@@ -110,6 +110,9 @@ function HintPill() {
             Double-click a wardrobe or nightstand to open it
           </div>
           <div style={{ color: 'var(--ink-3)', fontSize: 11 }}>
+            Click a wall to paint it or drag it to resize the room
+          </div>
+          <div style={{ color: 'var(--ink-3)', fontSize: 11 }}>
             Shift-click to multi-select · then Merge to move as one
           </div>
         </div>

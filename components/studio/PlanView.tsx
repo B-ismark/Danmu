@@ -5,7 +5,7 @@ import { useStudio } from '@/lib/store';
 import { useRoomScene } from '@/lib/room-scene';
 import { useScene } from '@/lib/scene-store';
 import { collidesAt } from '@/lib/scene-spec';
-import { pointInFootprint } from '@/lib/footprint';
+import { pointInFootprint, wallSegments } from '@/lib/footprint';
 
 const SCALE = 100; // px per meter at zoom=1
 const PAD = 80;
@@ -20,6 +20,13 @@ export function PlanView() {
   const setPosition = useStudio((s) => s.setPosition);
   const setRotation = useStudio((s) => s.setRotation);
   const setDragging = useStudio((s) => s.setDragging);
+  const selectedWall = useStudio((s) => s.selectedWall);
+  const setSelectedWall = useStudio((s) => s.setSelectedWall);
+  const moveWall = useScene((s) => s.moveWall);
+
+  // Wall-drag bookkeeping — measure the pointer along the wall's outward normal
+  // and feed incremental width/depth deltas to the store (matches the 3D handle).
+  const wallDragRef = useRef<{ index: number; outX: number; outZ: number; downAlong: number; prevTotal: number } | null>(null);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<{
@@ -153,6 +160,19 @@ export function PlanView() {
       return;
     }
 
+    if (wallDragRef.current) {
+      const wd = wallDragRef.current;
+      const w = svgToWorld(e);
+      const total = w.x * wd.outX + w.z * wd.outZ - wd.downAlong;
+      const step = total - wd.prevTotal;
+      wd.prevTotal = total;
+      // Resize about centre moves each opposite wall by delta/2 → feed 2× so the
+      // grabbed edge tracks the pointer 1:1.
+      if (step !== 0) moveWall(wd.index, step * 2);
+      force((v) => v + 1);
+      return;
+    }
+
     if (!dragRef.current) return;
     if (!dragRef.current.moved) {
       const dx = e.clientX - dragRef.current.startX;
@@ -187,7 +207,27 @@ export function PlanView() {
     force((v) => v + 1);
   }
 
+  function onWallPointerDown(e: React.PointerEvent, index: number) {
+    e.stopPropagation();
+    setSelectedWall(index);
+    setDragging('__wall__');
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    const seg = wallSegments(ROOM_DYN.footprint)[index];
+    if (!seg) return;
+    // Outward normal (away from centroid). wallSegments yaw encodes the inward
+    // normal as (sin yaw, cos yaw); negate for outward.
+    const outX = -Math.sin(seg.yaw);
+    const outZ = -Math.cos(seg.yaw);
+    const w = svgToWorld(e);
+    wallDragRef.current = { index, outX, outZ, downAlong: w.x * outX + w.z * outZ, prevTotal: 0 };
+  }
+
   function onPointerUp(e: React.PointerEvent) {
+    if (wallDragRef.current) {
+      wallDragRef.current = null;
+      setDragging(null);
+      (e.target as Element).releasePointerCapture?.(e.pointerId);
+    }
     if (rotRef.current) {
       rotRef.current = null;
       (e.target as Element).releasePointerCapture?.(e.pointerId);
@@ -257,6 +297,21 @@ export function PlanView() {
             stroke="var(--ink)"
             strokeWidth="3"
           />
+
+          {/* Interactive wall edges — click to select, drag to resize. Wide
+              transparent hit line over a thin visible accent when selected. */}
+          {ROOM_DYN.footprint.map((a, i) => {
+            const b = ROOM_DYN.footprint[(i + 1) % ROOM_DYN.footprint.length];
+            const la = toLocal(a[0], a[1]);
+            const lb = toLocal(b[0], b[1]);
+            const sel = selectedWall === i;
+            return (
+              <g key={`wall-${i}`} style={{ cursor: 'grab' }} onPointerDown={(e) => onWallPointerDown(e, i)}>
+                <line x1={la.x} y1={la.y} x2={lb.x} y2={lb.y} stroke="transparent" strokeWidth={16} strokeLinecap="round" />
+                {sel && <line x1={la.x} y1={la.y} x2={lb.x} y2={lb.y} stroke="var(--accent)" strokeWidth={5} strokeLinecap="round" />}
+              </g>
+            );
+          })}
 
           {/* Wall labels */}
           <WallLabel
@@ -453,6 +508,8 @@ export function PlanView() {
         <span>Shift-drag · pan</span>
         <span style={{ color: 'var(--hairline-strong)' }}>·</span>
         <span>Alt-drag · rotate</span>
+        <span style={{ color: 'var(--hairline-strong)' }}>·</span>
+        <span>Click wall · paint/resize</span>
         <span style={{ color: 'var(--hairline-strong)' }}>·</span>
         <span><span className="mono">[ ]</span> · step</span>
         <span style={{ color: 'var(--hairline-strong)' }}>·</span>

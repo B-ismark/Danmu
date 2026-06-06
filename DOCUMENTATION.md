@@ -79,6 +79,19 @@ Two ways in:
 - `buildSceneFromRoom` falls back to the layout's starter when a room has no saved
   parts yet.
 
+### 4.1b Wall painting & resizing ([`RoomShell`](components/three/RoomShell.tsx), [`WallHandles`](components/three/WallHandles.tsx))
+- **Click a wall** (3D or 2D plan) to select it — shows an accent frame and a
+  dedicated Wall panel in the Inspector. Wall vs part selection are mutually
+  exclusive (`useStudio.selectedWall`).
+- **Paint**: pick a swatch / hex for that wall, or **Apply to all walls** in one
+  tap. Stored per footprint-edge index in `useScene.room.wallColors`, persisted on
+  `RoomData.wallColors`.
+- **Move/resize**: drag the accent handle on the selected wall (3D) or drag the
+  wall edge (plan) to push it in/out. Resolves to a width/depth change about the
+  room centre (`scene-store.moveWall`) so the footprint stays centred and every
+  containment/clamp assumption downstream stays valid. Inspector also has precise
+  ±10 cm nudge buttons. Persisted via `RoomSync` (room-shell subscription).
+
 ### 4.2 Selection & transforms ([`Pickable`](components/three/Pickable.tsx), [`Draggable`](components/three/Draggable.tsx))
 - Click to select; drag to move; gizmo to rotate / scale.
 - **Wall-mounted parts** (TV, mirror, painting, AC, curtain) snap flush to the

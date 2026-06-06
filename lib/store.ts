@@ -18,6 +18,10 @@ type StudioState = {
   /** multi-select set (includes the primary). Drives highlight; the gizmo still
    *  attaches to selectedPartId only. */
   selection: string[];
+  /** index of the currently selected wall (footprint edge), or null. Mutually
+   *  exclusive with part selection — selecting a wall clears the part selection
+   *  and vice versa, so the Inspector shows one or the other. */
+  selectedWall: number | null;
   hoveredPartId: string | null;
   viewPreset: ViewPreset;
   renderMode: RenderMode;
@@ -51,6 +55,9 @@ type StudioState = {
   setSelected: (id: string | null) => void;
   /** set the whole selection at once (group click). primary becomes selectedPartId. */
   setSelection: (ids: string[], primary: string | null) => void;
+  /** select a wall by footprint-edge index (or null to clear). Clears any part
+   *  selection so the two never show at once. */
+  setSelectedWall: (i: number | null) => void;
   /** shift-click: add/remove one id from the selection. */
   toggleInSelection: (id: string) => void;
   setHovered: (id: string | null) => void;
@@ -88,6 +95,7 @@ type StudioState = {
 export const useStudio = create<StudioState>((set) => ({
   selectedPartId: null,
   selection: [],
+  selectedWall: null,
   hoveredPartId: null,
   viewPreset: 'iso',
   renderMode: 'construction',
@@ -107,8 +115,9 @@ export const useStudio = create<StudioState>((set) => ({
   frameSelectedToken: 0,
   hidden: {},
 
-  setSelected: (id) => set({ selectedPartId: id, selection: id ? [id] : [] }),
-  setSelection: (ids, primary) => set({ selection: ids, selectedPartId: primary }),
+  setSelected: (id) => set({ selectedPartId: id, selection: id ? [id] : [], selectedWall: null }),
+  setSelection: (ids, primary) => set({ selection: ids, selectedPartId: primary, selectedWall: null }),
+  setSelectedWall: (i) => set({ selectedWall: i, selectedPartId: null, selection: [] }),
   toggleInSelection: (id) =>
     set((s) => {
       const has = s.selection.includes(id);

@@ -20,6 +20,7 @@ export function RoomSync() {
   const loadTransforms = useStudio((s) => s.loadTransforms);
   const transformTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sceneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const roomTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ready = useRef(false);
 
   // Initial load: room meta → scene; cached scene parts override; transforms last.
@@ -73,6 +74,33 @@ export function RoomSync() {
           dims: s.dims,
         });
       }
+    };
+  }, [roomId]);
+
+  // Persist room-shell changes — wall paint + wall moves (width/depth). Merges
+  // into the existing meta so detections / name / layout survive.
+  useEffect(() => {
+    if (!roomId) return;
+    const unsub = useScene.subscribe((state, prev) => {
+      if (!ready.current) return;
+      if (state.room === prev.room) return;
+      if (roomTimer.current) clearTimeout(roomTimer.current);
+      const r = state.room;
+      roomTimer.current = setTimeout(async () => {
+        const existing = await roomStore.loadRoom(roomId);
+        if (!existing) return;
+        await roomStore.saveRoom({
+          ...existing,
+          width: r.width,
+          depth: r.depth,
+          height: r.height,
+          wallColors: r.wallColors,
+        });
+      }, DEBOUNCE_MS);
+    });
+    return () => {
+      unsub();
+      if (roomTimer.current) clearTimeout(roomTimer.current);
     };
   }, [roomId]);
 

@@ -15,6 +15,7 @@ import { useScene } from '@/lib/scene-store';
 import { placeNewPart, DND_MIME, type Category, type Shape } from '@/lib/scene-spec';
 import { roomStore } from '@/lib/storage';
 import { RoomShell } from './RoomShell';
+import { WallHandles } from './WallHandles';
 import { Draggable } from './Draggable';
 import { PartGeometry } from './DynamicPart';
 import { Dressing } from './Dressing';
@@ -171,6 +172,7 @@ export function Room() {
 
       <Suspense fallback={null}>
         <RoomShell />
+        <WallHandles />
         {parts.map((part) => (
           <Draggable key={part.id} partId={part.id}>
             <PartGeometry part={part} locked={part.locked} mode={mode} />

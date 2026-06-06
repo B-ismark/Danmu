@@ -11,9 +11,11 @@ import { RegenerateModal } from './RegenerateModal';
 import { LibraryPicker } from './LibraryPicker';
 import { isWallMountedPart, supportsDecor, autoSurfaceDecor, DECOR_KINDS, type LibraryItem, type ScenePart, type DecorItem, type DecorKind } from '@/lib/scene-spec';
 import { findSupportUnder, groundY, snapToWall as snapToWallPhys } from '@/lib/physics';
+import { wallSegments } from '@/lib/footprint';
 
 export function Inspector() {
   const id = useStudio((s) => s.selectedPartId);
+  const selectedWall = useStudio((s) => s.selectedWall);
   const part = useRoomPart(id);
   const baseDim = useScene((s) => s.parts.find((p) => p.id === id)?.dimMM);
   const hasOverrides = useStudio((s) => !!id && (!!s.positions[id] || !!s.rotations[id] || !!s.dims[id]));
@@ -34,10 +36,12 @@ export function Inspector() {
   const [editingLabel, setEditingLabel] = useState(false);
   const [labelDraft, setLabelDraft] = useState('');
 
+  if (selectedWall !== null) return <WallInspector index={selectedWall} />;
+
   if (!part || !id)
     return (
       <div style={{ padding: 20, textAlign: 'center', color: 'var(--ink-3)', fontSize: 12 }}>
-        Click a part to inspect.
+        Click a part or a wall to edit it.
       </div>
     );
 
@@ -440,6 +444,131 @@ function DecorCollection({ part, onChange }: { part: ScenePart; onChange: (decor
         )}
       </div>
     </Section>
+  );
+}
+
+// Compass label for a wall from its inward normal (wallSegments yaw encodes it).
+// Falls back to "Wall n" for the extra edges of L / T / U footprints.
+function wallName(yaw: number, index: number, edgeCount: number): string {
+  if (edgeCount !== 4) return `Wall ${index + 1}`;
+  const inX = Math.sin(yaw);
+  const inZ = Math.cos(yaw);
+  if (Math.abs(inZ) >= Math.abs(inX)) return inZ > 0 ? 'North wall' : 'South wall';
+  return inX > 0 ? 'West wall' : 'East wall';
+}
+
+// Wall editor — shown when a wall is selected instead of a part. Paint one wall
+// or all walls, reset, and nudge the wall in/out (drag in the 3D / plan views is
+// the primary move affordance; these buttons are the precise fallback).
+function WallInspector({ index }: { index: number }) {
+  const room = useScene((s) => s.room);
+  const setWallColor = useScene((s) => s.setWallColor);
+  const setAllWallColors = useScene((s) => s.setAllWallColors);
+  const resetWallColor = useScene((s) => s.resetWallColor);
+  const moveWall = useScene((s) => s.moveWall);
+  const setSelectedWall = useStudio((s) => s.setSelectedWall);
+
+  const segs = wallSegments(room.footprint);
+  const seg = segs[index];
+  const name = seg ? wallName(seg.yaw, index, room.footprint.length) : `Wall ${index + 1}`;
+  const current = room.wallColors?.[index] ?? '#ECE9E1';
+  const painted = room.wallColors?.[index] !== undefined;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', height: '100%' }}>
+      <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--hairline)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+          <span className="ds-label" style={{ color: 'var(--accent)' }}>WALL</span>
+          <span className="mono" style={{ fontSize: 9, color: 'var(--accent)', letterSpacing: '0.08em', padding: '2px 6px', border: '1px solid var(--accent)' }}>
+            SHELL
+          </span>
+        </div>
+        <div style={{ fontSize: 16, fontWeight: 500, letterSpacing: '-0.01em', padding: '4px 6px' }}>{name}</div>
+        <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.06em', marginTop: 2, paddingLeft: 6 }}>
+          {seg ? `${seg.len.toFixed(2)} M WIDE · ${room.height.toFixed(2)} M TALL` : ''}
+        </div>
+      </div>
+
+      {/* Paint */}
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--hairline)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <span className="section-title">Wall colour</span>
+          {painted && (
+            <button
+              onClick={() => resetWallColor(index)}
+              style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.06em', color: 'var(--accent)', background: 'transparent', border: '1px solid var(--accent)', padding: '2px 6px', cursor: 'pointer' }}
+            >
+              ↺ DEFAULT
+            </button>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <label
+            title="Pick a custom colour"
+            style={{ position: 'relative', width: 34, height: 34, borderRadius: 3, border: '1px solid var(--hairline-strong)', background: current, cursor: 'pointer', flexShrink: 0 }}
+          >
+            <input
+              type="color"
+              value={current}
+              onChange={(e) => setWallColor(index, e.target.value)}
+              style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
+            />
+          </label>
+          <span className="mono" style={{ fontSize: 12, color: painted ? 'var(--ink)' : 'var(--ink-3)', letterSpacing: '0.04em' }}>
+            {painted ? current.toUpperCase() : 'default shell'}
+          </span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 4 }}>
+          {SWATCHES.map((hex) => (
+            <button
+              key={hex}
+              onClick={() => setWallColor(index, hex)}
+              title={hex}
+              aria-label={hex}
+              style={{
+                aspectRatio: '1',
+                borderRadius: 2,
+                background: hex,
+                border: current.toLowerCase() === hex.toLowerCase() ? '2px solid var(--accent)' : '1px solid var(--hairline-strong)',
+                cursor: 'pointer',
+                padding: 0,
+              }}
+            />
+          ))}
+        </div>
+        <button
+          onClick={() => setAllWallColors(current)}
+          className="ds-btn"
+          style={{ width: '100%', height: 32, fontSize: 12, justifyContent: 'center', gap: 6, marginTop: 10 }}
+        >
+          <Icon name="layers" size={13} /> Apply this colour to all walls
+        </button>
+      </div>
+
+      {/* Move */}
+      <Section label="Move wall">
+        <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 8, lineHeight: 1.4 }}>
+          Drag the handle on the wall in the 3D or plan view — or nudge it here.
+          The room resizes around its centre.
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+          <button onClick={() => moveWall(index, 0.1)} className="ds-btn" style={{ height: 32, fontSize: 11, justifyContent: 'center', gap: 6 }}>
+            <Icon name="plus" size={12} /> Out 10 cm
+          </button>
+          <button onClick={() => moveWall(index, -0.1)} className="ds-btn" style={{ height: 32, fontSize: 11, justifyContent: 'center', gap: 6 }}>
+            <Icon name="minus" size={12} /> In 10 cm
+          </button>
+        </div>
+      </Section>
+
+      <div style={{ flex: 1 }} />
+
+      <div style={{ borderTop: '1px solid var(--hairline)', padding: '12px 16px', background: 'var(--paper-2)' }}>
+        <button onClick={() => setSelectedWall(null)} className="ds-btn" style={{ width: '100%', height: 32, fontSize: 12, justifyContent: 'center', gap: 6 }}>
+          <Icon name="x" size={12} /> Done
+        </button>
+      </div>
+    </div>
   );
 }
 

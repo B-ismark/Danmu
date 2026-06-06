@@ -13,8 +13,9 @@
 // others stay — all four exist, none of them occlude. No per-frame work; the GPU
 // does the culling for free.
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { DoubleSide, FrontSide, Shape, ShapeGeometry, Vector2 } from 'three';
+import { type ThreeEvent } from '@react-three/fiber';
 import { Line } from '@react-three/drei';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
@@ -23,11 +24,15 @@ import { floorNormal, floorRoughness } from '@/lib/textures';
 
 const WALL = '#ECE9E1';
 const FLOOR = '#E6E1D6';
+const ACCENT = '#E2613A';
 const FLOOR_NORMAL_SCALE = new Vector2(0.25, 0.25);
 
 export function RoomShell() {
-  const { width, depth, height, footprint } = useScene((s) => s.room);
+  const { width, depth, height, footprint, wallColors } = useScene((s) => s.room);
   const showGrid = useStudio((s) => s.showGrid);
+  const selectedWall = useStudio((s) => s.selectedWall);
+  const setSelectedWall = useStudio((s) => s.setSelectedWall);
+  const [hoverWall, setHoverWall] = useState<number | null>(null);
 
   const gridLines = useMemo(() => {
     const lines: Array<[[number, number, number], [number, number, number]]> = [];
@@ -82,13 +87,59 @@ export function RoomShell() {
           <Line key={i} points={pts} color="#131311" transparent opacity={0.06} lineWidth={0.5} />
         ))}
 
-      {/* Walls — single-sided, normal points inward → near wall back-face-culls. */}
-      {walls.map((wl, i) => (
-        <mesh key={`w-${i}`} position={[wl.x, height / 2, wl.z]} rotation={[0, wl.yaw, 0]} receiveShadow>
-          <planeGeometry args={[wl.len, height]} />
-          <meshStandardMaterial color={WALL} roughness={0.96} metalness={0} side={FrontSide} />
-        </mesh>
-      ))}
+      {/* Walls — single-sided, normal points inward → near wall back-face-culls.
+          Clickable to select + paint; selected/hovered wall gets an accent frame. */}
+      {walls.map((wl, i) => {
+        const color = wallColors?.[i] ?? WALL;
+        const isSel = selectedWall === i;
+        const isHov = hoverWall === i;
+        return (
+          <group key={`w-${i}`}>
+            <mesh
+              position={[wl.x, height / 2, wl.z]}
+              rotation={[0, wl.yaw, 0]}
+              receiveShadow
+              onClick={(e: ThreeEvent<MouseEvent>) => {
+                e.stopPropagation();
+                setSelectedWall(i);
+              }}
+              onPointerOver={(e: ThreeEvent<PointerEvent>) => {
+                e.stopPropagation();
+                setHoverWall(i);
+                document.body.style.cursor = 'pointer';
+              }}
+              onPointerOut={(e: ThreeEvent<PointerEvent>) => {
+                e.stopPropagation();
+                setHoverWall((h) => (h === i ? null : h));
+                document.body.style.cursor = '';
+              }}
+            >
+              <planeGeometry args={[wl.len, height]} />
+              <meshStandardMaterial color={color} roughness={0.96} metalness={0} side={FrontSide} />
+            </mesh>
+            {/* Selection / hover frame — drawn just inside the room face so it
+                reads on the visible side. Marked as an editor helper so the AI
+                snapshot (SceneCapture) strips it before rendering. */}
+            {(isSel || isHov) && (
+              <group userData={{ helper: true }}>
+                <Line
+                  points={[
+                    [wl.x - (wl.len / 2) * Math.cos(wl.yaw), 0.02, wl.z + (wl.len / 2) * Math.sin(wl.yaw)],
+                    [wl.x + (wl.len / 2) * Math.cos(wl.yaw), 0.02, wl.z - (wl.len / 2) * Math.sin(wl.yaw)],
+                    [wl.x + (wl.len / 2) * Math.cos(wl.yaw), height - 0.02, wl.z - (wl.len / 2) * Math.sin(wl.yaw)],
+                    [wl.x - (wl.len / 2) * Math.cos(wl.yaw), height - 0.02, wl.z + (wl.len / 2) * Math.sin(wl.yaw)],
+                    [wl.x - (wl.len / 2) * Math.cos(wl.yaw), 0.02, wl.z + (wl.len / 2) * Math.sin(wl.yaw)],
+                  ]}
+                  color={ACCENT}
+                  lineWidth={isSel ? 2.5 : 1.2}
+                  transparent
+                  opacity={isSel ? 1 : 0.5}
+                />
+              </group>
+            )}
+          </group>
+        );
+      })}
 
       {/* Skirting along the inner base of each wall. */}
       {walls.map((wl, i) => (

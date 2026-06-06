@@ -48,6 +48,9 @@ export type RoomData = {
   width: number; // meters
   depth: number;
   height: number;
+  /** per-wall paint colour, keyed by footprint-edge index. Optional — absent on
+   *  rooms created before wall painting shipped (defensive read on load). */
+  wallColors?: Record<number, string>;
   detectedObjects?: Array<{
     id: number;
     label: string;
