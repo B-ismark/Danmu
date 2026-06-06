@@ -1,0 +1,252 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Danmu — design tokens. Warm, rounded, editorial-casual (matches the soft 3D
+   models). Friendlier than the old CAD/blueprint look: rounded corners, warm
+   cream paper, clay accent + sage secondary, soft layered shadows. */
+:root {
+  --paper: #FBF8F2;
+  --paper-2: #F3EEE4;
+  --paper-3: #E9E2D4;
+  --ink: #2A2520;           /* warm soft-black, not pure ink */
+  --ink-2: #5A5147;
+  --ink-3: #8F857a;
+  --ink-4: #BBB1A3;
+  --hairline: rgba(42, 37, 32, 0.12);
+  --hairline-soft: rgba(42, 37, 32, 0.05);
+  --hairline-strong: rgba(42, 37, 32, 0.20);
+
+  --accent: #E2613A;        /* warm clay-terracotta */
+  --accent-tint: rgba(226, 97, 58, 0.12);
+  --accent-tint-strong: rgba(226, 97, 58, 0.20);
+  --accent-2: #5E8B6E;      /* friendly sage */
+  --accent-2-tint: rgba(94, 139, 110, 0.14);
+
+  --locked: #3A78C2;
+  --locked-tint: rgba(58, 120, 194, 0.14);
+  --danger: #C8472A;
+  --danger-tint: rgba(200, 71, 42, 0.10);
+  --warn: #9A6233;
+  --success: #5E8B6E;
+
+  --grid-unit: 16px;
+  --grid-major: 80px;
+  --grid-line: rgba(42, 37, 32, 0.03);
+  --grid-line-major: rgba(42, 37, 32, 0.05);
+
+  --font-sans: var(--font-nunito), ui-rounded, 'SF Pro Rounded', -apple-system, sans-serif;
+  --font-display: var(--font-display), 'Fraunces', Georgia, serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* Generously rounded — softness is the whole point. */
+  --r-0: 0;
+  --r-1: 6px;
+  --r-2: 10px;
+  --r-3: 16px;
+  --r-card: 20px;
+  --r-full: 9999px;
+
+  --shadow-soft: 0 1px 2px rgba(42, 37, 32, 0.04), 0 6px 16px rgba(42, 37, 32, 0.06);
+  --shadow-lift: 0 2px 4px rgba(42, 37, 32, 0.06), 0 12px 28px rgba(42, 37, 32, 0.10);
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+  background: #EFE9DD;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+* { box-sizing: border-box; }
+
+/* Headings lean on the display serif by default — warm + editorial. */
+h1, h2, h3, .display {
+  font-family: var(--font-display);
+  font-weight: 560;
+  letter-spacing: -0.01em;
+}
+
+.mono { font-family: var(--font-mono); font-feature-settings: "tnum" 1, "zero" 1; }
+.sans { font-family: var(--font-sans); }
+
+.ds-label {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--ink-3);
+  font-weight: 700;
+}
+.ds-kicker {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  color: var(--accent);
+  font-weight: 700;
+}
+.ds-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.ds-grid-bg {
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(var(--grid-line-major) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line-major) 1px, transparent 1px);
+  background-size:
+    var(--grid-unit) var(--grid-unit),
+    var(--grid-unit) var(--grid-unit),
+    var(--grid-major) var(--grid-major),
+    var(--grid-major) var(--grid-major);
+}
+.ds-crosshair-bg {
+  background-color: var(--paper);
+  background-image: radial-gradient(circle, var(--hairline) 1px, transparent 1px);
+  background-size: var(--grid-unit) var(--grid-unit);
+}
+
+.ds-btn {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: var(--r-3);
+  border: 1px solid var(--hairline);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px;
+  box-shadow: var(--shadow-soft);
+  transition: background .15s, border-color .15s, transform .12s, box-shadow .15s;
+}
+.ds-btn:hover { background: var(--paper); transform: translateY(-1px); box-shadow: var(--shadow-lift); }
+.ds-btn:active { transform: translateY(0); box-shadow: var(--shadow-soft); }
+.ds-btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+.ds-btn--primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.ds-btn--primary:hover { background: #3a342c; }
+.ds-btn--accent { background: var(--accent); color: #fff; border-color: var(--accent); }
+.ds-btn--accent:hover { filter: brightness(1.04); }
+.ds-btn--ghost { background: transparent; border-color: transparent; box-shadow: none; }
+.ds-btn--ghost:hover { background: var(--paper-2); box-shadow: none; transform: none; }
+
+.ds-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 28px; padding: 0 12px;
+  border-radius: var(--r-full);
+  border: 1px solid var(--hairline);
+  background: var(--paper);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--ink-2);
+  box-shadow: var(--shadow-soft);
+}
+.ds-chip--accent {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+
+.ds-input {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  height: 42px;
+  padding: 0 14px;
+  border-radius: var(--r-2);
+  border: 1px solid var(--hairline-strong);
+  background: var(--paper);
+  color: var(--ink);
+  outline: none;
+  width: 100%;
+}
+.ds-input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-tint); }
+
+/* Soft card surface — for panels/rooms cards on the warmer screens. */
+.ds-card {
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-soft);
+}
+
+/* ─── Studio semantic classes ──────────────────────────────────────────────
+   Token-driven building blocks for the studio chrome. Migrating inline styles
+   to these means future restyles happen here once instead of across every
+   component. Dynamic state uses modifier classes (.is-selected) or CSS :hover. */
+
+.rail { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--paper); }
+.rail--left { border-right: 1px solid var(--hairline); }
+.rail--right { border-left: 1px solid var(--hairline); }
+
+.section { padding: 14px 16px; border-bottom: 1px solid var(--hairline); }
+.section--flush { padding: 12px 16px; }
+.section-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.section-title {
+  font-family: var(--font-sans); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.02em; color: var(--ink-3);
+}
+.section-meta { font-size: 12px; font-weight: 600; color: var(--ink-3); }
+
+.field {
+  width: 100%; height: 34px; padding: 0 12px;
+  font-family: var(--font-sans); font-size: 13px;
+  background: var(--paper); color: var(--ink);
+  border: 1px solid var(--hairline-strong); border-radius: var(--r-2);
+  outline: none; transition: border-color .12s, box-shadow .12s;
+}
+.field:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-tint); }
+
+.list { padding: 6px; display: flex; flex-direction: column; gap: 2px; overflow: auto; flex: 1; }
+.list-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 11px; border-radius: var(--r-2);
+  cursor: pointer; user-select: none;
+  transition: background .12s, box-shadow .12s;
+}
+.list-row:hover { background: var(--paper-2); }
+/* Selection = a clean tinted fill (no left-bar — that accent border is the
+   generic AI "active item" tell). The leading status dot carries the cue. */
+.list-row.is-selected { background: var(--accent-tint); }
+.row-action { opacity: 0; transition: opacity .15s, color .15s; }
+.list-row:hover .row-action,
+.list-row .row-action.is-on { opacity: 1; }
+
+.tag {
+  font-size: 10px; font-weight: 600; color: var(--ink-3);
+  text-transform: capitalize; background: var(--paper-2);
+  border-radius: var(--r-full); padding: 2px 8px; white-space: nowrap;
+}
+
+.popover {
+  background: var(--paper); border: 1px solid var(--hairline);
+  border-radius: var(--r-2); box-shadow: var(--shadow-lift);
+}
+.toolbar {
+  display: inline-flex; align-items: center;
+  background: var(--paper); border: 1px solid var(--hairline);
+  border-radius: var(--r-3); box-shadow: var(--shadow-soft); overflow: hidden;
+}
+
+/* iOS frame for prototype mobile preview */
+.ios-frame {
+  width: 402px; height: 874px;
+  border-radius: 48px;
+  border: 8px solid #1a1a1a;
+  background: #000;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 30px 60px rgba(0,0,0,0.18);
+}
+.ios-frame__notch {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  width: 110px; height: 30px; background: #000; border-radius: 16px; z-index: 50;
+}
+.ios-frame__inner { position: absolute; inset: 0; background: var(--paper); overflow: auto; }
+
+/* hide scrollbars cosmetically */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
