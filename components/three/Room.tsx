@@ -13,6 +13,7 @@ import { v4 as uuid } from 'uuid';
 import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { placeNewPart, DND_MIME, type Category, type Shape } from '@/lib/scene-spec';
+import { footprintBounds } from '@/lib/footprint';
 import { roomStore } from '@/lib/storage';
 import { RoomShell } from './RoomShell';
 import { WallHandles } from './WallHandles';
@@ -95,11 +96,13 @@ export function Room() {
     const { pos, wallMounted } = placeNewPart(item.category, item.shape, item.dimMM, r, ps);
     let [x, y, z] = pos;
     if (!wallMounted) {
-      // Drop where the pointer hit the floor, kept inside the walls.
-      const halfW = r.width / 2 - item.dimMM[0] / 2000;
-      const halfD = r.depth / 2 - item.dimMM[1] / 2000;
-      x = Math.max(-halfW, Math.min(halfW, _hit.x));
-      z = Math.max(-halfD, Math.min(halfD, _hit.z));
+      // Drop where the pointer hit the floor, kept inside the (possibly
+      // off-centre) footprint bounds.
+      const b = footprintBounds(r.footprint);
+      const insetX = item.dimMM[0] / 2000;
+      const insetZ = item.dimMM[1] / 2000;
+      x = Math.max(b.minX + insetX, Math.min(b.maxX - insetX, _hit.x));
+      z = Math.max(b.minZ + insetZ, Math.min(b.maxZ - insetZ, _hit.z));
     }
     const id = `${item.category}-${uuid().slice(0, 6)}`;
     useScene.getState().addPart({
@@ -180,7 +183,7 @@ export function Room() {
         ))}
         {dressed && parts.map((part) => <Dressing key={`dress-${part.id}`} part={part} />)}
         <ContactShadows
-          position={[0, 0.004, 0]}
+          position={[footprintBounds(room.footprint).cx, 0.004, footprintBounds(room.footprint).cz]}
           scale={Math.max(room.width, room.depth) * 1.3}
           resolution={1024}
           far={room.height}

@@ -51,6 +51,9 @@ export type RoomData = {
   /** per-wall paint colour, keyed by footprint-edge index. Optional — absent on
    *  rooms created before wall painting shipped (defensive read on load). */
   wallColors?: Record<number, string>;
+  /** custom footprint polygon (XZ metres) after independent wall moves. When
+   *  present it overrides the layout-derived shape on load. Optional. */
+  footprint?: Array<[number, number]>;
   detectedObjects?: Array<{
     id: number;
     label: string;

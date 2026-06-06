@@ -11,7 +11,7 @@ import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { collidesAt, isParametric, isWallMountedPart, type ScenePart } from '@/lib/scene-spec';
 import { groundY, isFloorStanding } from '@/lib/physics';
-import { pointInFootprint } from '@/lib/footprint';
+import { pointInFootprint, footprintBounds } from '@/lib/footprint';
 import { Pickable } from './Pickable';
 import { Highlight } from './Highlight';
 
@@ -178,8 +178,11 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     const sn = Math.abs(Math.sin(rot));
     const extX = halfW * c + halfD * sn;
     const extZ = halfW * sn + halfD * c;
-    let x = Math.max(-room.width / 2 + extX, Math.min(room.width / 2 - extX, p.x));
-    let z = Math.max(-room.depth / 2 + extZ, Math.min(room.depth / 2 - extZ, p.z));
+    // Footprints can be off-centre (independent wall moves) → clamp to the real
+    // bounding box, not ±width/2.
+    const bnd = footprintBounds(room.footprint);
+    let x = Math.max(bnd.minX + extX, Math.min(bnd.maxX - extX, p.x));
+    let z = Math.max(bnd.minZ + extZ, Math.min(bnd.maxZ - extZ, p.z));
     // Non-rectangular rooms: if the centre left the polygon (e.g. dragged into an
     // L/U notch), snap back to the last valid spot instead of floating over void.
     if (!pointInFootprint(x, z, room.footprint) && lastValidPos.current) {
@@ -191,14 +194,12 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // snap flush to the NEAREST wall instead of floating mid-room. Position only;
     // rotation stays user-controlled. Rectangular-bounds approximation.
     if (isWallMountedPart(part.category, part.shape)) {
-      const hw = room.width / 2;
-      const hd = room.depth / 2;
-      const dW = x + hw, dE = hw - x, dS = z + hd, dN = hd - z;
+      const dW = x - bnd.minX, dE = bnd.maxX - x, dS = z - bnd.minZ, dN = bnd.maxZ - z;
       const m = Math.min(dW, dE, dS, dN);
-      if (m === dW) x = -hw + extX;
-      else if (m === dE) x = hw - extX;
-      else if (m === dS) z = -hd + extZ;
-      else z = hd - extZ;
+      if (m === dW) x = bnd.minX + extX;
+      else if (m === dE) x = bnd.maxX - extX;
+      else if (m === dS) z = bnd.minZ + extZ;
+      else z = bnd.maxZ - extZ;
     }
 
     // Gravity rules:

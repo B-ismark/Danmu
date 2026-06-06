@@ -58,9 +58,8 @@ export function WallHandles() {
       const total = _hit.x * d.outX + _hit.z * d.outZ - d.downAlong;
       const step = total - d.prevTotal;
       d.prevTotal = total;
-      // Resize about centre moves each opposite wall by delta/2 → feed 2× so the
-      // grabbed edge tracks the pointer 1:1.
-      if (step !== 0 && selectedWall !== null) moveWall(selectedWall, step * 2);
+      // Only the grabbed wall moves; it tracks the pointer 1:1 along its normal.
+      if (step !== 0 && selectedWall !== null) moveWall(selectedWall, step);
     }
     function up() {
       if (!drag.current) return;

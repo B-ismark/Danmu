@@ -5,15 +5,18 @@ import { useStudio } from '@/lib/store';
 import { useRoomScene } from '@/lib/room-scene';
 import { useScene } from '@/lib/scene-store';
 import { collidesAt } from '@/lib/scene-spec';
-import { pointInFootprint, wallSegments } from '@/lib/footprint';
+import { pointInFootprint, wallSegments, footprintBounds } from '@/lib/footprint';
 
 const SCALE = 100; // px per meter at zoom=1
 const PAD = 80;
 
 export function PlanView() {
   const ROOM_DYN = useScene((s) => s.room);
-  const baseW = ROOM_DYN.width * SCALE + PAD * 2;
-  const baseH = ROOM_DYN.depth * SCALE + PAD * 2;
+  // Footprints can be off-centre (independent wall moves), so map world↔pixels
+  // through the bounding box, not ±width/2.
+  const bounds = footprintBounds(ROOM_DYN.footprint);
+  const baseW = bounds.width * SCALE + PAD * 2;
+  const baseH = bounds.depth * SCALE + PAD * 2;
   const parts = useRoomScene();
   const selected = useStudio((s) => s.selectedPartId);
   const setSelected = useStudio((s) => s.setSelected);
@@ -73,8 +76,8 @@ export function PlanView() {
     const sx = (ux - offset.x) / zoom;
     const sy = (uy - offset.y) / zoom;
     return {
-      x: (sx - PAD) / SCALE - ROOM_DYN.width / 2,
-      z: (sy - PAD) / SCALE - ROOM_DYN.depth / 2,
+      x: (sx - PAD) / SCALE + bounds.minX,
+      z: (sy - PAD) / SCALE + bounds.minZ,
     };
   }
 
@@ -166,9 +169,8 @@ export function PlanView() {
       const total = w.x * wd.outX + w.z * wd.outZ - wd.downAlong;
       const step = total - wd.prevTotal;
       wd.prevTotal = total;
-      // Resize about centre moves each opposite wall by delta/2 → feed 2× so the
-      // grabbed edge tracks the pointer 1:1.
-      if (step !== 0) moveWall(wd.index, step * 2);
+      // Only the grabbed wall moves; it tracks the pointer 1:1 along its normal.
+      if (step !== 0) moveWall(wd.index, step);
       force((v) => v + 1);
       return;
     }
@@ -193,8 +195,8 @@ export function PlanView() {
       const s = Math.abs(Math.sin(part.rot));
       const extX = halfW * c + halfD * s;
       const extZ = halfW * s + halfD * c;
-      const x = clamp(w.x, -ROOM_DYN.width / 2 + extX, ROOM_DYN.width / 2 - extX);
-      const z = clamp(w.z, -ROOM_DYN.depth / 2 + extZ, ROOM_DYN.depth / 2 - extZ);
+      const x = clamp(w.x, bounds.minX + extX, bounds.maxX - extX);
+      const z = clamp(w.z, bounds.minZ + extZ, bounds.maxZ - extZ);
       // Keep the centre inside the (possibly non-rectangular) footprint.
       if (!pointInFootprint(x, z, ROOM_DYN.footprint)) return;
       if (collidesAt(parts, id, [x, part.pos[1], z], part.rot, part.dimMM)) return;
@@ -259,8 +261,8 @@ export function PlanView() {
   }, []);
 
   const toLocal = (x: number, z: number) => ({
-    x: PAD + (x + ROOM_DYN.width / 2) * SCALE,
-    y: PAD + (z + ROOM_DYN.depth / 2) * SCALE,
+    x: PAD + (x - bounds.minX) * SCALE,
+    y: PAD + (z - bounds.minZ) * SCALE,
   });
 
   return (

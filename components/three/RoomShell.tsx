@@ -19,7 +19,7 @@ import { type ThreeEvent } from '@react-three/fiber';
 import { Line } from '@react-three/drei';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
-import { wallSegments } from '@/lib/footprint';
+import { wallSegments, footprintBounds } from '@/lib/footprint';
 import { floorNormal, floorRoughness } from '@/lib/textures';
 
 const WALL = '#ECE9E1';
@@ -28,7 +28,7 @@ const ACCENT = '#E2613A';
 const FLOOR_NORMAL_SCALE = new Vector2(0.25, 0.25);
 
 export function RoomShell() {
-  const { width, depth, height, footprint, wallColors } = useScene((s) => s.room);
+  const { height, footprint, wallColors } = useScene((s) => s.room);
   const showGrid = useStudio((s) => s.showGrid);
   const selectedWall = useStudio((s) => s.selectedWall);
   const setSelectedWall = useStudio((s) => s.setSelectedWall);
@@ -36,23 +36,25 @@ export function RoomShell() {
 
   const gridLines = useMemo(() => {
     const lines: Array<[[number, number, number], [number, number, number]]> = [];
+    // Span the footprint bounding box — it may be off-centre after wall moves.
+    const b = footprintBounds(footprint);
     const div = 14;
     for (let i = 0; i <= div; i++) {
-      const u = -width / 2 + (i / div) * width;
+      const u = b.minX + (i / div) * b.width;
       lines.push([
-        [u, 0.002, -depth / 2],
-        [u, 0.002, depth / 2],
+        [u, 0.002, b.minZ],
+        [u, 0.002, b.maxZ],
       ]);
     }
     for (let j = 0; j <= 10; j++) {
-      const v = -depth / 2 + (j / 10) * depth;
+      const v = b.minZ + (j / 10) * b.depth;
       lines.push([
-        [-width / 2, 0.002, v],
-        [width / 2, 0.002, v],
+        [b.minX, 0.002, v],
+        [b.maxX, 0.002, v],
       ]);
     }
     return lines;
-  }, [width, depth]);
+  }, [footprint]);
 
   // Floor geometry from the polygon footprint. Shape is built in XY; the mesh is
   // laid flat with rot[-90°] about X which maps shape-Y → world -Z, so we feed

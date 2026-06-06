@@ -87,10 +87,17 @@ Two ways in:
   tap. Stored per footprint-edge index in `useScene.room.wallColors`, persisted on
   `RoomData.wallColors`.
 - **Move/resize**: drag the accent handle on the selected wall (3D) or drag the
-  wall edge (plan) to push it in/out. Resolves to a width/depth change about the
-  room centre (`scene-store.moveWall`) so the footprint stays centred and every
-  containment/clamp assumption downstream stays valid. Inspector also has precise
-  ±10 cm nudge buttons. Persisted via `RoomSync` (room-shell subscription).
+  wall edge (plan) to push it in/out. **Only the selected wall moves** — its edge
+  translates along its outward normal (`footprint.offsetWall`), adjacent walls
+  stretch, the opposite wall stays put, so the room becomes off-centre. The
+  footprint polygon is now the source of truth; `width`/`depth` are re-derived
+  from its bounding box and **all** containment / coordinate mapping reads
+  `footprintBounds` rather than ±width/2 (Draggable clamp + wall-snap, PlanView
+  world↔px, Room drop-clamp + ContactShadows centre, RoomShell grid). Custom
+  footprints persist on `RoomData.footprint` and reload as-is. Editing W/D in the
+  Room-shell editor resets to the preset shape; a height-only edit keeps the
+  custom footprint. Inspector also has ±10 cm nudge buttons. Persisted via
+  `RoomSync`.
 
 ### 4.2 Selection & transforms ([`Pickable`](components/three/Pickable.tsx), [`Draggable`](components/three/Draggable.tsx))
 - Click to select; drag to move; gizmo to rotate / scale.

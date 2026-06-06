@@ -66,6 +66,62 @@ export function footprintForLayout(layout: LayoutId, w: number, d: number): Foot
   }
 }
 
+/** Axis-aligned bounds of a footprint polygon (XZ metres). The footprint is no
+ *  longer guaranteed centred on the origin (walls can be dragged independently),
+ *  so containment / coordinate-mapping must use these bounds rather than
+ *  ±width/2. `cx`/`cz` is the bbox centre. */
+export function footprintBounds(poly: Footprint): {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+  width: number;
+  depth: number;
+  cx: number;
+  cz: number;
+} {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (const [x, z] of poly) {
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (z < minZ) minZ = z;
+    if (z > maxZ) maxZ = z;
+  }
+  return { minX, maxX, minZ, maxZ, width: maxX - minX, depth: maxZ - minZ, cx: (minX + maxX) / 2, cz: (minZ + maxZ) / 2 };
+}
+
+/** Move ONLY the selected wall: translate edge `index`'s two vertices along the
+ *  edge's outward normal by `delta` metres (delta > 0 = push out / bigger room).
+ *  Adjacent walls stretch to stay connected; the opposite wall does not move, so
+ *  the room becomes off-centre — that's intentional. */
+export function offsetWall(poly: Footprint, index: number, delta: number): Footprint {
+  const n = poly.length;
+  if (n < 3 || index < 0 || index >= n) return poly;
+  const a = poly[index];
+  const b = poly[(index + 1) % n];
+  // Edge perpendicular.
+  let nx = -(b[1] - a[1]);
+  let nz = b[0] - a[0];
+  const nl = Math.hypot(nx, nz) || 1;
+  nx /= nl;
+  nz /= nl;
+  // Flip to point OUTWARD (away from the centroid).
+  const [cx, cz] = polygonCentroid(poly);
+  const mx = (a[0] + b[0]) / 2;
+  const mz = (a[1] + b[1]) / 2;
+  if ((cx - mx) * nx + (cz - mz) * nz > 0) {
+    nx = -nx;
+    nz = -nz;
+  }
+  const next: Footprint = poly.map((p) => [p[0], p[1]]);
+  next[index] = [a[0] + nx * delta, a[1] + nz * delta];
+  next[(index + 1) % n] = [b[0] + nx * delta, b[1] + nz * delta];
+  return next;
+}
+
 export function polygonCentroid(poly: Footprint): [number, number] {
   let x = 0;
   let z = 0;

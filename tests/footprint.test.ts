@@ -5,6 +5,8 @@ import {
   clampIntoFootprint,
   polygonCentroid,
   wallSegments,
+  footprintBounds,
+  offsetWall,
 } from '@/lib/footprint';
 
 describe('footprintForLayout', () => {
@@ -77,5 +79,46 @@ describe('wallSegments', () => {
     const segs = wallSegments(footprintForLayout('rect', 6, 4));
     expect(segs).toHaveLength(4);
     for (const s of segs) expect(s.len).toBeGreaterThan(0);
+  });
+});
+
+describe('footprintBounds', () => {
+  it('measures a centred rectangle', () => {
+    const b = footprintBounds(footprintForLayout('rect', 6, 4));
+    expect(b.width).toBeCloseTo(6);
+    expect(b.depth).toBeCloseTo(4);
+    expect(b.cx).toBeCloseTo(0);
+    expect(b.cz).toBeCloseTo(0);
+    expect(b.minX).toBeCloseTo(-3);
+    expect(b.maxZ).toBeCloseTo(2);
+  });
+});
+
+describe('offsetWall', () => {
+  const rect = footprintForLayout('rect', 6, 4); // [[-3,-2],[3,-2],[3,2],[-3,2]]
+
+  it('moves only the selected edge outward, leaving the opposite wall fixed', () => {
+    // Edge 0 is the north edge (z = -2); pushing out grows depth on that side only.
+    const next = offsetWall(rect, 0, 1);
+    const b = footprintBounds(next);
+    expect(b.depth).toBeCloseTo(5); // 4 + 1
+    expect(b.minZ).toBeCloseTo(-3); // moved edge
+    expect(b.maxZ).toBeCloseTo(2); // opposite edge unchanged
+    expect(b.width).toBeCloseTo(6); // width untouched
+    // The two far vertices (south edge) are exactly where they started.
+    expect(next[2]).toEqual([3, 2]);
+    expect(next[3]).toEqual([-3, 2]);
+  });
+
+  it('pulling a wall inward shrinks that side only', () => {
+    const next = offsetWall(rect, 0, -1); // north edge inward
+    const b = footprintBounds(next);
+    expect(b.depth).toBeCloseTo(3);
+    expect(b.minZ).toBeCloseTo(-1);
+    expect(b.maxZ).toBeCloseTo(2);
+  });
+
+  it('returns the polygon unchanged for an out-of-range index', () => {
+    expect(offsetWall(rect, 9, 1)).toEqual(rect);
   });
 });

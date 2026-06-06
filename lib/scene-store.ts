@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { defaultScene, buildSceneFromRoom, type ScenePart } from './scene-spec';
 import { ROOM as ROOM_DEFAULT } from './parts-catalog';
-import { footprintForLayout, wallSegments, type Footprint, type LayoutId } from './footprint';
+import { footprintForLayout, offsetWall, footprintBounds, type Footprint, type LayoutId } from './footprint';
 import type { RoomData } from './storage';
 
 type RoomShape = {
@@ -60,21 +60,35 @@ const DEFAULT_ROOM: RoomShape = {
   wallColors: {},
 };
 
-const clampRoom = (v: number) => Math.max(MIN_ROOM, Math.min(MAX_ROOM, v));
-
 export const useScene = create<SceneState>((set) => ({
   parts: defaultScene(),
   room: DEFAULT_ROOM,
   ready: false,
   setParts: (parts) => set({ parts, ready: true }),
-  // Dimension edits re-derive the footprint from the current layout preset.
+  // Dimension edits re-derive the footprint from the current layout preset when
+  // width/depth change (a W/D edit intentionally resets any custom wall moves to
+  // the preset shape). A height-only edit keeps the current (possibly custom)
+  // footprint so it isn't wiped.
   setRoom: (r) =>
-    set((s) => ({
-      room: { ...s.room, ...r, footprint: footprintForLayout(s.room.layoutId, r.width, r.depth) },
-    })),
+    set((s) => {
+      const wdChanged = r.width !== s.room.width || r.depth !== s.room.depth;
+      return {
+        room: {
+          ...s.room,
+          ...r,
+          footprint: wdChanged ? footprintForLayout(s.room.layoutId, r.width, r.depth) : s.room.footprint,
+        },
+      };
+    }),
   loadFromRoom: (room) => {
     if (!room) return set({ parts: defaultScene(), room: DEFAULT_ROOM, ready: true });
     const layoutId = (room.layoutId ?? 'rect') as LayoutId;
+    // A saved custom footprint (from independent wall moves) is the source of
+    // truth; otherwise derive the preset shape from the layout + dims.
+    const footprint =
+      room.footprint && room.footprint.length >= 3
+        ? (room.footprint as Footprint)
+        : footprintForLayout(layoutId, room.width, room.depth);
     set({
       parts: buildSceneFromRoom(room),
       room: {
@@ -82,7 +96,7 @@ export const useScene = create<SceneState>((set) => ({
         depth: room.depth,
         height: room.height,
         layoutId,
-        footprint: footprintForLayout(layoutId, room.width, room.depth),
+        footprint,
         wallColors: room.wallColors ?? {},
       },
       ready: true,
@@ -105,25 +119,15 @@ export const useScene = create<SceneState>((set) => ({
     }),
   moveWall: (index, delta) =>
     set((s) => {
-      const segs = wallSegments(s.room.footprint);
-      const seg = segs[index];
-      if (!seg) return {};
-      // Wall normal (XZ) is encoded in the segment yaw — yaw = atan2(nx, nz), so
-      // nx = sin(yaw), nz = cos(yaw). A wall whose normal is more X-aligned is an
-      // east/west wall (its out-push changes WIDTH); more Z-aligned → north/south
-      // wall (changes DEPTH). The room stays centred about the origin.
-      const nx = Math.sin(seg.yaw);
-      const nz = Math.cos(seg.yaw);
-      const axisIsWidth = Math.abs(nx) >= Math.abs(nz);
-      const width = axisIsWidth ? clampRoom(s.room.width + delta) : s.room.width;
-      const depth = axisIsWidth ? s.room.depth : clampRoom(s.room.depth + delta);
+      // Move ONLY this wall — its edge translates along its outward normal,
+      // adjacent walls stretch, the opposite wall stays put. The room becomes
+      // off-centre; width/depth are re-derived from the new bounding box and
+      // every downstream consumer reads footprint bounds (not ±width/2).
+      const poly = offsetWall(s.room.footprint, index, delta);
+      const b = footprintBounds(poly);
+      if (b.width < MIN_ROOM || b.depth < MIN_ROOM || b.width > MAX_ROOM || b.depth > MAX_ROOM) return {};
       return {
-        room: {
-          ...s.room,
-          width,
-          depth,
-          footprint: footprintForLayout(s.room.layoutId, width, depth),
-        },
+        room: { ...s.room, footprint: poly, width: b.width, depth: b.depth, layoutId: 'custom' },
       };
     }),
   updatePart: (id, patch) =>
