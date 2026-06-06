@@ -2,16 +2,30 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useRoom, useSettings } from '@/lib/store';
+import { roomStore } from '@/lib/storage';
 
-// Entry: route based on user state.
-// No key → /onboarding/welcome. Key + roomId → /room/[id]/model. Key, no roomId → /workspace.
+// Entry: route on whether the user has any rooms — NOT on whether they have an
+// AI key. The 3D studio is the product; the AI preview is optional. A first-time
+// visitor (no rooms) sees the intro; a returning one drops straight into their
+// workspace. Key presence never blocks entry.
 export default function Home() {
   const router = useRouter();
   useEffect(() => {
-    const hasKey = !!useSettings.getState().apiKey;
-    if (!hasKey) router.replace('/onboarding/welcome');
-    else router.replace('/workspace');
+    let cancelled = false;
+    (async () => {
+      let hasRooms = false;
+      try {
+        const rooms = await roomStore.listRooms();
+        hasRooms = rooms.length > 0;
+      } catch {
+        hasRooms = false;
+      }
+      if (cancelled) return;
+      router.replace(hasRooms ? '/workspace' : '/onboarding/welcome');
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
   return (
     <div

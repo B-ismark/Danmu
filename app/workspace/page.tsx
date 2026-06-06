@@ -198,7 +198,7 @@ function RoomCard({
         </div>
       )}
       <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginBottom: 8 }}>
-        <span className="mono">{date.toLocaleDateString()}</span> · <span className="mono">{room.itemCount}</span> edited
+        <span className="mono">{date.toLocaleDateString()}</span> · <span className="mono">{room.itemCount}</span> {room.itemCount === 1 ? 'piece' : 'pieces'}
       </div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
         {!room.detected && room.captureCount > 0 && room.captureCount < 4 && (
@@ -228,7 +228,7 @@ function RoomCard({
               background: 'var(--accent-tint)',
             }}
           >
-            ↺ Run detect
+            ↺ Detect furniture
           </span>
         )}
         {room.renderCount > 0 && (
@@ -295,13 +295,14 @@ function EmptyState() {
         ↘ Workspace ready
       </div>
       <div style={{ fontSize: 38, fontWeight: 600, letterSpacing: '-0.02em', marginBottom: 10 }}>
-        Scan your first room.
+        Decorate your first room.
       </div>
       <p style={{ fontSize: 14, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 28 }}>
-        Pick a footprint, capture 4 wall photos, re-imagine the space — while preserving everything you already own.
+        Pick a footprint and start arranging furniture in real 3D — move, recolour, restyle, and relight
+        every piece. No account, no upload. Capturing your real room is optional.
       </p>
-      <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--primary" style={{ height: 40, padding: '0 20px', fontSize: 14 }}>
-        <Icon name="plus" size={13} />
+      <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--accent" style={{ height: 40, padding: '0 20px', fontSize: 14 }}>
+        <Icon name="plus" size={13} color="#fff" />
         Create your first room
       </Link>
     </div>

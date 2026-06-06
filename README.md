@@ -23,11 +23,13 @@ does, every current feature, architecture, and roadmap).
 pnpm install
 pnpm dev          # http://localhost:3000
 pnpm typecheck    # tsc --noEmit
+pnpm test         # vitest run
 pnpm build        # next build
 ```
 
-An AI key is optional — only the photo-preview step uses it. Paste one in Settings
-(or onboarding) when you want it.
+An AI key is optional — only the photo-preview step uses it. The 3D studio is
+fully reachable without one: pick a footprint and start decorating. Paste a key
+in Settings (or the optional field in onboarding) when you want a photo preview.
 
 ## Routes
 

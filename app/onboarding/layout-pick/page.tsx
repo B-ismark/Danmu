@@ -65,7 +65,7 @@ export default function LayoutPickPage() {
               step={2}
               total={4}
               title="Pick your room's footprint."
-              subtitle="Becomes the 1:1 grid every render is anchored to. Custom shapes coming soon."
+              subtitle="Becomes the 1:1 grid your 3D room is built on — start decorating right away, or capture your real room first. Custom shapes coming soon."
             />
             <div style={{ marginTop: 24, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {LAYOUTS.map((l) => (
@@ -101,10 +101,6 @@ export default function LayoutPickPage() {
                 </button>
               ))}
             </div>
-            <button onClick={next} className="ds-btn ds-btn--primary" style={{ marginTop: 24, height: 48, fontSize: 14, justifyContent: 'center', width: '100%' }}>
-              Capture room
-              <Icon name="camera" size={14} />
-            </button>
             <button
               onClick={async () => {
                 const id = uuid();
@@ -120,11 +116,15 @@ export default function LayoutPickPage() {
                 setRoomId(id);
                 router.push(`/room/${id}/model`);
               }}
-              className="ds-btn ds-btn--ghost"
-              style={{ marginTop: 8, height: 36, fontSize: 12, justifyContent: 'center', width: '100%' }}
+              className="ds-btn ds-btn--accent"
+              style={{ marginTop: 24, height: 48, fontSize: 14, justifyContent: 'center', width: '100%' }}
             >
-              Skip · start decorating with a {layout.starter.toLowerCase()}
-              <Icon name="arrow-right" size={12} />
+              Start decorating · {layout.starter.toLowerCase()}
+              <Icon name="arrow-right" size={14} color="#fff" />
+            </button>
+            <button onClick={next} className="ds-btn ds-btn--ghost" style={{ marginTop: 8, height: 36, fontSize: 12, justifyContent: 'center', width: '100%' }}>
+              <Icon name="camera" size={12} />
+              Capture my real room first (optional)
             </button>
           </div>
 

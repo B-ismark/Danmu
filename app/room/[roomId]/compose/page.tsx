@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
-import { useCompose } from '@/lib/store';
+import { useCompose, useSettings } from '@/lib/store';
 import { Icon } from '@/components/ui/Icon';
 import { STYLES, BUDGET_TIERS, tierFor } from '@/lib/prompt';
 
@@ -19,11 +20,20 @@ export default function ComposePage() {
   const router = useRouter();
   const { roomId } = useParams<{ roomId: string }>();
   const { styleId, budget, variants, setStyle, setBudget, setVariants, setRenderModel } = useCompose();
+  const hfToken = useSettings((s) => s.hfToken);
+  const apiKey = useSettings((s) => s.apiKey);
 
-  // Preview runs silently on the cheapest path. No model choice surfaced.
+  const hasHf = hfToken.trim().length > 0;
+  const hasGemini = apiKey.trim().length > 20;
+  const hasKey = hasHf || hasGemini;
+
+  // Preview runs silently on whichever path the user has a key for — HF FLUX if a
+  // HF token is set, else Gemini's standard image model with the Gemini key. No
+  // model choice surfaced. AI is optional, so absence of a key is a soft nudge,
+  // never a wall.
   useEffect(() => {
-    setRenderModel('hf');
-  }, [setRenderModel]);
+    setRenderModel(hasHf ? 'hf' : 'free');
+  }, [setRenderModel, hasHf]);
 
   const tier = tierFor(budget);
 
@@ -36,6 +46,36 @@ export default function ComposePage() {
           Pick a look and we&apos;ll turn your 3D layout into a warm, photo-real picture — same furniture,
           same arrangement, real materials and light.
         </p>
+
+        {!hasKey && (
+          <div
+            className="ds-card"
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 12,
+              padding: '14px 16px',
+              marginBottom: 32,
+              borderColor: 'var(--accent)',
+              background: 'var(--accent-tint)',
+            }}
+          >
+            <Icon name="sparkles" size={16} color="var(--accent)" style={{ marginTop: 2, flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--ink)', marginBottom: 2 }}>
+                Photo preview needs a free AI key
+              </div>
+              <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
+                The 3D studio works without one — this optional step turns your layout into a photo.
+                Add a key to enable it.
+              </div>
+            </div>
+            <Link href="/settings" className="ds-btn" style={{ height: 32, fontSize: 12, flexShrink: 0 }}>
+              <Icon name="key" size={12} />
+              Add key
+            </Link>
+          </div>
+        )}
 
         {/* Style picker */}
         <div className="ds-label" style={{ marginBottom: 12 }}>Choose a style</div>
@@ -120,14 +160,25 @@ export default function ComposePage() {
           ))}
         </div>
 
-        <button
-          className="ds-btn ds-btn--accent"
-          style={{ height: 52, fontSize: 16, padding: '0 28px' }}
-          onClick={() => router.push(`/room/${roomId}/render`)}
-        >
-          <Icon name="image" size={16} color="#fff" />
-          Generate preview
-        </button>
+        {hasKey ? (
+          <button
+            className="ds-btn ds-btn--accent"
+            style={{ height: 52, fontSize: 16, padding: '0 28px' }}
+            onClick={() => router.push(`/room/${roomId}/render`)}
+          >
+            <Icon name="image" size={16} color="#fff" />
+            Generate preview
+          </button>
+        ) : (
+          <Link
+            href="/settings"
+            className="ds-btn ds-btn--primary"
+            style={{ height: 52, fontSize: 16, padding: '0 28px' }}
+          >
+            <Icon name="key" size={16} />
+            Add a key to preview
+          </Link>
+        )}
         <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 12 }}>
           Takes around half a minute. Your 3D layout stays exactly as you built it.
         </div>

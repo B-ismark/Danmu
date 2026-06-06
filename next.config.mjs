@@ -4,8 +4,6 @@ const nextConfig = {
   images: {
     remotePatterns: [{ protocol: 'https', hostname: 'images.unsplash.com' }],
   },
-  // @react-pdf/renderer ships ESM only — Next 14 needs to transpile it.
-  transpilePackages: ['@react-pdf/renderer'],
   experimental: {
     optimizePackageImports: ['@react-three/drei', 'three'],
     esmExternals: 'loose',

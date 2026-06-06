@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import {
   ArrowRight, ArrowLeft, ArrowUpRight, Check, X, Plus, Minus,
   Camera, Lock, Unlock, Grid3x3, Layers, Ruler, Settings, Sparkles, Box,
-  Download, Share2, FileText, FileArchive, ChevronRight, ChevronLeft, ChevronDown,
+  Download, Share2, FileText, FileArchive, ChevronRight, ChevronLeft, ChevronDown, ChevronUp,
   Zap, Leaf, Crosshair, Sofa, Bed, Tv, Lamp, Table, Sprout, KeyRound,
   Eye, EyeOff, Info, BarChart3, ExternalLink, Pencil, Trash2, RefreshCw,
   Image, Play, Replace, Circle, type LucideIcon,
@@ -22,7 +22,7 @@ export type IconName =
   | 'settings' | 'sparkles' | 'cube'
   | 'download' | 'share' | 'whatsapp'
   | 'file' | 'zip'
-  | 'chevron-right' | 'chevron-left' | 'chevron-down'
+  | 'chevron-right' | 'chevron-left' | 'chevron-down' | 'chevron-up'
   | 'zap' | 'leaf' | 'crosshair'
   | 'sofa' | 'bed' | 'tv' | 'lamp' | 'table' | 'plant'
   | 'key' | 'eye' | 'eye-off'
@@ -39,7 +39,7 @@ const MAP: Record<Exclude<IconName, 'whatsapp' | 'snap-wall' | 'snap-floor' | 's
   settings: Settings, sparkles: Sparkles, cube: Box,
   download: Download, share: Share2,
   file: FileText, zip: FileArchive,
-  'chevron-right': ChevronRight, 'chevron-left': ChevronLeft, 'chevron-down': ChevronDown,
+  'chevron-right': ChevronRight, 'chevron-left': ChevronLeft, 'chevron-down': ChevronDown, 'chevron-up': ChevronUp,
   zap: Zap, leaf: Leaf, crosshair: Crosshair,
   sofa: Sofa, bed: Bed, tv: Tv, lamp: Lamp, table: Table, plant: Sprout,
   key: KeyRound, eye: Eye, 'eye-off': EyeOff,

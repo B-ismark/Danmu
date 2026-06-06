@@ -205,8 +205,6 @@ IndexedDB.
 
 ## 6. Known limitations
 
-- **AI key still gates entry.** With no stored key the entry router sends you to
-  onboarding; making the studio fully reachable key-free is pending (see roadmap).
 - AI image generation has no ControlNet depth lock — layout preservation relies on
   the blockout reference + prompt, not pixel-exact geometry.
 - WebXR / true measurement calibration deferred; 6-photo capture only.
@@ -217,12 +215,19 @@ IndexedDB.
 
 ## 7. Roadmap / future plans
 
+**Done (recent)**
+- ✅ Studio is reachable without an AI key. Entry router ([`app/page.tsx`](app/page.tsx))
+  routes on whether the user has rooms, not on key presence; onboarding/welcome
+  leads with "Start decorating" and the key is an optional, collapsed extra. The
+  AI preview surfaces an inline "add a key" nudge in Compose instead of gating.
+- ✅ Removed the dead carpenter-era dep `@react-pdf/renderer` (+ its
+  `transpilePackages` entry) and the stale `PROJECT_OVERVIEW.md`. This doc is the
+  single source of truth.
+- ✅ Added a Vitest smoke suite (`pnpm test`) over the pure core logic
+  (`lib/footprint`, `lib/prompt`, `lib/units`).
+
 **Near term**
-- Make the studio reachable without an AI key (decouple entry router from key
-  presence) — reinforce "AI is optional".
 - **Group rotate / scale-as-one** to finish multi-select (translate already done).
-- Remove dead deps/code left from the carpenter-spec era (`@react-pdf/renderer`
-  is unused now).
 
 **Visual fidelity**
 - **Photographic CC0 maps** (Poly Haven / ambientCG) bundled in `/public` for
@@ -251,6 +256,7 @@ IndexedDB.
 pnpm install
 pnpm dev          # http://localhost:3000
 pnpm typecheck    # tsc --noEmit
+pnpm test         # vitest run — smoke suite over pure core logic
 pnpm build        # next build
 ```
 
