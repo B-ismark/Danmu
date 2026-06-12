@@ -6,7 +6,7 @@ import { ROOM as ROOM_DEFAULT } from './parts-catalog';
 import { footprintForLayout, offsetWall, footprintBounds, type Footprint, type LayoutId } from './footprint';
 import type { RoomData } from './storage';
 
-type RoomShape = {
+export type RoomShape = {
   width: number;
   depth: number;
   height: number;

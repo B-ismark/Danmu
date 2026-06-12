@@ -12,6 +12,7 @@ import { HoverCard } from '@/components/studio/HoverCard';
 import { Inspector } from '@/components/studio/Inspector';
 import { PartTree } from '@/components/studio/PartTree';
 import { TransformToolbar } from '@/components/studio/TransformToolbar';
+import { RoomTools } from '@/components/studio/RoomTools';
 import { DemoBanner } from '@/components/studio/DemoBanner';
 import { Icon } from '@/components/ui/Icon';
 
@@ -53,6 +54,7 @@ export default function ModelPage() {
         <CatalogPanel />
         <ViewOptions />
         <ViewPresetChips />
+        <RoomTools />
         <SelectionBar />
         <DemoBanner />
       </main>
@@ -98,6 +100,9 @@ function HintPill() {
             whiteSpace: 'nowrap',
           }}
         >
+          <div style={{ color: 'var(--accent)', fontWeight: 600 }}>
+            Drag a piece to move it · scroll while dragging to rotate
+          </div>
           <div><Kb>W</Kb>Move <Kb>S</Kb>Scale <Kb>R</Kb>Rotate</div>
           <div><Kb>F</Kb>Frame <Kb>V</Kb>Hide <Kb>Esc</Kb>Deselect</div>
           <div style={{ paddingTop: 4, borderTop: '1px solid var(--hairline)' }}>

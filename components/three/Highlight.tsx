@@ -21,6 +21,7 @@ import { Edges, Line } from '@react-three/drei';
 
 const SELECTED = '#E2613A'; // accent orange — matches painting accent in the palette
 const HOVERED = '#3E8FD8'; // construction blue — distinct from the orange selection
+const INVALID = '#D2402E'; // red — current drag spot collides / leaves the room
 
 export function Highlight({
   dimMM,
@@ -29,8 +30,8 @@ export function Highlight({
 }: {
   dimMM: [number, number, number];
   floorStanding: boolean;
-  /** 'selected' wins over 'hovered' — caller decides which to pass. */
-  state: 'selected' | 'hovered';
+  /** 'invalid' wins over 'selected' wins over 'hovered' — caller decides. */
+  state: 'selected' | 'hovered' | 'invalid';
 }) {
   const w = dimMM[0] / 1000;
   const d = dimMM[1] / 1000;
@@ -39,8 +40,8 @@ export function Highlight({
   // Floor-standing geometry is anchored base-at-0, so its centre is h/2.
   // Wall / ceiling-mounted geometry is drawn around the group origin (centre 0).
   const centerY = floorStanding ? h / 2 : 0;
-  const selected = state === 'selected';
-  const color = selected ? SELECTED : HOVERED;
+  const selected = state !== 'hovered';
+  const color = state === 'invalid' ? INVALID : selected ? SELECTED : HOVERED;
 
   // Footprint loop on the resting surface (local y ≈ 0). Only meaningful for
   // floor / surface-resting parts — wall-mounted items have no footprint.
@@ -84,7 +85,7 @@ export function Highlight({
       </mesh>
 
       {selected && floorStanding && (
-        <Line points={footprint} color={SELECTED} lineWidth={1.5} transparent opacity={0.7} />
+        <Line points={footprint} color={color} lineWidth={state === 'invalid' ? 2.5 : 1.5} transparent opacity={state === 'invalid' ? 0.95 : 0.7} />
       )}
     </group>
   );

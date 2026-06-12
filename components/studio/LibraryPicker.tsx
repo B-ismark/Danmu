@@ -2,16 +2,19 @@
 
 import { useState } from 'react';
 import { PART_LIBRARY, type LibraryItem } from '@/lib/scene-spec';
+import { PRODUCT_PRESETS } from '@/lib/product-presets';
 import { Icon } from '@/components/ui/Icon';
 
-// Searchable, grouped grid over PART_LIBRARY. Shared by the Add-model modal
-// (AddPartButton) and the Inspector's swap flow.
+const ALL_ITEMS: LibraryItem[] = [...PART_LIBRARY, ...PRODUCT_PRESETS];
+
+// Searchable, grouped grid over PART_LIBRARY + real-product presets. Shared by
+// the Add-model modal (AddPartButton) and the Inspector's swap flow.
 export function LibraryPicker({ onPick }: { onPick: (item: LibraryItem) => void }) {
   const [q, setQ] = useState('');
   const query = q.trim().toLowerCase();
   const items = query
-    ? PART_LIBRARY.filter((i) => i.label.toLowerCase().includes(query) || i.group.toLowerCase().includes(query))
-    : PART_LIBRARY;
+    ? ALL_ITEMS.filter((i) => i.label.toLowerCase().includes(query) || i.group.toLowerCase().includes(query))
+    : ALL_ITEMS;
   const groups = items.reduce<Record<string, LibraryItem[]>>((acc, i) => {
     (acc[i.group] ??= []).push(i);
     return acc;

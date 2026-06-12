@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useStudio, useSettings } from '@/lib/store';
+import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
-import { improveBatch, genericParts } from '@/lib/improve-batch';
+import { bestMatch } from '@/lib/shape-search';
 import { Icon } from '@/components/ui/Icon';
 import { useConfirm } from '@/components/ui/Confirm';
 import { RoomDimsEditor } from './RoomDimsEditor';
@@ -17,9 +17,6 @@ export function PartTree() {
   const selectedId = useStudio((s) => s.selectedPartId);
   const setSelected = useStudio((s) => s.setSelected);
   const resetTransforms = useStudio((s) => s.resetTransforms);
-  const apiKey = useSettings((s) => s.apiKey);
-  const [improving, setImproving] = useState(false);
-  const [improveError, setImproveError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const hasAnyOverride = useStudio(
     (s) =>
@@ -43,23 +40,15 @@ export function PartTree() {
   const visibleParts = q
     ? parts.filter((p) => p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q))
     : parts;
-  const generics = genericParts(parts);
+  const generics = parts.filter((p) => p.shape === 'box');
 
-  async function improveAll() {
-    setImproveError(null);
-    setImproving(true);
-    try {
-      const results = await improveBatch(
-        apiKey,
-        generics.map((p) => ({ id: p.id, name: p.name, category: p.category, dimMM: p.dimMM })),
-      );
-      for (const r of results) {
-        updatePart(r.id, { shape: r.shape, dimMM: r.dimMM });
-      }
-    } catch (e) {
-      setImproveError(e instanceof Error ? e.message : 'Improve failed.');
-    } finally {
-      setImproving(false);
+  // Upgrade every generic box to its closest catalog model by NAME — local
+  // token matching, no AI. Items whose name matches nothing stay boxes (the
+  // per-part "Swap model" flow handles those).
+  function improveAll() {
+    for (const p of generics) {
+      const m = bestMatch(`${p.name} ${p.category}`);
+      if (m) updatePart(p.id, { shape: m.shape, dimMM: m.dimMM });
     }
   }
 
@@ -103,20 +92,16 @@ export function PartTree() {
               ⚠ {generics.length} generic item{generics.length === 1 ? '' : 's'}
             </div>
             <p style={{ fontSize: 11, color: 'var(--ink-2)', margin: '0 0 8px', lineHeight: 1.4 }}>
-              Some items use a generic box. Generate proper 3D models for them in one batch.
+              Some items use a generic box. Match them to proper 3D models by name.
             </p>
             <button
               onClick={improveAll}
-              disabled={improving}
               className="ds-btn"
               style={{ width: '100%', height: 28, fontSize: 11, justifyContent: 'center' }}
             >
-              <Icon name="sparkles" size={11} />
-              {improving ? 'Generating…' : 'Generate proper 3D models'}
+              <Icon name="refresh" size={11} />
+              Match to 3D models
             </button>
-            {improveError && (
-              <div style={{ marginTop: 6, fontSize: 10, color: 'var(--danger)' }}>{improveError}</div>
-            )}
           </div>
         )}
       </div>

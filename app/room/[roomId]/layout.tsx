@@ -10,10 +10,12 @@ import { RoomSwitcher } from '@/components/studio/RoomSwitcher';
 import { NarrowViewportBanner } from '@/components/studio/NarrowViewportBanner';
 import { Icon } from '@/components/ui/Icon';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
+import { useSnapshot } from '@/lib/snapshot';
 
 export default function StudioLayout({ children }: { children: ReactNode }) {
-  const { roomId } = useParams<{ roomId: string }>();
+  const pathname = usePathname();
+  const onModel = pathname?.endsWith('/model') ?? false;
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--paper)' }}>
       <TopBar
@@ -26,14 +28,17 @@ export default function StudioLayout({ children }: { children: ReactNode }) {
               <Icon name="refresh" size={12} />
               Rescan
             </Link>
-            <Link
-              href={`/room/${roomId}/compose`}
-              className="ds-btn ds-btn--primary"
-              style={{ height: 28, fontSize: 12 }}
-            >
-              <Icon name="image" size={12} />
-              Preview
-            </Link>
+            {onModel && (
+              <button
+                onClick={() => useSnapshot.getState().request()}
+                className="ds-btn ds-btn--primary"
+                style={{ height: 28, fontSize: 12 }}
+                title="Download a PNG of the current 3D view"
+              >
+                <Icon name="image" size={12} />
+                Snapshot
+              </button>
+            )}
           </>
         }
       />

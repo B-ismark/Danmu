@@ -2,12 +2,9 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { Currency } from './parts-catalog';
 
 // Studio view + interaction state. Session-scoped, not persisted.
 type ViewPreset = 'free' | 'front' | 'top' | 'iso';
-type RenderMode = 'construction' | 'finish';
-type StudioTab = 'plan' | 'photo' | 'iso' | 'model';
 /** Scene lighting mood — drives lights, environment + background in Room. */
 export type Lighting = 'day' | 'evening' | 'cool';
 /** Render quality — 'high' enables soft cast shadows + floor reflection. */
@@ -24,9 +21,6 @@ type StudioState = {
   selectedWall: number | null;
   hoveredPartId: string | null;
   viewPreset: ViewPreset;
-  renderMode: RenderMode;
-  infoMode: boolean;
-  studioTab: StudioTab;
   /** map of cabinet door/drawer id -> open progress 0..1 */
   openState: Record<string, number>;
   /** id of part currently being dragged; disables OrbitControls + raycast cursor */
@@ -62,9 +56,6 @@ type StudioState = {
   toggleInSelection: (id: string) => void;
   setHovered: (id: string | null) => void;
   setView: (v: ViewPreset) => void;
-  setMode: (m: RenderMode) => void;
-  toggleInfo: () => void;
-  setTab: (t: StudioTab) => void;
   toggleOpen: (id: string) => void;
   /** monotonically-incrementing token used to nudge CameraRig to frame the selected part. */
   frameSelectedToken: number;
@@ -98,9 +89,6 @@ export const useStudio = create<StudioState>((set) => ({
   selectedWall: null,
   hoveredPartId: null,
   viewPreset: 'iso',
-  renderMode: 'construction',
-  infoMode: true,
-  studioTab: 'model',
   openState: {},
   draggingId: null,
   positions: {},
@@ -127,9 +115,6 @@ export const useStudio = create<StudioState>((set) => ({
     }),
   setHovered: (id) => set({ hoveredPartId: id }),
   setView: (v) => set({ viewPreset: v }),
-  setMode: (m) => set({ renderMode: m }),
-  toggleInfo: () => set((s) => ({ infoMode: !s.infoMode })),
-  setTab: (t) => set({ studioTab: t }),
   toggleOpen: (id) =>
     set((s) => ({ openState: { ...s.openState, [id]: s.openState[id] ? 0 : 1 } })),
   setDragging: (id) => set({ draggingId: id }),
@@ -159,104 +144,37 @@ export const useStudio = create<StudioState>((set) => ({
   toggleHidden: (id) => set((s) => ({ hidden: { ...s.hidden, [id]: !s.hidden[id] } })),
 }));
 
-// Compose: style + budget + render model. Drives prompt + render.
-type StyleId = 'warm-min' | 'afro-mod' | 'coastal' | 'studio' | 'heritage';
-/** Render path. 'free' = Gemini Nano Banana (billed per image despite the name).
- *  'eco' = Imagen 4 standard. 'ultra' = Imagen 4 ultra. 'hf' = Hugging Face FLUX
- *  (BYO HF token; img2img Kontext when a base image exists, else text-to-image
- *  schnell — cheapest, ~$0.10/mo free credit). 'exp' = Gemini 2.0 Flash Exp —
- *  experimental native image generation, may be free while in preview.
- *  All bill per image except detection. */
-export type RenderModel = 'free' | 'eco' | 'ultra' | 'hf' | 'exp';
-
-type ComposeState = {
-  styleId: StyleId;
-  /** 0..100 budget bias */
-  budget: number;
-  renderModel: RenderModel;
-  variants: number;
-  /** user-edited prompt override. null = use generated; string = use as-is. */
-  customPrompt: string | null;
-
-  setStyle: (s: StyleId) => void;
-  setBudget: (b: number) => void;
-  setRenderModel: (m: RenderModel) => void;
-  setVariants: (n: number) => void;
-  setCustomPrompt: (p: string | null) => void;
-};
-
-export const useCompose = create<ComposeState>((set) => ({
-  styleId: 'warm-min',
-  budget: 42,
-  renderModel: 'free',
-  variants: 1,
-  customPrompt: null,
-  setStyle: (s) => set({ styleId: s, customPrompt: null }),
-  setBudget: (b) => set({ budget: b, customPrompt: null }),
-  setRenderModel: (m) => set({ renderModel: m }),
-  setVariants: (n) => set({ variants: n }),
-  setCustomPrompt: (p) => set({ customPrompt: p }),
-}));
-
 // Settings. Persisted to localStorage. API key kept here only on this device.
 export type DimUnit = 'mm' | 'cm' | 'm' | 'in' | 'ft';
 
 type SettingsState = {
   apiKey: string;
-  currency: Currency;
   units: 'metric' | 'imperial';
   /** Display unit for dimensions (W / D / H). All persistence stays in mm. */
   dimUnit: DimUnit;
-  /** Hard guard: require explicit confirmation before any paid Imagen render. */
-  confirmPaidRenders: boolean;
   /** Last validation result for the current apiKey. null = not yet tested. */
   keyValid: boolean | null;
   /** Last reason if validation failed. */
   keyValidReason: string | null;
-  /** Image-to-3D provider preference + BYO keys. Independent from Gemini key. */
-  mesh3dProvider: 'meshy' | 'tripo' | 'off';
-  meshyKey: string;
-  tripoKey: string;
-  /** Hugging Face access token (Inference Providers permission) for the HF FLUX
-   *  render path. Independent from the Gemini key. Stored on-device only. */
-  hfToken: string;
   setApiKey: (k: string) => void;
-  setCurrency: (c: Currency) => void;
   setUnits: (u: 'metric' | 'imperial') => void;
   setDimUnit: (u: DimUnit) => void;
-  setConfirmPaidRenders: (v: boolean) => void;
   setKeyValid: (v: boolean | null, reason?: string | null) => void;
-  setMesh3dProvider: (p: 'meshy' | 'tripo' | 'off') => void;
-  setMeshyKey: (k: string) => void;
-  setTripoKey: (k: string) => void;
-  setHfToken: (k: string) => void;
 };
 
 export const useSettings = create<SettingsState>()(
   persist(
     (set) => ({
       apiKey: '',
-      currency: 'GHS',
       units: 'metric',
       dimUnit: 'm',
-      confirmPaidRenders: true,
       keyValid: null,
       keyValidReason: null,
-      mesh3dProvider: 'off',
-      meshyKey: '',
-      tripoKey: '',
-      hfToken: '',
       // Setting a new key invalidates the cached test result.
       setApiKey: (k) => set({ apiKey: k, keyValid: null, keyValidReason: null }),
-      setCurrency: (c) => set({ currency: c }),
       setUnits: (u) => set({ units: u }),
       setDimUnit: (u) => set({ dimUnit: u }),
-      setConfirmPaidRenders: (v) => set({ confirmPaidRenders: v }),
       setKeyValid: (v, reason) => set({ keyValid: v, keyValidReason: reason ?? null }),
-      setMesh3dProvider: (p) => set({ mesh3dProvider: p }),
-      setMeshyKey: (k) => set({ meshyKey: k }),
-      setTripoKey: (k) => set({ tripoKey: k }),
-      setHfToken: (k) => set({ hfToken: k }),
     }),
     {
       name: 'danmu-settings',

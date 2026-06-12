@@ -34,12 +34,6 @@ export type Detection = {
   /** Dominant colour as a #rrggbb hex. Used as a fallback when client-side pixel
    *  sampling of the photo fails (occluded / tiny region). See lib/color-sample.ts. */
   color?: string;
-  /** User-edited target bbox after dragging in the PhotoEditor. Same coord system as `box`.
-   *  When present, AI is instructed to inpaint the source `box` region (use background) and
-   *  re-place the object inside `dstBox`. */
-  dstBox?: [number, number, number, number];
-  /** User flagged this object for removal — AI inpaints the source region as background. */
-  removed?: boolean;
   /** Stable perceptual-hash key into the local mesh cache (lib/mesh-cache.ts).
    *  When set, 3D scene loads the cached GLB instead of the primitive shape. */
   meshHash?: string;

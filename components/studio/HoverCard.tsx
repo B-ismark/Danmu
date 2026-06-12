@@ -3,15 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useStudio, useSettings } from '@/lib/store';
 import { useRoomPart } from '@/lib/room-scene';
-import { formatCost } from '@/lib/parts-catalog';
 import { formatDim } from '@/lib/units';
 
 export function HoverCard() {
   const hoveredId = useStudio((s) => s.hoveredPartId);
   const selectedId = useStudio((s) => s.selectedPartId);
-  const infoMode = useStudio((s) => s.infoMode);
   const part = useRoomPart(hoveredId);
-  const currency = useSettings((s) => s.currency);
   const dimUnit = useSettings((s) => s.dimUnit);
   const [pos, setPos] = useState({ x: 0, y: 0 });
 
@@ -23,7 +20,7 @@ export function HoverCard() {
     return () => window.removeEventListener('pointermove', onMove);
   }, []);
 
-  if (!infoMode || !hoveredId || hoveredId === selectedId || !part) return null;
+  if (!hoveredId || hoveredId === selectedId || !part) return null;
 
   const left = Math.min(pos.x + 14, (typeof window !== 'undefined' ? window.innerWidth : 1440) - 240);
   const top = Math.min(pos.y - 10, (typeof window !== 'undefined' ? window.innerHeight : 900) - 140);

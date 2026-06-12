@@ -24,7 +24,7 @@ function body(part: ScenePart, fallback: string, locked: boolean): string {
   return locked ? LOCKED_TINT : fallback;
 }
 
-export function PartGeometry({ part, locked, mode }: { part: ScenePart; locked: boolean; mode: 'construction' | 'finish' }) {
+export function PartGeometry({ part, locked }: { part: ScenePart; locked: boolean }) {
   // A cached GLB always wins over the primitive shape. The CachedMesh component
   // renders nothing until the blob resolves, so we also render the primitive as
   // a placeholder underneath via a fragment — it disappears visually when the
@@ -32,12 +32,12 @@ export function PartGeometry({ part, locked, mode }: { part: ScenePart; locked: 
   if (part.meshHash) {
     return <CachedMesh part={part} />;
   }
-  return <ShapeDispatch part={part} locked={locked} mode={mode} />;
+  return <ShapeDispatch part={part} locked={locked} />;
 }
 
 // Split from PartGeometry so we can use a hook (effective-dim lookup) without
 // it running on the meshHash early-return path above.
-function ShapeDispatch({ part, locked, mode }: { part: ScenePart; locked: boolean; mode: 'construction' | 'finish' }) {
+function ShapeDispatch({ part, locked }: { part: ScenePart; locked: boolean }) {
   // Parametric parts rebuild from the CURRENT (overridden) dim. Feed them an
   // effective part whose dimMM reflects the user's resize, so module counts
   // (pleats / shelves / bays / seats) recompute instead of the mesh stretching.
@@ -50,7 +50,7 @@ function ShapeDispatch({ part, locked, mode }: { part: ScenePart; locked: boolea
       return <TVGeo />;
     case 'closet':
     case 'wardrobe':
-      return <WardrobeGeo part={p} locked={locked} mode={mode} />;
+      return <WardrobeGeo part={p} locked={locked} />;
     case 'bookshelf':
       return <BookshelfGeo part={p} locked={locked} />;
     case 'shoe-rack':
@@ -60,15 +60,15 @@ function ShapeDispatch({ part, locked, mode }: { part: ScenePart; locked: boolea
     case 'chair-office':
       return <OfficeChairGeo part={part} locked={locked} />;
     case 'chair-armchair':
-      return <ArmchairGeo part={part} locked={locked} mode={mode} />;
+      return <ArmchairGeo part={part} locked={locked} />;
     case 'rug':
       return <RugGeo part={part} />;
     case 'plant':
-      return <PlantGeo part={part} mode={mode} />;
+      return <PlantGeo part={part} />;
     case 'lamp-floor':
-      return <FloorLampGeo part={part} mode={mode} />;
+      return <FloorLampGeo part={part} />;
     case 'lamp-table':
-      return <TableLampGeo part={part} mode={mode} />;
+      return <TableLampGeo part={part} />;
     case 'lamp-pendant':
       return <PendantLampGeo part={part} />;
     case 'bed-single':
@@ -91,6 +91,8 @@ function ShapeDispatch({ part, locked, mode }: { part: ScenePart; locked: boolea
       return <MirrorGeo part={part} oval={false} />;
     case 'mirror-oval':
       return <MirrorGeo part={part} oval />;
+    case 'window':
+      return <WindowGeo part={part} />;
     case 'laptop':
       return <LaptopGeo part={part} />;
     case 'painting':
@@ -282,8 +284,8 @@ function OfficeChairGeo({ part, locked }: { part: ScenePart; locked: boolean }) 
   );
 }
 
-function ArmchairGeo({ part, locked, mode }: { part: ScenePart; locked: boolean; mode: 'construction' | 'finish' }) {
-  const seat = body(part, mode === 'construction' ? '#E8C7AE' : '#C9A98E', locked);
+function ArmchairGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
+  const seat = body(part, '#E8C7AE', locked);
   const leg = body(part, '#4A3526', locked);
   const cushionDark = shade(seat, -10);
   return (
@@ -311,8 +313,8 @@ function ArmchairGeo({ part, locked, mode }: { part: ScenePart; locked: boolean;
 }
 
 // ─── Plant ──────────────────────────────────────────────────────────────
-function PlantGeo({ part, mode }: { part: ScenePart; mode: 'construction' | 'finish' }) {
-  const pot = part.color ?? (mode === 'construction' ? '#B07555' : '#8B5A3C');
+function PlantGeo({ part }: { part: ScenePart }) {
+  const pot = part.color ?? '#B07555';
   // Tapered pot + soil + a clustered canopy of varied-green blobs (was a single
   // ball that read as a lollipop).
   const blobs: Array<{ p: [number, number, number]; r: number; c: string }> = [
@@ -356,8 +358,8 @@ function PlantGeo({ part, mode }: { part: ScenePart; mode: 'construction' | 'fin
 }
 
 // ─── Lamps ──────────────────────────────────────────────────────────────
-function FloorLampGeo({ part, mode }: { part: ScenePart; mode: 'construction' | 'finish' }) {
-  const metal = mode === 'construction' ? '#9A7848' : '#B89060';
+function FloorLampGeo({ part }: { part: ScenePart }) {
+  const metal = '#9A7848';
   const shade = part.color ?? '#E8E0CB';
   return (
     <>
@@ -377,8 +379,8 @@ function FloorLampGeo({ part, mode }: { part: ScenePart; mode: 'construction' | 
   );
 }
 
-function TableLampGeo({ part, mode }: { part: ScenePart; mode: 'construction' | 'finish' }) {
-  const metal = mode === 'construction' ? '#9A7848' : '#B89060';
+function TableLampGeo({ part }: { part: ScenePart }) {
+  const metal = '#9A7848';
   const shade = part.color ?? '#E8E0CB';
   return (
     <>
@@ -429,11 +431,11 @@ function PendantLampGeo({ part }: { part: ScenePart }) {
 // ─── Wardrobe / Bookshelf ────────────────────────────────────────────────
 // Parametric: door bays tile across the width — a wider wardrobe gains bays +
 // dividers + handles instead of two stretched doors.
-function WardrobeGeo({ part, locked, mode }: { part: ScenePart; locked: boolean; mode: 'construction' | 'finish' }) {
+function WardrobeGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
-  const wood = body(part, mode === 'construction' ? '#E8B833' : '#7A4A2C', locked);
+  const wood = body(part, '#E8B833', locked);
   const side = shade(wood, -8);
   const top = shade(wood, -15);
   const bays = Math.max(1, Math.round(w / 0.6));
@@ -870,6 +872,37 @@ function MirrorGeo({ part, oval }: { part: ScenePart; oval: boolean }) {
         <planeGeometry args={[w, h]} />
         {/* Soft reflective mirror — gentle gloss, not a chrome plate. */}
         <meshStandardMaterial color="#cdd7df" metalness={0.5} roughness={0.24} />
+      </mesh>
+    </>
+  );
+}
+
+// Window — frame + translucent glass + cross mullions. Wall-mounted (centre-
+// anchored like mirror/painting); a wider window gains vertical mullions.
+function WindowGeo({ part }: { part: ScenePart }) {
+  const w = part.dimMM[0] / 1000;
+  const h = part.dimMM[2] / 1000;
+  const frame = part.color ?? '#F4F1EA';
+  // One pane per ~0.7m of width, separated by slim mullions.
+  const panes = Math.max(1, Math.round(w / 0.7));
+  const paneW = w / panes;
+  return (
+    <>
+      {/* outer frame */}
+      <Box size={[w + 0.06, 0.05, 0.06]} position={[0, h / 2 + 0.025, 0]} color={frame} roughness={0.7} />
+      <Box size={[w + 0.06, 0.05, 0.06]} position={[0, -h / 2 - 0.025, 0]} color={frame} roughness={0.7} />
+      <Box size={[0.05, h + 0.1, 0.06]} position={[-w / 2 - 0.025, 0, 0]} color={frame} roughness={0.7} />
+      <Box size={[0.05, h + 0.1, 0.06]} position={[w / 2 + 0.025, 0, 0]} color={frame} roughness={0.7} />
+      {/* sill */}
+      <Box size={[w + 0.12, 0.03, 0.12]} position={[0, -h / 2 - 0.065, 0.03]} color={frame} roughness={0.6} />
+      {/* mullions between panes */}
+      {Array.from({ length: panes - 1 }).map((_, i) => (
+        <Box key={i} size={[0.03, h, 0.04]} position={[-w / 2 + (i + 1) * paneW, 0, 0]} color={frame} roughness={0.7} />
+      ))}
+      {/* glass — sky-tinted, translucent both sides */}
+      <mesh>
+        <planeGeometry args={[w, h]} />
+        <meshStandardMaterial color="#BFD9EC" transparent opacity={0.32} roughness={0.1} metalness={0.1} side={2} />
       </mesh>
     </>
   );

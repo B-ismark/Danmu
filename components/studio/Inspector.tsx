@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
 import { useRoomPart } from '@/lib/room-scene';
 import { useScene } from '@/lib/scene-store';
-import { fromMM, toMM, stepFor, precisionFor, UNIT_OPTIONS } from '@/lib/units';
+import { fromMM, toMM, stepFor, precisionFor, formatDim, UNIT_OPTIONS } from '@/lib/units';
+import { clampDims, dimRangeFor } from '@/lib/dimension-ranges';
 import { Icon } from '@/components/ui/Icon';
 import { useConfirm } from '@/components/ui/Confirm';
 import { RegenerateModal } from './RegenerateModal';
@@ -96,7 +97,7 @@ export function Inspector() {
 
   function snapToNearestWall() {
     const [x, y, z] = currentXYZ();
-    const snapped = snapToWallPhys([x, y, z], part!.dimMM, { width: room.width, depth: room.depth });
+    const snapped = snapToWallPhys([x, y, z], part!.dimMM, room.footprint);
     setPosition(id!, [snapped.x, y, snapped.z]);
     if (snapped.rot !== undefined) setRotation(id!, snapped.rot);
   }
@@ -196,7 +197,7 @@ export function Inspector() {
         </div>
       </div>
 
-      <DimensionEditor partId={id} value={currentDim} defaultDim={defaultDim} onChange={(d) => setDim(id, d)} />
+      <DimensionEditor partId={id} category={part.category} shape={part.shape} value={currentDim} defaultDim={defaultDim} onChange={(d) => setDim(id, d)} />
 
       <ColorEditor
         value={part.color}
@@ -227,6 +228,19 @@ export function Inspector() {
             </>
           )}
         </div>
+        {part.wallMounted && (
+          <MountHeightRow
+            key={`${id}-${currentXYZ()[1]}`}
+            bottomMM={(currentXYZ()[1] - part.dimMM[2] / 2000) * 1000}
+            maxBottomMM={(room.height - part.dimMM[2] / 1000) * 1000}
+            onCommit={(bottomMM) => {
+              const [x, , z] = currentXYZ();
+              const h = part!.dimMM[2] / 1000;
+              const y = Math.max(h / 2 + 0.02, Math.min(room.height - h / 2 - 0.02, bottomMM / 1000 + h / 2));
+              setPosition(id!, [x, y, z]);
+            }}
+          />
+        )}
       </Section>
 
       {/* Generic-box parts (low-confidence detections) read poorly — nudge the
@@ -583,11 +597,15 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 
 function DimensionEditor({
   partId,
+  category,
+  shape,
   value,
   onChange,
   defaultDim,
 }: {
   partId: string;
+  category: ScenePart['category'];
+  shape: ScenePart['shape'];
   value: [number, number, number];
   onChange: (d: [number, number, number]) => void;
   defaultDim: [number, number, number];
@@ -596,6 +614,7 @@ function DimensionEditor({
   const setDimUnit = useSettings((s) => s.setDimUnit);
   const prec = precisionFor(dimUnit);
   const step = stepFor(dimUnit);
+  const range = dimRangeFor(category, shape);
 
   const [local, setLocal] = useState<[string, string, string]>(() => [
     fromMM(value[0], dimUnit).toFixed(prec),
@@ -620,8 +639,10 @@ function DimensionEditor({
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       const mm = next.map((s) => toMM(parseFloat(s), dimUnit));
-      if (mm.some((n) => Number.isNaN(n) || n <= 10)) return;
-      onChange([mm[0], mm[1], mm[2]] as [number, number, number]);
+      if (mm.some((n) => Number.isNaN(n) || n <= 0)) return;
+      // Clamp into the shape's trustable real-world range — same gate the scale
+      // gizmo and the AI paths go through.
+      onChange(clampDims(category, shape, [mm[0], mm[1], mm[2]]));
     }, 120);
   }
 
@@ -699,8 +720,14 @@ function DimensionEditor({
           </label>
         ))}
       </div>
-      <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.06em', marginTop: 8 }}>
-        ↳ {dimUnit.toUpperCase()} · live
+      {/* Real-world range hint — the values any edit is clamped into. */}
+      <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.06em', marginTop: 8, lineHeight: 1.6 }}>
+        ↳ {dimUnit.toUpperCase()} · live ·{' '}
+        {range.flex === 'fixed' ? 'standard product size' : range.flex === 'standard' ? 'typical size range' : 'made-to-measure'}
+        <br />
+        W {formatDim(range.min[0], dimUnit)}–{formatDim(range.max[0], dimUnit)} · D{' '}
+        {formatDim(range.min[1], dimUnit)}–{formatDim(range.max[1], dimUnit)} · H{' '}
+        {formatDim(range.min[2], dimUnit)}–{formatDim(range.max[2], dimUnit)}
       </div>
     </div>
   );
@@ -798,3 +825,47 @@ function ColorEditor({
 }
 
 
+
+// Numeric mount-height editor for wall/ceiling-mounted parts — bottom edge
+// height off the floor, in the user's display unit. Pairs with the gizmo's
+// Y axis (drag preserves whatever height is set here).
+function MountHeightRow({
+  bottomMM,
+  maxBottomMM,
+  onCommit,
+}: {
+  bottomMM: number;
+  maxBottomMM: number;
+  onCommit: (bottomMM: number) => void;
+}) {
+  const dimUnit = useSettings((s) => s.dimUnit);
+  const [draft, setDraft] = useState(() => formatDim(Math.max(0, bottomMM), dimUnit));
+  useEffect(() => {
+    setDraft(formatDim(Math.max(0, bottomMM), dimUnit));
+  }, [bottomMM, dimUnit]);
+
+  function commit() {
+    const v = parseFloat(draft);
+    if (!Number.isFinite(v)) return setDraft(formatDim(Math.max(0, bottomMM), dimUnit));
+    const mm = Math.max(0, Math.min(maxBottomMM, toMM(v, dimUnit)));
+    onCommit(mm);
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+      <span style={{ fontSize: 11, color: 'var(--ink-3)', flex: 1 }}>Mount height (bottom edge)</span>
+      <input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+        }}
+        inputMode="decimal"
+        className="ds-input"
+        style={{ width: 72, height: 28, fontFamily: 'var(--font-mono)', fontSize: 11, textAlign: 'right' }}
+      />
+      <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>{dimUnit}</span>
+    </div>
+  );
+}

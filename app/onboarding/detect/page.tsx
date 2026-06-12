@@ -9,20 +9,64 @@ import { Icon } from '@/components/ui/Icon';
 import { DanmuMark } from '@/components/ui/primitives';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { PhotoEditor } from '@/components/studio/PhotoEditor';
-import { cropFromBbox, perceptualHash } from '@/lib/mask';
 import { sampleBoxColor } from '@/lib/color-sample';
-import { meshCache } from '@/lib/mesh-cache';
-import { generateMesh, Mesh3dError } from '@/lib/image-to-3d';
+import { localDetectorAvailable, detectLocalAcrossImages } from '@/lib/local-detect';
+import {
+  defaultCal,
+  calibrateFromFloorLine,
+  findFloorLine,
+  imageAspect,
+  placeFloorObject,
+  placeWallObject,
+  type CameraCal,
+} from '@/lib/photo-geometry';
+import { anchorFor } from '@/lib/physics';
+import type { Category, Shape } from '@/lib/scene-spec';
 
 type SlotEntry = { slot: CaptureSlot; url: string; cap: Capture };
+type RoomDims = { width: number; depth: number };
+type CalMap = Partial<Record<CaptureSlot, CameraCal>>;
+
+// Per-photo camera calibration: try the wall-floor line (exact), fall back to
+// a typical phone FOV. Deterministic either way.
+async function buildCals(entries: SlotEntry[], room: RoomDims): Promise<CalMap> {
+  const map: CalMap = {};
+  for (const e of entries) {
+    const aspect = await imageAspect(e.cap.blob);
+    const vFloor = await findFloorLine(e.cap.blob);
+    map[e.slot] =
+      (vFloor !== null ? calibrateFromFloorLine(vFloor, e.slot, room, aspect) : null) ?? defaultCal(aspect);
+  }
+  return map;
+}
+
+// Replace the AI's guessed position/size with values computed from projective
+// geometry: bbox bottom edge → floor position; angular size × distance → real
+// W and H. Depth stays a category default (single photo can't observe it) and
+// clampDims gates everything downstream. AI keeps naming/classifying only.
+function geoRefine(d: Detection, cals: CalMap, room: RoomDims): Detection {
+  const cal = cals[d.slot];
+  if (!cal) return d;
+  const anchor = anchorFor((d.category ?? 'other') as Category, (d.shape ?? 'box') as Shape);
+  if (anchor === 'ceiling' && d.category !== 'curtain') return d; // fan/pendant: not on the wall plane
+  const g =
+    anchor === 'floor'
+      ? placeFloorObject(d.box, d.slot, room, cal)
+      : placeWallObject(d.box, d.slot, room, cal);
+  if (!g) return d;
+  const depth = d.dimMM?.[1] ?? 500;
+  return {
+    ...d,
+    position: g.position,
+    yaw: typeof d.yaw === 'number' ? d.yaw : g.yaw,
+    dimMM: [g.widthMM, depth, g.heightMM],
+  };
+}
 
 export default function DetectPage() {
   const router = useRouter();
   const roomId = useRoom((s) => s.roomId);
   const apiKey = useSettings((s) => s.apiKey);
-  const mesh3dProvider = useSettings((s) => s.mesh3dProvider);
-  const meshyKey = useSettings((s) => s.meshyKey);
-  const tripoKey = useSettings((s) => s.tripoKey);
   const [running, setRunning] = useState(false);
   const [slots, setSlots] = useState<SlotEntry[]>([]);
   const [detections, setDetections] = useState<Detection[]>([]);
@@ -30,10 +74,10 @@ export default function DetectPage() {
   const [activeSlot, setActiveSlot] = useState<CaptureSlot>('n');
   const [error, setError] = useState<{ code: string; title: string; body: string } | null>(null);
   const [adding, setAdding] = useState(false);
-  /** indices of detections with cached meshes (synced from meshCache on load + mesh-gen) */
-  const [meshReady, setMeshReady] = useState<Set<number>>(new Set());
-  const [meshPending, setMeshPending] = useState<Set<number>>(new Set());
-  const [meshError, setMeshError] = useState<string | null>(null);
+  // Geometry context for deterministic dims — per-slot camera calibration +
+  // the room's real dimensions. Used on fresh detections and manual adds.
+  const [cals, setCals] = useState<CalMap>({});
+  const [roomDims, setRoomDims] = useState<RoomDims | null>(null);
 
   useEffect(() => {
     if (!roomId) return;
@@ -57,6 +101,17 @@ export default function DetectPage() {
 
       // CACHE: if this room already has detections, skip the API call entirely.
       const room = await roomStore.loadRoom(roomId);
+      // Calibrate every photo up front (floor-line → exact, else default FOV)
+      // so geometry-derived dims are available to detections + manual adds.
+      let calMap: CalMap = {};
+      if (room) {
+        const dims = { width: room.width, depth: room.depth };
+        calMap = await buildCals(entries, dims);
+        if (!cancelled) {
+          setCals(calMap);
+          setRoomDims(dims);
+        }
+      }
       if (room?.detectedObjects && room.detectedObjects.length > 0) {
         const cached: Detection[] = room.detectedObjects.map((d) => ({
           label: d.label.replace(/__slot:[nesw]$/, ''),
@@ -66,33 +121,40 @@ export default function DetectPage() {
           slot: ((d.label.match(/__slot:([nesw])$/) ?? [])[1] ?? 'n') as CaptureSlot,
           dimMM: d.dimMM,
           color: d.color,
-          dstBox: d.dstBox as [number, number, number, number] | undefined,
-          removed: d.removed,
           meshHash: d.meshHash,
         }));
         setDetections(cached);
         setLocked(new Set(room.detectedObjects.map((d, i) => (d.locked ? i : -1)).filter((x) => x >= 0)));
-        // Hydrate mesh-ready set from cache.
-        const ready = new Set<number>();
-        for (const [i, d] of cached.entries()) {
-          if (d.meshHash && (await meshCache.has(d.meshHash))) ready.add(i);
-        }
-        setMeshReady(ready);
         return;
       }
 
-      // Otherwise: single multi-image Gemini call.
+      // Otherwise: local on-device detector first (no key, no quota); Gemini
+      // only as the fallback when the model isn't deployed or finds nothing.
       setRunning(true);
       try {
-        const dets = await detectAcrossImages(
+        let dets: Detection[] | null = null;
+        if (await localDetectorAvailable()) {
+          try {
+            dets = await detectLocalAcrossImages(entries.map((e) => ({ slot: e.slot, blob: e.cap.blob })));
+            if (dets && dets.length === 0) dets = null; // empty result → let Gemini try
+          } catch {
+            dets = null;
+          }
+        }
+        dets ??= await detectAcrossImages(
           apiKey,
           entries.map((e) => ({ slot: e.slot, blob: e.cap.blob })),
           room ? { width: room.width, depth: room.depth, height: room.height, layoutId: room.layoutId } : undefined,
         );
         if (cancelled) return;
-        setDetections(dets);
+        // Geometry pass — deterministic position + W/H from the calibrated
+        // camera; the AI result only contributes label/category/depth hint.
+        const refined = room
+          ? dets.map((d) => geoRefine(d, calMap, { width: room.width, depth: room.depth }))
+          : dets;
+        setDetections(refined);
         const lockSet = new Set<number>();
-        dets.forEach((d, i) => {
+        refined.forEach((d, i) => {
           if (d.conf >= 0.85) lockSet.add(i);
         });
         setLocked(lockSet);
@@ -177,112 +239,19 @@ export default function DetectPage() {
   }
 
   function addManual(box: [number, number, number, number]) {
-    const det: Detection = {
+    let det: Detection = {
       label: 'New item',
       conf: 1,
       box,
       category: 'other',
       slot: activeSlot,
     };
+    // Zero-AI path: the drawn box + calibrated camera give real position and
+    // W/H directly. Works offline, no key needed.
+    if (roomDims) det = geoRefine(det, cals, roomDims);
     setDetections((d) => [...d, det]);
     setLocked((prev) => new Set(prev).add(detections.length));
     setAdding(false);
-  }
-
-  function setDstBox(i: number, dst: [number, number, number, number]) {
-    setDetections((d) => d.map((x, idx) => (idx === i ? { ...x, dstBox: dst } : x)));
-  }
-  function clearDstBox(i: number) {
-    setDetections((d) =>
-      d.map((x, idx) => {
-        if (idx !== i) return x;
-        const { dstBox: _drop, ...rest } = x;
-        return rest;
-      }),
-    );
-  }
-  function toggleRemoved(i: number) {
-    setDetections((d) => d.map((x, idx) => (idx === i ? { ...x, removed: !x.removed } : x)));
-  }
-
-  async function persistDetections(meshIdx: number, meshHash: string) {
-    if (!roomId) return;
-    const room = await roomStore.loadRoom(roomId);
-    if (!room) return;
-    // Mirror finish()'s shape exactly — full rewrite of detectedObjects from
-    // the in-memory state so brand-new detect runs (which haven't called
-    // finish() yet) still produce a consistent persisted array.
-    const flat = detections.map((d, i) => ({
-      id: i,
-      label: `${d.label}__slot:${d.slot}`,
-      conf: d.conf,
-      locked: locked.has(i),
-      box: d.box,
-      category: d.category,
-      dimMM: d.dimMM,
-      position: d.position,
-      yaw: d.yaw,
-      shape: d.shape,
-      color: d.color,
-      dstBox: d.dstBox,
-      removed: d.removed,
-      meshHash: i === meshIdx ? meshHash : d.meshHash,
-    }));
-    await roomStore.saveRoom({ ...room, detectedObjects: flat });
-  }
-
-  async function make3d(i: number) {
-    if (mesh3dProvider === 'off') {
-      setMeshError('Enable a 3D provider in Settings first.');
-      return;
-    }
-    const key = mesh3dProvider === 'meshy' ? meshyKey : tripoKey;
-    if (!key) {
-      setMeshError(`Add ${mesh3dProvider} API key in Settings.`);
-      return;
-    }
-    const det = detections[i];
-    if (!det) return;
-    const cap = slots.find((s) => s.slot === det.slot)?.cap;
-    if (!cap) return;
-
-    setMeshError(null);
-    setMeshPending((prev) => new Set(prev).add(i));
-    try {
-      const crop = await cropFromBbox(cap.blob, det.box);
-      const hash = await perceptualHash(crop);
-
-      // Cache hit? Skip the network call entirely.
-      const fromCache = await meshCache.has(hash);
-      if (!fromCache) {
-        const result = await generateMesh(mesh3dProvider, key, crop, { label: det.label });
-        await meshCache.put({
-          hash,
-          label: det.label,
-          provider: result.provider,
-          glb: result.glb,
-          remoteUrl: result.remoteUrl,
-          createdAt: Date.now(),
-          source: roomId ? { roomId, slot: det.slot, bbox: det.box } : undefined,
-        });
-      }
-      setDetections((d) => d.map((x, idx) => (idx === i ? { ...x, meshHash: hash } : x)));
-      setMeshReady((prev) => new Set(prev).add(i));
-
-      // Auto-persist immediately so a refresh on this page doesn't lose the
-      // binding. The GLB itself lives forever in meshCache, but without the
-      // hash on the detection nothing references it.
-      if (roomId) await persistDetections(i, hash);
-    } catch (e) {
-      if (e instanceof Mesh3dError) setMeshError(`${e.code}: ${e.message}`);
-      else setMeshError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setMeshPending((prev) => {
-        const next = new Set(prev);
-        next.delete(i);
-        return next;
-      });
-    }
   }
 
   async function finish() {
@@ -301,8 +270,6 @@ export default function DetectPage() {
       yaw: d.yaw,
       shape: d.shape,
       color: d.color,
-      dstBox: d.dstBox,
-      removed: d.removed,
       meshHash: d.meshHash,
     }));
     await roomStore.saveRoom({ ...room, detectedObjects: flat });
@@ -410,45 +377,10 @@ export default function DetectPage() {
                 mode={adding ? 'add' : 'select'}
                 onToggleLock={toggle}
                 onDelete={deleteDetection}
-                onSetDstBox={setDstBox}
-                onClearDstBox={clearDstBox}
-                onToggleRemoved={toggleRemoved}
                 onAddBox={addManual}
-                onMake3d={mesh3dProvider === 'off' ? undefined : make3d}
-                meshAvailable={(i) => meshReady.has(i)}
-                meshPending={(i) => meshPending.has(i)}
               />
             )}
           </div>
-
-          {meshError && (
-            <div
-              style={{
-                margin: '0 16px 8px',
-                padding: '6px 10px',
-                background: 'rgba(192,38,24,0.08)',
-                border: '1px solid var(--danger)',
-                color: 'var(--danger)',
-                fontSize: 11,
-              }}
-            >
-              3D · {meshError}
-              <button
-                onClick={() => setMeshError(null)}
-                style={{
-                  marginLeft: 8,
-                  background: 'transparent',
-                  border: '1px solid var(--danger)',
-                  color: 'var(--danger)',
-                  padding: '0 6px',
-                  cursor: 'pointer',
-                  fontSize: 10,
-                }}
-              >
-                Dismiss
-              </button>
-            </div>
-          )}
 
           {/* canvas toolbar */}
           <div
@@ -491,7 +423,7 @@ export default function DetectPage() {
               <span className="ds-label" style={{ color: 'var(--locked)' }}>{lockedCount} locked</span>
             </div>
             <p style={{ fontSize: 11, color: 'var(--ink-3)', margin: '6px 0 0', lineHeight: 1.4 }}>
-              Lock = preserved when AI renders around it. Toggle on/off freely.
+              Lock = high-confidence item, kept as-is in your 3D room. Toggle on/off freely.
             </p>
           </div>
 

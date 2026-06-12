@@ -1,6 +1,9 @@
 node_modules
 .next
 out
+# local detector model — exported via scripts/export-detector.py, too big for git
+public/models/*.onnx
+public/models/*.names.json
 .env
 .env*
 .env*.local

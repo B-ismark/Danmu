@@ -4,6 +4,8 @@
 // is drawn around y=0 inside the group).
 
 import type { Category, Shape } from './scene-spec';
+import type { Footprint } from './footprint';
+import { nearestEdge } from './geometry';
 
 export type Anchor = 'floor' | 'ceiling' | 'wall-high' | 'wall-mid' | 'wall-low';
 
@@ -34,6 +36,7 @@ const ANCHOR_BY_SHAPE: Partial<Record<Shape, Anchor>> = {
   'mirror-oval': 'wall-mid',
   painting: 'wall-mid',
   'ac-unit': 'wall-high',
+  window: 'wall-mid',
 };
 
 export function anchorFor(category: Category, shape: Shape): Anchor {
@@ -111,29 +114,23 @@ export function wallAffinity(category: Category): WallAffinity {
   return WALL_AFFINITY_BY_CATEGORY[category] ?? 'free';
 }
 
-/** Snap an x/z position to the nearest wall in-room while clamping for the part footprint.
- *  Returns adjusted [x, z] in metres. Used by must-wall + prefers-wall items. */
+/** Snap an x/z position to the nearest wall (footprint edge) with the part's
+ *  back flush against it and its front facing into the room. Edge-exact, so it
+ *  works for L / T / U / custom rooms, not just the bounding rectangle.
+ *  Returns adjusted [x, z] in metres + the facing yaw. */
 export function snapToWall(
   pos: [number, number, number],
   dimMM: [number, number, number],
-  room: { width: number; depth: number },
+  footprint: Footprint,
 ): { x: number; z: number; rot?: number } {
-  const halfW = room.width / 2;
-  const halfD = room.depth / 2;
-  const partD = dimMM[1] / 1000; // depth (perpendicular to facing direction)
-  const inset = partD / 2 + 0.02;
-
-  // Distances to each wall from current pos
-  const distN = halfD + pos[2];
-  const distS = halfD - pos[2];
-  const distW = halfW + pos[0];
-  const distE = halfW - pos[0];
-  const min = Math.min(distN, distS, distW, distE);
-
-  if (min === distN) return { x: pos[0], z: -halfD + inset, rot: 0 }; // facing +Z (into room)
-  if (min === distS) return { x: pos[0], z: halfD - inset, rot: Math.PI };
-  if (min === distW) return { x: -halfW + inset, z: pos[2], rot: -Math.PI / 2 };
-  return { x: halfW - inset, z: pos[2], rot: Math.PI / 2 };
+  const edge = nearestEdge(footprint, pos[0], pos[2]);
+  if (!edge) return { x: pos[0], z: pos[2] };
+  const inset = dimMM[1] / 2000 + 0.02; // part depth/2 + wall gap
+  return {
+    x: edge.px + edge.nx * inset,
+    z: edge.pz + edge.nz * inset,
+    rot: edge.yaw,
+  };
 }
 
 /** Categories / shapes that PREFER to rest on a piece of furniture if one exists

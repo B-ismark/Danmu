@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { roomStore } from '@/lib/storage';
 
 // Entry: route on whether the user has any rooms — NOT on whether they have an
-// AI key. The 3D studio is the product; the AI preview is optional. A first-time
+// AI key. The 3D studio is the product; AI detection is optional. A first-time
 // visitor (no rooms) sees the intro; a returning one drops straight into their
 // workspace. Key presence never blocks entry.
 export default function Home() {

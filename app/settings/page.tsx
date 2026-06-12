@@ -4,9 +4,9 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useSettings, useRoom } from '@/lib/store';
 import { roomStore } from '@/lib/storage';
-import { validateKey } from '@/lib/imagen';
+import { validateKey } from '@/lib/validate-key';
 import { Icon } from '@/components/ui/Icon';
-import { DanmuMark, Toggle, Dot } from '@/components/ui/primitives';
+import { DanmuMark, Dot } from '@/components/ui/primitives';
 import { useConfirm } from '@/components/ui/Confirm';
 
 export default function SettingsPage() {
@@ -33,7 +33,7 @@ export default function SettingsPage() {
     if (!roomId) return;
     const ok = await confirm({
       title: 'Clear local data?',
-      body: 'Captures, detections and renders for the current room will be deleted.',
+      body: 'Captures, detections and edits for the current room will be deleted.',
       confirmLabel: 'Clear',
       danger: true,
     });
@@ -66,9 +66,9 @@ export default function SettingsPage() {
       </div>
 
       <div style={{ padding: '32px 40px', maxWidth: 920 }}>
-        <SecHeader eyebrow="Previews" title="Connect your preview key." desc="Previews are generated on your device using your own key. Nothing is uploaded to us." />
+        <SecHeader eyebrow="Detection" title="Connect your detection key (optional)." desc="Used only to recognise furniture in your photos. Everything else runs on your device, no key needed." />
 
-        <Row label="Access key" hint="Used to recognise furniture in your photos and to generate room previews. Stored on this device only.">
+        <Row label="Access key" hint="Used to recognise furniture in your photos. Stored on this device only.">
           <div style={{ display: 'flex', gap: 6 }}>
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', border: '1px solid var(--hairline-strong)', background: 'var(--paper)' }}>
               <input
@@ -127,18 +127,6 @@ export default function SettingsPage() {
         </Row>
 
         <SecHeader eyebrow="Workspace" title="Preferences." desc="" />
-        <Row label="Currency">
-          <select
-            value={s.currency}
-            onChange={(e) => s.setCurrency(e.target.value as typeof s.currency)}
-            className="ds-input"
-            style={{ width: 220, height: 34 }}
-          >
-            <option value="GHS">GHS — Ghana Cedi (₵)</option>
-            <option value="USD">USD — US Dollar ($)</option>
-            <option value="NGN">NGN — Naira (₦)</option>
-          </select>
-        </Row>
         <Row label="Measurement units">
           <div style={{ display: 'flex', border: '1px solid var(--hairline-strong)' }}>
             {(['metric', 'imperial'] as const).map((u) => (
@@ -160,79 +148,8 @@ export default function SettingsPage() {
             ))}
           </div>
         </Row>
-        <Row label="Confirm before paid previews" hint="Ask for confirmation before any preview that could cost money.">
-          <Toggle on={s.confirmPaidRenders} onClick={() => s.setConfirmPaidRenders(!s.confirmPaidRenders)} />
-        </Row>
-
-        <SecHeader
-          eyebrow="3D furniture"
-          title="Realistic 3D pieces (optional)."
-          desc="Turn your photographed furniture into reusable, more-detailed 3D pieces. Optional, uses your own key, saved on this device."
-        />
-        <Row label="Provider" hint="Choose a service, or OFF to keep the built-in 3D pieces.">
-          <div style={{ display: 'flex', border: '1px solid var(--hairline-strong)' }}>
-            {(['off', 'meshy', 'tripo'] as const).map((p) => (
-              <button
-                key={p}
-                onClick={() => s.setMesh3dProvider(p)}
-                style={{
-                  padding: '8px 18px',
-                  background: s.mesh3dProvider === p ? 'var(--ink)' : 'transparent',
-                  color: s.mesh3dProvider === p ? 'var(--paper)' : 'var(--ink-2)',
-                  border: 'none',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  textTransform: 'capitalize',
-                }}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
-        </Row>
-        {s.mesh3dProvider === 'meshy' && (
-          <Row label="Meshy API key" hint="Sign up at meshy.ai. Pricing ~$0.10–0.30 per generation. Stored only in this browser.">
-            <input
-              type="password"
-              value={s.meshyKey}
-              onChange={(e) => s.setMeshyKey(e.target.value)}
-              placeholder="msy_…"
-              className="ds-input"
-              style={{ width: 360, height: 36, fontFamily: 'var(--font-mono)', fontSize: 12 }}
-            />
-          </Row>
-        )}
-        {s.mesh3dProvider === 'tripo' && (
-          <Row label="Tripo3D API key" hint="Sign up at platform.tripo3d.ai. Cheaper than Meshy. Stored only in this browser.">
-            <input
-              type="password"
-              value={s.tripoKey}
-              onChange={(e) => s.setTripoKey(e.target.value)}
-              placeholder="tsk_…"
-              className="ds-input"
-              style={{ width: 360, height: 36, fontFamily: 'var(--font-mono)', fontSize: 12 }}
-            />
-          </Row>
-        )}
-
-        <SecHeader
-          eyebrow="Faster previews"
-          title="Quick-preview key (optional)."
-          desc="An optional second key that keeps your exact layout and previews faster and cheaper. The first previews are usually free."
-        />
-        <Row label="Quick-preview token" hint="Optional. Create a free token at huggingface.co/settings/tokens with the 'Inference Providers' permission. Stored on this device only.">
-          <input
-            type="password"
-            value={s.hfToken}
-            onChange={(e) => s.setHfToken(e.target.value)}
-            placeholder="hf_…"
-            className="ds-input"
-            style={{ width: 360, height: 36, fontFamily: 'var(--font-mono)', fontSize: 12 }}
-          />
-        </Row>
-
-        <SecHeader eyebrow="Data" title="Local-first storage." desc="Captures + renders live in this browser only." />
-        <Row label="Clear local cache" hint="Removes captures, detections, renders for the current room.">
+        <SecHeader eyebrow="Data" title="Local-first storage." desc="Captures + edits live in this browser only." />
+        <Row label="Clear local cache" hint="Removes captures, detections and edits for the current room.">
           <button onClick={clearCache} className="ds-btn" style={{ height: 32, fontSize: 12, color: 'var(--danger)', borderColor: 'var(--danger)' }}>
             <Icon name="trash" size={12} /> Clear room data
           </button>

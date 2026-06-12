@@ -1,16 +1,18 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { v4 as uuid } from 'uuid';
 import { useScene } from '@/lib/scene-store';
-import { useStudio, useSettings } from '@/lib/store';
-import { regenerateShape, blobToBase64Raw } from '@/lib/regenerate';
+import { useStudio } from '@/lib/store';
+import { searchLibrary, parseDims } from '@/lib/shape-search';
+import { clampDims } from '@/lib/dimension-ranges';
 import { placeNewPart, type LibraryItem, type ScenePart } from '@/lib/scene-spec';
 import { Icon } from '@/components/ui/Icon';
 import { LibraryPicker } from './LibraryPicker';
 
-// One button → opens modal → user describes (or uploads image) → Gemini picks
-// shape from catalog → new ScenePart spawned at room center floor.
+// One button → opens modal → pick from the catalog, or describe a piece in
+// words. Matching is local token search (lib/shape-search) — no AI, instant,
+// and explicit sizes in the text ("180cm wide") carry into the spawned part.
 
 export function AddPartButton() {
   const [open, setOpen] = useState(false);
@@ -38,15 +40,14 @@ export function AddPartButton() {
 }
 
 function AddPartModal({ onClose }: { onClose: () => void }) {
-  const apiKey = useSettings((s) => s.apiKey);
   const addPart = useScene((s) => s.addPart);
   const setSelected = useStudio((s) => s.setSelected);
   const [tab, setTab] = useState<'library' | 'describe'>('library');
   const [prompt, setPrompt] = useState('');
-  const [refFile, setRefFile] = useState<File | null>(null);
-  const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Live local matches — recomputed as the user types. No network involved.
+  const matches = useMemo(() => searchLibrary(prompt, 5), [prompt]);
 
   // Shared spawn — gravity applied so wall-hung items mount at height, others
   // rest on the surface/floor. Used by both the library and the prompt path.
@@ -63,32 +64,24 @@ function AddPartModal({ onClose }: { onClose: () => void }) {
     spawn(item.category, item.shape, [...item.dimMM], item.label);
   }
 
-  async function go() {
-    if (!prompt.trim() && !refFile) {
-      setError('Add a description or upload a reference image.');
+  // Spawn a match with any explicit sizes from the description applied
+  // ("queen bed 160x200cm" → those dims, clamped into the trustable range).
+  function addMatch(item: LibraryItem) {
+    const o = parseDims(prompt);
+    const dim = clampDims(item.category, item.shape, [
+      o.w ?? item.dimMM[0],
+      o.d ?? item.dimMM[1],
+      o.h ?? item.dimMM[2],
+    ]);
+    spawn(item.category, item.shape, dim, item.label);
+  }
+
+  function go() {
+    if (matches.length === 0) {
+      setError('Nothing in the catalog matches that — try other words, or pick from the Catalog tab.');
       return;
     }
-    setRunning(true);
-    setError(null);
-    try {
-      const ref = refFile ? await blobToBase64Raw(refFile) : undefined;
-      // Seed Gemini with a generic placeholder so it picks the right shape from scratch.
-      const seed: ScenePart = {
-        id: 'new',
-        category: 'other',
-        name: prompt.split(/\s+/).slice(0, 3).join(' ') || 'New item',
-        shape: 'box',
-        pos: [0, 0, 0],
-        rot: 0,
-        dimMM: [600, 600, 800],
-        locked: false,
-      };
-      const result = await regenerateShape(apiKey, seed, prompt, ref);
-      spawn(result.category, result.shape, result.dimMM, result.name);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Add failed.');
-      setRunning(false);
-    }
+    addMatch(matches[0]);
   }
 
   return (
@@ -145,15 +138,16 @@ function AddPartModal({ onClose }: { onClose: () => void }) {
           ) : (
             <>
               <p style={{ fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.5, margin: '0 0 12px' }}>
-                Type what you want and we&apos;ll add the closest match — optionally with a reference photo.
+                Type what you want — sizes included ("180cm wide") carry into the piece.
               </p>
               <textarea
                 value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder='e.g. "tall floor mirror with wooden frame, 1700mm" or "queen bed with white linen"'
+                onChange={(e) => { setPrompt(e.target.value); setError(null); }}
+                placeholder='e.g. "tall mirror 1700mm" or "queen bed 160x200cm"'
+                autoFocus
                 style={{
                   width: '100%',
-                  minHeight: 72,
+                  minHeight: 56,
                   border: '1px solid var(--hairline-strong)',
                   borderRadius: 2,
                   padding: 10,
@@ -168,21 +162,31 @@ function AddPartModal({ onClose }: { onClose: () => void }) {
                 onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--accent)')}
                 onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--hairline-strong)')}
               />
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                style={{ display: 'none' }}
-                onChange={(e) => setRefFile(e.target.files?.[0] ?? null)}
-              />
-              <button
-                onClick={() => fileRef.current?.click()}
-                className="ds-btn"
-                style={{ height: 36, fontSize: 12, width: '100%', justifyContent: 'flex-start' }}
-              >
-                <Icon name="image" size={12} />
-                {refFile ? refFile.name : 'Upload reference image (optional)'}
-              </button>
+              {matches.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {matches.map((m) => (
+                    <button
+                      key={m.label}
+                      onClick={() => addMatch(m)}
+                      className="ds-btn"
+                      style={{ height: 34, fontSize: 12, justifyContent: 'space-between', paddingLeft: 10 }}
+                    >
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                        <Icon name="plus" size={11} />
+                        {m.label}
+                      </span>
+                      <span className="mono" style={{ fontSize: 9, color: 'var(--ink-3)' }}>
+                        {m.dimMM[0]}×{m.dimMM[1]}×{m.dimMM[2]}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {prompt.trim().length > 1 && matches.length === 0 && (
+                <div style={{ fontSize: 12, color: 'var(--ink-3)', padding: '8px 0' }}>
+                  No catalog match yet — keep typing, or browse the Catalog tab.
+                </div>
+              )}
             </>
           )}
 
@@ -216,12 +220,12 @@ function AddPartModal({ onClose }: { onClose: () => void }) {
           {tab === 'describe' && (
             <button
               onClick={go}
-              disabled={running}
+              disabled={matches.length === 0}
               className="ds-btn ds-btn--primary"
               style={{ flex: 1, height: 36, fontSize: 13, justifyContent: 'center' }}
             >
               <Icon name="plus" size={12} />
-              {running ? 'Adding…' : 'Add to scene'}
+              Add best match
             </button>
           )}
         </div>

@@ -124,7 +124,7 @@ export default function WelcomePage() {
             >
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                 <Icon name="sparkles" size={13} />
-                {hasKey ? 'AI photo preview · key added' : 'Add an AI key for photo previews (optional)'}
+                {hasKey ? 'AI furniture detection · key added' : 'Add an AI key for furniture detection (optional)'}
               </span>
               <Icon name={keyOpen ? 'chevron-up' : 'chevron-down'} size={14} />
             </button>

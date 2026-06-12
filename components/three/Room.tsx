@@ -5,7 +5,6 @@
 
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { Suspense, useEffect, useRef, useState } from 'react';
-import { useParams } from 'next/navigation';
 import { ContactShadows, Environment, Lightformer, AdaptiveDpr, PerformanceMonitor } from '@react-three/drei';
 import { EffectComposer, N8AO, SMAA } from '@react-three/postprocessing';
 import { ACESFilmicToneMapping, Raycaster, Vector2, Vector3, Plane, type Camera, type WebGLRenderer } from 'three';
@@ -14,9 +13,10 @@ import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { placeNewPart, DND_MIME, type Category, type Shape } from '@/lib/scene-spec';
 import { footprintBounds } from '@/lib/footprint';
-import { roomStore } from '@/lib/storage';
+import { useSnapshot, downloadBlob } from '@/lib/snapshot';
 import { RoomShell } from './RoomShell';
 import { WallHandles } from './WallHandles';
+import { MeasureGuides } from './MeasureGuides';
 import { Draggable } from './Draggable';
 import { PartGeometry } from './DynamicPart';
 import { Dressing } from './Dressing';
@@ -62,7 +62,6 @@ const LIGHTING = {
 } as const;
 
 export function Room() {
-  const mode = useStudio((s) => s.renderMode);
   const hidden = useStudio((s) => s.hidden);
   const lighting = useStudio((s) => s.lighting);
   const quality = useStudio((s) => s.quality);
@@ -178,10 +177,11 @@ export function Room() {
         <WallHandles />
         {parts.map((part) => (
           <Draggable key={part.id} partId={part.id}>
-            <PartGeometry part={part} locked={part.locked} mode={mode} />
+            <PartGeometry part={part} locked={part.locked} />
           </Draggable>
         ))}
         {dressed && parts.map((part) => <Dressing key={`dress-${part.id}`} part={part} />)}
+        <MeasureGuides />
         <ContactShadows
           position={[footprintBounds(room.footprint).cx, 0.004, footprintBounds(room.footprint).cz]}
           scale={Math.max(room.width, room.depth) * 1.3}
@@ -225,49 +225,18 @@ function DropConnector({ apiRef }: { apiRef: React.MutableRefObject<{ camera: Ca
   return null;
 }
 
-// Persists a debounced screenshot of the live scene to IDB whenever the scene
-// settles. The render flow uses it as the base image when the user never
-// captured real photos — "reimagine this 3D blockout as a real room".
+// On-demand scene snapshot — the TopBar Snapshot button bumps useSnapshot's
+// token; we capture the next frame (helpers hidden) and download it as a PNG.
 function SceneCapture() {
   const { gl, scene, camera } = useThree();
-  const { roomId } = useParams<{ roomId: string }>();
-  const parts = useScene((s) => s.parts);
-  const room = useScene((s) => s.room);
-  // Transform overrides matter: the snapshot is the render's base image, so it
-  // MUST reflect the user's moves/rotations/scales. Watching only parts/room
-  // (the old behaviour) meant a rotated wardrobe or a moved item never made it
-  // into the snapshot, so the render reverted to the detected layout.
-  const positions = useStudio((s) => s.positions);
-  const rotations = useStudio((s) => s.rotations);
-  const dims = useStudio((s) => s.dims);
-
-  // "Dirty" episode tracking. Any arrangement OR camera change pushes the settle
-  // deadline; ~600ms after the last change we take exactly one snapshot. This is
-  // what makes the render use the EXACT view + arrangement the user is looking at
-  // (camera moves don't trigger React renders, so we poll the camera in useFrame).
-  const dirtyAt = useRef(Date.now());
-  const savedFor = useRef(0);
-  const lastCamKey = useRef('');
-
-  useEffect(() => {
-    dirtyAt.current = Date.now();
-  }, [parts, room, positions, rotations, dims]);
+  const done = useRef(useSnapshot.getState().token);
 
   useFrame(() => {
-    if (!roomId) return;
-    const p = camera.position;
-    const r = (camera as { rotation?: { x: number; y: number; z: number } }).rotation;
-    const camKey = `${p.x.toFixed(2)},${p.y.toFixed(2)},${p.z.toFixed(2)}|${r ? `${r.x.toFixed(2)},${r.y.toFixed(2)},${r.z.toFixed(2)}` : ''}`;
-    if (camKey !== lastCamKey.current) {
-      lastCamKey.current = camKey;
-      dirtyAt.current = Date.now();
-    }
-    // Settled, and not yet saved for this dirty episode → snapshot once.
-    if (Date.now() - dirtyAt.current < 600) return;
-    if (savedFor.current === dirtyAt.current) return;
-    savedFor.current = dirtyAt.current;
+    const want = useSnapshot.getState().token;
+    if (want === done.current) return;
+    done.current = want;
     // Hide editor-only helpers (selection highlight + transform gizmo) so they
-    // don't bake into the snapshot the AI renders from. Restore after.
+    // don't bake into the image. Restore after the synchronous copy.
     const hidden: Array<{ obj: { visible: boolean } }> = [];
     scene.traverse((o) => {
       const t = (o as { type?: string }).type ?? '';
@@ -292,17 +261,12 @@ function SceneCapture() {
       const ctx = snap.getContext('2d');
       if (!ctx) return;
       ctx.drawImage(src, 0, 0);
-      snap.toBlob(
-        (blob) => {
-          if (blob) roomStore.saveSceneSnap(roomId, blob).catch(() => {});
-        },
-        'image/jpeg',
-        0.92,
-      );
+      snap.toBlob((blob) => {
+        if (blob) downloadBlob(blob, 'room-snapshot.png');
+      }, 'image/png');
     } catch {
       /* canvas not ready / context lost — skip this snapshot */
     } finally {
-      // drawImage already captured the buffer synchronously, so restore now.
       hidden.forEach((h) => (h.obj.visible = true));
     }
   });

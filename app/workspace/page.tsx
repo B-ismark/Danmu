@@ -37,7 +37,7 @@ export default function WorkspacePage() {
     e.stopPropagation();
     const ok = await confirm({
       title: 'Delete this room?',
-      body: 'All captures, detections, edits and renders for this room will be permanently removed.',
+      body: 'All captures, detections and edits for this room will be permanently removed.',
       confirmLabel: 'Delete room',
       danger: true,
     });
@@ -229,35 +229,6 @@ function RoomCard({
             }}
           >
             ↺ Detect furniture
-          </span>
-        )}
-        {room.renderCount > 0 && (
-          <span
-            style={{
-              fontSize: 10,
-              fontWeight: 700,
-              padding: '2px 9px',
-              borderRadius: 'var(--r-full)',
-              border: '1px solid var(--accent)',
-              color: 'var(--accent)',
-              background: 'var(--accent-tint)',
-            }}
-          >
-            <span className="mono">{room.renderCount}</span> render{room.renderCount === 1 ? '' : 's'}
-          </span>
-        )}
-        {room.pinnedRenderCount > 0 && (
-          <span
-            style={{
-              fontSize: 10,
-              fontWeight: 700,
-              padding: '2px 9px',
-              borderRadius: 'var(--r-full)',
-              background: 'var(--accent)',
-              color: '#fff',
-            }}
-          >
-            ★ <span className="mono">{room.pinnedRenderCount}</span> pinned
           </span>
         )}
       </div>

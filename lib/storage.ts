@@ -17,7 +17,7 @@ async function set<T>(key: IDBValidKey, value: T): Promise<void> {
   }
 }
 
-// IndexedDB-backed room data: captures (blobs), depth maps, render variants, masks.
+// IndexedDB-backed room data: captures (blobs), detections, scene parts, transforms.
 // Single-room v0.1. Keys are namespaced by roomId.
 
 export type CaptureSlot = 'n' | 'e' | 's' | 'w';
@@ -27,17 +27,6 @@ export type Capture = {
   blob: Blob;
   takenAt: number;
   pose?: { yaw: number; tilt: number; height: number };
-};
-
-export type RenderVariant = {
-  id: string;
-  blob: Blob;
-  prompt: string;
-  seed: number;
-  createdAt: number;
-  costAmount: number;
-  costCurrency: string;
-  pinned?: boolean;
 };
 
 export type RoomData = {
@@ -67,10 +56,6 @@ export type RoomData = {
     shape?: string;
     /** Dominant colour (#rrggbb) — photo-sampled, Gemini hex fallback. */
     color?: string;
-    /** PhotoEditor: target bbox after user drag. */
-    dstBox?: [number, number, number, number];
-    /** PhotoEditor: user flagged for removal. */
-    removed?: boolean;
     /** Cached mesh hash → lib/mesh-cache.ts. */
     meshHash?: string;
   }>;
@@ -84,14 +69,23 @@ export type Transforms = {
   dims: Record<string, [number, number, number]>;
 };
 
+/** A named furniture-arrangement snapshot ("Layout A / B") — lets the user
+ *  save competing arrangements of the same room and flip between them. */
+export type LayoutVariant = {
+  id: string;
+  name: string;
+  createdAt: number;
+  /** ScenePart[] — stored opaque to avoid a lib cycle (same as saveSceneParts). */
+  parts: unknown;
+  transforms: Transforms;
+};
+
 export type RoomSummary = {
   id: string;
   name: string;
   createdAt: number;
   updatedAt: number;
   itemCount: number;
-  renderCount: number;
-  pinnedRenderCount: number;
   /** captures uploaded; 0 = never started capture */
   captureCount: number;
   /** has detectedObjects from a successful detect run */
@@ -106,19 +100,6 @@ export const roomStore = {
     const meta = await get<RoomData>(k(roomId, 'meta'));
     if (!meta) return;
     await set(k(roomId, 'meta'), { ...meta, name });
-  },
-  /** First pinned render variant for a room (for spec PDF cover, share preview). */
-  async firstPinnedRender(roomId: string): Promise<RenderVariant | undefined> {
-    const all = await keys();
-    const prefix = k(roomId, 'render:');
-    const list: RenderVariant[] = [];
-    for (const key of all) {
-      if (typeof key === 'string' && key.startsWith(prefix)) {
-        const v = await get<RenderVariant>(key);
-        if (v?.pinned) list.push(v);
-      }
-    }
-    return list.sort((a, b) => b.createdAt - a.createdAt)[0];
   },
   async loadRoom(roomId: string): Promise<RoomData | undefined> {
     return get<RoomData>(k(roomId, 'meta'));
@@ -138,31 +119,23 @@ export const roomStore = {
     }
     return out;
   },
-  async saveRender(roomId: string, variant: RenderVariant) {
-    await set(k(roomId, `render:${variant.id}`), variant);
+  async saveLayout(roomId: string, v: LayoutVariant) {
+    await set(k(roomId, `layout:${v.id}`), v);
   },
-  async pinRender(roomId: string, variantId: string, pinned: boolean) {
-    const v = await get<RenderVariant>(k(roomId, `render:${variantId}`));
-    if (!v) return;
-    await set(k(roomId, `render:${variantId}`), { ...v, pinned });
+  async deleteLayout(roomId: string, layoutId: string) {
+    await del(k(roomId, `layout:${layoutId}`));
   },
-  async deleteRender(roomId: string, variantId: string) {
-    await del(k(roomId, `render:${variantId}`));
-  },
-  async listRenders(roomId: string): Promise<RenderVariant[]> {
+  async listLayouts(roomId: string): Promise<LayoutVariant[]> {
     const all = await keys();
-    const prefix = k(roomId, 'render:');
-    const out: RenderVariant[] = [];
+    const prefix = k(roomId, 'layout:');
+    const out: LayoutVariant[] = [];
     for (const key of all) {
       if (typeof key === 'string' && key.startsWith(prefix)) {
-        const v = await get<RenderVariant>(key);
+        const v = await get<LayoutVariant>(key);
         if (v) out.push(v);
       }
     }
-    return out.sort((a, b) => {
-      if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
-      return b.createdAt - a.createdAt;
-    });
+    return out.sort((a, b) => a.createdAt - b.createdAt);
   },
   async saveTransforms(roomId: string, t: Transforms) {
     await set(k(roomId, 'transforms'), t);
@@ -175,14 +148,6 @@ export const roomStore = {
   },
   async loadSceneParts<T>(roomId: string): Promise<T | undefined> {
     return get<T>(k(roomId, 'scene'));
-  },
-  /** Latest 3D-scene screenshot — used as the render base when the user never
-   *  uploaded real photos (AI reimagines the blockout as a real room). */
-  async saveSceneSnap(roomId: string, blob: Blob) {
-    await set(k(roomId, 'scenesnap'), blob);
-  },
-  async loadSceneSnap(roomId: string): Promise<Blob | undefined> {
-    return get<Blob>(k(roomId, 'scenesnap'));
   },
   async listRooms(): Promise<RoomSummary[]> {
     const all = await keys();
@@ -198,22 +163,11 @@ export const roomStore = {
       const meta = await get<RoomData>(k(id, 'meta'));
       const transforms = await get<Transforms>(k(id, 'transforms'));
       const itemCount = transforms ? Object.keys(transforms.positions).length : 0;
-      // count renders + captures for this room
-      let renderCount = 0;
-      let pinnedRenderCount = 0;
+      // count captures for this room
       let captureCount = 0;
-      const renderPrefix = k(id, 'render:');
       const capPrefix = k(id, 'cap:');
       for (const key of all) {
-        if (typeof key === 'string') {
-          if (key.startsWith(renderPrefix)) {
-            renderCount++;
-            const v = await get<RenderVariant>(key);
-            if (v?.pinned) pinnedRenderCount++;
-          } else if (key.startsWith(capPrefix)) {
-            captureCount++;
-          }
-        }
+        if (typeof key === 'string' && key.startsWith(capPrefix)) captureCount++;
       }
       const detected = !!(meta?.detectedObjects && meta.detectedObjects.length > 0);
       if (meta) {
@@ -223,8 +177,6 @@ export const roomStore = {
           createdAt: meta.createdAt,
           updatedAt: meta.createdAt,
           itemCount,
-          renderCount,
-          pinnedRenderCount,
           captureCount,
           detected,
         });

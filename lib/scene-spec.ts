@@ -14,6 +14,8 @@ import {
   isTabletopProne,
 } from './physics';
 import type { CaptureSlot, RoomData } from './storage';
+import { clampDims } from './dimension-ranges';
+import { obbFromPart, obbOverlap } from './geometry';
 
 export type Shape =
   | 'sofa' | 'tv' | 'closet' | 'rug' | 'plant'
@@ -26,7 +28,7 @@ export type Shape =
   // lamps
   | 'lamp-floor' | 'lamp-table' | 'lamp-pendant'
   // wall-hung
-  | 'mirror' | 'mirror-oval' | 'painting' | 'ac-unit'
+  | 'mirror' | 'mirror-oval' | 'painting' | 'ac-unit' | 'window'
   // others
   | 'monitor' | 'laptop' | 'fan' | 'fridge' | 'wardrobe' | 'curtain'
   | 'bookshelf' | 'shoe-rack' | 'door'
@@ -160,7 +162,7 @@ export function defaultScene(layoutId: LayoutId = 'rect', w: number = ROOM.width
 // `group` only drives section headers in the Add-model picker.
 export type LibraryItem = {
   label: string;
-  group: 'Seating' | 'Tables' | 'Storage' | 'Bedroom' | 'Lighting' | 'Decor' | 'Tech' | 'Appliances';
+  group: 'Seating' | 'Tables' | 'Storage' | 'Bedroom' | 'Lighting' | 'Decor' | 'Tech' | 'Appliances' | 'Real sizes';
   category: Category;
   shape: Shape;
   dimMM: [number, number, number];
@@ -255,6 +257,7 @@ export const PART_LIBRARY: LibraryItem[] = [
   { label: 'Mirror · oval', group: 'Decor', category: 'mirror', shape: 'mirror-oval', dimMM: [600, 30, 1100] },
   { label: 'Painting', group: 'Decor', category: 'painting', shape: 'painting', dimMM: [800, 30, 600] },
   { label: 'Curtain', group: 'Decor', category: 'curtain', shape: 'curtain', dimMM: [1600, 80, 2200] },
+  { label: 'Window', group: 'Decor', category: 'other', shape: 'window', dimMM: [1200, 60, 1200] },
   // Tech
   { label: 'TV · 65"', group: 'Tech', category: 'tv', shape: 'tv', dimMM: [1450, 60, 820] },
   { label: 'Monitor', group: 'Tech', category: 'monitor', shape: 'monitor', dimMM: [600, 200, 400] },
@@ -364,23 +367,24 @@ function placementForSlot(
   dimMM: [number, number, number],
   wallMounted: boolean,
   shape: Shape,
+  room: { width: number; depth: number; height: number } = ROOM,
 ): { pos: [number, number, number]; rot: number } {
   const cx = bbox[0] + bbox[2] / 2;
-  const w = ROOM.width;
-  const d = ROOM.depth;
+  const w = room.width;
+  const d = room.depth;
   const dM = dimMM[1] / 1000;
   const hM = dimMM[2] / 1000;
 
   // Ceiling-mounted (fan) → at ceiling, snap to room center area
   if (shape === 'fan') {
-    return { pos: [(cx - 0.5) * (w * 0.5), ROOM.height - 0.15, 0], rot: 0 };
+    return { pos: [(cx - 0.5) * (w * 0.5), room.height - 0.15, 0], rot: 0 };
   }
 
   // Curtain hangs from above window height → top edge at ceiling, anchored to wall
   const yPos = wallMounted
     ? shape === 'curtain'
-      ? ROOM.height - hM / 2 - 0.05
-      : Math.max(1.2, ROOM.height - hM / 2 - 0.2)
+      ? room.height - hM / 2 - 0.05
+      : Math.max(1.2, room.height - hM / 2 - 0.2)
     : 0;
 
   switch (slot) {
@@ -403,10 +407,20 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
   const parts: ScenePart[] = [];
   const counters: Record<string, number> = {};
 
+  // The USER's room dims, not the demo defaults — detection positions come back
+  // in metres relative to the real room, so placing them against ROOM's default
+  // 5.6×4.2 box silently mis-scaled every layout that wasn't that exact size.
+  const rw = room.width ?? ROOM.width;
+  const rd = room.depth ?? ROOM.depth;
+  const rh = room.height ?? ROOM.height;
+
   // Non-rectangular rooms: keep detected items inside the actual footprint
   // (detection still reasons about a rectangle, so an item can land in the
-  // void of an L/U/T notch — pull it back in).
-  const footprint = footprintForLayout((room.layoutId ?? 'rect') as LayoutId, ROOM.width, ROOM.depth);
+  // void of an L/U/T notch — pull it back in). A saved custom footprint wins.
+  const footprint =
+    room.footprint && room.footprint.length >= 3
+      ? (room.footprint as [number, number][])
+      : footprintForLayout((room.layoutId ?? 'rect') as LayoutId, rw, rd);
 
   for (const d of dets) {
     const slot = (d.label as string).match(/__slot:([nesw])$/)?.[1] as CaptureSlot | undefined;
@@ -416,11 +430,6 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
     const cfg = CATEGORY_DEFAULTS[cat] ?? CATEGORY_DEFAULTS.other;
     counters[cat] = (counters[cat] ?? 0) + 1;
     const id = `${cat}-${counters[cat]}`;
-    // Prefer AI-estimated dim if present and sane.
-    const aiDim = (d as { dimMM?: [number, number, number] }).dimMM;
-    const dim = aiDim && aiDim.every((n) => n > 50 && n < 5000)
-      ? (aiDim as [number, number, number])
-      : cfg.dim;
     const aiShape = (d as { shape?: string }).shape as Shape | undefined;
     // Label-based refinement takes priority over the AI's generic shape: the
     // detector often returns shape:'monitor' for a laptop or shape:'mirror' for
@@ -435,13 +444,22 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
         : aiShape && CATALOG_SHAPES.has(aiShape) && aiShape !== 'box'
           ? aiShape
           : labelShape;
+    // AI-estimated dims are a HINT, never the source of truth — clamp them into
+    // the shape's real-world range (lib/dimension-ranges). A wild estimate
+    // (3.5 m sofa, 80 mm fridge) collapses to the nearest credible size.
+    const aiDim = (d as { dimMM?: [number, number, number] }).dimMM;
+    const dim = clampDims(
+      cat,
+      refined,
+      aiDim && aiDim.every((n) => Number.isFinite(n) && n > 0) ? (aiDim as [number, number, number]) : cfg.dim,
+    );
     // Prefer AI-estimated position/yaw when present and in-room; otherwise snap to wall.
     const aiPos = (d as { position?: { x: number; y: number; z: number } }).position;
     const aiYaw = (d as { yaw?: number }).yaw;
     let placement: { pos: [number, number, number]; rot: number };
-    const w = ROOM.width / 2;
-    const dHalf = ROOM.depth / 2;
-    const h = ROOM.height;
+    const w = rw / 2;
+    const dHalf = rd / 2;
+    const h = rh;
     if (
       aiPos &&
       typeof aiPos.x === 'number' &&
@@ -457,18 +475,19 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
         rot: typeof aiYaw === 'number' ? aiYaw : 0,
       };
     } else {
-      placement = placementForSlot(realSlot, d.box, dim, !!cfg.wallMounted, refined);
+      placement = placementForSlot(realSlot, d.box, dim, !!cfg.wallMounted, refined, { width: rw, depth: rd, height: rh });
     }
     // Gravity: floor-standing items must touch the floor. Wall-mounted / ceiling
     // items snap to their canonical mounting height for the current part height.
-    placement.pos[1] = groundY(cat, refined, dim, ROOM.height);
+    placement.pos[1] = groundY(cat, refined, dim, rh);
 
     // Logical placement: certain items only make sense against walls (door, fridge,
     // wardrobe, TV) or in the middle (rugs, coffee tables). Nudge accordingly.
+    // snapToWall is footprint-edge exact, so L/T/U inner walls count too.
     const aff = wallAffinity(cat);
-    const room = { width: ROOM.width, depth: ROOM.depth };
+    const room = { width: rw, depth: rd };
     if (aff === 'must-wall') {
-      const snapped = snapToWall(placement.pos, dim, room);
+      const snapped = snapToWall(placement.pos, dim, footprint);
       placement.pos[0] = snapped.x;
       placement.pos[2] = snapped.z;
       if (snapped.rot !== undefined && (typeof aiYaw !== 'number' || Math.abs(aiYaw) < 0.05)) {
@@ -477,32 +496,20 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
     } else if (aff === 'prefers-wall') {
       const halfW = room.width / 2;
       const halfD = room.depth / 2;
-      const partD = dim[1] / 1000;
       const distFromWall = Math.min(
         halfD + placement.pos[2],
         halfD - placement.pos[2],
         halfW + placement.pos[0],
         halfW - placement.pos[0],
       );
-      // If detection put it well inside the room, pull it toward the nearest wall.
-      if (distFromWall > 1.0) {
-        const snapped = snapToWall(placement.pos, dim, room);
+      // Always snap via footprint-aware snapToWall — works for L/T/U inner edges too.
+      if (distFromWall > 0.2) {
+        const snapped = snapToWall(placement.pos, dim, footprint);
         placement.pos[0] = snapped.x;
         placement.pos[2] = snapped.z;
         if (snapped.rot !== undefined && (typeof aiYaw !== 'number' || Math.abs(aiYaw) < 0.05)) {
           placement.rot = snapped.rot;
         }
-      } else {
-        // already near a wall — just tighten so it touches.
-        const partD2 = dim[1] / 1000;
-        const inset = partD2 / 2 + 0.02;
-        if (Math.abs(placement.pos[2] + halfD) < Math.abs(placement.pos[2] - halfD)) {
-          placement.pos[2] = -halfD + inset;
-        } else if (halfD - placement.pos[2] < 1) {
-          placement.pos[2] = halfD - inset;
-        }
-        if (halfW + placement.pos[0] < 1) placement.pos[0] = -halfW + inset;
-        else if (halfW - placement.pos[0] < 1) placement.pos[0] = halfW - inset;
       }
     } else if (aff === 'prefers-middle') {
       // gentle pull toward room center (only if AI placed it near a wall by mistake).
@@ -553,7 +560,7 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
   //      beneath, drop it to the floor — recovers from bad AI Y estimates.
   //   3. Ceiling clamp — no part top should poke through the ceiling.
   const CEILING_PAD = 0.02;
-  const cap = ROOM.height - CEILING_PAD;
+  const cap = rh - CEILING_PAD;
   for (const p of parts) {
     if (p.category !== 'rug') {
       const support =
@@ -635,18 +642,15 @@ export function collidesAt(
   const mover = parts.find((p) => p.id === movingId);
   if (!mover) return false;
   if (mover.category === 'rug') return false;
-  const mw = dimMM[0] / 1000;
-  const md = dimMM[1] / 1000;
   const mh = dimMM[2] / 1000;
   // Mover y-bottom (pos.y is the floor anchor in our scene; for wall-mounted it's mid-height).
   const myBottom = pos[1];
   const myTop = pos[1] + mh;
+  const me = obbFromPart(pos, rot, dimMM);
   for (const o of parts) {
     if (o.id === movingId) continue;
     if (o.category === 'rug') continue;
     if (o.wallMounted) continue;
-    const ow = o.dimMM[0] / 1000;
-    const od = o.dimMM[1] / 1000;
     const oh = o.dimMM[2] / 1000;
     const oyBottom = o.pos[1];
     const oyTop = o.pos[1] + oh;
@@ -655,12 +659,9 @@ export function collidesAt(
     const yOverlap = !(myTop <= oyBottom + 0.005 || myBottom >= oyTop - 0.005);
     if (!yOverlap) continue;
 
-    // XZ overlap via bounding circle approximation.
-    const r1 = Math.hypot(mw, md) / 2;
-    const r2 = Math.hypot(ow, od) / 2;
-    const dx = pos[0] - o.pos[0];
-    const dz = pos[2] - o.pos[2];
-    if (Math.hypot(dx, dz) < (r1 + r2) * 0.7) return true;
+    // XZ overlap — exact rotated-rectangle test (SAT). The tiny negative pad
+    // lets flush side-by-side placement read as touching, not colliding.
+    if (obbOverlap(me, obbFromPart(o.pos, o.rot, o.dimMM), -0.01)) return true;
   }
   return false;
 }
