@@ -6,7 +6,7 @@ import { useRoom, useSettings } from '@/lib/store';
 import { roomStore, blobToObjectUrl, type Capture, type CaptureSlot } from '@/lib/storage';
 import { detectAcrossImages, DetectError, type Detection } from '@/lib/detection';
 import { Icon } from '@/components/ui/Icon';
-import { DanmuMark } from '@/components/ui/primitives';
+import { DanmuMark, IconButton } from '@/components/ui/primitives';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { PhotoEditor } from '@/components/studio/PhotoEditor';
 import { sampleBoxColor } from '@/lib/color-sample';
@@ -344,24 +344,32 @@ export default function DetectPage() {
                 <button
                   key={s.slot}
                   onClick={() => setActiveSlot(s.slot)}
+                  aria-pressed={sel}
                   style={{
                     flex: 1,
                     padding: '10px 12px',
                     background: sel ? 'var(--ink)' : 'var(--paper)',
                     color: sel ? 'var(--paper)' : 'var(--ink-2)',
                     border: sel ? '1px solid var(--ink)' : '1px solid var(--hairline-strong)',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 11,
-                    letterSpacing: '0.08em',
+                    borderRadius: 'var(--r-2)',
+                    fontSize: 12,
+                    fontWeight: 700,
                     cursor: 'pointer',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
+                    gap: 6,
                   }}
                 >
                   <span>{s.slot.toUpperCase()}</span>
-                  <span style={{ fontSize: 10, opacity: 0.8 }}>
-                    {slotCount} {slotLocks > 0 && <span style={{ color: sel ? '#9CC1F2' : 'var(--locked)' }}>· {slotLocks}🔒</span>}
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, opacity: 0.85 }}>
+                    <span className="mono">{slotCount}</span>
+                    {slotLocks > 0 && (
+                      <>
+                        <Icon name="lock" size={9} color={sel ? 'var(--paper)' : 'var(--locked)'} />
+                        <span className="mono">{slotLocks}</span>
+                      </>
+                    )}
                   </span>
                 </button>
               );
@@ -410,7 +418,7 @@ export default function DetectPage() {
             <div style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 500 }}>
               {adding
                 ? 'Drag on the image to draw a box'
-                : 'Drag a box to move · click to lock · ∅ remove · 3D mesh · ✕ delete'}
+                : 'Drag a box to reposition it, or click to lock it.'}
             </div>
           </div>
         </div>
@@ -474,12 +482,13 @@ function ErrorBanner({
       style={{
         margin: '14px 24px',
         border: '1px solid var(--danger)',
-        background: 'rgba(192,38,24,0.05)',
+        background: 'var(--danger-tint)',
+        borderRadius: 'var(--r-3)',
         padding: 16,
       }}
     >
       <div className="ds-label" style={{ fontSize: 10, color: 'var(--danger)', marginBottom: 6 }}>
-        ⚠ Detection error
+        Detection error
       </div>
       <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>{title}</div>
       <p style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5, margin: '0 0 12px' }}>{body}</p>
@@ -531,6 +540,7 @@ function DetectionRow({
         gap: 10,
         padding: '8px 10px',
         border: '1px solid var(--hairline)',
+        borderRadius: 'var(--r-2)',
         background: isLocked ? 'var(--locked-tint)' : 'var(--paper)',
         cursor: 'pointer',
       }}
@@ -559,7 +569,7 @@ function DetectionRow({
               color: 'var(--ink)',
               padding: '2px 4px',
               border: '1px solid var(--accent)',
-              borderRadius: 2,
+              borderRadius: 'var(--r-1)',
               outline: 'none',
               background: 'var(--paper)',
             }}
@@ -580,7 +590,7 @@ function DetectionRow({
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               padding: '2px 4px',
-              borderRadius: 2,
+              borderRadius: 'var(--r-1)',
               cursor: 'text',
             }}
             title="Click to rename"
@@ -588,33 +598,25 @@ function DetectionRow({
             {cleanLabel}
           </div>
         )}
-        <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)' }}>
-          {d.slot.toUpperCase()} · {d.category} · {(d.conf * 100).toFixed(0)}%
+        <div style={{ fontSize: 10, color: 'var(--ink-3)', textTransform: 'capitalize' }}>
+          {d.slot.toUpperCase()} · {d.category} · <span className="mono">{(d.conf * 100).toFixed(0)}%</span>
           {d.alsoSeenIn && d.alsoSeenIn.length > 0 && (
             <> · Also {d.alsoSeenIn.join('/').toUpperCase()}</>
           )}
         </div>
       </div>
-      <button
+      <IconButton
+        icon="x"
+        label="Remove"
+        variant="outline"
         onClick={(e) => {
           e.stopPropagation();
           onDelete();
         }}
-        style={{
-          width: 22,
-          height: 22,
-          border: '1px solid var(--hairline-strong)',
-          background: 'var(--paper)',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'var(--ink-3)',
-        }}
-        aria-label="Remove"
-      >
-        <Icon name="x" size={10} />
-      </button>
+        size={24}
+        iconSize={10}
+        style={{ borderRadius: 'var(--r-1)' }}
+      />
     </div>
   );
 }

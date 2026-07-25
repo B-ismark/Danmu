@@ -5,6 +5,7 @@
 
 import { create } from 'zustand';
 import { Icon } from './Icon';
+import { Modal } from './Modal';
 
 type ConfirmRequest = {
   title: string;
@@ -44,64 +45,19 @@ export function ConfirmHost() {
 
   if (!pending) return null;
 
-  const accent = pending.danger ? 'var(--danger)' : 'var(--accent)';
   const confirmStyle: React.CSSProperties = pending.danger
     ? { background: 'var(--danger)', borderColor: 'var(--danger)', color: '#fff' }
     : {};
 
   return (
-    <div
-      onClick={() => close(false)}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(19,19,17,0.55)',
-        display: 'grid',
-        placeItems: 'center',
-        zIndex: 200,
-        padding: 20,
-        backdropFilter: 'blur(2px)',
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="confirm-title"
-        style={{
-          width: 'min(440px, 92vw)',
-          background: 'var(--paper)',
-          border: '1px solid var(--ink)',
-          boxShadow: '0 30px 80px rgba(0,0,0,0.4)',
-        }}
-      >
-        <div style={{ height: 4, background: accent }} />
-        <div style={{ padding: '20px 24px' }}>
-          <div
-            className="ds-kicker"
-            style={{
-              color: accent,
-              marginBottom: 8,
-            }}
-          >
-            {pending.danger ? '⚠ Confirm' : 'Confirm'}
-          </div>
-          <div id="confirm-title" style={{ fontSize: 20, fontWeight: 600, marginBottom: 6, letterSpacing: '-0.01em' }}>
-            {pending.title}
-          </div>
-          {pending.body && (
-            <p style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.55, margin: 0 }}>{pending.body}</p>
-          )}
-        </div>
-        <div
-          style={{
-            padding: '14px 24px',
-            background: 'var(--paper-2)',
-            borderTop: '1px solid var(--hairline)',
-            display: 'flex',
-            gap: 8,
-          }}
-        >
+    <Modal
+      onClose={() => close(false)}
+      labelledBy="confirm-title"
+      width={440}
+      zIndex={200}
+      blur
+      footer={
+        <>
           <button
             onClick={() => close(false)}
             className="ds-btn"
@@ -118,8 +74,15 @@ export function ConfirmHost() {
             <Icon name="check" size={11} color="#fff" />
             {pending.confirmLabel ?? 'Confirm'}
           </button>
-        </div>
+        </>
+      }
+    >
+      <div id="confirm-title" style={{ fontSize: 20, fontWeight: 600, marginBottom: 6, letterSpacing: '-0.01em' }}>
+        {pending.title}
       </div>
-    </div>
+      {pending.body && (
+        <p style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.55, margin: 0 }}>{pending.body}</p>
+      )}
+    </Modal>
   );
 }

@@ -9,6 +9,7 @@ import { useSettings } from '@/lib/store';
 import { fromMM, toMM, stepFor, precisionFor } from '@/lib/units';
 import { roomStore } from '@/lib/storage';
 import { useParams } from 'next/navigation';
+import { Icon } from '@/components/ui/Icon';
 
 export function RoomDimsEditor() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -64,6 +65,7 @@ export function RoomDimsEditor() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: open ? 10 : 0, gap: 8 }}>
         <button
           onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -76,8 +78,8 @@ export function RoomDimsEditor() {
             textAlign: 'left',
           }}
         >
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--ink-3)', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>
-            ▸
+          <span style={{ display: 'flex', color: 'var(--ink-3)', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>
+            <Icon name="chevron-right" size={14} />
           </span>
           <span className="section-title" style={{ color: 'var(--ink)' }}>Room shell</span>
           {!open && (
@@ -106,7 +108,7 @@ export function RoomDimsEditor() {
                 fontWeight: 600,
                 padding: '6px 8px',
                 border: '1px solid var(--hairline-strong)',
-                borderRadius: 2,
+                borderRadius: 'var(--r-1)',
                 background: 'var(--paper)',
                 color: 'var(--ink)',
                 outline: 'none',

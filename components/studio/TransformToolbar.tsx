@@ -35,6 +35,7 @@ export function TransformToolbar() {
           <button
             key={m.id}
             onClick={() => setMode(m.id)}
+            aria-pressed={mode === m.id}
             aria-label={`${m.label} (${m.key})`}
             title={`${m.label} (${m.key})`}
             style={{
@@ -61,7 +62,7 @@ export function TransformToolbar() {
                 fontSize: 9,
                 padding: '1px 4px',
                 border: `1px solid ${mode === m.id ? 'rgba(255,255,255,0.4)' : 'var(--hairline-strong)'}`,
-                borderRadius: 2,
+                borderRadius: 'var(--r-1)',
                 opacity: 0.85,
                 marginLeft: 2,
               }}
@@ -104,8 +105,8 @@ function SnapCycleButton({
         gap: 7,
         background: 'var(--paper)',
         border: `1px solid ${active ? 'var(--accent)' : 'var(--hairline-strong)'}`,
-        borderRadius: 4,
-        boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+        borderRadius: 'var(--r-3)',
+        boxShadow: 'var(--shadow-soft)',
         cursor: 'pointer',
         fontFamily: 'var(--font-sans)',
         fontSize: 12,

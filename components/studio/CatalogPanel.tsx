@@ -6,6 +6,7 @@ import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 import { PART_LIBRARY, placeNewPart, DND_MIME, type LibraryItem } from '@/lib/scene-spec';
 import { Icon } from '@/components/ui/Icon';
+import { IconButton } from '@/components/ui/primitives';
 
 // Floating, non-blocking furniture catalog docked on the left edge of the 3D
 // viewport. Items can be DRAGGED onto the room (Room's onDrop raycasts the drop
@@ -64,14 +65,7 @@ export function CatalogPanel() {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 12px 8px' }}>
         <span className="ds-label" style={{ flex: 1 }}>Furniture catalog</span>
-        <button
-          onClick={() => setOpen(false)}
-          aria-label="Close catalog"
-          className="ds-btn ds-btn--ghost"
-          style={{ height: 24, width: 24, padding: 0, justifyContent: 'center' }}
-        >
-          <Icon name="x" size={12} />
-        </button>
+        <IconButton icon="x" label="Close catalog" onClick={() => setOpen(false)} size={24} iconSize={12} />
       </div>
       <div style={{ padding: '0 12px 8px' }}>
         <input

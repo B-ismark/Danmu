@@ -7,7 +7,7 @@ import { roomStore, blobToObjectUrl } from '@/lib/storage';
 import { CAPTURE_SLOTS, snapToBlob, startCamera } from '@/lib/capture';
 import { scoreQuality, flagLabel, flagColor, type Quality } from '@/lib/image-quality';
 import { Icon } from '@/components/ui/Icon';
-import { DanmuMark, Dot } from '@/components/ui/primitives';
+import { DanmuMark, Dot, Pill, Segmented } from '@/components/ui/primitives';
 import type { CaptureSlot } from '@/lib/storage';
 
 type Source = 'upload' | 'camera';
@@ -98,48 +98,21 @@ export default function CapturePage() {
           {filled} / 4
         </span>
         {flaggedCount > 0 && (
-          <span
-            style={{
-              padding: '4px 8px',
-              background: 'rgba(192,38,24,0.1)',
-              border: '1px solid var(--danger)',
-              color: 'var(--danger)',
-              fontSize: 10,
-            }}
-          >
-            ⚠ {flaggedCount} quality issue{flaggedCount > 1 ? 's' : ''} — detection may miss things
-          </span>
+          <Pill tone="danger">
+            <Dot color="var(--danger)" size={5} />
+            {flaggedCount} photo{flaggedCount > 1 ? 's' : ''} flagged · detection may miss items
+          </Pill>
         )}
         <div style={{ flex: 1 }} />
-        <div style={{ display: 'flex', border: '1px solid var(--hairline-strong)' }}>
-          {(
-            [
-              { id: 'upload', label: 'Upload', icon: 'image' },
-              { id: 'camera', label: 'Camera', icon: 'camera' },
-            ] as const
-          ).map((m, i) => (
-            <button
-              key={m.id}
-              onClick={() => setSource(m.id)}
-              style={{
-                height: 32,
-                padding: '0 14px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                background: source === m.id ? 'var(--ink)' : 'var(--paper)',
-                color: source === m.id ? 'var(--paper)' : 'var(--ink-2)',
-                border: 'none',
-                borderRight: i === 0 ? '1px solid var(--hairline-strong)' : 'none',
-                fontSize: 11,
-                cursor: 'pointer',
-              }}
-            >
-              <Icon name={m.icon} size={12} color={source === m.id ? 'var(--paper)' : 'var(--ink-2)'} />
-              {m.label}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          ariaLabel="Photo source"
+          value={source}
+          onChange={setSource}
+          options={[
+            { value: 'upload', label: 'Upload', icon: 'image' },
+            { value: 'camera', label: 'Camera', icon: 'camera' },
+          ]}
+        />
         <button
           className="ds-btn ds-btn--primary"
           style={{ height: 32, fontSize: 12 }}
@@ -265,6 +238,7 @@ function SlotCard({
             : url
               ? '1px solid var(--hairline-strong)'
               : '1px dashed var(--hairline-strong)',
+        borderRadius: 'var(--r-3)',
         cursor: 'pointer',
         overflow: 'hidden',
         minHeight: 0,
@@ -296,11 +270,11 @@ function SlotCard({
           }}
         >
           <Icon name="plus" size={28} color="var(--ink-3)" />
-          <span style={{ fontSize: 11 }}>
-            Click or drop image
+          <span style={{ fontSize: 12 }}>
+            Click or drop a photo
           </span>
-          <span style={{ fontSize: 9, color: 'var(--ink-4)' }}>
-            <span className="mono">{slot.id.toUpperCase()}</span> · {slot.label}
+          <span style={{ fontSize: 10, color: 'var(--ink-3)' }}>
+            {slot.id.toUpperCase()} · {slot.label}
           </span>
         </div>
       )}
@@ -312,15 +286,16 @@ function SlotCard({
           top: 8,
           left: 8,
           padding: '3px 8px',
+          borderRadius: 'var(--r-full)',
           background: url ? 'rgba(0,0,0,0.8)' : 'var(--ink)',
           display: 'flex',
           alignItems: 'center',
           gap: 5,
         }}
       >
-        {url ? <Icon name="check" size={10} color="#7AD27A" /> : <Dot color="#fff" size={5} />}
+        {url ? <Icon name="check" size={10} color="var(--success)" /> : <Dot color="#fff" size={5} />}
         <span style={{ fontSize: 10, color: '#fff' }}>
-          <span className="mono">{slot.id.toUpperCase()}</span> · {slot.label}
+          {slot.id.toUpperCase()} · {slot.label}
         </span>
       </div>
 
@@ -365,11 +340,11 @@ function SlotCard({
                   key={f}
                   style={{
                     padding: '3px 8px',
-                    background: f === 'ok' ? 'rgba(46,125,79,0.92)' : 'rgba(192,38,24,0.92)',
+                    borderRadius: 'var(--r-full)',
+                    background: f === 'ok' ? 'var(--success)' : 'var(--danger)',
                     color: '#fff',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 9,
-                    letterSpacing: '0.08em',
+                    fontSize: 10,
+                    fontWeight: 600,
                   }}
                 >
                   {f === 'ok' ? '✓ ' : '⚠ '}
@@ -380,25 +355,15 @@ function SlotCard({
                 <span
                   style={{
                     padding: '3px 8px',
+                    borderRadius: 'var(--r-full)',
                     background: 'rgba(0,0,0,0.7)',
                     color: '#fff',
-                    fontSize: 9,
+                    fontSize: 10,
                   }}
                 >
                   Analyzing…
                 </span>
               )}
-          <div style={{ flex: 1 }} />
-          <span
-            style={{
-              padding: '3px 8px',
-              background: 'rgba(0,0,0,0.6)',
-              color: '#fff',
-              fontSize: 9,
-            }}
-          >
-            Drag to swap
-          </span>
         </div>
       )}
 
@@ -419,11 +384,13 @@ function SlotCard({
 
 function btnStyle(): React.CSSProperties {
   return {
-    padding: '4px 8px',
+    padding: '4px 10px',
+    borderRadius: 'var(--r-full)',
     background: 'rgba(0,0,0,0.7)',
     border: 'none',
     color: '#fff',
-    fontSize: 9,
+    fontSize: 10,
+    fontWeight: 600,
     cursor: 'pointer',
   };
 }
@@ -476,12 +443,14 @@ function CameraPanel({ activeSlot, onCapture }: { activeSlot: CaptureSlot; onCap
           top: 8,
           left: 8,
           padding: '4px 10px',
-          background: 'rgba(232,84,42,0.95)',
+          borderRadius: 'var(--r-full)',
+          background: 'var(--accent)',
           color: '#fff',
           fontSize: 10,
+          fontWeight: 600,
         }}
       >
-        Shooting · <span className="mono">{activeSlot.toUpperCase()}</span>
+        Shooting · {activeSlot.toUpperCase()}
       </div>
       <div style={{ position: 'absolute', bottom: 16, left: 0, right: 0, display: 'flex', justifyContent: 'center' }}>
         <button
@@ -490,13 +459,13 @@ function CameraPanel({ activeSlot, onCapture }: { activeSlot: CaptureSlot; onCap
           style={{
             width: 60,
             height: 60,
-            borderRadius: '50%',
+            borderRadius: 'var(--r-full)',
             background: '#fff',
-            border: '4px solid rgba(232,84,42,0.8)',
+            border: '4px solid var(--accent-tint-strong)',
             cursor: 'pointer',
           }}
         >
-          <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#E2613A', margin: 'auto' }} />
+          <div style={{ width: 44, height: 44, borderRadius: 'var(--r-full)', background: 'var(--accent)', margin: 'auto' }} />
         </button>
       </div>
     </div>

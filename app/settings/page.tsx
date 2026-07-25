@@ -6,7 +6,7 @@ import { useSettings, useRoom } from '@/lib/store';
 import { roomStore } from '@/lib/storage';
 import { validateKey } from '@/lib/validate-key';
 import { Icon } from '@/components/ui/Icon';
-import { DanmuMark, Dot } from '@/components/ui/primitives';
+import { DanmuMark, Dot, IconButton, Segmented } from '@/components/ui/primitives';
 import { useConfirm } from '@/components/ui/Confirm';
 
 export default function SettingsPage() {
@@ -68,9 +68,9 @@ export default function SettingsPage() {
       <div style={{ padding: '32px 40px', maxWidth: 920 }}>
         <SecHeader eyebrow="Detection" title="Connect your detection key (optional)." desc="Used only to recognise furniture in your photos. Everything else runs on your device, no key needed." />
 
-        <Row label="Access key" hint="Used to recognise furniture in your photos. Stored on this device only.">
+        <Row label="Access key" hint="Stored on this device only, never uploaded.">
           <div style={{ display: 'flex', gap: 6 }}>
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', border: '1px solid var(--hairline-strong)', background: 'var(--paper)' }}>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', border: '1px solid var(--hairline-strong)', borderRadius: 'var(--r-2)', background: 'var(--paper)' }}>
               <input
                 type={show ? 'text' : 'password'}
                 value={s.apiKey}
@@ -89,12 +89,14 @@ export default function SettingsPage() {
                   color: 'var(--ink)',
                 }}
               />
-              <button
+              <IconButton
+                icon={show ? 'eye-off' : 'eye'}
+                label={show ? 'Hide key' : 'Show key'}
                 onClick={() => setShow(!show)}
-                style={{ width: 36, height: 36, background: 'transparent', border: 'none', cursor: 'pointer' }}
-              >
-                <Icon name={show ? 'eye-off' : 'eye'} size={13} color="var(--ink-3)" />
-              </button>
+                active={show}
+                size={36}
+                iconSize={13}
+              />
             </div>
             <button onClick={test} disabled={testing || !s.apiKey} className="ds-btn" style={{ height: 36, fontSize: 12 }}>
               <Icon name="check" size={12} />
@@ -109,7 +111,7 @@ export default function SettingsPage() {
                 </span>
               ) : (
                 <span className="ds-chip" style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}>
-                  ✗ Invalid · {s.keyValidReason?.slice(0, 80)}
+                  <Dot color="var(--danger)" size={5} /> Invalid · {s.keyValidReason?.slice(0, 80)}
                 </span>
               )}
             </div>
@@ -117,7 +119,7 @@ export default function SettingsPage() {
           {s.keyValid === null && s.apiKey && !testing && (
             <div style={{ marginTop: 10 }}>
               <span className="ds-chip" style={{ borderColor: 'var(--ink-3)', color: 'var(--ink-3)' }}>
-                ◌ untested · blur or click Test
+                <Dot color="var(--ink-3)" size={5} /> Not tested yet
               </span>
             </div>
           )}
@@ -128,25 +130,15 @@ export default function SettingsPage() {
 
         <SecHeader eyebrow="Workspace" title="Preferences." desc="" />
         <Row label="Measurement units">
-          <div style={{ display: 'flex', border: '1px solid var(--hairline-strong)' }}>
-            {(['metric', 'imperial'] as const).map((u) => (
-              <button
-                key={u}
-                onClick={() => s.setUnits(u)}
-                style={{
-                  padding: '8px 18px',
-                  background: s.units === u ? 'var(--ink)' : 'transparent',
-                  color: s.units === u ? 'var(--paper)' : 'var(--ink-2)',
-                  border: 'none',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  textTransform: 'capitalize',
-                }}
-              >
-                {u}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            ariaLabel="Measurement units"
+            value={s.units}
+            onChange={(u) => s.setUnits(u)}
+            options={[
+              { value: 'metric', label: 'Metric' },
+              { value: 'imperial', label: 'Imperial' },
+            ]}
+          />
         </Row>
         <SecHeader eyebrow="Data" title="Local-first storage." desc="Captures + edits live in this browser only." />
         <Row label="Clear local cache" hint="Removes captures, detections and edits for the current room.">
@@ -162,8 +154,8 @@ export default function SettingsPage() {
 function SecHeader({ eyebrow, title, desc }: { eyebrow: string; title: string; desc: string }) {
   return (
     <div style={{ marginTop: 32, marginBottom: 4 }}>
-      <div className="ds-kicker" style={{ color: 'var(--accent)', marginBottom: 8 }}>
-        ↘ {eyebrow}
+      <div className="ds-kicker" style={{ marginBottom: 8 }}>
+        {eyebrow}
       </div>
       <div style={{ fontSize: 24, fontWeight: 600, letterSpacing: '-0.015em', marginBottom: 6 }}>{title}</div>
       {desc && <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5, maxWidth: 580 }}>{desc}</div>}

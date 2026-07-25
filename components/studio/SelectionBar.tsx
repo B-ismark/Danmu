@@ -7,6 +7,7 @@
 import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { Icon } from '@/components/ui/Icon';
+import { IconButton } from '@/components/ui/primitives';
 
 export function SelectionBar() {
   const selection = useStudio((s) => s.selection);
@@ -62,15 +63,13 @@ export function SelectionBar() {
             <Icon name="layers" size={12} /> Merge {selection.length}
           </button>
         )}
-        <button
+        <IconButton
+          icon="x"
+          label="Clear selection"
           onClick={() => setSelected(null)}
-          className="ds-btn ds-btn--ghost"
-          style={{ height: 30, width: 30, padding: 0, justifyContent: 'center' }}
-          aria-label="Clear selection"
-          title="Clear selection"
-        >
-          <Icon name="x" size={13} />
-        </button>
+          size={30}
+          iconSize={13}
+        />
       </div>
     </div>
   );

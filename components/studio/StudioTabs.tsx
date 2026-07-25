@@ -20,6 +20,7 @@ export function StudioTabs() {
         <button
           key={t.id}
           onClick={() => router.push(`/room/${params.roomId}/${t.id}`)}
+          aria-pressed={active === t.id}
           style={{
             height: 28,
             padding: '0 12px',

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useStudio, useSettings } from '@/lib/store';
 import { useRoomPart } from '@/lib/room-scene';
 import { formatDim } from '@/lib/units';
+import { Pill } from '@/components/ui/primitives';
 
 export function HoverCard() {
   const hoveredId = useStudio((s) => s.hoveredPartId);
@@ -35,8 +36,10 @@ export function HoverCard() {
         zIndex: 50,
         width: 220,
         background: 'var(--paper)',
-        border: '1px solid var(--ink)',
-        boxShadow: '0 4px 14px rgba(0,0,0,0.10)',
+        border: '1px solid var(--hairline)',
+        borderRadius: 'var(--r-2)',
+        boxShadow: 'var(--shadow-lift)',
+        overflow: 'hidden',
         pointerEvents: 'none',
       }}
     >
@@ -56,18 +59,7 @@ export function HoverCard() {
         <span style={{ fontSize: 13, fontWeight: 600, textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {part.name || part.category}
         </span>
-        <span
-          className="ds-label"
-          style={{
-            flexShrink: 0,
-            fontSize: 9,
-            color: part.locked ? 'var(--locked)' : 'var(--accent)',
-            padding: '1px 5px',
-            border: `1px solid ${part.locked ? 'var(--locked)' : 'var(--accent)'}`,
-          }}
-        >
-          {part.locked ? 'Locked' : 'New build'}
-        </span>
+        {part.locked && <Pill tone="locked" style={{ flexShrink: 0 }}>Locked</Pill>}
       </div>
       <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
         <Row label="Dims" value={dimDisplay} mono />
