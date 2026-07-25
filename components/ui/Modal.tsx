@@ -36,8 +36,12 @@ export function Modal({
       if (e.key === 'Escape') onClose();
     };
     document.addEventListener('keydown', onKey);
-    // Move focus into the dialog so Esc/Tab land here, not on the page behind.
-    cardRef.current?.focus();
+    // Move focus into the dialog so Esc/Tab land here — but DON'T steal it from
+    // an autoFocus'd field already inside the modal (a search box / textarea).
+    // React applies child autoFocus at commit, before this passive effect runs,
+    // so at this point activeElement is already that field when one exists.
+    const card = cardRef.current;
+    if (card && !card.contains(document.activeElement)) card.focus();
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
