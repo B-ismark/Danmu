@@ -8,6 +8,7 @@ import { fromMM, toMM, stepFor, precisionFor, formatDim, UNIT_OPTIONS } from '@/
 import { clampDims, dimRangeFor } from '@/lib/dimension-ranges';
 import { Icon } from '@/components/ui/Icon';
 import { Modal } from '@/components/ui/Modal';
+import { ColorPicker } from '@/components/ui/ColorPicker';
 import { IconButton, Pill } from '@/components/ui/primitives';
 import { useConfirm } from '@/components/ui/Confirm';
 import { RegenerateModal } from './RegenerateModal';
@@ -731,6 +732,7 @@ function ColorEditor({
   onReset: () => void;
 }) {
   const current = value ?? '#C9A98E';
+  const [open, setOpen] = useState(false);
   return (
     <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--hairline)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -746,32 +748,26 @@ function ColorEditor({
           </button>
         )}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        {/* Native picker + live hex. The label wraps the input so the whole
-            swatch is clickable. */}
-        <label
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, position: 'relative' }}>
+        {/* Brand-styled picker (replaces the unthemeable native <input type=color>). */}
+        <button
+          onClick={() => setOpen((o) => !o)}
+          aria-label="Pick a custom colour"
+          aria-expanded={open}
           title="Pick a custom colour"
-          style={{
-            position: 'relative',
-            width: 34,
-            height: 34,
-            borderRadius: 'var(--r-1)',
-            border: '1px solid var(--hairline-strong)',
-            background: current,
-            cursor: 'pointer',
-            flexShrink: 0,
-          }}
-        >
-          <input
-            type="color"
-            value={current}
-            onChange={(e) => onChange(e.target.value)}
-            style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
-          />
-        </label>
+          style={{ width: 34, height: 34, borderRadius: 'var(--r-1)', border: '1px solid var(--hairline-strong)', background: current, cursor: 'pointer', flexShrink: 0, padding: 0 }}
+        />
         <span className="mono" style={{ fontSize: 12, color: value ? 'var(--ink)' : 'var(--ink-3)', letterSpacing: '0.04em' }}>
           {value ? value.toUpperCase() : 'default · per shape'}
         </span>
+        {open && (
+          <>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setOpen(false)} />
+            <div className="popover" style={{ position: 'absolute', top: 42, left: 0, zIndex: 50, padding: 12 }}>
+              <ColorPicker value={current} onChange={onChange} />
+            </div>
+          </>
+        )}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 4 }}>
         {SWATCHES.map((hex) => (
