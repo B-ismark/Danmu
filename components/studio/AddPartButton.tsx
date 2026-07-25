@@ -110,7 +110,7 @@ function AddPartModal({ onClose }: { onClose: () => void }) {
         </>
       }
     >
-      <div id="add-part-title" className="ds-kicker" style={{ marginBottom: 10, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <div id="add-part-title" className="ds-kicker" style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
         <Icon name="plus" size={13} /> Add furniture
       </div>
 

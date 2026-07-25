@@ -28,6 +28,7 @@ export function PartTree() {
   const confirm = useConfirm();
 
   const setLighting = useStudio((s) => s.setLighting);
+  const [activeTheme, setActiveTheme] = useState<string | null>(null);
   function applyTheme(theme: (typeof THEMES)[number]) {
     // Recolour every unlocked part; locked items keep their preserved look.
     for (const p of useScene.getState().parts) {
@@ -35,6 +36,7 @@ export function PartTree() {
       updatePart(p.id, { color: themeColorFor(p.category, theme) });
     }
     setLighting(theme.lighting);
+    setActiveTheme(theme.id); // highlight the last-applied restyle
   }
 
   const q = query.trim().toLowerCase();
@@ -73,7 +75,8 @@ export function PartTree() {
                 key={t.id}
                 onClick={() => applyTheme(t)}
                 title={`Restyle the room — ${t.label}`}
-                className="ds-chip"
+                aria-pressed={activeTheme === t.id}
+                className={`ds-chip${activeTheme === t.id ? ' ds-chip--accent' : ''}`}
                 style={{ cursor: 'pointer', height: 30, paddingLeft: 6, fontWeight: 600 }}
               >
                 <span style={{ display: 'inline-flex', borderRadius: 'var(--r-full)', overflow: 'hidden', width: 22, height: 12 }}>

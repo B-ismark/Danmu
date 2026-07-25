@@ -12,10 +12,15 @@ import { Icon } from '@/components/ui/Icon';
 export function DemoBanner() {
   const { roomId } = useParams<{ roomId: string }>();
   const [demo, setDemo] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+  // Start hidden until storage is checked, so a previously-dismissed banner
+  // never flashes on mount.
+  const [dismissed, setDismissed] = useState(true);
+
+  const storageKey = roomId ? `danmu-demo-dismissed-${roomId}` : '';
 
   useEffect(() => {
     if (!roomId) return;
+    setDismissed(localStorage.getItem(`danmu-demo-dismissed-${roomId}`) === '1');
     (async () => {
       const room = await roomStore.loadRoom(roomId);
       const caps = await roomStore.loadCaptures(roomId);
@@ -24,6 +29,12 @@ export function DemoBanner() {
       setDemo(!hasDetections && !hasCaptures);
     })();
   }, [roomId]);
+
+  // Persist the dismissal so it stays gone across tab switches and reloads.
+  function dismiss() {
+    setDismissed(true);
+    if (storageKey) localStorage.setItem(storageKey, '1');
+  }
 
   if (!demo || dismissed) return null;
 
@@ -69,7 +80,7 @@ export function DemoBanner() {
         </Link>
       </span>
       <button
-        onClick={() => setDismissed(true)}
+        onClick={dismiss}
         aria-label="Dismiss"
         style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 2, opacity: 0.8 }}
       >
