@@ -20,6 +20,7 @@
   --accent: #E2613A;        /* warm clay-terracotta */
   --accent-tint: rgba(226, 97, 58, 0.12);
   --accent-tint-strong: rgba(226, 97, 58, 0.20);
+  --accent-strong: #C9542F;   /* darker terracotta — accent-button hover (keeps white text legible) */
   --accent-2: #5E8B6E;      /* friendly sage */
   --accent-2-tint: rgba(94, 139, 110, 0.14);
 
@@ -130,7 +131,7 @@ h1, h2, h3, .display {
 .ds-btn--primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 .ds-btn--primary:hover { background: #3a342c; }
 .ds-btn--accent { background: var(--accent); color: #fff; border-color: var(--accent); }
-.ds-btn--accent:hover { filter: brightness(1.04); }
+.ds-btn--accent:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
 .ds-btn--ghost { background: transparent; border-color: transparent; box-shadow: none; }
 .ds-btn--ghost:hover { background: var(--paper-2); box-shadow: none; transform: none; }
 
