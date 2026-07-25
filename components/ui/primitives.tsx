@@ -1,4 +1,5 @@
-import type { CSSProperties, ReactNode } from 'react';
+import type { CSSProperties, MouseEvent, ReactNode } from 'react';
+import { Icon, type IconName } from './Icon';
 
 export function DanmuMark({ size = 14, color = 'var(--ink)' as string }: { size?: number; color?: string }) {
   return (
@@ -42,61 +43,6 @@ export function Dot({
         ...style,
       }}
     />
-  );
-}
-
-export function CornerRegs({
-  color = 'currentColor',
-  inset = 10,
-  size = 12,
-}: {
-  color?: string;
-  inset?: number;
-  size?: number;
-}) {
-  const line = 1;
-  const arm = size;
-  const mark = (
-    pos: { top?: number; left?: number; right?: number; bottom?: number },
-    flipX: boolean,
-    flipY: boolean,
-    key: string,
-  ) => (
-    <div
-      key={key}
-      style={{ position: 'absolute', ...pos, width: arm, height: arm, pointerEvents: 'none' }}
-    >
-      <div
-        style={{
-          position: 'absolute',
-          [flipX ? 'right' : 'left']: 0,
-          top: '50%',
-          width: arm,
-          height: line,
-          background: color,
-          opacity: 0.4,
-        }}
-      />
-      <div
-        style={{
-          position: 'absolute',
-          [flipY ? 'bottom' : 'top']: 0,
-          left: '50%',
-          width: line,
-          height: arm,
-          background: color,
-          opacity: 0.4,
-        }}
-      />
-    </div>
-  );
-  return (
-    <>
-      {mark({ top: inset, left: inset }, false, false, 'tl')}
-      {mark({ top: inset, right: inset }, true, false, 'tr')}
-      {mark({ bottom: inset, left: inset }, false, true, 'bl')}
-      {mark({ bottom: inset, right: inset }, true, true, 'br')}
-    </>
   );
 }
 
@@ -163,10 +109,11 @@ export function Toggle({ on, onClick }: { on: boolean; onClick?: () => void }) {
   return (
     <button
       onClick={onClick}
+      aria-pressed={on}
       style={{
         width: 44,
         height: 24,
-        borderRadius: 12,
+        borderRadius: 'var(--r-full)',
         border: '1px solid var(--hairline-strong)',
         background: on ? 'var(--accent)' : 'var(--paper-2)',
         position: 'relative',
@@ -182,11 +129,158 @@ export function Toggle({ on, onClick }: { on: boolean; onClick?: () => void }) {
           left: on ? 22 : 2,
           width: 18,
           height: 18,
+          borderRadius: 'var(--r-full)',
           background: '#fff',
           border: '1px solid var(--hairline-strong)',
           transition: 'left 0.15s',
         }}
       />
     </button>
+  );
+}
+
+// Square icon-only button. `label` is REQUIRED and becomes both the aria-label
+// and the title tooltip — so an icon button is never unlabelled and its glyph
+// is always centered (styling lives in the .icon-btn class). Pass `active` to
+// expose a pressed/toggle state (adds aria-pressed + the tinted look).
+export function IconButton({
+  icon,
+  label,
+  onClick,
+  active,
+  disabled,
+  size = 32,
+  iconSize = 16,
+  variant = 'ghost',
+  tone = 'default',
+  title,
+  style,
+  className,
+}: {
+  icon: IconName;
+  label: string;
+  /** receives the event, so buttons nested in a clickable row can stopPropagation */
+  onClick?: (e: MouseEvent<HTMLButtonElement>) => void;
+  active?: boolean;
+  disabled?: boolean;
+  size?: number;
+  iconSize?: number;
+  variant?: 'ghost' | 'outline';
+  /** 'danger' tints the glyph red with a red hover — for destructive actions */
+  tone?: 'default' | 'danger';
+  title?: string;
+  style?: CSSProperties;
+  /** extra class(es) merged onto .icon-btn — e.g. "row-action" for hover-reveal */
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      aria-pressed={active === undefined ? undefined : active}
+      title={title ?? label}
+      className={`icon-btn${variant === 'outline' ? ' icon-btn--outline' : ''}${tone === 'danger' ? ' icon-btn--danger' : ''}${active ? ' is-active' : ''}${className ? ` ${className}` : ''}`}
+      style={{ width: size, height: size, ...style }}
+    >
+      <Icon name={icon} size={iconSize} />
+    </button>
+  );
+}
+
+// Small status pill — tinted background + tinted text from one tone. Replaces
+// the hand-built "Locked" / status chips that were duplicated across panels.
+const PILL_TONES: Record<string, [string, string]> = {
+  locked: ['--locked-tint', '--locked'],
+  accent: ['--accent-tint', '--accent'],
+  sage: ['--accent-2-tint', '--accent-2'],
+  danger: ['--danger-tint', '--danger'],
+  neutral: ['--paper-2', '--ink-2'],
+};
+
+export function Pill({
+  tone = 'neutral',
+  children,
+  style,
+}: {
+  tone?: 'locked' | 'accent' | 'sage' | 'danger' | 'neutral';
+  children: ReactNode;
+  style?: CSSProperties;
+}) {
+  const [bg, fg] = PILL_TONES[tone] ?? PILL_TONES.neutral;
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        height: 22,
+        padding: '0 10px',
+        borderRadius: 'var(--r-full)',
+        background: `var(${bg})`,
+        color: `var(${fg})`,
+        fontSize: 11,
+        fontWeight: 700,
+        whiteSpace: 'nowrap',
+        ...style,
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+// Segmented toggle — a row of mutually-exclusive options in the rounded
+// .toolbar shell, with aria-pressed per option. Replaces the several inline
+// segmented controls (units, upload/camera, view presets, …).
+export function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+  ariaLabel,
+  size = 30,
+}: {
+  options: { value: T; label?: string; icon?: IconName }[];
+  value: T;
+  onChange: (v: T) => void;
+  ariaLabel?: string;
+  size?: number;
+}) {
+  return (
+    <div className="toolbar" role="group" aria-label={ariaLabel}>
+      {options.map((o) => {
+        const active = o.value === value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(o.value)}
+            aria-pressed={active}
+            aria-label={o.label ?? o.value}
+            title={o.label ?? o.value}
+            style={{
+              height: size,
+              padding: o.label ? '0 12px' : 0,
+              width: o.label ? 'auto' : size,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              border: 'none',
+              background: active ? 'var(--accent-tint)' : 'transparent',
+              color: active ? 'var(--accent)' : 'var(--ink-2)',
+              cursor: 'pointer',
+              fontSize: 12.5,
+              fontWeight: 600,
+              fontFamily: 'var(--font-sans)',
+            }}
+          >
+            {o.icon && <Icon name={o.icon} size={14} />}
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }

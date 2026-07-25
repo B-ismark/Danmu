@@ -49,6 +49,8 @@
 
   --shadow-soft: 0 1px 2px rgba(42, 37, 32, 0.04), 0 6px 16px rgba(42, 37, 32, 0.06);
   --shadow-lift: 0 2px 4px rgba(42, 37, 32, 0.06), 0 12px 28px rgba(42, 37, 32, 0.10);
+
+  --scrim: rgba(19, 19, 17, 0.55);   /* modal backdrop — one source, was inline ×4 */
 }
 
 html, body {
@@ -131,6 +133,29 @@ h1, h2, h3, .display {
 .ds-btn--accent:hover { filter: brightness(1.04); }
 .ds-btn--ghost { background: transparent; border-color: transparent; box-shadow: none; }
 .ds-btn--ghost:hover { background: var(--paper-2); box-shadow: none; transform: none; }
+
+/* Visible keyboard focus — mouse users never see it (:focus-visible), keyboard
+   and screen-reader users always do. Applies to buttons and links app-wide. */
+.ds-btn:focus-visible,
+.icon-btn:focus-visible,
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-1); }
+
+/* Square icon-only button. The IconButton primitive owns the markup + the
+   required aria-label; this owns the look. One home for icon-button styling,
+   so a centered glyph and consistent hover/active are guaranteed everywhere. */
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--r-2); border: 1px solid transparent;
+  background: transparent; color: var(--ink-2); cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.icon-btn:hover { background: var(--paper-2); color: var(--ink); }
+.icon-btn:disabled { opacity: .45; cursor: not-allowed; }
+.icon-btn.is-active { background: var(--accent-tint); color: var(--accent); }
+.icon-btn--outline { border-color: var(--hairline-strong); background: var(--paper); box-shadow: var(--shadow-soft); }
+.icon-btn--outline:hover { background: var(--paper); border-color: var(--accent); }
+.icon-btn--danger { color: var(--danger); }
+.icon-btn--danger:hover { background: var(--danger-tint); color: var(--danger); }
 
 .ds-chip {
   display: inline-flex; align-items: center; gap: 6px;
