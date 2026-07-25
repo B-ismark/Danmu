@@ -6,6 +6,7 @@ import { useRoomScene } from '@/lib/room-scene';
 import { useScene } from '@/lib/scene-store';
 import { collidesAt } from '@/lib/scene-spec';
 import { pointInFootprint, wallSegments, footprintBounds } from '@/lib/footprint';
+import { IconButton } from '@/components/ui/primitives';
 
 const SCALE = 100; // px per meter at zoom=1
 const PAD = 80;
@@ -281,7 +282,7 @@ export function PlanView() {
       >
         <defs>
           <pattern id="lockHatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-            <line x1="0" y1="0" x2="0" y2="6" stroke="#2B6FD4" strokeWidth="0.4" opacity="0.35" />
+            <line x1="0" y1="0" x2="0" y2="6" stroke="var(--locked)" strokeWidth="0.4" opacity="0.35" />
           </pattern>
         </defs>
 
@@ -295,7 +296,7 @@ export function PlanView() {
                 })
                 .join(' ') + ' Z'
             }
-            fill="rgba(19,19,17,0.03)"
+            fill="var(--hairline-soft)"
             stroke="var(--ink)"
             strokeWidth="3"
           />
@@ -360,8 +361,8 @@ export function PlanView() {
             const center = toLocal(pos[0], pos[2]);
             const wpx = fpW * SCALE;
             const hpx = fpD * SCALE;
-            const color = part.locked ? '#2B6FD4' : '#E2613A';
-            const fill = part.locked ? 'rgba(43,111,212,0.14)' : 'rgba(232,84,42,0.10)';
+            const color = part.locked ? 'var(--locked)' : 'var(--accent)';
+            const fill = part.locked ? 'var(--locked-tint)' : 'var(--accent-tint)';
             const isSel = selected === part.id;
             const rotDeg = -(rotY * 180) / Math.PI;
             return (
@@ -445,19 +446,31 @@ export function PlanView() {
 
       {/* Pan/zoom controls */}
       <div
+        className="toolbar"
         style={{
           position: 'absolute',
           bottom: 16,
           left: 16,
-          display: 'flex',
           gap: 6,
-          background: 'var(--paper)',
-          border: '1px solid var(--hairline-strong)',
           padding: 4,
         }}
       >
-        <ZoomBtn onClick={() => setZoom((z) => Math.min(4, z * 1.15))} label="+" />
-        <ZoomBtn onClick={() => setZoom((z) => Math.max(0.4, z / 1.15))} label="−" />
+        <IconButton
+          icon="plus"
+          label="Zoom in"
+          onClick={() => setZoom((z) => Math.min(4, z * 1.15))}
+          variant="outline"
+          size={28}
+          iconSize={15}
+        />
+        <IconButton
+          icon="minus"
+          label="Zoom out"
+          onClick={() => setZoom((z) => Math.max(0.4, z / 1.15))}
+          variant="outline"
+          size={28}
+          iconSize={15}
+        />
         <span
           className="mono"
           style={{
@@ -472,8 +485,8 @@ export function PlanView() {
           {(zoom * 100).toFixed(0)}%
         </span>
         <div style={{ width: 1, background: 'var(--hairline)' }} />
-        <ZoomBtn onClick={() => setRot((r) => r - Math.PI / 12)} label="↺" />
-        <ZoomBtn onClick={() => setRot((r) => r + Math.PI / 12)} label="↻" />
+        <ZoomBtn onClick={() => setRot((r) => r - Math.PI / 12)} label="↺" title="Rotate view left" />
+        <ZoomBtn onClick={() => setRot((r) => r + Math.PI / 12)} label="↻" title="Rotate view right" />
         <span
           className="mono"
           style={{
@@ -488,16 +501,15 @@ export function PlanView() {
           {(((rot * 180) / Math.PI) % 360).toFixed(0)}°
         </span>
         <div style={{ width: 1, background: 'var(--hairline)' }} />
-        <ZoomBtn onClick={fit} label="Fit" wide />
+        <ZoomBtn onClick={fit} label="Fit" title="Reset view" wide />
       </div>
 
       <div
+        className="popover"
         style={{
           position: 'absolute',
           bottom: 16,
           right: 16,
-          background: 'var(--paper)',
-          border: '1px solid var(--hairline-strong)',
           padding: '6px 10px',
           fontSize: 10,
           color: 'var(--ink-3)',
@@ -550,15 +562,21 @@ function WallLabel({
   );
 }
 
-function ZoomBtn({ onClick, label, wide }: { onClick: () => void; label: string; wide?: boolean }) {
+function ZoomBtn({ onClick, label, title, wide }: { onClick: () => void; label: string; title?: string; wide?: boolean }) {
   return (
     <button
       onClick={onClick}
+      title={title}
+      aria-label={title ?? label}
       style={{
         width: wide ? 44 : 28,
         height: 28,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         background: 'var(--paper)',
-        border: '1px solid var(--hairline-strong)',
+        border: '1px solid var(--hairline)',
+        borderRadius: 'var(--r-1)',
         cursor: 'pointer',
         fontSize: 11,
         color: 'var(--ink-2)',

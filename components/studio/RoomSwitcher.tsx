@@ -38,6 +38,7 @@ export function RoomSwitcher() {
       <button
         onClick={() => setOpen((v) => !v)}
         aria-label="Switch room"
+        aria-expanded={open}
         title="Switch room"
         className="ds-btn"
         style={{ height: 28, padding: '0 8px', fontSize: 12 }}
@@ -47,6 +48,7 @@ export function RoomSwitcher() {
       </button>
       {open && (
         <div
+          className="popover"
           style={{
             position: 'absolute',
             top: 'calc(100% + 6px)',
@@ -55,9 +57,6 @@ export function RoomSwitcher() {
             minWidth: 280,
             maxHeight: 360,
             overflow: 'auto',
-            background: 'var(--paper)',
-            border: '1px solid var(--ink)',
-            boxShadow: '0 12px 30px rgba(0,0,0,0.18)',
           }}
         >
           <div
@@ -91,7 +90,6 @@ export function RoomSwitcher() {
                   padding: '10px 12px',
                   background: isCurrent ? 'var(--accent-tint)' : 'transparent',
                   border: 'none',
-                  borderLeft: isCurrent ? '2px solid var(--accent)' : '2px solid transparent',
                   cursor: 'pointer',
                   textAlign: 'left',
                   gap: 8,

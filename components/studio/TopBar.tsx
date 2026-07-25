@@ -78,7 +78,7 @@ export function TopBar({
             fontWeight: 500,
             padding: '2px 6px',
             border: '1px solid var(--accent)',
-            borderRadius: 2,
+            borderRadius: 'var(--r-1)',
             background: 'var(--paper)',
             color: 'var(--ink)',
             outline: 'none',
@@ -95,7 +95,7 @@ export function TopBar({
             fontWeight: 500,
             padding: '2px 6px',
             cursor: 'text',
-            borderRadius: 2,
+            borderRadius: 'var(--r-1)',
           }}
         >
           {name}

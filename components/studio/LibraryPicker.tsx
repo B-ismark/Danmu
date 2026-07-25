@@ -23,25 +23,12 @@ export function LibraryPicker({ onPick }: { onPick: (item: LibraryItem) => void 
   return (
     <div>
       <input
+        className="field"
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder="Search furniture…"
         autoFocus
-        style={{
-          width: '100%',
-          height: 32,
-          padding: '0 10px',
-          fontSize: 13,
-          fontFamily: 'var(--font-sans)',
-          background: 'var(--paper)',
-          color: 'var(--ink)',
-          border: '1px solid var(--hairline-strong)',
-          borderRadius: 2,
-          outline: 'none',
-          marginBottom: 12,
-        }}
-        onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--accent)')}
-        onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--hairline-strong)')}
+        style={{ marginBottom: 12 }}
       />
       <div style={{ maxHeight: 320, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
         {Object.keys(groups).length === 0 && (

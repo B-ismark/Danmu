@@ -43,8 +43,8 @@ export function NarrowViewportBanner() {
       </div>
       <div style={{ flex: 1, display: 'grid', placeItems: 'center', padding: '40px 0', maxWidth: 460, margin: '0 auto', textAlign: 'center' }}>
         <div>
-          <div className="ds-kicker" style={{ fontSize: 10, color: 'var(--accent)', marginBottom: 12 }}>
-            ↘ Needs a wider viewport
+          <div className="ds-kicker" style={{ fontSize: 10, marginBottom: 12 }}>
+            Needs a wider viewport
           </div>
           <div style={{ fontSize: 32, fontWeight: 600, letterSpacing: '-0.02em', marginBottom: 12 }}>
             Studio runs on desktop.

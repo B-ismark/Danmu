@@ -71,7 +71,7 @@ export function DemoBanner() {
       <button
         onClick={() => setDismissed(true)}
         aria-label="Dismiss"
-        style={{ flexShrink: 0, display: 'flex', background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 2, opacity: 0.8 }}
+        style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 2, opacity: 0.8 }}
       >
         <Icon name="x" size={13} color="#fff" />
       </button>

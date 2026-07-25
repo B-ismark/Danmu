@@ -1,6 +1,5 @@
 'use client';
 
-import { CornerRegs } from '@/components/ui/primitives';
 import { PartTree } from '@/components/studio/PartTree';
 import { Inspector } from '@/components/studio/Inspector';
 import { PlanView } from '@/components/studio/PlanView';
@@ -32,7 +31,6 @@ export default function PlanPage() {
       </aside>
 
       <main style={{ position: 'relative', overflow: 'hidden' }} className="ds-grid-bg">
-        <CornerRegs color="var(--ink-3)" inset={10} size={10} />
         <div
           style={{
             position: 'absolute',
@@ -49,17 +47,16 @@ export default function PlanPage() {
         <div style={{ position: 'absolute', top: 12, left: 12, display: 'flex', gap: 6 }}>
           <span className="ds-chip">
             <Icon name="ruler" size={10} />
-            1:50 · CM
+            <span className="mono">1:50</span> · cm
           </span>
-          <span className="ds-chip ds-chip--accent">PLAN</span>
         </div>
 
         <div style={{ position: 'absolute', top: 12, right: 12 }}>
           <button
             onClick={exportPlan}
             className="ds-btn"
-            title="Download a to-scale floor plan PNG with dimensions and a furniture legend"
-            style={{ height: 30, fontSize: 11, gap: 6, background: 'var(--paper)', boxShadow: '0 2px 6px rgba(0,0,0,0.06)' }}
+            title="Download a to-scale floor plan PNG"
+            style={{ height: 30, fontSize: 11 }}
           >
             <Icon name="image" size={12} />
             Export plan

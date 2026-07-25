@@ -7,6 +7,8 @@ import { useScene } from '@/lib/scene-store';
 import { fromMM, toMM, stepFor, precisionFor, formatDim, UNIT_OPTIONS } from '@/lib/units';
 import { clampDims, dimRangeFor } from '@/lib/dimension-ranges';
 import { Icon } from '@/components/ui/Icon';
+import { Modal } from '@/components/ui/Modal';
+import { IconButton, Pill } from '@/components/ui/primitives';
 import { useConfirm } from '@/components/ui/Confirm';
 import { RegenerateModal } from './RegenerateModal';
 import { LibraryPicker } from './LibraryPicker';
@@ -132,68 +134,61 @@ export function Inspector() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', height: '100%' }}>
       <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--hairline)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-          <span className="ds-label" style={{ color: 'var(--accent)' }}>INSPECTOR</span>
-          <span
-            className="mono"
-            style={{
-              fontSize: 9,
-              color: part.locked ? 'var(--locked)' : 'var(--accent)',
-              letterSpacing: '0.08em',
-              padding: '2px 6px',
-              border: `1px solid ${part.locked ? 'var(--locked)' : 'var(--accent)'}`,
-            }}
-          >
-            {part.locked ? 'LOCKED' : 'NEW BUILD'}
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {editingLabel ? (
+            <input
+              autoFocus
+              value={labelDraft}
+              onChange={(e) => setLabelDraft(e.target.value)}
+              onBlur={commitLabel}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitLabel();
+                else if (e.key === 'Escape') setEditingLabel(false);
+              }}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                fontSize: 16,
+                fontWeight: 500,
+                letterSpacing: '-0.01em',
+                padding: '4px 6px',
+                border: '1px solid var(--accent)',
+                borderRadius: 'var(--r-1)',
+                outline: 'none',
+                fontFamily: 'var(--font-sans)',
+                background: 'var(--paper)',
+                color: 'var(--ink)',
+              }}
+            />
+          ) : (
+            <div
+              onClick={() => {
+                setLabelDraft(part.name);
+                setEditingLabel(true);
+              }}
+              title="Click to rename"
+              style={{
+                flex: 1,
+                minWidth: 0,
+                fontSize: 16,
+                fontWeight: 500,
+                letterSpacing: '-0.01em',
+                padding: '4px 6px',
+                cursor: 'text',
+                borderRadius: 'var(--r-1)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {part.name}
+            </div>
+          )}
+          {part.locked && <Pill tone="locked" style={{ flexShrink: 0 }}>Locked</Pill>}
         </div>
 
-        {editingLabel ? (
-          <input
-            autoFocus
-            value={labelDraft}
-            onChange={(e) => setLabelDraft(e.target.value)}
-            onBlur={commitLabel}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') commitLabel();
-              else if (e.key === 'Escape') setEditingLabel(false);
-            }}
-            style={{
-              fontSize: 16,
-              fontWeight: 500,
-              letterSpacing: '-0.01em',
-              padding: '4px 6px',
-              border: '1px solid var(--accent)',
-              borderRadius: 2,
-              outline: 'none',
-              width: '100%',
-              fontFamily: 'var(--font-sans)',
-              background: 'var(--paper)',
-              color: 'var(--ink)',
-            }}
-          />
-        ) : (
-          <div
-            onClick={() => {
-              setLabelDraft(part.name);
-              setEditingLabel(true);
-            }}
-            title="Click to rename"
-            style={{
-              fontSize: 16,
-              fontWeight: 500,
-              letterSpacing: '-0.01em',
-              padding: '4px 6px',
-              cursor: 'text',
-              borderRadius: 2,
-            }}
-          >
-            {part.name}
-          </div>
-        )}
-
-        <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.06em', marginTop: 2, paddingLeft: 6 }}>
-          {part.category.toUpperCase()} · {part.shape.toUpperCase()}
+        <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2, paddingLeft: 6, textTransform: 'capitalize' }}>
+          {part.category} · {part.shape}
         </div>
       </div>
 
@@ -279,7 +274,7 @@ export function Inspector() {
           <button
             onClick={() => setRegenOpen(true)}
             className="ds-btn"
-            title="AI re-shapes this model from a description — uses your daily quota"
+            title="AI re-shapes this model from a description"
             style={{ height: 34, padding: '0 12px', justifyContent: 'center', fontSize: 12 }}
           >
             <Icon name="sparkles" size={12} />
@@ -327,29 +322,21 @@ export function Inspector() {
       )}
 
       {swapOpen && (
-        <div
-          onClick={() => setSwapOpen(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(19,19,17,0.55)', display: 'grid', placeItems: 'center', zIndex: 100, padding: 20 }}
+        <Modal
+          onClose={() => setSwapOpen(false)}
+          width={520}
+          footer={
+            <button onClick={() => setSwapOpen(false)} className="ds-btn" style={{ flex: 1, height: 36, fontSize: 13, justifyContent: 'center' }}>
+              Cancel
+            </button>
+          }
         >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{ width: 'min(520px, 92vw)', background: 'var(--paper)', border: '1px solid var(--ink)', boxShadow: '0 30px 80px rgba(0,0,0,0.4)' }}
-          >
-            <div style={{ height: 4, background: 'var(--accent)' }} />
-            <div style={{ padding: '20px 24px' }}>
-              <div className="ds-kicker" style={{ marginBottom: 6, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="swap" size={13} /> Swap model</div>
-              <p style={{ fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.5, margin: '0 0 14px' }}>
-                Replace <b>{part.name}</b> with a library model. Keeps its position and colour.
-              </p>
-              <LibraryPicker onPick={swapModel} />
-            </div>
-            <div style={{ padding: '14px 24px', background: 'var(--paper-2)', borderTop: '1px solid var(--hairline)', display: 'flex' }}>
-              <button onClick={() => setSwapOpen(false)} className="ds-btn" style={{ flex: 1, height: 36, fontSize: 13, justifyContent: 'center' }}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+          <div className="ds-kicker" style={{ marginBottom: 6, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="swap" size={13} /> Swap model</div>
+          <p style={{ fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.5, margin: '0 0 14px' }}>
+            Replace <b>{part.name}</b> with a library model. Keeps its position and colour.
+          </p>
+          <LibraryPicker onPick={swapModel} />
+        </Modal>
       )}
     </div>
   );
@@ -428,14 +415,14 @@ function DecorCollection({ part, onChange }: { part: ScenePart; onChange: (decor
           {items.map((it) => (
             <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', background: 'var(--paper-2)', borderRadius: 'var(--r-1)' }}>
               <span style={{ flex: 1, fontSize: 12, fontWeight: 600 }}>{DECOR_LABEL[it.kind]}</span>
-              <button
-                onClick={() => onChange(items.filter((x) => x.id !== it.id))}
-                aria-label={`Remove ${it.kind}`}
+              <IconButton
+                icon="x"
+                label={`Remove ${it.kind}`}
                 title="Remove"
-                style={{ width: 22, height: 22, border: 'none', background: 'transparent', color: 'var(--ink-3)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
-              >
-                <Icon name="x" size={12} />
-              </button>
+                onClick={() => onChange(items.filter((x) => x.id !== it.id))}
+                size={22}
+                iconSize={12}
+              />
             </div>
           ))}
         </div>
@@ -491,15 +478,9 @@ function WallInspector({ index }: { index: number }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', height: '100%' }}>
       <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--hairline)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-          <span className="ds-label" style={{ color: 'var(--accent)' }}>WALL</span>
-          <span className="mono" style={{ fontSize: 9, color: 'var(--accent)', letterSpacing: '0.08em', padding: '2px 6px', border: '1px solid var(--accent)' }}>
-            SHELL
-          </span>
-        </div>
         <div style={{ fontSize: 16, fontWeight: 500, letterSpacing: '-0.01em', padding: '4px 6px' }}>{name}</div>
-        <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.06em', marginTop: 2, paddingLeft: 6 }}>
-          {seg ? `${seg.len.toFixed(2)} M WIDE · ${room.height.toFixed(2)} M TALL` : ''}
+        <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.04em', marginTop: 2, paddingLeft: 6 }}>
+          {seg ? `${seg.len.toFixed(2)} m wide · ${room.height.toFixed(2)} m tall` : ''}
         </div>
       </div>
 
@@ -510,16 +491,18 @@ function WallInspector({ index }: { index: number }) {
           {painted && (
             <button
               onClick={() => resetWallColor(index)}
-              style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.06em', color: 'var(--accent)', background: 'transparent', border: '1px solid var(--accent)', padding: '2px 6px', cursor: 'pointer' }}
+              className="ds-btn ds-btn--ghost"
+              title="Back to the default shell colour"
+              style={{ height: 24, padding: '0 8px', fontSize: 11, fontWeight: 600, color: 'var(--accent)', gap: 4 }}
             >
-              ↺ DEFAULT
+              <Icon name="refresh" size={11} /> Default
             </button>
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <label
             title="Pick a custom colour"
-            style={{ position: 'relative', width: 34, height: 34, borderRadius: 3, border: '1px solid var(--hairline-strong)', background: current, cursor: 'pointer', flexShrink: 0 }}
+            style={{ position: 'relative', width: 34, height: 34, borderRadius: 'var(--r-1)', border: '1px solid var(--hairline-strong)', background: current, cursor: 'pointer', flexShrink: 0 }}
           >
             <input
               type="color"
@@ -541,7 +524,7 @@ function WallInspector({ index }: { index: number }) {
               aria-label={hex}
               style={{
                 aspectRatio: '1',
-                borderRadius: 2,
+                borderRadius: 'var(--r-1)',
                 background: hex,
                 border: current.toLowerCase() === hex.toLowerCase() ? '2px solid var(--accent)' : '1px solid var(--hairline-strong)',
                 cursor: 'pointer',
@@ -665,6 +648,7 @@ function DimensionEditor({
             letterSpacing: '0.06em',
             padding: '3px 6px',
             border: '1px solid var(--hairline-strong)',
+            borderRadius: 'var(--r-1)',
             background: 'var(--paper)',
             color: 'var(--ink-2)',
             cursor: 'pointer',
@@ -676,18 +660,11 @@ function DimensionEditor({
         </select>
         <button
           onClick={reset}
-          style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 9,
-            letterSpacing: '0.06em',
-            color: 'var(--accent)',
-            background: 'transparent',
-            border: '1px solid var(--accent)',
-            padding: '2px 8px',
-            cursor: 'pointer',
-          }}
+          className="ds-btn ds-btn--ghost"
+          title="Reset to detected size"
+          style={{ height: 24, padding: '0 8px', fontSize: 11, fontWeight: 600, color: 'var(--accent)', gap: 4 }}
         >
-          ↺ RESET
+          <Icon name="refresh" size={11} /> Reset
         </button>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
@@ -708,7 +685,7 @@ function DimensionEditor({
                 fontWeight: 600,
                 padding: '8px 10px',
                 border: '1.5px solid var(--ink)',
-                borderRadius: 2,
+                borderRadius: 'var(--r-1)',
                 background: 'var(--paper)',
                 color: 'var(--ink)',
                 outline: 'none',
@@ -721,13 +698,14 @@ function DimensionEditor({
         ))}
       </div>
       {/* Real-world range hint — the values any edit is clamped into. */}
-      <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.06em', marginTop: 8, lineHeight: 1.6 }}>
-        ↳ {dimUnit.toUpperCase()} · live ·{' '}
-        {range.flex === 'fixed' ? 'standard product size' : range.flex === 'standard' ? 'typical size range' : 'made-to-measure'}
+      <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 8, lineHeight: 1.6 }}>
+        {range.flex === 'fixed' ? 'Standard product size' : range.flex === 'standard' ? 'Typical size range' : 'Made to measure'}
         <br />
-        W {formatDim(range.min[0], dimUnit)}–{formatDim(range.max[0], dimUnit)} · D{' '}
-        {formatDim(range.min[1], dimUnit)}–{formatDim(range.max[1], dimUnit)} · H{' '}
-        {formatDim(range.min[2], dimUnit)}–{formatDim(range.max[2], dimUnit)}
+        <span className="mono">
+          W {formatDim(range.min[0], dimUnit)}–{formatDim(range.max[0], dimUnit)} · D{' '}
+          {formatDim(range.min[1], dimUnit)}–{formatDim(range.max[1], dimUnit)} · H{' '}
+          {formatDim(range.min[2], dimUnit)}–{formatDim(range.max[2], dimUnit)} {dimUnit}
+        </span>
       </div>
     </div>
   );
@@ -760,18 +738,11 @@ function ColorEditor({
         {value && (
           <button
             onClick={onReset}
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 9,
-              letterSpacing: '0.06em',
-              color: 'var(--accent)',
-              background: 'transparent',
-              border: '1px solid var(--accent)',
-              padding: '2px 6px',
-              cursor: 'pointer',
-            }}
+            className="ds-btn ds-btn--ghost"
+            title="Back to the default colour"
+            style={{ height: 24, padding: '0 8px', fontSize: 11, fontWeight: 600, color: 'var(--accent)', gap: 4 }}
           >
-            ↺ DEFAULT
+            <Icon name="refresh" size={11} /> Default
           </button>
         )}
       </div>
@@ -784,7 +755,7 @@ function ColorEditor({
             position: 'relative',
             width: 34,
             height: 34,
-            borderRadius: 3,
+            borderRadius: 'var(--r-1)',
             border: '1px solid var(--hairline-strong)',
             background: current,
             cursor: 'pointer',
@@ -811,7 +782,7 @@ function ColorEditor({
             aria-label={hex}
             style={{
               aspectRatio: '1',
-              borderRadius: 2,
+              borderRadius: 'var(--r-1)',
               background: hex,
               border: value?.toLowerCase() === hex.toLowerCase() ? '2px solid var(--accent)' : '1px solid var(--hairline-strong)',
               cursor: 'pointer',

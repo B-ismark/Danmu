@@ -1,21 +1,21 @@
 'use client';
 
-// Animated CAD-themed loader with rotating tips. Used during long async ops
-// to keep users engaged without misclicks. Carousels through facts every 4s.
+// Calm progress overlay with rotating tips. Used during long async ops to keep
+// users engaged without misclicks. Carousels through tips every 4s.
 
 import { useEffect, useState } from 'react';
 import { Dot } from './primitives';
 
 const TIPS = [
-  '↳ Lock a piece you want to keep — it stays exactly as-is in every preview.',
-  '↳ Right-click and drag any piece to spin it around.',
-  '↳ Recolour anything in the inspector — the room updates live.',
-  '↳ Try the material swatches to switch wood, fabric, or metal finishes.',
-  '↳ Press W / R / S to Move, Rotate, or Scale the selected piece.',
-  '↳ One-tap a style theme to redecorate the whole room at once.',
-  '↳ Toggle day or evening light to see your room in a different mood.',
-  '↳ Your photos and designs stay on your device.',
-  '↳ Drag new furniture in from the catalog to fill out the space.',
+  'Lock a piece you want to keep — it stays exactly as-is in every preview.',
+  'Right-click and drag any piece to spin it around.',
+  'Recolour anything in the inspector — the room updates live.',
+  'Try the material swatches to switch wood, fabric, or metal finishes.',
+  'Press W / R / S to Move, Rotate, or Scale the selected piece.',
+  'One-tap a style theme to redecorate the whole room at once.',
+  'Toggle day or evening light to see your room in a different mood.',
+  'Your photos and designs stay on your device.',
+  'Drag new furniture in from the catalog to fill out the space.',
 ];
 
 const HUDS = [
@@ -39,7 +39,7 @@ export function LoadingOverlay({
   step?: number;
   totalSteps?: number;
   description?: string;
-  /** When provided, replaces "DO NOT CLOSE" with a clickable escape hatch. */
+  /** When provided, replaces the "please wait" hint with a Cancel button. */
   onCancel?: () => void;
 }) {
   const pct = step !== undefined && totalSteps ? Math.min(100, (step / totalSteps) * 100) : null;
@@ -63,7 +63,7 @@ export function LoadingOverlay({
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(19,19,17,0.65)',
+        background: 'var(--scrim)',
         display: 'grid',
         placeItems: 'center',
         zIndex: 80,
@@ -75,16 +75,14 @@ export function LoadingOverlay({
         style={{
           width: 'min(520px, 92vw)',
           background: 'var(--paper)',
-          border: '1px solid var(--ink)',
+          border: '1px solid var(--hairline)',
+          borderRadius: 'var(--r-card)',
           padding: 28,
-          boxShadow: '0 30px 80px rgba(0,0,0,0.45)',
+          boxShadow: 'var(--shadow-lift)',
           position: 'relative',
           overflow: 'hidden',
         }}
       >
-        {/* animated CAD scanner */}
-        <Scanner t={t} />
-
         <div
           style={{
             position: 'relative',
@@ -105,23 +103,14 @@ export function LoadingOverlay({
           {onCancel ? (
             <button
               onClick={onCancel}
-              className="mono"
-              style={{
-                fontSize: 10,
-                letterSpacing: '0.1em',
-                color: 'var(--ink-2)',
-                background: 'transparent',
-                border: '1px solid var(--hairline-strong)',
-                borderRadius: 6,
-                padding: '3px 9px',
-                cursor: 'pointer',
-              }}
+              className="ds-btn ds-btn--ghost"
+              style={{ height: 26, fontSize: 12, padding: '0 12px' }}
             >
-              CANCEL
+              Cancel
             </button>
           ) : (
-            <span className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', color: 'var(--ink-3)' }}>
-              DO NOT CLOSE
+            <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>
+              This only takes a moment
             </span>
           )}
         </div>
@@ -141,6 +130,7 @@ export function LoadingOverlay({
               style={{
                 height: 4,
                 background: 'var(--paper-3)',
+                borderRadius: 'var(--r-full)',
                 position: 'relative',
                 marginBottom: 6,
               }}
@@ -151,9 +141,12 @@ export function LoadingOverlay({
                   left: 0,
                   top: 0,
                   bottom: 0,
-                  width: `${pct}%`,
+                  width: '100%',
+                  transform: `scaleX(${Math.max(0, Math.min(1, pct / 100))})`,
+                  transformOrigin: 'left',
                   background: 'var(--accent)',
-                  transition: 'width 0.3s',
+                  borderRadius: 'var(--r-full)',
+                  transition: 'transform 0.3s',
                 }}
               />
               {/* moving scan dot */}
@@ -187,12 +180,12 @@ export function LoadingOverlay({
             zIndex: 2,
             marginTop: 22,
             paddingTop: 14,
-            borderTop: '1px dashed var(--hairline)',
+            borderTop: '1px solid var(--hairline)',
             minHeight: 48,
           }}
         >
-          <div className="mono" style={{ fontSize: 9, letterSpacing: '0.18em', color: 'var(--accent)', marginBottom: 6 }}>
-            DID YOU KNOW
+          <div className="ds-kicker" style={{ marginBottom: 6 }}>
+            Tip
           </div>
           <div
             key={tipIdx}
@@ -219,58 +212,5 @@ export function LoadingOverlay({
         }
       `}</style>
     </div>
-  );
-}
-
-function Scanner({ t }: { t: number }) {
-  // Animated grid + scanner line + corner blueprints — gives the modal that "AI is working" feel.
-  const scanY = (t * 4) % 240;
-  return (
-    <svg
-      viewBox="0 0 520 240"
-      preserveAspectRatio="none"
-      style={{
-        position: 'absolute',
-        inset: 0,
-        width: '100%',
-        height: '100%',
-        opacity: 0.5,
-        pointerEvents: 'none',
-      }}
-    >
-      <defs>
-        <pattern id="loadgrid" width="20" height="20" patternUnits="userSpaceOnUse">
-          <path d="M 20 0 L 0 0 0 20" fill="none" stroke="var(--hairline)" strokeWidth="0.5" />
-        </pattern>
-        <linearGradient id="scanline" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="rgba(232,84,42,0)" />
-          <stop offset="0.5" stopColor="rgba(232,84,42,0.4)" />
-          <stop offset="1" stopColor="rgba(232,84,42,0)" />
-        </linearGradient>
-      </defs>
-      <rect width="520" height="240" fill="url(#loadgrid)" />
-      <rect x="0" y={scanY} width="520" height="14" fill="url(#scanline)" />
-      <line x1="0" y1={scanY + 7} x2="520" y2={scanY + 7} stroke="var(--accent)" strokeWidth="0.5" strokeDasharray="4 4" />
-      {/* corner blueprints */}
-      {[
-        [10, 10],
-        [510, 10, true, false],
-        [10, 230, false, true],
-        [510, 230, true, true],
-      ].map((c, i) => {
-        const [x, y, fx, fy] = c as [number, number, boolean?, boolean?];
-        return (
-          <g key={i}>
-            <line x1={x} y1={y} x2={x + (fx ? -10 : 10)} y2={y} stroke="var(--accent)" strokeWidth="1" />
-            <line x1={x} y1={y} x2={x} y2={y + (fy ? -10 : 10)} stroke="var(--accent)" strokeWidth="1" />
-          </g>
-        );
-      })}
-      {/* roving point markers */}
-      {[0.2, 0.5, 0.8].map((p, i) => {
-        const x = (t * 2 + i * 80) % 520;
-        return <circle key={i} cx={x} cy={p * 240} r="2" fill="var(--accent)" opacity="0.4" />;
-      })}
-    </svg>
   );
 }

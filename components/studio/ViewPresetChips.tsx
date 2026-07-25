@@ -1,13 +1,13 @@
 'use client';
 
 import { useStudio } from '@/lib/store';
-import { Dot } from '@/components/ui/primitives';
+import { Dot, Segmented } from '@/components/ui/primitives';
 
 const PRESETS = [
-  { id: 'front', label: 'FRONT' },
-  { id: 'top', label: 'TOP' },
-  { id: 'iso', label: 'ISO' },
-  { id: 'free', label: 'FREE' },
+  { value: 'front', label: 'Front' },
+  { value: 'top', label: 'Top' },
+  { value: 'iso', label: 'Iso' },
+  { value: 'free', label: 'Free' },
 ] as const;
 
 export function ViewPresetChips() {
@@ -20,23 +20,20 @@ export function ViewPresetChips() {
       <button
         onClick={toggleGrid}
         title="Toggle floor grid"
+        aria-pressed={showGrid}
         className={`ds-chip ${showGrid ? 'ds-chip--accent' : ''}`}
         style={{ cursor: 'pointer', height: 26, fontWeight: 500, border: 0, background: showGrid ? 'var(--accent-tint)' : 'var(--paper)' }}
       >
         {showGrid && <Dot color="var(--accent)" size={5} />}
-        GRID
+        Grid
       </button>
-      {PRESETS.map((p) => (
-        <button
-          key={p.id}
-          onClick={() => setView(p.id)}
-          className={`ds-chip ${view === p.id ? 'ds-chip--accent' : ''}`}
-          style={{ cursor: 'pointer', height: 26, fontWeight: 500, border: 0, background: view === p.id ? 'var(--accent-tint)' : 'var(--paper)' }}
-        >
-          {view === p.id && <Dot color="var(--accent)" size={5} />}
-          {p.label}
-        </button>
-      ))}
+      <Segmented
+        ariaLabel="View"
+        value={view}
+        onChange={setView}
+        options={PRESETS.map((p) => ({ value: p.value, label: p.label }))}
+        size={26}
+      />
     </div>
   );
 }

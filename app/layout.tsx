@@ -23,16 +23,14 @@ const nunito = Nunito({
 });
 
 export const metadata: Metadata = {
-  title: 'Danmu — Redesign your room without lying to yourself',
+  title: 'Danmu — Decorate your room in real 3D',
   description:
-    'A precise, zero-budget interior redesign tool. Lock what exists, ghost what you want, render with your own Google API key.',
+    'A warm, local-first interior decoration studio. Arrange, recolour, restyle and relight furniture in a scaled 3D room — right in your browser. No account, nothing leaves your device.',
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   themeColor: '#FAFAF7',
 };
 

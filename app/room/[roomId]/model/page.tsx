@@ -3,7 +3,6 @@
 import dynamic from 'next/dynamic';
 import { useState } from 'react';
 import { useStudio } from '@/lib/store';
-import { CornerRegs } from '@/components/ui/primitives';
 import { ViewPresetChips } from '@/components/studio/ViewPresetChips';
 import { ViewOptions } from '@/components/studio/ViewOptions';
 import { CatalogPanel } from '@/components/studio/CatalogPanel';
@@ -29,7 +28,7 @@ const Room = dynamic(() => import('@/components/three/Room').then((m) => m.Room)
         fontSize: 13,
       }}
     >
-      Loading 3D engine…
+      Loading your 3D room…
     </div>
   ),
 });
@@ -41,8 +40,7 @@ export default function ModelPage() {
         <PartTree />
       </aside>
 
-      <main style={{ position: 'relative', overflow: 'hidden' }} className="ds-grid-bg">
-        <CornerRegs color="var(--ink-3)" inset={10} size={10} />
+      <main style={{ position: 'relative', overflow: 'hidden', background: 'var(--paper-2)' }}>
         <Room />
 
         <div style={{ position: 'absolute', top: 12, left: 12 }}>
@@ -69,7 +67,7 @@ export default function ModelPage() {
 // Compact help affordance. Replaces the old always-on legend bar (which
 // duplicated the TransformToolbar buttons and the left-rail instructions).
 // Collapsed: a small "?" plus the active-mode dot when a part is selected.
-// Hover or focus reveals the full shortcut card.
+// Hover or keyboard-focus reveals the full shortcut card.
 function HintPill() {
   const selected = useStudio((s) => s.selectedPartId);
   const mode = useStudio((s) => s.transformMode);
@@ -81,22 +79,26 @@ function HintPill() {
       style={{ position: 'absolute', bottom: 12, left: 12 }}
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
+      onFocus={() => setOpen(true)}
+      onBlur={() => setOpen(false)}
     >
       {open && (
         <div
+          role="tooltip"
           style={{
             position: 'absolute',
             bottom: 'calc(100% + 6px)',
             left: 0,
             background: 'var(--paper)',
-            border: '1px solid var(--ink)',
+            border: '1px solid var(--hairline-strong)',
+            borderRadius: 'var(--r-2)',
             padding: '10px 14px',
             display: 'flex',
             flexDirection: 'column',
             gap: 6,
             fontSize: 12,
             color: 'var(--ink-2)',
-            boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+            boxShadow: 'var(--shadow-lift)',
             whiteSpace: 'nowrap',
           }}
         >
@@ -124,24 +126,26 @@ function HintPill() {
       )}
       <button
         aria-label="Keyboard shortcuts"
+        aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         style={{
-          height: 26,
-          padding: selected ? '0 10px' : 0,
-          width: selected ? 'auto' : 26,
+          height: 32,
+          padding: selected ? '0 12px' : 0,
+          width: selected ? 'auto' : 32,
           background: 'var(--paper)',
           border: '1px solid var(--hairline-strong)',
-          borderRadius: 4,
-          boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+          borderRadius: 'var(--r-full)',
+          boxShadow: 'var(--shadow-soft)',
           display: 'flex',
           alignItems: 'center',
+          justifyContent: 'center',
           gap: 8,
           cursor: 'pointer',
           fontSize: 12,
         }}
       >
         {selected ? (
-          <span style={{ color: 'var(--accent)', fontWeight: 500 }}>● {verb}</span>
+          <span style={{ color: 'var(--accent)', fontWeight: 600 }}>● {verb}</span>
         ) : (
           <span style={{ color: 'var(--ink-3)', fontFamily: 'var(--font-mono)' }}>?</span>
         )}
@@ -158,7 +162,7 @@ function Kb({ children }: { children: React.ReactNode }) {
         fontSize: 10,
         padding: '1px 5px',
         border: '1px solid var(--hairline-strong)',
-        borderRadius: 2,
+        borderRadius: 'var(--r-1)',
         marginRight: 4,
       }}
     >

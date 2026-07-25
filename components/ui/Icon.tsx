@@ -51,10 +51,15 @@ const MAP: Record<Exclude<IconName, 'whatsapp' | 'snap-wall' | 'snap-floor' | 's
 type Props = { name: IconName; size?: number; color?: string; strokeWidth?: number; style?: CSSProperties };
 
 export function Icon({ name, size = 16, color = 'currentColor', strokeWidth = 1.75, style }: Props) {
+  // `display:block` + `flex-shrink:0` fixes two chronic glyph bugs at the source:
+  // Lucide's inline SVG baseline (which sat icons slightly low next to text) and
+  // icons getting squished in tight flex rows. Callers can still override.
+  const base: CSSProperties = { display: 'block', flexShrink: 0, ...style };
+
   // Custom: WhatsApp brand mark (filled).
   if (name === 'whatsapp') {
     return (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill={color} style={style}>
+      <svg width={size} height={size} viewBox="0 0 24 24" fill={color} style={base}>
         <path d="M17.5 14.4c-.3-.2-1.8-.9-2-1s-.5-.2-.7.1c-.2.3-.8 1-1 1.2-.2.2-.4.2-.7.1-.3-.2-1.3-.5-2.5-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.6.2-.2.3-.4.5-.6.1-.2.2-.4.3-.6.1-.2 0-.4 0-.6-.1-.2-.7-1.7-.9-2.3-.3-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1 2.8 1.2 3c.1.2 2 3.1 4.8 4.3.7.3 1.2.5 1.6.6.7.2 1.3.2 1.8.1.5-.1 1.8-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.2-.3-.3-.6-.4zM12 2C6.5 2 2 6.5 2 12c0 1.9.5 3.7 1.4 5.2L2 22l4.9-1.4c1.5.8 3.2 1.2 5.1 1.2 5.5 0 10-4.5 10-10S17.5 2 12 2z" />
       </svg>
     );
@@ -63,7 +68,7 @@ export function Icon({ name, size = 16, color = 'currentColor', strokeWidth = 1.
   if (name === 'snap-wall' || name === 'snap-floor' || name === 'snap-surface') {
     const common = {
       width: size, height: size, viewBox: '0 0 24 24', fill: 'none' as const,
-      stroke: color, strokeWidth, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, style,
+      stroke: color, strokeWidth, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, style: base,
     };
     if (name === 'snap-wall') return <svg {...common}><path d="M5 4v16M21 12H10M13 8l-3 4 3 4" /></svg>;
     if (name === 'snap-floor') return <svg {...common}><path d="M12 3v10M8 11l4 4 4-4M4 20h16" /></svg>;
@@ -71,5 +76,5 @@ export function Icon({ name, size = 16, color = 'currentColor', strokeWidth = 1.
   }
 
   const Cmp = MAP[name] ?? Circle;
-  return <Cmp size={size} color={color} strokeWidth={strokeWidth} style={style} />;
+  return <Cmp size={size} color={color} strokeWidth={strokeWidth} style={base} />;
 }

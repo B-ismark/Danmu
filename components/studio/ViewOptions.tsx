@@ -10,6 +10,7 @@ import { useParams } from 'next/navigation';
 import { useStudio, type Lighting } from '@/lib/store';
 import { roomStore } from '@/lib/storage';
 import { Icon } from '@/components/ui/Icon';
+import { Segmented } from '@/components/ui/primitives';
 
 const MOODS: Array<{ id: Lighting; label: string; glyph: string }> = [
   { id: 'day', label: 'Day', glyph: '☀' },
@@ -54,6 +55,8 @@ export function ViewOptions() {
     <div ref={wrap} style={{ position: 'absolute', top: 12, right: 12, zIndex: 26 }}>
       <button
         onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-label="View options"
         className={`ds-chip ${open ? 'ds-chip--accent' : ''}`}
         style={{ cursor: 'pointer', height: 30, fontWeight: 700, background: open ? 'var(--accent-tint)' : 'var(--paper)' }}
       >
@@ -64,24 +67,27 @@ export function ViewOptions() {
       {open && (
         <div className="ds-card" style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 230, padding: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <Group label="Lighting">
-            <Seg
-              options={MOODS.map((m) => ({ id: m.id, label: `${m.glyph} ${m.label}` }))}
+            <Segmented
+              ariaLabel="Lighting"
+              options={MOODS.map((m) => ({ value: m.id, label: `${m.glyph} ${m.label}` }))}
               value={lighting}
-              onChange={(v) => setLighting(v as Lighting)}
+              onChange={setLighting}
             />
           </Group>
 
           <Group label="Decor">
-            <Seg
-              options={[{ id: 'on', label: 'On' }, { id: 'off', label: 'Off' }]}
+            <Segmented
+              ariaLabel="Decor"
+              options={[{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }]}
               value={dressed ? 'on' : 'off'}
               onChange={(v) => { if ((v === 'on') !== dressed) toggleDressed(); }}
             />
           </Group>
 
           <Group label="Quality">
-            <Seg
-              options={[{ id: 'high', label: 'High' }, { id: 'low', label: 'Fast' }]}
+            <Segmented
+              ariaLabel="Quality"
+              options={[{ value: 'high', label: 'High' }, { value: 'low', label: 'Fast' }]}
               value={hi ? 'high' : 'low'}
               onChange={(v) => setQuality(v === 'high' ? 'high' : 'low')}
             />
@@ -115,45 +121,6 @@ function Group({ label, children }: { label: string; children: React.ReactNode }
     <div>
       <span className="ds-label" style={{ display: 'block', marginBottom: 6 }}>{label}</span>
       {children}
-    </div>
-  );
-}
-
-function Seg({
-  options,
-  value,
-  onChange,
-}: {
-  options: Array<{ id: string; label: string }>;
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div style={{ display: 'flex', gap: 4, background: 'var(--paper-2)', borderRadius: 'var(--r-2)', padding: 3 }}>
-      {options.map((o) => {
-        const on = value === o.id;
-        return (
-          <button
-            key={o.id}
-            onClick={() => onChange(o.id)}
-            style={{
-              flex: 1,
-              height: 28,
-              border: 'none',
-              borderRadius: 'var(--r-1)',
-              cursor: 'pointer',
-              fontFamily: 'var(--font-sans)',
-              fontSize: 11.5,
-              fontWeight: 700,
-              background: on ? 'var(--paper)' : 'transparent',
-              color: on ? 'var(--accent)' : 'var(--ink-3)',
-              boxShadow: on ? 'var(--shadow-soft)' : 'none',
-            }}
-          >
-            {o.label}
-          </button>
-        );
-      })}
     </div>
   );
 }

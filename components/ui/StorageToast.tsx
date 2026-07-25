@@ -42,25 +42,26 @@ export function StorageToast() {
           pointerEvents: 'auto',
           background: 'var(--paper)',
           border: '1px solid var(--danger)',
+          borderRadius: 'var(--r-3)',
           padding: '10px 14px',
           display: 'flex',
           alignItems: 'flex-start',
           gap: 12,
           maxWidth: 560,
-          boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+          boxShadow: 'var(--shadow-lift)',
         }}
       >
         <span className="ds-label" style={{ color: 'var(--danger)', marginTop: 3 }}>
           ⚠ Storage full
         </span>
         <div style={{ flex: 1, fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.45 }}>
-          Browser ran out of room. Delete unused rooms or render variants to make space.
+          Your browser ran out of room. Delete unused rooms to free up space.
           {detail && (
             <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', marginTop: 4 }}>
               {detail.slice(0, 140)}
             </div>
           )}
-          <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+          <div style={{ marginTop: 8 }}>
             <Link
               href="/workspace"
               onClick={() => setVisible(false)}
@@ -69,19 +70,23 @@ export function StorageToast() {
             >
               Manage rooms
             </Link>
-            <button
-              onClick={() => setVisible(false)}
-              className="ds-btn"
-              style={{ height: 26, fontSize: 11 }}
-            >
-              Dismiss
-            </button>
           </div>
         </div>
         <button
           onClick={() => setVisible(false)}
           aria-label="Dismiss"
-          style={{ background: 'transparent', border: 'none', color: 'var(--ink-3)', cursor: 'pointer' }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 24,
+            height: 24,
+            padding: 0,
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--ink-3)',
+            cursor: 'pointer',
+          }}
         >
           <Icon name="x" size={12} />
         </button>

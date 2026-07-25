@@ -18,6 +18,7 @@ import { roomStore, type LayoutVariant, type Transforms } from '@/lib/storage';
 import { footprintBounds, type Footprint } from '@/lib/footprint';
 import { formatDim } from '@/lib/units';
 import { Icon } from '@/components/ui/Icon';
+import { IconButton } from '@/components/ui/primitives';
 import type { ScenePart } from '@/lib/scene-spec';
 
 export function RoomTools() {
@@ -69,7 +70,7 @@ export function RoomTools() {
             background: 'var(--paper)',
             borderColor: problems > 0 ? 'var(--danger)' : 'var(--hairline-strong)',
             color: problems > 0 ? 'var(--danger)' : 'var(--ink-2)',
-            boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+            boxShadow: 'var(--shadow-soft)',
           }}
         >
           <Icon name="info" size={12} />
@@ -80,7 +81,7 @@ export function RoomTools() {
               fontSize: 9,
               fontWeight: 700,
               padding: '1px 5px',
-              borderRadius: 8,
+              borderRadius: 'var(--r-full)',
               background: problems > 0 ? 'var(--danger)' : 'var(--accent)',
               color: '#fff',
             }}
@@ -92,7 +93,7 @@ export function RoomTools() {
           onClick={() => setOpen(open === 'list' ? null : 'list')}
           className="ds-btn"
           title="Furniture list with real dimensions — copy or download CSV"
-          style={{ height: 30, fontSize: 11, gap: 6, background: 'var(--paper)', boxShadow: '0 2px 6px rgba(0,0,0,0.06)' }}
+          style={{ height: 30, fontSize: 11, gap: 6, background: 'var(--paper)', boxShadow: 'var(--shadow-soft)' }}
         >
           <Icon name="layers" size={12} />
           List
@@ -101,7 +102,7 @@ export function RoomTools() {
           onClick={() => setOpen(open === 'layouts' ? null : 'layouts')}
           className="ds-btn"
           title="Save this arrangement as a layout and flip between saved layouts"
-          style={{ height: 30, fontSize: 11, gap: 6, background: 'var(--paper)', boxShadow: '0 2px 6px rgba(0,0,0,0.06)' }}
+          style={{ height: 30, fontSize: 11, gap: 6, background: 'var(--paper)', boxShadow: 'var(--shadow-soft)' }}
         >
           <Icon name="grid" size={12} />
           Layouts
@@ -113,7 +114,7 @@ export function RoomTools() {
 
 const SEV_COLOR: Record<ClearanceIssue['severity'], string> = {
   error: 'var(--danger)',
-  warn: '#C07A1B',
+  warn: 'var(--warn)',
   info: 'var(--ink-3)',
 };
 const SEV_LABEL: Record<ClearanceIssue['severity'], string> = {
@@ -127,16 +128,14 @@ function CheckPanel({ issues, freeShare, onClose }: { issues: ClearanceIssue[]; 
   const frameSelected = useStudio((s) => s.frameSelected);
 
   return (
-    <div className="ds-card" style={{ width: 300, maxHeight: 340, overflow: 'auto', padding: 0, boxShadow: '0 12px 36px rgba(0,0,0,0.16)' }}>
+    <div className="ds-card" style={{ width: 300, maxHeight: 340, overflow: 'auto', padding: 0, boxShadow: 'var(--shadow-lift)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderBottom: '1px solid var(--hairline)' }}>
         <span className="ds-label" style={{ color: 'var(--accent)' }}>ROOM CHECK</span>
-        <button onClick={onClose} aria-label="Close" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--ink-3)', padding: 2 }}>
-          <Icon name="x" size={12} />
-        </button>
+        <IconButton icon="x" label="Close" onClick={onClose} size={24} iconSize={12} />
       </div>
 
-      <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.05em', padding: '8px 12px', borderBottom: '1px solid var(--hairline)' }}>
-        {Math.round(freeShare * 100)}% OF THE FLOOR IS FREE
+      <div style={{ fontSize: 11, color: 'var(--ink-3)', padding: '8px 12px', borderBottom: '1px solid var(--hairline)' }}>
+        <span className="mono">{Math.round(freeShare * 100)}%</span> of the floor is free
       </div>
 
       {issues.length === 0 ? (
@@ -165,7 +164,7 @@ function CheckPanel({ issues, freeShare, onClose }: { issues: ClearanceIssue[]; 
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-              <span className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: '#fff', background: SEV_COLOR[issue.severity], padding: '1px 5px', borderRadius: 2 }}>
+              <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: '#fff', background: SEV_COLOR[issue.severity], padding: '1px 5px', borderRadius: 'var(--r-1)' }}>
                 {SEV_LABEL[issue.severity]}
               </span>
               <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}>{issue.title}</span>
@@ -239,7 +238,7 @@ function ListPanel({ parts, onClose }: { parts: ScenePart[]; onClose: () => void
   }
 
   return (
-    <div className="ds-card" style={{ width: 320, maxHeight: 360, overflow: 'auto', padding: 0, boxShadow: '0 12px 36px rgba(0,0,0,0.16)' }}>
+    <div className="ds-card" style={{ width: 320, maxHeight: 360, overflow: 'auto', padding: 0, boxShadow: 'var(--shadow-lift)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderBottom: '1px solid var(--hairline)', position: 'sticky', top: 0, background: 'var(--paper)' }}>
         <span className="ds-label" style={{ color: 'var(--accent)' }}>FURNITURE LIST</span>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -249,18 +248,16 @@ function ListPanel({ parts, onClose }: { parts: ScenePart[]; onClose: () => void
           <button onClick={downloadCsv} className="ds-btn" style={{ height: 24, fontSize: 10, padding: '0 8px' }}>
             CSV
           </button>
-          <button onClick={onClose} aria-label="Close" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--ink-3)', padding: 2 }}>
-            <Icon name="x" size={12} />
-          </button>
+          <IconButton icon="x" label="Close" onClick={onClose} size={24} iconSize={12} />
         </div>
       </div>
 
       {rows.map(({ part: p, count }, i) => (
         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--hairline)' }}>
           {p.color ? (
-            <span style={{ width: 12, height: 12, borderRadius: 2, background: p.color, border: '1px solid var(--hairline-strong)', flexShrink: 0 }} />
+            <span style={{ width: 12, height: 12, borderRadius: 'var(--r-1)', background: p.color, border: '1px solid var(--hairline-strong)', flexShrink: 0 }} />
           ) : (
-            <span style={{ width: 12, height: 12, borderRadius: 2, background: 'var(--paper-2)', border: '1px dashed var(--hairline-strong)', flexShrink: 0 }} />
+            <span style={{ width: 12, height: 12, borderRadius: 'var(--r-1)', background: 'var(--paper-2)', border: '1px dashed var(--hairline-strong)', flexShrink: 0 }} />
           )}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -326,16 +323,14 @@ function LayoutsPanel({
   }
 
   return (
-    <div className="ds-card" style={{ width: 320, maxHeight: 380, overflow: 'auto', padding: 0, boxShadow: '0 12px 36px rgba(0,0,0,0.16)' }}>
+    <div className="ds-card" style={{ width: 320, maxHeight: 380, overflow: 'auto', padding: 0, boxShadow: 'var(--shadow-lift)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderBottom: '1px solid var(--hairline)', position: 'sticky', top: 0, background: 'var(--paper)', zIndex: 1 }}>
         <span className="ds-label" style={{ color: 'var(--accent)' }}>LAYOUTS</span>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <button onClick={saveCurrent} className="ds-btn" style={{ height: 24, fontSize: 10, padding: '0 8px' }}>
             + Save current
           </button>
-          <button onClick={onClose} aria-label="Close" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--ink-3)', padding: 2 }}>
-            <Icon name="x" size={12} />
-          </button>
+          <IconButton icon="x" label="Close" onClick={onClose} size={24} iconSize={12} />
         </div>
       </div>
 
@@ -371,9 +366,7 @@ function LayoutsPanel({
               <button onClick={() => apply(v)} className="ds-btn ds-btn--primary" style={{ height: 24, fontSize: 10, padding: '0 8px' }}>
                 Apply
               </button>
-              <button onClick={() => remove(v)} aria-label={`Delete ${v.name}`} title="Delete layout" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--ink-3)', padding: 2 }}>
-                <Icon name="trash" size={12} />
-              </button>
+              <IconButton icon="trash" label={`Delete ${v.name}`} title="Delete layout" onClick={() => remove(v)} size={24} iconSize={12} />
             </div>
           );
         })
@@ -393,7 +386,7 @@ function MiniPlan({ parts, footprint }: { parts: ScenePart[]; footprint: Footpri
   const px = (x: number) => (x - b.minX) * s + (W - b.width * s) / 2;
   const pz = (z: number) => (z - b.minZ) * s + (H - b.depth * s) / 2;
   return (
-    <svg width={W} height={H} style={{ flexShrink: 0, background: 'var(--paper)', border: '1px solid var(--hairline-strong)', borderRadius: 3 }}>
+    <svg width={W} height={H} style={{ flexShrink: 0, background: 'var(--paper)', border: '1px solid var(--hairline-strong)', borderRadius: 'var(--r-1)' }}>
       <polygon
         points={footprint.map(([x, z]) => `${px(x)},${pz(z)}`).join(' ')}
         fill="var(--paper-2)"

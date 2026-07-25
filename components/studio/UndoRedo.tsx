@@ -1,53 +1,39 @@
 'use client';
 
 import { useHistory, applySnapshot } from '@/lib/history';
-import { Icon } from '@/components/ui/Icon';
+import { IconButton } from '@/components/ui/primitives';
 
 export function UndoRedo() {
   const canUndo = useHistory((s) => s.past.length >= 2);
   const canRedo = useHistory((s) => s.future.length > 0);
 
   return (
-    <div style={{ display: 'flex', border: '1px solid var(--hairline-strong)' }}>
-      <button
+    <div className="toolbar">
+      <IconButton
+        icon="arrow-left"
+        label="Undo"
+        title="Undo (Ctrl+Z)"
         onClick={() => {
           const snap = useHistory.getState().undo();
           if (snap) applySnapshot(snap);
         }}
         disabled={!canUndo}
-        title="Undo (Ctrl+Z)"
-        aria-label="Undo"
-        style={btnStyle(canUndo, true)}
-      >
-        <Icon name="arrow-left" size={12} color={canUndo ? 'var(--ink)' : 'var(--ink-4)'} />
-      </button>
-      <button
+        size={28}
+        iconSize={12}
+        style={{ borderRight: '1px solid var(--hairline-strong)' }}
+      />
+      <IconButton
+        icon="arrow-right"
+        label="Redo"
+        title="Redo (Ctrl+Shift+Z)"
         onClick={() => {
           const snap = useHistory.getState().redo();
           if (snap) applySnapshot(snap);
         }}
         disabled={!canRedo}
-        title="Redo (Ctrl+Shift+Z)"
-        aria-label="Redo"
-        style={btnStyle(canRedo, false)}
-      >
-        <Icon name="arrow-right" size={12} color={canRedo ? 'var(--ink)' : 'var(--ink-4)'} />
-      </button>
+        size={28}
+        iconSize={12}
+      />
     </div>
   );
-}
-
-function btnStyle(enabled: boolean, isFirst: boolean): React.CSSProperties {
-  return {
-    height: 28,
-    width: 32,
-    background: enabled ? 'var(--paper)' : 'var(--paper-2)',
-    border: 'none',
-    borderRight: isFirst ? '1px solid var(--hairline-strong)' : 'none',
-    cursor: enabled ? 'pointer' : 'not-allowed',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    opacity: enabled ? 1 : 0.5,
-  };
 }

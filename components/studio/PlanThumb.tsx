@@ -50,12 +50,6 @@ export function PlanThumb({ roomId }: { roomId: string }) {
   return (
     <div style={{ position: 'relative', aspectRatio: `${VW}/${VH}`, background: 'var(--paper-2)', borderBottom: '1px solid var(--hairline)', overflow: 'hidden' }}>
       <svg viewBox={`0 0 ${VW} ${VH}`} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
-        <defs>
-          <pattern id={`thumbgrid-${roomId}`} width="8" height="8" patternUnits="userSpaceOnUse">
-            <path d="M 8 0 L 0 0 0 8" fill="none" stroke="rgba(19,19,17,0.06)" strokeWidth="0.5" />
-          </pattern>
-        </defs>
-        <rect width={VW} height={VH} fill="url(#thumbgrid-${roomId})" />
         <rect
           x={ox}
           y={oy}
@@ -70,8 +64,8 @@ export function PlanThumb({ roomId }: { roomId: string }) {
           const py = oy + (p.pos[2] + D / 2) * scale;
           const wpx = (p.dimMM[0] / 1000) * scale;
           const dpx = (p.dimMM[1] / 1000) * scale;
-          const color = p.locked ? '#2B6FD4' : '#E2613A';
-          const fill = p.locked ? 'rgba(43,111,212,0.18)' : 'rgba(232,84,42,0.14)';
+          const color = p.locked ? 'var(--locked)' : 'var(--accent)';
+          const fill = p.locked ? 'var(--locked-tint)' : 'var(--accent-tint)';
           const rotDeg = -(p.rot * 180) / Math.PI;
           return (
             <g key={p.id} transform={`translate(${px} ${py}) rotate(${rotDeg})`}>

@@ -8,6 +8,7 @@ import { searchLibrary, parseDims } from '@/lib/shape-search';
 import { clampDims } from '@/lib/dimension-ranges';
 import { placeNewPart, type LibraryItem, type ScenePart } from '@/lib/scene-spec';
 import { Icon } from '@/components/ui/Icon';
+import { Modal } from '@/components/ui/Modal';
 import { LibraryPicker } from './LibraryPicker';
 
 // One button → opens modal → pick from the catalog, or describe a piece in
@@ -85,58 +86,62 @@ function AddPartModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(19,19,17,0.55)',
-        display: 'grid',
-        placeItems: 'center',
-        zIndex: 100,
-        padding: 20,
-      }}
+    <Modal
+      onClose={onClose}
+      labelledBy="add-part-title"
+      width={520}
+      bodyPadding="20px 24px 12px"
+      footer={
+        <>
+          <button onClick={onClose} className="ds-btn" style={{ flex: 1, height: 36, fontSize: 13, justifyContent: 'center' }}>
+            {tab === 'library' ? 'Close' : 'Cancel'}
+          </button>
+          {tab === 'describe' && (
+            <button
+              onClick={go}
+              disabled={matches.length === 0}
+              className="ds-btn ds-btn--primary"
+              style={{ flex: 1, height: 36, fontSize: 13, justifyContent: 'center' }}
+            >
+              <Icon name="plus" size={12} />
+              Add best match
+            </button>
+          )}
+        </>
+      }
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: 'min(520px, 92vw)',
-          background: 'var(--paper)',
-          border: '1px solid var(--ink)',
-          boxShadow: '0 30px 80px rgba(0,0,0,0.4)',
-        }}
-      >
-        <div style={{ height: 4, background: 'var(--accent)' }} />
-        <div style={{ padding: '20px 24px 12px' }}>
-          <div className="ds-kicker" style={{ marginBottom: 10 }}>＋ Add furniture</div>
+      <div id="add-part-title" className="ds-kicker" style={{ marginBottom: 10, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <Icon name="plus" size={13} /> Add furniture
+      </div>
 
-          {/* Two ways in: pick from the catalog, or describe a piece in words. */}
-          <div style={{ display: 'inline-flex', border: '1px solid var(--hairline-strong)', borderRadius: 'var(--r-2)', overflow: 'hidden', marginBottom: 14 }}>
-            {(['library', 'describe'] as const).map((t, i) => (
-              <button
-                key={t}
-                onClick={() => { setTab(t); setError(null); }}
-                style={{
-                  height: 30,
-                  padding: '0 16px',
-                  border: 'none',
-                  borderLeft: i > 0 ? '1px solid var(--hairline-strong)' : 'none',
-                  background: tab === t ? 'var(--ink)' : 'transparent',
-                  color: tab === t ? 'var(--paper)' : 'var(--ink-2)',
-                  fontSize: 12,
-                  fontFamily: 'var(--font-sans)',
-                  cursor: 'pointer',
-                }}
-              >
-                {t === 'library' ? 'Catalog' : 'Describe it'}
-              </button>
-            ))}
-          </div>
+      {/* Two ways in: pick from the catalog, or describe a piece in words. */}
+      <div style={{ display: 'inline-flex', border: '1px solid var(--hairline-strong)', borderRadius: 'var(--r-2)', overflow: 'hidden', marginBottom: 14 }}>
+        {(['library', 'describe'] as const).map((t, i) => (
+          <button
+            key={t}
+            onClick={() => { setTab(t); setError(null); }}
+            aria-pressed={tab === t}
+            style={{
+              height: 30,
+              padding: '0 16px',
+              border: 'none',
+              borderLeft: i > 0 ? '1px solid var(--hairline-strong)' : 'none',
+              background: tab === t ? 'var(--ink)' : 'transparent',
+              color: tab === t ? 'var(--paper)' : 'var(--ink-2)',
+              fontSize: 12,
+              fontFamily: 'var(--font-sans)',
+              cursor: 'pointer',
+            }}
+          >
+            {t === 'library' ? 'Catalog' : 'Describe it'}
+          </button>
+        ))}
+      </div>
 
-          {tab === 'library' ? (
-            <LibraryPicker onPick={addFromLibrary} />
-          ) : (
-            <>
+      {tab === 'library' ? (
+        <LibraryPicker onPick={addFromLibrary} />
+      ) : (
+        <>
               <p style={{ fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.5, margin: '0 0 12px' }}>
                 Type what you want — sizes included ("180cm wide") carry into the piece.
               </p>
@@ -149,7 +154,7 @@ function AddPartModal({ onClose }: { onClose: () => void }) {
                   width: '100%',
                   minHeight: 56,
                   border: '1px solid var(--hairline-strong)',
-                  borderRadius: 2,
+                  borderRadius: 'var(--r-1)',
                   padding: 10,
                   fontFamily: 'var(--font-sans)',
                   fontSize: 13,
@@ -195,8 +200,9 @@ function AddPartModal({ onClose }: { onClose: () => void }) {
               style={{
                 marginTop: 12,
                 padding: 10,
-                background: 'rgba(192,38,24,0.06)',
+                background: 'var(--danger-tint)',
                 border: '1px solid var(--danger)',
+                borderRadius: 'var(--r-1)',
                 color: 'var(--danger)',
                 fontSize: 12,
               }}
@@ -204,32 +210,6 @@ function AddPartModal({ onClose }: { onClose: () => void }) {
               {error}
             </div>
           )}
-        </div>
-        <div
-          style={{
-            padding: '14px 24px',
-            background: 'var(--paper-2)',
-            borderTop: '1px solid var(--hairline)',
-            display: 'flex',
-            gap: 8,
-          }}
-        >
-          <button onClick={onClose} className="ds-btn" style={{ flex: 1, height: 36, fontSize: 13, justifyContent: 'center' }}>
-            {tab === 'library' ? 'Close' : 'Cancel'}
-          </button>
-          {tab === 'describe' && (
-            <button
-              onClick={go}
-              disabled={matches.length === 0}
-              className="ds-btn ds-btn--primary"
-              style={{ flex: 1, height: 36, fontSize: 13, justifyContent: 'center' }}
-            >
-              <Icon name="plus" size={12} />
-              Add best match
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useRoom } from '@/lib/store';
 import { roomStore, type RoomSummary } from '@/lib/storage';
-import { DanmuMark } from '@/components/ui/primitives';
+import { DanmuMark, IconButton, Pill } from '@/components/ui/primitives';
 import { Icon } from '@/components/ui/Icon';
 import { useConfirm } from '@/components/ui/Confirm';
 import { PlanThumb } from '@/components/studio/PlanThumb';
@@ -90,8 +90,8 @@ export default function WorkspacePage() {
             <EmptyState />
           ) : (
             <>
-              <div className="ds-kicker" style={{ color: 'var(--accent)', marginBottom: 16 }}>
-                ↘ <span className="mono">{rooms.length}</span> room{rooms.length === 1 ? '' : 's'}
+              <div className="ds-kicker" style={{ marginBottom: 16 }}>
+                <span className="mono">{rooms.length}</span> room{rooms.length === 1 ? '' : 's'}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
                 {rooms.map((r) => (
@@ -176,7 +176,7 @@ function RoomCard({
             marginBottom: 4,
             padding: '2px 4px',
             border: '1px solid var(--accent)',
-            borderRadius: 2,
+            borderRadius: 'var(--r-1)',
             outline: 'none',
             width: '100%',
             fontFamily: 'var(--font-sans)',
@@ -210,26 +210,14 @@ function RoomCard({
               borderRadius: 'var(--r-full)',
               border: '1px solid var(--warn)',
               color: 'var(--warn)',
-              background: 'rgba(122,76,0,0.08)',
+              background: 'var(--paper-2)',
             }}
           >
-            ↻ Resume · <span className="mono">{room.captureCount}/4</span> walls
+            Resume · <span className="mono">{room.captureCount}/4</span> walls
           </span>
         )}
         {!room.detected && room.captureCount === 4 && (
-          <span
-            style={{
-              fontSize: 10,
-              fontWeight: 700,
-              padding: '2px 9px',
-              borderRadius: 'var(--r-full)',
-              border: '1px solid var(--accent)',
-              color: 'var(--accent)',
-              background: 'var(--accent-tint)',
-            }}
-          >
-            ↺ Detect furniture
-          </span>
+          <Pill tone="accent">Detect furniture</Pill>
         )}
       </div>
       <div style={{ display: 'flex', gap: 6 }}>
@@ -244,15 +232,16 @@ function RoomCard({
           <Icon name="cube" size={11} />
           Open
         </button>
-        <button
-          onClick={onDelete}
-          aria-label="Delete room"
+        <IconButton
+          icon="trash"
+          label="Delete room"
           title="Delete room"
-          className="ds-btn"
-          style={{ height: 30, width: 34, padding: 0, justifyContent: 'center', color: 'var(--danger)', borderColor: 'var(--hairline-strong)' }}
-        >
-          <Icon name="trash" size={14} />
-        </button>
+          tone="danger"
+          variant="outline"
+          onClick={onDelete}
+          size={30}
+          iconSize={14}
+        />
       </div>
       </div>
     </div>
@@ -262,8 +251,8 @@ function RoomCard({
 function EmptyState() {
   return (
     <div style={{ textAlign: 'center', padding: 80, maxWidth: 600, marginInline: 'auto' }}>
-      <div className="ds-kicker" style={{ color: 'var(--accent)', marginBottom: 12 }}>
-        ↘ Workspace ready
+      <div className="ds-kicker" style={{ marginBottom: 12 }}>
+        Ready when you are
       </div>
       <div style={{ fontSize: 38, fontWeight: 600, letterSpacing: '-0.02em', marginBottom: 10 }}>
         Decorate your first room.

@@ -5,6 +5,7 @@ import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { bestMatch } from '@/lib/shape-search';
 import { Icon } from '@/components/ui/Icon';
+import { IconButton } from '@/components/ui/primitives';
 import { useConfirm } from '@/components/ui/Confirm';
 import { RoomDimsEditor } from './RoomDimsEditor';
 import { AddPartButton } from './AddPartButton';
@@ -89,7 +90,7 @@ export function PartTree() {
         {generics.length > 0 && (
           <div style={{ marginTop: 10, padding: '10px 12px', border: '1px solid var(--accent)', background: 'var(--accent-tint)', borderRadius: 'var(--r-2)' }}>
             <div style={{ fontSize: 11, color: 'var(--accent)', marginBottom: 4, fontWeight: 700 }}>
-              ⚠ {generics.length} generic item{generics.length === 1 ? '' : 's'}
+              {generics.length} generic item{generics.length === 1 ? '' : 's'}
             </div>
             <p style={{ fontSize: 11, color: 'var(--ink-2)', margin: '0 0 8px', lineHeight: 1.4 }}>
               Some items use a generic box. Match them to proper 3D models by name.
@@ -170,9 +171,9 @@ export function PartTree() {
               if (ok) resetTransforms();
             }}
             className="ds-btn"
-            style={{ width: '100%', height: 30, fontSize: 11, justifyContent: 'center' }}
+            style={{ width: '100%', height: 30, fontSize: 11, gap: 6, justifyContent: 'center' }}
           >
-            ↺ Reset all to detected
+            <Icon name="refresh" size={11} /> Reset all to detected
           </button>
         </div>
       )}
@@ -245,56 +246,36 @@ function PartRow({
       >
         {name}
       </span>
-      <button
+      <IconButton
+        icon={isHidden ? 'eye-off' : 'eye'}
+        label={isHidden ? 'Show' : 'Hide'}
+        title={isHidden ? 'Show (V)' : 'Hide (V)'}
+        active={isHidden}
         onClick={(e) => {
           e.stopPropagation();
           onToggleHidden();
         }}
-        aria-label={isHidden ? 'Show' : 'Hide'}
-        title={isHidden ? 'Show (V)' : 'Hide (V)'}
-        style={{
-          width: 22,
-          height: 22,
-          border: 'none',
-          background: 'transparent',
-          color: isHidden ? 'var(--accent)' : hover ? 'var(--ink)' : 'var(--ink-3)',
-          opacity: isHidden || hover ? 1 : 0,
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: 0,
-          transition: 'opacity 0.15s, color 0.15s',
-        }}
-      >
-        <Icon name={isHidden ? 'eye-off' : 'eye'} size={12} />
-      </button>
+        size={22}
+        iconSize={12}
+        style={{ opacity: isHidden || hover ? 1 : 0, transition: 'opacity 0.15s' }}
+      />
       {/* Delete on hover. The category tag was removed — it just echoed the name
           (e.g. "modular wardrobe" / "wardrobe"). The leading dot + name suffice. */}
       {hover && (
-        <button
+        <IconButton
+          icon="trash"
+          label="Delete part"
+          title="Delete"
+          tone="danger"
+          variant="outline"
           onClick={(e) => {
             e.stopPropagation();
             onDelete();
           }}
-          aria-label="Delete part"
-          title="Delete"
-          style={{
-            width: 22,
-            height: 22,
-            borderRadius: 'var(--r-1)',
-            border: '1px solid var(--hairline-strong)',
-            background: 'var(--paper)',
-            color: 'var(--danger)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 0,
-          }}
-        >
-          <Icon name="trash" size={12} />
-        </button>
+          size={22}
+          iconSize={12}
+          style={{ borderRadius: 'var(--r-1)' }}
+        />
       )}
     </div>
   );

@@ -111,7 +111,7 @@ export function PhotoEditor({
             width: `${Math.abs(drag.x1 - drag.x0) * 100}%`,
             height: `${Math.abs(drag.y1 - drag.y0) * 100}%`,
             border: '2px dashed var(--accent)',
-            background: 'rgba(232,84,42,0.15)',
+            background: 'var(--accent-tint-strong)',
             pointerEvents: 'none',
           }}
         />
@@ -131,7 +131,7 @@ function ItemOverlay({
 }) {
   const { d, locked } = item;
   const [sx, sy, sw, sh] = d.box;
-  const color = locked ? '#2B6FD4' : '#E2613A';
+  const color = locked ? 'var(--locked)' : 'var(--accent)';
   const cleanLabel = d.label.replace(/__slot:[nesw]$/, '').toUpperCase();
 
   return (
@@ -143,7 +143,7 @@ function ItemOverlay({
         width: `${sw * 100}%`,
         height: `${sh * 100}%`,
         border: `1.5px ${locked ? 'solid' : 'dashed'} ${color}`,
-        background: locked ? 'rgba(43,111,212,0.12)' : 'rgba(232,84,42,0.08)',
+        background: locked ? 'var(--locked-tint)' : 'var(--accent-tint)',
         cursor: 'pointer',
       }}
       onClick={(e) => {
@@ -159,9 +159,11 @@ function ItemOverlay({
           padding: '3px 6px',
           background: color,
           color: '#fff',
-          fontFamily: 'var(--font-mono)',
+          fontFamily: 'var(--font-sans)',
           fontSize: 10,
-          letterSpacing: '0.05em',
+          fontWeight: 700,
+          letterSpacing: '0.03em',
+          borderRadius: 'var(--r-1)',
           whiteSpace: 'nowrap',
           display: 'flex',
           alignItems: 'center',
@@ -171,9 +173,10 @@ function ItemOverlay({
       >
         {locked && <Icon name="lock" size={9} color="#fff" />}
         <span>{cleanLabel}</span>
-        <span style={{ opacity: 0.75 }}>· {(d.conf * 100).toFixed(0)}%</span>
+        <span className="mono" style={{ opacity: 0.75 }}>· {(d.conf * 100).toFixed(0)}%</span>
         <button
           title="Delete detection"
+          aria-label="Delete detection"
           onClick={(e) => {
             e.stopPropagation();
             onDelete();
@@ -188,7 +191,7 @@ function ItemOverlay({
             alignItems: 'center',
             justifyContent: 'center',
             cursor: 'pointer',
-            borderRadius: 2,
+            borderRadius: 'var(--r-1)',
             padding: 0,
           }}
         >
