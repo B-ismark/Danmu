@@ -2,10 +2,12 @@
 
 Local-first **interior decoration simulation**. Pick or capture a room, rebuild it
 in 3D, then redecorate freely — move, recolour, restyle, relight, and arrange every
-piece. Optional, non-blocking AI photo preview on top.
+piece. Runs entirely in the browser: no backend, no account. Optional AI is used
+**only to detect furniture from photos** — never to generate images.
 
-📖 **Full platform documentation → [DOCUMENTATION.md](DOCUMENTATION.md)** (what it
-does, every current feature, architecture, and roadmap).
+📖 **Full design & architecture → [Design.md](Design.md)** (product principles,
+every current feature, architecture, geometry engine, and roadmap).
+🤖 **Agents:** see [CLAUDE.md](CLAUDE.md) for working rules.
 
 ## Stack
 
@@ -14,8 +16,9 @@ does, every current feature, architecture, and roadmap).
 - **Three.js** + **@react-three/fiber** + **drei** + **postprocessing** — declarative 3D
 - **Zustand** (client state) + **TanStack Query** (async)
 - **idb-keyval** for rooms, **localStorage** for settings + API key
-- Optional AI (BYO key, browser → provider direct): **@google/genai** (Imagen 4 +
-  Gemini 2.5 Flash) and **@huggingface/inference** (FLUX)
+- **onnxruntime-web** — local, in-browser YOLOv8 furniture detector (no key)
+- Optional cloud detection (BYO key, browser → provider direct): **@google/genai**
+  (Gemini). Detection-only — there is no image generation.
 
 ## Run
 
@@ -27,27 +30,23 @@ pnpm test         # vitest run
 pnpm build        # next build
 ```
 
-An AI key is optional — only the photo-preview step uses it. The 3D studio is
-fully reachable without one: pick a footprint and start decorating. Paste a key
-in Settings (or the optional field in onboarding) when you want a photo preview.
+An AI key is optional — only cloud photo detection uses it, and the local ONNX
+detector (or manual boxes) works without one. The 3D studio is fully reachable
+without any key: pick a footprint and start decorating.
 
 ## Routes
 
 | Path | Purpose |
 |---|---|
-| `/` | Entry router (key check → onboarding or workspace) |
-| `/onboarding/welcome` | Intro + optional BYO key |
+| `/` | Entry router (rooms? → workspace, else onboarding) |
+| `/onboarding/welcome` | Intro + "Start decorating"; optional BYO key |
 | `/onboarding/layout-pick` | Pick footprint preset (sets dims + starter scene) |
 | `/onboarding/capture` | 6-photo guided capture (`getUserMedia`) |
-| `/onboarding/detect` | Gemini furniture detection |
+| `/onboarding/detect` | Furniture detection (local ONNX → Gemini → manual) |
 | `/workspace` | Rooms list — create / resume / delete |
 | `/room/[id]/model` | **3D decoration studio (default)** |
 | `/room/[id]/plan` | 2D floor plan |
-| `/room/[id]/compose` | Style / finish / count picker for the preview |
-| `/room/[id]/render` | AI preview render + progress |
-| `/room/[id]/compare` | Before/after slider + variants |
-| `/room/[id]/share` | Share link + WhatsApp |
-| `/settings` | Key, currency, units, telemetry, danger zone |
+| `/settings` | Key, units, danger zone |
 
 ## Architecture rules
 
@@ -55,7 +54,11 @@ in Settings (or the optional field in onboarding) when you want a photo preview.
   3D scene, 2D plan, inspector tree, catalog, and decor all read from it.
 - **No hard-coded design values.** Colours / spacing / type go through tokens in
   `app/globals.css`; Tailwind reads them.
-- **BYO key, no backend.** Browser → provider directly. Scope the key with an
-  HTTP-referrer + API restriction. AI is an optional preview, not a dependency.
+- **Dimensions come from code, not AI.** All sizes pass through `clampDims`
+  ([`lib/dimension-ranges.ts`](lib/dimension-ranges.ts)); a deterministic geometry
+  engine owns sizing, placement, overlap and clearance. AI is a hint only.
+- **BYO key, no backend.** Browser → provider directly (optional Gemini
+  detection). Scope the key with an HTTP-referrer + API restriction. AI is
+  detection-only, never a dependency.
 
-See [DOCUMENTATION.md](DOCUMENTATION.md) for the full feature list, data flow, and roadmap.
+See [Design.md](Design.md) for the full feature list, data flow, and roadmap.
