@@ -38,7 +38,7 @@ function hsvToHex(h: number, s: number, v: number): string {
   else if (h < 120) { r = x; g = c; }
   else if (h < 180) { g = c; b = x; }
   else if (h < 240) { g = x; b = c; }
-  else if (h < 300) { r = c; b = x; }
+  else if (h < 300) { r = x; b = c; }
   else { r = c; b = x; }
   const to = (n: number) => Math.round((n + m) * 255).toString(16).padStart(2, '0');
   return `#${to(r)}${to(g)}${to(b)}`;
