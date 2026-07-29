@@ -89,13 +89,19 @@ const nextConfig = {
   // No `images` config: the app renders no remote images. The two raw <img>
   // tags point at local blob/data URLs from photo capture, which next/image
   // cannot optimise anyway. The old unsplash remotePattern was a leftover from
-  // the deleted render pipeline.
+  // the deleted render pipeline. This is also why the Image Optimizer advisories
+  // against Next do not reach this app, and why `sharp` — which Next depends on
+  // for exactly that feature — is never called here.
   // `next lint` only walks app/pages/components/lib/src by default; `tests` is
   // real TypeScript we ship rules for, so lint it too.
   eslint: { dirs: ['app', 'components', 'lib', 'tests'] },
   experimental: {
     optimizePackageImports: ['@react-three/drei', 'three'],
-    esmExternals: 'loose',
+    // No `esmExternals: 'loose'`. It was needed on Next 14 for the three /
+    // three-stdlib ESM graph; Next 15 resolves it without the escape hatch, and
+    // warns that setting it can itself disrupt resolution. Verified by building
+    // both ways. If a three-adjacent import starts failing to resolve, this is
+    // the first thing to try again — but measure before adding it back.
   },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
