@@ -83,11 +83,22 @@ living room, and the engine only needs four *consecutive* walls.
 Furniture detection runs through a fallback chain, best-effort:
 
 1. **Local detector** — `lib/local-detect.ts`: YOLOv8n trained on Open Images V7
-   (600 classes) via `onnxruntime-web`. No key, no quota, no network after the
-   first model download. The model (~13 MB) is **not bundled** — run
-   `python scripts/export-detector.py` (needs `pip install ultralytics`) once to
-   export `public/models/yolov8n-oiv7.onnx` (git-ignored). YOLOv8 weights are
-   AGPL-3.0 — acceptable because this project is open source.
+   (601 classes) via `onnxruntime-web`. No key, no quota, no network after the
+   first model download. The model (~13 MB) is **not bundled** and is
+   git-ignored; `resolveBase()` HEAD-probes two sources in order:
+   `public/models/` (produced by `python scripts/export-detector.py`, needs
+   `pip install ultralytics`) then the Hugging Face mirror
+   [`DearthAI/danmu-detector`](https://huggingface.co/DearthAI/danmu-detector),
+   so a fresh clone works without a Python + torch toolchain. Both are static
+   GETs of a public file — no user data leaves the device.
+
+   **Licence boundary:** the weights are AGPL-3.0 (Ultralytics) and Danmu is
+   MIT. AGPL is copyleft, so the two cannot be mixed — the weights therefore
+   live in their own AGPL-licensed HF repo and are fetched at runtime, never
+   committed or redistributed from here. GitHub Release hosting was tried and
+   rejected: release assets redirect to a storage host with no
+   `access-control-allow-origin`, so browsers block them (curl does not, which
+   makes this easy to mis-verify).
 2. **Gemini fallback** — `lib/detection.ts`: one multimodal `@google/genai` call
    over all wall photos at once (so it can reason about object continuity across
    walls). BYO key; quota tracked in `lib/quota.ts`. Key validated by
@@ -207,7 +218,10 @@ label / category / a depth hint.
 - **lucide-react** icons, wrapped by `components/ui/Icon.tsx` with a `Circle`
   fallback so no button renders empty
 - Loaded at runtime, not bundled: the ONNX model file; `onnxruntime-web` is
-  loaded via CDN with `webpackIgnore` (bundling ort breaks the Next build).
+  loaded via CDN with `webpackIgnore` (bundling ort breaks the Next build), so
+  it is a **devDependency** — installed for its types only. Its version is
+  pinned exactly and mirrored by `ORT_VERSION` in `lib/local-detect.ts`; move
+  both together or the compiled types drift from the executed wasm.
 
 ### State stores
 | Store | File | Holds |
