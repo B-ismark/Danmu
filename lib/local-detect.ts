@@ -1,21 +1,26 @@
 'use client';
 
-// Local, in-browser furniture detection — YOLOv8n trained on Open Images V7
-// (601 classes, includes wardrobe / mirror / nightstand / curtain / ceiling
-// fan and most other home categories), running through onnxruntime-web.
-// No API key, no quota, no network after the first model download.
+// Local, in-browser furniture detection through onnxruntime-web. No API key,
+// no quota, no network after the first model download.
+//
+// TWO models run as an ensemble, because they fail on disjoint classes:
+//   • yolov8n-oiv7      (14 MB) — YOLOv8 nano on Open Images V7, 601 fixed
+//                                 classes. Owns monitors and windows.
+//   • yolov8s-worldv2   (50 MB) — open-vocabulary, with Danmu's furniture
+//                                 prompts frozen into the graph at export.
+//                                 Owns fridges, ceiling fans, wardrobes, lamps,
+//                                 curtains — none of which the OIV7 model
+//                                 detects at all, at any model size.
+// Measured on a real 4-photo room: OIV7 7/19 objects, world 10/19, both 13/19.
 //
 // The model file is NOT bundled with the app (≈13 MB). `resolveBase()` probes
 // public/models/ first — populate it with `python scripts/export-detector.py`
 // — then the Hugging Face mirror. Only when neither answers does this module
 // report unavailable and the detect page fall back to Gemini / manual boxes.
 //
-// Expect PARTIAL results. Measured on a real 4-photo room, tiled nano recalls
-// 7 of 19 catalogued objects. Curtains, ceiling fans, fridges and wardrobes are
-// missed outright — their class heads peak around 0.002–0.03 on that imagery
-// versus 0.38–0.44 for what does fire, so no threshold recovers them. Treat
-// this as an opportunistic head start on manual boxes, not a substitute for
-// the Gemini pass.
+// Expect PARTIAL results — 13 of 19 on the room measured. Doors, wall art and
+// some curtains are still missed. Treat this as a head start on manual boxes,
+// not a substitute for the Gemini pass.
 //
 // Licence note: YOLOv8 weights are AGPL-3.0, this project is MIT. AGPL is
 // copyleft, so "we're open source too" does not clear it. Exporting the model
@@ -30,6 +35,9 @@ import type { Category, Shape } from './scene-spec';
 
 const MODEL_FILE = 'yolov8n-oiv7.onnx';
 const NAMES_FILE = 'yolov8n-oiv7.names.json';
+// Second, open-vocabulary pass. Optional: when it is absent (e.g. an older
+// local export) detection still runs on the OIV7 model alone.
+const WORLD_FILE = 'yolov8s-worldv2-danmu.onnx';
 // Served from public/ when the export script has been run locally.
 const LOCAL_BASE = '/models/';
 // Hugging Face mirror, tried only when the local export is absent — lets a
@@ -95,8 +103,69 @@ const NAME_TO_CATEGORY: Record<string, Category> = {
   'microwave oven': 'other',
 };
 
+// YOLO-World's vocabulary, in the exact order it was frozen into the graph by
+// set_classes() at export time — index N of the model's class channels is
+// WORLD_PROMPTS[N], so this array must not be reordered without re-exporting.
+//
+// These are natural noun phrases rather than dataset labels because that is
+// what an open-vocabulary model responds to, and several phrases deliberately
+// share one category: real rooms hold clothes rails and stacked fabric cubes,
+// not the canonical `Wardrobe` that a fixed-label model was trained on.
+const WORLD_PROMPTS = [
+  'sofa', 'couch', 'armchair',
+  'chair', 'office chair', 'stool',
+  'table', 'coffee table', 'dining table',
+  'desk',
+  'bed', 'mattress',
+  'nightstand',
+  'wardrobe', 'closet', 'chest of drawers', 'storage cabinet',
+  'shelf', 'bookshelf', 'shoe rack',
+  'mirror',
+  'curtain', 'window curtain', 'window blind',
+  'picture frame', 'wall art', 'poster',
+  'lamp', 'light bulb', 'ceiling light',
+  'ceiling fan', 'electric fan',
+  'refrigerator',
+  'potted plant',
+  'door', 'wooden door',
+  'computer monitor',
+  'television',
+  'window',
+  'laptop',
+  'washing machine',
+  'microwave oven',
+  'clothes rack', 'hanging clothes',
+] as const;
+
+const WORLD_TO_CATEGORY: Record<string, Category> = {
+  sofa: 'sofa', couch: 'sofa', armchair: 'sofa',
+  chair: 'chair', 'office chair': 'chair', stool: 'chair',
+  table: 'table', 'coffee table': 'table', 'dining table': 'table',
+  desk: 'desk',
+  bed: 'bed', mattress: 'bed',
+  nightstand: 'nightstand',
+  wardrobe: 'wardrobe', closet: 'wardrobe', 'chest of drawers': 'wardrobe',
+  'storage cabinet': 'wardrobe', 'clothes rack': 'wardrobe', 'hanging clothes': 'wardrobe',
+  shelf: 'shelf', bookshelf: 'shelf', 'shoe rack': 'shelf',
+  mirror: 'mirror',
+  curtain: 'curtain', 'window curtain': 'curtain', 'window blind': 'curtain',
+  'picture frame': 'painting', 'wall art': 'painting', poster: 'painting',
+  lamp: 'lamp', 'light bulb': 'lamp', 'ceiling light': 'lamp',
+  'ceiling fan': 'fan', 'electric fan': 'fan',
+  refrigerator: 'fridge',
+  'potted plant': 'plant',
+  door: 'door', 'wooden door': 'door',
+  'computer monitor': 'monitor',
+  television: 'tv',
+  // Shape-only entries: no dedicated category, but NAME_TO_SHAPE gives them a
+  // better 3D form than a generic box.
+  window: 'other', laptop: 'other',
+  'washing machine': 'other', 'microwave oven': 'other',
+};
+
 // Classes whose best 3D representation is a specific shape (category alone
-// would land on a generic box).
+// would land on a generic box). Keyed by lowercase label, so it serves both
+// the OIV7 names and the YOLO-World prompts.
 const NAME_TO_SHAPE: Partial<Record<string, Shape>> = {
   window: 'window',
   laptop: 'laptop',
@@ -116,10 +185,14 @@ type OrtNS = typeof import('onnxruntime-web');
 const ORT_VERSION = '1.27.0';
 const ORT_BASE = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`;
 
+type Session = import('onnxruntime-web').InferenceSession;
+
 type Loaded = {
   ort: OrtNS;
-  session: import('onnxruntime-web').InferenceSession;
+  session: Session;
   names: Record<string, string>;
+  /** Open-vocabulary second pass. null when the file isn't deployed. */
+  world: Session | null;
 };
 
 let loader: Promise<Loaded | null> | null = null;
@@ -164,7 +237,17 @@ async function load(): Promise<Loaded | null> {
       const session = await ort.InferenceSession.create(modelBase + MODEL_FILE, {
         executionProviders: providers as never,
       });
-      return { ort, session, names };
+      // Optional — an older local export has only the OIV7 file, and detection
+      // degrades to that model alone rather than failing.
+      let world: Session | null = null;
+      try {
+        world = await ort.InferenceSession.create(modelBase + WORLD_FILE, {
+          executionProviders: providers as never,
+        });
+      } catch {
+        world = null;
+      }
+      return { ort, session, names, world };
     } catch {
       return null;
     }
@@ -249,7 +332,19 @@ function toTensor(
   return { data, scale, dw, dh };
 }
 
-type RawBox = { x: number; y: number; w: number; h: number; conf: number; cls: number };
+/** A candidate in normalized whole-image space, with its class already
+ *  resolved — the two models have different vocabularies, so they can only be
+ *  merged after each has mapped its own class index to a label + category. */
+type RawBox = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  conf: number;
+  label: string;
+  category: Category;
+  shape?: Shape;
+};
 
 function iou(a: RawBox, b: RawBox): number {
   const x1 = Math.max(a.x - a.w / 2, b.x - b.w / 2);
@@ -277,7 +372,24 @@ export async function detectLocalAcrossImages(
 ): Promise<Detection[] | null> {
   const loaded = await load();
   if (!loaded) return null;
-  const { ort, session, names } = loaded;
+  const { ort, session, names, world } = loaded;
+
+  /** Map an OIV7 class index to a label + category, or null to drop it. */
+  const oivClass = (i: number) => {
+    const name = (names[String(i)] ?? '').toLowerCase();
+    const category = NAME_TO_CATEGORY[name];
+    if (!category) return null;
+    return { label: names[String(i)] ?? name, category, shape: NAME_TO_SHAPE[name] };
+  };
+
+  /** Same for YOLO-World, whose class order is WORLD_PROMPTS. */
+  const worldClass = (i: number) => {
+    const prompt = WORLD_PROMPTS[i];
+    if (!prompt) return null;
+    const category = WORLD_TO_CATEGORY[prompt];
+    if (!category) return null;
+    return { label: prompt, category, shape: NAME_TO_SHAPE[prompt] };
+  };
 
   const out: Detection[] = [];
   for (const img of images) {
@@ -286,57 +398,65 @@ export async function detectLocalAcrossImages(
     const iw = bitmap.naturalWidth;
     const ih = bitmap.naturalHeight;
 
-    // Collect across every pass in NORMALIZED whole-image space, so one NMS at
-    // the end resolves both per-tile duplicates and cross-tile seam duplicates.
+    // Both models, every tile, collected in NORMALIZED whole-image space, so a
+    // single NMS at the end resolves per-tile duplicates, cross-tile seam
+    // duplicates, AND the same object found by both models.
     const merged: RawBox[] = [];
+    const passes: Array<[Session, (i: number) => ReturnType<typeof oivClass>]> = [
+      [session, oivClass],
+    ];
+    if (world) passes.push([world, worldClass]);
+
     for (const crop of tilesFor(iw, ih)) {
       const pre = toTensor(bitmap, crop);
       if (!pre) continue;
-      const input = new ort.Tensor('float32', pre.data, [1, 3, INPUT, INPUT]);
-      const results = await session.run({ [session.inputNames[0]]: input });
-      const output = results[session.outputNames[0]];
-      // YOLOv8 head: [1, 4 + numClasses, anchors] — cx, cy, w, h, then scores.
-      const [, channels, anchors] = output.dims;
-      const nc = channels - 4;
-      const d = output.data as Float32Array;
-      const at = (ch: number, a: number) => d[ch * anchors + a];
 
       // letterboxed 640-space → crop pixels → normalized whole-image coords
       const toX = (v: number) => (crop.ox + (v - pre.dw) / pre.scale) / iw;
       const toY = (v: number) => (crop.oy + (v - pre.dh) / pre.scale) / ih;
 
-      for (let a = 0; a < anchors; a++) {
-        let best = 0;
-        let bestC = -1;
-        for (let cidx = 0; cidx < nc; cidx++) {
-          const s = at(4 + cidx, a);
-          if (s > best) {
-            best = s;
-            bestC = cidx;
+      for (const [sess, classOf] of passes) {
+        // A fresh tensor per run: onnxruntime may retain the backing buffer.
+        const input = new ort.Tensor('float32', pre.data.slice(), [1, 3, INPUT, INPUT]);
+        const results = await sess.run({ [sess.inputNames[0]]: input });
+        const output = results[sess.outputNames[0]];
+        // YOLOv8 head: [1, 4 + numClasses, anchors] — cx, cy, w, h, then scores.
+        const [, channels, anchors] = output.dims;
+        const nc = channels - 4;
+        const d = output.data as Float32Array;
+        const at = (ch: number, a: number) => d[ch * anchors + a];
+
+        for (let a = 0; a < anchors; a++) {
+          let best = 0;
+          let bestC = -1;
+          for (let cidx = 0; cidx < nc; cidx++) {
+            const s = at(4 + cidx, a);
+            if (s > best) {
+              best = s;
+              bestC = cidx;
+            }
           }
+          if (best < CONF_THRESHOLD || bestC < 0) continue;
+          const cls = classOf(bestC);
+          if (!cls) continue;
+          merged.push({
+            x: toX(at(0, a)),
+            y: toY(at(1, a)),
+            w: at(2, a) / pre.scale / iw,
+            h: at(3, a) / pre.scale / ih,
+            conf: best,
+            ...cls,
+          });
         }
-        if (best < CONF_THRESHOLD || bestC < 0) continue;
-        const name = (names[String(bestC)] ?? '').toLowerCase();
-        if (!(name in NAME_TO_CATEGORY)) continue;
-        merged.push({
-          x: toX(at(0, a)),
-          y: toY(at(1, a)),
-          w: at(2, a) / pre.scale / iw,
-          h: at(3, a) / pre.scale / ih,
-          conf: best,
-          cls: bestC,
-        });
       }
     }
 
     for (const b of nms(merged)) {
-      const name = (names[String(b.cls)] ?? '').toLowerCase();
-      const category = NAME_TO_CATEGORY[name];
       const nx = b.x - b.w / 2;
       const ny = b.y - b.h / 2;
       if (b.w <= 0.01 || b.h <= 0.01) continue;
       out.push({
-        label: names[String(b.cls)] ?? name,
+        label: b.label,
         conf: Math.min(1, b.conf),
         box: [
           Math.max(0, Math.min(1, nx)),
@@ -344,9 +464,9 @@ export async function detectLocalAcrossImages(
           Math.min(1, b.w),
           Math.min(1, b.h),
         ],
-        category,
+        category: b.category,
         slot: img.slot,
-        shape: NAME_TO_SHAPE[name],
+        shape: b.shape,
       });
     }
   }
