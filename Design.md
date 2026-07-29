@@ -104,8 +104,11 @@ Furniture detection runs through a fallback chain, best-effort:
    world model owns fridges / ceiling fans / wardrobes / lamps / curtains. Both
    feed one pool of candidates in normalized space, resolved by a single NMS.
 
-   The world model is optional — when only the OIV7 file is deployed (an older
-   local export) detection degrades to that model alone rather than failing.
+   `resolveFile()` resolves each file's source **independently** — a clone that
+   ran the pre-ensemble export script has only the OIV7 model locally, and picks
+   the world model up from the mirror rather than silently losing half its
+   recall. Only when neither source has it does detection fall back to the OIV7
+   model alone.
 
    **Measured on a real 4-photo room** (19 catalogued objects), so don't
    re-litigate this without new numbers:

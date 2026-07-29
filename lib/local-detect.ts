@@ -197,39 +197,50 @@ type Loaded = {
 
 let loader: Promise<Loaded | null> | null = null;
 
-/** Resolve which base URL serves the model — the local export first, the
- *  Hugging Face mirror second. Cached per session. null = unavailable, and
- *  callers fall back to Gemini / manual boxes. */
-let base: Promise<string | null> | null = null;
-function resolveBase(): Promise<string | null> {
-  base ??= (async () => {
-    for (const candidate of [LOCAL_BASE, REMOTE_BASE]) {
-      try {
-        const r = await fetch(candidate + MODEL_FILE, { method: 'HEAD' });
-        if (r.ok) return candidate;
-      } catch {
-        // Network error / CORS rejection — try the next candidate.
+/** Resolve which base URL serves one file — the local export first, the
+ *  Hugging Face mirror second. Cached per file, per session. null = that file
+ *  is unreachable.
+ *
+ *  PER FILE, not once for all of them: a clone that ran the pre-ensemble export
+ *  script has only the OIV7 model in public/models/. Picking a single base off
+ *  that one probe would pin everything to local and silently lose the world
+ *  model — and with it half the recall — even though the mirror has it. */
+const bases = new Map<string, Promise<string | null>>();
+function resolveFile(file: string): Promise<string | null> {
+  let hit = bases.get(file);
+  if (!hit) {
+    hit = (async () => {
+      for (const candidate of [LOCAL_BASE, REMOTE_BASE]) {
+        try {
+          const r = await fetch(candidate + file, { method: 'HEAD' });
+          if (r.ok) return candidate;
+        } catch {
+          // Network error / CORS rejection — try the next candidate.
+        }
       }
-    }
-    return null;
-  })();
-  return base;
+      return null;
+    })();
+    bases.set(file, hit);
+  }
+  return hit;
 }
 
-/** Whether a model file can be reached at all. Cached per session. */
+/** Whether the detector can run at all — the OIV7 model is the floor, the
+ *  open-vocabulary pass is a bonus on top. Cached per session. */
 export async function localDetectorAvailable(): Promise<boolean> {
-  return (await resolveBase()) !== null;
+  return (await resolveFile(MODEL_FILE)) !== null;
 }
 
 async function load(): Promise<Loaded | null> {
   loader ??= (async () => {
     try {
-      const modelBase = await resolveBase();
+      const modelBase = await resolveFile(MODEL_FILE);
       if (!modelBase) return null;
       const ortUrl = `${ORT_BASE}ort.min.mjs`;
       const ort = (await import(/* webpackIgnore: true */ ortUrl)) as OrtNS;
       ort.env.wasm.wasmPaths = ORT_BASE;
-      const names = (await (await fetch(modelBase + NAMES_FILE)).json()) as Record<string, string>;
+      const namesBase = (await resolveFile(NAMES_FILE)) ?? modelBase;
+      const names = (await (await fetch(namesBase + NAMES_FILE)).json()) as Record<string, string>;
       // WebGPU where present, WASM everywhere else.
       const providers: string[] = [];
       if (typeof navigator !== 'undefined' && 'gpu' in navigator) providers.push('webgpu');
@@ -237,15 +248,19 @@ async function load(): Promise<Loaded | null> {
       const session = await ort.InferenceSession.create(modelBase + MODEL_FILE, {
         executionProviders: providers as never,
       });
-      // Optional — an older local export has only the OIV7 file, and detection
-      // degrades to that model alone rather than failing.
+      // Optional, and resolved independently of the OIV7 model so a local
+      // export missing this file still picks it up from the mirror. Only when
+      // neither has it does detection run on the OIV7 model alone.
       let world: Session | null = null;
-      try {
-        world = await ort.InferenceSession.create(modelBase + WORLD_FILE, {
-          executionProviders: providers as never,
-        });
-      } catch {
-        world = null;
+      const worldBase = await resolveFile(WORLD_FILE);
+      if (worldBase) {
+        try {
+          world = await ort.InferenceSession.create(worldBase + WORLD_FILE, {
+            executionProviders: providers as never,
+          });
+        } catch {
+          world = null;
+        }
       }
       return { ort, session, names, world };
     } catch {
