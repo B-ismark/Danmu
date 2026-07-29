@@ -8,6 +8,8 @@ import { fromMM, toMM, stepFor, precisionFor, formatDim, UNIT_OPTIONS } from '@/
 import { clampDims, dimRangeFor } from '@/lib/dimension-ranges';
 import { Icon } from '@/components/ui/Icon';
 import { ColorPicker } from '@/components/ui/ColorPicker';
+import { Select } from '@/components/ui/Select';
+import { NumberField } from '@/components/ui/NumberField';
 import { EditableText, IconButton, Pill } from '@/components/ui/primitives';
 import { SwapModelModal } from './RegenerateModal';
 import { removeParts } from './KeyboardShortcuts';
@@ -558,15 +560,14 @@ function DimensionEditor({
               <label key={axis} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span style={{ fontSize: 11, color: 'var(--ink-2)', fontWeight: 600 }}>{axis}</span>
                 {/* .field owns the border + focus ring; mono is here only because
-                    these are measurements. */}
-                <input
-                  type="number"
+                    these are measurements. The stepper is ours — the native one
+                    is suppressed app-wide (see globals.css). */}
+                <NumberField
                   min={0.001}
                   step={step}
                   value={local[i]}
-                  onChange={(e) => commitDebounced(i as 0 | 1 | 2, e.target.value)}
-                  className="field"
-                  style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, height: 34, padding: '0 8px' }}
+                  onChange={(v) => commitDebounced(i as 0 | 1 | 2, v)}
+                  height={34}
                 />
               </label>
             ))}
@@ -588,26 +589,16 @@ function DimensionEditor({
                 the same preference, labelled, where the numbers actually are. */}
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--ink-2)', fontWeight: 600 }}>
               Units
-              <select
+              <Select
                 value={dimUnit}
-                onChange={(e) => setDimUnit(e.target.value as DimUnit)}
+                onChange={(u) => setDimUnit(u as DimUnit)}
+                options={UNIT_OPTIONS.map((u) => ({ value: u.id, label: u.label, short: u.id }))}
+                ariaLabel="Display units"
                 title="Applies everywhere in Danmu"
-                style={{
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 11,
-                  fontWeight: 600,
-                  padding: '4px 6px',
-                  border: '1px solid var(--edge)',
-                  borderRadius: 'var(--r-1)',
-                  background: 'var(--paper)',
-                  color: 'var(--ink)',
-                  cursor: 'pointer',
-                }}
-              >
-                {UNIT_OPTIONS.map((u) => (
-                  <option key={u.id} value={u.id}>{u.label}</option>
-                ))}
-              </select>
+                width={64}
+                height={26}
+                fontSize={11}
+              />
             </label>
             <div style={{ flex: 1 }} />
             <button
