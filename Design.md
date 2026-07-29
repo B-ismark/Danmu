@@ -137,6 +137,31 @@ Furniture detection runs through a fallback chain, best-effort:
    curtain in one photo. The local pass is a head start, not a replacement for
    Gemini.
 
+   **Verified in a real browser**, not only against a reference implementation:
+   Chromium reproduces 13/19 exactly, every box in range. Cost is dominated by
+   inference count (5 crops × 2 models = 10 passes/photo):
+
+   | environment | per photo |
+   |---|---|
+   | Chrome + WebGPU | ~4.8 s |
+   | headless, WASM single-thread | ~12–25 s |
+
+   WASM runs single-threaded because threading needs `SharedArrayBuffer`, which
+   needs cross-origin isolation (COOP/COEP) we do not send — and enabling it
+   would break the cross-origin ort and model fetches. WebGPU is the fast path;
+   WASM is the floor.
+
+   If that cost ever needs cutting, the measured curve is:
+
+   | config | passes | recall |
+   |---|---|---|
+   | both whole-frame | 2 | 9/19 |
+   | world tiled only | 5 | 12/19 |
+   | both tiled (current) | 10 | 13/19 |
+
+   The OIV7 model earns exactly one object for double the passes and +14 MB.
+   Dropping it is the obvious lever if detection ever feels too slow.
+
    **Licence boundary:** the weights are AGPL-3.0 (Ultralytics) and Danmu is
    MIT. AGPL is copyleft, so the two cannot be mixed — the weights therefore
    live in their own AGPL-licensed HF repo and are fetched at runtime, never
