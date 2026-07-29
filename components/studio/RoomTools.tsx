@@ -23,6 +23,9 @@ import { analyzeRoom, type ClearanceIssue, type ClearanceSeverity } from '@/lib/
 import { roomStore, type LayoutVariant, type Transforms } from '@/lib/storage';
 import { footprintBounds, type Footprint } from '@/lib/footprint';
 import { formatDim } from '@/lib/units';
+import { csvBlob } from '@/lib/csv';
+import { downloadBlob } from '@/lib/snapshot';
+import { savedLabel } from '@/lib/dates';
 import { Icon } from '@/components/ui/Icon';
 import { IconButton, Pill } from '@/components/ui/primitives';
 import { Modal } from '@/components/ui/Modal';
@@ -220,8 +223,9 @@ function PanelHead({ title, children }: { title: string; children?: ReactNode })
         top: 0,
         background: 'var(--paper)',
         // Local to this panel's own scroll box — it lifts the sticky header over
-        // the rows sliding under it. Not a layer in the app's --z-* stack.
-        zIndex: 1,
+        // the rows sliding under it. Its own rung on the --z-* scale rather than a
+        // bare 1, so nothing in the app invents a stacking number.
+        zIndex: 'var(--z-sticky-local)',
       }}
     >
       <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink)' }}>{title}</span>
@@ -338,28 +342,24 @@ function ListPanel({ parts, roomName, onClose }: { parts: ScenePart[]; roomName:
   }
 
   function downloadCsv() {
-    const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
-    const lines = [
-      ['Qty', 'Name', 'Category', `Width (${dimUnit})`, `Depth (${dimUnit})`, `Height (${dimUnit})`, 'Colour'].join(','),
-      ...rows.map(({ part: p, count }) =>
-        [
-          count,
-          esc(p.name),
-          p.category,
-          formatDim(p.dimMM[0], dimUnit),
-          formatDim(p.dimMM[1], dimUnit),
-          formatDim(p.dimMM[2], dimUnit),
-          p.color ? p.color.toUpperCase() : '',
-        ].join(','),
-      ),
-    ];
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${fileSlug(roomName)}-furniture.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    // lib/csv owns the escaping (formula injection, quoting, CRLF) and the BOM.
+    // This used to hand-roll quoting only, so a piece named "=HYPERLINK(...)" was
+    // written through verbatim and evaluated when the file was opened.
+    const blob = csvBlob([
+      ['Qty', 'Name', 'Category', `Width (${dimUnit})`, `Depth (${dimUnit})`, `Height (${dimUnit})`, 'Colour'],
+      ...rows.map(({ part: p, count }) => [
+        count,
+        p.name,
+        p.category,
+        formatDim(p.dimMM[0], dimUnit),
+        formatDim(p.dimMM[1], dimUnit),
+        formatDim(p.dimMM[2], dimUnit),
+        p.color ? p.color.toUpperCase() : '',
+      ]),
+    ]);
+    // The shared helper, which delays revoking the object URL — revoking it
+    // synchronously after .click() cancels the download in some browsers.
+    downloadBlob(blob, `${fileSlug(roomName)}-furniture.csv`);
   }
 
   return (
@@ -539,7 +539,7 @@ function LayoutsPanel({
               <MiniPlan parts={vParts} footprint={footprint} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.name}</div>
-                <div style={{ fontSize: 10, color: 'var(--ink-3)' }}>{new Date(v.createdAt).toLocaleString()}</div>
+                <div style={{ fontSize: 10, color: 'var(--ink-3)' }}>{savedLabel(v.createdAt)}</div>
               </div>
               <button onClick={() => requestApply(v)} className="ds-btn ds-btn--primary" style={{ height: 24, fontSize: 10, padding: '0 8px' }}>
                 Apply

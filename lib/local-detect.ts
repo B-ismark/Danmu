@@ -192,17 +192,84 @@ const NAME_TO_SHAPE: Partial<Record<string, Shape>> = {
   'microwave oven': 'microwave',
 };
 
-// onnxruntime-web is fetched at runtime from the CDN with webpackIgnore —
-// bundling its prebuilt dists breaks Next's server pass, and this keeps the
-// ~8 MB runtime out of the app bundle entirely. The package stays installed as
-// a devDependency for its types only.
+// onnxruntime-web is loaded at runtime with webpackIgnore — bundling its
+// prebuilt dists breaks Next's server pass, and this keeps the ~8 MB runtime out
+// of the app bundle entirely. The package stays installed as a devDependency for
+// its types only.
+//
+// SAME-ORIGIN FIRST. A dynamic import() cannot carry a subresource-integrity
+// hash, so when this resolved to a CDN there was nothing verifying what came
+// back — and whatever came back executes with full access to this origin, which
+// holds the user's Google API key (localStorage) and every room they own
+// (IndexedDB). `pnpm vendor:ort` copies the runtime into public/ort/, and the
+// probe below prefers it. The CDN stays as a fallback so a fresh clone still
+// works; the CSP in next.config.mjs allows exactly these two.
 //
 // ORT_VERSION must match that devDependency exactly, or the types compiled
 // against will drift from the wasm actually executed. Both are pinned (no
 // caret) so a lockfile refresh can't move one without the other.
 type OrtNS = typeof import('onnxruntime-web');
 const ORT_VERSION = '1.27.0';
-const ORT_BASE = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`;
+const ORT_LOCAL_BASE = '/ort/';
+const ORT_CDN_BASE = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`;
+const ORT_ENTRY = 'ort.min.mjs';
+
+// ─── Weights integrity ──────────────────────────────────────────────────────
+//
+// A HEAD 200 used to be the only validation on a 14 MB and a 50 MB graph fetched
+// from a public mirror and handed straight to the wasm runtime.
+//
+// This registry is EMPTY on purpose. Pinning a digest that does not match what
+// the mirror actually serves would fail closed and silently disable the detector
+// for every fresh clone, so the pin has to be made by someone who can verify both
+// sides — see scripts/hash-models.mjs, which prints paste-ready entries and
+// documents the check. Add an entry keyed by filename and remote copies of that
+// file are then verified before the runtime ever sees them.
+//
+// Independent of the registry, every REMOTE file is format-checked: an ONNX file
+// is a protobuf, and the realistic failure mode here is receiving something that
+// is not one at all (an HTML error page, a redirect body, a truncated download).
+// Local files are the user's own export and are trusted as-is.
+const MODEL_DIGESTS: Record<string, string> = {};
+
+/** Plausible size window for a detector graph, so a 400-byte error page or a
+ *  1 GB surprise is refused before it is parsed. */
+const MIN_MODEL_BYTES = 1 * 1024 * 1024;
+const MAX_MODEL_BYTES = 512 * 1024 * 1024;
+
+async function sha256Hex(buf: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/** True when `buf` looks like a serialised ONNX ModelProto. Field 1 (ir_version)
+ *  is a varint, so a well-formed file starts with the tag byte 0x08. */
+function looksLikeOnnx(buf: ArrayBuffer): boolean {
+  if (buf.byteLength < MIN_MODEL_BYTES || buf.byteLength > MAX_MODEL_BYTES) return false;
+  const head = new Uint8Array(buf, 0, Math.min(16, buf.byteLength));
+  if (head[0] !== 0x08) return false;
+  // The producer_name / domain strings appear early in every graph we ship.
+  const text = new TextDecoder('latin1').decode(new Uint8Array(buf, 0, Math.min(4096, buf.byteLength)));
+  return text.includes('onnx') || text.includes('pytorch') || text.includes('ai.onnx');
+}
+
+/** Fetch a model file and refuse anything that fails its format check or a
+ *  pinned digest. Returns null when it cannot be trusted — callers treat that
+ *  exactly like "not deployed" and fall back to Gemini / manual boxes. */
+async function fetchVerifiedModel(base: string, file: string): Promise<Uint8Array | null> {
+  const res = await fetch(base + file);
+  if (!res.ok) return null;
+  const buf = await res.arrayBuffer();
+  if (!looksLikeOnnx(buf)) return null;
+  const expected = MODEL_DIGESTS[file];
+  if (expected) {
+    const actual = `sha256-${await sha256Hex(buf)}`;
+    if (actual !== expected) return null;
+  }
+  return new Uint8Array(buf);
+}
 
 type Session = import('onnxruntime-web').InferenceSession;
 
@@ -250,23 +317,52 @@ export async function localDetectorAvailable(): Promise<boolean> {
   return (await resolveFile(MODEL_FILE)) !== null;
 }
 
+/** Same local-then-remote probe as the weights, for the runtime itself. */
+let ortBase: Promise<string> | null = null;
+function resolveOrtBase(): Promise<string> {
+  ortBase ??= (async () => {
+    try {
+      const r = await fetch(ORT_LOCAL_BASE + ORT_ENTRY, { method: 'HEAD' });
+      if (r.ok) return ORT_LOCAL_BASE;
+    } catch {
+      // Not vendored — fall through to the CDN.
+    }
+    return ORT_CDN_BASE;
+  })();
+  return ortBase;
+}
+
 async function load(): Promise<Loaded | null> {
   loader ??= (async () => {
     try {
       const modelBase = await resolveFile(MODEL_FILE);
       if (!modelBase) return null;
-      const ortUrl = `${ORT_BASE}ort.min.mjs`;
-      const ort = (await import(/* webpackIgnore: true */ ortUrl)) as OrtNS;
-      ort.env.wasm.wasmPaths = ORT_BASE;
+      const base = await resolveOrtBase();
+      const ort = (await import(/* webpackIgnore: true */ `${base}${ORT_ENTRY}`)) as OrtNS;
+      ort.env.wasm.wasmPaths = base;
       const namesBase = (await resolveFile(NAMES_FILE)) ?? modelBase;
       const names = (await (await fetch(namesBase + NAMES_FILE)).json()) as Record<string, string>;
       // WebGPU where present, WASM everywhere else.
       const providers: string[] = [];
       if (typeof navigator !== 'undefined' && 'gpu' in navigator) providers.push('webgpu');
       providers.push('wasm');
-      const session = await ort.InferenceSession.create(modelBase + MODEL_FILE, {
-        executionProviders: providers as never,
-      });
+
+      // A locally-exported file is the user's own and is handed to the runtime by
+      // URL. A remote one is fetched, format-checked and digest-checked first —
+      // see fetchVerifiedModel.
+      const open = async (fileBase: string, file: string): Promise<Session | null> => {
+        if (fileBase === LOCAL_BASE) {
+          return ort.InferenceSession.create(fileBase + file, {
+            executionProviders: providers as never,
+          });
+        }
+        const bytes = await fetchVerifiedModel(fileBase, file);
+        if (!bytes) return null;
+        return ort.InferenceSession.create(bytes, { executionProviders: providers as never });
+      };
+
+      const session = await open(modelBase, MODEL_FILE);
+      if (!session) return null;
       // Optional, and resolved independently of the OIV7 model so a local
       // export missing this file still picks it up from the mirror. Only when
       // neither has it does detection run on the OIV7 model alone.
@@ -274,9 +370,7 @@ async function load(): Promise<Loaded | null> {
       const worldBase = await resolveFile(WORLD_FILE);
       if (worldBase) {
         try {
-          world = await ort.InferenceSession.create(worldBase + WORLD_FILE, {
-            executionProviders: providers as never,
-          });
+          world = await open(worldBase, WORLD_FILE);
         } catch {
           world = null;
         }
@@ -369,7 +463,7 @@ function toTensor(
 /** A candidate in normalized whole-image space, with its class already
  *  resolved — the two models have different vocabularies, so they can only be
  *  merged after each has mapped its own class index to a label + category. */
-type RawBox = {
+export type RawBox = {
   x: number;
   y: number;
   w: number;
@@ -401,7 +495,11 @@ function containedIn(a: RawBox, b: RawBox): number {
   return overlap(a, b) / (a.w * a.h + 1e-9);
 }
 
-function nms(boxes: RawBox[]): RawBox[] {
+/** Non-maximum suppression over candidates from BOTH models and every tile.
+ *  Exported for tests — it is the step that decides how many boxes the user sees,
+ *  and it has to collapse three different kinds of duplicate: two tiles finding
+ *  the same object, both models finding it, and one model stacking boxes on it. */
+export function nms(boxes: RawBox[]): RawBox[] {
   const sorted = [...boxes].sort((a, b) => b.conf - a.conf);
   const keep: RawBox[] = [];
   for (const b of sorted) {

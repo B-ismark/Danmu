@@ -11,10 +11,22 @@ import { footprintBounds } from './footprint';
 import { formatDim } from './units';
 import type { DimUnit } from './store';
 import { downloadBlob } from './snapshot';
+import { PLAN } from './scene-palette';
 
 const PX_PER_M = 90; // plan scale on canvas
 const MARGIN = 70;
 const LEGEND_LINE = 20;
+/** Narrowest sheet we will emit, so a small room's legend still has a column to
+ *  sit in. A 2 m × 2 m room is only 180 px of plan; its legend rows are not. */
+const MIN_SHEET_W = 520;
+
+const TITLE_FONT = '600 16px system-ui, sans-serif';
+const META_FONT = '11px monospace';
+const LEGEND_HEAD_FONT = '600 12px system-ui, sans-serif';
+const LEGEND_INDEX_FONT = '700 11px monospace';
+const LEGEND_FONT = '11px system-ui, sans-serif';
+const BADGE_FONT = '700 11px system-ui, sans-serif';
+const DIM_FONT = '10px monospace';
 
 export function exportPlanPng(
   parts: ScenePart[],
@@ -28,8 +40,26 @@ export function exportPlanPng(
 
   const floorParts = parts.filter((p) => !p.wallMounted);
   const legendH = floorParts.length * LEGEND_LINE + 56;
-  const W = Math.ceil(planW + MARGIN * 2);
+
+  // Legend rows carry a user-typed name (up to 80 characters) plus its
+  // dimensions, and used to be drawn at whatever width they came out at — so a
+  // long name ran straight off the right edge of a narrow plan. Measure them
+  // first and let the sheet grow to fit, then ellipsise whatever still overruns.
+  const measure = document.createElement('canvas').getContext('2d');
+  const legendRows = floorParts.map((p) => legendText(p, dimUnit));
+  let widestLegend = 0;
+  if (measure) {
+    measure.font = LEGEND_FONT;
+    for (const row of legendRows) widestLegend = Math.max(widestLegend, measure.measureText(row).width);
+    measure.font = META_FONT;
+    widestLegend = Math.max(widestLegend, measure.measureText(metaText(room, dimUnit)).width - 24);
+  }
+
+  const contentW = Math.max(planW, widestLegend + 24, MIN_SHEET_W - MARGIN * 2);
+  const W = Math.ceil(contentW + MARGIN * 2);
   const H = Math.ceil(planH + MARGIN * 2 + legendH);
+  /** Right edge legend text must not cross. */
+  const legendMaxW = W - MARGIN - (MARGIN + 24);
 
   const c = document.createElement('canvas');
   c.width = W * 2; // 2× for crisp print
@@ -37,23 +67,19 @@ export function exportPlanPng(
   const ctx = c.getContext('2d')!;
   ctx.scale(2, 2);
 
-  ctx.fillStyle = '#FBF8F2';
+  ctx.fillStyle = PLAN.paper;
   ctx.fillRect(0, 0, W, H);
 
   const px = (x: number) => MARGIN + (x - b.minX) * PX_PER_M;
   const pz = (z: number) => MARGIN + (z - b.minZ) * PX_PER_M;
 
   // Title + room size.
-  ctx.fillStyle = '#1c1c1a';
-  ctx.font = '600 16px system-ui, sans-serif';
-  ctx.fillText(title, MARGIN, 30);
-  ctx.font = '11px monospace';
-  ctx.fillStyle = '#6b6b66';
-  ctx.fillText(
-    `${formatDim(room.width * 1000, dimUnit)} × ${formatDim(room.depth * 1000, dimUnit)} ${dimUnit} · ceiling ${formatDim(room.height * 1000, dimUnit)} ${dimUnit} · scale 1 m = ${PX_PER_M} px`,
-    MARGIN,
-    46,
-  );
+  ctx.fillStyle = PLAN.ink;
+  ctx.font = TITLE_FONT;
+  ctx.fillText(ellipsise(ctx, title, W - MARGIN * 2), MARGIN, 30);
+  ctx.font = META_FONT;
+  ctx.fillStyle = PLAN.ink2;
+  ctx.fillText(metaText(room, dimUnit), MARGIN, 46);
 
   // Footprint — floor fill + thick wall stroke.
   ctx.beginPath();
@@ -62,9 +88,9 @@ export function exportPlanPng(
     else ctx.lineTo(px(x), pz(z));
   });
   ctx.closePath();
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = PLAN.floor;
   ctx.fill();
-  ctx.strokeStyle = '#1c1c1a';
+  ctx.strokeStyle = PLAN.ink;
   ctx.lineWidth = 5;
   ctx.stroke();
 
@@ -77,15 +103,15 @@ export function exportPlanPng(
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(-p.rot);
-    ctx.fillStyle = p.color ? `${p.color}55` : 'rgba(62,143,216,0.25)';
-    ctx.strokeStyle = '#3a3a36';
+    ctx.fillStyle = `${p.color ?? PLAN.accent}40`;
+    ctx.strokeStyle = PLAN.outline;
     ctx.lineWidth = 1.2;
     ctx.fillRect(-w / 2, -d / 2, w, d);
     ctx.strokeRect(-w / 2, -d / 2, w, d);
     ctx.restore();
     // Number badge (unrotated, centred).
-    ctx.fillStyle = '#1c1c1a';
-    ctx.font = '700 11px system-ui, sans-serif';
+    ctx.fillStyle = PLAN.ink;
+    ctx.font = BADGE_FONT;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(String(i + 1), cx, cy);
@@ -103,7 +129,7 @@ export function exportPlanPng(
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(-p.rot);
-      ctx.strokeStyle = '#3E8FD8';
+      ctx.strokeStyle = PLAN.accent;
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(-w / 2, 0);
@@ -120,39 +146,60 @@ export function exportPlanPng(
 
   // Scale bar — 1 m.
   const sbY = pz(b.maxZ) + 44;
-  ctx.strokeStyle = '#1c1c1a';
+  ctx.strokeStyle = PLAN.ink;
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(MARGIN, sbY);
   ctx.lineTo(MARGIN + PX_PER_M, sbY);
   ctx.stroke();
-  ctx.font = '10px monospace';
-  ctx.fillStyle = '#6b6b66';
+  ctx.font = DIM_FONT;
+  ctx.fillStyle = PLAN.ink2;
   ctx.fillText(`1 m`, MARGIN + PX_PER_M + 6, sbY + 3);
 
   // Legend.
   let ly = planH + MARGIN + 70;
-  ctx.font = '600 12px system-ui, sans-serif';
-  ctx.fillStyle = '#1c1c1a';
+  ctx.font = LEGEND_HEAD_FONT;
+  ctx.fillStyle = PLAN.ink;
   ctx.fillText('Furniture', MARGIN, ly);
   ly += 8;
-  floorParts.forEach((p, i) => {
+  floorParts.forEach((_, i) => {
     ly += LEGEND_LINE;
-    ctx.font = '700 11px monospace';
-    ctx.fillStyle = '#3E8FD8';
+    ctx.font = LEGEND_INDEX_FONT;
+    ctx.fillStyle = PLAN.accent;
     ctx.fillText(String(i + 1).padStart(2, ' '), MARGIN, ly);
-    ctx.font = '11px system-ui, sans-serif';
-    ctx.fillStyle = '#1c1c1a';
-    ctx.fillText(
-      `${p.name} — ${formatDim(p.dimMM[0], dimUnit)} × ${formatDim(p.dimMM[1], dimUnit)} × ${formatDim(p.dimMM[2], dimUnit)} ${dimUnit} (W×D×H)`,
-      MARGIN + 24,
-      ly,
-    );
+    ctx.font = LEGEND_FONT;
+    ctx.fillStyle = PLAN.ink;
+    ctx.fillText(ellipsise(ctx, legendRows[i], legendMaxW), MARGIN + 24, ly);
   });
 
   c.toBlob((blob) => {
     if (blob) downloadBlob(blob, 'floor-plan.png');
   }, 'image/png');
+}
+
+function metaText(
+  room: { width: number; depth: number; height: number },
+  dimUnit: DimUnit,
+): string {
+  return `${formatDim(room.width * 1000, dimUnit)} × ${formatDim(room.depth * 1000, dimUnit)} ${dimUnit} · ceiling ${formatDim(room.height * 1000, dimUnit)} ${dimUnit} · scale 1 m = ${PX_PER_M} px`;
+}
+
+function legendText(p: ScenePart, dimUnit: DimUnit): string {
+  return `${p.name} — ${formatDim(p.dimMM[0], dimUnit)} × ${formatDim(p.dimMM[1], dimUnit)} × ${formatDim(p.dimMM[2], dimUnit)} ${dimUnit} (W×D×H)`;
+}
+
+/** Trim to fit `maxW`, ending in an ellipsis. Assumes ctx.font is already set to
+ *  the font the text will be drawn in. */
+function ellipsise(ctx: CanvasRenderingContext2D, text: string, maxW: number): string {
+  if (maxW <= 0 || ctx.measureText(text).width <= maxW) return text;
+  let lo = 0;
+  let hi = text.length;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (ctx.measureText(`${text.slice(0, mid)}…`).width <= maxW) lo = mid;
+    else hi = mid - 1;
+  }
+  return `${text.slice(0, lo)}…`;
 }
 
 function drawDimLine(
@@ -164,7 +211,7 @@ function drawDimLine(
   label: string,
   vertical = false,
 ) {
-  ctx.strokeStyle = '#9a9a94';
+  ctx.strokeStyle = PLAN.rule;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(x1, y1);
@@ -182,8 +229,8 @@ function drawDimLine(
     ctx.lineTo(x2, y2 + 4);
   }
   ctx.stroke();
-  ctx.font = '10px monospace';
-  ctx.fillStyle = '#6b6b66';
+  ctx.font = DIM_FONT;
+  ctx.fillStyle = PLAN.ink2;
   if (vertical) {
     ctx.save();
     ctx.translate(x1 + 12, (y1 + y2) / 2);

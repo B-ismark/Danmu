@@ -8,14 +8,22 @@
 //   · 600 mm in front of hinged storage (wardrobe doors, fridge)
 //   · 500 mm bedside access strip
 //   · TV viewing distance ≈ 1.2–2.5 × screen diagonal
+//
+// Two of the rules here exist because the geometry engine deliberately does not
+// "fix" a problem silently: parts can overlap (nothing resolves part-vs-part at
+// build time) and a part can be taller than the room (shrinking it to fit would be
+// a dimension lie). Both used to produce no finding at all, so the panel said
+// "Everything fits" over an arrangement that plainly did not.
 
 import type { ScenePart, Category } from './scene-spec';
 import type { Footprint } from './footprint';
 import {
   obbFromPart,
   obbGap,
+  obbIntersectionArea,
   faceClearance,
   pointInObb,
+  pointInPoly,
   type OBB,
   type Poly,
 } from './geometry';
@@ -48,6 +56,33 @@ const FRONT_CLEARANCE_CATEGORIES = new Set<Category>(['wardrobe', 'fridge', 'she
 const MIN_WALKWAY = 0.6;
 const MIN_FRONT = 0.6;
 const MIN_BEDSIDE = 0.5;
+
+// ── Same-place rule thresholds ──────────────────────────────────────────────
+// Seating pushed under a work surface shares that surface's footprint ON
+// PURPOSE, and the chair back rises above the table top so no vertical test
+// separates the two. Four chairs round a dining table is the most ordinary
+// arrangement there is; reporting four errors on it would teach people to
+// ignore this panel.
+const TUCKS_UNDER = new Set<Category>(['chair', 'ottoman']);
+const TUCKED_INTO = new Set<Category>(['table', 'desk']);
+
+/** Share of the SMALLER piece's footprint that must lie inside the other before
+ *  this is a collision rather than two pieces meeting untidily. Half of a piece
+ *  buried in another is unambiguous; a few centimetres of clip is a nudge. */
+const CLASH_SHARE = 0.5;
+
+/** …and for a pair that legitimately shares floor, the bar instead of a blanket
+ *  exemption. A chair pushed hard under a table reaches perhaps 60% of its own
+ *  footprint; a chair standing where the table is reaches all of it, and that is
+ *  still worth saying. */
+const TUCKED_CLASH_SHARE = 0.85;
+
+function clashShare(a: ScenePart, b: ScenePart): number {
+  const tucks =
+    (TUCKS_UNDER.has(a.category) && TUCKED_INTO.has(b.category)) ||
+    (TUCKS_UNDER.has(b.category) && TUCKED_INTO.has(a.category));
+  return tucks ? TUCKED_CLASH_SHARE : CLASH_SHARE;
+}
 
 export function analyzeRoom(
   parts: ScenePart[],
@@ -83,7 +118,44 @@ export function analyzeRoom(
     }
   }
 
-  // ── 2. Pinched walkways between bulky furniture ──────────────────────────
+  // ── 2. Two pieces in the same place ──────────────────────────────────────
+  // obbGap returns 0 both for furniture pushed flush together (deliberate) and
+  // for furniture occupying the same floor (a mistake), and the walkway rule
+  // below skips everything at or under 12 cm as "touching". So interpenetrating
+  // parts used to produce no finding at all, and the panel said "Everything
+  // fits". buildSceneFromRoom does no part-vs-part resolution, so a detected
+  // scene can genuinely arrive like this.
+  //
+  // "Overlap at all" is the wrong test, though — see TUCKS_UNDER and
+  // CLASH_SHARE above. This wants the pieces that are IN each other, not the
+  // ones that merely meet.
+  for (let i = 0; i < solid.length; i++) {
+    for (let j = i + 1; j < solid.length; j++) {
+      const a = solid[i];
+      const b = solid[j];
+      // Only when they also share vertical space — a monitor over a desk is a
+      // stack, not a clash. (`solid` is already floor-level, but a part can sit
+      // just under 0.05 m and still be short enough to pass under another.)
+      const aTop = a.pos[1] + a.dimMM[2] / 1000;
+      const bTop = b.pos[1] + b.dimMM[2] / 1000;
+      if (aTop <= b.pos[1] + 0.005 || bTop <= a.pos[1] + 0.005) continue;
+      const oa = obbs.get(a.id)!;
+      const ob = obbs.get(b.id)!;
+      const shared = obbIntersectionArea(oa, ob);
+      if (shared <= 0) continue;
+      const smaller = Math.min(oa.hw * oa.hd, ob.hw * ob.hd) * 4;
+      if (smaller <= 0 || shared / smaller < clashShare(a, b)) continue;
+      issues.push({
+        id: `clash-${a.id}-${b.id}`,
+        severity: 'error',
+        title: 'Two pieces in the same place',
+        detail: `“${a.name}” and “${b.name}” overlap on the floor — one of them has to move before this arrangement is real.`,
+        partIds: [a.id, b.id],
+      });
+    }
+  }
+
+  // ── 3. Pinched walkways between bulky furniture ──────────────────────────
   const bulky = solid.filter((p) => WALKWAY_CATEGORIES.has(p.category));
   for (let i = 0; i < bulky.length; i++) {
     for (let j = i + 1; j < bulky.length; j++) {
@@ -91,7 +163,8 @@ export function analyzeRoom(
       const b = bulky[j];
       const gap = obbGap(obbs.get(a.id)!, obbs.get(b.id)!);
       // Touching (deliberate composition) and far apart are both fine — the
-      // problem zone is a gap someone would try to squeeze through.
+      // problem zone is a gap someone would try to squeeze through. Genuine
+      // overlap is caught above, so 0 here really does mean flush.
       if (gap > 0.12 && gap < MIN_WALKWAY) {
         issues.push({
           id: `walk-${a.id}-${b.id}`,
@@ -104,7 +177,7 @@ export function analyzeRoom(
     }
   }
 
-  // ── 3. Storage door / drawer front clearance ─────────────────────────────
+  // ── 4. Storage door / drawer front clearance ─────────────────────────────
   for (const p of solid.filter((s) => FRONT_CLEARANCE_CATEGORIES.has(s.category))) {
     const others = solid.filter((o) => o.id !== p.id).map((o) => obbs.get(o.id)!);
     const front = faceClearance(obbs.get(p.id)!, '+z', others, poly, 2);
@@ -119,7 +192,7 @@ export function analyzeRoom(
     }
   }
 
-  // ── 4. Bedside access ────────────────────────────────────────────────────
+  // ── 5. Bedside access ────────────────────────────────────────────────────
   for (const bed of solid.filter((s) => s.category === 'bed')) {
     const others = solid
       .filter((o) => o.id !== bed.id && o.category !== 'nightstand')
@@ -148,7 +221,7 @@ export function analyzeRoom(
     }
   }
 
-  // ── 5. TV viewing distance ───────────────────────────────────────────────
+  // ── 6. TV viewing distance ───────────────────────────────────────────────
   const seats = parts.filter((p) => p.category === 'sofa' || p.shape === 'chair-armchair');
   for (const tv of parts.filter((p) => p.category === 'tv' && p.shape === 'tv')) {
     if (seats.length === 0) continue;
@@ -182,10 +255,30 @@ export function analyzeRoom(
     }
   }
 
-  // ── 6. Free floor share ──────────────────────────────────────────────────
-  const roomArea = polygonArea(poly);
-  const used = solid.reduce((acc, p) => acc + (p.dimMM[0] / 1000) * (p.dimMM[1] / 1000), 0);
-  const freeFloorShare = roomArea > 0 ? Math.max(0, 1 - used / roomArea) : 1;
+  // ── 7. Taller than the room ──────────────────────────────────────────────
+  // The scene builder deliberately does NOT shrink a piece to fit — clamping the
+  // dimension would be the one thing this codebase refuses to do, and a 2.6 m
+  // wardrobe genuinely does not go under a 2.4 m ceiling. So it keeps its real
+  // height, sits on the floor, and passes through the ceiling in the 3D view with
+  // nothing said about it. Say it here, where the room's problems are reported.
+  for (const p of parts) {
+    if (p.wallMounted) continue;
+    const h = p.dimMM[2] / 1000;
+    if (h <= room.height) continue;
+    issues.push({
+      id: `tall-${p.id}`,
+      severity: 'error',
+      title: 'Taller than the room',
+      detail: `“${p.name}” is ${Math.round(h * 100)} cm tall and the ceiling is ${Math.round(room.height * 100)} cm — it will not stand up in here. Danmu keeps the real size rather than shrinking it for you.`,
+      partIds: [p.id],
+    });
+  }
+
+  // ── 8. Free floor share ──────────────────────────────────────────────────
+  const freeFloorShare = freeFloorFraction(
+    solid.map((p) => obbs.get(p.id)!),
+    poly,
+  );
   if (freeFloorShare < 0.4) {
     issues.push({
       id: 'crowding',
@@ -199,6 +292,48 @@ export function analyzeRoom(
   const order: Record<ClearanceSeverity, number> = { error: 0, warn: 1, info: 2 };
   issues.sort((a, b) => order[a.severity] - order[b.severity]);
   return { issues, freeFloorShare };
+}
+
+/** Cell size for the coverage raster, in metres. 5 cm over a 40 m room is 800
+ *  columns — ample for a percentage, and cheap because the whole thing runs once
+ *  per committed edit (analyzeRoom is memoised by its caller). */
+const COVER_CELL = 0.05;
+
+/** Fraction of the footprint NOT covered by any part, 0..1.
+ *
+ *  A union, not a sum. Summing each part's W × D triple-counted a chair pushed
+ *  under a desk, ignored rotation entirely, and counted the whole of a part that
+ *  hung outside the room after a wall drag — then clamped the result at 0, so a
+ *  busy room confidently reported "100% of the floor covered". */
+export function freeFloorFraction(parts: OBB[], poly: Poly): number {
+  let inside = 0;
+  let covered = 0;
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (const [x, z] of poly) {
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (z < minZ) minZ = z;
+    if (z > maxZ) maxZ = z;
+  }
+  if (!Number.isFinite(minX) || maxX <= minX || maxZ <= minZ) return 1;
+
+  for (let z = minZ + COVER_CELL / 2; z < maxZ; z += COVER_CELL) {
+    for (let x = minX + COVER_CELL / 2; x < maxX; x += COVER_CELL) {
+      if (!pointInPoly(x, z, poly)) continue;
+      inside++;
+      for (const b of parts) {
+        if (pointInObb(x, z, b)) {
+          covered++;
+          break;
+        }
+      }
+    }
+  }
+  if (inside === 0) return 1;
+  return Math.max(0, Math.min(1, 1 - covered / inside));
 }
 
 /** Distance from a point to an OBB's boundary (0 when inside). */

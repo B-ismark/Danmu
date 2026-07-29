@@ -21,10 +21,19 @@ type QuotaState = {
   reset: () => void;
 };
 
+// en-CA gives ISO-shaped YYYY-MM-DD, and the timeZone option does the DST
+// arithmetic for us. Subtracting a fixed 8 hours was wrong for the ~8 months a
+// year Pacific runs on daylight time (UTC-7), so the counter rolled over an hour
+// off the reset the UI promises and a run in that window landed on the wrong day.
+const PACIFIC_DAY = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Los_Angeles',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
 function pacificDay(): string {
-  // Pacific midnight reset — approximate using UTC-8.
-  const d = new Date(Date.now() - 8 * 60 * 60 * 1000);
-  return d.toISOString().slice(0, 10);
+  return PACIFIC_DAY.format(new Date());
 }
 
 export const useQuota = create<QuotaState>()(

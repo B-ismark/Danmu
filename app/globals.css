@@ -59,6 +59,10 @@
 
   /* Stacking scale. Ad-hoc z values already caused one overlay-overlap bug;
      every layer in the app picks from this list, nothing invents a number. */
+  --z-sticky-local: 1;  /* a sticky header inside its OWN scroll box — lifts it
+                           over the rows sliding under it, and is not a layer in
+                           the app-wide stack below. Three panels had this as a
+                           bare `zIndex: 1`. */
   --z-canvas-ui: 20;    /* panels floating over the 3D canvas */
   --z-canvas-hint: 30;  /* help affordances — must stay above the panels */
   --z-panel: 40;        /* docked chrome that may overlap canvas UI */
@@ -160,6 +164,12 @@ h1, h2, h3 { margin: 0; }
   background-size: var(--grid-unit) var(--grid-unit);
 }
 
+/* --edge, not --hairline. This is the base class on essentially every button in
+   the app, and a 1.14:1 boundary fails WCAG 1.4.11's 3:1 for the visual boundary
+   of a control — which is exactly what the token comments above already say. The
+   tell that the old default was wrong: four call sites had started overriding it
+   inline, one at a time, with `borderColor: 'var(--edge)'`. --hairline stays where
+   it belongs, on .ds-card and the real dividers. */
 .ds-btn {
   font-family: var(--font-sans);
   font-size: 13px;
@@ -168,7 +178,7 @@ h1, h2, h3 { margin: 0; }
   height: 38px;
   padding: 0 16px;
   border-radius: var(--r-3);
-  border: 1px solid var(--hairline);
+  border: 1px solid var(--edge);
   background: var(--paper);
   color: var(--ink);
   cursor: pointer;
@@ -223,11 +233,13 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
 .icon-btn--danger { color: var(--danger); }
 .icon-btn--danger:hover { background: var(--danger-tint); color: var(--danger-text); }
 
+/* Chips are sometimes a button (the help toggle, Comfort zones) and sometimes a
+   readout, and the interactive ones set the contrast requirement for the class. */
 .ds-chip {
   display: inline-flex; align-items: center; gap: 6px;
   height: 28px; padding: 0 12px;
   border-radius: var(--r-full);
-  border: 1px solid var(--hairline);
+  border: 1px solid var(--edge);
   background: var(--paper);
   font-family: var(--font-sans);
   font-size: 12px;
@@ -257,7 +269,9 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
 .ds-input:focus { border-color: var(--accent-text); box-shadow: 0 0 0 4px var(--accent-tint); }
 .ds-input::placeholder { color: var(--ink-3); }
 
-/* Soft card surface — for panels/rooms cards on the warmer screens. */
+/* Soft card surface — for panels/rooms cards on the warmer screens. A card is a
+   surface, not a control, so --hairline is the right token here: the affordance
+   inside it carries the perceivable boundary. */
 .ds-card {
   background: var(--paper);
   border: 1px solid var(--hairline);
@@ -363,13 +377,15 @@ textarea.field { border-radius: var(--r-2); }
   border-radius: var(--r-full); padding: 2px 8px; white-space: nowrap;
 }
 
+/* Both hold controls and float over other content, so both need a boundary that
+   is actually perceivable against whatever they land on. */
 .popover {
-  background: var(--paper); border: 1px solid var(--hairline);
+  background: var(--paper); border: 1px solid var(--edge);
   border-radius: var(--r-2); box-shadow: var(--shadow-lift);
 }
 .toolbar {
   display: inline-flex; align-items: center;
-  background: var(--paper); border: 1px solid var(--hairline);
+  background: var(--paper); border: 1px solid var(--edge);
   border-radius: var(--r-3); box-shadow: var(--shadow-soft); overflow: hidden;
 }
 

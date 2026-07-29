@@ -29,9 +29,20 @@ export type Capture = {
   pose?: { yaw: number; tilt: number; height: number };
 };
 
+/** Schema version stamped onto every room we write.
+ *
+ *  Additive change has always been safe here — new optional fields are read
+ *  defensively (`wallColors?`, `footprint?`, `hidden?`). A change that is NOT
+ *  additive (a renamed field, a units change, a restructured `detectedObjects`)
+ *  needs something to branch on, and there was nothing. Records written before
+ *  this existed read back as version 0. */
+export const ROOM_SCHEMA_VERSION = 1;
+
 export type RoomData = {
   id: string;
   createdAt: number;
+  /** Absent on rooms written before the version stamp — treat as 0. */
+  version?: number;
   name: string;
   layoutId: 'rect' | 'l' | 't' | 'u' | 'open' | 'custom';
   width: number; // meters
@@ -45,6 +56,12 @@ export type RoomData = {
   footprint?: Array<[number, number]>;
   detectedObjects?: Array<{
     id: number;
+    /** Stable per-detection key, minted once when the detection is first saved.
+     *  It becomes the ScenePart id, so every transform the user makes stays
+     *  attached to the same piece of furniture across a re-detect. Absent on
+     *  rooms saved before this shipped — those fall back to the positional
+     *  `${category}-${n}` id (see buildSceneFromRoom). */
+    uid?: string;
     label: string;
     conf: number;
     locked: boolean;
@@ -111,13 +128,13 @@ export type RoomSummary = {
 
 export const roomStore = {
   async saveRoom(room: RoomData) {
-    await set(k(room.id, 'meta'), room);
+    await set(k(room.id, 'meta'), { ...room, version: ROOM_SCHEMA_VERSION });
     await touch(room.id);
   },
   async renameRoom(roomId: string, name: string) {
     const meta = await get<RoomData>(k(roomId, 'meta'));
     if (!meta) return;
-    await set(k(roomId, 'meta'), { ...meta, name });
+    await set(k(roomId, 'meta'), { ...meta, name, version: ROOM_SCHEMA_VERSION });
     await touch(roomId);
   },
   async loadRoom(roomId: string): Promise<RoomData | undefined> {
@@ -138,14 +155,13 @@ export const roomStore = {
   async loadCaptures(roomId: string): Promise<Capture[]> {
     const all = await keys();
     const prefix = k(roomId, 'cap:');
-    const out: Capture[] = [];
-    for (const key of all) {
-      if (typeof key === 'string' && key.startsWith(prefix)) {
-        const v = await get<Capture>(key);
-        if (v) out.push(v);
-      }
-    }
-    return out;
+    // Fan out rather than awaiting one multi-megabyte blob at a time — this runs
+    // on mount of both the capture and the detect screen, so it was four
+    // serialised reads before either could paint. Same treatment listRooms
+    // already had.
+    const matching = all.filter((key): key is string => typeof key === 'string' && key.startsWith(prefix));
+    const values = await Promise.all(matching.map((key) => get<Capture>(key)));
+    return values.filter((v): v is Capture => !!v);
   },
   async saveLayout(roomId: string, v: LayoutVariant) {
     await set(k(roomId, `layout:${v.id}`), v);
@@ -156,14 +172,11 @@ export const roomStore = {
   async listLayouts(roomId: string): Promise<LayoutVariant[]> {
     const all = await keys();
     const prefix = k(roomId, 'layout:');
-    const out: LayoutVariant[] = [];
-    for (const key of all) {
-      if (typeof key === 'string' && key.startsWith(prefix)) {
-        const v = await get<LayoutVariant>(key);
-        if (v) out.push(v);
-      }
-    }
-    return out.sort((a, b) => a.createdAt - b.createdAt);
+    const matching = all.filter((key): key is string => typeof key === 'string' && key.startsWith(prefix));
+    const values = await Promise.all(matching.map((key) => get<LayoutVariant>(key)));
+    return values
+      .filter((v): v is LayoutVariant => !!v)
+      .sort((a, b) => a.createdAt - b.createdAt);
   },
   async saveTransforms(roomId: string, t: Transforms) {
     await set(k(roomId, 'transforms'), t);
@@ -230,44 +243,69 @@ export const roomStore = {
   /** Soft-delete: every `room:{id}:*` key is moved under `trash:{ts}:`, so the
    *  room disappears from the workspace but is recoverable. Returns the token
    *  needed to undo. A sandbox that can undo moving a chair should not lose a
-   *  whole room permanently to one mis-aimed click. */
+   *  whole room permanently to one mis-aimed click.
+   *
+   *  `meta` moves FIRST and on its own. There is no transaction across keys here
+   *  (idb-keyval is a single store), so a tab closed mid-delete used to leave a
+   *  room with its meta still live and its scene, transforms and photos already
+   *  in the trash — a room that appears in the workspace and opens empty.
+   *  `listRooms` keys off `meta`, so retiring that key first makes the visible
+   *  state flip exactly once: worst case now is orphaned non-meta keys, which are
+   *  invisible and get swept by the next purge. */
   async clearRoom(roomId: string): Promise<{ roomId: string; deletedAt: number }> {
     const all = await keys();
     const prefix = `room:${roomId}:`;
     const deletedAt = Date.now();
-    for (const key of all) {
-      if (typeof key !== 'string' || !key.startsWith(prefix)) continue;
+    const metaKey = k(roomId, 'meta');
+    const move = async (key: string) => {
       const value = await get(key);
       if (value !== undefined) await set(`${TRASH}${deletedAt}:${key}`, value);
       await del(key);
-    }
+    };
+
+    await move(metaKey);
+    const rest = all.filter(
+      (key): key is string => typeof key === 'string' && key.startsWith(prefix) && key !== metaKey,
+    );
+    await Promise.all(rest.map(move));
     return { roomId, deletedAt };
   },
 
-  /** Undo a soft delete. */
+  /** Undo a soft delete.
+   *
+   *  Mirror image of clearRoom: everything else lands first and `meta` last, so
+   *  the room only reappears in the workspace once it is whole. Refuses when a
+   *  live room already holds the id rather than overwriting it. */
   async restoreRoom(token: { roomId: string; deletedAt: number }): Promise<boolean> {
+    const metaKey = k(token.roomId, 'meta');
+    if ((await get(metaKey)) !== undefined) return false;
+
     const all = await keys();
-    const prefix = `${TRASH}${token.deletedAt}:room:${token.roomId}:`;
-    let restored = 0;
-    for (const key of all) {
-      if (typeof key !== 'string' || !key.startsWith(prefix)) continue;
+    const trashPrefix = `${TRASH}${token.deletedAt}:`;
+    const prefix = `${trashPrefix}room:${token.roomId}:`;
+    const trashedMeta = `${trashPrefix}${metaKey}`;
+    const restore = async (key: string) => {
       const value = await get(key);
-      if (value !== undefined) await set(key.slice(`${TRASH}${token.deletedAt}:`.length), value);
+      if (value !== undefined) await set(key.slice(trashPrefix.length), value);
       await del(key);
-      restored++;
-    }
-    return restored > 0;
+    };
+
+    const matching = all.filter((key): key is string => typeof key === 'string' && key.startsWith(prefix));
+    await Promise.all(matching.filter((key) => key !== trashedMeta).map(restore));
+    if (matching.includes(trashedMeta)) await restore(trashedMeta);
+    return matching.length > 0;
   },
 
   /** Drop trashed keys older than TRASH_TTL. Cheap: one key scan, no reads. */
   async purgeTrash(maxAgeMs: number = TRASH_TTL) {
     const all = await keys();
     const cutoff = Date.now() - maxAgeMs;
-    for (const key of all) {
-      if (typeof key !== 'string' || !key.startsWith(TRASH)) continue;
+    const expired = all.filter((key): key is string => {
+      if (typeof key !== 'string' || !key.startsWith(TRASH)) return false;
       const ts = Number(key.slice(TRASH.length).split(':')[0]);
-      if (Number.isFinite(ts) && ts < cutoff) await del(key);
-    }
+      return Number.isFinite(ts) && ts < cutoff;
+    });
+    await Promise.all(expired.map((key) => del(key)));
   },
 
   /** Irreversible erase, bypassing trash. Only for an explicit "delete
@@ -275,9 +313,14 @@ export const roomStore = {
   async destroyRoom(roomId: string) {
     const all = await keys();
     const prefix = `room:${roomId}:`;
-    for (const key of all) {
-      if (typeof key === 'string' && key.startsWith(prefix)) await del(key);
-    }
+    const metaKey = k(roomId, 'meta');
+    // Same ordering rule as clearRoom: retire the key that decides visibility
+    // before the payload it describes.
+    await del(metaKey);
+    const rest = all.filter(
+      (key): key is string => typeof key === 'string' && key.startsWith(prefix) && key !== metaKey,
+    );
+    await Promise.all(rest.map((key) => del(key)));
   },
 };
 

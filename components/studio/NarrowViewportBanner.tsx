@@ -20,6 +20,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { Modal } from '@/components/ui/Modal';
+import { useMediaQuery, useMediaQueryState } from '@/lib/use-media-query';
 
 /** Below this the studio cannot lay out at all. Chosen to sit under WCAG 1.4.10's
  *  320px reflow target plus chrome, and far under any browser-zoom viewport. */
@@ -28,39 +29,30 @@ const MIN_WIDTH = 400;
 const STACK_WIDTH = 1023;
 const DISMISS_KEY = 'danmu-studio-gate-dismissed';
 
-/** True when the studio should stack its rails under the canvas rather than sit
- *  in three fixed columns. Exported from here so the reflow threshold and the
- *  gate's thresholds can never drift apart. */
-export function useStackedStudio(): boolean {
-  const [stacked, setStacked] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia(`(max-width: ${STACK_WIDTH}px)`);
-    const update = () => setStacked(mq.matches);
-    update();
-    mq.addEventListener('change', update);
-    return () => mq.removeEventListener('change', update);
-  }, []);
-  return stacked;
+/** Whether the studio should stack its rails under the canvas rather than sit in
+ *  three fixed columns. Exported from here so the reflow threshold and the gate's
+ *  thresholds can never drift apart.
+ *
+ *  Returns `ready` as well as `stacked`, because this decides a whole layout AND
+ *  the DOM order of three children. Reporting `false` on the first render meant a
+ *  narrow viewport painted the 260px / 1fr / 320px shell and then re-ordered and
+ *  re-flowed to the stacked one — a layout shift on exactly the devices least able
+ *  to absorb it. Callers hold their shell back until this is true. */
+export function useStackedStudio(): { stacked: boolean; ready: boolean } {
+  const { matches, ready } = useMediaQueryState(`(max-width: ${STACK_WIDTH}px)`);
+  return { stacked: matches, ready };
 }
 
 export function NarrowViewportBanner() {
-  const [reason, setReason] = useState<'touch' | 'narrow' | null>(null);
+  const touch = useMediaQuery('(hover: none) and (pointer: coarse)');
+  const narrow = useMediaQuery(`(max-width: ${MIN_WIDTH - 1}px)`);
+  const reason: 'touch' | 'narrow' | null = touch ? 'touch' : narrow ? 'narrow' : null;
   // Start dismissed so a previously-dismissed gate never flashes before
   // localStorage has been read.
   const [dismissed, setDismissed] = useState(true);
 
   useEffect(() => {
     setDismissed(localStorage.getItem(DISMISS_KEY) === '1');
-    const touch = window.matchMedia('(hover: none) and (pointer: coarse)');
-    const narrow = window.matchMedia(`(max-width: ${MIN_WIDTH - 1}px)`);
-    const update = () => setReason(touch.matches ? 'touch' : narrow.matches ? 'narrow' : null);
-    update();
-    touch.addEventListener('change', update);
-    narrow.addEventListener('change', update);
-    return () => {
-      touch.removeEventListener('change', update);
-      narrow.removeEventListener('change', update);
-    };
   }, []);
 
   if (!reason || dismissed) return null;

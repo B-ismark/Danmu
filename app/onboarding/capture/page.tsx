@@ -5,8 +5,17 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useRoom } from '@/lib/store';
 import { roomStore, blobToObjectUrl } from '@/lib/storage';
-import { CAPTURE_METHOD, CAPTURE_SLOTS, snapToBlob, startCamera } from '@/lib/capture';
+import {
+  ACCEPTED_PHOTO_TYPES,
+  CAPTURE_METHOD,
+  CAPTURE_SLOTS,
+  isAcceptedPhoto,
+  normalizePhoto,
+  snapToBlob,
+  startCamera,
+} from '@/lib/capture';
 import { scoreQuality, flagHelp, flagLabel, flagTone, type Quality } from '@/lib/image-quality';
+import { useMediaQuery } from '@/lib/use-media-query';
 import { Icon } from '@/components/ui/Icon';
 import { DanmuMark, Pill, Segmented } from '@/components/ui/primitives';
 import type { CaptureSlot } from '@/lib/storage';
@@ -22,23 +31,14 @@ function emptyMap<T>(): Record<CaptureSlot, T | null> {
 
 /** Capture is the one step people really do on a phone, and the layout genuinely
  *  differs there (camera full-bleed, slots as a filmstrip) rather than just
- *  reflowing — so it needs a JS breakpoint, not only the CSS one. */
-function useNarrow() {
-  const [narrow, setNarrow] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 720px)');
-    const update = () => setNarrow(mq.matches);
-    update();
-    mq.addEventListener('change', update);
-    return () => mq.removeEventListener('change', update);
-  }, []);
-  return narrow;
-}
+ *  reflowing — so it needs a JS breakpoint, not only the CSS one. The shared hook
+ *  replaced a third hand-rolled copy of the same matchMedia body. */
+const NARROW = '(max-width: 720px)';
 
 export default function CapturePage() {
   const router = useRouter();
   const roomId = useRoom((s) => s.roomId);
-  const narrow = useNarrow();
+  const narrow = useMediaQuery(NARROW);
   const [source, setSource] = useState<Source>('upload');
   /** which wall the camera shoots into. Selected from the camera panel itself —
    *  it used to depend on clicking a card in the grid, which no keyboard user
@@ -93,6 +93,8 @@ export default function CapturePage() {
     };
   }, [roomId]);
 
+  /** `blob` is stored as given — callers normalise first (see addFiles / shoot),
+   *  so nothing full-resolution reaches IndexedDB or the detection request. */
   async function persistBlob(slot: CaptureSlot, blob: Blob) {
     if (!roomId) return;
     await roomStore.saveCapture(roomId, { slot, blob, takenAt: Date.now() });
@@ -108,9 +110,16 @@ export default function CapturePage() {
    *  the old handler took files[0] and silently threw the rest away. Extras fill
    *  the following empty walls in shooting order. */
   async function addFiles(startSlot: CaptureSlot, list: FileList | File[] | null) {
-    const files = Array.from(list ?? []).filter((f) => f.type.startsWith('image/'));
+    const picked = Array.from(list ?? []);
+    // An explicit raster allowlist, not `image/*` — that also matched SVG, which
+    // has no pixels for the quality score or the colour sampler to read.
+    const files = picked.filter(isAcceptedPhoto);
     if (!files.length) {
-      setAnnounce('That file is not an image. Choose a photo — JPEG, PNG or HEIC.');
+      setAnnounce(
+        picked.length
+          ? 'Danmu can’t read that kind of file. Choose a photo — JPEG, PNG, WebP or HEIC.'
+          : 'That file is not an image. Choose a photo — JPEG, PNG, WebP or HEIC.',
+      );
       return;
     }
     const start = SLOT_IDS.indexOf(startSlot);
@@ -118,7 +127,10 @@ export default function CapturePage() {
       (id) => !previewsRef.current[id],
     );
     const targets = [startSlot, ...followers].slice(0, files.length);
-    for (let i = 0; i < targets.length; i++) await persistBlob(targets[i], files[i]);
+    // Decode + re-encode all of them at once; each was a full serialised decode
+    // before, so four photos meant four round trips of nothing happening.
+    const prepared = await Promise.all(targets.map((_, i) => normalizePhoto(files[i])));
+    for (let i = 0; i < targets.length; i++) await persistBlob(targets[i], prepared[i]);
     const spare = files.length - targets.length;
     setAnnounce(
       `${targets.length} photo${targets.length > 1 ? 's' : ''} added: ${targets.map(labelOf).join(', ')}.` +
@@ -536,7 +548,9 @@ function SlotCard({
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        // The same allowlist addFiles enforces, so the file dialog and the app
+        // agree about what counts as a photo.
+        accept={ACCEPTED_PHOTO_TYPES.join(',')}
         multiple
         className="sr-only"
         aria-label={`Choose photos for ${slot.label}`}

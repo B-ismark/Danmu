@@ -46,6 +46,57 @@ function inflate(b: OBB, by: number): OBB {
   return { ...b, hw: Math.max(0.001, b.hw + by), hd: Math.max(0.001, b.hd + by) };
 }
 
+/** Area of the two OBBs' intersection, in m².
+ *
+ *  `obbOverlap` answers "do these touch at all", which is not enough to tell a
+ *  3 cm clip from one piece standing inside another — and both of those need
+ *  different words from the app. This gives the amount, so a caller can require
+ *  a share of a footprint before it calls anything a collision.
+ *
+ *  Sutherland–Hodgman: clip a's rectangle against each of b's four edge
+ *  half-planes, then take the shoelace area of what survives. Exact for two
+ *  convex quads, and no sampling resolution to get wrong. */
+export function obbIntersectionArea(a: OBB, b: OBB): number {
+  let poly = obbCorners(a);
+  const clip = obbCorners(b);
+  for (let i = 0; i < 4 && poly.length > 0; i++) {
+    const [ex, ez] = clip[i];
+    const [fx, fz] = clip[(i + 1) % 4];
+    // Corners are counter-clockwise, so "inside" is to the left of each edge.
+    const side = (p: Vec2) => (fx - ex) * (p[1] - ez) - (fz - ez) * (p[0] - ex);
+    const next: Vec2[] = [];
+    for (let j = 0; j < poly.length; j++) {
+      const cur = poly[j];
+      const prev = poly[(j + poly.length - 1) % poly.length];
+      const dCur = side(cur);
+      const dPrev = side(prev);
+      if (dCur >= 0) {
+        // Entering: add the crossing point before the vertex itself.
+        if (dPrev < 0) next.push(lerpAt(prev, cur, dPrev, dCur));
+        next.push(cur);
+      } else if (dPrev >= 0) {
+        next.push(lerpAt(prev, cur, dPrev, dCur));
+      }
+    }
+    poly = next;
+  }
+  if (poly.length < 3) return 0;
+  let twice = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const [x1, z1] = poly[i];
+    const [x2, z2] = poly[(i + 1) % poly.length];
+    twice += x1 * z2 - x2 * z1;
+  }
+  return Math.abs(twice) / 2;
+}
+
+/** Where the segment prev→cur crosses the clip edge, from the two signed
+ *  distances. */
+function lerpAt(prev: Vec2, cur: Vec2, dPrev: number, dCur: number): Vec2 {
+  const t = dPrev / (dPrev - dCur);
+  return [prev[0] + (cur[0] - prev[0]) * t, prev[1] + (cur[1] - prev[1]) * t];
+}
+
 /** True if any edge normal of `a` separates the two corner sets. */
 function hasSeparatingAxis(a: Vec2[], b: Vec2[]): boolean {
   for (let i = 0; i < 4; i++) {
@@ -192,9 +243,60 @@ export function pointInPoly(x: number, z: number, poly: Poly): boolean {
   return inside;
 }
 
+/** Distance from (x,z) along unit direction (dx,dz) to the first entry into `b`,
+ *  or Infinity if the ray never enters it. Analytic slab test in the OBB's own
+ *  frame — exact, and constant-time. */
+export function rayToObb(x: number, z: number, dx: number, dz: number, b: OBB): number {
+  // World → OBB local (rotate by -rot about the centre).
+  const c = Math.cos(-b.rot);
+  const s = Math.sin(-b.rot);
+  const px = x - b.cx;
+  const pz = z - b.cz;
+  const ox = px * c - pz * s;
+  const oz = px * s + pz * c;
+  const rx = dx * c - dz * s;
+  const rz = dx * s + dz * c;
+
+  let tMin = -Infinity;
+  let tMax = Infinity;
+  // X slab, then Z slab.
+  for (const [o, r, half] of [
+    [ox, rx, b.hw],
+    [oz, rz, b.hd],
+  ] as const) {
+    if (Math.abs(r) < 1e-9) {
+      // Parallel to this slab: a miss unless the origin is already inside it.
+      if (Math.abs(o) > half) return Infinity;
+      continue;
+    }
+    const t1 = (-half - o) / r;
+    const t2 = (half - o) / r;
+    tMin = Math.max(tMin, Math.min(t1, t2));
+    tMax = Math.min(tMax, Math.max(t1, t2));
+    if (tMin > tMax) return Infinity;
+  }
+  if (tMax < 0) return Infinity;
+  return Math.max(0, tMin);
+}
+
+/** How many probes are cast across the width of a face. Must be odd and ≥ 3, so
+ *  one lands on the centre and the outermost pair sit just inside the corners. */
+const FACE_PROBES = 5;
+const PROBE_SPAN = FACE_PROBES - 1;
+
 /** Clearance from one face of an OBB to the nearest obstacle or wall, measured
  *  along the face's outward normal. `face` is in LOCAL space: '+z' is the
- *  part's front. Used for "can this wardrobe door open" checks. */
+ *  part's front. Used for "can this wardrobe door open" checks.
+ *
+ *  Probes ACROSS THE WHOLE FACE, not just its centre. A single centre ray missed
+ *  anything sitting off to one side — a chair tucked against the left third of a
+ *  2 m wardrobe front, or a bookshelf at the head end of a bed — and reported the
+ *  face fully clear. This module is the one the product describes as
+ *  "reproducible math you can plan a real room around", so a silent false
+ *  negative here is the worst kind of wrong.
+ *
+ *  Each probe is an exact ray/OBB intersection rather than a sampled march, so
+ *  the answer no longer depends on a step size either. */
 export function faceClearance(
   self: OBB,
   face: '+x' | '-x' | '+z' | '-z',
@@ -204,30 +306,31 @@ export function faceClearance(
 ): number {
   const c = Math.cos(self.rot);
   const s = Math.sin(self.rot);
-  let dx: number, dz: number, half: number;
+  // Outward normal of the face, the half-extent along it, and the in-face
+  // tangent + half-width to spread the probes along.
+  let dx: number, dz: number, half: number, tx: number, tz: number, halfAcross: number;
   switch (face) {
-    case '+x': dx = c; dz = s; half = self.hw; break;
-    case '-x': dx = -c; dz = -s; half = self.hw; break;
-    case '+z': dx = -s; dz = c; half = self.hd; break;
-    case '-z': dx = s; dz = -c; half = self.hd; break;
+    case '+x': dx = c; dz = s; half = self.hw; tx = -s; tz = c; halfAcross = self.hd; break;
+    case '-x': dx = -c; dz = -s; half = self.hw; tx = -s; tz = c; halfAcross = self.hd; break;
+    case '+z': dx = -s; dz = c; half = self.hd; tx = c; tz = s; halfAcross = self.hw; break;
+    case '-z': dx = s; dz = -c; half = self.hd; tx = c; tz = s; halfAcross = self.hw; break;
   }
-  // Start just outside the face centre.
-  const sx = self.cx + dx * (half + 0.001);
-  const sz = self.cz + dz * (half + 0.001);
-  let best = Math.min(maxRange, rayToBoundary(sx, sz, dx, dz, room));
-  // March a thin probe box outward and find the first obstacle hit (sampled —
-  // resolution 2cm is far below any clearance threshold we report on).
-  for (const o of obstacles) {
-    if (o === self) continue;
-    // Cheap reject: too far to matter.
-    const centreDist = Math.hypot(o.cx - sx, o.cz - sz);
-    if (centreDist - Math.hypot(o.hw, o.hd) > best) continue;
-    for (let t = 0.02; t < best; t += 0.02) {
-      if (pointInObb(sx + dx * t, sz + dz * t, o)) {
-        best = t;
-        break;
-      }
+
+  let best = maxRange;
+  // Inset the outermost probes slightly so a neighbour flush against the SIDE of
+  // this part isn't counted as blocking its front.
+  const spread = Math.max(0, halfAcross - 0.02);
+  for (let i = 0; i < FACE_PROBES; i++) {
+    const u = (i / PROBE_SPAN) * 2 - 1; // -1 … +1 across the face
+    const ax = self.cx + dx * (half + 0.001) + tx * u * spread;
+    const az = self.cz + dz * (half + 0.001) + tz * u * spread;
+    let hit = Math.min(best, rayToBoundary(ax, az, dx, dz, room));
+    for (const o of obstacles) {
+      if (o === self) continue;
+      const t = rayToObb(ax, az, dx, dz, o);
+      if (t < hit) hit = t;
     }
+    if (hit < best) best = hit;
   }
   return best;
 }

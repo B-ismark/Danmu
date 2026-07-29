@@ -49,7 +49,7 @@ export function LibraryPicker({ onPick }: { onPick: (item: LibraryItem) => void 
               style={{
                 position: 'sticky',
                 top: 0,
-                zIndex: 1,
+                zIndex: 'var(--z-sticky-local)',
                 fontSize: 10,
                 padding: '2px 0 6px',
                 background: 'var(--paper)',

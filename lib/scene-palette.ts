@@ -14,6 +14,8 @@
 // -room recolour presets). It is already centralised and owns different values
 // on purpose — do not merge the two.
 
+import type { Category, Shape } from './scene-spec';
+
 export const SCENE = {
   /** selection highlight — matches --accent */
   accent: '#E2613A',
@@ -34,24 +36,138 @@ export const SCENE = {
   ceiling: '#F5F1E8',
 } as const;
 
-/** Default colour for a piece of furniture that has never been recoloured,
- *  keyed by its scene-spec category. Was duplicated as bare hex in DynamicPart
- *  (twice) and again in the Inspector's swatch fallback. */
-const CATEGORY_COLORS: Record<string, string> = {
-  seating: '#B8907A',
-  table: '#C9A98E',
-  storage: '#C9A98E',
-  bed: '#CBB59C',
-  soft: '#D6C7B4',
-  lighting: '#E0D6C4',
-  appliance: '#D9D5CC',
-  screen: '#3A3530',
-  decor: '#C4B49C',
-  plant: '#6F8F6A',
-  rug: '#C2A88C',
-  wall: SCENE.wall,
+// ─── Exported-artifact palette ──────────────────────────────────────────────
+// lib/plan-export.ts draws to a <canvas>, which cannot read a custom property
+// either — so it reads these rather than carrying its own hex set. It used to
+// carry sixteen literals including #3E8FD8, the cold CAD blue this file records
+// as deliberately removed from the brand.
+export const PLAN = {
+  /** page — matches --paper */
+  paper: '#FBF8F2',
+  /** the floor inside the footprint */
+  floor: '#FFFFFF',
+  /** titles, wall stroke, badge numerals — matches --ink */
+  ink: '#2A2520',
+  /** secondary type (scale bar, dimension labels) — matches --ink-2 */
+  ink2: '#5A5147',
+  /** dimension lines + ticks — matches --hairline-strong, flattened to opaque */
+  rule: '#A9A296',
+  /** furniture outline */
+  outline: '#3A3A36',
+  /** furniture fill when the piece has no colour of its own, and the legend
+   *  index — terracotta, matching --accent, NOT the retired CAD blue. */
+  accent: SCENE.accent,
+} as const;
+
+// ─── Default body colour ────────────────────────────────────────────────────
+// The albedo a part renders with when the user has not recoloured it. Keyed by
+// SHAPE first (a dining chair and an office chair are both `chair` but do not
+// look alike), with a per-CATEGORY fallback for the generic primitives.
+//
+// This has to be the SAME table the renderer uses, because the Inspector shows
+// it as a swatch labelled "Default for this piece". It previously was not: the
+// lookup was keyed on material-group names ('seating', 'soft', 'screen'…) while
+// every caller passed a Category ('sofa', 'tv', 'chair'…), so eighteen of the
+// twenty-two categories fell through to one tan default and the swatch showed a
+// colour the furniture was not. The parameter was typed `string`, so nothing
+// caught it. Both maps below are exhaustive `Record`s over their union — adding
+// a shape or a category now fails the build until it has a colour.
+
+const BY_SHAPE: Record<Shape, string> = {
+  // seating
+  sofa: '#C9A98E',
+  'chair-dining': '#5D3820',
+  'chair-office': '#3A3A3A',
+  'chair-armchair': '#E8C7AE',
+  ottoman: '#A88A6E',
+  // beds
+  'bed-single': '#6F4F35',
+  'bed-double': '#6F4F35',
+  // tables / desks
+  'desk-standard': '#5D3820',
+  'desk-l': '#5D3820',
+  'coffee-table': '#5D3820',
+  'side-table': '#9A7848',
+  nightstand: '#5D3820',
+  // storage
+  wardrobe: '#E8B833',
+  closet: '#E8B833',
+  bookshelf: '#9A7848',
+  'shoe-rack': '#8A6A45',
+  // lighting
+  'lamp-floor': '#E8E0CB',
+  'lamp-table': '#E8E0CB',
+  'lamp-pendant': '#E8B833',
+  // wall-hung
+  mirror: '#5D3820',
+  'mirror-oval': '#5D3820',
+  painting: '#A88A6E',
+  'ac-unit': '#F2F1EB',
+  window: '#F4F1EA',
+  door: '#5D3820',
+  curtain: '#D4CDB8',
+  // screens
+  tv: '#0D0D0F',
+  monitor: '#1E1E22',
+  laptop: '#3A3D42',
+  // soft goods / greenery
+  rug: '#C8A88A',
+  plant: '#B07555',
+  // appliances
+  fridge: '#E8E5DB',
+  fan: '#C9A98E',
+  soundbar: '#2B2B2E',
+  radiator: '#ECEAE3',
+  'air-purifier': '#EDEDEA',
+  'washing-machine': '#EFEFEC',
+  microwave: '#3A3A3D',
+  'water-dispenser': '#EDEDEA',
+  // generic primitives — resolved by category instead (see defaultBodyColor)
+  box: '#C9A98E',
+  cylinder: '#C9A98E',
+  plane: '#C9A98E',
 };
 
-export function categoryColor(category: string): string {
-  return CATEGORY_COLORS[category] ?? '#C9A98E';
+/** Generic primitives ('box' / 'cylinder' / 'plane') carry no look of their own,
+ *  so they take the colour of their category's canonical shape — a low-confidence
+ *  detection labelled "bed" reads as a bed rather than as anonymous tan. */
+const BY_CATEGORY: Record<Category, string> = {
+  sofa: BY_SHAPE.sofa,
+  tv: BY_SHAPE.tv,
+  chair: BY_SHAPE['chair-dining'],
+  table: BY_SHAPE['coffee-table'],
+  desk: BY_SHAPE['desk-standard'],
+  lamp: BY_SHAPE['lamp-floor'],
+  plant: BY_SHAPE.plant,
+  shelf: BY_SHAPE.bookshelf,
+  rug: BY_SHAPE.rug,
+  bed: BY_SHAPE['bed-single'],
+  monitor: BY_SHAPE.monitor,
+  fan: BY_SHAPE.fan,
+  fridge: BY_SHAPE.fridge,
+  wardrobe: BY_SHAPE.wardrobe,
+  curtain: BY_SHAPE.curtain,
+  mirror: BY_SHAPE.mirror,
+  painting: BY_SHAPE.painting,
+  nightstand: BY_SHAPE.nightstand,
+  ottoman: BY_SHAPE.ottoman,
+  ac: BY_SHAPE['ac-unit'],
+  door: BY_SHAPE.door,
+  other: '#C9A98E',
+};
+
+const GENERIC = new Set<Shape>(['box', 'cylinder', 'plane']);
+
+/** The albedo this part renders with when it has no `color` of its own. Both
+ *  arguments are required — the shape is what actually decides the look, and
+ *  passing the category alone is the bug this signature exists to prevent. */
+export function defaultBodyColor(category: Category, shape: Shape): string {
+  if (GENERIC.has(shape)) return BY_CATEGORY[category] ?? BY_SHAPE[shape];
+  return BY_SHAPE[shape] ?? BY_CATEGORY[category] ?? BY_CATEGORY.other;
+}
+
+/** Default wall paint. Kept as its own export because a wall is not a part and
+ *  has no shape. */
+export function wallColor(): string {
+  return SCENE.wall;
 }

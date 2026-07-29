@@ -13,7 +13,7 @@ import { NumberField } from '@/components/ui/NumberField';
 import { EditableText, IconButton, Pill } from '@/components/ui/primitives';
 import { SwapModelModal } from './RegenerateModal';
 import { removeParts } from './KeyboardShortcuts';
-import { SCENE, categoryColor } from '@/lib/scene-palette';
+import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { isWallMountedPart, supportsDecor, autoSurfaceDecor, DECOR_KINDS, type LibraryItem, type ScenePart, type DecorItem, type DecorKind } from '@/lib/scene-spec';
 import { findSupportUnder, groundY, snapToWall as snapToWallPhys } from '@/lib/physics';
 import { wallSegments } from '@/lib/footprint';
@@ -149,7 +149,10 @@ export function Inspector() {
       <PaintPicker
         label="Colour"
         value={part.color}
-        fallback={categoryColor(part.category)}
+        // Shape AND category: the swatch has to be the exact colour the renderer
+        // falls back to, and within one category the shapes do not match (a
+        // dining chair is walnut, an office chair is charcoal).
+        fallback={defaultBodyColor(part.category, part.shape)}
         fallbackNote="Default for this piece"
         onChange={(c) => updatePart(id!, { color: c })}
         onReset={() => updatePart(id!, { color: undefined })}

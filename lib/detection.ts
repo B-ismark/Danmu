@@ -3,6 +3,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { useQuota } from './quota';
 import { footprintForLayout, type LayoutId } from './footprint';
+import { CATALOG_SHAPES_ORDERED } from './scene-spec';
 import type { CaptureSlot } from './storage';
 
 export type PromptRoom = { width: number; depth: number; height: number; layoutId?: LayoutId };
@@ -13,6 +14,10 @@ export type PromptRoom = { width: number; depth: number; height: number; layoutI
 // partially-visible objects.
 
 export type Detection = {
+  /** Stable key for this detection, minted on the detect screen and persisted as
+   *  `detectedObjects[].uid`. It becomes the ScenePart id, so a user's transforms
+   *  survive a re-detect. Absent until the detection is first saved. */
+  uid?: string;
   label: string;
   conf: number;
   /** [x, y, w, h] normalized 0..1 within the image of `slot` */
@@ -100,15 +105,7 @@ For each unique object return JSON with these fields:
 - yaw: rotation in radians around vertical axis. 0 = facing +Z (south). π = facing -Z (north). -π/2 = +X (east). +π/2 = -X (west). Most furniture faces room interior.
 - color: the object's DOMINANT colour as a #rrggbb hex (the main body/upholstery colour, ignoring small accents, highlights and shadows). Best-effort.
 - shape: pick ONE from our 3D catalog so we render a visually-faithful primitive. Never invent new ones. Catalog:
-  sofa, tv, wardrobe, rug, plant,
-  chair-dining, chair-office, chair-armchair, ottoman,
-  bed-single, bed-double,
-  desk-standard, desk-l, coffee-table, side-table, nightstand,
-  lamp-floor, lamp-table, lamp-pendant,
-  mirror, mirror-oval, painting, ac-unit,
-  monitor, laptop, fan, fridge, curtain,
-  bookshelf, door,
-  soundbar, radiator, air-purifier, washing-machine, microwave, water-dispenser,
+  ${CATALOG_SHAPES_ORDERED.join(', ')},
   box (LAST RESORT only — use a real shape whenever possible).
 
 CRITICAL RULES (REPEAT BEFORE OUTPUT):
@@ -122,13 +119,27 @@ Output ONLY a JSON array. No prose. No markdown. Maximum 25 items, sorted by vis
 
 export class DetectError extends Error {
   constructor(
-    public code: 'NO_KEY' | 'INVALID_KEY' | 'DAILY_QUOTA' | 'RATE_LIMIT' | 'UNKNOWN',
+    public code:
+      | 'NO_KEY'
+      | 'INVALID_KEY'
+      | 'DAILY_QUOTA'
+      | 'RATE_LIMIT'
+      | 'PHOTOS_TOO_BIG'
+      | 'BAD_RESPONSE'
+      | 'UNKNOWN',
     message: string,
     public detail?: unknown,
   ) {
     super(message);
   }
 }
+
+/** Ceiling on the inline request body. The endpoint refuses somewhere around
+ *  20 MB of total inline data; we stop short of it so the failure is ours and
+ *  nameable rather than an opaque transport error. Photos are downscaled on
+ *  ingest (lib/capture.ts), so hitting this means something unusual — a very
+ *  wide panorama, or captures saved before downscaling shipped. */
+const MAX_INLINE_BYTES = 16 * 1024 * 1024;
 
 function classifyDetect(e: unknown): DetectError {
   if (e instanceof DetectError) return e;
@@ -163,6 +174,20 @@ export async function detectAcrossImages(
   const ai = new GoogleGenAI({ apiKey });
   const prompt = buildPrompt(room);
 
+  // Base64 inflates by 4/3, so check the encoded size — the raw byte total was
+  // never the limit that mattered. Four untouched 12 MP phone photos are 12-20 MB
+  // raw and 16-27 MB encoded, which used to sail past this point and come back as
+  // a transport error the classifier could only call UNKNOWN. The detect screen
+  // then told the user "trying again often works", which it never did.
+  const rawBytes = images.reduce((n, img) => n + img.blob.size, 0);
+  if (Math.ceil((rawBytes / 3) * 4) > MAX_INLINE_BYTES) {
+    throw new DetectError(
+      'PHOTOS_TOO_BIG',
+      'These photos are too large to send in one request.',
+      { rawBytes },
+    );
+  }
+
   const labeled = await Promise.all(
     images.map(async (img) => {
       const data = await blobToBase64(img.blob);
@@ -196,35 +221,64 @@ export async function detectAcrossImages(
     throw classifyDetect(e);
   }
 
+  // A body we cannot parse is NOT an empty room. Returning [] here made the
+  // detect screen show its "All clear — nothing stood out in your photos, which
+  // is exactly right for an empty room" notice after a malformed response, having
+  // already spent the quota. Throw so the error path (which offers Retry) owns it.
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(text) as Detection[];
-    const valid = parsed.filter((d) => d.box && d.box.length === 4 && d.slot);
-    return dedupe(valid);
-  } catch {
-    return [];
+    parsed = JSON.parse(text);
+  } catch (e) {
+    throw new DetectError('BAD_RESPONSE', 'The detection service replied with something unreadable.', e);
   }
+  if (!Array.isArray(parsed)) {
+    throw new DetectError('BAD_RESPONSE', 'The detection service replied in an unexpected shape.', parsed);
+  }
+  const valid = (parsed as Detection[]).filter((d) => d.box && d.box.length === 4 && d.slot);
+  return dedupeDetections(valid);
 }
 
-/** Drop near-identical detections — same category + slot + bbox center within ~12% on each axis,
- *  OR same label across slots when alsoSeenIn is missing. Prevents the AI from listing
- *  the same physical object twice. */
-function dedupe(items: Detection[]): Detection[] {
+/** Two detections are the same physical object if their estimated 3D centres are
+ *  within this many metres of each other. Generous enough to catch one object
+ *  reported twice from two walls, tight enough that a pair of nightstands either
+ *  side of a bed (~1.5 m apart) stays two objects. */
+const SAME_OBJECT_M = 0.6;
+
+/** Drop near-identical detections. Two rules:
+ *
+ *  1. Same slot + same category + bbox centres within ~12% on each axis — one
+ *     object boxed twice in the same photo.
+ *  2. Same label + same category ACROSS slots, but only when their estimated 3D
+ *     positions agree — one object seen from two walls with `alsoSeenIn` omitted.
+ *
+ *  Rule 2 used to match on the label alone, with no positional test at all, so any
+ *  two objects the model named identically collapsed into one: four matching
+ *  dining chairs, a pair of bedside tables, two curtains on the same wall. On the
+ *  one path in the product that spends the user's quota, that quietly threw away
+ *  correct results. When either detection has no `position` there is nothing to
+ *  compare, and we keep both — a duplicate the user can delete beats a real piece
+ *  of furniture that never appears.
+ *
+ *  Exported for tests: this is pure logic that decides what the user gets from the
+ *  one call that spends their quota. */
+export function dedupeDetections(items: Detection[]): Detection[] {
   const out: Detection[] = [];
   for (const d of items) {
     const cx = d.box[0] + d.box[2] / 2;
     const cy = d.box[1] + d.box[3] / 2;
     const isDup = out.some((o) => {
-      // Same slot — bbox-centered overlap means same object
-      if (o.slot === d.slot && o.category === d.category) {
+      if (o.category !== d.category) return false;
+      // Same photo — overlapping bbox centres mean one object boxed twice.
+      if (o.slot === d.slot) {
         const ocx = o.box[0] + o.box[2] / 2;
         const ocy = o.box[1] + o.box[3] / 2;
         if (Math.abs(ocx - cx) < 0.12 && Math.abs(ocy - cy) < 0.12) return true;
       }
-      // Same label string (case-insensitive) anywhere — likely double-counted across walls
-      if (o.label.toLowerCase().trim() === d.label.toLowerCase().trim() && o.category === d.category) {
-        return true;
-      }
-      return false;
+      // Different photos — same name AND same place.
+      if (o.label.toLowerCase().trim() !== d.label.toLowerCase().trim()) return false;
+      if (!o.position || !d.position) return false;
+      const dist = Math.hypot(o.position.x - d.position.x, o.position.z - d.position.z);
+      return dist < SAME_OBJECT_M;
     });
     if (!isDup) out.push(d);
   }
