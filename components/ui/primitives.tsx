@@ -351,15 +351,25 @@ export function Segmented<T extends string>({
   onChange,
   ariaLabel,
   size = 30,
+  stretch = false,
 }: {
   options: { value: T; label?: string; icon?: IconName }[];
   value: T;
   onChange: (v: T) => void;
   ariaLabel?: string;
   size?: number;
+  /** fill the container and split it evenly between segments. For a set whose
+   *  labels are too wide to sit at their natural size in a narrow panel — even
+   *  thirds beat a track that overflows and clips its last segment. */
+  stretch?: boolean;
 }) {
   return (
-    <div className="toolbar" role="group" aria-label={ariaLabel}>
+    <div
+      className="toolbar"
+      role="group"
+      aria-label={ariaLabel}
+      style={stretch ? { display: 'flex', width: '100%' } : undefined}
+    >
       {options.map((o) => {
         const active = o.value === value;
         return (
@@ -372,12 +382,17 @@ export function Segmented<T extends string>({
             title={o.label ?? o.value}
             style={{
               height: size,
-              padding: o.label ? '0 12px' : 0,
+              padding: o.label ? (stretch ? '0 6px' : '0 12px') : 0,
               width: o.label ? 'auto' : size,
+              flex: stretch ? '1 1 0' : undefined,
+              minWidth: 0,
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: 6,
+              // An icon + label pair used to be one string with a space in it,
+              // which wrapped to a second line inside a 30px-tall segment.
+              whiteSpace: 'nowrap',
               border: 'none',
               background: active ? 'var(--accent-tint)' : 'transparent',
               color: active ? 'var(--accent-text)' : 'var(--ink-2)',

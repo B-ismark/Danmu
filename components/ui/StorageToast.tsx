@@ -20,6 +20,7 @@
 import { useEffect } from 'react';
 import { create } from 'zustand';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { IconButton } from './primitives';
 
 export type ToastTone = 'neutral' | 'danger' | 'success';
@@ -83,6 +84,12 @@ const TONE: Record<ToastTone, { border: string; lead: string }> = {
 export function StorageToast() {
   const items = useToasts((s) => s.items);
   const dismiss = useToasts((s) => s.dismiss);
+  // The studio parks a two-row control cluster in the bottom-right corner (view
+  // presets, room check, list, layouts). At the default offset a toast sat on top
+  // of it and, because the card takes pointer events, swallowed its clicks —
+  // which every delete now raises a toast over. Clear that row there.
+  const pathname = usePathname();
+  const bottom = pathname?.startsWith('/room/') ? 88 : 16;
 
   useEffect(() => {
     function onFull(e: Event) {
@@ -105,7 +112,7 @@ export function StorageToast() {
       role="status"
       style={{
         position: 'fixed',
-        bottom: 16,
+        bottom,
         left: 16,
         right: 16,
         zIndex: 'var(--z-toast)',
