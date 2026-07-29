@@ -10,6 +10,13 @@
 // — then the Hugging Face mirror. Only when neither answers does this module
 // report unavailable and the detect page fall back to Gemini / manual boxes.
 //
+// Expect PARTIAL results. Measured on a real 4-photo room, tiled nano recalls
+// 7 of 19 catalogued objects. Curtains, ceiling fans, fridges and wardrobes are
+// missed outright — their class heads peak around 0.002–0.03 on that imagery
+// versus 0.38–0.44 for what does fire, so no threshold recovers them. Treat
+// this as an opportunistic head start on manual boxes, not a substitute for
+// the Gemini pass.
+//
 // Licence note: YOLOv8 weights are AGPL-3.0, this project is MIT. AGPL is
 // copyleft, so "we're open source too" does not clear it. Exporting the model
 // for your own machine is not distribution and is fine. REDISTRIBUTING the
@@ -43,6 +50,9 @@ const INPUT = 640;
 const CONF_THRESHOLD = 0.35;
 const IOU_THRESHOLD = 0.45;
 const MAX_PER_IMAGE = 12;
+// Fraction of the image each 2×2 tile extends past its quadrant, so an object
+// sitting on a seam is still whole inside at least one tile.
+const TILE_OVERLAP = 0.15;
 
 // Open Images class name (lowercase) → our category. Classes not listed are
 // ignored — a 600-class detector sees a lot of irrelevant things.
@@ -162,53 +172,81 @@ async function load(): Promise<Loaded | null> {
   return loader;
 }
 
-/** Letterbox an image blob into a 640×640 RGB float tensor. Returns the
- *  transform needed to map detections back to normalized image coords. */
-async function preprocess(blob: Blob): Promise<{
-  data: Float32Array;
-  scale: number;
-  dw: number;
-  dh: number;
-  w: number;
-  h: number;
-} | null> {
+/** Decode a blob to a bitmap once — every tile pass reuses it. */
+async function decode(blob: Blob): Promise<HTMLImageElement | null> {
   const url = URL.createObjectURL(blob);
   try {
-    const img = await new Promise<HTMLImageElement>((res, rej) => {
+    return await new Promise<HTMLImageElement>((res, rej) => {
       const i = new Image();
       i.onload = () => res(i);
       i.onerror = rej;
       i.src = url;
     });
-    const w = img.naturalWidth;
-    const h = img.naturalHeight;
-    const scale = INPUT / Math.max(w, h);
-    const sw = Math.round(w * scale);
-    const sh = Math.round(h * scale);
-    const dw = Math.floor((INPUT - sw) / 2);
-    const dh = Math.floor((INPUT - sh) / 2);
-    const c = document.createElement('canvas');
-    c.width = INPUT;
-    c.height = INPUT;
-    const ctx = c.getContext('2d');
-    if (!ctx) return null;
-    ctx.fillStyle = '#727272'; // letterbox grey
-    ctx.fillRect(0, 0, INPUT, INPUT);
-    ctx.drawImage(img, dw, dh, sw, sh);
-    const px = ctx.getImageData(0, 0, INPUT, INPUT).data;
-    const data = new Float32Array(3 * INPUT * INPUT);
-    const area = INPUT * INPUT;
-    for (let i = 0; i < area; i++) {
-      data[i] = px[i * 4] / 255; // R plane
-      data[area + i] = px[i * 4 + 1] / 255; // G plane
-      data[2 * area + i] = px[i * 4 + 2] / 255; // B plane
-    }
-    return { data, scale, dw, dh, w, h };
   } catch {
     return null;
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+/** A crop of the source image, in source pixels. */
+type Crop = { ox: number; oy: number; cw: number; ch: number };
+
+/** Whole frame plus 2×2 tiles with 15% overlap.
+ *
+ *  Letterboxing a 2000px-wide wall photo down to 640 shrinks mid-sized objects
+ *  past what the nano model resolves. Re-running on tiles at closer to native
+ *  scale nearly doubles recall (4/19 → 7/19 on a real 4-photo room) for zero
+ *  extra download — the overlap keeps objects straddling a seam intact, and the
+ *  final NMS runs in whole-image space so seam duplicates collapse.
+ *
+ *  Measured alternative: bigger OIV7 variants do NOT help. s (46 MB), m
+ *  (105 MB) and x (275 MB) all land on the same 7/19 as tiled nano, so the
+ *  input resolution is the binding constraint, not model capacity. */
+function tilesFor(iw: number, ih: number): Crop[] {
+  const ox = iw * TILE_OVERLAP;
+  const oy = ih * TILE_OVERLAP;
+  const crops: Crop[] = [{ ox: 0, oy: 0, cw: iw, ch: ih }];
+  for (let r = 0; r < 2; r++) {
+    for (let c = 0; c < 2; c++) {
+      const x0 = Math.max(0, (c * iw) / 2 - ox);
+      const y0 = Math.max(0, (r * ih) / 2 - oy);
+      const x1 = Math.min(iw, ((c + 1) * iw) / 2 + ox);
+      const y1 = Math.min(ih, ((r + 1) * ih) / 2 + oy);
+      crops.push({ ox: x0, oy: y0, cw: x1 - x0, ch: y1 - y0 });
+    }
+  }
+  return crops;
+}
+
+/** Letterbox one crop into a 640×640 planar-RGB tensor, plus the transform
+ *  mapping detections back to normalized whole-image coords. */
+function toTensor(
+  img: HTMLImageElement,
+  crop: Crop,
+): { data: Float32Array; scale: number; dw: number; dh: number } | null {
+  const scale = INPUT / Math.max(crop.cw, crop.ch);
+  const sw = Math.round(crop.cw * scale);
+  const sh = Math.round(crop.ch * scale);
+  const dw = Math.floor((INPUT - sw) / 2);
+  const dh = Math.floor((INPUT - sh) / 2);
+  const c = document.createElement('canvas');
+  c.width = INPUT;
+  c.height = INPUT;
+  const ctx = c.getContext('2d');
+  if (!ctx) return null;
+  ctx.fillStyle = '#727272'; // letterbox grey
+  ctx.fillRect(0, 0, INPUT, INPUT);
+  ctx.drawImage(img, crop.ox, crop.oy, crop.cw, crop.ch, dw, dh, sw, sh);
+  const px = ctx.getImageData(0, 0, INPUT, INPUT).data;
+  const data = new Float32Array(3 * INPUT * INPUT);
+  const area = INPUT * INPUT;
+  for (let i = 0; i < area; i++) {
+    data[i] = px[i * 4] / 255; // R plane
+    data[area + i] = px[i * 4 + 1] / 255; // G plane
+    data[2 * area + i] = px[i * 4 + 2] / 255; // B plane
+  }
+  return { data, scale, dw, dh };
 }
 
 type RawBox = { x: number; y: number; w: number; h: number; conf: number; cls: number };
@@ -243,51 +281,68 @@ export async function detectLocalAcrossImages(
 
   const out: Detection[] = [];
   for (const img of images) {
-    const pre = await preprocess(img.blob);
-    if (!pre) continue;
-    const input = new ort.Tensor('float32', pre.data, [1, 3, INPUT, INPUT]);
-    const results = await session.run({ [session.inputNames[0]]: input });
-    const output = results[session.outputNames[0]];
-    // YOLOv8 head: [1, 4 + numClasses, anchors] — cx, cy, w, h, then scores.
-    const [, channels, anchors] = output.dims;
-    const nc = channels - 4;
-    const d = output.data as Float32Array;
-    const at = (ch: number, a: number) => d[ch * anchors + a];
+    const bitmap = await decode(img.blob);
+    if (!bitmap) continue;
+    const iw = bitmap.naturalWidth;
+    const ih = bitmap.naturalHeight;
 
-    const raw: RawBox[] = [];
-    for (let a = 0; a < anchors; a++) {
-      let best = 0;
-      let bestC = -1;
-      for (let cidx = 0; cidx < nc; cidx++) {
-        const s = at(4 + cidx, a);
-        if (s > best) {
-          best = s;
-          bestC = cidx;
+    // Collect across every pass in NORMALIZED whole-image space, so one NMS at
+    // the end resolves both per-tile duplicates and cross-tile seam duplicates.
+    const merged: RawBox[] = [];
+    for (const crop of tilesFor(iw, ih)) {
+      const pre = toTensor(bitmap, crop);
+      if (!pre) continue;
+      const input = new ort.Tensor('float32', pre.data, [1, 3, INPUT, INPUT]);
+      const results = await session.run({ [session.inputNames[0]]: input });
+      const output = results[session.outputNames[0]];
+      // YOLOv8 head: [1, 4 + numClasses, anchors] — cx, cy, w, h, then scores.
+      const [, channels, anchors] = output.dims;
+      const nc = channels - 4;
+      const d = output.data as Float32Array;
+      const at = (ch: number, a: number) => d[ch * anchors + a];
+
+      // letterboxed 640-space → crop pixels → normalized whole-image coords
+      const toX = (v: number) => (crop.ox + (v - pre.dw) / pre.scale) / iw;
+      const toY = (v: number) => (crop.oy + (v - pre.dh) / pre.scale) / ih;
+
+      for (let a = 0; a < anchors; a++) {
+        let best = 0;
+        let bestC = -1;
+        for (let cidx = 0; cidx < nc; cidx++) {
+          const s = at(4 + cidx, a);
+          if (s > best) {
+            best = s;
+            bestC = cidx;
+          }
         }
+        if (best < CONF_THRESHOLD || bestC < 0) continue;
+        const name = (names[String(bestC)] ?? '').toLowerCase();
+        if (!(name in NAME_TO_CATEGORY)) continue;
+        merged.push({
+          x: toX(at(0, a)),
+          y: toY(at(1, a)),
+          w: at(2, a) / pre.scale / iw,
+          h: at(3, a) / pre.scale / ih,
+          conf: best,
+          cls: bestC,
+        });
       }
-      if (best < CONF_THRESHOLD || bestC < 0) continue;
-      const name = (names[String(bestC)] ?? '').toLowerCase();
-      if (!(name in NAME_TO_CATEGORY)) continue;
-      raw.push({ x: at(0, a), y: at(1, a), w: at(2, a), h: at(3, a), conf: best, cls: bestC });
     }
 
-    for (const b of nms(raw)) {
+    for (const b of nms(merged)) {
       const name = (names[String(b.cls)] ?? '').toLowerCase();
       const category = NAME_TO_CATEGORY[name];
-      // letterboxed 640-space → normalized original-image coords
-      const nx = (b.x - b.w / 2 - pre.dw) / (pre.w * pre.scale);
-      const ny = (b.y - b.h / 2 - pre.dh) / (pre.h * pre.scale);
-      const nw = b.w / (pre.w * pre.scale);
-      const nh = b.h / (pre.h * pre.scale);
-      if (nw <= 0.01 || nh <= 0.01) continue;
+      const nx = b.x - b.w / 2;
+      const ny = b.y - b.h / 2;
+      if (b.w <= 0.01 || b.h <= 0.01) continue;
       out.push({
         label: names[String(b.cls)] ?? name,
         conf: Math.min(1, b.conf),
         box: [
           Math.max(0, Math.min(1, nx)),
           Math.max(0, Math.min(1, ny)),
-          Math.min(1, nw),
-          Math.min(1, nh),
+          Math.min(1, b.w),
+          Math.min(1, b.h),
         ],
         category,
         slot: img.slot,
