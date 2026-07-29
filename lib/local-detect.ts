@@ -57,6 +57,9 @@ const REMOTE_BASE = 'https://huggingface.co/DearthAI/danmu-detector/resolve/main
 const INPUT = 640;
 const CONF_THRESHOLD = 0.35;
 const IOU_THRESHOLD = 0.45;
+// Drop a same-category box this far inside a higher-confidence one, even when
+// IoU stays under the threshold.
+const CONTAINED_THRESHOLD = 0.8;
 const MAX_PER_IMAGE = 12;
 // Fraction of the image each 2×2 tile extends past its quadrant, so an object
 // sitting on a seam is still whole inside at least one tile.
@@ -361,28 +364,68 @@ type RawBox = {
   shape?: Shape;
 };
 
-function iou(a: RawBox, b: RawBox): number {
+function overlap(a: RawBox, b: RawBox): number {
   const x1 = Math.max(a.x - a.w / 2, b.x - b.w / 2);
   const y1 = Math.max(a.y - a.h / 2, b.y - b.h / 2);
   const x2 = Math.min(a.x + a.w / 2, b.x + b.w / 2);
   const y2 = Math.min(a.y + a.h / 2, b.y + b.h / 2);
-  const inter = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+  return Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+}
+
+function iou(a: RawBox, b: RawBox): number {
+  const inter = overlap(a, b);
   return inter / (a.w * a.h + b.w * b.h - inter + 1e-9);
+}
+
+/** How much of `a` sits inside `b`. IoU alone leaves a small box nested in a
+ *  much larger one untouched — a tall crop of a monitor inside the whole
+ *  monitor scores well under the IoU threshold — which surfaces as duplicate
+ *  boxes stacked on one object. */
+function containedIn(a: RawBox, b: RawBox): number {
+  return overlap(a, b) / (a.w * a.h + 1e-9);
 }
 
 function nms(boxes: RawBox[]): RawBox[] {
   const sorted = [...boxes].sort((a, b) => b.conf - a.conf);
   const keep: RawBox[] = [];
   for (const b of sorted) {
-    if (keep.every((k) => iou(k, b) < IOU_THRESHOLD)) keep.push(b);
+    const dup = keep.some(
+      (k) =>
+        iou(k, b) >= IOU_THRESHOLD ||
+        // Mostly swallowed by an already-kept box of the same kind. Measured:
+        // trims duplicate stacked boxes with no loss of recall.
+        (k.category === b.category && containedIn(b, k) >= CONTAINED_THRESHOLD),
+    );
+    if (!dup) keep.push(b);
     if (keep.length >= MAX_PER_IMAGE) break;
   }
   return keep;
 }
 
+// An InferenceSession rejects overlapping run() calls with "Session already
+// started", and load() hands every caller the same two sessions. Two concurrent
+// detections therefore poison each other — which React StrictMode causes on
+// every mount in dev, and a re-detect tap or a remount causes in production.
+// The detect page catches the throw and falls through to Gemini, so the symptom
+// is silent: local detection just appears not to work, and burns quota instead.
+// Queue the passes so overlapping callers wait rather than collide.
+let inflight: Promise<unknown> = Promise.resolve();
+function serialized<T>(fn: () => Promise<T>): Promise<T> {
+  const next = inflight.then(fn, fn);
+  inflight = next.catch(() => undefined);
+  return next;
+}
+
 /** Run the local detector over the 4 wall photos. Returns null when the model
- *  isn't deployed or fails to load — callers fall back to Gemini / manual. */
-export async function detectLocalAcrossImages(
+ *  isn't deployed or fails to load — callers fall back to Gemini / manual.
+ *  Concurrent calls are queued, not run in parallel. */
+export function detectLocalAcrossImages(
+  images: Array<{ slot: CaptureSlot; blob: Blob }>,
+): Promise<Detection[] | null> {
+  return serialized(() => runDetection(images));
+}
+
+async function runDetection(
   images: Array<{ slot: CaptureSlot; blob: Blob }>,
 ): Promise<Detection[] | null> {
   const loaded = await load();
