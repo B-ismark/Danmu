@@ -16,7 +16,13 @@ every current feature, architecture, geometry engine, and roadmap).
 - **Three.js** + **@react-three/fiber** + **drei** + **postprocessing** — declarative 3D
 - **Zustand** (client state)
 - **idb-keyval** for rooms, **localStorage** for settings + API key
-- **onnxruntime-web** — local, in-browser YOLOv8 furniture detector (no key)
+- **onnxruntime-web** — local, in-browser YOLOv8 furniture detector (no key).
+  CDN-loaded at runtime, so it is a devDependency (types only). The ~13 MB model
+  is not in the repo: it is fetched from
+  [DearthAI/danmu-detector](https://huggingface.co/DearthAI/danmu-detector), or
+  built locally with `python scripts/export-detector.py`. Those weights are
+  AGPL-3.0 (Ultralytics) and hosted separately for that reason — Danmu itself
+  stays MIT.
 - Optional cloud detection (BYO key, browser → provider direct): **@google/genai**
   (Gemini). Detection-only — there is no image generation.
 

@@ -1,7 +1,17 @@
 # Export the local furniture detector for in-browser use.
 #
-#   pip install ultralytics
-#   python scripts/export-detector.py
+# Only needed to rebuild the model — when public/models/ is empty the app falls
+# back to https://huggingface.co/DearthAI/danmu-detector, so a plain clone does
+# not need any of this. Keep the toolchain in a throwaway venv; CPU-only torch
+# is ~200 MB instead of ~2.5 GB, and export needs no GPU:
+#
+#   python -m venv .venv-export
+#   .venv-export/Scripts/pip install --index-url https://download.pytorch.org/whl/cpu torch
+#   .venv-export/Scripts/pip install ultralytics onnx onnxslim
+#   .venv-export/Scripts/python scripts/export-detector.py
+#   rm -rf .venv-export
+#
+# (Windows paths above; on macOS / Linux use .venv-export/bin/ instead.)
 #
 # Produces:
 #   public/models/yolov8n-oiv7.onnx        (~13 MB, opset 12, 640x640)
