@@ -10,6 +10,7 @@ import { CAPTURE_SLOTS } from '@/lib/capture';
 import { Icon } from '@/components/ui/Icon';
 import { DanmuMark, EditableText, IconButton, StepHeader } from '@/components/ui/primitives';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
+import { Select } from '@/components/ui/Select';
 import { PhotoEditor } from '@/components/studio/PhotoEditor';
 import { sampleBoxColor } from '@/lib/color-sample';
 import { localDetectorAvailable, detectLocalAcrossImages } from '@/lib/local-detect';
@@ -758,18 +759,15 @@ export default function DetectPage() {
                 <>
                   <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--ink-2)' }}>
                     What is it?
-                    <select
-                      className="field"
+                    <Select
                       value={manualCat}
-                      onChange={(e) => setManualCat(e.target.value as Detection['category'])}
-                      style={{ width: 'auto', height: 34 }}
-                    >
-                      {MANUAL_CATEGORIES.map((c) => (
-                        <option key={c.value} value={c.value}>
-                          {c.label}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(v) => setManualCat(v as Detection['category'])}
+                      options={MANUAL_CATEGORIES.map((c) => ({ value: c.value, label: c.label }))}
+                      ariaLabel="What is it?"
+                      width={176}
+                      height={34}
+                      fontSize={12.5}
+                    />
                   </label>
                   {pending ? (
                     <>

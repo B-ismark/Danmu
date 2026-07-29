@@ -291,7 +291,36 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
   outline: none; transition: border-color .12s, box-shadow .12s;
 }
 .field:focus { border-color: var(--accent-text); box-shadow: 0 0 0 4px var(--accent-tint); }
+/* The combobox trigger in Select is a button, so it focuses on click too — give
+   it the same ring the text fields get from :focus. */
+.field:focus-visible { border-color: var(--accent-text); box-shadow: 0 0 0 4px var(--accent-tint); }
 .field::placeholder { color: var(--ink-3); }
+
+/* Native number spinners are drawn by the platform: grey chrome-blue arrows that
+   appear on hover, in a set of fields that are otherwise ours. Both editors that
+   use them (Inspector's exact size, RoomDimsEditor) are typed fields with the
+   valid range printed underneath, and Up/Down still step the value. */
+input[type='number'] { appearance: textfield; -moz-appearance: textfield; }
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* The one native widget left in a textarea is the resize grip; keep the drag but
+   let the corner read as ours. */
+textarea.field { border-radius: var(--r-2); }
+
+/* Scrollbars. The default is an OS widget — grey, square, and (on Windows) 17px
+   of chrome inside every panel. Thin + tokenised keeps long lists, the part rail
+   and the Select popup looking like one product. Firefox takes the standard
+   properties; WebKit/Blink need the pseudo-elements. */
+* { scrollbar-width: thin; scrollbar-color: var(--hairline-strong) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--hairline-strong); border-radius: 999px;
+  border: 3px solid transparent; background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--ink-3); background-clip: content-box; }
+::-webkit-scrollbar-corner { background: transparent; }
 
 .list { padding: 6px; display: flex; flex-direction: column; gap: 2px; overflow: auto; flex: 1; }
 .list-row {
