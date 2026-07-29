@@ -245,28 +245,49 @@ export function Room() {
 //
 // drei's ContactShadows defaults to frames={Infinity} — it re-renders the whole
 // scene into a 1024² depth target and runs two (or with `smooth`, four) blur
-// passes EVERY frame, whether or not anything moved. It also resets its internal
-// frame counter on every React render, which is the lever we use: this wrapper
-// subscribes to the things that change where a shadow should fall (the parts
-// list and the live transform maps), so a commit re-renders it and it re-bakes
-// exactly once.
+// passes EVERY frame, whether or not anything moved. Its internal frame counter
+// resets on every React render, so this wrapper subscribes to everything that
+// changes where a shadow should fall and a commit re-opens the pass.
 //
-// While a drag is in flight the mesh moves imperatively, outside React, so
-// nothing would re-render and the shadow would stay behind under the old spot —
-// hence frames={Infinity} for the duration of the drag only. Subscribing to a
-// boolean rather than the drag-live channel keeps that to two re-renders per
-// drag instead of one per tick.
+// It re-bakes over a short WINDOW rather than for a single frame. `frames={1}`
+// spends its one allowed bake on the first frame that runs after the re-render,
+// and that frame is not reliably the one where the edit is on screen — deleting
+// a piece baked its shadow one last time and then froze, leaving furniture
+// shadows on an empty floor until some unrelated re-render (a Decor or Quality
+// toggle) happened to open the pass again. Holding it open for ~300ms and
+// keeping frames flowing means the last bake in the window is the true one.
+//
+// A drag is the same problem for a different reason: the mesh moves imperatively,
+// outside React, so nothing re-renders and the shadow would stay under the old
+// spot. Subscribing to a boolean rather than the drag-live channel keeps that to
+// two re-renders per drag instead of one per tick.
 function GroundShadows({ hi }: { hi: boolean }) {
   const footprint = useScene((s) => s.room.footprint);
   const width = useScene((s) => s.room.width);
   const depth = useScene((s) => s.room.depth);
   const height = useScene((s) => s.room.height);
-  // Re-bake triggers: a part added/removed/edited, or any committed transform.
-  useScene((s) => s.parts);
-  useStudio((s) => s.positions);
-  useStudio((s) => s.rotations);
-  useStudio((s) => s.dims);
+  // Re-bake triggers: a part added/removed/edited, any committed transform, and
+  // the two view switches that add or remove casters (hiding a piece, dropping
+  // the decor layer).
+  const parts = useScene((s) => s.parts);
+  const positions = useStudio((s) => s.positions);
+  const rotations = useStudio((s) => s.rotations);
+  const dims = useStudio((s) => s.dims);
+  const hidden = useStudio((s) => s.hidden);
+  const dressed = useStudio((s) => s.dressed);
   const dragging = useStudio((s) => s.draggingId !== null);
+  const invalidate = useThree((s) => s.invalidate);
+  const [baking, setBaking] = useState(true);
+  useEffect(() => {
+    setBaking(true);
+    const t = setTimeout(() => setBaking(false), 300);
+    return () => clearTimeout(t);
+  }, [parts, positions, rotations, dims, hidden, dressed, footprint, width, depth, height]);
+  // frameloop="demand": without this the window would open on a canvas that
+  // never paints again, and nothing would re-bake.
+  useFrame(() => {
+    if (baking) invalidate();
+  });
   const b = footprintBounds(footprint);
   // Quantised to 0.5m. `scale` feeds drei's internal useMemo, which allocates two
   // WebGLRenderTargets and never disposes the pair it replaces — so a continuous
@@ -284,7 +305,7 @@ function GroundShadows({ hi }: { hi: boolean }) {
       blur={2.4}
       // The second, softer blur pair is the polish half of the cost.
       smooth={hi}
-      frames={dragging ? Infinity : 1}
+      frames={dragging || baking ? Infinity : 1}
       opacity={0.45}
       color="#3a342b"
     />

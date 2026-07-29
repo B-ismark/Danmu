@@ -13,14 +13,19 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useStudio, type Lighting } from '@/lib/store';
 import { roomStore } from '@/lib/storage';
-import { Icon } from '@/components/ui/Icon';
+import { Icon, type IconName } from '@/components/ui/Icon';
 import { Segmented } from '@/components/ui/primitives';
 import { isTypingOrDialog } from './KeyboardShortcuts';
 
-const MOODS: Array<{ id: Lighting; label: string; glyph: string }> = [
-  { id: 'day', label: 'Day', glyph: '☀' },
-  { id: 'evening', label: 'Evening', glyph: '🌙' },
-  { id: 'cool', label: 'Cool', glyph: '☁' },
+// Lucide, not emoji. The emoji versions rendered in the system's colour font —
+// a red sun and a yellow moon in a panel that is otherwise warm neutrals — at
+// sizes and baselines nothing here controls. They also lived inside the label
+// string, so the space between glyph and word was a line-break opportunity and
+// every segment wrapped onto two lines inside a 30px-tall control.
+const MOODS: Array<{ id: Lighting; label: string; icon: IconName }> = [
+  { id: 'day', label: 'Day', icon: 'sun' },
+  { id: 'evening', label: 'Evening', icon: 'moon' },
+  { id: 'cool', label: 'Cool', icon: 'cloud' },
 ];
 
 export function ViewOptions() {
@@ -102,7 +107,9 @@ export function ViewOptions() {
             bottom: 'calc(100% + 8px)',
             right: 0,
             zIndex: 'var(--z-popover)',
-            width: 230,
+            // Wide enough for three lighting segments to hold icon + label on one
+            // line without the track clipping the last of them.
+            width: 252,
             padding: 14,
             display: 'flex',
             flexDirection: 'column',
@@ -113,9 +120,10 @@ export function ViewOptions() {
           <Group label="Lighting">
             <Segmented
               ariaLabel="Lighting"
-              options={MOODS.map((m) => ({ value: m.id, label: `${m.glyph} ${m.label}` }))}
+              options={MOODS.map((m) => ({ value: m.id, label: m.label, icon: m.icon }))}
               value={lighting}
               onChange={setLighting}
+              stretch
             />
           </Group>
 
