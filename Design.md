@@ -234,6 +234,17 @@ label / category / a depth hint.
 - **Quality** High / Fast — gates procedural normal/roughness maps
   (`lib/textures.ts`, zero assets) + soft cast shadows + ambient occlusion
   (N8AO/SMAA mount on `high` only). There is no floor reflection.
+- **Ground shadows** (`GroundShadows` in `Room.tsx`) are a drei `ContactShadows`
+  bake, not a per-frame render — the scene is drawn into a depth target and
+  blurred, which is far too expensive to repeat at 60fps for a room that is
+  usually still. The pass therefore re-opens on a **window**: any committed
+  change (parts, transforms, `hidden`, `dressed`, room shape) sets
+  `frames={Infinity}` for ~300ms and `invalidate()`s each frame, because
+  `frameloop="demand"` would otherwise leave the window open on a canvas that
+  never paints. A single `frames={1}` bake is not enough: it is spent on the
+  first frame after the re-render, which is not reliably the frame where the
+  edit is on screen, and a deleted piece kept its shadow on an empty floor until
+  some unrelated re-render happened to reopen the pass.
 - **Idle micro-motion** (`Motion.tsx`): fan spins, plant sways, pendant swings.
 
 ### Other studio tools
@@ -249,6 +260,28 @@ label / category / a depth hint.
   and transforms.
 - **Item-to-item snapping** (`lib/item-snap.ts`).
 
+### Removing a piece — `removeParts` in `KeyboardShortcuts.tsx`
+One path for every surface: the row trash, the Inspector button, the Delete key
+and the 2D plan all call it.
+
+- **No confirmation dialog.** Removing a chair is cheap and history covers scene
+  structure, so the reversal is offered *after* the fact as an **Undo action in
+  the toast** rather than as permission asked beforehand. A dialog on a
+  reversible action only teaches people to dismiss dialogs, which is what makes
+  the irreversible ones dangerous.
+- Undo restores through the **store**, not `applySnapshot`. History snapshots are
+  debounced 250ms, so an immediate Undo click would otherwise pop the state
+  *before* the delete. Parts return at their original list index.
+- Selection is **pruned**, not cleared — deleting one row of a multi-select keeps
+  the rest; the list passes an explicit next row to focus.
+- The toast speaks it; `announce()` does not. The toast host is itself a polite
+  live region, so doing both said the removal twice.
+
+**Confirmation is reserved for what undo cannot reach:** deleting a saved layout
+(stored with the room, outside edit history), the bulk "put every piece back"
+transform reset, and deleting a room (which is itself a soft delete with its own
+undo — see `lib/storage.ts`).
+
 ---
 
 ## 6. Architecture
@@ -262,6 +295,13 @@ label / category / a depth hint.
 - **onnxruntime-web** (local detector) · **@google/genai** (optional Gemini detection)
 - **lucide-react** icons, wrapped by `components/ui/Icon.tsx` with a `Circle`
   fallback so no button renders empty
+- **No native form controls.** Anything the OS draws its own way is replaced by a
+  design-system component, because a platform widget in the middle of a warm,
+  rounded, Nunito panel reads as a different product: `ui/Select.tsx` for
+  `<select>`, `ui/NumberField.tsx` for the number spinner, `ui/ColorPicker.tsx`
+  for `<input type="color">`, `ui/Confirm.tsx` for `window.confirm()`, and
+  tokenised scrollbars in `globals.css`. `<input type="file">` stays, kept
+  `sr-only` behind a styled trigger.
 - Loaded at runtime, not bundled: the ONNX model file; `onnxruntime-web` is
   loaded via CDN with `webpackIgnore` (bundling ort breaks the Next build), so
   it is a **devDependency** — installed for its types only. Its version is
@@ -294,11 +334,26 @@ label / category / a depth hint.
 | `lib/capture.ts` / `lib/image-quality.ts` / `lib/mask.ts` / `lib/color-sample.ts` | Photo capture + quality + masking + colour sampling. |
 | `lib/units.ts` | Unit conversion (persistence always mm). |
 
+### UI primitives worth knowing (`components/ui/`)
+| File | Notes |
+|---|---|
+| `Select.tsx` | Combobox trigger + listbox. The list is **portalled to `<body>`** and positioned fixed — the units picker lives inside the Inspector's scroll container, where an absolute popup gets clipped — and flips above the trigger when the room below is tight. Focus stays on the trigger (`aria-activedescendant`); Up/Down change the value while closed, plus type-ahead, Home/End, Esc (stopped, or it would also clear the studio selection). An outside scroll closes it, but a scroll *inside* the list does not: opening on a value far down the list scrolls it into view. `short` renders an abbreviation on the closed trigger when the full label will not fit. |
+| `NumberField.tsx` | Measurement input with our own two-chevron stepper (the native spinner is suppressed app-wide). Hold-to-repeat reads the clock and pays at most 3 steps per tick — a plain interval drifts badly when every step re-renders an inspector and a 3D scene, and pure clock catch-up turns one starved tick into a huge leap. It calls `onChange` through a ref, since callers rebuild that closure each render over their own local state. Chevrons are `aria-hidden` + `tabIndex -1`: the input is already a spinbutton and Up/Down step it. |
+| `StorageToast.tsx` | One live region for the whole app, plus the imperative `toast()`. Lifted clear of the studio's bottom-right control cluster on `/room/` routes — the card takes pointer events, so at the default offset it swallowed their clicks. |
+| `Confirm.tsx` · `ColorPicker.tsx` | Promise-based confirm modal; HSV picker. Both exist to keep an OS widget out of the UI. |
+
 ### Data flow (decoration loop)
 `scene-spec` defines a part → `scene-store` holds the instance → `Room` renders
 each part via `DynamicPart` (geometry) + `Dressing` (decor sibling) → `Pickable`
 selects, `Draggable` transforms/commits back to `useStudio` → `RoomSync`
 auto-saves to IndexedDB.
+
+`RoomSync` treats a **saved empty scene as real**: `loadSceneParts` returns
+`undefined` when there is no snapshot, so `[]` means the user emptied the room on
+purpose. Guarding the load on `length > 0` instead rebuilt the starter scene, and
+deleting every piece then reloading brought all the furniture back. Scene parts
+also flush on unmount, the way transforms do, so leaving a room inside the 300ms
+debounce does not drop the last edit.
 
 ---
 
