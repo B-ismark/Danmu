@@ -82,10 +82,10 @@ living room, and the engine only needs four *consecutive* walls.
 
 Furniture detection runs through a fallback chain, best-effort:
 
-1. **Local detector** — `lib/local-detect.ts`: YOLOv8n trained on Open Images V7
-   (601 classes) via `onnxruntime-web`. No key, no quota, no network after the
-   first model download. The model (~13 MB) is **not bundled** and is
-   git-ignored; `resolveBase()` HEAD-probes two sources in order:
+1. **Local detector** — `lib/local-detect.ts`, via `onnxruntime-web`. No key, no
+   quota, no network after the first model download. The models (~64 MB total)
+   are **not bundled** and are git-ignored; `resolveBase()` HEAD-probes two
+   sources in order:
    `public/models/` (produced by `python scripts/export-detector.py`, needs
    `pip install ultralytics`) then the Hugging Face mirror
    [`DearthAI/danmu-detector`](https://huggingface.co/DearthAI/danmu-detector),
@@ -97,22 +97,42 @@ Furniture detection runs through a fallback chain, best-effort:
    a 2000px wall photo to 640 shrinks mid-sized objects below what nano
    resolves; tiling recovers them for zero extra download.
 
+   **Two models run as an ensemble** — `yolov8n-oiv7` (14 MB, 601 fixed Open
+   Images classes) and `yolov8s-worldv2-danmu` (50 MB, open-vocabulary with
+   Danmu's 44 furniture prompts frozen into the graph by `set_classes()` at
+   export). They fail on disjoint classes: OIV7 owns monitors and windows, the
+   world model owns fridges / ceiling fans / wardrobes / lamps / curtains. Both
+   feed one pool of candidates in normalized space, resolved by a single NMS.
+
+   The world model is optional — when only the OIV7 file is deployed (an older
+   local export) detection degrades to that model alone rather than failing.
+
    **Measured on a real 4-photo room** (19 catalogued objects), so don't
    re-litigate this without new numbers:
 
-   | variant | size | whole frame | 2×2 tiled |
+   | config | size | whole frame | 2×2 tiled |
    |---|---|---|---|
-   | yolov8n-oiv7 (shipped) | 14 MB | 4/19 | **7/19** |
+   | yolov8n-oiv7 | 14 MB | 4/19 | 7/19 |
    | yolov8s-oiv7 | 46 MB | 4/19 | 7/19 |
    | yolov8m-oiv7 | 105 MB | 6/19 | 7/19 |
    | yolov8x-oiv7 | 275 MB | 7/19 | 7/19 |
+   | yolov8s-worldv2 | 50 MB | 7/19 | 10/19 |
+   | **oiv7-n + worldv2-s (shipped)** | **64 MB** | — | **13/19** |
 
-   Every variant converges on 7/19 — `x` is 19× the bytes of `n` for identical
-   recall, so **input resolution is the binding constraint, not model
-   capacity**. Curtain / ceiling fan / fridge / wardrobe are never detected at
-   any size: their class heads peak at 0.002–0.03 on this imagery against
-   0.38–0.44 for classes that do fire. That is a vocabulary gap, not a
-   threshold one. The local pass is a head start, not a replacement for Gemini.
+   Two findings worth keeping:
+
+   - **Scaling OIV7 does nothing.** Every variant converges on 7/19; `x` is 19×
+     the bytes of `n` for identical recall. Input resolution binds, not model
+     capacity — hence tiling.
+   - **The remaining gap was vocabulary, not capacity.** Curtain / ceiling fan /
+     fridge / wardrobe class heads peak at 0.002–0.03 on this imagery against
+     0.38–0.44 for classes that fire, at *every* OIV7 size. An open-vocabulary
+     model prompted with those words in plain language finds them.
+
+   Confidence stays at 0.35: dropping to 0.20 buys one object and adds a
+   spurious `sofa(0.29)`. Still missed at 13/19 — doors, wall art, and the
+   curtain in one photo. The local pass is a head start, not a replacement for
+   Gemini.
 
    **Licence boundary:** the weights are AGPL-3.0 (Ultralytics) and Danmu is
    MIT. AGPL is copyleft, so the two cannot be mixed — the weights therefore
