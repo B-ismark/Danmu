@@ -37,7 +37,11 @@ export function RoomSync() {
       ]);
       loadFromRoom(room);
       // If user previously edited / deleted parts, prefer that snapshot over rebuild from detections.
-      if (savedScene && savedScene.length > 0) setParts(savedScene);
+      // An empty array is a room the user emptied on purpose, NOT a missing
+      // snapshot — `loadSceneParts` returns undefined for that. Treating [] as
+      // "nothing saved" rebuilt the starter scene, so deleting every piece and
+      // reloading brought all the furniture back.
+      if (savedScene) setParts(savedScene);
       if (t) {
         loadTransforms(t);
         if (t.hidden) setHiddenMap(t.hidden);
@@ -133,7 +137,12 @@ export function RoomSync() {
     });
     return () => {
       unsub();
-      if (sceneTimer.current) clearTimeout(sceneTimer.current);
+      if (sceneTimer.current) {
+        // Flush on unmount, same as transforms: leaving the room within the
+        // debounce window otherwise dropped the last add/delete.
+        clearTimeout(sceneTimer.current);
+        roomStore.saveSceneParts(roomId, useScene.getState().parts);
+      }
     };
   }, [roomId]);
 
