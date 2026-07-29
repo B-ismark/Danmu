@@ -92,6 +92,28 @@ Furniture detection runs through a fallback chain, best-effort:
    so a fresh clone works without a Python + torch toolchain. Both are static
    GETs of a public file — no user data leaves the device.
 
+   Each photo is run **five times** — whole frame plus 2×2 tiles at 15% overlap
+   — and merged with a single NMS in normalized whole-image space. Letterboxing
+   a 2000px wall photo to 640 shrinks mid-sized objects below what nano
+   resolves; tiling recovers them for zero extra download.
+
+   **Measured on a real 4-photo room** (19 catalogued objects), so don't
+   re-litigate this without new numbers:
+
+   | variant | size | whole frame | 2×2 tiled |
+   |---|---|---|---|
+   | yolov8n-oiv7 (shipped) | 14 MB | 4/19 | **7/19** |
+   | yolov8s-oiv7 | 46 MB | 4/19 | 7/19 |
+   | yolov8m-oiv7 | 105 MB | 6/19 | 7/19 |
+   | yolov8x-oiv7 | 275 MB | 7/19 | 7/19 |
+
+   Every variant converges on 7/19 — `x` is 19× the bytes of `n` for identical
+   recall, so **input resolution is the binding constraint, not model
+   capacity**. Curtain / ceiling fan / fridge / wardrobe are never detected at
+   any size: their class heads peak at 0.002–0.03 on this imagery against
+   0.38–0.44 for classes that do fire. That is a vocabulary gap, not a
+   threshold one. The local pass is a head start, not a replacement for Gemini.
+
    **Licence boundary:** the weights are AGPL-3.0 (Ultralytics) and Danmu is
    MIT. AGPL is copyleft, so the two cannot be mixed — the weights therefore
    live in their own AGPL-licensed HF repo and are fetched at runtime, never
