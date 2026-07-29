@@ -5,17 +5,57 @@ import { useRouter } from 'next/navigation';
 import { v4 as uuid } from 'uuid';
 import { useRoom } from '@/lib/store';
 import { roomStore } from '@/lib/storage';
+import { footprintForLayout, type LayoutId } from '@/lib/footprint';
+import { polygonArea } from '@/lib/clearance';
 import { Icon } from '@/components/ui/Icon';
 import { DanmuMark, StepHeader } from '@/components/ui/primitives';
 
-const LAYOUTS = [
-  { id: 'rect' as const, name: 'Rectangle', area: '24 m²', width: 6.0, depth: 4.0, starter: 'Living room', path: 'M20 20 L220 20 L220 140 L20 140 Z' },
-  { id: 'l' as const, name: 'L-Shape', area: '28 m²', width: 6.0, depth: 4.7, starter: 'Living + reading nook', path: 'M20 20 L220 20 L220 90 L130 90 L130 160 L20 160 Z' },
-  { id: 't' as const, name: 'T-Shape', area: '26 m²', width: 5.5, depth: 4.7, starter: 'Living + dining', path: 'M60 20 L180 20 L180 80 L220 80 L220 140 L180 140 L180 170 L60 170 L60 140 L20 140 L20 80 L60 80 Z' },
-  { id: 'u' as const, name: 'U-Shape', area: '30 m²', width: 6.0, depth: 5.0, starter: 'Bedroom', path: 'M20 20 L80 20 L80 95 L160 95 L160 20 L220 20 L220 160 L20 160 Z' },
-  { id: 'open' as const, name: 'Open Plan', area: '42 m²', width: 7.5, depth: 5.6, starter: 'Living + dining loft', path: 'M20 20 L220 20 L220 170 L20 170 Z' },
+const PRESETS = [
+  { id: 'rect' as const, name: 'Rectangle', width: 6.0, depth: 4.0, starter: 'Living room' },
+  { id: 'l' as const, name: 'L-Shape', width: 6.0, depth: 4.7, starter: 'Living + reading nook' },
+  { id: 't' as const, name: 'T-Shape', width: 5.5, depth: 4.7, starter: 'Living + dining' },
+  { id: 'u' as const, name: 'U-Shape', width: 6.0, depth: 5.0, starter: 'Bedroom' },
+  { id: 'open' as const, name: 'Open Plan', width: 7.5, depth: 5.6, starter: 'Living + dining loft' },
 ];
 const HEIGHT = 2.8;
+
+// The drawing and the area label are both DERIVED from footprintForLayout — the
+// same function that builds the room. Hand-authored versions of each had drifted:
+//
+//   · The T-Shape path drew a plus/cross (arms both sides, narrowed top bar)
+//     while the footprint is a full-width north bar with one south stem. The
+//     shape you recognised was not the shape you got.
+//   · Every `area` string was the bounding box, so the presets that cut a
+//     quadrant or a notch overstated their floor — L by 21%, U by 28%, T by 45%.
+//     The figure is also inside each option's aria-label, so it was the number a
+//     screen-reader user chose on. On a product whose promise is trustworthy
+//     dimensions, a stale hand-typed area is the wrong thing to be wrong about.
+const VIEW = { w: 240, h: 180, pad: 20 };
+
+/** Footprint polygon → SVG path in the fixed 240×180 viewBox, preserving aspect. */
+function pathFor(layout: LayoutId, w: number, d: number): string {
+  const poly = footprintForLayout(layout, w, d);
+  const innerW = VIEW.w - VIEW.pad * 2;
+  const innerH = VIEW.h - VIEW.pad * 2;
+  const scale = Math.min(innerW / w, innerH / d);
+  const ox = (VIEW.w - w * scale) / 2;
+  const oz = (VIEW.h - d * scale) / 2;
+  return (
+    poly
+      .map(([x, z], i) => {
+        const px = ox + (x + w / 2) * scale;
+        const pz = oz + (z + d / 2) * scale;
+        return `${i === 0 ? 'M' : 'L'}${px.toFixed(1)} ${pz.toFixed(1)}`;
+      })
+      .join(' ') + ' Z'
+  );
+}
+
+const LAYOUTS = PRESETS.map((p) => ({
+  ...p,
+  path: pathFor(p.id, p.width, p.depth),
+  area: `${polygonArea(footprintForLayout(p.id, p.width, p.depth)).toFixed(1)} m²`,
+}));
 
 export default function LayoutPickPage() {
   const router = useRouter();
@@ -108,7 +148,7 @@ export default function LayoutPickPage() {
                     }}
                     role="radio"
                     aria-checked={active}
-                    aria-label={`${l.name}, ${l.area}, starts as a ${l.starter.toLowerCase()}`}
+                    aria-label={`${l.name}, ${l.area} of floor, starts as a ${l.starter.toLowerCase()}`}
                     // Roving tabindex: one stop for the whole group, arrows move
                     // within it — the standard radiogroup keyboard contract.
                     tabIndex={active ? 0 : -1}
@@ -197,10 +237,10 @@ export default function LayoutPickPage() {
             }}
           >
             <div className="ds-label" style={{ color: 'var(--ink-2)', marginBottom: 18 }}>
-              Footprint preview · <span className="mono" style={{ color: 'var(--ink)' }}>{layout.width.toFixed(1)} × {layout.depth.toFixed(1)} m</span> · {layout.starter}
+              Footprint preview · <span className="mono" style={{ color: 'var(--ink)' }}>{layout.width.toFixed(1)} × {layout.depth.toFixed(1)} m</span> · <span className="mono" style={{ color: 'var(--ink)' }}>{layout.area}</span> · {layout.starter}
             </div>
             <div className="ds-crosshair-bg" style={{ aspectRatio: '4/3', position: 'relative', borderRadius: 'var(--r-2)', overflow: 'hidden' }}>
-              <svg viewBox="0 0 240 180" style={{ width: '100%', height: '100%', display: 'block' }} role="img" aria-label={`${layout.name} footprint, ${layout.width.toFixed(1)} by ${layout.depth.toFixed(1)} metres`}>
+              <svg viewBox="0 0 240 180" style={{ width: '100%', height: '100%', display: 'block' }} role="img" aria-label={`${layout.name} footprint, ${layout.width.toFixed(1)} by ${layout.depth.toFixed(1)} metres, ${layout.area} of floor`}>
                 <path
                   d={layout.path}
                   fill="var(--accent-tint)"

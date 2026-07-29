@@ -5,66 +5,31 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useRoom } from '@/lib/store';
 import { roomStore, type RoomSummary } from '@/lib/storage';
+import { useMediaQuery } from '@/lib/use-media-query';
+import {
+  RECENCY_GROUPS,
+  editedLabel,
+  recencyBucket,
+  startOfToday,
+  type RecencyGroupId,
+} from '@/lib/dates';
 import { DanmuMark, EditableText, IconButton, Pill } from '@/components/ui/primitives';
 import { Icon } from '@/components/ui/Icon';
 import { useConfirmDeleteRooms } from '@/components/ui/Confirm';
 import { toast } from '@/components/ui/StorageToast';
 import { PlanThumb } from '@/components/studio/PlanThumb';
 
-const DAY = 24 * 60 * 60 * 1000;
-
-/** Recency buckets. A flat grid of identical cards stops being navigable at
- *  roughly eight rooms; "when did I last touch this" is the axis people
- *  actually search on, and it is now backed by a real updatedAt. */
-const GROUPS = [
-  { id: 'today', label: 'Today' },
-  { id: 'week', label: 'Earlier this week' },
-  { id: 'month', label: 'Earlier this month' },
-  { id: 'older', label: 'Older' },
-] as const;
-
-type GroupId = (typeof GROUPS)[number]['id'];
-
-function startOfToday() {
-  const n = new Date();
-  return new Date(n.getFullYear(), n.getMonth(), n.getDate()).getTime();
-}
-
-function bucketOf(ts: number, today: number): GroupId {
-  if (ts >= today) return 'today';
-  if (ts >= today - 6 * DAY) return 'week';
-  if (ts >= today - 29 * DAY) return 'month';
-  return 'older';
-}
-
-/** Date *and* time: two rooms edited on the same day were indistinguishable, and
- *  the card used to show createdAt while calling it nothing at all. */
-function editedLabel(ts: number, today: number) {
-  const d = new Date(ts);
-  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  if (ts >= today) return `Edited ${time}`;
-  if (ts >= today - DAY) return `Edited yesterday, ${time}`;
-  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
-  if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
-  return `Edited ${d.toLocaleDateString(undefined, opts)}, ${time}`;
-}
-
-/** Two things on this screen are decided in JS rather than CSS — the card's
- *  hover lift (a :hover rule can't reach an inline style object, so the global
- *  prefers-reduced-motion block can't neutralise it) and whether hover-revealed
- *  actions should just stay visible (a touch device never hovers, and an
- *  invisible-but-tappable delete button is worse than a visible one). */
-function useMediaQuery(query: string) {
-  const [matches, setMatches] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia(query);
-    const sync = () => setMatches(mq.matches);
-    sync();
-    mq.addEventListener('change', sync);
-    return () => mq.removeEventListener('change', sync);
-  }, [query]);
-  return matches;
-}
+// Recency grouping and the "Edited …" label live in lib/dates, alongside the
+// units formatter — this screen used to hand-roll both, while the saved-layouts
+// panel formatted the same kind of fact a third way.
+//
+// Two things here are decided in JS rather than CSS — the card's hover lift (a
+// :hover rule can't reach an inline style object, so the global
+// prefers-reduced-motion block can't neutralise it) and whether hover-revealed
+// actions should just stay visible (a touch device never hovers, and an
+// invisible-but-tappable delete button is worse than a visible one). Neither
+// needs `ready`: guessing "no" for one paint costs nothing either way.
+type GroupId = RecencyGroupId;
 
 export default function WorkspacePage() {
   const router = useRouter();
@@ -125,12 +90,12 @@ export default function WorkspacePage() {
   const grouped = useMemo(() => {
     const map = new Map<GroupId, RoomSummary[]>();
     for (const r of matches) {
-      const b = bucketOf(r.updatedAt, today);
+      const b = recencyBucket(r.updatedAt, today);
       const list = map.get(b);
       if (list) list.push(r);
       else map.set(b, [r]);
     }
-    return GROUPS.map((g) => ({ ...g, rooms: map.get(g.id) ?? [] })).filter((g) => g.rooms.length > 0);
+    return RECENCY_GROUPS.map((g) => ({ ...g, rooms: map.get(g.id) ?? [] })).filter((g) => g.rooms.length > 0);
   }, [matches, today]);
 
   function openRoom(id: string) {
@@ -144,8 +109,9 @@ export default function WorkspacePage() {
     if (!targets.length) return;
     const ok = await confirmDelete(targets.map((r) => r.name));
     if (!ok) return;
-    const tokens: Awaited<ReturnType<typeof roomStore.clearRoom>>[] = [];
-    for (const t of targets) tokens.push(await roomStore.clearRoom(t.id));
+    // Deleted together rather than one after another — a bulk delete of thirty
+    // rooms was thirty serialised trips through the whole key list.
+    const tokens = await Promise.all(targets.map((t) => roomStore.clearRoom(t.id)));
     if (roomId && targets.some((t) => t.id === roomId)) setRoomId(null);
     setSelected([]);
     await reload();
@@ -156,7 +122,7 @@ export default function WorkspacePage() {
       action: {
         label: 'Undo',
         onClick: async () => {
-          for (const token of tokens) await roomStore.restoreRoom(token);
+          await Promise.all(tokens.map((token) => roomStore.restoreRoom(token)));
           await reload();
           toast({
             tone: 'success',

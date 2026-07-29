@@ -22,6 +22,12 @@ export type Snapshot = {
    *  not name. `quality` / `dressed` stay out: they are view preferences, not
    *  part of the design being edited. */
   lighting: Lighting;
+  /** Which parts are hidden. This is an edit to the arrangement, not a view
+   *  preference — it is saved per room alongside the transforms — so it belongs
+   *  in history. Without it, pressing V and then Ctrl+Z undid the edit BEFORE the
+   *  hide, and walking back past a hide left the part hidden in a state the stack
+   *  did not describe. The help card advertises Ctrl+Z two lines under V. */
+  hidden: Record<string, boolean>;
 };
 
 const MAX = 80;
@@ -79,6 +85,7 @@ function takeSnapshot(): Snapshot {
     parts: sc.parts,
     room: sc.room,
     lighting: t.lighting,
+    hidden: t.hidden,
   };
 }
 
@@ -116,7 +123,8 @@ export function startHistoryRecording() {
       state.positions === prev.positions &&
       state.rotations === prev.rotations &&
       state.dims === prev.dims &&
-      state.lighting === prev.lighting
+      state.lighting === prev.lighting &&
+      state.hidden === prev.hidden
     )
       return;
     scheduleSnapshot();
@@ -138,13 +146,18 @@ function shallowEq(a: Snapshot, b: Snapshot): boolean {
     a.dims === b.dims &&
     a.parts === b.parts &&
     a.room === b.room &&
-    a.lighting === b.lighting
+    a.lighting === b.lighting &&
+    a.hidden === b.hidden
   );
 }
 
 export function applySnapshot(snap: Snapshot) {
-  const h = useHistory.getState();
-  h.suspended = true;
+  // setState, not a direct mutation of the object getState() hands back. The
+  // in-place version worked only because push() happened to read `suspended` off
+  // that same object; anything that froze or cloned state (immer, a devtools
+  // middleware) would have turned it into a silent no-op, and then every restore
+  // would push itself onto the stack and wipe the redo branch.
+  useHistory.setState({ suspended: true });
   // Cancel any pending debounce and mark the restored state as "already
   // recorded" — otherwise the subscription re-fires 250ms later (after
   // un-suspend), pushes the restored state, and wipes the redo stack.
@@ -152,6 +165,7 @@ export function applySnapshot(snap: Snapshot) {
   lastSnapshot = snap;
   useStudio.getState().loadTransforms(snap);
   useStudio.getState().setLighting(snap.lighting);
+  useStudio.getState().setHiddenMap(snap.hidden);
   useScene.setState({ parts: snap.parts, room: snap.room });
   // small async unsuspend so subscribe fires after state settles
   setTimeout(() => {

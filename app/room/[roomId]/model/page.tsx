@@ -39,7 +39,10 @@ export default function ModelPage() {
   // Below ~1024px the rails stack under the room instead of squeezing it to
   // nothing. Done in JS rather than CSS because the canvas has to come FIRST in
   // the stacked order and a media query cannot reorder an inline-styled grid.
-  const stacked = useStackedStudio();
+  //
+  // `ready` gates the first paint: without it a narrow viewport laid out the
+  // three-column shell, then re-ordered and re-flowed once matchMedia answered.
+  const { stacked, ready } = useStackedStudio();
 
   const shell: CSSProperties = stacked
     ? {
@@ -112,6 +115,16 @@ export default function ModelPage() {
       <SelectionBar />
     </main>
   );
+
+  if (!ready) {
+    return (
+      <div style={{ height: '100%', display: 'grid', placeItems: 'center', background: 'var(--paper-2)' }}>
+        <span role="status" style={{ fontSize: 13, color: 'var(--ink-3)' }}>
+          Setting up your studio…
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className="split split--stack" style={shell}>

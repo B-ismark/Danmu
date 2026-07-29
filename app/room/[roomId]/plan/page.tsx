@@ -16,7 +16,9 @@ import type { ScenePart } from '@/lib/scene-spec';
 
 export default function PlanPage() {
   const dimUnit = useSettings((s) => s.dimUnit);
-  const stacked = useStackedStudio();
+  // See the note in the 3D page: `ready` keeps the first paint from using the
+  // wrong shell and then reflowing.
+  const { stacked, ready } = useStackedStudio();
   const { roomId } = useParams<{ roomId: string }>();
   const [roomName, setRoomName] = useState('Floor plan');
   // Live from PlanView, which owns the zoom. The old chip hard-coded "1:50 · cm"
@@ -149,6 +151,16 @@ export default function PlanPage() {
       </div>
     </main>
   );
+
+  if (!ready) {
+    return (
+      <div style={{ height: '100%', display: 'grid', placeItems: 'center', background: 'var(--paper-2)' }}>
+        <span role="status" style={{ fontSize: 13, color: 'var(--ink-3)' }}>
+          Drawing your floor plan…
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className="split split--stack" style={shell}>

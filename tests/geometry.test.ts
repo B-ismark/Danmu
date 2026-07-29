@@ -3,6 +3,7 @@ import {
   obbFromPart,
   obbCorners,
   obbOverlap,
+  obbIntersectionArea,
   obbGap,
   nearestEdge,
   rayToBoundary,
@@ -52,6 +53,43 @@ describe('obbOverlap (SAT)', () => {
   it('treats flush contact as non-colliding with a negative pad', () => {
     expect(obbOverlap(box(0, 0, 1, 1), box(1, 0, 1, 1), -0.01)).toBe(false);
     expect(obbOverlap(box(0, 0, 1, 1), box(0.98, 0, 1, 1), -0.01)).toBe(true);
+  });
+});
+
+// The amount of overlap, not just its existence — this is what lets the clearance
+// panel tell a 3 cm clip from one piece standing inside another. Two different
+// sentences for the user, so the number has to be right.
+describe('obbIntersectionArea', () => {
+  it('is zero for separated boxes', () => {
+    expect(obbIntersectionArea(box(0, 0, 2, 1), box(3, 0, 2, 1))).toBe(0);
+  });
+
+  it('is zero for flush contact', () => {
+    expect(obbIntersectionArea(box(0, 0, 1, 1), box(1, 0, 1, 1))).toBeCloseTo(0, 6);
+  });
+
+  it('measures an axis-aligned partial overlap', () => {
+    // x: -1…1 vs 0.5…2.5 → 0.5 wide. z: -0.5…0.5 both → 1 deep.
+    expect(obbIntersectionArea(box(0, 0, 2, 1), box(1.5, 0, 2, 1))).toBeCloseTo(0.5, 6);
+  });
+
+  it('returns the contained box when one sits inside the other', () => {
+    expect(obbIntersectionArea(box(0, 0, 0.5, 0.4), box(0, 0, 3, 2))).toBeCloseTo(0.2, 6);
+    // …and is symmetric.
+    expect(obbIntersectionArea(box(0, 0, 3, 2), box(0, 0, 0.5, 0.4))).toBeCloseTo(0.2, 6);
+  });
+
+  it('handles rotation exactly', () => {
+    // A 45°-rotated unit square centred on a big box: full area, no sampling loss.
+    expect(obbIntersectionArea(box(0, 0, 1, 1, Math.PI / 4), box(0, 0, 4, 4))).toBeCloseTo(1, 6);
+    // Half of that square, cut by an edge through its centre.
+    expect(obbIntersectionArea(box(0, 0, 1, 1, Math.PI / 4), box(2, 0, 4, 4))).toBeCloseTo(0.5, 6);
+  });
+
+  it('never exceeds the smaller box', () => {
+    const small = box(0.2, 0.1, 0.5, 0.5, 0.7);
+    const big = box(0, 0, 3, 2, -0.3);
+    expect(obbIntersectionArea(small, big)).toBeLessThanOrEqual(0.25 + 1e-9);
   });
 });
 

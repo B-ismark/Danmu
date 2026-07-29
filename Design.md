@@ -350,14 +350,17 @@ undo — see `lib/storage.ts`).
 | `lib/scene-spec.ts` | **Single source of truth** — `Shape` union, `ScenePart`, `defaultScene` starters, parametric/decor/support flags, DnD MIME. |
 | `lib/parts-catalog.ts` | Room defaults + catalog data. |
 | `lib/scene-store.ts` | Scene parts CRUD + grouping. |
-| `lib/storage.ts` | IndexedDB room persistence (`RoomData`, `wallColors`, `footprint`, per-room `hidden`). Deleting a room is a **soft delete** — keys move under `trash:{ts}:` and `restoreRoom` undoes it; `purgeTrash` expires them after 30 days and `destroyRoom` is the irreversible path. A `room:{id}:touched` key carries the real `updatedAt`. |
-| `lib/scene-palette.ts` | Scene-side semantic colours (`SCENE`, `categoryColor`) — the one home for values the 3D layer and the panels that edit it must agree on, since Three.js materials cannot read a CSS custom property. Kept in sync with `globals.css` by hand, guarded by a test. |
+| `lib/storage.ts` | IndexedDB room persistence (`RoomData`, `wallColors`, `footprint`, per-room `hidden`, `version`). Deleting a room is a **soft delete** — keys move under `trash:{ts}:` and `restoreRoom` undoes it; `purgeTrash` expires them after 30 days and `destroyRoom` is the irreversible path. A `room:{id}:touched` key carries the real `updatedAt`. **`meta` is retired first on delete and written last on restore**: there is no transaction across keys, and `listRooms` decides visibility from `meta`, so ordering it this way makes the visible state flip exactly once instead of leaving a room that appears in the workspace and opens empty. `restoreRoom` refuses when a live room already holds the id. Each detection carries a `uid`, which becomes its ScenePart id so a user's transforms survive a re-detect; records written before that fall back to the positional `${category}-${n}`. |
+| `lib/scene-palette.ts` | Scene-side semantic colours — the one home for values the 3D layer, the canvas exports and the panels that edit them must agree on, since neither Three.js materials nor a 2D canvas can read a CSS custom property. Exports `SCENE` (selection / hover / locked / shell), `PLAN` (the floor-plan PNG's palette) and `defaultBodyColor(category, shape)`. Kept in sync with `globals.css` by hand, guarded by a test. **`defaultBodyColor` takes BOTH arguments**: within one category the shapes do not match (a dining chair is walnut, an office chair charcoal), and the renderer and the Inspector's "Default for this piece" swatch must return the same value. The predecessor took a single loosely-typed `category` and was keyed on material-group names, so 18 of 22 categories fell through to one tan default. |
 | `lib/room-scene.ts` | Build a scene from a room / detections. |
 | `lib/textures.ts` | Procedural normal/roughness maps (offline, zero assets). |
 | `lib/themes.ts` | One-tap restyle palettes. |
 | `lib/product-presets.ts` | Real-product size presets. |
-| `lib/capture.ts` / `lib/image-quality.ts` / `lib/mask.ts` / `lib/color-sample.ts` | Photo capture + quality + masking + colour sampling. |
+| `lib/capture.ts` / `lib/image-quality.ts` / `lib/mask.ts` / `lib/color-sample.ts` | Photo capture + quality + masking + colour sampling. `capture.ts` also owns **photo normalisation**: every photo entering the app is re-encoded to ≤1600 px on its long edge (`normalizePhoto`) and screened against a raster allowlist (`isAcceptedPhoto` — `image/*` also matches SVG, which has no pixels to measure). Nothing downstream wants more resolution, and four untouched 12 MP uploads exceeded the detection endpoint's inline-request ceiling. |
 | `lib/units.ts` | Unit conversion (persistence always mm). |
+| `lib/dates.ts` | Timestamp formatting — the counterpart to `units.ts`. Relative `editedLabel`, absolute `savedLabel`, and the workspace's recency buckets. |
+| `lib/csv.ts` | CSV writing that a spreadsheet opens correctly and does not execute: formula-injection escaping, quoting, CRLF, UTF-8 BOM. |
+| `lib/use-media-query.ts` | The one `matchMedia` hook. `useMediaQueryState` also returns `ready`, for callers that pick a whole layout and must not paint the wrong one first. |
 
 ### UI primitives worth knowing (`components/ui/`)
 | File | Notes |
@@ -413,7 +416,30 @@ pnpm dev          # http://localhost:3000
 pnpm typecheck    # tsc --noEmit
 pnpm test         # vitest run — pure-logic suite (geometry, physics, clearance, footprint, units, …)
 pnpm build        # next build
+pnpm vendor:ort   # copy onnxruntime-web into public/ort/ so it loads same-origin
+pnpm hash:models  # print SHA-256 digests of public/models/ for MODEL_DIGESTS
 ```
+
+### Third-party bytes, and the headers that bound them
+
+The optional local detector is the only part of the app that executes or parses
+anything fetched from outside. Two controls exist because of it:
+
+- **`pnpm vendor:ort`** copies the ONNX Runtime out of `node_modules` into
+  `public/ort/` (git-ignored). A dynamic `import()` cannot carry a
+  subresource-integrity hash, so while this resolved to a CDN nothing verified
+  what came back — and whatever came back runs with access to the origin holding
+  the user's API key and every room. `lib/local-detect.ts` probes the local copy
+  first and keeps the CDN as a fallback, so a fresh clone still works.
+- **Weights** are format-checked on every remote fetch (ONNX protobuf magic plus a
+  size window) and digest-checked against `MODEL_DIGESTS` in
+  `lib/local-detect.ts` when an entry exists. That registry is intentionally empty
+  — see the header of `scripts/hash-models.mjs` for why a pin must be made by
+  someone who can verify the mirror.
+
+`next.config.mjs` carries the CSP and the rest of the security headers. Every host
+in it is listed with the reason it is allowed; if a feature stops needing a host,
+delete it there.
 
 - **Windows / PowerShell** dev environment. The room route dir is literally
   `[roomId]` (brackets) — PowerShell treats brackets as wildcards, so use

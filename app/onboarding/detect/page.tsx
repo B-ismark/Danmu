@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { v4 as uuid } from 'uuid';
 import { useRoom, useSettings } from '@/lib/store';
-import { roomStore, blobToObjectUrl, type Capture, type CaptureSlot } from '@/lib/storage';
+import { roomStore, blobToObjectUrl, type Capture, type CaptureSlot, type RoomData } from '@/lib/storage';
 import { detectAcrossImages, DetectError, type Detection } from '@/lib/detection';
 import { CAPTURE_SLOTS } from '@/lib/capture';
 import { Icon } from '@/components/ui/Icon';
@@ -30,6 +31,69 @@ type SlotEntry = { slot: CaptureSlot; url: string; cap: Capture };
 type RoomDims = { width: number; depth: number };
 type CalMap = Partial<Record<CaptureSlot, CameraCal>>;
 type Box = [number, number, number, number];
+type SavedDetection = NonNullable<RoomData['detectedObjects']>[number];
+
+/** How many colour samples decode at once. See the sampling effect below. */
+const COLOR_BATCH = 4;
+
+// ─── Persistence codec ──────────────────────────────────────────────────────
+//
+// ONE pair of functions, because these two directions used to be written out by
+// hand at opposite ends of the file and had drifted: the record written by
+// finish() carried `position`, `yaw` and `shape` — the placement geoRefine()
+// derived from the calibrated camera — and the cache read that runs when the
+// screen is re-entered rebuilt Detection objects WITHOUT them. Since finish() is
+// the only way forward off this screen and its button is always enabled, the next
+// press wrote `undefined` over all three. The studio's Rescan button links
+// straight here, so it was one click from silently discarding the geometry pass
+// and falling back to wall-snapping and shape guessing.
+//
+// If a field is added to one of these, the other fails to compile.
+
+function toRecord(d: Detection, index: number, locked: boolean): SavedDetection {
+  return {
+    id: index,
+    // Minted once and then carried, so the ScenePart id stays attached to the
+    // same piece of furniture across a re-detect.
+    uid: d.uid ?? uuid(),
+    label: `${cleanLabelOf(d)}__slot:${d.slot}`,
+    conf: d.conf,
+    locked,
+    box: d.box,
+    category: d.category,
+    dimMM: d.dimMM,
+    position: d.position,
+    yaw: d.yaw,
+    shape: d.shape,
+    color: d.color,
+    meshHash: d.meshHash,
+  };
+}
+
+function fromRecord(r: SavedDetection): Detection {
+  return {
+    uid: r.uid,
+    label: r.label.replace(/__slot:[nesw]$/, ''),
+    conf: r.conf,
+    box: r.box,
+    category: (r.category ?? 'other') as Detection['category'],
+    slot: ((r.label.match(/__slot:([nesw])$/) ?? [])[1] ?? 'n') as CaptureSlot,
+    dimMM: r.dimMM,
+    position: r.position,
+    yaw: r.yaw,
+    shape: r.shape,
+    color: r.color,
+    meshHash: r.meshHash,
+  };
+}
+
+/** Give every detection a key the moment it enters state, so React rows and the
+ *  eventual ScenePart id are both stable. Rows used to be keyed by array index
+ *  while deleteDetection spliced the array, so removing a row handed its DOM node
+ *  — and an in-flight rename — to the row below it. */
+function keyed(items: Detection[]): Detection[] {
+  return items.map((d) => (d.uid ? d : { ...d, uid: uuid() }));
+}
 
 // Where the recognising happened. This drives the privacy line, so it has to be
 // exact: 'local' really is on-device, 'cloud' means the wall photos were sent to
@@ -41,7 +105,17 @@ type Path = 'idle' | 'cache' | 'checking' | 'local' | 'cloud' | 'stopped';
 // not a fault, so it must never render as a red alarm above a Retry that lands
 // in the identical state.
 type Notice = {
-  code: 'NO_CAPS' | 'NO_KEY' | 'STOPPED' | 'NOTHING_FOUND' | 'DAILY_QUOTA' | 'RATE_LIMIT' | 'INVALID_KEY' | 'UNKNOWN';
+  code:
+    | 'NO_CAPS'
+    | 'NO_KEY'
+    | 'STOPPED'
+    | 'NOTHING_FOUND'
+    | 'DAILY_QUOTA'
+    | 'RATE_LIMIT'
+    | 'INVALID_KEY'
+    | 'PHOTOS_TOO_BIG'
+    | 'BAD_RESPONSE'
+    | 'UNKNOWN';
   tone: 'calm' | 'warn' | 'error';
   kicker: string;
   title: string;
@@ -183,6 +257,32 @@ function noticeFor(e: unknown): Notice {
           'Have a look at the detection key in Settings — a stray space is the usual culprit. You don’t need a key to carry on: draw a box around each piece instead.',
         settings: true,
       };
+    case 'PHOTOS_TOO_BIG':
+      // Its own outcome, not a mystery failure. Photos are shrunk on the way in
+      // now, so this only reaches someone whose captures predate that — and
+      // "retake them" is a real, working instruction rather than "try again".
+      return {
+        code: 'PHOTOS_TOO_BIG',
+        tone: 'warn',
+        kicker: 'Photos too large',
+        title: 'These photos are too big to send in one go',
+        body:
+          'Danmu now shrinks photos as you add them, so this usually means these were taken before that. Retake or re-add your wall photos and it will go through — or add your pieces by hand right now, which sends nothing at all.',
+        capture: true,
+      };
+    case 'BAD_RESPONSE':
+      // Was indistinguishable from an empty room: an unparseable body came back
+      // as [], and the screen then said "nothing stood out in your photos, which
+      // is exactly right for an empty room".
+      return {
+        code: 'BAD_RESPONSE',
+        tone: 'error',
+        kicker: 'Unreadable answer',
+        title: 'Danmu couldn’t make sense of the reply',
+        body:
+          'The service answered, but not in a form Danmu can read — this is not something about your room or your photos. Trying again usually clears it. You can also add your pieces by hand, which needs no key.',
+        retry: true,
+      };
     default:
       return {
         code: 'UNKNOWN',
@@ -225,6 +325,14 @@ export default function DetectPage() {
   const padRef = useRef<HTMLButtonElement>(null);
   // Flipped by Stop so an in-flight run stops writing to state.
   const stopped = useRef(false);
+  // The detect run needs the key to be CURRENT when it calls, not to be a
+  // trigger. With `apiKey` in the effect's dep array, editing it in Settings —
+  // including in another tab, since the store persists to localStorage — re-ran
+  // the whole pipeline: re-read every capture blob, re-calibrated all four photos
+  // (two decodes each), re-minted the object URLs, and fired a second billed
+  // detection. The subscribed value above still drives the privacy line.
+  const apiKeyRef = useRef(apiKey);
+  apiKeyRef.current = apiKey;
 
   useEffect(() => {
     if (!roomId) return;
@@ -269,17 +377,7 @@ export default function DetectPage() {
         }
       }
       if (room?.detectedObjects && room.detectedObjects.length > 0) {
-        const cached: Detection[] = room.detectedObjects.map((d) => ({
-          label: d.label.replace(/__slot:[nesw]$/, ''),
-          conf: d.conf,
-          box: d.box as Box,
-          category: (d.category ?? 'other') as Detection['category'],
-          slot: ((d.label.match(/__slot:([nesw])$/) ?? [])[1] ?? 'n') as CaptureSlot,
-          dimMM: d.dimMM,
-          color: d.color,
-          meshHash: d.meshHash,
-        }));
-        setDetections(cached);
+        setDetections(keyed(room.detectedObjects.map(fromRecord)));
         setConfirmed(new Set(room.detectedObjects.map((d, i) => (d.locked ? i : -1)).filter((x) => x >= 0)));
         setPath('cache');
         return;
@@ -305,7 +403,7 @@ export default function DetectPage() {
           // the disclosure is on screen for the whole upload.
           setPath('cloud');
           dets = await detectAcrossImages(
-            apiKey,
+            apiKeyRef.current,
             entries.map((e) => ({ slot: e.slot, blob: e.cap.blob })),
             room ? { width: room.width, depth: room.depth, height: room.height, layoutId: room.layoutId } : undefined,
           );
@@ -313,9 +411,9 @@ export default function DetectPage() {
         if (cancelled || stopped.current) return;
         // Geometry pass — deterministic position + W/H from the calibrated
         // camera; the AI result only contributes label/category/depth hint.
-        const refined = room
-          ? dets.map((d) => geoRefine(d, calMap, { width: room.width, depth: room.depth }))
-          : dets;
+        const refined = keyed(
+          room ? dets.map((d) => geoRefine(d, calMap, { width: room.width, depth: room.depth })) : dets,
+        );
         setDetections(refined);
         const marks = new Set<number>();
         refined.forEach((d, i) => {
@@ -354,7 +452,9 @@ export default function DetectPage() {
       cancelled = true;
       urls.forEach(URL.revokeObjectURL);
     };
-  }, [roomId, apiKey]);
+    // roomId only — see apiKeyRef above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId]);
 
   // Hybrid colour fill — sample the dominant colour from each detection's photo
   // region (exact pixels), falling back to any Gemini-provided hex. Runs once
@@ -368,13 +468,28 @@ export default function DetectPage() {
     if (missing.length === 0) return;
     let cancelled = false;
     (async () => {
-      const updates = new Map<number, string>();
-      for (const { d, i } of missing) {
-        const cap = slots.find((s) => s.slot === d.slot)?.cap;
-        const sampled = cap ? await sampleBoxColor(cap.blob, d.box) : null;
-        const color = sampled ?? d.color; // hybrid: photo sample, else Gemini hex
-        if (color) updates.set(i, color);
+      // A few at a time, not one after another and not all at once. Each call
+      // decodes the WHOLE photo, so serialising twenty detections meant twenty
+      // round trips of nothing happening — but firing all twenty holds twenty
+      // decoded bitmaps at once, which is ~150 MB on the phones this screen is
+      // aimed at. Four gives most of the speed-up with a bounded peak.
+      const sampled: Array<string | null> = [];
+      for (let n = 0; n < missing.length && !cancelled; n += COLOR_BATCH) {
+        const batch = missing.slice(n, n + COLOR_BATCH);
+        sampled.push(
+          ...(await Promise.all(
+            batch.map(({ d }) => {
+              const cap = slots.find((s) => s.slot === d.slot)?.cap;
+              return cap ? sampleBoxColor(cap.blob, d.box) : Promise.resolve(null);
+            }),
+          )),
+        );
       }
+      const updates = new Map<number, string>();
+      missing.forEach(({ d, i }, n) => {
+        const color = sampled[n] ?? d.color; // hybrid: photo sample, else Gemini hex
+        if (color) updates.set(i, color);
+      });
       if (cancelled || updates.size === 0) return;
       setDetections((arr) => arr.map((x, i) => (updates.has(i) ? { ...x, color: updates.get(i) } : x)));
     })();
@@ -411,6 +526,7 @@ export default function DetectPage() {
 
   function addManual(box: Box) {
     let det: Detection = {
+      uid: uuid(),
       label: categoryLabel(manualCat),
       conf: 1,
       box,
@@ -493,20 +609,7 @@ export default function DetectPage() {
     try {
       const room = await roomStore.loadRoom(roomId);
       if (!room) return;
-      const flat = detections.map((d, i) => ({
-        id: i,
-        label: `${cleanLabelOf(d)}__slot:${d.slot}`,
-        conf: d.conf,
-        locked: confirmed.has(i),
-        box: d.box,
-        category: d.category,
-        dimMM: d.dimMM,
-        position: d.position,
-        yaw: d.yaw,
-        shape: d.shape,
-        color: d.color,
-        meshHash: d.meshHash,
-      }));
+      const flat = detections.map((d, i) => toRecord(d, i, confirmed.has(i)));
       await roomStore.saveRoom({ ...room, detectedObjects: flat });
       router.push(`/room/${roomId}/model`);
     } finally {
@@ -830,7 +933,7 @@ export default function DetectPage() {
             )}
             {detections.map((d, i) => (
               <DetectionRow
-                key={i}
+                key={d.uid ?? `row-${i}`}
                 d={d}
                 confirmed={confirmed.has(i)}
                 highlighted={linked === i}

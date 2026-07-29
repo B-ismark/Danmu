@@ -305,17 +305,34 @@ const CATEGORY_DEFAULTS: Record<
   other: { shape: 'box', dim: [600, 600, 800] },
 };
 
-const CATALOG_SHAPES = new Set<Shape>([
+/** The shapes a detector — cloud or on-device — is allowed to name, in the order
+ *  the detection prompt lists them.
+ *
+ *  ONE list, exported, because there were three that had drifted apart:
+ *    · `'window'` was missing here while lib/local-detect.ts maps a detected
+ *      window onto it, so the gate in buildSceneFromRoom rejected the hint and a
+ *      window rendered as a plain box — even though WindowGeo exists.
+ *    · `'shoe-rack'` was here but absent from the prompt's catalog, so the cloud
+ *      path could never produce a shape this gate would accept.
+ *  lib/detection.ts now interpolates this array into the prompt instead of
+ *  restating it.
+ *
+ *  `'closet'` is deliberately NOT here: it is a legacy alias for `'wardrobe'`
+ *  that persisted rooms may still hold (ShapeDispatch and the dimension ranges
+ *  keep handling it), but nothing should mint a new one. */
+export const CATALOG_SHAPES_ORDERED: readonly Shape[] = [
   'sofa', 'tv', 'wardrobe', 'rug', 'plant',
   'chair-dining', 'chair-office', 'chair-armchair', 'ottoman',
   'bed-single', 'bed-double',
   'desk-standard', 'desk-l', 'coffee-table', 'side-table', 'nightstand',
   'lamp-floor', 'lamp-table', 'lamp-pendant',
-  'mirror', 'mirror-oval', 'painting', 'ac-unit',
+  'mirror', 'mirror-oval', 'painting', 'ac-unit', 'window',
   'monitor', 'laptop', 'fan', 'fridge', 'curtain',
   'bookshelf', 'shoe-rack', 'door',
   'soundbar', 'radiator', 'air-purifier', 'washing-machine', 'microwave', 'water-dispenser',
-]);
+] as const;
+
+const CATALOG_SHAPES = new Set<Shape>(CATALOG_SHAPES_ORDERED);
 
 /** Refine the default shape based on label keywords — turns a generic chair into
  *  an office chair if the AI detected it as such. */
@@ -429,7 +446,17 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
     const cat = ((d as { category?: Category }).category ?? 'other') as Category;
     const cfg = CATEGORY_DEFAULTS[cat] ?? CATEGORY_DEFAULTS.other;
     counters[cat] = (counters[cat] ?? 0) + 1;
-    const id = `${cat}-${counters[cat]}`;
+    // Prefer the detection's own stable key. The positional `${cat}-${n}` is an
+    // ordinal, not an identity, and every per-part user edit — positions,
+    // rotations, dims, hidden — is stored in a map keyed by this string. So
+    // re-running detection with a different set of objects used to re-point the
+    // old `sofa-1`'s saved transform at whatever the new `sofa-1` happened to be,
+    // and deleting one detection shifted every id after it.
+    //
+    // Rooms detected before `uid` shipped have none, and fall back to the ordinal
+    // — which keeps their existing transforms attached rather than orphaning every
+    // one of them in the name of the fix.
+    const id = (d as { uid?: string }).uid ?? `${cat}-${counters[cat]}`;
     const aiShape = (d as { shape?: string }).shape as Shape | undefined;
     // Label-based refinement takes priority over the AI's generic shape: the
     // detector often returns shape:'monitor' for a laptop or shape:'mirror' for
@@ -485,7 +512,9 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
     // wardrobe, TV) or in the middle (rugs, coffee tables). Nudge accordingly.
     // snapToWall is footprint-edge exact, so L/T/U inner walls count too.
     const aff = wallAffinity(cat);
-    const room = { width: rw, depth: rd };
+    // Named `bounds`, not `room` — that shadowed this function's own `room`
+    // parameter for the rest of the block.
+    const bounds = { width: rw, depth: rd };
     if (aff === 'must-wall') {
       const snapped = snapToWall(placement.pos, dim, footprint);
       placement.pos[0] = snapped.x;
@@ -494,8 +523,8 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
         placement.rot = snapped.rot;
       }
     } else if (aff === 'prefers-wall') {
-      const halfW = room.width / 2;
-      const halfD = room.depth / 2;
+      const halfW = bounds.width / 2;
+      const halfD = bounds.depth / 2;
       const distFromWall = Math.min(
         halfD + placement.pos[2],
         halfD - placement.pos[2],
@@ -513,8 +542,8 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
       }
     } else if (aff === 'prefers-middle') {
       // gentle pull toward room center (only if AI placed it near a wall by mistake).
-      const halfW = room.width / 2;
-      const halfD = room.depth / 2;
+      const halfW = bounds.width / 2;
+      const halfD = bounds.depth / 2;
       const distFromWall = Math.min(
         halfD + placement.pos[2],
         halfD - placement.pos[2],

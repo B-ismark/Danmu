@@ -56,23 +56,20 @@ export const meshCache = {
   },
   async list(): Promise<MeshRecord[]> {
     const all = await keys();
-    const out: MeshRecord[] = [];
-    for (const key of all) {
-      if (typeof key === 'string' && key.startsWith('mesh:') && key.endsWith(':meta')) {
-        const m = await get<MeshRecord>(key);
-        if (m) out.push(m);
-      }
-    }
-    return out.sort((a, b) => b.createdAt - a.createdAt);
+    const metaKeys = all.filter(
+      (key): key is string => typeof key === 'string' && key.startsWith('mesh:') && key.endsWith(':meta'),
+    );
+    const records = await Promise.all(metaKeys.map((key) => get<MeshRecord>(key)));
+    return records
+      .filter((m): m is MeshRecord => !!m)
+      .sort((a, b) => b.createdAt - a.createdAt);
   },
   async delete(hash: string): Promise<void> {
-    await del(META(hash));
-    await del(BLOB(hash));
+    await Promise.all([del(META(hash)), del(BLOB(hash))]);
   },
   async clearAll(): Promise<void> {
     const all = await keys();
-    for (const key of all) {
-      if (typeof key === 'string' && key.startsWith('mesh:')) await del(key);
-    }
+    const mine = all.filter((key): key is string => typeof key === 'string' && key.startsWith('mesh:'));
+    await Promise.all(mine.map((key) => del(key)));
   },
 };

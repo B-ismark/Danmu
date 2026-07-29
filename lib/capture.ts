@@ -31,12 +31,85 @@ export async function startCamera(): Promise<MediaStream> {
   });
 }
 
+// ─── Photo normalisation ────────────────────────────────────────────────────
+//
+// Every photo entering the app is re-encoded to at most MAX_EDGE on its long
+// side. Nothing downstream wants more: the local detector letterboxes to 640,
+// lib/photo-geometry works in normalized coordinates, and lib/color-sample
+// downsamples to a 24×24 grid.
+//
+// Uploads used to be stored and transmitted at their original resolution, and a
+// photo straight off a phone is 3-5 MB. Four of those are 12-20 MB raw, which
+// base64 inflates to 16-27 MB — past the inline-request ceiling on the detection
+// endpoint. So the app's DEFAULT input path (the Upload tab) broke detection
+// outright, and the error came back as an unclassifiable transport failure. The
+// same untouched blobs also sat in IndexedDB, pushing at the storage quota.
+//
+// ~1600px keeps a wall legible while cutting a typical upload by an order of
+// magnitude.
+const MAX_EDGE = 1600;
+const JPEG_QUALITY = 0.9;
+
+/** Raster formats the pipeline can actually measure. `image/*` also matches
+ *  SVG, which has no pixels to sample: quality scoring and colour sampling both
+ *  return noise for one, and it would then be uploaded as if it were a
+ *  photograph. */
+export const ACCEPTED_PHOTO_TYPES = [
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+  'image/avif',
+];
+
+export function isAcceptedPhoto(file: File | Blob): boolean {
+  const type = (file.type || '').toLowerCase();
+  return ACCEPTED_PHOTO_TYPES.includes(type);
+}
+
+/** Re-encode to JPEG at no more than MAX_EDGE on the long edge. Returns the
+ *  input unchanged when it cannot be decoded — a browser that refuses the format
+ *  (HEIC on desktop Chrome, say) should still be able to store the file and let
+ *  the later steps degrade, rather than lose the photo here. */
+export async function normalizePhoto(input: Blob): Promise<Blob> {
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(input);
+  } catch {
+    return input;
+  }
+  try {
+    const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    // Already small enough and already a JPEG — re-encoding would only lose data.
+    if (scale === 1 && (input.type === 'image/jpeg' || input.type === 'image/jpg')) return input;
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return input;
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    const out = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, 'image/jpeg', JPEG_QUALITY),
+    );
+    // Keep whichever is smaller: a flat wall can re-encode larger than a
+    // well-compressed original.
+    return out && out.size < input.size ? out : scale < 1 && out ? out : input;
+  } finally {
+    bitmap.close();
+  }
+}
+
 export async function snapToBlob(video: HTMLVideoElement): Promise<Blob> {
+  const scale = Math.min(1, MAX_EDGE / Math.max(video.videoWidth, video.videoHeight));
   const canvas = document.createElement('canvas');
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+  canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+  canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
   const ctx = canvas.getContext('2d')!;
-  ctx.drawImage(video, 0, 0);
-  return new Promise((resolve) => canvas.toBlob((b) => resolve(b!), 'image/jpeg', 0.92));
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  return new Promise((resolve) => canvas.toBlob((b) => resolve(b!), 'image/jpeg', JPEG_QUALITY));
 }
 

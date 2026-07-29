@@ -10,7 +10,7 @@ import { SURFACE } from './materials';
 import { Spin, Sway } from './Motion';
 import { isParametric, type ScenePart } from '@/lib/scene-spec';
 import { useStudio } from '@/lib/store';
-import { SCENE, categoryColor } from '@/lib/scene-palette';
+import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
 
 // Body albedo for a part's main surfaces. An explicit colour (photo-sampled on
 // detection, or chosen in the Inspector) ALWAYS wins — otherwise recolouring a
@@ -18,12 +18,32 @@ import { SCENE, categoryColor } from '@/lib/scene-palette';
 // "kept as-is" tint for locked items with no colour, else the shape default.
 // (Locked status still reads from the PartTree dot, Inspector badge + plan view.)
 //
-// That tint comes from lib/scene-palette. It used to be three different hard-
-// coded blues in this file alone, so "locked" rendered as a different colour
-// depending on which shape you happened to select.
-function body(part: ScenePart, fallback: string, locked: boolean): string {
+// Both the tint and the shape default come from lib/scene-palette. The tint used
+// to be three different hard-coded blues in this file alone, so "locked"
+// rendered differently depending on which shape you selected; the shape defaults
+// used to be a literal per renderer, which is why the Inspector's "Default for
+// this piece" swatch showed a colour the furniture was not.
+//
+// `locked` is deliberately the LAST word before the default, not before an
+// explicit colour.
+//
+// `fallback` is for a SECONDARY surface that should still follow the user's
+// recolour but has its own default when they haven't picked one — an armchair's
+// legs against its seat, a bed's mattress against its frame. The main body of a
+// shape must never pass it: that is what put a per-renderer literal out of step
+// with the swatch in the first place.
+function body(part: ScenePart, locked: boolean, fallback?: string): string {
   if (part.color) return part.color;
-  return locked ? SCENE.lockedTint : fallback;
+  if (locked) return SCENE.lockedTint;
+  return fallback ?? defaultBodyColor(part.category, part.shape);
+}
+
+/** `body()` for the shapes whose renderer takes no `locked` flag. These have
+ *  always shown their own colour rather than the "kept as-is" tint; keeping that
+ *  behaviour is deliberate, so this is a narrower helper rather than a call with
+ *  `locked: false` hard-coded. */
+function tint(part: ScenePart): string {
+  return part.color ?? defaultBodyColor(part.category, part.shape);
 }
 
 export function PartGeometry({ part, locked }: { part: ScenePart; locked: boolean }) {
@@ -49,7 +69,7 @@ function ShapeDispatch({ part, locked }: { part: ScenePart; locked: boolean }) {
     case 'sofa':
       return <SofaGeo part={p} locked={locked} />;
     case 'tv':
-      return <TVGeo />;
+      return <TVGeo part={part} locked={locked} />;
     case 'closet':
     case 'wardrobe':
       return <WardrobeGeo part={p} locked={locked} />;
@@ -139,7 +159,7 @@ function SofaGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
-  const main = body(part, categoryColor(part.category), locked);
+  const main = body(part, locked);
   const cushion = shade(main, 14);
   const arm = Math.min(0.18, w * 0.12);
   const legH = 0.1;
@@ -175,14 +195,25 @@ function SofaGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   );
 }
 
-function TVGeo() {
-  const w = 1.45;
-  const h = 0.82;
+// Chassis size comes from dimMM like every other shape. It used to be a fixed
+// 1.45 × 0.82 m regardless of the part's dimensions — and because Draggable
+// scales the group by `storedDim / part.dimMM`, a 2 m TV with no user resize
+// rendered at 1.45 m while the inspector, the plan view and the furniture list
+// all said 2 m. On a product whose promise is real dimensions, the one shape
+// that ignored its own was the TV.
+//
+// It also took no `part` at all, so recolouring a TV in the Inspector silently
+// did nothing.
+function TVGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
+  const w = part.dimMM[0] / 1000;
+  const h = part.dimMM[2] / 1000;
+  const d = Math.max(0.03, part.dimMM[1] / 1000);
+  const bezel = body(part, locked);
   return (
     <>
-      <Box size={[w, h, 0.05]} position={[0, 0, 0]} color="#0d0d0f" roughness={0.5} />
+      <Box size={[w, h, d]} position={[0, 0, 0]} color={bezel} roughness={0.5} />
       {/* recessed glowing screen */}
-      <mesh position={[0, 0, 0.027]}>
+      <mesh position={[0, 0, d / 2 + 0.002]}>
         <planeGeometry args={[w * 0.95, h * 0.9]} />
         <meshStandardMaterial color="#10141c" emissive="#1c2e48" emissiveIntensity={0.35} roughness={0.18} metalness={0.2} />
       </mesh>
@@ -193,7 +224,7 @@ function TVGeo() {
 function RugGeo({ part }: { part: ScenePart }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
-  const base = part.color ?? '#C8A88A';
+  const base = tint(part);
   // A thin soft slab (not a zero-thickness plane) gives an edge + pile, and a
   // slightly darker inset border reads as a woven rug rather than painted floor.
   return (
@@ -221,7 +252,7 @@ function shade(hex: string, pct: number): string {
 
 // ─── Chairs ──────────────────────────────────────────────────────────────
 function DiningChairGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
-  const wood = body(part, '#5D3820', locked);
+  const wood = body(part, locked);
   const seat = shade(wood, 14);
   return (
     <>
@@ -245,7 +276,7 @@ function DiningChairGeo({ part, locked }: { part: ScenePart; locked: boolean }) 
 }
 
 function OfficeChairGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
-  const cushion = body(part, '#3A3A3A', locked);
+  const cushion = body(part, locked);
   const metal = '#5A5A5A';
   return (
     <>
@@ -287,8 +318,8 @@ function OfficeChairGeo({ part, locked }: { part: ScenePart; locked: boolean }) 
 }
 
 function ArmchairGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
-  const seat = body(part, '#E8C7AE', locked);
-  const leg = body(part, '#4A3526', locked);
+  const seat = body(part, locked);
+  const leg = body(part, locked, '#4A3526');
   const cushionDark = shade(seat, -10);
   return (
     <>
@@ -316,7 +347,7 @@ function ArmchairGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
 
 // ─── Plant ──────────────────────────────────────────────────────────────
 function PlantGeo({ part }: { part: ScenePart }) {
-  const pot = part.color ?? '#B07555';
+  const pot = tint(part);
   // Tapered pot + soil + a clustered canopy of varied-green blobs (was a single
   // ball that read as a lollipop).
   const blobs: Array<{ p: [number, number, number]; r: number; c: string }> = [
@@ -362,7 +393,7 @@ function PlantGeo({ part }: { part: ScenePart }) {
 // ─── Lamps ──────────────────────────────────────────────────────────────
 function FloorLampGeo({ part }: { part: ScenePart }) {
   const metal = '#9A7848';
-  const shade = part.color ?? '#E8E0CB';
+  const shade = tint(part);
   return (
     <>
       <mesh position={[0, 0.02, 0]}>
@@ -383,7 +414,7 @@ function FloorLampGeo({ part }: { part: ScenePart }) {
 
 function TableLampGeo({ part }: { part: ScenePart }) {
   const metal = '#9A7848';
-  const shade = part.color ?? '#E8E0CB';
+  const shade = tint(part);
   return (
     <>
       {/* base */}
@@ -406,7 +437,7 @@ function TableLampGeo({ part }: { part: ScenePart }) {
 }
 
 function PendantLampGeo({ part }: { part: ScenePart }) {
-  const dome = part.color ?? '#E8B833';
+  const dome = tint(part);
   // Swing from the ceiling mount (top of the cord at y≈0.6).
   return (
     <group position={[0, 0.6, 0]}>
@@ -437,7 +468,7 @@ function WardrobeGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
-  const wood = body(part, '#E8B833', locked);
+  const wood = body(part, locked);
   const side = shade(wood, -8);
   const top = shade(wood, -15);
   const bays = Math.max(1, Math.round(w / 0.6));
@@ -486,7 +517,7 @@ function BookshelfGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
-  const wood = body(part, '#9A7848', locked);
+  const wood = body(part, locked);
   const back = shade(wood, -18);
   const bays = Math.max(2, Math.round(h / 0.35)); // vertical compartments
   const gap = h / bays;
@@ -532,7 +563,7 @@ function ShoeRackGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
-  const wood = body(part, '#8A6A45', locked);
+  const wood = body(part, locked);
   const tiers = Math.max(2, Math.round(h / 0.2));
   const gap = h / tiers;
   const posts = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => [sx * (w / 2 - 0.02), sz * (d / 2 - 0.02)] as [number, number]));
@@ -565,8 +596,8 @@ function BedGeo({ part, locked, double }: { part: ScenePart; locked: boolean; do
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
-  const frame = body(part, '#6F4F35', locked);
-  const mattress = body(part, '#E8D5B0', locked);
+  const frame = body(part, locked);
+  const mattress = body(part, locked, '#E8D5B0');
   // Pillows always neutral — real beds have white/cream pillows regardless of frame color.
   const pillow = locked ? shade(SCENE.lockedTint, 20) : '#F0ECE3';
   return (
@@ -601,7 +632,7 @@ function DeskGeo({ part, locked, lShape }: { part: ScenePart; locked: boolean; l
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
-  const top = body(part, '#5D3820', locked);
+  const top = body(part, locked);
   const leg = shade(top, -25);
   return (
     <>
@@ -628,19 +659,22 @@ function MonitorGeo({ part }: { part: ScenePart }) {
   const h = part.dimMM[2] / 1000;
   const screenH = h * 0.6;
   const screenY = h * 0.66;
+  // The bezel, housing, neck and base follow the part's colour. They were four
+  // literals, so the Inspector's colour picker did nothing to a monitor.
+  const shell = tint(part);
   return (
     <>
       {/* weighted base disc */}
       <mesh position={[0, 0.012, 0.01]}>
         <cylinderGeometry args={[0.12, 0.15, 0.024, 28]} />
-        <meshStandardMaterial color="#1E1E22" roughness={0.5} metalness={0.35} />
+        <meshStandardMaterial color={shell} roughness={0.5} metalness={0.35} />
       </mesh>
       {/* angled neck */}
-      <Box size={[0.05, h * 0.32, 0.028]} position={[0, h * 0.22, -0.005]} color="#26262A" roughness={0.5} metalness={0.3} />
+      <Box size={[0.05, h * 0.32, 0.028]} position={[0, h * 0.22, -0.005]} color={shade(shell, 6)} roughness={0.5} metalness={0.3} />
       {/* housing / back bulge (gives the panel real depth) */}
-      <Box size={[w * 0.98, screenH, 0.05]} position={[0, screenY, -0.022]} color="#17171A" roughness={0.55} />
+      <Box size={[w * 0.98, screenH, 0.05]} position={[0, screenY, -0.022]} color={shade(shell, -8)} roughness={0.55} />
       {/* bezel frame */}
-      <Box size={[w, screenH + 0.02, 0.02]} position={[0, screenY, 0.006]} color="#0D0D0F" roughness={0.6} />
+      <Box size={[w, screenH + 0.02, 0.02]} position={[0, screenY, 0.006]} color={shell} roughness={0.6} />
       {/* lit screen, inset into the bezel */}
       <mesh position={[0, screenY + 0.008, 0.017]}>
         <planeGeometry args={[w * 0.93, screenH * 0.84]} />
@@ -657,6 +691,9 @@ function MonitorGeo({ part }: { part: ScenePart }) {
 
 function FanGeo({ part }: { part: ScenePart }) {
   const r = part.dimMM[0] / 2 / 1000;
+  // Blades follow the part's colour; the motor housing stays metal. The blades
+  // were a literal, so recolouring a ceiling fan did nothing.
+  const blade = tint(part);
   return (
     <>
       <mesh position={[0, 0, 0]}>
@@ -672,7 +709,7 @@ function FanGeo({ part }: { part: ScenePart }) {
               <Box
                 size={[r * 1.6, 0.012, 0.16]}
                 position={[r * 0.6, 0, 0]}
-                color="#C9A98E"
+                color={blade}
                 edgeOpacity={0.4}
               />
             </group>
@@ -687,7 +724,7 @@ function FridgeGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
-  const shell = body(part, '#E8E5DB', locked);
+  const shell = body(part, locked);
   return (
     <>
       <Box size={[w, h, d]} position={[0, h / 2, 0]} color={shell} roughness={0.5} metalness={0.08} />
@@ -707,7 +744,7 @@ function FridgeGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
 function CurtainGeo({ part }: { part: ScenePart }) {
   const w = part.dimMM[0] / 1000;
   const h = part.dimMM[2] / 1000;
-  const cloth = part.color ?? '#D4CDB8';
+  const cloth = tint(part);
   // Accordion pleats: vertical strips with alternating Y-rotation read as folds
   // and catch light per-face — far less flat than two billboard planes.
   const pleats = Math.max(8, Math.round(w / 0.11));
@@ -742,7 +779,7 @@ function CoffeeTableGeo({ part, locked }: { part: ScenePart; locked: boolean }) 
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
-  const top = body(part, '#5D3820', locked);
+  const top = body(part, locked);
   const frame = shade(top, -20);
   return (
     <>
@@ -767,7 +804,7 @@ function SideTableGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
-  const top = body(part, '#9A7848', locked);
+  const top = body(part, locked);
   const dark = shade(top, -28);
   const r = Math.min(w, d) * 0.38;
   return (
@@ -792,7 +829,7 @@ function NightstandGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
-  const wood = body(part, '#5D3820', locked);
+  const wood = body(part, locked);
   const dark = shade(wood, -20);
   const face = shade(wood, 8);
   // Double-click toggles drawers open; slide the faces (+ pulls + a shallow
@@ -826,7 +863,7 @@ function OttomanGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
-  const fabric = body(part, '#A88A6E', locked);
+  const fabric = body(part, locked);
   const dark = shade(fabric, -14);
   const leg = shade(fabric, -35);
   return (
@@ -852,6 +889,9 @@ function OttomanGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
 function MirrorGeo({ part, oval }: { part: ScenePart; oval: boolean }) {
   const w = part.dimMM[0] / 1000;
   const h = part.dimMM[2] / 1000;
+  // The frame is the recolourable surface (the glass is not). It was a literal in
+  // both branches, so recolouring a mirror did nothing.
+  const frame = tint(part);
   if (oval) {
     // Ellipse from a unit circle scaled to W × H. Frame is a slightly larger
     // ellipse behind the reflective face.
@@ -859,7 +899,7 @@ function MirrorGeo({ part, oval }: { part: ScenePart; oval: boolean }) {
       <>
         <mesh position={[0, 0, 0]} scale={[w / 2 + 0.03, h / 2 + 0.03, 1]}>
           <circleGeometry args={[1, 56]} />
-          <meshStandardMaterial color="#5D3820" {...SURFACE.wood} />
+          <meshStandardMaterial color={frame} {...SURFACE.wood} />
         </mesh>
         <mesh position={[0, 0, 0.025]} scale={[w / 2, h / 2, 1]}>
           <circleGeometry args={[1, 56]} />
@@ -870,7 +910,7 @@ function MirrorGeo({ part, oval }: { part: ScenePart; oval: boolean }) {
   }
   return (
     <>
-      <Box size={[w + 0.03, h + 0.03, 0.04]} position={[0, 0, 0]} color="#5D3820" />
+      <Box size={[w + 0.03, h + 0.03, 0.04]} position={[0, 0, 0]} color={frame} />
       <mesh position={[0, 0, 0.025]}>
         <planeGeometry args={[w, h]} />
         {/* Soft reflective mirror — gentle gloss, not a chrome plate. */}
@@ -885,7 +925,7 @@ function MirrorGeo({ part, oval }: { part: ScenePart; oval: boolean }) {
 function WindowGeo({ part }: { part: ScenePart }) {
   const w = part.dimMM[0] / 1000;
   const h = part.dimMM[2] / 1000;
-  const frame = part.color ?? '#F4F1EA';
+  const frame = tint(part);
   // One pane per ~0.7m of width, separated by slim mullions.
   const panes = Math.max(1, Math.round(w / 0.7));
   const paneW = w / panes;
@@ -916,13 +956,15 @@ function LaptopGeo({ part }: { part: ScenePart }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000; // open height (lid raised)
-  const body = '#3a3d42';
-  const deck = shade(body, -10);
+  // Was a local `const body`, which shadowed the body() helper above and pinned
+  // the chassis to one literal — so a laptop could not be recoloured either.
+  const shell = tint(part);
+  const deck = shade(shell, -10);
   return (
     <>
       {/* chassis — tapered: thin front lip, thicker back (reads as a real base) */}
-      <Box size={[w, 0.012, d]} position={[0, 0.006, d * 0.12]} color={body} roughness={0.45} metalness={0.4} />
-      <Box size={[w, 0.022, d * 0.7]} position={[0, 0.011, -d * 0.12]} color={body} roughness={0.45} metalness={0.4} />
+      <Box size={[w, 0.012, d]} position={[0, 0.006, d * 0.12]} color={shell} roughness={0.45} metalness={0.4} />
+      <Box size={[w, 0.022, d * 0.7]} position={[0, 0.011, -d * 0.12]} color={shell} roughness={0.45} metalness={0.4} />
       {/* recessed keyboard well */}
       <Box size={[w * 0.9, 0.006, d * 0.5]} position={[0, 0.016, -d * 0.1]} color="#202327" roughness={0.6} />
       {/* key rows — a few thin ridges hint at keys without thousands of meshes */}
@@ -966,7 +1008,7 @@ function PaintingGeo({ part }: { part: ScenePart }) {
       <Box size={[w + 0.04, h + 0.04, 0.025]} position={[0, 0, 0]} color="#3A2818" />
       <mesh position={[0, 0, 0.014]}>
         <planeGeometry args={[w, h]} />
-        <meshStandardMaterial color={part.color ?? '#A88A6E'} roughness={0.85} />
+        <meshStandardMaterial color={tint(part)} roughness={0.85} />
       </mesh>
       {/* abstract bands */}
       <mesh position={[0, h * 0.15, 0.015]}>
@@ -985,7 +1027,7 @@ function ACUnitGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
-  const shell = part.color ?? (locked ? SCENE.lockedTint : '#F2F1EB');
+  const shell = body(part, locked);
   return (
     <>
       <Box size={[w, h, d]} position={[0, 0, 0]} color={shell} />
@@ -1007,7 +1049,7 @@ function DoorGeo({ part }: { part: ScenePart }) {
   // already "correct" for a bottom-anchored mesh.
   return (
     <>
-      <Box size={[w, h, 0.04]} position={[0, h / 2, 0]} color={part.color ?? '#5D3820'} />
+      <Box size={[w, h, 0.04]} position={[0, h / 2, 0]} color={tint(part)} />
       {/* handle at ~1 m from the floor */}
       <mesh position={[w / 2 - 0.06, Math.min(1.0, h * 0.45), 0.025]}>
         <sphereGeometry args={[0.025, 12, 12]} />
@@ -1022,7 +1064,7 @@ function SoundbarGeo({ part }: { part: ScenePart }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
-  const bodyC = part.color ?? '#2b2b2e';
+  const bodyC = tint(part);
   return (
     <>
       <Box size={[w, h, d]} position={[0, h / 2, 0]} color={bodyC} roughness={0.55} />
@@ -1039,7 +1081,7 @@ function RadiatorGeo({ part }: { part: ScenePart }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
-  const bodyC = part.color ?? '#ECEAE3';
+  const bodyC = tint(part);
   const fins = Math.max(6, Math.round(w / 0.06));
   const fw = w / fins;
   // 33 fins on a 2m radiator, all the same colour — a textbook instanced set.
@@ -1060,7 +1102,7 @@ function AirPurifierGeo({ part }: { part: ScenePart }) {
   const w = part.dimMM[0] / 1000;
   const h = part.dimMM[2] / 1000;
   const r = w / 2;
-  const bodyC = part.color ?? '#EDEDEA';
+  const bodyC = tint(part);
   return (
     <>
       <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
@@ -1087,7 +1129,7 @@ function WashingMachineGeo({ part }: { part: ScenePart }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
-  const bodyC = part.color ?? '#EFEFEC';
+  const bodyC = tint(part);
   const doorR = Math.min(w, h) * 0.3;
   return (
     <>
@@ -1111,7 +1153,7 @@ function MicrowaveGeo({ part }: { part: ScenePart }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
-  const bodyC = part.color ?? '#3a3a3d';
+  const bodyC = tint(part);
   return (
     <>
       <Box size={[w, h, d]} position={[0, h / 2, 0]} color={bodyC} roughness={0.5} metalness={0.1} />
@@ -1135,7 +1177,7 @@ function WaterDispenserGeo({ part }: { part: ScenePart }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
-  const bodyC = part.color ?? '#EDEDEA';
+  const bodyC = tint(part);
   return (
     <>
       <Box size={[w, h * 0.7, d]} position={[0, h * 0.35, 0]} color={bodyC} roughness={0.45} />
@@ -1162,14 +1204,14 @@ function BoxGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
-  const color = body(part, categoryColor(part.category), locked);
+  const color = body(part, locked);
   return <Box size={[w, h, d]} position={[0, h / 2, 0]} color={color} />;
 }
 
 function CylinderGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const w = part.dimMM[0] / 1000;
   const h = part.dimMM[2] / 1000;
-  const color = body(part, categoryColor(part.category), locked);
+  const color = body(part, locked);
   return (
     <mesh position={[0, h / 2, 0]}>
       <cylinderGeometry args={[w / 2, w / 2, h, 24]} />
@@ -1181,7 +1223,7 @@ function CylinderGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
 function PlaneGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
-  const color = body(part, categoryColor(part.category), locked);
+  const color = body(part, locked);
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, 0]}>
       <planeGeometry args={[w, d]} />

@@ -6,6 +6,10 @@ package-lock.json
 # local detector model — exported via scripts/export-detector.py, too big for git
 public/models/*.onnx
 public/models/*.names.json
+# vendored ONNX Runtime — copied from node_modules by `pnpm vendor:ort` so the
+# browser loads it same-origin instead of from a CDN. Not committed: it is a
+# build artifact of a pinned dependency.
+public/ort
 # throwaway venv for that export (torch + ultralytics); safe to delete after
 .venv-export
 # ultralytics auto-downloads the .pt weights into cwd during export
