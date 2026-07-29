@@ -489,19 +489,23 @@ function DimensionEditor({
   // millimetres is the rare path; dragging and recolouring are the common ones.
   const [open, setOpen] = useState(false);
 
+  // Destructured so the resync effect can depend on the three numbers rather
+  // than the tuple identity — the parent rebuilds `value` every render.
+  const [valW, valD, valH] = value;
+
   const [local, setLocal] = useState<[string, string, string]>(() => [
-    fromMM(value[0], dimUnit).toFixed(prec),
-    fromMM(value[1], dimUnit).toFixed(prec),
-    fromMM(value[2], dimUnit).toFixed(prec),
+    fromMM(valW, dimUnit).toFixed(prec),
+    fromMM(valD, dimUnit).toFixed(prec),
+    fromMM(valH, dimUnit).toFixed(prec),
   ]);
 
   useEffect(() => {
     setLocal([
-      fromMM(value[0], dimUnit).toFixed(prec),
-      fromMM(value[1], dimUnit).toFixed(prec),
-      fromMM(value[2], dimUnit).toFixed(prec),
+      fromMM(valW, dimUnit).toFixed(prec),
+      fromMM(valD, dimUnit).toFixed(prec),
+      fromMM(valH, dimUnit).toFixed(prec),
     ]);
-  }, [partId, value[0], value[1], value[2], dimUnit, prec]);
+  }, [partId, valW, valD, valH, dimUnit, prec]);
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
