@@ -20,7 +20,9 @@
 // a single object. As an InstancedMesh it is one of each.
 
 import { Edges, RoundedBox } from '@react-three/drei';
-import type { MeshStandardMaterialProps } from '@react-three/fiber';
+// R3F 9 dropped the per-element `*Props` aliases; the element prop types now
+// come off the `ThreeElements` map instead.
+import type { ThreeElements } from '@react-three/fiber';
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { Color, DoubleSide, Euler, Matrix4, Quaternion, Vector3, type InstancedMesh } from 'three';
 
@@ -154,7 +156,7 @@ type InstancedProps = {
   /** shared albedo. Pass '#ffffff' when items carry their own colour. */
   color: string;
   /** extra material props — normally a SURFACE preset from ./materials. */
-  surface?: Omit<MeshStandardMaterialProps, 'color'>;
+  surface?: Omit<ThreeElements['meshStandardMaterial'], 'color'>;
 };
 
 /** One draw call for N boxes — book spines, radiator fins, rack slats. */

@@ -11,9 +11,11 @@ every current feature, architecture, geometry engine, and roadmap).
 
 ## Stack
 
-- **Next.js 15.5** (App Router) + **React 18.3** + **TypeScript 5.9**
+- **Next.js 15.5** (App Router) + **React 19.2** + **TypeScript 5.9**
 - **Tailwind 3.4** — design tokens in [`app/globals.css`](app/globals.css)
-- **Three.js** + **@react-three/fiber** + **drei** + **postprocessing** — declarative 3D
+- **Three.js** + **@react-three/fiber 9** + **drei 10** + **postprocessing 3** — declarative 3D
+  (the React 19 line; see [Design.md](Design.md) — fiber 8 + drei 9 cannot run
+  under Next 15's App Router)
 - **Zustand** (client state)
 - **idb-keyval** for rooms, **localStorage** for settings + API key
 - **onnxruntime-web** — local, in-browser furniture detection (no key). Two
