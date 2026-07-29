@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { v4 as uuid } from 'uuid';
 import { useRoom } from '@/lib/store';
@@ -22,6 +22,9 @@ export default function LayoutPickPage() {
   const setRoomId = useRoom((s) => s.setRoomId);
   const [sel, setSel] = useState<(typeof LAYOUTS)[number]['id']>('rect');
   const [saving, setSaving] = useState<null | 'model' | 'capture'>(null);
+  const [error, setError] = useState<string | null>(null);
+  // Roving tabindex needs the DOM nodes: arrow keys move focus, not just state.
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const layout = LAYOUTS.find((l) => l.id === sel)!;
 
@@ -29,18 +32,43 @@ export default function LayoutPickPage() {
   async function createRoom(dest: 'model' | 'capture') {
     if (saving) return;
     setSaving(dest);
+    setError(null);
     const id = uuid();
-    await roomStore.saveRoom({
-      id,
-      name: 'My Room',
-      createdAt: Date.now(),
-      layoutId: sel,
-      width: layout.width,
-      depth: layout.depth,
-      height: HEIGHT,
-    });
+    try {
+      await roomStore.saveRoom({
+        id,
+        // Named after the preset it started from. Every room used to be called
+        // "My Room", which turned the workspace into a grid of identical cards.
+        name: layout.starter,
+        createdAt: Date.now(),
+        layoutId: sel,
+        width: layout.width,
+        depth: layout.depth,
+        height: HEIGHT,
+      });
+    } catch {
+      // Storage can genuinely refuse (private windows, full disk). Say so and
+      // hand the button back rather than sitting in "Creating…" forever.
+      setSaving(null);
+      setError("This browser wouldn't save the room. Free up some space, or try a normal (non-private) window.");
+      return;
+    }
     setRoomId(id);
     router.push(dest === 'model' ? `/room/${id}/model` : '/onboarding/capture');
+  }
+
+  // A radiogroup promises arrow-key navigation; without this it only had Tab.
+  function onOptionKeyDown(e: React.KeyboardEvent, i: number) {
+    const last = LAYOUTS.length - 1;
+    let next = -1;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = i === last ? 0 : i + 1;
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = i === 0 ? last : i - 1;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = last;
+    if (next < 0) return;
+    e.preventDefault();
+    setSel(LAYOUTS[next].id);
+    optionRefs.current[next]?.focus();
   }
 
   return (
@@ -56,39 +84,38 @@ export default function LayoutPickPage() {
           'var(--paper)',
       }}
     >
-      <Topbar step="02 / 04" onBack={() => router.back()} />
+      <Topbar onBack={() => router.back()} />
 
-      <div style={{ flex: 1, display: 'grid', placeItems: 'center', padding: '40px 24px' }}>
-        <div
-          style={{
-            width: '100%',
-            maxWidth: 1100,
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
-            gap: 32,
-            alignItems: 'start',
-          }}
-        >
+      <div className="page-pad" style={{ flex: 1, display: 'grid', placeItems: 'center' }}>
+        {/* .auto-grid--wide collapses to one column on a phone; the old
+            minmax(380px, 1fr) forced a track wider than the viewport. */}
+        <div className="auto-grid auto-grid--wide" style={{ width: '100%', maxWidth: 1100, gap: 32, alignItems: 'start' }}>
           {/* INTRO + PICKER */}
           <div>
             <StepHeader
-              step={2}
-              total={4}
-              title="Pick your room's footprint."
-              subtitle="Becomes the 1:1 grid your 3D room is built on — start decorating right away, or capture your real room first. Custom shapes coming soon."
+              kicker="Pick a shape"
+              title="Which footprint is closest to your room?"
+              subtitle="It becomes the 1:1 floor your 3D room is built on. Start decorating right away, or photograph your real room first — either way you can move the walls later."
             />
             <div role="radiogroup" aria-label="Room footprint" style={{ marginTop: 24, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              {LAYOUTS.map((l) => {
+              {LAYOUTS.map((l, i) => {
                 const active = sel === l.id;
                 return (
                   <button
                     key={l.id}
+                    ref={(el) => {
+                      optionRefs.current[i] = el;
+                    }}
                     role="radio"
                     aria-checked={active}
                     aria-label={`${l.name}, ${l.area}, starts as a ${l.starter.toLowerCase()}`}
+                    // Roving tabindex: one stop for the whole group, arrows move
+                    // within it — the standard radiogroup keyboard contract.
+                    tabIndex={active ? 0 : -1}
+                    onKeyDown={(e) => onOptionKeyDown(e, i)}
                     onClick={() => setSel(l.id)}
                     style={{
-                      border: `2px solid ${active ? 'var(--accent)' : 'var(--hairline-strong)'}`,
+                      border: `2px solid ${active ? 'var(--accent)' : 'var(--edge)'}`,
                       background: active ? 'var(--accent-tint)' : 'var(--paper)',
                       borderRadius: 'var(--r-3)',
                       padding: '14px 14px 12px',
@@ -110,8 +137,8 @@ export default function LayoutPickPage() {
                         strokeWidth="2"
                       />
                     </svg>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                      <span style={{ fontSize: 13.5, fontWeight: 700, color: active ? 'var(--accent)' : 'var(--ink)' }}>{l.name}</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 700, color: active ? 'var(--accent-text)' : 'var(--ink)' }}>{l.name}</span>
                       <span className="mono" style={{ fontSize: 10, color: 'var(--ink-2)' }}>{l.area}</span>
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--ink-2)' }}>Starts as a {l.starter.toLowerCase()}</div>
@@ -120,13 +147,31 @@ export default function LayoutPickPage() {
               })}
             </div>
 
+            {error && (
+              <p
+                role="status"
+                aria-live="polite"
+                style={{
+                  margin: '16px 0 0',
+                  padding: '10px 12px',
+                  borderRadius: 'var(--r-2)',
+                  background: 'var(--danger-tint)',
+                  color: 'var(--danger-text)',
+                  fontSize: 12.5,
+                  lineHeight: 1.45,
+                }}
+              >
+                {error}
+              </p>
+            )}
+
             <button
               onClick={() => createRoom('model')}
               disabled={saving !== null}
               className="ds-btn ds-btn--accent"
               style={{ marginTop: 24, height: 48, fontSize: 14, justifyContent: 'center', width: '100%' }}
             >
-              {saving === 'model' ? 'Creating your room…' : (<>Start decorating · {layout.starter.toLowerCase()}<Icon name="arrow-right" size={14} color="#fff" /></>)}
+              {saving === 'model' ? 'Creating your room…' : (<>Start decorating · {layout.starter.toLowerCase()}<Icon name="arrow-right" size={14} color="var(--on-accent)" /></>)}
             </button>
             <button
               onClick={() => createRoom('capture')}
@@ -135,14 +180,14 @@ export default function LayoutPickPage() {
               style={{ marginTop: 8, height: 44, fontSize: 12.5, justifyContent: 'center', width: '100%', color: 'var(--ink-2)' }}
             >
               <Icon name="camera" size={13} />
-              {saving === 'capture' ? 'Creating your room…' : 'Capture my real room first (optional)'}
+              {saving === 'capture' ? 'Creating your room…' : 'Photograph my real room first (optional)'}
             </button>
           </div>
 
           {/* PREVIEW */}
           <div
             style={{
-              border: '1px solid var(--hairline-strong)',
+              border: '1px solid var(--hairline)',
               background: 'var(--paper)',
               borderRadius: 'var(--r-card)',
               padding: 24,
@@ -162,7 +207,7 @@ export default function LayoutPickPage() {
                   stroke="var(--accent)"
                   strokeWidth="1.5"
                 />
-                <g fontFamily="var(--font-mono)" fontSize="8" fill="var(--accent)">
+                <g fontFamily="var(--font-mono)" fontSize="8" fill="var(--accent-text)">
                   <line x1="20" y1="10" x2="220" y2="10" stroke="var(--accent)" strokeWidth="0.8" />
                   <rect x="102" y="4" width="40" height="12" fill="var(--paper)" />
                   <text x="122" y="12" textAnchor="middle">{(layout.width * 1000).toFixed(0)} mm</text>
@@ -176,27 +221,18 @@ export default function LayoutPickPage() {
   );
 }
 
-function Topbar({ step, onBack }: { step: string; onBack: () => void }) {
+function Topbar({ onBack }: { onBack: () => void }) {
+  // No step counter: the primary CTA on this screen goes straight to the studio,
+  // so "02 / 04" was promising a sequence most people never walk.
   return (
-    <div
-      style={{
-        height: 56,
-        padding: '0 24px',
-        borderBottom: '1px solid var(--hairline)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 14,
-        background: 'var(--paper)',
-      }}
-    >
+    <div className="chrome-bar">
       <button onClick={onBack} className="ds-btn ds-btn--ghost" style={{ height: 40, padding: '0 10px' }}>
         <Icon name="chevron-left" size={14} />
         <span style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>Back</span>
       </button>
       <div style={{ width: 1, height: 18, background: 'var(--hairline)' }} />
       <DanmuMark size={12} />
-      <div style={{ flex: 1 }} />
-      <span className="ds-label">{step}</span>
+      <div className="chrome-bar__spacer" />
     </div>
   );
 }

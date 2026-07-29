@@ -5,9 +5,27 @@
 // stops parts reading as flat slabs. Hard ink outlines are OFF by default now
 // (they were the main "flat CAD" tell); small accent calls can still opt back in
 // by passing edgeOpacity > 0.
+//
+// A bevel is only worth its vertex count when you can see it. The radius is
+// clamped to 18% of the smallest dimension, so anything under ~5cm (legs, slats,
+// rails, shelf boards, book spines, grille louvres) gets a sub-1cm fillet that
+// is sub-pixel at any sane camera distance — those fall through to a plain
+// 12-triangle boxGeometry instead of RoundedBox's few hundred, in the shadow
+// pass too. Visually identical, an order of magnitude cheaper.
+//
+// BoxInstances / PlaneInstances below exist because the parametric shapes repeat
+// ONE element dozens-to-hundreds of times: a maxed bookshelf is 7 bays × 42
+// books = 294 spines, a 5m curtain is 45 pleats, a 2m radiator 33 fins. As
+// individual meshes that is 300 geometries + 300 materials + 300 draw calls for
+// a single object. As an InstancedMesh it is one of each.
 
 import { Edges, RoundedBox } from '@react-three/drei';
-import type { ReactNode } from 'react';
+import type { MeshStandardMaterialProps } from '@react-three/fiber';
+import { useLayoutEffect, useRef, type ReactNode } from 'react';
+import { Color, DoubleSide, Euler, Matrix4, Quaternion, Vector3, type InstancedMesh } from 'three';
+
+/** Below this (metres) the clamped bevel is invisible — skip RoundedBox. */
+const BEVEL_FLOOR = 0.05;
 
 type Props = {
   size: [number, number, number];
@@ -42,24 +60,123 @@ export function Box({
   // (doors, shelves, TV) don't collapse.
   const minDim = Math.min(size[0], size[1], size[2]);
   const radius = Math.min(0.03, Math.max(0.004, minDim * 0.18));
+  const material = (
+    <meshStandardMaterial
+      color={color}
+      roughness={roughness}
+      metalness={metalness}
+      envMapIntensity={0.5}
+      emissive={emissive ?? '#000000'}
+      emissiveIntensity={emissiveIntensity}
+    />
+  );
+  const outline = edgeOpacity > 0 && (
+    <Edges threshold={30} renderOrder={1}>
+      <lineBasicMaterial color={edgeColor} transparent opacity={edgeOpacity} />
+    </Edges>
+  );
   return (
     <group position={position} rotation={rotation}>
-      <RoundedBox args={size} radius={radius} smoothness={3} steps={1} castShadow receiveShadow>
-        <meshStandardMaterial
-          color={color}
-          roughness={roughness}
-          metalness={metalness}
-          envMapIntensity={0.5}
-          emissive={emissive ?? '#000000'}
-          emissiveIntensity={emissiveIntensity}
-        />
-        {edgeOpacity > 0 && (
-          <Edges threshold={30} renderOrder={1}>
-            <lineBasicMaterial color={edgeColor} transparent opacity={edgeOpacity} />
-          </Edges>
-        )}
-      </RoundedBox>
+      {minDim < BEVEL_FLOOR ? (
+        <mesh castShadow receiveShadow>
+          <boxGeometry args={size} />
+          {material}
+          {outline}
+        </mesh>
+      ) : (
+        <RoundedBox args={size} radius={radius} smoothness={3} steps={1} castShadow receiveShadow>
+          {material}
+          {outline}
+        </RoundedBox>
+      )}
       {children}
     </group>
+  );
+}
+
+// ─── Instanced repeats ────────────────────────────────────────────────────────
+
+export type InstanceItem = {
+  /** centre, in the parent group's local space */
+  pos: [number, number, number];
+  /** box: [w, h, d]. plane: [w, h] (the third value is ignored) */
+  size: [number, number, number];
+  /** optional local euler rotation, radians */
+  rot?: [number, number, number];
+  /** per-instance albedo, multiplied over the shared material colour. Only the
+   *  bookshelf needs it (every spine a different colour, one material). */
+  color?: string;
+};
+
+// Module-level scratch — composing a matrix per instance must not allocate.
+const _m = new Matrix4();
+const _p = new Vector3();
+const _q = new Quaternion();
+const _e = new Euler();
+const _s = new Vector3();
+const _c = new Color();
+
+/** Writes one transform (and optional colour) per item into the InstancedMesh.
+ *  Runs in a layout effect, never per frame — the geometry is static once the
+ *  part's dims are resolved. */
+function useInstanceTransforms(items: InstanceItem[]) {
+  const ref = useRef<InstancedMesh | null>(null);
+  useLayoutEffect(() => {
+    const mesh = ref.current;
+    if (!mesh) return;
+    let tinted = false;
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      _p.set(it.pos[0], it.pos[1], it.pos[2]);
+      _e.set(it.rot?.[0] ?? 0, it.rot?.[1] ?? 0, it.rot?.[2] ?? 0);
+      _q.setFromEuler(_e);
+      // Unit geometry scaled to the item's size — one geometry serves every
+      // variation, which is what makes the whole set a single upload.
+      _s.set(it.size[0] || 1e-4, it.size[1] || 1e-4, it.size[2] || 1);
+      mesh.setMatrixAt(i, _m.compose(_p, _q, _s));
+      if (it.color) {
+        mesh.setColorAt(i, _c.set(it.color));
+        tinted = true;
+      }
+    }
+    mesh.count = items.length;
+    mesh.instanceMatrix.needsUpdate = true;
+    if (tinted && mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    // InstancedMesh keeps its own bounds; without this the whole set can be
+    // frustum-culled from the wrong place.
+    mesh.computeBoundingSphere();
+  }, [items]);
+  return ref;
+}
+
+type InstancedProps = {
+  items: InstanceItem[];
+  /** shared albedo. Pass '#ffffff' when items carry their own colour. */
+  color: string;
+  /** extra material props — normally a SURFACE preset from ./materials. */
+  surface?: Omit<MeshStandardMaterialProps, 'color'>;
+};
+
+/** One draw call for N boxes — book spines, radiator fins, rack slats. */
+export function BoxInstances({ items, color, surface }: InstancedProps) {
+  const ref = useInstanceTransforms(items);
+  if (items.length === 0) return null;
+  return (
+    <instancedMesh ref={ref} args={[undefined, undefined, items.length]} castShadow receiveShadow>
+      <boxGeometry args={[1, 1, 1]} />
+      <meshStandardMaterial color={color} roughness={0.8} envMapIntensity={0.5} {...surface} />
+    </instancedMesh>
+  );
+}
+
+/** One draw call for N double-sided planes — curtain pleats. */
+export function PlaneInstances({ items, color, surface }: InstancedProps) {
+  const ref = useInstanceTransforms(items);
+  if (items.length === 0) return null;
+  return (
+    <instancedMesh ref={ref} args={[undefined, undefined, items.length]} castShadow receiveShadow>
+      <planeGeometry args={[1, 1]} />
+      <meshStandardMaterial color={color} side={DoubleSide} envMapIntensity={0.5} {...surface} />
+    </instancedMesh>
   );
 }

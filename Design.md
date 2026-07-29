@@ -47,13 +47,13 @@ owned by a deterministic geometry engine, not by a model.
 └─ /onboarding
    ├─ /welcome            intro + "Start decorating"; optional BYO key (collapsed)
    ├─ /layout-pick        pick footprint preset → sets width/depth + starter scene
-   ├─ /capture            6-photo guided capture (getUserMedia)
+   ├─ /capture            4-wall guided capture (getUserMedia)
    └─ /detect             furniture detection on captured photos
 /workspace                rooms list — create / resume / delete
 /room/[roomId]
    ├─ /model              ★ 3D decoration studio (default landing)
    └─ /plan               2D top-down floor plan
-/settings                 API key, units, danger zone
+/settings                 API key, display unit, danger zone
 ```
 
 Two ways in:
@@ -64,9 +64,21 @@ Two ways in:
 
 There are **only two studio tabs**: `3D Model` and `2D Plan` (`StudioTabs.tsx`).
 
+Capture is **four wall photos**, not six — `CAPTURE_SLOTS` in `lib/capture.ts` is
+the four walls in clockwise order; floor and ceiling were dropped. The slots are
+labelled relationally ("Wall 1 · start anywhere", "Wall 2 · turn right") while
+keeping `n`/`e`/`s`/`w` as the internal ids the geometry and storage depend on —
+compass bearings asked the user a question they cannot answer in their own
+living room, and the engine only needs four *consecutive* walls.
+
 ---
 
 ## 3. Detection (the only AI, optional)
+
+> Detection is the app's **only** egress. The optional Gemini path sends the
+> wall photos to Google; the local ONNX path does not. The UI must say which
+> one is happening at the moment it happens — a privacy promise displayed
+> during an upload is the one bug class this section exists to prevent.
 
 Furniture detection runs through a fallback chain, best-effort:
 
@@ -164,7 +176,8 @@ label / category / a depth hint.
 ### Lighting, realism & motion
 - **Lighting moods** Day / Evening / Cool (`ViewOptions.tsx` → Room `LIGHTING`).
 - **Quality** High / Fast — gates procedural normal/roughness maps
-  (`lib/textures.ts`, zero assets) + soft cast shadows + floor reflection.
+  (`lib/textures.ts`, zero assets) + soft cast shadows + ambient occlusion
+  (N8AO/SMAA mount on `high` only). There is no floor reflection.
 - **Idle micro-motion** (`Motion.tsx`): fan spins, plant sways, pendant swings.
 
 ### Other studio tools
@@ -187,7 +200,8 @@ label / category / a depth hint.
 ### Stack
 - **Next.js 14.2** (App Router) + **React 18.3** + **TypeScript 5.6**
 - **Three.js 0.169** + **@react-three/fiber 8** + **drei** + **postprocessing** — declarative 3D
-- **Zustand 5** (client state) + **TanStack Query 5** (async)
+- **Zustand 5** (client state). No data-fetching library — a local-first app
+  makes no queries, so TanStack Query was removed.
 - **idb-keyval** (rooms) · **localStorage** (settings + key)
 - **onnxruntime-web** (local detector) · **@google/genai** (optional Gemini detection)
 - **lucide-react** icons, wrapped by `components/ui/Icon.tsx` with a `Circle`
@@ -198,8 +212,8 @@ label / category / a depth hint.
 ### State stores
 | Store | File | Holds |
 |---|---|---|
-| `useStudio` | `lib/store.ts` | selection, wall selection, positions/rotations/dims, lighting, quality, dressed, snap, open state, hidden, grid, view preset. **Session-scoped, not persisted.** |
-| `useSettings` | `lib/store.ts` | apiKey, units, dimUnit, key-valid cache. Persisted to localStorage (`danmu-settings`). |
+| `useStudio` | `lib/store.ts` | selection, wall selection, positions/rotations/dims, lighting, quality, dressed, snap, open state, hidden, grid, view preset. **Only the view *preferences* persist** (`lighting`, `quality`, `dressed`, `snapMode`, `showGrid` → `danmu-studio-prefs`, via `partialize`). Selection / camera / open drawers are ephemeral; transforms and `hidden` are per-room and owned by `RoomSync`. |
+| `useSettings` | `lib/store.ts` | apiKey, dimUnit (the one display unit — a dead `units` metric/imperial flag was removed), key-valid cache. Persisted to localStorage (`danmu-settings`). |
 | `useRoom` | `lib/store.ts` | active room id. Persisted (`danmu-room`). |
 | `useScene` | `lib/scene-store.ts` | scene parts CRUD + group/ungroup + room. |
 | `useQuota` | `lib/quota.ts` | Gemini detection quota (flash-only). |
@@ -212,7 +226,8 @@ label / category / a depth hint.
 | `lib/scene-spec.ts` | **Single source of truth** — `Shape` union, `ScenePart`, `defaultScene` starters, parametric/decor/support flags, DnD MIME. |
 | `lib/parts-catalog.ts` | Room defaults + catalog data. |
 | `lib/scene-store.ts` | Scene parts CRUD + grouping. |
-| `lib/storage.ts` | IndexedDB room persistence (`RoomData`, `wallColors`, `footprint`). |
+| `lib/storage.ts` | IndexedDB room persistence (`RoomData`, `wallColors`, `footprint`, per-room `hidden`). Deleting a room is a **soft delete** — keys move under `trash:{ts}:` and `restoreRoom` undoes it; `purgeTrash` expires them after 30 days and `destroyRoom` is the irreversible path. A `room:{id}:touched` key carries the real `updatedAt`. |
+| `lib/scene-palette.ts` | Scene-side semantic colours (`SCENE`, `categoryColor`) — the one home for values the 3D layer and the panels that edit it must agree on, since Three.js materials cannot read a CSS custom property. Kept in sync with `globals.css` by hand, guarded by a test. |
 | `lib/room-scene.ts` | Build a scene from a room / detections. |
 | `lib/textures.ts` | Procedural normal/roughness maps (offline, zero assets). |
 | `lib/themes.ts` | One-tap restyle palettes. |
@@ -230,7 +245,7 @@ auto-saves to IndexedDB.
 
 ## 7. Known limitations
 - Group transforms are **move-only** (no rotate/scale-as-one yet).
-- WebXR / true measurement calibration deferred; 6-photo capture only.
+- WebXR / true measurement calibration deferred; 4-wall capture only.
 - The CC0 GLB library (`LibraryPicker` / `mesh-cache`) is a work in progress —
   most furniture is still procedural.
 - BYO key lives in browser memory — Settings warns users to scope / referrer-

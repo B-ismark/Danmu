@@ -6,7 +6,7 @@
 // Bounded ring buffer to keep memory in check on long sessions.
 
 import { create } from 'zustand';
-import { useStudio } from './store';
+import { useStudio, type Lighting } from './store';
 import { useScene, type RoomShape } from './scene-store';
 import type { ScenePart } from './scene-spec';
 
@@ -16,6 +16,12 @@ export type Snapshot = {
   dims: Record<string, [number, number, number]>;
   parts: ScenePart[];
   room: RoomShape;
+  /** Lighting mood belongs in history because applying a theme changes it in
+   *  the same gesture as the colours. Without it, undoing a theme reverted
+   *  every colour and left the room in the theme's light — a state the UI could
+   *  not name. `quality` / `dressed` stay out: they are view preferences, not
+   *  part of the design being edited. */
+  lighting: Lighting;
 };
 
 const MAX = 80;
@@ -72,7 +78,23 @@ function takeSnapshot(): Snapshot {
     dims: t.dims,
     parts: sc.parts,
     room: sc.room,
+    lighting: t.lighting,
   };
+}
+
+/** Record the room's loaded state as the baseline to undo *back to*.
+ *
+ *  `undo()` restores `past[length - 2]`, so with a single entry there is nothing
+ *  to return to and the first edit of a session was unreachable forever — the
+ *  worst case being a first action of Delete. Call this once the room's real
+ *  parts and transforms are in the stores (RoomSync), NOT from
+ *  startHistoryRecording: subscribing happens before the room loads, so the
+ *  baseline would be the default starter scene and the first undo would wipe
+ *  the user's actual room. */
+export function seedHistory() {
+  const snap = takeSnapshot();
+  lastSnapshot = snap;
+  useHistory.setState({ past: [snap], future: [] });
 }
 
 function scheduleSnapshot() {
@@ -93,7 +115,8 @@ export function startHistoryRecording() {
     if (
       state.positions === prev.positions &&
       state.rotations === prev.rotations &&
-      state.dims === prev.dims
+      state.dims === prev.dims &&
+      state.lighting === prev.lighting
     )
       return;
     scheduleSnapshot();
@@ -114,7 +137,8 @@ function shallowEq(a: Snapshot, b: Snapshot): boolean {
     a.rotations === b.rotations &&
     a.dims === b.dims &&
     a.parts === b.parts &&
-    a.room === b.room
+    a.room === b.room &&
+    a.lighting === b.lighting
   );
 }
 
@@ -127,6 +151,7 @@ export function applySnapshot(snap: Snapshot) {
   if (timer) clearTimeout(timer);
   lastSnapshot = snap;
   useStudio.getState().loadTransforms(snap);
+  useStudio.getState().setLighting(snap.lighting);
   useScene.setState({ parts: snap.parts, room: snap.room });
   // small async unsuspend so subscribe fires after state settles
   setTimeout(() => {

@@ -29,15 +29,19 @@ export default function Home() {
   }, [router]);
   return (
     <div
+      // role=status so the redirect is announced instead of leaving a screen
+      // reader on a silent blank page. 13px/--ink-2 rather than a whisper: this
+      // is the very first thing a visitor sees, and it has to be legible.
+      role="status"
       style={{
-        minHeight: '100vh',
+        minHeight: '100dvh',
         display: 'grid',
         placeItems: 'center',
-        color: 'var(--ink-3)',
-        fontSize: 11,
+        color: 'var(--ink-2)',
+        fontSize: 13,
       }}
     >
-      Danmu · Loading…
+      Danmu · Opening your rooms…
     </div>
   );
 }

@@ -2,7 +2,8 @@
 
 // Cheap client-side image quality scoring. No AI call.
 // Returns brightness, sharpness (Laplacian variance), resolution. Used as a soft guardrail
-// in the capture step so users get feedback before paying tokens on detection.
+// in the capture step so a dark or blurry shot is caught while the user is still
+// standing in the room, rather than after detection quietly misses half of it.
 
 export type Quality = {
   width: number;
@@ -87,21 +88,44 @@ function blobToImage(blob: Blob): Promise<HTMLImageElement> {
   });
 }
 
+// Warm, sentence-case labels. The old caps ('LOW-RES', 'OVEREXPOSED', 'BLURRY')
+// read like a photogrammetry tool's error log; this is a decorating app talking
+// to someone holding a phone.
 export function flagLabel(f: QualityFlag): string {
   switch (f) {
     case 'low-res':
-      return 'LOW-RES';
+      return 'Quite small';
     case 'too-dark':
-      return 'DARK';
+      return 'Very dark';
     case 'too-bright':
-      return 'OVEREXPOSED';
+      return 'Very bright';
     case 'blurry':
-      return 'BLURRY';
+      return 'A bit blurry';
     case 'ok':
-      return 'OK';
+      return 'Looks good';
   }
 }
 
-export function flagColor(f: QualityFlag): string {
-  return f === 'ok' ? 'var(--success)' : '#C02618';
+/** Every flag names its own way out — a badge that only states the problem
+ *  leaves the user guessing what to do about it. */
+export function flagHelp(f: QualityFlag): string {
+  switch (f) {
+    case 'low-res':
+      return 'Small photos hide detail. A shot straight from your camera app usually works better.';
+    case 'too-dark':
+      return 'Turn on the lights or open the curtains, then retake this wall.';
+    case 'too-bright':
+      return 'Try again facing away from the window, or draw the curtains a little.';
+    case 'blurry':
+      return 'Hold still for a moment and retake — a sharp photo finds more furniture.';
+    case 'ok':
+      return 'Clear, bright and sharp enough to work with.';
+  }
+}
+
+/** Whether this flag should read as reassurance or as a nudge. Returned as an
+ *  intent, not a colour, so the badge picks its tokens at the call site — the
+ *  old flagColor() shipped a raw hex into a token-driven codebase. */
+export function flagTone(f: QualityFlag): 'good' | 'nudge' {
+  return f === 'ok' ? 'good' : 'nudge';
 }

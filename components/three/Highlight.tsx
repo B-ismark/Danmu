@@ -18,10 +18,7 @@
 
 import { useMemo } from 'react';
 import { Edges, Line } from '@react-three/drei';
-
-const SELECTED = '#E2613A'; // accent orange — matches painting accent in the palette
-const HOVERED = '#3E8FD8'; // construction blue — distinct from the orange selection
-const INVALID = '#D2402E'; // red — current drag spot collides / leaves the room
+import { SCENE } from '@/lib/scene-palette';
 
 export function Highlight({
   dimMM,
@@ -41,7 +38,10 @@ export function Highlight({
   // Wall / ceiling-mounted geometry is drawn around the group origin (centre 0).
   const centerY = floorStanding ? h / 2 : 0;
   const selected = state !== 'hovered';
-  const color = state === 'invalid' ? INVALID : selected ? SELECTED : HOVERED;
+  // All three from lib/scene-palette — the same terracotta / sage / danger the
+  // panels use, so a selection reads identically in the 3D view, the plan and
+  // the inspector.
+  const color = state === 'invalid' ? SCENE.invalid : selected ? SCENE.accent : SCENE.accentHover;
 
   // Footprint loop on the resting surface (local y ≈ 0). Only meaningful for
   // floor / surface-resting parts — wall-mounted items have no footprint.
@@ -59,8 +59,8 @@ export function Highlight({
   }, [w, d]);
 
   return (
-    // userData.helper lets SceneCapture hide this during the render snapshot, so
-    // the selection box never bakes into the image fed to the AI render.
+    // userData.helper lets SceneCapture hide this while it grabs the PNG, so an
+    // editor-only cue never bakes into the exported image.
     <group userData={{ helper: true }}>
       {/* Bounding box — slightly inflated so its edges sit just outside the mesh. */}
       <mesh position={[0, centerY, 0]} renderOrder={998}>

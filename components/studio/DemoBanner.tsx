@@ -1,13 +1,24 @@
 'use client';
 
-// Banner shown when the loaded scene came from the default catalog (no detections
-// run for this room). Encourages user to capture photos for a real layout.
+// Shown when the room the studio loaded is the starter scene — no photos taken,
+// nothing detected. Two things changed here:
+//
+//  1. It is a strip in the room layout, not a floating pill over the canvas. It
+//     used to be centred at the top of the 3D viewport at ~560px wide, which put
+//     it directly on top of the Move / Scale / Rotate / Snap toolbar at top-left
+//     — so the one session where the banner appears was the one session where
+//     the primary toolbar could not be clicked.
+//  2. The copy is an invitation, not a shortfall. This is the first sentence the
+//     product says to a new user, and "Sample room — capture your walls for an
+//     accurate layout" told them what they had not done yet. The room is theirs;
+//     the useful next move is to drag something in it.
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { roomStore } from '@/lib/storage';
 import { Icon } from '@/components/ui/Icon';
+import { IconButton } from '@/components/ui/primitives';
 
 export function DemoBanner() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -40,52 +51,49 @@ export function DemoBanner() {
 
   return (
     <div
+      role="region"
+      aria-label="Getting started"
       style={{
-        position: 'absolute',
-        top: 12,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: 25,
-        // Cap to the viewport so the pill never clips its dismiss button off the
-        // edge on a narrow studio pane; content wraps instead of overflowing.
-        maxWidth: 'min(560px, calc(100vw - 32px))',
-        background: 'var(--accent)',
-        color: '#fff',
-        padding: '10px 14px 10px 16px',
-        borderRadius: 'var(--r-2)',
+        flexShrink: 0,
         display: 'flex',
         alignItems: 'center',
-        gap: 12,
+        flexWrap: 'wrap',
+        gap: '4px 12px',
+        padding: '9px 16px',
+        // A tint, not the flat accent: white on --accent is 3.0:1, and --accent
+        // is a fill token. --accent-text on --accent-tint measures 4.85:1.
+        background: 'var(--accent-tint)',
+        borderBottom: '1px solid var(--hairline)',
+        color: 'var(--accent-text)',
         fontFamily: 'var(--font-sans)',
         fontSize: 13,
-        fontWeight: 500,
-        lineHeight: 1.35,
-        boxShadow: 'var(--shadow-lift)',
+        fontWeight: 600,
+        lineHeight: 1.4,
       }}
     >
-      <Icon name="camera" size={15} color="#fff" style={{ flexShrink: 0 }} />
-      <span style={{ minWidth: 0 }}>
-        Sample room — capture your walls for an accurate layout.{' '}
+      <Icon name="sparkles" size={15} style={{ flexShrink: 0 }} />
+      <span style={{ minWidth: 0, flex: 1 }}>
+        This room is yours to rearrange — drag a piece to move it, click a wall to paint it.{' '}
         <Link
           href="/onboarding/capture"
           style={{
             fontWeight: 700,
-            color: '#fff',
+            color: 'var(--accent-text)',
             textDecoration: 'underline',
             textUnderlineOffset: 3,
-            whiteSpace: 'nowrap',
           }}
         >
-          Capture now →
+          Rather use your own room? Photograph it
         </Link>
       </span>
-      <button
+      <IconButton
+        icon="x"
+        label="Hide the getting-started tip"
         onClick={dismiss}
-        aria-label="Dismiss"
-        style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 2, opacity: 0.8 }}
-      >
-        <Icon name="x" size={13} color="#fff" />
-      </button>
+        size={26}
+        iconSize={13}
+        style={{ color: 'var(--accent-text)', flexShrink: 0 }}
+      />
     </div>
   );
 }

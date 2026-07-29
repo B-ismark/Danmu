@@ -7,16 +7,20 @@ import { useScene } from '@/lib/scene-store';
 import { fromMM, toMM, stepFor, precisionFor, formatDim, UNIT_OPTIONS } from '@/lib/units';
 import { clampDims, dimRangeFor } from '@/lib/dimension-ranges';
 import { Icon } from '@/components/ui/Icon';
-import { Modal } from '@/components/ui/Modal';
 import { ColorPicker } from '@/components/ui/ColorPicker';
-import { IconButton, Pill } from '@/components/ui/primitives';
-import { useConfirm } from '@/components/ui/Confirm';
-import { RegenerateModal } from './RegenerateModal';
-import { LibraryPicker } from './LibraryPicker';
+import { EditableText, IconButton, Pill } from '@/components/ui/primitives';
+import { SwapModelModal } from './RegenerateModal';
+import { removeParts } from './KeyboardShortcuts';
+import { SCENE, categoryColor } from '@/lib/scene-palette';
 import { isWallMountedPart, supportsDecor, autoSurfaceDecor, DECOR_KINDS, type LibraryItem, type ScenePart, type DecorItem, type DecorKind } from '@/lib/scene-spec';
 import { findSupportUnder, groundY, snapToWall as snapToWallPhys } from '@/lib/physics';
 import { wallSegments } from '@/lib/footprint';
 
+// The right rail is a DECORATING panel, not a properties palette. Order matters:
+// colour → finish → decor → where it sits → which model → and only then the
+// exact millimetres, folded away behind a disclosure. Selecting a sofa used to
+// open on a mono W / D / H triple and a unit dropdown, which reads as CAD; every
+// warm verb was below the fold. Nothing was removed, only re-ranked.
 export function Inspector() {
   const id = useStudio((s) => s.selectedPartId);
   const selectedWall = useStudio((s) => s.selectedWall);
@@ -29,34 +33,22 @@ export function Inspector() {
   const positions = useStudio((s) => s.positions);
   const resetTransforms = useStudio((s) => s.resetTransforms);
   const updatePart = useScene((s) => s.updatePart);
-  const deletePart = useScene((s) => s.deletePart);
   const allParts = useScene((s) => s.parts);
   const room = useScene((s) => s.room);
-  const setSelected = useStudio((s) => s.setSelected);
-  const confirm = useConfirm();
 
-  const [regenOpen, setRegenOpen] = useState(false);
   const [swapOpen, setSwapOpen] = useState(false);
-  const [editingLabel, setEditingLabel] = useState(false);
-  const [labelDraft, setLabelDraft] = useState('');
 
   if (selectedWall !== null) return <WallInspector index={selectedWall} />;
 
   if (!part || !id)
     return (
-      <div style={{ padding: 20, textAlign: 'center', color: 'var(--ink-3)', fontSize: 12 }}>
-        Click a part or a wall to edit it.
+      <div style={{ padding: 20, textAlign: 'center', color: 'var(--ink-3)', fontSize: 12, lineHeight: 1.5 }}>
+        Click a piece of furniture to recolour, restyle or move it — or click a wall to paint it.
       </div>
     );
 
   const currentDim = part.dimMM;
   const defaultDim = baseDim ?? part.dimMM;
-
-  function commitLabel() {
-    const t = labelDraft.trim();
-    if (t && t !== part!.name) updatePart(id!, { name: t });
-    setEditingLabel(false);
-  }
 
   function currentXYZ(): [number, number, number] {
     const override = positions[id!];
@@ -72,13 +64,16 @@ export function Inspector() {
   // Hybrid swap — replace this part's model with a library one, keeping its
   // position + colour. Re-grounds Y for the new dims / mount type and clears
   // stale transform overrides (old scale would distort the new base dims).
-  function swapModel(item: LibraryItem) {
+  // `dimOverride` carries sizes the user named in the "Describe it" tab; both
+  // entry points land here so re-grounding only ever happens in one place.
+  function swapModel(item: LibraryItem, dimOverride?: [number, number, number]) {
+    const dimMM = dimOverride ?? ([...item.dimMM] as [number, number, number]);
     const [x, y, z] = currentXYZ();
     const wallMounted = isWallMountedPart(item.category, item.shape);
-    const h = item.dimMM[2] / 1000;
+    const h = dimMM[2] / 1000;
     let ny = y;
     if (wallMounted) {
-      ny = Math.max(h / 2 + 0.02, Math.min(room.height - h / 2 - 0.02, groundY(item.category, item.shape, item.dimMM, room.height)));
+      ny = Math.max(h / 2 + 0.02, Math.min(room.height - h / 2 - 0.02, groundY(item.category, item.shape, dimMM, room.height)));
     } else {
       const snapshot = allParts.map((p) => ({
         id: p.id,
@@ -87,13 +82,13 @@ export function Inspector() {
         category: p.category,
         wallMounted: p.wallMounted,
       }));
-      const support = findSupportUnder(snapshot, id!, x, z, item.dimMM);
+      const support = findSupportUnder(snapshot, id!, x, z, dimMM);
       ny = support !== null && support > 0.3 ? support : 0;
     }
     resetTransforms(id!); // drop stale rotate/scale overrides
     // Update the name too — leaving it stale is how a swapped-in door kept its
     // old "tall mirror" identity, so hover/tree showed a wrong, conflicting label.
-    updatePart(id!, { name: item.label, category: item.category, shape: item.shape, dimMM: item.dimMM, wallMounted });
+    updatePart(id!, { name: item.label, category: item.category, shape: item.shape, dimMM, wallMounted });
     setPosition(id!, [x, ny, z]);
     setSwapOpen(false);
   }
@@ -120,83 +115,40 @@ export function Inspector() {
     setPosition(id!, [x, support ?? 0, z]);
   }
 
-  async function onDelete() {
-    const ok = await confirm({
-      title: `Delete "${part!.name}"?`,
-      body: 'Removes it from the scene. You can add it back later.',
-      confirmLabel: 'Delete',
-      danger: true,
-    });
-    if (!ok) return;
-    deletePart(id!);
-    setSelected(null);
+  // No confirm — the shared delete path answers with an Undo toast instead of a
+  // dialog (see `removeParts` in KeyboardShortcuts).
+  function onDelete() {
+    removeParts([id!]);
   }
+
+  const isGeneric = part.shape === 'box';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', height: '100%' }}>
       <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--hairline)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {editingLabel ? (
-            <input
-              autoFocus
-              value={labelDraft}
-              onChange={(e) => setLabelDraft(e.target.value)}
-              onBlur={commitLabel}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') commitLabel();
-                else if (e.key === 'Escape') setEditingLabel(false);
-              }}
-              style={{
-                flex: 1,
-                minWidth: 0,
-                fontSize: 16,
-                fontWeight: 500,
-                letterSpacing: '-0.01em',
-                padding: '4px 6px',
-                border: '1px solid var(--accent)',
-                borderRadius: 'var(--r-1)',
-                outline: 'none',
-                fontFamily: 'var(--font-sans)',
-                background: 'var(--paper)',
-                color: 'var(--ink)',
-              }}
-            />
-          ) : (
-            <div
-              onClick={() => {
-                setLabelDraft(part.name);
-                setEditingLabel(true);
-              }}
-              title="Click to rename"
-              style={{
-                flex: 1,
-                minWidth: 0,
-                fontSize: 16,
-                fontWeight: 500,
-                letterSpacing: '-0.01em',
-                padding: '4px 6px',
-                cursor: 'text',
-                borderRadius: 'var(--r-1)',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              {part.name}
-            </div>
-          )}
+          <EditableText
+            value={part.name}
+            label="Furniture name"
+            onCommit={(next) => updatePart(id!, { name: next })}
+            style={{ flex: 1, minWidth: 0, fontSize: 16, fontWeight: 500, letterSpacing: '-0.01em' }}
+            inputStyle={{ fontSize: 16, fontWeight: 500, height: 32 }}
+          />
           {part.locked && <Pill tone="locked" style={{ flexShrink: 0 }}>Locked</Pill>}
         </div>
 
-        <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2, paddingLeft: 6, textTransform: 'capitalize' }}>
-          {part.category} · {part.shape}
+        <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2, paddingLeft: 4, textTransform: 'capitalize' }}>
+          {/* shape ids are hyphenated internally ("chair-armchair") — say it in words */}
+          {part.category} · {part.shape.replace(/-/g, ' ')}
         </div>
       </div>
 
-      <DimensionEditor partId={id} category={part.category} shape={part.shape} value={currentDim} defaultDim={defaultDim} onChange={(d) => setDim(id, d)} />
-
-      <ColorEditor
+      {/* ── The decorating verbs, first ─────────────────────────────────── */}
+      <PaintPicker
+        label="Colour"
         value={part.color}
+        fallback={categoryColor(part.category)}
+        fallbackNote="Default for this piece"
         onChange={(c) => updatePart(id!, { color: c })}
         onReset={() => updatePart(id!, { color: undefined })}
       />
@@ -208,7 +160,7 @@ export function Inspector() {
       )}
 
       {/* Placement — surfaced as visible buttons (was buried in a ⋯ menu). */}
-      <Section label="Placement">
+      <Section label="Where it sits">
         <div style={{ display: 'grid', gridTemplateColumns: part.wallMounted ? '1fr' : 'repeat(3, 1fr)', gap: 6 }}>
           <button onClick={snapToNearestWall} className="ds-btn" title="Move to the nearest wall and face the room" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
             <Icon name="snap-wall" size={13} /> Wall
@@ -239,60 +191,43 @@ export function Inspector() {
         )}
       </Section>
 
-      {/* Generic-box parts (low-confidence detections) read poorly — nudge the
-          user to swap in a real library model. */}
-      {part.shape === 'box' && (
-        <div style={{ padding: '10px 16px 0' }}>
-          <button
-            onClick={() => setSwapOpen(true)}
-            className="ds-btn"
-            style={{
-              width: '100%',
-              height: 32,
-              fontSize: 12,
-              justifyContent: 'center',
-              background: 'var(--accent-tint)',
-              borderColor: 'var(--accent)',
-              color: 'var(--accent)',
-              gap: 6,
-            }}
-          >
-            <Icon name="swap" size={13} /> Generic shape — swap for a library model
-          </button>
-        </div>
-      )}
-
+      {/* One entry point to the model library. Generic-box parts (low-confidence
+          detections) read poorly, so for those the same button leads with why. */}
       <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button
-            onClick={() => setSwapOpen(true)}
-            className="ds-btn ds-btn--primary"
-            title="Replace with a model from the library — free, instant"
-            style={{ flex: 1, height: 34, gap: 6, justifyContent: 'center', fontSize: 12 }}
-          >
-            <Icon name="swap" size={13} /> Swap model
-          </button>
-          <button
-            onClick={() => setRegenOpen(true)}
-            className="ds-btn"
-            title="AI re-shapes this model from a description"
-            style={{ height: 34, padding: '0 12px', justifyContent: 'center', fontSize: 12 }}
-          >
-            <Icon name="sparkles" size={12} />
-            AI refine
-          </button>
-        </div>
+        <button
+          onClick={() => setSwapOpen(true)}
+          className={isGeneric ? 'ds-btn' : 'ds-btn ds-btn--primary'}
+          title="Browse the catalog, or describe the piece in words"
+          style={{
+            width: '100%',
+            height: 34,
+            fontSize: 12,
+            gap: 6,
+            justifyContent: 'center',
+            ...(isGeneric
+              ? { background: 'var(--accent-tint)', borderColor: 'var(--accent-text)', color: 'var(--accent-text)' }
+              : null),
+          }}
+        >
+          <Icon name="swap" size={13} />
+          {isGeneric ? 'Generic shape — pick a real model' : 'Change the model'}
+        </button>
         {hasOverrides && (
           <button
             onClick={() => resetTransforms(id!)}
             className="ds-btn"
-            title="Revert move / rotate / scale to detected"
+            title="Undo the moves, turns and resizes you made to this piece"
             style={{ width: '100%', height: 30, gap: 6, justifyContent: 'center', fontSize: 11 }}
           >
-            <Icon name="refresh" size={12} /> Reset transforms
+            <Icon name="refresh" size={12} /> Back to where it started
           </button>
         )}
       </div>
+
+      {/* Precise millimetres last, folded away — and the plain-language size tier
+          stays on screen either way, because that clamp is the app's promise that
+          nothing can end up a fantasy size. */}
+      <DimensionEditor partId={id} category={part.category} shape={part.shape} value={currentDim} defaultDim={defaultDim} onChange={(d) => setDim(id, d)} />
 
       <div style={{ flex: 1 }} />
 
@@ -314,30 +249,8 @@ export function Inspector() {
         </button>
       </div>
 
-      {regenOpen && id && part && (
-        <RegenerateModal
-          partId={id}
-          part={part}
-          onClose={() => setRegenOpen(false)}
-        />
-      )}
-
       {swapOpen && (
-        <Modal
-          onClose={() => setSwapOpen(false)}
-          width={520}
-          footer={
-            <button onClick={() => setSwapOpen(false)} className="ds-btn" style={{ flex: 1, height: 36, fontSize: 13, justifyContent: 'center' }}>
-              Cancel
-            </button>
-          }
-        >
-          <div className="ds-kicker" style={{ marginBottom: 6, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="swap" size={13} /> Swap model</div>
-          <p style={{ fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.5, margin: '0 0 14px' }}>
-            Replace <b>{part.name}</b> with a library model. Keeps its position and colour.
-          </p>
-          <LibraryPicker onPick={swapModel} />
-        </Modal>
+        <SwapModelModal part={part} onClose={() => setSwapOpen(false)} onSwap={swapModel} />
       )}
     </div>
   );
@@ -371,8 +284,9 @@ function SurfaceFinish({
             <button
               key={f.id}
               onClick={() => onChange(f.id)}
+              aria-pressed={on}
               className={`ds-chip ${on ? 'ds-chip--accent' : ''}`}
-              style={{ cursor: 'pointer', height: 28, fontWeight: 600, border: 0, background: on ? 'var(--accent-tint)' : 'var(--paper)' }}
+              style={{ cursor: 'pointer', height: 28, fontWeight: 600, background: on ? 'var(--accent-tint)' : 'var(--paper)' }}
             >
               {f.label}
             </button>
@@ -405,23 +319,27 @@ function DecorCollection({ part, onChange }: { part: ScenePart; onChange: (decor
   }
 
   return (
-    <Section label="Decor">
+    <Section label="On the surface">
       {isAuto && (
         <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 8, lineHeight: 1.4 }}>
           Showing suggested props. Add or remove to make it your own.
         </div>
       )}
+      {items.length === 0 && !isAuto && (
+        <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 8, lineHeight: 1.4 }}>
+          Bare surface. Add something below, or go back to the suggestion.
+        </div>
+      )}
       {items.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }}>
           {items.map((it) => (
-            <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', background: 'var(--paper-2)', borderRadius: 'var(--r-1)' }}>
+            <div key={it.id} className="list-row" style={{ cursor: 'default', padding: '5px 8px', background: 'var(--paper-2)' }}>
               <span style={{ flex: 1, fontSize: 12, fontWeight: 600 }}>{DECOR_LABEL[it.kind]}</span>
               <IconButton
                 icon="x"
-                label={`Remove ${it.kind}`}
-                title="Remove"
+                label={`Remove ${DECOR_LABEL[it.kind].toLowerCase()}`}
                 onClick={() => onChange(items.filter((x) => x.id !== it.id))}
-                size={22}
+                size={24}
                 iconSize={12}
               />
             </div>
@@ -473,75 +391,41 @@ function WallInspector({ index }: { index: number }) {
   const segs = wallSegments(room.footprint);
   const seg = segs[index];
   const name = seg ? wallName(seg.yaw, index, room.footprint.length) : `Wall ${index + 1}`;
-  const current = room.wallColors?.[index] ?? '#ECE9E1';
   const painted = room.wallColors?.[index] !== undefined;
+  const current = room.wallColors?.[index] ?? SCENE.wall;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', height: '100%' }}>
       <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--hairline)' }}>
-        <div style={{ fontSize: 16, fontWeight: 500, letterSpacing: '-0.01em', padding: '4px 6px' }}>{name}</div>
-        <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.04em', marginTop: 2, paddingLeft: 6 }}>
-          {seg ? `${seg.len.toFixed(2)} m wide · ${room.height.toFixed(2)} m tall` : ''}
+        <div style={{ fontSize: 16, fontWeight: 500, letterSpacing: '-0.01em' }}>{name}</div>
+        <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>
+          {seg ? (
+            <>
+              <span className="mono">{seg.len.toFixed(2)} m</span> wide ·{' '}
+              <span className="mono">{room.height.toFixed(2)} m</span> tall
+            </>
+          ) : null}
         </div>
       </div>
 
-      {/* Paint */}
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--hairline)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <span className="section-title">Wall colour</span>
-          {painted && (
-            <button
-              onClick={() => resetWallColor(index)}
-              className="ds-btn ds-btn--ghost"
-              title="Back to the default shell colour"
-              style={{ height: 24, padding: '0 8px', fontSize: 11, fontWeight: 600, color: 'var(--accent)', gap: 4 }}
-            >
-              <Icon name="refresh" size={11} /> Default
-            </button>
-          )}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          <label
-            title="Pick a custom colour"
-            style={{ position: 'relative', width: 34, height: 34, borderRadius: 'var(--r-1)', border: '1px solid var(--hairline-strong)', background: current, cursor: 'pointer', flexShrink: 0 }}
+      <PaintPicker
+        label="Wall colour"
+        value={room.wallColors?.[index]}
+        fallback={SCENE.wall}
+        fallbackNote="Default shell colour"
+        onChange={(hex) => setWallColor(index, hex)}
+        onReset={() => resetWallColor(index)}
+        footer={
+          <button
+            onClick={() => setAllWallColors(current)}
+            className="ds-btn"
+            title={painted ? 'Paint every wall this colour' : 'Paint every wall the default colour'}
+            style={{ width: '100%', height: 32, fontSize: 12, justifyContent: 'center', gap: 6, marginTop: 10 }}
           >
-            <input
-              type="color"
-              value={current}
-              onChange={(e) => setWallColor(index, e.target.value)}
-              style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
-            />
-          </label>
-          <span className="mono" style={{ fontSize: 12, color: painted ? 'var(--ink)' : 'var(--ink-3)', letterSpacing: '0.04em' }}>
-            {painted ? current.toUpperCase() : 'default shell'}
-          </span>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 4 }}>
-          {SWATCHES.map((hex) => (
-            <button
-              key={hex}
-              onClick={() => setWallColor(index, hex)}
-              title={hex}
-              aria-label={hex}
-              style={{
-                aspectRatio: '1',
-                borderRadius: 'var(--r-1)',
-                background: hex,
-                border: current.toLowerCase() === hex.toLowerCase() ? '2px solid var(--accent)' : '1px solid var(--hairline-strong)',
-                cursor: 'pointer',
-                padding: 0,
-              }}
-            />
-          ))}
-        </div>
-        <button
-          onClick={() => setAllWallColors(current)}
-          className="ds-btn"
-          style={{ width: '100%', height: 32, fontSize: 12, justifyContent: 'center', gap: 6, marginTop: 10 }}
-        >
-          <Icon name="layers" size={13} /> Apply this colour to all walls
-        </button>
-      </div>
+            <Icon name="layers" size={13} /> Use this colour on every wall
+          </button>
+        }
+      />
 
       {/* Move */}
       <Section label="Move wall">
@@ -599,6 +483,9 @@ function DimensionEditor({
   const prec = precisionFor(dimUnit);
   const step = stepFor(dimUnit);
   const range = dimRangeFor(category, shape);
+  // Collapsed by default — same disclosure the room shell uses. Typing exact
+  // millimetres is the rare path; dragging and recolouring are the common ones.
+  const [open, setOpen] = useState(false);
 
   const [local, setLocal] = useState<[string, string, string]>(() => [
     fromMM(value[0], dimUnit).toFixed(prec),
@@ -625,173 +512,262 @@ function DimensionEditor({
       const mm = next.map((s) => toMM(parseFloat(s), dimUnit));
       if (mm.some((n) => Number.isNaN(n) || n <= 0)) return;
       // Clamp into the shape's trustable real-world range — same gate the scale
-      // gizmo and the AI paths go through.
+      // gizmo and every other size path go through.
       onChange(clampDims(category, shape, [mm[0], mm[1], mm[2]]));
     }, 120);
   }
 
-  function reset() {
-    onChange(defaultDim);
-  }
-
-  const labels: ['W', 'D', 'H'] = ['W', 'D', 'H'];
+  const labels: ['Width', 'Depth', 'Height'] = ['Width', 'Depth', 'Height'];
+  // The tier, in plain language: this is the promise that a size can't go silly.
+  const tier =
+    range.flex === 'fixed' ? 'Standard product size' : range.flex === 'standard' ? 'Typical size range' : 'Made to measure';
 
   return (
-    <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--hairline)', background: 'var(--paper)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8 }}>
-        <span className="section-title" style={{ color: 'var(--ink)' }}>Dimensions</span>
-        <select
-          value={dimUnit}
-          onChange={(e) => setDimUnit(e.target.value as DimUnit)}
-          style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 10,
-            letterSpacing: '0.06em',
-            padding: '3px 6px',
-            border: '1px solid var(--hairline-strong)',
-            borderRadius: 'var(--r-1)',
-            background: 'var(--paper)',
-            color: 'var(--ink-2)',
-            cursor: 'pointer',
-          }}
-        >
-          {UNIT_OPTIONS.map((u) => (
-            <option key={u.id} value={u.id}>{u.id.toUpperCase()}</option>
-          ))}
-        </select>
-        <button
-          onClick={reset}
-          className="ds-btn ds-btn--ghost"
-          title="Reset to detected size"
-          style={{ height: 24, padding: '0 8px', fontSize: 11, fontWeight: 600, color: 'var(--accent)', gap: 4 }}
-        >
-          <Icon name="refresh" size={11} /> Reset
-        </button>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-        {labels.map((axis, i) => (
-          <label key={axis} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span className="mono" style={{ fontSize: 10, color: 'var(--ink)', letterSpacing: '0.1em', fontWeight: 600 }}>
-              {axis}
-            </span>
-            <input
-              type="number"
-              min={0.001}
-              step={step}
-              value={local[i]}
-              onChange={(e) => commitDebounced(i as 0 | 1 | 2, e.target.value)}
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 14,
-                fontWeight: 600,
-                padding: '8px 10px',
-                border: '1.5px solid var(--ink)',
-                borderRadius: 'var(--r-1)',
-                background: 'var(--paper)',
-                color: 'var(--ink)',
-                outline: 'none',
-                width: '100%',
-              }}
-              onFocus={(e) => (e.target.style.borderColor = 'var(--accent)')}
-              onBlur={(e) => (e.target.style.borderColor = 'var(--ink)')}
-            />
-          </label>
-        ))}
-      </div>
-      {/* Real-world range hint — the values any edit is clamped into. */}
-      <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 8, lineHeight: 1.6 }}>
-        {range.flex === 'fixed' ? 'Standard product size' : range.flex === 'standard' ? 'Typical size range' : 'Made to measure'}
-        <br />
-        <span className="mono">
-          W {formatDim(range.min[0], dimUnit)}–{formatDim(range.max[0], dimUnit)} · D{' '}
-          {formatDim(range.min[1], dimUnit)}–{formatDim(range.max[1], dimUnit)} · H{' '}
-          {formatDim(range.min[2], dimUnit)}–{formatDim(range.max[2], dimUnit)} {dimUnit}
+    <div className="section" style={{ background: 'var(--paper)' }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          background: 'transparent',
+          border: 'none',
+          padding: 0,
+          cursor: 'pointer',
+          width: '100%',
+          textAlign: 'left',
+        }}
+      >
+        <span style={{ display: 'flex', color: 'var(--ink-3)', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>
+          <Icon name="chevron-right" size={14} />
         </span>
-      </div>
+        <span className="section-title" style={{ color: 'var(--ink)' }}>Exact size</span>
+        {!open && (
+          <span className="mono" style={{ fontSize: 11, color: 'var(--ink-3)', letterSpacing: '0.04em', marginLeft: 'auto' }}>
+            {local.join(' × ')} {dimUnit}
+          </span>
+        )}
+      </button>
+      <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 4, paddingLeft: 22 }}>{tier}</div>
+
+      {open && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 10 }}>
+            {labels.map((axis, i) => (
+              <label key={axis} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ fontSize: 11, color: 'var(--ink-2)', fontWeight: 600 }}>{axis}</span>
+                {/* .field owns the border + focus ring; mono is here only because
+                    these are measurements. */}
+                <input
+                  type="number"
+                  min={0.001}
+                  step={step}
+                  value={local[i]}
+                  onChange={(e) => commitDebounced(i as 0 | 1 | 2, e.target.value)}
+                  className="field"
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, height: 34, padding: '0 8px' }}
+                />
+              </label>
+            ))}
+          </div>
+
+          {/* The values every edit is clamped into. */}
+          <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 8, lineHeight: 1.6 }}>
+            Anything you type lands inside{' '}
+            <span className="mono">
+              {formatDim(range.min[0], dimUnit)}–{formatDim(range.max[0], dimUnit)} wide ·{' '}
+              {formatDim(range.min[1], dimUnit)}–{formatDim(range.max[1], dimUnit)} deep ·{' '}
+              {formatDim(range.min[2], dimUnit)}–{formatDim(range.max[2], dimUnit)} tall
+            </span>{' '}
+            ({dimUnit}).
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+            {/* One display unit for the whole app — Settings owns it, and this is
+                the same preference, labelled, where the numbers actually are. */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--ink-2)', fontWeight: 600 }}>
+              Units
+              <select
+                value={dimUnit}
+                onChange={(e) => setDimUnit(e.target.value as DimUnit)}
+                title="Applies everywhere in Danmu"
+                style={{
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  padding: '4px 6px',
+                  border: '1px solid var(--edge)',
+                  borderRadius: 'var(--r-1)',
+                  background: 'var(--paper)',
+                  color: 'var(--ink)',
+                  cursor: 'pointer',
+                }}
+              >
+                {UNIT_OPTIONS.map((u) => (
+                  <option key={u.id} value={u.id}>{u.label}</option>
+                ))}
+              </select>
+            </label>
+            <div style={{ flex: 1 }} />
+            <button
+              onClick={() => onChange(defaultDim)}
+              className="ds-btn ds-btn--ghost"
+              title="Back to the size it came with"
+              style={{ height: 26, padding: '0 8px', fontSize: 11, fontWeight: 600, color: 'var(--accent-text)', gap: 4 }}
+            >
+              <Icon name="refresh" size={11} /> Original size
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
-// Curated swatches — neutrals, woods, upholstery tones + accents. Two rows of
-// 12; the warm "finish" tones (oak, walnut, sage, clay, brass…) live here too,
-// so Colour is the single place to pick a tone.
-const SWATCHES = [
-  '#E8E5DB', '#EDE6D6', '#D8C7A8', '#C9A87C', '#C9A98E', '#9A6A48',
-  '#6F4A2F', '#5D3820', '#3A3733', '#3A3A3A', '#131311', '#D6C7AE',
-  '#8FA98C', '#5D8A5D', '#6E94C8', '#4F6D8C', '#3F5670', '#C57B53',
-  '#A86E5A', '#C44A3A', '#B08D4F', '#D8C36A', '#A9C4C0', '#DCE4E2',
+// Curated palette — named, and grouped so no single decision is 24 options wide.
+// The names are what a screen reader announces and what the tooltip shows: "#E8E5DB"
+// told nobody anything. 8 columns keeps every target ≥ 32px in a 320px rail.
+type Swatch = { hex: string; name: string };
+const SWATCH_GROUPS: Array<{ label: string; items: Swatch[] }> = [
+  {
+    label: 'Neutrals',
+    items: [
+      { hex: '#E8E5DB', name: 'Chalk' },
+      { hex: '#EDE6D6', name: 'Cream' },
+      { hex: '#D6C7AE', name: 'Linen' },
+      { hex: '#DCE4E2', name: 'Mist' },
+      { hex: '#D8C7A8', name: 'Oat' },
+      { hex: '#3A3733', name: 'Charcoal' },
+      { hex: '#3A3A3A', name: 'Graphite' },
+      { hex: '#131311', name: 'Ink' },
+    ],
+  },
+  {
+    label: 'Woods & metals',
+    items: [
+      { hex: '#C9A98E', name: 'Pale oak' },
+      { hex: '#C9A87C', name: 'Warm oak' },
+      { hex: '#9A6A48', name: 'Teak' },
+      { hex: '#6F4A2F', name: 'Walnut' },
+      { hex: '#5D3820', name: 'Espresso' },
+      { hex: '#A86E5A', name: 'Clay' },
+      { hex: '#B08D4F', name: 'Brass' },
+      { hex: '#D8C36A', name: 'Ochre' },
+    ],
+  },
+  {
+    label: 'Colours',
+    items: [
+      { hex: '#8FA98C', name: 'Sage' },
+      { hex: '#5D8A5D', name: 'Fern' },
+      { hex: '#A9C4C0', name: 'Eucalyptus' },
+      { hex: '#6E94C8', name: 'Cornflower' },
+      { hex: '#4F6D8C', name: 'Denim' },
+      { hex: '#3F5670', name: 'Navy' },
+      { hex: '#C57B53', name: 'Terracotta' },
+      { hex: '#C44A3A', name: 'Paprika' },
+    ],
+  },
 ];
 
-function ColorEditor({
+const SWATCH_NAME = new Map(
+  SWATCH_GROUPS.flatMap((g) => g.items).map((s) => [s.hex.toLowerCase(), s.name] as const),
+);
+
+// One paint control, used for furniture AND for walls — the two used to be
+// separate 24-swatch grids that could drift apart.
+function PaintPicker({
+  label,
   value,
+  fallback,
+  fallbackNote,
   onChange,
   onReset,
+  footer,
 }: {
+  label: string;
+  /** the user's chosen colour, or undefined while the default applies */
   value?: string;
+  /** colour actually on screen when `value` is unset */
+  fallback: string;
+  fallbackNote: string;
   onChange: (hex: string) => void;
   onReset: () => void;
+  footer?: React.ReactNode;
 }) {
-  const current = value ?? '#C9A98E';
   const [open, setOpen] = useState(false);
+  const current = value ?? fallback;
+  const named = value ? SWATCH_NAME.get(value.toLowerCase()) : undefined;
+
   return (
-    <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--hairline)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <span className="section-title">Colour</span>
+    <div className="section section--flush">
+      <div className="section-head">
+        <span className="section-title">{label}</span>
         {value && (
           <button
             onClick={onReset}
             className="ds-btn ds-btn--ghost"
             title="Back to the default colour"
-            style={{ height: 24, padding: '0 8px', fontSize: 11, fontWeight: 600, color: 'var(--accent)', gap: 4 }}
+            style={{ height: 24, padding: '0 8px', fontSize: 11, fontWeight: 600, color: 'var(--accent-text)', gap: 4 }}
           >
             <Icon name="refresh" size={11} /> Default
           </button>
         )}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, position: 'relative' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, position: 'relative' }}>
         {/* Brand-styled picker (replaces the unthemeable native <input type=color>). */}
         <button
           onClick={() => setOpen((o) => !o)}
-          aria-label="Pick a custom colour"
+          aria-label="Mix a custom colour"
           aria-expanded={open}
-          title="Pick a custom colour"
-          style={{ width: 34, height: 34, borderRadius: 'var(--r-1)', border: '1px solid var(--hairline-strong)', background: current, cursor: 'pointer', flexShrink: 0, padding: 0 }}
+          title="Mix a custom colour"
+          className="swatch"
+          style={{ width: 34, height: 34, flexShrink: 0, background: current, aspectRatio: 'auto' }}
         />
-        <span className="mono" style={{ fontSize: 12, color: value ? 'var(--ink)' : 'var(--ink-3)', letterSpacing: '0.04em' }}>
-          {value ? value.toUpperCase() : 'default · per shape'}
+        <span style={{ fontSize: 12, color: value ? 'var(--ink)' : 'var(--ink-3)', minWidth: 0 }}>
+          {value ? (
+            named ?? <span className="mono" style={{ letterSpacing: '0.04em' }}>{value.toUpperCase()}</span>
+          ) : (
+            fallbackNote
+          )}
         </span>
         {open && (
           <>
-            <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setOpen(false)} />
-            <div className="popover" style={{ position: 'absolute', top: 42, left: 0, zIndex: 50, padding: 12 }}>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 'var(--z-popover)' }} onClick={() => setOpen(false)} />
+            <div className="popover" style={{ position: 'absolute', top: 42, left: 0, zIndex: 'var(--z-popover)', padding: 12 }}>
               <ColorPicker value={current} onChange={onChange} />
             </div>
           </>
         )}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 4 }}>
-        {SWATCHES.map((hex) => (
-          <button
-            key={hex}
-            onClick={() => onChange(hex)}
-            title={hex}
-            aria-label={hex}
-            style={{
-              aspectRatio: '1',
-              borderRadius: 'var(--r-1)',
-              background: hex,
-              border: value?.toLowerCase() === hex.toLowerCase() ? '2px solid var(--accent)' : '1px solid var(--hairline-strong)',
-              cursor: 'pointer',
-              padding: 0,
-            }}
-          />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {SWATCH_GROUPS.map((g) => (
+          <div key={g.label}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--ink-3)', marginBottom: 4 }}>{g.label}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 4 }}>
+              {g.items.map((s) => {
+                const on = value?.toLowerCase() === s.hex.toLowerCase();
+                return (
+                  <button
+                    key={s.hex}
+                    onClick={() => onChange(s.hex)}
+                    title={s.name}
+                    aria-label={s.name}
+                    aria-pressed={on}
+                    className={`swatch${on ? ' is-selected' : ''}`}
+                    style={{ background: s.hex }}
+                  />
+                );
+              })}
+            </div>
+          </div>
         ))}
       </div>
+      {footer}
     </div>
   );
 }
-
-
 
 // Numeric mount-height editor for wall/ceiling-mounted parts — bottom edge
 // height off the floor, in the user's display unit. Pairs with the gizmo's
@@ -819,8 +795,8 @@ function MountHeightRow({
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-      <span style={{ fontSize: 11, color: 'var(--ink-3)', flex: 1 }}>Mount height (bottom edge)</span>
+    <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+      <span style={{ fontSize: 11, color: 'var(--ink-2)', flex: 1 }}>Height off the floor</span>
       <input
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
@@ -829,10 +805,10 @@ function MountHeightRow({
           if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
         }}
         inputMode="decimal"
-        className="ds-input"
+        className="field"
         style={{ width: 72, height: 28, fontFamily: 'var(--font-mono)', fontSize: 11, textAlign: 'right' }}
       />
       <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>{dimUnit}</span>
-    </div>
+    </label>
   );
 }

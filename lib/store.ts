@@ -3,11 +3,15 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
-// Studio view + interaction state. Session-scoped, not persisted.
+// Studio view + interaction state. Mostly session-scoped: only the handful of
+// fields in STUDIO_PREFS below survive a reload (see the persist config at the
+// bottom of this store). Everything else — selection, transforms, camera, open
+// drawers — is either per-room (saved by RoomSync) or genuinely ephemeral.
 type ViewPreset = 'free' | 'front' | 'top' | 'iso';
 /** Scene lighting mood — drives lights, environment + background in Room. */
 export type Lighting = 'day' | 'evening' | 'cool';
-/** Render quality — 'high' enables soft cast shadows + floor reflection. */
+/** Render quality — 'high' enables soft cast shadows, ambient occlusion and
+ *  per-part procedural material maps. */
 export type Quality = 'low' | 'high';
 
 type StudioState = {
@@ -37,13 +41,14 @@ type StudioState = {
   showGrid: boolean;
   /** scene lighting mood */
   lighting: Lighting;
-  /** render quality (soft shadows + floor reflection on 'high') */
+  /** render quality (soft shadows + AO + material maps on 'high') */
   quality: Quality;
   /** auto set-dressing — decorative props on furniture surfaces */
   dressed: boolean;
-  /** Snap granularity for the gizmo. 'off' = free move, 'fine' = 1cm / 2.5°,
-   *  'coarse' = 5cm / 7.5°. Default is fine — coarse was the old behaviour
-   *  but is too chunky for placing a monitor on a desk. */
+  /** Snap granularity for the gizmo. 'off' = free move, 'fine' = 10mm / 15°,
+   *  'coarse' = 50mm / 45° (see SNAP in components/three/Draggable.tsx, which
+   *  owns the real increments). Default is fine — coarse is too chunky for
+   *  placing a monitor on a desk. */
   snapMode: 'off' | 'fine' | 'coarse';
 
   setSelected: (id: string | null) => void;
@@ -74,6 +79,8 @@ type StudioState = {
   toggleDressed: () => void;
   frameSelected: () => void;
   toggleHidden: (id: string) => void;
+  /** restore the whole hidden map from persistence (per-room, via RoomSync) */
+  setHiddenMap: (h: Record<string, boolean>) => void;
   loadTransforms: (data: {
     positions?: Record<string, [number, number, number]>;
     rotations?: Record<string, number>;
@@ -83,7 +90,16 @@ type StudioState = {
   resetTransforms: (id?: string) => void;
 };
 
-export const useStudio = create<StudioState>((set) => ({
+/** The only studio fields that survive a reload. These are *preferences* — the
+ *  user set them once and expects them to stick, and the top bar's "saved"
+ *  affordance implies the whole studio is remembered. Selection, camera, open
+ *  drawers and transforms stay out: the first two are ephemeral by nature and
+ *  the last is per-room, owned by RoomSync. */
+const STUDIO_PREFS = ['lighting', 'quality', 'dressed', 'snapMode', 'showGrid'] as const;
+
+export const useStudio = create<StudioState>()(
+  persist(
+    (set) => ({
   selectedPartId: null,
   selection: [],
   selectedWall: null,
@@ -142,22 +158,34 @@ export const useStudio = create<StudioState>((set) => ({
     }),
   frameSelected: () => set((s) => ({ frameSelectedToken: s.frameSelectedToken + 1 })),
   toggleHidden: (id) => set((s) => ({ hidden: { ...s.hidden, [id]: !s.hidden[id] } })),
-}));
+  setHiddenMap: (hidden) => set({ hidden }),
+    }),
+    {
+      name: 'danmu-studio-prefs',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (s) =>
+        Object.fromEntries(STUDIO_PREFS.map((key) => [key, s[key]])) as Partial<StudioState>,
+    },
+  ),
+);
 
 // Settings. Persisted to localStorage. API key kept here only on this device.
 export type DimUnit = 'mm' | 'cm' | 'm' | 'in' | 'ft';
 
+/** Why there is no `units: 'metric' | 'imperial'` here: there used to be, wired
+ *  to a Settings control, and nothing ever read it — switching it changed
+ *  nothing on screen while `dimUnit` (below) silently drove every dimension.
+ *  One display unit, one owner. */
 type SettingsState = {
   apiKey: string;
-  units: 'metric' | 'imperial';
   /** Display unit for dimensions (W / D / H). All persistence stays in mm. */
   dimUnit: DimUnit;
   /** Last validation result for the current apiKey. null = not yet tested. */
   keyValid: boolean | null;
-  /** Last reason if validation failed. */
+  /** Last reason if validation failed — a KeyFailure code, not an exception
+   *  string (see lib/validate-key.ts). */
   keyValidReason: string | null;
   setApiKey: (k: string) => void;
-  setUnits: (u: 'metric' | 'imperial') => void;
   setDimUnit: (u: DimUnit) => void;
   setKeyValid: (v: boolean | null, reason?: string | null) => void;
 };
@@ -166,13 +194,11 @@ export const useSettings = create<SettingsState>()(
   persist(
     (set) => ({
       apiKey: '',
-      units: 'metric',
       dimUnit: 'm',
       keyValid: null,
       keyValidReason: null,
       // Setting a new key invalidates the cached test result.
       setApiKey: (k) => set({ apiKey: k, keyValid: null, keyValidReason: null }),
-      setUnits: (u) => set({ units: u }),
       setDimUnit: (u) => set({ dimUnit: u }),
       setKeyValid: (v, reason) => set({ keyValid: v, keyValidReason: reason ?? null }),
     }),

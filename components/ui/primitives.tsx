@@ -1,24 +1,129 @@
-import type { CSSProperties, MouseEvent, ReactNode } from 'react';
+'use client';
+
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import { Icon, type IconName } from './Icon';
 
-export function DanmuMark({ size = 14, color = 'var(--ink)' as string }: { size?: number; color?: string }) {
+// The mark is the room the studio builds: a soft dollhouse volume with one
+// piece of furniture in it, matching app/icon.svg. It replaced a hard-cornered
+// square with tracked monospace caps — a drafting-instrument signature that
+// contradicted the brand's "warm, playful, deliberately not CAD" commitment on
+// every screen it appeared.
+export function DanmuMark({ size = 16, color = 'var(--ink)' as string }: { size?: number; color?: string }) {
   return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color }}>
-      <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
-        <rect x="1" y="1" width="14" height="14" stroke="currentColor" strokeWidth="1.3" />
-        <circle cx="8" cy="8" r="2.3" fill="var(--accent)" />
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color }}>
+      <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <path d="M6 21.5 16 26l10-4.5V11L16 6.5 6 11z" fill="var(--accent)" opacity="0.16" />
+        <path
+          d="M6 21.5V11l10-4.5L26 11v10.5L16 26zM6 11l10 4.5L26 11M16 15.5V26"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <rect x="12.6" y="17.9" width="6.8" height="4.2" rx="1.6" fill="var(--accent-2)" />
       </svg>
       <span
         style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: size - 2,
-          letterSpacing: '0.14em',
-          fontWeight: 500,
+          fontFamily: 'var(--font-display)',
+          fontSize: size + 1,
+          fontWeight: 560,
+          letterSpacing: '-0.015em',
         }}
       >
-        DANMU
+        Danmu
       </span>
     </div>
+  );
+}
+
+// Rename-in-place. A real button that swaps to an input, so renaming is
+// reachable by keyboard and announced — it replaces four separate
+// `<div onClick>` affordances (room card, room name in the studio top bar, part
+// name, detection label) whose only hint was a title attribute.
+export function EditableText({
+  value,
+  onCommit,
+  onReject,
+  label,
+  maxLength = 80,
+  style,
+  inputStyle,
+}: {
+  value: string;
+  onCommit: (next: string) => void;
+  /** called when a blank/whitespace-only name is submitted and the old value is
+   *  kept, so the caller can say so instead of appearing to ignore the user */
+  onReject?: () => void;
+  /** what is being renamed, e.g. "Room name" — used for the accessible name */
+  label: string;
+  maxLength?: number;
+  style?: CSSProperties;
+  inputStyle?: CSSProperties;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const restore = useRef(false);
+
+  // Return focus to the trigger after an edit ends, so keyboard position is
+  // never lost. Only on a real edit — not on first mount.
+  useEffect(() => {
+    if (!editing && restore.current) {
+      restore.current = false;
+      btnRef.current?.focus();
+    }
+  }, [editing]);
+
+  function start() {
+    setDraft(value);
+    restore.current = true;
+    setEditing(true);
+  }
+
+  function commit() {
+    const next = draft.trim();
+    // An empty or whitespace-only name is a mistake, not an intent: revert, and
+    // let the caller explain why nothing changed.
+    if (!next) onReject?.();
+    else if (next !== value) onCommit(next);
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <input
+        className="field"
+        aria-label={label}
+        autoFocus
+        maxLength={maxLength}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit();
+          if (e.key === 'Escape') setEditing(false);
+          e.stopPropagation();
+        }}
+        style={inputStyle}
+      />
+    );
+  }
+
+  return (
+    <button
+      ref={btnRef}
+      type="button"
+      className="editable"
+      onClick={(e) => {
+        e.stopPropagation();
+        start();
+      }}
+      aria-label={`${label}: ${value}. Activate to rename.`}
+      title="Rename"
+      style={style}
+    >
+      {value}
+    </button>
   );
 }
 
@@ -46,37 +151,32 @@ export function Dot({
   );
 }
 
+// The title is a real <h1>: these are separate routes, and without a heading
+// element the page has no document outline *and* the display-serif rule in
+// globals.css never fires — which is why Fraunces was absent from onboarding.
+// `kicker` is free text rather than a zero-padded "Step 01 / 04": the mono
+// tabular counter read as a drafting form, and it over-promised a fixed
+// four-step sequence the primary path skips.
 export function StepHeader({
-  step,
-  total,
+  kicker,
   title,
   subtitle,
 }: {
-  step: number;
-  total: number;
+  kicker?: string;
   title: string;
   subtitle?: string;
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span className="ds-label" style={{ color: 'var(--accent)' }}>
-          Step <span className="mono">{String(step).padStart(2, '0')} / {String(total).padStart(2, '0')}</span>
-        </span>
-        <div style={{ flex: 1, height: 1, background: 'var(--hairline)' }} />
-      </div>
-      <div
-        style={{
-          fontFamily: 'var(--font-sans)',
-          fontSize: 22,
-          fontWeight: 500,
-          letterSpacing: '-0.02em',
-          color: 'var(--ink)',
-          lineHeight: 1.15,
-        }}
-      >
-        {title}
-      </div>
+      {kicker && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className="ds-label" style={{ color: 'var(--accent-text)' }}>
+            {kicker}
+          </span>
+          <div style={{ flex: 1, height: 1, background: 'var(--hairline)' }} />
+        </div>
+      )}
+      <h1 style={{ fontSize: 24, lineHeight: 1.15, color: 'var(--ink)' }}>{title}</h1>
       {subtitle && (
         <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.45 }}>{subtitle}</div>
       )}
@@ -105,34 +205,39 @@ export function IOSFrame({
   );
 }
 
-export function Toggle({ on, onClick }: { on: boolean; onClick?: () => void }) {
+export function Toggle({ on, onClick, label }: { on: boolean; onClick?: () => void; label?: string }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       aria-pressed={on}
+      aria-label={label}
       style={{
         width: 44,
         height: 24,
         borderRadius: 'var(--r-full)',
-        border: '1px solid var(--hairline-strong)',
+        border: '1px solid var(--edge)',
         background: on ? 'var(--accent)' : 'var(--paper-2)',
         position: 'relative',
         cursor: 'pointer',
         padding: 0,
-        transition: 'all 0.15s',
+        transition: 'background .15s, border-color .15s',
       }}
     >
       <div
         style={{
           position: 'absolute',
           top: 2,
-          left: on ? 22 : 2,
+          left: 2,
           width: 18,
           height: 18,
           borderRadius: 'var(--r-full)',
-          background: '#fff',
-          border: '1px solid var(--hairline-strong)',
-          transition: 'left 0.15s',
+          background: 'var(--on-accent)',
+          border: '1px solid var(--edge)',
+          // transform, not `left` — `left` forces layout on every toggle, and
+          // this is the primitive every other switch in the app copies.
+          transform: on ? 'translateX(20px)' : 'translateX(0)',
+          transition: 'transform .15s',
         }}
       />
     </button>
@@ -149,6 +254,8 @@ export function IconButton({
   onClick,
   active,
   disabled,
+  /** visual box; the hit area is lifted to 44px by .icon-btn::after. Floored at
+   *  24px so no control falls under the WCAG 2.5.8 minimum target size. */
   size = 32,
   iconSize = 16,
   variant = 'ghost',
@@ -182,7 +289,7 @@ export function IconButton({
       aria-pressed={active === undefined ? undefined : active}
       title={title ?? label}
       className={`icon-btn${variant === 'outline' ? ' icon-btn--outline' : ''}${tone === 'danger' ? ' icon-btn--danger' : ''}${active ? ' is-active' : ''}${className ? ` ${className}` : ''}`}
-      style={{ width: size, height: size, ...style }}
+      style={{ width: Math.max(size, 24), height: Math.max(size, 24), ...style }}
     >
       <Icon name={icon} size={iconSize} />
     </button>
@@ -191,11 +298,15 @@ export function IconButton({
 
 // Small status pill — tinted background + tinted text from one tone. Replaces
 // the hand-built "Locked" / status chips that were duplicated across panels.
+// Foregrounds are the *-text tokens: pill copy is 11px on a tinted surface, the
+// hardest contrast case in the app, and the plain fill tokens do not clear
+// 4.5:1 against their own tints.
 const PILL_TONES: Record<string, [string, string]> = {
   locked: ['--locked-tint', '--locked'],
-  accent: ['--accent-tint', '--accent'],
-  sage: ['--accent-2-tint', '--accent-2'],
-  danger: ['--danger-tint', '--danger'],
+  accent: ['--accent-tint', '--accent-text'],
+  sage: ['--accent-2-tint', '--success-text'],
+  danger: ['--danger-tint', '--danger-text'],
+  warn: ['--paper-3', '--warn-text'],
   neutral: ['--paper-2', '--ink-2'],
 };
 
@@ -204,7 +315,7 @@ export function Pill({
   children,
   style,
 }: {
-  tone?: 'locked' | 'accent' | 'sage' | 'danger' | 'neutral';
+  tone?: 'locked' | 'accent' | 'sage' | 'danger' | 'warn' | 'neutral';
   children: ReactNode;
   style?: CSSProperties;
 }) {
@@ -269,7 +380,7 @@ export function Segmented<T extends string>({
               gap: 6,
               border: 'none',
               background: active ? 'var(--accent-tint)' : 'transparent',
-              color: active ? 'var(--accent)' : 'var(--ink-2)',
+              color: active ? 'var(--accent-text)' : 'var(--ink-2)',
               cursor: 'pointer',
               fontSize: 12.5,
               fontWeight: 600,

@@ -10,7 +10,7 @@ export function Modal({
   onClose,
   labelledBy,
   width = 440,
-  zIndex = 100,
+  zIndex = 'var(--z-modal)' as number | string,
   blur = false,
   closeOnBackdrop = true,
   bodyPadding = '20px 24px',
@@ -21,7 +21,8 @@ export function Modal({
   /** id of the title element, for aria-labelledby */
   labelledBy?: string;
   width?: number;
-  zIndex?: number;
+  /** accepts a --z-* token string; defaults to the modal layer */
+  zIndex?: number | string;
   blur?: boolean;
   closeOnBackdrop?: boolean;
   bodyPadding?: string;
@@ -30,11 +31,47 @@ export function Modal({
   children: ReactNode;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
+  // Whatever had focus before the dialog opened, so it can be given back on
+  // close. Without this, dismissing a modal drops focus to the top of the
+  // document and a keyboard user loses their place entirely.
+  const returnTo = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
+    returnTo.current = document.activeElement as HTMLElement | null;
+
+    const FOCUSABLE =
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      // Trap Tab inside the dialog. A modal the keyboard can walk out of is
+      // still showing its scrim over content the user is now editing blind.
+      if (e.key !== 'Tab') return;
+      const card = cardRef.current;
+      if (!card) return;
+      const items = Array.from(card.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+        (el) => el.offsetParent !== null || el === card,
+      );
+      if (!items.length) {
+        e.preventDefault();
+        card.focus();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || active === card)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
+
     document.addEventListener('keydown', onKey);
     // Move focus into the dialog so Esc/Tab land here — but DON'T steal it from
     // an autoFocus'd field already inside the modal (a search box / textarea).
@@ -42,7 +79,10 @@ export function Modal({
     // so at this point activeElement is already that field when one exists.
     const card = cardRef.current;
     if (card && !card.contains(document.activeElement)) card.focus();
-    return () => document.removeEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      returnTo.current?.focus?.();
+    };
   }, [onClose]);
 
   return (

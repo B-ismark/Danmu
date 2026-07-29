@@ -63,10 +63,27 @@ export type RoomData = {
 
 const k = (roomId: string, sub: string) => `room:${roomId}:${sub}`;
 
+/** Deleted rooms are moved under this prefix instead of being erased, so a
+ *  mis-click is recoverable. Purged after TRASH_TTL on the next listRooms. */
+const TRASH = 'trash:';
+const TRASH_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+/** Last-modified stamp, kept in its own tiny key. Writing it here rather than
+ *  into `meta` means the 300ms-debounced transform/scene saves don't have to
+ *  read-modify-write the whole room record just to record that it changed. */
+async function touch(roomId: string) {
+  await set(k(roomId, 'touched'), Date.now());
+}
+
 export type Transforms = {
   positions: Record<string, [number, number, number]>;
   rotations: Record<string, number>;
   dims: Record<string, [number, number, number]>;
+  /** which parts the user hid. Per-room like the transforms, and optional —
+   *  rooms saved before this shipped simply have nothing hidden. Without it, a
+   *  refresh silently brought hidden parts back while the top bar had been
+   *  showing a "saved" state the whole time. */
+  hidden?: Record<string, boolean>;
 };
 
 /** A named furniture-arrangement snapshot ("Layout A / B") — lets the user
@@ -95,17 +112,28 @@ export type RoomSummary = {
 export const roomStore = {
   async saveRoom(room: RoomData) {
     await set(k(room.id, 'meta'), room);
+    await touch(room.id);
   },
   async renameRoom(roomId: string, name: string) {
     const meta = await get<RoomData>(k(roomId, 'meta'));
     if (!meta) return;
     await set(k(roomId, 'meta'), { ...meta, name });
+    await touch(roomId);
   },
   async loadRoom(roomId: string): Promise<RoomData | undefined> {
     return get<RoomData>(k(roomId, 'meta'));
   },
   async saveCapture(roomId: string, capture: Capture) {
     await set(k(roomId, `cap:${capture.slot}`), capture);
+    await touch(roomId);
+  },
+  /** Remove one wall photo. Without this, moving a photo between slots left the
+   *  original behind in IndexedDB — React showed the source slot as empty while
+   *  a reload resurrected the same photo in both slots and fed a duplicate wall
+   *  into detection. Also backs the per-photo Remove action. */
+  async deleteCapture(roomId: string, slot: CaptureSlot) {
+    await del(k(roomId, `cap:${slot}`));
+    await touch(roomId);
   },
   async loadCaptures(roomId: string): Promise<Capture[]> {
     const all = await keys();
@@ -139,52 +167,112 @@ export const roomStore = {
   },
   async saveTransforms(roomId: string, t: Transforms) {
     await set(k(roomId, 'transforms'), t);
+    await touch(roomId);
   },
   async loadTransforms(roomId: string): Promise<Transforms | undefined> {
     return get<Transforms>(k(roomId, 'transforms'));
   },
   async saveSceneParts(roomId: string, parts: unknown) {
     await set(k(roomId, 'scene'), parts);
+    await touch(roomId);
   },
   async loadSceneParts<T>(roomId: string): Promise<T | undefined> {
     return get<T>(k(roomId, 'scene'));
   },
   async listRooms(): Promise<RoomSummary[]> {
-    const all = await keys();
-    const roomIds = new Set<string>();
+    const all = (await keys()).filter((key): key is string => typeof key === 'string');
+
+    // One pass over the key list to bucket everything per room, then parallel
+    // reads. The previous shape did two sequential gets *plus* a full rescan of
+    // every key for each room, so 40 rooms meant ~160 serialised round trips
+    // before the grid could paint.
+    const ids = new Set<string>();
+    const captureCounts = new Map<string, number>();
     for (const key of all) {
-      if (typeof key === 'string') {
-        const m = key.match(/^room:([^:]+):meta$/);
-        if (m) roomIds.add(m[1]);
-      }
-    }
-    const out: RoomSummary[] = [];
-    for (const id of roomIds) {
-      const meta = await get<RoomData>(k(id, 'meta'));
-      const transforms = await get<Transforms>(k(id, 'transforms'));
-      const itemCount = transforms ? Object.keys(transforms.positions).length : 0;
-      // count captures for this room
-      let captureCount = 0;
-      const capPrefix = k(id, 'cap:');
-      for (const key of all) {
-        if (typeof key === 'string' && key.startsWith(capPrefix)) captureCount++;
-      }
-      const detected = !!(meta?.detectedObjects && meta.detectedObjects.length > 0);
+      const meta = key.match(/^room:([^:]+):meta$/);
       if (meta) {
-        out.push({
+        ids.add(meta[1]);
+        continue;
+      }
+      const cap = key.match(/^room:([^:]+):cap:/);
+      if (cap) captureCounts.set(cap[1], (captureCounts.get(cap[1]) ?? 0) + 1);
+    }
+
+    const rows = await Promise.all(
+      [...ids].map(async (id) => {
+        const [meta, transforms, touched] = await Promise.all([
+          get<RoomData>(k(id, 'meta')),
+          get<Transforms>(k(id, 'transforms')),
+          get<number>(k(id, 'touched')),
+        ]);
+        if (!meta) return null;
+        return {
           id,
           name: meta.name,
           createdAt: meta.createdAt,
-          updatedAt: meta.createdAt,
-          itemCount,
-          captureCount,
-          detected,
-        });
-      }
-    }
-    return out.sort((a, b) => b.updatedAt - a.updatedAt);
+          // Rooms saved before `touched` existed fall back to their creation
+          // date — the honest answer for a room we have no edit record for.
+          updatedAt: touched ?? meta.createdAt,
+          itemCount: transforms ? Object.keys(transforms.positions).length : 0,
+          captureCount: captureCounts.get(id) ?? 0,
+          detected: !!(meta.detectedObjects && meta.detectedObjects.length > 0),
+        } satisfies RoomSummary;
+      }),
+    );
+
+    // Expiring old trash here keeps deletion recoverable without needing a
+    // background job in a product that has no server.
+    void roomStore.purgeTrash();
+
+    return rows.filter((r): r is RoomSummary => r !== null).sort((a, b) => b.updatedAt - a.updatedAt);
   },
-  async clearRoom(roomId: string) {
+
+  /** Soft-delete: every `room:{id}:*` key is moved under `trash:{ts}:`, so the
+   *  room disappears from the workspace but is recoverable. Returns the token
+   *  needed to undo. A sandbox that can undo moving a chair should not lose a
+   *  whole room permanently to one mis-aimed click. */
+  async clearRoom(roomId: string): Promise<{ roomId: string; deletedAt: number }> {
+    const all = await keys();
+    const prefix = `room:${roomId}:`;
+    const deletedAt = Date.now();
+    for (const key of all) {
+      if (typeof key !== 'string' || !key.startsWith(prefix)) continue;
+      const value = await get(key);
+      if (value !== undefined) await set(`${TRASH}${deletedAt}:${key}`, value);
+      await del(key);
+    }
+    return { roomId, deletedAt };
+  },
+
+  /** Undo a soft delete. */
+  async restoreRoom(token: { roomId: string; deletedAt: number }): Promise<boolean> {
+    const all = await keys();
+    const prefix = `${TRASH}${token.deletedAt}:room:${token.roomId}:`;
+    let restored = 0;
+    for (const key of all) {
+      if (typeof key !== 'string' || !key.startsWith(prefix)) continue;
+      const value = await get(key);
+      if (value !== undefined) await set(key.slice(`${TRASH}${token.deletedAt}:`.length), value);
+      await del(key);
+      restored++;
+    }
+    return restored > 0;
+  },
+
+  /** Drop trashed keys older than TRASH_TTL. Cheap: one key scan, no reads. */
+  async purgeTrash(maxAgeMs: number = TRASH_TTL) {
+    const all = await keys();
+    const cutoff = Date.now() - maxAgeMs;
+    for (const key of all) {
+      if (typeof key !== 'string' || !key.startsWith(TRASH)) continue;
+      const ts = Number(key.slice(TRASH.length).split(':')[0]);
+      if (Number.isFinite(ts) && ts < cutoff) await del(key);
+    }
+  },
+
+  /** Irreversible erase, bypassing trash. Only for an explicit "delete
+   *  permanently" affordance — never for the ordinary delete path. */
+  async destroyRoom(roomId: string) {
     const all = await keys();
     const prefix = `room:${roomId}:`;
     for (const key of all) {

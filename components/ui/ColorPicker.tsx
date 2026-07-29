@@ -1,6 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 
 // A small, self-contained HSV color picker styled to the design system — a
 // saturation/value square, a hue slider, and a hex field. Replaces the browser's
@@ -100,6 +106,53 @@ export function ColorPicker({ value, onChange }: { value: string; onChange: (hex
     emit([clamp((e.clientX - r.left) / r.width, 0, 1) * 360, s, v]);
   };
 
+  // Both tracks were pointer-only, which made recolouring a wall impossible
+  // without a mouse. Arrows step 1%, Shift or PageUp/Down steps 10%, Home/End
+  // jump to the ends of the axis (WCAG 2.1.1 + the ARIA slider keyboard model).
+  // stopPropagation so arrow keys never reach a studio-wide key handler.
+  function onSatKey(e: ReactKeyboardEvent) {
+    const step = e.shiftKey ? 0.1 : 0.01;
+    let ns = s;
+    let nv = v;
+    switch (e.key) {
+      case 'ArrowLeft': ns = clamp(s - step, 0, 1); break;
+      case 'ArrowRight': ns = clamp(s + step, 0, 1); break;
+      case 'ArrowUp': nv = clamp(v + step, 0, 1); break;
+      case 'ArrowDown': nv = clamp(v - step, 0, 1); break;
+      // The square has two axes, so Page/Home/End take the brightness axis —
+      // saturation already has a full-range shortcut via Shift+arrows.
+      case 'PageUp': nv = clamp(v + 0.1, 0, 1); break;
+      case 'PageDown': nv = clamp(v - 0.1, 0, 1); break;
+      case 'Home': nv = 0; break;
+      case 'End': nv = 1; break;
+      default: return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    emit([h, ns, nv]);
+  }
+
+  function onHueKey(e: ReactKeyboardEvent) {
+    const step = e.shiftKey ? 15 : 1;
+    let nh = h;
+    switch (e.key) {
+      case 'ArrowLeft': case 'ArrowDown': nh = clamp(h - step, 0, 360); break;
+      case 'ArrowRight': case 'ArrowUp': nh = clamp(h + step, 0, 360); break;
+      case 'PageDown': nh = clamp(h - 30, 0, 360); break;
+      case 'PageUp': nh = clamp(h + 30, 0, 360); break;
+      case 'Home': nh = 0; break;
+      case 'End': nh = 360; break;
+      default: return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    emit([nh, s, v]);
+  }
+
+  const satPct = Math.round(s * 100);
+  const valPct = Math.round(v * 100);
+  const huePct = Math.round(h);
+
   function commitHex(raw: string) {
     const rgb = hexToRgb(raw);
     if (rgb) {
@@ -111,6 +164,9 @@ export function ColorPicker({ value, onChange }: { value: string; onChange: (hex
     }
   }
 
+  // Literal white + a dark halo, not tokens: the thumb sits on an arbitrary hue,
+  // so its ring has to stay legible against *any* colour the user lands on. Same
+  // reason the gradients below use raw hex — this is colour space, not styling.
   const thumbRing = '2px solid #fff';
   const thumbShadow = '0 0 0 1px rgba(0,0,0,0.35)';
 
@@ -120,6 +176,14 @@ export function ColorPicker({ value, onChange }: { value: string; onChange: (hex
       <div
         ref={satRef}
         onPointerDown={dragHandler(onSat)}
+        onKeyDown={onSatKey}
+        tabIndex={0}
+        role="slider"
+        aria-label="Saturation and brightness"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={satPct}
+        aria-valuetext={`Saturation ${satPct}%, brightness ${valPct}%`}
         style={{
           position: 'relative',
           width: '100%',
@@ -150,6 +214,14 @@ export function ColorPicker({ value, onChange }: { value: string; onChange: (hex
       <div
         ref={hueRef}
         onPointerDown={dragHandler(onHue)}
+        onKeyDown={onHueKey}
+        tabIndex={0}
+        role="slider"
+        aria-label="Hue"
+        aria-valuemin={0}
+        aria-valuemax={360}
+        aria-valuenow={huePct}
+        aria-valuetext={`${huePct} degrees`}
         style={{
           position: 'relative',
           width: '100%',

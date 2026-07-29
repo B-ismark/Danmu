@@ -14,3 +14,5 @@ public/models/*.names.json
 next-env.d.ts
 .vscode
 .claude
+# local design-hook cache + machine-local config
+.impeccable

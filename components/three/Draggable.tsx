@@ -4,7 +4,7 @@
 //   1. DIRECT DRAG (game-style, the default): press a part and drag it across
 //      the floor — it slides, snaps to walls when wall-mounted, stops against
 //      obstacles, and tints red while the spot is invalid. Scroll rotates it
-//      mid-drag.
+//      mid-drag; on touch, a second finger twists it.
 //   2. GIZMO (precision): Maya-style W=move E=rotate R=scale TransformControls
 //      on the selected part.
 // Both paths resolve through the same deterministic placement pipeline
@@ -12,10 +12,22 @@
 // the same code, so behaviour never diverges. On an invalid drop the part rests
 // at the LAST VALID spot of the drag (slide-up-to-the-obstacle), not back where
 // it started.
+//
+// TOUCH: a plain touch-drag on furniture must NOT pick it up. In a furnished
+// room almost every pixel is a part, so grabbing on contact left nowhere to
+// orbit the camera from. Instead a touch has to dwell (~280ms) to pick the part
+// up — the standard mobile "long-press to move" contract — and a touch that
+// moves first is handed straight back to OrbitControls.
+//
+// PERFORMANCE: the canvas runs frameloop="demand", so every imperative mutation
+// here asks for its own frame. Pointer input arrives faster than the display
+// refreshes, so moves are coalesced to one placement resolve per animation frame,
+// and the world snapshot the resolve reads is built ONCE per gesture (nothing
+// else can move while you are dragging).
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { TransformControls } from '@react-three/drei';
-import { type ThreeEvent } from '@react-three/fiber';
+import { useThree, type ThreeEvent } from '@react-three/fiber';
 import { Group, Mesh, MeshStandardMaterial, Plane, Vector3 } from 'three';
 import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
@@ -43,6 +55,26 @@ type FinishMat = MeshStandardMaterial & {
   userData: { __origRough?: number; __origMetal?: number; __origEnv?: number };
 };
 
+// Touch pick-up: dwell time, and how far the finger may drift while dwelling
+// before we decide it is a camera gesture and let go.
+const HOLD_MS = 280;
+const HOLD_SLOP = 10;
+
+/** Only one part may own a pointer gesture at a time. Without this, the second
+ *  finger of a twist landing on neighbouring furniture starts a competing
+ *  pick-up on THAT part and the two fight over draggingId. */
+let _gestureOwner: string | null = null;
+
+/** Coarse-pointer (finger / stylus) detection, resolved once and cached. Drives
+ *  the gizmo handle size: drei's default 0.8 is far under a 44px target. */
+let _coarse: boolean | null = null;
+function coarsePointer(): boolean {
+  if (_coarse === null) {
+    _coarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches === true;
+  }
+  return _coarse;
+}
+
 // Applies the part's surface finish to every standard material in the group by
 // overriding roughness/metalness. Caches each material's original values the
 // first time it's touched so 'auto' restores the shape's hand-tuned look. Skips
@@ -60,6 +92,7 @@ function FinishApplier({
   colorKey?: string;
   dimKey?: string;
 }) {
+  const invalidate = useThree((s) => s.invalidate);
   useLayoutEffect(() => {
     const g = groupRef.current;
     if (!g) return;
@@ -93,7 +126,9 @@ function FinishApplier({
         mat.needsUpdate = true;
       }
     });
-  }, [groupRef, finish, colorKey, dimKey]);
+    // Materials were mutated outside React — nothing else will ask for a repaint.
+    invalidate();
+  }, [groupRef, finish, colorKey, dimKey, invalidate]);
   return null;
 }
 
@@ -104,10 +139,14 @@ const _hit = new Vector3();
 export function Draggable({ partId, children }: { partId: string; children: ReactNode }) {
   const ref = useRef<Group | null>(null);
   const [obj, setObj] = useState<Group | null>(null);
+  const invalidate = useThree((s) => s.invalidate);
 
   const part = useScene((s) => s.parts.find((p) => p.id === partId));
-  const allParts = useScene((s) => s.parts);
-  const room = useScene((s) => s.room);
+  // Field-level: containment + gravity need the polygon and the ceiling, nothing
+  // else on `room`. Subscribing to the whole object re-rendered every part in the
+  // scene on every tick of a wall drag (and on every wall repaint).
+  const footprint = useScene((s) => s.room.footprint);
+  const roomHeight = useScene((s) => s.room.height);
 
   const storedPos = useStudio((s) => s.positions[partId]);
   const storedRot = useStudio((s) => s.rotations[partId]);
@@ -124,12 +163,6 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     snapMode === 'off' ? null : snapMode === 'fine' ? 0.01 : 0.05;
   const rotationSnap =
     snapMode === 'off' ? null : snapMode === 'fine' ? Math.PI / 12 : Math.PI / 4;
-
-  // Live override maps — needed so support/collision sees furniture where it
-  // ACTUALLY is (after the user moved it), not its stale detected position.
-  const allPositions = useStudio((s) => s.positions);
-  const allRotations = useStudio((s) => s.rotations);
-  const allDims = useStudio((s) => s.dims);
 
   const setPosition = useStudio((s) => s.setPosition);
   const setRotation = useStudio((s) => s.setRotation);
@@ -169,17 +202,34 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       ref.current.scale.set(1, 1, 1);
     }
     lastValidPos.current = [ref.current.position.x, ref.current.position.y, ref.current.position.z];
-  }, [storedPos, storedRot, storedDim, part]);
+    invalidate(); // transform written straight to the object3D, not via props
+  }, [storedPos, storedRot, storedDim, part, invalidate]);
 
   /** Snapshot every part at its effective (user-overridden) transform so
-   *  collision + support see the world as it currently looks. */
-  function effSnapshot(): ScenePart[] {
-    return allParts.map((o) => ({
+   *  collision + support see the world as it currently looks.
+   *
+   *  Read through getState() rather than a subscription: the override maps are
+   *  replaced wholesale by their setters, so subscribing to them re-rendered
+   *  EVERY Draggable on every commit — and they are never read during render,
+   *  only inside these handlers. */
+  function buildEffSnapshot(): ScenePart[] {
+    const { positions, rotations, dims } = useStudio.getState();
+    return useScene.getState().parts.map((o) => ({
       ...o,
-      pos: allPositions[o.id] ?? o.pos,
-      rot: allRotations[o.id] ?? o.rot,
-      dimMM: allDims[o.id] ?? o.dimMM,
+      pos: positions[o.id] ?? o.pos,
+      rot: rotations[o.id] ?? o.rot,
+      dimMM: dims[o.id] ?? o.dimMM,
     }));
+  }
+
+  // The snapshot is built ONCE per gesture and reused for every tick of it.
+  // Nothing else can move while you hold a part, so re-cloning all N parts on
+  // each pointermove (then feeding that to snapToNeighbors + collidesAt over all
+  // N) was pure waste at input rate. Cleared when the gesture ends.
+  const effCache = useRef<ScenePart[] | null>(null);
+  function effParts(): ScenePart[] {
+    if (!effCache.current) effCache.current = buildEffSnapshot();
+    return effCache.current;
   }
 
   /** The shared deterministic placement pipeline: containment clamp → wall
@@ -203,7 +253,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     const sn = Math.abs(Math.sin(rot));
     const extX = halfW * c + halfD * sn;
     const extZ = halfW * sn + halfD * c;
-    const bnd = footprintBounds(room.footprint);
+    const bnd = footprintBounds(footprint);
     let x = Math.max(bnd.minX + extX, Math.min(bnd.maxX - extX, rawX));
     let z = Math.max(bnd.minZ + extZ, Math.min(bnd.maxZ - extZ, rawZ));
     let outRot = rot;
@@ -214,7 +264,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // L/T/U inner walls too, always facing into the room.
     const wallMounted = isWallMountedPart(part.category, part.shape);
     if (wallMounted) {
-      const snapped = snapToWall([x, 0, z], dim, room.footprint);
+      const snapped = snapToWall([x, 0, z], dim, footprint);
       x = snapped.x;
       z = snapped.z;
       if (snapped.rot !== undefined) outRot = snapped.rot;
@@ -244,14 +294,14 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       // gizmo's Y axis or the Inspector) while sliding along walls. Fresh parts
       // (no meaningful current y yet) fall back to the canonical height.
       const curY = ref.current?.position.y ?? NaN;
-      y = Number.isFinite(curY) && curY > 0.01 ? curY : groundY(part.category, part.shape, dim, room.height);
+      y = Number.isFinite(curY) && curY > 0.01 ? curY : groundY(part.category, part.shape, dim, roomHeight);
     }
 
     // Vertical containment — keep the whole part between floor and ceiling.
     if (centered) {
-      y = Math.max(partH / 2 + 0.02, Math.min(room.height - partH / 2 - 0.02, y));
-    } else if (y + partH > room.height - 0.02) {
-      y = Math.max(0, room.height - 0.02 - partH);
+      y = Math.max(partH / 2 + 0.02, Math.min(roomHeight - partH / 2 - 0.02, y));
+    } else if (y + partH > roomHeight - 0.02) {
+      y = Math.max(0, roomHeight - 0.02 - partH);
     }
 
     // Legality: inside the actual polygon (catches L/T/U notches the bounding
@@ -261,7 +311,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     const inRoom =
       wallMounted ||
       part.category === 'rug' ||
-      (obbInsidePoly(slightlyShrunk, room.footprint) && pointInFootprint(x, z, room.footprint));
+      (obbInsidePoly(slightlyShrunk, footprint) && pointInFootprint(x, z, footprint));
     const collides = collidesAt(effParts, partId, [x, y, z], outRot, dim);
 
     return { pos: [x, y, z], rot: outRot, valid: inRoom && !collides, snapLines };
@@ -316,21 +366,22 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       snapLines: resolved.snapLines,
     });
     setDragInvalid((prev) => (prev === !resolved.valid ? prev : !resolved.valid));
+    invalidate(); // the object3D moved imperatively — request the repaint
   }
 
   function commit() {
     if (!ref.current || !part) return;
     const dim = currentDim();
-    const effParts = effSnapshot();
+    const eff = effParts();
     const p = ref.current.position;
-    let resolved = resolvePlacement(p.x, p.z, ref.current.rotation.y, dim, effParts);
+    let resolved = resolvePlacement(p.x, p.z, ref.current.rotation.y, dim, eff);
 
     // Invalid drop → rest at the last collision-free spot seen during this drag
     // (slide-up-to-the-obstacle); fall back to the pre-drag position.
     if (!resolved.valid) {
       const back = lastFreePos.current ?? lastValidPos.current;
       if (back) {
-        const r = resolvePlacement(back[0], back[2], ref.current.rotation.y, dim, effParts);
+        const r = resolvePlacement(back[0], back[2], ref.current.rotation.y, dim, eff);
         resolved = r.valid ? r : { pos: [back[0], back[1], back[2]], rot: ref.current.rotation.y, valid: true };
       }
     }
@@ -349,9 +400,11 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       const dx = x - sx[0];
       const dz = z - sx[2];
       if (dx !== 0 || dz !== 0) {
-        for (const o of allParts) {
+        const { parts } = useScene.getState();
+        const { positions } = useStudio.getState();
+        for (const o of parts) {
           if (o.id === partId || o.groupId !== part.groupId) continue;
-          const op = allPositions[o.id] ?? o.pos;
+          const op = positions[o.id] ?? o.pos;
           setPosition(o.id, [op[0] + dx, op[1], op[2] + dz]);
         }
       }
@@ -361,6 +414,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     lastFreePos.current = null;
     setDragInvalid(false);
     setLive(null);
+    invalidate();
   }
 
   /** Return Y of the highest part top under (x,z) within mover's footprint, or null. */
@@ -390,18 +444,151 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     return best;
   }
 
+  // ─── Coalesced resolve ────────────────────────────────────────────────────
+  // Pointer / wheel / twist events all just record their intent; one rAF tick
+  // resolves and applies it. Multiple events inside a frame collapse into the
+  // single placement the user will actually see.
+  const pendingPos = useRef<[number, number] | null>(null);
+  const pendingRot = useRef<number | null>(null);
+  const raf = useRef(0);
+
+  function flushGesture() {
+    raf.current = 0;
+    if (!ref.current || !part) return;
+    const pp = pendingPos.current;
+    const pr = pendingRot.current;
+    pendingPos.current = null;
+    pendingRot.current = null;
+    if (pp === null && pr === null) return;
+    const x = pp ? pp[0] : ref.current.position.x;
+    const z = pp ? pp[1] : ref.current.position.z;
+    const rot = pr ?? ref.current.rotation.y;
+    const dim = currentDim();
+    liveUpdate(resolvePlacement(x, z, rot, dim, effParts()), dim);
+  }
+
+  function schedule() {
+    if (!raf.current) raf.current = requestAnimationFrame(flushGesture);
+  }
+
+  function flushNow() {
+    if (raf.current) {
+      cancelAnimationFrame(raf.current);
+      raf.current = 0;
+    }
+    flushGesture();
+  }
+
   // ─── Direct drag (game-style) ─────────────────────────────────────────────
   // Press a part and pull it across the floor. A 4px threshold keeps plain
   // clicks as selection. While active, OrbitControls is off (draggingId) and
-  // scrolling rotates the part.
+  // scrolling (or a second finger) rotates the part.
   const drag = useRef<{
     pointerId: number;
     started: boolean;
+    /** false while a touch is still dwelling — the camera still owns the gesture */
+    armed: boolean;
+    hold: number;
     startClient: [number, number];
     planeY: number;
     offX: number;
     offZ: number;
   } | null>(null);
+
+  // Two-finger twist. Tracked at window level so the second finger does not have
+  // to land on the part itself — on a nightstand there is barely room for one.
+  const touchPts = useRef(new Map<number, [number, number]>());
+  const twist = useRef<{ secondId: number; baseAngle: number; baseRot: number } | null>(null);
+
+  function onWinDown(e: PointerEvent) {
+    const d = drag.current;
+    if (!d || e.pointerType !== 'touch' || e.pointerId === d.pointerId) return;
+    touchPts.current.set(e.pointerId, [e.clientX, e.clientY]);
+    if (twist.current || !d.armed) return;
+    const a = touchPts.current.get(d.pointerId);
+    if (!a || !ref.current) return;
+    twist.current = {
+      secondId: e.pointerId,
+      baseAngle: Math.atan2(e.clientY - a[1], e.clientX - a[0]),
+      baseRot: ref.current.rotation.y,
+    };
+    // A twist counts as a real gesture even if the part never slid, so the
+    // rotation is committed on release instead of being visually orphaned.
+    if (!d.started) {
+      d.started = true;
+      dragStartPos.current = [ref.current.position.x, ref.current.position.y, ref.current.position.z];
+      lastFreePos.current = null;
+      effCache.current = buildEffSnapshot();
+    }
+  }
+
+  function onWinMove(e: PointerEvent) {
+    const d = drag.current;
+    if (!d || e.pointerType !== 'touch') return;
+    touchPts.current.set(e.pointerId, [e.clientX, e.clientY]);
+    const t = twist.current;
+    if (!t) return;
+    const a = touchPts.current.get(d.pointerId);
+    const b = touchPts.current.get(t.secondId);
+    if (!a || !b) return;
+    const angle = Math.atan2(b[1] - a[1], b[0] - a[0]);
+    // Screen Y grows downward, so a clockwise twist increases `angle`, while a
+    // positive Y rotation in three is counter-clockwise seen from above.
+    let rot = t.baseRot - (angle - t.baseAngle);
+    if (rotationSnap) rot = Math.round(rot / rotationSnap) * rotationSnap;
+    pendingRot.current = rot;
+    schedule();
+  }
+
+  function onWinUp(e: PointerEvent) {
+    touchPts.current.delete(e.pointerId);
+    if (twist.current?.secondId === e.pointerId) twist.current = null;
+  }
+
+  // Window listeners are attached imperatively for the life of a touch drag, so
+  // they must not capture a stale render. These wrappers stay identity-stable
+  // while always calling the current handler.
+  const latest = useRef({ onWinDown, onWinMove, onWinUp });
+  latest.current = { onWinDown, onWinMove, onWinUp };
+  const bound = useRef<{ down: (e: PointerEvent) => void; move: (e: PointerEvent) => void; up: (e: PointerEvent) => void } | null>(null);
+
+  function attachTouch() {
+    if (bound.current) return;
+    const b = {
+      down: (e: PointerEvent) => latest.current.onWinDown(e),
+      move: (e: PointerEvent) => latest.current.onWinMove(e),
+      up: (e: PointerEvent) => latest.current.onWinUp(e),
+    };
+    window.addEventListener('pointerdown', b.down);
+    window.addEventListener('pointermove', b.move);
+    window.addEventListener('pointerup', b.up);
+    window.addEventListener('pointercancel', b.up);
+    bound.current = b;
+  }
+
+  function detachTouch() {
+    const b = bound.current;
+    if (!b) return;
+    window.removeEventListener('pointerdown', b.down);
+    window.removeEventListener('pointermove', b.move);
+    window.removeEventListener('pointerup', b.up);
+    window.removeEventListener('pointercancel', b.up);
+    bound.current = null;
+    touchPts.current.clear();
+    twist.current = null;
+  }
+
+  // Release everything if the part unmounts mid-gesture (deleted, room swapped).
+  useEffect(
+    () => () => {
+      if (raf.current) cancelAnimationFrame(raf.current);
+      if (drag.current?.hold) window.clearTimeout(drag.current.hold);
+      if (_gestureOwner === partId) _gestureOwner = null;
+      detachTouch();
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
 
   function onPointerDown(e: ThreeEvent<PointerEvent>) {
     if (!part || !ref.current) return;
@@ -409,31 +596,83 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // The gizmo's own handles run their interaction — only grab presses on the
     // part body itself.
     e.stopPropagation();
+
+    // A second finger is a twist, not a new grab — whether it lands on this part
+    // or on the sideboard next to it.
+    if (_gestureOwner && _gestureOwner !== partId) return;
+    if (drag.current && e.pointerType === 'touch' && e.pointerId !== drag.current.pointerId) return;
+
     const planeY = isFloorStanding(part.category, part.shape) ? ref.current.position.y : 0;
     _plane.set(_plane.normal.set(0, 1, 0), -planeY);
     if (!e.ray.intersectPlane(_plane, _hit)) return;
+    const isTouch = e.pointerType === 'touch';
     drag.current = {
       pointerId: e.pointerId,
       started: false,
+      armed: !isTouch,
+      hold: 0,
       startClient: [e.clientX, e.clientY],
       planeY,
       offX: _hit.x - ref.current.position.x,
       offZ: _hit.z - ref.current.position.z,
     };
+    _gestureOwner = partId;
     (e.target as Element).setPointerCapture(e.pointerId);
-    // Park the camera immediately so the press never orbits.
-    setDragging(partId);
+    if (isTouch) {
+      touchPts.current.set(e.pointerId, [e.clientX, e.clientY]);
+      attachTouch();
+      // Dwell to pick up. Until then the camera keeps the gesture, which is the
+      // only way to orbit a room where furniture covers the whole viewport.
+      drag.current.hold = window.setTimeout(() => {
+        const d = drag.current;
+        if (!d) return;
+        d.armed = true;
+        setDragging(partId);
+        // Selecting on pick-up is the feedback that the part is now in hand.
+        if (!useStudio.getState().selection.includes(partId)) useStudio.getState().setSelected(partId);
+      }, HOLD_MS);
+    } else {
+      // Park the camera immediately so the press never orbits.
+      setDragging(partId);
+    }
+  }
+
+  /** Give the gesture back to OrbitControls — a touch that moved before it
+   *  dwelled was a camera drag all along. */
+  function abandonDrag(e: ThreeEvent<PointerEvent>) {
+    const d = drag.current;
+    if (!d) return;
+    if (d.hold) window.clearTimeout(d.hold);
+    try {
+      (e.target as Element).releasePointerCapture(d.pointerId);
+    } catch {
+      /* already released */
+    }
+    drag.current = null;
+    if (_gestureOwner === partId) _gestureOwner = null;
+    detachTouch();
   }
 
   function onPointerMove(e: ThreeEvent<PointerEvent>) {
     const d = drag.current;
     if (!d || !part || !ref.current) return;
+    if (!d.armed) {
+      const drift = Math.hypot(e.clientX - d.startClient[0], e.clientY - d.startClient[1]);
+      if (drift > HOLD_SLOP) abandonDrag(e);
+      return;
+    }
+    // While twisting, the fingers are rotating the part — not sliding it.
+    if (twist.current) {
+      e.stopPropagation();
+      return;
+    }
     if (!d.started) {
       const dist = Math.hypot(e.clientX - d.startClient[0], e.clientY - d.startClient[1]);
       if (dist < 4) return;
       d.started = true;
       dragStartPos.current = [ref.current.position.x, ref.current.position.y, ref.current.position.z];
       lastFreePos.current = null;
+      effCache.current = buildEffSnapshot(); // one world snapshot for the gesture
       if (!inSelection) useStudio.getState().setSelected(partId);
       document.body.style.cursor = 'grabbing';
     }
@@ -446,39 +685,43 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       nx = Math.round(nx / translationSnap) * translationSnap;
       nz = Math.round(nz / translationSnap) * translationSnap;
     }
-    const dim = currentDim();
-    liveUpdate(resolvePlacement(nx, nz, ref.current.rotation.y, dim, effSnapshot()), dim);
+    pendingPos.current = [nx, nz];
+    schedule();
   }
 
   function onPointerUp(e: ThreeEvent<PointerEvent>) {
     const d = drag.current;
-    drag.current = null;
     if (!d) return;
+    if (d.hold) window.clearTimeout(d.hold);
+    drag.current = null;
+    if (_gestureOwner === partId) _gestureOwner = null;
+    detachTouch();
     try {
       (e.target as Element).releasePointerCapture(d.pointerId);
     } catch {
       /* already released */
     }
     document.body.style.cursor = '';
-    if (d.started) commit();
-    setDragging(null);
+    if (d.started) {
+      flushNow(); // land the last sub-frame move before resolving the drop
+      commit();
+    }
+    effCache.current = null;
+    if (d.armed) setDragging(null);
     setLive(null);
     setDragInvalid(false);
   }
 
   function onWheel(e: ThreeEvent<WheelEvent>) {
-    // Rotate the part under the cursor mid-drag (Sims-style).
+    // Rotate the part under the cursor mid-drag (Sims-style). Touch gets the
+    // same job done with a second finger — see onWinMove.
     const d = drag.current;
     if (!d || !d.started || !part || !ref.current) return;
     e.stopPropagation();
     const step = rotationSnap ?? Math.PI / 36; // 5° when snapping is off
     const dir = e.deltaY > 0 ? 1 : -1;
-    const rot = ref.current.rotation.y + dir * step;
-    const dim = currentDim();
-    liveUpdate(
-      resolvePlacement(ref.current.position.x, ref.current.position.z, rot, dim, effSnapshot()),
-      dim,
-    );
+    pendingRot.current = (pendingRot.current ?? ref.current.rotation.y) + dir * step;
+    schedule();
   }
 
   // ─── Gizmo live feedback ──────────────────────────────────────────────────
@@ -486,8 +729,8 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     if (!ref.current || !part) return;
     if (mode !== 'translate') return; // rotate/scale resolve on commit
     const p = ref.current.position;
-    const dim = currentDim();
-    liveUpdate(resolvePlacement(p.x, p.z, ref.current.rotation.y, dim, effSnapshot()), dim);
+    pendingPos.current = [p.x, p.z];
+    schedule();
   }
 
   // Translate / Scale: all 3 axes. Rotate: Y only (around vertical).
@@ -528,7 +771,8 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
           showX={showX}
           showY={showY}
           showZ={showZ}
-          size={0.8}
+          // Fingers need a target roughly twice the size a mouse does.
+          size={coarsePointer() ? 1.5 : 0.8}
           translationSnap={mode === 'translate' ? translationSnap : null}
           rotationSnap={mode === 'rotate' ? rotationSnap : null}
           onObjectChange={onGizmoChange}
@@ -537,9 +781,12 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
             const pp = ref.current?.position;
             dragStartPos.current = pp ? [pp.x, pp.y, pp.z] : null;
             lastFreePos.current = null;
+            effCache.current = buildEffSnapshot();
           }}
           onMouseUp={() => {
+            flushNow();
             commit();
+            effCache.current = null;
             setDragging(null);
           }}
         />
