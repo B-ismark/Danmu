@@ -140,6 +140,22 @@ const WORLD_PROMPTS = [
   'clothes rack', 'hanging clothes',
 ] as const;
 
+// `label` is user-facing — the detect page renders it, and the Gemini path's
+// contract is "short noun phrase". A few prompts are phrased for the detector
+// rather than for a person, so they get a display name instead.
+const WORLD_LABEL: Record<string, string> = {
+  'hanging clothes': 'clothes rail',
+  'clothes rack': 'clothes rail',
+  'storage cabinet': 'cabinet',
+  'window curtain': 'curtain',
+};
+
+/** OIV7 names are sentence case ("Computer monitor"); the world prompts are
+ *  lowercase. Without this the detection list mixes both. */
+function displayLabel(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 const WORLD_TO_CATEGORY: Record<string, Category> = {
   sofa: 'sofa', couch: 'sofa', armchair: 'sofa',
   chair: 'chair', 'office chair': 'chair', stool: 'chair',
@@ -437,7 +453,7 @@ async function runDetection(
     const name = (names[String(i)] ?? '').toLowerCase();
     const category = NAME_TO_CATEGORY[name];
     if (!category) return null;
-    return { label: names[String(i)] ?? name, category, shape: NAME_TO_SHAPE[name] };
+    return { label: displayLabel(name), category, shape: NAME_TO_SHAPE[name] };
   };
 
   /** Same for YOLO-World, whose class order is WORLD_PROMPTS. */
@@ -446,7 +462,12 @@ async function runDetection(
     if (!prompt) return null;
     const category = WORLD_TO_CATEGORY[prompt];
     if (!category) return null;
-    return { label: prompt, category, shape: NAME_TO_SHAPE[prompt] };
+    // Look shape up by the prompt, but show the display name.
+    return {
+      label: displayLabel(WORLD_LABEL[prompt] ?? prompt),
+      category,
+      shape: NAME_TO_SHAPE[prompt],
+    };
   };
 
   const out: Detection[] = [];
