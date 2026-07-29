@@ -8,7 +8,7 @@ export function UndoRedo() {
   const canRedo = useHistory((s) => s.future.length > 0);
 
   return (
-    <div className="toolbar">
+    <div className="toolbar" role="group" aria-label="Edit history">
       <IconButton
         icon="arrow-left"
         label="Undo"

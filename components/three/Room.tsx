@@ -4,7 +4,7 @@
 // Replaces the prior hand-coded Sofa/TV/Closet/Chair/etc imports.
 
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { ContactShadows, Environment, Lightformer, AdaptiveDpr, PerformanceMonitor } from '@react-three/drei';
 import { EffectComposer, N8AO, SMAA } from '@react-three/postprocessing';
 import { ACESFilmicToneMapping, Raycaster, Vector2, Vector3, Plane, type Camera, type WebGLRenderer } from 'three';
@@ -69,10 +69,11 @@ export function Room() {
   const hi = quality === 'high';
   const L = LIGHTING[lighting];
   const parts = useScene((s) => s.parts).filter((p) => !hidden[p.id]);
-  const room = useScene((s) => s.room);
   // Drop the upper DPR bound when FPS regresses (large scenes / weak GPUs);
   // AdaptiveDpr cuts further while interacting. Keeps AO affordable.
   const [dprMax, setDprMax] = useState(2);
+  // True only while frames are flowing continuously — see FrameRateGate.
+  const hotLoop = useRef(false);
 
   // Camera + canvas handle, stashed by DropConnector so the DOM drop handler
   // (outside the R3F tree) can raycast the drop point into the scene.
@@ -126,15 +127,27 @@ export function Room() {
       // bright surfaces roll off instead of clipping to flat white.
       // preserveDrawingBuffer OFF; SceneCapture reads the canvas synchronously.
       gl={{ antialias: true, alpha: true, toneMapping: ACESFilmicToneMapping, toneMappingExposure: L.exposure }}
-      // Continuous render so the composer repaints every frame.
-      frameloop="always"
+      // On-demand rendering: paint only when something actually changed. R3F
+      // invalidates itself for every declarative change, drei's Orbit/Transform
+      // controls invalidate on move, and the handful of things that mutate the
+      // scene imperatively ask for their own frames (Motion's fan/plant/pendant
+      // tick, Draggable's live drag, CameraRig's tween + keyboard nav).
+      // Previously this was "always", so an untouched room paid a full render +
+      // SSAO + SMAA + a 1024² depth pass + two blur passes ~60×/second while
+      // sitting still — and every invalidate() in the tree was a no-op.
+      frameloop="demand"
       onPointerMissed={() => useStudio.getState().setSelected(null)}
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* Opaque paper background — THE fix for the moving-object "shadow trail":
           with a transparent canvas the EffectComposer (N8AO) blended each frame
           over the last, so contact shadows + gizmos smeared. An explicit scene
-          background makes the render pass CLEAR the colour buffer every frame.
+          background makes three's WebGLBackground CLEAR the colour buffer at the
+          top of every render call.
+          Still correct under frameloop="demand": the clear is tied to the render
+          CALL, not to the wall clock, so a frame painted on request clears
+          exactly as one painted continuously did. Nothing about this fix depended
+          on how often we paint.
           (The page's grid-bg sat behind a transparent canvas before; its lines
           are ~invisible at 0.03 alpha, so matching --paper here is no visible
           loss and kills the ghosting outright.) */}
@@ -164,9 +177,13 @@ export function Room() {
 
       {/* Offline studio environment built from emissive panels — gives metals
           something to reflect and adds soft specular gloss to all standard
-          materials. Baked once (frames={1}); no CDN/HDR file fetched, so it
-          works for the BYO-key, browser-only architecture. */}
-      <Environment key={lighting} resolution={256} frames={1}>
+          materials. Baked once, in a layout effect (frames={1}), so it costs
+          nothing per frame and works under frameloop="demand". No CDN/HDR file
+          fetched, so it suits the browser-only architecture.
+          It is NOT dropped on 'Fast': without an environment every metalness > 0
+          surface (chair bases, lamp poles, handles) goes near-black. Halving the
+          cube resolution keeps the bake cheap while preserving that. */}
+      <Environment key={`${lighting}-${quality}`} resolution={hi ? 256 : 128} frames={1}>
         <Lightformer intensity={0.7} position={[0, 5, 0]} scale={[8, 8, 1]} rotation={[Math.PI / 2, 0, 0]} color={L.env[0]} />
         <Lightformer intensity={0.35} position={[5, 2, 3]} scale={[4, 6, 1]} color={L.env[1]} />
         <Lightformer intensity={0.3} position={[-5, 2, -3]} scale={[4, 6, 1]} color={L.env[2]} />
@@ -182,29 +199,38 @@ export function Room() {
         ))}
         {dressed && parts.map((part) => <Dressing key={`dress-${part.id}`} part={part} />)}
         <MeasureGuides />
-        <ContactShadows
-          position={[footprintBounds(room.footprint).cx, 0.004, footprintBounds(room.footprint).cz]}
-          scale={Math.max(room.width, room.depth) * 1.3}
-          resolution={1024}
-          far={room.height}
-          blur={2.4}
-          opacity={0.45}
-          color="#3a342b"
-        />
+        <GroundShadows hi={hi} />
       </Suspense>
 
       {/* Ambient occlusion — the biggest "CG → real" jump for interiors:
           darkens corners + where objects meet the floor. N8AO is the
-          performance-oriented SSAO variant; half-res + SMAA keeps it light, and
-          it only runs on requested frames under frameloop="demand". */}
-      <EffectComposer enableNormalPass={false} multisampling={0}>
-        <N8AO aoRadius={0.5} intensity={1.1} distanceFalloff={1} halfRes />
-        <SMAA />
-      </EffectComposer>
+          performance-oriented SSAO variant; half-res + SMAA keeps it light.
+          'Fast' drops the composer entirely. It is by far the most expensive
+          thing in the frame, and leaving it on made the quality toggle look
+          broken — someone who picks Fast because the room stutters was still
+          paying for SSAO. Without the composer the canvas' own MSAA
+          (gl.antialias) handles edges, so Fast stays smooth, just flatter. */}
+      {hi && (
+        <EffectComposer enableNormalPass={false} multisampling={0}>
+          <N8AO aoRadius={0.5} intensity={1.1} distanceFalloff={1} halfRes />
+          <SMAA />
+        </EffectComposer>
+      )}
 
       {/* Perf guards: PerformanceMonitor lowers the DPR ceiling on FPS decline;
-          AdaptiveDpr drops resolution while the camera is moving. */}
-      <PerformanceMonitor onDecline={() => setDprMax(1)} onIncline={() => setDprMax(2)} />
+          AdaptiveDpr drops resolution while the camera is moving.
+          The decline is gated on hotLoop: under frameloop="demand" an idle canvas
+          legitimately renders a handful of frames per second, and to a monitor
+          that only counts rendered frames that is indistinguishable from a GPU on
+          its knees — it would quietly halve the resolution of a scene that is
+          performing perfectly. */}
+      <FrameRateGate hot={hotLoop} />
+      <PerformanceMonitor
+        onDecline={() => {
+          if (hotLoop.current) setDprMax(1);
+        }}
+        onIncline={() => setDprMax(2)}
+      />
       <AdaptiveDpr pixelated />
 
       <CameraRig />
@@ -213,6 +239,69 @@ export function Room() {
     </Canvas>
     </div>
   );
+}
+
+// Soft grounding shadow under the furniture.
+//
+// drei's ContactShadows defaults to frames={Infinity} — it re-renders the whole
+// scene into a 1024² depth target and runs two (or with `smooth`, four) blur
+// passes EVERY frame, whether or not anything moved. It also resets its internal
+// frame counter on every React render, which is the lever we use: this wrapper
+// subscribes to the things that change where a shadow should fall (the parts
+// list and the live transform maps), so a commit re-renders it and it re-bakes
+// exactly once.
+//
+// While a drag is in flight the mesh moves imperatively, outside React, so
+// nothing would re-render and the shadow would stay behind under the old spot —
+// hence frames={Infinity} for the duration of the drag only. Subscribing to a
+// boolean rather than the drag-live channel keeps that to two re-renders per
+// drag instead of one per tick.
+function GroundShadows({ hi }: { hi: boolean }) {
+  const footprint = useScene((s) => s.room.footprint);
+  const width = useScene((s) => s.room.width);
+  const depth = useScene((s) => s.room.depth);
+  const height = useScene((s) => s.room.height);
+  // Re-bake triggers: a part added/removed/edited, or any committed transform.
+  useScene((s) => s.parts);
+  useStudio((s) => s.positions);
+  useStudio((s) => s.rotations);
+  useStudio((s) => s.dims);
+  const dragging = useStudio((s) => s.draggingId !== null);
+  const b = footprintBounds(footprint);
+  // Quantised to 0.5m. `scale` feeds drei's internal useMemo, which allocates two
+  // WebGLRenderTargets and never disposes the pair it replaces — so a continuous
+  // value would orphan a couple of megabytes of VRAM per committed wall move.
+  // The plane is already oversized (×1.3) and only has to cover the room, so
+  // rounding up costs nothing visually.
+  const span = Math.ceil(Math.max(width, depth) * 1.3 * 2) / 2;
+  return (
+    <ContactShadows
+      position={[b.cx, 0.004, b.cz]}
+      scale={span}
+      // 512 on 'Fast' — a quarter of the texels to fill and blur.
+      resolution={hi ? 1024 : 512}
+      far={height}
+      blur={2.4}
+      // The second, softer blur pair is the polish half of the cost.
+      smooth={hi}
+      frames={dragging ? Infinity : 1}
+      opacity={0.45}
+      color="#3a342b"
+    />
+  );
+}
+
+// Records whether the render loop is currently running hot (consecutive frames
+// milliseconds apart) or merely ticking on demand. PerformanceMonitor cannot
+// tell the difference on its own.
+function FrameRateGate({ hot }: { hot: MutableRefObject<boolean> }) {
+  const last = useRef(0);
+  useFrame(() => {
+    const now = performance.now();
+    hot.current = now - last.current < 40;
+    last.current = now;
+  });
+  return null;
 }
 
 // Publishes the live camera + renderer to a ref the DOM drop handler can read.
@@ -228,8 +317,16 @@ function DropConnector({ apiRef }: { apiRef: React.MutableRefObject<{ camera: Ca
 // On-demand scene snapshot — the TopBar Snapshot button bumps useSnapshot's
 // token; we capture the next frame (helpers hidden) and download it as a PNG.
 function SceneCapture() {
-  const { gl, scene, camera } = useThree();
+  const { gl, scene, camera, invalidate } = useThree();
+  const token = useSnapshot((s) => s.token);
   const done = useRef(useSnapshot.getState().token);
+
+  // Under frameloop="demand" a useFrame poll is not enough: on an idle canvas the
+  // next frame might never come, and the button would appear to do nothing. Ask
+  // for one the moment the token moves.
+  useEffect(() => {
+    if (token !== done.current) invalidate();
+  }, [token, invalidate]);
 
   useFrame(() => {
     const want = useSnapshot.getState().token;

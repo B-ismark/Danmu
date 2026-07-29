@@ -28,7 +28,15 @@ backend, no account. The 3D studio *is* the product.
 4. **No hard-coded design values.** Colours / spacing / type / radii go through
    CSS tokens in `app/globals.css` (`--paper`, `--ink`, `--accent` terracotta,
    `--accent-2` sage, `--r-*`, `--font-sans` Nunito / `--font-display`
-   Fraunces). Match the warm, rounded, playful direction.
+   Fraunces). Match the warm, rounded, playful direction. **Fill tokens and text
+   tokens are not interchangeable:** `--accent` / `--danger` / `--warn` /
+   `--success` are fills, and their `-ink` / `-text` variants are the ones that
+   clear 4.5:1 as type (`--accent-text` also works on `--accent-tint`). Anything
+   interactive gets `--edge` as its boundary, not a `--hairline*` (those are
+   decorative dividers). Text on a filled surface uses `--on-accent` /
+   `--on-ink`, never `#fff`. z-index comes from the `--z-*` scale only. For the
+   3D layer, which cannot read a custom property, `lib/scene-palette.ts` is the
+   single source and is hand-synced to these tokens.
 5. **Local-first.** Rooms → IndexedDB (`lib/storage.ts`); settings + key →
    localStorage. The only network call is the optional direct Gemini detection
    (BYO key). Don't add a backend or send data anywhere else.

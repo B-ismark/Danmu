@@ -8,6 +8,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { roomStore, type RoomSummary } from '@/lib/storage';
 import { useRoom } from '@/lib/store';
 import { Icon } from '@/components/ui/Icon';
+import { isTypingOrDialog } from './KeyboardShortcuts';
 
 export function RoomSwitcher() {
   const router = useRouter();
@@ -16,6 +17,7 @@ export function RoomSwitcher() {
   const [open, setOpen] = useState(false);
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -23,19 +25,32 @@ export function RoomSwitcher() {
   }, [open]);
 
   useEffect(() => {
+    if (!open) return;
     function onClick(e: MouseEvent) {
       if (!wrapRef.current) return;
       if (!wrapRef.current.contains(e.target as Node)) setOpen(false);
     }
-    if (open) document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
+    // Esc closes and returns focus to the trigger. Before this the only exits
+    // were re-clicking the button or clicking somewhere harmless.
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      if (isTypingOrDialog(e.target)) return;
+      e.stopPropagation();
+      setOpen(false);
+      btnRef.current?.focus();
+    }
+    document.addEventListener('mousedown', onClick);
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      window.removeEventListener('keydown', onKey, true);
+    };
   }, [open]);
-
-  const current = rooms.find((r) => r.id === currentId);
 
   return (
     <div ref={wrapRef} style={{ position: 'relative' }}>
       <button
+        ref={btnRef}
         onClick={() => setOpen((v) => !v)}
         aria-label="Switch room"
         aria-expanded={open}
@@ -53,7 +68,7 @@ export function RoomSwitcher() {
             position: 'absolute',
             top: 'calc(100% + 6px)',
             right: 0,
-            zIndex: 60,
+            zIndex: 'var(--z-popover)',
             minWidth: 280,
             maxHeight: 360,
             overflow: 'auto',
@@ -63,8 +78,6 @@ export function RoomSwitcher() {
             className="ds-label"
             style={{
               padding: '10px 12px',
-              fontSize: 9,
-              color: 'var(--ink-3)',
               borderBottom: '1px solid var(--hairline)',
             }}
           >
@@ -83,6 +96,7 @@ export function RoomSwitcher() {
                   setOpen(false);
                   router.push(`/room/${r.id}/model`);
                 }}
+                aria-current={isCurrent ? 'true' : undefined}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -97,12 +111,12 @@ export function RoomSwitcher() {
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{r.name}</div>
-                  <div style={{ fontSize: 9.5, color: 'var(--ink-3)' }}>
-                    <span className="mono" style={{ letterSpacing: '0.06em' }}>{r.id.slice(0, 8).toUpperCase()}</span> · <span className="mono">{r.itemCount}</span> edited
+                  <div style={{ fontSize: 10.5, color: 'var(--ink-3)' }}>
+                    <span className="mono">{r.itemCount}</span> pieces edited
                   </div>
                 </div>
                 {isCurrent && (
-                  <span className="ds-label" style={{ fontSize: 9, color: 'var(--accent)' }}>
+                  <span className="ds-label" style={{ color: 'var(--accent-text)' }}>
                     Here
                   </span>
                 )}

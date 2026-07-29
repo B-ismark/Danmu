@@ -10,23 +10,34 @@
 // so it keeps firing even when the cursor leaves the small knob — the same
 // pattern Room.tsx uses for catalog drops.
 //
+// Pointer deltas are accumulated and committed ONCE per animation frame.
+// `pointermove` fires faster than the display refreshes (often >120Hz on a
+// trackpad), and every `moveWall` re-derives the footprint, which rebuilds the
+// floor shape, the wall segments and the grid, and re-runs containment for every
+// piece of furniture. Coalescing costs nothing in fidelity — the deltas are
+// summed, so the wall lands in exactly the same place — and cuts the work to at
+// most one pass per painted frame.
+//
 // The whole group is flagged `userData.helper` so SceneCapture strips it from
-// the snapshot the AI preview renders from.
+// the exported PNG.
 
 import { useEffect, useMemo, useRef } from 'react';
 import { useThree, type ThreeEvent } from '@react-three/fiber';
 import { Plane, Raycaster, Vector2, Vector3 } from 'three';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
+import { SCENE } from '@/lib/scene-palette';
 import { wallSegments } from '@/lib/footprint';
 
-const ACCENT = '#E2613A';
 const _ray = new Raycaster();
 const _ndc = new Vector2();
 const _hit = new Vector3();
 
 export function WallHandles() {
-  const room = useScene((s) => s.room);
+  // Field-level subscriptions: `room` is replaced on every wall commit, and this
+  // component only cares about the polygon and the ceiling height.
+  const footprint = useScene((s) => s.room.footprint);
+  const roomHeight = useScene((s) => s.room.height);
   const moveWall = useScene((s) => s.moveWall);
   const selectedWall = useStudio((s) => s.selectedWall);
   const setDragging = useStudio((s) => s.setDragging);
@@ -34,8 +45,8 @@ export function WallHandles() {
 
   const seg = useMemo(() => {
     if (selectedWall === null) return null;
-    return wallSegments(room.footprint)[selectedWall] ?? null;
-  }, [room.footprint, selectedWall]);
+    return wallSegments(footprint)[selectedWall] ?? null;
+  }, [footprint, selectedWall]);
 
   const drag = useRef<{
     plane: Plane;
@@ -45,9 +56,21 @@ export function WallHandles() {
     prevTotal: number;
   } | null>(null);
 
+  // Accumulated (uncommitted) displacement along the wall normal + the rAF that
+  // will flush it.
+  const pending = useRef(0);
+  const raf = useRef(0);
+
   // Window-level drag: raycast the pointer onto a horizontal plane at the knob
   // height and project the displacement onto the wall's outward normal.
   useEffect(() => {
+    function flush() {
+      raf.current = 0;
+      const step = pending.current;
+      pending.current = 0;
+      // Only the grabbed wall moves; it tracks the pointer 1:1 along its normal.
+      if (step !== 0 && selectedWall !== null) moveWall(selectedWall, step);
+    }
     function move(ev: PointerEvent) {
       const d = drag.current;
       if (!d) return;
@@ -58,12 +81,19 @@ export function WallHandles() {
       const total = _hit.x * d.outX + _hit.z * d.outZ - d.downAlong;
       const step = total - d.prevTotal;
       d.prevTotal = total;
-      // Only the grabbed wall moves; it tracks the pointer 1:1 along its normal.
-      if (step !== 0 && selectedWall !== null) moveWall(selectedWall, step);
+      if (step === 0) return;
+      pending.current += step;
+      if (!raf.current) raf.current = requestAnimationFrame(flush);
     }
     function up() {
       if (!drag.current) return;
       drag.current = null;
+      // Land the last sub-frame sliver so the wall ends exactly where released.
+      if (raf.current) {
+        cancelAnimationFrame(raf.current);
+        raf.current = 0;
+      }
+      flush();
       setDragging(null);
       document.body.style.cursor = '';
     }
@@ -72,12 +102,16 @@ export function WallHandles() {
     return () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
+      if (raf.current) {
+        cancelAnimationFrame(raf.current);
+        raf.current = 0;
+      }
     };
   }, [camera, gl, moveWall, selectedWall, setDragging]);
 
   if (selectedWall === null || !seg) return null;
 
-  const handleY = room.height * 0.5;
+  const handleY = roomHeight * 0.5;
   // Inward normal (toward centroid) — wallSegments encodes it as yaw = atan2(nx,nz).
   const inX = Math.sin(seg.yaw);
   const inZ = Math.cos(seg.yaw);
@@ -96,6 +130,7 @@ export function WallHandles() {
       downAlong: e.point.x * outX + e.point.z * outZ,
       prevTotal: 0,
     };
+    pending.current = 0;
     setDragging('__wall__');
     document.body.style.cursor = 'grabbing';
   }
@@ -115,13 +150,19 @@ export function WallHandles() {
         }}
       >
         <sphereGeometry args={[0.11, 24, 24]} />
-        <meshStandardMaterial color={ACCENT} roughness={0.4} metalness={0.1} emissive={ACCENT} emissiveIntensity={0.25} />
+        <meshStandardMaterial
+          color={SCENE.accent}
+          roughness={0.4}
+          metalness={0.1}
+          emissive={SCENE.accent}
+          emissiveIntensity={0.25}
+        />
       </mesh>
       {/* Double-headed arrow hint along the normal (pointer-transparent). */}
       {[1, -1].map((dir) => (
         <mesh key={dir} position={[0, 0, dir * 0.28]} rotation={[dir > 0 ? Math.PI / 2 : -Math.PI / 2, 0, 0]} raycast={() => null}>
           <coneGeometry args={[0.07, 0.16, 16]} />
-          <meshStandardMaterial color={ACCENT} roughness={0.5} emissive={ACCENT} emissiveIntensity={0.2} />
+          <meshStandardMaterial color={SCENE.accent} roughness={0.5} emissive={SCENE.accent} emissiveIntensity={0.2} />
         </mesh>
       ))}
     </group>

@@ -1,8 +1,12 @@
 'use client';
 
-// Single top-right "View" popover that consolidates what used to be a row of
-// overlapping chips: lighting mood, decor toggle, render quality, and the
-// re-scan action. One button → tidy panel. Keeps the canvas top uncluttered.
+// The "View" popover: lighting mood, decor toggle, render quality, re-scan.
+//
+// It no longer positions itself. It used to float alone at the top-right of the
+// canvas, which made it one of seven separate clusters over a single 3D view —
+// and lighting/quality belong next to the camera presets and the room checks, not
+// in a corner of their own. The parent (RoomTools' row) places it now; this
+// component only owns the button and the panel that hangs off it.
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -11,6 +15,7 @@ import { useStudio, type Lighting } from '@/lib/store';
 import { roomStore } from '@/lib/storage';
 import { Icon } from '@/components/ui/Icon';
 import { Segmented } from '@/components/ui/primitives';
+import { isTypingOrDialog } from './KeyboardShortcuts';
 
 const MOODS: Array<{ id: Lighting; label: string; glyph: string }> = [
   { id: 'day', label: 'Day', glyph: '☀' },
@@ -30,6 +35,7 @@ export function ViewOptions() {
   const [hasCaps, setHasCaps] = useState(false);
   const [detected, setDetected] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
+  const btn = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!roomId) return;
@@ -42,30 +48,68 @@ export function ViewOptions() {
   }, [roomId]);
 
   useEffect(() => {
+    if (!open) return;
     function onDown(e: MouseEvent) {
       if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false);
     }
-    if (open) document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
+    // Esc closes and hands focus back to the trigger. Without it the only ways
+    // out were clicking the button again or clicking somewhere harmless.
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      if (isTypingOrDialog(e.target)) return;
+      e.stopPropagation();
+      setOpen(false);
+      btn.current?.focus();
+    }
+    document.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey, true);
+    };
   }, [open]);
 
   const hi = quality === 'high';
 
   return (
-    <div ref={wrap} style={{ position: 'absolute', top: 12, right: 12, zIndex: 26 }}>
+    <div ref={wrap} style={{ position: 'relative' }}>
       <button
+        ref={btn}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        aria-label="View options"
-        className={`ds-chip ${open ? 'ds-chip--accent' : ''}`}
-        style={{ cursor: 'pointer', height: 30, fontWeight: 700, background: open ? 'var(--accent-tint)' : 'var(--paper)' }}
+        className="ds-btn"
+        title="Lighting, decor and render quality"
+        style={{
+          height: 30,
+          fontSize: 11,
+          gap: 6,
+          background: open ? 'var(--accent-tint)' : 'var(--paper)',
+          borderColor: open ? 'var(--accent-text)' : 'var(--edge)',
+          color: open ? 'var(--accent-text)' : 'var(--ink-2)',
+          boxShadow: 'var(--shadow-soft)',
+        }}
       >
-        <Icon name="settings" size={13} />
+        <Icon name="settings" size={12} />
         View
       </button>
 
       {open && (
-        <div className="ds-card" style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 230, padding: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div
+          className="ds-card"
+          style={{
+            position: 'absolute',
+            // Opens upward now that the button lives near the bottom edge.
+            bottom: 'calc(100% + 8px)',
+            right: 0,
+            zIndex: 'var(--z-popover)',
+            width: 230,
+            padding: 14,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 14,
+            boxShadow: 'var(--shadow-lift)',
+          }}
+        >
           <Group label="Lighting">
             <Segmented
               ariaLabel="Lighting"

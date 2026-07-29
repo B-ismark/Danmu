@@ -24,6 +24,9 @@ export function RoomDimsEditor() {
     fromMM(room.depth * 1000, dimUnit).toFixed(prec),
     fromMM(room.height * 1000, dimUnit).toFixed(prec),
   ]);
+  // An out-of-range entry used to be a silent no-op — the number stayed on
+  // screen and the room simply didn't change. Say what the limit is instead.
+  const [rangeError, setRangeError] = useState(false);
 
   useEffect(() => {
     setLocal([
@@ -42,7 +45,11 @@ export function RoomDimsEditor() {
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
       const m = next.map((s) => toMM(parseFloat(s), dimUnit) / 1000);
-      if (m.some((n) => Number.isNaN(n) || n < 1 || n > 50)) return;
+      if (m.some((n) => Number.isNaN(n) || n < 1 || n > 50)) {
+        setRangeError(true);
+        return;
+      }
+      setRangeError(false);
       const r = { width: m[0], depth: m[1], height: m[2] };
       setRoom(r);
       if (roomId) {
@@ -52,11 +59,12 @@ export function RoomDimsEditor() {
     }, 200);
   }
 
-  const labels: ['W', 'D', 'H'] = ['W', 'D', 'H'];
+  const labels: ['Width', 'Depth', 'Height'] = ['Width', 'Depth', 'Height'];
 
-  // Collapsed by default — the top bar already shows the room dims, and the
-  // shell is edited rarely. Header doubles as the toggle and shows a live
-  // summary so the value stays glanceable without expanding.
+  // Collapsed by default — the shell is set once during onboarding and edited
+  // rarely, while the left rail's real job is the furniture. The header doubles
+  // as the toggle and carries a live summary, so the size stays glanceable
+  // without opening anything (nothing else in the studio shows it).
   const [open, setOpen] = useState(false);
   const summary = local.join(' × ');
 
@@ -90,36 +98,32 @@ export function RoomDimsEditor() {
         </button>
       </div>
       {open && (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-        {labels.map((axis, i) => (
-          <label key={axis} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span className="mono" style={{ fontSize: 10, color: 'var(--ink)', letterSpacing: '0.1em', fontWeight: 600 }}>
-              {axis}
-            </span>
-            <input
-              type="number"
-              min={0.5}
-              step={step}
-              value={local[i]}
-              onChange={(e) => commit(i as 0 | 1 | 2, e.target.value)}
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 13,
-                fontWeight: 600,
-                padding: '6px 8px',
-                border: '1px solid var(--hairline-strong)',
-                borderRadius: 'var(--r-1)',
-                background: 'var(--paper)',
-                color: 'var(--ink)',
-                outline: 'none',
-                width: '100%',
-              }}
-              onFocus={(e) => (e.target.style.borderColor = 'var(--accent)')}
-              onBlur={(e) => (e.target.style.borderColor = 'var(--hairline-strong)')}
-            />
-          </label>
-        ))}
-      </div>
+      <>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+          {labels.map((axis, i) => (
+            <label key={axis} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: 11, color: 'var(--ink-2)', fontWeight: 600 }}>{axis}</span>
+              {/* .field owns the boundary and the focus ring — the old inline
+                  outline:none + onFocus/onBlur border swap fought it. */}
+              <input
+                type="number"
+                min={0.5}
+                step={step}
+                value={local[i]}
+                onChange={(e) => commit(i as 0 | 1 | 2, e.target.value)}
+                className="field"
+                aria-invalid={rangeError || undefined}
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, height: 32, padding: '0 8px' }}
+              />
+            </label>
+          ))}
+        </div>
+        <div style={{ fontSize: 11, marginTop: 6, lineHeight: 1.4, color: rangeError ? 'var(--danger-text)' : 'var(--ink-3)' }}>
+          {rangeError
+            ? 'That is outside 1–50 m — enter a size in that range and the room will follow.'
+            : `Sizes in ${dimUnit}. Anything from 1 to 50 m a side.`}
+        </div>
+      </>
       )}
     </div>
   );

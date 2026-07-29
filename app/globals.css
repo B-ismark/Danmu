@@ -4,32 +4,68 @@
 
 /* Danmu — design tokens. Warm, rounded, editorial-casual (matches the soft 3D
    models). Friendlier than the old CAD/blueprint look: rounded corners, warm
-   cream paper, clay accent + sage secondary, soft layered shadows. */
+   cream paper, clay accent + sage secondary, soft layered shadows.
+
+   Contrast rule for this file: any token used for *text* or for an interactive
+   *boundary* carries its measured ratio in a comment. Decorative-only values
+   are allowed to be soft, and say so. Paper surfaces are the reference
+   backgrounds (--paper 0.941 L, --paper-2 0.858, --paper-3 0.765). */
 :root {
+  --paper-0: #EFE9DD;       /* page wash behind every surface — was an untokenized body colour */
   --paper: #FBF8F2;
   --paper-2: #F3EEE4;
   --paper-3: #E9E2D4;
   --ink: #2A2520;           /* warm soft-black, not pure ink */
   --ink-2: #5A5147;
-  --ink-3: #8F857a;
-  --ink-4: #BBB1A3;
-  --hairline: rgba(42, 37, 32, 0.12);
-  --hairline-soft: rgba(42, 37, 32, 0.05);
-  --hairline-strong: rgba(42, 37, 32, 0.20);
+  --ink-3: #675E55;         /* 5.99:1 on --paper, 4.92:1 on --paper-3 — safe for 10-12px hint text */
+  --ink-3-soft: #8F857A;    /* decorative only (2.99-3.41:1). Never text. */
+  --ink-4: #BBB1A3;         /* decorative fills only (1.99:1) */
+  --ink-hover: #3A342C;     /* --ink one step darker, for primary-button hover */
 
-  --accent: #E2613A;        /* warm clay-terracotta */
+  --hairline: rgba(42, 37, 32, 0.12);        /* decorative divider */
+  --hairline-soft: rgba(42, 37, 32, 0.05);   /* decorative divider */
+  --hairline-strong: rgba(42, 37, 32, 0.20); /* decorative divider, heavier */
+  --edge: rgba(42, 37, 32, 0.50);            /* 3.10:1 — boundary of anything interactive (WCAG 1.4.11) */
+
+  --accent: #E2613A;        /* warm clay-terracotta — fills, tints, 3D highlights. NOT for text. */
   --accent-tint: rgba(226, 97, 58, 0.12);
   --accent-tint-strong: rgba(226, 97, 58, 0.20);
-  --accent-strong: #C9542F;   /* darker terracotta — accent-button hover (keeps white text legible) */
-  --accent-2: #5E8B6E;      /* friendly sage */
+  --accent-strong: #C9542F;   /* darker terracotta — decorative hover fills */
+  --accent-ink: #C24A22;      /* 4.73:1 with white — the accent-button surface */
+  --accent-ink-hover: #A83D1A;/* 6.27:1 with white */
+  --accent-text: #B03F1E;     /* 5.54:1 on --paper, 4.85:1 on --accent-tint — accent-coloured type */
+  --accent-2: #5E8B6E;      /* friendly sage — fills */
   --accent-2-tint: rgba(94, 139, 110, 0.14);
 
-  --locked: #3A78C2;
-  --locked-tint: rgba(58, 120, 194, 0.14);
-  --danger: #C8472A;
+  /* "Kept as-is" used to be an institutional CAD blue. Warm aubergine instead:
+     a third brand-compatible hue that reads deliberate next to clay + sage. */
+  --locked: #7A4B63;        /* 6.27:1 on --paper */
+  --locked-tint: rgba(122, 75, 99, 0.14);
+
+  --danger: #C8472A;        /* 4.51:1 on --paper */
   --danger-tint: rgba(200, 71, 42, 0.10);
-  --warn: #9A6233;
-  --success: #5E8B6E;
+  --danger-text: #A63A20;   /* 5.33:1 on --danger-tint — for text sitting in a danger banner */
+  --warn: #9A6233;          /* 4.75:1 on --paper */
+  --warn-text: #85511F;     /* 5.69:1 on --paper-2 — for warn text on a tinted chip */
+  --success: #5E8B6E;       /* fills only (3.67:1) */
+  --success-text: #46705A;  /* 5.32:1 on --paper */
+
+  /* Text/icons that sit on top of a filled surface. One knob, so a brand
+     change can't silently produce white-on-light in 30 places. */
+  --on-accent: #FFFFFF;
+  --on-ink: var(--paper);
+  --scrim: rgba(19, 19, 17, 0.55);       /* modal backdrop — one source, was inline ×4 */
+  --scrim-photo: rgba(0, 0, 0, 0.62);    /* chrome over a photo or the 3D canvas */
+
+  /* Stacking scale. Ad-hoc z values already caused one overlay-overlap bug;
+     every layer in the app picks from this list, nothing invents a number. */
+  --z-canvas-ui: 20;    /* panels floating over the 3D canvas */
+  --z-canvas-hint: 30;  /* help affordances — must stay above the panels */
+  --z-panel: 40;        /* docked chrome that may overlap canvas UI */
+  --z-popover: 50;      /* menus, hover cards, colour popovers */
+  --z-overlay: 80;      /* blocking progress overlay */
+  --z-modal: 90;        /* dialogs, viewport gate */
+  --z-toast: 100;       /* transient status, always on top */
 
   --grid-unit: 16px;
   --grid-major: 80px;
@@ -37,7 +73,10 @@
   --grid-line-major: rgba(42, 37, 32, 0.05);
 
   --font-sans: var(--font-nunito), ui-rounded, 'SF Pro Rounded', -apple-system, sans-serif;
-  --font-display: var(--font-display), 'Fraunces', Georgia, serif;
+  /* Must reference a *different* source name than the one next/font defines,
+     or the property is cyclic and the whole value (fallbacks included) is
+     discarded — which silently drops Fraunces app-wide. */
+  --font-display: var(--font-fraunces), 'Fraunces', Georgia, serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
   /* Generously rounded — softness is the whole point. */
@@ -50,15 +89,13 @@
 
   --shadow-soft: 0 1px 2px rgba(42, 37, 32, 0.04), 0 6px 16px rgba(42, 37, 32, 0.06);
   --shadow-lift: 0 2px 4px rgba(42, 37, 32, 0.06), 0 12px 28px rgba(42, 37, 32, 0.10);
-
-  --scrim: rgba(19, 19, 17, 0.55);   /* modal backdrop — one source, was inline ×4 */
 }
 
 html, body {
   margin: 0;
   padding: 0;
   font-family: var(--font-sans);
-  background: #EFE9DD;
+  background: var(--paper-0);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
 }
@@ -70,9 +107,23 @@ h1, h2, h3, .display {
   font-weight: 560;
   letter-spacing: -0.01em;
 }
+/* Page and section titles are headings for the document outline, not for size.
+   These reset the browser's default margins so an h1 can be dropped into an
+   existing layout without shifting it. */
+h1, h2, h3 { margin: 0; }
 
 .mono { font-family: var(--font-mono); font-feature-settings: "tnum" 1, "zero" 1; }
 .sans { font-family: var(--font-sans); }
+
+/* Visually hidden but available to screen readers and to focus. Used for real
+   labels on controls whose visible label is an icon or a placeholder, and for
+   file inputs that must stay focusable (display:none removes them from the
+   accessibility tree entirely). */
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
 
 .ds-label {
   font-family: var(--font-sans);
@@ -85,7 +136,7 @@ h1, h2, h3, .display {
   font-family: var(--font-sans);
   font-size: 12px;
   letter-spacing: 0.01em;
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: 700;
 }
 .ds-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -125,38 +176,52 @@ h1, h2, h3, .display {
   box-shadow: var(--shadow-soft);
   transition: background .15s, border-color .15s, transform .12s, box-shadow .15s;
 }
-.ds-btn:hover { background: var(--paper); transform: translateY(-1px); box-shadow: var(--shadow-lift); }
+.ds-btn:hover { background: var(--paper-2); transform: translateY(-1px); box-shadow: var(--shadow-lift); }
 .ds-btn:active { transform: translateY(0); box-shadow: var(--shadow-soft); }
 .ds-btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
-.ds-btn--primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-.ds-btn--primary:hover { background: #3a342c; }
-.ds-btn--accent { background: var(--accent); color: #fff; border-color: var(--accent); }
-.ds-btn--accent:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
+.ds-btn--primary { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }
+.ds-btn--primary:hover { background: var(--ink-hover); }
+.ds-btn--accent { background: var(--accent-ink); color: var(--on-accent); border-color: var(--accent-ink); }
+.ds-btn--accent:hover { background: var(--accent-ink-hover); border-color: var(--accent-ink-hover); }
 .ds-btn--ghost { background: transparent; border-color: transparent; box-shadow: none; }
 .ds-btn--ghost:hover { background: var(--paper-2); box-shadow: none; transform: none; }
 
 /* Visible keyboard focus — mouse users never see it (:focus-visible), keyboard
-   and screen-reader users always do. Applies to buttons and links app-wide. */
+   and screen-reader users always do. Applies to every control the app builds,
+   including the ones promoted from div to button. */
 .ds-btn:focus-visible,
 .icon-btn:focus-visible,
-a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-1); }
+.list-row:focus-visible,
+.card-link:focus-visible,
+.slot-card:focus-visible,
+.editable:focus-visible,
+.swatch:focus-visible,
+[role="slider"]:focus-visible,
+a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; border-radius: var(--r-1); }
 
 /* Square icon-only button. The IconButton primitive owns the markup + the
    required aria-label; this owns the look. One home for icon-button styling,
-   so a centered glyph and consistent hover/active are guaranteed everywhere. */
+   so a centered glyph and consistent hover/active are guaranteed everywhere.
+   The ::after pad lifts the *hit* area to 44px without changing the visual
+   size, so small chrome buttons still satisfy a touch target. */
 .icon-btn {
+  position: relative;
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: var(--r-2); border: 1px solid transparent;
   background: transparent; color: var(--ink-2); cursor: pointer;
   transition: background .12s, color .12s, border-color .12s;
 }
+.icon-btn::after {
+  content: ''; position: absolute; left: 50%; top: 50%;
+  width: 44px; height: 44px; transform: translate(-50%, -50%);
+}
 .icon-btn:hover { background: var(--paper-2); color: var(--ink); }
 .icon-btn:disabled { opacity: .45; cursor: not-allowed; }
-.icon-btn.is-active { background: var(--accent-tint); color: var(--accent); }
-.icon-btn--outline { border-color: var(--hairline-strong); background: var(--paper); box-shadow: var(--shadow-soft); }
-.icon-btn--outline:hover { background: var(--paper); border-color: var(--accent); }
+.icon-btn.is-active { background: var(--accent-tint); color: var(--accent-text); }
+.icon-btn--outline { border-color: var(--edge); background: var(--paper); box-shadow: var(--shadow-soft); }
+.icon-btn--outline:hover { background: var(--paper); border-color: var(--accent-text); }
 .icon-btn--danger { color: var(--danger); }
-.icon-btn--danger:hover { background: var(--danger-tint); color: var(--danger); }
+.icon-btn--danger:hover { background: var(--danger-tint); color: var(--danger-text); }
 
 .ds-chip {
   display: inline-flex; align-items: center; gap: 6px;
@@ -172,8 +237,8 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
   box-shadow: var(--shadow-soft);
 }
 .ds-chip--accent {
-  color: var(--accent);
-  border-color: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent-text);
   background: var(--accent-tint);
 }
 
@@ -183,13 +248,14 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
   height: 42px;
   padding: 0 14px;
   border-radius: var(--r-2);
-  border: 1px solid var(--hairline-strong);
+  border: 1px solid var(--edge);
   background: var(--paper);
   color: var(--ink);
   outline: none;
   width: 100%;
 }
-.ds-input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-tint); }
+.ds-input:focus { border-color: var(--accent-text); box-shadow: 0 0 0 4px var(--accent-tint); }
+.ds-input::placeholder { color: var(--ink-3); }
 
 /* Soft card surface — for panels/rooms cards on the warmer screens. */
 .ds-card {
@@ -221,25 +287,46 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
   width: 100%; height: 34px; padding: 0 12px;
   font-family: var(--font-sans); font-size: 13px;
   background: var(--paper); color: var(--ink);
-  border: 1px solid var(--hairline-strong); border-radius: var(--r-2);
+  border: 1px solid var(--edge); border-radius: var(--r-2);
   outline: none; transition: border-color .12s, box-shadow .12s;
 }
-.field:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-tint); }
+.field:focus { border-color: var(--accent-text); box-shadow: 0 0 0 4px var(--accent-tint); }
+.field::placeholder { color: var(--ink-3); }
 
 .list { padding: 6px; display: flex; flex-direction: column; gap: 2px; overflow: auto; flex: 1; }
 .list-row {
   display: flex; align-items: center; gap: 8px;
-  padding: 9px 11px; border-radius: var(--r-2);
+  width: 100%; padding: 9px 11px; border-radius: var(--r-2);
+  font-family: var(--font-sans); font-size: 13px; text-align: left;
+  background: transparent; border: 1px solid transparent; color: var(--ink);
   cursor: pointer; user-select: none;
   transition: background .12s, box-shadow .12s;
 }
 .list-row:hover { background: var(--paper-2); }
-/* Selection = a clean tinted fill (no left-bar — that accent border is the
-   generic AI "active item" tell). The leading status dot carries the cue. */
-.list-row.is-selected { background: var(--accent-tint); }
+/* Selection = a tinted fill plus a 1px inset ring at 5.1:1, so the state is
+   perceivable without relying on a 1.14:1 wash (WCAG 1.4.11). No left-bar —
+   that accent border is the generic "active item" tell. */
+.list-row.is-selected {
+  background: var(--accent-tint-strong);
+  box-shadow: inset 0 0 0 1px var(--accent-text);
+}
+/* Row actions reveal on hover *or* keyboard focus. Without :focus-within a
+   tabbing user lands on an invisible control. */
 .row-action { opacity: 0; transition: opacity .15s, color .15s; }
 .list-row:hover .row-action,
+.list-row:focus-within .row-action,
+.list-row .row-action:focus-visible,
 .list-row .row-action.is-on { opacity: 1; }
+
+/* Editable text: a real button that swaps to an input on activate. Replaces
+   four separate `<div onClick>` rename affordances. */
+.editable {
+  font: inherit; color: inherit; text-align: left;
+  background: none; border: 0; padding: 2px 4px; margin: -2px -4px;
+  border-radius: var(--r-1); cursor: text;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.editable:hover { background: var(--paper-2); }
 
 .tag {
   font-size: 10px; font-weight: 600; color: var(--ink-3);
@@ -257,6 +344,71 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
   border-radius: var(--r-3); box-shadow: var(--shadow-soft); overflow: hidden;
 }
 
+/* Colour swatch — a real button with a perceivable boundary and selected ring. */
+.swatch {
+  width: 100%; aspect-ratio: 1; min-height: 28px;
+  border-radius: var(--r-1); border: 1px solid var(--edge);
+  cursor: pointer; padding: 0;
+}
+.swatch.is-selected { box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--accent-text); }
+
+/* ─── Layout scaffolding ───────────────────────────────────────────────────
+   The app styles almost everything with inline style objects, which cannot
+   express a media query. These few classes exist so the responsive rules at
+   the bottom of this file have something to hold on to. */
+
+.page-pad { padding: 40px 24px; }
+
+/* Auto-fitting card grid that never forces a track wider than its container —
+   `minmax(340px, 1fr)` alone overflows any viewport narrower than the track. */
+.auto-grid { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); }
+.auto-grid--wide { grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr)); }
+
+/* A 56px chrome bar. Wraps to multiple rows instead of overflowing when the
+   viewport gets narrow. */
+.chrome-bar {
+  display: flex; align-items: center; gap: 10px;
+  height: 56px; flex-shrink: 0;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--paper);
+}
+.chrome-bar__spacer { flex: 1; min-width: 0; }
+
+/* Two-column work surface: fixed rail(s) + fluid content. */
+.split { display: grid; min-height: 0; }
+
+@media (max-width: 720px) {
+  .page-pad { padding: 24px 16px; }
+  .chrome-bar { height: auto; min-height: 56px; flex-wrap: wrap; row-gap: 8px; padding: 10px 14px; }
+  /* Rails become stacked sheets under the primary surface rather than fixed
+     tracks that squeeze the content to nothing. */
+  .split--stack { grid-template-columns: 1fr !important; grid-template-rows: minmax(280px, 55vh) auto; }
+  .split--stack > .rail { border: 0; border-top: 1px solid var(--hairline); height: auto; }
+  /* Label/control rows stop being a fixed 220px + 1fr grid. */
+  .row-grid { grid-template-columns: 1fr !important; gap: 6px !important; }
+  /* A primary action pinned where a thumb can reach it. */
+  .sticky-cta {
+    position: sticky; bottom: 0; z-index: var(--z-canvas-hint);
+    padding: 12px 0 16px;
+    background: linear-gradient(to top, var(--paper-0) 60%, transparent);
+  }
+}
+
+/* Movement is decorative here; state feedback is not. Reduced motion keeps
+   colour/shadow/opacity transitions (they carry meaning) and drops travel,
+   looping animation, and camera easing. Not a blanket 0.01ms kill. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-property: background-color, background, border-color, color, box-shadow, opacity !important;
+    transition-duration: 120ms !important;
+    scroll-behavior: auto !important;
+  }
+  .ds-btn:hover, .ds-btn:active, .ds-card:hover { transform: none !important; }
+}
+
 /* iOS frame for prototype mobile preview */
 .ios-frame {
   width: 402px; height: 874px;
@@ -269,10 +421,36 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-
 }
 .ios-frame__notch {
   position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-  width: 110px; height: 30px; background: #000; border-radius: 16px; z-index: 50;
+  width: 110px; height: 30px; background: #000; border-radius: 16px; z-index: var(--z-popover);
 }
 .ios-frame__inner { position: absolute; inset: 0; background: var(--paper); overflow: auto; }
 
 /* hide scrollbars cosmetically */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
+
+/* ─── Front-door vignette motion ───────────────────────────────────────────
+   The welcome page's isometric room demonstrates the two core verbs — move a
+   piece, re-colour it — so the front door shows a live studio instead of a flat
+   elevation. The keyframes live here, not in the component: styled-jsx hashes
+   keyframe names, so a scoped @keyframes referenced from an inline
+   style={{ animation }} resolves to nothing and fails silently.
+   `color` is animated rather than `fill` so one declaration re-tints every
+   upholstery face through currentColor while each face keeps its own shading
+   opacity. No animation-fill-mode, so the reduced-motion block above (1ms, one
+   iteration) leaves the piece at its own base colour and position. */
+@keyframes danmu-vignette-slide {
+  0%, 26%  { transform: translate(0, 0); }
+  46%, 72% { transform: translate(24px, 12px); }  /* one step along the floor's iso axis */
+  100%     { transform: translate(0, 0); }
+}
+@keyframes danmu-vignette-reupholster {
+  0%, 22%  { color: var(--accent); }
+  42%, 68% { color: var(--accent-2); }
+  100%     { color: var(--accent); }
+}
+.vignette-piece {
+  animation:
+    danmu-vignette-slide 7s ease-in-out infinite,
+    danmu-vignette-reupholster 7s ease-in-out infinite;
+}

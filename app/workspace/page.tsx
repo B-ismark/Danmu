@@ -1,68 +1,182 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useRoom } from '@/lib/store';
 import { roomStore, type RoomSummary } from '@/lib/storage';
-import { DanmuMark, IconButton, Pill } from '@/components/ui/primitives';
+import { DanmuMark, EditableText, IconButton, Pill } from '@/components/ui/primitives';
 import { Icon } from '@/components/ui/Icon';
-import { useConfirm } from '@/components/ui/Confirm';
+import { useConfirmDeleteRooms } from '@/components/ui/Confirm';
+import { toast } from '@/components/ui/StorageToast';
 import { PlanThumb } from '@/components/studio/PlanThumb';
+
+const DAY = 24 * 60 * 60 * 1000;
+
+/** Recency buckets. A flat grid of identical cards stops being navigable at
+ *  roughly eight rooms; "when did I last touch this" is the axis people
+ *  actually search on, and it is now backed by a real updatedAt. */
+const GROUPS = [
+  { id: 'today', label: 'Today' },
+  { id: 'week', label: 'Earlier this week' },
+  { id: 'month', label: 'Earlier this month' },
+  { id: 'older', label: 'Older' },
+] as const;
+
+type GroupId = (typeof GROUPS)[number]['id'];
+
+function startOfToday() {
+  const n = new Date();
+  return new Date(n.getFullYear(), n.getMonth(), n.getDate()).getTime();
+}
+
+function bucketOf(ts: number, today: number): GroupId {
+  if (ts >= today) return 'today';
+  if (ts >= today - 6 * DAY) return 'week';
+  if (ts >= today - 29 * DAY) return 'month';
+  return 'older';
+}
+
+/** Date *and* time: two rooms edited on the same day were indistinguishable, and
+ *  the card used to show createdAt while calling it nothing at all. */
+function editedLabel(ts: number, today: number) {
+  const d = new Date(ts);
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (ts >= today) return `Edited ${time}`;
+  if (ts >= today - DAY) return `Edited yesterday, ${time}`;
+  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+  return `Edited ${d.toLocaleDateString(undefined, opts)}, ${time}`;
+}
+
+/** Two things on this screen are decided in JS rather than CSS — the card's
+ *  hover lift (a :hover rule can't reach an inline style object, so the global
+ *  prefers-reduced-motion block can't neutralise it) and whether hover-revealed
+ *  actions should just stay visible (a touch device never hovers, and an
+ *  invisible-but-tappable delete button is worse than a visible one). */
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const sync = () => setMatches(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, [query]);
+  return matches;
+}
 
 export default function WorkspacePage() {
   const router = useRouter();
+  const roomId = useRoom((s) => s.roomId);
   const setRoomId = useRoom((s) => s.setRoomId);
-  const confirm = useConfirm();
+  const confirmDelete = useConfirmDeleteRooms();
+  const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
+  const noHover = useMediaQuery('(hover: none)');
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Only ever flips true. The old `loading` flag was re-raised by every delete,
+  // so a cleanup session replaced the whole grid with "Loading rooms…" once per
+  // deletion — the list vanished under the user thirty times in a row.
+  const [booted, setBooted] = useState(false);
+  const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState<string[]>([]);
+  const filterRef = useRef<HTMLInputElement>(null);
 
-  async function reload() {
-    setLoading(true);
+  const reload = useCallback(async () => {
     const rs = await roomStore.listRooms();
     setRooms(rs);
-    setLoading(false);
-  }
+    setBooted(true);
+    // Drop selections for rooms that no longer exist.
+    setSelected((prev) => prev.filter((id) => rs.some((r) => r.id === id)));
+  }, []);
 
   useEffect(() => {
     reload();
-  }, []);
+  }, [reload]);
 
-  function open(id: string) {
+  // KeyboardShortcuts only mounts inside the studio layout, so Cmd/Ctrl+, was
+  // dead on the screen users actually land on. `/` focuses the filter.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+        e.preventDefault();
+        router.push('/settings');
+        return;
+      }
+      if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        filterRef.current?.focus();
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [router]);
+
+  const today = startOfToday();
+
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return rooms;
+    return rooms.filter((r) => r.name.toLowerCase().includes(q));
+  }, [rooms, query]);
+
+  const grouped = useMemo(() => {
+    const map = new Map<GroupId, RoomSummary[]>();
+    for (const r of matches) {
+      const b = bucketOf(r.updatedAt, today);
+      const list = map.get(b);
+      if (list) list.push(r);
+      else map.set(b, [r]);
+    }
+    return GROUPS.map((g) => ({ ...g, rooms: map.get(g.id) ?? [] })).filter((g) => g.rooms.length > 0);
+  }, [matches, today]);
+
+  function openRoom(id: string) {
     setRoomId(id);
-    router.push(`/room/${id}/model`);
   }
 
-  async function remove(id: string, e: React.MouseEvent) {
-    e.stopPropagation();
-    const ok = await confirm({
-      title: 'Delete this room?',
-      body: 'All captures, detections and edits for this room will be permanently removed.',
-      confirmLabel: 'Delete room',
-      danger: true,
-    });
+  /** Soft-delete one or more rooms and offer the reversal. clearRoom moves keys
+   *  to trash rather than erasing them, so "Undo" is real and not a promise we
+   *  can't keep. */
+  async function removeRooms(targets: RoomSummary[]) {
+    if (!targets.length) return;
+    const ok = await confirmDelete(targets.map((r) => r.name));
     if (!ok) return;
-    await roomStore.clearRoom(id);
-    reload();
+    const tokens: Awaited<ReturnType<typeof roomStore.clearRoom>>[] = [];
+    for (const t of targets) tokens.push(await roomStore.clearRoom(t.id));
+    if (roomId && targets.some((t) => t.id === roomId)) setRoomId(null);
+    setSelected([]);
+    await reload();
+    toast({
+      title:
+        targets.length === 1 ? `“${targets[0].name}” deleted` : `${targets.length} rooms deleted`,
+      message: 'Recoverable for 30 days.',
+      action: {
+        label: 'Undo',
+        onClick: async () => {
+          for (const token of tokens) await roomStore.restoreRoom(token);
+          await reload();
+          toast({
+            tone: 'success',
+            title: targets.length === 1 ? 'Room restored' : `${targets.length} rooms restored`,
+          });
+        },
+      },
+      ttl: 14000,
+    });
   }
+
+  const selectedRooms = rooms.filter((r) => selected.includes(r.id));
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--paper)', display: 'flex', flexDirection: 'column' }}>
-      <div
-        style={{
-          height: 56,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 14,
-          padding: '0 24px',
-          borderBottom: '1px solid var(--hairline)',
-        }}
-      >
+      <div className="chrome-bar">
         <DanmuMark size={12} />
         <div style={{ width: 1, height: 18, background: 'var(--hairline)' }} />
         <span className="ds-label">Workspace</span>
-        <span style={{ fontSize: 13, fontWeight: 500 }}>Your rooms</span>
-        <div style={{ flex: 1 }} />
+        <div className="chrome-bar__spacer" />
         <Link href="/settings" className="ds-btn" style={{ height: 32, fontSize: 12 }}>
           <Icon name="settings" size={12} />
           Settings
@@ -73,40 +187,143 @@ export default function WorkspacePage() {
         </Link>
       </div>
 
-      <div style={{ flex: 1, position: 'relative', padding: 32, background: 'var(--paper-2)' }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-          {loading ? (
-            <div
-              style={{
-                textAlign: 'center',
-                padding: 60,
-                color: 'var(--ink-3)',
-                fontSize: 13,
-              }}
-            >
+      <div style={{ flex: 1, position: 'relative', background: 'var(--paper-2)' }}>
+        <div className="page-pad" style={{ maxWidth: 1100, margin: '0 auto' }}>
+          {!booted ? (
+            <div style={{ textAlign: 'center', padding: 60, color: 'var(--ink-3)', fontSize: 13 }}>
               Loading rooms…
             </div>
           ) : rooms.length === 0 ? (
             <EmptyState />
           ) : (
             <>
-              <div className="ds-kicker" style={{ marginBottom: 16 }}>
-                <span className="mono">{rooms.length}</span> room{rooms.length === 1 ? '' : 's'}
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
-                {rooms.map((r) => (
-                  <RoomCard
-                    key={r.id}
-                    room={r}
-                    onOpen={() => open(r.id)}
-                    onDelete={(e) => remove(r.id, e)}
-                    onRename={async (name) => {
-                      await roomStore.renameRoom(r.id, name);
-                      reload();
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-end',
+                  justifyContent: 'space-between',
+                  gap: 16,
+                  flexWrap: 'wrap',
+                  marginBottom: 18,
+                }}
+              >
+                <div>
+                  {/* The route had no heading element, so it had no document
+                      outline and the display serif never rendered on it. */}
+                  <h1 style={{ fontSize: 30, letterSpacing: '-0.02em', marginBottom: 4 }}>Your rooms</h1>
+                  <div style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>
+                    <span className="mono">{rooms.length}</span> room{rooms.length === 1 ? '' : 's'}, newest edit
+                    first
+                  </div>
+                </div>
+                <div style={{ flex: '0 1 280px', minWidth: 180 }}>
+                  <label htmlFor="room-filter" className="sr-only">
+                    Filter rooms by name
+                  </label>
+                  <input
+                    id="room-filter"
+                    ref={filterRef}
+                    className="field"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') setQuery('');
                     }}
+                    placeholder="Filter rooms — press /"
+                    autoComplete="off"
                   />
-                ))}
+                </div>
               </div>
+
+              {selected.length > 0 && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    flexWrap: 'wrap',
+                    marginBottom: 16,
+                    padding: '10px 12px',
+                    background: 'var(--paper)',
+                    border: '1px solid var(--edge)',
+                    borderRadius: 'var(--r-3)',
+                  }}
+                >
+                  <span style={{ fontSize: 12.5, fontWeight: 700 }}>
+                    <span className="mono">{selected.length}</span> selected
+                  </span>
+                  <div style={{ flex: 1 }} />
+                  <button onClick={() => setSelected([])} className="ds-btn" style={{ height: 30, fontSize: 12 }}>
+                    Clear selection
+                  </button>
+                  <button
+                    onClick={() => removeRooms(selectedRooms)}
+                    className="ds-btn"
+                    style={{ height: 30, fontSize: 12, color: 'var(--danger-text)', borderColor: 'var(--danger)' }}
+                  >
+                    <Icon name="trash" size={12} />
+                    Delete selected
+                  </button>
+                </div>
+              )}
+
+              {matches.length === 0 ? (
+                <div
+                  style={{
+                    textAlign: 'center',
+                    padding: '56px 24px',
+                    background: 'var(--paper)',
+                    border: '1px solid var(--hairline)',
+                    borderRadius: 'var(--r-card)',
+                  }}
+                >
+                  <div style={{ fontSize: 17, fontWeight: 600, marginBottom: 6 }}>
+                    No room is called “{query.trim()}”.
+                  </div>
+                  <p style={{ fontSize: 13, color: 'var(--ink-2)', margin: '0 0 16px' }}>
+                    You have {rooms.length} room{rooms.length === 1 ? '' : 's'} — try a shorter word, or clear the
+                    filter.
+                  </p>
+                  <button onClick={() => setQuery('')} className="ds-btn" style={{ height: 32, fontSize: 12 }}>
+                    <Icon name="x" size={11} />
+                    Clear filter
+                  </button>
+                </div>
+              ) : (
+                grouped.map((g) => (
+                  <section key={g.id} style={{ marginBottom: 26 }}>
+                    <h2 className="ds-label" style={{ marginBottom: 10 }}>
+                      {g.label} · <span className="mono">{g.rooms.length}</span>
+                    </h2>
+                    <div className="auto-grid">
+                      {g.rooms.map((r) => (
+                        <RoomCard
+                          key={r.id}
+                          room={r}
+                          today={today}
+                          reducedMotion={reducedMotion}
+                          alwaysShowActions={noHover}
+                          selected={selected.includes(r.id)}
+                          onToggleSelect={() =>
+                            setSelected((prev) =>
+                              prev.includes(r.id) ? prev.filter((id) => id !== r.id) : [...prev, r.id],
+                            )
+                          }
+                          onOpen={() => openRoom(r.id)}
+                          onDelete={() => removeRooms([r])}
+                          onRename={async (name) => {
+                            await roomStore.renameRoom(r.id, name);
+                            await reload();
+                            // Renaming used to be completely silent, so there was
+                            // no way to tell a saved rename from a rejected one.
+                            toast({ tone: 'success', title: `Renamed to “${name}”`, ttl: 4000 });
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                ))
+              )}
             </>
           )}
         </div>
@@ -117,132 +334,140 @@ export default function WorkspacePage() {
 
 function RoomCard({
   room,
+  today,
+  reducedMotion,
+  alwaysShowActions,
+  selected,
+  onToggleSelect,
   onOpen,
   onDelete,
   onRename,
 }: {
   room: RoomSummary;
+  today: number;
+  reducedMotion: boolean;
+  /** touch device: nothing ever hovers, so the actions have to stay put */
+  alwaysShowActions: boolean;
+  selected: boolean;
+  onToggleSelect: () => void;
   onOpen: () => void;
-  onDelete: (e: React.MouseEvent) => void;
+  onDelete: () => void;
   onRename: (name: string) => void | Promise<void>;
 }) {
-  const date = new Date(room.updatedAt);
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(room.name);
-  function commit() {
-    const t = draft.trim();
-    if (t && t !== room.name) onRename(t);
-    setEditing(false);
-  }
+  const [hover, setHover] = useState(false);
+  const [focused, setFocused] = useState(false);
+  // Secondary actions reveal on hover *or* keyboard focus, and stay out while
+  // the card is idle: a permanent trash button 6px from Open meant tabbing 40
+  // rooms passed 40 permanent-delete controls at the same weight as the primary
+  // one. (The CSS .row-action rule needs a .list-row ancestor, which a card is
+  // not — hence the same behaviour in state here.)
+  const revealed = hover || focused || selected || alwaysShowActions;
+  const lift = hover && !reducedMotion;
+  const href = `/room/${room.id}/model`;
+
   return (
     <div
-      onClick={onOpen}
       className="ds-card"
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
       style={{
-        cursor: 'pointer',
         position: 'relative',
-        transition: 'box-shadow 0.15s, transform 0.12s',
+        display: 'flex',
+        flexDirection: 'column',
         overflow: 'hidden',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.boxShadow = 'var(--shadow-lift)';
-        e.currentTarget.style.transform = 'translateY(-2px)';
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.boxShadow = 'var(--shadow-soft)';
-        e.currentTarget.style.transform = 'none';
+        transition: 'box-shadow .15s, transform .12s',
+        transform: lift ? 'translateY(-2px)' : 'none',
+        boxShadow: [
+          selected ? 'inset 0 0 0 2px var(--accent-text)' : '',
+          lift ? 'var(--shadow-lift)' : 'var(--shadow-soft)',
+        ]
+          .filter(Boolean)
+          .join(', '),
       }}
     >
-      <PlanThumb roomId={room.id} />
-      <div style={{ padding: 16 }}>
-      {editing ? (
-        <input
-          autoFocus
-          value={draft}
-          onClick={(e) => e.stopPropagation()}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') commit();
-            else if (e.key === 'Escape') {
-              setDraft(room.name);
-              setEditing(false);
-            }
-          }}
-          style={{
-            fontSize: 17,
-            fontWeight: 600,
-            letterSpacing: '-0.01em',
-            marginBottom: 4,
-            padding: '2px 4px',
-            border: '1px solid var(--accent)',
-            borderRadius: 'var(--r-1)',
-            outline: 'none',
-            width: '100%',
-            fontFamily: 'var(--font-sans)',
-            background: 'var(--paper)',
-            color: 'var(--ink)',
-          }}
-        />
-      ) : (
-        <div
-          onClick={(e) => {
-            e.stopPropagation();
-            setDraft(room.name);
-            setEditing(true);
-          }}
-          title="Click to rename"
-          style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.01em', marginBottom: 4, cursor: 'text' }}
-        >
-          {room.name}
-        </div>
-      )}
-      <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginBottom: 8 }}>
-        <span className="mono">{date.toLocaleDateString()}</span> · <span className="mono">{room.itemCount}</span> {room.itemCount === 1 ? 'piece' : 'pieces'}
-      </div>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
-        {!room.detected && room.captureCount > 0 && room.captureCount < 4 && (
-          <span
+      {/* A real <a>, not a div onClick: that restores keyboard focus, Enter,
+          middle-click and Cmd-click for free. The plan drawing is the open
+          target because it is the only reliable recognition cue on this screen. */}
+      <Link
+        href={href}
+        onClick={onOpen}
+        className="card-link"
+        aria-label={`Open ${room.name}`}
+        style={{ display: 'block' }}
+      >
+        <PlanThumb roomId={room.id} />
+      </Link>
+
+      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <EditableText
+            value={room.name}
+            onCommit={onRename}
+            label="Room name"
+            // A pasted 400-character name had nothing stopping it.
+            maxLength={60}
+            style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.01em', flex: 1, minWidth: 0 }}
+            inputStyle={{ fontSize: 14, fontWeight: 600, flex: 1, minWidth: 0 }}
+          />
+          <div
             style={{
-              fontSize: 10,
-              fontWeight: 700,
-              padding: '2px 9px',
-              borderRadius: 'var(--r-full)',
-              border: '1px solid var(--warn)',
-              color: 'var(--warn)',
-              background: 'var(--paper-2)',
+              display: 'flex',
+              gap: 2,
+              opacity: revealed ? 1 : 0,
+              // A transparent destructive button must not be clickable. Keyboard
+              // focus is unaffected by pointer-events, and landing on it flips
+              // `revealed` anyway.
+              pointerEvents: revealed ? 'auto' : 'none',
+              transition: 'opacity .15s',
             }}
           >
-            Resume · <span className="mono">{room.captureCount}/4</span> walls
-          </span>
+            <IconButton
+              icon="check"
+              label={selected ? `Deselect ${room.name}` : `Select ${room.name}`}
+              active={selected}
+              onClick={onToggleSelect}
+              size={30}
+              iconSize={14}
+            />
+            <IconButton
+              icon="trash"
+              label={`Delete ${room.name}`}
+              tone="danger"
+              onClick={onDelete}
+              size={30}
+              iconSize={14}
+            />
+          </div>
+        </div>
+
+        <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>
+          {editedLabel(room.updatedAt, today)} · <span className="mono">{room.itemCount}</span>{' '}
+          {room.itemCount === 1 ? 'piece' : 'pieces'}
+        </div>
+
+        {!room.detected && room.captureCount > 0 && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {room.captureCount < 4 ? (
+              <Pill tone="warn">
+                Resume · <span className="mono">{room.captureCount}/4</span> walls
+              </Pill>
+            ) : (
+              <Pill tone="accent">Detect furniture</Pill>
+            )}
+          </div>
         )}
-        {!room.detected && room.captureCount === 4 && (
-          <Pill tone="accent">Detect furniture</Pill>
-        )}
-      </div>
-      <div style={{ display: 'flex', gap: 6 }}>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpen();
-          }}
+
+        <Link
+          href={href}
+          onClick={onOpen}
           className="ds-btn ds-btn--primary"
-          style={{ flex: 1, height: 30, fontSize: 12, justifyContent: 'center' }}
+          style={{ height: 32, fontSize: 12, justifyContent: 'center' }}
         >
           <Icon name="cube" size={11} />
           Open
-        </button>
-        <IconButton
-          icon="trash"
-          label="Delete room"
-          title="Delete room"
-          tone="danger"
-          variant="outline"
-          onClick={onDelete}
-          size={30}
-          iconSize={14}
-        />
-      </div>
+        </Link>
       </div>
     </div>
   );
@@ -250,19 +475,18 @@ function RoomCard({
 
 function EmptyState() {
   return (
-    <div style={{ textAlign: 'center', padding: 80, maxWidth: 600, marginInline: 'auto' }}>
+    <div style={{ textAlign: 'center', padding: '80px 8px', maxWidth: 600, marginInline: 'auto' }}>
       <div className="ds-kicker" style={{ marginBottom: 12 }}>
         Ready when you are
       </div>
-      <div style={{ fontSize: 38, fontWeight: 600, letterSpacing: '-0.02em', marginBottom: 10 }}>
-        Decorate your first room.
-      </div>
+      <h1 style={{ fontSize: 38, letterSpacing: '-0.02em', marginBottom: 10 }}>Decorate your first room.</h1>
       <p style={{ fontSize: 14, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 28 }}>
         Pick a footprint and start arranging furniture in real 3D — move, recolour, restyle, and relight
         every piece. No account, no upload. Capturing your real room is optional.
       </p>
       <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--accent" style={{ height: 40, padding: '0 20px', fontSize: 14 }}>
-        <Icon name="plus" size={13} color="#fff" />
+        {/* inherits the button's own --on-accent foreground */}
+        <Icon name="plus" size={13} />
         Create your first room
       </Link>
     </div>

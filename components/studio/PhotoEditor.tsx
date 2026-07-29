@@ -1,9 +1,13 @@
 'use client';
 
 // Direct-manipulation editor over a captured photo.
-// Shows detection bboxes as rectangles: click toggles lock, X deletes, and in
-// "add" mode dragging draws a new box (the manual, zero-AI detection path —
-// the geometry engine turns the box into real position + dimensions).
+// Shows detection bboxes as rectangles: activating one toggles "keep", X removes
+// it, and in "add" mode dragging on the photo draws a new box (the manual,
+// zero-AI detection path — the geometry engine turns the box into real position
+// and dimensions).
+//
+// Boxes are NOT movable: there is no handler for dragging an existing box, only
+// for drawing a new one. Any caller-side hint copy must say so.
 //
 // All coordinates are normalized 0..1 in image space — the same convention used
 // by the detection pipeline. The element is responsive to its container.
@@ -24,6 +28,7 @@ export function PhotoEditor({
   imageUrl,
   items,
   mode,
+  slotLabel,
   onToggleLock,
   onDelete,
   onAddBox,
@@ -31,6 +36,8 @@ export function PhotoEditor({
   imageUrl: string;
   items: PhotoEditorItem[];
   mode: Mode;
+  /** which wall this photo is, e.g. "Wall 2" — names the image for screen readers */
+  slotLabel?: string;
   onToggleLock: (i: number) => void;
   onDelete: (i: number) => void;
   onAddBox: (box: [number, number, number, number]) => void;
@@ -79,7 +86,9 @@ export function PhotoEditor({
       style={{
         position: 'relative',
         width: '100%',
-        background: '#0A0A08',
+        // Tokenised: the old near-black #0A0A08 made this read like an annotation
+        // tool rather than part of a warm decorating app.
+        background: 'var(--ink)',
         cursor: mode === 'add' ? 'crosshair' : 'default',
         userSelect: 'none',
         touchAction: 'none',
@@ -88,7 +97,11 @@ export function PhotoEditor({
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={imageUrl}
-        alt="wall"
+        alt={
+          slotLabel
+            ? `Your photo of ${slotLabel}, with found furniture outlined`
+            : 'Your room photo, with found furniture outlined'
+        }
         style={{ width: '100%', height: '100%', objectFit: 'contain' }}
         draggable={false}
       />
@@ -97,6 +110,7 @@ export function PhotoEditor({
         <ItemOverlay
           key={item.index}
           item={item}
+          mode={mode}
           onToggleLock={() => onToggleLock(item.index)}
           onDelete={() => onDelete(item.index)}
         />
@@ -122,17 +136,25 @@ export function PhotoEditor({
 
 function ItemOverlay({
   item,
+  mode,
   onToggleLock,
   onDelete,
 }: {
   item: PhotoEditorItem;
+  mode: Mode;
   onToggleLock: () => void;
   onDelete: () => void;
 }) {
   const { d, locked } = item;
   const [sx, sy, sw, sh] = d.box;
-  const color = locked ? 'var(--locked)' : 'var(--accent)';
-  const cleanLabel = d.label.replace(/__slot:[nesw]$/, '').toUpperCase();
+  const [hoverX, setHoverX] = useState(false);
+  // Fill tokens, not the plain hues: --accent is 3.5:1 with white, so 10px label
+  // copy on it fails. --accent-ink (4.73:1) and --locked (6.97:1) do not.
+  const fill = locked ? 'var(--locked)' : 'var(--accent-ink)';
+  const cleanLabel = d.label.replace(/__slot:[nesw]$/, '');
+  // While drawing, boxes step aside entirely: a half-interactive overlay under a
+  // crosshair was ambiguous for the mouse and unreachable for the keyboard.
+  const drawing = mode === 'add';
 
   return (
     <div
@@ -142,23 +164,43 @@ function ItemOverlay({
         top: `${sy * 100}%`,
         width: `${sw * 100}%`,
         height: `${sh * 100}%`,
-        border: `1.5px ${locked ? 'solid' : 'dashed'} ${color}`,
+        border: `1.5px ${locked ? 'solid' : 'dashed'} ${fill}`,
         background: locked ? 'var(--locked-tint)' : 'var(--accent-tint)',
-        cursor: 'pointer',
-      }}
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggleLock();
+        pointerEvents: 'none',
       }}
     >
+      {/* A real toggle rather than a <div onClick>: keyboard reachable, and its
+          state is announced instead of being carried by border style alone. */}
+      <button
+        type="button"
+        disabled={drawing}
+        aria-pressed={locked}
+        aria-label={`${cleanLabel}, ${(d.conf * 100).toFixed(0)} percent confident. ${locked ? 'Kept' : 'Not kept'}. Activate to ${locked ? 'stop keeping' : 'keep'} it.`}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleLock();
+        }}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          background: 'transparent',
+          border: 0,
+          padding: 0,
+          cursor: 'pointer',
+          pointerEvents: drawing ? 'none' : 'auto',
+        }}
+      />
+
       <div
         style={{
           position: 'absolute',
-          top: -22,
+          top: -26,
           left: -1,
-          padding: '3px 6px',
-          background: color,
-          color: '#fff',
+          padding: '2px 4px 2px 7px',
+          background: fill,
+          color: 'var(--on-accent)',
           fontFamily: 'var(--font-sans)',
           fontSize: 10,
           fontWeight: 700,
@@ -168,25 +210,29 @@ function ItemOverlay({
           display: 'flex',
           alignItems: 'center',
           gap: 4,
+          pointerEvents: 'auto',
         }}
         onPointerDown={(e) => e.stopPropagation()}
       >
-        {locked && <Icon name="lock" size={9} color="#fff" />}
-        <span>{cleanLabel}</span>
-        <span className="mono" style={{ opacity: 0.75 }}>· {(d.conf * 100).toFixed(0)}%</span>
+        {locked && <Icon name="lock" size={9} color="var(--on-accent)" />}
+        <span style={{ textTransform: 'capitalize' }}>{cleanLabel}</span>
+        <span className="mono" style={{ opacity: 0.8 }}>· {(d.conf * 100).toFixed(0)}%</span>
         <button
-          title="Delete detection"
-          aria-label="Delete detection"
+          type="button"
+          title={`Remove ${cleanLabel}`}
+          aria-label={`Remove ${cleanLabel}`}
+          onMouseEnter={() => setHoverX(true)}
+          onMouseLeave={() => setHoverX(false)}
           onClick={(e) => {
             e.stopPropagation();
             onDelete();
           }}
           style={{
-            background: 'rgba(255,255,255,0.18)',
-            border: 'none',
-            color: '#fff',
-            width: 16,
-            height: 16,
+            // 24px is the WCAG 2.5.8 floor; this control was 16px.
+            width: 24,
+            height: 24,
+            background: hoverX ? 'var(--scrim-photo)' : 'transparent',
+            border: '1px solid transparent',
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -195,7 +241,7 @@ function ItemOverlay({
             padding: 0,
           }}
         >
-          <Icon name="x" size={9} color="#fff" />
+          <Icon name="x" size={12} color="var(--on-accent)" />
         </button>
       </div>
     </div>

@@ -1,8 +1,10 @@
 'use client';
 
-// Floating action bar for multi-selection. Shift-click parts to build a
-// selection, then Merge them into a group that moves as one. A merged group is
-// selected whole on click; Ungroup splits it again.
+// Floating action bar for selection. It appears as soon as ONE piece is
+// selected, because the shift-click gesture that builds a multi-selection was
+// otherwise undiscoverable: the bar used to require two items, i.e. it only
+// taught you the gesture after you had already guessed it. With one item it
+// prompts; with two or more it merges; on a merged group it ungroups.
 
 import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
@@ -15,14 +17,15 @@ export function SelectionBar() {
   const parts = useScene((s) => s.parts);
   const groupParts = useScene((s) => s.groupParts);
   const ungroupParts = useScene((s) => s.ungroupParts);
-  const setSelection = useStudio((s) => s.setSelection);
   const setSelected = useStudio((s) => s.setSelected);
 
   const primary = parts.find((p) => p.id === primaryId);
   const grouped = !!primary?.groupId;
   const groupMembers = grouped ? parts.filter((p) => p.groupId === primary!.groupId).map((p) => p.id) : [];
 
-  if (selection.length < 2 && !grouped) return null;
+  if (selection.length === 0 && !grouped) return null;
+
+  const canMerge = selection.length >= 2;
 
   return (
     <div
@@ -32,16 +35,22 @@ export function SelectionBar() {
         bottom: 14,
         left: '50%',
         transform: 'translateX(-50%)',
-        zIndex: 26,
+        zIndex: 'var(--z-canvas-ui)',
         display: 'flex',
         alignItems: 'center',
         gap: 10,
         padding: '8px 10px 8px 14px',
+        maxWidth: 'calc(100% - 28px)',
       }}
     >
-      <span style={{ fontSize: 12.5, fontWeight: 700 }}>
+      <span style={{ fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap' }}>
         {grouped ? `Group · ${groupMembers.length} items` : `${selection.length} selected`}
       </span>
+      {!grouped && !canMerge && (
+        <span style={{ fontSize: 12, color: 'var(--ink-2)' }}>
+          Shift-click another piece to merge them
+        </span>
+      )}
       <div style={{ display: 'flex', gap: 6 }}>
         {grouped ? (
           <button
@@ -55,13 +64,16 @@ export function SelectionBar() {
             <Icon name="swap" size={12} /> Ungroup
           </button>
         ) : (
-          <button
-            onClick={() => groupParts(selection)}
-            className="ds-btn ds-btn--accent"
-            style={{ height: 30, fontSize: 12 }}
-          >
-            <Icon name="layers" size={12} /> Merge {selection.length}
-          </button>
+          canMerge && (
+            <button
+              onClick={() => groupParts(selection)}
+              className="ds-btn ds-btn--accent"
+              title="These pieces will move as one"
+              style={{ height: 30, fontSize: 12 }}
+            >
+              <Icon name="layers" size={12} /> Merge {selection.length}
+            </button>
+          )
         )}
         <IconButton
           icon="x"

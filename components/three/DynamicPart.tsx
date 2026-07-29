@@ -4,24 +4,26 @@
 // variety based on Gemini's label keywords (office vs dining chair, single vs
 // double bed, etc).
 
-import { DoubleSide } from 'three';
-import { Box } from './Box';
+import { Box, BoxInstances, PlaneInstances, type InstanceItem } from './Box';
 import { CachedMesh } from './CachedMesh';
 import { SURFACE } from './materials';
 import { Spin, Sway } from './Motion';
 import { isParametric, type ScenePart } from '@/lib/scene-spec';
 import { useStudio } from '@/lib/store';
-
-const LOCKED_TINT = '#6E94C8';
+import { SCENE, categoryColor } from '@/lib/scene-palette';
 
 // Body albedo for a part's main surfaces. An explicit colour (photo-sampled on
 // detection, or chosen in the Inspector) ALWAYS wins — otherwise recolouring a
 // locked item did nothing, since most detections auto-lock. Falls back to the
-// blue "preserved" tint for locked items with no colour, else the shape default.
+// "kept as-is" tint for locked items with no colour, else the shape default.
 // (Locked status still reads from the PartTree dot, Inspector badge + plan view.)
+//
+// That tint comes from lib/scene-palette. It used to be three different hard-
+// coded blues in this file alone, so "locked" rendered as a different colour
+// depending on which shape you happened to select.
 function body(part: ScenePart, fallback: string, locked: boolean): string {
   if (part.color) return part.color;
-  return locked ? LOCKED_TINT : fallback;
+  return locked ? SCENE.lockedTint : fallback;
 }
 
 export function PartGeometry({ part, locked }: { part: ScenePart; locked: boolean }) {
@@ -137,7 +139,7 @@ function SofaGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
-  const main = body(part, '#C9A98E', locked);
+  const main = body(part, categoryColor(part.category), locked);
   const cushion = shade(main, 14);
   const arm = Math.min(0.18, w * 0.12);
   const legH = 0.1;
@@ -490,6 +492,19 @@ function BookshelfGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const gap = h / bays;
   const booksPerRow = Math.max(4, Math.floor((w - 0.08) / 0.055));
   const usableW = w - 0.08;
+  const bookW = usableW / booksPerRow;
+  const books: InstanceItem[] = [];
+  for (let row = 0; row < bays; row++) {
+    for (let j = 0; j < booksPerRow; j++) {
+      const seed = (row * 7 + j * 13) % BOOK_COLORS.length;
+      const bh = Math.min(gap * 0.82, 0.16 + (seed % 3) * 0.03);
+      books.push({
+        pos: [-usableW / 2 + (j + 0.5) * bookW, row * gap + 0.018 + bh / 2, 0],
+        size: [bookW * 0.82, bh, d * 0.68],
+        color: BOOK_COLORS[seed],
+      });
+    }
+  }
   return (
     <>
       <Box size={[0.018, h, d]} position={[-w / 2, h / 2, 0]} color={wood} roughness={0.7} />
@@ -499,26 +514,14 @@ function BookshelfGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
       {Array.from({ length: bays + 1 }).map((_, i) => (
         <Box key={i} size={[w, 0.018, d - 0.01]} position={[0, Math.min(h - 0.009, i * gap + 0.009), 0]} color={wood} roughness={0.65} />
       ))}
-      {/* books — a filled row resting on each compartment floor */}
-      {Array.from({ length: bays }).map((_, row) => (
-        <group key={row}>
-          {Array.from({ length: booksPerRow }).map((_, j) => {
-            const seed = (row * 7 + j * 13) % BOOK_COLORS.length;
-            const bh = Math.min(gap * 0.82, 0.16 + (seed % 3) * 0.03);
-            const x = -usableW / 2 + (j + 0.5) * (usableW / booksPerRow);
-            return (
-              <Box
-                key={j}
-                size={[(usableW / booksPerRow) * 0.82, bh, d * 0.68]}
-                position={[x, row * gap + 0.018 + bh / 2, 0]}
-                color={BOOK_COLORS[seed]}
-                roughness={0.88}
-                edgeOpacity={0.25}
-              />
-            );
-          })}
-        </group>
-      ))}
+      {/* Books — a filled row resting on each compartment floor. At the clamp
+          ceiling that is 7 bays × 42 spines = 294 of them, which as individual
+          meshes made ONE bookshelf the heaviest object in the room (294
+          geometries + 294 materials, doubled in the shadow pass). One
+          InstancedMesh, one material, per-instance colour for the spines.
+          The old 0.25 edge outline is gone with them: a 5cm spine's outline was
+          a hairline at any real zoom, and outlines were the "flat CAD" tell. */}
+      <BoxInstances items={books} color="#ffffff" surface={{ roughness: 0.88 }} />
     </>
   );
 }
@@ -538,15 +541,18 @@ function ShoeRackGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
       {posts.map(([x, z], i) => (
         <Box key={i} size={[0.025, h, 0.025]} position={[x, h / 2, z]} color={wood} roughness={0.7} />
       ))}
+      {/* Tiers × slats multiplies fast (a tall wide rack is 40+ boards), so each
+          tier's slats are one instanced set. The tier group keeps the back-tilt,
+          which means the instances stay in simple local space. */}
       {Array.from({ length: tiers }).map((_, i) => {
-        const y = (i + 0.5) * gap;
-        const slats = Math.max(3, Math.round(d / 0.06));
+        const slatCount = Math.max(3, Math.round(d / 0.06));
+        const slats: InstanceItem[] = Array.from({ length: slatCount }, (_, j) => ({
+          pos: [0, 0, -d / 2 + (j + 0.5) * (d / slatCount)] as [number, number, number],
+          size: [w - 0.06, 0.012, 0.018] as [number, number, number],
+        }));
         return (
-          <group key={i} position={[0, y, 0]} rotation={[-0.12, 0, 0]}>
-            {Array.from({ length: slats }).map((_, j) => {
-              const z = -d / 2 + (j + 0.5) * (d / slats);
-              return <Box key={j} size={[w - 0.06, 0.012, 0.018]} position={[0, 0, z]} color={wood} roughness={0.7} />;
-            })}
+          <group key={i} position={[0, (i + 0.5) * gap, 0]} rotation={[-0.12, 0, 0]}>
+            <BoxInstances items={slats} color={wood} surface={{ roughness: 0.7 }} />
           </group>
         );
       })}
@@ -562,7 +568,7 @@ function BedGeo({ part, locked, double }: { part: ScenePart; locked: boolean; do
   const frame = body(part, '#6F4F35', locked);
   const mattress = body(part, '#E8D5B0', locked);
   // Pillows always neutral — real beds have white/cream pillows regardless of frame color.
-  const pillow = locked ? shade(LOCKED_TINT, 20) : '#F0ECE3';
+  const pillow = locked ? shade(SCENE.lockedTint, 20) : '#F0ECE3';
   return (
     <>
       <Box size={[w, h * 0.4, d]} position={[0, h * 0.2, 0]} color={frame} roughness={0.7} />
@@ -706,6 +712,12 @@ function CurtainGeo({ part }: { part: ScenePart }) {
   // and catch light per-face — far less flat than two billboard planes.
   const pleats = Math.max(8, Math.round(w / 0.11));
   const stripW = w / pleats;
+  // 45 planes on a 5m curtain — one instanced set instead of 45 meshes.
+  const folds: InstanceItem[] = Array.from({ length: pleats }, (_, i) => ({
+    pos: [-w / 2 + (i + 0.5) * stripW, -0.02, 0] as [number, number, number],
+    size: [stripW * 1.45, h - 0.04, 1] as [number, number, number],
+    rot: [0, (i % 2 === 0 ? 1 : -1) * 0.55, 0] as [number, number, number],
+  }));
   return (
     <>
       {/* horizontal rod */}
@@ -720,16 +732,7 @@ function CurtainGeo({ part }: { part: ScenePart }) {
           <meshStandardMaterial color="#8A6D44" {...SURFACE.metal} />
         </mesh>
       ))}
-      {Array.from({ length: pleats }).map((_, i) => {
-        const x = -w / 2 + (i + 0.5) * stripW;
-        const ry = (i % 2 === 0 ? 1 : -1) * 0.55;
-        return (
-          <mesh key={i} position={[x, -0.02, 0]} rotation={[0, ry, 0]}>
-            <planeGeometry args={[stripW * 1.45, h - 0.04]} />
-            <meshStandardMaterial color={cloth} side={DoubleSide} {...SURFACE.fabric} />
-          </mesh>
-        );
-      })}
+      <PlaneInstances items={folds} color={cloth} surface={SURFACE.fabric} />
     </>
   );
 }
@@ -982,7 +985,7 @@ function ACUnitGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
-  const shell = part.color ?? (locked ? '#7AA4D2' : '#F2F1EB');
+  const shell = part.color ?? (locked ? SCENE.lockedTint : '#F2F1EB');
   return (
     <>
       <Box size={[w, h, d]} position={[0, 0, 0]} color={shell} />
@@ -1039,11 +1042,14 @@ function RadiatorGeo({ part }: { part: ScenePart }) {
   const bodyC = part.color ?? '#ECEAE3';
   const fins = Math.max(6, Math.round(w / 0.06));
   const fw = w / fins;
+  // 33 fins on a 2m radiator, all the same colour — a textbook instanced set.
+  const finItems: InstanceItem[] = Array.from({ length: fins }, (_, i) => ({
+    pos: [-w / 2 + (i + 0.5) * fw, h / 2, 0] as [number, number, number],
+    size: [fw * 0.6, h * 0.9, d] as [number, number, number],
+  }));
   return (
     <>
-      {Array.from({ length: fins }).map((_, i) => (
-        <Box key={i} size={[fw * 0.6, h * 0.9, d]} position={[-w / 2 + (i + 0.5) * fw, h / 2, 0]} color={bodyC} roughness={0.5} metalness={0.1} />
-      ))}
+      <BoxInstances items={finItems} color={bodyC} surface={{ roughness: 0.5, metalness: 0.1 }} />
       <Box size={[w, h * 0.06, d * 1.05]} position={[0, h - h * 0.03, 0]} color={bodyC} />
       <Box size={[w, h * 0.06, d * 1.05]} position={[0, h * 0.03, 0]} color={bodyC} />
     </>
@@ -1149,18 +1155,21 @@ function WaterDispenserGeo({ part }: { part: ScenePart }) {
 }
 
 // ─── Generic fallbacks ──────────────────────────────────────────────────
+// Category defaults come from lib/scene-palette (categoryColor) — the same
+// source the Inspector's swatch fallback reads, so an un-recoloured part looks
+// the same in the studio as it does in the panel that edits it.
 function BoxGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
-  const color = body(part, pickColor(part.category), locked);
+  const color = body(part, categoryColor(part.category), locked);
   return <Box size={[w, h, d]} position={[0, h / 2, 0]} color={color} />;
 }
 
 function CylinderGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const w = part.dimMM[0] / 1000;
   const h = part.dimMM[2] / 1000;
-  const color = body(part, pickColor(part.category), locked);
+  const color = body(part, categoryColor(part.category), locked);
   return (
     <mesh position={[0, h / 2, 0]}>
       <cylinderGeometry args={[w / 2, w / 2, h, 24]} />
@@ -1172,28 +1181,11 @@ function CylinderGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
 function PlaneGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
-  const color = body(part, pickColor(part.category), locked);
+  const color = body(part, categoryColor(part.category), locked);
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, 0]}>
       <planeGeometry args={[w, d]} />
       <meshStandardMaterial color={color} />
     </mesh>
   );
-}
-
-function pickColor(cat: ScenePart['category']): string {
-  switch (cat) {
-    case 'table':
-    case 'desk':
-      return '#A88A6E';
-    case 'shelf':
-    case 'wardrobe':
-      return '#9A7848';
-    case 'lamp':
-      return '#B89060';
-    case 'plant':
-      return '#5D8A5D';
-    default:
-      return '#C9A98E';
-  }
 }

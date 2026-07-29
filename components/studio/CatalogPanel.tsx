@@ -55,12 +55,14 @@ export function CatalogPanel() {
         position: 'absolute',
         top: 54,
         left: 12,
-        bottom: 12,
+        // Stops short of the bottom-left corner: the studio's only help
+        // affordance lives there, and this panel used to sit on top of it.
+        bottom: 56,
         width: 230,
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        zIndex: 20,
+        zIndex: 'var(--z-canvas-ui)',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 12px 8px' }}>
@@ -70,23 +72,47 @@ export function CatalogPanel() {
       <div style={{ padding: '0 12px 8px' }}>
         <input
           className="field"
+          aria-label="Search the furniture catalog"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search furniture…"
         />
         <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 6, lineHeight: 1.4 }}>
-          Drag a piece into the room, or click to drop it in the centre.
+          {query
+            ? `${items.length} match${items.length === 1 ? '' : 'es'}`
+            : 'Drag a piece into the room, or click to drop it in the centre.'}
         </div>
       </div>
       <div style={{ flex: 1, overflow: 'auto', padding: '0 8px 10px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {Object.keys(groups).length === 0 && (
-          <div style={{ padding: 14, textAlign: 'center', color: 'var(--ink-3)', fontSize: 12 }}>
-            No furniture matches “{q}”.
+          <div style={{ padding: 14, textAlign: 'center', color: 'var(--ink-3)', fontSize: 12, lineHeight: 1.5 }}>
+            Nothing here matches “{q}”.
+            <br />
+            Try a room word like “chair”, “lamp” or “storage”.
           </div>
         )}
         {Object.entries(groups).map(([group, list]) => (
           <div key={group}>
-            <div className="ds-label" style={{ fontSize: 9, marginBottom: 6, paddingLeft: 4 }}>{group}</div>
+            {/* Sticky group header: 40 items in a narrow scroller means the
+                grouping only earns its keep if you can always see which group
+                you are looking at. */}
+            <div
+              className="ds-label"
+              style={{
+                position: 'sticky',
+                top: 0,
+                zIndex: 1,
+                fontSize: 10,
+                padding: '4px 4px 6px',
+                background: 'var(--paper)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: 6,
+              }}
+            >
+              <span>{group}</span>
+              <span style={{ fontWeight: 600 }}>{list.length}</span>
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {list.map((item) => (
                 <button
@@ -100,9 +126,9 @@ export function CatalogPanel() {
                     e.dataTransfer.effectAllowed = 'copy';
                   }}
                   onClick={() => addAtCentre(item)}
-                  title={`${item.dimMM[0]} × ${item.dimMM[1]} × ${item.dimMM[2]} mm — drag in or click to add`}
+                  title={`${item.label} — drag into the room, or click to add it in the centre`}
                   className="list-row"
-                  style={{ cursor: 'grab', textAlign: 'left', border: 0, background: 'transparent', width: '100%' }}
+                  style={{ cursor: 'grab' }}
                 >
                   <Icon name="plus" size={11} />
                   <span style={{ fontSize: 12, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

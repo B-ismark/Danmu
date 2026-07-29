@@ -47,9 +47,21 @@ export function PlanThumb({ roomId }: { roomId: string }) {
   const ox = (VW - W * scale) / 2;
   const oy = (VH - D * scale) / 2;
 
+  // This SVG carries information (room proportions, how full the room is), so it
+  // is an image with a description — not decoration a screen reader can skip.
+  const count = parts?.length ?? 0;
+  const label = `Floor plan — ${W.toFixed(1)} by ${D.toFixed(1)} metres, ${
+    count === 0 ? 'nothing in it yet' : count === 1 ? '1 piece of furniture' : `${count} pieces of furniture`
+  }`;
+
   return (
     <div style={{ position: 'relative', aspectRatio: `${VW}/${VH}`, background: 'var(--paper-2)', borderBottom: '1px solid var(--hairline)', overflow: 'hidden' }}>
-      <svg viewBox={`0 0 ${VW} ${VH}`} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+      <svg
+        role="img"
+        aria-label={label}
+        viewBox={`0 0 ${VW} ${VH}`}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
+      >
         <rect
           x={ox}
           y={oy}
@@ -88,18 +100,19 @@ export function PlanThumb({ roomId }: { roomId: string }) {
         })}
       </svg>
       {(!parts || parts.length === 0) && (
+        // Speaks to someone decorating, not to the data model ("No parts yet").
         <div
-          className="ds-label"
           style={{
             position: 'absolute',
             inset: 0,
             display: 'grid',
             placeItems: 'center',
             color: 'var(--ink-3)',
-            fontSize: 9,
+            fontSize: 11,
+            fontWeight: 600,
           }}
         >
-          No parts yet
+          Empty room — open it to start
         </div>
       )}
     </div>

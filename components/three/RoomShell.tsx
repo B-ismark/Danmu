@@ -14,21 +14,28 @@
 // does the culling for free.
 
 import { useMemo, useState } from 'react';
-import { DoubleSide, FrontSide, Shape, ShapeGeometry, Vector2 } from 'three';
+import { DoubleSide, FrontSide, Shape, Vector2 } from 'three';
 import { type ThreeEvent } from '@react-three/fiber';
 import { Line } from '@react-three/drei';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
+import { SCENE } from '@/lib/scene-palette';
 import { wallSegments, footprintBounds } from '@/lib/footprint';
 import { floorNormal, floorRoughness } from '@/lib/textures';
 
-const WALL = '#ECE9E1';
+// Floor board tone. Stays local rather than reading SCENE.floor: that value is
+// the *swatch* the plan view and inspector show for a floor, deliberately a shade
+// deeper than the lit 3D board so the two read the same on screen.
 const FLOOR = '#E6E1D6';
-const ACCENT = '#E2613A';
 const FLOOR_NORMAL_SCALE = new Vector2(0.25, 0.25);
 
 export function RoomShell() {
-  const { height, footprint, wallColors } = useScene((s) => s.room);
+  // Field-level subscriptions, not the whole `room` object: a wall drag replaces
+  // `room` on every rAF tick, and painting one wall replaces it too. Subscribing
+  // to the object re-rendered the entire shell for changes it doesn't read.
+  const height = useScene((s) => s.room.height);
+  const footprint = useScene((s) => s.room.footprint);
+  const wallColors = useScene((s) => s.room.wallColors);
   const showGrid = useStudio((s) => s.showGrid);
   const selectedWall = useStudio((s) => s.selectedWall);
   const setSelectedWall = useStudio((s) => s.setSelectedWall);
@@ -56,23 +63,48 @@ export function RoomShell() {
     return lines;
   }, [footprint]);
 
-  // Floor geometry from the polygon footprint. Shape is built in XY; the mesh is
+  // Floor outline from the polygon footprint. Shape is built in XY; the mesh is
   // laid flat with rot[-90°] about X which maps shape-Y → world -Z, so we feed
   // (x, -z) to keep the floor aligned with the walls (placed in XZ).
-  const floorGeo = useMemo(() => {
+  //
+  // Only the Shape is memoised — the geometry itself is declared as
+  // <shapeGeometry args={…}/> below so R3F owns its lifecycle. It used to be
+  // `new ShapeGeometry(shape)` handed over as geometry={…}: R3F auto-disposes
+  // only what it creates, so every footprint change orphaned a buffer on the
+  // GPU. A wall drag emits one per commit, and VRAM climbed until context loss.
+  const floorShape = useMemo(() => {
     const shape = new Shape();
     footprint.forEach((p, i) => (i ? shape.lineTo(p[0], -p[1]) : shape.moveTo(p[0], -p[1])));
     shape.closePath();
-    return new ShapeGeometry(shape);
+    return shape;
   }, [footprint]);
 
   // One inward-facing single-sided wall per polygon edge — the near one culls.
   const walls = useMemo(() => wallSegments(footprint), [footprint]);
 
+  // Selection / hover frame loops, memoised alongside the walls. drei's <Line>
+  // keys its LineGeometry on the `points` identity, so an inline array literal
+  // meant a fresh geometry + GPU upload on every render — including every tick
+  // of a wall drag, which is exactly when the frame is on screen.
+  const wallFrames = useMemo(
+    () =>
+      walls.map((wl) => {
+        const hx = (wl.len / 2) * Math.cos(wl.yaw);
+        const hz = (wl.len / 2) * Math.sin(wl.yaw);
+        const a: [number, number, number] = [wl.x - hx, 0.02, wl.z + hz];
+        const b: [number, number, number] = [wl.x + hx, 0.02, wl.z - hz];
+        const c: [number, number, number] = [wl.x + hx, height - 0.02, wl.z - hz];
+        const d: [number, number, number] = [wl.x - hx, height - 0.02, wl.z + hz];
+        return [a, b, c, d, a];
+      }),
+    [walls, height],
+  );
+
   return (
     <group>
       {/* Floor — double-sided so it reads from above and below. */}
-      <mesh geometry={floorGeo} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <shapeGeometry args={[floorShape]} />
         <meshStandardMaterial
           color={FLOOR}
           roughness={0.92}
@@ -92,7 +124,7 @@ export function RoomShell() {
       {/* Walls — single-sided, normal points inward → near wall back-face-culls.
           Clickable to select + paint; selected/hovered wall gets an accent frame. */}
       {walls.map((wl, i) => {
-        const color = wallColors?.[i] ?? WALL;
+        const color = wallColors?.[i] ?? SCENE.wall;
         const isSel = selectedWall === i;
         const isHov = hoverWall === i;
         return (
@@ -120,19 +152,13 @@ export function RoomShell() {
               <meshStandardMaterial color={color} roughness={0.96} metalness={0} side={FrontSide} />
             </mesh>
             {/* Selection / hover frame — drawn just inside the room face so it
-                reads on the visible side. Marked as an editor helper so the AI
-                snapshot (SceneCapture) strips it before rendering. */}
+                reads on the visible side. Marked as an editor helper so
+                SceneCapture strips it out of the exported PNG. */}
             {(isSel || isHov) && (
               <group userData={{ helper: true }}>
                 <Line
-                  points={[
-                    [wl.x - (wl.len / 2) * Math.cos(wl.yaw), 0.02, wl.z + (wl.len / 2) * Math.sin(wl.yaw)],
-                    [wl.x + (wl.len / 2) * Math.cos(wl.yaw), 0.02, wl.z - (wl.len / 2) * Math.sin(wl.yaw)],
-                    [wl.x + (wl.len / 2) * Math.cos(wl.yaw), height - 0.02, wl.z - (wl.len / 2) * Math.sin(wl.yaw)],
-                    [wl.x - (wl.len / 2) * Math.cos(wl.yaw), height - 0.02, wl.z + (wl.len / 2) * Math.sin(wl.yaw)],
-                    [wl.x - (wl.len / 2) * Math.cos(wl.yaw), 0.02, wl.z + (wl.len / 2) * Math.sin(wl.yaw)],
-                  ]}
-                  color={ACCENT}
+                  points={wallFrames[i]}
+                  color={SCENE.accent}
                   lineWidth={isSel ? 2.5 : 1.2}
                   transparent
                   opacity={isSel ? 1 : 0.5}

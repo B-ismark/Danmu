@@ -14,7 +14,7 @@ every current feature, architecture, geometry engine, and roadmap).
 - **Next.js 14.2** (App Router) + **React 18.3** + **TypeScript 5.6**
 - **Tailwind 3.4** — design tokens in [`app/globals.css`](app/globals.css)
 - **Three.js** + **@react-three/fiber** + **drei** + **postprocessing** — declarative 3D
-- **Zustand** (client state) + **TanStack Query** (async)
+- **Zustand** (client state)
 - **idb-keyval** for rooms, **localStorage** for settings + API key
 - **onnxruntime-web** — local, in-browser YOLOv8 furniture detector (no key)
 - Optional cloud detection (BYO key, browser → provider direct): **@google/genai**
@@ -41,12 +41,12 @@ without any key: pick a footprint and start decorating.
 | `/` | Entry router (rooms? → workspace, else onboarding) |
 | `/onboarding/welcome` | Intro + "Start decorating"; optional BYO key |
 | `/onboarding/layout-pick` | Pick footprint preset (sets dims + starter scene) |
-| `/onboarding/capture` | 6-photo guided capture (`getUserMedia`) |
+| `/onboarding/capture` | 4-wall guided capture (`getUserMedia`) |
 | `/onboarding/detect` | Furniture detection (local ONNX → Gemini → manual) |
 | `/workspace` | Rooms list — create / resume / delete |
 | `/room/[id]/model` | **3D decoration studio (default)** |
 | `/room/[id]/plan` | 2D floor plan |
-| `/settings` | Key, units, danger zone |
+| `/settings` | Key, display unit, danger zone |
 
 ## Architecture rules
 
