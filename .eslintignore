@@ -1,0 +1,7 @@
+node_modules
+.next
+out
+public
+weights
+*.config.mjs
+next-env.d.ts
