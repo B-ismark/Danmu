@@ -1,14 +1,16 @@
 # Security findings — Danmu
 
-> **Status: all fixed** (2026-07-29), except the dependency scan, which could not
-> be run here. The diagnosis below is kept as the record; each finding now ends
-> with what changed.
+> **Status: all fixed** (2026-07-29). The diagnosis below is kept as the record;
+> each finding now ends with what changed. Two items originally recorded as open —
+> the weights digest pin and the dependency scan — were closed in a follow-up pass
+> and are written up in full below, including one further hole found while pinning.
 >
 > | Finding | Resolution |
 > |---|---|
 > | No security headers | `next.config.mjs` now sends a CSP plus X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, HSTS, COOP and X-DNS-Prefetch-Control. Every allowed host is named with its reason. |
 > | ORT imported from a CDN unpinned | `pnpm vendor:ort` (`scripts/vendor-ort.mjs`) copies the runtime into `public/ort/`; `lib/local-detect.ts` probes same-origin first and keeps the CDN as fallback. Verified: copies 6 files / 40.2 MB from onnxruntime-web@1.27.0. |
-> | Weights fetched with no validation | Remote fetches now go through `fetchVerifiedModel` — ONNX protobuf magic + size window, plus a SHA-256 check against `MODEL_DIGESTS` when an entry exists. `pnpm hash:models` prints paste-ready entries. Registry deliberately empty; see the *partial* note under that finding. |
+> | Weights fetched with no validation | Remote fetches go through `fetchVerifiedModel` — ONNX protobuf magic + size window + SHA-256 against `MODEL_DIGESTS`. All three files are now **pinned**, verified on both sides by `pnpm hash:models --verify`. The class-name JSON is verified too; it used to bypass this entirely via a bare `fetch().json()`. |
+> | Dependency vulnerability scan | **Now run.** `pnpm` reached through Corepack. 40 advisories → 1, and that one is an advisory-range artifact. See that finding. |
 > | CSV formula injection | New `lib/csv.ts` (`csvCell` / `toCsv` / `csvBlob`) owns escaping, quoting, CRLF and the UTF-8 BOM. 7 tests in `tests/csv.test.ts`. |
 > | API key in localStorage | Unchanged — accepted design decision, now less exposed because of the CSP. |
 > | Upload validated by MIME prefix only | `isAcceptedPhoto` enforces a raster allowlist, and the file input's `accept` is generated from the same list. |
@@ -125,19 +127,38 @@ pass the buffer to `InferenceSession.create`. Fail closed to "detector
 unavailable" on mismatch — the fallback path (Gemini / manual boxes) already
 exists and is already the documented behaviour when the model is missing.
 
-**Fixed — with one part deliberately left open.** `fetchVerifiedModel` now
-fetches remote files as an `ArrayBuffer`, checks the ONNX protobuf magic and a
-1 MB–512 MB size window, checks SHA-256 against `MODEL_DIGESTS` when an entry
-exists, and returns null (→ "detector unavailable") on any failure. Local files
-are the user's own export and are still opened by URL.
+**Fixed, including the pin.** `fetchVerifiedModel` fetches remote files as an
+`ArrayBuffer`, checks the ONNX protobuf magic and a 1 MB–512 MB size window,
+checks SHA-256 against `MODEL_DIGESTS`, and returns null (→ "detector
+unavailable") on any failure. Local files are the user's own export and are still
+opened by URL.
 
-`MODEL_DIGESTS` is **empty**, on purpose. Pinning a digest I cannot verify against
-what the mirror actually serves would fail closed and silently disable the
-detector for every fresh clone — a worse outcome than the gap being closed.
-`pnpm hash:models` prints the local digests and its header documents the
-two-sided check needed before pinning. So: format validation is in place and
-enforced; identity pinning is one command away and needs someone who can fetch
-the mirror copy to complete it.
+`MODEL_DIGESTS` was initially left **empty**, because a digest pinned from the
+local export alone would fail closed and silently disable the detector for every
+fresh clone — a worse outcome than the gap being closed. That has now been done
+properly: all three files are pinned, and each was verified on **both** sides —
+the local export and the bytes `huggingface.co/.../resolve/main/` actually serves
+hash identically.
+
+Rather than leave the remote half as a note someone has to remember,
+`scripts/hash-models.mjs` gained a `--verify` mode that does it:
+
+```
+pnpm hash:models --verify
+  ✓ yolov8n-oiv7.names.json — matches (0.0 MB)
+  ✓ yolov8n-oiv7.onnx — matches (13.6 MB)
+  ✓ yolov8s-worldv2-danmu.onnx — matches (48.1 MB)
+[hash-models] local export and mirror agree. Safe to pin.
+```
+
+**A second hole found while pinning.** The `.names.json` was fetched with a bare
+`fetch(namesBase + NAMES_FILE).json()`, never routed through the verifier — so a
+digest pinned for it would have been pure decoration. It is not code, but this
+finding's own diagnosis says it "silently controls what every detection is
+called". `fetchNames` now digest-checks a remote copy (it cannot use
+`looksLikeOnnx` — as JSON of a few kB it fails both the magic byte and the size
+window by design), and a missing or unparseable table is now a hard failure
+instead of an unhandled rejection inside the loader.
 
 ---
 
@@ -211,13 +232,70 @@ that).
 
 ---
 
-## [INFO] Dependency vulnerability scan not performed
+## [HIGH] Dependency advisories — 40 found, 39 fixed
 
-`pnpm` is not on `PATH` in this environment (`node`, `npm`, `npx` and the local
-`node_modules/.bin` shims are), and running `npm audit` against a
-`pnpm-lock.yaml` gives unreliable results. **No high/critical dependency
-findings are claimed either way** — this check was not run. Please run
-`pnpm audit` locally.
+**Originally filed as INFO / not performed:** `pnpm` is not on `PATH` here. It is
+reachable through **Corepack** (`corepack pnpm audit`), which ships with Node —
+so the check was run after all, and it was not empty.
+
+**Starting point:** 40 advisories — 1 critical, 20 high, 17 moderate, 2 low,
+across 603 packages.
+
+| | Before | After |
+|---|---|---|
+| critical | 1 | **0** |
+| high | 20 | 1 (see below) |
+| moderate | 17 | **0** |
+| low | 2 | **0** |
+
+What they were, and what was done:
+
+- **`next` — 22 advisories (8 high, 12 moderate, 2 low).** Every one of them, and
+  the whole `postcss` cluster underneath. Next 14 has no patched line: the fixes
+  land in `>=15.5.21`. **Upgraded 14.2.35 → 15.5.22.**
+
+  The upgrade was smaller than it looks. Next 15 still accepts `react ^18.2`, so
+  React stays on 18 and `@react-three/fiber` stays on v8 — a React 19 move would
+  have dragged the entire 3D stack (R3F v9, drei v10) into a change with no
+  browser here to verify it in. The only breaking change this app touches is
+  `params` becoming a Promise, in the single server component that reads a route
+  param (`app/room/[roomId]/page.tsx`); everything else uses `useParams()`
+  client-side. `experimental.esmExternals: 'loose'` was dropped — Next 15 warns
+  about it and resolves the three/three-stdlib graph without it, verified by
+  building both ways.
+
+  **Most of these advisories did not reach this app in the first place**, which is
+  worth recording so the upgrade is not mistaken for a breach response. No Server
+  Actions, no middleware, no rewrites, no i18n, no custom server, no `images`
+  config, no `next/image`, no CSP nonces, no `beforeInteractive` scripts. That
+  rules out the SSRF, request-smuggling, Image-Optimizer, middleware-bypass and
+  nonce-XSS findings outright. The genuinely-applicable subset is the RSC
+  DoS/cache-poisoning cluster against the two dynamic routes — which carry no
+  data, since everything lives in the browser.
+
+- **`vitest` — 1 critical.** Fixed in `>=3.2.6`; **upgraded to 4.1.10**, which
+  also cleared the `vite` (3) and `esbuild` (1) advisories at source rather than
+  by override. `vite` had to be declared explicitly as a devDependency: it is only
+  a *peer* of vitest, so pnpm kept resolving the old 5.x from the lockfile.
+- **`sharp` — 1 high** (inherited libvips CVEs), arriving via Next 15. Overridden
+  to `^0.35.0`. Unreachable here regardless: sharp exists for the Image Optimizer,
+  which this app has no `images` config for and never calls.
+- **`postcss`, `protobufjs`, `js-yaml`, `glob`, `brace-expansion`** — transitive,
+  nothing depends on them directly, so they are pinned in `pnpm.overrides`.
+
+**A trap worth writing down.** The first pass used `>=` ranges in the overrides:
+`"brace-expansion@1": ">=1.1.16"`. That silently promoted *every* line in the tree
+onto 5.x, because `5.0.8` also satisfies `>=1.1.16` — three separate majors
+collapsed onto one. The overrides now use carets so each consumer stays on the
+major it was written against.
+
+**The one remaining high is an advisory-range artifact, not an exposure.** The
+`brace-expansion` DoS advisory declares its vulnerable range as `<=5.0.7`, which
+in semver literally includes the whole 1.x line — so `1.1.17` matches it, even
+though 1.x got its own backport in `1.1.16` and there is no `5.0.8` for a 1.x
+consumer to move to. It arrives under `eslint@8 > minimatch@3`, is dev-only, and
+clearing it would mean an ESLint 9 flat-config migration for a glob-matcher DoS in
+a lint run. Deliberately not chased.
 
 ---
 

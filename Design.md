@@ -312,7 +312,9 @@ undo — see `lib/storage.ts`).
 ## 6. Architecture
 
 ### Stack
-- **Next.js 14.2** (App Router) + **React 18.3** + **TypeScript 5.6**
+- **Next.js 15.5** (App Router) + **React 18.3** + **TypeScript 5.9**. React stays
+  on 18: Next 15 accepts `^18.2`, and moving to 19 would force @react-three/fiber
+  to v9 — the whole 3D stack — for nothing this app needs.
 - **Three.js 0.169** + **@react-three/fiber 8** + **drei** + **postprocessing** — declarative 3D
 - **Zustand 5** (client state). No data-fetching library — a local-first app
   makes no queries, so TanStack Query was removed.
@@ -414,10 +416,12 @@ debounce does not drop the last edit.
 pnpm install
 pnpm dev          # http://localhost:3000
 pnpm typecheck    # tsc --noEmit
-pnpm test         # vitest run — pure-logic suite (geometry, physics, clearance, footprint, units, …)
+pnpm test         # vitest run — pure logic, plus the jsdom files (storage*, history)
 pnpm build        # next build
+pnpm audit        # dependency advisories; transitive fixes live in pnpm.overrides
 pnpm vendor:ort   # copy onnxruntime-web into public/ort/ so it loads same-origin
 pnpm hash:models  # print SHA-256 digests of public/models/ for MODEL_DIGESTS
+pnpm hash:models --verify   # …and check the mirror serves the same bytes (~62 MB)
 ```
 
 ### Third-party bytes, and the headers that bound them
@@ -433,9 +437,15 @@ anything fetched from outside. Two controls exist because of it:
   first and keeps the CDN as a fallback, so a fresh clone still works.
 - **Weights** are format-checked on every remote fetch (ONNX protobuf magic plus a
   size window) and digest-checked against `MODEL_DIGESTS` in
-  `lib/local-detect.ts` when an entry exists. That registry is intentionally empty
-  — see the header of `scripts/hash-models.mjs` for why a pin must be made by
-  someone who can verify the mirror.
+  `lib/local-detect.ts`. All three files are pinned, and each digest was verified
+  on both sides — the local export and the bytes the mirror actually serves —
+  because a pin taken from the local copy alone would fail closed and silently
+  disable the detector for every fresh clone. `pnpm hash:models --verify` does
+  both sides and is the command to re-run when re-pinning. The class-name JSON is
+  covered too: it is not code, but it decides what every detection is *called*,
+  and it used to arrive through a bare `fetch().json()`.
+  A mismatch is meant to refuse: the detector reports unavailable and the Gemini /
+  manual-box paths carry on.
 
 `next.config.mjs` carries the CSP and the rest of the security headers. Every host
 in it is listed with the reason it is allowed; if a feature stops needing a host,

@@ -11,7 +11,7 @@ every current feature, architecture, geometry engine, and roadmap).
 
 ## Stack
 
-- **Next.js 14.2** (App Router) + **React 18.3** + **TypeScript 5.6**
+- **Next.js 15.5** (App Router) + **React 18.3** + **TypeScript 5.9**
 - **Tailwind 3.4** — design tokens in [`app/globals.css`](app/globals.css)
 - **Three.js** + **@react-three/fiber** + **drei** + **postprocessing** — declarative 3D
 - **Zustand** (client state)
