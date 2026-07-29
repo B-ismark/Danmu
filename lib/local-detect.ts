@@ -219,18 +219,30 @@ const ORT_ENTRY = 'ort.min.mjs';
 // A HEAD 200 used to be the only validation on a 14 MB and a 50 MB graph fetched
 // from a public mirror and handed straight to the wasm runtime.
 //
-// This registry is EMPTY on purpose. Pinning a digest that does not match what
-// the mirror actually serves would fail closed and silently disable the detector
-// for every fresh clone, so the pin has to be made by someone who can verify both
-// sides — see scripts/hash-models.mjs, which prints paste-ready entries and
-// documents the check. Add an entry keyed by filename and remote copies of that
-// file are then verified before the runtime ever sees them.
+// Each digest below was verified on BOTH sides before being pinned — the local
+// export in public/models/ and the bytes the mirror actually serves over
+// /resolve/main/ hash identically. That check is the whole point: a digest pinned
+// from the local copy alone would fail closed and silently disable the detector
+// for every fresh clone, which is worse than the gap it closes. `pnpm hash:models`
+// prints the local side; its header documents the remote side.
+//
+// A mismatch here means the mirror changed. That is exactly when the detector
+// SHOULD refuse: fetchVerifiedModel returns null, the app reports the detector as
+// unavailable, and the Gemini / manual-box paths carry on. Re-verify and re-pin
+// deliberately rather than deleting the entry to make it work again.
 //
 // Independent of the registry, every REMOTE file is format-checked: an ONNX file
 // is a protobuf, and the realistic failure mode here is receiving something that
 // is not one at all (an HTML error page, a redirect body, a truncated download).
 // Local files are the user's own export and are trusted as-is.
-const MODEL_DIGESTS: Record<string, string> = {};
+const MODEL_DIGESTS: Record<string, string> = {
+  'yolov8n-oiv7.names.json':
+    'sha256-8126ccfbc3780e25825a1beae446edf7d663b69223b5ce796d8499ea8c3ce13d',
+  'yolov8n-oiv7.onnx':
+    'sha256-10833f3633b96c0e7554564d06be8449191ac3c36b3e9d4df7387b41b4187c33',
+  'yolov8s-worldv2-danmu.onnx':
+    'sha256-3a04741b738b1b6c756e00dfe5fe322765efba93699b331200e625f963d37f5b',
+};
 
 /** Plausible size window for a detector graph, so a 400-byte error page or a
  *  1 GB surprise is refused before it is parsed. */
@@ -255,20 +267,46 @@ function looksLikeOnnx(buf: ArrayBuffer): boolean {
   return text.includes('onnx') || text.includes('pytorch') || text.includes('ai.onnx');
 }
 
-/** Fetch a model file and refuse anything that fails its format check or a
- *  pinned digest. Returns null when it cannot be trusted — callers treat that
- *  exactly like "not deployed" and fall back to Gemini / manual boxes. */
-async function fetchVerifiedModel(base: string, file: string): Promise<Uint8Array | null> {
+/** Fetch a remote file and refuse it unless its digest matches the pinned one.
+ *  Returns null when it cannot be trusted — callers treat that exactly like "not
+ *  deployed" and fall back to Gemini / manual boxes.
+ *
+ *  A file with no pinned digest passes: the registry is allowed to be partial so
+ *  that adding a model file does not require a release to pin it first. */
+async function fetchVerifiedBytes(base: string, file: string): Promise<ArrayBuffer | null> {
   const res = await fetch(base + file);
   if (!res.ok) return null;
   const buf = await res.arrayBuffer();
-  if (!looksLikeOnnx(buf)) return null;
   const expected = MODEL_DIGESTS[file];
-  if (expected) {
-    const actual = `sha256-${await sha256Hex(buf)}`;
-    if (actual !== expected) return null;
-  }
+  if (expected && `sha256-${await sha256Hex(buf)}` !== expected) return null;
+  return buf;
+}
+
+/** …and for a graph, the format check as well. */
+async function fetchVerifiedModel(base: string, file: string): Promise<Uint8Array | null> {
+  const buf = await fetchVerifiedBytes(base, file);
+  if (!buf || !looksLikeOnnx(buf)) return null;
   return new Uint8Array(buf);
+}
+
+/** The class-name table. It is not code, but it silently decides what every
+ *  detection is CALLED, so a remote copy gets the same digest treatment as a
+ *  graph — it used to be fetched with a bare `fetch().json()`, which meant a
+ *  pinned digest for it would have been decoration. `looksLikeOnnx` cannot be
+ *  applied here: this file is JSON and a few kB, so it fails both the magic byte
+ *  and the size window by design. */
+async function fetchNames(base: string, file: string): Promise<Record<string, string> | null> {
+  if (base === LOCAL_BASE) {
+    const res = await fetch(base + file);
+    return res.ok ? ((await res.json()) as Record<string, string>) : null;
+  }
+  const buf = await fetchVerifiedBytes(base, file);
+  if (!buf) return null;
+  try {
+    return JSON.parse(new TextDecoder().decode(buf)) as Record<string, string>;
+  } catch {
+    return null;
+  }
 }
 
 type Session = import('onnxruntime-web').InferenceSession;
@@ -341,7 +379,11 @@ async function load(): Promise<Loaded | null> {
       const ort = (await import(/* webpackIgnore: true */ `${base}${ORT_ENTRY}`)) as OrtNS;
       ort.env.wasm.wasmPaths = base;
       const namesBase = (await resolveFile(NAMES_FILE)) ?? modelBase;
-      const names = (await (await fetch(namesBase + NAMES_FILE)).json()) as Record<string, string>;
+      const names = await fetchNames(namesBase, NAMES_FILE);
+      // Without the class table every detection would be an index, so this is a
+      // hard failure rather than a degraded mode. It used to be an unhandled
+      // rejection inside the loader.
+      if (!names) return null;
       // WebGPU where present, WASM everywhere else.
       const providers: string[] = [];
       if (typeof navigator !== 'undefined' && 'gpu' in navigator) providers.push('webgpu');
