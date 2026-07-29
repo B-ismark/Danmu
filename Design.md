@@ -312,10 +312,22 @@ undo — see `lib/storage.ts`).
 ## 6. Architecture
 
 ### Stack
-- **Next.js 15.5** (App Router) + **React 18.3** + **TypeScript 5.9**. React stays
-  on 18: Next 15 accepts `^18.2`, and moving to 19 would force @react-three/fiber
-  to v9 — the whole 3D stack — for nothing this app needs.
-- **Three.js 0.169** + **@react-three/fiber 8** + **drei** + **postprocessing** — declarative 3D
+- **Next.js 15.5** (App Router) + **React 19.2** + **TypeScript 5.9**. React 19 is
+  not a preference here, it is forced: whatever `react` resolves to in
+  `node_modules`, Next 15's App Router aliases the client bundle to its own
+  vendored React 19, whose internals key is
+  `__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE`. The React 18
+  key that `react-reconciler@0.27` (and so @react-three/fiber v8) reads is simply
+  absent, so the 3D route threw `Cannot read properties of undefined (reading
+  'ReactCurrentOwner')` on mount. The peer range Next advertises (`^18.2 || ^19`)
+  describes the Pages Router, not this one — trust the runtime, not the range.
+- **Three.js 0.169** + **@react-three/fiber 9** + **drei 10** + **postprocessing 3** — declarative 3D.
+  This is the line that runs on React 19; fiber 8 + drei 9 cannot. Note fiber 9
+  peers `react@>=19 <19.3` — an upper bound, so React is not a free-floating
+  caret here; `tests/react-3d-peers.test.ts` fails if one drifts from the other.
+  R3F 9 also
+  dropped the per-element `*Props` type aliases, so element prop types come off
+  the `ThreeElements` map (`components/three/Box.tsx`).
 - **Zustand 5** (client state). No data-fetching library — a local-first app
   makes no queries, so TanStack Query was removed.
 - **idb-keyval** (rooms) · **localStorage** (settings + key)

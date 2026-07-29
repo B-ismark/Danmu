@@ -254,10 +254,24 @@ What they were, and what was done:
   the whole `postcss` cluster underneath. Next 14 has no patched line: the fixes
   land in `>=15.5.21`. **Upgraded 14.2.35 → 15.5.22.**
 
-  The upgrade was smaller than it looks. Next 15 still accepts `react ^18.2`, so
-  React stays on 18 and `@react-three/fiber` stays on v8 — a React 19 move would
-  have dragged the entire 3D stack (R3F v9, drei v10) into a change with no
-  browser here to verify it in. The only breaking change this app touches is
+  **Correction — the paragraph that used to sit here was wrong, and it broke the
+  product.** It read: "Next 15 still accepts `react ^18.2`, so React stays on 18
+  and `@react-three/fiber` stays on v8." The peer range does say that, but the
+  App Router does not honour it: it aliases the client bundle to Next's own
+  vendored React (`19.2.0-canary-0bdb9206-20250818` in 15.5.22), which no longer
+  exports the `__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED` key that
+  `react-reconciler@0.27` — R3F v8's renderer — reads. Every visit to
+  `/room/[roomId]/model` threw `TypeError: Cannot read properties of undefined
+  (reading 'ReactCurrentOwner')` and rendered `app/error.tsx` instead of the
+  studio. The 3D view *is* the product, so the upgrade shipped it dark.
+
+  This is exactly the risk the sentence excused itself with — "a change with no
+  browser here to verify it in." The unverified change was not the React 19 move;
+  it was skipping it. Resolved by going forward: React 19.2, R3F 9, drei 10,
+  postprocessing 3, verified by loading every route in headless Chrome and
+  asserting a `<canvas>` on the 3D route.
+
+  Otherwise the upgrade was small. The only breaking change this app touches is
   `params` becoming a Promise, in the single server component that reads a route
   param (`app/room/[roomId]/page.tsx`); everything else uses `useParams()`
   client-side. `experimental.esmExternals: 'loose'` was dropped — Next 15 warns
