@@ -1,7 +1,9 @@
 # Platform Audit — 2026-07-29
 
-Danmu @ `main`. Audited, then **fixed**: all 40 findings addressed, plus 3 more
-found while fixing and 4 more found while reviewing the fixes. 47 total.
+Danmu @ `main`. Audited, then **fixed**: 49 code findings — the original 40, 3 more
+found while fixing, 4 more found while reviewing the fixes, 2 more found while
+closing the leftovers — plus the 40 dependency advisories the first pass recorded
+as un-run. Nothing left open.
 
 The four from the review pass matter more than their count suggests: one of them
 was a **regression this fix pass introduced**, and it was the loudest kind — a new
@@ -16,49 +18,80 @@ not an honest one.
 | Check | Before | After |
 |---|---|---|
 | `tsc --noEmit` | clean | **clean** |
-| `vitest run` | 87 tests / 10 files | **148 tests / 15 files** |
+| `vitest run` | 87 tests / 10 files | **189 tests / 19 files** |
 | `next lint` | clean | **clean** |
 | `next build` | clean, 11 routes | **clean, 11 routes** |
-| Shared First Load JS | 87.4 kB | 87.4 kB |
-| Studio route | 152 kB | 154 kB |
-| Detect route | 189 kB | 196 kB |
+| `pnpm audit` | not run | **1 advisory, an advisory-range artifact** (from 40) |
+| Next.js | 14.2.35 | **15.5.22** |
+| Shared First Load JS | 87.4 kB | 103 kB |
+| Studio route | 152 kB | 164 kB |
+| Detect route | 189 kB | 205 kB |
 
-New scripts, both run and confirmed working:
+The bundle grew ~15 kB on the shared chunk. That is Next 15's runtime, not
+application code, and it is the cost of the 22 Next advisories below.
+
+New scripts, all run and confirmed working:
 
 ```
-pnpm vendor:ort    → copied 6 files (40.2 MB) from onnxruntime-web@1.27.0 → public/ort/
-pnpm hash:models   → printed SHA-256 digests for the three files in public/models/
+pnpm vendor:ort            → copied 6 files (40.2 MB) from onnxruntime-web@1.27.0 → public/ort/
+pnpm hash:models           → SHA-256 digests for the three files in public/models/
+pnpm hash:models --verify  → …and all three match what the mirror serves
 ```
 
 ## Summary
 
-| Severity | Found | Fixed | Partial | Not done |
-|---|---|---|---|---|
-| Critical | 0 | — | — | — |
-| High | 5 | 5 | 0 | 0 |
-| Medium | 23 | 23 | 0 | 0 |
-| Low | 17 | 17 | 0 | 0 |
-| Info | 2 | 0 | 1 | 1 |
-| **Total** | **47** | **45** | **1** | **1** |
+Code findings — 49, all fixed:
 
-The two that are not straight fixes are both stated plainly rather than quietly
-closed:
+| Severity | Found | Fixed |
+|---|---|---|
+| Critical | 0 | — |
+| High | 6 | 6 |
+| Medium | 24 | 24 |
+| Low | 17 | 17 |
+| Info | 2 | 2 |
 
-- **Partial — weights identity pinning.** Format validation (ONNX protobuf magic +
-  size window) is in place and enforced on every remote fetch, and the SHA-256
-  machinery is wired up. `MODEL_DIGESTS` is deliberately empty: pinning a digest I
-  cannot verify against what the mirror actually serves would fail closed and
-  silently disable the detector for every fresh clone. `pnpm hash:models` prints
-  the local digests and documents the two-sided check. One command from done, by
-  someone who can fetch the mirror copy.
-- **Not done — dependency vulnerability scan.** `pnpm` is not on `PATH` in this
-  environment, and `npm audit` against a `pnpm-lock.yaml` is unreliable. No
-  verdict is claimed either way. Run `pnpm audit` locally.
+Dependency advisories — counted separately, because 40 advisories resolve to six
+packages and one upgrade, and rolling them into the table above would inflate the
+total by an order of magnitude for a single afternoon's work:
 
-One further gap is recorded honestly rather than papered over: `lib/history.ts`
-and `lib/storage.ts` still have no unit tests, because they need jsdom +
-`fake-indexeddb` — two new devDependencies I could not install without a working
-package manager. The fixes to both files are complete; only their coverage is not.
+| Severity | Found | Fixed |
+|---|---|---|
+| Critical | 1 | 1 |
+| High | 20 | 19 |
+| Moderate | 17 | 17 |
+| Low | 2 | 2 |
+
+The one unfixed high is an advisory-range artifact, not an exposure — the
+`brace-expansion` DoS advisory declares `<=5.0.7`, which in semver includes the
+whole 1.x line, so `1.1.17` matches it even though 1.x was patched in `1.1.16` and
+has no `5.0.8` to move to.
+
+Nothing is left open. The three items that were open in the first pass have all
+been closed, and the way two of them were closed is itself worth reading:
+
+- **The dependency scan turned out to be runnable.** It was recorded as "not
+  performed — `pnpm` is not on `PATH`". `pnpm` is reachable through **Corepack**,
+  which ships with Node. Running it found **40 advisories** (1 critical, 20 high,
+  17 moderate, 2 low) — so "no verdict claimed" had been covering a real gap, not
+  an empty one. 39 are now fixed, including a Next 14 → 15 upgrade;
+  [findings-security.md](audit/findings-security.md) has the full account,
+  including which of the 22 Next advisories could never reach this app and why the
+  last remaining one is a false positive rather than an exposure.
+- **The weights digests are pinned, verified on both sides.** Left empty in the
+  first pass on the grounds that a pin taken from the local copy alone would fail
+  closed for every fresh clone. Both sides now hash identically, and
+  `pnpm hash:models --verify` performs the check instead of a comment asking
+  someone to remember it. Pinning also exposed a hole in the original fix: the
+  class-name JSON bypassed the verifier entirely, so a digest for it would have
+  been decoration.
+- **`lib/storage.ts` and `lib/history.ts` are covered.** 41 new tests across four
+  files. `storage-ordering.test.ts` mocks `idb-keyval` to record the call sequence,
+  because the delete/restore ordering guarantee cannot be observed any other way —
+  IndexedDB returns keys in sort order, and `room:a:meta` sorts before
+  `room:a:transforms` whichever way round they were written. My first attempt
+  asserted over `keys()` and would have passed against a deliberately broken
+  implementation; both suites were then mutation-checked by reversing the code they
+  guard and confirming they fail.
 
 ## The three found while fixing
 
@@ -100,6 +133,23 @@ this pass. All four are in
 4. **[LOW] Colour sampling went from too serial to too parallel.** 25 detections
    held 25 decoded photos at once. Batches of four.
 
+## The two found while closing the open items
+
+Both were holes in this pass's own earlier work, found by finishing it properly:
+
+1. **[HIGH] The class-name JSON bypassed the weights verifier entirely.** The
+   whole point of `MODEL_DIGESTS` is that nothing remote reaches the runtime
+   unchecked — but `.names.json` was still fetched with a bare
+   `fetch(...).json()`, so pinning a digest for it would have been decoration.
+   This file decides what every detection is *called*, which the original finding
+   said in as many words. `fetchNames` now verifies it, and a missing table is a
+   hard failure rather than an unhandled rejection inside the loader.
+2. **[MEDIUM] The first override set silently collapsed three majors into one.**
+   `"brace-expansion@1": ">=1.1.16"` also matches `5.0.8`, so every
+   `brace-expansion` in the tree — 1.x, 2.x and 5.x — was promoted onto 5.x.
+   Nothing failed, which is what makes it worth writing down. Caret ranges now
+   keep each consumer on the major it was written against.
+
 ## What changed, by theme
 
 **The detect → persist → rebuild seam** (all three original Highs lived here).
@@ -124,17 +174,22 @@ its area label, `lib/dates.ts` for timestamps, `lib/csv.ts` for CSV, one
 had already diverged — which is how a picker offered a cross shape and built a T.
 
 **Third-party bytes.** A CSP with every host named and justified; the ONNX
-Runtime served same-origin with the CDN demoted to fallback; remote weights
-format-checked before the runtime sees them.
+Runtime served same-origin with the CDN demoted to fallback; remote weights and
+the class-name table both format- and digest-checked before the runtime sees them;
+and 39 of 40 dependency advisories cleared, Next included.
+
+**Coverage where it was missing.** 87 → 189 tests. The persistence layer and the
+undo stack had none at all, which is exactly how a hand-written read and a
+hand-written write drifted apart and silently dropped the geometry pass.
 
 ## Findings by dimension
 
 | Dimension | Findings | File |
 |---|---|---|
-| Security | 4 Medium, 2 Low, 1 Info | [audit/findings-security.md](audit/findings-security.md) |
+| Security | 2 High, 4 Medium, 2 Low, 1 Info + the 40 advisories | [audit/findings-security.md](audit/findings-security.md) |
 | Data integrity | 2 High, 5 Medium, 4 Low | [audit/findings-data.md](audit/findings-data.md) |
 | Performance | 1 High, 2 Medium, 5 Low | [audit/findings-performance.md](audit/findings-performance.md) |
-| UI & code quality | 1 High, 10 Medium, 6 Low | [audit/findings-ui-code.md](audit/findings-ui-code.md) |
+| UI & code quality | 2 High, 12 Medium, 7 Low | [audit/findings-ui-code.md](audit/findings-ui-code.md) |
 | Visual | not performed | [audit/findings-visual.md](audit/findings-visual.md) |
 
 Each file opens with a resolution table and keeps its original diagnosis as the
@@ -157,7 +212,16 @@ measured legend).
 
 ## Deferred / won't fix
 
-Unchanged from the original audit, and re-confirmed while fixing:
+Re-confirmed at each pass:
+
+- **React stays on 18.** Next 15 accepts `^18.2`, so the upgrade did not require
+  it. Moving to 19 would force `@react-three/fiber` to v9 and drei to v10 — the
+  entire 3D stack — in an environment with no browser to verify the result in.
+- **One `brace-expansion` advisory left standing** — an advisory-range artifact,
+  dev-only, reachable only under `eslint@8 > minimatch@3`. Clearing it means an
+  ESLint 9 flat-config migration for a glob-matcher DoS during linting.
+- **`next lint` still used**, though Next 15 suggests migrating to the ESLint CLI.
+  It works, and the codemod is a separate change with its own risk.
 
 - **API key in plaintext `localStorage`** — accepted design decision; there is no
   server to hold it, and Settings states plainly where it goes. Less exposed now

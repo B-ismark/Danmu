@@ -67,16 +67,31 @@ backend, no account. The 3D studio *is* the product.
 pnpm install
 pnpm dev          # http://localhost:3000
 pnpm typecheck    # tsc --noEmit — run after edits
-pnpm test         # vitest run — pure-logic suite
+pnpm test         # vitest run — pure-logic suite (+ jsdom files, see below)
 pnpm build        # next build
 pnpm lint         # next lint
+pnpm audit        # dependency advisories — see `pnpm.overrides` in package.json
 pnpm vendor:ort   # copy onnxruntime-web → public/ort/ (loads same-origin, not CDN)
-pnpm hash:models  # print SHA-256 digests of public/models/ for MODEL_DIGESTS
+pnpm hash:models  # SHA-256 digests of public/models/ for MODEL_DIGESTS
+pnpm hash:models --verify   # …and confirm the mirror serves those same bytes (~62 MB)
 ```
+
+`pnpm` is invoked through Corepack here (`corepack pnpm …`) if it is not on
+`PATH`; `packageManager` in `package.json` pins the version.
 
 Run `pnpm typecheck` after non-trivial edits. Add a Vitest test when you touch
 pure logic in `lib/` (geometry / physics / clearance / footprint / dimension-
-ranges / shape-search / item-snap / units all have tests in `tests/`).
+ranges / shape-search / item-snap / units / csv / dates all have tests in
+`tests/`).
+
+The suite runs in the **node** environment by default. Files that need a browser
+opt in individually with `// @vitest-environment jsdom` — `storage*.test.ts`
+(IndexedDB via `fake-indexeddb`) and `history.test.ts` (zustand `persist` wants
+localStorage). Don't switch the whole suite over. Two properties there can only be
+observed by instrumenting the store, so `storage-ordering.test.ts` mocks
+`idb-keyval` to record the call sequence: IndexedDB returns keys in **sort** order,
+not insertion order, so an assertion over `keys()` proves nothing about write
+order.
 
 ## Layout
 

@@ -19,16 +19,26 @@
 > | CSV had no BOM / used LF | `lib/csv.ts`. |
 > | Plan legend text overran | Measured; the sheet widens to fit and anything still over is ellipsised. |
 > | Raw z-index / shadowed variable | `--z-sticky-local` token; `bounds` instead of shadowing `room`. |
-> | Test coverage gaps | 139 tests across 15 files, up from 87 across 10. New: `csv`, `dates`, `detection-dedupe`, `scene-build`, `local-detect-nms`, plus 6 regression tests added to `clearance`. |
+> | Test coverage gaps | 189 tests across 19 files, up from 87 across 10. New: `csv`, `dates`, `detection-dedupe`, `scene-build`, `local-detect-nms`, `storage`, `storage-ordering`, `storage-quota`, `history`, plus 10 regression tests added to `clearance` and 6 to `geometry`. |
 >
-> **Still uncovered, and why:** `lib/history.ts` (undo/redo) and `lib/storage.ts`
-> (trash round-trip) need a jsdom + `fake-indexeddb` harness. Both are new
-> devDependencies, and `pnpm` is not on `PATH` in this environment — installing
-> them with `npm` into a pnpm workspace would rewrite the module layout. Left for
-> whoever can run the install; the fixes to both files are otherwise complete.
+> **The two files that were left uncovered are now covered.** `lib/history.ts`
+> (undo/redo) and `lib/storage.ts` (trash round-trip) needed jsdom +
+> `fake-indexeddb`, recorded here as un-installable because `pnpm` was not on
+> `PATH`. It is reachable through Corepack, so they were installed and the tests
+> written — 41 of them, opted into jsdom per-file so the rest of the suite stays in
+> the node environment.
+>
+> Two things about that worth keeping: the delete/restore ORDER cannot be observed
+> against a real store (IndexedDB returns keys in sort order, and `room:a:meta`
+> sorts before `room:a:transforms` whichever way round they were written), so
+> `storage-ordering.test.ts` mocks `idb-keyval` to record the call sequence — my
+> first attempt asserted over `keys()` and would have passed against a deliberately
+> reversed implementation. And both new suites were then mutation-checked: reverse
+> the code they guard, confirm they fail, revert.
 
-**Toolchain baseline:** `tsc --noEmit` clean · `vitest run` 87/87 passing across
-10 files · `next lint` clean · `next build` clean. Zero `any` in the codebase,
+**Toolchain baseline (as first audited):** `tsc --noEmit` clean · `vitest run`
+87/87 passing across 10 files · `next lint` clean · `next build` clean. Zero `any`
+in the codebase,
 zero `console.*` outside the two error boundaries, zero
 `dangerouslySetInnerHTML`.
 
