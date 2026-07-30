@@ -294,6 +294,34 @@ deliberately, one at a time, with the reason in the commit — not in bulk.
 
 ### 2b Circle and polygon footprints · **M**
 
+> **Done**, with two departures from the plan above.
+>
+> **`circle?: boolean` was kept, not replaced by `footprintShape`.** It already
+> exists, it is already the single source of truth in `scene-spec.ts`, and it is
+> already persisted inside saved layouts — renaming it buys nothing and costs a
+> codec on both sides of a record, which is the exact drift `CLAUDE.md` warns
+> about. What was missing was never the name; it was that no geometry read it.
+>
+> **`circle` now means the inscribed ELLIPSE, not a circle of radius W/2.** W and
+> D are separately editable, and the renderer draws what that implies, so a
+> stretched plant pot has to be measured as the shape on screen. `pointInFoot` is
+> the exact closed form (it runs per raster cell); the pairwise helpers polygonise
+> to an inscribed 32-gon, which holds 99.4% of the area — deliberately inscribed,
+> so a round piece is never reported as hitting something it does not touch.
+>
+> **The gap function did not need it.** `obbGap` has no callers left in `lib/` —
+> Phase 2a moved walkway measurement onto the field, which reads the exact ellipse
+> through the raster. So there is no ellipse-to-polygon distance code, which would
+> have been the only part of this with no closed form.
+>
+> One correction to the plan's stated payoff: the phantom corners were **not**
+> fighting tucked-in chairs in the room report. The clash rule's
+> `TUCKED_CLASH_SHARE` already lets a chair reach 85% of its own footprint into a
+> table, and a corner overlap is ~20%. Where the bounding square actually bit the
+> user is `collidesAt` — the placement gate behind the 3D drag, the plan drag and
+> the keyboard nudge, which had no test at all and now does. The 27%
+> over-estimate on coverage was real and is fixed.
+
 `scene-spec.ts` gains `footprintShape?: 'rect' | 'circle'` (rule 3: flags live
 there; `circle?: boolean` already exists for the plan and should be folded into
 this). `geometry.ts` gains circle-vs-OBB overlap / gap / ray — all closed-form.

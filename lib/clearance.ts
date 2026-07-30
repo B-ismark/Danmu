@@ -18,10 +18,12 @@
 import type { ScenePart, Category } from './scene-spec';
 import type { Footprint } from './footprint';
 import {
-  obbFromPart,
-  obbIntersectionArea,
   faceClearance,
+  footArea,
+  footFromPart,
+  footIntersectionArea,
   pointInObb,
+  type Foot,
   type OBB,
   type Poly,
 } from './geometry';
@@ -145,8 +147,8 @@ export function analyzeRoom(
   const poly = room.footprint as Poly;
 
   const solid = floorBlockers(parts);
-  const obbs = new Map<string, OBB>();
-  for (const p of solid) obbs.set(p.id, obbFromPart(p.pos, p.rot, p.dimMM));
+  const obbs = new Map<string, Foot>();
+  for (const p of solid) obbs.set(p.id, footFromPart(p.pos, p.rot, p.dimMM, p.circle));
 
   // One raster, read by rules 3, 8, 9 and 10. Its cell index IS the index into
   // `solid`, so a finding can name the pieces it is about.
@@ -195,9 +197,13 @@ export function analyzeRoom(
       if (aTop <= b.pos[1] + 0.005 || bTop <= a.pos[1] + 0.005) continue;
       const oa = obbs.get(a.id)!;
       const ob = obbs.get(b.id)!;
-      const shared = obbIntersectionArea(oa, ob);
+      const shared = footIntersectionArea(oa, ob);
       if (shared <= 0) continue;
-      const smaller = Math.min(oa.hw * oa.hd, ob.hw * ob.hd) * 4;
+      // Real areas, so a round table is measured as a circle rather than as the
+      // square around it — the four phantom corners are precisely where a tucked
+      // chair sits, so the square version reported the most ordinary dining
+      // arrangement there is as a collision.
+      const smaller = Math.min(footArea(oa), footArea(ob));
       if (smaller <= 0 || shared / smaller < clashShare(a, b)) continue;
       issues.push({
         id: `clash-${a.id}-${b.id}`,
@@ -453,7 +459,7 @@ export function analyzeRoom(
  *  Kept as its own entry point because plenty of callers want the percentage and
  *  nothing else - building the distance transform for them would undo the win
  *  above. analyzeRoom, which needs the field anyway, reads the share off it. */
-export function freeFloorFraction(parts: OBB[], poly: Poly): number {
+export function freeFloorFraction(parts: Foot[], poly: Poly): number {
   // Nothing to subtract - skip rasterising the room to divide it by itself.
   if (parts.length === 0) return 1;
   const raster = rasterizeCoverage(parts, poly);

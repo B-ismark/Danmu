@@ -156,6 +156,31 @@ describe('analyzeRoom', () => {
     expect(hit).toBeDefined();
   });
 
+  // ── Round footprints ────────────────────────────────────────────────────
+  // The clash rule is NOT where this shows up, and it would be misleading to
+  // write a test implying otherwise: the tucked-chair exemption already lets a
+  // chair reach 85% of its own footprint into a table before anything is said, so
+  // a corner overlap of ~20% was never going to be reported either way. Where the
+  // bounding square really bit the user is `collidesAt` — see
+  // tests/scene-build.test.ts — and here, in what a round piece covers.
+
+  it('still flags a chair standing in the middle of a round table', () => {
+    const table = part({ category: 'table', shape: 'coffee-table', dimMM: [1200, 1200, 750], pos: [0, 0, 0], circle: true });
+    const chair = part({ category: 'chair', shape: 'chair-dining', dimMM: [450, 450, 850], pos: [0, 0, 0] });
+    expect(analyzeRoom([table, chair], ROOM).issues.find((i) => i.id.startsWith('clash-'))).toBeDefined();
+  });
+
+  it('counts a round piece as a circle when reporting floor coverage', () => {
+    // Rugs are excluded from the blocker set, so use something that is not one.
+    const square = part({ category: 'ottoman', shape: 'ottoman', dimMM: [1400, 1400, 400], pos: [0, 0, 0] });
+    const circle = part({ ...square, id: 'c', circle: true } as never);
+    const squareCover = 1 - analyzeRoom([square], ROOM).freeFloorShare;
+    const circleCover = 1 - analyzeRoom([circle], ROOM).freeFloorShare;
+    expect(squareCover).toBeGreaterThan(0);
+    // π/4 of the square, to within the raster.
+    expect(circleCover / squareCover).toBeCloseTo(Math.PI / 4, 2);
+  });
+
   it('counts overlapping furniture once when reporting floor coverage', () => {
     // The old sum double-counted a chair pushed under a desk and ignored rotation,
     // then clamped at 0 — so a busy room reported "100% covered".

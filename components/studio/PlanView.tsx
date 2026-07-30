@@ -740,10 +740,16 @@ export function PlanView({
                   />
                 )}
                 {part.circle ? (
-                  <circle
+                  // An ellipse, not a circle of radius W/2: a round part is
+                  // authored square, but W and D are separately editable, and
+                  // `lib/geometry`'s Foot models the inscribed ELLIPSE — so a
+                  // stretched plant pot has to draw as the shape the collision
+                  // and coverage maths is using.
+                  <ellipse
                     cx={0}
                     cy={0}
-                    r={wpx / 2}
+                    rx={wpx / 2}
+                    ry={hpx / 2}
                     fill={fill}
                     stroke={color}
                     strokeWidth={isSel ? 2.5 : 1.4}

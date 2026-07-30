@@ -5,7 +5,7 @@
 
 import type { Category, Shape } from './scene-spec';
 import type { Footprint } from './footprint';
-import { nearestEdge, obbFromPart, obbIntersectionArea } from './geometry';
+import { nearestEdge, footArea, footFromPart, footIntersectionArea } from './geometry';
 
 export type Anchor = 'floor' | 'ceiling' | 'wall-high' | 'wall-mid' | 'wall-low';
 
@@ -175,18 +175,20 @@ export function findSupportUnder(
     category: Category;
     rot?: number;
     wallMounted?: boolean;
+    circle?: boolean;
   }>,
   selfId: string,
   x: number,
   z: number,
   selfDim: [number, number, number],
   selfRot = 0,
+  selfCircle?: boolean,
 ): number | null {
-  const moverArea = (selfDim[0] / 1000) * (selfDim[1] / 1000);
+  const mover = footFromPart([x, 0, z], selfRot, selfDim, selfCircle);
+  const moverArea = footArea(mover);
   // A footprint with no area has nothing to rest ON — no share of it can meet
   // the bar, and dividing by it would produce Infinity or NaN.
   if (!(moverArea > 0)) return null;
-  const mover = obbFromPart([x, 0, z], selfRot, selfDim);
 
   let best: number | null = null;
   for (const o of parts) {
@@ -196,7 +198,7 @@ export function findSupportUnder(
     const top = o.pos[1] + o.dimMM[2] / 1000;
     // Nothing lower than the best candidate can win — skip the area maths.
     if (best !== null && top <= best) continue;
-    const shared = obbIntersectionArea(mover, obbFromPart(o.pos, o.rot ?? 0, o.dimMM));
+    const shared = footIntersectionArea(mover, footFromPart(o.pos, o.rot ?? 0, o.dimMM, o.circle));
     if (shared / moverArea < MIN_SUPPORT_SHARE) continue;
     best = top;
   }

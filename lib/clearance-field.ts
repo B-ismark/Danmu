@@ -30,7 +30,7 @@
 // rule, which is the same "no false warnings" bar the rest of the room report is
 // held to.
 
-import { obbExtentAlong, pointInPoly, type OBB, type Poly } from './geometry';
+import { obbExtentAlong, pointInPoly, type Foot, type Poly } from './geometry';
 
 /** Raster resolution, metres. 5 cm gives ±25 mm on every reading, which is finer
  *  than any of the rules this feeds and cheap enough to run on every edit. */
@@ -99,7 +99,7 @@ export type ClearanceField = CoverageRaster & {
  *
  *  Interior cell centres land on the same lattice as the unpadded scan, so this
  *  produces the same coverage numbers `freeFloorFraction` always did. */
-export function rasterizeCoverage(parts: OBB[], poly: Poly, cell = FIELD_CELL): CoverageRaster | null {
+export function rasterizeCoverage(parts: Foot[], poly: Poly, cell = FIELD_CELL): CoverageRaster | null {
   let minX = Infinity;
   let maxX = -Infinity;
   let minZ = Infinity;
@@ -142,6 +142,12 @@ export function rasterizeCoverage(parts: OBB[], poly: Poly, cell = FIELD_CELL): 
     const b = parts[p];
     const cs = Math.cos(-b.rot);
     const sn = Math.sin(-b.rot);
+    // A round footprint is the inscribed ellipse, tested in closed form below —
+    // the bound is still the bounding box, which is a superset, so it only costs
+    // a few extra cells at the corners.
+    const round = b.circle === true;
+    const ihw = 1 / b.hw;
+    const ihd = 1 / b.hd;
     const ex = obbExtentAlong(b, 1, 0);
     const ez = obbExtentAlong(b, 0, 1);
     const i0 = Math.max(0, Math.floor((b.cx - ex - ox) / c - 0.5));
@@ -158,8 +164,13 @@ export function rasterizeCoverage(parts: OBB[], poly: Poly, cell = FIELD_CELL): 
         // under a desk) are counted a single time.
         if (cover[at] !== FREE_CELL) continue;
         const dx = ox + (i + 0.5) * c - b.cx;
-        if (Math.abs(dx * cs - dz * sn) > b.hw) continue;
-        if (Math.abs(dx * sn + dz * cs) > b.hd) continue;
+        const lx = dx * cs - dz * sn;
+        const lz = dx * sn + dz * cs;
+        if (round) {
+          if (lx * lx * ihw * ihw + lz * lz * ihd * ihd > 1) continue;
+        } else {
+          if (Math.abs(lx) > b.hw || Math.abs(lz) > b.hd) continue;
+        }
         cover[at] = p;
         covered++;
       }
@@ -171,7 +182,7 @@ export function rasterizeCoverage(parts: OBB[], poly: Poly, cell = FIELD_CELL): 
 
 /** Build the full field: coverage, exact distance-to-nearest-obstacle, which
  *  obstacle that is, and the walkable connected components. */
-export function buildClearanceField(parts: OBB[], poly: Poly, cell = FIELD_CELL): ClearanceField | null {
+export function buildClearanceField(parts: Foot[], poly: Poly, cell = FIELD_CELL): ClearanceField | null {
   const r = rasterizeCoverage(parts, poly, cell);
   if (!r) return null;
   const { nx, nz, cover } = r;
@@ -437,7 +448,7 @@ export function componentsNear(f: ClearanceField, x: number, z: number, radius: 
 /** Which walkable regions reach the space immediately around a part. Generous on
  *  purpose: this feeds a "you cannot get to this" finding, and the cost of a
  *  false one is that the room report cries wolf. */
-export function componentsAround(f: ClearanceField, b: OBB, margin = 0.75): Set<number> {
+export function componentsAround(f: ClearanceField, b: Foot, margin = 0.75): Set<number> {
   const ex = obbExtentAlong(b, 1, 0) + margin;
   const ez = obbExtentAlong(b, 0, 1) + margin;
   const out = new Set<number>();

@@ -15,7 +15,7 @@ import {
 } from './physics';
 import type { CaptureSlot, RoomData } from './storage';
 import { clampDims } from './dimension-ranges';
-import { obbFromPart, obbOverlap } from './geometry';
+import { footFromPart, footOverlap } from './geometry';
 
 export type Shape =
   | 'sofa' | 'tv' | 'closet' | 'rug' | 'plant'
@@ -720,7 +720,7 @@ export function collidesAt(
   // Mover y-bottom (pos.y is the floor anchor in our scene; for wall-mounted it's mid-height).
   const myBottom = pos[1];
   const myTop = pos[1] + mh;
-  const me = obbFromPart(pos, rot, dimMM);
+  const me = footFromPart(pos, rot, dimMM, mover.circle);
   for (const o of parts) {
     if (o.id === movingId) continue;
     if (o.category === 'rug') continue;
@@ -733,9 +733,10 @@ export function collidesAt(
     const yOverlap = !(myTop <= oyBottom + 0.005 || myBottom >= oyTop - 0.005);
     if (!yOverlap) continue;
 
-    // XZ overlap — exact rotated-rectangle test (SAT). The tiny negative pad
-    // lets flush side-by-side placement read as touching, not colliding.
-    if (obbOverlap(me, obbFromPart(o.pos, o.rot, o.dimMM), -0.01)) return true;
+    // XZ overlap — exact separating-axis test, over the ROUND footprint where a
+    // piece has one. The tiny negative pad lets flush side-by-side placement read
+    // as touching, not colliding.
+    if (footOverlap(me, footFromPart(o.pos, o.rot, o.dimMM, o.circle), -0.01)) return true;
   }
   return false;
 }
