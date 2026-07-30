@@ -30,11 +30,13 @@ function installed(pkg: string): string {
   return JSON.parse(readFileSync(p, 'utf8')).version as string;
 }
 
-function peerReact(pkg: string): string {
+function peerRange(pkg: string, dep: string): string | undefined {
   const p = join(ROOT, 'node_modules', ...pkg.split('/'), 'package.json');
   const peers = JSON.parse(readFileSync(p, 'utf8')).peerDependencies ?? {};
-  return peers.react as string;
+  return peers[dep] as string | undefined;
 }
+
+const peerReact = (pkg: string) => peerRange(pkg, 'react') as string;
 
 /** The React major the App Router actually serves to the browser. */
 function vendoredReactMajor(): number {
@@ -53,6 +55,13 @@ function vendoredReactMajor(): number {
 
 const THREE_STACK = ['@react-three/fiber', '@react-three/drei', '@react-three/postprocessing'];
 
+/** Everything that renders THROUGH three and therefore has to agree with the
+ *  copy of it we install. `postprocessing` is the one that actually bites: it is
+ *  a plain dependency rather than part of the R3F family, it ships an UPPER
+ *  bound, and it is the reason this project sits on r184 rather than the latest
+ *  release. */
+const THREE_CONSUMERS = [...THREE_STACK, 'three-stdlib', 'postprocessing'];
+
 describe('React runtime matches the 3D stack it renders', () => {
   it('app react major equals the React major Next vendors for the client', () => {
     expect(major(installed('react'))).toBe(vendoredReactMajor());
@@ -70,5 +79,31 @@ describe('React runtime matches the 3D stack it renders', () => {
       satisfies(react, range, { includePrerelease: true }),
       `${pkg} peers react@${range}, but react@${react} is installed — the 3D route will throw on mount`,
     ).toBe(true);
+  });
+});
+
+// The same class of fault one layer down. react/fiber was the pairing that took
+// the studio out; three/drei/postprocessing is the pairing that can, and a peer
+// range with an UPPER bound is the one that goes stale silently — `pnpm add`
+// prints a warning and installs anyway, and nothing downstream fails until a
+// shader or a class that moved is reached at runtime.
+describe('three matches the stack rendering through it', () => {
+  it.each(THREE_CONSUMERS)('%s admits the installed three', (pkg) => {
+    const range = peerRange(pkg, 'three');
+    const three = installed('three');
+    expect(range, `${pkg} declares no three peer`).toBeTruthy();
+    expect(
+      satisfies(three, range!, { includePrerelease: true }),
+      `${pkg} peers three@${range}, but three@${three} is installed`,
+    ).toBe(true);
+  });
+
+  it('types track the runtime three, minor for minor', () => {
+    // three is pre-1.0, so its MINOR is its breaking-change axis: @types/three
+    // 0.169 against three 0.184 type-checks a fifteen-release-old API and calls
+    // it green.
+    const runtime = installed('three');
+    const types = installed('@types/three');
+    expect(types.split('.').slice(0, 2).join('.')).toBe(runtime.split('.').slice(0, 2).join('.'));
   });
 });

@@ -498,6 +498,14 @@ restore them.
 
 ### 5b three r169 → r18x · **M**
 
+> **Done — r184, and 184 is a ceiling rather than a choice.** `postprocessing`
+> peers `three >= 0.168 < 0.185`, so r185 installs with a warning and a silent
+> mismatch. That is exactly the shape of fault `tests/react-3d-peers.test.ts`
+> exists for, so the guard now covers `three` across fiber, drei, postprocessing
+> and three-stdlib — and asserts `@types/three` tracks the runtime minor for minor,
+> because three is pre-1.0 and its MINOR is its breaking-change axis: types fifteen
+> releases behind type-check a different API and call it green.
+
 WebGL path unchanged; picks up the r184 fix for per-frame allocation (240k–500k
 objects/sec at 1000 meshes / 60 fps). `@react-three/postprocessing` keeps working.
 
