@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { snapToWall } from '@/lib/physics';
+import { snapToWall, findSupportUnder } from '@/lib/physics';
 import type { Footprint } from '@/lib/footprint';
 
 const RECT: Footprint = [
@@ -41,5 +41,69 @@ describe('snapToWall (footprint-edge exact)', () => {
     const deep: [number, number, number] = [600, 650, 1700]; // fridge
     const s = snapToWall([-2.5, 0, 0], deep, RECT);
     expect(s.x).toBeCloseTo(-3 + 0.325 + 0.02, 2);
+  });
+});
+
+// ─── findSupportUnder ───────────────────────────────────────────────────────
+// Used to ask only whether the mover's CENTRE sat within the support's
+// half-extents plus 5 cm, which called a laptop 90% off a desk "on the desk".
+// It now weighs how much of the mover actually rests on the surface.
+
+type SupportPart = Parameters<typeof findSupportUnder>[0][number];
+
+const LAPTOP: [number, number, number] = [340, 240, 220]; // 0.34 × 0.24 m
+const DESK: SupportPart = {
+  id: 'desk',
+  pos: [0, 0, 0],
+  dimMM: [1400, 700, 750], // top at 0.75 m; half-width 0.7 m
+  category: 'desk',
+};
+
+/** Laptop centre X that leaves `share` of its width over the desk's +X edge. */
+const overhangX = (share: number) => 0.7 + 0.17 - share * 0.34;
+
+describe('findSupportUnder', () => {
+  it('lands a part sitting squarely on the desk', () => {
+    expect(findSupportUnder([DESK], 'laptop', 0, 0, LAPTOP)).toBeCloseTo(0.75, 6);
+  });
+
+  it('drops a part that is mostly off the edge', () => {
+    // 10% of the laptop over the desk. The old centre test said "supported"
+    // because the centre was still within half-extents + 5 cm.
+    expect(findSupportUnder([DESK], 'laptop', overhangX(0.1), 0, LAPTOP)).toBeNull();
+    // 40% is still not enough to hold it up.
+    expect(findSupportUnder([DESK], 'laptop', overhangX(0.4), 0, LAPTOP)).toBeNull();
+  });
+
+  it('holds a part that is mostly on', () => {
+    expect(findSupportUnder([DESK], 'laptop', overhangX(0.6), 0, LAPTOP)).toBeCloseTo(0.75, 6);
+  });
+
+  it('honours the support rotation', () => {
+    // Desk turned a quarter turn is 0.7 m across, not 1.4. A point 0.5 m out is
+    // beyond it — the rotation-blind version counted it as over the desk.
+    const turned: SupportPart = { ...DESK, rot: Math.PI / 2 };
+    expect(findSupportUnder([turned], 'laptop', 0.5, 0, LAPTOP)).toBeNull();
+    expect(findSupportUnder([turned], 'laptop', 0, 0.5, LAPTOP)).toBeCloseTo(0.75, 6);
+  });
+
+  it('honours the mover rotation', () => {
+    // At 45° the laptop reaches further along X, so more of it clears the edge.
+    const x = overhangX(0.5);
+    expect(findSupportUnder([DESK], 'laptop', x, 0, LAPTOP)).toBeCloseTo(0.75, 6);
+    expect(findSupportUnder([DESK], 'laptop', x, 0, LAPTOP, Math.PI / 4)).toBeNull();
+  });
+
+  it('picks the highest qualifying surface', () => {
+    const shelf: SupportPart = { id: 'shelf', pos: [0, 0.8, 0], dimMM: [800, 400, 40], category: 'shelf' };
+    expect(findSupportUnder([DESK, shelf], 'laptop', 0, 0, LAPTOP)).toBeCloseTo(0.84, 6);
+    expect(findSupportUnder([shelf, DESK], 'laptop', 0, 0, LAPTOP)).toBeCloseTo(0.84, 6);
+  });
+
+  it('ignores rugs, wall-mounted pieces and itself', () => {
+    const rug: SupportPart = { id: 'rug', pos: [0, 0, 0], dimMM: [3000, 2000, 10], category: 'rug' };
+    const tv: SupportPart = { id: 'tv', pos: [0, 1.3, 0], dimMM: [1400, 60, 800], category: 'tv', wallMounted: true };
+    expect(findSupportUnder([rug, tv], 'laptop', 0, 0, LAPTOP)).toBeNull();
+    expect(findSupportUnder([DESK], 'desk', 0, 0, LAPTOP)).toBeNull();
   });
 });

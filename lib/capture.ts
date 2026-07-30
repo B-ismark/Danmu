@@ -1,6 +1,7 @@
 'use client';
 
 import type { CaptureSlot } from './storage';
+import { stripJpegMetadata } from './jpeg-strip';
 
 // 4 walls only — floor + ceiling dropped (unnecessary for our pipeline).
 //
@@ -69,11 +70,45 @@ export function isAcceptedPhoto(file: File | Blob): boolean {
   return ACCEPTED_PHOTO_TYPES.includes(type);
 }
 
+/** Normalise a photo for storage and for the one request that leaves the device:
+ *  bounded resolution, and no metadata riding along.
+ *
+ *  The strip is not redundant with the re-encode. A canvas re-encode drops
+ *  metadata as a side effect, but `reencode` deliberately returns some photos
+ *  UNCHANGED — a JPEG already under the cap loses quality for nothing if it is
+ *  re-encoded. Those are exactly the photos that kept their EXIF, GPS included,
+ *  and were then uploaded during detection. Strip runs on the passthrough. */
+export async function normalizePhoto(input: Blob): Promise<Blob> {
+  const out = await reencode(input);
+  // A re-encode already produced clean bytes; only a passthrough needs surgery.
+  return out === input ? stripPhotoMetadata(input) : out;
+}
+
+/** Drop metadata segments in place. Falls back to the original blob whenever the
+ *  bytes cannot be read or understood — see `stripJpegMetadata`. */
+async function stripPhotoMetadata(input: Blob): Promise<Blob> {
+  try {
+    const bytes = new Uint8Array(await input.arrayBuffer());
+    const out = stripJpegMetadata(bytes);
+    if (out === bytes) return input;
+    // Copied into a plain ArrayBuffer rather than handing the view straight to
+    // Blob(): a Uint8Array's buffer is typed as possibly shared, which BlobPart
+    // will not accept. The photos that reach here are under the size cap, so the
+    // copy is cheaper than a cast that depends on where this branch is reached
+    // from.
+    const buf = new ArrayBuffer(out.byteLength);
+    new Uint8Array(buf).set(out);
+    return new Blob([buf], { type: input.type || 'image/jpeg' });
+  } catch {
+    return input;
+  }
+}
+
 /** Re-encode to JPEG at no more than MAX_EDGE on the long edge. Returns the
  *  input unchanged when it cannot be decoded — a browser that refuses the format
  *  (HEIC on desktop Chrome, say) should still be able to store the file and let
  *  the later steps degrade, rather than lose the photo here. */
-export async function normalizePhoto(input: Blob): Promise<Blob> {
+async function reencode(input: Blob): Promise<Blob> {
   let bitmap: ImageBitmap;
   try {
     bitmap = await createImageBitmap(input);

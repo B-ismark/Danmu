@@ -5,7 +5,7 @@
 
 import type { Category, Shape } from './scene-spec';
 import type { Footprint } from './footprint';
-import { nearestEdge } from './geometry';
+import { nearestEdge, obbFromPart, obbIntersectionArea } from './geometry';
 
 export type Anchor = 'floor' | 'ceiling' | 'wall-high' | 'wall-mid' | 'wall-low';
 
@@ -146,39 +146,59 @@ const TABLETOP_PRONE_CATEGORIES = new Set<Category>([
   'other',
 ]);
 
+/** Share of the mover's own footprint that must rest on a surface before that
+ *  surface counts as holding it up.
+ *
+ *  A rectangle is centrally symmetric, so any half-plane that excludes its centre
+ *  covers less than half of it: requiring more than 50% inside the support
+ *  therefore also guarantees the centre is inside, which is the physical test
+ *  (centre of mass over the support) stated as an area. */
+const MIN_SUPPORT_SHARE = 0.5;
+
 /** Highest world-Y where a part at (x,z) with given XZ footprint would land on
  *  another part's top surface. Wall-mounted + rugs are ignored as supports.
- *  Returns null if nothing is under the footprint. */
+ *  Returns null if nothing holds it up.
+ *
+ *  Tests how much of the mover ACTUALLY sits on the surface, not just where its
+ *  centre point is. The centre test (plus a 5 cm margin) called a laptop 90%
+ *  overhanging a desk "on the desk", and a part perched on the very lip of a
+ *  nightstand floated at the nightstand's height with nothing under it.
+ *
+ *  `rot` on either side is optional and defaults to 0 — at 0/90° the rotated
+ *  rectangle and its bounding box are the same, which is the overwhelmingly
+ *  common case, so callers that have not got a rotation to hand lose nothing. */
 export function findSupportUnder(
   parts: Array<{
     id: string;
     pos: [number, number, number];
     dimMM: [number, number, number];
     category: Category;
+    rot?: number;
     wallMounted?: boolean;
   }>,
   selfId: string,
   x: number,
   z: number,
   selfDim: [number, number, number],
+  selfRot = 0,
 ): number | null {
+  const moverArea = (selfDim[0] / 1000) * (selfDim[1] / 1000);
+  // A footprint with no area has nothing to rest ON — no share of it can meet
+  // the bar, and dividing by it would produce Infinity or NaN.
+  if (!(moverArea > 0)) return null;
+  const mover = obbFromPart([x, 0, z], selfRot, selfDim);
+
   let best: number | null = null;
   for (const o of parts) {
     if (o.id === selfId) continue;
     if (o.wallMounted) continue;
     if (o.category === 'rug') continue;
-    const ow = o.dimMM[0] / 1000;
-    const od = o.dimMM[1] / 1000;
-    const oh = o.dimMM[2] / 1000;
-    const dx = x - o.pos[0];
-    const dz = z - o.pos[2];
-    // The mover's CENTRE must actually sit over the support's footprint —
-    // a bounding-circle test let a part grab a *neighbour's* top (mid-air)
-    // instead of dropping to the floor. Small margin only.
-    if (Math.abs(dx) < ow / 2 + 0.05 && Math.abs(dz) < od / 2 + 0.05) {
-      const top = o.pos[1] + oh;
-      if (best === null || top > best) best = top;
-    }
+    const top = o.pos[1] + o.dimMM[2] / 1000;
+    // Nothing lower than the best candidate can win — skip the area maths.
+    if (best !== null && top <= best) continue;
+    const shared = obbIntersectionArea(mover, obbFromPart(o.pos, o.rot ?? 0, o.dimMM));
+    if (shared / moverArea < MIN_SUPPORT_SHARE) continue;
+    best = top;
   }
   return best;
 }

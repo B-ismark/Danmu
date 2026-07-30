@@ -79,6 +79,14 @@ living room, and the engine only needs four *consecutive* walls.
 > wall photos to Google; the local ONNX path does not. The UI must say which
 > one is happening at the moment it happens — a privacy promise displayed
 > during an upload is the one bug class this section exists to prevent.
+>
+> What leaves is **pixels only**. `normalizePhoto` strips EXIF / XMP / IPTC
+> before a photo is stored or sent (`lib/jpeg-strip.ts`), because a phone writes
+> `GPSLatitude` / `GPSLongitude` into a photo taken at home and the promise above
+> is about the room, not the address. The re-encode path drops metadata as a side
+> effect; the passthrough path — a JPEG already under the size cap, kept
+> unchanged so it does not lose quality for nothing — is the one that needed the
+> explicit strip, and is where the coordinates used to survive.
 
 Furniture detection runs through a fallback chain, best-effort:
 
@@ -370,7 +378,8 @@ undo — see `lib/storage.ts`).
 | `lib/textures.ts` | Procedural normal/roughness maps (offline, zero assets). |
 | `lib/themes.ts` | One-tap restyle palettes. |
 | `lib/product-presets.ts` | Real-product size presets. |
-| `lib/capture.ts` / `lib/image-quality.ts` / `lib/mask.ts` / `lib/color-sample.ts` | Photo capture + quality + masking + colour sampling. `capture.ts` also owns **photo normalisation**: every photo entering the app is re-encoded to ≤1600 px on its long edge (`normalizePhoto`) and screened against a raster allowlist (`isAcceptedPhoto` — `image/*` also matches SVG, which has no pixels to measure). Nothing downstream wants more resolution, and four untouched 12 MP uploads exceeded the detection endpoint's inline-request ceiling. |
+| `lib/capture.ts` / `lib/image-quality.ts` / `lib/mask.ts` / `lib/color-sample.ts` | Photo capture + quality + masking + colour sampling. `capture.ts` also owns **photo normalisation**: every photo entering the app is re-encoded to ≤1600 px on its long edge (`normalizePhoto`) and screened against a raster allowlist (`isAcceptedPhoto` — `image/*` also matches SVG, which has no pixels to measure). Nothing downstream wants more resolution, and four untouched 12 MP uploads exceeded the detection endpoint's inline-request ceiling. It also **strips metadata** on the passthrough path via `lib/jpeg-strip.ts` — see §3. |
+| `lib/jpeg-strip.ts` | Removes EXIF (APP1), IPTC (APP13) and comment segments from a JPEG by byte surgery, so the image data is copied verbatim and the passthrough optimisation survives. Keeps JFIF density and the **ICC colour profile** — neither identifies anyone, and dropping the profile would shift the colours this app exists to get right. Returns the input untouched for anything it cannot parse: a photo that kept its metadata is a smaller problem than a photo we corrupted. **Read anything you need out of EXIF before calling it** — the focal length a future calibration pass wants lives in the segment this deletes. |
 | `lib/units.ts` | Unit conversion (persistence always mm). |
 | `lib/dates.ts` | Timestamp formatting — the counterpart to `units.ts`. Relative `editedLabel`, absolute `savedLabel`, and the workspace's recency buckets. |
 | `lib/csv.ts` | CSV writing that a spreadsheet opens correctly and does not execute: formula-injection escaping, quoting, CRLF, UTF-8 BOM. |

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { analyzeRoom, polygonArea } from '@/lib/clearance';
+import { analyzeRoom, polygonArea, freeFloorFraction } from '@/lib/clearance';
+import { pointInObb, pointInPoly, type OBB, type Poly } from '@/lib/geometry';
 import type { ScenePart } from '@/lib/scene-spec';
 import type { Footprint } from '@/lib/footprint';
 
@@ -171,5 +172,100 @@ describe('analyzeRoom', () => {
 describe('polygonArea', () => {
   it('measures the rectangle', () => {
     expect(polygonArea(RECT)).toBe(24);
+  });
+});
+
+// ─── freeFloorFraction ──────────────────────────────────────────────────────
+// The implementation was rewritten from cell-major (every cell against every
+// part, recomputing trig in the innermost loop) to part-major (each part over its
+// own bounding box, trig hoisted). Same union, ~50-200× less work. These tests
+// pin the "same union" half: the reference below is the shape of the old loop, so
+// a divergence fails here rather than quietly changing what the room report says.
+
+const CELL = 0.05;
+
+function referenceFreeFloor(parts: OBB[], poly: Poly): number {
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (const [x, z] of poly) {
+    minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+    minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
+  }
+  let inside = 0;
+  let covered = 0;
+  for (let z = minZ + CELL / 2; z < maxZ; z += CELL) {
+    for (let x = minX + CELL / 2; x < maxX; x += CELL) {
+      if (!pointInPoly(x, z, poly)) continue;
+      inside++;
+      for (const b of parts) {
+        if (pointInObb(x, z, b)) { covered++; break; }
+      }
+    }
+  }
+  if (inside === 0) return 1;
+  return Math.max(0, Math.min(1, 1 - covered / inside));
+}
+
+/** Seeded PRNG — a flaky geometry test is worse than no geometry test. */
+function rng(seed: number) {
+  return () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const L_ROOM: Footprint = [
+  [-3, -2],
+  [3, -2],
+  [3, 0],
+  [1, 0],
+  [1, 2],
+  [-3, 2],
+];
+
+describe('freeFloorFraction', () => {
+  it('is 1 for an empty room', () => {
+    expect(freeFloorFraction([], RECT)).toBe(1);
+  });
+
+  it('matches the cell-major reference over random scenes, rotations included', () => {
+    const rand = rng(20260730);
+    for (let iter = 0; iter < 24; iter++) {
+      const poly = iter % 3 === 0 ? L_ROOM : RECT;
+      const parts: OBB[] = [];
+      for (let k = 0; k < 1 + Math.floor(rand() * 6); k++) {
+        parts.push({
+          cx: -3 + rand() * 6,
+          cz: -2 + rand() * 4,
+          hw: 0.15 + rand() * 0.8,
+          hd: 0.15 + rand() * 0.8,
+          rot: rand() * Math.PI * 2,
+        });
+      }
+      expect(freeFloorFraction(parts, poly)).toBeCloseTo(referenceFreeFloor(parts, poly), 12);
+    }
+  });
+
+  it('counts a part that hangs outside the room only where it is inside', () => {
+    // Half over the edge: it may not claim floor the room does not have.
+    const half: OBB = { cx: -3, cz: 0, hw: 1, hd: 1, rot: 0 };
+    const inside: OBB = { cx: -1, cz: 0, hw: 1, hd: 1, rot: 0 };
+    const outside = 1 - freeFloorFraction([half], RECT);
+    const whole = 1 - freeFloorFraction([inside], RECT);
+    expect(outside).toBeCloseTo(whole / 2, 2);
+  });
+
+  it('reaches 0 when furniture covers the whole floor', () => {
+    const slab: OBB = { cx: 0, cz: 0, hw: 4, hd: 3, rot: 0 };
+    expect(freeFloorFraction([slab], RECT)).toBe(0);
+  });
+
+  it('does not double-count overlapping parts', () => {
+    const a: OBB = { cx: 0, cz: 0, hw: 0.7, hd: 0.4, rot: 0 };
+    const b: OBB = { cx: 0.1, cz: 0.05, hw: 0.7, hd: 0.4, rot: 0.3 };
+    const both = freeFloorFraction([a, b], RECT);
+    expect(both).toBeGreaterThanOrEqual(freeFloorFraction([a, b, b], RECT) - 1e-12);
+    expect(both).toBeLessThan(freeFloorFraction([a], RECT));
   });
 });
