@@ -18,11 +18,19 @@
 
 import type { CaptureSlot } from './storage';
 
-/** Camera height used in the capture instructions (metres). */
+/** Camera height assumed when the photo and the user tell us nothing (metres).
+ *  A real shooter is anywhere between about 1.2 and 1.75 m, and distance scales
+ *  linearly with this number (∂d/∂h = d/h), so an assumed height is a ±17% error
+ *  on every width and height derived from the photo. `CameraCal.height` carries a
+ *  known one; this is only the floor. */
 export const CAM_HEIGHT = 1.5;
 
-/** Default horizontal FOV when no calibration is available — typical phone
- *  main camera (~66°). Calibration from the wall-floor line replaces this. */
+/** Default horizontal FOV when nothing better is available — typical phone
+ *  main camera (~66°). EXIF, then the wall-floor line, replace this. A wall shot
+ *  in a small room is often taken on the ULTRAWIDE (~106°), which this under-reads
+ *  by more than a factor of two: that mis-sizes wall-mounted items directly, and
+ *  mis-PLACES floor-standing ones (their size survives, because distance scales as
+ *  1/k and angular size as k — until the wall clamp breaks the cancellation). */
 const DEFAULT_HFOV_DEG = 66;
 
 export type CameraCal = {
@@ -31,11 +39,29 @@ export type CameraCal = {
   k: number;
   /** image aspect (width / height) — vertical tangent uses k / aspect. */
   aspect: number;
+  /** Camera height off the floor in metres. Absent → CAM_HEIGHT. */
+  height?: number;
+  /** Camera tilt in radians, positive when the lens points DOWN. Absent → level.
+   *  Handheld shots are routinely 5° off, which at 3 m under-reads distance by
+   *  19% — the single largest error in this module when it is not known. */
+  tiltRad?: number;
 };
 
 export function defaultCal(aspect: number): CameraCal {
   return { k: 2 * Math.tan(((DEFAULT_HFOV_DEG / 2) * Math.PI) / 180), aspect };
 }
+
+/** Build a calibration from a known horizontal field of view — the EXIF path.
+ *  See `hfovFromFocal35` in lib/exif.ts for where the angle comes from. */
+export function calFromHfov(hfovDeg: number, aspect: number, view?: CameraView): CameraCal {
+  return { k: 2 * Math.tan(((hfovDeg / 2) * Math.PI) / 180), aspect, ...view };
+}
+
+/** What we know about where the camera was, as opposed to what lens it had. */
+export type CameraView = { height?: number; tiltRad?: number };
+
+const heightOf = (cal: CameraCal) => cal.height ?? CAM_HEIGHT;
+const tiltOf = (cal: CameraCal) => cal.tiltRad ?? 0;
 
 /** Distance from the room-centre camera to the framed wall. */
 export function wallDistance(slot: CaptureSlot, room: { width: number; depth: number }): number {
@@ -43,31 +69,111 @@ export function wallDistance(slot: CaptureSlot, room: { width: number; depth: nu
 }
 
 /**
- * Calibrate focal length from the wall-floor boundary line. With a level
- * camera at CAM_HEIGHT and the wall at distance d, the floor line sits
- * tan_down = CAM_HEIGHT / d below the image centre:
- *     (vFloor − 0.5) · k / aspect = CAM_HEIGHT / d   →   solve k.
- * Returns null when vFloor is implausible (≤ centre — floor line must be in
- * the lower half).
+ * The wall-floor line ties camera height, focal length and tilt together in one
+ * equation — which means it can solve for ONE of them when the other two are
+ * known.
+ *
+ * A ray leaving the camera at image row v has, after the tilt rotation, a
+ * vertical component `b·cosθ − sinθ` and a forward component `b·sinθ + cosθ`
+ * where `b = tanY(v)`. Requiring it to land on the floor at exactly the wall
+ * distance D gives
+ *
+ *     b = (D·sinθ − H·cosθ) / (H·sinθ + D·cosθ)
+ *
+ * which reduces to the familiar `b = −H/D` for a level camera. `bAtFloorLine`
+ * below is that expression; the two solvers each invert it for their unknown.
+ */
+function bAtFloorLine(height: number, d: number, tiltRad: number): number {
+  const c = Math.cos(tiltRad);
+  const s = Math.sin(tiltRad);
+  const denom = height * s + d * c;
+  return denom === 0 ? NaN : (d * s - height * c) / denom;
+}
+
+/**
+ * Solve for FOCAL LENGTH, assuming a camera height. The original path, still the
+ * fallback when the photo carries no lens information.
+ *
+ * Returns null when vFloor is implausible (≤ centre — the floor line must be in
+ * the lower half of a level frame) or the answer is not a lens.
  */
 export function calibrateFromFloorLine(
   vFloor: number,
   slot: CaptureSlot,
   room: { width: number; depth: number },
   aspect: number,
+  view?: CameraView,
 ): CameraCal | null {
   if (vFloor <= 0.52 || vFloor >= 0.99) return null;
   const d = wallDistance(slot, room);
-  const k = ((CAM_HEIGHT / d) * aspect) / (vFloor - 0.5);
+  const height = view?.height ?? CAM_HEIGHT;
+  const tiltRad = view?.tiltRad ?? 0;
+  const b = bAtFloorLine(height, d, tiltRad);
+  if (!Number.isFinite(b)) return null;
+  // b = (0.5 − vFloor)·k / aspect, and 0.5 − vFloor is negative here.
+  const k = (b * aspect) / (0.5 - vFloor);
+  if (!(k > 0)) return null;
   // Sanity: equivalent hFOV between 30° and 120°.
   const hfov = (2 * Math.atan(k / 2) * 180) / Math.PI;
   if (hfov < 30 || hfov > 120) return null;
-  return { k, aspect };
+  return { k, aspect, ...view };
+}
+
+/** Plausible band for a solved camera height, in metres. Outside it the floor
+ *  line was not the floor line — a rug edge, a skirting shadow, a strip of
+ *  sunlight — and the honest answer is "no measurement", not a confident wrong
+ *  number. */
+const MIN_SOLVED_HEIGHT = 0.8;
+const MAX_SOLVED_HEIGHT = 2.2;
+
+/**
+ * Solve for CAMERA HEIGHT, given a known lens.
+ *
+ * This is the same one equation as `calibrateFromFloorLine`, inverted for the
+ * other unknown. When EXIF tells us the field of view, height stops being the
+ * 1.5 m assumption that costs ±17% on every measurement and becomes something
+ * the photo measured:
+ *
+ *     H = D · (sinθ − b·cosθ) / (b·sinθ + cosθ)
+ */
+export function heightFromFloorLine(
+  vFloor: number,
+  slot: CaptureSlot,
+  room: { width: number; depth: number },
+  cal: CameraCal,
+): number | null {
+  if (vFloor <= 0.5 || vFloor >= 0.99) return null;
+  const d = wallDistance(slot, room);
+  const b = ((0.5 - vFloor) * cal.k) / cal.aspect;
+  const tiltRad = tiltOf(cal);
+  const c = Math.cos(tiltRad);
+  const s = Math.sin(tiltRad);
+  const denom = b * s + c;
+  if (denom === 0) return null;
+  const height = (d * (s - b * c)) / denom;
+  if (!Number.isFinite(height) || height < MIN_SOLVED_HEIGHT || height > MAX_SOLVED_HEIGHT) return null;
+  return height;
 }
 
 const tanX = (u: number, cal: CameraCal) => (u - 0.5) * cal.k;
 /** positive up */
 const tanY = (v: number, cal: CameraCal) => ((0.5 - v) * cal.k) / cal.aspect;
+
+/** Direction of the ray through a normalized image point, in world-aligned
+ *  camera axes (right / up / forward) with the camera's tilt applied.
+ *
+ *  Tilting the lens down by θ rotates every ray about the camera's right axis:
+ *  the forward axis itself acquires `up = −sinθ`, which is what makes a level
+ *  camera's simple `distance = height / tanDown` wrong by 19% at 3 m for a very
+ *  ordinary 5° of handheld droop. At θ = 0 this collapses to (tanX, tanY, 1) and
+ *  every formula below reduces to the one it replaced. */
+function ray(u: number, v: number, cal: CameraCal): { right: number; up: number; fwd: number } {
+  const a = tanX(u, cal);
+  const b = tanY(v, cal);
+  const c = Math.cos(tiltOf(cal));
+  const s = Math.sin(tiltOf(cal));
+  return { right: a, up: b * c - s, fwd: b * s + c };
+}
 
 /** Map a camera-frame (forward, right) floor point into world XZ + facing yaw. */
 function slotToWorld(
@@ -117,16 +223,28 @@ export function placeFloorObject(
   const [bx, by, bw, bh] = box;
   const uC = bx + bw / 2;
   const vBottom = by + bh;
-  const tDown = -tanY(vBottom, cal); // > 0 when bottom edge is below centre
-  if (tDown <= 0.02) return null; // bottom at/above horizon — not on the floor
-  let d = CAM_HEIGHT / tDown;
+  const height = heightOf(cal);
+
+  // Where the bottom edge's ray meets the floor plane.
+  const bottom = ray(uC, vBottom, cal);
+  if (bottom.up >= -0.02) return null; // at or above the horizon — not on the floor
+  let t = height / -bottom.up; // along the ray
+  let d = t * bottom.fwd; // forward distance from the camera
+  if (!(d > 0)) return null;
+
   const wallD = wallDistance(slot, room);
   d = Math.min(Math.max(d, 0.3), wallD);
+  t = d / bottom.fwd; // re-derive after clamping so lateral and width agree
 
-  const right = d * tanX(uC, cal);
-  const widthM = d * (tanX(bx + bw, cal) - tanX(bx, cal));
-  // Top of the object above the floor at distance d.
-  const heightM = CAM_HEIGHT + d * tanY(by, cal);
+  // Both horizontal edges share this row, so they share `t`.
+  const right = t * bottom.right;
+  const widthM = t * (tanX(bx + bw, cal) - tanX(bx, cal));
+
+  // Top of the object, at the same forward distance rather than the same ray
+  // length — a tilted camera sees the top edge along a different ray.
+  const top = ray(uC, by, cal);
+  if (!(top.fwd > 0)) return null;
+  const heightM = height + (d / top.fwd) * top.up;
   if (widthM <= 0.01 || heightM <= 0.01) return null;
 
   const { x, z, yaw } = slotToWorld(slot, d, right);
@@ -153,11 +271,20 @@ export function placeWallObject(
   const [bx, by, bw, bh] = box;
   const d = wallDistance(slot, room);
   const uC = bx + bw / 2;
+  const height = heightOf(cal);
 
-  const right = d * tanX(uC, cal);
-  const widthM = d * (tanX(bx + bw, cal) - tanX(bx, cal));
-  const topM = CAM_HEIGHT + d * tanY(by, cal);
-  const bottomM = CAM_HEIGHT + d * tanY(by + bh, cal);
+  // Everything lies on one vertical plane at forward distance d, so each row's
+  // ray is scaled to reach that plane rather than sharing one length.
+  const rTop = ray(uC, by, cal);
+  const rBottom = ray(uC, by + bh, cal);
+  const rMid = ray(uC, by + bh / 2, cal);
+  if (!(rTop.fwd > 0) || !(rBottom.fwd > 0) || !(rMid.fwd > 0)) return null;
+
+  const tMid = d / rMid.fwd;
+  const right = tMid * rMid.right;
+  const widthM = tMid * (tanX(bx + bw, cal) - tanX(bx, cal));
+  const topM = height + (d / rTop.fwd) * rTop.up;
+  const bottomM = height + (d / rBottom.fwd) * rBottom.up;
   const heightM = topM - bottomM;
   if (widthM <= 0.01 || heightM <= 0.01) return null;
 

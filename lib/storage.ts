@@ -22,11 +22,35 @@ async function set<T>(key: IDBValidKey, value: T): Promise<void> {
 
 export type CaptureSlot = 'n' | 'e' | 's' | 'w';
 
+/** What we managed to learn about the camera when the photo was taken.
+ *
+ *  The geometry engine otherwise assumes a 66° lens, a level phone and a shooter
+ *  exactly 1.5 m tall, and those three assumptions are its largest error terms
+ *  (see lib/photo-geometry.ts). Every field is optional: each has a fallback, and
+ *  a photo that tells us nothing is calibrated exactly as it always was.
+ *
+ *  This replaces an earlier `pose?: { yaw, tilt, height }` that was declared but
+ *  never once written or read, so there is nothing stored to migrate. */
+export type CapturePose = {
+  /** 35 mm-equivalent focal length, from EXIF. Deliberately stored as the focal
+   *  length rather than a field of view: converting needs the image aspect, and
+   *  that is known at calibration time, not here. */
+  focal35mm?: number;
+  /** Lens tilt at the shutter in degrees, positive when pointing DOWN. Live
+   *  capture only — standard EXIF has no tilt field. */
+  tiltDeg?: number;
+  /** Camera height off the floor in metres, when the user told us. */
+  heightM?: number;
+  /** Compass bearing the lens faced, degrees clockwise from north. Unused today;
+   *  a daylight model would want it. */
+  bearingDeg?: number;
+};
+
 export type Capture = {
   slot: CaptureSlot;
   blob: Blob;
   takenAt: number;
-  pose?: { yaw: number; tilt: number; height: number };
+  pose?: CapturePose;
 };
 
 /** Schema version stamped onto every room we write.

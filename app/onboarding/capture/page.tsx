@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useRoom } from '@/lib/store';
+import { useRoom, useSettings, CAM_HEIGHT_MIN, CAM_HEIGHT_MAX } from '@/lib/store';
 import { roomStore, blobToObjectUrl } from '@/lib/storage';
 import {
   ACCEPTED_PHOTO_TYPES,
@@ -11,14 +11,17 @@ import {
   CAPTURE_SLOTS,
   isAcceptedPhoto,
   normalizePhoto,
+  readCapturePose,
   snapToBlob,
   startCamera,
 } from '@/lib/capture';
+import { useDeviceTilt } from '@/lib/device-tilt';
 import { scoreQuality, flagHelp, flagLabel, flagTone, type Quality } from '@/lib/image-quality';
 import { useMediaQuery } from '@/lib/use-media-query';
 import { Icon } from '@/components/ui/Icon';
+import { NumberField } from '@/components/ui/NumberField';
 import { DanmuMark, Pill, Segmented } from '@/components/ui/primitives';
-import type { CaptureSlot } from '@/lib/storage';
+import type { CaptureSlot, CapturePose } from '@/lib/storage';
 
 type Source = 'upload' | 'camera';
 type SlotDef = (typeof CAPTURE_SLOTS)[number];
@@ -50,6 +53,17 @@ export default function CapturePage() {
   const [draggingFrom, setDraggingFrom] = useState<CaptureSlot | null>(null);
   /** single polite live region for everything that happens without a page change */
   const [announce, setAnnounce] = useState('');
+  // How high the phone is held. Remembered per person, not per room, and written
+  // onto each photo's pose as it is saved.
+  const camHeightM = useSettings((s) => s.camHeightM);
+  // Only a stated height goes onto a photo. Recording the 1.5 m default would be
+  // indistinguishable from an answer, and would stop the detect screen solving
+  // for the real height off the wall-floor line.
+  const camHeightSet = useSettings((s) => s.camHeightSet);
+  const statedHeight = camHeightSet ? camHeightM : undefined;
+  const setCamHeight = useSettings((s) => s.setCamHeight);
+  const [heightDraft, setHeightDraft] = useState(String(camHeightM));
+  const { tilt, requestAccess } = useDeviceTilt();
 
   // Mirror of `previews` readable from async handlers, so replacing or removing a
   // photo can revoke the URL it is retiring.
@@ -66,6 +80,25 @@ export default function CapturePage() {
     },
     [],
   );
+
+  // Committing a new height re-stamps the photos already saved. Someone who
+  // uploads four walls and only then answers the question should not have their
+  // answer quietly ignored. Debounced, because the field emits per keystroke.
+  useEffect(() => {
+    const n = Number(heightDraft);
+    if (!Number.isFinite(n) || n < CAM_HEIGHT_MIN || n > CAM_HEIGHT_MAX || n === camHeightM) return;
+    const t = setTimeout(() => {
+      setCamHeight(n);
+      if (!roomId) return;
+      void (async () => {
+        const caps = await roomStore.loadCaptures(roomId);
+        await Promise.all(
+          caps.map((c) => roomStore.saveCapture(roomId, { ...c, pose: { ...c.pose, heightM: n } })),
+        );
+      })();
+    }, 500);
+    return () => clearTimeout(t);
+  }, [heightDraft, camHeightM, roomId, setCamHeight]);
 
   // Rehydrate from IndexedDB: photos survive leaving and coming back.
   useEffect(() => {
@@ -94,10 +127,12 @@ export default function CapturePage() {
   }, [roomId]);
 
   /** `blob` is stored as given — callers normalise first (see addFiles / shoot),
-   *  so nothing full-resolution reaches IndexedDB or the detection request. */
-  async function persistBlob(slot: CaptureSlot, blob: Blob) {
+   *  so nothing full-resolution reaches IndexedDB or the detection request.
+   *  `pose` is what we managed to learn about the camera, read from the ORIGINAL
+   *  file before normalising stripped it (see readCapturePose). */
+  async function persistBlob(slot: CaptureSlot, blob: Blob, pose?: CapturePose) {
     if (!roomId) return;
-    await roomStore.saveCapture(roomId, { slot, blob, takenAt: Date.now() });
+    await roomStore.saveCapture(roomId, { slot, blob, takenAt: Date.now(), pose });
     const retiring = previewsRef.current[slot];
     setBlobs((p) => ({ ...p, [slot]: blob }));
     setPreviews((p) => ({ ...p, [slot]: blobToObjectUrl(blob) }));
@@ -129,8 +164,17 @@ export default function CapturePage() {
     const targets = [startSlot, ...followers].slice(0, files.length);
     // Decode + re-encode all of them at once; each was a full serialised decode
     // before, so four photos meant four round trips of nothing happening.
-    const prepared = await Promise.all(targets.map((_, i) => normalizePhoto(files[i])));
-    for (let i = 0; i < targets.length; i++) await persistBlob(targets[i], prepared[i]);
+    // The pose is read from the ORIGINAL file: normalizePhoto strips the metadata
+    // it comes from, which is the whole point of the strip.
+    const prepared = await Promise.all(
+      targets.map(async (_, i) => ({
+        blob: await normalizePhoto(files[i]),
+        pose: await readCapturePose(files[i], { heightM: statedHeight }),
+      })),
+    );
+    for (let i = 0; i < targets.length; i++) {
+      await persistBlob(targets[i], prepared[i].blob, prepared[i].pose);
+    }
     const spare = files.length - targets.length;
     setAnnounce(
       `${targets.length} photo${targets.length > 1 ? 's' : ''} added: ${targets.map(labelOf).join(', ')}.` +
@@ -238,11 +282,45 @@ export default function CapturePage() {
     ));
 
   const method = (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: narrow ? '12px 14px 0' : '14px 16px 0' }}>
-      <Icon name="info" size={14} color="var(--accent-text)" style={{ marginTop: 2 }} />
-      <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.45, color: 'var(--ink-2)' }}>
-        {CAPTURE_METHOD} <span style={{ color: 'var(--ink-3)' }}>One photo is enough to start; four gets the closest room.</span>
-      </p>
+    <div style={{ padding: narrow ? '12px 14px 0' : '14px 16px 0' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <Icon name="info" size={14} color="var(--accent-text)" style={{ marginTop: 2 }} />
+        <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.45, color: 'var(--ink-2)' }}>
+          {CAPTURE_METHOD} <span style={{ color: 'var(--ink-3)' }}>One photo is enough to start; four gets the closest room.</span>
+        </p>
+      </div>
+      {/* "Chest height" above is the one number the geometry engine cannot see and
+          cannot do without: every distance it reads off a photo scales directly
+          with it. Asking is a 10-second question that removes a ±17% error, so it
+          sits with the instruction it makes precise rather than in Settings. */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          flexWrap: 'wrap',
+          margin: '10px 0 0',
+          paddingLeft: 22,
+        }}
+      >
+        <label htmlFor="cam-height" style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>
+          Phone height off the floor
+        </label>
+        <NumberField
+          value={heightDraft}
+          onChange={setHeightDraft}
+          step={0.05}
+          min={CAM_HEIGHT_MIN}
+          max={CAM_HEIGHT_MAX}
+          height={30}
+          ariaLabel="Phone height off the floor, in metres"
+          style={{ width: 96 }}
+        />
+        <span style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>m</span>
+        <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
+          Sets the scale of everything measured from your photos.
+        </span>
+      </div>
     </div>
   );
 
@@ -251,8 +329,18 @@ export default function CapturePage() {
       targetLabel={labelOf(target)}
       target={target}
       onSetTarget={setTarget}
+      onStart={requestAccess}
       onCapture={(blob) => {
-        void persistBlob(target, blob);
+        // A canvas snapshot carries no EXIF, so the pose here is only what the
+        // device measured — the tilt an uploaded photo can never tell us, and
+        // the height the user gave us.
+        void (async () => {
+          const pose = await readCapturePose(blob, {
+            tiltDeg: tilt ?? undefined,
+            heightM: statedHeight,
+          });
+          await persistBlob(target, blob, pose);
+        })();
         setAnnounce(`Photo taken for ${labelOf(target)}.`);
       }}
       onUseUpload={() => setSource('upload')}
@@ -681,12 +769,17 @@ function CameraPanel({
   targetLabel,
   onSetTarget,
   onCapture,
+  onStart,
   onUseUpload,
 }: {
   target: CaptureSlot;
   targetLabel: string;
   onSetTarget: (s: CaptureSlot) => void;
   onCapture: (blob: Blob) => void;
+  /** Runs alongside the camera permission prompt. iOS only exposes the
+   *  orientation sensors from inside a user gesture, and "turn on the camera" is
+   *  the gesture — declining just means the geometry assumes a level phone. */
+  onStart: () => Promise<void>;
   /** hands the user back to the Upload tab — the way out the error state never had */
   onUseUpload: () => void;
 }) {
@@ -716,6 +809,9 @@ function CameraPanel({
   async function turnOn() {
     setPhase('starting');
     setErrorName(null);
+    // Same gesture, second ask: the orientation sensors record how far the phone
+    // is tilted at the shutter. Failure is silent and harmless by design.
+    void onStart();
     try {
       streamRef.current = await startCamera();
       setPhase('live');

@@ -1,7 +1,8 @@
 'use client';
 
-import type { CaptureSlot } from './storage';
+import type { CaptureSlot, CapturePose } from './storage';
 import { stripJpegMetadata } from './jpeg-strip';
+import { readExifFromJpeg } from './exif';
 
 // 4 walls only — floor + ceiling dropped (unnecessary for our pipeline).
 //
@@ -68,6 +69,32 @@ export const ACCEPTED_PHOTO_TYPES = [
 export function isAcceptedPhoto(file: File | Blob): boolean {
   const type = (file.type || '').toLowerCase();
   return ACCEPTED_PHOTO_TYPES.includes(type);
+}
+
+/**
+ * What the file itself knows about the camera, plus whatever the capture screen
+ * measured or the user told us.
+ *
+ * MUST run on the ORIGINAL file, before `normalizePhoto` — the re-encode and the
+ * metadata strip both destroy EXIF, which is the point of the strip. Returns
+ * undefined when there is nothing to record, so an absent pose means "we know
+ * nothing", not "we measured nothing".
+ */
+export async function readCapturePose(
+  input: Blob,
+  measured?: { tiltDeg?: number; heightM?: number },
+): Promise<CapturePose | undefined> {
+  const pose: CapturePose = {};
+  try {
+    const exif = readExifFromJpeg(new Uint8Array(await input.arrayBuffer()));
+    if (exif?.focalLength35mm !== undefined) pose.focal35mm = exif.focalLength35mm;
+    if (exif?.bearingDeg !== undefined) pose.bearingDeg = exif.bearingDeg;
+  } catch {
+    /* unreadable file — the geometry engine has a fallback for every field */
+  }
+  if (measured?.tiltDeg !== undefined) pose.tiltDeg = measured.tiltDeg;
+  if (measured?.heightM !== undefined) pose.heightM = measured.heightM;
+  return Object.keys(pose).length > 0 ? pose : undefined;
 }
 
 /** Normalise a photo for storage and for the one request that leaves the device:

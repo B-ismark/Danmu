@@ -100,6 +100,19 @@ before storage and before any request.
 
 ## Phase 1 — Measurement truth · **M** · highest value
 
+> **Done except 1.6**, which was always scoped as its own PR. Shipped:
+> `lib/exif.ts`, `lib/device-tilt.ts`, `CameraCal.height` / `.tiltRad` with
+> ray-based placement, `heightFromFloorLine`, the `CapturePose` record, the
+> calibration ladder in `buildCals`, and the camera-height field on the capture
+> screen. 33 new tests.
+>
+> One finding changed the shape of the problem: the assumed FOV does **not**
+> distort a floor-standing object's size — `k` cancels between distance and
+> angular size — it distorts its *position*. It distorts *size* only for
+> wall-mounted items, whose distance is pinned to the wall. Camera height is the
+> term that scales floor-object size, and cancels for wall items. See
+> `Research.md` §1.4 and `tests/photo-geometry.test.ts`.
+
 Turns three stacked guesses into measured values.
 
 ### 1.1 `lib/exif.ts` — read the numbers *(new file, pure)*

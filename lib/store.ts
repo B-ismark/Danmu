@@ -185,10 +185,35 @@ type SettingsState = {
   /** Last reason if validation failed — a KeyFailure code, not an exception
    *  string (see lib/validate-key.ts). */
   keyValidReason: string | null;
+  /** How high off the floor the user holds the phone, in metres.
+   *
+   *  Remembered here rather than per room because it is a property of the person,
+   *  not the room — the same shooter is the same height in the next one. The
+   *  geometry engine assumed a flat 1.5 m, and distance scales linearly with this
+   *  (∂d/∂h = d/h), so an unasked question was a ±17% error on every measurement
+   *  taken from a photo. It is still written onto each capture's pose as the
+   *  photo is saved, so a stored photo records what was believed when it was
+   *  taken. */
+  camHeightM: number;
+  /** Whether the user has actually answered, as opposed to inheriting 1.5.
+   *
+   *  The difference matters downstream and cannot be recovered from the number
+   *  itself: a photo whose height is merely the default should let the wall-floor
+   *  line SOLVE for the height (see `buildCals` on the detect screen), while a
+   *  height the user stated should not be overruled by a luminance heuristic that
+   *  can lock onto a rug edge. Without this flag every photo carried a height and
+   *  the solve was unreachable. */
+  camHeightSet: boolean;
   setApiKey: (k: string) => void;
   setDimUnit: (u: DimUnit) => void;
   setKeyValid: (v: boolean | null, reason?: string | null) => void;
+  setCamHeight: (m: number) => void;
 };
+
+/** Bounds on the remembered camera height. Outside these it is a typo, and a
+ *  typo here silently rescales an entire room. */
+export const CAM_HEIGHT_MIN = 0.8;
+export const CAM_HEIGHT_MAX = 2.2;
 
 export const useSettings = create<SettingsState>()(
   persist(
@@ -197,10 +222,17 @@ export const useSettings = create<SettingsState>()(
       dimUnit: 'm',
       keyValid: null,
       keyValidReason: null,
+      camHeightM: 1.5,
+      camHeightSet: false,
       // Setting a new key invalidates the cached test result.
       setApiKey: (k) => set({ apiKey: k, keyValid: null, keyValidReason: null }),
       setDimUnit: (u) => set({ dimUnit: u }),
       setKeyValid: (v, reason) => set({ keyValid: v, keyValidReason: reason ?? null }),
+      setCamHeight: (m) =>
+        set({
+          camHeightM: Math.min(CAM_HEIGHT_MAX, Math.max(CAM_HEIGHT_MIN, m)),
+          camHeightSet: true,
+        }),
     }),
     {
       name: 'danmu-settings',

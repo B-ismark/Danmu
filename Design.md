@@ -199,7 +199,9 @@ This is what makes Danmu trustworthy. All pure math, all covered by tests.
 | File | Role |
 |---|---|
 | `lib/geometry.ts` | Oriented rectangles (OBB) in the XZ plane; separating-axis overlap, gaps, face clearance, point-in-poly, nearest-edge. |
-| `lib/photo-geometry.ts` | Pinhole camera at room centre (`CAM_HEIGHT` 1.5 m) + entered room dims → floor homography gives real position + W/H from any bbox. Floor-line calibration (`findFloorLine`); landscape shots fall back to a 66° FOV default. |
+| `lib/photo-geometry.ts` | Pinhole camera at room centre + entered room dims → ray/plane intersection gives real position + W/H from any bbox. `CameraCal` carries the lens (`k`), and optionally the camera's `height` and `tiltRad`; absent values fall back to 1.5 m and level, which is what it always assumed. Tilt matters: 5° of ordinary handheld droop mis-reads distance by ~20%. |
+| `lib/exif.ts` | Reads the camera fields a photo carries about itself — 35 mm-equivalent focal length (→ `hfovFromFocal35`), orientation, compass bearing. Pure byte parsing; browsers expose no EXIF API. **Does not read GPS coordinates**, deliberately: nothing needs them, and moving them from the file into IndexedDB would relocate the exposure rather than remove it. |
+| `lib/device-tilt.ts` | Lens tilt at the shutter from `deviceorientation`, for the live-camera path only (EXIF has no tilt field). Reports a tilt only for an upright, unrolled phone — a wrong tilt is worse than none, since "none" is the level camera the engine already assumed. |
 | `lib/physics.ts` | Gravity/anchor rules — where a part sits (floor / ceiling / wall-mid / …), wall affinity + snap, support-under lookup for tabletop-prone items. |
 | `lib/clearance.ts` | Ergonomics checker over exact geometry: ≥600 mm walkways, ≥600 mm in front of hinged storage, 500 mm bedside strip, TV viewing distance. Reproducible findings, no AI. |
 | `lib/dimension-ranges.ts` | `clampDims` — per-item sizing tiers (fixed / standard / flexible). **All sizes pass through this.** |
@@ -208,6 +210,32 @@ This is what makes Danmu trustworthy. All pure math, all covered by tests.
 On the detect page, `geoRefine` runs the geometry engine over **every** detection
 and manual box: geometry overrides AI dims/position; the AI contributes only
 label / category / a depth hint.
+
+### The calibration ladder
+
+`buildCals` (detect page) resolves one `CameraCal` per photo. The wall-floor line
+ties focal length, camera height and tilt together in **one** equation, so it can
+solve for exactly one unknown — which one depends on what the photo already told
+us:
+
+| What the photo carries | Floor line solves for | Notes |
+|---|---|---|
+| EXIF focal length | **camera height** | The lens is known, so the 1.5 m guess (±17% on everything) becomes a measurement. |
+| nothing | **focal length** | The original path, assuming 1.5 m. Still correct, no longer the only one. |
+| neither, or no floor line | — | A typical phone lens (66°), and the room is measured as it always was. |
+
+Tilt is never solved for here — one equation cannot give two unknowns. It comes
+from `lib/device-tilt.ts` at capture time or not at all. Camera height is asked
+for on the capture screen (`useSettings.camHeightM`, remembered per person since
+it is a property of the shooter, not the room) and written onto each photo's
+`CapturePose` as it is saved.
+
+Which term the assumed values hurt is not uniform, and it is worth knowing before
+tuning any of this: for a **floor-standing** piece the lens cancels out of the size
+(distance scales as 1/k, angular size as k) and only its *position* moves; for a
+**wall-mounted** piece the distance is pinned to the wall, so the lens error lands
+directly on the measured size — and conversely the camera height cancels out of
+its W and H. See `tests/photo-geometry.test.ts`, which pins both.
 
 ---
 
