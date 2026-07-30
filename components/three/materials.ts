@@ -37,10 +37,24 @@ export const SURFACE = {
   metal: { roughness: 0.52, metalness: 0.55 },
   /** Dark matte metal — feet, thin frames. */
   metalDark: { roughness: 0.6, metalness: 0.45 },
-  /** Upholstery — sofas, cushions, ottomans, lamp shades. */
+  /** Upholstery — sofas, cushions, ottomans, lamp shades.
+   *
+   *  `sheen` is the cloth term, and it is the difference between a sofa and a
+   *  painted box. Real fabric scatters a pale rim of light at grazing angles as
+   *  the fibres catch it; a plain rough dielectric has no such lobe, which is
+   *  exactly why upholstery used to read as matte plastic. It is the
+   *  most-looked-at surface in the app.
+   *
+   *  Requires `meshPhysicalMaterial` — meshStandardMaterial silently ignores
+   *  these three. See SURFACE_PHYSICAL below. */
   fabric: {
     roughness: 0.97,
     metalness: 0.0,
+    sheen: 1,
+    sheenRoughness: 0.85,
+    // Slightly warm rather than pure white, so the rim reads as fibre rather than
+    // as a specular highlight sitting on top of the colour.
+    sheenColor: '#fff4e6',
     get normalMap(): Texture { return fabricNormal(); },
     normalScale: NORMAL_SCALE_FABRIC,
   },
@@ -55,3 +69,12 @@ export const SURFACE = {
 };
 
 export type SurfaceKey = keyof typeof SURFACE;
+
+/** Surfaces whose preset uses a property only `meshPhysicalMaterial` implements.
+ *
+ *  A renderer spreading one of these onto a `<meshStandardMaterial>` does not
+ *  fail — three drops the unknown properties silently, and the surface renders
+ *  looking exactly as flat as it did before, which is the kind of change that
+ *  gets written twice because the first time left no trace. Anything listed here
+ *  must be spread onto `<meshPhysicalMaterial>`. */
+export const PHYSICAL_SURFACES: readonly SurfaceKey[] = ['fabric'];

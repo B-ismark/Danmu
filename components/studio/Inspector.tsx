@@ -14,7 +14,7 @@ import { EditableText, IconButton, Pill } from '@/components/ui/primitives';
 import { SwapModelModal } from './RegenerateModal';
 import { removeParts } from './KeyboardShortcuts';
 import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
-import { isWallMountedPart, supportsDecor, autoSurfaceDecor, DECOR_KINDS, type LibraryItem, type ScenePart, type DecorItem, type DecorKind } from '@/lib/scene-spec';
+import { isWallMountedPart, supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, DECOR_KINDS, type LibraryItem, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
 import { findSupportUnder, groundY, snapToWall as snapToWallPhys } from '@/lib/physics';
 import { wallSegments } from '@/lib/footprint';
 
@@ -28,11 +28,20 @@ export function Inspector() {
   const selectedWall = useStudio((s) => s.selectedWall);
   const part = useRoomPart(id);
   const baseDim = useScene((s) => s.parts.find((p) => p.id === id)?.dimMM);
+  // The rotation a swap will LAND on: swapModel calls resetTransforms, so the
+  // effective (overridden) rot is about to be discarded and must not be the one
+  // the new model's footprint is measured with.
+  const baseRot = useScene((s) => s.parts.find((p) => p.id === id)?.rot) ?? 0;
   const hasOverrides = useStudio((s) => !!id && (!!s.positions[id] || !!s.rotations[id] || !!s.dims[id]));
   const setDim = useStudio((s) => s.setDim);
   const setPosition = useStudio((s) => s.setPosition);
   const setRotation = useStudio((s) => s.setRotation);
   const positions = useStudio((s) => s.positions);
+  // Both also feed the support snapshot below — findSupportUnder weighs how much
+  // of a piece rests on a surface, so a neighbour's live rotation and size change
+  // the answer the same way its position does.
+  const rotations = useStudio((s) => s.rotations);
+  const dims = useStudio((s) => s.dims);
   const resetTransforms = useStudio((s) => s.resetTransforms);
   const updatePart = useScene((s) => s.updatePart);
   const allParts = useScene((s) => s.parts);
@@ -58,6 +67,19 @@ export function Inspector() {
     return [part!.pos[0], part!.pos[1], part!.pos[2]];
   }
 
+  /** Every part in its CURRENT effective transform, so surface snapping works
+   *  against the world the user is looking at rather than the original scene. */
+  function partSnapshot() {
+    return allParts.map((p) => ({
+      id: p.id,
+      pos: positions[p.id] ?? p.pos,
+      rot: rotations[p.id] ?? p.rot,
+      dimMM: dims[p.id] ?? p.dimMM,
+      category: p.category,
+      wallMounted: p.wallMounted,
+    }));
+  }
+
   function groundToFloor() {
     const [x, , z] = currentXYZ();
     setPosition(id!, [x, 0, z]);
@@ -77,14 +99,7 @@ export function Inspector() {
     if (wallMounted) {
       ny = Math.max(h / 2 + 0.02, Math.min(room.height - h / 2 - 0.02, groundY(item.category, item.shape, dimMM, room.height)));
     } else {
-      const snapshot = allParts.map((p) => ({
-        id: p.id,
-        pos: positions[p.id] ?? p.pos,
-        dimMM: p.dimMM,
-        category: p.category,
-        wallMounted: p.wallMounted,
-      }));
-      const support = findSupportUnder(snapshot, id!, x, z, dimMM);
+      const support = findSupportUnder(partSnapshot(), id!, x, z, dimMM, baseRot);
       ny = support !== null && support > 0.3 ? support : 0;
     }
     resetTransforms(id!); // drop stale rotate/scale overrides
@@ -104,16 +119,7 @@ export function Inspector() {
 
   function snapToSurface() {
     const [x, , z] = currentXYZ();
-    // Build a snapshot of parts in their CURRENT effective positions so we snap
-    // against the latest user-edited world, not the original detection scene.
-    const snapshot = allParts.map((p) => ({
-      id: p.id,
-      pos: positions[p.id] ?? p.pos,
-      dimMM: p.dimMM,
-      category: p.category,
-      wallMounted: p.wallMounted,
-    }));
-    const support = findSupportUnder(snapshot, id!, x, z, part!.dimMM);
+    const support = findSupportUnder(partSnapshot(), id!, x, z, part!.dimMM, part!.rot);
     setPosition(id!, [x, support ?? 0, z]);
   }
 
@@ -159,6 +165,10 @@ export function Inspector() {
       />
 
       <SurfaceFinish value={part.finish} onChange={(f) => updatePart(id!, { finish: f })} />
+
+      {isLightFixture(part.shape) && (
+        <LightControls part={part} onChange={(light) => updatePart(id!, { light })} />
+      )}
 
       {supportsDecor(part.category, part.shape) && (
         <DecorCollection part={part} onChange={(decor) => updatePart(id!, { decor })} />
@@ -298,6 +308,75 @@ function SurfaceFinish({
           );
         })}
       </div>
+    </Section>
+  );
+}
+
+// What a fixture emits, in the units printed on the box it came in. Shown only
+// for lamps (isLightFixture), because everything else emits nothing.
+//
+// Real units are the point: 800 lm really is twice 400 lm in the scene, and 2700 K
+// really is a warm bulb. The alternative — an abstract 0-to-1 "brightness" — would
+// have made this another slider to fiddle with rather than a decision about a
+// lamp you could go and buy.
+const WARMTHS: Array<{ k: number; label: string }> = [
+  { k: 2200, label: 'Candle' },
+  { k: 2700, label: 'Warm' },
+  { k: 4000, label: 'Neutral' },
+  { k: 6500, label: 'Daylight' },
+];
+
+function LightControls({
+  part,
+  onChange,
+}: {
+  part: ScenePart;
+  onChange: (light: PartLight) => void;
+}) {
+  const spec = lightFor(part);
+  if (!spec) return null;
+  const set = (patch: Partial<PartLight>) => onChange({ ...spec, ...patch });
+  return (
+    <Section label="Light">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <label htmlFor={`lm-${part.id}`} style={{ fontSize: 12, color: 'var(--ink-2)', minWidth: 66 }}>
+          Brightness
+        </label>
+        <NumberField
+          value={String(spec.lumens)}
+          onChange={(v) => {
+            const n = Number(v);
+            if (Number.isFinite(n) && n >= 0) set({ lumens: n });
+          }}
+          step={50}
+          min={0}
+          max={5000}
+          height={30}
+          ariaLabel="Brightness in lumens"
+          style={{ width: 104 }}
+        />
+        <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>lm</span>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {WARMTHS.map((w) => {
+          const on = spec.kelvin === w.k;
+          return (
+            <button
+              key={w.k}
+              onClick={() => set({ kelvin: w.k })}
+              aria-pressed={on}
+              className={`ds-chip ${on ? 'ds-chip--accent' : ''}`}
+              style={{ cursor: 'pointer', height: 28, fontWeight: 600, background: on ? 'var(--accent-tint)' : 'var(--paper)' }}
+            >
+              {w.label}
+            </button>
+          );
+        })}
+      </div>
+      <p style={{ margin: '8px 0 0', fontSize: 11.5, lineHeight: 1.45, color: 'var(--ink-3)' }}>
+        A typical bulb is 400–800 lm. Switch the room to Evening to see what this
+        one actually does.
+      </p>
     </Section>
   );
 }

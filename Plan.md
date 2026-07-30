@@ -285,6 +285,17 @@ their phantom corners from fighting chairs that really do tuck in.
 
 ## Phase 3 — Real lights · **S–M** · makes "relight" true
 
+> **Done.** `lib/light-units.ts` (+ 11 tests), `PartLight` on `ScenePart` with
+> per-shape defaults and `lightFor` / `isLightFixture` (+ 5 tests),
+> `components/three/PartLight.tsx` with the shadow budget, an Inspector section
+> that edits lumens and colour temperature, and the Evening rebalance.
+>
+> One thing the plan did not anticipate: **`SURFACE.fabric` was not reaching the
+> sofa.** Upholstered bodies are built from `Box`, which took a bare `roughness`
+> number and no surface preset, so sheen alone would have changed only lamp shades
+> and curtains. `Box` now takes a named `surface`, and picks
+> `meshPhysicalMaterial` itself when the preset needs it — see 5a.
+
 ### 3.1 Declare light on the part — `lib/scene-spec.ts`
 
 ```ts
@@ -384,6 +395,15 @@ equinox.
 ## Phase 5 — Materials and stack
 
 ### 5a Sheen on fabric · **S** · best realism per line changed
+
+> **Done**, but not where the plan expected. The preset needed a route to the
+> upholstery first: `Box` gained a `surface` prop taken by NAME, so a call site
+> cannot pair a physical-only preset with `meshStandardMaterial` — three drops
+> unknown properties silently, and the surface would have gone on looking exactly
+> as flat as before with nothing to show it had failed. `PHYSICAL_SURFACES` in
+> `materials.ts` is the list that decides the element. Sofa and armchair bodies
+> now carry it; `FinishApplier` still round-trips because `MeshPhysicalMaterial`
+> extends `MeshStandardMaterial`, and sheen survives every finish.
 
 `components/three/materials.ts` — promote `SURFACE.fabric` to
 `meshPhysicalMaterial` with `sheen` / `sheenRoughness` / `sheenColor`.

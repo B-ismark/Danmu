@@ -291,7 +291,30 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
   and opt out of raycasting so they never block selecting the furniture beneath.
 
 ### Lighting, realism & motion
-- **Lighting moods** Day / Evening / Cool (`ViewOptions.tsx` → Room `LIGHTING`).
+- **Fixtures emit real light** (`components/three/PartLight.tsx`, `lib/light-units.ts`).
+  A lamp carries `light?: { lumens, kelvin, coneDeg? }` on its `ScenePart`
+  (defaults per shape in `scene-spec.ts`), and the Inspector edits it in those
+  units. Intensity reaches three as **candela** — point and spot lights have been
+  photometric since r155 — so a 400 lm bedside lamp is genuinely half an 800 lm
+  floor lamp. Colour comes from the Planckian locus, so 2700 K is a warm bulb
+  rather than an orange tint.
+  Before this every "light" was an emissive material: the shade glowed and the
+  room did not change, so Evening dimmed a room while the lamp standing in it
+  contributed nothing.
+  **Cost is bounded deliberately.** A shadow-casting point light is a cube map —
+  six scene renders per bake — so only shaded downward fixtures (spot lights, one
+  map) may cast, only on `high`, and only the two brightest in the room.
+  `LIGHT_SCALE` re-bases candela into the scene's artistic exposure; the ratios
+  between fixtures survive it, which is the part that matters.
+- **Lighting moods** Day / Evening / Cool (`ViewOptions.tsx` → Room `LIGHTING`)
+  set the **ambient** conditions only. Evening is deliberately low now — its job
+  is to leave room for the fixtures rather than to be an orange filter over a
+  fully-lit room, so a room with no lamps in it reads as genuinely dim there.
+  Each mood carries an **`envMul`** that scales the `<Environment>` lightformers
+  with it. Dimming the three lights and leaving the environment at full strength
+  is not enough: every material has `envMapIntensity: 0.5`, so the environment
+  supplies most of the light in the scene, and a nominally dark Evening still
+  rendered as a fully-lit amber room. Both halves move together or neither does.
 - **Quality** High / Fast — gates procedural normal/roughness maps
   (`lib/textures.ts`, zero assets) + soft cast shadows + ambient occlusion
   (N8AO/SMAA mount on `high` only). There is no floor reflection.
@@ -404,6 +427,7 @@ undo — see `lib/storage.ts`).
 | `lib/scene-palette.ts` | Scene-side semantic colours — the one home for values the 3D layer, the canvas exports and the panels that edit them must agree on, since neither Three.js materials nor a 2D canvas can read a CSS custom property. Exports `SCENE` (selection / hover / locked / shell), `PLAN` (the floor-plan PNG's palette) and `defaultBodyColor(category, shape)`. Kept in sync with `globals.css` by hand, guarded by a test. **`defaultBodyColor` takes BOTH arguments**: within one category the shapes do not match (a dining chair is walnut, an office chair charcoal), and the renderer and the Inspector's "Default for this piece" swatch must return the same value. The predecessor took a single loosely-typed `category` and was keyed on material-group names, so 18 of 22 categories fell through to one tan default. |
 | `lib/room-scene.ts` | Build a scene from a room / detections. |
 | `lib/textures.ts` | Procedural normal/roughness maps (offline, zero assets). |
+| `lib/light-units.ts` | Lumens → candela (isotropic and in-cone), and kelvin → sRGB via the Planckian locus. Pure and tested — the interface between how a lamp is described and how three renders it. |
 | `lib/themes.ts` | One-tap restyle palettes. |
 | `lib/product-presets.ts` | Real-product size presets. |
 | `lib/capture.ts` / `lib/image-quality.ts` / `lib/mask.ts` / `lib/color-sample.ts` | Photo capture + quality + masking + colour sampling. `capture.ts` also owns **photo normalisation**: every photo entering the app is re-encoded to ≤1600 px on its long edge (`normalizePhoto`) and screened against a raster allowlist (`isAcceptedPhoto` — `image/*` also matches SVG, which has no pixels to measure). Nothing downstream wants more resolution, and four untouched 12 MP uploads exceeded the detection endpoint's inline-request ceiling. It also **strips metadata** on the passthrough path via `lib/jpeg-strip.ts` — see §3. |

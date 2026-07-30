@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { buildSceneFromRoom, CATALOG_SHAPES_ORDERED } from '../lib/scene-spec';
+import {
+  buildSceneFromRoom,
+  CATALOG_SHAPES_ORDERED,
+  isLightFixture,
+  lightFor,
+  type ScenePart,
+} from '../lib/scene-spec';
 import type { RoomData } from '../lib/storage';
 
 type Saved = NonNullable<RoomData['detectedObjects']>[number];
@@ -142,5 +148,59 @@ describe('buildSceneFromRoom', () => {
     const parts = buildSceneFromRoom(room([saved(0, { locked: true, color: '#123456' })]));
     expect(parts[0].locked).toBe(true);
     expect(parts[0].color).toBe('#123456');
+  });
+});
+
+// ─── Light emission ─────────────────────────────────────────────────────────
+
+const asPart = (over: Partial<ScenePart>): ScenePart =>
+  ({
+    id: 'p',
+    category: 'lamp',
+    name: 'Lamp',
+    shape: 'lamp-floor',
+    pos: [0, 0, 0],
+    rot: 0,
+    dimMM: [300, 300, 1700],
+    locked: false,
+    ...over,
+  }) as ScenePart;
+
+describe('lightFor', () => {
+  it('gives every lamp shape a sensible domestic bulb', () => {
+    for (const shape of ['lamp-table', 'lamp-floor', 'lamp-pendant'] as const) {
+      const spec = lightFor(asPart({ shape }))!;
+      expect(spec).not.toBeNull();
+      expect(spec.lumens).toBeGreaterThan(100);
+      expect(spec.lumens).toBeLessThan(2000);
+      expect(spec.kelvin).toBeGreaterThanOrEqual(2200);
+      expect(spec.kelvin).toBeLessThanOrEqual(6500);
+    }
+  });
+
+  it('only a shaded fixture aims its light', () => {
+    // Which matters beyond looks: a cone is one shadow map, a bare bulb is six.
+    expect(lightFor(asPart({ shape: 'lamp-pendant' }))!.coneDeg).toBeGreaterThan(0);
+    expect(lightFor(asPart({ shape: 'lamp-floor' }))!.coneDeg).toBeUndefined();
+  });
+
+  it('emits nothing for furniture that is not a lamp', () => {
+    expect(lightFor(asPart({ shape: 'sofa' }))).toBeNull();
+    expect(lightFor(asPart({ shape: 'tv' }))).toBeNull();
+    expect(lightFor(asPart({ shape: 'bed-double' }))).toBeNull();
+  });
+
+  it('lets the user override the shape default', () => {
+    const spec = lightFor(asPart({ shape: 'lamp-floor', light: { lumens: 120, kelvin: 2200 } }))!;
+    expect(spec.lumens).toBe(120);
+    expect(spec.kelvin).toBe(2200);
+  });
+
+  it('agrees with isLightFixture', () => {
+    // The Inspector shows the light controls off one and the renderer emits off
+    // the other; a disagreement is an uneditable lamp or an inert control.
+    for (const shape of CATALOG_SHAPES_ORDERED) {
+      expect(isLightFixture(shape)).toBe(lightFor(asPart({ shape })) !== null);
+    }
   });
 });

@@ -34,6 +34,13 @@ const _hit = new Vector3();
 // Lighting moods — background, hemisphere sky/ground, key + fill, and the
 // emissive environment panels all shift together so the room reads as daylight,
 // warm evening, or cool overcast.
+//
+// These are the AMBIENT conditions only. Since lamps became real emitters
+// (components/three/PartLight.tsx) the moods no longer have to fake the whole
+// result: Evening in particular is pulled well down, because its job is to leave
+// room for the fixtures in the scene rather than to be an orange filter over a
+// fully-lit room. A room with no lamps in it will read as genuinely dim at
+// Evening — which is correct, and is what a lighting study is for.
 const LIGHTING = {
   day: {
     bg: '#FBF8F2',
@@ -41,15 +48,25 @@ const LIGHTING = {
     key: { color: '#fff4e2', intensity: 1.1 },
     fill: { color: '#dfe7ff', intensity: 0.25 },
     env: ['#fffaf0', '#eef3ff', '#fff3e0'] as [string, string, string],
+    // Scales the studio environment with the mood. Dimming the three lights and
+    // leaving this at full strength was the reason a "dark" Evening still read as
+    // a fully-lit amber room: every material has envMapIntensity 0.5, so the
+    // environment was quietly supplying most of the light in the scene.
+    envMul: 1,
     exposure: 1.0,
   },
   evening: {
     bg: '#27201C',
-    hemi: ['#ffd9a8', '#3a2c20', 0.5] as [string, string, number],
-    key: { color: '#ffb15e', intensity: 1.25 },
-    fill: { color: '#6a4b8a', intensity: 0.35 },
+    // Ambient pulled down hard — this is the mood where the lamps are supposed to
+    // do the work. At the old levels (hemi 0.5, key 1.25) a shadeless room was
+    // already fully lit, so adding a real 800 lm floor lamp changed nothing
+    // visible and the whole point was lost.
+    hemi: ['#ffd9a8', '#3a2c20', 0.07] as [string, string, number],
+    key: { color: '#ffb15e', intensity: 0.12 },
+    fill: { color: '#6a4b8a', intensity: 0.06 },
     env: ['#ffce93', '#ff9d5c', '#5b4a8a'] as [string, string, string],
-    exposure: 1.05,
+    envMul: 0.2,
+    exposure: 1.15,
   },
   cool: {
     bg: '#EAEEF1',
@@ -57,6 +74,7 @@ const LIGHTING = {
     key: { color: '#eef4ff', intensity: 0.95 },
     fill: { color: '#d6e2ee', intensity: 0.4 },
     env: ['#f2f6ff', '#dfe9f5', '#e8eef5'] as [string, string, string],
+    envMul: 1,
     exposure: 0.95,
   },
 } as const;
@@ -171,9 +189,9 @@ export function Room() {
           surface (chair bases, lamp poles, handles) goes near-black. Halving the
           cube resolution keeps the bake cheap while preserving that. */}
       <Environment key={`${lighting}-${quality}`} resolution={hi ? 256 : 128} frames={1}>
-        <Lightformer intensity={0.7} position={[0, 5, 0]} scale={[8, 8, 1]} rotation={[Math.PI / 2, 0, 0]} color={L.env[0]} />
-        <Lightformer intensity={0.35} position={[5, 2, 3]} scale={[4, 6, 1]} color={L.env[1]} />
-        <Lightformer intensity={0.3} position={[-5, 2, -3]} scale={[4, 6, 1]} color={L.env[2]} />
+        <Lightformer intensity={0.7 * L.envMul} position={[0, 5, 0]} scale={[8, 8, 1]} rotation={[Math.PI / 2, 0, 0]} color={L.env[0]} />
+        <Lightformer intensity={0.35 * L.envMul} position={[5, 2, 3]} scale={[4, 6, 1]} color={L.env[1]} />
+        <Lightformer intensity={0.3 * L.envMul} position={[-5, 2, -3]} scale={[4, 6, 1]} color={L.env[2]} />
       </Environment>
 
       <Suspense fallback={null}>
