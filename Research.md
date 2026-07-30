@@ -567,6 +567,132 @@ The WebGPU migration is now a *when*, not an *if*, but sequence it correctly:
   it implies a relay to be useful. Out of scope under the no-backend rule; noted
   only so it isn't rediscovered.
 
+### 3.9 Layout intelligence, second pass: why the first one read as random
+
+> Added 2026-07-30, after the "Suggest" button shipped and was reported as *"it
+> doesn't do any logic checks, it just randomly moves objects around"*. That
+> report was correct, and this section is the diagnosis, the literature the fix is
+> built on, and the numbers it uses. Implemented in
+> [`lib/layout-rules.ts`](lib/layout-rules.ts).
+
+#### 3.9.1 The three causes, each measured
+
+1. **Doors were invisible to the cost function.** `layout-score`'s blocker mask was
+   `!wallMounted && category !== 'rug' && height > 250 mm`, and a door *is*
+   wall-mounted — so it contributed no term at all. Measured: a bed placed across a
+   900 mm doorway, solved with 3000 steps, moved **0.4 mm**; total cost before 3.00,
+   after 2.01, of which the doorway was **zero**. `analyzeRoom` then reported
+   `error Door can't open fully` on the solver's own output. The two modules were
+   optimising different rule sets while a comment in each claimed otherwise.
+
+2. **Nothing charged for movement.** With no term penalising displacement, any local
+   minimum was as good as any other, so each press returned a wholesale rearrangement
+   for a fraction of a percent of cost. That is indistinguishable from a shuffle,
+   because in the way that matters it *is* one.
+
+3. **The rotation convention was mirrored.** `lib/geometry.ts` rotated local→world as
+   `(x cos − z sin, x sin + z cos)`; three.js's `rotation.y` — which is what the
+   scene actually renders, `Draggable` assigns `part.rot` straight to it — is
+   `(x cos + z sin, −x sin + z cos)`. Identical at 0°/180°, mirrored everywhere else,
+   and it inverts every *directional* answer. Measured: a wardrobe correctly snapped
+   to the east or west wall reported **1.9 cm** of clearance in front of its doors
+   and raised "Doors can't open"; the same wardrobe on the north or south wall
+   reported 3.38 m. Two of four walls, on the most ordinary placement there is.
+   `tests/geometry.test.ts` now pins the convention against three's own `Euler`.
+
+   A fourth, cosmetic: `propose` *added* quarter turns to an already-snapped yaw
+   instead of replacing it, so parts came back stored at ~597 radians.
+
+#### 3.9.2 What the literature actually specifies
+
+The two SIGGRAPH 2011 papers remain the right foundation, but the term
+*definitions* are what was missing, and the clearest statement of them is the
+patent rather than the paper —
+[US 2013/0222393](https://patents.google.com/patent/US20130222393A1/en) writes
+Merrell et al.'s density function out in text:
+
+| Term | Definition as published | What it became here |
+|---|---|---|
+| Clearance `m_cv` | Σ area of overlap between furniture and other items' **accessible regions**, each built as the *Minkowski sum of the footprint with a line segment or a disk, sized per furniture type* | `AccessRule` — per-side zones in the piece's own frame |
+| Circulation `m_ci` | number of connected components of `C_free = ⋂(g ⊕ P)`, `P` a person as a **disk of radius 18″ (457 mm)** | `navigabilityCost`, over the existing EDT field |
+| Pairwise distance `m_pd` | `t(d, m, M, α)` — 1 inside `[m, M]`, `(d/m)^α` below, `(M/d)^α` above, α = 2 | `bandCost`, in metres rather than ratios |
+| Conversation `m_cd` | same `t`, with **`m_c` = 4 ft, `M_c` = 8 ft** | the `armchair ← sofa` relation, 1.2–2.6 m |
+| Conversation angle `m_ca` | `−Σ (cos φ_fg + 1)(cos φ_gf + 1)` | the `faces` kinds' angle term |
+| Alignment `m_fa` / `m_wa` | `−Σ cos(4(θ_f − θ_g))` — parallel *or* square, one expression | `quarterTurnCost` = `(1 − cos 4Δθ)/2` |
+| Balance `m_vb` | area-weighted centroid of furniture vs room centroid | unchanged |
+| Emphasis `m_ef` | `−Σ cos φ_{g,p}` toward a focal point | `roomProfile.focals` + the `faces` relations |
+
+Two more sources carry what Merrell's paper leaves implicit:
+
+- **[Automatic Generation of Constrained Furniture Layouts](https://arxiv.org/pdf/1711.10939)**
+  models clearance as **four numbers per object** — padding in-front-of, behind,
+  to-the-left-of, to-the-right-of — and defines traversability as: erode free space
+  by a **0.25 m circular kernel** to get the passable region `P`, erode again for
+  the regions `A` that need access, then require every pair in `A` to be mutually
+  reachable through `P`. That per-side shape is exactly `AccessRule.sides`, and it
+  is what lets a double bed want *both* sides while a single wants *one*.
+- **[Architect-Ant](https://arxiv.org/html/2606.10953)** (2026) publishes a rubric of
+  numeric penalties, which is the closest thing in the literature to a citable table:
+  **door swing 0.60 m depth**, **window blocker zone 0.40 m** for large furniture,
+  **wall-touch tolerance 0.15 m**, **chair within 0.60 m of the table**, tiered
+  overlap thresholds at 10 / 15 / 50 % of area, and containment as a hard rule.
+- **[ProcTHOR](https://arxiv.org/pdf/2206.06994)**'s *semantic asset groups* — sets
+  of objects that co-occur and must be **sampled and placed together** (a dining
+  table with four chairs), plus per-category *room* and *location* annotations
+  (a fridge along a wall, a TV never on the floor). That is the relation table's
+  justification for existing at all, and the reason relations are also used as
+  *proposal moves* and not only as costs.
+- **[SceneEval](https://arxiv.org/abs/2503.14756)**'s taxonomy — Collision, Support,
+  Navigability, Accessibility, Out-of-bounds — is the test rubric; every one of the
+  five now has a term and a test.
+- **Maximal Marginal Relevance** (from the same patent's discussion of diversifying
+  samples) is why the solver keeps a pool of *dissimilar* finalists rather than the
+  best four scores, which would be four rounding errors apart on one arrangement.
+
+#### 3.9.3 Residential space-planning numbers used
+
+Design-manual figures, agreeing across sources to a few centimetres. Every one of
+them lives in `lib/layout-rules.ts` and nowhere else.
+
+| Activity | Figure | Source |
+|---|---|---|
+| Tight walkway (squeeze past) | **600 mm** | universal; derived here from `WALK_RADIUS × 2` |
+| Comfortable route | **900 mm** | [Space Stylists](https://www.spacestylistsco.com/blog/commonclearances) (3′-0″ residential), [Archi-Monarch](https://archi-monarch.com/residential-space-planning/) |
+| Two-way corridor | 1200 mm | Archi-Monarch |
+| In front of hinged storage / a fridge | **600 mm** | Architect-Ant; matches the app's existing rule |
+| Dining chair pull-back | **900 mm** (1050–1200 with traffic behind) | [Arcedior](https://arcedior.com/blog/chair-clearance-behind-dining-tables) |
+| Service passage behind a seated diner | 560 mm | Archi-Monarch |
+| Bedside strip | **500 mm** to get in and make the bed (600 mm preferred for walking) | app's existing rule; Archi-Monarch gives 600 |
+| Behind a desk chair | **900–1000 mm** | Archi-Monarch |
+| Sofa to coffee table | **400–500 mm** | Archi-Monarch |
+| Facing seating units | 1800 mm | Archi-Monarch |
+| Door swing | leaf width, **≥600 mm** deep | Architect-Ant |
+| Window band kept clear of tall furniture | **400 mm** | Architect-Ant |
+| TV viewing distance | **1.2–2.5 × diagonal** | app's existing rule; now derived per screen |
+
+#### 3.9.4 The shape of the fix
+
+- **One table, two readers.** `lib/layout-rules.ts` holds roles, access zones,
+  relations and the room profile; `lib/clearance.ts` (checks) and
+  `lib/layout-score.ts` (costs) both read it. A property test over twelve randomly
+  scattered rooms asserts the solver never leaves behind an `error` the report will
+  raise — the exact failure that started this.
+- **Zones are derived, never stored.** A zone's depth is what the *activity* needs,
+  its width comes from the piece's own `dimMM`, and it lives in the piece's local
+  frame. So resizing a piece or the room recalibrates everything by construction:
+  there is no cached number to invalidate. The UI's only remaining job is to *offer*
+  a re-fit, which is a solve with the inertia weight turned up ~10×.
+- **A role is not a category.** The catalog overloads `shape: 'coffee-table'` across
+  a 900 mm side table and an 1800 mm six-seater dining table, so the shape cannot
+  answer what a piece is *for*. Height does: a top you get your knees under is
+  730–750 mm, a coffee table is 400–450 mm, and there is nothing in between.
+- **Cost:** the terms are pairwise, so an evaluation is O(n²) and the search does
+  thousands. Hoisting everything static into a prepared model, plus an
+  axis-aligned-box reject before any exact test and a closed-form lens area for two
+  circles, took a 20-piece solve from **8.4 s to 0.27 s** (30 pieces: 18.5 s → 0.43 s).
+  A guard test holds it. The remaining factor of ~5 would come from delta-scoring a
+  single moved piece instead of the whole room; it is not needed yet.
+
 ---
 
 ## 4. Proposals ranked by value ÷ effort
@@ -649,6 +775,11 @@ suite does not yet use. Candidate invariants (`fast-check` over random OBBs):
 
 **Layout synthesis, constraints, evaluation**
 - [Interactive Furniture Layout Using Interior Design Guidelines](http://graphics.berkeley.edu/papers/Merrell-IFL-2011-08/Merrell-IFL-2011-08.pdf) — Merrell, Schkufza, Li, Agrawala, Koltun, SIGGRAPH 2011 — *the single most directly applicable paper here*
+- [US 2013/0222393 — Method and System for Interactive Layout](https://patents.google.com/patent/US20130222393A1/en) — the same authors' patent, and the only place the density function's terms are written out in extractable text (see §3.9.2)
+- [Make it Home: Automatic Optimization of Furniture Arrangement](https://web.cs.ucla.edu/~dt/papers/siggraph11/siggraph11.pdf) — Yu, Yeung, Tang, Chan, Terzopoulos, Osher, SIGGRAPH 2011 — accessible-space rectangles + viewing frusta, Metropolis–Hastings annealing
+- [Automatic Generation of Constrained Furniture Layouts](https://arxiv.org/pdf/1711.10939) — per-side padding as four numbers; traversability by morphological erosion (0.25 m kernel)
+- [Architect-Ant: Editable Automatic Furnishing of Architectural Floor Plans](https://arxiv.org/html/2606.10953) — arXiv 2606.10953 (2026); a published numeric penalty rubric (door swing 0.60 m, window band 0.40 m, wall-touch 0.15 m)
+- [ProcTHOR: Large-Scale Embodied AI Using Procedural Generation](https://arxiv.org/pdf/2206.06994) — NeurIPS 2022; semantic asset groups, room/location annotations
 - [Infinigen Indoors: Photorealistic Indoor Scenes using Procedural Generation](https://arxiv.org/abs/2406.11824) — CVPR 2024 (constraint DSL + hierarchical simulated annealing)
 - [DiffuScene: Denoising Diffusion Models for Generative Indoor Scene Synthesis](https://openaccess.thecvf.com/content/CVPR2024/papers/Tang_DiffuScene_Denoising_Diffusion_Models_for_Generative_Indoor_Scene_Synthesis_CVPR_2024_paper.pdf) — CVPR 2024
 - [SceneEval: Evaluating Semantic Coherence in Text-Conditioned 3D Indoor Scene Synthesis](https://arxiv.org/abs/2503.14756) — plausibility metrics: COL / SUP / NAV / ACC / OOB
@@ -669,6 +800,9 @@ suite does not yet use. Candidate invariants (`fast-check` over random OBBs):
 
 **Colour**
 - [OKLCH in CSS: why we moved from RGB and HSL](https://evilmartians.com/chronicles/oklch-in-css-why-quit-rgb-hsl) · [Exploring the OKLCH ecosystem](https://evilmartians.com/chronicles/exploring-the-oklch-ecosystem-and-its-tools) · [Harmony palette (OKLCH + APCA)](https://github.com/evilmartians/harmony)
+
+**Residential space planning (the numbers in §3.9.3)**
+- [Space Stylists & Co — Common clearances](https://www.spacestylistsco.com/blog/commonclearances) · [Archi-Monarch — Residential space planning](https://archi-monarch.com/residential-space-planning/) · [Arcedior — Chair clearance behind dining tables](https://arcedior.com/blog/chair-clearance-behind-dining-tables)
 
 **Accessibility / ergonomics**
 - [US Access Board — Clear Floor Space and Turning Space](https://www.access-board.gov/ada/guides/chapter-3-clear-floor-or-ground-space-and-turning-space/) (60″ / 1524 mm turning circle; 36″ / 915 mm route)

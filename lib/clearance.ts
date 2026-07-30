@@ -3,11 +3,12 @@
 // reproducible math over the scene, which is what makes it trustworthy enough
 // to plan a real room around.
 //
-// Thresholds follow common interior-design guidance:
-//   · 600 mm minimum comfortable walkway between furniture
-//   · 600 mm in front of hinged storage (wardrobe doors, fridge)
-//   · 500 mm bedside access strip
-//   · TV viewing distance ≈ 1.2–2.5 × screen diagonal
+// Thresholds are NOT written here. Every "how much room does this piece need"
+// number lives in `lib/layout-rules.ts`, as a zone in the piece's own frame, and
+// this file reads that table — because the arrangement solver reads it too, and the
+// two carrying separate copies is what let "Suggest" produce layouts that this
+// panel immediately complained about. The remaining constants here are about how
+// findings are WORDED and when they are worth raising, which is this file's job.
 //
 // Two of the rules here exist because the geometry engine deliberately does not
 // "fix" a problem silently: parts can overlap (nothing resolves part-vs-part at
@@ -22,9 +23,7 @@ import {
   footArea,
   footFromPart,
   footIntersectionArea,
-  pointInObb,
   type Foot,
-  type OBB,
   type Poly,
 } from './geometry';
 import {
@@ -38,9 +37,18 @@ import {
   pairGaps,
   rasterizeCoverage,
   TURNING_DIAMETER,
-  WALK_RADIUS,
   type ClearanceField,
 } from './clearance-field';
+import {
+  accessZones,
+  doorPath,
+  routeWidth,
+  roleOf,
+  sharesFloor,
+  zoneExempt,
+  WALK_MIN,
+  type AccessRule,
+} from './layout-rules';
 
 export type ClearanceSeverity = 'error' | 'warn' | 'info';
 
@@ -74,26 +82,27 @@ const WALKWAY_CATEGORIES = new Set<Category>([
   'sofa', 'bed', 'wardrobe', 'shelf', 'fridge', 'desk',
 ]);
 
-// Storage whose doors/drawers need room to open in front.
-const FRONT_CLEARANCE_CATEGORIES = new Set<Category>(['wardrobe', 'fridge', 'shelf']);
+// DERIVED, not restated — `WALK_MIN` is `WALK_RADIUS × 2`, and `WALK_RADIUS` is
+// documented as half the 600 mm walkway rule. Writing 0.6 here spelled the same
+// number in three files with nothing tying them together: narrowing the radius
+// would have left this rule still policing 600 mm, and the field, the report and
+// the solver would disagree about what a walkway is while all three looked right.
+const MIN_WALKWAY = WALK_MIN;
 
-// DERIVED, not restated. `WALK_RADIUS` is documented as "half the 600 mm walkway
-// rule", so writing 0.6 here spelled the same number twice in two files with
-// nothing tying them together: narrowing the radius would have left this rule
-// still policing 600 mm, and the field and the report would disagree about what
-// a walkway is while both looked right.
-const MIN_WALKWAY = WALK_RADIUS * 2;
-const MIN_FRONT = 0.6;
-const MIN_BEDSIDE = 0.5;
+/** How much of a door's swing a piece has to take before it is worth saying.
+ *  Small, because a door leaf stops on the first thing it meets — this is only here
+ *  so a millimetre of floating-point contact is not a finding. */
+const SWING_CLASH_SHARE = 0.02;
 
 // ── Same-place rule thresholds ──────────────────────────────────────────────
-// Seating pushed under a work surface shares that surface's footprint ON
+// Which pieces genuinely share floor is `sharesFloor` in lib/layout-rules — the
+// same predicate the solver's overlap term reads, so the two cannot disagree about
+// whether a tucked-in chair is a collision. It used to be a pair of category sets
+// here: seating pushed under a work surface shares that surface's footprint ON
 // PURPOSE, and the chair back rises above the table top so no vertical test
 // separates the two. Four chairs round a dining table is the most ordinary
-// arrangement there is; reporting four errors on it would teach people to
-// ignore this panel.
-const TUCKS_UNDER = new Set<Category>(['chair', 'ottoman']);
-const TUCKED_INTO = new Set<Category>(['table', 'desk']);
+// arrangement there is; reporting four errors on it would teach people to ignore
+// this panel.
 
 /** Share of the SMALLER piece's footprint that must lie inside the other before
  *  this is a collision rather than two pieces meeting untidily. Half of a piece
@@ -106,11 +115,52 @@ const CLASH_SHARE = 0.5;
  *  still worth saying. */
 const TUCKED_CLASH_SHARE = 0.85;
 
+/** Issue-id prefix per zone rule, so a finding keeps the id the UI and the tests
+ *  already know it by. Anything not listed keys off the rule's own id. */
+const ZONE_ISSUE_ID: Record<string, string> = { front: 'front', bedside: 'bed' };
+
+const ZONE_TITLE: Record<string, string> = {
+  front: 'Doors can’t open',
+  bedside: 'Bed hard to get into',
+  seats: 'No room to pull the chairs out',
+  seat: 'No room for the chair',
+  'push-back': 'No room to push the chair back',
+};
+
+const FACE_OF: Record<string, '+x' | '-x' | '+z' | '-z'> = {
+  front: '+z',
+  back: '-z',
+  left: '-x',
+  right: '+x',
+};
+
+/** One finding's sentence.
+ *
+ *  A rule about a single face can say the actual measurement, which is what a
+ *  person wants — "has 30 cm in front" beats "68% of the space in front is taken".
+ *  A rule spread over several faces cannot: three sides at three distances is not a
+ *  number, so it reports how many of them are clear instead. Both read the depth
+ *  and the wording off the rule rather than restating them. */
+function zoneDetail(
+  part: ScenePart,
+  rule: AccessRule,
+  blocked: number,
+  clear: number,
+  self: Foot,
+  others: Foot[],
+  poly: Poly,
+): string {
+  const cm = Math.round(rule.depth * 100);
+  if (rule.sides.length === 1) {
+    const got = faceClearance(self, FACE_OF[rule.sides[0]], others, poly, rule.depth * 2);
+    return `“${part.name}” has ${Math.round(got * 100)} cm ${rule.sides[0] === 'front' ? 'in front' : `on its ${rule.sides[0]}`} — needs ${cm} cm ${rule.reason}.`;
+  }
+  const need = rule.atLeast === rule.sides.length ? `all ${rule.sides.length}` : `${rule.atLeast} of its ${rule.sides.length}`;
+  return `“${part.name}” wants ${cm} cm clear on ${need} sides ${rule.reason} — ${clear === 0 ? 'none of them is' : `only ${clear} ${clear === 1 ? 'is' : 'are'}`} (${blocked} blocked).`;
+}
+
 function clashShare(a: ScenePart, b: ScenePart): number {
-  const tucks =
-    (TUCKS_UNDER.has(a.category) && TUCKED_INTO.has(b.category)) ||
-    (TUCKS_UNDER.has(b.category) && TUCKED_INTO.has(a.category));
-  return tucks ? TUCKED_CLASH_SHARE : CLASH_SHARE;
+  return sharesFloor(roleOf(a), roleOf(b)) ? TUCKED_CLASH_SHARE : CLASH_SHARE;
 }
 
 /** The pieces that actually get in a walker's way: floor-standing, solid, and
@@ -161,21 +211,52 @@ export function analyzeRoom(
   const solidObbs = solid.map((p) => obbs.get(p.id)!);
   const field = buildClearanceField(solidObbs, poly);
 
-  // ── 1. Door swing blocked ────────────────────────────────────────────────
+  // ── 1. Door swing blocked, and the way in from it ────────────────────────
+  //
+  // The swing is the zone `lib/layout-rules` gives a door — a box the width of the
+  // leaf and as deep as the leaf is wide, in front of it. It used to be a radius
+  // measured from the door's centre POINT, which got both edges wrong: a wardrobe
+  // 500 mm to one side of a 900 mm door counted as blocking it, and one standing
+  // squarely in front at 950 mm did not.
+  const route = routeWidth(room.footprint);
   for (const door of parts.filter((p) => p.category === 'door')) {
-    const radius = door.dimMM[0] / 1000; // the leaf sweeps its own width
-    const blockers = solid.filter((p) => {
-      if (p.id === door.id) return false;
-      const b = obbs.get(p.id)!;
-      return distPointToObb(door.pos[0], door.pos[2], b) < radius;
-    });
-    if (blockers.length > 0) {
+    const zones = accessZones(door, door.pos[0], door.pos[2], door.rot);
+    const swing = zones[0];
+    if (swing) {
+      const blockers = solid.filter(
+        (p) =>
+          p.id !== door.id &&
+          !zoneExempt('door', roleOf(p)) &&
+          footIntersectionArea(obbs.get(p.id)!, swing.foot) / Math.min(footArea(obbs.get(p.id)!), footArea(swing.foot)) >
+            SWING_CLASH_SHARE,
+      );
+      if (blockers.length > 0) {
+        issues.push({
+          id: `door-${door.id}`,
+          severity: 'error',
+          title: 'Door can’t open fully',
+          detail: `${blockers.map((b) => b.name).join(', ')} ${blockers.length === 1 ? 'sits' : 'sit'} inside the ${Math.round(swing.rule.depth * 100)} cm swing of “${door.name}”.`,
+          partIds: [door.id, ...blockers.map((b) => b.id)],
+        });
+      }
+    }
+    // Opening is not the same question as getting in. A door with a clear swing
+    // that puts you straight into the back of a sofa is still a door you cannot
+    // walk through, and no pairwise gap rule sees it.
+    const path = doorPath(door, route);
+    const inTheWay = solid.filter(
+      (p) =>
+        p.id !== door.id &&
+        !zoneExempt('door', roleOf(p)) &&
+        footIntersectionArea(obbs.get(p.id)!, path) / footArea(path) > 0.12,
+    );
+    if (inTheWay.length > 0) {
       issues.push({
-        id: `door-${door.id}`,
-        severity: 'error',
-        title: 'Door can’t open fully',
-        detail: `${blockers.map((b) => b.name).join(', ')} sits inside the ${Math.round(radius * 100)} cm swing of “${door.name}”.`,
-        partIds: [door.id, ...blockers.map((b) => b.id)],
+        id: `entry-${door.id}`,
+        severity: 'warn',
+        title: 'The way in is blocked',
+        detail: `${inTheWay.map((b) => b.name).join(', ')} ${inTheWay.length === 1 ? 'stands' : 'stand'} in the ${Math.round(route * 100)} cm route in from “${door.name}”.`,
+        partIds: [door.id, ...inTheWay.map((b) => b.id)],
       });
     }
   }
@@ -259,46 +340,68 @@ export function analyzeRoom(
     }
   }
 
-  // ── 4. Storage door / drawer front clearance ─────────────────────────────
-  for (const p of solid.filter((s) => FRONT_CLEARANCE_CATEGORIES.has(s.category))) {
-    const others = solid.filter((o) => o.id !== p.id).map((o) => obbs.get(o.id)!);
-    const front = faceClearance(obbs.get(p.id)!, '+z', others, poly, 2);
-    if (front < MIN_FRONT) {
+  // ── 4. Functional zones: what each piece needs clear ─────────────────────
+  //
+  // One pass over `lib/layout-rules`, where there used to be a rule for wardrobe
+  // fronts, a rule for bed sides, and nothing at all for a desk, a dining table or
+  // a sofa. The table also carries the number, the wording and — through
+  // `atLeast` — how many of a rule's sides actually have to hold, which is what
+  // lets a double bed want both sides and a dining table want three of four.
+  for (const p of solid) {
+    const zones = accessZones(p, p.pos[0], p.pos[2], p.rot);
+    if (zones.length === 0) continue;
+    const others = solid
+      .filter((o) => o.id !== p.id && !zoneExempt(roleOf(p), roleOf(o)))
+      .map((o) => obbs.get(o.id)!);
+    const me = obbs.get(p.id)!;
+    const byRule = new Map<string, { rule: AccessRule; blocked: string[]; clear: string[] }>();
+    for (const zn of zones) {
+      const entry = byRule.get(zn.rule.id) ?? { rule: zn.rule, blocked: [], clear: [] };
+      // The narrowest point across the face, not the average of it. A chair against
+      // the left third of a 2 m wardrobe takes under a fifth of the zone's AREA and
+      // stops the door dead, so a share-of-area test reports nothing — which is the
+      // bug `faceClearance` was written to fix, and the reason the report reads the
+      // worst probe while the solver's cost reads the total. Same zone, same depth;
+      // the solver wants a gradient and the report wants the truth about the
+      // tightest point.
+      const got = faceClearance(me, FACE_OF[zn.side], others, poly, zn.rule.depth * 2);
+      if (got < zn.rule.depth) entry.blocked.push(zn.side);
+      else entry.clear.push(zn.side);
+      byRule.set(zn.rule.id, entry);
+    }
+    for (const { rule, blocked, clear } of byRule.values()) {
+      if (clear.length >= rule.atLeast) continue;
       issues.push({
-        id: `front-${p.id}`,
+        id: `${ZONE_ISSUE_ID[rule.id] ?? rule.id}-${p.id}`,
         severity: 'warn',
-        title: 'Doors can’t open',
-        detail: `“${p.name}” has ${Math.round(front * 100)} cm in front — needs ${MIN_FRONT * 100} cm to open doors and reach inside.`,
+        title: ZONE_TITLE[rule.id] ?? 'Not enough room to use it',
+        detail: zoneDetail(p, rule, blocked.length, clear.length, me, others, poly),
         partIds: [p.id],
       });
     }
   }
 
-  // ── 5. Bedside access ────────────────────────────────────────────────────
-  for (const bed of solid.filter((s) => s.category === 'bed')) {
-    const others = solid
-      .filter((o) => o.id !== bed.id && o.category !== 'nightstand')
-      .map((o) => obbs.get(o.id)!);
-    const me = obbs.get(bed.id)!;
-    const left = faceClearance(me, '-x', others, poly, 2);
-    const right = faceClearance(me, '+x', others, poly, 2);
-    const isDouble = bed.shape === 'bed-double';
-    const clearSides = [left, right].filter((d) => d >= MIN_BEDSIDE).length;
-    if (isDouble && clearSides < 2) {
-      issues.push({
-        id: `bed-${bed.id}`,
-        severity: 'warn',
-        title: 'Bed hard to get into',
-        detail: `A double bed wants ${MIN_BEDSIDE * 100} cm on both sides — “${bed.name}” has ${Math.round(left * 100)} cm / ${Math.round(right * 100)} cm.`,
-        partIds: [bed.id],
+  // ── 5. Windows left visible ──────────────────────────────────────────────
+  //
+  // Not a clearance so much as a sightline, and height is the whole rule: a low
+  // chest under a window is a windowsill, a wardrobe in front of one is a mistake.
+  // The zone carries the sill it is measured from, so a high transom window and a
+  // floor-to-ceiling one are judged differently without either being special-cased.
+  for (const win of parts.filter((p) => roleOf(p) === 'window')) {
+    for (const zn of accessZones(win, win.pos[0], win.pos[2], win.rot)) {
+      const blockers = solid.filter((p) => {
+        if (zoneExempt('window', roleOf(p))) return false;
+        if (p.pos[1] + p.dimMM[2] / 1000 <= zn.rule.aboveY + 0.05) return false;
+        const f = obbs.get(p.id)!;
+        return footIntersectionArea(f, zn.foot) / (footArea(zn.foot) || 1) > 0.15;
       });
-    } else if (!isDouble && clearSides < 1) {
+      if (blockers.length === 0) continue;
       issues.push({
-        id: `bed-${bed.id}`,
+        id: `window-${win.id}`,
         severity: 'warn',
-        title: 'Bed boxed in',
-        detail: `“${bed.name}” has no free side — keep at least ${MIN_BEDSIDE * 100} cm on one side to get in and make the bed.`,
-        partIds: [bed.id],
+        title: 'Window is blocked',
+        detail: `${blockers.map((b) => b.name).join(', ')} ${blockers.length === 1 ? 'stands' : 'stand'} in front of “${win.name}” and ${blockers.length === 1 ? 'rises' : 'rise'} above its ${Math.round(zn.rule.aboveY * 100)} cm sill.`,
+        partIds: [win.id, ...blockers.map((b) => b.id)],
       });
     }
   }
@@ -472,26 +575,4 @@ export function freeFloorFraction(parts: Foot[], poly: Poly): number {
   return raster ? freeShareOf(raster) : 1;
 }
 
-/** Distance from a point to an OBB's boundary (0 when inside). */
-function distPointToObb(x: number, z: number, b: OBB): number {
-  if (pointInObb(x, z, b)) return 0;
-  const c = Math.cos(-b.rot);
-  const s = Math.sin(-b.rot);
-  const dx = x - b.cx;
-  const dz = z - b.cz;
-  const lx = dx * c - dz * s;
-  const lz = dx * s + dz * c;
-  const ex = Math.max(0, Math.abs(lx) - b.hw);
-  const ez = Math.max(0, Math.abs(lz) - b.hd);
-  return Math.hypot(ex, ez);
-}
 
-export function polygonArea(poly: Poly): number {
-  let a = 0;
-  for (let i = 0; i < poly.length; i++) {
-    const [x1, z1] = poly[i];
-    const [x2, z2] = poly[(i + 1) % poly.length];
-    a += x1 * z2 - x2 * z1;
-  }
-  return Math.abs(a) / 2;
-}

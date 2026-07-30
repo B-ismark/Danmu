@@ -140,8 +140,10 @@ export function rasterizeCoverage(parts: Foot[], poly: Poly, cell = FIELD_CELL):
   let covered = 0;
   for (let p = 0; p < parts.length; p++) {
     const b = parts[p];
-    const cs = Math.cos(-b.rot);
-    const sn = Math.sin(-b.rot);
+    // `worldToLocal` (lib/geometry) inlined with the trig hoisted — this is the
+    // per-cell loop, so the helper's array return would allocate per cell.
+    const cs = Math.cos(b.rot);
+    const sn = Math.sin(b.rot);
     // A round footprint is the inscribed ellipse, tested in closed form below —
     // the bound is still the bounding box, which is a superset, so it only costs
     // a few extra cells at the corners.

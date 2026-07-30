@@ -1,0 +1,666 @@
+// What a piece of furniture needs from the room, stated as geometry.
+//
+// This is the table both the room report (`lib/clearance.ts`) and the arrangement
+// solver (`lib/layout-score.ts`) read. They used to carry their own copies: the
+// checker knew a wardrobe wants 600 mm in front and a bed wants a side to get in
+// on, the solver knew about the wardrobe and not the bed, and neither of them knew
+// a door existed — so "Suggest" would park a bed across a doorway and Room check
+// would immediately report that it had. One table, two readers.
+//
+// ── The shape of a rule ─────────────────────────────────────────────────────
+//
+// Nothing here is a fixed rectangle in room coordinates. Every zone is authored in
+// the piece's OWN frame:
+//
+//   · its DEPTH is what the activity needs — a drawer pulls out 600 mm whether the
+//     chest is 400 mm or 2 m wide,
+//   · its WIDTH comes from the piece's own `dimMM`, so resizing the piece resizes
+//     what it asks for,
+//   · its POSITION and ORIENTATION are relative to the piece's front (local +Z),
+//     so turning the piece turns its needs with it.
+//
+// That is the whole of "recalibrate when the room or an object changes": there is
+// nothing to recalibrate, because no number was ever measured from the old state.
+// Change a dimension and every zone derived from it moves on the next read.
+//
+// ── Where the numbers come from ─────────────────────────────────────────────
+//
+// Residential space-planning practice, and they agree with each other to within a
+// few centimetres across sources:
+//
+//   · 600 mm — the tight minimum walkway; also the depth in front of hinged
+//     storage and a fridge. Derived here from `WALK_RADIUS` rather than typed
+//     twice (see `WALK_MIN`).
+//   · 900 mm — the comfortable route, and the pull-back for a seated diner
+//     (1050–1200 mm if people also walk behind them). Also the circulation behind
+//     a desk chair.
+//   · 500 mm — the bedside strip you need to get in and make the bed.
+//   · 400–500 mm — sofa to coffee table.
+//   · 400 mm — the band in front of a window that large furniture should stay out
+//     of, and 600 mm for the depth a door leaf sweeps.
+//   · TV: 1.2–2.5 × the screen diagonal. A multiple, never a constant — which is
+//     why the relation table can carry a function.
+//
+// Sources are listed in `Research.md` §3.9. Nothing here is learned, sampled or
+// downloaded; it is a table of numbers from design manuals with the geometry to
+// apply them.
+
+import type { Category, Shape, ScenePart } from './scene-spec';
+import type { Footprint } from './footprint';
+import { WALK_RADIUS } from './clearance-field';
+import { footFromPart, localToWorld, polygonArea, type Foot } from './geometry';
+
+// ─── Roles ──────────────────────────────────────────────────────────────────
+//
+// `Category` says what a thing IS; a role says what it is FOR, which is what the
+// rules are about. A `table` is a coffee table, a dining table or a bedside table
+// depending on its shape, and those three want completely different things from
+// the room — the first wants to be in front of a sofa, the second wants a metre
+// clear on every side, the third wants to touch a bed.
+
+export type Role =
+  | 'bed'
+  | 'sofa'
+  | 'armchair'
+  | 'dining-chair'
+  | 'office-chair'
+  | 'ottoman'
+  | 'dining-table'
+  | 'coffee-table'
+  | 'side-table'
+  | 'nightstand'
+  | 'desk'
+  | 'wardrobe'
+  | 'bookshelf'
+  | 'shoe-rack'
+  | 'fridge'
+  | 'appliance'
+  | 'tv'
+  | 'monitor'
+  | 'floor-lamp'
+  | 'table-lamp'
+  | 'rug'
+  | 'plant'
+  | 'door'
+  | 'window'
+  | 'wall-art'
+  | 'other';
+
+const ROLE_BY_SHAPE: Partial<Record<Shape, Role>> = {
+  sofa: 'sofa',
+  'chair-armchair': 'armchair',
+  'chair-dining': 'dining-chair',
+  'chair-office': 'office-chair',
+  ottoman: 'ottoman',
+  'bed-single': 'bed',
+  'bed-double': 'bed',
+  'side-table': 'side-table',
+  nightstand: 'nightstand',
+  'desk-l': 'desk',
+  wardrobe: 'wardrobe',
+  closet: 'wardrobe',
+  bookshelf: 'bookshelf',
+  'shoe-rack': 'shoe-rack',
+  fridge: 'fridge',
+  'washing-machine': 'appliance',
+  microwave: 'appliance',
+  'water-dispenser': 'appliance',
+  'air-purifier': 'appliance',
+  radiator: 'appliance',
+  tv: 'tv',
+  soundbar: 'appliance',
+  monitor: 'monitor',
+  laptop: 'other',
+  'lamp-floor': 'floor-lamp',
+  'lamp-table': 'table-lamp',
+  'lamp-pendant': 'other',
+  rug: 'rug',
+  plant: 'plant',
+  door: 'door',
+  window: 'window',
+  mirror: 'wall-art',
+  'mirror-oval': 'wall-art',
+  painting: 'wall-art',
+  curtain: 'other',
+  fan: 'other',
+  'ac-unit': 'other',
+};
+
+const ROLE_BY_CATEGORY: Partial<Record<Category, Role>> = {
+  sofa: 'sofa',
+  bed: 'bed',
+  chair: 'dining-chair',
+  ottoman: 'ottoman',
+  table: 'dining-table',
+  desk: 'desk',
+  nightstand: 'nightstand',
+  wardrobe: 'wardrobe',
+  shelf: 'bookshelf',
+  fridge: 'fridge',
+  tv: 'tv',
+  monitor: 'monitor',
+  lamp: 'floor-lamp',
+  rug: 'rug',
+  plant: 'plant',
+  door: 'door',
+  mirror: 'wall-art',
+  painting: 'wall-art',
+};
+
+/** Shapes that mean "a flat top on legs" and nothing more specific than that. The
+ *  catalog uses `coffee-table` for a 1.8 m six-seater dining table and
+ *  `desk-standard` for the entry literally labelled "Dining / desk table", so for
+ *  these the shape is not the answer — the SIZE is. */
+const AMBIGUOUS_TABLE = new Set<Shape>(['coffee-table', 'desk-standard', 'box']);
+
+/** Above this a table is one you sit AT; below it, one you put a mug on. Dining
+ *  and desk tops are 730–750 mm because that is what a seated adult's knees need;
+ *  coffee tables are 400–450 mm because that is sofa-seat height. There is nothing
+ *  in between, which is what makes the height a reliable reading. */
+const SIT_AT_HEIGHT = 0.6;
+/** …and under this in both plan directions it is a side table whatever its height:
+ *  nothing you can seat two people at is 700 mm square. */
+const SIDE_TABLE_SPAN = 0.7;
+
+/** What this piece is FOR.
+ *
+ *  Shape first, since it is usually the more specific of the two — except for the
+ *  table-ish shapes, where the catalog overloads one shape across three different
+ *  pieces of furniture and the dimensions are the only honest signal. This is the
+ *  one place in the codebase where a size decides a BEHAVIOUR rather than the other
+ *  way round, and it is safe in the direction that matters: the dimension is read,
+ *  never written. */
+export function roleOf(part: { category: Category; shape: Shape; dimMM: [number, number, number] }): Role {
+  const tableish =
+    AMBIGUOUS_TABLE.has(part.shape) && (part.category === 'table' || part.category === 'desk' || part.category === 'other');
+  if (tableish) {
+    const w = part.dimMM[0] / 1000;
+    const d = part.dimMM[1] / 1000;
+    const h = part.dimMM[2] / 1000;
+    if (w < SIDE_TABLE_SPAN && d < SIDE_TABLE_SPAN) return 'side-table';
+    if (h < SIT_AT_HEIGHT) return 'coffee-table';
+    // Tall enough to sit at. Which of the two it is, is a question about the room
+    // rather than the object, and `wallAffinity` already answers it by category:
+    // a desk wants a wall behind it, a dining table wants the middle.
+    return part.category === 'desk' ? 'desk' : 'dining-table';
+  }
+  return ROLE_BY_SHAPE[part.shape] ?? ROLE_BY_CATEGORY[part.category] ?? 'other';
+}
+
+// ─── Derived thresholds ─────────────────────────────────────────────────────
+
+/** The tight minimum walkway. DERIVED from the field's walk radius rather than
+ *  written down again — `lib/clearance.ts` learned this lesson already: two files
+ *  spelling 0.6 with nothing tying them together drift silently. */
+export const WALK_MIN = WALK_RADIUS * 2;
+
+/** The comfortable route width, and what a seated diner needs to push back. */
+export const WALK_COMFORT = 0.9;
+
+/** How wide a route this particular room can be asked for, metres.
+ *
+ *  A rule the room cannot satisfy is the same as no rule at all: in a 6 m² box
+ *  every arrangement fails a 900 mm route equally, so the term stops
+ *  discriminating and the solver spends its budget elsewhere. So the requirement
+ *  scales with the room — the tight minimum in a small room, the comfortable
+ *  figure once there is floor to spare. This is the "context" half of taking the
+ *  room's structure into account; the other half is the footprint's own shape,
+ *  which every zone test already sees. */
+export function routeWidth(footprint: Footprint): number {
+  const area = polygonArea(footprint);
+  const t = Math.max(0, Math.min(1, (area - 8) / 12)); // 8 m² → 20 m²
+  return WALK_MIN + (WALK_COMFORT - WALK_MIN) * t;
+}
+
+/** Sill height of a window whose part we cannot measure — only used when a window
+ *  part carries no usable Y. Ordinary domestic sills sit at about this. */
+const DEFAULT_SILL = 0.9;
+
+/** Below this a piece is a step-over rather than an obstacle, and below this it
+ *  cannot block a sightline either. Matches `floorBlockers`. */
+export const OBSTACLE_HEIGHT = 0.25;
+
+// ─── Access zones ───────────────────────────────────────────────────────────
+
+export type ZoneSide = 'front' | 'back' | 'left' | 'right';
+
+/** One thing a piece needs clear, resolved for that piece's actual size.
+ *
+ *  `sides` + `atLeast` is what makes a bed expressible: a double wants BOTH of
+ *  left and right (atLeast 2), a single wants one of them (atLeast 1), and a
+ *  dining table wants three of its four (atLeast 3), because pushed against one
+ *  wall it still seats people. A rule with `atLeast` below `sides.length` costs
+ *  only its best sides — the cheapest ones are the ones it is allowed to lose. */
+export type AccessRule = {
+  /** Stable, so a finding can be keyed on it: 'front' | 'bedside' | 'seats' | … */
+  id: string;
+  sides: ZoneSide[];
+  atLeast: number;
+  /** Clear depth out from the face, metres. */
+  depth: number;
+  /** Share of the face the zone spans, centred. Under 1 so a zone on one side
+   *  does not claim the corners its neighbour is measuring. */
+  span: number;
+  /** A neighbour only counts against this rule if it rises above this world Y.
+   *  0 for ordinary floor clearance; a window's sill for a sightline. */
+  aboveY: number;
+  /** Said in the room report's voice, completing "… needs 60 cm in front —". */
+  reason: string;
+};
+
+type RuleSpec = (part: Pick<ScenePart, 'shape' | 'dimMM' | 'pos'>) => AccessRule[];
+
+const zone = (
+  id: string,
+  sides: ZoneSide[],
+  depth: number,
+  reason: string,
+  opts: { atLeast?: number; span?: number; aboveY?: number } = {},
+): AccessRule => ({
+  id,
+  sides,
+  atLeast: opts.atLeast ?? sides.length,
+  depth,
+  span: opts.span ?? 0.9,
+  aboveY: opts.aboveY ?? 0,
+  reason,
+});
+
+const ACCESS_BY_ROLE: Partial<Record<Role, RuleSpec>> = {
+  // Hinged doors and deep drawers: 600 mm is the figure that lets the door past
+  // you and your arm past the door.
+  wardrobe: () => [zone('front', ['front'], 0.6, 'to open the doors and reach inside', { span: 1 })],
+  fridge: () => [zone('front', ['front'], 0.6, 'to open the door and reach inside', { span: 1 })],
+  bookshelf: () => [zone('front', ['front'], 0.6, 'to stand and read the spines', { span: 1 })],
+  'shoe-rack': () => [zone('front', ['front'], 0.45, 'to stand there and put shoes on')],
+  appliance: () => [zone('front', ['front'], 0.5, 'to reach the front of it')],
+
+  // A bed needs a strip you can walk down and make it from. Both sides for a
+  // double, because two people get out of it in two directions.
+  bed: (p) => [
+    zone('bedside', ['left', 'right'], 0.5, 'to get in and make the bed', {
+      atLeast: p.shape === 'bed-double' ? 2 : 1,
+      span: 0.8,
+    }),
+  ],
+
+  // Every side you might pull a chair out on. Three of four, so a table with one
+  // end against a wall is not reported as a fault — that is a real arrangement.
+  'dining-table': () => [
+    zone('seats', ['front', 'back', 'left', 'right'], WALK_COMFORT, 'to pull a chair out and sit down', {
+      atLeast: 3,
+      span: 0.85,
+    }),
+  ],
+
+  // The desk's front is where the person is. 900 mm covers the chair pushed back
+  // plus getting out of it.
+  desk: () => [zone('seat', ['front'], WALK_COMFORT, 'to pull the chair back and get up', { span: 1 })],
+  'office-chair': () => [zone('push-back', ['back'], 0.45, 'to push the chair back and stand up', { span: 0.8 })],
+
+  // Enough to stand up out of, and to walk to the far seat.
+  sofa: () => [zone('front', ['front'], 0.35, 'to get to the seat and stand up out of it', { span: 0.9 })],
+  armchair: () => [zone('front', ['front'], 0.3, 'to sit down and get up')],
+
+  // A door's leaf sweeps its own width. Modelled as a box rather than the quarter
+  // disc it really is: the box is the conservative reading (it contains the disc),
+  // and both the checker and the solver can test it with the same overlap maths
+  // they use for everything else.
+  door: (p) => [
+    zone('swing', ['front'], p.dimMM[0] / 1000, 'for the door to open', { span: 1 }),
+  ],
+
+  // Not a clearance so much as a sightline: a low chest under a window is fine, a
+  // wardrobe in front of one is not, and the difference is entirely height.
+  window: (p) => [
+    zone('light', ['front'], 0.4, 'so the window is not blocked', {
+      span: 1,
+      // The sill is the window's own bottom edge — wall-mounted parts are centred
+      // on their mesh, so that is `y − h/2`. A window with no usable Y (nothing
+      // has placed it yet) falls back to an ordinary domestic sill rather than
+      // claiming the sill is at the floor, which would make every low chest a
+      // blocker.
+      aboveY: p.pos[1] > 0 ? Math.max(0.3, p.pos[1] - p.dimMM[2] / 2000) : DEFAULT_SILL,
+    }),
+  ],
+};
+
+/** What this piece needs clear, resolved against its own dimensions. */
+export function accessRules(part: Pick<ScenePart, 'category' | 'shape' | 'dimMM' | 'pos'>): AccessRule[] {
+  return ACCESS_BY_ROLE[roleOf(part)]?.(part) ?? [];
+}
+
+/** One access rule made concrete: the footprints, one per side, that have to stay
+ *  clear.
+ *
+ *  In the piece's own frame, so a rotation carries it and a resize scales it. The
+ *  zone for a left/right side has the depth as its X half-extent and the piece's
+ *  own depth as its Z one — i.e. the piece's local axes, which is why the zone can
+ *  share the piece's `rot` instead of needing one of its own. */
+export function accessZones(
+  part: Pick<ScenePart, 'category' | 'shape' | 'dimMM' | 'pos'>,
+  x: number,
+  z: number,
+  yaw: number,
+): Array<{ rule: AccessRule; side: ZoneSide; foot: Foot }> {
+  const hw = part.dimMM[0] / 2000;
+  const hd = part.dimMM[1] / 2000;
+  const out: Array<{ rule: AccessRule; side: ZoneSide; foot: Foot }> = [];
+  for (const rule of accessRules(part)) {
+    const half = rule.depth / 2;
+    for (const side of rule.sides) {
+      let lx = 0;
+      let lz = 0;
+      let zhw = hw * rule.span;
+      let zhd = half;
+      if (side === 'front') lz = hd + half;
+      else if (side === 'back') lz = -(hd + half);
+      else {
+        zhw = half;
+        zhd = hd * rule.span;
+        lx = side === 'right' ? hw + half : -(hw + half);
+      }
+      const [dx, dz] = localToWorld(yaw, lx, lz);
+      out.push({ rule, side, foot: { cx: x + dx, cz: z + dz, hw: zhw, hd: zhd, rot: yaw } });
+    }
+  }
+  return out;
+}
+
+/** Pieces that belong in each other's way.
+ *
+ *  A coffee table standing in the 350 mm in front of a sofa is not blocking the
+ *  sofa, it is the reason the sofa is there; a nightstand inside a bed's side
+ *  strip is the arrangement working. Without this the two would fight: the
+ *  relation table wants them together and the access rule would fine them for it.
+ *
+ *  Keyed owner → user, and read in both directions by `zoneExempt`. */
+const ZONE_GUESTS: Partial<Record<Role, Role[]>> = {
+  bed: ['nightstand', 'side-table', 'table-lamp', 'rug', 'ottoman'],
+  sofa: ['coffee-table', 'side-table', 'ottoman', 'rug', 'table-lamp'],
+  armchair: ['side-table', 'ottoman', 'rug', 'table-lamp'],
+  'dining-table': ['dining-chair', 'office-chair', 'rug', 'table-lamp'],
+  'coffee-table': ['ottoman', 'side-table', 'rug'],
+  desk: ['office-chair', 'dining-chair', 'monitor', 'other'],
+  'office-chair': ['desk', 'dining-table', 'rug'],
+  'dining-chair': ['dining-table', 'desk', 'rug'],
+  window: ['rug', 'plant', 'side-table', 'nightstand', 'table-lamp'],
+  door: ['rug'],
+};
+
+/** Is `guest` allowed inside `owner`'s access zone? */
+export function zoneExempt(owner: Role, guest: Role): boolean {
+  return ZONE_GUESTS[owner]?.includes(guest) ?? false;
+}
+
+/** Pieces that share the same FLOOR on purpose — a different and much shorter list
+ *  than the zone guests above, and confusing the two is a mistake worth naming.
+ *
+ *  A nightstand is welcome in the strip beside a bed; it is not welcome INSIDE the
+ *  bed. A coffee table belongs in the space in front of a sofa, not in the sofa.
+ *  Only seating pushed under a surface genuinely occupies the same square metre as
+ *  something else, and that is what this is for.
+ *
+ *  Read symmetrically — the caller does not know which of the two is the surface. */
+const FLOOR_SHARERS: Array<[Role, Role[]]> = [
+  ['dining-chair', ['dining-table', 'desk']],
+  ['office-chair', ['dining-table', 'desk']],
+  ['ottoman', ['coffee-table', 'dining-table', 'desk']],
+];
+
+export function sharesFloor(a: Role, b: Role): boolean {
+  for (const [seat, surfaces] of FLOOR_SHARERS) {
+    if (a === seat && surfaces.includes(b)) return true;
+    if (b === seat && surfaces.includes(a)) return true;
+  }
+  return false;
+}
+
+// ─── Functional relations ───────────────────────────────────────────────────
+//
+// The other half of "what is this for": a nightstand's whole job is to be within
+// arm's reach of a pillow, and a coffee table's is to be reachable from the sofa
+// without standing up. A layout can satisfy every clearance rule in the book and
+// still be wrong because the pieces have been scattered rather than grouped.
+//
+// After Merrell et al.'s pairwise-distance term: a band [min, max] rather than a
+// target, and a cost that is zero inside it and grows outside — so a relation
+// says "these belong together" without dictating exactly where.
+
+export type RelationKind =
+  /** Face-to-face gap, and `self` should be alongside `anchor`'s side. */
+  | 'beside'
+  /** Face-to-face gap off `anchor`'s front. */
+  | 'in-front'
+  /** Centre-to-centre distance, plus `self` turned toward `anchor`. */
+  | 'faces'
+  /** Centre-to-centre distance only — for a rug under a group, where facing is
+   *  meaningless and the gap is negative by design. */
+  | 'near';
+
+export type Relation = {
+  kind: RelationKind;
+  /** Metres. `min`/`max` are resolved for the actual pair, so a viewing distance
+   *  can be a multiple of the screen it is about. */
+  min: number;
+  max: number;
+  /** Relative to the other cost weights in `layout-score`. */
+  weight: number;
+  reason: string;
+};
+
+type RelationSpec = {
+  self: Role[];
+  anchor: Role[];
+  kind: RelationKind;
+  band: (self: ScenePart, anchor: ScenePart) => [number, number];
+  weight: number;
+  reason: string;
+};
+
+const band = (min: number, max: number) => () => [min, max] as [number, number];
+
+const RELATIONS: RelationSpec[] = [
+  {
+    self: ['nightstand'],
+    anchor: ['bed'],
+    kind: 'beside',
+    band: band(0, 0.15),
+    weight: 1,
+    reason: 'a nightstand wants to touch the head of the bed',
+  },
+  {
+    self: ['coffee-table'],
+    anchor: ['sofa'],
+    kind: 'in-front',
+    band: band(0.4, 0.5),
+    weight: 1,
+    reason: 'close enough to reach from the sofa, far enough to get past',
+  },
+  {
+    self: ['side-table'],
+    anchor: ['sofa', 'armchair'],
+    kind: 'beside',
+    band: band(0, 0.4),
+    weight: 0.5,
+    reason: 'within reach of the arm of the chair',
+  },
+  {
+    self: ['floor-lamp', 'table-lamp'],
+    anchor: ['sofa', 'armchair', 'bed'],
+    kind: 'beside',
+    band: band(0, 0.7),
+    weight: 0.4,
+    reason: 'a reading lamp belongs beside the seat it lights',
+  },
+  {
+    // 600 mm is the figure a chair-at-a-table rule wants: further and the chair is
+    // not at the table, nearer and it is under it, which is also fine.
+    self: ['dining-chair', 'office-chair'],
+    anchor: ['dining-table', 'desk'],
+    kind: 'in-front',
+    band: band(0, 0.6),
+    weight: 0.9,
+    reason: 'a chair belongs at the table it is for',
+  },
+  {
+    self: ['ottoman'],
+    anchor: ['sofa', 'armchair'],
+    kind: 'in-front',
+    band: band(0.15, 0.7),
+    weight: 0.4,
+    reason: 'a footstool wants to be within a leg’s reach',
+  },
+  {
+    // The viewing distance is a property of the SCREEN, so it is computed from
+    // the screen — 1.2–2.5 × the diagonal, the same rule the room report states.
+    self: ['sofa', 'armchair'],
+    anchor: ['tv'],
+    kind: 'faces',
+    band: (_self, tv) => {
+      const diag = Math.hypot(tv.dimMM[0], tv.dimMM[2]) / 1000;
+      return [diag * 1.2, diag * 2.5];
+    },
+    weight: 0.9,
+    reason: 'comfortable viewing distance for a screen this size',
+  },
+  {
+    self: ['armchair'],
+    anchor: ['sofa'],
+    kind: 'faces',
+    band: band(1.2, 2.6),
+    weight: 0.6,
+    reason: 'close enough to talk across without raising your voice',
+  },
+  {
+    self: ['rug'],
+    anchor: ['sofa', 'bed', 'dining-table'],
+    kind: 'near',
+    band: band(0, 0.8),
+    weight: 0.5,
+    reason: 'a rug anchors the group it sits under',
+  },
+  {
+    self: ['desk'],
+    anchor: ['window'],
+    kind: 'beside',
+    band: band(0, 1.5),
+    weight: 0.3,
+    reason: 'daylight across the desk rather than into your eyes',
+  },
+];
+
+/** The relation `self` has to `anchor`, if any — resolved for this actual pair. */
+export function relationFor(self: ScenePart, anchor: ScenePart): Relation | null {
+  const a = roleOf(self);
+  const b = roleOf(anchor);
+  for (const spec of RELATIONS) {
+    if (!spec.self.includes(a) || !spec.anchor.includes(b)) continue;
+    const [min, max] = spec.band(self, anchor);
+    if (!(max > 0)) continue;
+    return { kind: spec.kind, min, max, weight: spec.weight, reason: spec.reason };
+  }
+  return null;
+}
+
+/** Does any relation in the table mention this role at all? Lets a caller skip
+ *  the n² pass over pieces that can never be in one. */
+export function hasRelations(role: Role): boolean {
+  return RELATIONS.some((r) => r.self.includes(role) || r.anchor.includes(role));
+}
+
+// ─── Reading the room ───────────────────────────────────────────────────────
+
+export type RoomKind = 'bedroom' | 'living' | 'dining' | 'workspace' | 'mixed';
+
+export type RoomProfile = {
+  kind: RoomKind;
+  /** The piece the room is arranged around, by index into the parts array, or
+   *  null when nothing in here is big enough to be one. Settling it first is what
+   *  makes a hierarchical solve behave: a bed's position decides a bedroom, and
+   *  optimising it jointly with two nightstands spends the budget on nightstands. */
+  anchor: number | null;
+  /** Indices worth facing — a screen, a table. */
+  focals: number[];
+  /** Doors and windows, which belong to the walls and never move. */
+  apertures: number[];
+};
+
+/** Which roles make a room what it is. First match wins, in this order — a room
+ *  with a bed in it is a bedroom even if there is also a sofa. */
+const KIND_BY_ANCHOR: Array<[Role, RoomKind]> = [
+  ['bed', 'bedroom'],
+  ['sofa', 'living'],
+  ['dining-table', 'dining'],
+  ['desk', 'workspace'],
+];
+
+const FOCAL_ROLES = new Set<Role>(['tv', 'dining-table', 'coffee-table']);
+const APERTURE_ROLES = new Set<Role>(['door', 'window']);
+
+/** What kind of room this is, what it is arranged around, and where its openings
+ *  are. Everything the score needs that is a property of the whole room rather
+ *  than of one piece. */
+export function roomProfile(parts: ScenePart[]): RoomProfile {
+  const focals: number[] = [];
+  const apertures: number[] = [];
+  let anchor: number | null = null;
+  let anchorArea = 0;
+  let kind: RoomKind = 'mixed';
+  let kindRank = KIND_BY_ANCHOR.length;
+
+  for (let i = 0; i < parts.length; i++) {
+    const role = roleOf(parts[i]);
+    if (APERTURE_ROLES.has(role)) apertures.push(i);
+    if (FOCAL_ROLES.has(role)) focals.push(i);
+    const rank = KIND_BY_ANCHOR.findIndex(([r]) => r === role);
+    if (rank >= 0) {
+      if (rank < kindRank) {
+        kindRank = rank;
+        kind = KIND_BY_ANCHOR[rank][1];
+      }
+      const area = (parts[i].dimMM[0] / 1000) * (parts[i].dimMM[1] / 1000);
+      if (area > anchorArea) {
+        anchorArea = area;
+        anchor = i;
+      }
+    }
+  }
+  return { kind, anchor, focals, apertures };
+}
+
+/** Where a person entering through this door arrives, and how wide their route
+ *  in has to be.
+ *
+ *  Separate from the swing zone: a door that opens fine into a room you then
+ *  cannot walk out of is still a room you cannot walk out of. The path runs from
+ *  the doorway along the wall's inward normal, at least as wide as the leaf,
+ *  because that is the width of the hole people come through. */
+export function doorPath(
+  door: Pick<ScenePart, 'dimMM' | 'pos' | 'rot'>,
+  width: number,
+  depth = 1.2,
+): Foot {
+  const w = Math.max(width, door.dimMM[0] / 1000);
+  const [dx, dz] = localToWorld(door.rot, 0, depth / 2);
+  return { cx: door.pos[0] + dx, cz: door.pos[2] + dz, hw: w / 2, hd: depth / 2, rot: door.rot };
+}
+
+/** The pieces that get in a walker's way — floor-standing, solid, tall enough to
+ *  stop someone. The same set `lib/clearance.ts` reports on, as a predicate so the
+ *  solver can build the mask once per solve. */
+export function isObstacle(part: ScenePart): boolean {
+  return (
+    !part.wallMounted &&
+    roleOf(part) !== 'rug' &&
+    part.pos[1] < 0.05 &&
+    part.dimMM[2] / 1000 > OBSTACLE_HEIGHT
+  );
+}
+
+/** A part's footprint at a given placement — the one-liner every consumer of this
+ *  module needs, kept here so nobody has to remember that `dimMM` is millimetres
+ *  and `pos` is `[x, y, z]`. */
+export function footAt(part: ScenePart, x: number, z: number, yaw: number): Foot {
+  return footFromPart([x, part.pos[1], z], yaw, part.dimMM, part.circle);
+}
