@@ -214,9 +214,21 @@ measured legend).
 
 Re-confirmed at each pass:
 
-- **React stays on 18.** Next 15 accepts `^18.2`, so the upgrade did not require
-  it. Moving to 19 would force `@react-three/fiber` to v9 and drei to v10 — the
-  entire 3D stack — in an environment with no browser to verify the result in.
+- ~~**React stays on 18.**~~ **Withdrawn — this was wrong, and it shipped the
+  studio dark.** The reasoning was "Next 15 accepts `^18.2`, so the upgrade did
+  not require it; moving to 19 would force `@react-three/fiber` to v9 and drei to
+  v10 in an environment with no browser to verify the result in." The peer range
+  does say `^18.2`; the App Router does not honour it, and aliases the client
+  bundle to Next's own vendored React 19 canary. R3F v8's reconciler reads an
+  internals key that build no longer exports, so every visit to
+  `/room/[roomId]/model` threw and rendered `app/error.tsx` instead of the 3D
+  studio — the product. Resolved by going forward: React 19.2, R3F 9, drei 10,
+  postprocessing 3, three r184, verified in headless Chrome. Full account in
+  [findings-security.md](audit/findings-security.md).
+
+  Worth keeping as the lesson: "no browser here to verify it in" was used to
+  justify the option that then went unverified. Skipping a major is a change too,
+  and on the one route that carries the product it was the riskier of the two.
 - **One `brace-expansion` advisory left standing** — an advisory-range artifact,
   dev-only, reachable only under `eslint@8 > minimatch@3`. Clearing it means an
   ESLint 9 flat-config migration for a glob-matcher DoS during linting.
