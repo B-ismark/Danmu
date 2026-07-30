@@ -36,11 +36,6 @@ export function parseHex(hex: string): Rgb | null {
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
 }
 
-export function toHex({ r, g, b }: Rgb): string {
-  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
-  return `#${c(r)}${c(g)}${c(b)}`.toUpperCase();
-}
-
 /** sRGB transfer function, 0..255 → linear 0..1. */
 function toLinear(v: number): number {
   const c = v / 255;

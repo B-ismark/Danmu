@@ -38,6 +38,7 @@ import {
   pairGaps,
   rasterizeCoverage,
   TURNING_DIAMETER,
+  WALK_RADIUS,
   type ClearanceField,
 } from './clearance-field';
 
@@ -76,7 +77,12 @@ const WALKWAY_CATEGORIES = new Set<Category>([
 // Storage whose doors/drawers need room to open in front.
 const FRONT_CLEARANCE_CATEGORIES = new Set<Category>(['wardrobe', 'fridge', 'shelf']);
 
-const MIN_WALKWAY = 0.6;
+// DERIVED, not restated. `WALK_RADIUS` is documented as "half the 600 mm walkway
+// rule", so writing 0.6 here spelled the same number twice in two files with
+// nothing tying them together: narrowing the radius would have left this rule
+// still policing 600 mm, and the field and the report would disagree about what
+// a walkway is while both looked right.
+const MIN_WALKWAY = WALK_RADIUS * 2;
 const MIN_FRONT = 0.6;
 const MIN_BEDSIDE = 0.5;
 
