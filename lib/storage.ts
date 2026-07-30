@@ -22,11 +22,35 @@ async function set<T>(key: IDBValidKey, value: T): Promise<void> {
 
 export type CaptureSlot = 'n' | 'e' | 's' | 'w';
 
+/** What we managed to learn about the camera when the photo was taken.
+ *
+ *  The geometry engine otherwise assumes a 66° lens, a level phone and a shooter
+ *  exactly 1.5 m tall, and those three assumptions are its largest error terms
+ *  (see lib/photo-geometry.ts). Every field is optional: each has a fallback, and
+ *  a photo that tells us nothing is calibrated exactly as it always was.
+ *
+ *  This replaces an earlier `pose?: { yaw, tilt, height }` that was declared but
+ *  never once written or read, so there is nothing stored to migrate. */
+export type CapturePose = {
+  /** 35 mm-equivalent focal length, from EXIF. Deliberately stored as the focal
+   *  length rather than a field of view: converting needs the image aspect, and
+   *  that is known at calibration time, not here. */
+  focal35mm?: number;
+  /** Lens tilt at the shutter in degrees, positive when pointing DOWN. Live
+   *  capture only — standard EXIF has no tilt field. */
+  tiltDeg?: number;
+  /** Camera height off the floor in metres, when the user told us. */
+  heightM?: number;
+  /** Compass bearing the lens faced, degrees clockwise from north. Unused today;
+   *  a daylight model would want it. */
+  bearingDeg?: number;
+};
+
 export type Capture = {
   slot: CaptureSlot;
   blob: Blob;
   takenAt: number;
-  pose?: { yaw: number; tilt: number; height: number };
+  pose?: CapturePose;
 };
 
 /** Schema version stamped onto every room we write.
@@ -37,6 +61,17 @@ export type Capture = {
  *  needs something to branch on, and there was nothing. Records written before
  *  this existed read back as version 0. */
 export const ROOM_SCHEMA_VERSION = 1;
+
+/** Where a room is and how it is oriented, for the sun path. */
+export type Site = {
+  /** Degrees north, -90…90. */
+  lat: number;
+  /** Degrees east, -180…180. */
+  lon: number;
+  /** True bearing the room's own north edge faces, degrees clockwise. 0 = the
+   *  plan's north really is north. */
+  bearingDeg: number;
+};
 
 export type RoomData = {
   id: string;
@@ -51,6 +86,14 @@ export type RoomData = {
   /** per-wall paint colour, keyed by footprint-edge index. Optional — absent on
    *  rooms created before wall painting shipped (defensive read on load). */
   wallColors?: Record<number, string>;
+  /** Where on earth this room is, and which way it faces — the inputs the sun
+   *  path needs (`lib/solar.ts`). A property of the room, not of the device, so a
+   *  flat and a holiday cottage do not have to share a latitude.
+   *
+   *  Entered by the user and never derived from a photo: EXIF carries GPS
+   *  coordinates, and `lib/exif.ts` deliberately does not read them — see §3 of
+   *  Design.md. Additive, so no version bump. */
+  site?: Site;
   /** custom footprint polygon (XZ metres) after independent wall moves. When
    *  present it overrides the layout-derived shape on load. Optional. */
   footprint?: Array<[number, number]>;

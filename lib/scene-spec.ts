@@ -15,7 +15,7 @@ import {
 } from './physics';
 import type { CaptureSlot, RoomData } from './storage';
 import { clampDims } from './dimension-ranges';
-import { obbFromPart, obbOverlap } from './geometry';
+import { footFromPart, footOverlap } from './geometry';
 
 export type Shape =
   | 'sofa' | 'tv' | 'closet' | 'rug' | 'plant'
@@ -39,6 +39,47 @@ export type Shape =
 // surface. Positions are local-metre offsets from the part centre.
 export type DecorKind = 'books' | 'vase' | 'plant' | 'bowl' | 'candle';
 export type DecorItem = { id: string; kind: DecorKind; x: number; z: number };
+
+// ─── Light emission ─────────────────────────────────────────────────────────
+// A lamp described the way a lamp on a shelf is described. Until this existed,
+// every "light" in the scene was an emissive material: the fixture LOOKED lit and
+// emitted nothing, so switching to the Evening mood darkened a room while the
+// floor lamp standing in it contributed exactly nothing.
+//
+// Units are real (see lib/light-units.ts) so two lamps relate correctly to each
+// other. Where the bulb physically sits inside each shape belongs with that
+// shape's geometry, not here — see LIGHT_ANCHORS in components/three/PartLight.tsx.
+
+export type PartLight = {
+  /** Luminous flux off the box. 800 lm is the usual "60 W equivalent". */
+  lumens: number;
+  /** Colour temperature. 2700 K is a warm domestic bulb, 6500 K daylight. */
+  kelvin: number;
+  /** Full cone angle in degrees for a shaded downward fixture. Omitted means a
+   *  bare bulb radiating in every direction. */
+  coneDeg?: number;
+};
+
+/** What each fixture emits when the user has not said otherwise. Values are
+ *  ordinary domestic bulbs, not stage lighting. */
+const LIGHT_BY_SHAPE: Partial<Record<Shape, PartLight>> = {
+  'lamp-table': { lumens: 400, kelvin: 2700 },
+  'lamp-floor': { lumens: 800, kelvin: 2700 },
+  // A pendant's shade aims the light down rather than making more of it.
+  'lamp-pendant': { lumens: 900, kelvin: 3000, coneDeg: 110 },
+};
+
+/** The light a part emits: the user's override, else the shape's default, else
+ *  none. Most furniture is not a lamp. */
+export function lightFor(part: Pick<ScenePart, 'shape' | 'light'>): PartLight | null {
+  return part.light ?? LIGHT_BY_SHAPE[part.shape] ?? null;
+}
+
+/** True for shapes that are fixtures — the Inspector shows lighting controls for
+ *  these and nothing else. */
+export function isLightFixture(shape: Shape): boolean {
+  return shape in LIGHT_BY_SHAPE;
+}
 
 export type Category =
   | 'sofa' | 'tv' | 'chair' | 'table' | 'lamp' | 'plant' | 'shelf' | 'rug'
@@ -74,6 +115,10 @@ export type ScenePart = {
    *  undefined, an auto-suggested arrangement is shown; once the user edits it
    *  this array (possibly empty) takes over. See components/three/Dressing.tsx. */
   decor?: DecorItem[];
+  /** What this fixture emits, overriding the per-shape default. Absent means the
+   *  default for its shape (see `lightFor`), which for anything that is not a
+   *  lamp is no light at all. */
+  light?: PartLight;
   /** group id — parts sharing one move together (multi-select merge). */
   groupId?: string;
   /** Reference into the local mesh cache (lib/mesh-cache.ts). When set, the 3D
@@ -593,7 +638,7 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
   for (const p of parts) {
     if (p.category !== 'rug') {
       const support =
-        p.wallMounted ? null : findSupportUnder(parts, p.id, p.pos[0], p.pos[2], p.dimMM);
+        p.wallMounted ? null : findSupportUnder(parts, p.id, p.pos[0], p.pos[2], p.dimMM, p.rot);
 
       if (!p.wallMounted && isTabletopProne(p.category) && support !== null && support > 0.3) {
         p.pos[1] = support;
@@ -675,7 +720,7 @@ export function collidesAt(
   // Mover y-bottom (pos.y is the floor anchor in our scene; for wall-mounted it's mid-height).
   const myBottom = pos[1];
   const myTop = pos[1] + mh;
-  const me = obbFromPart(pos, rot, dimMM);
+  const me = footFromPart(pos, rot, dimMM, mover.circle);
   for (const o of parts) {
     if (o.id === movingId) continue;
     if (o.category === 'rug') continue;
@@ -688,9 +733,10 @@ export function collidesAt(
     const yOverlap = !(myTop <= oyBottom + 0.005 || myBottom >= oyTop - 0.005);
     if (!yOverlap) continue;
 
-    // XZ overlap — exact rotated-rectangle test (SAT). The tiny negative pad
-    // lets flush side-by-side placement read as touching, not colliding.
-    if (obbOverlap(me, obbFromPart(o.pos, o.rot, o.dimMM), -0.01)) return true;
+    // XZ overlap — exact separating-axis test, over the ROUND footprint where a
+    // piece has one. The tiny negative pad lets flush side-by-side placement read
+    // as touching, not colliding.
+    if (footOverlap(me, footFromPart(o.pos, o.rot, o.dimMM, o.circle), -0.01)) return true;
   }
   return false;
 }

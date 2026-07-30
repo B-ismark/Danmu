@@ -15,11 +15,14 @@
 // It also no longer refuses work silently: a drag that collides tints red and
 // slides along whatever it hit, matching the 3D Draggable.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStudio, useSettings } from '@/lib/store';
 import { useRoomScene } from '@/lib/room-scene';
 import { useScene } from '@/lib/scene-store';
 import { collidesAt, type ScenePart } from '@/lib/scene-spec';
+import { entranceComponents, floorBlockers } from '@/lib/clearance';
+import { buildClearanceField, fieldRuns, FREE_CELL, WALK_RADIUS } from '@/lib/clearance-field';
+import { obbFromPart } from '@/lib/geometry';
 import { pointInFootprint, wallSegments, footprintBounds } from '@/lib/footprint';
 import { formatDim } from '@/lib/units';
 import { IconButton } from '@/components/ui/primitives';
@@ -32,14 +35,21 @@ const MAX_ZOOM = 4;
 /** How far one arrow press moves a wall. */
 const WALL_STEP = 0.05;
 
-// Ergonomic thresholds, in metres. lib/clearance.ts owns these rules and reports
-// on them; this is the only view that can *draw* them, so the numbers are
-// mirrored here and must be kept in step with that file.
-const WALKWAY_M = 0.6; // comfortable passage between bulky pieces
+// Ergonomic thresholds, in metres, for the per-piece bands below. Circulation is
+// NOT among them any more: the walkway used to be drawn as each bulky piece's
+// footprint inflated by half of 600 mm, which is a decent picture of one rule and
+// a poor picture of the room — it could not show a gap against a wall, could not
+// show two bands leaving a corridor that is technically clear but goes nowhere,
+// and needed the threshold and the category list copied out of lib/clearance.ts
+// and kept in step by hand. `lib/clearance-field.ts` is where circulation lives
+// now, and the plan reads the same raster the room report does.
 const FRONT_M = 0.6; // in front of doors and drawers
 const BEDSIDE_M = 0.5; // enough to get into bed and make it
-const WALKWAY_CATS = new Set(['sofa', 'bed', 'wardrobe', 'shelf', 'fridge', 'desk']);
 const FRONT_CATS = new Set(['wardrobe', 'fridge', 'shelf']);
+
+/** Run states for the circulation overlay. */
+const WALKABLE = 0;
+const CUT_OFF = 1;
 
 export function PlanView({
   onViewChange,
@@ -66,6 +76,27 @@ export function PlanView({
   const setSelectedWall = useStudio((s) => s.setSelectedWall);
   const snapMode = useStudio((s) => s.snapMode);
   const moveWall = useScene((s) => s.moveWall);
+
+  // Circulation, straight off the same field lib/clearance.ts reports from — and
+  // only while the overlay is on, since building it costs a distance transform.
+  const walkRuns = useMemo(() => {
+    if (!showComfort) return [];
+    const blockers = floorBlockers(parts);
+    const field = buildClearanceField(
+      blockers.map((p) => obbFromPart(p.pos, p.rot, p.dimMM)),
+      ROOM_DYN.footprint,
+    );
+    if (!field) return [];
+    // No door means no way to know which side anyone comes in from, so every
+    // walkable region is drawn as walkable rather than guessed at.
+    const entrance = entranceComponents(field, parts);
+    return fieldRuns(field, (at) => {
+      if (field.cover[at] !== FREE_CELL) return -1;
+      const id = field.component[at];
+      if (id < 0) return -1; // free floor, but too tight to stand in
+      return !entrance || entrance.has(id) ? WALKABLE : CUT_OFF;
+    });
+  }, [showComfort, parts, ROOM_DYN.footprint]);
 
   // Keyboard steps track the gizmo's snap setting so the two agree: 10 mm / 15°
   // fine, 50 mm / 45° coarse. "Off" still steps — a key press has to be discrete.
@@ -527,8 +558,32 @@ export function PlanView({
             strokeWidth="3"
           />
 
-          {/* Comfort zones — the clearance rules as floor regions, under the
-              furniture so a piece is never obscured by its own band. */}
+          {/* Where a person actually fits, cell by cell. Runs rather than cells:
+              a 6 x 4 m room is ~10 000 cells but only a few hundred horizontal
+              runs, so this stays plain SVG and keeps reading the design tokens
+              instead of needing a canvas and a fourth copy of the palette.
+              A half-cell overlap on each rect closes the hairlines that otherwise
+              show between rows at high zoom. */}
+          {showComfort && walkRuns.length > 0 && (
+            <g style={{ pointerEvents: 'none' }} aria-hidden="true">
+              {walkRuns.map((r, i) => {
+                const a = toLocal(r.x, r.z);
+                return (
+                  <rect
+                    key={`walk-${i}`}
+                    x={a.x}
+                    y={a.y}
+                    width={r.w * SCALE + 0.5}
+                    height={r.h * SCALE + 0.5}
+                    fill={r.state === CUT_OFF ? 'var(--warn-tint)' : 'var(--accent-2-tint)'}
+                  />
+                );
+              })}
+            </g>
+          )}
+
+          {/* Comfort zones — the per-piece clearance rules as floor regions, under
+              the furniture so a piece is never obscured by its own band. */}
           {showComfort && (
             <g style={{ pointerEvents: 'none' }}>
               {parts.map((part) => {
@@ -685,10 +740,16 @@ export function PlanView({
                   />
                 )}
                 {part.circle ? (
-                  <circle
+                  // An ellipse, not a circle of radius W/2: a round part is
+                  // authored square, but W and D are separately editable, and
+                  // `lib/geometry`'s Foot models the inscribed ELLIPSE — so a
+                  // stretched plant pot has to draw as the shape the collision
+                  // and coverage maths is using.
+                  <ellipse
                     cx={0}
                     cy={0}
-                    r={wpx / 2}
+                    rx={wpx / 2}
+                    ry={hpx / 2}
                     fill={fill}
                     stroke={color}
                     strokeWidth={isSel ? 2.5 : 1.4}
@@ -857,23 +918,41 @@ export function PlanView({
           Arrow keys nudge whatever is focused; hold Shift to turn it.
         </span>
         {showComfort && (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--ink-3)' }}>
-            <span
-              aria-hidden="true"
-              style={{
-                width: 14,
-                height: 10,
-                flexShrink: 0,
-                background: 'var(--accent-2-tint)',
-                border: '1px dashed var(--accent-2)',
-                borderRadius: 2,
-              }}
-            />
-            Shaded floor is room to walk, open a door, and get into bed.
-          </span>
+          <>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--ink-3)' }}>
+              <Swatch fill="var(--accent-2-tint)" />
+              Sage floor has room to stand and walk — {WALK_RADIUS * 200} cm across.
+            </span>
+            {walkRuns.some((r) => r.state === CUT_OFF) && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--warn-text)' }}>
+                <Swatch fill="var(--warn-tint)" />
+                No route from the door to this part of the floor.
+              </span>
+            )}
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--ink-3)' }}>
+              <Swatch fill="var(--accent-2-tint)" dashed />
+              Dashed bands are room to open a door and get into bed.
+            </span>
+          </>
         )}
       </div>
     </div>
+  );
+}
+
+function Swatch({ fill, dashed }: { fill: string; dashed?: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        width: 14,
+        height: 10,
+        flexShrink: 0,
+        background: fill,
+        border: dashed ? '1px dashed var(--accent-2)' : '1px solid var(--edge)',
+        borderRadius: 2,
+      }}
+    />
   );
 }
 
@@ -895,14 +974,6 @@ function comfortBands(part: ScenePart): React.ReactNode[] | null {
 
   if (part.wallMounted || part.category === 'rug') return null;
 
-  if (WALKWAY_CATS.has(part.category)) {
-    // Inflated by half the walkway on every side, so two of these overlapping is
-    // exactly the condition Room check reports as a tight walkway.
-    const pad = (WALKWAY_M / 2) * SCALE;
-    out.push(
-      <rect key="walk" x={-w / 2 - pad} y={-d / 2 - pad} width={w + pad * 2} height={d + pad * 2} rx={pad / 2} {...soft} />,
-    );
-  }
   if (FRONT_CATS.has(part.category)) {
     out.push(<rect key="front" x={-w / 2} y={d / 2} width={w} height={FRONT_M * SCALE} {...soft} fillOpacity={0.9} />);
   }

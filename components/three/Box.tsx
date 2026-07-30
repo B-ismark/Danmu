@@ -25,6 +25,7 @@ import { Edges, RoundedBox } from '@react-three/drei';
 import type { ThreeElements } from '@react-three/fiber';
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { Color, DoubleSide, Euler, Matrix4, Quaternion, Vector3, type InstancedMesh } from 'three';
+import { PHYSICAL_SURFACES, SURFACE, type SurfaceKey } from './materials';
 
 /** Below this (metres) the clamped bevel is invisible — skip RoundedBox. */
 const BEVEL_FLOOR = 0.05;
@@ -39,9 +40,13 @@ type Props = {
   edgeOpacity?: number;
   emissive?: string;
   emissiveIntensity?: number;
-  /** roughness override (default 0.8 — slight sheen reads less plasticky/flat). */
+  /** roughness override. Defaults to the surface preset's, else 0.8. */
   roughness?: number;
   metalness?: number;
+  /** Named surface from ./materials — microrelief and, for cloth, the sheen lobe.
+   *  Taken by NAME rather than as a spread object so the caller cannot pair a
+   *  preset with a material element that silently drops half of it. */
+  surface?: SurfaceKey;
   children?: ReactNode;
 };
 
@@ -54,24 +59,34 @@ export function Box({
   edgeOpacity = 0,
   emissive,
   emissiveIntensity = 0,
-  roughness = 0.8,
-  metalness = 0,
+  roughness,
+  metalness,
+  surface,
   children,
 }: Props) {
   // Bevel radius scaled to the smallest dimension, clamped so thin panels
   // (doors, shelves, TV) don't collapse.
   const minDim = Math.min(size[0], size[1], size[2]);
   const radius = Math.min(0.03, Math.max(0.004, minDim * 0.18));
-  const material = (
-    <meshStandardMaterial
-      color={color}
-      roughness={roughness}
-      metalness={metalness}
-      envMapIntensity={0.5}
-      emissive={emissive ?? '#000000'}
-      emissiveIntensity={emissiveIntensity}
-    />
-  );
+  const preset = surface ? SURFACE[surface] : undefined;
+  const matProps = {
+    color,
+    envMapIntensity: 0.5,
+    emissive: emissive ?? '#000000',
+    emissiveIntensity,
+    ...preset,
+    roughness: roughness ?? preset?.roughness ?? 0.8,
+    metalness: metalness ?? preset?.metalness ?? 0,
+  };
+  // meshPhysicalMaterial is the heavier shader, so it is used only where the
+  // preset actually needs it — cloth, for its sheen. Everything else stays on
+  // meshStandardMaterial exactly as before.
+  const material =
+    surface && PHYSICAL_SURFACES.includes(surface) ? (
+      <meshPhysicalMaterial {...matProps} />
+    ) : (
+      <meshStandardMaterial {...matProps} />
+    );
   const outline = edgeOpacity > 0 && (
     <Edges threshold={30} renderOrder={1}>
       <lineBasicMaterial color={edgeColor} transparent opacity={edgeOpacity} />

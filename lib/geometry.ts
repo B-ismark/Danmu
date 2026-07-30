@@ -57,11 +57,17 @@ function inflate(b: OBB, by: number): OBB {
  *  half-planes, then take the shoelace area of what survives. Exact for two
  *  convex quads, and no sampling resolution to get wrong. */
 export function obbIntersectionArea(a: OBB, b: OBB): number {
-  let poly = obbCorners(a);
-  const clip = obbCorners(b);
-  for (let i = 0; i < 4 && poly.length > 0; i++) {
+  return polyIntersectionArea(obbCorners(a), obbCorners(b));
+}
+
+/** Area shared by two CONVEX polygons, both counter-clockwise. The general form
+ *  of the above — a round footprint is a many-sided convex polygon, and the clip
+ *  does not care how many sides it has. */
+export function polyIntersectionArea(subject: Vec2[], clip: Vec2[]): number {
+  let poly = subject;
+  for (let i = 0; i < clip.length && poly.length > 0; i++) {
     const [ex, ez] = clip[i];
-    const [fx, fz] = clip[(i + 1) % 4];
+    const [fx, fz] = clip[(i + 1) % clip.length];
     // Corners are counter-clockwise, so "inside" is to the left of each edge.
     const side = (p: Vec2) => (fx - ex) * (p[1] - ez) - (fz - ez) * (p[0] - ex);
     const next: Vec2[] = [];
@@ -97,11 +103,13 @@ function lerpAt(prev: Vec2, cur: Vec2, dPrev: number, dCur: number): Vec2 {
   return [prev[0] + (cur[0] - prev[0]) * t, prev[1] + (cur[1] - prev[1]) * t];
 }
 
-/** True if any edge normal of `a` separates the two corner sets. */
+/** True if any edge normal of `a` separates the two corner sets. Convex only —
+ *  which every footprint in this file is. */
 function hasSeparatingAxis(a: Vec2[], b: Vec2[]): boolean {
-  for (let i = 0; i < 4; i++) {
-    const ax = a[(i + 1) % 4][0] - a[i][0];
-    const az = a[(i + 1) % 4][1] - a[i][1];
+  const n = a.length;
+  for (let i = 0; i < n; i++) {
+    const ax = a[(i + 1) % n][0] - a[i][0];
+    const az = a[(i + 1) % n][1] - a[i][1];
     // Edge normal.
     const nx = -az;
     const nz = ax;
@@ -343,4 +351,96 @@ export function pointInObb(x: number, z: number, b: OBB): boolean {
   const lx = dx * c - dz * s;
   const lz = dx * s + dz * c;
   return Math.abs(lx) <= b.hw && Math.abs(lz) <= b.hd;
+}
+
+// ─── Round footprints ───────────────────────────────────────────────────────
+//
+// A round table, an ottoman, a pot plant and a round rug all had square
+// footprints as far as the geometry was concerned. The bounding square of a
+// circle is 4/π — 27% — bigger than the circle, and all of that surplus sits in
+// the four corners, which is exactly where the chairs go. So a chair genuinely
+// tucked under a round dining table read as a clash, and a round rug claimed a
+// quarter more floor than it covers.
+//
+// `circle` means the ellipse INSCRIBED in the OBB. That is a true circle whenever
+// W == D, which is how every round part in the catalog is authored — and an
+// ellipse is what the renderer actually draws if someone scales one axis, so
+// modelling the ellipse rather than "a circle of radius W/2" keeps the maths and
+// the picture agreeing.
+
+/** A plan footprint that may be round. Assignable anywhere an `OBB` is wanted,
+ *  so the rectangle-only helpers above still take one — they then treat it as its
+ *  bounding box, which is the conservative direction for the two that matter
+ *  (`faceClearance` reports slightly LESS room in front of a wardrobe, never
+ *  more). */
+export type Foot = OBB & { circle?: boolean };
+
+export function footFromPart(
+  pos: [number, number, number],
+  rot: number,
+  dimMM: [number, number, number],
+  circle?: boolean,
+): Foot {
+  return { ...obbFromPart(pos, rot, dimMM), circle };
+}
+
+/** Exact plan area, m². */
+export function footArea(f: Foot): number {
+  return f.circle ? Math.PI * f.hw * f.hd : 4 * f.hw * f.hd;
+}
+
+/** Sides used to approximate a round footprint as a convex polygon.
+ *
+ *  An inscribed N-gon holds `(N/2π)·sin(2π/N)` of the ellipse: 98.9% at 24 sides,
+ *  99.4% at 32. Inscribed rather than circumscribed on purpose, so every answer
+ *  derived from it errs slightly SMALL and a round piece is never reported as
+ *  hitting something it does not touch — a false collision is the worse failure
+ *  here, because it stops a move the user is entitled to make.
+ *
+ *  Only the pairwise helpers polygonise; the per-cell containment test below is
+ *  the exact ellipse, so this never runs in a hot loop. */
+const CIRCLE_SEGMENTS = 32;
+
+/** The footprint as a counter-clockwise convex polygon. Exact for a rectangle. */
+export function footCorners(f: Foot, segments = CIRCLE_SEGMENTS): Vec2[] {
+  if (!f.circle) return obbCorners(f);
+  const c = Math.cos(f.rot);
+  const s = Math.sin(f.rot);
+  const out: Vec2[] = [];
+  for (let i = 0; i < segments; i++) {
+    const t = (i / segments) * Math.PI * 2;
+    const lx = Math.cos(t) * f.hw;
+    const lz = Math.sin(t) * f.hd;
+    out.push([f.cx + lx * c - lz * s, f.cz + lx * s + lz * c]);
+  }
+  return out;
+}
+
+/** Do these two footprints overlap? Falls through to the rectangle fast path
+ *  when neither is round, so nothing about rectangles changes. */
+export function footOverlap(a: Foot, b: Foot, pad = 0): boolean {
+  if (!a.circle && !b.circle) return obbOverlap(a, b, pad);
+  const ca = footCorners(inflate(a, pad / 2));
+  const cb = footCorners(inflate(b, pad / 2));
+  return !hasSeparatingAxis(ca, cb) && !hasSeparatingAxis(cb, ca);
+}
+
+/** Area the two footprints share, m². */
+export function footIntersectionArea(a: Foot, b: Foot): number {
+  if (!a.circle && !b.circle) return obbIntersectionArea(a, b);
+  return polyIntersectionArea(footCorners(a), footCorners(b));
+}
+
+/** Is this point inside the footprint? Exact for the ellipse — no polygon
+ *  approximation, because this one runs per raster cell and the closed form is
+ *  cheaper than the 24-gon anyway. */
+export function pointInFoot(x: number, z: number, f: Foot): boolean {
+  if (!f.circle) return pointInObb(x, z, f);
+  const c = Math.cos(-f.rot);
+  const s = Math.sin(-f.rot);
+  const dx = x - f.cx;
+  const dz = z - f.cz;
+  const lx = (dx * c - dz * s) / f.hw;
+  const lz = (dx * s + dz * c) / f.hd;
+  return lx * lx + lz * lz <= 1;
 }

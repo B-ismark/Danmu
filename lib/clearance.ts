@@ -18,15 +18,28 @@
 import type { ScenePart, Category } from './scene-spec';
 import type { Footprint } from './footprint';
 import {
-  obbFromPart,
-  obbGap,
-  obbIntersectionArea,
   faceClearance,
+  footArea,
+  footFromPart,
+  footIntersectionArea,
   pointInObb,
-  pointInPoly,
+  type Foot,
   type OBB,
   type Poly,
 } from './geometry';
+import {
+  buildClearanceField,
+  componentAreas,
+  componentsAround,
+  componentsNear,
+  freeShareOf,
+  gapTolerance,
+  largestFreeCircle,
+  pairGaps,
+  rasterizeCoverage,
+  TURNING_DIAMETER,
+  type ClearanceField,
+} from './clearance-field';
 
 export type ClearanceSeverity = 'error' | 'warn' | 'info';
 
@@ -43,6 +56,16 @@ export type RoomReport = {
   issues: ClearanceIssue[];
   /** share of the floor polygon not covered by floor-standing furniture, 0..1 */
   freeFloorShare: number;
+  /** The raster the circulation rules were read off, for the plan's heatmap.
+   *  Null only when the footprint is degenerate. */
+  field: ClearanceField | null;
+};
+
+export type AnalyzeOptions = {
+  /** Report step-free turning space. Off by default — not every room needs to
+   *  meet it, and everyone whose does needs it stated plainly rather than mixed
+   *  into the ordinary findings. */
+  accessibility?: boolean;
 };
 
 // Bulky pieces whose pairwise gaps form walkways people actually use.
@@ -84,20 +107,53 @@ function clashShare(a: ScenePart, b: ScenePart): number {
   return tucks ? TUCKED_CLASH_SHARE : CLASH_SHARE;
 }
 
+/** The pieces that actually get in a walker's way: floor-standing, solid, and
+ *  tall enough to stop someone. Rugs and wall-hung items do not block a route,
+ *  and a 20 cm-tall pouffe is a step-over rather than an obstacle.
+ *
+ *  Exported because the 2D plan draws the same circulation the report describes,
+ *  and it has to be reading the same set of blockers — the plan used to inflate
+ *  each bulky piece by half a walkway and call that the rule, with a comment
+ *  admitting the thresholds were copied from this file and had to be kept in
+ *  step. */
+export function floorBlockers(parts: ScenePart[]): ScenePart[] {
+  return parts.filter(
+    (p) => !p.wallMounted && p.category !== 'rug' && p.pos[1] < 0.05 && p.dimMM[2] > 250,
+  );
+}
+
+/** Which walkable regions someone can actually enter the room into.
+ *
+ *  Null when the room has no door: there is then no telling which side anybody
+ *  arrives from, and every "you cannot get to this" claim would be a guess
+ *  dressed as a measurement. Callers must treat null as "reachability unknown"
+ *  and say nothing, not as "nothing is reachable". */
+export function entranceComponents(field: ClearanceField, parts: ScenePart[]): Set<number> | null {
+  const doors = parts.filter((p) => p.category === 'door');
+  if (doors.length === 0) return null;
+  const out = new Set<number>();
+  // A door stands ON the wall, where by definition nobody can stand, so look
+  // outward from it for the floor it opens onto.
+  for (const d of doors) for (const id of componentsNear(field, d.pos[0], d.pos[2], 1.2)) out.add(id);
+  return out.size > 0 ? out : null;
+}
+
 export function analyzeRoom(
   parts: ScenePart[],
   room: { footprint: Footprint; height: number },
+  opts: AnalyzeOptions = {},
 ): RoomReport {
   const issues: ClearanceIssue[] = [];
   const poly = room.footprint as Poly;
 
-  // Floor-standing solid furniture only (rugs and wall-mounted items don't
-  // block walking).
-  const solid = parts.filter(
-    (p) => !p.wallMounted && p.category !== 'rug' && p.pos[1] < 0.05 && p.dimMM[2] > 250,
-  );
-  const obbs = new Map<string, OBB>();
-  for (const p of solid) obbs.set(p.id, obbFromPart(p.pos, p.rot, p.dimMM));
+  const solid = floorBlockers(parts);
+  const obbs = new Map<string, Foot>();
+  for (const p of solid) obbs.set(p.id, footFromPart(p.pos, p.rot, p.dimMM, p.circle));
+
+  // One raster, read by rules 3, 8, 9 and 10. Its cell index IS the index into
+  // `solid`, so a finding can name the pieces it is about.
+  const solidObbs = solid.map((p) => obbs.get(p.id)!);
+  const field = buildClearanceField(solidObbs, poly);
 
   // ── 1. Door swing blocked ────────────────────────────────────────────────
   for (const door of parts.filter((p) => p.category === 'door')) {
@@ -141,9 +197,13 @@ export function analyzeRoom(
       if (aTop <= b.pos[1] + 0.005 || bTop <= a.pos[1] + 0.005) continue;
       const oa = obbs.get(a.id)!;
       const ob = obbs.get(b.id)!;
-      const shared = obbIntersectionArea(oa, ob);
+      const shared = footIntersectionArea(oa, ob);
       if (shared <= 0) continue;
-      const smaller = Math.min(oa.hw * oa.hd, ob.hw * ob.hd) * 4;
+      // Real areas, so a round table is measured as a circle rather than as the
+      // square around it — the four phantom corners are precisely where a tucked
+      // chair sits, so the square version reported the most ordinary dining
+      // arrangement there is as a collision.
+      const smaller = Math.min(footArea(oa), footArea(ob));
       if (smaller <= 0 || shared / smaller < clashShare(a, b)) continue;
       issues.push({
         id: `clash-${a.id}-${b.id}`,
@@ -155,25 +215,41 @@ export function analyzeRoom(
     }
   }
 
-  // ── 3. Pinched walkways between bulky furniture ──────────────────────────
-  const bulky = solid.filter((p) => WALKWAY_CATEGORIES.has(p.category));
-  for (let i = 0; i < bulky.length; i++) {
-    for (let j = i + 1; j < bulky.length; j++) {
-      const a = bulky[i];
-      const b = bulky[j];
-      const gap = obbGap(obbs.get(a.id)!, obbs.get(b.id)!);
-      // Touching (deliberate composition) and far apart are both fine — the
-      // problem zone is a gap someone would try to squeeze through. Genuine
-      // overlap is caught above, so 0 here really does mean flush.
-      if (gap > 0.12 && gap < MIN_WALKWAY) {
-        issues.push({
-          id: `walk-${a.id}-${b.id}`,
-          severity: 'warn',
-          title: 'Tight walkway',
-          detail: `Only ${Math.round(gap * 100)} cm between “${a.name}” and “${b.name}” — comfortable passage needs ${MIN_WALKWAY * 100} cm.`,
-          partIds: [a.id, b.id],
-        });
-      }
+  // ── 3. Pinched walkways ──────────────────────────────────────────────────
+  // Read off the field instead of comparing every bulky pair. Two cells whose
+  // nearest obstacles differ sit on the medial axis between those obstacles, and
+  // at the point of closest approach the disc that fits there has exactly half
+  // the gap as its radius — so this returns the same number `obbGap` did, for
+  // every pair at once and in one pass over the raster instead of n².
+  //
+  // The reading carries the raster's ±half-cell, so the band is narrowed by a
+  // whole cell at each end: a finding is raised only when the entire uncertainty
+  // range sits inside it. Touching (deliberate composition) and far apart are
+  // both fine — the problem zone is a gap someone would try to squeeze through.
+  //
+  // Gaps against a WALL are deliberately not reported here. The field knows them
+  // — the wall is just another owner — but "the sofa is 40 cm from the wall" is
+  // usually a description of the room rather than a fault, and saying it every
+  // time would teach people to close this panel. A wall gap that genuinely
+  // matters is one that pinches the only route through, and that is what rule 9
+  // reports, in the terms that actually make it a problem.
+  if (field) {
+    const band = gapTolerance(field);
+    for (const [key, gap] of pairGaps(field)) {
+      const [ai, bi] = key.split(':').map(Number);
+      if (ai < 0 || bi < 0) continue; // one side is the wall — see rule 9
+      const a = solid[ai];
+      const b = solid[bi];
+      if (!a || !b) continue;
+      if (!WALKWAY_CATEGORIES.has(a.category) && !WALKWAY_CATEGORIES.has(b.category)) continue;
+      if (gap - band <= 0.12 || gap + band >= MIN_WALKWAY) continue;
+      issues.push({
+        id: `walk-${a.id}-${b.id}`,
+        severity: 'warn',
+        title: 'Tight walkway',
+        detail: `Only ${Math.round(gap * 100)} cm between “${a.name}” and “${b.name}” — comfortable passage needs ${MIN_WALKWAY * 100} cm.`,
+        partIds: [a.id, b.id],
+      });
     }
   }
 
@@ -275,10 +351,8 @@ export function analyzeRoom(
   }
 
   // ── 8. Free floor share ──────────────────────────────────────────────────
-  const freeFloorShare = freeFloorFraction(
-    solid.map((p) => obbs.get(p.id)!),
-    poly,
-  );
+  // A by-product of the raster now, rather than its own pass over the room.
+  const freeFloorShare = field ? freeShareOf(field) : freeFloorFraction(solidObbs, poly);
   if (freeFloorShare < 0.4) {
     issues.push({
       id: 'crowding',
@@ -289,51 +363,107 @@ export function analyzeRoom(
     });
   }
 
+  // ── 9. Can you actually get there? ───────────────────────────────────────
+  // The one question a pairwise rule cannot ask. Every individual gap in a room
+  // can pass and the room still be split in two, because circulation is a
+  // property of the whole floor rather than of any pair of pieces — and it is
+  // where a wall pinch finally becomes a fault worth naming, rather than a
+  // description of where the sofa sits.
+  //
+  // Gated hard, because a false "you cannot reach this" is worse than silence:
+  // it needs a door to reason from (without one there is no telling which side
+  // someone comes in), and it does nothing at all unless the walkable floor has
+  // genuinely split into more than one piece.
+  const entrance = field ? entranceComponents(field, parts) : null;
+  if (field && field.componentCount > 1 && entrance) {
+    const reachable = entrance;
+    const stranded = solid.filter((p, i) => {
+      const near = componentsAround(field, solidObbs[i]);
+      // Nothing walkable anywhere near it is "wedged in", not "unreachable" — a
+      // stool in a corner reads that way and is perfectly reachable.
+      if (near.size === 0) return false;
+      for (const id of near) if (reachable.has(id)) return false;
+      return true;
+    });
+    if (stranded.length > 0) {
+      issues.push({
+        id: 'reach',
+        severity: 'warn',
+        title: 'You can’t walk to everything',
+        detail: `${stranded.map((p) => `“${p.name}”`).join(', ')} ${stranded.length === 1 ? 'sits' : 'sit'} in part of the room that nothing connects to the door — every route in is under ${MIN_WALKWAY * 100} cm wide.`,
+        partIds: stranded.map((p) => p.id),
+      });
+    }
+    const cutOff = componentAreas(field).reduce((sum, a, id) => (reachable.has(id) ? sum : sum + a), 0);
+    if (cutOff >= 1.5) {
+      issues.push({
+        id: 'cut-off',
+        severity: 'info',
+        title: 'Part of the floor is cut off',
+        detail: `About ${cutOff.toFixed(1)} m² of floor has no route to the door wider than ${MIN_WALKWAY * 100} cm.`,
+        partIds: [],
+      });
+    }
+  }
+
+  // ── 10. Step-free turning space ──────────────────────────────────────────
+  // Opt-in: most people do not need this, and the ones who do need it said
+  // plainly rather than blended into the ordinary findings.
+  if (opts.accessibility && field) {
+    const circle = largestFreeCircle(field, entrance ?? undefined);
+    const diameter = circle ? circle.r * 2 : 0;
+    // Only when even the optimistic reading falls short of the standard.
+    if (diameter + field.cell < TURNING_DIAMETER) {
+      issues.push({
+        id: 'turning',
+        severity: 'warn',
+        title: 'No room to turn a wheelchair',
+        detail: `The largest clear circle in this room is about ${Math.round(diameter * 100)} cm across. A wheelchair needs ${TURNING_DIAMETER * 100} cm to turn on the spot.`,
+        partIds: [],
+      });
+    }
+  }
+
   const order: Record<ClearanceSeverity, number> = { error: 0, warn: 1, info: 2 };
   issues.sort((a, b) => order[a.severity] - order[b.severity]);
-  return { issues, freeFloorShare };
+  return { issues, freeFloorShare, field };
 }
 
-/** Cell size for the coverage raster, in metres. 5 cm over a 40 m room is 800
- *  columns — ample for a percentage, and cheap because the whole thing runs once
- *  per committed edit (analyzeRoom is memoised by its caller). */
-const COVER_CELL = 0.05;
 
 /** Fraction of the footprint NOT covered by any part, 0..1.
  *
- *  A union, not a sum. Summing each part's W × D triple-counted a chair pushed
+ *  A union, not a sum. Summing each part's W x D triple-counted a chair pushed
  *  under a desk, ignored rotation entirely, and counted the whole of a part that
- *  hung outside the room after a wall drag — then clamped the result at 0, so a
- *  busy room confidently reported "100% of the floor covered". */
-export function freeFloorFraction(parts: OBB[], poly: Poly): number {
-  let inside = 0;
-  let covered = 0;
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minZ = Infinity;
-  let maxZ = -Infinity;
-  for (const [x, z] of poly) {
-    if (x < minX) minX = x;
-    if (x > maxX) maxX = x;
-    if (z < minZ) minZ = z;
-    if (z > maxZ) maxZ = z;
-  }
-  if (!Number.isFinite(minX) || maxX <= minX || maxZ <= minZ) return 1;
-
-  for (let z = minZ + COVER_CELL / 2; z < maxZ; z += COVER_CELL) {
-    for (let x = minX + COVER_CELL / 2; x < maxX; x += COVER_CELL) {
-      if (!pointInPoly(x, z, poly)) continue;
-      inside++;
-      for (const b of parts) {
-        if (pointInObb(x, z, b)) {
-          covered++;
-          break;
-        }
-      }
-    }
-  }
-  if (inside === 0) return 1;
-  return Math.max(0, Math.min(1, 1 - covered / inside));
+ *  hung outside the room after a wall drag - then clamped the result at 0, so a
+ *  busy room confidently reported "100% of the floor covered".
+ *
+ *  The raster behind it lives in lib/clearance-field.ts now, because the
+ *  circulation rules need exactly the same grid and rasterising the room twice
+ *  per edit to answer two questions about one picture would be silly. Scanning
+ *  each PART over its own bounding box rather than each CELL over every part is
+ *  what made it cheap: the cell-major form cost `room area x part count` with
+ *  Math.cos/Math.sin in the innermost loop, so a 40 m room (640 000 cells) with
+ *  30 pieces meant 19 M point tests and ~38 M trig calls for one percentage.
+ *
+ *  Measured, identical results to the last bit:
+ *
+ *  | room                       | before  | after   |
+ *  |----------------------------|---------|---------|
+ *  | 5 x 5 m, 12 parts          | 7.9 ms  | 0.7 ms  |
+ *  | 12 x 9 m open plan, 30     | 121 ms  | 2.5 ms  |
+ *  | 40 x 40 m (MAX_ROOM), 30   | 1558 ms | 27.9 ms |
+ *
+ *  The last row is the one that mattered: analyzeRoom runs on every committed
+ *  edit, so a large room paid a 1.5 s freeze per drag-release.
+ *
+ *  Kept as its own entry point because plenty of callers want the percentage and
+ *  nothing else - building the distance transform for them would undo the win
+ *  above. analyzeRoom, which needs the field anyway, reads the share off it. */
+export function freeFloorFraction(parts: Foot[], poly: Poly): number {
+  // Nothing to subtract - skip rasterising the room to divide it by itself.
+  if (parts.length === 0) return 1;
+  const raster = rasterizeCoverage(parts, poly);
+  return raster ? freeShareOf(raster) : 1;
 }
 
 /** Distance from a point to an OBB's boundary (0 when inside). */

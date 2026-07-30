@@ -79,6 +79,14 @@ living room, and the engine only needs four *consecutive* walls.
 > wall photos to Google; the local ONNX path does not. The UI must say which
 > one is happening at the moment it happens — a privacy promise displayed
 > during an upload is the one bug class this section exists to prevent.
+>
+> What leaves is **pixels only**. `normalizePhoto` strips EXIF / XMP / IPTC
+> before a photo is stored or sent (`lib/jpeg-strip.ts`), because a phone writes
+> `GPSLatitude` / `GPSLongitude` into a photo taken at home and the promise above
+> is about the room, not the address. The re-encode path drops metadata as a side
+> effect; the passthrough path — a JPEG already under the size cap, kept
+> unchanged so it does not lose quality for nothing — is the one that needed the
+> explicit strip, and is where the coordinates used to survive.
 
 Furniture detection runs through a fallback chain, best-effort:
 
@@ -121,6 +129,7 @@ Furniture detection runs through a fallback chain, best-effort:
    | yolov8x-oiv7 | 275 MB | 7/19 | 7/19 |
    | yolov8s-worldv2 | 50 MB | 7/19 | 10/19 |
    | **oiv7-n + worldv2-s (shipped)** | **64 MB** | — | **13/19** |
+   | rfdetr-base (Apache-2.0, COCO-80) | 108 MB | — | 6/19 |
 
    Two findings worth keeping:
 
@@ -131,6 +140,25 @@ Furniture detection runs through a fallback chain, best-effort:
      fridge / wardrobe class heads peak at 0.002–0.03 on this imagery against
      0.38–0.44 for classes that fire, at *every* OIV7 size. An open-vocabulary
      model prompted with those words in plain language finds them.
+   - **RF-DETR is a better detector and a worse fit, and the reason is the same
+     one.** Measured 2026-07-30 on the same room and the same 5-crop tiling
+     (`onnx-community/rfdetr_base-ONNX`, 560², ImageNet normalisation, sigmoid +
+     no NMS). On the classes it *has* it beats the shipped ensemble outright —
+     refrigerator 94% against 86%, bed 94%, monitor 92%, laptop 92%, and it is
+     the only configuration ever measured here that finds the **keyboard**. But
+     COCO-80 has no word for door, window, curtain, wardrobe, ceiling fan, lamp,
+     desk, shelf, shoe rack or clothes rail, which is thirteen of this room's
+     nineteen objects. It scores **6/19**, and the six are exactly COCO's
+     household nouns. Its other detections are real objects Danmu has no use for
+     — handbag, backpack, suitcase, book, tie, mouse.
+
+     So **the licence prize is not reachable by substitution.** Apache-2.0 would
+     delete the AGPL fence only if RF-DETR replaced *both* current models, and
+     the model it cannot replace is `worldv2`, which is where the open-vocabulary
+     half of 13/19 comes from. Swapping it for the OIV7 model instead is
+     defensible on the merits — better precision, Apache-2.0, and OIV7 already
+     earns just one object for double the passes — but the fence stays up as long
+     as `worldv2` ships, so that trade buys accuracy, not licence freedom.
 
    Confidence stays at 0.35: dropping to 0.20 buys one object and adds a
    spurious `sofa(0.29)`. Still missed at 13/19 — doors, wall art, and the
@@ -140,6 +168,30 @@ Furniture detection runs through a fallback chain, best-effort:
    **Verified in a real browser**, not only against a reference implementation:
    Chromium reproduces 13/19 exactly, every box in range. Cost is dominated by
    inference count (5 crops × 2 models = 10 passes/photo):
+
+   **Re-verified 2026-07-30** on the same room, driving the shipped path (capture
+   screen → the detect screen's own auto-run) in headless Chromium with no API
+   key, so this is the local ensemble alone. 32 raw detections across the four
+   walls, and scored two ways:
+
+   - **13/19 correctly categorised** — the table's figure, unchanged.
+   - **17/19 localised**: a box lands on the object but carries the wrong label.
+     Only the keyboard and the small wall painting get no box at all.
+
+   The gap between those two numbers is the honest description of what this model
+   does badly, and it is worth writing down because "missed" and "mislabelled"
+   need different fixes. A curtain came back as `Bed (40%)`, the ceiling fan as
+   `Lamp (40%)`, the two garment rails as `Wardrobe (72 / 75 / 38%)`, and the
+   wooden ledge behind the bed as `Desk (37%)`. Every one of those is a real
+   object found in the right place and filed under the wrong word — a vocabulary
+   failure, exactly like the recall gap that motivated the open-vocabulary second
+   model in the first place. There were also two clean false positives: the
+   `Multipurpose Hanger` cardboard box read as a `Picture frame` on both walls it
+   appears in, and a bare ceiling hook as a `Ceiling fan (47%)`.
+
+   The benchmark photos are **not in this repo** and should not be added — they
+   are photographs of somebody's bedroom, and this repo is public. Point the
+   harness at them wherever they live.
 
    | environment | per photo |
    |---|---|
@@ -190,16 +242,117 @@ This is what makes Danmu trustworthy. All pure math, all covered by tests.
 
 | File | Role |
 |---|---|
-| `lib/geometry.ts` | Oriented rectangles (OBB) in the XZ plane; separating-axis overlap, gaps, face clearance, point-in-poly, nearest-edge. |
-| `lib/photo-geometry.ts` | Pinhole camera at room centre (`CAM_HEIGHT` 1.5 m) + entered room dims → floor homography gives real position + W/H from any bbox. Floor-line calibration (`findFloorLine`); landscape shots fall back to a 66° FOV default. |
+| `lib/geometry.ts` | Oriented rectangles (OBB) in the XZ plane; separating-axis overlap, gaps, face clearance, point-in-poly, nearest-edge. Also `Foot` — a footprint that may be **round**, meaning the ellipse inscribed in the OBB (a true circle when W = D, which is how round parts are authored, and the ellipse the renderer draws if an axis is scaled). A circle's bounding square is 27% bigger than the circle and all of it is in the corners, which is where the chairs go; `collidesAt` used to refuse a chair tucked diagonally under a round table for corners the table does not have. Containment is the exact closed form; the pairwise helpers use an inscribed 32-gon (99.4% of the area — inscribed on purpose, so a round piece is never reported as hitting what it does not touch). |
+| `lib/photo-geometry.ts` | Pinhole camera at room centre + entered room dims → ray/plane intersection gives real position + W/H from any bbox. `CameraCal` carries the lens (`k`), and optionally the camera's `height` and `tiltRad`; absent values fall back to 1.5 m and level, which is what it always assumed. Tilt matters: 5° of ordinary handheld droop mis-reads distance by ~20%. |
+| `lib/exif.ts` | Reads the camera fields a photo carries about itself — 35 mm-equivalent focal length (→ `hfovFromFocal35`), orientation, compass bearing. Pure byte parsing; browsers expose no EXIF API. **Does not read GPS coordinates**, deliberately: nothing needs them, and moving them from the file into IndexedDB would relocate the exposure rather than remove it. |
+| `lib/device-tilt.ts` | Lens tilt at the shutter from `deviceorientation`, for the live-camera path only (EXIF has no tilt field). Reports a tilt only for an upright, unrolled phone — a wrong tilt is worse than none, since "none" is the level camera the engine already assumed. |
 | `lib/physics.ts` | Gravity/anchor rules — where a part sits (floor / ceiling / wall-mid / …), wall affinity + snap, support-under lookup for tabletop-prone items. |
-| `lib/clearance.ts` | Ergonomics checker over exact geometry: ≥600 mm walkways, ≥600 mm in front of hinged storage, 500 mm bedside strip, TV viewing distance. Reproducible findings, no AI. |
+| `lib/clearance.ts` | Ergonomics checker over exact geometry: ≥600 mm walkways, ≥600 mm in front of hinged storage, 500 mm bedside strip, TV viewing distance, door swings, clashes, over-height. Reproducible findings, no AI. |
+| `lib/apertures.ts` | Turns wall-mounted `window` / `door` parts into rectangles in each wall's own 2D frame, which is all `THREE.Shape` needs to punch a hole (`Shape.holes` + Earcut — no CSG library). Pure, because the wall-local conversion is the part that goes wrong invisibly: get the tangent backwards and every opening mirrors about the middle of its wall. |
+| `lib/layout-score.ts` / `lib/layout-solve.ts` | The clearance rules restated as **costs** rather than checks, plus alignment, wall affinity, conversation grouping and balance; then seeded simulated annealing over `(x, z, yaw)` of the unlocked pieces. Deterministic per seed. **Never writes `dimMM`** — it moves and turns, and the type it works in has no field a size could travel in. |
+| `lib/solar.ts` | NOAA / Meeus solar position — declination, equation of time, hour angle → altitude and azimuth, ~0.01°. No model, no network, no data file: pure astronomy, which is the one thing in this app a model could not do better. |
+| `lib/clearance-field.ts` | Circulation as a **field** rather than a list of pairs — see below. One 5 cm raster of the floor plus an exact Euclidean distance transform answers walkway width, reachability, turning space and crowding at once, and it also carries WHICH obstacle is nearest so a finding can name the pieces to select. |
 | `lib/dimension-ranges.ts` | `clampDims` — per-item sizing tiers (fixed / standard / flexible). **All sizes pass through this.** |
 | `lib/footprint.ts` | Footprint polygon math (preset shapes, containment, `offsetWall` for wall moves). The polygon — not `width`/`depth` — is the source of truth for room shape. |
 
 On the detect page, `geoRefine` runs the geometry engine over **every** detection
 and manual box: geometry overrides AI dims/position; the AI contributes only
 label / category / a depth hint.
+
+### Circulation is a field, not a list of pairs
+
+Comparing furniture two at a time answers "is there a gap between these" and
+nothing else. It cannot see a walkway pinched between a sofa and a **wall**,
+because a wall is not a part; and it cannot see that every individual gap passes
+while the room is still severed in two, because being able to walk somewhere is a
+property of the whole floor.
+
+`lib/clearance-field.ts` rasterises the footprint at 5 cm, marks the cells
+furniture stands on, and runs Felzenszwalb & Huttenlocher's exact squared
+Euclidean distance transform over the rest — O(cells), two 1D lower-envelope
+passes, no iteration count to tune. It is extended to carry the **index of the
+winning source**, so each free cell knows not only how far away the nearest
+obstacle is but which one it is. One raster then answers four questions:
+
+| Question | Read from the field |
+|---|---|
+| Walkway width, including against a wall | the two cells straddling the medial axis between two owners |
+| Can you reach this piece from the door? | is any walkable cell around it in the door's connected component |
+| Wheelchair turning space | 2 × the largest value anywhere reachable (1500 mm) |
+| Crowding | free-cell share — the old metric, now a by-product |
+
+**Every reading is quantised, and the rules are written knowing it.** A cell
+centre is up to half a cell from the surface it measures, so `gapTolerance`
+publishes the error bound (1.5 cells, pinned by a test over random rotations) and
+a finding is raised only when the *whole* ± band sits on the wrong side of the
+threshold. Under-reporting a gap would invent warnings, which is the one failure
+mode this panel cannot afford.
+
+Two deliberate silences: gaps against a wall are measured but **not** reported as
+tight walkways, because "the sofa is 40 cm off the wall" is usually a description
+of the room rather than a fault — a wall gap that matters is one that pinches the
+only route, and that surfaces as reachability instead. And reachability says
+nothing at all when the room has no door, since which side someone arrives from
+is then unknowable.
+
+The 2D plan draws the same raster (`fieldRuns` collapses it to a few hundred
+horizontal runs, so it stays SVG that reads the design tokens rather than a canvas
+needing its own palette). It used to approximate the walkway rule by inflating
+each bulky piece by half of 600 mm, with the threshold and category list copied
+out of `clearance.ts` and a comment asking that they be kept in step.
+
+### The calibration ladder
+
+`buildCals` (detect page) resolves one `CameraCal` per photo. The wall-floor line
+ties focal length, camera height and tilt together in **one** equation, so it can
+solve for exactly one unknown — which one depends on what the photo already told
+us:
+
+| What the photo carries | Floor line solves for | Notes |
+|---|---|---|
+| EXIF focal length | **camera height** | The lens is known, so the 1.5 m guess (±17% on everything) becomes a measurement. |
+| its own perspective | **camera height** | `lib/vanishing-point.ts` reads the lens out of the geometry — see below. |
+| nothing | **focal length** | The original path, assuming 1.5 m. Still correct, no longer the only one. |
+| neither, or no floor line | — | A typical phone lens (66°), and the room is measured as it always was. |
+
+**The middle rung is for photos that arrive with nothing.** A room is a box: three
+families of parallel lines, mutually perpendicular. With the principal point at
+the image centre, two vanishing points in perpendicular directions give the focal
+length in closed form (`k² = −1/(X₁X₂ + Y₁Y₂)` in the tangent space this module
+already uses), and the vertical one gives the tilt. `lib/vanishing-point.ts` finds
+the segments with a cut-down LSD — gradient, grow regions of like-oriented pixels,
+take each region's principal axis — then chooses the orthogonal PAIR by how well
+the whole frame it implies explains the whole image.
+
+That last part is load-bearing and was learned the hard way. Picking the strongest
+vanishing point, then the strongest of what remains, is unstable: a hypothesis
+straddling two families scores well, consumes segments from both, and a pixel and
+a half of noise flipped a synthetic room from 75° to 21°. Scoring the pair by its
+own support is no better, because straddling is exactly what earns support.
+Scoring by frame coverage — two directions fix the third by cross product, and a
+real box has segments along all three — is stable across 0 to 5 px of noise.
+
+**Coverage is also the gate.** At four resolutions every correct answer explained
+100% of the segments and the single wrong one explained 47%, so a frame that
+leaves half the straight lines in a photograph unaccounted for is refused. The
+other bound is resolution: 1600 px recovers 78.0° against a truth of 78°, 1200 px
+gives 77.8°, and 800 px is correctly refused because the edge fragments are too
+short for their angles to mean anything. `normalizePhoto` caps the long edge at
+1600, so real input lands where this was measured.
+
+Tilt is never solved for from the floor line — one equation cannot give two
+unknowns. It comes from `lib/device-tilt.ts` at capture time, or from the
+vanishing points, or not at all; a measured device tilt outranks an inferred one. Camera height is asked
+for on the capture screen (`useSettings.camHeightM`, remembered per person since
+it is a property of the shooter, not the room) and written onto each photo's
+`CapturePose` as it is saved.
+
+Which term the assumed values hurt is not uniform, and it is worth knowing before
+tuning any of this: for a **floor-standing** piece the lens cancels out of the size
+(distance scales as 1/k, angular size as k) and only its *position* moves; for a
+**wall-mounted** piece the distance is pinned to the wall, so the lens error lands
+directly on the measured size — and conversely the camera height cancels out of
+its W and H. See `tests/photo-geometry.test.ts`, which pins both.
 
 ---
 
@@ -255,7 +408,56 @@ label / category / a depth hint.
   and opt out of raycasting so they never block selecting the furniture beneath.
 
 ### Lighting, realism & motion
-- **Lighting moods** Day / Evening / Cool (`ViewOptions.tsx` → Room `LIGHTING`).
+- **Fixtures emit real light** (`components/three/PartLight.tsx`, `lib/light-units.ts`).
+  A lamp carries `light?: { lumens, kelvin, coneDeg? }` on its `ScenePart`
+  (defaults per shape in `scene-spec.ts`), and the Inspector edits it in those
+  units. Intensity reaches three as **candela** — point and spot lights have been
+  photometric since r155 — so a 400 lm bedside lamp is genuinely half an 800 lm
+  floor lamp. Colour comes from the Planckian locus, so 2700 K is a warm bulb
+  rather than an orange tint.
+  Before this every "light" was an emissive material: the shade glowed and the
+  room did not change, so Evening dimmed a room while the lamp standing in it
+  contributed nothing.
+  **Cost is bounded deliberately.** A shadow-casting point light is a cube map —
+  six scene renders per bake — so only shaded downward fixtures (spot lights, one
+  map) may cast, only on `high`, and only the two brightest in the room.
+  `LIGHT_SCALE` re-bases candela into the scene's artistic exposure; the ratios
+  between fixtures survive it, which is the part that matters.
+- **Lighting moods** Day / Evening / Cool (`ViewOptions.tsx` → Room `LIGHTING`)
+  set the **ambient** conditions only. Evening is deliberately low now — its job
+  is to leave room for the fixtures rather than to be an orange filter over a
+  fully-lit room, so a room with no lamps in it reads as genuinely dim there.
+  Each mood carries an **`envMul`** that scales the `<Environment>` lightformers
+  with it. Dimming the three lights and leaving the environment at full strength
+  is not enough: every material has `envMapIntensity: 0.5`, so the environment
+  supplies most of the light in the scene, and a nominally dark Evening still
+  rendered as a fully-lit amber room. Both halves move together or neither does.
+- **Sunlight is a fourth mood, and it is a measurement rather than a look.**
+  Day / Evening / Cool are studio lighting; `Sun` asks `lib/solar.ts` where the sun
+  actually is for this room's latitude, on a chosen date, at a chosen time, and
+  points the key light there. Its colour comes off the same Planckian locus the
+  lamps use (warm at the horizon, neutral overhead) and its strength falls with
+  `sin(altitude)` — the first-order air-mass term, which is what makes a 7 am room
+  read as 7 am. **When the sun is down there is no key light at all**, because that
+  is the honest picture of 9 pm in December.
+  Latitude, longitude and the room's compass bearing are stored **on the room**
+  (`RoomData.site`): a flat and a holiday cottage do not share a latitude. The date
+  and time being asked about are device prefs — a question, not a property of the
+  furniture. Nothing is read from a photo; `lib/exif.ts` does not read GPS.
+  The key light's shadow frustum is fitted per direction, not per room: a sun near
+  the horizon throws shadows an order of magnitude longer than a studio light, so
+  the throw-per-metre term is derived from the light vector and capped, and the
+  shadow camera's `far` follows the fitted distance.
+- **Windows and doors are holes in the wall**, not panels in front of it
+  (`lib/apertures.ts` → `RoomShell`). Each wall is a `THREE.Shape` with one hole per
+  opening; `ShapeGeometry` faces +Z exactly as the `planeGeometry` it replaced, so
+  the near-wall back-face culling that makes the dollhouse view work is untouched.
+  Skirting is not cut with a hole — a doorway spans the whole 100 mm strip, so the
+  hole would touch the outline top and bottom and leave two degenerate slivers; it
+  is split into the runs between openings instead. Openings are clamped 2 cm inside
+  the wall outline, because a door standing on the floor of a wall that starts at
+  the floor is the degenerate case for the triangulator. The **part** keeps its real
+  size; the hole behind it is what shrinks.
 - **Quality** High / Fast — gates procedural normal/roughness maps
   (`lib/textures.ts`, zero assets) + soft cast shadows + ambient occlusion
   (N8AO/SMAA mount on `high` only). There is no floor reflection.
@@ -368,9 +570,11 @@ undo — see `lib/storage.ts`).
 | `lib/scene-palette.ts` | Scene-side semantic colours — the one home for values the 3D layer, the canvas exports and the panels that edit them must agree on, since neither Three.js materials nor a 2D canvas can read a CSS custom property. Exports `SCENE` (selection / hover / locked / shell), `PLAN` (the floor-plan PNG's palette) and `defaultBodyColor(category, shape)`. Kept in sync with `globals.css` by hand, guarded by a test. **`defaultBodyColor` takes BOTH arguments**: within one category the shapes do not match (a dining chair is walnut, an office chair charcoal), and the renderer and the Inspector's "Default for this piece" swatch must return the same value. The predecessor took a single loosely-typed `category` and was keyed on material-group names, so 18 of 22 categories fell through to one tan default. |
 | `lib/room-scene.ts` | Build a scene from a room / detections. |
 | `lib/textures.ts` | Procedural normal/roughness maps (offline, zero assets). |
+| `lib/light-units.ts` | Lumens → candela (isotropic and in-cone), and kelvin → sRGB via the Planckian locus. Pure and tested — the interface between how a lamp is described and how three renders it. |
 | `lib/themes.ts` | One-tap restyle palettes. |
 | `lib/product-presets.ts` | Real-product size presets. |
-| `lib/capture.ts` / `lib/image-quality.ts` / `lib/mask.ts` / `lib/color-sample.ts` | Photo capture + quality + masking + colour sampling. `capture.ts` also owns **photo normalisation**: every photo entering the app is re-encoded to ≤1600 px on its long edge (`normalizePhoto`) and screened against a raster allowlist (`isAcceptedPhoto` — `image/*` also matches SVG, which has no pixels to measure). Nothing downstream wants more resolution, and four untouched 12 MP uploads exceeded the detection endpoint's inline-request ceiling. |
+| `lib/capture.ts` / `lib/image-quality.ts` / `lib/mask.ts` / `lib/color-sample.ts` | Photo capture + quality + masking + colour sampling. `capture.ts` also owns **photo normalisation**: every photo entering the app is re-encoded to ≤1600 px on its long edge (`normalizePhoto`) and screened against a raster allowlist (`isAcceptedPhoto` — `image/*` also matches SVG, which has no pixels to measure). Nothing downstream wants more resolution, and four untouched 12 MP uploads exceeded the detection endpoint's inline-request ceiling. It also **strips metadata** on the passthrough path via `lib/jpeg-strip.ts` — see §3. |
+| `lib/jpeg-strip.ts` | Removes EXIF (APP1), IPTC (APP13) and comment segments from a JPEG by byte surgery, so the image data is copied verbatim and the passthrough optimisation survives. Keeps JFIF density and the **ICC colour profile** — neither identifies anyone, and dropping the profile would shift the colours this app exists to get right. Returns the input untouched for anything it cannot parse: a photo that kept its metadata is a smaller problem than a photo we corrupted. **Read anything you need out of EXIF before calling it** — the focal length a future calibration pass wants lives in the segment this deletes. |
 | `lib/units.ts` | Unit conversion (persistence always mm). |
 | `lib/dates.ts` | Timestamp formatting — the counterpart to `units.ts`. Relative `editedLabel`, absolute `savedLabel`, and the workspace's recency buckets. |
 | `lib/csv.ts` | CSV writing that a spreadsheet opens correctly and does not execute: formula-injection escaping, quoting, CRLF, UTF-8 BOM. |

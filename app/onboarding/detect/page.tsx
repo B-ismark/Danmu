@@ -17,13 +17,18 @@ import { sampleBoxColor } from '@/lib/color-sample';
 import { localDetectorAvailable, detectLocalAcrossImages } from '@/lib/local-detect';
 import {
   defaultCal,
+  calFromHfov,
   calibrateFromFloorLine,
+  heightFromFloorLine,
   findFloorLine,
   imageAspect,
   placeFloorObject,
   placeWallObject,
   type CameraCal,
+  type CameraView,
+  calibrateFromPhoto,
 } from '@/lib/photo-geometry';
+import { hfovFromFocal35 } from '@/lib/exif';
 import { anchorFor } from '@/lib/physics';
 import type { Category, Shape } from '@/lib/scene-spec';
 
@@ -175,15 +180,61 @@ function cleanLabelOf(d: Detection): string {
   return d.label.replace(/__slot:[nesw]$/, '');
 }
 
-// Per-photo camera calibration: try the wall-floor line (exact), fall back to
-// a typical phone FOV. Deterministic either way.
+// Per-photo camera calibration. Deterministic at every step — no model decides a
+// number here, and each rung of the ladder is a measurement or an honest default.
+//
+// The wall-floor line ties focal length, camera height and tilt together in ONE
+// equation, so it can solve for exactly one unknown. Which one depends on what
+// the photo already told us:
+//
+//   · EXIF gave us the lens  → spend the floor line on the CAMERA HEIGHT, which
+//     is otherwise a flat 1.5 m guess and scales every measurement by ±17%.
+//   · no EXIF                → spend it on the FOCAL LENGTH, assuming 1.5 m.
+//     This is the original behaviour, still correct, just no longer the only path.
+//   · neither                → a typical phone lens, and say so.
+//
+// Tilt is never solved for here: one equation cannot yield two unknowns. It comes
+// from the device sensors at capture time or not at all.
 async function buildCals(entries: SlotEntry[], room: RoomDims): Promise<CalMap> {
   const map: CalMap = {};
   for (const e of entries) {
     const aspect = await imageAspect(e.cap.blob);
+    const pose = e.cap.pose;
+    const view: CameraView = {};
+    if (pose?.heightM !== undefined) view.height = pose.heightM;
+    if (pose?.tiltDeg !== undefined) view.tiltRad = (pose.tiltDeg * Math.PI) / 180;
+
+    let hfov = pose?.focal35mm !== undefined ? hfovFromFocal35(pose.focal35mm, aspect) : null;
     const vFloor = await findFloorLine(e.cap.blob);
+
+    // No EXIF: read the lens out of the photo's own perspective. This is the path
+    // for an upload whose metadata was stripped somewhere upstream — which is most
+    // of them, and includes anything that went through a messaging app. It gives a
+    // TILT as well, the only source of one for a photo that was not taken inside
+    // this app; a measured device tilt still wins, being a direct observation
+    // rather than an inference.
+    if (hfov === null) {
+      const vp = await calibrateFromPhoto(e.cap.blob);
+      if (vp) {
+        hfov = vp.hfovDeg;
+        if (view.tiltRad === undefined) view.tiltRad = (vp.tiltDeg * Math.PI) / 180;
+      }
+    }
+
+    if (hfov !== null) {
+      let cal = calFromHfov(hfov, aspect, view);
+      if (view.height === undefined && vFloor !== null) {
+        const solved = heightFromFloorLine(vFloor, e.slot, room, cal);
+        if (solved !== null) cal = { ...cal, height: solved };
+      }
+      map[e.slot] = cal;
+      continue;
+    }
     map[e.slot] =
-      (vFloor !== null ? calibrateFromFloorLine(vFloor, e.slot, room, aspect) : null) ?? defaultCal(aspect);
+      (vFloor !== null ? calibrateFromFloorLine(vFloor, e.slot, room, aspect, view) : null) ?? {
+        ...defaultCal(aspect),
+        ...view,
+      };
   }
   return map;
 }

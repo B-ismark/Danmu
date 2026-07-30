@@ -15,11 +15,12 @@
 // confirms, and applying one over an arrangement that was never saved offers to
 // save it first.
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import { useScene } from '@/lib/scene-store';
 import { useStudio, useSettings } from '@/lib/store';
 import { analyzeRoom, type ClearanceIssue, type ClearanceSeverity } from '@/lib/clearance';
+import { solveLayout } from '@/lib/layout-solve';
 import { roomStore, type LayoutVariant, type Transforms } from '@/lib/storage';
 import { footprintBounds, type Footprint } from '@/lib/footprint';
 import { formatDim } from '@/lib/units';
@@ -78,9 +79,15 @@ export function RoomTools({ leading }: { leading?: ReactNode }) {
     [parts, positions, rotations, dims],
   );
 
+  // Step-free findings are opt-in and remembered, because whether a room has to
+  // meet them is a fact about the person, not about the room — asking again every
+  // time someone opens the panel would be its own small insult.
+  const stepFree = useSettings((s) => s.stepFree);
+  const setStepFree = useSettings((s) => s.setStepFree);
+
   const report = useMemo(
-    () => analyzeRoom(effParts, { footprint: room.footprint, height: room.height }),
-    [effParts, room.footprint, room.height],
+    () => analyzeRoom(effParts, { footprint: room.footprint, height: room.height }, { accessibility: stepFree }),
+    [effParts, room.footprint, room.height, stepFree],
   );
   const problems = report.issues.filter((i) => i.severity !== 'info').length;
 
@@ -126,7 +133,13 @@ export function RoomTools({ leading }: { leading?: ReactNode }) {
       }}
     >
       {open === 'check' && (
-        <CheckPanel issues={report.issues} freeShare={report.freeFloorShare} onClose={() => setOpen(null)} />
+        <CheckPanel
+          issues={report.issues}
+          freeShare={report.freeFloorShare}
+          stepFree={stepFree}
+          onStepFree={setStepFree}
+          onClose={() => setOpen(null)}
+        />
       )}
       {open === 'list' && <ListPanel parts={effParts} roomName={roomName} onClose={() => setOpen(null)} />}
       {open === 'layouts' && (
@@ -135,6 +148,7 @@ export function RoomTools({ leading }: { leading?: ReactNode }) {
 
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         {leading}
+        <SuggestButton effParts={effParts} footprint={room.footprint} />
         <button
           onClick={() => setOpen(open === 'check' ? null : 'check')}
           aria-expanded={open === 'check'}
@@ -195,6 +209,83 @@ export function RoomTools({ leading }: { leading?: ReactNode }) {
   );
 }
 
+// ─── Suggest an arrangement ─────────────────────────────────────────────────
+//
+// Preview IS applying it: the room is right there, and a thumbnail of a
+// suggestion would be a worse view of it than the 3D scene already on screen.
+// Rejection is undo, which is the same contract "Apply layout" already offers —
+// one history entry, one keystroke back. That is why the whole thing writes
+// through `loadTransforms` in a single call rather than looping `setPosition`:
+// the history recorder subscribes to those fields, so a loop would push one
+// snapshot per piece and take twenty undos to reverse.
+
+function SuggestButton({ effParts, footprint }: { effParts: ScenePart[]; footprint: Footprint }) {
+  const loadTransforms = useStudio((s) => s.loadTransforms);
+  const [busy, setBusy] = useState(false);
+  // Pressing again asks for a DIFFERENT arrangement rather than recomputing the
+  // same one — the solver is deterministic per seed, which is what makes both
+  // behaviours possible at once.
+  const attempt = useRef(0);
+
+  function suggest() {
+    setBusy(true);
+    try {
+      const t = useStudio.getState();
+      const result = solveLayout(
+        effParts,
+        footprint,
+        effParts.map((p) => p.locked),
+        { seed: ++attempt.current },
+      );
+      if (result.moved.length === 0 || result.after >= result.before) {
+        toast({
+          title: 'This is already a good arrangement',
+          message: 'Nothing was moved — the pieces are where the guidelines want them.',
+        });
+        return;
+      }
+      const positions = { ...t.positions };
+      const rotations = { ...t.rotations };
+      for (const i of result.moved) {
+        const p = effParts[i];
+        positions[p.id] = [result.placements[i].x, p.pos[1], result.placements[i].z];
+        rotations[p.id] = result.placements[i].yaw;
+      }
+      // dims carried through untouched: the solver moves and turns, and a
+      // suggestion that resized the furniture would be the one thing this app
+      // refuses to do.
+      loadTransforms({ positions, rotations, dims: t.dims });
+      toast({
+        title: `Moved ${result.moved.length} ${result.moved.length === 1 ? 'piece' : 'pieces'}`,
+        message: 'Undo puts the previous arrangement back. Press again for a different idea.',
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      onClick={suggest}
+      disabled={busy}
+      className="ds-btn"
+      title="Rearrange the unlocked furniture using the same guidelines Room check measures"
+      style={{
+        height: 30,
+        fontSize: 11,
+        gap: 6,
+        background: 'var(--paper)',
+        borderColor: 'var(--edge)',
+        color: 'var(--ink-2)',
+        boxShadow: 'var(--shadow-soft)',
+      }}
+    >
+      <Icon name="sparkles" size={12} />
+      Suggest
+    </button>
+  );
+}
+
 // ─── Room check ─────────────────────────────────────────────────────────────
 //
 // The findings used to be badged FIX / TIGHT / NOTE in 8px tracked caps, which
@@ -234,7 +325,19 @@ function PanelHead({ title, children }: { title: string; children?: ReactNode })
   );
 }
 
-function CheckPanel({ issues, freeShare, onClose }: { issues: ClearanceIssue[]; freeShare: number; onClose: () => void }) {
+function CheckPanel({
+  issues,
+  freeShare,
+  stepFree,
+  onStepFree,
+  onClose,
+}: {
+  issues: ClearanceIssue[];
+  freeShare: number;
+  stepFree: boolean;
+  onStepFree: (on: boolean) => void;
+  onClose: () => void;
+}) {
   const setSelection = useStudio((s) => s.setSelection);
   const frameSelected = useStudio((s) => s.frameSelected);
 
@@ -247,6 +350,31 @@ function CheckPanel({ issues, freeShare, onClose }: { issues: ClearanceIssue[]; 
       <div style={{ fontSize: 11.5, color: 'var(--ink-3)', padding: '8px 14px', borderBottom: '1px solid var(--hairline)' }}>
         <span className="mono">{Math.round(freeShare * 100)}%</span> of the floor is still clear to walk on
       </div>
+
+      {/* A real checkbox rather than a styled div: this is a persisted preference
+          that changes what the panel reports, and it has to be reachable by Tab
+          and announce its own state. */}
+      <label
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '8px 14px',
+          borderBottom: '1px solid var(--hairline)',
+          fontSize: 11.5,
+          color: 'var(--ink-2)',
+          cursor: 'pointer',
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={stepFree}
+          onChange={(e) => onStepFree(e.target.checked)}
+          style={{ accentColor: 'var(--accent)', width: 14, height: 14, flexShrink: 0, cursor: 'pointer' }}
+        />
+        Check step-free access
+        <span style={{ color: 'var(--ink-3)' }}>· 150 cm turning space</span>
+      </label>
 
       {issues.length === 0 ? (
         <div style={{ padding: '18px 14px', fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>

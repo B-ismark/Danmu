@@ -113,6 +113,15 @@ order.
 - The room route dir is literally `[roomId]` with brackets. PowerShell treats
   brackets as wildcards — use `-LiteralPath` with `Remove-Item` / `Test-Path` on
   those paths. A Bash tool (POSIX sh) is also available.
+- **Never round-trip a source file through Windows PowerShell 5.1's
+  `Get-Content` → `Set-Content`.** `Get-Content` decodes UTF-8 as the system ANSI
+  codepage, so every em dash, `·`, `×`, `≈` and curly quote in this codebase comes
+  back as mojibake and a BOM is prepended — silently, with `pnpm typecheck` still
+  passing. `-Encoding utf8` on the *write* does not save you; the damage is on the
+  read. Edit files with the editing tools, or do bulk transforms in Node, which is
+  UTF-8 by default. (Repairing it means re-encoding each character to its CP1252
+  byte and decoding as UTF-8 — `latin1` will not do, since the mojibake contains
+  characters from CP1252's 0x80–0x9F range.)
 - `onnxruntime-web` must stay **runtime-loaded** with `webpackIgnore` — bundling
   it breaks the Next build. It is served from `public/ort/` after
   `pnpm vendor:ort` (same-origin, so the CSP can be tight); the jsDelivr CDN is

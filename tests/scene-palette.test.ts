@@ -45,14 +45,11 @@ describe('scene palette', () => {
     expect(SCENE.accent).not.toBe(SCENE.accentHover);
   });
 
-  it('stays in sync with the CSS tokens it duplicates', () => {
-    // If a token in app/globals.css changes, these must be updated by hand —
-    // that is the cost of Three.js not being able to read a custom property.
-    expect(SCENE.accent).toBe('#E2613A'); // --accent
-    expect(SCENE.accentHover).toBe('#5E8B6E'); // --accent-2
-    expect(SCENE.invalid).toBe('#C8472A'); // --danger
-    expect(SCENE.locked).toBe('#7A4B63'); // --locked
-  });
+  // The sync guard that used to live here asserted `SCENE.accent === '#E2613A'`
+  // — a literal against a literal, both inside this test's own reach. Editing the
+  // token in app/globals.css and forgetting scene-palette left it green, which is
+  // the entire failure it was written to catch. It reads the stylesheet now, and
+  // lives in tests/color-tokens.test.ts with the rest of the colour maths.
 
   it('exposes the default wall paint', () => {
     expect(wallColor()).toBe(SCENE.wall);

@@ -5,7 +5,7 @@ import {
   Download, Share2, FileText, FileArchive, ChevronRight, ChevronLeft, ChevronDown, ChevronUp,
   Zap, Leaf, Crosshair, Sofa, Bed, Tv, Lamp, Table, Sprout, KeyRound,
   Eye, EyeOff, Info, BarChart3, ExternalLink, Pencil, Trash2, RefreshCw,
-  Image, Play, Replace, Circle, Sun, Moon, Cloud, type LucideIcon,
+  Image, Play, Replace, Circle, Sun, Moon, Cloud, Compass, type LucideIcon,
 } from 'lucide-react';
 
 // Single icon surface for the whole app. Backed by Lucide (MIT, free) — a
@@ -29,7 +29,7 @@ export type IconName =
   | 'info' | 'chart' | 'external'
   | 'edit' | 'trash' | 'refresh'
   | 'image' | 'play'
-  | 'sun' | 'moon' | 'cloud'
+  | 'sun' | 'moon' | 'cloud' | 'compass'
   | 'swap' | 'snap-wall' | 'snap-floor' | 'snap-surface';
 
 const MAP: Record<Exclude<IconName, 'whatsapp' | 'snap-wall' | 'snap-floor' | 'snap-surface'>, LucideIcon> = {
@@ -47,7 +47,7 @@ const MAP: Record<Exclude<IconName, 'whatsapp' | 'snap-wall' | 'snap-floor' | 's
   info: Info, chart: BarChart3, external: ExternalLink,
   edit: Pencil, trash: Trash2, refresh: RefreshCw,
   image: Image, play: Play, swap: Replace,
-  sun: Sun, moon: Moon, cloud: Cloud,
+  sun: Sun, moon: Moon, cloud: Cloud, compass: Compass,
 };
 
 type Props = { name: IconName; size?: number; color?: string; strokeWidth?: number; style?: CSSProperties };

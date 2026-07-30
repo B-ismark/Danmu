@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { analyzeRoom, polygonArea } from '@/lib/clearance';
+import { analyzeRoom, polygonArea, freeFloorFraction } from '@/lib/clearance';
+import { pointInObb, pointInPoly, type OBB, type Poly } from '@/lib/geometry';
 import type { ScenePart } from '@/lib/scene-spec';
 import type { Footprint } from '@/lib/footprint';
 
@@ -155,6 +156,31 @@ describe('analyzeRoom', () => {
     expect(hit).toBeDefined();
   });
 
+  // ── Round footprints ────────────────────────────────────────────────────
+  // The clash rule is NOT where this shows up, and it would be misleading to
+  // write a test implying otherwise: the tucked-chair exemption already lets a
+  // chair reach 85% of its own footprint into a table before anything is said, so
+  // a corner overlap of ~20% was never going to be reported either way. Where the
+  // bounding square really bit the user is `collidesAt` — see
+  // tests/scene-build.test.ts — and here, in what a round piece covers.
+
+  it('still flags a chair standing in the middle of a round table', () => {
+    const table = part({ category: 'table', shape: 'coffee-table', dimMM: [1200, 1200, 750], pos: [0, 0, 0], circle: true });
+    const chair = part({ category: 'chair', shape: 'chair-dining', dimMM: [450, 450, 850], pos: [0, 0, 0] });
+    expect(analyzeRoom([table, chair], ROOM).issues.find((i) => i.id.startsWith('clash-'))).toBeDefined();
+  });
+
+  it('counts a round piece as a circle when reporting floor coverage', () => {
+    // Rugs are excluded from the blocker set, so use something that is not one.
+    const square = part({ category: 'ottoman', shape: 'ottoman', dimMM: [1400, 1400, 400], pos: [0, 0, 0] });
+    const circle = part({ ...square, id: 'c', circle: true } as never);
+    const squareCover = 1 - analyzeRoom([square], ROOM).freeFloorShare;
+    const circleCover = 1 - analyzeRoom([circle], ROOM).freeFloorShare;
+    expect(squareCover).toBeGreaterThan(0);
+    // π/4 of the square, to within the raster.
+    expect(circleCover / squareCover).toBeCloseTo(Math.PI / 4, 2);
+  });
+
   it('counts overlapping furniture once when reporting floor coverage', () => {
     // The old sum double-counted a chair pushed under a desk and ignored rotation,
     // then clamped at 0 — so a busy room reported "100% covered".
@@ -171,5 +197,100 @@ describe('analyzeRoom', () => {
 describe('polygonArea', () => {
   it('measures the rectangle', () => {
     expect(polygonArea(RECT)).toBe(24);
+  });
+});
+
+// ─── freeFloorFraction ──────────────────────────────────────────────────────
+// The implementation was rewritten from cell-major (every cell against every
+// part, recomputing trig in the innermost loop) to part-major (each part over its
+// own bounding box, trig hoisted). Same union, ~50-200× less work. These tests
+// pin the "same union" half: the reference below is the shape of the old loop, so
+// a divergence fails here rather than quietly changing what the room report says.
+
+const CELL = 0.05;
+
+function referenceFreeFloor(parts: OBB[], poly: Poly): number {
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (const [x, z] of poly) {
+    minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+    minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
+  }
+  let inside = 0;
+  let covered = 0;
+  for (let z = minZ + CELL / 2; z < maxZ; z += CELL) {
+    for (let x = minX + CELL / 2; x < maxX; x += CELL) {
+      if (!pointInPoly(x, z, poly)) continue;
+      inside++;
+      for (const b of parts) {
+        if (pointInObb(x, z, b)) { covered++; break; }
+      }
+    }
+  }
+  if (inside === 0) return 1;
+  return Math.max(0, Math.min(1, 1 - covered / inside));
+}
+
+/** Seeded PRNG — a flaky geometry test is worse than no geometry test. */
+function rng(seed: number) {
+  return () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const L_ROOM: Footprint = [
+  [-3, -2],
+  [3, -2],
+  [3, 0],
+  [1, 0],
+  [1, 2],
+  [-3, 2],
+];
+
+describe('freeFloorFraction', () => {
+  it('is 1 for an empty room', () => {
+    expect(freeFloorFraction([], RECT)).toBe(1);
+  });
+
+  it('matches the cell-major reference over random scenes, rotations included', () => {
+    const rand = rng(20260730);
+    for (let iter = 0; iter < 24; iter++) {
+      const poly = iter % 3 === 0 ? L_ROOM : RECT;
+      const parts: OBB[] = [];
+      for (let k = 0; k < 1 + Math.floor(rand() * 6); k++) {
+        parts.push({
+          cx: -3 + rand() * 6,
+          cz: -2 + rand() * 4,
+          hw: 0.15 + rand() * 0.8,
+          hd: 0.15 + rand() * 0.8,
+          rot: rand() * Math.PI * 2,
+        });
+      }
+      expect(freeFloorFraction(parts, poly)).toBeCloseTo(referenceFreeFloor(parts, poly), 12);
+    }
+  });
+
+  it('counts a part that hangs outside the room only where it is inside', () => {
+    // Half over the edge: it may not claim floor the room does not have.
+    const half: OBB = { cx: -3, cz: 0, hw: 1, hd: 1, rot: 0 };
+    const inside: OBB = { cx: -1, cz: 0, hw: 1, hd: 1, rot: 0 };
+    const outside = 1 - freeFloorFraction([half], RECT);
+    const whole = 1 - freeFloorFraction([inside], RECT);
+    expect(outside).toBeCloseTo(whole / 2, 2);
+  });
+
+  it('reaches 0 when furniture covers the whole floor', () => {
+    const slab: OBB = { cx: 0, cz: 0, hw: 4, hd: 3, rot: 0 };
+    expect(freeFloorFraction([slab], RECT)).toBe(0);
+  });
+
+  it('does not double-count overlapping parts', () => {
+    const a: OBB = { cx: 0, cz: 0, hw: 0.7, hd: 0.4, rot: 0 };
+    const b: OBB = { cx: 0.1, cz: 0.05, hw: 0.7, hd: 0.4, rot: 0.3 };
+    const both = freeFloorFraction([a, b], RECT);
+    expect(both).toBeGreaterThanOrEqual(freeFloorFraction([a, b, b], RECT) - 1e-12);
+    expect(both).toBeLessThan(freeFloorFraction([a], RECT));
   });
 });

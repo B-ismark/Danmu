@@ -9,7 +9,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 // drawers — is either per-room (saved by RoomSync) or genuinely ephemeral.
 type ViewPreset = 'free' | 'front' | 'top' | 'iso';
 /** Scene lighting mood — drives lights, environment + background in Room. */
-export type Lighting = 'day' | 'evening' | 'cool';
+export type Lighting = 'day' | 'evening' | 'cool' | 'sun';
 /** Render quality — 'high' enables soft cast shadows, ambient occlusion and
  *  per-part procedural material maps. */
 export type Quality = 'low' | 'high';
@@ -43,6 +43,12 @@ type StudioState = {
   lighting: Lighting;
   /** render quality (soft shadows + AO + material maps on 'high') */
   quality: Quality;
+  /** Which moment the 'sun' mood is showing: minutes past local midnight, and the
+   *  day of the year. A time of day rather than a slider labelled "brightness" —
+   *  the whole value of a real sun path is being able to ask about 4 pm in
+   *  December, and the answer only means something if the question is a date. */
+  sunMinutes: number;
+  sunDayOfYear: number;
   /** auto set-dressing — decorative props on furniture surfaces */
   dressed: boolean;
   /** Snap granularity for the gizmo. 'off' = free move, 'fine' = 10mm / 15°,
@@ -76,6 +82,8 @@ type StudioState = {
   toggleGrid: () => void;
   setLighting: (l: Lighting) => void;
   setQuality: (q: Quality) => void;
+  setSunMinutes: (m: number) => void;
+  setSunDayOfYear: (d: number) => void;
   toggleDressed: () => void;
   frameSelected: () => void;
   toggleHidden: (id: string) => void;
@@ -95,7 +103,15 @@ type StudioState = {
  *  affordance implies the whole studio is remembered. Selection, camera, open
  *  drawers and transforms stay out: the first two are ephemeral by nature and
  *  the last is per-room, owned by RoomSync. */
-const STUDIO_PREFS = ['lighting', 'quality', 'dressed', 'snapMode', 'showGrid'] as const;
+const STUDIO_PREFS = [
+  'lighting',
+  'quality',
+  'dressed',
+  'snapMode',
+  'showGrid',
+  'sunMinutes',
+  'sunDayOfYear',
+] as const;
 
 export const useStudio = create<StudioState>()(
   persist(
@@ -115,6 +131,11 @@ export const useStudio = create<StudioState>()(
   showGrid: true,
   lighting: 'day',
   quality: 'high',
+  // 3 pm on the March equinox: the sun is up at every inhabited latitude and
+  // clearly to one side, so the first thing anyone sees when they pick the sun
+  // mood is a room with a direction to its light.
+  sunMinutes: 15 * 60,
+  sunDayOfYear: 80,
   dressed: true,
   frameSelectedToken: 0,
   hidden: {},
@@ -142,6 +163,8 @@ export const useStudio = create<StudioState>()(
   toggleGrid: () => set((s) => ({ showGrid: !s.showGrid })),
   setLighting: (l) => set({ lighting: l }),
   setQuality: (q) => set({ quality: q }),
+  setSunMinutes: (m) => set({ sunMinutes: Math.min(1439, Math.max(0, Math.round(m))) }),
+  setSunDayOfYear: (d) => set({ sunDayOfYear: Math.min(365, Math.max(1, Math.round(d))) }),
   toggleDressed: () => set((s) => ({ dressed: !s.dressed })),
   loadTransforms: (data) =>
     set({ positions: data.positions ?? {}, rotations: data.rotations ?? {}, dims: data.dims ?? {} }),
@@ -185,10 +208,41 @@ type SettingsState = {
   /** Last reason if validation failed — a KeyFailure code, not an exception
    *  string (see lib/validate-key.ts). */
   keyValidReason: string | null;
+  /** How high off the floor the user holds the phone, in metres.
+   *
+   *  Remembered here rather than per room because it is a property of the person,
+   *  not the room — the same shooter is the same height in the next one. The
+   *  geometry engine assumed a flat 1.5 m, and distance scales linearly with this
+   *  (∂d/∂h = d/h), so an unasked question was a ±17% error on every measurement
+   *  taken from a photo. It is still written onto each capture's pose as the
+   *  photo is saved, so a stored photo records what was believed when it was
+   *  taken. */
+  camHeightM: number;
+  /** Whether the user has actually answered, as opposed to inheriting 1.5.
+   *
+   *  The difference matters downstream and cannot be recovered from the number
+   *  itself: a photo whose height is merely the default should let the wall-floor
+   *  line SOLVE for the height (see `buildCals` on the detect screen), while a
+   *  height the user stated should not be overruled by a luminance heuristic that
+   *  can lock onto a rug edge. Without this flag every photo carried a height and
+   *  the solve was unreachable. */
+  camHeightSet: boolean;
+  /** Report step-free access in the room check — 1500 mm turning space, reachable
+   *  routes. Off by default and remembered: whether a room has to meet this is a
+   *  fact about the person using it, not about the room, so it belongs with the
+   *  other per-device preferences rather than being asked again per room. */
+  stepFree: boolean;
   setApiKey: (k: string) => void;
   setDimUnit: (u: DimUnit) => void;
   setKeyValid: (v: boolean | null, reason?: string | null) => void;
+  setCamHeight: (m: number) => void;
+  setStepFree: (on: boolean) => void;
 };
+
+/** Bounds on the remembered camera height. Outside these it is a typo, and a
+ *  typo here silently rescales an entire room. */
+export const CAM_HEIGHT_MIN = 0.8;
+export const CAM_HEIGHT_MAX = 2.2;
 
 export const useSettings = create<SettingsState>()(
   persist(
@@ -197,10 +251,19 @@ export const useSettings = create<SettingsState>()(
       dimUnit: 'm',
       keyValid: null,
       keyValidReason: null,
+      camHeightM: 1.5,
+      camHeightSet: false,
+      stepFree: false,
       // Setting a new key invalidates the cached test result.
       setApiKey: (k) => set({ apiKey: k, keyValid: null, keyValidReason: null }),
       setDimUnit: (u) => set({ dimUnit: u }),
       setKeyValid: (v, reason) => set({ keyValid: v, keyValidReason: reason ?? null }),
+      setCamHeight: (m) =>
+        set({
+          camHeightM: Math.min(CAM_HEIGHT_MAX, Math.max(CAM_HEIGHT_MIN, m)),
+          camHeightSet: true,
+        }),
+      setStepFree: (on) => set({ stepFree: on }),
     }),
     {
       name: 'danmu-settings',

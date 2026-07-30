@@ -11,6 +11,13 @@ import {
   obbInsidePoly,
   pointInObb,
   faceClearance,
+  footArea,
+  footCorners,
+  footFromPart,
+  footIntersectionArea,
+  footOverlap,
+  pointInFoot,
+  type Foot,
   type OBB,
   type Poly,
 } from '@/lib/geometry';
@@ -23,12 +30,96 @@ const box = (cx: number, cz: number, w: number, d: number, rot = 0): OBB => ({
   rot,
 });
 
+const round = (cx: number, cz: number, w: number, d = w, rot = 0): Foot => ({
+  cx,
+  cz,
+  hw: w / 2,
+  hd: d / 2,
+  rot,
+  circle: true,
+});
+
 const RECT: Poly = [
   [-3, -2],
   [3, -2],
   [3, 2],
   [-3, 2],
 ];
+
+describe('round footprints', () => {
+  it('measures the circle, not the square around it', () => {
+    // The whole point. A 1.2 m round table covers 1.13 m², not 1.44 — the
+    // bounding square is 27% bigger, and every bit of that surplus is in the
+    // four corners where the chairs go.
+    expect(footArea(round(0, 0, 1.2))).toBeCloseTo(Math.PI * 0.36, 9);
+    expect(footArea(box(0, 0, 1.2, 1.2))).toBeCloseTo(1.44, 9);
+    expect(footArea(box(0, 0, 1.2, 1.2)) / footArea(round(0, 0, 1.2))).toBeCloseTo(4 / Math.PI, 9);
+  });
+
+  it('leaves rectangles bit-identical', () => {
+    const a = box(0, 0, 2, 1, 0.4);
+    const b = box(1.1, 0.3, 1, 1, -0.2);
+    expect(footOverlap(a, b)).toBe(obbOverlap(a, b));
+    expect(footIntersectionArea(a, b)).toBe(obbIntersectionArea(a, b));
+    expect(footArea(a)).toBeCloseTo(2, 12);
+    expect(footCorners(a)).toEqual(obbCorners(a));
+  });
+
+  it('does not collide across a corner the circle never reaches', () => {
+    // A 1 m square box sitting diagonally off a 1 m round table's corner. The
+    // bounding square touches it; the circle is nowhere near.
+    const table = round(0, 0, 1);
+    const chair = box(0.62, 0.62, 0.5, 0.5);
+    expect(obbOverlap(table, chair)).toBe(true);
+    expect(footOverlap(table, chair)).toBe(false);
+  });
+
+  it('still collides head-on', () => {
+    expect(footOverlap(round(0, 0, 1), box(0.6, 0, 0.5, 0.5))).toBe(true);
+  });
+
+  it('is exact enough on point containment to trust per cell', () => {
+    const t = round(0, 0, 2);
+    expect(pointInFoot(0.99, 0, t)).toBe(true);
+    expect(pointInFoot(1.01, 0, t)).toBe(false);
+    // The corner of the bounding square, which a square footprint would claim.
+    expect(pointInFoot(0.9, 0.9, t)).toBe(false);
+    expect(pointInObb(0.9, 0.9, t)).toBe(true);
+  });
+
+  it('models an ellipse when the axes are scaled apart', () => {
+    // W and D are separately editable, and the renderer draws what that implies.
+    const e = round(0, 0, 2, 1);
+    expect(footArea(e)).toBeCloseTo(Math.PI * 1 * 0.5, 9);
+    expect(pointInFoot(0.9, 0, e)).toBe(true);
+    expect(pointInFoot(0, 0.9, e)).toBe(false);
+  });
+
+  it('turns with the part', () => {
+    const e = round(0, 0, 2, 1, Math.PI / 2);
+    // Rotated a quarter turn, the long axis now runs along z.
+    expect(pointInFoot(0.9, 0, e)).toBe(false);
+    expect(pointInFoot(0, 0.9, e)).toBe(true);
+  });
+
+  it('errs small rather than large on shared area', () => {
+    // The polygon is INSCRIBED, so a derived overlap is never bigger than the
+    // truth — a round piece is not reported as hitting what it does not touch.
+    // The lower bound holds the documented 99.4%: drop the segment count and
+    // this fails rather than quietly shaving area off every round part.
+    const t = round(0, 0, 2);
+    const slab = box(0, 0, 10, 10);
+    const area = footIntersectionArea(t, slab);
+    expect(area).toBeLessThanOrEqual(footArea(t) + 1e-9);
+    expect(area).toBeGreaterThan(footArea(t) * 0.993);
+  });
+
+  it('builds from a part the way the scene stores one', () => {
+    const f = footFromPart([1, 0, 2], 0, [400, 400, 1600], true);
+    expect(f.circle).toBe(true);
+    expect(footArea(f)).toBeCloseTo(Math.PI * 0.04, 9);
+  });
+});
 
 describe('obbOverlap (SAT)', () => {
   it('detects plain axis-aligned overlap', () => {

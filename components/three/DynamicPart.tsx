@@ -6,6 +6,7 @@
 
 import { Box, BoxInstances, PlaneInstances, type InstanceItem } from './Box';
 import { CachedMesh } from './CachedMesh';
+import { PartLight } from './PartLight';
 import { SURFACE } from './materials';
 import { Spin, Sway } from './Motion';
 import { isParametric, type ScenePart } from '@/lib/scene-spec';
@@ -51,10 +52,16 @@ export function PartGeometry({ part, locked }: { part: ScenePart; locked: boolea
   // renders nothing until the blob resolves, so we also render the primitive as
   // a placeholder underneath via a fragment — it disappears visually when the
   // GLB overlays it (CachedMesh re-anchors to the same world origin).
-  if (part.meshHash) {
-    return <CachedMesh part={part} />;
-  }
-  return <ShapeDispatch part={part} locked={locked} />;
+  //
+  // PartLight rides along either way: a lamp emits because it is a lamp, not
+  // because of which mesh happens to represent it. It renders nothing for the
+  // overwhelming majority of parts, which are not fixtures.
+  return (
+    <>
+      {part.meshHash ? <CachedMesh part={part} /> : <ShapeDispatch part={part} locked={locked} />}
+      <PartLight part={part} />
+    </>
+  );
 }
 
 // Split from PartGeometry so we can use a hook (effective-dim lookup) without
@@ -171,20 +178,21 @@ function SofaGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => [sx * (w / 2 - 0.08), sz * (d / 2 - 0.08)] as [number, number]));
   return (
     <>
-      {/* plinth */}
-      <Box size={[w, seatTop - legH, d]} position={[0, (seatTop + legH) / 2, 0]} color={main} roughness={0.75} />
+      {/* plinth — upholstered, so it takes the cloth surface (weave + sheen).
+          The frame keeps its tauter 0.75 roughness against the loose cushions. */}
+      <Box size={[w, seatTop - legH, d]} position={[0, (seatTop + legH) / 2, 0]} color={main} surface="fabric" roughness={0.75} />
       {/* backrest */}
-      <Box size={[w, h - seatTop, backTh]} position={[0, (h + seatTop) / 2, -d / 2 + backTh / 2]} color={main} roughness={0.75} />
+      <Box size={[w, h - seatTop, backTh]} position={[0, (h + seatTop) / 2, -d / 2 + backTh / 2]} color={main} surface="fabric" roughness={0.75} />
       {/* arms */}
-      <Box size={[arm, h * 0.62 - legH, d]} position={[-w / 2 + arm / 2, (h * 0.62 + legH) / 2, 0]} color={main} roughness={0.75} />
-      <Box size={[arm, h * 0.62 - legH, d]} position={[w / 2 - arm / 2, (h * 0.62 + legH) / 2, 0]} color={main} roughness={0.75} />
+      <Box size={[arm, h * 0.62 - legH, d]} position={[-w / 2 + arm / 2, (h * 0.62 + legH) / 2, 0]} color={main} surface="fabric" roughness={0.75} />
+      <Box size={[arm, h * 0.62 - legH, d]} position={[w / 2 - arm / 2, (h * 0.62 + legH) / 2, 0]} color={main} surface="fabric" roughness={0.75} />
       {/* per-seat cushions (tiled) */}
       {Array.from({ length: seats }).map((_, i) => {
         const x = -innerW / 2 + (i + 0.5) * seatW;
         return (
           <group key={i}>
-            <Box size={[seatW * 0.94, 0.2, d * 0.72]} position={[x, seatTop + 0.06, d * 0.04]} color={cushion} roughness={0.97} />
-            <Box size={[seatW * 0.94, (h - seatTop) * 0.82, 0.16]} position={[x, seatTop + (h - seatTop) * 0.45, -d * 0.3]} color={cushion} roughness={0.97} />
+            <Box size={[seatW * 0.94, 0.2, d * 0.72]} position={[x, seatTop + 0.06, d * 0.04]} color={cushion} surface="fabric" />
+            <Box size={[seatW * 0.94, (h - seatTop) * 0.82, 0.16]} position={[x, seatTop + (h - seatTop) * 0.45, -d * 0.3]} color={cushion} surface="fabric" />
           </group>
         );
       })}
@@ -324,14 +332,14 @@ function ArmchairGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   return (
     <>
       {/* seat cushion */}
-      <Box size={[0.7, 0.12, 0.7]} position={[0, 0.43, 0]} color={seat} roughness={0.97} />
+      <Box size={[0.7, 0.12, 0.7]} position={[0, 0.43, 0]} color={seat} surface="fabric" />
       {/* back cushion */}
-      <Box size={[0.68, 0.58, 0.12]} position={[0, 0.73, -0.29]} color={seat} roughness={0.97} />
+      <Box size={[0.68, 0.58, 0.12]} position={[0, 0.73, -0.29]} color={seat} surface="fabric" />
       {/* back cushion crease line */}
-      <Box size={[0.62, 0.005, 0.1]} position={[0, 0.68, -0.24]} color={cushionDark} roughness={0.98} />
+      <Box size={[0.62, 0.005, 0.1]} position={[0, 0.68, -0.24]} color={cushionDark} surface="fabric" roughness={0.98} />
       {/* armrests */}
-      <Box size={[0.1, 0.38, 0.68]} position={[-0.3, 0.56, 0]} color={seat} roughness={0.95} />
-      <Box size={[0.1, 0.38, 0.68]} position={[0.3, 0.56, 0]} color={seat} roughness={0.95} />
+      <Box size={[0.1, 0.38, 0.68]} position={[-0.3, 0.56, 0]} color={seat} surface="fabric" roughness={0.95} />
+      <Box size={[0.1, 0.38, 0.68]} position={[0.3, 0.56, 0]} color={seat} surface="fabric" roughness={0.95} />
       {/* wooden legs */}
       {[
         [-0.3, -0.3],

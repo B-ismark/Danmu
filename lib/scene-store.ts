@@ -4,7 +4,7 @@ import { create } from 'zustand';
 import { defaultScene, buildSceneFromRoom, type ScenePart } from './scene-spec';
 import { ROOM as ROOM_DEFAULT } from './parts-catalog';
 import { footprintForLayout, offsetWall, footprintBounds, type Footprint, type LayoutId } from './footprint';
-import type { RoomData } from './storage';
+import type { RoomData, Site } from './storage';
 
 export type RoomShape = {
   width: number;
@@ -16,6 +16,10 @@ export type RoomShape = {
   /** per-wall paint colour, keyed by footprint-edge index. Missing = default
    *  shell colour (rendered in RoomShell). */
   wallColors: Record<number, string>;
+  /** Where the room is and which way it faces, for the sun path. Absent until the
+   *  user says — a latitude cannot be guessed, and guessing one would make the
+   *  daylight study quietly wrong rather than obviously unset. */
+  site?: Site;
 };
 
 /** Room resize clamps (metres) — match the dims editor's sane range. */
@@ -30,6 +34,8 @@ type SceneState = {
   setParts: (p: ScenePart[]) => void;
   setRoom: (r: { width: number; depth: number; height: number }) => void;
   loadFromRoom: (room: RoomData | undefined) => void;
+  /** where the room is on earth + which way it faces (sun path). */
+  setSite: (site: Site) => void;
   /** paint one wall (by footprint-edge index). */
   setWallColor: (index: number, color: string) => void;
   /** paint every wall the same colour in one go. */
@@ -98,10 +104,12 @@ export const useScene = create<SceneState>((set) => ({
         layoutId,
         footprint,
         wallColors: room.wallColors ?? {},
+        site: room.site,
       },
       ready: true,
     });
   },
+  setSite: (site) => set((s) => ({ room: { ...s.room, site } })),
   setWallColor: (index, color) =>
     set((s) => ({ room: { ...s.room, wallColors: { ...s.room.wallColors, [index]: color } } })),
   setAllWallColors: (color) =>

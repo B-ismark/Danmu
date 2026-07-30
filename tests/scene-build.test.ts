@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { buildSceneFromRoom, CATALOG_SHAPES_ORDERED } from '../lib/scene-spec';
+import {
+  buildSceneFromRoom,
+  CATALOG_SHAPES_ORDERED,
+  collidesAt,
+  isLightFixture,
+  lightFor,
+  type ScenePart,
+} from '../lib/scene-spec';
 import type { RoomData } from '../lib/storage';
 
 type Saved = NonNullable<RoomData['detectedObjects']>[number];
@@ -142,5 +149,125 @@ describe('buildSceneFromRoom', () => {
     const parts = buildSceneFromRoom(room([saved(0, { locked: true, color: '#123456' })]));
     expect(parts[0].locked).toBe(true);
     expect(parts[0].color).toBe('#123456');
+  });
+});
+
+// ─── Light emission ─────────────────────────────────────────────────────────
+
+const asPart = (over: Partial<ScenePart>): ScenePart =>
+  ({
+    id: 'p',
+    category: 'lamp',
+    name: 'Lamp',
+    shape: 'lamp-floor',
+    pos: [0, 0, 0],
+    rot: 0,
+    dimMM: [300, 300, 1700],
+    locked: false,
+    ...over,
+  }) as ScenePart;
+
+describe('lightFor', () => {
+  it('gives every lamp shape a sensible domestic bulb', () => {
+    for (const shape of ['lamp-table', 'lamp-floor', 'lamp-pendant'] as const) {
+      const spec = lightFor(asPart({ shape }))!;
+      expect(spec).not.toBeNull();
+      expect(spec.lumens).toBeGreaterThan(100);
+      expect(spec.lumens).toBeLessThan(2000);
+      expect(spec.kelvin).toBeGreaterThanOrEqual(2200);
+      expect(spec.kelvin).toBeLessThanOrEqual(6500);
+    }
+  });
+
+  it('only a shaded fixture aims its light', () => {
+    // Which matters beyond looks: a cone is one shadow map, a bare bulb is six.
+    expect(lightFor(asPart({ shape: 'lamp-pendant' }))!.coneDeg).toBeGreaterThan(0);
+    expect(lightFor(asPart({ shape: 'lamp-floor' }))!.coneDeg).toBeUndefined();
+  });
+
+  it('emits nothing for furniture that is not a lamp', () => {
+    expect(lightFor(asPart({ shape: 'sofa' }))).toBeNull();
+    expect(lightFor(asPart({ shape: 'tv' }))).toBeNull();
+    expect(lightFor(asPart({ shape: 'bed-double' }))).toBeNull();
+  });
+
+  it('lets the user override the shape default', () => {
+    const spec = lightFor(asPart({ shape: 'lamp-floor', light: { lumens: 120, kelvin: 2200 } }))!;
+    expect(spec.lumens).toBe(120);
+    expect(spec.kelvin).toBe(2200);
+  });
+
+  it('agrees with isLightFixture', () => {
+    // The Inspector shows the light controls off one and the renderer emits off
+    // the other; a disagreement is an uneditable lamp or an inert control.
+    for (const shape of CATALOG_SHAPES_ORDERED) {
+      expect(isLightFixture(shape)).toBe(lightFor(asPart({ shape })) !== null);
+    }
+  });
+});
+
+// ─── collidesAt over round footprints ───────────────────────────────────────
+// The placement gate. This is where a round table's phantom corners actually bit
+// the user: a chair dragged into the corner of a round table was refused, in the
+// 3D view, the plan and the keyboard nudge, because all three ask this one
+// function. The clash rule in the room report barely notices the change by
+// comparison — its tucked-chair exemption already lets a chair reach 85% of its
+// own footprint into a table before it says anything.
+
+describe('collidesAt with a round footprint', () => {
+  function piece(over: Partial<ScenePart> & Pick<ScenePart, 'id' | 'dimMM' | 'pos'>): ScenePart {
+    return {
+      name: over.id,
+      category: 'other',
+      shape: 'box',
+      rot: 0,
+      locked: false,
+      ...over,
+    } as ScenePart;
+  }
+
+  /** A 1.2 m table at the origin, round or square, and a 450 mm chair. */
+  function scene(circle: boolean, chairAt: [number, number]): ScenePart[] {
+    return [
+      piece({ id: 'table', category: 'table', dimMM: [1200, 1200, 750], pos: [0, 0, 0], circle }),
+      piece({ id: 'chair', category: 'chair', dimMM: [450, 450, 850], pos: [chairAt[0], 0, chairAt[1]] }),
+    ];
+  }
+
+  function blocked(parts: ScenePart[]): boolean {
+    const chair = parts.find((p) => p.id === 'chair')!;
+    return collidesAt(parts, 'chair', chair.pos, chair.rot, chair.dimMM);
+  }
+
+  it('lets a chair into the corner a circle does not occupy', () => {
+    // Diagonally placed so the chair's inner corner clears r = 600 mm while
+    // staying inside the bounding square on both axes.
+    const at: [number, number] = [0.655, 0.655];
+    expect(blocked(scene(false, at))).toBe(true);
+    expect(blocked(scene(true, at))).toBe(false);
+  });
+
+  it('still refuses a chair pushed into the table itself', () => {
+    expect(blocked(scene(true, [0.7, 0]))).toBe(true);
+    expect(blocked(scene(true, [0, 0]))).toBe(true);
+  });
+
+  it('respects the MOVER’s own round footprint, not just the obstacle’s', () => {
+    // Same geometry as above with the roles swapped: the round piece is the one
+    // being dragged. Its corners are the phantom ones now, so dropping them has to
+    // work on the mover side too — `collidesAt` reads the flag off the part it
+    // looks up by id, which is easy to get wrong when the dims arrive as a
+    // separate argument.
+    //
+    // Note the reverse is NOT true and there is no test claiming it: a small round
+    // mover beside a SQUARE table still collides, because that table's corner is
+    // real.
+    const build = (circle: boolean): ScenePart[] => [
+      piece({ id: 'table', category: 'table', dimMM: [1200, 1200, 750], pos: [0, 0, 0], circle }),
+      piece({ id: 'chair', category: 'chair', dimMM: [450, 450, 850], pos: [0.655, 0, 0.655] }),
+    ];
+    const at: [number, number, number] = [0, 0, 0];
+    expect(collidesAt(build(false), 'table', at, 0, [1200, 1200, 750])).toBe(true);
+    expect(collidesAt(build(true), 'table', at, 0, [1200, 1200, 750])).toBe(false);
   });
 });

@@ -12,8 +12,11 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useStudio, type Lighting } from '@/lib/store';
+import { useScene } from '@/lib/scene-store';
 import { roomStore } from '@/lib/storage';
+import { sunPosition } from '@/lib/solar';
 import { Icon, type IconName } from '@/components/ui/Icon';
+import { NumberField } from '@/components/ui/NumberField';
 import { Segmented } from '@/components/ui/primitives';
 import { isTypingOrDialog } from './KeyboardShortcuts';
 
@@ -26,7 +29,28 @@ const MOODS: Array<{ id: Lighting; label: string; icon: IconName }> = [
   { id: 'day', label: 'Day', icon: 'sun' },
   { id: 'evening', label: 'Evening', icon: 'moon' },
   { id: 'cool', label: 'Cool', icon: 'cloud' },
+  // The other three are studio moods — a look. This one is a measurement: the
+  // sun's real position for this room's latitude, on this date, at this time.
+  { id: 'sun', label: 'Sun', icon: 'compass' },
 ];
+
+/** Where the sun is asked about before the room has a site. Mirrors Room.tsx —
+ *  the panel has to show the same numbers the scene is lit by, or the fields read
+ *  as blank while the room is plainly lit from somewhere. */
+const DEFAULT_SITE = { lat: 40, lon: 0, bearingDeg: 0 };
+
+function clockLabel(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+/** Day-of-year → "5 Mar". 2001 is a non-leap year, so 1…365 maps exactly. */
+function dateLabel(dayOfYear: number): string {
+  const d = new Date(2001, 0, 1);
+  d.setDate(dayOfYear);
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
 
 export function ViewOptions() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -107,9 +131,9 @@ export function ViewOptions() {
             bottom: 'calc(100% + 8px)',
             right: 0,
             zIndex: 'var(--z-popover)',
-            // Wide enough for three lighting segments to hold icon + label on one
+            // Wide enough for four lighting segments to hold icon + label on one
             // line without the track clipping the last of them.
-            width: 252,
+            width: 300,
             padding: 14,
             display: 'flex',
             flexDirection: 'column',
@@ -126,6 +150,8 @@ export function ViewOptions() {
               stretch
             />
           </Group>
+
+          {lighting === 'sun' && <SunControls />}
 
           <Group label="Decor">
             <Segmented
@@ -165,6 +191,176 @@ export function ViewOptions() {
         </div>
       )}
     </div>
+  );
+}
+
+/** Date, time and place for the sun mood.
+ *
+ *  The sliders are the feature, not decoration: a sun path is only worth having if
+ *  you can scrub an afternoon and watch the light cross the floor. Latitude and
+ *  the room's compass bearing live ON THE ROOM (a flat and a holiday cottage do
+ *  not share a latitude); the moment being shown lives in device prefs, because it
+ *  is a question you are asking rather than a fact about the room.
+ *
+ *  Nothing here is derived from a photo. EXIF carries GPS coordinates and
+ *  `lib/exif.ts` deliberately does not read them, so this is typed in or it is the
+ *  default — and the default is on screen rather than hidden. */
+function SunControls() {
+  const sunMinutes = useStudio((s) => s.sunMinutes);
+  const setSunMinutes = useStudio((s) => s.setSunMinutes);
+  const sunDayOfYear = useStudio((s) => s.sunDayOfYear);
+  const setSunDayOfYear = useStudio((s) => s.setSunDayOfYear);
+  const site = useScene((s) => s.room.site);
+  const setSite = useScene((s) => s.setSite);
+  const s = site ?? DEFAULT_SITE;
+
+  // The same instant Room.tsx lights the scene with, so the readout cannot
+  // disagree with what is on screen.
+  const when = new Date(new Date().getFullYear(), 0, 1);
+  when.setDate(sunDayOfYear);
+  when.setHours(Math.floor(sunMinutes / 60), sunMinutes % 60, 0, 0);
+  const pos = sunPosition(when.getTime(), s.lat, s.lon);
+  const up = pos.altitudeDeg > 0;
+
+  return (
+    <Group label="Sun">
+      <Row>
+        <Slider
+          label={`Time · ${clockLabel(sunMinutes)}`}
+          min={0}
+          max={1425}
+          step={15}
+          value={sunMinutes}
+          onChange={setSunMinutes}
+        />
+      </Row>
+      <Row>
+        <Slider
+          label={`Date · ${dateLabel(sunDayOfYear)}`}
+          min={1}
+          max={365}
+          step={1}
+          value={sunDayOfYear}
+          onChange={setSunDayOfYear}
+        />
+      </Row>
+
+      <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+        <Field
+          label="Lat"
+          value={s.lat}
+          min={-90}
+          max={90}
+          step={0.5}
+          onChange={(lat) => setSite({ ...s, lat })}
+        />
+        <Field
+          label="Lon"
+          value={s.lon}
+          min={-180}
+          max={180}
+          step={0.5}
+          onChange={(lon) => setSite({ ...s, lon })}
+        />
+        <Field
+          label="Facing"
+          value={s.bearingDeg}
+          min={0}
+          max={359}
+          step={5}
+          onChange={(bearingDeg) => setSite({ ...s, bearingDeg })}
+        />
+      </div>
+
+      <div
+        style={{
+          fontSize: 10.5,
+          color: up ? 'var(--ink-3)' : 'var(--warn-text)',
+          marginTop: 7,
+          lineHeight: 1.45,
+        }}
+      >
+        {up ? (
+          <>
+            Sun <span className="mono">{Math.round(pos.altitudeDeg)}°</span> up, bearing{' '}
+            <span className="mono">{Math.round(pos.azimuthDeg)}°</span>. “Facing” is the compass
+            bearing of the plan’s north edge.
+          </>
+        ) : (
+          <>The sun is below the horizon at this time — the room is lit by sky only.</>
+        )}
+      </div>
+    </Group>
+  );
+}
+
+function Row({ children }: { children: React.ReactNode }) {
+  return <div style={{ marginTop: 6 }}>{children}</div>;
+}
+
+function Slider({
+  label,
+  min,
+  max,
+  step,
+  value,
+  onChange,
+}: {
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <label style={{ display: 'block', fontSize: 10.5, color: 'var(--ink-2)' }}>
+      {label}
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        style={{ width: '100%', accentColor: 'var(--accent)', marginTop: 3 }}
+      />
+    </label>
+  );
+}
+
+function Field({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <label style={{ flex: 1, minWidth: 0, fontSize: 10.5, color: 'var(--ink-3)' }}>
+      {label}
+      <NumberField
+        value={String(value)}
+        step={step}
+        min={min}
+        max={max}
+        height={28}
+        ariaLabel={label}
+        onChange={(v) => {
+          const n = Number(v);
+          if (Number.isFinite(n)) onChange(Math.min(max, Math.max(min, n)));
+        }}
+        style={{ marginTop: 3 }}
+      />
+    </label>
   );
 }
 
