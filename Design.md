@@ -129,6 +129,7 @@ Furniture detection runs through a fallback chain, best-effort:
    | yolov8x-oiv7 | 275 MB | 7/19 | 7/19 |
    | yolov8s-worldv2 | 50 MB | 7/19 | 10/19 |
    | **oiv7-n + worldv2-s (shipped)** | **64 MB** | — | **13/19** |
+   | rfdetr-base (Apache-2.0, COCO-80) | 108 MB | — | 6/19 |
 
    Two findings worth keeping:
 
@@ -139,6 +140,25 @@ Furniture detection runs through a fallback chain, best-effort:
      fridge / wardrobe class heads peak at 0.002–0.03 on this imagery against
      0.38–0.44 for classes that fire, at *every* OIV7 size. An open-vocabulary
      model prompted with those words in plain language finds them.
+   - **RF-DETR is a better detector and a worse fit, and the reason is the same
+     one.** Measured 2026-07-30 on the same room and the same 5-crop tiling
+     (`onnx-community/rfdetr_base-ONNX`, 560², ImageNet normalisation, sigmoid +
+     no NMS). On the classes it *has* it beats the shipped ensemble outright —
+     refrigerator 94% against 86%, bed 94%, monitor 92%, laptop 92%, and it is
+     the only configuration ever measured here that finds the **keyboard**. But
+     COCO-80 has no word for door, window, curtain, wardrobe, ceiling fan, lamp,
+     desk, shelf, shoe rack or clothes rail, which is thirteen of this room's
+     nineteen objects. It scores **6/19**, and the six are exactly COCO's
+     household nouns. Its other detections are real objects Danmu has no use for
+     — handbag, backpack, suitcase, book, tie, mouse.
+
+     So **the licence prize is not reachable by substitution.** Apache-2.0 would
+     delete the AGPL fence only if RF-DETR replaced *both* current models, and
+     the model it cannot replace is `worldv2`, which is where the open-vocabulary
+     half of 13/19 comes from. Swapping it for the OIV7 model instead is
+     defensible on the merits — better precision, Apache-2.0, and OIV7 already
+     earns just one object for double the passes — but the fence stays up as long
+     as `worldv2` ships, so that trade buys accuracy, not licence freedom.
 
    Confidence stays at 0.35: dropping to 0.20 buys one object and adds a
    spurious `sofa(0.29)`. Still missed at 13/19 — doors, wall art, and the

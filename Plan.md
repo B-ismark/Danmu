@@ -18,7 +18,7 @@ under its own heading. Nothing is silently skipped.
 | 1.6 vanishing point · 2a field · 2b round footprints · 4a apertures · 4b sun · 5b three r184 · 6 solver | **Shipped** |
 | 5d OKLCH | **Shipped in part**, and the omitted part is a design decision, not a task — see 5d |
 | 5c BatchedMesh / WebGPU | **Measured, declined.** 330 draw calls at 30 parts, against a ~1,000 threshold — see 5c |
-| 7b RF-DETR | **Baseline reproduced** at 13/19 on the original room; RF-DETR itself needs a model download + a DETR decode path — see Phase 7 |
+| 7b RF-DETR | **Measured, declined.** 6/19 against the shipped ensemble's 13/19 — COCO-80 has no word for most of this room. The Apache-2.0 prize is unreachable by substitution — see Phase 7 |
 | 7a metric depth | **Blocked.** Needs tape-measured ground truth, which no photo supplies — see Phase 7 |
 
 ---
@@ -711,11 +711,36 @@ Measure before threading a worker; ~30 parts may well be fast enough inline.
 > and the ceiling fan as a lamp are vocabulary failures, not detection failures,
 > and they need a different fix from the four objects that get no box at all.
 >
-> **Still open on 7b: RF-DETR itself.** It needs an ONNX export downloaded from a
-> host not currently in the CSP allowlist, and a DETR-style decode path — sigmoid
-> logits, no NMS, `cxcywh` boxes — which is not the YOLO decode `lib/local-detect.ts`
-> implements. That is a feature-sized piece of work plus a new dependency, not a
-> file swap, so it wants an explicit go-ahead rather than being slipped in.
+> **RF-DETR: measured, and the answer is that the prize is not reachable.** Run as
+> a throwaway spike — model, page and static server all in a scratch directory,
+> nothing in `lib/`, nothing added to the CSP — against the same room and the same
+> 5-crop tiling. `onnx-community/rfdetr_base-ONNX`, 108 MB, Apache-2.0, 560²,
+> DETR decode (sigmoid logits, no NMS, `cxcywh`). One calibration note worth
+> keeping: its `preprocessor_config.json` says `do_normalize: false` while still
+> listing ImageNet mean/std, and the config is wrong — normalising gives 5
+> detections over 0.35 where not normalising gives 2. That was settled by running
+> both, not by reading the file.
+>
+> | | shipped ensemble | rfdetr-base |
+> |---|---|---|
+> | correctly categorised | **13/19** | **6/19** |
+> | size | 64 MB | 108 MB |
+> | passes per photo | 10 | 5 |
+>
+> On the classes it has, RF-DETR is the better detector — refrigerator 94% against
+> 86%, and it is the only configuration ever measured here that finds the
+> **keyboard**. But COCO-80 has no word for door, window, curtain, wardrobe,
+> ceiling fan, lamp, desk, shelf, shoe rack or clothes rail: thirteen of the
+> nineteen objects in this room. The six it gets are exactly COCO's household
+> nouns.
+>
+> **So the licence question is closed, negatively.** Apache-2.0 deletes the AGPL
+> fence only if RF-DETR replaces *both* shipped models, and the one it cannot
+> replace is `worldv2` — the open-vocabulary pass that contributes the half of
+> 13/19 that COCO cannot express. Replacing the OIV7 model with it is defensible
+> on accuracy (OIV7 already earns one object for double the passes), but the fence
+> stays up while `worldv2` ships, so that trade buys precision, not freedom. Full
+> numbers and the failure detail are in `Design.md` §3.
 >
 > **7a is still blocked, and on the other asset.** Accuracy for metric depth is
 > against tape-measured ground truth in millimetres; photographs cannot supply it
