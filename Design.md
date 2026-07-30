@@ -149,6 +149,30 @@ Furniture detection runs through a fallback chain, best-effort:
    Chromium reproduces 13/19 exactly, every box in range. Cost is dominated by
    inference count (5 crops × 2 models = 10 passes/photo):
 
+   **Re-verified 2026-07-30** on the same room, driving the shipped path (capture
+   screen → the detect screen's own auto-run) in headless Chromium with no API
+   key, so this is the local ensemble alone. 32 raw detections across the four
+   walls, and scored two ways:
+
+   - **13/19 correctly categorised** — the table's figure, unchanged.
+   - **17/19 localised**: a box lands on the object but carries the wrong label.
+     Only the keyboard and the small wall painting get no box at all.
+
+   The gap between those two numbers is the honest description of what this model
+   does badly, and it is worth writing down because "missed" and "mislabelled"
+   need different fixes. A curtain came back as `Bed (40%)`, the ceiling fan as
+   `Lamp (40%)`, the two garment rails as `Wardrobe (72 / 75 / 38%)`, and the
+   wooden ledge behind the bed as `Desk (37%)`. Every one of those is a real
+   object found in the right place and filed under the wrong word — a vocabulary
+   failure, exactly like the recall gap that motivated the open-vocabulary second
+   model in the first place. There were also two clean false positives: the
+   `Multipurpose Hanger` cardboard box read as a `Picture frame` on both walls it
+   appears in, and a bare ceiling hook as a `Ceiling fan (47%)`.
+
+   The benchmark photos are **not in this repo** and should not be added — they
+   are photographs of somebody's bedroom, and this repo is public. Point the
+   harness at them wherever they live.
+
    | environment | per photo |
    |---|---|
    | Chrome + WebGPU | ~4.8 s |

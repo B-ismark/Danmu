@@ -18,7 +18,8 @@ under its own heading. Nothing is silently skipped.
 | 1.6 vanishing point · 2a field · 2b round footprints · 4a apertures · 4b sun · 5b three r184 · 6 solver | **Shipped** |
 | 5d OKLCH | **Shipped in part**, and the omitted part is a design decision, not a task — see 5d |
 | 5c BatchedMesh / WebGPU | **Measured, declined.** 330 draw calls at 30 parts, against a ~1,000 threshold — see 5c |
-| 7a metric depth · 7b RF-DETR | **Blocked on assets.** The 4-photo benchmark room is not in this repo — see Phase 7 |
+| 7b RF-DETR | **Baseline reproduced** at 13/19 on the original room; RF-DETR itself needs a model download + a DETR decode path — see Phase 7 |
+| 7a metric depth | **Blocked.** Needs tape-measured ground truth, which no photo supplies — see Phase 7 |
 
 ---
 
@@ -687,39 +688,46 @@ Measure before threading a worker; ~30 parts may well be fast enough inline.
 
 ## Phase 7 — Spikes · parallel, measure before committing
 
-> **Both are blocked on assets, not on effort — and the missing asset is the
-> same one.** The benchmark table in `Design.md` §3 is headed "measured on a real
-> 4-photo room (19 catalogued objects)", and that room is not in this repo: a
-> sweep for `*.jpg` / `*.jpeg` / `*.png` outside `node_modules` and `.git` returns
-> nothing at all. Neither the photos nor the 19-object ground-truth list survived
-> into version control.
+> **The benchmark room exists again, and the baseline is reproduced.** The four
+> photos are not in this repo and should stay out of it — they are photographs of
+> somebody's bedroom and this repo is public — but they can be pointed at on disk,
+> which is all a harness needs.
 >
-> Both spikes are defined as comparisons against that table, so without it there
-> is nothing honest to run. A recall figure from different imagery is not a row in
-> that table — it is a different experiment wearing its column headings, and
-> "compare on the same table so the numbers stay honest" is the one instruction
-> that forbids exactly that. So no number is recorded here rather than a number
-> that would be quoted later as if it were comparable.
+> Driving the shipped path end to end (capture screen file input → the detect
+> screen's own auto-run, headless Chromium, no API key, WASM execution provider)
+> returns **32 raw detections** across the four walls. Scored against a
+> ground-truth list rebuilt from the photos:
 >
-> **To unblock, in order of how much it buys:**
+> | metric | result |
+> |---|---|
+> | correctly categorised | **13/19** — matches `Design.md` §3 exactly |
+> | localised (box lands on it, label wrong) | 17/19 |
+> | no box at all | keyboard, small wall painting |
 >
-> 1. Commit the four photos and the 19-object list (or put them anywhere a script
->    can reach). This is the whole blocker for 7b's recall column, and half of 7a's.
-> 2. Tape-measure that room. 7a's accuracy claim is against ground truth in
->    millimetres, and no model output can substitute for a tape.
+> Reproducing 13/19 is the load-bearing part: it says the rebuilt ground-truth
+> list agrees with the one the original table was scored on, so the row is still
+> true and future rows are comparable to it. See `Design.md` §3 for the mislabels
+> and false positives, which are the more useful output — a curtain read as a bed
+> and the ceiling fan as a lamp are vocabulary failures, not detection failures,
+> and they need a different fix from the four objects that get no box at all.
 >
-> With (1) in hand, 7b is short: export RF-DETR to ONNX, point the existing
-> 5-crop tiling harness at it, fill in the row. The licence question — Apache-2.0,
-> therefore bundleable, therefore the AGPL fence in `Design.md` §9 disappears — is
-> the actual prize and is already settled on paper; only the recall is unknown.
+> **Still open on 7b: RF-DETR itself.** It needs an ONNX export downloaded from a
+> host not currently in the CSP allowlist, and a DETR-style decode path — sigmoid
+> logits, no NMS, `cxcywh` boxes — which is not the YOLO decode `lib/local-detect.ts`
+> implements. That is a feature-sized piece of work plus a new dependency, not a
+> file swap, so it wants an explicit go-ahead rather than being slipped in.
 >
-> **The latency half of 7b is blocked differently, and cannot be fixed by
-> committing photos.** Per-photo cost is content-independent (a fixed 5 crops × 2
-> models), so any image would do — but the only WebGPU-capable browser available
-> to an agent here is headless Chromium on SwiftShader, which is a CPU rasteriser.
-> Its timings say nothing about the ~4.8 s Chrome + WebGPU figure the table quotes,
-> so an fp16 / io-binding comparison measured that way would be noise. That one
-> needs a human at a machine with a real GPU.
+> **7a is still blocked, and on the other asset.** Accuracy for metric depth is
+> against tape-measured ground truth in millimetres; photographs cannot supply it
+> and no model output can substitute for a tape.
+>
+> **The latency half of 7b is blocked differently, and photos do not fix it.**
+> Per-photo cost is content-independent (a fixed 5 crops × 2 models), so any image
+> would do — but the only WebGPU-capable browser available to an agent here is
+> headless Chromium on SwiftShader, a CPU rasteriser. This run took ~61 s/photo,
+> which measures SwiftShader, not the ~4.8 s Chrome + WebGPU figure the table
+> quotes. An fp16 / io-binding comparison measured that way would be noise. That
+> one needs a human at a machine with a real GPU.
 
 ### 7a Metric depth for the missing axis
 
