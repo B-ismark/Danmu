@@ -9,7 +9,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 // drawers — is either per-room (saved by RoomSync) or genuinely ephemeral.
 type ViewPreset = 'free' | 'front' | 'top' | 'iso';
 /** Scene lighting mood — drives lights, environment + background in Room. */
-export type Lighting = 'day' | 'evening' | 'cool';
+export type Lighting = 'day' | 'evening' | 'cool' | 'sun';
 /** Render quality — 'high' enables soft cast shadows, ambient occlusion and
  *  per-part procedural material maps. */
 export type Quality = 'low' | 'high';
@@ -43,6 +43,12 @@ type StudioState = {
   lighting: Lighting;
   /** render quality (soft shadows + AO + material maps on 'high') */
   quality: Quality;
+  /** Which moment the 'sun' mood is showing: minutes past local midnight, and the
+   *  day of the year. A time of day rather than a slider labelled "brightness" —
+   *  the whole value of a real sun path is being able to ask about 4 pm in
+   *  December, and the answer only means something if the question is a date. */
+  sunMinutes: number;
+  sunDayOfYear: number;
   /** auto set-dressing — decorative props on furniture surfaces */
   dressed: boolean;
   /** Snap granularity for the gizmo. 'off' = free move, 'fine' = 10mm / 15°,
@@ -76,6 +82,8 @@ type StudioState = {
   toggleGrid: () => void;
   setLighting: (l: Lighting) => void;
   setQuality: (q: Quality) => void;
+  setSunMinutes: (m: number) => void;
+  setSunDayOfYear: (d: number) => void;
   toggleDressed: () => void;
   frameSelected: () => void;
   toggleHidden: (id: string) => void;
@@ -95,7 +103,15 @@ type StudioState = {
  *  affordance implies the whole studio is remembered. Selection, camera, open
  *  drawers and transforms stay out: the first two are ephemeral by nature and
  *  the last is per-room, owned by RoomSync. */
-const STUDIO_PREFS = ['lighting', 'quality', 'dressed', 'snapMode', 'showGrid'] as const;
+const STUDIO_PREFS = [
+  'lighting',
+  'quality',
+  'dressed',
+  'snapMode',
+  'showGrid',
+  'sunMinutes',
+  'sunDayOfYear',
+] as const;
 
 export const useStudio = create<StudioState>()(
   persist(
@@ -115,6 +131,11 @@ export const useStudio = create<StudioState>()(
   showGrid: true,
   lighting: 'day',
   quality: 'high',
+  // 3 pm on the March equinox: the sun is up at every inhabited latitude and
+  // clearly to one side, so the first thing anyone sees when they pick the sun
+  // mood is a room with a direction to its light.
+  sunMinutes: 15 * 60,
+  sunDayOfYear: 80,
   dressed: true,
   frameSelectedToken: 0,
   hidden: {},
@@ -142,6 +163,8 @@ export const useStudio = create<StudioState>()(
   toggleGrid: () => set((s) => ({ showGrid: !s.showGrid })),
   setLighting: (l) => set({ lighting: l }),
   setQuality: (q) => set({ quality: q }),
+  setSunMinutes: (m) => set({ sunMinutes: Math.min(1439, Math.max(0, Math.round(m))) }),
+  setSunDayOfYear: (d) => set({ sunDayOfYear: Math.min(365, Math.max(1, Math.round(d))) }),
   toggleDressed: () => set((s) => ({ dressed: !s.dressed })),
   loadTransforms: (data) =>
     set({ positions: data.positions ?? {}, rotations: data.rotations ?? {}, dims: data.dims ?? {} }),

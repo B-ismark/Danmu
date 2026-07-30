@@ -402,6 +402,37 @@ quality gates; needs the light model and the shadow budget.
 
 ## Phase 4 — Openings, then the sun
 
+> **Both done.** `lib/apertures.ts` (+ 13 tests) turns wall-mounted `window` /
+> `door` parts into rectangles in each wall's own 2D frame; `RoomShell` builds each
+> wall as a `Shape` with a hole per opening. `lib/solar.ts` (+ 14 tests) is the
+> NOAA position, and a fourth lighting mood drives the key light from it.
+>
+> Four things the plan did not anticipate:
+>
+> · **Skirting cannot be cut with a hole.** A door opening spans the whole 100 mm
+>   strip, so the hole touches the outline top *and* bottom and leaves Earcut two
+>   degenerate slivers. `skirtingRuns` splits the strip into the stretches between
+>   openings instead, which is both simpler and exactly right.
+> · **A door's opening is a degenerate hole too.** It stands on the floor and the
+>   wall starts at the floor, so the edges are coincident. The OPENING is clamped
+>   2 cm inside the outline — the door part keeps its real 2100 mm, and what shrinks
+>   is the hole behind it.
+> · **The shadow frustum had to become direction-aware.** `THROW_PER_M` was a
+>   constant derived from the studio key's fixed position; a sun near the horizon
+>   throws shadows an order of magnitude longer. It is now computed from the light
+>   direction and capped, and the shadow camera's `far` follows the fitted distance
+>   instead of a hard-coded 30.
+> · **Latitude belongs to the room, the moment belongs to the device.** A flat and
+>   a holiday cottage do not share a latitude, so `Site` went on `RoomData`
+>   (additive — `RoomSync` writes it, `loadFromRoom` reads it). The date and time
+>   being *asked about* are a question, not a property of the furniture, so they sit
+>   in studio prefs.
+>
+> One thing the plan got wrong: it proposed prefilling latitude, longitude and
+> bearing **from EXIF**. `lib/exif.ts` deliberately does not read GPS — the reason
+> is recorded in Design.md §3 and has not changed — so these are typed in, with the
+> default visible on screen rather than hidden.
+
 ### 4a Windows and doors as real apertures · **M**
 
 Walls are already `planeGeometry` per footprint edge (`RoomShell.tsx:151`).

@@ -204,6 +204,8 @@ This is what makes Danmu trustworthy. All pure math, all covered by tests.
 | `lib/device-tilt.ts` | Lens tilt at the shutter from `deviceorientation`, for the live-camera path only (EXIF has no tilt field). Reports a tilt only for an upright, unrolled phone — a wrong tilt is worse than none, since "none" is the level camera the engine already assumed. |
 | `lib/physics.ts` | Gravity/anchor rules — where a part sits (floor / ceiling / wall-mid / …), wall affinity + snap, support-under lookup for tabletop-prone items. |
 | `lib/clearance.ts` | Ergonomics checker over exact geometry: ≥600 mm walkways, ≥600 mm in front of hinged storage, 500 mm bedside strip, TV viewing distance, door swings, clashes, over-height. Reproducible findings, no AI. |
+| `lib/apertures.ts` | Turns wall-mounted `window` / `door` parts into rectangles in each wall's own 2D frame, which is all `THREE.Shape` needs to punch a hole (`Shape.holes` + Earcut — no CSG library). Pure, because the wall-local conversion is the part that goes wrong invisibly: get the tangent backwards and every opening mirrors about the middle of its wall. |
+| `lib/solar.ts` | NOAA / Meeus solar position — declination, equation of time, hour angle → altitude and azimuth, ~0.01°. No model, no network, no data file: pure astronomy, which is the one thing in this app a model could not do better. |
 | `lib/clearance-field.ts` | Circulation as a **field** rather than a list of pairs — see below. One 5 cm raster of the floor plus an exact Euclidean distance transform answers walkway width, reachability, turning space and crowding at once, and it also carries WHICH obstacle is nearest so a finding can name the pieces to select. |
 | `lib/dimension-ranges.ts` | `clampDims` — per-item sizing tiers (fixed / standard / flexible). **All sizes pass through this.** |
 | `lib/footprint.ts` | Footprint polygon math (preset shapes, containment, `offsetWall` for wall moves). The polygon — not `width`/`depth` — is the source of truth for room shape. |
@@ -358,6 +360,32 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
   is not enough: every material has `envMapIntensity: 0.5`, so the environment
   supplies most of the light in the scene, and a nominally dark Evening still
   rendered as a fully-lit amber room. Both halves move together or neither does.
+- **Sunlight is a fourth mood, and it is a measurement rather than a look.**
+  Day / Evening / Cool are studio lighting; `Sun` asks `lib/solar.ts` where the sun
+  actually is for this room's latitude, on a chosen date, at a chosen time, and
+  points the key light there. Its colour comes off the same Planckian locus the
+  lamps use (warm at the horizon, neutral overhead) and its strength falls with
+  `sin(altitude)` — the first-order air-mass term, which is what makes a 7 am room
+  read as 7 am. **When the sun is down there is no key light at all**, because that
+  is the honest picture of 9 pm in December.
+  Latitude, longitude and the room's compass bearing are stored **on the room**
+  (`RoomData.site`): a flat and a holiday cottage do not share a latitude. The date
+  and time being asked about are device prefs — a question, not a property of the
+  furniture. Nothing is read from a photo; `lib/exif.ts` does not read GPS.
+  The key light's shadow frustum is fitted per direction, not per room: a sun near
+  the horizon throws shadows an order of magnitude longer than a studio light, so
+  the throw-per-metre term is derived from the light vector and capped, and the
+  shadow camera's `far` follows the fitted distance.
+- **Windows and doors are holes in the wall**, not panels in front of it
+  (`lib/apertures.ts` → `RoomShell`). Each wall is a `THREE.Shape` with one hole per
+  opening; `ShapeGeometry` faces +Z exactly as the `planeGeometry` it replaced, so
+  the near-wall back-face culling that makes the dollhouse view work is untouched.
+  Skirting is not cut with a hole — a doorway spans the whole 100 mm strip, so the
+  hole would touch the outline top and bottom and leave two degenerate slivers; it
+  is split into the runs between openings instead. Openings are clamped 2 cm inside
+  the wall outline, because a door standing on the floor of a wall that starts at
+  the floor is the degenerate case for the triangulator. The **part** keeps its real
+  size; the hole behind it is what shrinks.
 - **Quality** High / Fast — gates procedural normal/roughness maps
   (`lib/textures.ts`, zero assets) + soft cast shadows + ambient occlusion
   (N8AO/SMAA mount on `high` only). There is no floor reflection.

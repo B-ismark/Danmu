@@ -14,12 +14,14 @@
 // does the culling for free.
 
 import { useMemo, useState } from 'react';
-import { DoubleSide, FrontSide, Shape, Vector2 } from 'three';
+import { DoubleSide, FrontSide, Path, Shape, Vector2 } from 'three';
 import { type ThreeEvent } from '@react-three/fiber';
 import { Line } from '@react-three/drei';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
+import { useRoomScene } from '@/lib/room-scene';
 import { SCENE } from '@/lib/scene-palette';
+import { wallApertures, skirtingRuns } from '@/lib/apertures';
 import { wallSegments, footprintBounds } from '@/lib/footprint';
 import { floorNormal, floorRoughness } from '@/lib/textures';
 
@@ -28,6 +30,9 @@ import { floorNormal, floorRoughness } from '@/lib/textures';
 // deeper than the lit 3D board so the two read the same on screen.
 const FLOOR = '#E6E1D6';
 const FLOOR_NORMAL_SCALE = new Vector2(0.25, 0.25);
+/** Skirting height, metres. Shared with the aperture maths, which needs to know
+ *  which openings reach down far enough to interrupt it. */
+const SKIRTING_H = 0.1;
 
 export function RoomShell() {
   // Field-level subscriptions, not the whole `room` object: a wall drag replaces
@@ -81,6 +86,44 @@ export function RoomShell() {
 
   // One inward-facing single-sided wall per polygon edge — the near one culls.
   const walls = useMemo(() => wallSegments(footprint), [footprint]);
+
+  // Windows and doors are HOLES in the wall, not panels in front of it. Built
+  // from the effective scene (`useRoomScene`) rather than the stored parts, so an
+  // opening follows its window when the user slides it along the wall.
+  const parts = useRoomScene();
+  const apertures = useMemo(
+    () => wallApertures(parts, footprint, walls, height),
+    [parts, footprint, walls, height],
+  );
+
+  // `THREE.Shape` triangulates an outline with holes through Earcut, so cutting a
+  // wall needs no CSG library — and a ShapeGeometry in the XY plane faces +Z just
+  // as planeGeometry did, which is what keeps the near-wall back-face culling
+  // (the whole dollhouse trick) working unchanged.
+  const wallShapes = useMemo(
+    () =>
+      walls.map((wl, i) => {
+        const hw = wl.len / 2;
+        const hh = height / 2;
+        const shape = new Shape();
+        shape.moveTo(-hw, -hh);
+        shape.lineTo(hw, -hh);
+        shape.lineTo(hw, hh);
+        shape.lineTo(-hw, hh);
+        shape.closePath();
+        for (const a of apertures.get(i) ?? []) {
+          const hole = new Path();
+          hole.moveTo(a.x0, a.y0);
+          hole.lineTo(a.x1, a.y0);
+          hole.lineTo(a.x1, a.y1);
+          hole.lineTo(a.x0, a.y1);
+          hole.closePath();
+          shape.holes.push(hole);
+        }
+        return shape;
+      }),
+    [walls, height, apertures],
+  );
 
   // Selection / hover frame loops, memoised alongside the walls. drei's <Line>
   // keys its LineGeometry on the `points` identity, so an inline array literal
@@ -148,7 +191,7 @@ export function RoomShell() {
                 document.body.style.cursor = '';
               }}
             >
-              <planeGeometry args={[wl.len, height]} />
+              <shapeGeometry args={[wallShapes[i]]} />
               <meshStandardMaterial color={color} roughness={0.96} metalness={0} side={FrontSide} />
             </mesh>
             {/* Selection / hover frame — drawn just inside the room face so it
@@ -169,13 +212,28 @@ export function RoomShell() {
         );
       })}
 
-      {/* Skirting along the inner base of each wall. */}
-      {walls.map((wl, i) => (
-        <mesh key={`sk-${i}`} position={[wl.x, 0.05, wl.z]} rotation={[0, wl.yaw, 0]}>
-          <planeGeometry args={[wl.len, 0.1]} />
-          <meshStandardMaterial color="#D8D3C6" roughness={0.9} side={FrontSide} />
-        </mesh>
-      ))}
+      {/* Skirting along the inner base of each wall, in runs BETWEEN any doorway.
+          Not cut as a hole like the wall above: a door opening spans the whole
+          100 mm strip, so the hole would touch the outline top and bottom and
+          leave Earcut two degenerate slivers. */}
+      {walls.map((wl, i) =>
+        skirtingRuns(wl.len, apertures.get(i) ?? [], SKIRTING_H).map(([a, b], k) => {
+          const mid = (a + b) / 2;
+          // Runs are off-centre, so each one is offset along the wall's own
+          // tangent — (cos yaw, -sin yaw), the same axis the openings are
+          // measured on.
+          return (
+            <mesh
+              key={`sk-${i}-${k}`}
+              position={[wl.x + mid * Math.cos(wl.yaw), SKIRTING_H / 2, wl.z - mid * Math.sin(wl.yaw)]}
+              rotation={[0, wl.yaw, 0]}
+            >
+              <planeGeometry args={[b - a, SKIRTING_H]} />
+              <meshStandardMaterial color="#D8D3C6" roughness={0.9} side={FrontSide} />
+            </mesh>
+          );
+        }),
+      )}
     </group>
   );
 }

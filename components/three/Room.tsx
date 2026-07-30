@@ -4,7 +4,7 @@
 // Replaces the prior hand-coded Sofa/TV/Closet/Chair/etc imports.
 
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
-import { Suspense, useEffect, useRef, useState, type MutableRefObject } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { ContactShadows, Environment, Lightformer, AdaptiveDpr, PerformanceMonitor } from '@react-three/drei';
 import { EffectComposer, N8AO, SMAA } from '@react-three/postprocessing';
 import { ACESFilmicToneMapping, Raycaster, Vector2, Vector3, Plane, type Camera, type DirectionalLight, type WebGLRenderer } from 'three';
@@ -13,6 +13,8 @@ import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { placeNewPart, DND_MIME, type Category, type Shape } from '@/lib/scene-spec';
 import { footprintBounds } from '@/lib/footprint';
+import { sunPosition, sunDirection, daylightKelvin } from '@/lib/solar';
+import { hexFromKelvin } from '@/lib/light-units';
 import { useSnapshot, downloadBlob } from '@/lib/snapshot';
 import { RoomShell } from './RoomShell';
 import { WallHandles } from './WallHandles';
@@ -77,7 +79,44 @@ const LIGHTING = {
     envMul: 1,
     exposure: 0.95,
   },
+  // Real sunlight. These are the AMBIENT terms only — sky and bounce; the key
+  // light's direction, colour and strength all come from `lib/solar.ts` for the
+  // room's latitude, the chosen date and the chosen time. They are the sky, not
+  // the sun, which is why they are lower than 'day': anything they contribute is
+  // light the sun is not responsible for, and the point of this mood is to see
+  // exactly where the sun does and does not reach.
+  sun: {
+    bg: '#EDF1F5',
+    hemi: ['#cfe0f5', '#b8ad98', 0.35] as [string, string, number],
+    key: { color: '#fff4e2', intensity: 1.0 },
+    fill: { color: '#cfe0f5', intensity: 0.12 },
+    env: ['#eef5ff', '#e6eefb', '#f6f1e6'] as [string, string, string],
+    envMul: 0.7,
+    exposure: 1.0,
+  },
 } as const;
+
+/** Where the sun is asked about when the room has no site yet.
+ *
+ *  40° N is a compromise, not a guess dressed as a fact: the UI shows these
+ *  numbers as editable fields the moment the mood is selected, so a room whose
+ *  latitude nobody has set says so rather than quietly rendering somebody else's
+ *  daylight. */
+const DEFAULT_SITE = { lat: 40, lon: 0, bearingDeg: 0 };
+
+/** The UTC instant for a day-of-year and a local clock time.
+ *
+ *  Built through the platform's own Date so the browser's zone and its DST rules
+ *  do the conversion — the alternative is deriving an offset from longitude, which
+ *  is off by an hour for half the year in any country that puts its clocks
+ *  forward. The assumption this makes is that the room is in the same time zone as
+ *  the person looking at it, which is true of a room you live in. */
+function localInstant(dayOfYear: number, minutes: number): number {
+  const d = new Date(new Date().getFullYear(), 0, 1, 0, 0, 0, 0);
+  d.setDate(dayOfYear);
+  d.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+  return d.getTime();
+}
 
 export function Room() {
   const hidden = useStudio((s) => s.hidden);
@@ -87,6 +126,28 @@ export function Room() {
   const hi = quality === 'high';
   const L = LIGHTING[lighting];
   const parts = useScene((s) => s.parts).filter((p) => !hidden[p.id]);
+
+  // The sun, when the sun mood is on. Null in every other mood, and null when the
+  // sun is below the horizon — which is a real answer, not a missing one, and the
+  // key light has to go out rather than shine up through the floor.
+  const site = useScene((s) => s.room.site);
+  const sunMinutes = useStudio((s) => s.sunMinutes);
+  const sunDayOfYear = useStudio((s) => s.sunDayOfYear);
+  const sun = useMemo(() => {
+    if (lighting !== 'sun') return null;
+    const s = site ?? DEFAULT_SITE;
+    const p = sunPosition(localInstant(sunDayOfYear, sunMinutes), s.lat, s.lon);
+    const dir = sunDirection(p.altitudeDeg, p.azimuthDeg, s.bearingDeg);
+    if (!dir) return null;
+    return {
+      dir,
+      color: hexFromKelvin(daylightKelvin(p.altitudeDeg)),
+      // Air mass, roughly: the sun is dimmer near the horizon because its light
+      // takes a longer path through the atmosphere. sin(altitude) is the standard
+      // first approximation and it is what makes a 7 am room read as 7 am.
+      intensity: 0.25 + 1.35 * Math.sin((p.altitudeDeg * Math.PI) / 180),
+    };
+  }, [lighting, site, sunDayOfYear, sunMinutes]);
   // Drop the upper DPR bound when FPS regresses (large scenes / weak GPUs);
   // AdaptiveDpr cuts further while interacting. Keeps AO affordable.
   const [dprMax, setDprMax] = useState(2);
@@ -177,7 +238,14 @@ export function Room() {
           cast a real shadow map on 'high' (see KeyLight); ContactShadows below is
           the soft contact grounding on top of it, not a replacement for it. */}
       <hemisphereLight args={L.hemi} />
-      <KeyLight intensity={L.key.intensity} color={L.key.color} cast={hi} />
+      {/* In the sun mood the key light IS the sun — and when the sun is down there
+          is no key light at all, which is the honest picture of 9 pm in December
+          and the reason this is a conditional rather than a dimmer. */}
+      {lighting === 'sun' ? (
+        sun && <KeyLight intensity={sun.intensity} color={sun.color} cast={hi} dir={sun.dir} />
+      ) : (
+        <KeyLight intensity={L.key.intensity} color={L.key.color} cast={hi} />
+      )}
       <directionalLight position={[-4, 3, -5]} intensity={L.fill.intensity} color={L.fill.color} />
 
       {/* Offline studio environment built from emissive panels — gives metals
@@ -250,7 +318,20 @@ export function Room() {
 // the shadow frustum can DERIVE how far a piece throws instead of guessing: at
 // this offset the horizontal run per unit of height is run/rise below.
 const KEY_OFFSET: [number, number, number] = [5, 8, 4];
-const THROW_PER_M = Math.hypot(KEY_OFFSET[0], KEY_OFFSET[2]) / KEY_OFFSET[1];
+const KEY_LEN = Math.hypot(...KEY_OFFSET);
+const KEY_DIR: [number, number, number] = [
+  KEY_OFFSET[0] / KEY_LEN,
+  KEY_OFFSET[1] / KEY_LEN,
+  KEY_OFFSET[2] / KEY_LEN,
+];
+
+/** How far a piece throws per metre of its own height, at a given light
+ *  direction. Capped because a sun a degree above the horizon throws a shadow
+ *  hundreds of metres long, and fitting a frustum to that would spend the whole
+ *  shadow map on empty floor. */
+function throwPerMetre(dir: [number, number, number]): number {
+  return Math.min(6, Math.hypot(dir[0], dir[2]) / Math.max(0.05, dir[1]));
+}
 
 // The key light, with its shadow frustum fitted to the room.
 //
@@ -277,13 +358,28 @@ const THROW_PER_M = Math.hypot(KEY_OFFSET[0], KEY_OFFSET[2]) / KEY_OFFSET[1];
 // (The comment at the light used to claim this scene had "no shadow maps" at all.
 // It has had one since `shadows={hi}` went on the Canvas. Nobody reconciled the
 // comment, so nobody tuned the map.)
-function KeyLight({ intensity, color, cast }: { intensity: number; color: string; cast: boolean }) {
+function KeyLight({
+  intensity,
+  color,
+  cast,
+  dir,
+}: {
+  intensity: number;
+  color: string;
+  cast: boolean;
+  /** Unit vector from the room toward the light. Defaults to the studio key's
+   *  fixed three-quarter position; the sun mood passes a real solar direction, and
+   *  the frustum has to re-fit for it because a low sun throws far longer shadows
+   *  than a studio light ever does. */
+  dir?: [number, number, number];
+}) {
   const ref = useRef<DirectionalLight>(null);
   const footprint = useScene((s) => s.room.footprint);
   const parts = useScene((s) => s.parts);
   const dims = useStudio((s) => s.dims);
   const invalidate = useThree((s) => s.invalidate);
 
+  const d = dir ?? KEY_DIR;
   const b = footprintBounds(footprint);
   // Tallest thing that actually casts — the ceiling does not, and the walls only
   // receive. Honour a user's resize (`dims`) over the authored `dimMM`, or a
@@ -292,9 +388,12 @@ function KeyLight({ intensity, color, cast }: { intensity: number; color: string
   // Half the footprint diagonal covers the room from any light azimuth; the throw
   // term covers how far the tallest piece reaches at this light's elevation.
   // Quantised to 0.5m so dragging a wall re-fits in steps, not every tick.
-  const extent = Math.ceil((Math.hypot(b.width, b.depth) / 2 + tallest * THROW_PER_M) * 2) / 2;
+  const extent = Math.ceil((Math.hypot(b.width, b.depth) / 2 + tallest * throwPerMetre(d)) * 2) / 2;
   // One step, not a continuum: each size change reallocates the depth target.
   const mapSize = extent > 8 ? 2048 : 1024;
+  // Far enough out that the shadow camera's near plane clears the room from any
+  // direction: dist - extent >= 0.6 x extent, so nothing can cross it.
+  const dist = Math.max(12, extent * 1.6);
 
   useEffect(() => {
     const l = ref.current;
@@ -320,7 +419,7 @@ function KeyLight({ intensity, color, cast }: { intensity: number; color: string
   return (
     <directionalLight
       ref={ref}
-      position={[b.cx + KEY_OFFSET[0], KEY_OFFSET[1], b.cz + KEY_OFFSET[2]]}
+      position={[b.cx + d[0] * dist, d[1] * dist, b.cz + d[2] * dist]}
       intensity={intensity}
       color={color}
       castShadow={cast}
@@ -332,7 +431,7 @@ function KeyLight({ intensity, color, cast }: { intensity: number; color: string
       shadow-bias={-0.0001}
       shadow-normalBias={((2 * extent) / mapSize) * 2}
       shadow-camera-near={0.5}
-      shadow-camera-far={30}
+      shadow-camera-far={dist + extent + 2}
     />
   );
 }

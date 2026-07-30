@@ -62,6 +62,17 @@ export type Capture = {
  *  this existed read back as version 0. */
 export const ROOM_SCHEMA_VERSION = 1;
 
+/** Where a room is and how it is oriented, for the sun path. */
+export type Site = {
+  /** Degrees north, -90…90. */
+  lat: number;
+  /** Degrees east, -180…180. */
+  lon: number;
+  /** True bearing the room's own north edge faces, degrees clockwise. 0 = the
+   *  plan's north really is north. */
+  bearingDeg: number;
+};
+
 export type RoomData = {
   id: string;
   createdAt: number;
@@ -75,6 +86,14 @@ export type RoomData = {
   /** per-wall paint colour, keyed by footprint-edge index. Optional — absent on
    *  rooms created before wall painting shipped (defensive read on load). */
   wallColors?: Record<number, string>;
+  /** Where on earth this room is, and which way it faces — the inputs the sun
+   *  path needs (`lib/solar.ts`). A property of the room, not of the device, so a
+   *  flat and a holiday cottage do not have to share a latitude.
+   *
+   *  Entered by the user and never derived from a photo: EXIF carries GPS
+   *  coordinates, and `lib/exif.ts` deliberately does not read them — see §3 of
+   *  Design.md. Additive, so no version bump. */
+  site?: Site;
   /** custom footprint polygon (XZ metres) after independent wall moves. When
    *  present it overrides the layout-derived shape on load. Optional. */
   footprint?: Array<[number, number]>;

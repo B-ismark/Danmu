@@ -115,6 +115,7 @@ export function RoomSync() {
           height: r.height,
           wallColors: r.wallColors,
           footprint: r.footprint,
+          site: r.site,
         });
       }, DEBOUNCE_MS);
     });
