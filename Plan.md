@@ -544,6 +544,35 @@ fallback; the quality toggle already models tiers, so a third is natural.
 
 ### 5d OKLCH tokens · **M** · independent
 
+> **Partly done, and the rest deliberately not.**
+>
+> Shipped: `lib/color.ts` — sRGB ↔ OKLab ↔ OKLCH, WCAG luminance and contrast,
+> alpha compositing, and `rotateHue`, which holds lightness and chroma so no
+> rotation can produce a theme that fails a contrast the original passed (the
+> property that makes this space worth having, and the one HSL does not have).
+> Plus 30 tests that read `app/globals.css` and hold it to its own word: every
+> `N.NN:1 on --token` comment in the file is now executed, every `-text` / `-ink`
+> token is checked for 4.5:1, and the fills are checked for NOT clearing it —
+> because if `--accent` were legible as type, the separate `--accent-text` token
+> would be ceremony.
+>
+> That also fixed a guard that was not guarding. `tests/scene-palette.test.ts`
+> asserted `SCENE.accent === '#E2613A'` — a literal against a literal, both inside
+> the test's own reach — so changing the token in `globals.css` and forgetting
+> `scene-palette.ts` left it green, which is the exact failure it existed to catch.
+> It reads the stylesheet now and compares perceptually in OKLab, which is what
+> "these must not visibly differ" actually means.
+>
+> **Not done, on purpose: converting `globals.css` to `oklch()` and deriving
+> `defaultBodyColor` from a formula.** The first is a zero-benefit rewrite of the
+> most load-bearing file in the app's appearance — the colours would be identical
+> where `oklch()` is supported and the declaration would be dropped where it is
+> not. The second is not a refactor at all: replacing 30-odd hand-chosen furniture
+> albedos with "constant L per material family, hue per category" changes what every
+> piece of furniture in the product looks like. That is a decision about how the app
+> should look, and it needs someone to look at it. The maths to do it is now in
+> `lib/color.ts` whenever somebody wants to.
+
 Move `app/globals.css` to OKLCH; generate `lib/themes.ts` harmonies by rotating
 hue at constant L and C so no theme can produce an unreadable room. Then derive
 `lib/scene-palette.ts`'s `defaultBodyColor` (constant L per material family, hue
