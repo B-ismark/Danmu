@@ -411,10 +411,19 @@ function KeyLight({
     // R3F sets the `shadow-camera-*` props for us but never calls this, and an
     // ortho camera ignores its bounds until it does.
     cam.updateProjectionMatrix();
+    // Setting `shadow-mapSize` does nothing once the depth target exists — three
+    // allocates it on first use and then reuses it at its original size forever.
+    // Without this, a room dragged past the 8m step kept its 1024² map while
+    // `normalBias` above was already being computed for 2048², which halves the
+    // bias and lets the bleeding straight back in at the size that needs it most.
+    if (l.shadow.map && l.shadow.map.width !== mapSize) {
+      l.shadow.map.dispose();
+      l.shadow.map = null;
+    }
     l.shadow.needsUpdate = true;
     // frameloop="demand" — nothing else asks for the frame that shows the re-fit.
     invalidate();
-  }, [b.cx, b.cz, extent, invalidate]);
+  }, [b.cx, b.cz, extent, mapSize, invalidate]);
 
   return (
     <directionalLight
