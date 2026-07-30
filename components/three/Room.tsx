@@ -7,7 +7,7 @@ import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { Suspense, useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { ContactShadows, Environment, Lightformer, AdaptiveDpr, PerformanceMonitor } from '@react-three/drei';
 import { EffectComposer, N8AO, SMAA } from '@react-three/postprocessing';
-import { ACESFilmicToneMapping, Raycaster, Vector2, Vector3, Plane, type Camera, type WebGLRenderer } from 'three';
+import { ACESFilmicToneMapping, Raycaster, Vector2, Vector3, Plane, type Camera, type DirectionalLight, type WebGLRenderer } from 'three';
 import { v4 as uuid } from 'uuid';
 import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
@@ -155,24 +155,11 @@ export function Room() {
 
       {/* Hemisphere (sky → ground gradient) gives soft, directionally-aware
           ambient — far less flat than a single ambientLight. One key light adds
-          form; a dim back-fill keeps shadowed faces readable. No shadow maps
-          (we ground objects with ContactShadows below — cheaper + softer). */}
+          form; a dim back-fill keeps shadowed faces readable. The key light DOES
+          cast a real shadow map on 'high' (see KeyLight); ContactShadows below is
+          the soft contact grounding on top of it, not a replacement for it. */}
       <hemisphereLight args={L.hemi} />
-      <directionalLight
-        position={[5, 8, 4]}
-        intensity={L.key.intensity}
-        color={L.key.color}
-        castShadow={hi}
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
-        shadow-bias={-0.0004}
-        shadow-camera-left={-6}
-        shadow-camera-right={6}
-        shadow-camera-top={6}
-        shadow-camera-bottom={-6}
-        shadow-camera-near={0.5}
-        shadow-camera-far={30}
-      />
+      <KeyLight intensity={L.key.intensity} color={L.key.color} cast={hi} />
       <directionalLight position={[-4, 3, -5]} intensity={L.fill.intensity} color={L.fill.color} />
 
       {/* Offline studio environment built from emissive panels — gives metals
@@ -241,6 +228,97 @@ export function Room() {
   );
 }
 
+// Where the key light sits relative to the room centre. Exported as a constant so
+// the shadow frustum can DERIVE how far a piece throws instead of guessing: at
+// this offset the horizontal run per unit of height is run/rise below.
+const KEY_OFFSET: [number, number, number] = [5, 8, 4];
+const THROW_PER_M = Math.hypot(KEY_OFFSET[0], KEY_OFFSET[2]) / KEY_OFFSET[1];
+
+// The key light, with its shadow frustum fitted to the room.
+//
+// The frustum used to be hard-coded to ±6m — a 12×12m box — and two separate
+// things were wrong with that:
+//
+//   · **It clipped.** `MAX_ROOM` is 40m. Anything further than ~6m from the room
+//     centre fell outside the shadow camera and cast nothing at all, with a hard
+//     line across the floor where the frustum ended. The Open Plan preset
+//     (7.5×5.6m) already sits on that edge before the user drags a single wall.
+//   · **`shadow-bias` alone cannot keep the depth comparison honest.** The floor
+//     and the wall planes are lit at a grazing angle, so their own depth rounds
+//     across a texel boundary and they shadow THEMSELVES — streaks and smudges
+//     with nothing casting them, which is what the bleeding is. `normalBias` is
+//     the parameter three exposes for exactly this (it walks the sample along the
+//     surface normal in proportion to texel size) and it was never set.
+//
+// Fitting the frustum is not by itself a density win — a small room gains a
+// little, a large room legitimately needs a bigger box and gains nothing. That is
+// why normalBias is derived from the texel size that this room's fit actually
+// produces, and why the map steps up once a room outgrows what 1024² can carry.
+// A constant would be right at one room size and wrong at every other.
+//
+// (The comment at the light used to claim this scene had "no shadow maps" at all.
+// It has had one since `shadows={hi}` went on the Canvas. Nobody reconciled the
+// comment, so nobody tuned the map.)
+function KeyLight({ intensity, color, cast }: { intensity: number; color: string; cast: boolean }) {
+  const ref = useRef<DirectionalLight>(null);
+  const footprint = useScene((s) => s.room.footprint);
+  const parts = useScene((s) => s.parts);
+  const dims = useStudio((s) => s.dims);
+  const invalidate = useThree((s) => s.invalidate);
+
+  const b = footprintBounds(footprint);
+  // Tallest thing that actually casts — the ceiling does not, and the walls only
+  // receive. Honour a user's resize (`dims`) over the authored `dimMM`, or a
+  // stretched wardrobe would throw past the box fitted for its original height.
+  const tallest = parts.reduce((m, p) => Math.max(m, (dims[p.id] ?? p.dimMM)[2] / 1000), 0);
+  // Half the footprint diagonal covers the room from any light azimuth; the throw
+  // term covers how far the tallest piece reaches at this light's elevation.
+  // Quantised to 0.5m so dragging a wall re-fits in steps, not every tick.
+  const extent = Math.ceil((Math.hypot(b.width, b.depth) / 2 + tallest * THROW_PER_M) * 2) / 2;
+  // One step, not a continuum: each size change reallocates the depth target.
+  const mapSize = extent > 8 ? 2048 : 1024;
+
+  useEffect(() => {
+    const l = ref.current;
+    if (!l) return;
+    // Aim at the room, not the world origin: an independently-moved wall leaves
+    // the footprint off-centre, and a frustum fitted this tightly would then clip
+    // its own shadows at the far edge.
+    l.target.position.set(b.cx, 0, b.cz);
+    l.target.updateMatrixWorld();
+    const cam = l.shadow.camera;
+    cam.left = -extent;
+    cam.right = extent;
+    cam.top = extent;
+    cam.bottom = -extent;
+    // R3F sets the `shadow-camera-*` props for us but never calls this, and an
+    // ortho camera ignores its bounds until it does.
+    cam.updateProjectionMatrix();
+    l.shadow.needsUpdate = true;
+    // frameloop="demand" — nothing else asks for the frame that shows the re-fit.
+    invalidate();
+  }, [b.cx, b.cz, extent, invalidate]);
+
+  return (
+    <directionalLight
+      ref={ref}
+      position={[b.cx + KEY_OFFSET[0], KEY_OFFSET[1], b.cz + KEY_OFFSET[2]]}
+      intensity={intensity}
+      color={color}
+      castShadow={cast}
+      shadow-mapSize-width={mapSize}
+      shadow-mapSize-height={mapSize}
+      // normalBias carries the offset now, so the constant bias only has to cover
+      // faces square to the light and can stay small — a large negative bias is
+      // what detaches a shadow from its object ("peter-panning").
+      shadow-bias={-0.0001}
+      shadow-normalBias={((2 * extent) / mapSize) * 2}
+      shadow-camera-near={0.5}
+      shadow-camera-far={30}
+    />
+  );
+}
+
 // Soft grounding shadow under the furniture.
 //
 // drei's ContactShadows defaults to frames={Infinity} — it re-renders the whole
@@ -292,16 +370,31 @@ function GroundShadows({ hi }: { hi: boolean }) {
   // Quantised to 0.5m. `scale` feeds drei's internal useMemo, which allocates two
   // WebGLRenderTargets and never disposes the pair it replaces — so a continuous
   // value would orphan a couple of megabytes of VRAM per committed wall move.
-  // The plane is already oversized (×1.3) and only has to cover the room, so
-  // rounding up costs nothing visually.
-  const span = Math.ceil(Math.max(width, depth) * 1.3 * 2) / 2;
+  //
+  // Fitted to the footprint, per axis. It used to be ONE square span of
+  // max(width, depth) × 1.3, which on a 5.6×4.2m room put the plane 1m past the
+  // long walls and 1.65m past the short ones. That matters because of what drei
+  // actually does in the pass (read its source, not its name): it sets
+  // `scene.overrideMaterial` to a MeshDepthMaterial and renders the WHOLE scene
+  // through a top-down ortho camera the size of this plane, hiding only its own
+  // group. Nothing is filtered by `castShadow`. So the walls are captured too —
+  // edge-on strips from above — and every millimetre of plane sticking out past a
+  // wall is a surface for that wall's blurred strip to paint on, outside the room.
+  const spanX = Math.ceil(b.width * 2) / 2;
+  const spanZ = Math.ceil(b.depth * 2) / 2;
   return (
     <ContactShadows
       position={[b.cx, 0.004, b.cz]}
-      scale={span}
+      scale={[spanX, spanZ]}
       // 512 on 'Fast' — a quarter of the texels to fill and blur.
       resolution={hi ? 1024 : 512}
-      far={height}
+      // A CONTACT shadow, so the depth band is a contact distance — not the whole
+      // room. At `far={height}` the pass reached the ceiling, which meant a
+      // wall-mounted TV at 1.3m and the full height of every wall registered as
+      // occluders and blurred out across the floor. The real cast shadows come
+      // from the key light's shadow map (see KeyLight); this pass only has to
+      // darken where things MEET the floor.
+      far={0.6}
       blur={2.4}
       // The second, softer blur pair is the polish half of the cost.
       smooth={hi}
