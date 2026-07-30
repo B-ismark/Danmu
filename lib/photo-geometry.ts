@@ -17,6 +17,12 @@
 // +Y up, +Z toward the South wall. Slot cameras: n looks −Z, s +Z, e +X, w −X.
 
 import type { CaptureSlot } from './storage';
+import {
+  calibrateFromSegments,
+  detectSegments,
+  toGrayscale,
+  type VanishingCalibration,
+} from './vanishing-point';
 
 /** Camera height assumed when the photo and the user tell us nothing (metres).
  *  A real shooter is anywhere between about 1.2 and 1.75 m, and distance scales
@@ -309,6 +315,45 @@ export async function imageAspect(blob: Blob): Promise<number> {
       i.src = url;
     });
     return img.naturalWidth / Math.max(1, img.naturalHeight);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/**
+ * Read the lens and the tilt out of a photo's own geometry — the vanishing-point
+ * path, for the photos EXIF cannot help with. Browser only; the maths it wraps is
+ * pure and tested in `lib/vanishing-point.ts`.
+ *
+ * Runs at the image's own resolution rather than a thumbnail, and that is not an
+ * oversight: the same synthetic room calibrates to 78.0° at 1600 px, 77.8° at
+ * 1200, and is correctly REFUSED at 800, because the edge fragments get too short
+ * for their angles to mean anything. `normalizePhoto` caps the long edge at
+ * 1600 px, so what arrives here is already the resolution this was measured at.
+ */
+export async function calibrateFromPhoto(blob: Blob): Promise<VanishingCalibration | null> {
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await new Promise<HTMLImageElement>((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = rej;
+      i.src = url;
+    });
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+    if (w < 2 || h < 2) return null;
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, w, h);
+    const gray = toGrayscale(ctx.getImageData(0, 0, w, h).data, w, h);
+    return calibrateFromSegments(detectSegments(gray, w, h), w, h);
+  } catch {
+    // An undecodable photo is a photo we calibrate some other way, not a crash.
+    return null;
   } finally {
     URL.revokeObjectURL(url);
   }

@@ -266,11 +266,38 @@ us:
 | What the photo carries | Floor line solves for | Notes |
 |---|---|---|
 | EXIF focal length | **camera height** | The lens is known, so the 1.5 m guess (±17% on everything) becomes a measurement. |
+| its own perspective | **camera height** | `lib/vanishing-point.ts` reads the lens out of the geometry — see below. |
 | nothing | **focal length** | The original path, assuming 1.5 m. Still correct, no longer the only one. |
 | neither, or no floor line | — | A typical phone lens (66°), and the room is measured as it always was. |
 
-Tilt is never solved for here — one equation cannot give two unknowns. It comes
-from `lib/device-tilt.ts` at capture time or not at all. Camera height is asked
+**The middle rung is for photos that arrive with nothing.** A room is a box: three
+families of parallel lines, mutually perpendicular. With the principal point at
+the image centre, two vanishing points in perpendicular directions give the focal
+length in closed form (`k² = −1/(X₁X₂ + Y₁Y₂)` in the tangent space this module
+already uses), and the vertical one gives the tilt. `lib/vanishing-point.ts` finds
+the segments with a cut-down LSD — gradient, grow regions of like-oriented pixels,
+take each region's principal axis — then chooses the orthogonal PAIR by how well
+the whole frame it implies explains the whole image.
+
+That last part is load-bearing and was learned the hard way. Picking the strongest
+vanishing point, then the strongest of what remains, is unstable: a hypothesis
+straddling two families scores well, consumes segments from both, and a pixel and
+a half of noise flipped a synthetic room from 75° to 21°. Scoring the pair by its
+own support is no better, because straddling is exactly what earns support.
+Scoring by frame coverage — two directions fix the third by cross product, and a
+real box has segments along all three — is stable across 0 to 5 px of noise.
+
+**Coverage is also the gate.** At four resolutions every correct answer explained
+100% of the segments and the single wrong one explained 47%, so a frame that
+leaves half the straight lines in a photograph unaccounted for is refused. The
+other bound is resolution: 1600 px recovers 78.0° against a truth of 78°, 1200 px
+gives 77.8°, and 800 px is correctly refused because the edge fragments are too
+short for their angles to mean anything. `normalizePhoto` caps the long edge at
+1600, so real input lands where this was measured.
+
+Tilt is never solved for from the floor line — one equation cannot give two
+unknowns. It comes from `lib/device-tilt.ts` at capture time, or from the
+vanishing points, or not at all; a measured device tilt outranks an inferred one. Camera height is asked
 for on the capture screen (`useSettings.camHeightM`, remembered per person since
 it is a property of the shooter, not the room) and written onto each photo's
 `CapturePose` as it is saved.

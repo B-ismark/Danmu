@@ -26,6 +26,7 @@ import {
   placeWallObject,
   type CameraCal,
   type CameraView,
+  calibrateFromPhoto,
 } from '@/lib/photo-geometry';
 import { hfovFromFocal35 } from '@/lib/exif';
 import { anchorFor } from '@/lib/physics';
@@ -203,8 +204,22 @@ async function buildCals(entries: SlotEntry[], room: RoomDims): Promise<CalMap> 
     if (pose?.heightM !== undefined) view.height = pose.heightM;
     if (pose?.tiltDeg !== undefined) view.tiltRad = (pose.tiltDeg * Math.PI) / 180;
 
-    const hfov = pose?.focal35mm !== undefined ? hfovFromFocal35(pose.focal35mm, aspect) : null;
+    let hfov = pose?.focal35mm !== undefined ? hfovFromFocal35(pose.focal35mm, aspect) : null;
     const vFloor = await findFloorLine(e.cap.blob);
+
+    // No EXIF: read the lens out of the photo's own perspective. This is the path
+    // for an upload whose metadata was stripped somewhere upstream — which is most
+    // of them, and includes anything that went through a messaging app. It gives a
+    // TILT as well, the only source of one for a photo that was not taken inside
+    // this app; a measured device tilt still wins, being a direct observation
+    // rather than an inference.
+    if (hfov === null) {
+      const vp = await calibrateFromPhoto(e.cap.blob);
+      if (vp) {
+        hfov = vp.hfovDeg;
+        if (view.tiltRad === undefined) view.tiltRad = (vp.tiltDeg * Math.PI) / 180;
+      }
+    }
 
     if (hfov !== null) {
       let cal = calFromHfov(hfov, aspect, view);

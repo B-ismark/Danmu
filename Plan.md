@@ -202,6 +202,25 @@ this is the only calibration the live path can get.
 
 ### 1.6 Vanishing-point calibration *(optional within this phase — **M** on its own)*
 
+> **Done** (+ 14 tests). `lib/vanishing-point.ts` is pure and takes SEGMENTS, so
+> the maths is tested against a synthetic room projected through a known camera
+> rather than against assertions about a JPEG; `calibrateFromPhoto` in
+> `photo-geometry.ts` is the browser wrapper, and `buildCals` gained the rung.
+>
+> Three things the plan's one-line formula did not cover:
+>
+> · **Choosing the vanishing points is the whole problem**, not computing the
+>   focal length from them. Greedy selection is unstable — 1.5 px of endpoint noise
+>   flipped a synthetic room from 75° to 21°, because a hypothesis straddling two
+>   families outscores the real ones. Scoring the orthogonal PAIR by how much of the
+>   image the frame it implies explains is stable from 0 to 5 px of noise.
+> · **Coverage is the gate that separates a calibration from a coincidence.**
+>   Correct answers explained 100% of the segments; the one wrong answer that
+>   cleared every other bound explained 47%.
+> · **Resolution is a hard floor.** 1600 px → 78.0° against a truth of 78°;
+>   1200 px → 77.8°; 800 px is refused, and before the coverage gate it returned a
+>   confident 143.85°. `normalizePhoto` caps at 1600, so real input is in range.
+
 Line-segment detection + RANSAC for two orthogonal vanishing points gives focal
 length in closed form and pitch/roll independently:
 
