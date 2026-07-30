@@ -553,6 +553,20 @@ per category) instead of hand-listing 22 categories and guarding with a test.
 
 ## Phase 6 — Layout suggestions · **M–L** · needs Phase 2
 
+> **Done** (+ 15 tests). One departure worth recording: the plan says "the cost
+> function IS the field", and it cannot be. The score runs inside the annealer's
+> loop — thousands of evaluations per suggestion — and an EDT per proposal is
+> several seconds of work for one press. The costs are analytic instead, written
+> against the same thresholds and the same `WALKWAY_CATEGORIES` set the field-based
+> report uses, so the solver optimises the rule the room report checks rather than
+> a near neighbour of it.
+>
+> Preview turned out not to need building: the room is on screen, so applying IS
+> the preview, and rejection is undo — the same contract "Apply layout" already
+> offers. The one thing that mattered was writing through `loadTransforms` once
+> instead of looping `setPosition`, since the history recorder subscribes to those
+> fields and a loop would cost one undo per piece moved.
+
 Merrell et al. (SIGGRAPH 2011) as pure optimisation — no model, no download.
 
 - `lib/layout-score.ts` — the clearance rules restated as **costs** rather than

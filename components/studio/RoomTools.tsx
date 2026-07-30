@@ -15,11 +15,12 @@
 // confirms, and applying one over an arrangement that was never saved offers to
 // save it first.
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import { useScene } from '@/lib/scene-store';
 import { useStudio, useSettings } from '@/lib/store';
 import { analyzeRoom, type ClearanceIssue, type ClearanceSeverity } from '@/lib/clearance';
+import { solveLayout } from '@/lib/layout-solve';
 import { roomStore, type LayoutVariant, type Transforms } from '@/lib/storage';
 import { footprintBounds, type Footprint } from '@/lib/footprint';
 import { formatDim } from '@/lib/units';
@@ -147,6 +148,7 @@ export function RoomTools({ leading }: { leading?: ReactNode }) {
 
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         {leading}
+        <SuggestButton effParts={effParts} footprint={room.footprint} />
         <button
           onClick={() => setOpen(open === 'check' ? null : 'check')}
           aria-expanded={open === 'check'}
@@ -204,6 +206,83 @@ export function RoomTools({ leading }: { leading?: ReactNode }) {
         </button>
       </div>
     </div>
+  );
+}
+
+// ─── Suggest an arrangement ─────────────────────────────────────────────────
+//
+// Preview IS applying it: the room is right there, and a thumbnail of a
+// suggestion would be a worse view of it than the 3D scene already on screen.
+// Rejection is undo, which is the same contract "Apply layout" already offers —
+// one history entry, one keystroke back. That is why the whole thing writes
+// through `loadTransforms` in a single call rather than looping `setPosition`:
+// the history recorder subscribes to those fields, so a loop would push one
+// snapshot per piece and take twenty undos to reverse.
+
+function SuggestButton({ effParts, footprint }: { effParts: ScenePart[]; footprint: Footprint }) {
+  const loadTransforms = useStudio((s) => s.loadTransforms);
+  const [busy, setBusy] = useState(false);
+  // Pressing again asks for a DIFFERENT arrangement rather than recomputing the
+  // same one — the solver is deterministic per seed, which is what makes both
+  // behaviours possible at once.
+  const attempt = useRef(0);
+
+  function suggest() {
+    setBusy(true);
+    try {
+      const t = useStudio.getState();
+      const result = solveLayout(
+        effParts,
+        footprint,
+        effParts.map((p) => p.locked),
+        { seed: ++attempt.current },
+      );
+      if (result.moved.length === 0 || result.after >= result.before) {
+        toast({
+          title: 'This is already a good arrangement',
+          message: 'Nothing was moved — the pieces are where the guidelines want them.',
+        });
+        return;
+      }
+      const positions = { ...t.positions };
+      const rotations = { ...t.rotations };
+      for (const i of result.moved) {
+        const p = effParts[i];
+        positions[p.id] = [result.placements[i].x, p.pos[1], result.placements[i].z];
+        rotations[p.id] = result.placements[i].yaw;
+      }
+      // dims carried through untouched: the solver moves and turns, and a
+      // suggestion that resized the furniture would be the one thing this app
+      // refuses to do.
+      loadTransforms({ positions, rotations, dims: t.dims });
+      toast({
+        title: `Moved ${result.moved.length} ${result.moved.length === 1 ? 'piece' : 'pieces'}`,
+        message: 'Undo puts the previous arrangement back. Press again for a different idea.',
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      onClick={suggest}
+      disabled={busy}
+      className="ds-btn"
+      title="Rearrange the unlocked furniture using the same guidelines Room check measures"
+      style={{
+        height: 30,
+        fontSize: 11,
+        gap: 6,
+        background: 'var(--paper)',
+        borderColor: 'var(--edge)',
+        color: 'var(--ink-2)',
+        boxShadow: 'var(--shadow-soft)',
+      }}
+    >
+      <Icon name="sparkles" size={12} />
+      Suggest
+    </button>
   );
 }
 
