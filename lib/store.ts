@@ -204,10 +204,16 @@ type SettingsState = {
    *  can lock onto a rug edge. Without this flag every photo carried a height and
    *  the solve was unreachable. */
   camHeightSet: boolean;
+  /** Report step-free access in the room check — 1500 mm turning space, reachable
+   *  routes. Off by default and remembered: whether a room has to meet this is a
+   *  fact about the person using it, not about the room, so it belongs with the
+   *  other per-device preferences rather than being asked again per room. */
+  stepFree: boolean;
   setApiKey: (k: string) => void;
   setDimUnit: (u: DimUnit) => void;
   setKeyValid: (v: boolean | null, reason?: string | null) => void;
   setCamHeight: (m: number) => void;
+  setStepFree: (on: boolean) => void;
 };
 
 /** Bounds on the remembered camera height. Outside these it is a typo, and a
@@ -224,6 +230,7 @@ export const useSettings = create<SettingsState>()(
       keyValidReason: null,
       camHeightM: 1.5,
       camHeightSet: false,
+      stepFree: false,
       // Setting a new key invalidates the cached test result.
       setApiKey: (k) => set({ apiKey: k, keyValid: null, keyValidReason: null }),
       setDimUnit: (u) => set({ dimUnit: u }),
@@ -233,6 +240,7 @@ export const useSettings = create<SettingsState>()(
           camHeightM: Math.min(CAM_HEIGHT_MAX, Math.max(CAM_HEIGHT_MIN, m)),
           camHeightSet: true,
         }),
+      setStepFree: (on) => set({ stepFree: on }),
     }),
     {
       name: 'danmu-settings',

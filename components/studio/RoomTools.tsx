@@ -78,9 +78,15 @@ export function RoomTools({ leading }: { leading?: ReactNode }) {
     [parts, positions, rotations, dims],
   );
 
+  // Step-free findings are opt-in and remembered, because whether a room has to
+  // meet them is a fact about the person, not about the room — asking again every
+  // time someone opens the panel would be its own small insult.
+  const stepFree = useSettings((s) => s.stepFree);
+  const setStepFree = useSettings((s) => s.setStepFree);
+
   const report = useMemo(
-    () => analyzeRoom(effParts, { footprint: room.footprint, height: room.height }),
-    [effParts, room.footprint, room.height],
+    () => analyzeRoom(effParts, { footprint: room.footprint, height: room.height }, { accessibility: stepFree }),
+    [effParts, room.footprint, room.height, stepFree],
   );
   const problems = report.issues.filter((i) => i.severity !== 'info').length;
 
@@ -126,7 +132,13 @@ export function RoomTools({ leading }: { leading?: ReactNode }) {
       }}
     >
       {open === 'check' && (
-        <CheckPanel issues={report.issues} freeShare={report.freeFloorShare} onClose={() => setOpen(null)} />
+        <CheckPanel
+          issues={report.issues}
+          freeShare={report.freeFloorShare}
+          stepFree={stepFree}
+          onStepFree={setStepFree}
+          onClose={() => setOpen(null)}
+        />
       )}
       {open === 'list' && <ListPanel parts={effParts} roomName={roomName} onClose={() => setOpen(null)} />}
       {open === 'layouts' && (
@@ -234,7 +246,19 @@ function PanelHead({ title, children }: { title: string; children?: ReactNode })
   );
 }
 
-function CheckPanel({ issues, freeShare, onClose }: { issues: ClearanceIssue[]; freeShare: number; onClose: () => void }) {
+function CheckPanel({
+  issues,
+  freeShare,
+  stepFree,
+  onStepFree,
+  onClose,
+}: {
+  issues: ClearanceIssue[];
+  freeShare: number;
+  stepFree: boolean;
+  onStepFree: (on: boolean) => void;
+  onClose: () => void;
+}) {
   const setSelection = useStudio((s) => s.setSelection);
   const frameSelected = useStudio((s) => s.frameSelected);
 
@@ -247,6 +271,31 @@ function CheckPanel({ issues, freeShare, onClose }: { issues: ClearanceIssue[]; 
       <div style={{ fontSize: 11.5, color: 'var(--ink-3)', padding: '8px 14px', borderBottom: '1px solid var(--hairline)' }}>
         <span className="mono">{Math.round(freeShare * 100)}%</span> of the floor is still clear to walk on
       </div>
+
+      {/* A real checkbox rather than a styled div: this is a persisted preference
+          that changes what the panel reports, and it has to be reachable by Tab
+          and announce its own state. */}
+      <label
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '8px 14px',
+          borderBottom: '1px solid var(--hairline)',
+          fontSize: 11.5,
+          color: 'var(--ink-2)',
+          cursor: 'pointer',
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={stepFree}
+          onChange={(e) => onStepFree(e.target.checked)}
+          style={{ accentColor: 'var(--accent)', width: 14, height: 14, flexShrink: 0, cursor: 'pointer' }}
+        />
+        Check step-free access
+        <span style={{ color: 'var(--ink-3)' }}>· 150 cm turning space</span>
+      </label>
 
       {issues.length === 0 ? (
         <div style={{ padding: '18px 14px', fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>

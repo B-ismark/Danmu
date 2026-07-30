@@ -226,6 +226,28 @@ and the honest statement that depth is still a category default.
 
 ## Phase 2 — Clearance field · **M** · replaces four rules with one
 
+> **2a done.** `lib/clearance-field.ts` (+ 26 tests), rules 3 and 8 rewired onto
+> it, reachability and turning space added, the plan overlay redrawn from the same
+> raster, and `floorBlockers` / `entranceComponents` extracted so the report and
+> the plan cannot disagree about what blocks a route.
+>
+> Three things the plan did not anticipate:
+>
+> · **A rectangular room has no cell outside its own bounding box**, so without a
+>   one-cell pad ring the EDT has nothing to measure the walls from and every cell
+>   in a room made entirely of walls reports infinite clearance.
+> · **The obvious gap estimator is biased.** `2 × min(clearance)` over the medial
+>   axis loses up to a full cell every time, because the axis almost never lands on
+>   a cell centre — a systematic *under*-estimate, which on a "too tight?" rule is
+>   the direction that invents warnings. Straddling the axis
+>   (`clearance[a] + cell + clearance[b]`) is exact face-to-face and within 1.5
+>   cells at any rotation, and `gapTolerance` now publishes that bound with a test
+>   holding it.
+> · **Wall gaps are measured but not reported.** The field knows them, but saying
+>   "the sofa is 40 cm off the wall" every time would teach people to close the
+>   panel. A wall pinch that matters is one that severs a route, so it surfaces as
+>   reachability instead.
+
 ### 2a The field — `lib/clearance-field.ts` *(new, pure)*
 
 Built on the raster Phase 0.1 already produces:

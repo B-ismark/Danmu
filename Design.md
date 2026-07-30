@@ -203,13 +203,56 @@ This is what makes Danmu trustworthy. All pure math, all covered by tests.
 | `lib/exif.ts` | Reads the camera fields a photo carries about itself — 35 mm-equivalent focal length (→ `hfovFromFocal35`), orientation, compass bearing. Pure byte parsing; browsers expose no EXIF API. **Does not read GPS coordinates**, deliberately: nothing needs them, and moving them from the file into IndexedDB would relocate the exposure rather than remove it. |
 | `lib/device-tilt.ts` | Lens tilt at the shutter from `deviceorientation`, for the live-camera path only (EXIF has no tilt field). Reports a tilt only for an upright, unrolled phone — a wrong tilt is worse than none, since "none" is the level camera the engine already assumed. |
 | `lib/physics.ts` | Gravity/anchor rules — where a part sits (floor / ceiling / wall-mid / …), wall affinity + snap, support-under lookup for tabletop-prone items. |
-| `lib/clearance.ts` | Ergonomics checker over exact geometry: ≥600 mm walkways, ≥600 mm in front of hinged storage, 500 mm bedside strip, TV viewing distance. Reproducible findings, no AI. |
+| `lib/clearance.ts` | Ergonomics checker over exact geometry: ≥600 mm walkways, ≥600 mm in front of hinged storage, 500 mm bedside strip, TV viewing distance, door swings, clashes, over-height. Reproducible findings, no AI. |
+| `lib/clearance-field.ts` | Circulation as a **field** rather than a list of pairs — see below. One 5 cm raster of the floor plus an exact Euclidean distance transform answers walkway width, reachability, turning space and crowding at once, and it also carries WHICH obstacle is nearest so a finding can name the pieces to select. |
 | `lib/dimension-ranges.ts` | `clampDims` — per-item sizing tiers (fixed / standard / flexible). **All sizes pass through this.** |
 | `lib/footprint.ts` | Footprint polygon math (preset shapes, containment, `offsetWall` for wall moves). The polygon — not `width`/`depth` — is the source of truth for room shape. |
 
 On the detect page, `geoRefine` runs the geometry engine over **every** detection
 and manual box: geometry overrides AI dims/position; the AI contributes only
 label / category / a depth hint.
+
+### Circulation is a field, not a list of pairs
+
+Comparing furniture two at a time answers "is there a gap between these" and
+nothing else. It cannot see a walkway pinched between a sofa and a **wall**,
+because a wall is not a part; and it cannot see that every individual gap passes
+while the room is still severed in two, because being able to walk somewhere is a
+property of the whole floor.
+
+`lib/clearance-field.ts` rasterises the footprint at 5 cm, marks the cells
+furniture stands on, and runs Felzenszwalb & Huttenlocher's exact squared
+Euclidean distance transform over the rest — O(cells), two 1D lower-envelope
+passes, no iteration count to tune. It is extended to carry the **index of the
+winning source**, so each free cell knows not only how far away the nearest
+obstacle is but which one it is. One raster then answers four questions:
+
+| Question | Read from the field |
+|---|---|
+| Walkway width, including against a wall | the two cells straddling the medial axis between two owners |
+| Can you reach this piece from the door? | is any walkable cell around it in the door's connected component |
+| Wheelchair turning space | 2 × the largest value anywhere reachable (1500 mm) |
+| Crowding | free-cell share — the old metric, now a by-product |
+
+**Every reading is quantised, and the rules are written knowing it.** A cell
+centre is up to half a cell from the surface it measures, so `gapTolerance`
+publishes the error bound (1.5 cells, pinned by a test over random rotations) and
+a finding is raised only when the *whole* ± band sits on the wrong side of the
+threshold. Under-reporting a gap would invent warnings, which is the one failure
+mode this panel cannot afford.
+
+Two deliberate silences: gaps against a wall are measured but **not** reported as
+tight walkways, because "the sofa is 40 cm off the wall" is usually a description
+of the room rather than a fault — a wall gap that matters is one that pinches the
+only route, and that surfaces as reachability instead. And reachability says
+nothing at all when the room has no door, since which side someone arrives from
+is then unknowable.
+
+The 2D plan draws the same raster (`fieldRuns` collapses it to a few hundred
+horizontal runs, so it stays SVG that reads the design tokens rather than a canvas
+needing its own palette). It used to approximate the walkway rule by inflating
+each bulky piece by half of 600 mm, with the threshold and category list copied
+out of `clearance.ts` and a comment asking that they be kept in step.
 
 ### The calibration ladder
 
