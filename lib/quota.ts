@@ -58,8 +58,3 @@ export function quotaLimit(key: ModelKey): number {
   return LIMITS[key];
 }
 
-export function quotaSummary(): { used: number; limit: number; per: Record<ModelKey, { used: number; limit: number }> } {
-  const counts = useQuota.getState().counts;
-  const per = { flash: { used: counts.flash ?? 0, limit: LIMITS.flash } };
-  return { used: per.flash.used, limit: LIMITS.flash, per };
-}

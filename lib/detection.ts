@@ -297,7 +297,3 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
-// Backward-compat single-image fallback (kept for callers that still need it).
-export async function detectInImage(apiKey: string, blob: Blob, slot: CaptureSlot = 'n'): Promise<Detection[]> {
-  return detectAcrossImages(apiKey, [{ slot, blob }]);
-}
