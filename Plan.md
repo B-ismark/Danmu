@@ -7,6 +7,19 @@
 > Sizes are relative, not hours: **XS** = one sitting · **S** = a day ·
 > **M** = a few days · **L** = a week+ · **spike** = measure before committing.
 
+## Status
+
+Every phase is either shipped or has a written reason it is not, immediately
+under its own heading. Nothing is silently skipped.
+
+| Phase | State |
+|---|---|
+| 0.1–0.3 · 1.1–1.5 · 1.7 · 3 · 5a | **Shipped** |
+| 1.6 vanishing point · 2a field · 2b round footprints · 4a apertures · 4b sun · 5b three r184 · 6 solver | **Shipped** |
+| 5d OKLCH | **Shipped in part**, and the omitted part is a design decision, not a task — see 5d |
+| 5c BatchedMesh / WebGPU | **Measured, declined.** 330 draw calls at 30 parts, against a ~1,000 threshold — see 5c |
+| 7a metric depth · 7b RF-DETR | **Blocked on assets.** The 4-photo benchmark room is not in this repo — see Phase 7 |
+
 ---
 
 ## Dependency graph
@@ -533,6 +546,66 @@ three↔drei↔fiber so this pairing cannot drift either.
 
 ### 5c `BatchedMesh`, then WebGPU · **L**
 
+> **Measured, and the answer is no — for now, and for a reason with a number
+> attached.** The plan says "a 30-piece room is several hundred draw calls",
+> which turns out to be exactly right, and that is the problem with doing it:
+> several hundred is not a lot.
+>
+> Counted by patching `drawElements` / `drawArrays` / `*Instanced` on
+> `WebGL2RenderingContext.prototype` before any page script runs — renderer-
+> agnostic, so it counts what the GPU is actually asked to do rather than what
+> three's own `info` counter believes. Three room sizes, each measured from an
+> identical camera pose (the page is reloaded between points; the room is in
+> IndexedDB and survives, the camera does not):
+>
+> | parts | draw calls / frame |
+> |---|---|
+> | 6 (the `rect` starter room) | 72.5 |
+> | 18 | 202.0 |
+> | 30 | 330.0 |
+>
+> **10.75 draw calls per part, and ~8 calls of fixed overhead** for the shell,
+> the shadow pass and the effect composer. The two slopes — 10.8 and 10.7 — were
+> measured independently and agree to 1%, which is what makes this a line rather
+> than a fit through noise.
+>
+> So a full 30-piece room costs **330 draw calls per frame**. The point where
+> draw-call count starts binding a desktop WebGL2 frame is around 1,000–2,000;
+> Danmu would need roughly **90 parts** to reach the bottom of that band, and no
+> room the app builds gets close. Spending a rewrite of the interaction layer to
+> optimise a number that is 3–6× under the threshold is the definition of
+> premature.
+>
+> And it *is* the interaction layer, not just the renderer. `BatchedMesh` takes
+> one material for the whole batch, and Danmu's parts differ in
+> material (nine `SURFACE` presets, of which `fabric` must be
+> `MeshPhysicalMaterial` for its sheen term — the thing that makes a sofa read as
+> cloth), so batching means grouping by preset. Worse, `Pickable` hangs
+> `onPointerOver` / `onClick` off a real `<group>` per part and R3F's event system
+> resolves a hit to that object; a `BatchedMesh` hit resolves to a batch id, so
+> hover, selection, the highlight outline, hide, and lock tinting would all need
+> rewriting against per-instance state. That is a large, risky change to the most
+> interactive part of the product, and its payoff at 330 calls is nil.
+>
+> **What the measurement did confirm is worth keeping:** `frameloop="demand"` is
+> genuinely holding. A still scene costs 0–2 renders over a 3-second window, not
+> 180. The per-part instancing inside `Box.tsx` is doing its job too — 10.75 calls
+> covers a part's body, legs, and shadow-pass repeat, where an un-instanced
+> bookshelf alone would be ~294.
+>
+> **Revisit when** a room can hold ~90+ parts, or when a profile on real hardware
+> shows draw-call submission (not shading, not the AO pass) as the frame's
+> bottleneck. Re-run the count first; it is twenty lines of Playwright.
+>
+> **WebGPU is a separate decision, and it is also not now.** It is not a renderer
+> swap: `@react-three/postprocessing` and `postprocessing` are WebGL-only, so
+> `WebGPURenderer` means deleting the `N8AO` + `SMAA` stack in `Room.tsx` and
+> rebuilding ambient occlusion and antialiasing in TSL. The prize (`ssgi()`,
+> native `ao()`) is real, but it is a fork of the render path with a fallback to
+> maintain, and the same `postprocessing` dependency is what pins three to 0.184
+> today. Worth doing when the visual gain is the goal — not as a performance fix,
+> because the performance is fine.
+
 Danmu already instances *within* a part (book spines, curtain pleats, radiator
 fins — `Box.tsx`). The remaining cost is *across* parts: a 30-piece room is
 several hundred draw calls of near-identical rounded boxes. `BatchedMesh`
@@ -613,6 +686,40 @@ Measure before threading a worker; ~30 parts may well be fast enough inline.
 ---
 
 ## Phase 7 — Spikes · parallel, measure before committing
+
+> **Both are blocked on assets, not on effort — and the missing asset is the
+> same one.** The benchmark table in `Design.md` §3 is headed "measured on a real
+> 4-photo room (19 catalogued objects)", and that room is not in this repo: a
+> sweep for `*.jpg` / `*.jpeg` / `*.png` outside `node_modules` and `.git` returns
+> nothing at all. Neither the photos nor the 19-object ground-truth list survived
+> into version control.
+>
+> Both spikes are defined as comparisons against that table, so without it there
+> is nothing honest to run. A recall figure from different imagery is not a row in
+> that table — it is a different experiment wearing its column headings, and
+> "compare on the same table so the numbers stay honest" is the one instruction
+> that forbids exactly that. So no number is recorded here rather than a number
+> that would be quoted later as if it were comparable.
+>
+> **To unblock, in order of how much it buys:**
+>
+> 1. Commit the four photos and the 19-object list (or put them anywhere a script
+>    can reach). This is the whole blocker for 7b's recall column, and half of 7a's.
+> 2. Tape-measure that room. 7a's accuracy claim is against ground truth in
+>    millimetres, and no model output can substitute for a tape.
+>
+> With (1) in hand, 7b is short: export RF-DETR to ONNX, point the existing
+> 5-crop tiling harness at it, fill in the row. The licence question — Apache-2.0,
+> therefore bundleable, therefore the AGPL fence in `Design.md` §9 disappears — is
+> the actual prize and is already settled on paper; only the recall is unknown.
+>
+> **The latency half of 7b is blocked differently, and cannot be fixed by
+> committing photos.** Per-photo cost is content-independent (a fixed 5 crops × 2
+> models), so any image would do — but the only WebGPU-capable browser available
+> to an agent here is headless Chromium on SwiftShader, which is a CPU rasteriser.
+> Its timings say nothing about the ~4.8 s Chrome + WebGPU figure the table quotes,
+> so an fp16 / io-binding comparison measured that way would be noise. That one
+> needs a human at a machine with a real GPU.
 
 ### 7a Metric depth for the missing axis
 

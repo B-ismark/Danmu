@@ -348,6 +348,13 @@ describe('cost', () => {
     // canary for an accidental O(cells x parts) regression rather than a
     // benchmark — the measured figure is ~40 ms and the bar is deliberately
     // loose enough not to flake on a busy machine.
+    //
+    // BEST of three, not one. A single sample measures whatever else the machine
+    // was doing during that slice: with eight busy cores this took 1604 ms — a
+    // 40x stall on a 40 ms body, failing a 1500 ms bar that has an enormous
+    // margin. Taking the best sample measures what the machine CAN do, which is
+    // the question a ceiling is asking. A real O(cells x parts) regression is
+    // slow in all three.
     const big: Footprint = [
       [-20, -20],
       [20, -20],
@@ -358,11 +365,15 @@ describe('cost', () => {
     for (let i = 0; i < 30; i++) {
       parts.push(box(-18 + (i % 6) * 7, -18 + Math.floor(i / 6) * 8, 1.8, 0.9, i * 0.31));
     }
-    const t0 = performance.now();
-    const f = buildClearanceField(parts, big)!;
-    pairGaps(f);
-    const ms = performance.now() - t0;
-    expect(f.componentCount).toBeGreaterThanOrEqual(1);
-    expect(ms).toBeLessThan(1500);
+    let best = Infinity;
+    let f!: ReturnType<typeof buildClearanceField>;
+    for (let run = 0; run < 3; run++) {
+      const t0 = performance.now();
+      f = buildClearanceField(parts, big)!;
+      pairGaps(f!);
+      best = Math.min(best, performance.now() - t0);
+    }
+    expect(f!.componentCount).toBeGreaterThanOrEqual(1);
+    expect(best).toBeLessThan(1500);
   });
 });
