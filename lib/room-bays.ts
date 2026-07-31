@@ -23,7 +23,7 @@
 // bay never overhangs a wall it merely straddles on the grid.
 
 import type { Footprint } from './footprint';
-import { distToBoundary, pointInPoly, type Poly } from './geometry';
+import { pointInPoly, type Poly } from './geometry';
 
 /** An axis-aligned rectangle of real floor. */
 export type Bay = {
@@ -67,9 +67,11 @@ export type BaySide = {
  *  inset by this much rather than on the knife edge. */
 const EPS = 1e-4;
 
-/** How close a side has to run to the boundary along its whole length before it
- *  counts as a wall. Generous enough for floating-point drift, tight enough that a
- *  bay edge crossing open floor never passes. */
+/** How far out of true a wall may be and still count as one, metres — both how far
+ *  from the side's own offset it may sit, and how much it may lean across its own
+ *  length. Generous enough for a footprint whose vertices the user has dragged to
+ *  not-quite-round numbers, tight enough that a wall a hand's width away is a
+ *  different wall. */
 const WALL_TOL = 0.02;
 
 function makeBay(minX: number, maxX: number, minZ: number, maxZ: number): Bay {
@@ -274,18 +276,59 @@ function segmentsCross(
   return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
 }
 
-/** Does the whole side lie on the polygon's boundary? Sampled along it rather than
- *  at its midpoint: half a bay edge can sit on a wall while the other half crosses
- *  open floor, and a sofa placed against the open half is a sofa in the middle of
- *  the room facing nothing. */
+/** Does the whole side lie on the polygon's boundary?
+ *
+ *  Answered by covering, not by sampling. The first version probed five points and
+ *  asked `distToBoundary` about each, which is wrong twice over:
+ *
+ *    · Five probes leave gaps. A notch narrower than a quarter of the side slips
+ *      between them — measured: a 1.2 m step in a 6 m wall reported `onWall`.
+ *    · `distToBoundary` is the distance to the NEAREST edge, in any direction. A
+ *      probe standing in the mouth of that notch is millimetres from the notch's own
+ *      side walls, so it passes while the wall it is supposed to be lying on is half
+ *      a metre away. No probe count fixes a test that ignores direction.
+ *
+ *  Bays are axis-aligned, so every side is a segment at a constant x or z. Take the
+ *  polygon edges running the same way at the same offset, clip them to the side, and
+ *  see whether they cover it end to end. Exact for rectilinear rooms — the case the
+ *  module promises exactness for — and conservative elsewhere, since an edge at an
+ *  angle covers none of an axis-aligned side and the answer comes back false. That is
+ *  the safe direction: `backWall` skips a side it is unsure about, and a bay whose
+ *  every side is refused simply offers nothing to back furniture against. */
 function sideOnWall(mx: number, mz: number, nx: number, nz: number, length: number, poly: Poly): boolean {
-  // Along the side is perpendicular to its normal.
-  const tx = -nz;
-  const tz = nx;
-  const probes = 5;
-  for (let i = 0; i < probes; i++) {
-    const u = ((i / (probes - 1)) * 2 - 1) * (length / 2) * 0.92;
-    if (distToBoundary(poly, mx + tx * u, mz + tz * u) > WALL_TOL) return false;
+  // A side with a normal along X runs along Z, and vice versa.
+  const alongX = nx === 0;
+  const offset = alongX ? mz : mx;
+  const half = length / 2 - EPS;
+  const from = (alongX ? mx : mz) - half;
+  const to = (alongX ? mx : mz) + half;
+  // Degenerate side (a bay thinner than the epsilon): nothing to cover.
+  if (to <= from) return true;
+
+  const spans: Array<[number, number]> = [];
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    const a1 = alongX ? a[0] : a[1];
+    const b1 = alongX ? b[0] : b[1];
+    const a2 = alongX ? a[1] : a[0];
+    const b2 = alongX ? b[1] : b[0];
+    // Parallel to the side, and at the side's own offset. Anything else — including
+    // every diagonal wall — covers none of it.
+    if (Math.abs(a2 - b2) > WALL_TOL) continue;
+    if (Math.abs((a2 + b2) / 2 - offset) > WALL_TOL) continue;
+    const lo = Math.min(a1, b1);
+    const hi = Math.max(a1, b1);
+    if (hi > from && lo < to) spans.push([Math.max(lo, from), Math.min(hi, to)]);
   }
-  return true;
+  if (spans.length === 0) return false;
+
+  spans.sort((p, q) => p[0] - q[0]);
+  let reached = from;
+  for (const [lo, hi] of spans) {
+    // A hole between one covering edge and the next is open floor along the side.
+    if (lo > reached + EPS) return false;
+    if (hi > reached) reached = hi;
+  }
+  return reached >= to - EPS;
 }

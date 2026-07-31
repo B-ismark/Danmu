@@ -3,9 +3,26 @@
 //
 // This is deliberately NOT the arrangement solver. `lib/layout-solve.ts` searches
 // for a *good* layout and costs tens of thousands of evaluations; this repairs two
-// specific facts about a layout and is a few hundred microseconds, because it runs
-// on every room open — including from the store's synchronous initial state, where
-// an annealer has no business being.
+// specific facts about a layout and is cheap enough to run on every room open,
+// including from the store's synchronous initial state, where an annealer has no
+// business being.
+//
+// Measured, because "cheap" was asserted here as "a few hundred microseconds" and
+// that was only ever true of the easy case. On this machine, per call:
+//
+//   ·   65 us — nine pieces, nothing clashing. The seeded path.
+//   ·  3.6 ms — nineteen detections of which four are duplicates of pieces already
+//                there. The realistic bad case, and the one this pass exists for.
+//   · 15.3 ms — twenty pieces stacked on each other in a room whose floor is
+//                smaller than their combined footprint. Nothing can be placed, so
+//                every candidate position is walked and rejected.
+//
+// The last two were 78 ms before two changes: the derived facts about each part
+// (footprint, role, area) are computed once per pass rather than once per candidate
+// position, and a piece that fails to find a spot is not asked again until the next
+// pass — having just proved the room full, it would return the same answer for every
+// remaining pair. A repair pass on the synchronous store path cannot cost five
+// frames.
 //
 // Two failures, both of which shipped:
 //
@@ -105,26 +122,50 @@ export function settleParts(parts: ScenePart[], footprint: Footprint, opts: Sett
 
   // ── Out of each other ─────────────────────────────────────────────────────
   //
+  // Everything each part is, computed once. `pushClear` tests up to 160 candidate
+  // positions and each one has to be checked against every other part; rebuilding
+  // those parts' footprints, roles and areas per candidate made this pass measure
+  // 78 ms on twenty mutually clashing pieces — on a path that runs during the
+  // store's synchronous initial state, so it was a visible stall on opening a room
+  // the detector had found duplicates in. Only the mover moves, so only the mover's
+  // entry is ever stale, and `pushClear` refreshes it.
+  const world: World = {
+    parts: out,
+    feet: out.map(footOf),
+    roles: out.map(roleOf),
+    obstacle: out.map(isObstacle),
+    areas: [],
+  };
+  world.areas = world.feet.map(footArea);
+
   // Biggest first, and the bigger of a clashing pair never moves: a room is read
   // from its large pieces outward, and a solve that lets a nightstand shove a bed
   // across the floor reads as damage. Same reason `layout-solve` settles the large
   // furniture in its first pass.
   const order = out
-    .map((p, i) => ({ i, area: footArea(footOf(p)) }))
-    .sort((a, b) => b.area - a.area || a.i - b.i)
-    .map((e) => e.i);
+    .map((_, i) => i)
+    .sort((a, b) => world.areas[b] - world.areas[a] || a - b);
 
   for (let pass = 0; pass < PASSES; pass++) {
     let touched = false;
+    // One attempt per mover per pass, not one per anchor it clashes with. A piece
+    // that could not be placed has just proved the room full, and walking its 160
+    // candidate positions again for every remaining pair is where the other 70 ms
+    // went: twenty pieces on top of each other is 190 pairs, all of them hopeless,
+    // each one re-deriving the same answer. Space another piece frees up is picked
+    // up on the next pass, which is what the passes are for.
+    const stuck = new Set<number>();
     for (let a = 0; a < order.length; a++) {
       const anchor = order[a];
-      if (!isObstacle(out[anchor])) continue;
+      if (!world.obstacle[anchor]) continue;
       for (let b = a + 1; b < order.length; b++) {
         const mover = order[b];
-        if (!movable[mover] || !isObstacle(out[mover])) continue;
-        if (sharesFloor(roleOf(out[anchor]), roleOf(out[mover]))) continue;
-        if (!clashes(out[anchor], out[mover])) continue;
-        if (pushClear(out, mover, poly, centre)) touched = true;
+        if (!movable[mover] || !world.obstacle[mover]) continue;
+        if (stuck.has(mover)) continue;
+        if (sharesFloor(world.roles[anchor], world.roles[mover])) continue;
+        if (!clashes(world, anchor, mover)) continue;
+        if (pushClear(world, mover, poly, centre)) touched = true;
+        else stuck.add(mover);
       }
     }
     if (!touched) break;
@@ -133,14 +174,27 @@ export function settleParts(parts: ScenePart[], footprint: Footprint, opts: Sett
   return out;
 }
 
+/** The scene as the clash pass reads it: the parts, plus the derived facts about
+ *  each that do not change while a candidate position is being tried. */
+type World = {
+  parts: ScenePart[];
+  feet: Foot[];
+  roles: ReturnType<typeof roleOf>[];
+  obstacle: boolean[];
+  areas: number[];
+};
+
 /** Two pieces sharing more than a rounding error of floor. */
-function clashes(a: ScenePart, b: ScenePart): boolean {
-  const fa = footOf(a);
-  const fb = footOf(b);
+function clashes(w: World, i: number, j: number): boolean {
+  return shares(w.feet[i], w.feet[j], Math.min(w.areas[i], w.areas[j]));
+}
+
+/** Do these two footprints overlap by more than the touch epsilon? The cheap
+ *  bounding test first — it rejects nearly every pair in a real room, and the
+ *  intersection area is the expensive half. */
+function shares(fa: Foot, fb: Foot, smaller: number): boolean {
   if (!footOverlap(fa, fb, -0.01)) return false;
-  const shared = footIntersectionArea(fa, fb);
-  const smaller = Math.min(footArea(fa), footArea(fb));
-  return smaller > 0 && shared / smaller > TOUCH_SHARE;
+  return smaller > 0 && footIntersectionArea(fa, fb) / smaller > TOUCH_SHARE;
 }
 
 function footOf(p: ScenePart): Foot {
@@ -224,8 +278,8 @@ function escape(p: ScenePart, x: number, z: number, poly: Poly): number {
  *  makes the answer stable: pushing along the line between two centres alone sends a
  *  sofa clipped by a bed's corner diagonally into the middle of the floor, where a
  *  200 mm slide along the wall was available. */
-function pushClear(parts: ScenePart[], index: number, poly: Poly, centre: [number, number]): boolean {
-  const p = parts[index];
+function pushClear(w: World, index: number, poly: Poly, centre: [number, number]): boolean {
+  const p = w.parts[index];
   // Outward from the room's middle, so a piece that clashes near a wall is pushed
   // along it rather than into it.
   let ox = p.pos[0] - centre[0];
@@ -249,10 +303,13 @@ function pushClear(parts: ScenePart[], index: number, poly: Poly, centre: [numbe
     for (const [dx, dz] of dirs) {
       const x = p.pos[0] + dx * step;
       const z = p.pos[2] + dz * step;
-      if (escape(p, x, z, poly) > 0) continue;
-      if (!clearOfAll(parts, index, x, z)) continue;
+      const me = footAtXZ(p, x, z);
+      if (!footInsidePoly(me, poly)) continue;
+      if (!clearOfAll(w, index, me)) continue;
       p.pos[0] = x;
       p.pos[2] = z;
+      // The one cached footprint that just went stale.
+      w.feet[index] = me;
       return true;
     }
   }
@@ -262,20 +319,16 @@ function pushClear(parts: ScenePart[], index: number, poly: Poly, centre: [numbe
   return false;
 }
 
-function clearOfAll(parts: ScenePart[], index: number, x: number, z: number): boolean {
-  const p = parts[index];
-  const me = footAtXZ(p, x, z);
-  const myRole = roleOf(p);
-  const myArea = footArea(me);
-  for (let j = 0; j < parts.length; j++) {
+function clearOfAll(w: World, index: number, me: Foot): boolean {
+  const myRole = w.roles[index];
+  // The mover's own area is its footprint's, wherever it stands — a translation does
+  // not change it, so the cached value holds for every candidate position.
+  const myArea = w.areas[index];
+  for (let j = 0; j < w.parts.length; j++) {
     if (j === index) continue;
-    const o = parts[j];
-    if (!isObstacle(o)) continue;
-    if (sharesFloor(myRole, roleOf(o))) continue;
-    const fo = footOf(o);
-    if (!footOverlap(me, fo, -0.01)) continue;
-    const smaller = Math.min(myArea, footArea(fo));
-    if (smaller > 0 && footIntersectionArea(me, fo) / smaller > TOUCH_SHARE) return false;
+    if (!w.obstacle[j]) continue;
+    if (sharesFloor(myRole, w.roles[j])) continue;
+    if (shares(me, w.feet[j], Math.min(myArea, w.areas[j]))) return false;
   }
   return true;
 }

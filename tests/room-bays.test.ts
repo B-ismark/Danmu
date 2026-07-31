@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { backWall, baySides, insetBay, roomBays, splitBay, type Bay } from '../lib/room-bays';
 import { footprintForLayout, offsetWall, type Footprint } from '../lib/footprint';
-import { outsideShare, polygonArea } from '../lib/geometry';
+import { outsideShare, pointInPoly, polygonArea } from '../lib/geometry';
 
 /** A bay as a footprint the containment test understands. */
 const asFoot = (b: Bay) => ({ cx: b.cx, cz: b.cz, hw: b.width / 2, hd: b.depth / 2, rot: 0 });
@@ -113,5 +113,79 @@ describe('splitBay', () => {
     expect(a.width).toBeCloseTo(4);
     expect(b.width).toBeCloseTo(4);
     expect(a.area + b.area).toBeCloseTo(bay.area);
+  });
+});
+
+describe('sideOnWall', () => {
+  // `onWall` decides where furniture puts its back. It used to be five probes and
+  // `distToBoundary`, which is wrong in two ways that compound: the probes leave
+  // gaps, and the distance is to the NEAREST edge in ANY direction, so a probe
+  // standing in the mouth of a notch is millimetres from the notch's own side walls
+  // and passes. Both cases below reported `onWall: true` before.
+
+  /** 6 x 4, with a 1.2 m x 0.5 m alcove in the north wall, placed so that the old
+   *  probes at x = 0.24, 1.62, 3, 4.38, 5.76 all miss it. */
+  const NOTCHED: Footprint = [
+    [0, 0],
+    [0.33, 0],
+    [0.33, -0.5],
+    [1.53, -0.5],
+    [1.53, 0],
+    [6, 0],
+    [6, 4],
+    [0, 4],
+  ];
+
+  it('refuses a side with a hole in it, however the probes fall', () => {
+    const bay = roomBays(NOTCHED)[0];
+    // The main bay is the full 6 x 4 — the alcove is extra floor beyond it.
+    expect(bay.area).toBeCloseTo(24);
+    const [north, east, south, west] = baySides(bay, NOTCHED);
+    // 1.2 m of this side's 6 m is the open mouth of the alcove, not wall.
+    expect(north.onWall).toBe(false);
+    // …and the three sides that are unbroken wall still are.
+    expect(east.onWall).toBe(true);
+    expect(south.onWall).toBe(true);
+    expect(west.onWall).toBe(true);
+  });
+
+  it('does not offer a holed side as somewhere to put a sofa’s back', () => {
+    const bay = roomBays(NOTCHED)[0];
+    const back = backWall(baySides(bay, NOTCHED));
+    expect(back).not.toBeNull();
+    // The north side is the one with the most depth in front of it, so it would have
+    // won on score. It has to lose on being a wall.
+    expect(back!.mz).not.toBeCloseTo(0);
+  });
+
+  it('claims a side only when stepping out across it leaves the room', () => {
+    // The property `backWall` actually depends on, checked independently of how
+    // `sideOnWall` decides it: if a side is wall along its whole length, then a point
+    // just OUTSIDE it is outside the room at every point along it. Where a side
+    // crosses open floor — the U bar's north edge over the legs, the L's inner
+    // corner — the outward probe lands back inside, and the side must not be claimed.
+    for (const layout of ['rect', 'l', 't', 'u'] as const) {
+      const poly = footprintForLayout(layout, 6, 4.7);
+      for (const bay of roomBays(poly)) {
+        for (const s of baySides(bay, poly)) {
+          if (!s.onWall) continue;
+          for (let i = 0; i <= 20; i++) {
+            const u = ((i / 20) * 2 - 1) * (s.length / 2) * 0.98;
+            // Along the side is perpendicular to its inward normal.
+            const px = s.mx - s.nz * u;
+            const pz = s.mz + s.nx * u;
+            // 50 mm out — beyond WALL_TOL, so a wall within tolerance still counts.
+            const outside = pointInPoly(px - s.nx * 0.05, pz - s.nz * 0.05, poly);
+            expect(outside, `${layout}: side at (${s.mx},${s.mz}) claims wall at u=${u.toFixed(2)}`).toBe(false);
+          }
+        }
+      }
+    }
+  });
+
+  it('still recognises a plain rectangle’s four walls', () => {
+    const poly = footprintForLayout('rect', 6, 4);
+    const bay = roomBays(poly)[0];
+    expect(baySides(bay, poly).every((s) => s.onWall)).toBe(true);
   });
 });
