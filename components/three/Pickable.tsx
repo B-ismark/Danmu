@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { type ThreeEvent } from '@react-three/fiber';
 import { Group } from 'three';
 import { useStudio } from '@/lib/store';
@@ -24,6 +24,18 @@ export function Pickable({
   const toggleOpen = useStudio((s) => s.toggleOpen);
   const ref = useRef<Group>(null);
 
+  // A part that disappears from under the cursor never fires `pointerout`, so the
+  // store went on pointing at it — and `Highlight` kept drawing the hover box on
+  // whatever took its place. Deleting the hovered piece does this, and so does
+  // hiding it with V (Room filters hidden parts out of the tree entirely).
+  useEffect(
+    () => () => {
+      if (useStudio.getState().hoveredPartId === partId) useStudio.getState().setHovered(null);
+      document.body.style.cursor = '';
+    },
+    [partId],
+  );
+
   return (
     <group
       ref={ref}
@@ -39,6 +51,9 @@ export function Pickable({
       }}
       onClick={(e: ThreeEvent<MouseEvent>) => {
         e.stopPropagation();
+        // A Space + left-drag that happens to pass over furniture is a camera
+        // pan; it must not re-select whatever it flew across.
+        if (useStudio.getState().panKeyHeld) return;
         // Shift-click toggles this part in/out of the multi-selection.
         if (e.shiftKey) {
           toggleInSelection(partId);

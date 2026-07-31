@@ -261,7 +261,7 @@ export default function WorkspacePage() {
                     <h2 className="ds-label" style={{ marginBottom: 10 }}>
                       {g.label} · <span className="mono">{g.rooms.length}</span>
                     </h2>
-                    <div className="auto-grid">
+                    <div className="auto-grid auto-grid--cards">
                       {g.rooms.map((r) => (
                         <RoomCard
                           key={r.id}
@@ -366,15 +366,15 @@ function RoomCard({
         <PlanThumb roomId={room.id} />
       </Link>
 
-      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+      <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 7 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
           <EditableText
             value={room.name}
             onCommit={onRename}
             label="Room name"
             // A pasted 400-character name had nothing stopping it.
             maxLength={60}
-            style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.01em', flex: 1, minWidth: 0 }}
+            style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em', flex: 1, minWidth: 0 }}
             inputStyle={{ fontSize: 14, fontWeight: 600, flex: 1, minWidth: 0 }}
           />
           <div

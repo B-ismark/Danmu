@@ -8,6 +8,14 @@ import { roomStore } from '@/lib/storage';
 import type { ScenePart } from '@/lib/scene-spec';
 import type { RoomData } from '@/lib/storage';
 
+// Viewport of the drawing, and therefore the card's picture height: a card is
+// ~220–280px wide, so a 4:3 thumb spent ~200px of vertical on letterboxing and
+// pushed the second row of rooms below the fold. 8:5 is short enough that two
+// cards sit in one screen; the plan itself is still fitted, never cropped.
+const VW = 240;
+const VH = 150;
+const PAD = 12;
+
 export function PlanThumb({ roomId }: { roomId: string }) {
   const [room, setRoom] = useState<RoomData | null>(null);
   const [parts, setParts] = useState<ScenePart[] | null>(null);
@@ -27,10 +35,12 @@ export function PlanThumb({ roomId }: { roomId: string }) {
   }, [roomId]);
 
   if (!room) {
+    // Same box as the loaded state — a placeholder of a different height makes
+    // every card jump when the plan arrives.
     return (
       <div
         style={{
-          aspectRatio: '4/3',
+          aspectRatio: `${VW}/${VH}`,
           background: 'var(--paper-2)',
           borderBottom: '1px solid var(--hairline)',
         }}
@@ -40,9 +50,6 @@ export function PlanThumb({ roomId }: { roomId: string }) {
 
   const W = room.width;
   const D = room.depth;
-  const PAD = 12;
-  const VW = 240;
-  const VH = 180;
   const scale = Math.min((VW - PAD * 2) / W, (VH - PAD * 2) / D);
   const ox = (VW - W * scale) / 2;
   const oy = (VH - D * scale) / 2;

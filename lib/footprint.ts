@@ -93,13 +93,19 @@ export function footprintBounds(poly: Footprint): {
   return { minX, maxX, minZ, maxZ, width: maxX - minX, depth: maxZ - minZ, cx: (minX + maxX) / 2, cz: (minZ + maxZ) / 2 };
 }
 
-/** Move ONLY the selected wall: translate edge `index`'s two vertices along the
- *  edge's outward normal by `delta` metres (delta > 0 = push out / bigger room).
- *  Adjacent walls stretch to stay connected; the opposite wall does not move, so
- *  the room becomes off-centre — that's intentional. */
-export function offsetWall(poly: Footprint, index: number, delta: number): Footprint {
+/** Unit normal of edge `index`, pointing OUT of the room.
+ *
+ *  Exported because three things have to agree on it: `offsetWall` (which way the
+ *  edge travels), the wall handles in the 3D and plan views (which way the
+ *  pointer's travel is projected) and `lib/wall-move.ts` (which way the furniture
+ *  standing on that wall travels with it). Sharing one function is the point —
+ *  the same sign mistake that `lib/geometry.ts` warns about for part rotations
+ *  applies here: a carried sofa with the normal flipped walks INTO the room as
+ *  the wall moves out, and on the North/South walls of a rectangle that reads as
+ *  "the wall moved and the sofa stayed", not as an inverted axis. */
+export function wallOutwardNormal(poly: Footprint, index: number): [number, number] {
   const n = poly.length;
-  if (n < 3 || index < 0 || index >= n) return poly;
+  if (n < 3 || index < 0 || index >= n) return [0, 0];
   const a = poly[index];
   const b = poly[(index + 1) % n];
   // Edge perpendicular.
@@ -116,6 +122,22 @@ export function offsetWall(poly: Footprint, index: number, delta: number): Footp
     nx = -nx;
     nz = -nz;
   }
+  return [nx, nz];
+}
+
+/** Move ONLY the selected wall: translate edge `index`'s two vertices along the
+ *  edge's outward normal by `delta` metres (delta > 0 = push out / bigger room).
+ *  Adjacent walls stretch to stay connected; the opposite wall does not move, so
+ *  the room becomes off-centre — that's intentional.
+ *
+ *  Geometry only. Whatever is standing on the wall is carried by
+ *  `lib/wall-move.ts`, through the one action in `lib/wall-actions.ts`. */
+export function offsetWall(poly: Footprint, index: number, delta: number): Footprint {
+  const n = poly.length;
+  if (n < 3 || index < 0 || index >= n) return poly;
+  const a = poly[index];
+  const b = poly[(index + 1) % n];
+  const [nx, nz] = wallOutwardNormal(poly, index);
   const next: Footprint = poly.map((p) => [p[0], p[1]]);
   next[index] = [a[0] + nx * delta, a[1] + nz * delta];
   next[(index + 1) % n] = [b[0] + nx * delta, b[1] + nz * delta];

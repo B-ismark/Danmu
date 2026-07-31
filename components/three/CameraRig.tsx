@@ -18,6 +18,12 @@ const PRESETS = {
 export function CameraRig() {
   const view = useStudio((s) => s.viewPreset);
   const dragging = useStudio((s) => s.draggingId);
+  // Space + left-drag pans — the gesture every 3D tool shares, and the reason the
+  // right button is now free for the context menu. Panning used to be RIGHT only,
+  // which both hid it behind the least-used button and spent the one press that
+  // had no other meaning in the studio. Space is tracked once, in
+  // KeyboardShortcuts, so the 2D plan can pan the same way.
+  const panKey = useStudio((s) => s.panKeyHeld);
   const frameToken = useStudio((s) => s.frameSelectedToken);
   const partsRef = useScene((s) => s.parts);
   const ctrlRef = useRef<OrbitControlsImpl>(null);
@@ -67,7 +73,10 @@ export function CameraRig() {
         enabled={!dragging}
         enablePan
         screenSpacePanning={false}
-        mouseButtons={{ LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN }}
+        // RIGHT is deliberately absent, not MOUSE.PAN: three reads the button
+        // through this map, so leaving it out is how the button is handed to the
+        // context menu. Middle-drag still dollies.
+        mouseButtons={{ LEFT: panKey ? MOUSE.PAN : MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY }}
         enableDamping
         dampingFactor={0.12}
         makeDefault

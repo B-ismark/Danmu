@@ -30,28 +30,38 @@ export function SelectionBar() {
   return (
     <div
       className="ds-card"
+      // A pill, not a banner. It shares the bottom band with the help corner and
+      // the room dock, and at its old width — "Shift-click another piece to merge
+      // them" spelled out in full — a one-item selection reached across the canvas
+      // and covered the dock it was centred between.
       style={{
         position: 'absolute',
-        bottom: 14,
+        bottom: 12,
         left: '50%',
         transform: 'translateX(-50%)',
         zIndex: 'var(--z-canvas-ui)',
         display: 'flex',
         alignItems: 'center',
-        gap: 10,
-        padding: '8px 10px 8px 14px',
+        gap: 8,
+        padding: '5px 6px 5px 12px',
+        borderRadius: 'var(--r-full)',
         maxWidth: 'calc(100% - 28px)',
       }}
     >
       <span style={{ fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap' }}>
-        {grouped ? `Group · ${groupMembers.length} items` : `${selection.length} selected`}
+        {grouped ? `Group · ${groupMembers.length}` : `${selection.length} selected`}
       </span>
       {!grouped && !canMerge && (
-        <span style={{ fontSize: 12, color: 'var(--ink-2)' }}>
-          Shift-click another piece to merge them
+        // The gesture still has to be taught — it is the only route to a merge —
+        // but four words and a tooltip carry it in a third of the width.
+        <span
+          title="Hold Shift and click a second piece, then Merge, and they move as one"
+          style={{ fontSize: 12, color: 'var(--ink-2)', whiteSpace: 'nowrap' }}
+        >
+          Shift-click to merge
         </span>
       )}
-      <div style={{ display: 'flex', gap: 6 }}>
+      <div style={{ display: 'flex', gap: 4 }}>
         {grouped ? (
           <button
             onClick={() => {
@@ -59,7 +69,7 @@ export function SelectionBar() {
               setSelected(primaryId);
             }}
             className="ds-btn"
-            style={{ height: 30, fontSize: 12 }}
+            style={{ height: 28, fontSize: 12 }}
           >
             <Icon name="swap" size={12} /> Ungroup
           </button>
@@ -69,7 +79,7 @@ export function SelectionBar() {
               onClick={() => groupParts(selection)}
               className="ds-btn ds-btn--accent"
               title="These pieces will move as one"
-              style={{ height: 30, fontSize: 12 }}
+              style={{ height: 28, fontSize: 12 }}
             >
               <Icon name="layers" size={12} /> Merge {selection.length}
             </button>
@@ -79,7 +89,7 @@ export function SelectionBar() {
           icon="x"
           label="Clear selection"
           onClick={() => setSelected(null)}
-          size={30}
+          size={28}
           iconSize={13}
         />
       </div>

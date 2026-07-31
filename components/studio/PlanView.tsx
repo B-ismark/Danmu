@@ -25,11 +25,13 @@ import { buildClearanceField, fieldRuns, FREE_CELL, WALK_RADIUS } from '@/lib/cl
 import { accessZones } from '@/lib/layout-rules';
 import { obbFromPart } from '@/lib/geometry';
 import { pointInFootprint, wallSegments, footprintBounds } from '@/lib/footprint';
+import { moveWallCarrying, wallAttachments } from '@/lib/wall-actions';
 import { formatDim } from '@/lib/units';
 import { Icon } from '@/components/ui/Icon';
 import { IconButton } from '@/components/ui/primitives';
 import { HelpGroup, HelpLine, HelpToggle, Kb } from './HelpCard';
 import { announce, removeParts, studioSurfaceFocused } from './KeyboardShortcuts';
+import { openSceneMenu } from './SceneContextMenu';
 
 const SCALE = 100; // px per metre at zoom = 1, in viewBox units
 const PAD = 80;
@@ -77,10 +79,10 @@ export function PlanView({
   const setPosition = useStudio((s) => s.setPosition);
   const setRotation = useStudio((s) => s.setRotation);
   const setDragging = useStudio((s) => s.setDragging);
+  const panKey = useStudio((s) => s.panKeyHeld);
   const selectedWall = useStudio((s) => s.selectedWall);
   const setSelectedWall = useStudio((s) => s.setSelectedWall);
   const snapMode = useStudio((s) => s.snapMode);
-  const moveWall = useScene((s) => s.moveWall);
 
   // Circulation, straight off the same field lib/clearance.ts reports from — and
   // only while the overlay is on, since building it costs a distance transform.
@@ -109,8 +111,17 @@ export function PlanView({
   const spin = snapMode === 'coarse' ? Math.PI / 4 : Math.PI / 12;
 
   // Wall-drag bookkeeping — measure the pointer along the wall's outward normal
-  // and feed incremental width/depth deltas to the store (matches the 3D handle).
-  const wallDragRef = useRef<{ index: number; outX: number; outZ: number; downAlong: number; prevTotal: number } | null>(null);
+  // and feed incremental deltas to the store (matches the 3D handle). `attached`
+  // is what this wall carries, resolved once on pointer-down: re-resolving it per
+  // frame lets a piece near the tolerance detach mid-drag (lib/wall-actions.ts).
+  const wallDragRef = useRef<{
+    index: number;
+    outX: number;
+    outZ: number;
+    downAlong: number;
+    prevTotal: number;
+    attached: string[];
+  } | null>(null);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -291,7 +302,10 @@ export function PlanView({
       e.preventDefault();
       return;
     }
-    const startPan = e.button === 1 || e.button === 2 || e.shiftKey;
+    // Space + left-drag, as in the 3D tab. The right button used to pan here too
+    // and now opens the context menu instead; middle-drag and Shift-drag stay.
+    const startPan =
+      e.button === 1 || (e.button === 0 && (useStudio.getState().panKeyHeld || e.shiftKey));
     if (!startPan) return;
     panRef.current = { startX: e.clientX, startY: e.clientY, ox: offset.x, oy: offset.y };
     (e.target as Element).setPointerCapture?.(e.pointerId);
@@ -299,6 +313,9 @@ export function PlanView({
   }
 
   function onPointerDown(e: React.PointerEvent, id: string, mode: 'translate' | 'rotate') {
+    // Space held = the press belongs to the pan. Left unstopped so it reaches the
+    // svg's own handler, which is where panning starts.
+    if (useStudio.getState().panKeyHeld) return;
     e.stopPropagation();
     setSelected(id);
     setDragging(id);
@@ -351,8 +368,9 @@ export function PlanView({
       const total = w.x * wd.outX + w.z * wd.outZ - wd.downAlong;
       const step = total - wd.prevTotal;
       wd.prevTotal = total;
-      // Only the grabbed wall moves; it tracks the pointer 1:1 along its normal.
-      if (step !== 0) moveWall(wd.index, step);
+      // Only the grabbed wall moves; it tracks the pointer 1:1 along its normal,
+      // and takes what is mounted on it along.
+      if (step !== 0) moveWallCarrying(wd.index, step, wd.attached);
       force((v) => v + 1);
       return;
     }
@@ -390,7 +408,14 @@ export function PlanView({
     const outX = -Math.sin(seg.yaw);
     const outZ = -Math.cos(seg.yaw);
     const w = svgToWorld(e);
-    wallDragRef.current = { index, outX, outZ, downAlong: w.x * outX + w.z * outZ, prevTotal: 0 };
+    wallDragRef.current = {
+      index,
+      outX,
+      outZ,
+      downAlong: w.x * outX + w.z * outZ,
+      prevTotal: 0,
+      attached: wallAttachments(index),
+    };
   }
 
   function onPointerUp(e: React.PointerEvent) {
@@ -498,7 +523,7 @@ export function PlanView({
     e.stopPropagation();
     const out = e.key === 'ArrowRight' || e.key === 'ArrowUp' ? WALL_STEP : -WALL_STEP;
     setSelectedWall(index);
-    moveWall(index, out);
+    moveWallCarrying(index, out);
     force((v) => v + 1);
     const b = footprintBounds(useScene.getState().room.footprint);
     announce(
@@ -537,9 +562,12 @@ export function PlanView({
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         onPointerLeave={onPointerUp}
-        onContextMenu={(e) => e.preventDefault()}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          openSceneMenu(e.clientX, e.clientY, useStudio.getState().hoveredPartId);
+        }}
         onWheel={onWheel}
-        style={{ width: '100%', height: '100%', maxWidth: 1100, touchAction: 'none', cursor: panRef.current ? 'grabbing' : 'default' }}
+        style={{ width: '100%', height: '100%', maxWidth: 1100, touchAction: 'none', cursor: panRef.current ? 'grabbing' : panKey ? 'grab' : 'default' }}
         preserveAspectRatio="xMidYMid meet"
       >
         <defs>
@@ -856,7 +884,8 @@ export function PlanView({
             <HelpLine>Click a wall to paint it, or drag it to make the room bigger or smaller.</HelpLine>
           </HelpGroup>
           <HelpGroup title="Getting around">
-            <HelpLine>Pinch or scroll to zoom. Two fingers, Shift-drag or right-drag to pan.</HelpLine>
+            <HelpLine>Pinch or scroll to zoom. Two fingers, Shift-drag, or hold <Kb>Space</Kb> and drag, to pan.</HelpLine>
+            <HelpLine>Right-click a piece — or the plan — for what you can do to it.</HelpLine>
             <HelpLine>Alt-drag turns the page — the drawing, not the furniture.</HelpLine>
           </HelpGroup>
           <HelpGroup title="Keys" note="Click the drawing first — these stay quiet while you are using a panel.">

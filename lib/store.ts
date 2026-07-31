@@ -30,6 +30,10 @@ type StudioState = {
   openState: Record<string, number>;
   /** id of part currently being dragged; disables OrbitControls + raycast cursor */
   draggingId: string | null;
+  /** Space is held down. It is the camera modifier: while it is true the left
+   *  button pans instead of orbiting, and no press may pick a piece up. Pure
+   *  input state — never persisted, never part of a history snapshot. */
+  panKeyHeld: boolean;
   /** runtime overrides for part scene position [x, y, z]. Default positions come from each component. */
   positions: Record<string, [number, number, number]>;
   /** runtime Y-rotation overrides in radians. */
@@ -91,7 +95,13 @@ type StudioState = {
   hidden: Record<string, boolean>;
 
   setDragging: (id: string | null) => void;
+  setPanKeyHeld: (held: boolean) => void;
   setPosition: (id: string, pos: [number, number, number]) => void;
+  /** Move several parts in ONE store update. A wall drag re-positions everything
+   *  standing on that wall on every animation frame; N separate `setPosition`
+   *  calls meant N notifications per frame, each re-running every selector
+   *  subscribed to this store. */
+  setPositionsFor: (moves: Array<{ id: string; pos: [number, number, number] }>) => void;
   setRotation: (id: string, rot: number) => void;
   setDim: (id: string, dim: [number, number, number]) => void;
   setTransformMode: (m: 'translate' | 'rotate' | 'scale') => void;
@@ -162,6 +172,7 @@ export const useStudio = create<StudioState>()(
   viewPreset: 'iso',
   openState: {},
   draggingId: null,
+  panKeyHeld: false,
   positions: {},
   rotations: {},
   dims: {},
@@ -196,7 +207,20 @@ export const useStudio = create<StudioState>()(
   toggleOpen: (id) =>
     set((s) => ({ openState: { ...s.openState, [id]: s.openState[id] ? 0 : 1 } })),
   setDragging: (id) => set({ draggingId: id }),
+  // Key repeat fires keydown ~30×/second while Space is held. Bail on a no-op so
+  // the whole scene does not re-render for every one of them.
+  setPanKeyHeld: (held) => set((s) => (s.panKeyHeld === held ? s : { panKeyHeld: held })),
   setPosition: (id, pos) => set((s) => ({ positions: { ...s.positions, [id]: pos } })),
+  setPositionsFor: (moves) =>
+    set((s) => {
+      // No-op returns {} rather than a fresh `positions` object: an identical-but-
+      // new reference would look like an edit to history's subscription and push a
+      // snapshot for a frame in which nothing moved.
+      if (moves.length === 0) return {};
+      const positions = { ...s.positions };
+      for (const m of moves) positions[m.id] = m.pos;
+      return { positions };
+    }),
   setRotation: (id, rot) => set((s) => ({ rotations: { ...s.rotations, [id]: rot } })),
   setDim: (id, dim) => set((s) => ({ dims: { ...s.dims, [id]: dim } })),
   setTransformMode: (m) => set({ transformMode: m }),

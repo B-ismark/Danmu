@@ -155,7 +155,7 @@ const COPY_OFFSETS: Array<[number, number]> = [
   [0, 0],
 ];
 
-function selectedIds(): string[] {
+export function selectedIds(): string[] {
   const s = useStudio.getState();
   if (s.selection.length > 0) return s.selection;
   return s.selectedPartId ? [s.selectedPartId] : [];
@@ -201,10 +201,13 @@ export function removeParts(ids: string[], opts?: { selectAfter?: string | null 
 
   // Spoken by the toast, not by `announce`: the toast host is itself a polite
   // live region, so doing both says the removal twice.
+  //
+  // Title and action only. "Undo brings it straight back" was a second line of
+  // prose restating the button sitting next to it, and it doubled the height of a
+  // card that floats over the room.
   const many = doomed.length > 1;
   toast({
     title: many ? `${doomed.length} pieces removed` : `“${doomed[0].name}” removed`,
-    message: `Undo brings ${many ? 'them' : 'it'} straight back.`,
     action: { label: 'Undo', onClick: () => restoreParts(doomed, before) },
     ttl: 8000,
   });
@@ -232,7 +235,7 @@ function deleteSelection() {
   removeParts(selectedIds());
 }
 
-function duplicateSelection() {
+export function duplicateSelection() {
   const ids = selectedIds();
   if (ids.length === 0) return;
   const s = useStudio.getState();
@@ -278,7 +281,26 @@ function duplicateSelection() {
   announce(created.length === 1 ? 'Copy added and selected.' : `${created.length} copies added and selected.`);
 }
 
-function selectAllParts() {
+/** A quarter turn on every selected piece, about its own centre.
+ *
+ *  It deliberately does NOT shuffle anything to make room. If the turn puts a
+ *  wardrobe corner through the plaster, the piece keeps its real rotation and
+ *  Room check reports it — silently nudging furniture to make an action succeed
+ *  is the one thing this app must never do. */
+export function spinSelection(quarterTurns = 1) {
+  const ids = selectedIds();
+  if (ids.length === 0) return;
+  const s = useStudio.getState();
+  const parts = useScene.getState().parts;
+  for (const id of ids) {
+    const base = parts.find((p) => p.id === id);
+    if (!base) continue;
+    s.setRotation(id, (s.rotations[id] ?? base.rot) + (quarterTurns * Math.PI) / 2);
+  }
+  announce(ids.length === 1 ? 'Turned a quarter turn.' : `${ids.length} pieces turned a quarter turn.`);
+}
+
+export function selectAllParts() {
   const { parts } = useScene.getState();
   const { hidden } = useStudio.getState();
   const ids = parts.filter((p) => !hidden[p.id]).map((p) => p.id);
@@ -367,9 +389,49 @@ export function KeyboardShortcuts() {
       }
     }
 
+    // ── Space: the camera's pan modifier ────────────────────────────────────
+    // Held rather than pressed. While it is down, CameraRig swaps the left mouse
+    // button from orbit to pan and Draggable/Pickable refuse to grab or select,
+    // so the gesture works over furniture as well as over bare floor. Tracked
+    // here, not in CameraRig, because the 2D plan pans on the same key and this
+    // component is the one thing mounted on both tabs.
+    //
+    // Armed only while the room itself has focus, or while nothing is focused at
+    // all. Space is how a keyboard user activates the button they have tabbed to;
+    // swallowing it across the whole studio would cost more than the gesture is
+    // worth.
+    function panKeyArmed(): boolean {
+      const active = document.activeElement;
+      return studioSurfaceFocused() || !active || active === document.body;
+    }
+    function onSpaceDown(e: KeyboardEvent) {
+      if (e.code !== 'Space') return;
+      if (isTypingOrDialog(e.target) || !panKeyArmed()) return;
+      // Every repeat too, not just the first: Space scrolls the page otherwise.
+      e.preventDefault();
+      useStudio.getState().setPanKeyHeld(true);
+    }
+    function onSpaceUp(e: KeyboardEvent) {
+      if (e.code === 'Space') useStudio.getState().setPanKeyHeld(false);
+    }
+    // Alt-tabbing away mid-pan never delivers the keyup, and a modifier stuck on
+    // means the left button quietly stops selecting furniture.
+    function releasePanKey() {
+      useStudio.getState().setPanKeyHeld(false);
+    }
+
     window.addEventListener('keydown', onKey);
+    window.addEventListener('keydown', onSpaceDown);
+    window.addEventListener('keyup', onSpaceUp);
+    window.addEventListener('blur', releasePanKey);
+    document.addEventListener('visibilitychange', releasePanKey);
     return () => {
       window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keydown', onSpaceDown);
+      window.removeEventListener('keyup', onSpaceUp);
+      window.removeEventListener('blur', releasePanKey);
+      document.removeEventListener('visibilitychange', releasePanKey);
+      releasePanKey();
       unsubHistory();
     };
   }, []);

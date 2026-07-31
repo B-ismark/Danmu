@@ -6,7 +6,7 @@ import {
   Zap, Leaf, Crosshair, Sofa, Bed, Tv, Lamp, Table, Sprout, KeyRound,
   Eye, EyeOff, Info, HelpCircle, BarChart3, ExternalLink, Pencil, Trash2, RefreshCw,
   Image, Play, Replace, Circle, Sun, Moon, Cloud, Compass, Clock,
-  RotateCcw, RotateCw, Maximize, type LucideIcon,
+  RotateCcw, RotateCw, Maximize, Copy, type LucideIcon,
 } from 'lucide-react';
 
 // Single icon surface for the whole app. Backed by Lucide (MIT, free) — a
@@ -28,7 +28,7 @@ export type IconName =
   | 'sofa' | 'bed' | 'tv' | 'lamp' | 'table' | 'plant'
   | 'key' | 'eye' | 'eye-off'
   | 'info' | 'help' | 'chart' | 'external'
-  | 'edit' | 'trash' | 'refresh'
+  | 'edit' | 'trash' | 'refresh' | 'copy'
   | 'image' | 'play'
   | 'rotate-ccw' | 'rotate-cw' | 'fit'
   | 'sun' | 'moon' | 'cloud' | 'compass' | 'clock'
@@ -47,7 +47,7 @@ const MAP: Record<Exclude<IconName, 'whatsapp' | 'snap-wall' | 'snap-floor' | 's
   sofa: Sofa, bed: Bed, tv: Tv, lamp: Lamp, table: Table, plant: Sprout,
   key: KeyRound, eye: Eye, 'eye-off': EyeOff,
   info: Info, help: HelpCircle, chart: BarChart3, external: ExternalLink,
-  edit: Pencil, trash: Trash2, refresh: RefreshCw,
+  edit: Pencil, trash: Trash2, refresh: RefreshCw, copy: Copy,
   image: Image, play: Play, swap: Replace,
   'rotate-ccw': RotateCcw, 'rotate-cw': RotateCw, fit: Maximize,
   sun: Sun, moon: Moon, cloud: Cloud, compass: Compass, clock: Clock,

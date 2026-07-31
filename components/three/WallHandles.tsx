@@ -18,6 +18,10 @@
 // summed, so the wall lands in exactly the same place — and cuts the work to at
 // most one pass per painted frame.
 //
+// The move goes through `moveWallCarrying`, so whatever is mounted in or standing
+// against the wall travels with it. Which pieces those are is resolved ONCE on
+// pointer-down and reused for the rest of the drag — see `lib/wall-actions.ts`.
+//
 // The whole group is flagged `userData.helper` so SceneCapture strips it from
 // the exported PNG.
 
@@ -28,6 +32,7 @@ import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 import { SCENE } from '@/lib/scene-palette';
 import { wallSegments } from '@/lib/footprint';
+import { moveWallCarrying, wallAttachments } from '@/lib/wall-actions';
 
 const _ray = new Raycaster();
 const _ndc = new Vector2();
@@ -38,7 +43,6 @@ export function WallHandles() {
   // component only cares about the polygon and the ceiling height.
   const footprint = useScene((s) => s.room.footprint);
   const roomHeight = useScene((s) => s.room.height);
-  const moveWall = useScene((s) => s.moveWall);
   const selectedWall = useStudio((s) => s.selectedWall);
   const setDragging = useStudio((s) => s.setDragging);
   const { camera, gl } = useThree();
@@ -54,6 +58,8 @@ export function WallHandles() {
     outZ: number;
     downAlong: number;
     prevTotal: number;
+    /** resolved on pointer-down and fixed for the gesture */
+    attached: string[];
   } | null>(null);
 
   // Accumulated (uncommitted) displacement along the wall normal + the rAF that
@@ -68,8 +74,12 @@ export function WallHandles() {
       raf.current = 0;
       const step = pending.current;
       pending.current = 0;
+      const d = drag.current;
       // Only the grabbed wall moves; it tracks the pointer 1:1 along its normal.
-      if (step !== 0 && selectedWall !== null) moveWall(selectedWall, step);
+      // `d` is null on the final flush from `up()`, which is exactly when the last
+      // sub-frame sliver still has to land — fall back to resolving attachment
+      // fresh rather than dropping the furniture out of that last step.
+      if (step !== 0 && selectedWall !== null) moveWallCarrying(selectedWall, step, d?.attached);
     }
     function move(ev: PointerEvent) {
       const d = drag.current;
@@ -87,13 +97,15 @@ export function WallHandles() {
     }
     function up() {
       if (!drag.current) return;
-      drag.current = null;
-      // Land the last sub-frame sliver so the wall ends exactly where released.
+      // Land the last sub-frame sliver so the wall ends exactly where released —
+      // BEFORE clearing `drag`, so that last step carries the same pieces every
+      // other step of this gesture did.
       if (raf.current) {
         cancelAnimationFrame(raf.current);
         raf.current = 0;
       }
       flush();
+      drag.current = null;
       setDragging(null);
       document.body.style.cursor = '';
     }
@@ -107,7 +119,7 @@ export function WallHandles() {
         raf.current = 0;
       }
     };
-  }, [camera, gl, moveWall, selectedWall, setDragging]);
+  }, [camera, gl, selectedWall, setDragging]);
 
   if (selectedWall === null || !seg) return null;
 
@@ -129,6 +141,7 @@ export function WallHandles() {
       outZ,
       downAlong: e.point.x * outX + e.point.z * outZ,
       prevTotal: 0,
+      attached: selectedWall === null ? [] : wallAttachments(selectedWall),
     };
     pending.current = 0;
     setDragging('__wall__');

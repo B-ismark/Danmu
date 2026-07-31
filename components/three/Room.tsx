@@ -16,6 +16,7 @@ import { footprintBounds } from '@/lib/footprint';
 import { sunPosition, sunDirection, daylightKelvin, localInstant } from '@/lib/solar';
 import { hexFromKelvin } from '@/lib/light-units';
 import { useSnapshot, downloadBlob } from '@/lib/snapshot';
+import { openSceneMenu } from '@/components/studio/SceneContextMenu';
 import { RoomShell } from './RoomShell';
 import { WallHandles } from './WallHandles';
 import { MeasureGuides } from './MeasureGuides';
@@ -23,6 +24,45 @@ import { Draggable } from './Draggable';
 import { PartGeometry } from './DynamicPart';
 import { Dressing } from './Dressing';
 import { CameraRig } from './CameraRig';
+
+/** Drop the hover highlight when the pointer leaves the canvas.
+ *
+ *  R3F derives hover from pointer MOVES over the canvas: `onPointerOut` fires when
+ *  a later move lands somewhere else, and a pointer that leaves the canvas
+ *  entirely — onto the inspector, the toolbar, another window — sends no later
+ *  move. So the last part under the cursor kept its highlight indefinitely, which
+ *  reads as a selection that cannot be dismissed. It reads that way in particular
+ *  because the hover box is only 3% larger than the mesh and IS depth-tested
+ *  (Highlight.tsx), so all that survives is the fragment of each edge near a
+ *  corner — eight little brackets around the piece, exactly the vocabulary every
+ *  other tool uses for "selected".
+ *
+ *  Listeners go on the canvas element rather than the wrapper div: the overlays are
+ *  siblings of the canvas inside that div, so a wrapper-level `pointerleave` would
+ *  not fire for the most common case of all — moving from a chair to the panel
+ *  describing it. */
+function HoverReset() {
+  const gl = useThree((s) => s.gl);
+  useEffect(() => {
+    const el = gl.domElement;
+    const clear = () => {
+      if (useStudio.getState().hoveredPartId) useStudio.getState().setHovered(null);
+    };
+    el.addEventListener('pointerleave', clear);
+    // Touch: a tap sets hover and then the finger is gone. Also covers a pointer
+    // the browser takes away mid-gesture.
+    el.addEventListener('pointercancel', clear);
+    // Leaving through the window edge, or switching tab/app mid-hover, fires
+    // neither of the above.
+    window.addEventListener('blur', clear);
+    return () => {
+      el.removeEventListener('pointerleave', clear);
+      el.removeEventListener('pointercancel', clear);
+      window.removeEventListener('blur', clear);
+    };
+  }, [gl]);
+  return null;
+}
 
 // Catalog drag-drop payload (set by CatalogPanel's draggable items).
 type DropItem = { label: string; category: Category; shape: Shape; dimMM: [number, number, number] };
@@ -109,6 +149,7 @@ export function Room() {
   const lighting = useStudio((s) => s.lighting);
   const quality = useStudio((s) => s.quality);
   const dressed = useStudio((s) => s.dressed);
+  const panKey = useStudio((s) => s.panKeyHeld);
   const hi = quality === 'high';
   const L = LIGHTING[lighting];
   const parts = useScene((s) => s.parts).filter((p) => !hidden[p.id]);
@@ -202,9 +243,19 @@ export function Room() {
 
   return (
     <div
-      style={{ position: 'absolute', inset: 0 }}
+      // The cursor lives on this element rather than on <body> so it beats the
+      // 'pointer' that Pickable writes to body while a piece is hovered — Space
+      // over a sofa is still a pan, and has to look like one.
+      style={{ position: 'absolute', inset: 0, cursor: panKey ? 'grab' : undefined }}
       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
       onDrop={onDrop}
+      // Right-click. OrbitControls no longer pans on this button, so it opens the
+      // studio's context menu instead — on the piece under the cursor if there is
+      // one (hover already knows which), on the room if there is not.
+      onContextMenu={(e) => {
+        e.preventDefault();
+        openSceneMenu(e.clientX, e.clientY, useStudio.getState().hoveredPartId);
+      }}
     >
     <Canvas
       shadows={hi}
@@ -224,7 +275,11 @@ export function Room() {
       // SSAO + SMAA + a 1024² depth pass + two blur passes ~60×/second while
       // sitting still — and every invalidate() in the tree was a no-op.
       frameloop="demand"
-      onPointerMissed={() => useStudio.getState().setSelected(null)}
+      onPointerMissed={() => {
+        // A pan that ends over bare floor is not a click on nothing.
+        if (useStudio.getState().panKeyHeld) return;
+        useStudio.getState().setSelected(null);
+      }}
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* Opaque paper background — THE fix for the moving-object "shadow trail":
@@ -271,6 +326,7 @@ export function Room() {
         <Lightformer intensity={0.3 * L.envMul} position={[-5, 2, -3]} scale={[4, 6, 1]} color={L.env[2]} />
       </Environment>
 
+      <HoverReset />
       <Suspense fallback={null}>
         <RoomShell />
         <WallHandles />
