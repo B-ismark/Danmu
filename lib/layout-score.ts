@@ -53,6 +53,7 @@ import {
   roomProfile,
   routeWidth,
   sharesFloor,
+  WALK_MIN,
   zoneExempt,
   type AccessRule,
   type Relation,
@@ -178,11 +179,16 @@ export type LayoutModel = {
    *  is scanned for every ordered pair otherwise, which for thirty pieces is 870
    *  lookups against eleven specs per evaluation. */
   relations: Array<{ i: number; j: number; rel: Relation }>;
-  /** …and the same pairs as an unordered membership test, `i * n + j` both ways.
+  /** The pairs allowed to sit closer than a walkway, as an unordered membership
+   *  test, `i * n + j` both ways.
+   *
    *  The circulation term needs it: the gap between a sofa and its own coffee table
    *  is what the relation asks for, not a route someone walks down, and costing it
    *  as a pinch had the solver pulling apart the arrangement the relation had just
-   *  paid to build. `lib/clearance.ts` skips the same pairs for the same reason. */
+   *  paid to build. Membership is the relation's own BAND — `min < WALK_MIN` — and not
+   *  the existence of a relation, so an armchair that is supposed to sit 1.2 m from a
+   *  sofa is still charged for sitting 300 mm from one. `lib/clearance.ts` reads the
+   *  same rule through `belongTogether`. */
   related: Set<number>;
   /** The route width this room is big enough to be asked for. */
   route: number;
@@ -244,8 +250,10 @@ export function prepare(ctx: LayoutContext): LayoutModel {
       const rel = relationFor(parts[i], parts[j]);
       if (!rel) continue;
       relations.push({ i, j, rel });
-      related.add(i * parts.length + j);
-      related.add(j * parts.length + i);
+      if (rel.min < WALK_MIN) {
+        related.add(i * parts.length + j);
+        related.add(j * parts.length + i);
+      }
     }
   }
 

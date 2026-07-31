@@ -569,17 +569,28 @@ export function hasRelations(role: Role): boolean {
   return RELATIONS.some((r) => r.self.includes(role) || r.anchor.includes(role));
 }
 
-/** Is there a relation between these two, either way round?
+/** May these two legitimately sit closer together than a walkway?
  *
- *  The question a circulation rule has to ask before calling a gap a walkway. The
- *  band above puts a coffee table 400–500 mm off the sofa; the 600 mm walkway rule
- *  read that same 450 mm as a pinch, so the room report warned about the one
- *  arrangement this table asks for — on every living room the app has ever seeded.
- *  The gap between a sofa and ITS coffee table, or a bed and ITS nightstand, is the
- *  arrangement working, not a route someone would try to squeeze down. `ZONE_GUESTS`
- *  makes the same point about access zones; this makes it about walkways. */
+ *  The question a circulation rule has to ask before calling a gap a pinch. The band
+ *  above puts a coffee table 400–500 mm off the sofa; the 600 mm walkway rule read
+ *  that same 450 mm as a pinch, so the room report warned about the one arrangement
+ *  this table asks for — on every living room the app has ever seeded. The gap between
+ *  a sofa and ITS coffee table, or a bed and ITS nightstand, is the arrangement
+ *  working, not a route someone would try to squeeze down. `ZONE_GUESTS` makes the
+ *  same point about access zones; this makes it about walkways.
+ *
+ *  It is the BAND that answers, not the mere existence of a relation. An armchair
+ *  facing a sofa is a relation whose band starts at 1.2 m — the two are supposed to
+ *  have room between them, so 300 mm there is a genuine pinch and the report should
+ *  say so. Exempting every related pair silenced exactly that, along with a sofa
+ *  crowding the screen it faces. Only a relation that PERMITS a sub-walkway gap
+ *  (`min < WALK_MIN`) grants the exemption. */
 export function belongTogether(a: ScenePart, b: ScenePart): boolean {
-  return relationFor(a, b) !== null || relationFor(b, a) !== null;
+  return maySnug(relationFor(a, b)) || maySnug(relationFor(b, a));
+}
+
+function maySnug(rel: Relation | null): boolean {
+  return rel !== null && rel.min < WALK_MIN;
 }
 
 // ─── Reading the room ───────────────────────────────────────────────────────

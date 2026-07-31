@@ -532,6 +532,21 @@ export function footCorners(f: Foot, segments = CIRCLE_SEGMENTS): Vec2[] {
   return out;
 }
 
+/** Is the whole footprint inside the polygon?
+ *
+ *  Corner-exact, and the answer `outsideShare` cannot give: that one SAMPLES on a
+ *  3×3 or 5×5 grid whose outermost points sit 10% in from the edges, so a piece
+ *  hanging 20 mm through a wall reads as perfectly inside. It is the right tool for
+ *  "how much of this is unusable" inside an annealer; it is the wrong tool for
+ *  "may this be placed here", and using it as the placement gate let the starter
+ *  scene seat a coffee table 20 mm inside the plaster with the test agreeing.
+ *
+ *  Round footprints polygonise, so a circle is tested as a circle rather than as
+ *  the bounding square whose corners it does not occupy. */
+export function footInsidePoly(f: Foot, poly: Poly): boolean {
+  return footCorners(f).every(([x, z]) => pointInPoly(x, z, poly));
+}
+
 /** Do these two footprints overlap? Falls through to the rectangle fast path
  *  when neither is round, so nothing about rectangles changes. */
 export function footOverlap(a: Foot, b: Foot, pad = 0): boolean {

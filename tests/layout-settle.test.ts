@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { settleParts } from '../lib/layout-settle';
 import { footprintForLayout, type Footprint } from '../lib/footprint';
-import { footArea, footFromPart, footIntersectionArea, outsideShare } from '../lib/geometry';
+import { footArea, footFromPart, footInsidePoly, footIntersectionArea, outsideShare } from '../lib/geometry';
 import type { ScenePart } from '../lib/scene-spec';
 
 const RECT: Footprint = footprintForLayout('rect', 6, 4);
@@ -20,6 +20,18 @@ const sofa = (pos: [number, number, number], rot = 0) =>
   part({ category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880], pos, rot });
 
 describe('settleParts · inside the room', () => {
+  it('sees an overhang the sampled share forgives', () => {
+    // `outsideShare`'s outermost samples sit 10% in from the edges, so a 2.2 m sofa
+    // 100 mm over the wall reads as 0.000 outside on a 5×5 grid. Settling used that
+    // as its acceptance test and stopped early; the seed used it as its placement
+    // gate and seated a coffee table 20 mm inside the plaster.
+    const s = sofa([2.55, 0, 0], Math.PI / 2);
+    expect(outsideShare(foot(s), RECT, 5)).toBe(0);
+    expect(footInsidePoly(foot(s), RECT)).toBe(false);
+    const [settled] = settleParts([s], RECT);
+    expect(footInsidePoly(foot(settled), RECT)).toBe(true);
+  });
+
   it('pulls a piece whose footprint hangs over a wall back in', () => {
     // Centre 150 mm inside the east wall: the CENTRE clamp every previous pass used
     // called this in-room, and half the sofa was in the garden.

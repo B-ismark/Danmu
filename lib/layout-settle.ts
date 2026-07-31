@@ -30,6 +30,7 @@ import { polygonCentroid } from './footprint';
 import {
   footArea,
   footFromPart,
+  footInsidePoly,
   footIntersectionArea,
   footOverlap,
   nearestEdge,
@@ -47,10 +48,22 @@ import type { ScenePart } from './scene-spec';
  *  distance from it. */
 const WALL_GAP = 0.02;
 
-/** Share of the smaller footprint two pieces may share before it counts as a
- *  clash. The same bar `lib/clearance.ts` reports on, so a scene this leaves alone
- *  is a scene the room report is quiet about. */
-const CLASH_SHARE = 0.02;
+/** Share of the smaller footprint two pieces may share before this pass treats them
+ *  as touching and pushes them apart.
+ *
+ *  Deliberately NOT the bar `lib/clearance.ts` reports a collision at: that one is
+ *  `CLASH_SHARE = 0.5` (and `TUCKED_CLASH_SHARE = 0.85` where two pieces legitimately
+ *  share floor). This is a settle pass, so it wants the tight epsilon — the same
+ *  order as that file's `SWING_CLASH_SHARE`, which exists so a millimetre of
+ *  floating-point contact is not a finding.
+ *
+ *  Being stricter than the report is the safe direction: a scene this leaves alone
+ *  is a scene the report is quiet about. It is not reversible, though — a piece the
+ *  report would call "meeting untidily" at 30% shared footprint gets moved here, so
+ *  do not read this number as what the room report considers a clash. Named for what
+ *  it is to keep the two from being confused again; pairs that share floor by design
+ *  are exempted by `sharesFloor` before this is consulted, not by the threshold. */
+const TOUCH_SHARE = 0.02;
 
 /** How far a piece may be pushed to get out of another's way. Beyond this the room
  *  has no space for it, and further searching is just moving the problem. */
@@ -127,7 +140,7 @@ function clashes(a: ScenePart, b: ScenePart): boolean {
   if (!footOverlap(fa, fb, -0.01)) return false;
   const shared = footIntersectionArea(fa, fb);
   const smaller = Math.min(footArea(fa), footArea(fb));
-  return smaller > 0 && shared / smaller > CLASH_SHARE;
+  return smaller > 0 && shared / smaller > TOUCH_SHARE;
 }
 
 function footOf(p: ScenePart): Foot {
@@ -149,7 +162,7 @@ function footAtXZ(p: ScenePart, x: number, z: number): Foot {
 function contain(p: ScenePart, poly: Poly, centre: [number, number]): void {
   let x = p.pos[0];
   let z = p.pos[2];
-  let bestOut = outsideShare(footAtXZ(p, x, z), poly, 5);
+  let bestOut = escape(p, x, z, poly);
   if (bestOut <= 0) return;
   let bestX = x;
   let bestZ = z;
@@ -164,7 +177,7 @@ function contain(p: ScenePart, poly: Poly, centre: [number, number]): void {
     if (push <= 1e-4) break;
     x += e.nx * push;
     z += e.nz * push;
-    const out = outsideShare(footAtXZ(p, x, z), poly, 5);
+    const out = escape(p, x, z, poly);
     if (out < bestOut) {
       bestOut = out;
       bestX = x;
@@ -177,7 +190,7 @@ function contain(p: ScenePart, poly: Poly, centre: [number, number]): void {
   for (let t = 0.1; t <= 1.0001 && bestOut > 0; t += 0.1) {
     const nx = p.pos[0] + (centre[0] - p.pos[0]) * t;
     const nz = p.pos[2] + (centre[1] - p.pos[2]) * t;
-    const out = outsideShare(footAtXZ(p, nx, nz), poly, 5);
+    const out = escape(p, nx, nz, poly);
     if (out < bestOut) {
       bestOut = out;
       bestX = nx;
@@ -187,6 +200,20 @@ function contain(p: ScenePart, poly: Poly, centre: [number, number]): void {
 
   p.pos[0] = bestX;
   p.pos[2] = bestZ;
+}
+
+/** How badly a part placed here escapes the room: 0 only when the whole footprint
+ *  is inside, corner-exact.
+ *
+ *  The sampled share alone was the acceptance test, and it stops at zero while a
+ *  corner is still 20 mm through the wall — its outermost samples sit 10% in from
+ *  the edges. So the exact test decides WHETHER a position is acceptable and the
+ *  share only ranks the unacceptable ones, which is what a piece too big for the
+ *  room needs: something to be least-bad about. */
+function escape(p: ScenePart, x: number, z: number, poly: Poly): number {
+  const f = footAtXZ(p, x, z);
+  if (footInsidePoly(f, poly)) return 0;
+  return Math.max(outsideShare(f, poly, 5), 1e-4);
 }
 
 /** Slide one part off everything it is inside, and keep it in the room.
@@ -222,7 +249,7 @@ function pushClear(parts: ScenePart[], index: number, poly: Poly, centre: [numbe
     for (const [dx, dz] of dirs) {
       const x = p.pos[0] + dx * step;
       const z = p.pos[2] + dz * step;
-      if (outsideShare(footAtXZ(p, x, z), poly, 5) > 0) continue;
+      if (escape(p, x, z, poly) > 0) continue;
       if (!clearOfAll(parts, index, x, z)) continue;
       p.pos[0] = x;
       p.pos[2] = z;
@@ -248,7 +275,7 @@ function clearOfAll(parts: ScenePart[], index: number, x: number, z: number): bo
     const fo = footOf(o);
     if (!footOverlap(me, fo, -0.01)) continue;
     const smaller = Math.min(myArea, footArea(fo));
-    if (smaller > 0 && footIntersectionArea(me, fo) / smaller > CLASH_SHARE) return false;
+    if (smaller > 0 && footIntersectionArea(me, fo) / smaller > TOUCH_SHARE) return false;
   }
   return true;
 }

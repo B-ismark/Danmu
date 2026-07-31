@@ -24,11 +24,12 @@ import { clampDims } from './dimension-ranges';
 import {
   footArea,
   footFromPart,
+  footInsidePoly,
   footIntersectionArea,
   footOverlap,
   localToWorld,
   obbGap,
-  outsideShare,
+  worldToLocal,
   type Poly,
 } from './geometry';
 import { backWall, baySides, roomBays, splitBay, type Bay } from './room-bays';
@@ -189,12 +190,21 @@ type SeedFrame = {
   width: number;
   depth: number;
   onWall: boolean;
+  /** Midpoint of the wall — the frame's origin, so a world position can be read
+   *  back as `(u, v)`. */
+  mx: number;
+  mz: number;
   at: (u: number, v: number) => [number, number];
 };
 
 /** Gap left between a piece and the wall behind it. The same figure `snapToWall`
  *  uses, so a seeded piece and a user-snapped one sit at the same distance. */
 const SEED_WALL_GAP = 0.02;
+
+/** Share of the smaller footprint two seeded pieces may share before the placement
+ *  is refused. A seeding epsilon for floating-point contact, NOT the room report's
+ *  collision bar — see `seats`. */
+const SEED_TOUCH_SHARE = 0.02;
 
 /** How far a dining chair is pushed under the table. Seating tucked under a work
  *  surface is what `sharesFloor` is about — and it is how a laid table looks. */
@@ -249,6 +259,8 @@ function seedFrames(bay: Bay, poly: Footprint, wantDepth?: number): SeedFrame[] 
     width: s.length,
     depth: s.depth,
     onWall: s.onWall,
+    mx: s.mx,
+    mz: s.mz,
     at: (u: number, v: number) => {
       const [dx, dz] = localToWorld(s.yaw, u, v);
       return [s.mx + dx, s.mz + dz] as [number, number];
@@ -417,9 +429,14 @@ export function defaultScene(
     place('tv', screen.name, 'tv', screen.dimMM, f, 0, 0.06, { extra: { wallMounted: true } });
     const sofa = place('sofa', 'Sofa', 'sofa', sofaDim, f, 0, vSofa, { turn: Math.PI });
 
-    // 450 mm off the sofa — the middle of layout-rules' reach-from-the-seat band.
+    // 450 mm off the sofa — the middle of layout-rules' reach-from-the-seat band —
+    // but never through the screen wall behind it. Pulling the sofa forward for a
+    // route (above) walks the table toward that wall, and in the T's stem it walked
+    // 20 mm past it: the gap the relation wants is not always a gap the room has, and
+    // the wall wins. The 400 mm end of the band absorbs the difference.
     const tableDim: [number, number, number] = [1100, 600, 420];
-    const vTable = vSofa - sofaHalf - 0.45 - tableDim[1] / 2000;
+    const tableHalf = tableDim[1] / 2000;
+    const vTable = Math.max(tableHalf + SEED_WALL_GAP, vSofa - sofaHalf - 0.45 - tableHalf);
     const table = place('table', 'Coffee table', 'coffee-table', tableDim, f, 0, vTable);
 
     // A rug under whichever of the two got placed, anchoring the group.
@@ -538,11 +555,45 @@ export function defaultScene(
     const frames = seedFrames(bay, poly);
     const f = frames[0];
     const chair: [number, number, number] = [800, 800, 900];
-    const vChair = Math.min(f.depth - chair[1] / 2000 - SEED_WALL_GAP, chair[1] / 2000 + 0.35);
-    const armchair = place('chair', 'Armchair', 'chair-armchair', chair, f, -0.35, vChair);
+    const chairHalf = chair[1] / 2000;
+    const vChair = Math.min(f.depth - chairHalf - SEED_WALL_GAP, chairHalf + 0.35);
+    // Along the wing, AWAY from the living group and not pinching it. A wing opens off
+    // the room's main bay, so the nook's default end is the shared edge — which put
+    // the armchair 250 mm behind the sofa's back, i.e. across the only route from one
+    // half of the room to the other.
+    const group = parts.find((p) => p.category === 'sofa') ?? null;
+    const armchair = placeSomewhere(
+      'chair',
+      'Armchair',
+      'chair-armchair',
+      chair,
+      f,
+      [
+        { u: 0.35, v: vChair },
+        { u: -0.35, v: vChair },
+        { u: 0, v: vChair },
+      ],
+      {},
+      group,
+      true,
+    );
     if (armchair) {
-      // Within reach of the arm of the chair.
-      place('table', 'Side table', 'side-table', [450, 450, 550], f, -0.35 + chair[0] / 2000 + 0.25, vChair);
+      // Within reach of the arm of the chair, on whichever side has the room.
+      const [uChair] = worldToLocal(f.yaw, armchair.pos[0] - f.mx, armchair.pos[2] - f.mz);
+      const reach = chair[0] / 2000 + 0.25;
+      placeSomewhere(
+        'table',
+        'Side table',
+        'side-table',
+        [450, 450, 550],
+        f,
+        [
+          { u: uChair + reach, v: vChair },
+          { u: uChair - reach, v: vChair },
+        ],
+        {},
+        group,
+      );
     }
     const shelf: [number, number, number] = [900, 350, 1800];
     const side = crossFrame(frames, f) ?? f;
@@ -658,12 +709,21 @@ function pinches(part: ScenePart, placed: ScenePart[]): boolean {
 }
 
 /** Would this piece sit properly here — wholly inside the room, and clear of what
- *  is already placed? The clash test is the room report's: rugs go under things,
- *  and seating tucks under a table on purpose. */
+ *  is already placed?
+ *
+ *  The EXEMPTIONS are the room report's — rugs go under things, seating tucks under a
+ *  table on purpose — but the share is a seeding epsilon, not the report's collision
+ *  bar (`CLASH_SHARE = 0.5` there). Nothing being placed for the first time has any
+ *  business overlapping anything, so this is as tight as floating point allows, and
+ *  the same figure `lib/layout-settle.ts` names `TOUCH_SHARE`. */
 function seats(part: ScenePart, placed: ScenePart[], poly: Footprint): boolean {
   if (part.wallMounted) return pointInFootprint(part.pos[0], part.pos[2], poly);
   const foot = footFromPart(part.pos, part.rot, part.dimMM, part.circle);
-  if (outsideShare(foot, poly as Poly, 5) > 0) return false;
+  // Corner-exact, NOT the sampled share: `outsideShare`'s outermost samples sit 10%
+  // in from the edges, so it forgave a coffee table 20 mm through the wall of the
+  // T-shape's stem — and the test that was supposed to catch that asked the same
+  // forgiving question.
+  if (!footInsidePoly(foot, poly as Poly)) return false;
   if (part.category === 'rug') return true;
   const role = roleOf(part);
   const area = footArea(foot);
@@ -673,7 +733,7 @@ function seats(part: ScenePart, placed: ScenePart[], poly: Footprint): boolean {
     const other = footFromPart(o.pos, o.rot, o.dimMM, o.circle);
     if (!footOverlap(foot, other, -0.01)) continue;
     const smaller = Math.min(area, footArea(other));
-    if (smaller > 0 && footIntersectionArea(foot, other) / smaller > 0.02) return false;
+    if (smaller > 0 && footIntersectionArea(foot, other) / smaller > SEED_TOUCH_SHARE) return false;
   }
   return true;
 }

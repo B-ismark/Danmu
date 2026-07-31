@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { defaultScene, PART_LIBRARY } from '../lib/scene-spec';
 import { footprintForLayout, offsetWall, pointInFootprint, type Footprint, type LayoutId } from '../lib/footprint';
-import { footFromPart, footIntersectionArea, footArea, outsideShare, distToBoundary } from '../lib/geometry';
-import { isObstacle, roleOf, sharesFloor } from '../lib/layout-rules';
+import { footFromPart, footInsidePoly, footIntersectionArea, footArea, distToBoundary, obbGap } from '../lib/geometry';
+import { isObstacle, roleOf, sharesFloor, WALK_MIN } from '../lib/layout-rules';
 import { analyzeRoom } from '../lib/clearance';
 
 // The starter furniture a brand-new room opens with. It is the FIRST thing anyone
@@ -25,11 +25,17 @@ const PRESETS: Array<{ id: LayoutId; w: number; d: number }> = [
 
 const HEIGHT = 2.8;
 
-/** Every part whose footprint is not wholly inside the room, named. */
+/** Every part whose footprint is not wholly inside the room, named.
+ *
+ *  Corner-exact (`footInsidePoly`), NOT `outsideShare`. This test used to ask the
+ *  sampled question and passed while the T-shape's coffee table stood 20 mm inside
+ *  the plaster: the share's outermost samples sit 10% in from the edges, so a small
+ *  overhang is invisible to it. A containment test that cannot see a 20 mm overhang
+ *  is not a containment test. */
 function escaped(parts: ReturnType<typeof defaultScene>, poly: Footprint): string[] {
   return parts
     .filter((p) => !p.wallMounted)
-    .filter((p) => outsideShare(footFromPart(p.pos, p.rot, p.dimMM, p.circle), poly) > 0.001)
+    .filter((p) => !footInsidePoly(footFromPart(p.pos, p.rot, p.dimMM, p.circle), poly))
     .map((p) => `${p.name} @ ${p.pos[0].toFixed(2)},${p.pos[2].toFixed(2)}`);
 }
 
@@ -115,6 +121,21 @@ describe('starter scene keeps the preset’s promise', () => {
     // band. The armchair belongs in the wing, not tucked behind the sofa.
     expect(nook!.pos[2]).toBeGreaterThan(0);
     expect(parts.some((p) => p.shape === 'bookshelf')).toBe(true);
+  });
+
+  it('keeps a reading nook out of the route into it', () => {
+    // The L's wing opens off the leg, so the nook's default end was the shared edge
+    // and the armchair landed 250 mm behind the sofa's back — across the only way
+    // from one half of the room to the other. It was invisible because the pinch rule
+    // exempted every RELATED pair, and an armchair facing a sofa is a relation.
+    const parts = seed('l', 6, 4.7);
+    const sofa = parts.find((p) => p.category === 'sofa')!;
+    const chair = parts.find((p) => p.shape === 'chair-armchair')!;
+    const gap = obbGap(
+      footFromPart(sofa.pos, sofa.rot, sofa.dimMM, sofa.circle),
+      footFromPart(chair.pos, chair.rot, chair.dimMM, chair.circle),
+    );
+    expect(gap).toBeGreaterThanOrEqual(WALK_MIN);
   });
 
   it('a T and an open plan both get a dining set', () => {

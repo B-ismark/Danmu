@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   accessRules,
   accessZones,
+  belongTogether,
   doorPath,
   relationFor,
   roleOf,
@@ -270,5 +271,54 @@ describe('doorPath', () => {
     // One rule spread over two sides is two zones — the rule is what `atLeast`
     // counts, the zones are what the geometry tests.
     expect(accessZones(part({ category: 'bed', shape: 'bed-double', dimMM: [1600, 2000, 600] }), 0, -1, 0)).toHaveLength(2);
+  });
+});
+
+// ─── belongTogether ─────────────────────────────────────────────────────────
+// Read by the room report's walkway rule and by the solver's circulation term, so
+// the answer decides whether a gap is a corridor or the arrangement working.
+
+describe('belongTogether', () => {
+  const sofa = () => part({ category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880] });
+  const coffee = () => part({ category: 'table', shape: 'coffee-table', dimMM: [1100, 600, 420] });
+  const armchair = () => part({ category: 'chair', shape: 'chair-armchair', dimMM: [800, 800, 900] });
+  const bed = () => part({ category: 'bed', shape: 'bed-double', dimMM: [2000, 1600, 600] });
+  const stand = () => part({ category: 'nightstand', shape: 'nightstand', dimMM: [450, 400, 550] });
+  const tv = () => part({ category: 'tv', shape: 'tv', dimMM: [1450, 60, 820], wallMounted: true });
+
+  it('exempts a pair whose band allows less than a walkway between them', () => {
+    // 400–500 mm sofa to coffee table, and a nightstand touching the bed. Both are
+    // under WALK_MIN by design, and reporting them as tight passages made the room
+    // report cry wolf on every living room and bedroom the app seeds.
+    expect(belongTogether(sofa(), coffee())).toBe(true);
+    expect(belongTogether(coffee(), sofa())).toBe(true); // either way round
+    expect(belongTogether(bed(), stand())).toBe(true);
+  });
+
+  it('does NOT exempt a pair that is supposed to have room between it', () => {
+    // An armchair facing a sofa has a band of 1.2–2.6 m; a sofa facing a screen,
+    // 2.0–4.2. Those two ARE related, and 300 mm between them is still a pinch — the
+    // first version keyed on the existence of a relation and silenced exactly this,
+    // which hid a seeded armchair 250 mm behind a sofa.
+    expect(belongTogether(sofa(), armchair())).toBe(false);
+    expect(belongTogether(sofa(), tv())).toBe(false);
+  });
+
+  it('says nothing about an unrelated pair', () => {
+    expect(belongTogether(sofa(), part({ category: 'fridge', shape: 'fridge', dimMM: [600, 650, 1700] }))).toBe(false);
+  });
+
+  it('agrees with the bands it is derived from', () => {
+    // Not a restatement of the numbers: whatever the table says, the exemption is
+    // exactly "this pair may be closer than a route".
+    for (const [a, b] of [
+      [sofa(), coffee()],
+      [sofa(), armchair()],
+      [bed(), stand()],
+      [sofa(), tv()],
+    ] as const) {
+      const rel = relationFor(a, b) ?? relationFor(b, a);
+      expect(belongTogether(a, b)).toBe(rel !== null && rel.min < WALK_MIN);
+    }
   });
 });
