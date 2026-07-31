@@ -6,6 +6,7 @@
 import type { Category, Shape } from './scene-spec';
 import type { Footprint } from './footprint';
 import { nearestEdge, footArea, footFromPart, footIntersectionArea } from './geometry';
+import { WALL_GAP } from './layout-rules';
 
 export type Anchor = 'floor' | 'ceiling' | 'wall-high' | 'wall-mid' | 'wall-low';
 
@@ -125,7 +126,9 @@ export function snapToWall(
 ): { x: number; z: number; rot?: number } {
   const edge = nearestEdge(footprint, pos[0], pos[2]);
   if (!edge) return { x: pos[0], z: pos[2] };
-  const inset = dimMM[1] / 2000 + 0.02; // part depth/2 + wall gap
+  // Part depth/2, plus the shared wall gap — the same figure the seeded arrangements
+  // and the settle pass use, so all three put a back against a wall in one place.
+  const inset = dimMM[1] / 2000 + WALL_GAP;
   return {
     x: edge.px + edge.nx * inset,
     z: edge.pz + edge.nz * inset,

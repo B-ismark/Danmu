@@ -33,7 +33,7 @@ import {
   type Poly,
 } from './geometry';
 import { backWall, baySides, roomBays, splitBay, type Bay } from './room-bays';
-import { belongTogether, isObstacle, roleOf, sharesFloor, WALK_COMFORT, WALK_MIN } from './layout-rules';
+import { belongTogether, isObstacle, roleOf, sharesFloor, WALK_COMFORT, WALK_MIN, WALL_GAP } from './layout-rules';
 import { settleParts } from './layout-settle';
 
 export type Shape =
@@ -197,9 +197,11 @@ type SeedFrame = {
   at: (u: number, v: number) => [number, number];
 };
 
-/** Gap left between a piece and the wall behind it. The same figure `snapToWall`
- *  uses, so a seeded piece and a user-snapped one sit at the same distance. */
-const SEED_WALL_GAP = 0.02;
+/** Gap left between a piece and the wall behind it — `layout-rules`' figure, so a
+ *  seeded piece, a user-snapped one and a settled one land in the same place. The
+ *  local alias is kept because it reads at every one of its fifteen call sites
+ *  below. */
+const SEED_WALL_GAP = WALL_GAP;
 
 /** Share of the smaller footprint two seeded pieces may share before the placement
  *  is refused. A seeding epsilon for floating-point contact, NOT the room report's

@@ -40,13 +40,13 @@ import {
   type Foot,
   type Poly,
 } from './geometry';
-import { isObstacle, roleOf, sharesFloor } from './layout-rules';
+import { isObstacle, roleOf, sharesFloor, WALL_GAP } from './layout-rules';
 import type { ScenePart } from './scene-spec';
 
-/** Breathing room kept off a wall, metres. Matches `snapToWall`'s inset so a piece
- *  this pushes off a wall and a piece the user snapped to one sit at the same
- *  distance from it. */
-const WALL_GAP = 0.02;
+// Breathing room kept off a wall comes from `layout-rules` (imported above) rather
+// than being spelled out again here: a piece this pushes off a wall and a piece the
+// user snapped to one have to sit at the same distance from it, and a comment saying
+// they match is not the same as their matching.
 
 /** Share of the smaller footprint two pieces may share before this pass treats them
  *  as touching and pushes them apart.

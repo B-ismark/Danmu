@@ -12,7 +12,10 @@ import {
   zoneExempt,
   WALK_MIN,
   WALK_COMFORT,
+  WALL_GAP,
 } from '@/lib/layout-rules';
+import { snapToWall } from '@/lib/physics';
+import { settleParts } from '@/lib/layout-settle';
 import { footIntersectionArea, frontVector, pointInFoot } from '@/lib/geometry';
 import type { ScenePart } from '@/lib/scene-spec';
 import type { Footprint } from '@/lib/footprint';
@@ -320,5 +323,45 @@ describe('belongTogether', () => {
       const rel = relationFor(a, b) ?? relationFor(b, a);
       expect(belongTogether(a, b)).toBe(rel !== null && rel.min < WALK_MIN);
     }
+  });
+});
+
+describe('WALL_GAP', () => {
+  // The gap used to be three literals — `snapToWall`'s inline `+ 0.02`,
+  // `scene-spec`'s SEED_WALL_GAP, and `layout-settle`'s WALL_GAP, each with a
+  // comment asserting it matched the others. Nothing tied them together, so a tune
+  // to one would have shown up as a 20 mm seam between a sofa the user snapped and
+  // one the settler pushed: invisible in a diff, plain in the 3D scene. These
+  // assertions are over the OBSERVED distance, not the constant, so they still hold
+  // if someone re-inlines the number and still fail if the paths disagree.
+  const wall = -2; // the RECT footprint's north edge, at z = -2
+  const depthMM = 900;
+
+  function backDistance(z: number): number {
+    return Math.abs(z - wall) - depthMM / 2000;
+  }
+
+  it('is what snapToWall leaves behind a piece', () => {
+    const snapped = snapToWall([0, 0, -1.9], [2000, depthMM, 800], RECT);
+    expect(backDistance(snapped.z)).toBeCloseTo(WALL_GAP, 6);
+  });
+
+  it('is what the settle pass leaves behind a piece it pulls in off a wall', () => {
+    // Straddling the north wall: containment slides it in, and where it lands has to
+    // agree with where snapToWall would have put it.
+    const over = part({
+      category: 'sofa',
+      shape: 'sofa',
+      dimMM: [2000, depthMM, 800],
+      pos: [0, 0, -2.4],
+      rot: 0,
+    });
+    const [settled] = settleParts([over], RECT);
+    expect(backDistance(settled.pos[2])).toBeCloseTo(WALL_GAP, 6);
+  });
+
+  it('is small enough to read as against the wall, not floating', () => {
+    expect(WALL_GAP).toBeGreaterThan(0);
+    expect(WALL_GAP).toBeLessThan(0.05);
   });
 });

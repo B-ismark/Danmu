@@ -197,6 +197,19 @@ export const WALK_MIN = WALK_RADIUS * 2;
 /** The comfortable route width, and what a seated diner needs to push back. */
 export const WALK_COMFORT = 0.9;
 
+/** Breathing room left between a piece's back and the wall behind it, metres.
+ *
+ *  Small, and load-bearing anyway: it is the difference between furniture that
+ *  looks placed and furniture that looks welded on, and every path that puts
+ *  something against a wall has to agree on it. Three did not — `snapToWall`
+ *  (`lib/physics.ts`) had it inline as `+ 0.02` with a trailing comment, the seeded
+ *  arrangements had `SEED_WALL_GAP`, and `lib/layout-settle.ts` had `WALL_GAP` under
+ *  a note claiming it matched the first. Nothing tied them together, so the drift
+ *  would have shown up as a 20 mm seam between a sofa the user snapped and one the
+ *  settler pushed — invisible in a diff, plain in the 3D scene. Same lesson as
+ *  `WALK_MIN` above, one file later. */
+export const WALL_GAP = 0.02;
+
 /** How wide a route this particular room can be asked for, metres.
  *
  *  A rule the room cannot satisfy is the same as no rule at all: in a 6 m² box
