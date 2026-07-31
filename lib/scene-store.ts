@@ -43,10 +43,17 @@ type SceneState = {
   /** clear a wall's paint (back to default), or all walls when no index given. */
   resetWallColor: (index?: number) => void;
   /** drag-move a wall: push it out (delta > 0) or in (delta < 0) by `delta`
-   *  metres along its outward normal. Resolves to a width or depth change about
-   *  the room centre and re-derives the footprint, so every centred-origin
-   *  assumption downstream stays valid. */
-  moveWall: (index: number, delta: number) => void;
+   *  metres along its outward normal. Re-derives the footprint, so every
+   *  footprint-bounds consumer downstream stays valid.
+   *
+   *  Returns the delta actually applied — `delta`, or 0 when the room clamp
+   *  refused the move. Callers that also move something else in the same gesture
+   *  (`lib/wall-actions.ts` carries the furniture standing on the wall) need to
+   *  know that, or they translate furniture on a frame the wall did not move.
+   *
+   *  Geometry only: call it through `moveWallCarrying` in `lib/wall-actions.ts`
+   *  rather than directly, so what is mounted on the wall comes too. */
+  moveWall: (index: number, delta: number) => number;
   /** scene mutations — user can edit, delete, add parts after detection. */
   updatePart: (id: string, patch: Partial<ScenePart>) => void;
   deletePart: (id: string) => void;
@@ -66,7 +73,7 @@ const DEFAULT_ROOM: RoomShape = {
   wallColors: {},
 };
 
-export const useScene = create<SceneState>((set) => ({
+export const useScene = create<SceneState>((set, get) => ({
   parts: defaultScene(),
   room: DEFAULT_ROOM,
   ready: false,
@@ -133,19 +140,22 @@ export const useScene = create<SceneState>((set) => ({
       delete next[index];
       return { room: { ...s.room, wallColors: next } };
     }),
-  moveWall: (index, delta) =>
-    set((s) => {
-      // Move ONLY this wall — its edge translates along its outward normal,
-      // adjacent walls stretch, the opposite wall stays put. The room becomes
-      // off-centre; width/depth are re-derived from the new bounding box and
-      // every downstream consumer reads footprint bounds (not ±width/2).
-      const poly = offsetWall(s.room.footprint, index, delta);
-      const b = footprintBounds(poly);
-      if (b.width < MIN_ROOM || b.depth < MIN_ROOM || b.width > MAX_ROOM || b.depth > MAX_ROOM) return {};
-      return {
-        room: { ...s.room, footprint: poly, width: b.width, depth: b.depth, layoutId: 'custom' },
-      };
-    }),
+  moveWall: (index, delta) => {
+    // Move ONLY this wall — its edge translates along its outward normal,
+    // adjacent walls stretch, the opposite wall stays put. The room becomes
+    // off-centre; width/depth are re-derived from the new bounding box and
+    // every downstream consumer reads footprint bounds (not ±width/2).
+    const s = get();
+    const poly = offsetWall(s.room.footprint, index, delta);
+    const b = footprintBounds(poly);
+    // All-or-nothing, and it must be reported: the caller carries the furniture
+    // that is on this wall by the SAME delta, and a rejected wall move with an
+    // accepted furniture move would walk a sofa through the plaster one clamped
+    // frame at a time.
+    if (b.width < MIN_ROOM || b.depth < MIN_ROOM || b.width > MAX_ROOM || b.depth > MAX_ROOM) return 0;
+    set({ room: { ...s.room, footprint: poly, width: b.width, depth: b.depth, layoutId: 'custom' } });
+    return delta;
+  },
   updatePart: (id, patch) =>
     set((s) => ({ parts: s.parts.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
   deletePart: (id) => set((s) => ({ parts: s.parts.filter((p) => p.id !== id) })),

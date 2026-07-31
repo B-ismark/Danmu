@@ -254,7 +254,8 @@ This is what makes Danmu trustworthy. All pure math, all covered by tests.
 | `lib/solar.ts` | NOAA / Meeus solar position — declination, equation of time, hour angle → altitude and azimuth, ~0.01°. No model, no network, no data file: pure astronomy, which is the one thing in this app a model could not do better. |
 | `lib/clearance-field.ts` | Circulation as a **field** rather than a list of pairs — see below. One 5 cm raster of the floor plus an exact Euclidean distance transform answers walkway width, reachability, turning space and crowding at once, and it also carries WHICH obstacle is nearest so a finding can name the pieces to select. |
 | `lib/dimension-ranges.ts` | `clampDims` — per-item sizing tiers (fixed / standard / flexible). **All sizes pass through this.** |
-| `lib/footprint.ts` | Footprint polygon math (preset shapes, containment, `offsetWall` for wall moves). The polygon — not `width`/`depth` — is the source of truth for room shape. |
+| `lib/footprint.ts` | Footprint polygon math (preset shapes, containment, `offsetWall` / `wallOutwardNormal` for wall moves). The polygon — not `width`/`depth` — is the source of truth for room shape. |
+| `lib/wall-move.ts` + `lib/wall-actions.ts` | Moving a wall takes its furniture with it. The first is pure (who is attached, where they land); the second is the single action every wall-mover calls, spanning both stores. |
 | `lib/room-bays.ts` | **Where in the room there is actually room.** The footprint's maximal axis-aligned rectangles of real floor, largest first, plus each bay's sides (which of them are real walls, how deep the bay runs from each) and `splitBay` for putting two groups in one rectangle. Exact for rectilinear rooms — the candidate grid is the polygon's own vertex coordinates — and conservative for anything with a diagonal wall, since a candidate is only returned once it has been proved inside. This exists because arranging furniture against the polygon's *bounding box* furnished the quadrant an L / T / U cuts away: the starter scene put five of the L-shape's nine pieces outside the house. |
 | `lib/layout-settle.ts` | The guarantee both scene paths end on: nothing outside the room, nothing inside anything else. Containment pushes a piece in by its own half-extent along the wall it overhangs (clamping the *centre* leaves a 2.2 m sofa half in the garden), then clashing pairs are separated smaller-piece-first using the room report's own clash bar, `sharesFloor` and rug exemptions. Cheap and deterministic on purpose — it runs on every room open, where the annealer has no business. It never resizes, never moves a wall-mounted piece, and when a room is genuinely too full it leaves the piece where it was for `clearance.ts` to report. |
 
@@ -380,6 +381,17 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
   (`footprint.offsetWall`), adjacent walls stretch, opposite wall stays. The
   footprint polygon becomes the source of truth; `width`/`depth` are re-derived
   from its bounds. Custom footprints persist on `RoomData.footprint`.
+- **What the wall carries**: anything mounted **in** it (window, door, TV, mirror)
+  or standing **against** it travels with it, by the same delta along the same
+  normal. `lib/wall-move.ts` decides who is attached (`WALL_ATTACH_TOL` in
+  `layout-rules.ts`) and where they land; `lib/wall-actions.ts` is the **only**
+  entry point — all four movers (3D handle, plan handle, plan arrow keys,
+  Inspector nudge) go through `moveWallCarrying`, and the positions it writes are
+  `useStudio` overrides, because those are the layer that wins. Attachment is
+  resolved **once per gesture**, never per frame. Pieces on the *adjacent* walls
+  do not move: those edges stretch, they do not travel. A carried piece that
+  would end up outside the room is left where it is and reported by
+  `clearance.ts` — never resized, never shoved.
 
 ### Multi-select & grouping — `SelectionBar.tsx`
 - Shift-click adds to `selection: string[]`. "Merge N" assigns a shared

@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { PartTree } from '@/components/studio/PartTree';
 import { Inspector } from '@/components/studio/Inspector';
 import { PlanView } from '@/components/studio/PlanView';
+import { SceneContextMenu } from '@/components/studio/SceneContextMenu';
 import { CatalogPanel, STUDIO_CANVAS_ID } from '@/components/studio/CatalogPanel';
 import { useStackedStudio } from '@/components/studio/NarrowViewportBanner';
 import { Icon } from '@/components/ui/Icon';
@@ -104,6 +105,10 @@ export default function PlanPage() {
       >
         <PlanView onViewChange={onViewChange} showComfort={comfort} />
       </div>
+
+      {/* Same right-click menu as the 3D tab; it positions itself against this
+          element's box. */}
+      <SceneContextMenu />
 
       <div
         style={{

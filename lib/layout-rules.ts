@@ -210,6 +210,23 @@ export const WALK_COMFORT = 0.9;
  *  `WALK_MIN` above, one file later. */
 export const WALL_GAP = 0.02;
 
+/** How close a piece's back has to be to a wall for that wall to take the piece
+ *  with it when it moves, metres. Measured from the piece's near FACE, so it is a
+ *  gap, not a centre distance.
+ *
+ *  Deliberately looser than `WALL_GAP`, because "against the wall" in a real
+ *  arrangement is anything from welded-on to a hand's width off: the settler
+ *  leaves exactly `WALL_GAP`, a user dragging by hand leaves whatever the snap
+ *  step gave them (50 mm on the coarse setting), and a piece placed from a photo
+ *  detection can be a few centimetres out. At `WALL_GAP` exactly, a sofa the user
+ *  nudged 30 mm off the plaster would be abandoned by its own wall — and being
+ *  left behind is far more surprising than being taken along.
+ *
+ *  Here rather than in `lib/wall-move.ts` for the reason `WALL_GAP` above already
+ *  records: this is a number about what a piece needs from the room, every
+ *  consumer has to agree on it, and the ones that kept private copies drifted. */
+export const WALL_ATTACH_TOL = 0.12;
+
 /** How wide a route this particular room can be asked for, metres.
  *
  *  A rule the room cannot satisfy is the same as no rule at all: in a 6 m² box

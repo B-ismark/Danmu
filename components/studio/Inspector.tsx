@@ -17,6 +17,7 @@ import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { isWallMountedPart, supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, DECOR_KINDS, type LibraryItem, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
 import { findSupportUnder, groundY, snapToWall as snapToWallPhys } from '@/lib/physics';
 import { wallSegments } from '@/lib/footprint';
+import { moveWallCarrying } from '@/lib/wall-actions';
 
 // The right rail is a DECORATING panel, not a properties palette. Order matters:
 // colour → finish → decor → where it sits → which model → and only then the
@@ -469,7 +470,6 @@ function WallInspector({ index }: { index: number }) {
   const setWallColor = useScene((s) => s.setWallColor);
   const setAllWallColors = useScene((s) => s.setAllWallColors);
   const resetWallColor = useScene((s) => s.resetWallColor);
-  const moveWall = useScene((s) => s.moveWall);
   const setSelectedWall = useStudio((s) => s.setSelectedWall);
 
   const segs = wallSegments(room.footprint);
@@ -515,13 +515,14 @@ function WallInspector({ index }: { index: number }) {
       <Section label="Move wall">
         <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 8, lineHeight: 1.4 }}>
           Drag the handle on the wall in the 3D or plan view — or nudge it here.
-          The room resizes around its centre.
+          Only this wall moves, and anything mounted on it or standing against it
+          comes along.
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-          <button onClick={() => moveWall(index, 0.1)} className="ds-btn" style={{ height: 32, fontSize: 11, justifyContent: 'center', gap: 6 }}>
+          <button onClick={() => moveWallCarrying(index, 0.1)} className="ds-btn" style={{ height: 32, fontSize: 11, justifyContent: 'center', gap: 6 }}>
             <Icon name="plus" size={12} /> Out 10 cm
           </button>
-          <button onClick={() => moveWall(index, -0.1)} className="ds-btn" style={{ height: 32, fontSize: 11, justifyContent: 'center', gap: 6 }}>
+          <button onClick={() => moveWallCarrying(index, -0.1)} className="ds-btn" style={{ height: 32, fontSize: 11, justifyContent: 'center', gap: 6 }}>
             <Icon name="minus" size={12} /> In 10 cm
           </button>
         </div>

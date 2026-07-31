@@ -593,6 +593,11 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   function onPointerDown(e: ThreeEvent<PointerEvent>) {
     if (!part || !ref.current) return;
     if (e.button !== 0) return;
+    // Space held = the press belongs to the camera pan, not to the furniture
+    // under it. Checked before stopPropagation so nothing here claims the
+    // gesture; OrbitControls listens on the canvas element directly and gets the
+    // event either way, but setDragging below would have switched it off.
+    if (useStudio.getState().panKeyHeld) return;
     // The gizmo's own handles run their interaction — only grab presses on the
     // part body itself.
     e.stopPropagation();

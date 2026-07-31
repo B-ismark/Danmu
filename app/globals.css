@@ -435,6 +435,12 @@ textarea.field { border-radius: var(--r-2); }
    `minmax(340px, 1fr)` alone overflows any viewport narrower than the track. */
 .auto-grid { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); }
 .auto-grid--wide { grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr)); }
+/* Room cards: browsing a library, not reading two posters. `auto-fit` is wrong
+   here — it collapses the tracks nobody filled and hands their width to the
+   survivors, so a workspace holding two rooms rendered two half-page cards and
+   made the user scroll for them. `auto-fill` keeps the empty tracks, so a card
+   is the same size whether you own 2 rooms or 20. */
+.auto-grid--cards { gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr)); }
 
 /* A 56px chrome bar. Wraps to multiple rows instead of overflowing when the
    viewport gets narrow. */

@@ -7,6 +7,7 @@ import { ViewPresetChips } from '@/components/studio/ViewPresetChips';
 import { ViewOptions } from '@/components/studio/ViewOptions';
 import { CatalogPanel, CatalogToggle, STUDIO_CANVAS_ID } from '@/components/studio/CatalogPanel';
 import { SelectionBar } from '@/components/studio/SelectionBar';
+import { SceneContextMenu } from '@/components/studio/SceneContextMenu';
 import { HoverCard } from '@/components/studio/HoverCard';
 import { Inspector } from '@/components/studio/Inspector';
 import { PartTree } from '@/components/studio/PartTree';
@@ -139,6 +140,10 @@ export default function ModelPage() {
 
       {/* Not a cluster — it exists only while something is selected. */}
       <SelectionBar />
+
+      {/* Neither is this: it exists only between a right-click and the next
+          press, and it positions itself against this element's box. */}
+      <SceneContextMenu />
     </main>
   );
 
@@ -332,7 +337,11 @@ function ShortcutCard({ onClose }: { onClose: () => void }) {
       </HelpGroup>
 
       <HelpGroup title="Getting around">
-        <HelpLine>Left-drag to orbit, right-drag to pan, scroll to zoom.</HelpLine>
+        <HelpLine>Left-drag to orbit, scroll to zoom.</HelpLine>
+        <HelpLine>
+          Hold <Kb>Space</Kb> and drag to slide the whole view across.
+        </HelpLine>
+        <HelpLine>Right-click a piece — or the room — for what you can do to it.</HelpLine>
         <HelpLine>
           <Kb>↑</Kb>
           <Kb>↓</Kb>

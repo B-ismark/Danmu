@@ -84,13 +84,15 @@ const TONE: Record<ToastTone, { border: string; lead: string }> = {
 export function StorageToast() {
   const items = useToasts((s) => s.items);
   const dismiss = useToasts((s) => s.dismiss);
-  // The studio parks its dock along the bottom of the canvas (camera presets,
-  // Look, Suggest, Room — one row, two when the canvas is narrow enough to wrap
-  // it). At the default offset a toast sat on top of it and, because the card
-  // takes pointer events, swallowed its clicks — which every delete now raises a
-  // toast over. 88 clears the wrapped case, which is the tall one.
+  // TOP-RIGHT, not bottom-centre. The studio's bottom band is fully spoken for —
+  // help in the left corner, the selection bar in the middle, the room dock in
+  // the right — so a 560px card floating there covered one of the three and, as a
+  // card that takes pointer events, swallowed their clicks. The top strip holds
+  // one left-aligned toolbar and nothing else.
+  //
+  // 68 clears the 56px chrome bar on every route; 16 is the plain page inset.
   const pathname = usePathname();
-  const bottom = pathname?.startsWith('/room/') ? 88 : 16;
+  const top = pathname === '/' ? 16 : 68;
 
   useEffect(() => {
     function onFull(e: Event) {
@@ -113,14 +115,16 @@ export function StorageToast() {
       role="status"
       style={{
         position: 'fixed',
-        bottom,
-        left: 16,
+        top,
         right: 16,
+        // Never wider than the strip it sits in, and on a phone never wider than
+        // the screen. Width is content-driven below that.
+        maxWidth: 'min(360px, calc(100vw - 32px))',
         zIndex: 'var(--z-toast)',
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',
-        gap: 8,
+        alignItems: 'flex-end',
+        gap: 6,
         pointerEvents: 'none',
       }}
     >
@@ -131,20 +135,21 @@ export function StorageToast() {
             key={t.id}
             style={{
               pointerEvents: 'auto',
-              width: '100%',
-              maxWidth: 560,
               background: 'var(--paper)',
               border: `1px solid ${tone.border}`,
               borderRadius: 'var(--r-3)',
-              padding: '10px 12px 10px 14px',
+              // Tighter than a card: most toasts are now one line — a title and
+              // the button that reverses it — and the old 10/14 padding around a
+              // two-line block was most of the height.
+              padding: '7px 8px 7px 12px',
               display: 'flex',
               alignItems: 'flex-start',
-              gap: 10,
+              gap: 8,
               boxShadow: 'var(--shadow-lift)',
             }}
           >
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: tone.lead }}>{t.title}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: tone.lead, lineHeight: 1.5 }}>{t.title}</div>
               {t.message && (
                 <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.45, marginTop: 2 }}>
                   {t.message}
@@ -168,7 +173,7 @@ export function StorageToast() {
                 </div>
               )}
               {(t.action || t.link) && (
-                <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {t.action && (
                     <button
                       onClick={() => {
@@ -176,7 +181,7 @@ export function StorageToast() {
                         t.action?.onClick();
                       }}
                       className="ds-btn"
-                      style={{ height: 28, fontSize: 11.5, padding: '0 12px' }}
+                      style={{ height: 26, fontSize: 11.5, padding: '0 10px' }}
                     >
                       {t.action.label}
                     </button>
@@ -186,7 +191,7 @@ export function StorageToast() {
                       href={t.link.href}
                       onClick={() => dismiss(t.id)}
                       className="ds-btn"
-                      style={{ height: 28, fontSize: 11.5, padding: '0 12px' }}
+                      style={{ height: 26, fontSize: 11.5, padding: '0 10px' }}
                     >
                       {t.link.label}
                     </Link>
