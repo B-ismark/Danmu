@@ -6,7 +6,7 @@ import { v4 as uuid } from 'uuid';
 import { useRoom } from '@/lib/store';
 import { roomStore } from '@/lib/storage';
 import { footprintForLayout, type LayoutId } from '@/lib/footprint';
-import { polygonArea } from '@/lib/clearance';
+import { polygonArea } from '@/lib/geometry';
 import { Icon } from '@/components/ui/Icon';
 import { DanmuMark, StepHeader } from '@/components/ui/primitives';
 

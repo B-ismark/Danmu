@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { snapToWall, findSupportUnder } from '@/lib/physics';
+import { footArea, footFromPart, footIntersectionArea } from '@/lib/geometry';
 import type { Footprint } from '@/lib/footprint';
 
 const RECT: Footprint = [
@@ -62,6 +63,13 @@ const DESK: SupportPart = {
 /** Laptop centre X that leaves `share` of its width over the desk's +X edge. */
 const overhangX = (share: number) => 0.7 + 0.17 - share * 0.34;
 
+/** The share `findSupportUnder` weighs, measured the same way it does — so a test
+ *  can compare two orientations rather than only read its pass/fail verdict. */
+const supportShare = (x: number, z: number, rot: number) => {
+  const mover = footFromPart([x, 0, z], rot, LAPTOP);
+  return footIntersectionArea(mover, footFromPart(DESK.pos, 0, DESK.dimMM)) / footArea(mover);
+};
+
 describe('findSupportUnder', () => {
   it('lands a part sitting squarely on the desk', () => {
     expect(findSupportUnder([DESK], 'laptop', 0, 0, LAPTOP)).toBeCloseTo(0.75, 6);
@@ -88,10 +96,26 @@ describe('findSupportUnder', () => {
   });
 
   it('honours the mover rotation', () => {
-    // At 45° the laptop reaches further along X, so more of it clears the edge.
-    const x = overhangX(0.5);
-    expect(findSupportUnder([DESK], 'laptop', x, 0, LAPTOP)).toBeCloseTo(0.75, 6);
-    expect(findSupportUnder([DESK], 'laptop', x, 0, LAPTOP, Math.PI / 4)).toBeNull();
+    // Straight off ONE edge, rotation cannot matter and the maths has to say so:
+    // the desk edge is then a line through the laptop's own centre, and any
+    // centrally-symmetric shape is halved by a line through its centre. (This
+    // used to be asserted the other way — "at 45° it reaches further along X, so
+    // more of it clears the edge" — which is not true, and only passed because
+    // the old rotation put the last bit of a 0.5 share below the threshold.)
+    for (const rot of [Math.PI / 4, -Math.PI / 4, Math.PI / 2, 1.1]) {
+      expect(supportShare(overhangX(0.5), 0, rot)).toBeCloseTo(0.5, 9);
+      expect(findSupportUnder([DESK], 'laptop', overhangX(0.55), 0, LAPTOP, rot)).toBeCloseTo(0.75, 6);
+      expect(findSupportUnder([DESK], 'laptop', overhangX(0.45), 0, LAPTOP, rot)).toBeNull();
+    }
+    // Over a CORNER it does matter, and which WAY it is turned matters too —
+    // turning one way tucks the laptop's long axis along the desk edge, the other
+    // sends it out over the corner. Equal shares here would mean the rotation was
+    // ignored; swapped ones would mean the scene's Y-rotation was read mirrored.
+    const turnedIn = findSupportUnder([DESK], 'laptop', 0.6, 0.3, LAPTOP, Math.PI / 4);
+    const turnedOut = findSupportUnder([DESK], 'laptop', 0.6, 0.3, LAPTOP, -Math.PI / 4);
+    expect(turnedIn).not.toBeNull();
+    expect(turnedOut).not.toBeNull();
+    expect(supportShare(0.6, 0.3, Math.PI / 4)).toBeLessThan(supportShare(0.6, 0.3, -Math.PI / 4));
   });
 
   it('picks the highest qualifying surface', () => {

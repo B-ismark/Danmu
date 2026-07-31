@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import { Euler, Vector3 } from 'three';
 import {
+  frontVector,
+  localToWorld,
+  worldToLocal,
   obbFromPart,
   obbCorners,
   obbOverlap,
@@ -137,8 +141,11 @@ describe('obbOverlap (SAT)', () => {
   });
 
   it('catches rotated overlap the circle test could shrink past', () => {
-    // 45°-rotated box poking into its neighbour.
-    expect(obbOverlap(box(0, 0, 2, 0.4, Math.PI / 4), box(0.8, 0.8, 1, 1))).toBe(true);
+    // 45°-rotated box poking into its neighbour. `rot` is three.js's
+    // `rotation.y`, which turns the long axis toward +x/−z — so THAT is the
+    // quadrant the far end reaches into, and the opposite one it does not.
+    expect(obbOverlap(box(0, 0, 2, 0.4, Math.PI / 4), box(0.8, -0.8, 1, 1))).toBe(true);
+    expect(obbOverlap(box(0, 0, 2, 0.4, Math.PI / 4), box(0.8, 0.8, 1, 1))).toBe(false);
   });
 
   it('treats flush contact as non-colliding with a negative pad', () => {
@@ -283,5 +290,90 @@ describe('faceClearance', () => {
     const d = faceClearance(box(0, 0, 1, 1), '+z', [obstacle], RECT);
     expect(d).toBeGreaterThan(0.4);
     expect(d).toBeLessThan(0.56);
+  });
+});
+
+// ─── The rotation convention, pinned against three.js itself ────────────────
+//
+// `part.rot` is assigned straight to `group.rotation.y` (components/three/
+// Draggable), so three's own Euler is the authority on what it means. The kernel
+// used to rotate the other way, which is invisible at 0°/180° and inverts every
+// directional answer on the side walls — a wardrobe correctly snapped to the east
+// wall measured 1.9 cm in front of its doors and the report said they could not
+// open. These tests exist so that can never come back quietly.
+
+/** Where three.js puts a part-local offset for a given `rotation.y`. */
+function threeLocalToWorld(rot: number, lx: number, lz: number): [number, number] {
+  const v = new Vector3(lx, 0, lz).applyEuler(new Euler(0, rot, 0));
+  return [v.x, v.z];
+}
+
+describe('rotation convention', () => {
+  const ANGLES = [0, 0.3, Math.PI / 4, Math.PI / 2, 2.1, -Math.PI / 2, -1.2, Math.PI];
+
+  it('localToWorld matches three.js Euler(0, rot, 0)', () => {
+    for (const rot of ANGLES) {
+      for (const [lx, lz] of [[1, 0], [0, 1], [0.17, -0.12], [-0.85, 0.4]]) {
+        const [ex, ez] = threeLocalToWorld(rot, lx, lz);
+        const [ax, az] = localToWorld(rot, lx, lz);
+        expect(ax).toBeCloseTo(ex, 12);
+        expect(az).toBeCloseTo(ez, 12);
+      }
+    }
+  });
+
+  it('worldToLocal is its exact inverse', () => {
+    for (const rot of ANGLES) {
+      const [wx, wz] = localToWorld(rot, 0.4, -0.9);
+      const [lx, lz] = worldToLocal(rot, wx, wz);
+      expect(lx).toBeCloseTo(0.4, 12);
+      expect(lz).toBeCloseTo(-0.9, 12);
+    }
+  });
+
+  it('frontVector is the part’s local +Z as the scene draws it', () => {
+    for (const rot of ANGLES) {
+      const [ex, ez] = threeLocalToWorld(rot, 0, 1);
+      const [ax, az] = frontVector(rot);
+      expect(ax).toBeCloseTo(ex, 12);
+      expect(az).toBeCloseTo(ez, 12);
+    }
+  });
+
+  it('every corner of an OBB lands where three.js would put it', () => {
+    for (const rot of ANGLES) {
+      const b = box(1.4, -0.6, 2.2, 0.95, rot);
+      const expected = ([[-b.hw, -b.hd], [b.hw, -b.hd], [b.hw, b.hd], [-b.hw, b.hd]] as const).map(
+        ([lx, lz]) => {
+          const [dx, dz] = threeLocalToWorld(rot, lx, lz);
+          return [b.cx + dx, b.cz + dz];
+        },
+      );
+      obbCorners(b).forEach(([x, z], i) => {
+        expect(x).toBeCloseTo(expected[i][0], 12);
+        expect(z).toBeCloseTo(expected[i][1], 12);
+      });
+    }
+  });
+
+  it('a part turned to a wall’s yaw has its FRONT to the room, on every wall', () => {
+    // nearestEdge hands back the yaw that faces a part into the room. The kernel
+    // has to agree with that, or `faceClearance(’+z’)` measures the plaster.
+    for (const [px, pz] of [[0, -1.9], [2.9, 0], [0, 1.9], [-2.9, 0]] as const) {
+      const e = nearestEdge(RECT, px, pz)!;
+      const [fx, fz] = frontVector(e.yaw);
+      expect(fx).toBeCloseTo(e.nx, 9);
+      expect(fz).toBeCloseTo(e.nz, 9);
+    }
+  });
+
+  it('measures the room in front of a wall-snapped wardrobe, not the wall behind it', () => {
+    for (const [px, pz] of [[0, -1.9], [2.9, 0], [0, 1.9], [-2.9, 0]] as const) {
+      const e = nearestEdge(RECT, px, pz)!;
+      const inset = 0.3 + 0.02;
+      const w = box(e.px + e.nx * inset, e.pz + e.nz * inset, 2, 0.6, e.yaw);
+      expect(faceClearance(w, '+z', [], RECT, 4)).toBeGreaterThan(1);
+      expect(faceClearance(w, '-z', [], RECT, 4)).toBeLessThan(0.05);
+    }
   });
 });

@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useStudio } from '@/lib/store';
 import { ViewPresetChips } from '@/components/studio/ViewPresetChips';
 import { ViewOptions } from '@/components/studio/ViewOptions';
@@ -13,9 +13,9 @@ import { PartTree } from '@/components/studio/PartTree';
 import { TransformToolbar } from '@/components/studio/TransformToolbar';
 import { RoomTools } from '@/components/studio/RoomTools';
 import { useStackedStudio } from '@/components/studio/NarrowViewportBanner';
+import { HelpCard, HelpGroup, HelpLine, Kb } from '@/components/studio/HelpCard';
 import { isTypingOrDialog } from '@/components/studio/KeyboardShortcuts';
 import { Icon } from '@/components/ui/Icon';
-import { IconButton } from '@/components/ui/primitives';
 
 const Room = dynamic(() => import('@/components/three/Room').then((m) => m.Room), {
   ssr: false,
@@ -284,32 +284,7 @@ function HelpDock() {
 
 function ShortcutCard({ onClose }: { onClose: () => void }) {
   return (
-    <div
-      className="ds-card"
-      style={{
-        padding: 0,
-        boxShadow: 'var(--shadow-lift)',
-        maxHeight: 'min(420px, 60vh)',
-        overflow: 'auto',
-        width: 320,
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '10px 10px 10px 14px',
-          borderBottom: '1px solid var(--hairline)',
-          position: 'sticky',
-          top: 0,
-          background: 'var(--paper)',
-        }}
-      >
-        <span style={{ fontSize: 12.5, fontWeight: 700, flex: 1 }}>How this works</span>
-        <IconButton icon="x" label="Close help" onClick={onClose} size={24} iconSize={12} />
-      </div>
-
+    <HelpCard title="How this works" onClose={onClose}>
       <HelpGroup title="Moving furniture">
         <HelpLine>Drag a piece to slide it around the floor. It stops against whatever is in the way.</HelpLine>
         <HelpLine>Scroll while you are dragging to spin the piece.</HelpLine>
@@ -351,47 +326,6 @@ function ShortcutCard({ onClose }: { onClose: () => void }) {
           <Kb>Z</Kb> undo · add <Kb>Shift</Kb> to redo
         </HelpLine>
       </HelpGroup>
-    </div>
-  );
-}
-
-function HelpGroup({ title, note, children }: { title: string; note?: string; children: ReactNode }) {
-  return (
-    <div style={{ padding: '10px 14px 12px', borderBottom: '1px solid var(--hairline-soft)' }}>
-      <div className="ds-label" style={{ marginBottom: 6 }}>
-        {title}
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>{children}</div>
-      {note && (
-        <div style={{ fontSize: 11, color: 'var(--ink-3)', lineHeight: 1.45, marginTop: 7 }}>{note}</div>
-      )}
-    </div>
-  );
-}
-
-function HelpLine({ children }: { children: ReactNode }) {
-  return <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5 }}>{children}</div>;
-}
-
-// Keycaps in the sans face, not mono: a keycap is a real convention, but this
-// product's monospace is reserved for numerals and measurements.
-function Kb({ children }: { children: ReactNode }) {
-  return (
-    <kbd
-      style={{
-        fontFamily: 'var(--font-sans)',
-        fontSize: 10.5,
-        fontWeight: 700,
-        color: 'var(--ink)',
-        padding: '1px 5px',
-        background: 'var(--paper-2)',
-        border: '1px solid var(--hairline-strong)',
-        borderRadius: 'var(--r-1)',
-        marginRight: 3,
-        whiteSpace: 'nowrap',
-      }}
-    >
-      {children}
-    </kbd>
+    </HelpCard>
   );
 }

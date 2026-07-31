@@ -22,10 +22,13 @@ import { useScene } from '@/lib/scene-store';
 import { collidesAt, type ScenePart } from '@/lib/scene-spec';
 import { entranceComponents, floorBlockers } from '@/lib/clearance';
 import { buildClearanceField, fieldRuns, FREE_CELL, WALK_RADIUS } from '@/lib/clearance-field';
+import { accessZones } from '@/lib/layout-rules';
 import { obbFromPart } from '@/lib/geometry';
 import { pointInFootprint, wallSegments, footprintBounds } from '@/lib/footprint';
 import { formatDim } from '@/lib/units';
+import { Icon } from '@/components/ui/Icon';
 import { IconButton } from '@/components/ui/primitives';
+import { HelpGroup, HelpLine, HelpToggle, Kb } from './HelpCard';
 import { announce, removeParts, studioSurfaceFocused } from './KeyboardShortcuts';
 
 const SCALE = 100; // px per metre at zoom = 1, in viewBox units
@@ -35,17 +38,19 @@ const MAX_ZOOM = 4;
 /** How far one arrow press moves a wall. */
 const WALL_STEP = 0.05;
 
-// Ergonomic thresholds, in metres, for the per-piece bands below. Circulation is
-// NOT among them any more: the walkway used to be drawn as each bulky piece's
-// footprint inflated by half of 600 mm, which is a decent picture of one rule and
-// a poor picture of the room — it could not show a gap against a wall, could not
-// show two bands leaving a corridor that is technically clear but goes nowhere,
-// and needed the threshold and the category list copied out of lib/clearance.ts
-// and kept in step by hand. `lib/clearance-field.ts` is where circulation lives
-// now, and the plan reads the same raster the room report does.
-const FRONT_M = 0.6; // in front of doors and drawers
-const BEDSIDE_M = 0.5; // enough to get into bed and make it
-const FRONT_CATS = new Set(['wardrobe', 'fridge', 'shelf']);
+// There are no ergonomic thresholds in this file. There used to be: 600 mm in
+// front of doors and drawers, a 500 mm bedside strip, and the three categories
+// that get a front band — a third hand-kept copy of numbers that also live in the
+// room report and the layout solver, with nothing tying any of them together. The
+// bands are read off `accessZones` now, which is where the rules are, so the plan
+// draws exactly what Room check measures and what Suggest optimises. It also gains
+// the rules it never knew about: a desk's chair, a dining table's seats, a window's
+// band, and the difference between a single bed (one side) and a double (both).
+//
+// Circulation went the same way earlier: the walkway used to be each bulky piece's
+// footprint inflated by half of 600 mm, which is a decent picture of one rule and a
+// poor picture of the room. `lib/clearance-field.ts` owns it, and the plan reads
+// the same raster the room report does.
 
 /** Run states for the circulation overlay. */
 const WALKABLE = 0;
@@ -828,20 +833,46 @@ export function PlanView({
         </g>
       </svg>
 
-      {/* Pan/zoom controls */}
+      {/* The bottom-left cluster, laid out the way the 3D tab lays out its own:
+          the help chip sits above the controls and opens over them, so the drawing
+          itself is never covered by something the user did not ask for. */}
       <div
-        className="toolbar"
-        role="group"
-        aria-label="Plan view"
         style={{
           position: 'absolute',
           bottom: 16,
           left: 16,
-          gap: 6,
-          padding: 4,
-          zIndex: 'var(--z-canvas-ui)',
+          zIndex: 'var(--z-canvas-hint)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-start',
+          gap: 8,
+          maxWidth: 'min(340px, calc(100% - 32px))',
         }}
       >
+        <HelpToggle>
+          <HelpGroup title="Moving furniture">
+            <HelpLine>Drag a piece to move it. It stops against whatever is in the way, and tints red if it cannot go there.</HelpLine>
+            <HelpLine>Drag the handle on a selected piece to turn it.</HelpLine>
+            <HelpLine>Click a wall to paint it, or drag it to make the room bigger or smaller.</HelpLine>
+          </HelpGroup>
+          <HelpGroup title="Getting around">
+            <HelpLine>Pinch or scroll to zoom. Two fingers, Shift-drag or right-drag to pan.</HelpLine>
+            <HelpLine>Alt-drag turns the page — the drawing, not the furniture.</HelpLine>
+          </HelpGroup>
+          <HelpGroup title="Keys" note="Click the drawing first — these stay quiet while you are using a panel.">
+            <HelpLine>
+              <Kb>↑</Kb>
+              <Kb>↓</Kb>
+              <Kb>←</Kb>
+              <Kb>→</Kb> nudge whatever is focused · hold <Kb>Shift</Kb> to turn it
+            </HelpLine>
+            <HelpLine>
+              <Kb>Tab</Kb> steps through the pieces and the walls · <Kb>Esc</Kb> deselects
+            </HelpLine>
+          </HelpGroup>
+        </HelpToggle>
+
+        <div className="toolbar" role="group" aria-label="Plan view" style={{ gap: 6, padding: 4 }}>
         <IconButton
           icon="plus"
           label="Zoom in"
@@ -874,8 +905,22 @@ export function PlanView({
           {(zoom * 100).toFixed(0)}%
         </span>
         <div style={{ width: 1, background: 'var(--hairline)' }} />
-        <PlainBtn onClick={() => setRot((r) => r - Math.PI / 12)} label="↺" title="Turn the page left" />
-        <PlainBtn onClick={() => setRot((r) => r + Math.PI / 12)} label="↻" title="Turn the page right" />
+        <IconButton
+          icon="rotate-ccw"
+          label="Turn the page left"
+          onClick={() => setRot((r) => r - Math.PI / 12)}
+          variant="outline"
+          size={28}
+          iconSize={14}
+        />
+        <IconButton
+          icon="rotate-cw"
+          label="Turn the page right"
+          onClick={() => setRot((r) => r + Math.PI / 12)}
+          variant="outline"
+          size={28}
+          iconSize={14}
+        />
         <span
           className="mono"
           style={{
@@ -890,52 +935,56 @@ export function PlanView({
           {(((rot * 180) / Math.PI) % 360).toFixed(0)}°
         </span>
         <div style={{ width: 1, background: 'var(--hairline)' }} />
-        <PlainBtn onClick={fit} label="Fit" title="Back to the default view" wide />
+        <button
+          onClick={fit}
+          title="Back to the default view"
+          className="ds-btn"
+          style={{ height: 28, fontSize: 11, padding: '0 9px', gap: 5 }}
+        >
+          <Icon name="fit" size={12} />
+          Fit
+        </button>
+        </div>
       </div>
 
-      <div
-        className="popover"
-        style={{
-          position: 'absolute',
-          bottom: 16,
-          right: 16,
-          zIndex: 'var(--z-canvas-hint)',
-          padding: '8px 12px',
-          maxWidth: 300,
-          fontSize: 11,
-          color: 'var(--ink-2)',
-          lineHeight: 1.5,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 4,
-        }}
-      >
-        <span>Drag a piece to move it, or click a wall to paint or resize it.</span>
-        <span style={{ color: 'var(--ink-3)' }}>
-          Pinch or scroll to zoom · two fingers, Shift-drag or right-drag to pan · Alt-drag turns the page.
-        </span>
-        <span style={{ color: 'var(--ink-3)' }}>
-          Arrow keys nudge whatever is focused; hold Shift to turn it.
-        </span>
-        {showComfort && (
-          <>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--ink-3)' }}>
-              <Swatch fill="var(--accent-2-tint)" />
-              Sage floor has room to stand and walk — {WALK_RADIUS * 200} cm across.
+      {/* The key for the shading, and ONLY when the shading is on. It used to be a
+          permanent four-line paragraph pinned over the bottom-right of the drawing:
+          three of those lines were how-to-drive text, which belongs in the help card
+          exactly as it does on the 3D tab, and the fourth described colours that
+          were not on screen unless Comfort zones was switched on. */}
+      {showComfort && (
+        <div
+          className="popover"
+          style={{
+            position: 'absolute',
+            bottom: 16,
+            right: 16,
+            zIndex: 'var(--z-canvas-hint)',
+            padding: '7px 10px',
+            fontSize: 11,
+            color: 'var(--ink-3)',
+            lineHeight: 1.45,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 3,
+          }}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Swatch fill="var(--accent-2-tint)" />
+            Room to stand and walk — {WALK_RADIUS * 200} cm across
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Swatch fill="var(--accent-2-tint)" dashed />
+            Room each piece needs to be used
+          </span>
+          {walkRuns.some((r) => r.state === CUT_OFF) && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--warn-text)' }}>
+              <Swatch fill="var(--warn-tint)" />
+              No route from the door to here
             </span>
-            {walkRuns.some((r) => r.state === CUT_OFF) && (
-              <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--warn-text)' }}>
-                <Swatch fill="var(--warn-tint)" />
-                No route from the door to this part of the floor.
-              </span>
-            )}
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--ink-3)' }}>
-              <Swatch fill="var(--accent-2-tint)" dashed />
-              Dashed bands are room to open a door and get into bed.
-            </span>
-          </>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -956,33 +1005,28 @@ function Swatch({ fill, dashed }: { fill: string; dashed?: boolean }) {
   );
 }
 
-/** The comfort bands for one piece, drawn in its own local frame: local +y is the
- *  piece's front (the same face lib/clearance.ts measures as '+z'), local ±x are
- *  its sides. Returns null when the piece has no rule attached to it. */
+/** The comfort bands for one piece, drawn in its own local frame — which is
+ *  exactly the frame `accessZones` authors them in, so this is a unit conversion
+ *  and nothing more. Returns null when the piece has no rule attached to it.
+ *
+ *  Local +y here is the piece's front. `accessZones` returns world coordinates for
+ *  a placement, so it is asked for the zones of a piece at the origin facing +z,
+ *  and its `cz` is that same local +y. Nothing about the geometry is restated. */
 function comfortBands(part: ScenePart): React.ReactNode[] | null {
-  const w = (part.dimMM[0] / 1000) * SCALE;
-  const d = (part.dimMM[1] / 1000) * SCALE;
-  const out: React.ReactNode[] = [];
+  const zones = accessZones(part, 0, 0, 0);
+  if (zones.length === 0) return null;
   const soft = { fill: 'var(--accent-2-tint)', stroke: 'var(--accent-2)', strokeWidth: 0.8, strokeDasharray: '5 4' };
-
-  if (part.category === 'door') {
-    // The leaf sweeps its own width, inward — same radius Room check uses.
-    const r = (part.dimMM[0] / 1000) * SCALE;
-    out.push(<path key="swing" d={`M 0 0 L ${r} 0 A ${r} ${r} 0 0 1 0 ${r} Z`} {...soft} />);
-    return out;
-  }
-
-  if (part.wallMounted || part.category === 'rug') return null;
-
-  if (FRONT_CATS.has(part.category)) {
-    out.push(<rect key="front" x={-w / 2} y={d / 2} width={w} height={FRONT_M * SCALE} {...soft} fillOpacity={0.9} />);
-  }
-  if (part.category === 'bed') {
-    const strip = BEDSIDE_M * SCALE;
-    out.push(<rect key="bedL" x={-w / 2 - strip} y={-d / 2} width={strip} height={d} {...soft} fillOpacity={0.9} />);
-    out.push(<rect key="bedR" x={w / 2} y={-d / 2} width={strip} height={d} {...soft} fillOpacity={0.9} />);
-  }
-  return out.length > 0 ? out : null;
+  return zones.map((zn, i) => (
+    <rect
+      key={`${zn.rule.id}-${zn.side}-${i}`}
+      x={(zn.foot.cx - zn.foot.hw) * SCALE}
+      y={(zn.foot.cz - zn.foot.hd) * SCALE}
+      width={zn.foot.hw * 2 * SCALE}
+      height={zn.foot.hd * 2 * SCALE}
+      {...soft}
+      fillOpacity={0.9}
+    />
+  ));
 }
 
 /** Mirrors the Inspector's wall naming so the two screens can never disagree. */
@@ -992,31 +1036,6 @@ function wallLabelFor(yaw: number, index: number, useCompass: boolean): string {
   const inZ = Math.cos(yaw);
   if (Math.abs(inZ) >= Math.abs(inX)) return inZ > 0 ? 'North wall' : 'South wall';
   return inX > 0 ? 'West wall' : 'East wall';
-}
-
-function PlainBtn({ onClick, label, title, wide }: { onClick: () => void; label: string; title?: string; wide?: boolean }) {
-  return (
-    <button
-      onClick={onClick}
-      title={title}
-      aria-label={title ?? label}
-      style={{
-        width: wide ? 44 : 28,
-        height: 28,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'var(--paper)',
-        border: '1px solid var(--edge)',
-        borderRadius: 'var(--r-1)',
-        cursor: 'pointer',
-        fontSize: 11,
-        color: 'var(--ink-2)',
-      }}
-    >
-      {label}
-    </button>
-  );
 }
 
 function clamp(v: number, lo: number, hi: number) {

@@ -15,12 +15,13 @@
 // confirms, and applying one over an arrangement that was never saved offers to
 // save it first.
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import { useScene } from '@/lib/scene-store';
 import { useStudio, useSettings } from '@/lib/store';
 import { analyzeRoom, type ClearanceIssue, type ClearanceSeverity } from '@/lib/clearance';
 import { solveLayout } from '@/lib/layout-solve';
+import type { CostBreakdown } from '@/lib/layout-score';
 import { roomStore, type LayoutVariant, type Transforms } from '@/lib/storage';
 import { footprintBounds, type Footprint } from '@/lib/footprint';
 import { formatDim } from '@/lib/units';
@@ -90,6 +91,9 @@ export function RoomTools({ leading }: { leading?: ReactNode }) {
     [effParts, room.footprint, room.height, stepFree],
   );
   const problems = report.issues.filter((i) => i.severity !== 'info').length;
+
+  // Offer a re-fit when a size change is what broke things. See `useRefitOffer`.
+  useRefitOffer(effParts, room.footprint, dims, problems);
 
   // Close any open panel when a drag starts.
   useEffect(() => {
@@ -218,32 +222,54 @@ export function RoomTools({ leading }: { leading?: ReactNode }) {
 // through `loadTransforms` in a single call rather than looping `setPosition`:
 // the history recorder subscribes to those fields, so a loop would push one
 // snapshot per piece and take twenty undos to reverse.
+//
+// The message says WHAT it fixed, not only how many pieces it touched. "Moved 4
+// pieces" is indistinguishable from a shuffle, and the shuffle is exactly what
+// this was accused of being; `SolveResult` carries the per-term costs before and
+// after, so the answer is available rather than guessed at.
 
-function SuggestButton({ effParts, footprint }: { effParts: ScenePart[]; footprint: Footprint }) {
+/** Which improvement is worth naming, in the order a person would care. */
+const FIXED_PHRASE: Array<[keyof CostBreakdown, string]> = [
+  ['overlap', 'separated pieces that were in the same place'],
+  ['outside', 'brought furniture back inside the room'],
+  ['door', 'cleared the doorway'],
+  ['access', 'freed up the space each piece needs to be used'],
+  ['walkway', 'widened the walkways'],
+  ['window', 'uncovered the window'],
+  ['relation', 'grouped the pieces that belong together'],
+  ['wall', 'moved things back against the walls'],
+  ['middle', 'brought the middle of the room together'],
+  ['alignment', 'squared things up'],
+  ['balance', 'evened out the weight in the room'],
+];
+
+/** The two biggest genuine improvements, as a sentence. Below a whole cost unit a
+ *  term has not really changed, and naming it would be flattery. */
+function whatChanged(before: CostBreakdown, after: CostBreakdown): string {
+  const gains = FIXED_PHRASE.map(([k, phrase]) => ({ gain: before[k] - after[k], phrase }))
+    .filter((g) => g.gain > 1)
+    .sort((a, b) => b.gain - a.gain)
+    .slice(0, 2)
+    .map((g) => g.phrase);
+  if (gains.length === 0) return 'Undo puts the previous arrangement back.';
+  return `It ${gains.join(' and ')}. Undo puts the previous arrangement back.`;
+}
+
+/** Run the solver and write the result as one history entry. Shared, because the
+ *  same thing happens whether the user asked for an idea or accepted a re-fit
+ *  after resizing something. */
+function useSuggest(effParts: ScenePart[], footprint: Footprint) {
   const loadTransforms = useStudio((s) => s.loadTransforms);
-  const [busy, setBusy] = useState(false);
-  // Pressing again asks for a DIFFERENT arrangement rather than recomputing the
-  // same one — the solver is deterministic per seed, which is what makes both
-  // behaviours possible at once.
-  const attempt = useRef(0);
-
-  function suggest() {
-    setBusy(true);
-    try {
+  return useCallback(
+    (mode: 'arrange' | 'refit', seed: number) => {
       const t = useStudio.getState();
       const result = solveLayout(
         effParts,
         footprint,
         effParts.map((p) => p.locked),
-        { seed: ++attempt.current },
+        { seed, mode },
       );
-      if (result.moved.length === 0 || result.after >= result.before) {
-        toast({
-          title: 'This is already a good arrangement',
-          message: 'Nothing was moved — the pieces are where the guidelines want them.',
-        });
-        return;
-      }
+      if (result.moved.length === 0 || result.after >= result.before) return null;
       const positions = { ...t.positions };
       const rotations = { ...t.rotations };
       for (const i of result.moved) {
@@ -255,9 +281,34 @@ function SuggestButton({ effParts, footprint }: { effParts: ScenePart[]; footpri
       // suggestion that resized the furniture would be the one thing this app
       // refuses to do.
       loadTransforms({ positions, rotations, dims: t.dims });
+      return result;
+    },
+    [effParts, footprint, loadTransforms],
+  );
+}
+
+function SuggestButton({ effParts, footprint }: { effParts: ScenePart[]; footprint: Footprint }) {
+  const suggest = useSuggest(effParts, footprint);
+  const [busy, setBusy] = useState(false);
+  // Pressing again asks for a DIFFERENT arrangement rather than recomputing the
+  // same one — the solver is deterministic per seed, which is what makes both
+  // behaviours possible at once.
+  const attempt = useRef(0);
+
+  function run() {
+    setBusy(true);
+    try {
+      const result = suggest('arrange', ++attempt.current);
+      if (!result) {
+        toast({
+          title: 'This is already a good arrangement',
+          message: 'Nothing was moved — the pieces are where the guidelines want them.',
+        });
+        return;
+      }
       toast({
         title: `Moved ${result.moved.length} ${result.moved.length === 1 ? 'piece' : 'pieces'}`,
-        message: 'Undo puts the previous arrangement back. Press again for a different idea.',
+        message: whatChanged(result.breakdownBefore, result.breakdownAfter),
       });
     } finally {
       setBusy(false);
@@ -266,7 +317,7 @@ function SuggestButton({ effParts, footprint }: { effParts: ScenePart[]; footpri
 
   return (
     <button
-      onClick={suggest}
+      onClick={run}
       disabled={busy}
       className="ds-btn"
       title="Rearrange the unlocked furniture using the same guidelines Room check measures"
@@ -284,6 +335,65 @@ function SuggestButton({ effParts, footprint }: { effParts: ScenePart[]; footpri
       Suggest
     </button>
   );
+}
+
+// ─── Re-fit after a resize ──────────────────────────────────────────────────
+//
+// Every rule in `lib/layout-rules` is derived from the sizes it is about, so
+// nothing needs recalculating when a size changes — the room report is already
+// telling the truth about the new numbers on the next render. What is missing is
+// the offer: someone who types a real wardrobe's width in wants to hear that it no
+// longer fits and to be able to do something about it in one click.
+//
+// Only ever an OFFER. Moving the user's furniture because they edited a dimension
+// would be the app taking a decision that is theirs, and the re-fit mode exists
+// precisely so accepting it costs them as little of their arrangement as possible.
+
+function useRefitOffer(
+  effParts: ScenePart[],
+  footprint: Footprint,
+  dims: Record<string, [number, number, number]>,
+  problems: number,
+) {
+  const suggest = useSuggest(effParts, footprint);
+  // What the geometry looked like last time, and how many problems it had. Both
+  // are needed: a problem count that went up on its own is the user dragging
+  // something, and they can see that happening.
+  const seen = useRef<{ key: string; problems: number } | null>(null);
+
+  useEffect(() => {
+    const key = JSON.stringify([footprint, dims]);
+    const prev = seen.current;
+    seen.current = { key, problems };
+    if (!prev || prev.key === key) return;
+    if (problems <= prev.problems) return;
+    const added = problems - prev.problems;
+    toast({
+      title: `That size change left ${added} ${added === 1 ? 'problem' : 'problems'}`,
+      message: 'Room check has the details. A re-fit makes the smallest set of moves that clears them.',
+      ttl: 14000,
+      action: {
+        label: 'Re-fit',
+        onClick: () => {
+          const result = suggest('refit', 1);
+          toast(
+            result
+              ? {
+                  title: `Re-fitted ${result.moved.length} ${result.moved.length === 1 ? 'piece' : 'pieces'}`,
+                  message: whatChanged(result.breakdownBefore, result.breakdownAfter),
+                }
+              : {
+                  title: 'Nothing to move',
+                  message: 'No arrangement of the unlocked pieces clears this — try a different size, or unlock more.',
+                },
+          );
+        },
+      },
+    });
+    // `suggest` closes over the parts, and re-running this effect when they change
+    // would re-offer on every drag. The geometry key is the trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [footprint, dims, problems]);
 }
 
 // ─── Room check ─────────────────────────────────────────────────────────────

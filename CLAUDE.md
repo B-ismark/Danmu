@@ -32,6 +32,13 @@ backend, no account. The 3D studio *is* the product.
 3. **Single source of truth for furniture** is `lib/scene-spec.ts` (+
    `lib/parts-catalog.ts`). 3D scene, 2D plan, inspector, catalog and decor all
    read from it. Add a shape / behaviour flag there, not ad-hoc in a component.
+   The companion for *what a piece needs from the room* — how much clear floor, on
+   which side, what it belongs next to — is `lib/layout-rules.ts`, read by both the
+   room report (`clearance.ts`) and the arrangement solver (`layout-score.ts`).
+   Those two carrying their own copies is exactly how "Suggest" came to park a bed
+   across a doorway and have Room check report it: **add a clearance number there,
+   never in a consumer.** Zones are authored in the piece's own frame and derived
+   from its `dimMM`, which is what makes them recalibrate on a resize for free.
 4. **No hard-coded design values.** Colours / spacing / type / radii go through
    CSS tokens in `app/globals.css` (`--paper`, `--ink`, `--accent` terracotta,
    `--accent-2` sage, `--r-*`, `--font-sans` Nunito / `--font-display`
@@ -105,6 +112,11 @@ order.
 - `components/ui/` — primitives + `Icon` (lucide wrapper).
 - `lib/` — state (`store.ts` = `useStudio`/`useSettings`/`useRoom`,
   `scene-store.ts` = `useScene`), geometry engine, detection, persistence.
+  `geometry.ts` has **one rotation convention and it is three.js's** — a part's
+  front (local +Z) is `(sin rot, cos rot)`, because `rot` is what `Draggable`
+  assigns to `rotation.y`. Use `localToWorld` / `worldToLocal` / `frontVector`
+  rather than writing the matrix out; getting the sign wrong is invisible at
+  0°/180° and inverts every "which side does this face" answer on the side walls.
 - `tests/` — Vitest over pure `lib/` logic. `scripts/export-detector.py` exports
   the optional ONNX model into `public/models/` (git-ignored, not bundled).
 

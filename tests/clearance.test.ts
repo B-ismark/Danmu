@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { analyzeRoom, polygonArea, freeFloorFraction } from '@/lib/clearance';
-import { pointInObb, pointInPoly, type OBB, type Poly } from '@/lib/geometry';
+import { analyzeRoom, freeFloorFraction } from '@/lib/clearance';
+import { pointInObb, pointInPoly, polygonArea, type OBB, type Poly } from '@/lib/geometry';
 import type { ScenePart } from '@/lib/scene-spec';
 import type { Footprint } from '@/lib/footprint';
 
