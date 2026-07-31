@@ -8,6 +8,8 @@ import {
   type ScenePart,
 } from '../lib/scene-spec';
 import type { RoomData } from '../lib/storage';
+import { footprintForLayout } from '../lib/footprint';
+import { footArea, footFromPart, footIntersectionArea, outsideShare } from '../lib/geometry';
 
 type Saved = NonNullable<RoomData['detectedObjects']>[number];
 
@@ -110,6 +112,45 @@ describe('buildSceneFromRoom', () => {
       expect(Math.abs(p.pos[0])).toBeLessThanOrEqual(2.5 + 0.01);
       expect(Math.abs(p.pos[2])).toBeLessThanOrEqual(2 + 0.01);
     }
+  });
+
+  // Clamping the CENTRE — which is all this used to do — leaves a 2.2 m sofa whose
+  // centre is 150 mm inside the wall still half in the garden. The whole FOOTPRINT
+  // has to be in the room, and in an L / U / T that means the polygon, not the box.
+  it('keeps every part’s whole footprint inside the room, not just its centre', () => {
+    for (const over of [{}, { layoutId: 'l' as const, width: 6, depth: 4.7 }]) {
+      const poly =
+        'layoutId' in over && over.layoutId
+          ? footprintForLayout(over.layoutId, over.width!, over.depth!)
+          : footprintForLayout('rect', 5, 4);
+      const parts = buildSceneFromRoom(
+        room(
+          [
+            saved(0, { uid: 'a', position: { x: 2.4, y: 0, z: 1.9 } }),
+            saved(1, { uid: 'b', category: 'wardrobe', label: 'wardrobe__slot:e', position: { x: 2.9, y: 0, z: 0.2 } }),
+            saved(2, { uid: 'c', category: 'bed', label: 'double bed__slot:s', position: { x: 1.6, y: 0, z: 1.6 } }),
+          ],
+          over,
+        ),
+      );
+      for (const p of parts.filter((x) => !x.wallMounted)) {
+        expect(outsideShare(footFromPart(p.pos, p.rot, p.dimMM, p.circle), poly, 5)).toBe(0);
+      }
+    }
+  });
+
+  it('separates two detections that arrive in the same place', () => {
+    // The AI regularly returns the same sofa twice, or puts a bed and a wardrobe on
+    // the same wall. There used to be no part-vs-part resolution at all, so the
+    // scene opened with two pieces of furniture inside each other.
+    const parts = buildSceneFromRoom(
+      room([
+        saved(0, { uid: 'a', position: { x: 0, y: 0, z: 1.4 } }),
+        saved(1, { uid: 'b', category: 'bed', label: 'double bed__slot:s', position: { x: 0.2, y: 0, z: 1.3 } }),
+      ]),
+    );
+    const [a, b] = parts.map((p) => footFromPart(p.pos, p.rot, p.dimMM, p.circle));
+    expect(footIntersectionArea(a, b) / Math.min(footArea(a), footArea(b))).toBeLessThan(0.05);
   });
 
   it('drops a part that would poke through the ceiling back under it', () => {

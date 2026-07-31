@@ -178,6 +178,12 @@ export type LayoutModel = {
    *  is scanned for every ordered pair otherwise, which for thirty pieces is 870
    *  lookups against eleven specs per evaluation. */
   relations: Array<{ i: number; j: number; rel: Relation }>;
+  /** …and the same pairs as an unordered membership test, `i * n + j` both ways.
+   *  The circulation term needs it: the gap between a sofa and its own coffee table
+   *  is what the relation asks for, not a route someone walks down, and costing it
+   *  as a pinch had the solver pulling apart the arrangement the relation had just
+   *  paid to build. `lib/clearance.ts` skips the same pairs for the same reason. */
+  related: Set<number>;
   /** The route width this room is big enough to be asked for. */
   route: number;
   centre: [number, number];
@@ -231,11 +237,15 @@ export function prepare(ctx: LayoutContext): LayoutModel {
   const paths = doors.map((i) => ({ owner: i, foot: doorPath(parts[i], route) }));
 
   const relations: LayoutModel['relations'] = [];
+  const related = new Set<number>();
   for (let i = 0; i < parts.length; i++) {
     for (let j = 0; j < parts.length; j++) {
       if (i === j) continue;
       const rel = relationFor(parts[i], parts[j]);
-      if (rel) relations.push({ i, j, rel });
+      if (!rel) continue;
+      relations.push({ i, j, rel });
+      related.add(i * parts.length + j);
+      related.add(j * parts.length + i);
     }
   }
 
@@ -257,6 +267,7 @@ export function prepare(ctx: LayoutContext): LayoutModel {
     apertures,
     paths,
     relations,
+    related,
     route,
     centre: polyCentroid(ctx.footprint as Poly),
     feet: parts.map((p) => ({
@@ -438,6 +449,8 @@ export function costBreakdown(
     if (!obstacle[i]) continue;
     for (let j = i + 1; j < feet.length; j++) {
       if (!obstacle[j]) continue;
+      // Pieces that belong together are exempt — see `related`.
+      if (m.related.has(i * feet.length + j)) continue;
       // `boxGap` never overstates how close they are, so anything it puts beyond a
       // route's width cannot be a pinch and never needs the exact corner-to-corner
       // answer. This one reject is worth a third of an evaluation.

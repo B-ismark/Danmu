@@ -87,7 +87,15 @@ export const useScene = create<SceneState>((set) => ({
       };
     }),
   loadFromRoom: (room) => {
-    if (!room) return set({ parts: defaultScene(), room: DEFAULT_ROOM, ready: true });
+    if (!room)
+      return set({
+        parts: defaultScene(DEFAULT_ROOM.layoutId, DEFAULT_ROOM.width, DEFAULT_ROOM.depth, {
+          footprint: DEFAULT_ROOM.footprint,
+          height: DEFAULT_ROOM.height,
+        }),
+        room: DEFAULT_ROOM,
+        ready: true,
+      });
     const layoutId = (room.layoutId ?? 'rect') as LayoutId;
     // A saved custom footprint (from independent wall moves) is the source of
     // truth; otherwise derive the preset shape from the layout + dims.

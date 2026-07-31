@@ -41,6 +41,7 @@ import {
 } from './clearance-field';
 import {
   accessZones,
+  belongTogether,
   doorPath,
   routeWidth,
   roleOf,
@@ -329,6 +330,10 @@ export function analyzeRoom(
       const b = solid[bi];
       if (!a || !b) continue;
       if (!WALKWAY_CATEGORIES.has(a.category) && !WALKWAY_CATEGORIES.has(b.category)) continue;
+      // A pair the relation table puts together is not a walkway: 450 mm between a
+      // sofa and its own coffee table is the figure `layout-rules` asks for, and
+      // reporting it taught people that this panel cries wolf about correct rooms.
+      if (belongTogether(a, b)) continue;
       if (gap - band <= 0.12 || gap + band >= MIN_WALKWAY) continue;
       issues.push({
         id: `walk-${a.id}-${b.id}`,

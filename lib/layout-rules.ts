@@ -569,6 +569,19 @@ export function hasRelations(role: Role): boolean {
   return RELATIONS.some((r) => r.self.includes(role) || r.anchor.includes(role));
 }
 
+/** Is there a relation between these two, either way round?
+ *
+ *  The question a circulation rule has to ask before calling a gap a walkway. The
+ *  band above puts a coffee table 400–500 mm off the sofa; the 600 mm walkway rule
+ *  read that same 450 mm as a pinch, so the room report warned about the one
+ *  arrangement this table asks for — on every living room the app has ever seeded.
+ *  The gap between a sofa and ITS coffee table, or a bed and ITS nightstand, is the
+ *  arrangement working, not a route someone would try to squeeze down. `ZONE_GUESTS`
+ *  makes the same point about access zones; this makes it about walkways. */
+export function belongTogether(a: ScenePart, b: ScenePart): boolean {
+  return relationFor(a, b) !== null || relationFor(b, a) !== null;
+}
+
 // ─── Reading the room ───────────────────────────────────────────────────────
 
 export type RoomKind = 'bedroom' | 'living' | 'dining' | 'workspace' | 'mixed';
