@@ -64,7 +64,16 @@ backend, no account. The 3D studio *is* the product.
    are normalised on ingest (`normalizePhoto`, ≤1600 px) before they are stored
    or sent — nothing full-resolution reaches IndexedDB or a request. Every
    third-party host is allow-listed with a reason in `next.config.mjs`'s CSP;
-   adding a fetch target means adding it there too.
+   adding a fetch target means adding it there too. The same file's
+   `Permissions-Policy` allows only the features the app actually uses —
+   `camera=(self)` for capture, `geolocation=(self)` for the sun mood's latitude,
+   and `accelerometer`/`gyroscope`/`magnetometer=(self)` for its compass — and
+   denies the rest; `()` there overrides the user's own grant, so a feature and
+   its header entry move together. None of them send anything: a device
+   permission is not egress, and a reading is coarsened before it is stored
+   (`lib/geolocate.ts` ~11 km, `lib/compass.ts` 5° — precision the sun cannot use
+   is precision not worth holding). Neither is ever requested on mount, only on a
+   press.
 6. **Do not reintroduce the carpenter spec** (cutlist / build-cost / pricing).
    Removed in the pivot.
 

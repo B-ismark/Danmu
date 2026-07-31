@@ -1,23 +1,23 @@
 'use client';
 
-// The "View" popover: lighting mood, decor toggle, render quality, re-scan.
+// The "View" popover — one place for everything about how the room LOOKS.
 //
 // It no longer positions itself. It used to float alone at the top-right of the
-// canvas, which made it one of seven separate clusters over a single 3D view —
-// and lighting/quality belong next to the camera presets and the room checks, not
-// in a corner of their own. The parent (RoomTools' row) places it now; this
-// component only owns the button and the panel that hangs off it.
+// canvas, which made it one of seven separate clusters over a single 3D view; the
+// dock at the bottom-right places it now, next to the camera presets it belongs
+// with, and this component only owns the button and the panel that hangs off it.
+//
+// It has since absorbed two strays. The floor grid was a chip of its own down in
+// the corner — a display toggle sitting apart from the other display toggle — and
+// the "Re-scan room" link was a second copy of the top bar's Rescan, which is
+// about what is IN the room rather than how it is lit. Three groups now, in the
+// order someone reaches for them: Lighting, Display, Quality.
 
-import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useStudio, type Lighting } from '@/lib/store';
-import { useScene } from '@/lib/scene-store';
-import { roomStore } from '@/lib/storage';
-import { sunPosition } from '@/lib/solar';
 import { Icon, type IconName } from '@/components/ui/Icon';
-import { NumberField } from '@/components/ui/NumberField';
-import { Segmented } from '@/components/ui/primitives';
+import { Segmented, Toggle } from '@/components/ui/primitives';
+import { SunControls } from './SunControls';
 import { isTypingOrDialog } from './KeyboardShortcuts';
 
 // Lucide, not emoji. The emoji versions rendered in the system's colour font —
@@ -34,47 +34,18 @@ const MOODS: Array<{ id: Lighting; label: string; icon: IconName }> = [
   { id: 'sun', label: 'Sun', icon: 'compass' },
 ];
 
-/** Where the sun is asked about before the room has a site. Mirrors Room.tsx —
- *  the panel has to show the same numbers the scene is lit by, or the fields read
- *  as blank while the room is plainly lit from somewhere. */
-const DEFAULT_SITE = { lat: 40, lon: 0, bearingDeg: 0 };
-
-function clockLabel(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-}
-
-/** Day-of-year → "5 Mar". 2001 is a non-leap year, so 1…365 maps exactly. */
-function dateLabel(dayOfYear: number): string {
-  const d = new Date(2001, 0, 1);
-  d.setDate(dayOfYear);
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
 export function ViewOptions() {
-  const { roomId } = useParams<{ roomId: string }>();
   const lighting = useStudio((s) => s.lighting);
   const setLighting = useStudio((s) => s.setLighting);
   const dressed = useStudio((s) => s.dressed);
   const toggleDressed = useStudio((s) => s.toggleDressed);
+  const showGrid = useStudio((s) => s.showGrid);
+  const toggleGrid = useStudio((s) => s.toggleGrid);
   const quality = useStudio((s) => s.quality);
   const setQuality = useStudio((s) => s.setQuality);
   const [open, setOpen] = useState(false);
-  const [hasCaps, setHasCaps] = useState(false);
-  const [detected, setDetected] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   const btn = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!roomId) return;
-    (async () => {
-      const caps = await roomStore.loadCaptures(roomId);
-      const room = await roomStore.loadRoom(roomId);
-      setHasCaps(caps.length > 0);
-      setDetected(!!(room?.detectedObjects && room.detectedObjects.length > 0));
-    })();
-  }, [roomId]);
 
   useEffect(() => {
     if (!open) return;
@@ -107,7 +78,7 @@ export function ViewOptions() {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         className="ds-btn"
-        title="Lighting, decor and render quality"
+        title="Lighting, floor grid, decor and render quality"
         style={{
           height: 30,
           fontSize: 11,
@@ -118,8 +89,8 @@ export function ViewOptions() {
           boxShadow: 'var(--shadow-soft)',
         }}
       >
-        <Icon name="settings" size={12} />
-        View
+        <Icon name="sun" size={12} />
+        Look
       </button>
 
       {open && (
@@ -127,13 +98,15 @@ export function ViewOptions() {
           className="ds-card"
           style={{
             position: 'absolute',
-            // Opens upward now that the button lives near the bottom edge.
+            // Opens upward: the button lives on the bottom edge of the canvas.
             bottom: 'calc(100% + 8px)',
             right: 0,
             zIndex: 'var(--z-popover)',
             // Wide enough for four lighting segments to hold icon + label on one
             // line without the track clipping the last of them.
             width: 300,
+            maxHeight: 'min(560px, 72vh)',
+            overflow: 'auto',
             padding: 14,
             display: 'flex',
             flexDirection: 'column',
@@ -149,16 +122,27 @@ export function ViewOptions() {
               onChange={setLighting}
               stretch
             />
+            {lighting === 'sun' && (
+              <div style={{ marginTop: 12 }}>
+                <SunControls />
+              </div>
+            )}
           </Group>
 
-          {lighting === 'sun' && <SunControls />}
+          <div style={{ height: 1, background: 'var(--hairline)' }} />
 
-          <Group label="Decor">
-            <Segmented
-              ariaLabel="Decor"
-              options={[{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }]}
-              value={dressed ? 'on' : 'off'}
-              onChange={(v) => { if ((v === 'on') !== dressed) toggleDressed(); }}
+          <Group label="Display">
+            <SwitchRow
+              label="Floor grid"
+              hint="A metre grid under the furniture"
+              on={showGrid}
+              onToggle={toggleGrid}
+            />
+            <SwitchRow
+              label="Decor"
+              hint="Books, plants and props on surfaces"
+              on={dressed}
+              onToggle={toggleDressed}
             />
           </Group>
 
@@ -173,198 +157,37 @@ export function ViewOptions() {
               High adds soft shadows + textured surfaces.
             </div>
           </Group>
-
-          {hasCaps && (
-            <>
-              <div style={{ height: 1, background: 'var(--hairline)' }} />
-              <Link
-                href="/onboarding/detect"
-                className="ds-btn"
-                style={{ height: 32, fontSize: 12, justifyContent: 'center' }}
-                title={detected ? 'Re-scan your photos for furniture' : 'Scan your photos for furniture'}
-              >
-                <Icon name="refresh" size={12} />
-                {detected ? 'Re-scan room' : 'Scan room'}
-              </Link>
-            </>
-          )}
         </div>
       )}
     </div>
   );
 }
 
-/** Date, time and place for the sun mood.
- *
- *  The sliders are the feature, not decoration: a sun path is only worth having if
- *  you can scrub an afternoon and watch the light cross the floor. Latitude and
- *  the room's compass bearing live ON THE ROOM (a flat and a holiday cottage do
- *  not share a latitude); the moment being shown lives in device prefs, because it
- *  is a question you are asking rather than a fact about the room.
- *
- *  Nothing here is derived from a photo. EXIF carries GPS coordinates and
- *  `lib/exif.ts` deliberately does not read them, so this is typed in or it is the
- *  default — and the default is on screen rather than hidden. */
-function SunControls() {
-  const sunMinutes = useStudio((s) => s.sunMinutes);
-  const setSunMinutes = useStudio((s) => s.setSunMinutes);
-  const sunDayOfYear = useStudio((s) => s.sunDayOfYear);
-  const setSunDayOfYear = useStudio((s) => s.setSunDayOfYear);
-  const site = useScene((s) => s.room.site);
-  const setSite = useScene((s) => s.setSite);
-  const s = site ?? DEFAULT_SITE;
-
-  // The same instant Room.tsx lights the scene with, so the readout cannot
-  // disagree with what is on screen.
-  const when = new Date(new Date().getFullYear(), 0, 1);
-  when.setDate(sunDayOfYear);
-  when.setHours(Math.floor(sunMinutes / 60), sunMinutes % 60, 0, 0);
-  const pos = sunPosition(when.getTime(), s.lat, s.lon);
-  const up = pos.altitudeDeg > 0;
-
-  return (
-    <Group label="Sun">
-      <Row>
-        <Slider
-          label={`Time · ${clockLabel(sunMinutes)}`}
-          min={0}
-          max={1425}
-          step={15}
-          value={sunMinutes}
-          onChange={setSunMinutes}
-        />
-      </Row>
-      <Row>
-        <Slider
-          label={`Date · ${dateLabel(sunDayOfYear)}`}
-          min={1}
-          max={365}
-          step={1}
-          value={sunDayOfYear}
-          onChange={setSunDayOfYear}
-        />
-      </Row>
-
-      <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-        <Field
-          label="Lat"
-          value={s.lat}
-          min={-90}
-          max={90}
-          step={0.5}
-          onChange={(lat) => setSite({ ...s, lat })}
-        />
-        <Field
-          label="Lon"
-          value={s.lon}
-          min={-180}
-          max={180}
-          step={0.5}
-          onChange={(lon) => setSite({ ...s, lon })}
-        />
-        <Field
-          label="Facing"
-          value={s.bearingDeg}
-          min={0}
-          max={359}
-          step={5}
-          onChange={(bearingDeg) => setSite({ ...s, bearingDeg })}
-        />
-      </div>
-
-      <div
-        style={{
-          fontSize: 10.5,
-          color: up ? 'var(--ink-3)' : 'var(--warn-text)',
-          marginTop: 7,
-          lineHeight: 1.45,
-        }}
-      >
-        {up ? (
-          <>
-            Sun <span className="mono">{Math.round(pos.altitudeDeg)}°</span> up, bearing{' '}
-            <span className="mono">{Math.round(pos.azimuthDeg)}°</span>. “Facing” is the compass
-            bearing of the plan’s north edge.
-          </>
-        ) : (
-          <>The sun is below the horizon at this time — the room is lit by sky only.</>
-        )}
-      </div>
-    </Group>
-  );
-}
-
-function Row({ children }: { children: React.ReactNode }) {
-  return <div style={{ marginTop: 6 }}>{children}</div>;
-}
-
-function Slider({
+/** A named on/off with a line of explanation. Two of these replaced two On/Off
+ *  segmented tracks that said nothing about what they did. */
+function SwitchRow({
   label,
-  min,
-  max,
-  step,
-  value,
-  onChange,
+  hint,
+  on,
+  onToggle,
 }: {
   label: string;
-  min: number;
-  max: number;
-  step: number;
-  value: number;
-  onChange: (v: number) => void;
+  hint: string;
+  on: boolean;
+  onToggle: () => void;
 }) {
   return (
-    <label style={{ display: 'block', fontSize: 10.5, color: 'var(--ink-2)' }}>
-      {label}
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        style={{ width: '100%', accentColor: 'var(--accent)', marginTop: 3 }}
-      />
-    </label>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}>{label}</div>
+        <div style={{ fontSize: 10.5, color: 'var(--ink-3)', lineHeight: 1.35 }}>{hint}</div>
+      </div>
+      <Toggle on={on} onClick={onToggle} label={label} />
+    </div>
   );
 }
 
-function Field({
-  label,
-  value,
-  min,
-  max,
-  step,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <label style={{ flex: 1, minWidth: 0, fontSize: 10.5, color: 'var(--ink-3)' }}>
-      {label}
-      <NumberField
-        value={String(value)}
-        step={step}
-        min={min}
-        max={max}
-        height={28}
-        ariaLabel={label}
-        onChange={(v) => {
-          const n = Number(v);
-          if (Number.isFinite(n)) onChange(Math.min(max, Math.max(min, n)));
-        }}
-        style={{ marginTop: 3 }}
-      />
-    </label>
-  );
-}
-
-function Group({ label, children }: { label: string; children: React.ReactNode }) {
+function Group({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
       <span className="ds-label" style={{ display: 'block', marginBottom: 6 }}>{label}</span>

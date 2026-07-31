@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useStudio } from '@/lib/store';
 import { ViewPresetChips } from '@/components/studio/ViewPresetChips';
 import { ViewOptions } from '@/components/studio/ViewOptions';
-import { CatalogPanel } from '@/components/studio/CatalogPanel';
+import { CatalogPanel, CatalogToggle, STUDIO_CANVAS_ID } from '@/components/studio/CatalogPanel';
 import { SelectionBar } from '@/components/studio/SelectionBar';
 import { HoverCard } from '@/components/studio/HoverCard';
 import { Inspector } from '@/components/studio/Inspector';
@@ -43,6 +43,9 @@ export default function ModelPage() {
   // `ready` gates the first paint: without it a narrow viewport laid out the
   // three-column shell, then re-ordered and re-flowed once matchMedia answered.
   const { stacked, ready } = useStackedStudio();
+  // In the store, not in this page: the rail's "Add furniture" opens the same
+  // panel from the other side of the studio, and on the 2D tab as well.
+  const catalogOpen = useStudio((s) => s.catalogOpen);
 
   const shell: CSSProperties = stacked
     ? {
@@ -79,6 +82,7 @@ export default function ModelPage() {
   const canvas = (
     <main
       key="canvas"
+      id={STUDIO_CANVAS_ID}
       style={{
         position: 'relative',
         overflow: 'hidden',
@@ -91,21 +95,43 @@ export default function ModelPage() {
       <h1 className="sr-only">Your room in 3D</h1>
       <Room />
 
-      {/* ── Cluster 1 · top left: the tools that change a piece. CatalogPanel
-             docks itself directly underneath, so the left edge reads as one
-             column of "make something" controls. ── */}
-      <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 'var(--z-canvas-ui)' }}>
+      {/* ── Cluster 1 · top left: everything that puts a piece in the room or
+             changes one. What dragging does, how far it snaps, and where new
+             furniture comes from — one row, with the catalog opening under it. ── */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 12,
+          left: 12,
+          zIndex: 'var(--z-canvas-ui)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          flexWrap: 'wrap',
+          maxWidth: 'calc(100% - 24px)',
+        }}
+      >
         <TransformToolbar />
+        <span aria-hidden="true" style={{ width: 1, height: 20, background: 'var(--hairline-strong)' }} />
+        <CatalogToggle />
       </div>
-      <CatalogPanel />
+      {/* Drag lands here and only here: Room's onDrop raycasts the drop point. */}
+      {catalogOpen && <CatalogPanel canDrag />}
 
       <HoverCard />
 
-      {/* ── Cluster 2 · bottom right: everything about looking at the room and
-             checking it over. The View popover used to be a fourth cluster on its
-             own at top-right; lighting and camera presets belong together. ── */}
-      <RoomTools leading={<ViewOptions />} />
-      <ViewPresetChips />
+      {/* ── Cluster 2 · bottom right: one dock. Where you stand and how it looks
+             on the left of the divider, what to do about it on the right. The
+             camera presets and the floor grid used to be a second row below this
+             one, and the room readings were three buttons instead of one. ── */}
+      <RoomTools
+        leading={
+          <>
+            <ViewPresetChips />
+            <ViewOptions />
+          </>
+        }
+      />
 
       {/* ── Cluster 3 · bottom left: the only help surface, on --z-canvas-hint so
              no panel can ever paint over it. ── */}
@@ -259,24 +285,31 @@ function HelpDock() {
 
       {open && <ShortcutCard onClose={() => { setOpen(false); btnRef.current?.focus(); }} />}
 
-      {/* Deliberately one narrow control: the selection bar is centred along this
-          same edge, and anything wider here reaches into it. The active mode
-          lives on the toolbar that sets it, not down here as a second readout. */}
+      {/* A question mark, not a sentence. This corner shares an edge with the
+          centred selection bar, and "How this works" spent 150px saying what the
+          universal glyph says in 30 — on a control most people press once. The
+          accessible name still carries the words. */}
       <button
         ref={btnRef}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className={`ds-chip ${open ? 'ds-chip--accent' : ''}`}
+        aria-label="How this works"
+        title="How this works"
         style={{
-          cursor: 'pointer',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 30,
           height: 30,
-          fontWeight: 700,
-          borderColor: open ? 'var(--accent-text)' : 'var(--edge)',
+          borderRadius: 'var(--r-full)',
+          cursor: 'pointer',
+          border: `1px solid ${open ? 'var(--accent-text)' : 'var(--edge)'}`,
           background: open ? 'var(--accent-tint)' : 'var(--paper)',
+          color: open ? 'var(--accent-text)' : 'var(--ink-2)',
+          boxShadow: 'var(--shadow-soft)',
         }}
       >
-        <Icon name="info" size={12} />
-        How this works
+        <Icon name="help" size={15} />
       </button>
     </div>
   );

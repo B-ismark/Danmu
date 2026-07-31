@@ -9,7 +9,7 @@ import { Dot, IconButton } from '@/components/ui/primitives';
 import { useConfirm } from '@/components/ui/Confirm';
 import { toast } from '@/components/ui/StorageToast';
 import { RoomDimsEditor } from './RoomDimsEditor';
-import { AddPartButton } from './AddPartButton';
+import { AddFurnitureButton } from './CatalogPanel';
 import { removeParts } from './KeyboardShortcuts';
 import { THEMES, themeColorFor, type Theme } from '@/lib/themes';
 
@@ -160,7 +160,7 @@ export function PartTree() {
             {parts.length} piece{parts.length === 1 ? '' : 's'}
           </span>
         </div>
-        <AddPartButton />
+        <AddFurnitureButton />
 
         <div style={{ marginTop: 12 }} role="group" aria-labelledby="restyle-label">
           <span id="restyle-label" className="ds-label" style={{ display: 'block', marginBottom: 8 }}>One-tap restyle</span>

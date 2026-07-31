@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { daysInYear, localClock } from './solar';
 
 // Studio view + interaction state. Mostly session-scoped: only the handful of
 // fields in STUDIO_PREFS below survive a reload (see the persist config at the
@@ -49,6 +50,15 @@ type StudioState = {
    *  December, and the answer only means something if the question is a date. */
   sunMinutes: number;
   sunDayOfYear: number;
+  /** Whether the two fields above are pinned to the device's own clock, ticking
+   *  with it minute by minute (the ticker lives in `Room`, the only always-mounted
+   *  consumer). Off by default: the moment someone wants to see is usually not the
+   *  moment they opened the app, and a room asked about at 1 am is correctly black.
+   *
+   *  Scrubbing either slider clears it — the clock and the sliders cannot both own
+   *  the value, and moving one is an unambiguous request to stop following the
+   *  other. */
+  sunLive: boolean;
   /** auto set-dressing — decorative props on furniture surfaces */
   dressed: boolean;
   /** Snap granularity for the gizmo. 'off' = free move, 'fine' = 10mm / 15°,
@@ -56,6 +66,13 @@ type StudioState = {
    *  owns the real increments). Default is fine — coarse is too chunky for
    *  placing a monitor on a desk. */
   snapMode: 'off' | 'fine' | 'coarse';
+  /** Whether the furniture catalog panel is open. It lives here rather than in a
+   *  page because there is exactly ONE catalog and two triggers open it — the rail's
+   *  "Add furniture" and the canvas toggle. When it was a modal in the rail AND a
+   *  strip on the canvas, they were two component trees over two different item
+   *  lists, and only one of them could drag a piece onto the floor. Not persisted:
+   *  an open panel is a thing you are doing, not a preference. */
+  catalogOpen: boolean;
 
   setSelected: (id: string | null) => void;
   /** set the whole selection at once (group click). primary becomes selectedPartId. */
@@ -79,11 +96,17 @@ type StudioState = {
   setDim: (id: string, dim: [number, number, number]) => void;
   setTransformMode: (m: 'translate' | 'rotate' | 'scale') => void;
   setSnapMode: (m: 'off' | 'fine' | 'coarse') => void;
+  setCatalogOpen: (open: boolean) => void;
   toggleGrid: () => void;
   setLighting: (l: Lighting) => void;
   setQuality: (q: Quality) => void;
   setSunMinutes: (m: number) => void;
   setSunDayOfYear: (d: number) => void;
+  setSunLive: (on: boolean) => void;
+  /** Snap the shown moment to the device clock. The one setter that leaves
+   *  `sunLive` alone, which is what lets the ticker call it every minute without
+   *  unpinning itself. */
+  syncSunToNow: (now?: number) => void;
   toggleDressed: () => void;
   frameSelected: () => void;
   toggleHidden: (id: string) => void;
@@ -111,7 +134,23 @@ const STUDIO_PREFS = [
   'showGrid',
   'sunMinutes',
   'sunDayOfYear',
+  'sunLive',
 ] as const;
+
+const clampMinutes = (m: number) => Math.min(1439, Math.max(0, Math.round(m)));
+
+/** Day-of-year is clamped against the CURRENT year's length, not a flat 365, so
+ *  31 December is reachable in a leap year. `localInstant` clamps the same way, so
+ *  a 366 persisted in 2028 and read back in 2029 lands on 31 December rather than
+ *  rolling into January. */
+const clampDayOfYear = (d: number) =>
+  Math.min(daysInYear(new Date().getFullYear()), Math.max(1, Math.round(d)));
+
+/** The device clock, as the two fields the sun mood stores. */
+function sunMomentNow(now?: number): { sunMinutes: number; sunDayOfYear: number } {
+  const { dayOfYear, minutes } = localClock(now);
+  return { sunMinutes: clampMinutes(minutes), sunDayOfYear: clampDayOfYear(dayOfYear) };
+}
 
 export const useStudio = create<StudioState>()(
   persist(
@@ -136,7 +175,9 @@ export const useStudio = create<StudioState>()(
   // mood is a room with a direction to its light.
   sunMinutes: 15 * 60,
   sunDayOfYear: 80,
+  sunLive: false,
   dressed: true,
+  catalogOpen: false,
   frameSelectedToken: 0,
   hidden: {},
 
@@ -159,12 +200,18 @@ export const useStudio = create<StudioState>()(
   setRotation: (id, rot) => set((s) => ({ rotations: { ...s.rotations, [id]: rot } })),
   setDim: (id, dim) => set((s) => ({ dims: { ...s.dims, [id]: dim } })),
   setTransformMode: (m) => set({ transformMode: m }),
+  setCatalogOpen: (open) => set({ catalogOpen: open }),
   setSnapMode: (m) => set({ snapMode: m }),
   toggleGrid: () => set((s) => ({ showGrid: !s.showGrid })),
   setLighting: (l) => set({ lighting: l }),
   setQuality: (q) => set({ quality: q }),
-  setSunMinutes: (m) => set({ sunMinutes: Math.min(1439, Math.max(0, Math.round(m))) }),
-  setSunDayOfYear: (d) => set({ sunDayOfYear: Math.min(365, Math.max(1, Math.round(d))) }),
+  setSunMinutes: (m) => set({ sunMinutes: clampMinutes(m), sunLive: false }),
+  setSunDayOfYear: (d) => set({ sunDayOfYear: clampDayOfYear(d), sunLive: false }),
+  setSunLive: (on) =>
+    // Turning it on has to move the moment too, or the pin is announced while the
+    // room stays lit by whatever hour was last scrubbed to.
+    set(on ? { sunLive: true, ...sunMomentNow() } : { sunLive: false }),
+  syncSunToNow: (now) => set(sunMomentNow(now)),
   toggleDressed: () => set((s) => ({ dressed: !s.dressed })),
   loadTransforms: (data) =>
     set({ positions: data.positions ?? {}, rotations: data.rotations ?? {}, dims: data.dims ?? {} }),

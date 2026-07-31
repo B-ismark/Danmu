@@ -4,8 +4,8 @@ import {
   Camera, Lock, Unlock, Grid3x3, Layers, Ruler, Settings, Sparkles, Box,
   Download, Share2, FileText, FileArchive, ChevronRight, ChevronLeft, ChevronDown, ChevronUp,
   Zap, Leaf, Crosshair, Sofa, Bed, Tv, Lamp, Table, Sprout, KeyRound,
-  Eye, EyeOff, Info, BarChart3, ExternalLink, Pencil, Trash2, RefreshCw,
-  Image, Play, Replace, Circle, Sun, Moon, Cloud, Compass,
+  Eye, EyeOff, Info, HelpCircle, BarChart3, ExternalLink, Pencil, Trash2, RefreshCw,
+  Image, Play, Replace, Circle, Sun, Moon, Cloud, Compass, Clock,
   RotateCcw, RotateCw, Maximize, type LucideIcon,
 } from 'lucide-react';
 
@@ -27,11 +27,11 @@ export type IconName =
   | 'zap' | 'leaf' | 'crosshair'
   | 'sofa' | 'bed' | 'tv' | 'lamp' | 'table' | 'plant'
   | 'key' | 'eye' | 'eye-off'
-  | 'info' | 'chart' | 'external'
+  | 'info' | 'help' | 'chart' | 'external'
   | 'edit' | 'trash' | 'refresh'
   | 'image' | 'play'
   | 'rotate-ccw' | 'rotate-cw' | 'fit'
-  | 'sun' | 'moon' | 'cloud' | 'compass'
+  | 'sun' | 'moon' | 'cloud' | 'compass' | 'clock'
   | 'swap' | 'snap-wall' | 'snap-floor' | 'snap-surface';
 
 const MAP: Record<Exclude<IconName, 'whatsapp' | 'snap-wall' | 'snap-floor' | 'snap-surface'>, LucideIcon> = {
@@ -46,11 +46,11 @@ const MAP: Record<Exclude<IconName, 'whatsapp' | 'snap-wall' | 'snap-floor' | 's
   zap: Zap, leaf: Leaf, crosshair: Crosshair,
   sofa: Sofa, bed: Bed, tv: Tv, lamp: Lamp, table: Table, plant: Sprout,
   key: KeyRound, eye: Eye, 'eye-off': EyeOff,
-  info: Info, chart: BarChart3, external: ExternalLink,
+  info: Info, help: HelpCircle, chart: BarChart3, external: ExternalLink,
   edit: Pencil, trash: Trash2, refresh: RefreshCw,
   image: Image, play: Play, swap: Replace,
   'rotate-ccw': RotateCcw, 'rotate-cw': RotateCw, fit: Maximize,
-  sun: Sun, moon: Moon, cloud: Cloud, compass: Compass,
+  sun: Sun, moon: Moon, cloud: Cloud, compass: Compass, clock: Clock,
 };
 
 type Props = { name: IconName; size?: number; color?: string; strokeWidth?: number; style?: CSSProperties };

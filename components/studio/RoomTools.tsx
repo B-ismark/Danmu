@@ -1,14 +1,22 @@
 'use client';
 
-// The bottom-right cluster of the 3D view — "look at it" and "check it over":
-//   · View (passed in as `leading`) — lighting, decor, quality.
-//   · Room check — deterministic ergonomics review (door swings, walkways,
-//     storage clearance, bed access, TV distance, crowding). Click a finding to
-//     select the pieces involved and fly to them.
+// The bottom-right dock of the 3D view — one row, two halves.
+//
+// LEFT (passed in as `leading`): looking at the room — the camera presets and the
+// Look popover. RIGHT: changing and checking it — Suggest, and one "Room" button
+// whose panel carries three readings as tabs:
+//   · Check — deterministic ergonomics review (door swings, walkways, storage
+//     clearance, bed access, TV distance, crowding). Click a finding to select the
+//     pieces involved and fly to them.
 //   · List — every piece with its real dimensions in the user's display unit;
 //     copy as text or download a CSV to take shopping.
 //   · Layouts — named arrangement snapshots with mini floor plans, so competing
 //     arrangements can be saved and flipped between.
+//
+// Those three were three buttons opening three cards that could never be open at
+// the same time — a tab strip, spread across the bottom of the canvas and costing
+// three slots in a corner that also had to hold the camera, the lighting, the
+// grid and the suggestion button.
 //
 // Layouts are the one feature that stores work OUTSIDE the undo stack (they live
 // in IndexedDB), so both of its destructive paths are guarded: deleting a layout
@@ -29,7 +37,7 @@ import { csvBlob } from '@/lib/csv';
 import { downloadBlob } from '@/lib/snapshot';
 import { savedLabel } from '@/lib/dates';
 import { Icon } from '@/components/ui/Icon';
-import { IconButton, Pill } from '@/components/ui/primitives';
+import { IconButton, Pill, Segmented } from '@/components/ui/primitives';
 import { Modal } from '@/components/ui/Modal';
 import { useConfirm } from '@/components/ui/Confirm';
 import { toast } from '@/components/ui/StorageToast';
@@ -48,8 +56,15 @@ function fileSlug(name: string): string {
   );
 }
 
+type RoomTab = 'check' | 'list' | 'layouts';
+
 export function RoomTools({ leading }: { leading?: ReactNode }) {
-  const [open, setOpen] = useState<'check' | 'list' | 'layouts' | null>(null);
+  // One panel, three tabs. These were three sibling buttons opening three cards
+  // that were already mutually exclusive — i.e. a tab strip with the tabs spread
+  // along the bottom of the canvas. Saying so costs two buttons of width and makes
+  // the second and third readings discoverable from the first.
+  const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<RoomTab>('check');
   const { roomId } = useParams<{ roomId: string }>();
   const [roomName, setRoomName] = useState('Room');
 
@@ -97,7 +112,7 @@ export function RoomTools({ leading }: { leading?: ReactNode }) {
 
   // Close any open panel when a drag starts.
   useEffect(() => {
-    if (draggingId) setOpen(null);
+    if (draggingId) setOpen(false);
   }, [draggingId]);
 
   // Esc closes the open panel — it was previously only closable by re-clicking
@@ -111,7 +126,7 @@ export function RoomTools({ leading }: { leading?: ReactNode }) {
       // key, so it has to yield.
       if (isTypingOrDialog(e.target)) return;
       e.stopPropagation();
-      setOpen(null);
+      setOpen(false);
     }
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
@@ -121,55 +136,97 @@ export function RoomTools({ leading }: { leading?: ReactNode }) {
     <div
       style={{
         position: 'absolute',
-        bottom: 48,
+        bottom: 12,
         right: 12,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'flex-end',
         gap: 8,
         zIndex: 'var(--z-canvas-ui)',
-        // Faded rather than unmounted mid-drag: this row hosts the View popover,
-        // which reads the room from IndexedDB on mount — unmounting it would mean
-        // a storage read on every drop.
+        // Leaves the selection bar its half of the bottom edge, and wraps rather
+        // than reaching into it when the canvas is narrow.
+        maxWidth: 'calc(100% - 24px)',
+        // Faded rather than unmounted mid-drag: this row hosts the Look popover
+        // and the camera presets, and remounting them on every drop would throw
+        // away their state for the sake of 30px of chrome.
         opacity: draggingId ? 0 : 1,
         pointerEvents: draggingId ? 'none' : 'auto',
         transition: 'opacity .15s',
       }}
     >
-      {open === 'check' && (
-        <CheckPanel
-          issues={report.issues}
-          freeShare={report.freeFloorShare}
-          stepFree={stepFree}
-          onStepFree={setStepFree}
-          onClose={() => setOpen(null)}
-        />
-      )}
-      {open === 'list' && <ListPanel parts={effParts} roomName={roomName} onClose={() => setOpen(null)} />}
-      {open === 'layouts' && (
-        <LayoutsPanel effParts={effParts} footprint={room.footprint} onClose={() => setOpen(null)} />
+      {open && (
+        <div
+          className="ds-card"
+          style={{ width: 324, maxHeight: 400, overflow: 'auto', padding: 0, boxShadow: 'var(--shadow-lift)' }}
+        >
+          <div
+            style={{
+              position: 'sticky',
+              top: 0,
+              background: 'var(--paper)',
+              borderBottom: '1px solid var(--hairline)',
+              // Local to this panel's own scroll box — it lifts the header over the
+              // rows sliding under it. Its own rung on the --z-* scale rather than a
+              // bare 1, so nothing in the app invents a stacking number.
+              zIndex: 'var(--z-sticky-local)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 10px 6px 14px' }}>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink)', flex: 1 }}>This room</span>
+              <IconButton icon="x" label="Close room panel" onClick={() => setOpen(false)} size={24} iconSize={12} />
+            </div>
+            <div style={{ padding: '0 12px 10px' }}>
+              <Segmented
+                ariaLabel="Room panel"
+                value={tab}
+                onChange={setTab}
+                stretch
+                size={28}
+                options={[
+                  { value: 'check', label: problems > 0 ? `Check · ${problems}` : 'Check' },
+                  { value: 'list', label: 'List' },
+                  { value: 'layouts', label: 'Layouts' },
+                ]}
+              />
+            </div>
+          </div>
+
+          {tab === 'check' && (
+            <CheckPanel
+              issues={report.issues}
+              freeShare={report.freeFloorShare}
+              stepFree={stepFree}
+              onStepFree={setStepFree}
+            />
+          )}
+          {tab === 'list' && <ListPanel parts={effParts} roomName={roomName} />}
+          {tab === 'layouts' && <LayoutsPanel effParts={effParts} footprint={room.footprint} />}
+        </div>
       )}
 
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         {leading}
+        {/* Two jobs, two groups: everything to the left of this line is about
+            looking at the room, everything to the right changes or checks it. */}
+        <span aria-hidden="true" style={{ width: 1, height: 20, background: 'var(--hairline-strong)', margin: '0 2px' }} />
         <SuggestButton effParts={effParts} footprint={room.footprint} />
         <button
-          onClick={() => setOpen(open === 'check' ? null : 'check')}
-          aria-expanded={open === 'check'}
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
           className="ds-btn"
-          title="Check walkways, door swings, storage clearance and viewing distances"
+          title="Room check, the furniture list and saved layouts"
           style={{
             height: 30,
             fontSize: 11,
             gap: 6,
-            background: 'var(--paper)',
-            borderColor: problems > 0 ? 'var(--danger)' : 'var(--edge)',
-            color: problems > 0 ? 'var(--danger-text)' : 'var(--ink-2)',
+            background: open ? 'var(--accent-tint)' : 'var(--paper)',
+            borderColor: problems > 0 ? 'var(--danger)' : open ? 'var(--accent-text)' : 'var(--edge)',
+            color: problems > 0 ? 'var(--danger-text)' : open ? 'var(--accent-text)' : 'var(--ink-2)',
             boxShadow: 'var(--shadow-soft)',
           }}
         >
           <Icon name="info" size={12} />
-          Room check
+          Room
           <span
             style={{
               display: 'inline-flex',
@@ -187,26 +244,6 @@ export function RoomTools({ leading }: { leading?: ReactNode }) {
           >
             {problems > 0 ? <span className="mono">{problems}</span> : <Icon name="check" size={10} />}
           </span>
-        </button>
-        <button
-          onClick={() => setOpen(open === 'list' ? null : 'list')}
-          aria-expanded={open === 'list'}
-          className="ds-btn"
-          title="Furniture list with real dimensions — copy or download CSV"
-          style={{ height: 30, fontSize: 11, gap: 6, background: 'var(--paper)', borderColor: 'var(--edge)', boxShadow: 'var(--shadow-soft)' }}
-        >
-          <Icon name="layers" size={12} />
-          List
-        </button>
-        <button
-          onClick={() => setOpen(open === 'layouts' ? null : 'layouts')}
-          aria-expanded={open === 'layouts'}
-          className="ds-btn"
-          title="Save this arrangement as a layout and flip between saved layouts"
-          style={{ height: 30, fontSize: 11, gap: 6, background: 'var(--paper)', borderColor: 'var(--edge)', boxShadow: 'var(--shadow-soft)' }}
-        >
-          <Icon name="grid" size={12} />
-          Layouts
         </button>
       </div>
     </div>
@@ -410,27 +447,23 @@ const SEVERITY: Record<ClearanceSeverity, { tone: 'danger' | 'warn' | 'neutral';
   info: { tone: 'neutral', label: 'Just so you know' },
 };
 
-function PanelHead({ title, children }: { title: string; children?: ReactNode }) {
+/** A tab's action row — the buttons that belong to one reading rather than to the
+ *  panel as a whole (copy the list, save a layout). They used to live in each
+ *  card's own header; the header is shared now, so they sit at the top of the
+ *  body they act on. */
+function TabActions({ children }: { children: ReactNode }) {
   return (
     <div
       style={{
         display: 'flex',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        gap: 8,
-        padding: '10px 10px 10px 14px',
+        gap: 6,
+        padding: '8px 14px',
         borderBottom: '1px solid var(--hairline)',
-        position: 'sticky',
-        top: 0,
-        background: 'var(--paper)',
-        // Local to this panel's own scroll box — it lifts the sticky header over
-        // the rows sliding under it. Its own rung on the --z-* scale rather than a
-        // bare 1, so nothing in the app invents a stacking number.
-        zIndex: 'var(--z-sticky-local)',
+        background: 'var(--paper-2)',
       }}
     >
-      <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink)' }}>{title}</span>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>{children}</div>
+      {children}
     </div>
   );
 }
@@ -440,23 +473,17 @@ function CheckPanel({
   freeShare,
   stepFree,
   onStepFree,
-  onClose,
 }: {
   issues: ClearanceIssue[];
   freeShare: number;
   stepFree: boolean;
   onStepFree: (on: boolean) => void;
-  onClose: () => void;
 }) {
   const setSelection = useStudio((s) => s.setSelection);
   const frameSelected = useStudio((s) => s.frameSelected);
 
   return (
-    <div className="ds-card" style={{ width: 316, maxHeight: 360, overflow: 'auto', padding: 0, boxShadow: 'var(--shadow-lift)' }}>
-      <PanelHead title="Room check">
-        <IconButton icon="x" label="Close room check" onClick={onClose} size={24} iconSize={12} />
-      </PanelHead>
-
+    <div>
       <div style={{ fontSize: 11.5, color: 'var(--ink-3)', padding: '8px 14px', borderBottom: '1px solid var(--hairline)' }}>
         <span className="mono">{Math.round(freeShare * 100)}%</span> of the floor is still clear to walk on
       </div>
@@ -538,7 +565,7 @@ function CheckPanel({
 
 // ─── Furniture list ─────────────────────────────────────────────────────────
 
-function ListPanel({ parts, roomName, onClose }: { parts: ScenePart[]; roomName: string; onClose: () => void }) {
+function ListPanel({ parts, roomName }: { parts: ScenePart[]; roomName: string }) {
   const dimUnit = useSettings((s) => s.dimUnit);
   const [copied, setCopied] = useState(false);
 
@@ -601,16 +628,16 @@ function ListPanel({ parts, roomName, onClose }: { parts: ScenePart[]; roomName:
   }
 
   return (
-    <div className="ds-card" style={{ width: 320, maxHeight: 360, overflow: 'auto', padding: 0, boxShadow: 'var(--shadow-lift)' }}>
-      <PanelHead title="Furniture list">
+    <div>
+      <TabActions>
+        <span style={{ flex: 1, fontSize: 11, color: 'var(--ink-3)' }}>Real sizes, in your unit</span>
         <button onClick={copy} className="ds-btn" style={{ height: 24, fontSize: 10, padding: '0 8px' }}>
           {copied ? 'Copied ✓' : 'Copy'}
         </button>
         <button onClick={downloadCsv} className="ds-btn" style={{ height: 24, fontSize: 10, padding: '0 8px' }}>
           CSV
         </button>
-        <IconButton icon="x" label="Close furniture list" onClick={onClose} size={24} iconSize={12} />
-      </PanelHead>
+      </TabActions>
 
       {rows.length === 0 ? (
         <div style={{ padding: '16px 14px', fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
@@ -646,15 +673,7 @@ function transformKey(t: Transforms): string {
   return JSON.stringify([t.positions, t.rotations, t.dims]);
 }
 
-function LayoutsPanel({
-  effParts,
-  footprint,
-  onClose,
-}: {
-  effParts: ScenePart[];
-  footprint: Footprint;
-  onClose: () => void;
-}) {
+function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprint: Footprint }) {
   const { roomId } = useParams<{ roomId: string }>();
   const [layouts, setLayouts] = useState<LayoutVariant[]>([]);
   const [pendingApply, setPendingApply] = useState<LayoutVariant | null>(null);
@@ -739,13 +758,13 @@ function LayoutsPanel({
   }
 
   return (
-    <div className="ds-card" style={{ width: 322, maxHeight: 380, overflow: 'auto', padding: 0, boxShadow: 'var(--shadow-lift)' }}>
-      <PanelHead title="Layouts">
+    <div>
+      <TabActions>
+        <span style={{ flex: 1, fontSize: 11, color: 'var(--ink-3)' }}>Snapshots you can flip between</span>
         <button onClick={() => void saveCurrent()} className="ds-btn" style={{ height: 24, fontSize: 10, padding: '0 8px' }}>
           <Icon name="plus" size={10} /> Save current
         </button>
-        <IconButton icon="x" label="Close layouts" onClick={onClose} size={24} iconSize={12} />
-      </PanelHead>
+      </TabActions>
 
       {/* Current arrangement, for visual comparison against the saved ones. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderBottom: '1px solid var(--hairline)', background: 'var(--paper-2)' }}>

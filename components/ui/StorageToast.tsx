@@ -84,10 +84,11 @@ const TONE: Record<ToastTone, { border: string; lead: string }> = {
 export function StorageToast() {
   const items = useToasts((s) => s.items);
   const dismiss = useToasts((s) => s.dismiss);
-  // The studio parks a two-row control cluster in the bottom-right corner (view
-  // presets, room check, list, layouts). At the default offset a toast sat on top
-  // of it and, because the card takes pointer events, swallowed its clicks —
-  // which every delete now raises a toast over. Clear that row there.
+  // The studio parks its dock along the bottom of the canvas (camera presets,
+  // Look, Suggest, Room — one row, two when the canvas is narrow enough to wrap
+  // it). At the default offset a toast sat on top of it and, because the card
+  // takes pointer events, swallowed its clicks — which every delete now raises a
+  // toast over. 88 clears the wrapped case, which is the tall one.
   const pathname = usePathname();
   const bottom = pathname?.startsWith('/room/') ? 88 : 16;
 

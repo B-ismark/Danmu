@@ -51,21 +51,30 @@ export function HelpToggle({ children, label = 'How this works' }: { children: R
           {children}
         </HelpCard>
       )}
+      {/* A question mark rather than the sentence. The label is still the
+          accessible name and the tooltip — it just stops taking 150px of a corner
+          the drawing wants, on a control that gets pressed once. */}
       <button
         ref={btnRef}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className={`ds-chip ${open ? 'ds-chip--accent' : ''}`}
+        aria-label={label}
+        title={label}
         style={{
-          cursor: 'pointer',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 30,
           height: 30,
-          fontWeight: 700,
-          borderColor: open ? 'var(--accent-text)' : 'var(--edge)',
+          borderRadius: 'var(--r-full)',
+          cursor: 'pointer',
+          border: `1px solid ${open ? 'var(--accent-text)' : 'var(--edge)'}`,
           background: open ? 'var(--accent-tint)' : 'var(--paper)',
+          color: open ? 'var(--accent-text)' : 'var(--ink-2)',
+          boxShadow: 'var(--shadow-soft)',
         }}
       >
-        <Icon name="info" size={12} />
-        {label}
+        <Icon name="help" size={15} />
       </button>
     </>
   );

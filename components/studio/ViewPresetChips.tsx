@@ -1,7 +1,15 @@
 'use client';
 
+// Camera presets — where you stand, and nothing else.
+//
+// The floor-grid toggle used to ride along here, which made this row two
+// unrelated things wearing the same clothes: three of the four buttons moved the
+// camera and the fourth changed what the floor looked like. The grid is a display
+// setting and lives with the other display settings, in the Look popover. This
+// row is now one idea, and it no longer positions itself — the dock does.
+
 import { useStudio } from '@/lib/store';
-import { Dot, Segmented } from '@/components/ui/primitives';
+import { Segmented } from '@/components/ui/primitives';
 
 const PRESETS = [
   { value: 'front', label: 'Front' },
@@ -13,27 +21,13 @@ const PRESETS = [
 export function ViewPresetChips() {
   const view = useStudio((s) => s.viewPreset);
   const setView = useStudio((s) => s.setView);
-  const showGrid = useStudio((s) => s.showGrid);
-  const toggleGrid = useStudio((s) => s.toggleGrid);
   return (
-    <div style={{ position: 'absolute', bottom: 12, right: 12, display: 'flex', gap: 6 }}>
-      <button
-        onClick={toggleGrid}
-        title="Toggle floor grid"
-        aria-pressed={showGrid}
-        className={`ds-chip ${showGrid ? 'ds-chip--accent' : ''}`}
-        style={{ cursor: 'pointer', height: 26, fontWeight: 500, border: 0, background: showGrid ? 'var(--accent-tint)' : 'var(--paper)' }}
-      >
-        {showGrid && <Dot color="var(--accent)" size={5} />}
-        Grid
-      </button>
-      <Segmented
-        ariaLabel="View"
-        value={view}
-        onChange={setView}
-        options={PRESETS.map((p) => ({ value: p.value, label: p.label }))}
-        size={26}
-      />
-    </div>
+    <Segmented
+      ariaLabel="Camera"
+      value={view}
+      onChange={setView}
+      options={PRESETS.map((p) => ({ value: p.value, label: p.label }))}
+      size={30}
+    />
   );
 }

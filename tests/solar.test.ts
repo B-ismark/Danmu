@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { sunPosition, solarNoonUtcMinutes, sunDirection, daylightKelvin } from '@/lib/solar';
+import {
+  sunPosition,
+  solarNoonUtcMinutes,
+  sunDirection,
+  daylightKelvin,
+  daysInYear,
+  localInstant,
+  localClock,
+} from '@/lib/solar';
 
 // Checked against identities rather than against a copied table, so the test says
 // something even if the table would have been mistyped. The load-bearing one is
@@ -139,6 +147,59 @@ describe('sunDirection', () => {
   it('refuses to shine up through the floor', () => {
     expect(sunDirection(0, 180)).toBeNull();
     expect(sunDirection(-12, 180)).toBeNull();
+  });
+});
+
+describe('the calendar bridge', () => {
+  it('knows which years are long', () => {
+    expect(daysInYear(2026)).toBe(365);
+    expect(daysInYear(2028)).toBe(366);
+    expect(daysInYear(1900)).toBe(365); // century, not a leap year
+    expect(daysInYear(2000)).toBe(366); // …unless divisible by 400
+  });
+
+  it('round-trips the clock through an instant and back, to the minute', () => {
+    // The property "Now" depends on: whatever the device clock reads must survive
+    // being stored as (day-of-year, minutes) and rebuilt as an instant. A day count
+    // off by one is an hour of sun in the wrong place; an hour off is the wrong
+    // wall lit.
+    for (const t of [
+      new Date(2026, 0, 1, 0, 0).getTime(),
+      new Date(2026, 2, 29, 7, 3).getTime(), // a spring-forward weekend
+      new Date(2026, 6, 15, 14, 37).getTime(),
+      new Date(2026, 9, 25, 2, 30).getTime(), // a fall-back weekend
+      new Date(2026, 11, 31, 23, 59).getTime(),
+      new Date(2028, 11, 31, 23, 59).getTime(), // last minute of a leap year
+      new Date(2028, 1, 29, 12, 0).getTime(), // 29 February
+    ]) {
+      const { dayOfYear, minutes } = localClock(t);
+      const year = new Date(t).getFullYear();
+      expect(localInstant(dayOfYear, minutes, year)).toBe(Math.floor(t / 60000) * 60000);
+    }
+  });
+
+  it('numbers the days from one, and reaches the end of a leap year', () => {
+    expect(localClock(new Date(2026, 0, 1, 12, 0).getTime()).dayOfYear).toBe(1);
+    expect(localClock(new Date(2026, 11, 31, 12, 0).getTime()).dayOfYear).toBe(365);
+    expect(localClock(new Date(2028, 11, 31, 12, 0).getTime()).dayOfYear).toBe(366);
+    // 29 February exists, and pushes March out by a day.
+    expect(localClock(new Date(2028, 1, 29, 12, 0).getTime()).dayOfYear).toBe(60);
+    expect(localClock(new Date(2028, 2, 1, 12, 0).getTime()).dayOfYear).toBe(61);
+  });
+
+  it('clamps rather than rolling into the next year', () => {
+    // A 366 persisted in a leap year and read back in a short one must stay on
+    // 31 December — setDate(366) would silently become 1 January.
+    expect(localInstant(366, 0, 2026)).toBe(new Date(2026, 11, 31).getTime());
+    expect(localInstant(0, 0, 2026)).toBe(new Date(2026, 0, 1).getTime());
+    expect(localInstant(366, 0, 2028)).toBe(new Date(2028, 11, 31).getTime());
+  });
+
+  it('is a local-clock question, not a UTC one', () => {
+    // Same civil time on two dates six months apart: the wall clock reads the same,
+    // so the minutes-past-midnight must match even where the UTC offset moved.
+    expect(localClock(localInstant(15, 9 * 60 + 30, 2026)).minutes).toBe(9 * 60 + 30);
+    expect(localClock(localInstant(200, 9 * 60 + 30, 2026)).minutes).toBe(9 * 60 + 30);
   });
 });
 
