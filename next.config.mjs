@@ -58,15 +58,31 @@ const securityHeaders = [
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'no-referrer' },
-  // The app asks for the camera on the capture screen and nothing else. Note
-  // this is NOT the same as denying it — `camera=(self)` is what lets the
-  // capture step work while refusing every other powerful feature.
+  // The app asks for exactly two powerful features and refuses the rest. Note
+  // that `=(self)` is NOT the same as denying it — it is what lets the feature
+  // work on this origin while still blocking it in anything this page embeds.
+  //   · camera — the capture screen.
+  //   · geolocation — the "Use my location" button in the sun mood, which fills
+  //     in the room's latitude and longitude (see lib/geolocate.ts, which
+  //     coarsens the fix to ~11 km before storing it). This was `()` until that
+  //     button existed, and `()` here overrides the user's own permission grant,
+  //     so the two have to move together.
+  //   · accelerometer / gyroscope / magnetometer — the "Compass" button in the
+  //     same panel reads the room's bearing off the phone's own compass
+  //     (lib/compass.ts). Chrome gates the DeviceOrientation events on these
+  //     three, so all three are needed for one reading. Listed explicitly rather
+  //     than left to the `self` default, because a feature this app depends on
+  //     should be visible in the policy rather than inferred from its absence.
+  // None of these send anything anywhere; all write to local storage only.
   {
     key: 'Permissions-Policy',
     value: [
       'camera=(self)',
       'microphone=()',
-      'geolocation=()',
+      'geolocation=(self)',
+      'accelerometer=(self)',
+      'gyroscope=(self)',
+      'magnetometer=(self)',
       'payment=()',
       'usb=()',
       'midi=()',

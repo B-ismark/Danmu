@@ -6,8 +6,7 @@ import { clampDims } from '@/lib/dimension-ranges';
 import type { LibraryItem, ScenePart } from '@/lib/scene-spec';
 import { Icon } from '@/components/ui/Icon';
 import { Modal } from '@/components/ui/Modal';
-import { LibraryPicker } from './LibraryPicker';
-import { PickerTabs, DescribeField, type PickerTab } from './AddPartButton';
+import { LibraryPicker, PickerTabs, DescribeField, type PickerTab } from './LibraryPicker';
 
 // The ONE way to change which model a piece uses. It used to be two buttons
 // side by side — "Swap model" (browse the catalog) and "AI refine" (describe it)

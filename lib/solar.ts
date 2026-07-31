@@ -164,6 +164,58 @@ export function sunDirection(
   return [horizontal * Math.sin(az), Math.sin(alt), -horizontal * Math.cos(az)];
 }
 
+// ── The calendar bridge ──────────────────────────────────────────────────────
+//
+// The sun mood asks its question in local civil time — "4 pm on 12 December" —
+// while `sunPosition` answers about UTC instants. Both directions of that
+// conversion live here, side by side, for the same reason `toRecord`/`fromRecord`
+// do: a hand-written read and a hand-written write drift. They already had. The
+// View panel formatted its date label against a fixed non-leap year while the
+// scene built its instant from the real one, so through every leap year after
+// 28 February the label read a day later than the light it described.
+
+/** 365, or 366 in a leap year. */
+export function daysInYear(year: number): number {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 366 : 365;
+}
+
+/** The UTC instant for a day-of-year and a local clock time.
+ *
+ *  Built through the platform's own Date so the browser's zone and its DST rules
+ *  do the conversion — the alternative is deriving an offset from longitude, which
+ *  is off by an hour for half the year in any country that puts its clocks
+ *  forward. The assumption this makes is that the room is in the same time zone as
+ *  the person looking at it, which is true of a room you live in. */
+export function localInstant(
+  dayOfYear: number,
+  minutes: number,
+  year: number = new Date().getFullYear(),
+): number {
+  const day = Math.min(daysInYear(year), Math.max(1, Math.round(dayOfYear)));
+  const d = new Date(year, 0, 1, 0, 0, 0, 0);
+  d.setDate(day);
+  d.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+  return d.getTime();
+}
+
+/** What the user's own clock reads, in the terms the sun mood stores.
+ *
+ *  A left inverse of `localInstant` to the minute, which is the whole point: it is
+ *  what lets "Now" light the room with the light that is actually outside the
+ *  window, instead of an hour off it.
+ *
+ *  The day count rounds rather than floors because a clock change makes one local
+ *  day 23 hours long and another 25, and flooring loses a day every spring. */
+export function localClock(now: number = Date.now()): { dayOfYear: number; minutes: number } {
+  const d = new Date(now);
+  const midnight = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const jan1 = new Date(d.getFullYear(), 0, 1).getTime();
+  return {
+    dayOfYear: Math.round((midnight - jan1) / MS_PER_DAY) + 1,
+    minutes: d.getHours() * 60 + d.getMinutes(),
+  };
+}
+
 /** Warm-to-white daylight for a given sun altitude, as a hex colour.
  *
  *  Not a physical model of atmospheric scattering — a two-point interpolation

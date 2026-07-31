@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { PartTree } from '@/components/studio/PartTree';
 import { Inspector } from '@/components/studio/Inspector';
 import { PlanView } from '@/components/studio/PlanView';
+import { CatalogPanel, STUDIO_CANVAS_ID } from '@/components/studio/CatalogPanel';
 import { useStackedStudio } from '@/components/studio/NarrowViewportBanner';
 import { Icon } from '@/components/ui/Icon';
 import { useScene } from '@/lib/scene-store';
@@ -26,6 +27,7 @@ export default function PlanPage() {
   // 0.4×–4× — three false claims on the one screen someone might measure from.
   const [zoom, setZoom] = useState(1);
   const [comfort, setComfort] = useState(true);
+  const catalogOpen = useStudio((s) => s.catalogOpen);
 
   useEffect(() => {
     if (!roomId) return;
@@ -85,6 +87,7 @@ export default function PlanPage() {
   const plan = (
     <main
       key="plan"
+      id={STUDIO_CANVAS_ID}
       style={{ position: 'relative', overflow: 'hidden', minHeight: stacked ? 300 : 0 }}
       className="ds-grid-bg"
     >
@@ -137,6 +140,11 @@ export default function PlanPage() {
           Comfort zones
         </button>
       </div>
+
+      {/* The same catalog the 3D tab uses, opened by the same rail button. Its
+          rows are not draggable here — nothing on this page catches a drop — so
+          it offers click-to-drop-in-the-centre instead of pretending otherwise. */}
+      {catalogOpen && <CatalogPanel bottomGap={100} />}
 
       <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 'var(--z-canvas-ui)' }}>
         <button

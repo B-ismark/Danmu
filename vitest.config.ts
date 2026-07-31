@@ -21,4 +21,11 @@ export default defineConfig({
   resolve: {
     alias: { '@': resolve(__dirname, '.') },
   },
+  // A test that renders a component (tests/sun-controls.test.ts) imports .tsx, and
+  // tsconfig says `jsx: "preserve"` because Next owns that transform in the app
+  // build. esbuild reads the same setting and falls back to the CLASSIC runtime,
+  // which emits `React.createElement` into files that — correctly, under Next —
+  // never import React. Naming the automatic runtime here fixes it for the test
+  // run only; the app build is untouched.
+  esbuild: { jsx: 'automatic' },
 });

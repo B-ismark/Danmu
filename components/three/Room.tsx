@@ -13,7 +13,7 @@ import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { placeNewPart, DND_MIME, type Category, type Shape } from '@/lib/scene-spec';
 import { footprintBounds } from '@/lib/footprint';
-import { sunPosition, sunDirection, daylightKelvin } from '@/lib/solar';
+import { sunPosition, sunDirection, daylightKelvin, localInstant } from '@/lib/solar';
 import { hexFromKelvin } from '@/lib/light-units';
 import { useSnapshot, downloadBlob } from '@/lib/snapshot';
 import { RoomShell } from './RoomShell';
@@ -104,20 +104,6 @@ const LIGHTING = {
  *  daylight. */
 const DEFAULT_SITE = { lat: 40, lon: 0, bearingDeg: 0 };
 
-/** The UTC instant for a day-of-year and a local clock time.
- *
- *  Built through the platform's own Date so the browser's zone and its DST rules
- *  do the conversion — the alternative is deriving an offset from longitude, which
- *  is off by an hour for half the year in any country that puts its clocks
- *  forward. The assumption this makes is that the room is in the same time zone as
- *  the person looking at it, which is true of a room you live in. */
-function localInstant(dayOfYear: number, minutes: number): number {
-  const d = new Date(new Date().getFullYear(), 0, 1, 0, 0, 0, 0);
-  d.setDate(dayOfYear);
-  d.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
-  return d.getTime();
-}
-
 export function Room() {
   const hidden = useStudio((s) => s.hidden);
   const lighting = useStudio((s) => s.lighting);
@@ -133,6 +119,29 @@ export function Room() {
   const site = useScene((s) => s.room.site);
   const sunMinutes = useStudio((s) => s.sunMinutes);
   const sunDayOfYear = useStudio((s) => s.sunDayOfYear);
+  // While the moment is pinned to "Now", follow the device clock. This is the app's
+  // only such ticker and it lives here rather than in the View panel, because the
+  // panel is closed most of the time and the room still has to keep up.
+  //
+  // Aligned to the next minute rather than a bare 60s interval: the readout is a
+  // clock, and a clock that changes 40 seconds after the minute does is wrong twice
+  // over. Nothing runs in the other moods — the sun is not consulted there, so a
+  // timer waking the scene up every minute would be pure battery.
+  const sunLive = useStudio((s) => s.sunLive);
+  const syncSunToNow = useStudio((s) => s.syncSunToNow);
+  useEffect(() => {
+    if (!sunLive || lighting !== 'sun') return;
+    syncSunToNow();
+    let tick: ReturnType<typeof setInterval> | undefined;
+    const align = setTimeout(() => {
+      syncSunToNow();
+      tick = setInterval(syncSunToNow, 60_000);
+    }, 60_000 - (Date.now() % 60_000));
+    return () => {
+      clearTimeout(align);
+      if (tick) clearInterval(tick);
+    };
+  }, [sunLive, lighting, syncSunToNow]);
   const sun = useMemo(() => {
     if (lighting !== 'sun') return null;
     const s = site ?? DEFAULT_SITE;

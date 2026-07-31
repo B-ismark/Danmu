@@ -447,6 +447,66 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
   (`RoomData.site`): a flat and a holiday cottage do not share a latitude. The date
   and time being asked about are device prefs — a question, not a property of the
   furniture. Nothing is read from a photo; `lib/exif.ts` does not read GPS.
+  **`Use my location` fills latitude and longitude from the device** on a press —
+  never on mount, because an unprompted permission dialog is the fastest route to
+  being denied one permanently. `lib/geolocate.ts` **coarsens the fix to one decimal
+  place (~11 km) before it is stored**: across that distance the sun's altitude
+  moves 0.1° and solar noon 24 seconds, both under the width of the sun's own disc,
+  so the room keeps enough to be lit correctly and not enough to say which building
+  it is in. High accuracy is never requested for the same reason. The fix goes to
+  `RoomData.site` in IndexedDB and nowhere else — this is not egress, and the
+  browser's location service is the only party that holds the precise position.
+  The bearing is deliberately left alone: a fix says where the room is, not which
+  way it points.
+  **`Compass` reads the bearing off the phone's magnetometer** (`lib/compass.ts`),
+  which is the last of the three facts nobody knows about their own living room.
+  The gesture is defined so that no conversion is needed, and that is the point: a
+  compass heading is clockwise from true north and describes the device's **top
+  edge**, while `site.bearingDeg` is the true bearing of the plan's **up** direction
+  (scene `-Z`) — so *aim the phone's top edge at the wall drawn at the top of the
+  plan* makes the heading the bearing. A sign error here is invisible at 0° and 180°
+  and inverts every side wall, the same trap `lib/geometry.ts` documents for
+  rotations. Two APIs are needed: iOS's `webkitCompassHeading` behind
+  `DeviceOrientationEvent.requestPermission()` (which must be reached synchronously
+  from the tap), and `deviceorientationabsolute`'s `alpha` elsewhere — measured
+  *counter*-clockwise from north, hence `360 - alpha`. A `deviceorientation` event
+  **without** `absolute` is refused rather than used: it is relative to wherever the
+  phone was when listening began, and would produce a confident wrong bearing.
+  The reading is a ~1.4 s window averaged as unit vectors, not a single event —
+  arithmetic on bearings averages 359° and 1° to 180°, the exact opposite answer —
+  and the resultant length doubles as an agreement measure: below 0.6 the read is
+  refused, above ~15° of circular spread the value is applied but reported as shaky,
+  because a bearing taken next to a radiator looks identical to a good one on the
+  dial. Snapped to 5°, which is the dial's step and about as far as a phone
+  magnetometer should be believed.
+  Both buttons needed `Permissions-Policy` changes in `next.config.mjs`:
+  `geolocation=(self)`, and `accelerometer` / `gyroscope` / `magnetometer=(self)`
+  (Chrome gates the orientation events on all three). `()` there overrides the
+  user's own grant, so a feature and its header entry move together.
+  **`Now` pins that moment to the device clock** (`sunLive`), and a ticker in `Room`
+  advances it on the minute so the room stays lit by the light that is outside the
+  window; scrubbing the day or picking a month unpins it, because the clock and the
+  panel cannot both own the value. Off by default — the moment you want to look at is
+  rarely the moment you opened the app, and a room asked about at 1 am is correctly
+  black. Both directions of the local-clock ↔ UTC-instant conversion live together
+  in `lib/solar.ts` (`localInstant` / `localClock`, and `daysInYear` so 31 December
+  is reachable in a leap year), because they had already drifted apart: the panel's
+  date label was formatted against a fixed non-leap year while the scene built its
+  instant from the real one, so through a leap year the label read a day later than
+  the light it described.
+  **The controls are `SunControls.tsx`, and they show the answer rather than the
+  parameters.** The day is drawn — sun altitude across 24 hours, night shaded,
+  sunrise/sunset/solar-noon marked — from the same `sunPosition` the scene is lit
+  by, sampled every 10 minutes and bisected to the minute at the horizon crossings,
+  so the picture and the presets (`Sunrise` / `Noon` / `Golden` / `Sunset`, which
+  are *this* place's real times) can never disagree with the light. A native
+  `<input type="range">` lies over the graph with a transparent track (`.sun-scrub`),
+  which is what keeps arrow keys, Home/End and a spoken value for free. The date is
+  twelve month buttons rather than a 365-step slider — a sun path moves little
+  within a month — and the compass bearing is a dial with the room square in the
+  middle and the sun drawn where it actually is, because "which way does the room
+  face" is a picture, not a number between 0 and 359. The dial is a real
+  `role="slider"` with arrow keys, since pointing is otherwise a mouse-only gesture.
   The key light's shadow frustum is fitted per direction, not per room: a sun near
   the horizon throws shadows an order of magnitude longer than a studio light, so
   the throw-per-metre term is derived from the light vector and capped, and the
@@ -477,9 +537,53 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
   some unrelated re-render happened to reopen the pass.
 - **Idle micro-motion** (`Motion.tsx`): fan spins, plant sways, pendant swings.
 
+### Studio chrome — where a control lives
+The 3D canvas carries **three clusters and one transient bar**, and a new control
+joins one of them rather than starting a fourth. It reached seven at one point —
+transform modes, snap, a Catalog chip, a View popover, a Suggest button, three
+room-report buttons, a camera-preset row, a grid chip and a help chip — over a
+single view of a single room.
+
+| Where | What | Why together |
+|---|---|---|
+| **Top left** | `TransformToolbar` (Move/Scale/Rotate + snap) · `CatalogToggle`, with the one `CatalogPanel` hanging under it | Everything that puts a piece in the room or changes one |
+| **Bottom right** | `RoomTools` dock: `ViewPresetChips` · `ViewOptions` — divider — `Suggest` · `Room` | Left of the divider is looking at the room, right of it is changing and checking it |
+| **Bottom left** | The `?` button (`HelpToggle` / `HelpDock`), on `--z-canvas-hint` | The one place the studio explains itself, and no panel may paint over it |
+| **Bottom centre** | `SelectionBar` | Not a cluster: it exists only while something is selected |
+
+Two consolidations are load-bearing and should not be undone casually:
+
+- **Room check / List / Layouts are one button with three tabs.** They were three
+  buttons opening three cards that could never be open at once — a tab strip spread
+  along the canvas edge, costing three slots and making the second and third
+  readings invisible until you knew they existed.
+- **`ViewOptions` owns every display setting.** The floor grid was a chip in the
+  corner (a display toggle sitting apart from the other display toggle) and
+  "Re-scan room" was a second copy of the top bar's Rescan, which is about what is
+  *in* the room rather than how it looks. Lighting, Display, Quality — in that
+  order, and nothing else.
+
+The 2D plan tab mirrors the same idea at smaller scale: help chip above the zoom
+toolbar, bottom-left; scale/comfort chips top-left; export top-right.
+
 ### Other studio tools
-- **Catalog drag-in** (`CatalogPanel.tsx`) — drag a piece onto the canvas; drop
-  point raycasts onto the floor. Click-to-add-at-centre is the fallback.
+- **Adding furniture is ONE surface** (`CatalogPanel.tsx`) — a docked, non-blocking
+  strip with the two ways in as tabs: **Catalog** (searchable, grouped, drag onto
+  the 3D floor or click to drop at centre) and **Describe it** (local token search
+  through `lib/shape-search.ts`; explicit sizes in the words are parsed and passed
+  through `clampDims`). Two triggers open it and both live in `useStudio`
+  (`catalogOpen`): `AddFurnitureButton` in the rail's Furniture section and
+  `CatalogToggle` in the canvas toolbar.
+  It was two surfaces until they were merged: a 520px modal from the rail over
+  `PART_LIBRARY` + product presets, and a canvas strip over `PART_LIBRARY` alone.
+  Same feature, two component trees, **two different item lists** — and only the
+  strip could drag onto the floor while only the modal could take a described
+  piece. The strip won because a modal covers the room you are placing furniture
+  into, which is also the drop target. `LibraryPicker.tsx` now owns the one list
+  (plus `PickerTabs` / `DescribeField`, shared with the Inspector's swap flow) and
+  takes `columns` / `draggable`, so the dock and the swap modal cannot drift apart
+  again. `draggable` is **off on the 2D plan**, which has no drop handler — a drag
+  that cannot land is worse than no drag.
 - **One-tap themes** (`lib/themes.ts`) — recolour all unlocked parts + set a
   matching lighting mood.
 - **2D plan** (`PlanView.tsx`) synced with the 3D scene; export via

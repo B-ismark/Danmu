@@ -1,6 +1,7 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
+import { useStudio } from '@/lib/store';
 import { TopBar } from '@/components/studio/TopBar';
 import { StudioTabs } from '@/components/studio/StudioTabs';
 import { RoomSync } from '@/components/studio/RoomSync';
@@ -22,6 +23,14 @@ export default function StudioLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const onModel = pathname?.endsWith('/model') ?? false;
   const surface = studioSurfaceProps();
+
+  // The catalog is open state, not a preference, and it lives in a store that
+  // outlives the route. Without this, opening the catalog in one room and leaving
+  // meant the next room you opened had a panel over its canvas that you never
+  // asked for. Cleared here rather than in a page so switching 3D ↔ 2D — which
+  // keeps this layout mounted — leaves it open, which is the point of it being
+  // shared in the first place.
+  useEffect(() => () => useStudio.getState().setCatalogOpen(false), []);
   return (
     // dvh, not vh: on mobile browsers vh includes the collapsing URL bar, so the
     // bottom row of studio chrome sat under it.
