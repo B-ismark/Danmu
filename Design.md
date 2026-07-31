@@ -1,6 +1,6 @@
 # Danmu — Design & Architecture
 
-> Last updated: 2026-07-25 · reflects the codebase on `main`.
+> Last updated: 2026-07-31 · reflects the codebase on `main`.
 > Canonical design doc. Supersedes the older `DOCUMENTATION.md`.
 
 Danmu is a **local-first interior decoration simulation**. You pick a footprint

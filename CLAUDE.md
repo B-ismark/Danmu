@@ -39,6 +39,15 @@ backend, no account. The 3D studio *is* the product.
    across a doorway and have Room check report it: **add a clearance number there,
    never in a consumer.** Zones are authored in the piece's own frame and derived
    from its `dimMM`, which is what makes them recalibrate on a resize for free.
+   **Arrange against the room, never against its bounding box.** A footprint is a
+   polygon; `±width/2` describes a box the room may not be. Every starter
+   arrangement was written that way and so furnished the quadrant an L / T / U cuts
+   away — five of the L-shape's nine pieces stood outside the house.
+   `lib/room-bays.ts` gives you the rectangles of floor that exist and which of
+   their sides are real walls; place in a wall's own frame, and end on
+   `lib/layout-settle.ts` (both scene paths do). Gate a placement with
+   `footInsidePoly`, **not** `outsideShare` — the latter samples, and its samples sit
+   10% in from the edges, so it forgives a piece 20 mm through the plaster.
 4. **No hard-coded design values.** Colours / spacing / type / radii go through
    CSS tokens in `app/globals.css` (`--paper`, `--ink`, `--accent` terracotta,
    `--accent-2` sage, `--r-*`, `--font-sans` Nunito / `--font-display`
