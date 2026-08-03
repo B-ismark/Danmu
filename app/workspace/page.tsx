@@ -18,6 +18,7 @@ import { Icon } from '@/components/ui/Icon';
 import { useConfirmDeleteRooms } from '@/components/ui/Confirm';
 import { toast } from '@/components/ui/StorageToast';
 import { PlanThumb } from '@/components/studio/PlanThumb';
+import { ImportSceneButton } from '@/components/studio/SceneFile';
 
 // Recency grouping and the "Edited …" label live in lib/dates, alongside the
 // units formatter — this screen used to hand-roll both, while the saved-layouts
@@ -147,6 +148,9 @@ export default function WorkspacePage() {
           <Icon name="settings" size={12} />
           Settings
         </Link>
+        {/* Import belongs here rather than in a room: it makes a new room, so the
+            workspace is both where it lands and where you can see it land. */}
+        <ImportSceneButton />
         <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--primary" style={{ height: 32, fontSize: 12 }}>
           <Icon name="plus" size={12} />
           New Room
@@ -450,11 +454,16 @@ function EmptyState() {
         Pick a footprint and start arranging furniture in real 3D — move, recolour, restyle, and relight
         every piece. No account, no upload. Capturing your real room is optional.
       </p>
-      <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--accent" style={{ height: 40, padding: '0 20px', fontSize: 14 }}>
-        {/* inherits the button's own --on-accent foreground */}
-        <Icon name="plus" size={13} />
-        Create your first room
-      </Link>
+      <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+        <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--accent" style={{ height: 40, padding: '0 20px', fontSize: 14 }}>
+          {/* inherits the button's own --on-accent foreground */}
+          <Icon name="plus" size={13} />
+          Create your first room
+        </Link>
+        {/* Someone arriving from a shared file has no room to resume, so the empty
+            state is exactly where they need this. */}
+        <ImportSceneButton size="large" />
+      </div>
     </div>
   );
 }

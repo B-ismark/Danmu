@@ -120,6 +120,16 @@ export function clampDims(category: Category, shape: Shape, dim: Dim3): Dim3 {
   ];
 }
 
+/** How long a room's side may be, in metres — the outermost dimension in the app,
+ *  and the one bound that is not per-item.
+ *
+ *  It lives here with the furniture ranges because it has the same job and needs
+ *  the same discipline: `RoomDimsEditor` wrote `1` and `50` once in a predicate and
+ *  twice more into the sentences it shows the user, and `lib/scene-file.ts` needed
+ *  a fourth copy to validate an imported room against. A displayed measurement is
+ *  derived from the rule, never typed next to it. */
+export const ROOM_SIDE_M = { min: 1, max: 50 } as const;
+
 /** True if the given dims already sit inside the allowed range. */
 export function dimsWithinRange(category: Category, shape: Shape, dim: Dim3): boolean {
   const r = dimRangeFor(category, shape);

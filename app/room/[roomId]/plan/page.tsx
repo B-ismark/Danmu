@@ -10,11 +10,11 @@ import { CatalogPanel, STUDIO_CANVAS_ID } from '@/components/studio/CatalogPanel
 import { useStackedStudio } from '@/components/studio/NarrowViewportBanner';
 import { Icon } from '@/components/ui/Icon';
 import { useScene } from '@/lib/scene-store';
+import { currentRoomScene } from '@/lib/room-scene';
 import { useStudio, useSettings } from '@/lib/store';
 import { exportPlanPng } from '@/lib/plan-export';
 import { roomStore } from '@/lib/storage';
 import { UNIT_OPTIONS } from '@/lib/units';
-import type { ScenePart } from '@/lib/scene-spec';
 
 export default function PlanPage() {
   const dimUnit = useSettings((s) => s.dimUnit);
@@ -42,15 +42,7 @@ export default function PlanPage() {
   const unitName = UNIT_OPTIONS.find((u) => u.id === dimUnit)?.label ?? dimUnit;
 
   function exportPlan() {
-    const { parts, room } = useScene.getState();
-    const { positions, rotations, dims } = useStudio.getState();
-    const effParts: ScenePart[] = parts.map((p) => ({
-      ...p,
-      pos: positions[p.id] ?? p.pos,
-      rot: rotations[p.id] ?? p.rot,
-      dimMM: dims[p.id] ?? p.dimMM,
-    }));
-    exportPlanPng(effParts, room, dimUnit, roomName);
+    exportPlanPng(currentRoomScene(), useScene.getState().room, dimUnit, roomName);
   }
 
   const shell: CSSProperties = stacked

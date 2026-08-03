@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useScene } from '@/lib/scene-store';
 import { useSettings } from '@/lib/store';
 import { fromMM, toMM, stepFor, precisionFor } from '@/lib/units';
+import { ROOM_SIDE_M } from '@/lib/dimension-ranges';
 import { roomStore } from '@/lib/storage';
 import { useParams } from 'next/navigation';
 import { Icon } from '@/components/ui/Icon';
@@ -46,7 +47,7 @@ export function RoomDimsEditor() {
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
       const m = next.map((s) => toMM(parseFloat(s), dimUnit) / 1000);
-      if (m.some((n) => Number.isNaN(n) || n < 1 || n > 50)) {
+      if (m.some((n) => Number.isNaN(n) || n < ROOM_SIDE_M.min || n > ROOM_SIDE_M.max)) {
         setRangeError(true);
         return;
       }
@@ -120,8 +121,8 @@ export function RoomDimsEditor() {
         </div>
         <div style={{ fontSize: 11, marginTop: 6, lineHeight: 1.4, color: rangeError ? 'var(--danger-text)' : 'var(--ink-3)' }}>
           {rangeError
-            ? 'That is outside 1–50 m — enter a size in that range and the room will follow.'
-            : `Sizes in ${dimUnit}. Anything from 1 to 50 m a side.`}
+            ? `That is outside ${ROOM_SIDE_M.min}–${ROOM_SIDE_M.max} m — enter a size in that range and the room will follow.`
+            : `Sizes in ${dimUnit}. Anything from ${ROOM_SIDE_M.min} to ${ROOM_SIDE_M.max} m a side.`}
         </div>
       </>
       )}

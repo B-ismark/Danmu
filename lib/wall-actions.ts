@@ -20,23 +20,11 @@
 // Undo is one entry for the whole gesture: `lib/history.ts` snapshots both stores
 // behind a 250 ms debounce, so the wall and everything it carried undo together.
 
-import { useScene } from './scene-store';
 import { useStudio } from './store';
+import { currentRoomScene } from './room-scene';
 import { attachedToWall, carryAttached } from './wall-move';
 import { wallOutwardNormal } from './footprint';
-import type { ScenePart } from './scene-spec';
-
-/** Parts at their effective transforms — the non-hook twin of `useRoomScene`,
- *  because this runs inside pointer handlers, not render. */
-function effectiveParts(): ScenePart[] {
-  const { positions, rotations, dims } = useStudio.getState();
-  return useScene.getState().parts.map((p) => ({
-    ...p,
-    pos: positions[p.id] ?? p.pos,
-    rot: rotations[p.id] ?? p.rot,
-    dimMM: dims[p.id] ?? p.dimMM,
-  }));
-}
+import { useScene } from './scene-store';
 
 /**
  * Ids of everything wall `index` will take with it.
@@ -47,7 +35,7 @@ function effectiveParts(): ScenePart[] {
  * rejoin — the wall visibly walks away from its own sofa.
  */
 export function wallAttachments(index: number): string[] {
-  return attachedToWall(effectiveParts(), useScene.getState().room.footprint, index);
+  return attachedToWall(currentRoomScene(), useScene.getState().room.footprint, index);
 }
 
 /**
@@ -59,7 +47,7 @@ export function wallAttachments(index: number): string[] {
  */
 export function moveWallCarrying(index: number, delta: number, ids?: string[]): number {
   const before = useScene.getState().room.footprint;
-  const attached = ids ?? attachedToWall(effectiveParts(), before, index);
+  const attached = ids ?? attachedToWall(currentRoomScene(), before, index);
   // Read before the move: the moved edge translates along this normal and keeps its
   // direction, so one reading holds for the whole gesture — but the polygon object
   // does not, so take it from `before`.
@@ -69,7 +57,7 @@ export function moveWallCarrying(index: number, delta: number, ids?: string[]): 
   if (applied === 0) return 0;
   if (attached.length === 0) return applied;
   const after = useScene.getState().room.footprint;
-  const moves = carryAttached(attached, effectiveParts(), before, after, outward, applied);
+  const moves = carryAttached(attached, currentRoomScene(), before, after, outward, applied);
   useStudio.getState().setPositionsFor(moves);
   return applied;
 }

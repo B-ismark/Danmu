@@ -16,7 +16,8 @@
 import { useMemo } from 'react';
 import { Line, Html } from '@react-three/drei';
 import { useScene } from '@/lib/scene-store';
-import { useSettings, useStudio } from '@/lib/store';
+import { useRoomScene } from '@/lib/room-scene';
+import { useSettings } from '@/lib/store';
 import { useDragLive } from '@/lib/drag-live';
 import { SCENE } from '@/lib/scene-palette';
 import { rayToBoundary, obbExtentAlong, obbFromPart } from '@/lib/geometry';
@@ -41,15 +42,14 @@ type Pt = [number, number, number];
 export function MeasureGuides() {
   const live = useDragLive((s) => s.live);
   const footprint = useScene((s) => s.room.footprint);
-  const parts = useScene((s) => s.parts);
+  // Effective transforms, so gaps measure to where furniture ACTUALLY is.
+  const parts = useRoomScene();
   const dimUnit = useSettings((s) => s.dimUnit);
 
   const { guides, snapGuides } = useMemo(() => {
     const empty = { guides: [] as Array<{ points: [Pt, Pt]; mid: Pt; label: string }>, snapGuides: [] as Array<{ points: [Pt, Pt]; center: boolean }> };
     if (!live) return empty;
     const obb = obbFromPart([live.x, live.y, live.z], live.rot, live.dimMM);
-    // Effective transforms so gaps measure to where furniture ACTUALLY is.
-    const { positions, rotations, dims } = useStudio.getState();
     const out: Array<{ points: [Pt, Pt]; mid: Pt; label: string }> = [];
     for (const [dx, dz] of DIRS) {
       const ext = obbExtentAlong(obb, dx, dz);
@@ -61,10 +61,8 @@ export function MeasureGuides() {
       let nearest = wall;
       for (const o of parts) {
         if (o.id === live.partId || o.wallMounted || o.category === 'rug') continue;
-        const op = positions[o.id] ?? o.pos;
-        const orot = rotations[o.id] ?? o.rot;
-        const odim = dims[o.id] ?? o.dimMM;
-        const oe = aabbExtents(orot, odim);
+        const op = o.pos;
+        const oe = aabbExtents(o.rot, o.dimMM);
         // Cross-axis corridor check: the neighbour must overlap the mover's
         // swept band for the gap to be a real walkway.
         const crossOverlap =

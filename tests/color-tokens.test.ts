@@ -11,7 +11,7 @@ import {
   toOklch,
   relativeLuminance,
   type Rgb,
-} from '@/lib/color';
+} from './helpers/color';
 import { SCENE } from '@/lib/scene-palette';
 
 // app/globals.css states a contrast ratio next to almost every colour it defines,
