@@ -511,7 +511,9 @@ export function analyzeRoom(
   const entrance = field ? entranceComponents(field, parts) : null;
   if (field && field.componentCount > 1 && entrance) {
     const reachable = entrance;
-    const stranded = solid.filter((p, i) => {
+    // Index only — `solidObbs` is built from `solid` and stays index-aligned with it,
+    // so the footprint is looked up by position rather than taken off the part.
+    const stranded = solid.filter((_, i) => {
       const near = componentsAround(field, solidObbs[i]);
       // Nothing walkable anywhere near it is "wedged in", not "unreachable" — a
       // stool in a corner reads that way and is perfectly reachable.

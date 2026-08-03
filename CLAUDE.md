@@ -126,7 +126,7 @@ pnpm dev          # http://localhost:3000
 pnpm typecheck    # tsc --noEmit — run after edits
 pnpm test         # vitest run — pure-logic suite (+ jsdom files, see below)
 pnpm build        # next build
-pnpm lint         # next lint
+pnpm lint         # eslint . — flat config in eslint.config.mjs
 pnpm audit        # dependency advisories — see `pnpm.overrides` in package.json
 pnpm vendor:ort   # copy onnxruntime-web → public/ort/ (loads same-origin, not CDN)
 pnpm hash:models  # SHA-256 digests of public/models/ for MODEL_DIGESTS
@@ -204,6 +204,13 @@ tests import does not belong in `lib/`, where it reads as shipped code.
   UTF-8 by default. (Repairing it means re-encoding each character to its CP1252
   byte and decoding as UTF-8 — `latin1` will not do, since the mojibake contains
   characters from CP1252's 0x80–0x9F range.)
+- **Linting is the ESLint CLI, not `next lint`** (removed in Next 16). Rules still
+  come from `eslint-config-next`, bridged into `eslint.config.mjs` by `FlatCompat`
+  from `@eslint/eslintrc` — which is a declared devDependency, not a borrowed
+  transitive of ESLint's. The ignore list moved out of `.eslintignore` (deprecated in
+  ESLint 9, and **silently ignored** under flat config, which is the dangerous part:
+  it does not error, it just starts linting `public/` and `.next/`). `eslint .` covers
+  `tests/` and `scripts/` as well, which `next lint`'s default dirs did not.
 - `onnxruntime-web` must stay **runtime-loaded** with `webpackIgnore` — bundling
   it breaks the Next build. It is served from `public/ort/` after
   `pnpm vendor:ort` (same-origin, so the CSP can be tight); the jsDelivr CDN is
