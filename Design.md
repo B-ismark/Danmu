@@ -991,6 +991,18 @@ pnpm hash:models  # print SHA-256 digests of public/models/ for MODEL_DIGESTS
 pnpm hash:models --verify   # …and check the mirror serves the same bytes (~62 MB)
 ```
 
+`.github/workflows/ci.yml` runs the first four on every push to `main` and every
+pull request. One job, `contents: read`, no secrets — a local-first app with no
+backend has nothing to give a build. Node is 22 and pnpm comes from
+`packageManager`, so CI does not carry a second copy of either version.
+
+The build step reads its **output** as well as its exit code, because
+`next build` runs an ESLint pass of its own that can fail while the build still
+exits 0 — an ESLint below 9 gets handed eslintrc options and lints nothing, and a
+config that ignores `*.config.mjs` hides itself from Next's plugin detection.
+`tests/toolchain.test.ts` asserts both invariants directly, so they fail in
+`pnpm test` before CI ever sees them.
+
 ### Third-party bytes, and the headers that bound them
 
 The optional local detector is the only part of the app that executes or parses

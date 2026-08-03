@@ -1,0 +1,91 @@
+# The four gates, on every push to main and every pull request.
+#
+# There is no deploy step and nothing here needs a secret: Danmu is local-first,
+# the detection key is the user's own and lives in their browser, so a build has
+# nothing to be given. `permissions` is read-only for the same reason.
+#
+# Node and pnpm are not chosen here. `packageManager` in package.json pins pnpm
+# and Corepack honours it, so the version CI uses is the version the repo
+# declares — one place, not two that drift.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch makes the older run's answer worthless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    name: typecheck · lint · test · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      # v5 rather than v4 on both: v4 targets the Node 20 action runtime, which
+      # GitHub is deprecating — the runner already forces those steps onto Node 24
+      # and warns, so v4 is a failure with a date on it, not a working pin.
+      - uses: actions/checkout@v5
+
+      # Before setup-node, which needs pnpm on PATH to resolve its cache.
+      - name: Enable Corepack
+        run: corepack enable
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # `!cancelled()` rather than `always()`: one red gate should not hide the
+      # other three, but a cancelled run should stop.
+      - name: Typecheck
+        if: ${{ !cancelled() }}
+        run: pnpm typecheck
+
+      - name: Lint
+        if: ${{ !cancelled() }}
+        run: pnpm lint
+
+      - name: Test
+        if: ${{ !cancelled() }}
+        run: pnpm test
+
+      # `next build` runs its own ESLint pass over the same config, and two ways
+      # that pass can fail do NOT fail the build — it prints one line and exits
+      # 0. Both have happened here (an ESLint 8 / flat-config mismatch linted
+      # nothing; a `*.config.mjs` ignore entry hid the config from Next's plugin
+      # detection), and a green build is exactly what they look like. So the
+      # build's own output is read, not just its exit code.
+      #
+      # `tests/toolchain.test.ts` asserts the same two invariants structurally,
+      # which is the check that fails fast and locally; this one is the backstop
+      # for a *new* way of skipping the pass that no test anticipates yet.
+      - name: Build
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm build 2>&1 | tee build.log
+          if grep -qE 'ESLint: Invalid Options|plugin was not detected' build.log; then
+            echo "::error::next build ran its ESLint pass but the pass did not lint — see the line above. The build's exit code does not cover this."
+            exit 1
+          fi
+
+      # Advisory, and deliberately not a gate: an advisory published upstream
+      # overnight is not a defect in the pull request that happens to run next.
+      # Transitive fixes go in `pnpm.overrides`.
+      - name: Audit (advisory)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: pnpm audit
