@@ -50,7 +50,7 @@ dimensionally real *and* private-by-construction at the same time.
   the optional API key to localStorage. The only network call is one optional,
   direct Gemini request (user's own key) during photo detection.
 - Two ways in: **quick start** (pick a footprint, land straight in the studio
-  with a contextual starter scene) or **capture** (footprint → 6-photo guided
+  with a contextual starter scene) or **capture** (footprint → 4-wall guided
   room capture → furniture detection → studio).
 - Two studio surfaces only: **3D Model** and **2D Plan**.
 - If detection is unavailable, the studio still fully works — pick a footprint

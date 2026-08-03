@@ -33,8 +33,6 @@ import type { CostBreakdown } from '@/lib/layout-score';
 import { roomStore, type LayoutVariant, type Transforms } from '@/lib/storage';
 import { footprintBounds, type Footprint } from '@/lib/footprint';
 import { formatDim } from '@/lib/units';
-import { csvBlob } from '@/lib/csv';
-import { downloadBlob } from '@/lib/snapshot';
 import { savedLabel } from '@/lib/dates';
 import { Icon } from '@/components/ui/Icon';
 import { IconButton, Pill, Segmented } from '@/components/ui/primitives';
@@ -43,18 +41,6 @@ import { useConfirm } from '@/components/ui/Confirm';
 import { toast } from '@/components/ui/StorageToast';
 import { isTypingOrDialog } from './KeyboardShortcuts';
 import type { ScenePart } from '@/lib/scene-spec';
-
-/** Downloads carry the room's name, so a folder of exports from three rooms is
- *  still readable a week later. */
-function fileSlug(name: string): string {
-  return (
-    name
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'room'
-  );
-}
 
 type RoomTab = 'check' | 'list' | 'layouts';
 
@@ -65,8 +51,6 @@ export function RoomTools({ leading }: { leading?: ReactNode }) {
   // the second and third readings discoverable from the first.
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<RoomTab>('check');
-  const { roomId } = useParams<{ roomId: string }>();
-  const [roomName, setRoomName] = useState('Room');
 
   const parts = useScene((s) => s.parts);
   const room = useScene((s) => s.room);
@@ -74,13 +58,6 @@ export function RoomTools({ leading }: { leading?: ReactNode }) {
   const rotations = useStudio((s) => s.rotations);
   const dims = useStudio((s) => s.dims);
   const draggingId = useStudio((s) => s.draggingId);
-
-  useEffect(() => {
-    if (!roomId) return;
-    roomStore.loadRoom(roomId).then((r) => {
-      if (r?.name) setRoomName(r.name);
-    });
-  }, [roomId]);
 
   // Effective scene = base parts + user transform overrides. Recomputed on
   // commit (stores don't change during a live drag), so this stays cheap.
@@ -199,7 +176,7 @@ export function RoomTools({ leading }: { leading?: ReactNode }) {
               onStepFree={setStepFree}
             />
           )}
-          {tab === 'list' && <ListPanel parts={effParts} roomName={roomName} />}
+          {tab === 'list' && <ListPanel parts={effParts} />}
           {tab === 'layouts' && <LayoutsPanel effParts={effParts} footprint={room.footprint} />}
         </div>
       )}
@@ -565,7 +542,7 @@ function CheckPanel({
 
 // ─── Furniture list ─────────────────────────────────────────────────────────
 
-function ListPanel({ parts, roomName }: { parts: ScenePart[]; roomName: string }) {
+function ListPanel({ parts }: { parts: ScenePart[] }) {
   const dimUnit = useSettings((s) => s.dimUnit);
   const [copied, setCopied] = useState(false);
 
@@ -596,35 +573,14 @@ function ListPanel({ parts, roomName }: { parts: ScenePart[]; roomName: string }
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
     } catch {
-      // Naming the recovery matters more than naming the API: some browsers
-      // refuse clipboard writes outright, and the CSV is right there.
+      // Naming the recovery matters more than naming the API: some browsers refuse
+      // clipboard writes outright, and the list is on screen either way.
       toast({
         tone: 'danger',
         title: 'Your browser blocked the copy',
-        message: 'Nothing was copied. Download the CSV instead, or allow clipboard access for this site.',
+        message: 'Nothing was copied. Allow clipboard access for this site, or read the list off the panel.',
       });
     }
-  }
-
-  function downloadCsv() {
-    // lib/csv owns the escaping (formula injection, quoting, CRLF) and the BOM.
-    // This used to hand-roll quoting only, so a piece named "=HYPERLINK(...)" was
-    // written through verbatim and evaluated when the file was opened.
-    const blob = csvBlob([
-      ['Qty', 'Name', 'Category', `Width (${dimUnit})`, `Depth (${dimUnit})`, `Height (${dimUnit})`, 'Colour'],
-      ...rows.map(({ part: p, count }) => [
-        count,
-        p.name,
-        p.category,
-        formatDim(p.dimMM[0], dimUnit),
-        formatDim(p.dimMM[1], dimUnit),
-        formatDim(p.dimMM[2], dimUnit),
-        p.color ? p.color.toUpperCase() : '',
-      ]),
-    ]);
-    // The shared helper, which delays revoking the object URL — revoking it
-    // synchronously after .click() cancels the download in some browsers.
-    downloadBlob(blob, `${fileSlug(roomName)}-furniture.csv`);
   }
 
   return (
@@ -633,9 +589,6 @@ function ListPanel({ parts, roomName }: { parts: ScenePart[]; roomName: string }
         <span style={{ flex: 1, fontSize: 11, color: 'var(--ink-3)' }}>Real sizes, in your unit</span>
         <button onClick={copy} className="ds-btn" style={{ height: 24, fontSize: 10, padding: '0 8px' }}>
           {copied ? 'Copied ✓' : 'Copy'}
-        </button>
-        <button onClick={downloadCsv} className="ds-btn" style={{ height: 24, fontSize: 10, padding: '0 8px' }}>
-          CSV
         </button>
       </TabActions>
 

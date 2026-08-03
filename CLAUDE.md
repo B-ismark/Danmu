@@ -106,7 +106,7 @@ pnpm hash:models --verify   # …and confirm the mirror serves those same bytes 
 
 Run `pnpm typecheck` after non-trivial edits. Add a Vitest test when you touch
 pure logic in `lib/` (geometry / physics / clearance / footprint / dimension-
-ranges / shape-search / item-snap / units / csv / dates all have tests in
+ranges / shape-search / item-snap / units / dates all have tests in
 `tests/`).
 
 The suite runs in the **node** environment by default. Files that need a browser
@@ -117,6 +117,12 @@ observed by instrumenting the store, so `storage-ordering.test.ts` mocks
 `idb-keyval` to record the call sequence: IndexedDB returns keys in **sort** order,
 not insertion order, so an assertion over `keys()` proves nothing about write
 order.
+
+Support code a test needs but the app does not goes in `tests/helpers/` — vitest's
+`include` is `tests/**/*.test.ts`, so a helper there is never collected as a suite.
+`tests/helpers/color.ts` (OKLab / WCAG contrast, read by `color-tokens.test.ts`) is
+the one that exists. Keep that boundary honest in both directions: a module only
+tests import does not belong in `lib/`, where it reads as shipped code.
 
 ## Layout
 
@@ -168,4 +174,9 @@ order.
 - `Design.md` — canonical design + architecture (keep it current when you change
   architecture, routes, stores, or the AI/geometry boundary).
 - `README.md` — quickstart + stack.
-- `DOCUMENTATION.md` — legacy; redirects to `Design.md`.
+- `PRODUCT.md` — who this is for, what counts as success, the durable constraints.
+- `docs/history/` — **point-in-time studies, not live docs.** The 2026-07 platform
+  audit (`AUDIT.md` + `audit/`), the engine research (`Research.md`) and the
+  remediation plan (`Plan.md`). Every phase in them is shipped or explicitly
+  declined; read them for *why* a design is the way it is, never as a description
+  of the current codebase. When they disagree with `Design.md`, `Design.md` wins.

@@ -455,6 +455,6 @@ function clamp(v: number, lo: number, hi: number): number {
 
 /** Fold a yaw into (−π, π]. Every proposal runs through this, so nothing the
  *  solver hands back can accumulate turns. */
-export function normaliseYaw(yaw: number): number {
+function normaliseYaw(yaw: number): number {
   return angleDelta(yaw, 0);
 }

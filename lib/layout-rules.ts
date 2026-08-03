@@ -41,7 +41,7 @@
 //   · TV: 1.2–2.5 × the screen diagonal. A multiple, never a constant — which is
 //     why the relation table can carry a function.
 //
-// Sources are listed in `Research.md` §3.9. Nothing here is learned, sampled or
+// Sources are listed in `docs/history/Research.md` §3.9. Nothing here is learned, sampled or
 // downloaded; it is a table of numbers from design manuals with the geometry to
 // apply them.
 
@@ -248,7 +248,7 @@ const DEFAULT_SILL = 0.9;
 
 /** Below this a piece is a step-over rather than an obstacle, and below this it
  *  cannot block a sightline either. Matches `floorBlockers`. */
-export const OBSTACLE_HEIGHT = 0.25;
+const OBSTACLE_HEIGHT = 0.25;
 
 // ─── Access zones ───────────────────────────────────────────────────────────
 
@@ -591,12 +591,6 @@ export function relationFor(self: ScenePart, anchor: ScenePart): Relation | null
     return { kind: spec.kind, min, max, weight: spec.weight, reason: spec.reason };
   }
   return null;
-}
-
-/** Does any relation in the table mention this role at all? Lets a caller skip
- *  the n² pass over pieces that can never be in one. */
-export function hasRelations(role: Role): boolean {
-  return RELATIONS.some((r) => r.self.includes(role) || r.anchor.includes(role));
 }
 
 /** May these two legitimately sit closer together than a walkway?
