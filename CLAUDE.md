@@ -39,6 +39,13 @@ backend, no account. The 3D studio *is* the product.
    across a doorway and have Room check report it: **add a clearance number there,
    never in a consumer.** Zones are authored in the piece's own frame and derived
    from its `dimMM`, which is what makes them recalibrate on a resize for free.
+   `tests/layout-conformance.test.ts` now holds the two consumers to each other: a
+   layout the checker flags must cost the solver more **on the term implementing that
+   same rule**, and every issue family `clearance.ts` can emit must be classified as
+   priced or explicitly not. **A new finding fails that test until you decide which
+   it is** — a cost term, or a written reason a cost cannot express it (`tall` is a
+   size, `crowding` is the whole room, `reach` belongs to `navigabilityCost`). Adding
+   a check with no cost is allowed; adding one silently is not.
    **Arrange against the room, never against its bounding box.** A footprint is a
    polygon; `±width/2` describes a box the room may not be. Every starter
    arrangement was written that way and so furnished the quadrant an L / T / U cuts

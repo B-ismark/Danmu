@@ -251,7 +251,7 @@ This is what makes Danmu trustworthy. All pure math, all covered by tests.
 | `lib/layout-rules.ts` | **What each piece needs from the room, as geometry** — and the one table both the checker and the solver read. Roles (what a piece is *for*, which the catalog's shapes cannot say: `coffee-table` is used for both a 900 mm side table and an 1800 mm dining table, so height decides), access zones per functional side, functional relations between pairs, the room's own profile, and the route width the room is big enough to be asked for. Every number is derived from the piece it is about — a zone's depth is what the *activity* needs, its width comes from `dimMM`, and it lives in the piece's local frame — so resizing anything recalibrates by construction. |
 | `lib/clearance.ts` | Ergonomics checker over exact geometry: walkways, functional zones (storage fronts, bed sides, a table's seats, a desk's chair), door swings **and the route in from them**, windows kept unblocked, clashes, reachability, over-height. Every threshold comes from `layout-rules`; nothing is written twice — including `belongTogether`, which keeps the walkway rule off a pair the relation table put together: 450 mm between a sofa and its own coffee table is the figure the table asks for, and reporting it made the panel cry wolf about every correct living room (the solver's circulation term skips the same pairs). Reproducible findings, no AI. |
 | `lib/apertures.ts` | Turns wall-mounted `window` / `door` parts into rectangles in each wall's own 2D frame, which is all `THREE.Shape` needs to punch a hole (`Shape.holes` + Earcut — no CSG library). Pure, because the wall-local conversion is the part that goes wrong invisibly: get the tangent backwards and every opening mirrors about the middle of its wall. |
-| `lib/layout-score.ts` / `lib/layout-solve.ts` | `layout-rules` restated as **costs** rather than checks — collisions, doors and their approach, functional zones, windows, walkways, wall affinity, relations, alignment, balance — plus **inertia**, which charges for movement so a piece only moves if moving it buys something, and **navigability** over the clearance field for the handful of finalists. Then seeded simulated annealing over `(x, z, yaw)` of the unlocked pieces, with proposals that know the room's structure (snap to a wall, park beside the thing you belong to, face the screen, swap two pieces). Deterministic per seed; `mode: 'refit'` turns the inertia up to repair a layout after a resize rather than reinvent it. **Never writes `dimMM`** — it moves and turns, and the type it works in has no field a size could travel in. |
+| `lib/layout-score.ts` / `lib/layout-solve.ts` | `layout-rules` restated as **costs** rather than checks — collisions, doors and their approach, functional zones, windows, walkways, wall affinity, relations, alignment, balance — plus **inertia**, which charges for movement so a piece only moves if moving it buys something, and **navigability** over the clearance field for the handful of finalists. Then seeded simulated annealing over `(x, z, yaw)` of the unlocked pieces, with proposals that know the room's structure (snap to a wall, park beside the thing you belong to, face the screen, swap two pieces). Deterministic per seed; `mode: 'refit'` turns the inertia up to repair a layout after a resize rather than reinvent it. **Never writes `dimMM`** — it moves and turns, and the type it works in has no field a size could travel in. Restating a table is safe only while the restatements agree, so `tests/layout-conformance.test.ts` pins them to each other — see below. |
 | `lib/solar.ts` | NOAA / Meeus solar position — declination, equation of time, hour angle → altitude and azimuth, ~0.01°. No model, no network, no data file: pure astronomy, which is the one thing in this app a model could not do better. |
 | `lib/clearance-field.ts` | Circulation as a **field** rather than a list of pairs — see below. One 5 cm raster of the floor plus an exact Euclidean distance transform answers walkway width, reachability, turning space and crowding at once, and it also carries WHICH obstacle is nearest so a finding can name the pieces to select. |
 | `lib/dimension-ranges.ts` | `clampDims` — per-item sizing tiers (fixed / standard / flexible). **All sizes pass through this**, including every size read out of a scene file (§6a). Also `ROOM_SIDE_M`, the one bound on a room's own side: the dims editor wrote `1` and `50` in a predicate and twice more into the sentences it shows, while `scene-store`'s wall-drag clamp independently held 40 — so a size you could type was a size a drag refused to reach. |
@@ -263,6 +263,38 @@ This is what makes Danmu trustworthy. All pure math, all covered by tests.
 On the detect page, `geoRefine` runs the geometry engine over **every** detection
 and manual box: geometry overrides AI dims/position; the AI contributes only
 label / category / a depth hint.
+
+### The checker and the solver are held to each other
+
+`clearance.ts` and `layout-score.ts` both restate `layout-rules.ts` — one as findings
+a user reads, one as costs an annealer descends. The docs and the code have said for
+a while that they must agree; nothing checked it, and the disagreement had already
+shipped once ("Suggest" parked a bed across a doorway and Room check reported the
+doorway as blocked). Neither module was wrong on its own terms, which is why no test
+of either one could have caught it.
+
+`tests/layout-conformance.test.ts` tests the relation instead. For each rule it holds
+a pair of layouts over the same pieces, differing only in placement, and asserts four
+things: the checker flags the rule in one, is quiet in the other, the solver's cost
+**for the term implementing that same rule** is strictly higher in the flagged one,
+and the total prefers the clean one. The per-term half is the point — comparing totals
+would pass on a layout that is merely worse for unrelated reasons and would not prove
+the two modules agree about *which* rule broke.
+
+The second half is a drift guard. Every issue family `clearance.ts` can emit is read
+out of its source and must appear in one classification table as either priced (with
+the cost term) or deliberately unpriced (with the reason). Three are legitimately
+unpriced and stay that way: `tall` is a fact about a piece's size and the solver has
+no field a dimension could travel in; `crowding` is a property of the whole room that
+no rearrangement fixes; `reach` / `cut-off` / `turning` are connectivity, priced by
+`navigabilityCost` over the finalists rather than per proposal. **Adding a check with
+no cost is allowed. Adding one silently is not** — a new finding fails the test until
+someone classifies it.
+
+One note for anyone extending it: the table is the *only* place a rule's cost term is
+named. An earlier draft let each fixture carry its own copy too, and pointing the door
+rule at a taste weight left every assertion green — the same duplication-that-drifts
+the file exists to police, reproduced inside it.
 
 ### Circulation is a field, not a list of pairs
 
