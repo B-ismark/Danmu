@@ -30,13 +30,16 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4
+      # v5 rather than v4 on both: v4 targets the Node 20 action runtime, which
+      # GitHub is deprecating — the runner already forces those steps onto Node 24
+      # and warns, so v4 is a failure with a date on it, not a working pin.
+      - uses: actions/checkout@v5
 
       # Before setup-node, which needs pnpm on PATH to resolve its cache.
       - name: Enable Corepack
         run: corepack enable
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
