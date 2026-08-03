@@ -9,7 +9,7 @@
 // keep true size on group-scaled parts. All meshes opt out of raycasting.
 
 import { useMemo, type ReactNode } from 'react';
-import { useStudio } from '@/lib/store';
+import { usePartTransform } from '@/lib/room-scene';
 import { supportsDecor, autoSurfaceDecor, type DecorItem, type DecorKind, type ScenePart } from '@/lib/scene-spec';
 
 const NOPICK = () => {};
@@ -144,12 +144,9 @@ function SurfaceDecor({ items, topY }: { items: DecorItem[]; topY: number }) {
 }
 
 export function Dressing({ part }: { part: ScenePart }) {
-  const pos = useStudio((s) => s.positions[part.id]);
-  const rot = useStudio((s) => s.rotations[part.id]);
-  const dim = useStudio((s) => s.dims[part.id]);
-  const p = pos ?? part.pos;
-  const r = rot ?? part.rot;
-  const dm = dim ?? part.dimMM;
+  // Narrow on purpose: decor renders as a SIBLING of its part, so it has to follow
+  // that part's transform without re-rendering every time some other piece moves.
+  const { pos: p, rot: r, dimMM: dm } = usePartTransform(part);
 
   const content = useMemo<ReactNode | null>(() => {
     // Only SURFACE decor (tables, shelves, nightstands…). Sofas/beds already

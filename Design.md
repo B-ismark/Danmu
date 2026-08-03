@@ -730,7 +730,7 @@ undo — see `lib/storage.ts`).
 ### State stores
 | Store | File | Holds |
 |---|---|---|
-| `useStudio` | `lib/store.ts` | selection, wall selection, positions/rotations/dims, lighting, quality, dressed, snap, open state, hidden, grid, view preset. **Only the view *preferences* persist** (`lighting`, `quality`, `dressed`, `snapMode`, `showGrid` → `danmu-studio-prefs`, via `partialize`). Selection / camera / open drawers are ephemeral; transforms and `hidden` are per-room and owned by `RoomSync`. |
+| `useStudio` | `lib/store.ts` | selection, wall selection, positions/rotations/dims, lighting, quality, dressed, snap, open state, hidden, grid, view preset. **Only the view *preferences* persist** (`lighting`, `quality`, `dressed`, `snapMode`, `showGrid` → `danmu-studio-prefs`, via `partialize`). Selection / camera / open drawers are ephemeral; transforms and `hidden` are per-room and owned by `RoomSync`. **Never read the transform maps directly** — see "Two layers, one fallback" below. |
 | `useSettings` | `lib/store.ts` | apiKey, dimUnit (the one display unit — a dead `units` metric/imperial flag was removed), key-valid cache. Persisted to localStorage (`danmu-settings`). |
 | `useRoom` | `lib/store.ts` | active room id. Persisted (`danmu-room`). |
 | `useScene` | `lib/scene-store.ts` | scene parts CRUD + group/ungroup + room. |
@@ -746,7 +746,8 @@ undo — see `lib/storage.ts`).
 | `lib/scene-store.ts` | Scene parts CRUD + grouping. |
 | `lib/storage.ts` | IndexedDB room persistence (`RoomData`, `wallColors`, `footprint`, per-room `hidden`, `version`). Deleting a room is a **soft delete** — keys move under `trash:{ts}:` and `restoreRoom` undoes it; `purgeTrash` expires them after 30 days and `destroyRoom` is the irreversible path. A `room:{id}:touched` key carries the real `updatedAt`. **`meta` is retired first on delete and written last on restore**: there is no transaction across keys, and `listRooms` decides visibility from `meta`, so ordering it this way makes the visible state flip exactly once instead of leaving a room that appears in the workspace and opens empty. `restoreRoom` refuses when a live room already holds the id. Each detection carries a `uid`, which becomes its ScenePart id so a user's transforms survive a re-detect; records written before that fall back to the positional `${category}-${n}`. |
 | `lib/scene-palette.ts` | Scene-side semantic colours — the one home for values the 3D layer, the canvas exports and the panels that edit them must agree on, since neither Three.js materials nor a 2D canvas can read a CSS custom property. Exports `SCENE` (selection / hover / locked / shell), `PLAN` (the floor-plan PNG's palette) and `defaultBodyColor(category, shape)`. Kept in sync with `globals.css` by hand, guarded by a test. **`defaultBodyColor` takes BOTH arguments**: within one category the shapes do not match (a dining chair is walnut, an office chair charcoal), and the renderer and the Inspector's "Default for this piece" swatch must return the same value. The predecessor took a single loosely-typed `category` and was keyed on material-group names, so 18 of 22 categories fell through to one tan default. |
-| `lib/room-scene.ts` | Build a scene from a room / detections. |
+| `lib/transforms.ts` | **Where a piece actually is.** `resolvePart` / `resolveParts` merge the authored transform on `ScenePart` with the user's `useStudio` override, and this is the ONLY place that fallback is written — see below. Pure, no React, so the scene file and the wall mover resolve exactly the way the renderer does. |
+| `lib/room-scene.ts` | The React half of the above: `useRoomScene` (whole scene, memoised), `useRoomPart`, `usePartTransform` (one part, narrow subscription, for `Draggable` and `Dressing`), `useHasOverrides`, and `currentRoomScene()` for pointer handlers. The row here used to say "build a scene from a room / detections", which is `scene-spec`'s job, not this module's. |
 | `lib/textures.ts` | Procedural normal/roughness maps (offline, zero assets). |
 | `lib/light-units.ts` | Lumens → candela (isotropic and in-cone), and kelvin → sRGB via the Planckian locus. Pure and tested — the interface between how a lamp is described and how three renders it. |
 | `lib/themes.ts` | One-tap restyle palettes. |
@@ -765,6 +766,42 @@ undo — see `lib/storage.ts`).
 | `NumberField.tsx` | Measurement input with our own two-chevron stepper (the native spinner is suppressed app-wide). Hold-to-repeat reads the clock and pays at most 3 steps per tick — a plain interval drifts badly when every step re-renders an inspector and a 3D scene, and pure clock catch-up turns one starved tick into a huge leap. It calls `onChange` through a ref, since callers rebuild that closure each render over their own local state. Chevrons are `aria-hidden` + `tabIndex -1`: the input is already a spinbutton and Up/Down step it. |
 | `StorageToast.tsx` | One live region for the whole app, plus the imperative `toast()`. Lifted clear of the studio's bottom-right control cluster on `/room/` routes — the card takes pointer events, so at the default offset it swallowed their clicks. |
 | `Confirm.tsx` · `ColorPicker.tsx` | Promise-based confirm modal; HSV picker. Both exist to keep an OS widget out of the UI. |
+
+### Two layers, one fallback
+
+A part's transform lives in two places, and it is meant to:
+
+| Layer | Holds |
+|---|---|
+| `useScene.parts` → `ScenePart.pos/rot/dimMM` | The **authored** scene — where `defaultScene` put a piece, or where the geometry engine resolved a detection to. |
+| `useStudio.positions/rotations/dims` | The user's **edits**, keyed by part id. These win. |
+
+**Do not collapse them.** The path that needs the separation is easy to miss: dragging
+a piece writes *only* the override map, so a detected room whose furniture the user
+has only moved carries overrides and **no scene snapshot at all**. Re-scanning then
+rebuilds `parts` from the new detections while those moves re-apply by id — which is
+what `storage.ts` means by "each detection carries a `uid` … so a user's transforms
+survive a re-detect". Folding the maps into `ScenePart` takes that survival with them,
+and any way to say "put this piece back where it was found".
+
+What the separation must **not** be is open-coded. `positions[p.id] ?? p.pos` written
+by hand is a silent bug the moment one of the three lines is forgotten: the piece
+renders, the numbers look plausible, and it is simply in the wrong place.
+`lib/room-scene.ts` had already declared itself the one place that merge happens —
+and four files used it while **thirteen** wrote the fallback out again, because the
+un-memoised version rebuilt the whole array on every render of every consumer and the
+hot paths could not afford it.
+
+So: the merge lives in `lib/transforms.ts` (pure) with memoised hooks over it in
+`lib/room-scene.ts`, and `tests/room-scene.test.ts` sweeps `app/`, `components/` and
+`lib/` for a hand-written fallback and fails on one. It found the thirteenth site
+itself — a shadow-camera fit in `Room.tsx` that grep had missed — which is the
+argument for the sweep over a comment.
+
+Reading a raw override *without* the fallback is still legitimate and stays allowed,
+because sometimes the question really is "has this been overridden": `Draggable` and
+`DynamicPart` divide a stored dim by the **authored** `dimMM` to get a scale factor,
+and the resolved value cannot express that (it would always be 1).
 
 ### Data flow (decoration loop)
 `scene-spec` defines a part → `scene-store` holds the instance → `Room` renders

@@ -138,7 +138,8 @@ pnpm hash:models --verify   # …and confirm the mirror serves those same bytes 
 
 Run `pnpm typecheck` after non-trivial edits. Add a Vitest test when you touch
 pure logic in `lib/` (geometry / physics / clearance / footprint / dimension-
-ranges / shape-search / item-snap / units / dates / scene-file all have tests in
+ranges / shape-search / item-snap / units / dates / scene-file / transforms all have tests
+in
 `tests/`).
 
 The suite runs in the **node** environment by default. Files that need a browser
@@ -173,6 +174,18 @@ tests import does not belong in `lib/`, where it reads as shipped code.
   assigns to `rotation.y`. Use `localToWorld` / `worldToLocal` / `frontVector`
   rather than writing the matrix out; getting the sign wrong is invisible at
   0°/180° and inverts every "which side does this face" answer on the side walls.
+  **A part's transform lives in two layers and that is deliberate** — the authored
+  one on `ScenePart`, the user's edit in `useStudio.positions/rotations/dims`, which
+  wins. Do not collapse them: a drag writes only the override map, so a detected room
+  the user has only *moved* things in has overrides and no scene snapshot, and that is
+  exactly what lets a re-scan rebuild `parts` while the moves re-apply by id. But
+  **never write `positions[p.id] ?? p.pos` yourself.** `lib/transforms.ts`
+  (`resolvePart` / `resolveParts`, pure) and `lib/room-scene.ts` (`useRoomScene`,
+  `useRoomPart`, `usePartTransform`, `currentRoomScene`) are the only places that
+  fallback exists, and `tests/room-scene.test.ts` sweeps the tree and fails on a
+  hand-written one. Reading a raw override *without* a fallback is still fine when the
+  question is genuinely "has this been overridden" — `Draggable` divides a stored dim
+  by the **authored** `dimMM` for a scale factor, which no resolved value can give.
 - `tests/` — Vitest over pure `lib/` logic. `scripts/export-detector.py` exports
   the optional ONNX model into `public/models/` (git-ignored, not bundled).
 

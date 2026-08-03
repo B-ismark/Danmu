@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
-import { useRoomPart } from '@/lib/room-scene';
+import { useHasOverrides, useRoomPart, useRoomScene } from '@/lib/room-scene';
 import { useScene } from '@/lib/scene-store';
 import { fromMM, toMM, stepFor, precisionFor, formatDim, UNIT_OPTIONS } from '@/lib/units';
 import { clampDims, dimRangeFor } from '@/lib/dimension-ranges';
@@ -33,19 +33,15 @@ export function Inspector() {
   // effective (overridden) rot is about to be discarded and must not be the one
   // the new model's footprint is measured with.
   const baseRot = useScene((s) => s.parts.find((p) => p.id === id)?.rot) ?? 0;
-  const hasOverrides = useStudio((s) => !!id && (!!s.positions[id] || !!s.rotations[id] || !!s.dims[id]));
+  const hasOverrides = useHasOverrides(id);
   const setDim = useStudio((s) => s.setDim);
   const setPosition = useStudio((s) => s.setPosition);
   const setRotation = useStudio((s) => s.setRotation);
-  const positions = useStudio((s) => s.positions);
-  // Both also feed the support snapshot below — findSupportUnder weighs how much
-  // of a piece rests on a surface, so a neighbour's live rotation and size change
-  // the answer the same way its position does.
-  const rotations = useStudio((s) => s.rotations);
-  const dims = useStudio((s) => s.dims);
   const resetTransforms = useStudio((s) => s.resetTransforms);
   const updatePart = useScene((s) => s.updatePart);
-  const allParts = useScene((s) => s.parts);
+  // Resolved once for the whole panel: surface snapping and the dimension fields
+  // both need the world as it stands, not as it was authored.
+  const effParts = useRoomScene();
   const room = useScene((s) => s.room);
 
   const [swapOpen, setSwapOpen] = useState(false);
@@ -63,19 +59,19 @@ export function Inspector() {
   const defaultDim = baseDim ?? part.dimMM;
 
   function currentXYZ(): [number, number, number] {
-    const override = positions[id!];
-    if (override) return override;
+    // `part` is already resolved by `useRoomPart`, so this is the effective position
+    // without a second fallback written out.
     return [part!.pos[0], part!.pos[1], part!.pos[2]];
   }
 
   /** Every part in its CURRENT effective transform, so surface snapping works
    *  against the world the user is looking at rather than the original scene. */
   function partSnapshot() {
-    return allParts.map((p) => ({
+    return effParts.map((p) => ({
       id: p.id,
-      pos: positions[p.id] ?? p.pos,
-      rot: rotations[p.id] ?? p.rot,
-      dimMM: dims[p.id] ?? p.dimMM,
+      pos: p.pos,
+      rot: p.rot,
+      dimMM: p.dimMM,
       category: p.category,
       wallMounted: p.wallMounted,
     }));

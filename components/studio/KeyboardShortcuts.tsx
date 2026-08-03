@@ -23,6 +23,7 @@ import { useRouter } from 'next/navigation';
 import { v4 as uuid } from 'uuid';
 import { useStudio, useSettings } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
+import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { useHistory, applySnapshot, startHistoryRecording } from '@/lib/history';
 import { collidesAt, type ScenePart } from '@/lib/scene-spec';
 import { clampIntoFootprint } from '@/lib/footprint';
@@ -88,11 +89,11 @@ export function announce(message: string) {
 }
 
 export function StudioAnnouncer() {
-  const parts = useScene((s) => s.parts);
+  // Resolved: what it reads out is where the piece is now, not where it started.
+  const parts = useRoomScene();
   const selectedPartId = useStudio((s) => s.selectedPartId);
   const selection = useStudio((s) => s.selection);
   const selectedWall = useStudio((s) => s.selectedWall);
-  const positions = useStudio((s) => s.positions);
   const snapMode = useStudio((s) => s.snapMode);
   const draggingId = useStudio((s) => s.draggingId);
   const dimUnit = useSettings((s) => s.dimUnit);
@@ -110,7 +111,7 @@ export function StudioAnnouncer() {
   }, []);
 
   const primary = parts.find((p) => p.id === selectedPartId);
-  const pos = primary ? positions[primary.id] ?? primary.pos : null;
+  const pos = primary?.pos ?? null;
   const snapLabel =
     snapMode === 'off' ? 'Snap off' : snapMode === 'fine' ? 'Snap on, fine steps' : 'Snap on, coarse steps';
 
@@ -238,16 +239,16 @@ function deleteSelection() {
 export function duplicateSelection() {
   const ids = selectedIds();
   if (ids.length === 0) return;
-  const s = useStudio.getState();
   const sc = useScene.getState();
   const created: string[] = [];
 
+  // Duplicating copies the piece as it STANDS, not as it was authored.
+  const live = currentRoomScene();
   for (const id of ids) {
     const base = sc.parts.find((p) => p.id === id);
-    if (!base) continue;
-    const pos = s.positions[id] ?? base.pos;
-    const rot = s.rotations[id] ?? base.rot;
-    const dimMM = s.dims[id] ?? base.dimMM;
+    const eff = live.find((p) => p.id === id);
+    if (!base || !eff) continue;
+    const { pos, rot, dimMM } = eff;
 
     // Probe with a stand-in that IS in the parts list, so the original counts as
     // an obstacle — collidesAt exempts whatever id you name as the mover.
@@ -290,12 +291,12 @@ export function duplicateSelection() {
 export function spinSelection(quarterTurns = 1) {
   const ids = selectedIds();
   if (ids.length === 0) return;
-  const s = useStudio.getState();
-  const parts = useScene.getState().parts;
-  for (const id of ids) {
-    const base = parts.find((p) => p.id === id);
-    if (!base) continue;
-    s.setRotation(id, (s.rotations[id] ?? base.rot) + (quarterTurns * Math.PI) / 2);
+  const setRotation = useStudio.getState().setRotation;
+  // From where each piece effectively faces — off `base.rot` alone, a second quarter
+  // turn would start over from the authored heading and undo the first.
+  for (const p of currentRoomScene()) {
+    if (!ids.includes(p.id)) continue;
+    setRotation(p.id, p.rot + (quarterTurns * Math.PI) / 2);
   }
   announce(ids.length === 1 ? 'Turned a quarter turn.' : `${ids.length} pieces turned a quarter turn.`);
 }

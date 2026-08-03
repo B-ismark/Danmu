@@ -54,6 +54,7 @@ import {
   type Shape,
 } from './scene-spec';
 import { clampDims, ROOM_SIDE_M } from './dimension-ranges';
+import { resolveParts } from './transforms';
 import { LAYOUT_IDS, type LayoutId, type RoomData, type Site, type Transforms } from './storage';
 
 /** Marks the JSON as ours. Checked exactly — a file that does not say this is not
@@ -131,11 +132,12 @@ export type SceneFile = {
 
 /** Collapse a room, its parts and the studio's transform overrides into one file.
  *
- *  The overrides are BAKED here rather than carried alongside. In the running app a
- *  part's position lives in two places — `ScenePart.pos` and `useStudio.positions`,
- *  reconciled by an unwritten "overrides win" — and a file is the one place that
- *  ambiguity can simply be resolved instead of propagated. Whatever the user is
- *  looking at is what gets written. */
+ *  The overrides are BAKED, through the same `resolveParts` the renderer uses. The
+ *  running app keeps a piece's authored transform and the user's edit to it in two
+ *  layers on purpose (see `lib/transforms.ts`), and a file is one of the places that
+ *  distinction stops mattering: whoever opens it has made no edits, so the two would
+ *  collapse on the next save anyway. Whatever the user is looking at is what gets
+ *  written. */
 export function buildSceneFile(
   room: RoomData,
   parts: ScenePart[],
@@ -157,19 +159,13 @@ export function buildSceneFile(
       ...(room.footprint ? { footprint: room.footprint } : {}),
       ...(room.site ? { site: room.site } : {}),
     },
-    parts: parts.map((p) => {
+    parts: resolveParts(parts, { positions, rotations, dims }).map((resolved) => {
       // fromDetection is dropped on the way out, not just refused on the way in: it
       // points at a bounding box in a photo the file does not carry, so keeping it
       // would be a reference into nothing.
-      const { fromDetection: _drop, ...rest } = p;
-      const part: SceneFilePart = {
-        ...rest,
-        pos: positions[p.id] ?? p.pos,
-        rot: rotations[p.id] ?? p.rot,
-        dimMM: dims[p.id] ?? p.dimMM,
-      };
-      if (hidden?.[p.id]) part.hidden = true;
-      return part;
+      const { fromDetection: _drop, ...part } = resolved;
+      if (hidden?.[part.id]) (part as SceneFilePart).hidden = true;
+      return part as SceneFilePart;
     }),
   };
 }

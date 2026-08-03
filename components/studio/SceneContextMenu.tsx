@@ -26,6 +26,7 @@ import {
 } from 'react';
 import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
+import { hasOverride } from '@/lib/transforms';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import {
   STUDIO_SURFACE_ID,
@@ -236,7 +237,7 @@ function partEntries(partId: string): MenuEntry[] {
   const ids = selectedIds();
   const many = ids.length > 1;
   const groupMembers = part.groupId ? sc.parts.filter((p) => p.groupId === part.groupId).map((p) => p.id) : [];
-  const hasOverrides = !!s.positions[partId] || !!s.rotations[partId] || !!s.dims[partId];
+  const hasOverrides = hasOverride(partId, s);
   const isHidden = !!s.hidden[partId];
 
   const entries: MenuEntry[] = [

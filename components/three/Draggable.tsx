@@ -31,6 +31,7 @@ import { useThree, type ThreeEvent } from '@react-three/fiber';
 import { Group, Mesh, MeshStandardMaterial, Plane, Vector3 } from 'three';
 import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
+import { currentRoomScene } from '@/lib/room-scene';
 import { useDragLive } from '@/lib/drag-live';
 import { collidesAt, isParametric, isWallMountedPart, type ScenePart } from '@/lib/scene-spec';
 import { groundY, isFloorStanding, snapToWall } from '@/lib/physics';
@@ -213,13 +214,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
    *  EVERY Draggable on every commit — and they are never read during render,
    *  only inside these handlers. */
   function buildEffSnapshot(): ScenePart[] {
-    const { positions, rotations, dims } = useStudio.getState();
-    return useScene.getState().parts.map((o) => ({
-      ...o,
-      pos: positions[o.id] ?? o.pos,
-      rot: rotations[o.id] ?? o.rot,
-      dimMM: dims[o.id] ?? o.dimMM,
-    }));
+    return currentRoomScene();
   }
 
   // The snapshot is built ONCE per gesture and reused for every tick of it.
@@ -400,12 +395,12 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       const dx = x - sx[0];
       const dz = z - sx[2];
       if (dx !== 0 || dz !== 0) {
-        const { parts } = useScene.getState();
-        const { positions } = useStudio.getState();
-        for (const o of parts) {
+        // The group moves as one, so each sibling shifts from where it EFFECTIVELY
+        // is — reading `o.pos` alone would snap every already-moved sibling back to
+        // where the scene was authored.
+        for (const o of currentRoomScene()) {
           if (o.id === partId || o.groupId !== part.groupId) continue;
-          const op = positions[o.id] ?? o.pos;
-          setPosition(o.id, [op[0] + dx, op[1], op[2] + dz]);
+          setPosition(o.id, [o.pos[0] + dx, o.pos[1], o.pos[2] + dz]);
         }
       }
     }

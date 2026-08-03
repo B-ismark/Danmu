@@ -26,6 +26,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import { useScene } from '@/lib/scene-store';
+import { resolveParts, useRoomScene } from '@/lib/room-scene';
 import { useStudio, useSettings } from '@/lib/store';
 import { analyzeRoom, type ClearanceIssue, type ClearanceSeverity } from '@/lib/clearance';
 import { solveLayout } from '@/lib/layout-solve';
@@ -52,25 +53,14 @@ export function RoomTools({ leading }: { leading?: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<RoomTab>('check');
 
-  const parts = useScene((s) => s.parts);
   const room = useScene((s) => s.room);
-  const positions = useStudio((s) => s.positions);
-  const rotations = useStudio((s) => s.rotations);
-  const dims = useStudio((s) => s.dims);
   const draggingId = useStudio((s) => s.draggingId);
+  // `dims` for the re-fit offer only, which watches sizes rather than reading them.
+  const dims = useStudio((s) => s.dims);
 
-  // Effective scene = base parts + user transform overrides. Recomputed on
-  // commit (stores don't change during a live drag), so this stays cheap.
-  const effParts = useMemo<ScenePart[]>(
-    () =>
-      parts.map((p) => ({
-        ...p,
-        pos: positions[p.id] ?? p.pos,
-        rot: rotations[p.id] ?? p.rot,
-        dimMM: dims[p.id] ?? p.dimMM,
-      })),
-    [parts, positions, rotations, dims],
-  );
+  // The scene as it stands. `useRoomScene` is memoised on the same four slices this
+  // used to merge by hand, so it costs no more and is one fewer copy of the fallback.
+  const effParts = useRoomScene();
 
   // Step-free findings are opt-in and remembered, because whether a room has to
   // meet them is a fact about the person, not about the room — asking again every
@@ -859,12 +849,9 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
         </div>
       ) : (
         layouts.map((v) => {
-          const vParts = (v.parts as ScenePart[]).map((p) => ({
-            ...p,
-            pos: v.transforms.positions[p.id] ?? p.pos,
-            rot: v.transforms.rotations[p.id] ?? p.rot,
-            dimMM: v.transforms.dims[p.id] ?? p.dimMM,
-          }));
+          // A saved layout stores both layers as they were, so it resolves the same
+          // way the live scene does.
+          const vParts = resolveParts(v.parts as ScenePart[], v.transforms);
           return (
             <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderBottom: '1px solid var(--hairline)' }}>
               <MiniPlan parts={vParts} footprint={footprint} />
