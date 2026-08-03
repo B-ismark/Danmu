@@ -112,7 +112,7 @@ export function RoomSwitcher() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{r.name}</div>
                   <div style={{ fontSize: 10.5, color: 'var(--ink-3)' }}>
-                    <span className="mono">{r.itemCount}</span> pieces edited
+                    <span className="mono">{r.itemCount}</span> {r.itemCount === 1 ? 'piece' : 'pieces'}
                   </div>
                 </div>
                 {isCurrent && (

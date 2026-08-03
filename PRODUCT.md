@@ -61,7 +61,8 @@ dimensionally real *and* private-by-construction at the same time.
 **Capabilities:** place / move / recolour / restyle / relight / arrange
 furniture in real-time 3D; parametric furniture shapes plus decor; a 2D
 top-down floor plan; one-tap restyle palettes; optional photo capture and
-furniture detection.
+furniture detection; saving a room to a file and opening one back — which is how a
+room is shared, backed up, and moved between devices without a server.
 
 **Constraints (durable):**
 
@@ -76,7 +77,11 @@ furniture detection.
   compare / share pipeline was deleted permanently and must not return, nor any
   AI-render / model-name / cost / quota language in the user-facing UI.
 - **No backend.** Nothing leaves the browser except the one optional detection
-  call above.
+  call above. A room is shared as a file the user saves and hands over
+  themselves — never by uploading it somewhere.
+- **A shared room carries no photographs.** The scene file holds the room and its
+  furniture; the wall photos stay on the device that took them. A file is made to be
+  sent to someone, and the captures show the inside of a home.
 - **Single source of truth for furniture** is the scene spec + parts catalog;
   the 3D scene, 2D plan, inspector, catalog, and decor all read from it.
 

@@ -14,6 +14,7 @@ import { UndoRedo } from '@/components/studio/UndoRedo';
 import { RoomSwitcher } from '@/components/studio/RoomSwitcher';
 import { NarrowViewportBanner } from '@/components/studio/NarrowViewportBanner';
 import { DemoBanner } from '@/components/studio/DemoBanner';
+import { ExportSceneButton } from '@/components/studio/SceneFile';
 import { Icon } from '@/components/ui/Icon';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -45,6 +46,11 @@ export default function StudioLayout({ children }: { children: ReactNode }) {
               <Icon name="refresh" size={12} />
               Rescan
             </Link>
+            {/* Two ways to take the room with you, side by side: a picture of the
+                view, and the room itself. The file is available on both tabs — it
+                describes the room, not whichever way you happen to be looking at
+                it — while Snapshot needs the 3D canvas to exist. */}
+            <ExportSceneButton />
             {onModel && (
               <button
                 onClick={() => useSnapshot.getState().request()}

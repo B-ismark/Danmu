@@ -71,11 +71,14 @@ describe('listRooms', () => {
       rotations: {},
       dims: {},
     });
+    await roomStore.saveSceneParts('a', [{ id: 'sofa-1' }, { id: 'bed-1' }, { id: 'rug-1' }]);
 
     const [summary] = await roomStore.listRooms();
     expect(summary.id).toBe('a');
     expect(summary.captureCount).toBe(2);
-    expect(summary.itemCount).toBe(2);
+    // The furniture in the room — three pieces — not the two the user has moved.
+    // Counting the transform map called a room of untouched starter furniture empty.
+    expect(summary.itemCount).toBe(3);
     // An empty detectedObjects array is NOT "detected" — the detect screen writes
     // one when a run finds nothing, and the grid badge should not claim otherwise.
     expect(summary.detected).toBe(false);
@@ -111,6 +114,7 @@ describe('clearRoom / restoreRoom ordering', () => {
     await roomStore.saveRoom(room('a'));
     await roomStore.saveCapture('a', { slot: 'n', blob: new Blob(['x']), takenAt: 1 });
     await roomStore.saveTransforms('a', { positions: { 'sofa-1': [0, 0, 0] }, rotations: {}, dims: {} });
+    await roomStore.saveSceneParts('a', [{ id: 'sofa-1' }]);
 
     const token = await roomStore.clearRoom('a');
     expect(await roomStore.loadRoom('a')).toBeUndefined();
@@ -119,6 +123,7 @@ describe('clearRoom / restoreRoom ordering', () => {
     expect(await roomStore.restoreRoom(token)).toBe(true);
     expect((await roomStore.loadRoom('a'))?.name).toBe('Room a');
     expect(await roomStore.loadCaptures('a')).toHaveLength(1);
+    // The scene key came back too, so the grid can count the furniture again.
     expect((await roomStore.listRooms())[0].itemCount).toBe(1);
   });
 

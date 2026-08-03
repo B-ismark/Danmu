@@ -149,3 +149,44 @@ describe('destroyRoom write order', () => {
     }
   });
 });
+
+describe('importScene write order', () => {
+  const ROOM_IN = { name: 'Opened room', layoutId: 'rect' as const, width: 5, depth: 4, height: 2.6 };
+  const EMPTY = { positions: {}, rotations: {}, dims: {} };
+
+  it('writes `meta` last, so a half-finished import is invisible rather than empty', async () => {
+    // Same property as restoreRoom, for the same reason: an import is several keys
+    // with no transaction across them, and `listRooms` decides a room exists by its
+    // meta. Furniture first means an interrupted import leaves orphaned payload
+    // keys, not a room that lists in the workspace and opens with nothing in it.
+    const id = await roomStore.importScene(ROOM_IN, [{ id: 'sofa-1' }], EMPTY);
+
+    const metaWrite = lastAt(new RegExp(`^set room:${id}:meta$`));
+    expect(metaWrite).toBeGreaterThanOrEqual(0);
+
+    // `touched` is excluded: it is the updatedAt stamp every mutation in the store
+    // ends with, not payload. Landing after meta costs at most a missing timestamp
+    // on a room that is otherwise whole, and `saveRoom` orders it the same way.
+    const payloadWrites = log
+      .map((entry, i) => ({ entry, i }))
+      .filter(
+        ({ entry }) =>
+          new RegExp(`^set room:${id}:`).test(entry) && !/(meta|touched)$/.test(entry),
+      );
+    expect(payloadWrites.map((w) => w.entry)).toContain(`set room:${id}:scene`);
+    expect(payloadWrites.map((w) => w.entry)).toContain(`set room:${id}:transforms`);
+    for (const { entry, i } of payloadWrites) {
+      expect(i, `${entry} was written after room:${id}:meta`).toBeLessThan(metaWrite);
+    }
+  });
+
+  it('mints a fresh id, so opening a file cannot overwrite the room it came from', async () => {
+    await roomStore.saveRoom(ROOM);
+    const a = await roomStore.importScene(ROOM_IN, [], EMPTY);
+    const b = await roomStore.importScene(ROOM_IN, [], EMPTY);
+    expect(a).not.toBe(b);
+    expect(a).not.toBe('a');
+    // The pre-existing room is untouched by either import.
+    expect(await roomStore.loadRoom('a')).toMatchObject({ name: 'Room a' });
+  });
+});

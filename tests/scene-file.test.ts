@@ -1,0 +1,437 @@
+import { describe, expect, it } from 'vitest';
+import {
+  buildSceneFile,
+  MAX_FILE_BYTES,
+  parseSceneFile,
+  SCENE_FILE_FORMAT,
+  SCENE_FILE_VERSION,
+  sceneFileJson,
+  sceneFileName,
+  sceneFileToRoom,
+  type SceneFile,
+} from '../lib/scene-file';
+import { dimRangeFor } from '../lib/dimension-ranges';
+import type { RoomData, Transforms } from '../lib/storage';
+import type { ScenePart } from '../lib/scene-spec';
+
+const ROOM: RoomData = {
+  id: 'room-1',
+  createdAt: 1_700_000_000_000,
+  name: 'Front Room',
+  layoutId: 'rect',
+  width: 5,
+  depth: 4,
+  height: 2.6,
+};
+
+const SOFA: ScenePart = {
+  id: 'sofa-1',
+  category: 'sofa',
+  name: 'Sofa',
+  shape: 'sofa',
+  pos: [0, 0.44, -1.5],
+  rot: 0,
+  dimMM: [2200, 950, 880],
+  locked: false,
+};
+
+const NO_TRANSFORMS: Transforms = { positions: {}, rotations: {}, dims: {} };
+
+/** Export → JSON → parse, the trip a file actually makes. */
+function roundTrip(
+  room: RoomData = ROOM,
+  parts: ScenePart[] = [SOFA],
+  transforms: Transforms = NO_TRANSFORMS,
+) {
+  const out = parseSceneFile(sceneFileJson(buildSceneFile(room, parts, transforms, 1_700_000_000_001)));
+  if (!out.ok) throw new Error(`expected a readable file, got: ${out.error}`);
+  return out;
+}
+
+/** A minimal valid file as loose JSON, so a test can corrupt one field at a time
+ *  without the type checker defending it. */
+function rawFile(over: Record<string, unknown> = {}): string {
+  return JSON.stringify({
+    format: SCENE_FILE_FORMAT,
+    version: SCENE_FILE_VERSION,
+    exportedAt: 1,
+    room: { name: 'R', layoutId: 'rect', width: 5, depth: 4, height: 2.6 },
+    parts: [],
+    ...over,
+  });
+}
+
+function rawPart(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: 'p1',
+    category: 'sofa',
+    name: 'Sofa',
+    shape: 'sofa',
+    pos: [0, 0.44, -1.5],
+    rot: 0,
+    dimMM: [2200, 950, 880],
+    locked: false,
+    ...over,
+  };
+}
+
+/** Parse a file carrying exactly these parts. */
+function withParts(parts: unknown[]) {
+  const out = parseSceneFile(rawFile({ parts }));
+  if (!out.ok) throw new Error(`expected a readable file, got: ${out.error}`);
+  return out;
+}
+
+describe('scene file · round trip', () => {
+  it('carries the room and its furniture', () => {
+    const { file, dropped } = roundTrip();
+    expect(dropped).toEqual([]);
+    expect(file.room).toEqual({ name: 'Front Room', layoutId: 'rect', width: 5, depth: 4, height: 2.6 });
+    expect(file.parts).toHaveLength(1);
+    expect(file.parts[0]).toMatchObject({ id: 'sofa-1', shape: 'sofa', dimMM: [2200, 950, 880] });
+  });
+
+  it('carries wall paint, a custom outline and the site', () => {
+    const { file } = roundTrip({
+      ...ROOM,
+      layoutId: 'custom',
+      wallColors: { 0: '#aabbcc', 2: '#112233' },
+      footprint: [
+        [0, 0],
+        [5, 0],
+        [5, 4],
+        [0, 4],
+      ],
+      site: { lat: 5.6, lon: -0.2, bearingDeg: 90 },
+    });
+    expect(file.room.wallColors).toEqual({ 0: '#aabbcc', 2: '#112233' });
+    expect(file.room.footprint).toHaveLength(4);
+    expect(file.room.site).toEqual({ lat: 5.6, lon: -0.2, bearingDeg: 90 });
+  });
+
+  it('bakes the studio overrides, so the file shows what the user is looking at', () => {
+    // The live app keeps a part's transform in two places and lets the override win.
+    // A file resolves that instead of reproducing it.
+    const { file } = roundTrip(ROOM, [SOFA], {
+      positions: { 'sofa-1': [1, 0.44, 2] },
+      rotations: { 'sofa-1': Math.PI / 2 },
+      dims: { 'sofa-1': [1800, 900, 800] },
+    });
+    expect(file.parts[0].pos).toEqual([1, 0.44, 2]);
+    expect(file.parts[0].rot).toBeCloseTo(Math.PI / 2);
+    expect(file.parts[0].dimMM).toEqual([1800, 900, 800]);
+  });
+
+  it('keeps a hidden piece hidden, and puts it back in the transforms on the way in', () => {
+    const { file } = roundTrip(ROOM, [SOFA], { ...NO_TRANSFORMS, hidden: { 'sofa-1': true } });
+    expect(file.parts[0].hidden).toBe(true);
+
+    const { parts, transforms } = sceneFileToRoom(file);
+    expect(transforms.hidden).toEqual({ 'sofa-1': true });
+    // `hidden` is per-room state, not a property of the piece — it must not ride
+    // along on the ScenePart the scene store holds.
+    expect('hidden' in parts[0]).toBe(false);
+  });
+
+  it('returns empty override maps, because the parts already carry the final values', () => {
+    const { file } = roundTrip(ROOM, [SOFA], { positions: { 'sofa-1': [1, 0.44, 2] }, rotations: {}, dims: {} });
+    const { parts, transforms } = sceneFileToRoom(file);
+    expect(transforms.positions).toEqual({});
+    expect(parts[0].pos).toEqual([1, 0.44, 2]);
+  });
+});
+
+describe('scene file · what never leaves', () => {
+  it('does not carry a detection box into a file that has no photos', () => {
+    const detected: ScenePart = {
+      ...SOFA,
+      fromDetection: { slot: 'n', bbox: [0, 0, 1, 1], conf: 0.9 },
+    };
+    const file = buildSceneFile(ROOM, [detected], NO_TRANSFORMS, 1);
+    expect('fromDetection' in file.parts[0]).toBe(false);
+    expect(sceneFileJson(file)).not.toContain('fromDetection');
+  });
+
+  it('has no room for a photo anywhere in the serialised form', () => {
+    // The privacy line this format is built around: a file is for sending to
+    // someone, and the captures are pictures of the inside of a home.
+    const json = sceneFileJson(buildSceneFile(ROOM, [SOFA], NO_TRANSFORMS, 1));
+    for (const forbidden of ['blob', 'capture', 'cap:', 'image/', 'base64', 'detectedObjects']) {
+      expect(json.toLowerCase()).not.toContain(forbidden.toLowerCase());
+    }
+  });
+
+  it('leaves the exporting room’s identity behind', () => {
+    // id / createdAt describe a record in one browser's IndexedDB, not the room.
+    const json = sceneFileJson(buildSceneFile(ROOM, [SOFA], NO_TRANSFORMS, 1));
+    expect(json).not.toContain('room-1');
+    expect(JSON.parse(json).room.createdAt).toBeUndefined();
+  });
+
+  it('drops a mesh hash, which points into the exporting browser’s cache', () => {
+    const { file } = withParts([rawPart({ meshHash: 'abc123' })]);
+    expect(file.parts[0].meshHash).toBeUndefined();
+  });
+});
+
+describe('scene file · a file is untrusted input', () => {
+  it('refuses text that is not JSON', () => {
+    const out = parseSceneFile('not json at all {');
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.error).toMatch(/readable|damaged/i);
+  });
+
+  it('refuses JSON that is not ours', () => {
+    const out = parseSceneFile(JSON.stringify({ some: 'other tool', version: 1 }));
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.error).toMatch(/isn't a Danmu room/i);
+  });
+
+  it('refuses a primitive and an array at the top level', () => {
+    expect(parseSceneFile('42').ok).toBe(false);
+    expect(parseSceneFile('[]').ok).toBe(false);
+    expect(parseSceneFile('null').ok).toBe(false);
+  });
+
+  it('names the version skew rather than calling a newer file invalid', () => {
+    const out = parseSceneFile(rawFile({ version: SCENE_FILE_VERSION + 1 }));
+    expect(out.ok).toBe(false);
+    // The fix is on this side, and the user cannot infer that from "invalid file".
+    if (!out.ok) expect(out.error).toMatch(/newer version.*[Uu]pdate/s);
+  });
+
+  it('reads an older file, since every change so far is additive', () => {
+    expect(parseSceneFile(rawFile({ version: 0 })).ok).toBe(true);
+  });
+
+  it('refuses a file longer than the cap without trying to parse it', () => {
+    const out = parseSceneFile('x'.repeat(MAX_FILE_BYTES + 1));
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.error).toMatch(/too large/i);
+  });
+
+  it('refuses a file with no usable room', () => {
+    expect(parseSceneFile(rawFile({ room: undefined })).ok).toBe(false);
+    expect(parseSceneFile(rawFile({ room: { name: 'R' } })).ok).toBe(false);
+    // Out-of-range sides are fatal for the room itself: there is no floor to stand
+    // furniture on, and unlike a colour there is no sensible default.
+    expect(parseSceneFile(rawFile({ room: { width: 0, depth: 4, height: 2.6 } })).ok).toBe(false);
+    expect(parseSceneFile(rawFile({ room: { width: 5, depth: 4, height: 1e6 } })).ok).toBe(false);
+  });
+
+  it('rejects Infinity, which JSON smuggles in as 1e400', () => {
+    // JSON has no Infinity literal, but an over-large exponent parses to one — and
+    // an infinite coordinate turns every comparison false and every matrix NaN
+    // without throwing anywhere the app would notice.
+    expect(JSON.parse('1e400')).toBe(Infinity);
+    const { file, dropped } = withParts([rawPart({ pos: [0, 0, 1e400] })]);
+    expect(file.parts).toHaveLength(0);
+    expect(dropped.join(' ')).toMatch(/could not be read/i);
+  });
+
+  it('drops a piece whose shape it cannot render, rather than guessing', () => {
+    const { file, dropped } = withParts([rawPart({ shape: 'teleporter' }), rawPart({ id: 'p2' })]);
+    expect(file.parts.map((p) => p.id)).toEqual(['p2']);
+    expect(dropped.join(' ')).toMatch(/1 piece could not be read/);
+  });
+
+  it('drops a piece with an unknown category, since sizing keys off it', () => {
+    expect(withParts([rawPart({ category: 'spaceship' })]).file.parts).toHaveLength(0);
+  });
+
+  it('clamps an imported size instead of believing it', () => {
+    // The trust boundary: a number from a file is a hint, exactly like a number
+    // from a model. Nothing downstream should have to know where it came from.
+    const { file } = withParts([rawPart({ dimMM: [99000, 99000, 99000] })]);
+    const max = dimRangeFor('sofa', 'sofa').max;
+    expect(file.parts[0].dimMM).toEqual(max);
+  });
+
+  it('clamps a size that is too small as well as too large', () => {
+    const { file } = withParts([rawPart({ dimMM: [1, 1, 1] })]);
+    expect(file.parts[0].dimMM).toEqual(dimRangeFor('sofa', 'sofa').min);
+  });
+
+  it('drops a piece with a malformed transform', () => {
+    expect(withParts([rawPart({ pos: [0, 0] })]).file.parts).toHaveLength(0);
+    expect(withParts([rawPart({ pos: 'middle' })]).file.parts).toHaveLength(0);
+    expect(withParts([rawPart({ rot: null })]).file.parts).toHaveLength(0);
+    expect(withParts([rawPart({ dimMM: ['2200', 950, 880] })]).file.parts).toHaveLength(0);
+  });
+
+  it('forgets a colour that is not a plain hex, and keeps the piece', () => {
+    // A colour reaches a Three.js material and a style attribute, so nothing that is
+    // not #rrggbb may survive the parse.
+    for (const bad of ['red', 'url(evil)', '#ab', 'rgb(1,2,3)', '#12345g', 'javascript:x']) {
+      const { file } = withParts([rawPart({ color: bad })]);
+      expect(file.parts).toHaveLength(1);
+      expect(file.parts[0].color).toBeUndefined();
+    }
+  });
+
+  it('accepts a hex colour and normalises its case', () => {
+    expect(withParts([rawPart({ color: '#AABBCC' })]).file.parts[0].color).toBe('#aabbcc');
+  });
+
+  it('forgets an unknown finish', () => {
+    expect(withParts([rawPart({ finish: 'holographic' })]).file.parts[0].finish).toBeUndefined();
+    expect(withParts([rawPart({ finish: 'matte' })]).file.parts[0].finish).toBe('matte');
+  });
+
+  it('gives a piece a fresh id when its own is missing or already taken', () => {
+    // Two pieces sharing an id would move as one, because the transform maps and the
+    // React list are both keyed on it.
+    const { file } = withParts([rawPart({ id: 'dup' }), rawPart({ id: 'dup' }), rawPart({ id: '' })]);
+    const ids = file.parts.map((p) => p.id);
+    expect(ids).toHaveLength(3);
+    expect(new Set(ids).size).toBe(3);
+    expect(ids[0]).toBe('dup');
+  });
+
+  it('caps how many pieces it will read, and says that it did', () => {
+    const { file, dropped } = withParts(
+      Array.from({ length: 600 }, (_, i) => rawPart({ id: `p${i}` })),
+    );
+    expect(file.parts.length).toBeLessThanOrEqual(500);
+    expect(dropped.join(' ')).toMatch(/only the first 500/);
+  });
+
+  it('truncates a name rather than storing an essay', () => {
+    const { file } = withParts([rawPart({ name: 'n'.repeat(5000) })]);
+    expect(file.parts[0].name.length).toBeLessThanOrEqual(200);
+  });
+
+  it('coerces a non-boolean lock to false', () => {
+    expect(withParts([rawPart({ locked: 'yes' })]).file.parts[0].locked).toBe(false);
+    expect(withParts([rawPart({ locked: true })]).file.parts[0].locked).toBe(true);
+  });
+});
+
+describe('scene file · degrading a room rather than refusing it', () => {
+  it('falls back to the preset shape when the outline is unreadable, and says so', () => {
+    const out = parseSceneFile(
+      rawFile({ room: { name: 'R', layoutId: 'l', width: 5, depth: 4, height: 2.6, footprint: [[0, 0], [1, 1]] } }),
+    );
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.file.room.footprint).toBeUndefined();
+      expect(out.file.room.layoutId).toBe('l');
+      expect(out.dropped.join(' ')).toMatch(/outline was unreadable/i);
+    }
+  });
+
+  it('refuses an outline whole rather than truncating it', () => {
+    // Half an outline is a different room, not a partial one.
+    const many = Array.from({ length: 300 }, (_, i) => [i * 0.01, 0]);
+    const out = parseSceneFile(rawFile({ room: { name: 'R', layoutId: 'custom', width: 5, depth: 4, height: 2.6, footprint: many } }));
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.file.room.footprint).toBeUndefined();
+  });
+
+  it('keeps only the wall colours that are real hexes', () => {
+    const out = parseSceneFile(
+      rawFile({
+        room: { name: 'R', layoutId: 'rect', width: 5, depth: 4, height: 2.6, wallColors: { 0: '#aabbcc', 1: 'red', notAnIndex: '#ffffff' } },
+      }),
+    );
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.file.room.wallColors).toEqual({ 0: '#aabbcc' });
+  });
+
+  it('drops a site outside the coordinates the earth has, and says so', () => {
+    const out = parseSceneFile(
+      rawFile({ room: { name: 'R', layoutId: 'rect', width: 5, depth: 4, height: 2.6, site: { lat: 200, lon: 0, bearingDeg: 0 } } }),
+    );
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.file.room.site).toBeUndefined();
+      expect(out.dropped.join(' ')).toMatch(/location was unreadable/i);
+    }
+  });
+
+  it('falls back to a custom layout for an unknown preset, keeping the sizes', () => {
+    const out = parseSceneFile(rawFile({ room: { name: 'R', layoutId: 'hexagon', width: 5, depth: 4, height: 2.6 } }));
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.file.room.layoutId).toBe('custom');
+      expect(out.file.room.width).toBe(5);
+    }
+  });
+
+  it('names an unnamed room instead of opening a blank card', () => {
+    const out = parseSceneFile(rawFile({ room: { layoutId: 'rect', width: 5, depth: 4, height: 2.6 } }));
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.file.room.name).toBe('Imported room');
+  });
+});
+
+describe('scene file · decor and light', () => {
+  it('keeps well-formed decor and skips the rest', () => {
+    const { file } = withParts([
+      rawPart({
+        decor: [
+          { id: 'd1', kind: 'books', x: 0.1, z: 0.2 },
+          { id: 'd2', kind: 'trophy', x: 0, z: 0 },
+          { kind: 'vase', x: 0, z: 0 },
+        ],
+      }),
+    ]);
+    const decor = file.parts[0].decor ?? [];
+    expect(decor.map((d) => d.kind)).toEqual(['books', 'vase']);
+    expect(decor[1].id).toBeTruthy();
+  });
+
+  it('keeps an empty decor array, which means the user cleared the surface', () => {
+    // Distinct from absent, which means "never touched, show a suggestion".
+    expect(withParts([rawPart({ decor: [] })]).file.parts[0].decor).toEqual([]);
+  });
+
+  it('keeps a lamp’s real units and drops a physically impossible one', () => {
+    expect(withParts([rawPart({ light: { lumens: 400, kelvin: 2700 } })]).file.parts[0].light).toEqual({
+      lumens: 400,
+      kelvin: 2700,
+    });
+    expect(withParts([rawPart({ light: { lumens: 1e9, kelvin: 2700 } })]).file.parts[0].light).toBeUndefined();
+    expect(withParts([rawPart({ light: { lumens: 400, kelvin: 0 } })]).file.parts[0].light).toBeUndefined();
+  });
+
+  it('keeps a cone angle only when it is one', () => {
+    expect(withParts([rawPart({ light: { lumens: 400, kelvin: 2700, coneDeg: 60 } })]).file.parts[0].light?.coneDeg).toBe(60);
+    expect(withParts([rawPart({ light: { lumens: 400, kelvin: 2700, coneDeg: 400 } })]).file.parts[0].light?.coneDeg).toBeUndefined();
+  });
+});
+
+describe('scene file · filenames', () => {
+  it('slugs a room name', () => {
+    expect(sceneFileName('Front Room')).toBe('front-room.danmu.json');
+    expect(sceneFileName('  Ama’s Flat!! ')).toBe('ama-s-flat.danmu.json');
+  });
+
+  it('falls back rather than producing a dotfile', () => {
+    expect(sceneFileName('')).toBe('room.danmu.json');
+    expect(sceneFileName('!!!')).toBe('room.danmu.json');
+  });
+
+  it('bounds the length', () => {
+    expect(sceneFileName('a'.repeat(500)).length).toBeLessThanOrEqual(60 + '.danmu.json'.length);
+  });
+});
+
+describe('scene file · the shape of the format itself', () => {
+  it('stamps the format and version it was written with', () => {
+    const file: SceneFile = buildSceneFile(ROOM, [], NO_TRANSFORMS, 42);
+    expect(file.format).toBe(SCENE_FILE_FORMAT);
+    expect(file.version).toBe(SCENE_FILE_VERSION);
+    expect(file.exportedAt).toBe(42);
+  });
+
+  it('is readable by a human, which is most of what makes a local format trustworthy', () => {
+    expect(sceneFileJson(buildSceneFile(ROOM, [SOFA], NO_TRANSFORMS, 1))).toContain('\n  ');
+  });
+
+  it('survives an empty room', () => {
+    const out = roundTrip(ROOM, []);
+    expect(out.file.parts).toEqual([]);
+    expect(sceneFileToRoom(out.file).parts).toEqual([]);
+  });
+});

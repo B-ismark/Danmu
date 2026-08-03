@@ -48,6 +48,16 @@ backend, no account. The 3D studio *is* the product.
    `lib/layout-settle.ts` (both scene paths do). Gate a placement with
    `footInsidePoly`, **not** `outsideShare` — the latter samples, and its samples sit
    10% in from the edges, so it forgives a piece 20 mm through the plaster.
+   **A scene file is an AI hint with a filename.** `lib/scene-file.ts` is the only
+   thing here that parses bytes someone else produced, so the same boundary holds:
+   imported sizes go through `clampDims`, and shape / category / decor / finish /
+   layout are checked against the runtime vocabularies rather than trusted. Those
+   vocabularies are `as const` arrays with the unions **derived** from them
+   (`SHAPES`, `CATEGORIES`, `DECOR_KINDS`, `FINISHES`, `LAYOUT_IDS`) — never a union
+   beside a hand-kept `Set`, which drifts in the one direction nobody notices: a
+   validator quietly refusing a shape the app grew last week. Parsing is lossy on
+   purpose and **never silent** — whatever is dropped comes back in `dropped` and is
+   shown. And a room's own side is bounded by `ROOM_SIDE_M`, not by a fresh literal.
 4. **No hard-coded design values.** Colours / spacing / type / radii go through
    CSS tokens in `app/globals.css` (`--paper`, `--ink`, `--accent` terracotta,
    `--accent-2` sage, `--r-*`, `--font-sans` Nunito / `--font-display`
@@ -69,7 +79,13 @@ backend, no account. The 3D studio *is* the product.
    a surface the user can recolour.
 5. **Local-first.** Rooms → IndexedDB (`lib/storage.ts`); settings + key →
    localStorage. The only user-data egress is the optional direct Gemini
-   detection (BYO key). Don't add a backend or send data anywhere else. Photos
+   detection (BYO key). Don't add a backend or send data anywhere else. A room
+   leaves as a **file the user saves and hands over themselves**
+   (`lib/scene-file.ts`) — that is the sharing story, and it needs no server.
+   **It carries no photographs**, deliberately: a file exists to be sent to
+   someone, and the captures are pictures of the inside of their home, so
+   `Capture` blobs, `detectedObjects` and `fromDetection` all stay behind. Don't
+   add them "for fidelity" — the geometry is already in the parts. Photos
    are normalised on ingest (`normalizePhoto`, ≤1600 px) before they are stored
    or sent — nothing full-resolution reaches IndexedDB or a request. Every
    third-party host is allow-listed with a reason in `next.config.mjs`'s CSP;
@@ -106,7 +122,7 @@ pnpm hash:models --verify   # …and confirm the mirror serves those same bytes 
 
 Run `pnpm typecheck` after non-trivial edits. Add a Vitest test when you touch
 pure logic in `lib/` (geometry / physics / clearance / footprint / dimension-
-ranges / shape-search / item-snap / units / dates all have tests in
+ranges / shape-search / item-snap / units / dates / scene-file all have tests in
 `tests/`).
 
 The suite runs in the **node** environment by default. Files that need a browser

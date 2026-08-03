@@ -36,28 +36,47 @@ import { backWall, baySides, roomBays, splitBay, type Bay } from './room-bays';
 import { belongTogether, isObstacle, roleOf, sharesFloor, WALK_COMFORT, WALK_MIN, WALL_GAP } from './layout-rules';
 import { settleParts } from './layout-settle';
 
-export type Shape =
-  | 'sofa' | 'tv' | 'closet' | 'rug' | 'plant'
+// The shape / category / decor vocabularies are written as `as const` arrays with
+// the union DERIVED from each, rather than as hand-written unions.
+//
+// The type is what the compiler checks; the array is what code can check at
+// RUNTIME, and `lib/scene-file.ts` needs the second kind: an imported file is a
+// stranger's JSON, and "is this a shape we can render" is a question no type can
+// answer once the value is already in memory. The alternative — a union plus a
+// separate `Set` of the same strings — is a pair that drifts, and it would drift
+// silently in the direction that matters, a validator quietly refusing a shape the
+// app grew last week. `CATALOG_SHAPES_ORDERED` below is deliberately NOT that list:
+// it is the catalog's running order and omits `closet` and the three primitives.
+export const SHAPES = [
+  'sofa', 'tv', 'closet', 'rug', 'plant',
   // chairs
-  | 'chair-dining' | 'chair-office' | 'chair-armchair' | 'ottoman'
+  'chair-dining', 'chair-office', 'chair-armchair', 'ottoman',
   // beds
-  | 'bed-single' | 'bed-double'
+  'bed-single', 'bed-double',
   // tables / desks
-  | 'desk-standard' | 'desk-l' | 'coffee-table' | 'side-table' | 'nightstand'
+  'desk-standard', 'desk-l', 'coffee-table', 'side-table', 'nightstand',
   // lamps
-  | 'lamp-floor' | 'lamp-table' | 'lamp-pendant'
+  'lamp-floor', 'lamp-table', 'lamp-pendant',
   // wall-hung
-  | 'mirror' | 'mirror-oval' | 'painting' | 'ac-unit' | 'window'
+  'mirror', 'mirror-oval', 'painting', 'ac-unit', 'window',
   // others
-  | 'monitor' | 'laptop' | 'fan' | 'fridge' | 'wardrobe' | 'curtain'
-  | 'bookshelf' | 'shoe-rack' | 'door'
+  'monitor', 'laptop', 'fan', 'fridge', 'wardrobe', 'curtain',
+  'bookshelf', 'shoe-rack', 'door',
   // appliances
-  | 'soundbar' | 'radiator' | 'air-purifier' | 'washing-machine' | 'microwave' | 'water-dispenser'
-  | 'box' | 'cylinder' | 'plane';
+  'soundbar', 'radiator', 'air-purifier', 'washing-machine', 'microwave', 'water-dispenser',
+  'box', 'cylinder', 'plane',
+] as const;
+export type Shape = (typeof SHAPES)[number];
+
 // Decor collection — small props the user can add to / remove from a furniture
 // surface. Positions are local-metre offsets from the part centre.
-export type DecorKind = 'books' | 'vase' | 'plant' | 'bowl' | 'candle';
+export const DECOR_KINDS = ['books', 'vase', 'plant', 'bowl', 'candle'] as const;
+export type DecorKind = (typeof DECOR_KINDS)[number];
 export type DecorItem = { id: string; kind: DecorKind; x: number; z: number };
+
+/** Surface sheen, overriding each shape's hand-tuned default. `auto` restores it. */
+export const FINISHES = ['auto', 'matte', 'satin', 'polished', 'metal'] as const;
+export type Finish = (typeof FINISHES)[number];
 
 // ─── Light emission ─────────────────────────────────────────────────────────
 // A lamp described the way a lamp on a shelf is described. Until this existed,
@@ -100,11 +119,14 @@ export function isLightFixture(shape: Shape): boolean {
   return shape in LIGHT_BY_SHAPE;
 }
 
-export type Category =
-  | 'sofa' | 'tv' | 'chair' | 'table' | 'lamp' | 'plant' | 'shelf' | 'rug'
-  | 'bed' | 'desk' | 'monitor' | 'fan' | 'fridge' | 'wardrobe' | 'curtain'
-  | 'mirror' | 'painting' | 'nightstand' | 'ottoman' | 'ac' | 'door'
-  | 'other';
+/** Derived-from-array for the same reason as `SHAPES` above. */
+export const CATEGORIES = [
+  'sofa', 'tv', 'chair', 'table', 'lamp', 'plant', 'shelf', 'rug',
+  'bed', 'desk', 'monitor', 'fan', 'fridge', 'wardrobe', 'curtain',
+  'mirror', 'painting', 'nightstand', 'ottoman', 'ac', 'door',
+  'other',
+] as const;
+export type Category = (typeof CATEGORIES)[number];
 
 export type ScenePart = {
   id: string;
@@ -129,7 +151,7 @@ export type ScenePart = {
   /** Surface finish (sheen). Overrides material roughness/metalness on the
    *  part's meshes via Draggable's FinishApplier. 'auto' / undefined keeps each
    *  shape's hand-tuned default. */
-  finish?: 'auto' | 'matte' | 'satin' | 'polished' | 'metal';
+  finish?: Finish;
   /** User-managed decor collection placed on the part's top surface. When
    *  undefined, an auto-suggested arrangement is shown; once the user edits it
    *  this array (possibly empty) takes over. See components/three/Dressing.tsx. */
@@ -772,8 +794,6 @@ export function supportsDecor(category: Category, shape: Shape): boolean {
   if (shape === 'shoe-rack') return false; // angled tiers, no flat top
   return DECOR_CATEGORIES.has(category);
 }
-
-export const DECOR_KINDS: DecorKind[] = ['books', 'vase', 'plant', 'bowl', 'candle'];
 
 function seededRand(s: string): () => number {
   let h = 1779033703 ^ s.length;

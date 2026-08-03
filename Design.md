@@ -254,7 +254,7 @@ This is what makes Danmu trustworthy. All pure math, all covered by tests.
 | `lib/layout-score.ts` / `lib/layout-solve.ts` | `layout-rules` restated as **costs** rather than checks — collisions, doors and their approach, functional zones, windows, walkways, wall affinity, relations, alignment, balance — plus **inertia**, which charges for movement so a piece only moves if moving it buys something, and **navigability** over the clearance field for the handful of finalists. Then seeded simulated annealing over `(x, z, yaw)` of the unlocked pieces, with proposals that know the room's structure (snap to a wall, park beside the thing you belong to, face the screen, swap two pieces). Deterministic per seed; `mode: 'refit'` turns the inertia up to repair a layout after a resize rather than reinvent it. **Never writes `dimMM`** — it moves and turns, and the type it works in has no field a size could travel in. |
 | `lib/solar.ts` | NOAA / Meeus solar position — declination, equation of time, hour angle → altitude and azimuth, ~0.01°. No model, no network, no data file: pure astronomy, which is the one thing in this app a model could not do better. |
 | `lib/clearance-field.ts` | Circulation as a **field** rather than a list of pairs — see below. One 5 cm raster of the floor plus an exact Euclidean distance transform answers walkway width, reachability, turning space and crowding at once, and it also carries WHICH obstacle is nearest so a finding can name the pieces to select. |
-| `lib/dimension-ranges.ts` | `clampDims` — per-item sizing tiers (fixed / standard / flexible). **All sizes pass through this.** |
+| `lib/dimension-ranges.ts` | `clampDims` — per-item sizing tiers (fixed / standard / flexible). **All sizes pass through this**, including every size read out of a scene file (§6a). Also `ROOM_SIDE_M`, the one bound on a room's own side: the dims editor wrote `1` and `50` in a predicate and twice more into the sentences it shows, while `scene-store`'s wall-drag clamp independently held 40 — so a size you could type was a size a drag refused to reach. |
 | `lib/footprint.ts` | Footprint polygon math (preset shapes, containment, `offsetWall` / `wallOutwardNormal` for wall moves). The polygon — not `width`/`depth` — is the source of truth for room shape. |
 | `lib/wall-move.ts` + `lib/wall-actions.ts` | Moving a wall takes its furniture with it. The first is pure (who is attached, where they land); the second is the single action every wall-mover calls, spanning both stores. |
 | `lib/room-bays.ts` | **Where in the room there is actually room.** The footprint's maximal axis-aligned rectangles of real floor, largest first, plus each bay's sides (which of them are real walls, how deep the bay runs from each) and `splitBay` for putting two groups in one rectangle. Exact for rectilinear rooms — the candidate grid is the polygon's own vertex coordinates — and conservative for anything with a diagonal wall, since a candidate is only returned once it has been proved inside. This exists because arranging furniture against the polygon's *bounding box* furnished the quadrant an L / T / U cuts away: the starter scene put five of the L-shape's nine pieces outside the house. |
@@ -603,6 +603,11 @@ toolbar, bottom-left; scale/comfort chips top-left; export top-right.
   `lib/plan-export.ts`.
 - **Snapshot** (`lib/snapshot.ts`) — PNG of the 3D view (replaces the deleted
   photoreal render).
+- **The scene file** (`lib/scene-file.ts`, `components/studio/SceneFile.tsx`) —
+  `Save file` in the top bar writes the whole room as readable JSON
+  (`front-room.danmu.json`); `Open a file` on `/workspace` lands one as a **new**
+  room. See §6a — it is the app's only import path, and therefore its only
+  untrusted input.
 - **Undo/redo** (`lib/history.ts`, `UndoRedo.tsx`) — snapshots cover parts, room
   and transforms.
 - **Item-to-item snapping** (`lib/item-snap.ts`).
@@ -695,6 +700,7 @@ undo — see `lib/storage.ts`).
 | `lib/product-presets.ts` | Real-product size presets. |
 | `lib/capture.ts` / `lib/image-quality.ts` / `lib/color-sample.ts` | Photo capture + quality + colour sampling. `capture.ts` also owns **photo normalisation**: every photo entering the app is re-encoded to ≤1600 px on its long edge (`normalizePhoto`) and screened against a raster allowlist (`isAcceptedPhoto` — `image/*` also matches SVG, which has no pixels to measure). Nothing downstream wants more resolution, and four untouched 12 MP uploads exceeded the detection endpoint's inline-request ceiling. It also **strips metadata** on the passthrough path via `lib/jpeg-strip.ts` — see §3. |
 | `lib/jpeg-strip.ts` | Removes EXIF (APP1), IPTC (APP13) and comment segments from a JPEG by byte surgery, so the image data is copied verbatim and the passthrough optimisation survives. Keeps JFIF density and the **ICC colour profile** — neither identifies anyone, and dropping the profile would shift the colours this app exists to get right. Returns the input untouched for anything it cannot parse: a photo that kept its metadata is a smaller problem than a photo we corrupted. **Read anything you need out of EXIF before calling it** — the focal length a future calibration pass wants lives in the segment this deletes. |
+| `lib/scene-file.ts` | The `.danmu.json` scene file — build, serialise, and defensively parse. The app's only import path and so its only untrusted input; see §6a. `buildSceneFile` bakes the studio's transform overrides so the file holds one truth per piece, and `parseSceneFile` never throws: it returns a reason, or a file plus the list of what it dropped. |
 | `lib/units.ts` | Unit conversion (persistence always mm). |
 | `lib/dates.ts` | Timestamp formatting — the counterpart to `units.ts`. Relative `editedLabel`, absolute `savedLabel`, and the workspace's recency buckets. |
 | `lib/use-media-query.ts` | The one `matchMedia` hook. `useMediaQueryState` also returns `ready`, for callers that pick a whole layout and must not paint the wrong one first. |
@@ -722,8 +728,89 @@ debounce does not drop the last edit.
 
 ---
 
+## 6a. The scene file — `lib/scene-file.ts`
+
+A room lives in one browser's IndexedDB and nowhere else. That is the privacy
+promise working correctly, and it is also why two of the four success cases in
+`PRODUCT.md` had nothing to stand on: you could not show a layout to a partner or a
+landlord, and you could not survive the browser evicting its storage. A file answers
+both without a server.
+
+`Save file` (studio top bar, both tabs) → `front-room.danmu.json`. `Open a file`
+(`/workspace` chrome bar and its empty state) → a **new** room, never a replacement
+for the one you have open, because `roomStore.importScene` mints its own id.
+
+### What travels
+
+The room — name, footprint polygon, wall paint, site — and every piece with its
+size, position, rotation, colour, finish, decor and light. Transforms are **baked**:
+in the running app a part's position lives in both `ScenePart.pos` and
+`useStudio.positions`, reconciled by an unwritten "overrides win", and a file is the
+one place that ambiguity can be resolved rather than propagated. What the user is
+looking at is what gets written; `sceneFileToRoom` puts it back with empty override
+maps.
+
+### What deliberately does not
+
+- **The photographs.** `Capture` blobs stay behind, and this is the decision in the
+  format worth defending. A file exists to be sent to someone; the captures are
+  pictures of the inside of the user's home. Everything else in a room describes
+  furniture — the captures describe a place. Shipping them would mean the first time
+  anyone shared a layout they would also, invisibly, share photos of their living
+  room. (They are large, too, and the geometry has already been extracted.)
+- **`detectedObjects`** and per-part **`fromDetection`** — the photo pipeline's
+  intermediate representation, carrying boxes into images the file does not contain.
+  The parts *are* their resolved output.
+- **`meshHash`** — a key into the exporting browser's mesh cache, which the importing
+  one has no entry for. Honouring it would render nothing where a sofa should be, so
+  the piece falls back to its procedural `shape`.
+- **`id` / `createdAt`** — they describe a record in somebody's IndexedDB, not a room.
+
+### A file is untrusted input, and is treated exactly like an AI hint
+
+This is the first thing in the app that parses bytes a stranger produced, so the
+trust boundary of §4 applies with the same force: **a number from outside the
+geometry engine is a hint.** Every imported size goes through `clampDims`; every
+shape and category is checked against the runtime vocabularies (`SHAPES`,
+`CATEGORIES`, `DECOR_KINDS`, `FINISHES` in `scene-spec.ts`, `LAYOUT_IDS` in
+`storage.ts`); every colour must match `#rrggbb` before it reaches a Three.js
+material or a style attribute; and file length, part count, polygon vertices, string
+lengths and light units are all bounded, because "the user picked this file" is not a
+promise about its contents. `1e400` is the case worth remembering: JSON has no
+`Infinity` literal but that expression parses to one, and an infinite coordinate
+turns every comparison false and every matrix `NaN` without throwing anywhere.
+
+**Those vocabularies are `as const` arrays with the unions derived from them**, not
+unions with a parallel `Set`. A validator that can fall behind the type it validates
+would drift silently in the worst direction — quietly refusing a shape the app grew
+last week.
+
+The parse is **lossy on purpose and never silent**. An unknown shape drops the piece
+rather than guessing at it; an unreadable colour drops the field and keeps the piece;
+a broken footprint falls back to the layout preset. Every one of those is reported in
+`dropped`, which the import toast shows and makes sticky. Refusing a whole file over
+one bad field would make a version skew unrecoverable — and pretending nothing was
+lost is the other failure.
+
+A file whose `version` is *newer* than `SCENE_FILE_VERSION` is refused by naming the
+skew ("saved by a newer version of Danmu"), because the fix is on this side and the
+user cannot infer that from "invalid file". Older files are read: every change so far
+is additive, the same contract `RoomData` lives under.
+
+### Write order
+
+`importScene` writes the furniture first and `meta` **last**, mirroring `restoreRoom`
+for the same reason — there is no transaction across keys and `listRooms` decides a
+room exists by its `meta`, so an interrupted import leaves orphaned payload keys
+rather than a room that lists in the workspace and opens empty
+(`tests/storage-ordering.test.ts`).
+
+---
+
 ## 7. Known limitations
 - Group transforms are **move-only** (no rotate/scale-as-one yet).
+- A scene file carries no photos, so a captured room round-trips as furniture and
+  dimensions only — re-detecting needs the original device. This is deliberate (§6a).
 - WebXR / true measurement calibration deferred; 4-wall capture only.
 - The CC0 GLB library (`LibraryPicker` / `mesh-cache`) is a work in progress —
   most furniture is still procedural.
@@ -737,7 +824,8 @@ debounce does not drop the last edit.
 - Bundle a curated **CC0 GLB library** for higher-fidelity pieces.
 - More parametric shapes + richer decor kinds.
 - Multi-room projects / rooms dashboard.
-- Export polish (image / layout / shareable scene file).
+- Export polish — the scene file and both PNG exports have shipped; what is left is
+  a nicer share affordance around them.
 
 > **Explicitly NOT planned:** reintroducing AI image generation (render / compose
 > / compare / share) or the carpenter spec / cutlist / build-cost feature. Both
