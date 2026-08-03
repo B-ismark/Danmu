@@ -39,6 +39,9 @@ const KEEP = [SHELL, ASSETS];
 const PRECACHE = ['/', '/workspace', '/onboarding/welcome', '/settings'];
 
 // Content-hashed and immutable — a URL match here is always the right bytes.
+// Compared against the *pathname*: `url.includes()` would also match a query
+// string that merely mentioned the prefix, and hand a caller a permanently
+// cached response for a URL that was never immutable at all.
 const IMMUTABLE = '/_next/static/';
 
 self.addEventListener('install', (event) => {
@@ -73,18 +76,26 @@ self.addEventListener('activate', (event) => {
 // app to someone in the middle of arranging a room. The new worker waits for the
 // next load, which is the boring, correct behaviour.
 
+// Both strategies take the *event*, not just the request, so a cache write can be
+// handed to `event.waitUntil`. A service worker is killed once the promise given to
+// `respondWith` settles, and a bare `cache.put(...)` is not part of that promise —
+// so the response is returned, the worker is terminated, and the write is silently
+// dropped. It looks like a cache that works and then does not.
+
 /** Cache-first: for bytes whose URL already identifies them exactly. */
-async function immutable(request) {
+async function immutable(event) {
+  const request = event.request;
   const cache = await caches.open(ASSETS);
   const hit = await cache.match(request);
   if (hit) return hit;
   const res = await fetch(request);
-  if (res.ok) cache.put(request, res.clone());
+  if (res.ok) event.waitUntil(cache.put(request, res.clone()));
   return res;
 }
 
 /** Network-first, cache as a fallback: for anything whose content can change. */
-async function fresh(request, cacheName) {
+async function fresh(event, cacheName) {
+  const request = event.request;
   const cache = await caches.open(cacheName);
   try {
     const res = await fetch(request);
@@ -94,7 +105,7 @@ async function fresh(request, cacheName) {
     // fetch is `basic` in a browser but not in every runtime this is exercised in,
     // and a check that silently never caches is worse than no check. The origin
     // guard in `fetch` is what actually keeps cross-origin out.
-    if (res.ok && res.type !== 'opaque') cache.put(request, res.clone());
+    if (res.ok && res.type !== 'opaque') event.waitUntil(cache.put(request, res.clone()));
     return res;
   } catch (err) {
     const hit = await cache.match(request);
@@ -108,12 +119,13 @@ self.addEventListener('fetch', (event) => {
 
   // Never touch anything but plain GETs, and never anything off this origin.
   if (request.method !== 'GET') return;
-  if (new URL(request.url).origin !== self.location.origin) return;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
   // A range request wants a slice; serving it a whole cached body is a bug.
   if (request.headers.has('range')) return;
 
-  if (request.url.includes(IMMUTABLE)) {
-    event.respondWith(immutable(request));
+  if (url.pathname.startsWith(IMMUTABLE)) {
+    event.respondWith(immutable(event));
     return;
   }
 
@@ -126,7 +138,7 @@ self.addEventListener('fetch', (event) => {
       // earlier version re-tried `cache.match(request)` here, which read as if
       // this were where per-URL fallback happened; it was dead code, and a
       // mutation test proved it by deleting it with nothing going red.)
-      fresh(request, SHELL).catch(async () => {
+      fresh(event, SHELL).catch(async () => {
         const cache = await caches.open(SHELL);
         return (await cache.match('/')) ?? Response.error();
       }),
@@ -137,5 +149,5 @@ self.addEventListener('fetch', (event) => {
   // Everything else same-origin: the manifest, the icon, and Next's RSC payloads
   // for client-side navigation. Fresh when possible so a deploy is picked up,
   // cached so an offline client-side navigation still resolves.
-  event.respondWith(fresh(request, ASSETS).catch(() => Response.error()));
+  event.respondWith(fresh(event, ASSETS).catch(() => Response.error()));
 });

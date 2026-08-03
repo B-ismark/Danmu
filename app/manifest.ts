@@ -15,8 +15,11 @@ import type { MetadataRoute } from 'next';
 // already what `viewport.themeColor` in app/layout.tsx uses. A splash screen and
 // the browser chrome disagreeing about which cream the app is would be worse than
 // either choice on its own.
+//
+// One export, not two: an `--ink` constant lived here briefly with nothing in the
+// manifest using it — a value that exists only for its own test, which is the thing
+// `tests/helpers/` exists to keep out of shipped code.
 export const PAPER_0 = '#EFE9DD';
-export const INK = '#2A2520';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {

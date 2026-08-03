@@ -153,6 +153,37 @@ describe('hashed assets are cache-first', () => {
     expect(await res!.text()).toBe('chunk');
   });
 
+  it('keeps the cache write alive with waitUntil, not as a dangling promise', async () => {
+    // A worker is killed once the promise given to respondWith settles. A bare
+    // `cache.put(...)` is not part of that promise, so the response is returned,
+    // the worker is terminated, and the write is silently dropped — a cache that
+    // appears to work and then does not. Nothing else observes this.
+    const sw = await installed();
+    sw.setNetwork(async () => new Response('chunk', { status: 200 }));
+    await sw.fetch(asset(CHUNK));
+    expect(sw.extendedOnLastFetch()).toBe(1);
+
+    // …and not on a cache hit, where there is nothing to write.
+    await sw.fetch(asset(CHUNK));
+    expect(sw.extendedOnLastFetch()).toBe(0);
+  });
+
+  it('matches the immutable prefix on the path, not anywhere in the URL', async () => {
+    // `url.includes('/_next/static/')` would treat this as immutable and cache it
+    // permanently, on the strength of a query string mentioning the prefix.
+    const sw = await installed();
+    sw.setNetwork(async () => new Response('not really static', { status: 200 }));
+    const sneaky = asset('/api-ish?next=/_next/static/chunks/x.js');
+    await sw.fetch(sneaky);
+    const assets = await sw.cacheStorage.open('danmu-assets-v1');
+    // It is still same-origin, so it is cached — but as mutable, network-first.
+    // The proof it took the other branch: a second fetch goes to the network again.
+    const before = sw.calls.length;
+    await sw.fetch(sneaky);
+    expect(sw.calls.length).toBe(before + 1);
+    expect(assets.urls()).toHaveLength(1);
+  });
+
   it('does not cache a failed asset response', async () => {
     const sw = await installed();
     sw.setNetwork(async () => new Response('boom', { status: 500 }));

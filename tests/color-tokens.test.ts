@@ -13,7 +13,7 @@ import {
   type Rgb,
 } from './helpers/color';
 import { SCENE } from '@/lib/scene-palette';
-import { INK, PAPER_0 } from '@/app/manifest';
+import { PAPER_0 } from '@/app/manifest';
 
 // app/globals.css states a contrast ratio next to almost every colour it defines,
 // and CLAUDE.md turns those into a rule: fills are fills, and only the -ink and
@@ -161,30 +161,53 @@ describe('scene-palette really does match the CSS', () => {
   });
 });
 
-describe('the web manifest matches the CSS too', () => {
-  // Third layer that cannot read a custom property, after Three.js materials and
-  // the plan canvas: a manifest is JSON parsed by the OS to paint the splash
-  // screen and the task-switcher card. Same failure mode, so the same guard —
-  // read the stylesheet, not a literal.
-  const pairs: Array<[string, string, string]> = [
-    ['PAPER_0', PAPER_0, 'paper-0'],
-    ['INK', INK, 'ink'],
-  ];
+describe('the layers that cannot read a custom property', () => {
+  // After Three.js materials and the plan canvas there are two more, and neither
+  // was checked. Same failure mode as scene-palette, so the same guard: read the
+  // stylesheet.
 
-  it.each(pairs)('%s is --%s', (_name, value, token) => {
-    const css = surface(token)!;
-    expect(css, `--${token} is not a hex token in globals.css`).toBeTruthy();
-    expect(deltaEOk(css, parseHex(value)!)).toBeLessThan(0.01);
+  it('the web manifest paints its splash with --paper-0', () => {
+    // A manifest is JSON parsed by the OS for the splash screen and the
+    // task-switcher card, so `var(--paper-0)` is not available to it.
+    const css = surface('paper-0');
+    expect(css, '--paper-0 is not a hex token in globals.css').toBeTruthy();
+    expect(deltaEOk(css!, parseHex(PAPER_0)!)).toBeLessThan(0.01);
   });
 
-  it('paints the splash with the same colour the layout gives the browser chrome', () => {
-    // app/layout.tsx sets `viewport.themeColor` for the address bar and the
-    // manifest sets `theme_color` for the installed shell. Two files, one answer
-    // to "what colour is this app" — they were allowed to disagree before this.
+  it('the manifest and the layout agree on what colour the app is', () => {
+    // app/layout.tsx sets `viewport.themeColor` for the browser chrome and the
+    // manifest sets `theme_color` for the installed shell. Two files, one answer —
+    // and nothing stopped them diverging before this.
     const layout = readFileSync(join(process.cwd(), 'app', 'layout.tsx'), 'utf8');
     const declared = layout.match(/themeColor:\s*'(#[0-9A-Fa-f]{6})'/)?.[1];
     expect(declared, 'viewport.themeColor is no longer a plain hex in app/layout.tsx').toBeTruthy();
     expect(deltaEOk(parseHex(declared!)!, parseHex(PAPER_0)!)).toBeLessThan(0.01);
+  });
+
+  // app/global-error.tsx is the last resort boundary: it renders when the root
+  // layout itself failed, so it cannot import a stylesheet or a palette module and
+  // inlines its colours. Each one already names its token in a trailing comment —
+  // and the file's own header records that three of them had drifted to an earlier
+  // palette before being fixed by hand. So the comment is the assertion: every
+  // `const NAME = '#hex'; // --token` in there is held to globals.css, which also
+  // means a newly added one is covered the moment it is annotated.
+  describe('app/global-error.tsx, which cannot import anything', () => {
+    const SRC = readFileSync(join(process.cwd(), 'app', 'global-error.tsx'), 'utf8');
+    const annotated = [...SRC.matchAll(/const\s+([A-Z_0-9]+)\s*=\s*'(#[0-9A-Fa-f]{6})';\s*\/\/\s*--([a-z0-9-]+)/g)].map(
+      (m) => [m[1], m[2], m[3]] as const,
+    );
+
+    it('annotates its colours at all, so there is something to check', () => {
+      // If this file stops naming its tokens, the guard below silently checks
+      // nothing — the one way a test like this fails open.
+      expect(annotated.length).toBeGreaterThanOrEqual(5);
+    });
+
+    it.each(annotated)('%s is --%s', (_name, hex, token) => {
+      const css = surface(token);
+      expect(css, `--${token} is not a hex token in globals.css`).toBeTruthy();
+      expect(deltaEOk(css!, parseHex(hex)!)).toBeLessThan(0.01);
+    });
   });
 });
 

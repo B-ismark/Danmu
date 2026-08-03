@@ -104,6 +104,12 @@ export type Harness = {
    */
   fetch: (req: AnyRequest) => Promise<Response | null>;
   claimed: () => boolean;
+  /**
+   * How many promises the worker handed to `event.waitUntil` during the last
+   * fetch. A cache write that is not registered there does not survive the worker
+   * being terminated, and nothing else can observe the difference.
+   */
+  extendedOnLastFetch: () => number;
 };
 
 export function loadServiceWorker(): Harness {
@@ -113,6 +119,7 @@ export function loadServiceWorker(): Harness {
   const cacheStorage = new FakeCacheStorage();
   const calls: FetchCall[] = [];
   let claimed = false;
+  let extendedOnLastFetch = 0;
 
   let network: (req: AnyRequest) => Promise<Response> = async () => new Response('ok', { status: 200 });
 
@@ -162,18 +169,31 @@ export function loadServiceWorker(): Harness {
     install: () => dispatchExtendable('install'),
     activate: () => dispatchExtendable('activate'),
     claimed: () => claimed,
+    extendedOnLastFetch: () => extendedOnLastFetch,
     async fetch(req: AnyRequest) {
       let answered: Promise<Response> | null = null;
+      // A real FetchEvent has waitUntil, and the worker uses it to keep cache
+      // writes alive past the response. Awaiting them here is not politeness: it
+      // is what makes "was it cached?" a deterministic question instead of a race
+      // the assertion happens to win.
+      const extended: Promise<unknown>[] = [];
       const event = {
         request: req,
         respondWith(p: Promise<Response>) {
           answered = p;
         },
+        waitUntil(p: Promise<unknown>) {
+          extended.push(p);
+        },
       };
       for (const fn of listeners.get('fetch') ?? []) fn(event);
       // `null` means the worker never called respondWith — the browser would go to
       // the network itself, and the worker is not in the path.
-      return answered === null ? null : await answered;
+      if (answered === null) return null;
+      const res = await answered;
+      extendedOnLastFetch = extended.length;
+      await Promise.all(extended);
+      return res;
     },
   };
 }
