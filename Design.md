@@ -612,6 +612,44 @@ The 2D plan tab mirrors the same idea at smaller scale: help chip above the zoom
 toolbar, bottom-left; scale/comfort chips top-left; export top-right.
 
 ### Other studio tools
+- **"Will it fit?"** (`lib/fit-check.ts`, the `Will it fit` tab in `RoomTools.tsx`).
+  The gap between "I like this layout" and `PRODUCT.md`'s *confidence to commit* is one
+  question: does the sofa on the shop page go in THIS room, with what is already in it?
+  Type its W × D × H, say what kind of thing it is, and the geometry engine answers —
+  no backend, no scraping, no model.
+  It computes almost nothing itself: it asks `solveLayout` to seat the piece with every
+  existing piece **locked**, ends on `layout-settle` the way both scene paths do, then
+  asks `analyzeRoom` what it thinks and keeps the findings naming the candidate. Two
+  properties come free from composing it that way — the spot it suggests is one the room
+  report agrees with (which §4's conformance test pins), and a "no" is a no by the same
+  rules the rest of the app judges a room by. Locking is the premise, not an
+  optimisation: the user is asking whether the piece fits their room, not whether their
+  room could be rearranged around it, and **Suggest** is already the other question.
+  Four answers: **fits**, **tight** (it goes in, something is tighter than the
+  guidelines like), **no room** (and then it says the largest clear rectangle of floor
+  the room does have), and **too tall**, which is judged on its own because no
+  arrangement of the floor can help with a ceiling.
+  Two checks it makes itself rather than reading off the report, both because the two
+  have opposite error budgets — a panel must avoid crying wolf, a fit answer must avoid
+  a false yes. **Containment**, because the report has no finding for a piece that is
+  outside the room (`outside` is a cost with no checker counterpart); without it, a sofa
+  parked through the wall of a too-small room came back "fits". And **overlap**, because
+  the report's clash rule is a generous share of the smaller footprint so an ordinary
+  dining set is not called a collision; without it, a sofa 31% inside a bed came back
+  "a bit tight". The overlap gate defers to `sharesFloor`, whose polarity reads
+  backwards at a glance: TRUE means the pair MAY share the square metre (a chair tucked
+  under its table), so those are the ones to skip.
+  **Nothing is clamped on the way in.** `clampDims` gates sizes the app STORES, and it
+  belongs on **Put it there** — the path that adds the piece — not on the path answering
+  a question about a real product. A user who types the 2700 mm wardrobe off a spec
+  sheet and is told about a 2600 mm one has been lied to. The check reports
+  `outOfRange` instead, and placing says the size was brought into range.
+  One thing worth knowing about the search: the starting POINT matters more than the RNG
+  seed, because the inertia term charges for movement so every run from one origin
+  explores the same neighbourhood. Starts are spread over `room-bays`' rectangles of
+  real floor. Seeded only at the largest bay's centre, a dining chair in a room whose
+  table sits in that centre started inside its own anchor and four seeds all agreed on
+  burying it there — "no room" for a chair in a room with a table in it.
 - **The room report offers, it does not just report** (`RoomTools.tsx` `CheckPanel`).
   An earlier pass fixed how the panel *sounds* — findings badged FIX / TIGHT / NOTE
   in tracked caps became "Worth fixing" / "A bit tight" / "Just so you know", which
@@ -746,12 +784,13 @@ undo — see `lib/storage.ts`).
 | `lib/scene-store.ts` | Scene parts CRUD + grouping. |
 | `lib/storage.ts` | IndexedDB room persistence (`RoomData`, `wallColors`, `footprint`, per-room `hidden`, `version`). Deleting a room is a **soft delete** — keys move under `trash:{ts}:` and `restoreRoom` undoes it; `purgeTrash` expires them after 30 days and `destroyRoom` is the irreversible path. A `room:{id}:touched` key carries the real `updatedAt`. **`meta` is retired first on delete and written last on restore**: there is no transaction across keys, and `listRooms` decides visibility from `meta`, so ordering it this way makes the visible state flip exactly once instead of leaving a room that appears in the workspace and opens empty. `restoreRoom` refuses when a live room already holds the id. Each detection carries a `uid`, which becomes its ScenePart id so a user's transforms survive a re-detect; records written before that fall back to the positional `${category}-${n}`. |
 | `lib/scene-palette.ts` | Scene-side semantic colours — the one home for values the 3D layer, the canvas exports and the panels that edit them must agree on, since neither Three.js materials nor a 2D canvas can read a CSS custom property. Exports `SCENE` (selection / hover / locked / shell), `PLAN` (the floor-plan PNG's palette) and `defaultBodyColor(category, shape)`. Kept in sync with `globals.css` by hand, guarded by a test. **`defaultBodyColor` takes BOTH arguments**: within one category the shapes do not match (a dining chair is walnut, an office chair charcoal), and the renderer and the Inspector's "Default for this piece" swatch must return the same value. The predecessor took a single loosely-typed `category` and was keyed on material-group names, so 18 of 22 categories fell through to one tan default. |
+| `lib/fit-check.ts` | **Will this actually fit?** `checkFit` seats one candidate with everything else locked and reports one of four answers with the room report's own reasons. Pure; see §5. |
 | `lib/transforms.ts` | **Where a piece actually is.** `resolvePart` / `resolveParts` merge the authored transform on `ScenePart` with the user's `useStudio` override, and this is the ONLY place that fallback is written — see below. Pure, no React, so the scene file and the wall mover resolve exactly the way the renderer does. |
 | `lib/room-scene.ts` | The React half of the above: `useRoomScene` (whole scene, memoised), `useRoomPart`, `usePartTransform` (one part, narrow subscription, for `Draggable` and `Dressing`), `useHasOverrides`, and `currentRoomScene()` for pointer handlers. The row here used to say "build a scene from a room / detections", which is `scene-spec`'s job, not this module's. |
 | `lib/textures.ts` | Procedural normal/roughness maps (offline, zero assets). |
 | `lib/light-units.ts` | Lumens → candela (isotropic and in-cone), and kelvin → sRGB via the Planckian locus. Pure and tested — the interface between how a lamp is described and how three renders it. |
 | `lib/themes.ts` | One-tap restyle palettes. |
-| `lib/product-presets.ts` | Real-product size presets. |
+| `lib/product-presets.ts` | Real-product size presets — the data half of "will it fit?", quoted from manufacturer spec sheets. Read by the fit panel's fill-in chips as well as the catalog. |
 | `lib/capture.ts` / `lib/image-quality.ts` / `lib/color-sample.ts` | Photo capture + quality + colour sampling. `capture.ts` also owns **photo normalisation**: every photo entering the app is re-encoded to ≤1600 px on its long edge (`normalizePhoto`) and screened against a raster allowlist (`isAcceptedPhoto` — `image/*` also matches SVG, which has no pixels to measure). Nothing downstream wants more resolution, and four untouched 12 MP uploads exceeded the detection endpoint's inline-request ceiling. It also **strips metadata** on the passthrough path via `lib/jpeg-strip.ts` — see §3. |
 | `lib/jpeg-strip.ts` | Removes EXIF (APP1), IPTC (APP13) and comment segments from a JPEG by byte surgery, so the image data is copied verbatim and the passthrough optimisation survives. Keeps JFIF density and the **ICC colour profile** — neither identifies anyone, and dropping the profile would shift the colours this app exists to get right. Returns the input untouched for anything it cannot parse: a photo that kept its metadata is a smaller problem than a photo we corrupted. **Read anything you need out of EXIF before calling it** — the focal length a future calibration pass wants lives in the segment this deletes. |
 | `lib/scene-file.ts` | The `.danmu.json` scene file — build, serialise, and defensively parse. The app's only import path and so its only untrusted input; see §6a. `buildSceneFile` bakes the studio's transform overrides so the file holds one truth per piece, and `parseSceneFile` never throws: it returns a reason, or a file plus the list of what it dropped. |

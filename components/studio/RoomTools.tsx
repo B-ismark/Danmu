@@ -4,19 +4,21 @@
 //
 // LEFT (passed in as `leading`): looking at the room — the camera presets and the
 // Look popover. RIGHT: changing and checking it — Suggest, and one "Room" button
-// whose panel carries three readings as tabs:
+// whose panel carries four readings as tabs:
 //   · Check — deterministic ergonomics review (door swings, walkways, storage
 //     clearance, bed access, TV distance, crowding). Click a finding to select the
-//     pieces involved and fly to them.
-//   · List — every piece with its real dimensions in the user's display unit;
-//     copy as text or download a CSV to take shopping.
+//     pieces involved and fly to them, or offer it a fix where the solver can act.
+//   · Will it fit — a real product's W × D × H against THIS room, without moving
+//     anything in it. The bridge from playing to buying; see `lib/fit-check.ts`.
+//   · List — every piece with its real dimensions in the user's display unit,
+//     copyable as text.
 //   · Layouts — named arrangement snapshots with mini floor plans, so competing
 //     arrangements can be saved and flipped between.
 //
-// Those three were three buttons opening three cards that could never be open at
-// the same time — a tab strip, spread across the bottom of the canvas and costing
-// three slots in a corner that also had to hold the camera, the lighting, the
-// grid and the suggestion button.
+// The first three of those were three buttons opening three cards that could never
+// be open at the same time — a tab strip, spread across the bottom of the canvas and
+// costing three slots in a corner that also had to hold the camera, the lighting,
+// the grid and the suggestion button.
 //
 // Layouts are the one feature that stores work OUTSIDE the undo stack (they live
 // in IndexedDB), so both of its destructive paths are guarded: deleting a layout
@@ -25,15 +27,22 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
-import { useScene } from '@/lib/scene-store';
+import { useScene, type RoomShape } from '@/lib/scene-store';
 import { resolveParts, useRoomScene } from '@/lib/room-scene';
-import { useStudio, useSettings } from '@/lib/store';
+import { useStudio, useSettings, type DimUnit } from '@/lib/store';
 import { analyzeRoom, type ClearanceIssue, type ClearanceSeverity } from '@/lib/clearance';
 import { solveLayout } from '@/lib/layout-solve';
 import { RULE_HANDLING, type CostBreakdown } from '@/lib/layout-score';
 import { roomStore, type LayoutVariant, type Transforms } from '@/lib/storage';
 import { footprintBounds, type Footprint } from '@/lib/footprint';
-import { formatDim } from '@/lib/units';
+import { formatDim, fromMM, stepFor, toMM } from '@/lib/units';
+import { checkFit, PROBE_ID, type FitResult, type FitStatus } from '@/lib/fit-check';
+import { clampDims } from '@/lib/dimension-ranges';
+import { groundY } from '@/lib/physics';
+import { PRODUCT_PRESETS } from '@/lib/product-presets';
+import { Select } from '@/components/ui/Select';
+import { NumberField } from '@/components/ui/NumberField';
+import { v4 as uuid } from 'uuid';
 import { savedLabel } from '@/lib/dates';
 import { Icon } from '@/components/ui/Icon';
 import { IconButton, Pill, Segmented } from '@/components/ui/primitives';
@@ -41,9 +50,9 @@ import { Modal } from '@/components/ui/Modal';
 import { useConfirm } from '@/components/ui/Confirm';
 import { toast } from '@/components/ui/StorageToast';
 import { isTypingOrDialog } from './KeyboardShortcuts';
-import type { ScenePart } from '@/lib/scene-spec';
+import type { LibraryItem, ScenePart } from '@/lib/scene-spec';
 
-type RoomTab = 'check' | 'list' | 'layouts';
+type RoomTab = 'check' | 'fit' | 'list' | 'layouts';
 
 export function RoomTools({ leading }: { leading?: ReactNode }) {
   // One panel, three tabs. These were three sibling buttons opening three cards
@@ -151,6 +160,7 @@ export function RoomTools({ leading }: { leading?: ReactNode }) {
                 size={28}
                 options={[
                   { value: 'check', label: problems > 0 ? `Check · ${problems}` : 'Check' },
+                  { value: 'fit', label: 'Will it fit' },
                   { value: 'list', label: 'List' },
                   { value: 'layouts', label: 'Layouts' },
                 ]}
@@ -168,6 +178,7 @@ export function RoomTools({ leading }: { leading?: ReactNode }) {
               footprint={room.footprint}
             />
           )}
+          {tab === 'fit' && <FitPanel effParts={effParts} room={room} />}
           {tab === 'list' && <ListPanel parts={effParts} />}
           {tab === 'layouts' && <LayoutsPanel effParts={effParts} footprint={room.footprint} />}
         </div>
@@ -646,6 +657,337 @@ function CheckPanel({
             </div>
           );
         })
+      )}
+    </div>
+  );
+}
+
+// ─── Will it fit? ───────────────────────────────────────────────────────────
+//
+// The gap between "I like this layout" and PRODUCT.md's "confidence to commit" is one
+// question: does the sofa on the shop page go in THIS room, with what is already in
+// it? Every mood-board tool can show you a sofa; none can answer that, and this app
+// already has everything needed to — see `lib/fit-check.ts`.
+//
+// Three numbers off a product page and what kind of thing it is. No backend, no
+// scraping, no guessing: the user reads the size, and the geometry engine answers.
+
+/** What the answer looks like, per verdict. Tone comes from the same Pill palette the
+ *  room report uses, so a fit answer and a finding read as the same kind of statement. */
+const FIT_TONE: Record<FitStatus, { tone: 'sage' | 'warn' | 'danger'; lead: string }> = {
+  fits: { tone: 'sage', lead: 'Yes — it fits' },
+  tight: { tone: 'warn', lead: 'It goes in, but it is tight' },
+  'no-room': { tone: 'danger', lead: 'No room for it' },
+  'too-tall': { tone: 'danger', lead: 'Too tall for this room' },
+};
+
+/** The kinds someone is most likely to be shopping for, and the shape each maps to.
+ *  Deliberately short: this is a fit check, not the catalog, and `lib/parts-catalog.ts`
+ *  is where the full list lives. */
+const FIT_KINDS: Array<{ id: string; label: string; category: ScenePart['category']; shape: ScenePart['shape'] }> = [
+  { id: 'sofa', label: 'Sofa', category: 'sofa', shape: 'sofa' },
+  { id: 'armchair', label: 'Armchair', category: 'chair', shape: 'chair-armchair' },
+  { id: 'bed', label: 'Bed', category: 'bed', shape: 'bed-double' },
+  { id: 'wardrobe', label: 'Wardrobe or dresser', category: 'wardrobe', shape: 'wardrobe' },
+  { id: 'shelf', label: 'Bookcase', category: 'shelf', shape: 'bookshelf' },
+  { id: 'desk', label: 'Desk', category: 'desk', shape: 'desk-standard' },
+  { id: 'dining', label: 'Dining table', category: 'table', shape: 'coffee-table' },
+  { id: 'coffee', label: 'Coffee table', category: 'table', shape: 'coffee-table' },
+  { id: 'chair', label: 'Dining chair', category: 'chair', shape: 'chair-dining' },
+  { id: 'fridge', label: 'Fridge', category: 'fridge', shape: 'fridge' },
+];
+
+/** Nothing anybody buys is over 6 m on a side; a room's own side is capped at 50. */
+const ABSURD_MM = 6000;
+
+/** The unit the numbers were probably read in, when they make no sense as entered.
+ *  Null when they are plausible, which is the overwhelmingly common case. */
+function misreadUnit(dimMM: [number, number, number], entered: DimUnit): string | null {
+  if (!dimMM.every((v) => Number.isFinite(v) && v > 0)) return null;
+  if (!dimMM.some((v) => v > ABSURD_MM)) return null;
+  // Only worth guessing when the same digits ARE sensible a unit down.
+  if (entered === 'm' && dimMM.every((v) => v / 100 <= ABSURD_MM)) return 'centimetres';
+  if (entered === 'cm' && dimMM.every((v) => v / 10 <= ABSURD_MM)) return 'millimetres';
+  return null;
+}
+
+function FitPanel({ effParts, room }: { effParts: ScenePart[]; room: RoomShape }) {
+  const dimUnit = useSettings((s) => s.dimUnit);
+  const [kindId, setKindId] = useState(FIT_KINDS[0].id);
+  // Held as strings, like every other measurement field here: a half-typed number is
+  // a valid thing to be looking at, and parsing on commit keeps it that way.
+  const [w, setW] = useState('');
+  const [d, setD] = useState('');
+  const [h, setH] = useState('');
+  const [result, setResult] = useState<FitResult | null>(null);
+
+  const kind = FIT_KINDS.find((k) => k.id === kindId) ?? FIT_KINDS[0];
+  const dimMM: [number, number, number] = [
+    toMM(parseFloat(w), dimUnit),
+    toMM(parseFloat(d), dimUnit),
+    toMM(parseFloat(h), dimUnit),
+  ];
+  const ready = dimMM.every((v) => Number.isFinite(v) && v > 0);
+
+  // Real products, so someone can check the answer against a size they recognise
+  // before trusting it with a size they have typed.
+  const presets = useMemo(
+    () => PRODUCT_PRESETS.filter((p) => p.category === kind.category).slice(0, 4),
+    [kind.category],
+  );
+
+  function fill(item: LibraryItem) {
+    setW(String(fromMM(item.dimMM[0], dimUnit)));
+    setD(String(fromMM(item.dimMM[1], dimUnit)));
+    setH(String(fromMM(item.dimMM[2], dimUnit)));
+    setResult(null);
+  }
+
+  function check() {
+    if (!ready) return;
+    setResult(checkFit({ category: kind.category, shape: kind.shape, dimMM, name: kind.label }, effParts, room));
+  }
+
+  /** Put it in the room, where the check said it goes. This is the one path that
+   *  clamps — `clampDims` gates sizes the app STORES, and the check deliberately does
+   *  not, so a size the studio cannot represent is brought into range here and the
+   *  panel says so rather than letting it happen quietly. */
+  function place() {
+    if (!result?.placement) return;
+    const stored = clampDims(kind.category, kind.shape, dimMM);
+    const id = `${kind.category}-${uuid().slice(0, 6)}`;
+    useScene.getState().addPart({
+      id,
+      category: kind.category,
+      name: kind.label,
+      shape: kind.shape,
+      pos: [result.placement.x, groundY(kind.category, kind.shape, stored, room.height), result.placement.z],
+      rot: result.placement.yaw,
+      dimMM: stored,
+      locked: false,
+    });
+    useStudio.getState().setSelected(id);
+    const resized = stored.some((v, i) => v !== dimMM[i]);
+    toast({
+      tone: 'success',
+      title: `${kind.label} placed`,
+      message: resized
+        ? 'Its size was brought into the range the studio works in — the fit answer was about the size you entered.'
+        : 'Undo puts the room back.',
+    });
+    setResult(null);
+  }
+
+  const label = (t: string) => (
+    <span style={{ fontSize: 11, color: 'var(--ink-2)', fontWeight: 600 }}>{t}</span>
+  );
+
+  return (
+    <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.45 }}>
+        Type the size off the shop page. Nothing in your room moves — this only asks
+        whether there is somewhere for it.
+      </div>
+
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {label('What is it')}
+        <Select
+          value={kindId}
+          onChange={(v) => {
+            setKindId(v);
+            setResult(null);
+          }}
+          ariaLabel="What kind of piece"
+          options={FIT_KINDS.map((k) => ({ value: k.id, label: k.label }))}
+          height={30}
+        />
+      </label>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+        {([
+          ['Width', w, setW],
+          ['Depth', d, setD],
+          ['Height', h, setH],
+        ] as Array<[string, string, (v: string) => void]>).map(([name, value, set]) => (
+          <label key={name} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {label(name)}
+            <NumberField
+              value={value}
+              onChange={(v) => {
+                set(v);
+                setResult(null);
+              }}
+              min={0}
+              step={stepFor(dimUnit)}
+              height={30}
+              ariaLabel={`${name} in ${dimUnit}`}
+            />
+          </label>
+        ))}
+      </div>
+      <div style={{ fontSize: 10.5, color: 'var(--ink-3)' }}>
+        W × D × H in <span className="mono">{dimUnit}</span>
+      </div>
+
+      {/* The one mistake this panel invites. Shop pages quote centimetres or
+          millimetres; the studio's display unit defaults to metres, so the natural
+          move is to copy "228" into a field that means metres and be told a sofa is
+          too tall for the room. Cheaper to notice than to explain: if the numbers are
+          absurd as entered and sensible one unit down, say so. */}
+      {misreadUnit(dimMM, dimUnit) && (
+        <div style={{ fontSize: 11, color: 'var(--warn-text)', lineHeight: 1.4 }}>
+          Those look like {misreadUnit(dimMM, dimUnit)} — these fields are in{' '}
+          <span className="mono">{dimUnit}</span>. Settings can change the unit.
+        </div>
+      )}
+
+      {presets.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          {presets.map((p) => (
+            <button
+              key={p.label}
+              onClick={() => fill(p)}
+              className="ds-chip"
+              style={{ cursor: 'pointer', fontSize: 10 }}
+              title={`Fill in ${p.dimMM.join(' × ')} mm`}
+            >
+              {p.label.replace(/^IKEA /, '')}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <button
+        onClick={check}
+        disabled={!ready}
+        className="ds-btn ds-btn--primary"
+        style={{ height: 30, fontSize: 11.5 }}
+      >
+        <Icon name="ruler" size={12} />
+        Check the room
+      </button>
+
+      {result && <FitAnswer result={result} kindLabel={kind.label} room={room} effParts={effParts} onPlace={place} />}
+    </div>
+  );
+}
+
+function FitAnswer({
+  result,
+  kindLabel,
+  room,
+  effParts,
+  onPlace,
+}: {
+  result: FitResult;
+  kindLabel: string;
+  room: RoomShape;
+  effParts: ScenePart[];
+  onPlace: () => void;
+}) {
+  const dimUnit = useSettings((s) => s.dimUnit);
+  const { tone, lead } = FIT_TONE[result.status];
+
+  // The room with the candidate in it, so the answer is a picture as well as a
+  // sentence. Built here rather than in `fit-check`, which stays free of rendering.
+  const preview = useMemo(() => {
+    if (!result.placement) return null;
+    return [
+      ...effParts,
+      {
+        id: PROBE_ID,
+        category: 'other',
+        name: kindLabel,
+        shape: 'box',
+        pos: [result.placement.x, 0, result.placement.z] as [number, number, number],
+        rot: result.placement.yaw,
+        dimMM: [500, 500, 500] as [number, number, number],
+        locked: false,
+      } as ScenePart,
+    ];
+  }, [effParts, result.placement, kindLabel]);
+
+  return (
+    <div
+      style={{
+        borderTop: '1px solid var(--hairline)',
+        paddingTop: 10,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Pill tone={tone}>{lead}</Pill>
+        {result.status === 'too-tall' && (
+          <span style={{ fontSize: 11, color: 'var(--ink-2)' }}>
+            by <span className="mono">{formatDim(-result.headroomMM, dimUnit)} {dimUnit}</span>
+          </span>
+        )}
+      </div>
+
+      {result.status === 'fits' && (
+        <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.45 }}>
+          There is somewhere for it that keeps the doors opening and the walkways clear.
+          {result.headroomMM > 0 && (
+            <>
+              {' '}
+              <span className="mono">{formatDim(result.headroomMM, dimUnit)} {dimUnit}</span> under the ceiling.
+            </>
+          )}
+        </div>
+      )}
+
+      {result.status === 'too-tall' && (
+        <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.45 }}>
+          The ceiling here is <span className="mono">{formatDim(room.height * 1000, dimUnit)} {dimUnit}</span>. Nothing
+          about the floor can help with that.
+        </div>
+      )}
+
+      {result.status === 'no-room' && (
+        <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.45 }}>
+          {result.largestBay ? (
+            <>
+              The biggest clear rectangle of floor is{' '}
+              <span className="mono">
+                {formatDim(result.largestBay.width * 1000, dimUnit)} × {formatDim(result.largestBay.depth * 1000, dimUnit)} {dimUnit}
+              </span>
+              . Moving what is already in here might make room — try <b>Suggest</b>.
+            </>
+          ) : (
+            <>This room has no clear stretch of floor to put it on.</>
+          )}
+        </div>
+      )}
+
+      {/* The reasons, straight from the room report, so a fit answer and a finding say
+          the same thing in the same words. */}
+      {result.issues.length > 0 && (
+        <ul style={{ margin: 0, paddingLeft: 16, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {result.issues.map((i) => (
+            <li key={i.id} style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.4 }}>
+              {i.title}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {result.outOfRange && (
+        <div style={{ fontSize: 11, color: 'var(--warn-text)', lineHeight: 1.4 }}>
+          That size is outside the range the studio works in. The answer above is about
+          the size you entered; placing it will bring it into range.
+        </div>
+      )}
+
+      {preview && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <MiniPlan parts={preview} footprint={room.footprint} />
+          <button onClick={onPlace} className="ds-btn" style={{ height: 26, fontSize: 10.5 }}>
+            <Icon name="plus" size={11} />
+            Put it there
+          </button>
+        </div>
       )}
     </div>
   );

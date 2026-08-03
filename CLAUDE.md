@@ -138,7 +138,8 @@ pnpm hash:models --verify   # …and confirm the mirror serves those same bytes 
 
 Run `pnpm typecheck` after non-trivial edits. Add a Vitest test when you touch
 pure logic in `lib/` (geometry / physics / clearance / footprint / dimension-
-ranges / shape-search / item-snap / units / dates / scene-file / transforms all have tests
+ranges / shape-search / item-snap / units / dates / scene-file / transforms /
+fit-check all have tests
 in
 `tests/`).
 
