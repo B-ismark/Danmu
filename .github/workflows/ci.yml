@@ -61,6 +61,37 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm test
 
+      # Next's own build cache — without it every run rebuilds from cold and says
+      # so (`⚠ No build cache found`). `v5` for the same reason as the actions
+      # above: v4 targets the deprecated Node 20 runtime.
+      #
+      # The key is the lockfile plus the sources a build actually reads, NOT
+      # `**/*.ts` — that pattern would hash `node_modules` too, since this runs
+      # after the install. `restore-keys` is the point of the split: an ordinary
+      # source change misses the exact key and still starts from the last cache
+      # built against the same dependencies, rather than from nothing.
+      #
+      # Safe to reuse across runs because the cache is content-addressed — it
+      # holds compiler output keyed by input, so a stale entry is ignored rather
+      # than trusted. `actions/cache` saves it in a post step, and only when the
+      # job succeeded.
+      #
+      # Measured locally rather than taken on faith: from cold, `next build`
+      # compiles in 110s; with only `.next/cache` restored and the rest of
+      # `.next` deleted — exactly what this step reconstructs — it compiles in
+      # 14s. Nearly all of the ~230 MB is `cache/webpack`; `cache/eslint` and
+      # `cache/swc` are 64 KB and 12 KB, so there is nothing worth scoping out.
+      # That sits alongside the ~250 MB pnpm store cache, well inside the 10 GB
+      # a repository gets.
+      - name: Restore the Next build cache
+        if: ${{ !cancelled() }}
+        uses: actions/cache@v5
+        with:
+          path: .next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('app/**', 'components/**', 'lib/**', 'next.config.mjs', 'tsconfig.json') }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+
       # `next build` runs its own ESLint pass over the same config, and two ways
       # that pass can fail do NOT fail the build — it prints one line and exits
       # 0. Both have happened here (an ESLint 8 / flat-config mismatch linted
