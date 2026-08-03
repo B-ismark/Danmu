@@ -134,7 +134,18 @@ pnpm hash:models --verify   # …and confirm the mirror serves those same bytes 
 ```
 
 `pnpm` is invoked through Corepack here (`corepack pnpm …`) if it is not on
-`PATH`; `packageManager` in `package.json` pins the version.
+`PATH`; `packageManager` in `package.json` pins the version — and CI reads the
+same field rather than naming a pnpm version of its own.
+
+**CI runs the first four on every push to `main` and every pull request**
+(`.github/workflows/ci.yml`, one job, no secrets — nothing here has a backend to
+deploy to). Each gate is guarded by `!cancelled()` so one red gate does not hide
+the other three, and `pnpm audit` runs `continue-on-error` on purpose: an
+advisory published upstream overnight is not a defect in whichever pull request
+happens to run next. The build step also **greps its own output**, because
+`next build` can skip its ESLint pass and still exit 0 — see the lint notes
+below, and `tests/toolchain.test.ts`, which pins the same two invariants where
+they fail faster.
 
 Run `pnpm typecheck` after non-trivial edits. Add a Vitest test when you touch
 pure logic in `lib/` (geometry / physics / clearance / footprint / dimension-
@@ -232,6 +243,12 @@ tests import does not belong in `lib/`, where it reads as shipped code.
     the build warn the plugin is missing while every Next rule is in fact firing. The
     root config files are linted instead, which is why `postcss.config.mjs` and
     `eslint.config.mjs` name their default export.
+
+  Both are pinned by `tests/toolchain.test.ts` — which asserts the *declared* range
+  admits nothing below 9, not just the installed version, and makes Next's own
+  `calculateConfigForFile('eslint.config.mjs')` call itself — and backstopped in CI by
+  grepping the build's output. Neither guard is decoration: each of the five
+  assertions was checked by mutation, including an actual downgrade to 8.57.
 - `onnxruntime-web` must stay **runtime-loaded** with `webpackIgnore` — bundling
   it breaks the Next build. It is served from `public/ort/` after
   `pnpm vendor:ort` (same-origin, so the CSP can be tight); the jsDelivr CDN is
