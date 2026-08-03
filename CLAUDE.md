@@ -39,12 +39,21 @@ backend, no account. The 3D studio *is* the product.
    across a doorway and have Room check report it: **add a clearance number there,
    never in a consumer.** Zones are authored in the piece's own frame and derived
    from its `dimMM`, which is what makes them recalibrate on a resize for free.
-   `tests/layout-conformance.test.ts` now holds the two consumers to each other: a
+   Every finding names its rule as a **value** (`ClearanceIssue.rule: RuleKind`), not
+   as a prefix of its `id` — the id is for React keys, and anything that branches on
+   the kind of finding reads `rule`. What the solver can do about each kind lives in
+   `RULE_HANDLING` (`lib/layout-score.ts`), which is production knowledge and not a
+   test fixture: the room report reads it to decide which findings get a **Try a fix**
+   button, so a wrong row is a wrong button. It answers two questions that differ —
+   `costTerm` (which weight implements the rule) and `movable` (could rearranging
+   clear it), and `reach` has no weight yet is movable, because `solveLayout` scores it
+   over the finalists via `navigabilityCost`.
+   `tests/layout-conformance.test.ts` holds the two consumers to each other: a
    layout the checker flags must cost the solver more **on the term implementing that
-   same rule**, and every issue family `clearance.ts` can emit must be classified as
-   priced or explicitly not. **A new finding fails that test until you decide which
-   it is** — a cost term, or a written reason a cost cannot express it (`tall` is a
-   size, `crowding` is the whole room, `reach` belongs to `navigabilityCost`). Adding
+   same rule**, and every rule `clearance.ts` emits must have a `RULE_HANDLING` row.
+   **A new finding fails that test until you decide what it is** — a cost term, or a
+   written reason a cost cannot express it (`tall` is a size, `crowding` is the whole
+   room, `turning` nothing costs at all). Adding
    a check with no cost is allowed; adding one silently is not.
    **Arrange against the room, never against its bounding box.** A footprint is a
    polygon; `±width/2` describes a box the room may not be. Every starter

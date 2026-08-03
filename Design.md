@@ -249,7 +249,7 @@ This is what makes Danmu trustworthy. All pure math, all covered by tests.
 | `lib/device-tilt.ts` | Lens tilt at the shutter from `deviceorientation`, for the live-camera path only (EXIF has no tilt field). Reports a tilt only for an upright, unrolled phone — a wrong tilt is worse than none, since "none" is the level camera the engine already assumed. |
 | `lib/physics.ts` | Gravity/anchor rules — where a part sits (floor / ceiling / wall-mid / …), wall affinity + snap, support-under lookup for tabletop-prone items. |
 | `lib/layout-rules.ts` | **What each piece needs from the room, as geometry** — and the one table both the checker and the solver read. Roles (what a piece is *for*, which the catalog's shapes cannot say: `coffee-table` is used for both a 900 mm side table and an 1800 mm dining table, so height decides), access zones per functional side, functional relations between pairs, the room's own profile, and the route width the room is big enough to be asked for. Every number is derived from the piece it is about — a zone's depth is what the *activity* needs, its width comes from `dimMM`, and it lives in the piece's local frame — so resizing anything recalibrates by construction. |
-| `lib/clearance.ts` | Ergonomics checker over exact geometry: walkways, functional zones (storage fronts, bed sides, a table's seats, a desk's chair), door swings **and the route in from them**, windows kept unblocked, clashes, reachability, over-height. Every threshold comes from `layout-rules`; nothing is written twice — including `belongTogether`, which keeps the walkway rule off a pair the relation table put together: 450 mm between a sofa and its own coffee table is the figure the table asks for, and reporting it made the panel cry wolf about every correct living room (the solver's circulation term skips the same pairs). Reproducible findings, no AI. |
+| `lib/clearance.ts` | Ergonomics checker over exact geometry: walkways, functional zones (storage fronts, bed sides, a table's seats, a desk's chair), door swings **and the route in from them**, windows kept unblocked, clashes, reachability, over-height. Every threshold comes from `layout-rules`; nothing is written twice — including `belongTogether`, which keeps the walkway rule off a pair the relation table put together: 450 mm between a sofa and its own coffee table is the figure the table asks for, and reporting it made the panel cry wolf about every correct living room (the solver's circulation term skips the same pairs). Reproducible findings, no AI. Each finding carries a `rule: RuleKind` — the kind of thing that is wrong, as a value rather than as a prefix of its `id`, which is what lets the report ask `RULE_HANDLING` whether the solver could clear it. |
 | `lib/apertures.ts` | Turns wall-mounted `window` / `door` parts into rectangles in each wall's own 2D frame, which is all `THREE.Shape` needs to punch a hole (`Shape.holes` + Earcut — no CSG library). Pure, because the wall-local conversion is the part that goes wrong invisibly: get the tangent backwards and every opening mirrors about the middle of its wall. |
 | `lib/layout-score.ts` / `lib/layout-solve.ts` | `layout-rules` restated as **costs** rather than checks — collisions, doors and their approach, functional zones, windows, walkways, wall affinity, relations, alignment, balance — plus **inertia**, which charges for movement so a piece only moves if moving it buys something, and **navigability** over the clearance field for the handful of finalists. Then seeded simulated annealing over `(x, z, yaw)` of the unlocked pieces, with proposals that know the room's structure (snap to a wall, park beside the thing you belong to, face the screen, swap two pieces). Deterministic per seed; `mode: 'refit'` turns the inertia up to repair a layout after a resize rather than reinvent it. **Never writes `dimMM`** — it moves and turns, and the type it works in has no field a size could travel in. Restating a table is safe only while the restatements agree, so `tests/layout-conformance.test.ts` pins them to each other — see below. |
 | `lib/solar.ts` | NOAA / Meeus solar position — declination, equation of time, hour angle → altitude and azimuth, ~0.01°. No model, no network, no data file: pure astronomy, which is the one thing in this app a model could not do better. |
@@ -612,6 +612,27 @@ The 2D plan tab mirrors the same idea at smaller scale: help chip above the zoom
 toolbar, bottom-left; scale/comfort chips top-left; export top-right.
 
 ### Other studio tools
+- **The room report offers, it does not just report** (`RoomTools.tsx` `CheckPanel`).
+  An earlier pass fixed how the panel *sounds* — findings badged FIX / TIGHT / NOTE
+  in tracked caps became "Worth fixing" / "A bit tight" / "Just so you know", which
+  is the same information said the way the rest of the product talks. What it could
+  *do* was still nothing: it named a problem, offered to select the pieces, and
+  stopped. The only way to act was the whole-room **Suggest** in the toolbar, which
+  is a bigger move than most findings deserve — it rearranges nine pieces to answer a
+  question about two.
+  So each finding the solver can act on carries **Try a fix**, which runs the same
+  solver confined to the pieces that finding names by locking everything else. That
+  confinement is the honest part: someone asking about one tight walkway has not
+  asked to have their room rearranged. When the confined solve finds nothing it says
+  so and names the wider move, rather than being a button that quietly does nothing.
+  **Which findings get one is not decided in the component.** `RULE_HANDLING` in
+  `lib/layout-score.ts` answers it, because that is already the table saying which
+  cost term implements each rule, and it distinguishes two questions that have
+  different answers: `reach` has no `scoreLayout` weight (it needs the clearance
+  field) yet is still fixable, because `solveLayout` scores it over the finalists
+  through `navigabilityCost`. Three findings deliberately get no button — a piece
+  taller than the room is a *size* and the solver cannot resize, a crowded room needs
+  a piece removed rather than moved, and nothing costs turning space at all.
 - **Adding furniture is ONE surface** (`CatalogPanel.tsx`) — a docked, non-blocking
   strip with the two ways in as tabs: **Catalog** (searchable, grouped, drag onto
   the 3D floor or click to drop at centre) and **Describe it** (local token search

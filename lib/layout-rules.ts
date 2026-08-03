@@ -187,6 +187,37 @@ export function roleOf(part: { category: Category; shape: Shape; dimMM: [number,
   return ROLE_BY_SHAPE[part.shape] ?? ROLE_BY_CATEGORY[part.category] ?? 'other';
 }
 
+// ─── What can be wrong with a room ──────────────────────────────────────────
+//
+// The kinds of finding this table's rules can produce, named once so that the two
+// consumers and the UI can all talk about the same thing.
+//
+// It exists because "which rule is this" used to be answerable only by matching the
+// prefix of a `ClearanceIssue.id` — a string built for React keys and being read as
+// a type. That is fine until something needs to BRANCH on it, and the room report
+// now does: whether a finding can be cleared by moving furniture decides whether it
+// is offered a fix, and getting that wrong means either a button that does nothing
+// or no button where one would have helped.
+//
+// The zone rules (a wardrobe's front, a bed's side, a table's seats) are one kind
+// here on purpose. They differ in which side of a piece they measure and not at all
+// in what to do about them.
+export const RULE_KINDS = [
+  'door',
+  'entry',
+  'clash',
+  'walk',
+  'zone',
+  'window',
+  'tv',
+  'tall',
+  'crowding',
+  'reach',
+  'cut-off',
+  'turning',
+] as const;
+export type RuleKind = (typeof RULE_KINDS)[number];
+
 // ─── Derived thresholds ─────────────────────────────────────────────────────
 
 /** The tight minimum walkway. DERIVED from the field's walk radius rather than

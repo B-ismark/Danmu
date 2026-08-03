@@ -29,7 +29,7 @@ import { useScene } from '@/lib/scene-store';
 import { useStudio, useSettings } from '@/lib/store';
 import { analyzeRoom, type ClearanceIssue, type ClearanceSeverity } from '@/lib/clearance';
 import { solveLayout } from '@/lib/layout-solve';
-import type { CostBreakdown } from '@/lib/layout-score';
+import { RULE_HANDLING, type CostBreakdown } from '@/lib/layout-score';
 import { roomStore, type LayoutVariant, type Transforms } from '@/lib/storage';
 import { footprintBounds, type Footprint } from '@/lib/footprint';
 import { formatDim } from '@/lib/units';
@@ -174,6 +174,8 @@ export function RoomTools({ leading }: { leading?: ReactNode }) {
               freeShare={report.freeFloorShare}
               stepFree={stepFree}
               onStepFree={setStepFree}
+              effParts={effParts}
+              footprint={room.footprint}
             />
           )}
           {tab === 'list' && <ListPanel parts={effParts} />}
@@ -270,17 +272,25 @@ function whatChanged(before: CostBreakdown, after: CostBreakdown): string {
 }
 
 /** Run the solver and write the result as one history entry. Shared, because the
- *  same thing happens whether the user asked for an idea or accepted a re-fit
- *  after resizing something. */
+ *  same thing happens whether the user asked for an idea, accepted a re-fit after
+ *  resizing something, or asked the room report to clear one finding.
+ *
+ *  `only` confines the solve to a few pieces by locking everything else. It is what
+ *  makes a per-finding fix honest: someone who asks about one tight walkway has not
+ *  asked to have their room rearranged, and a fix that moved nine other pieces to
+ *  clear it would be answering a question they did not ask. Locking is the whole
+ *  mechanism — the solver already understands locked pieces, and still scores them,
+ *  because a piece nobody may move is still in the way. */
 function useSuggest(effParts: ScenePart[], footprint: Footprint) {
   const loadTransforms = useStudio((s) => s.loadTransforms);
   return useCallback(
-    (mode: 'arrange' | 'refit', seed: number) => {
+    (mode: 'arrange' | 'refit', seed: number, only?: string[]) => {
       const t = useStudio.getState();
+      const confined = only && only.length > 0 ? new Set(only) : null;
       const result = solveLayout(
         effParts,
         footprint,
-        effParts.map((p) => p.locked),
+        effParts.map((p) => p.locked || (confined ? !confined.has(p.id) : false)),
         { seed, mode },
       );
       if (result.moved.length === 0 || result.after >= result.before) return null;
@@ -373,13 +383,23 @@ function useRefitOffer(
   // What the geometry looked like last time, and how many problems it had. Both
   // are needed: a problem count that went up on its own is the user dragging
   // something, and they can see that happening.
-  const seen = useRef<{ key: string; problems: number } | null>(null);
+  const seen = useRef<{ key: string; problems: number; cast: string } | null>(null);
 
   useEffect(() => {
     const key = JSON.stringify([footprint, dims]);
+    // WHICH pieces are in the room, as distinct from what size they are. A resize
+    // never changes this; loading or importing a room changes both at once, and the
+    // geometry key alone could not tell the two apart. Opening a room reliably
+    // announced "that size change left 5 problems" about a size nobody had touched,
+    // because the room's real geometry arrives a render after this mounts.
+    const cast = effParts
+      .map((p) => p.id)
+      .sort()
+      .join(',');
     const prev = seen.current;
-    seen.current = { key, problems };
+    seen.current = { key, problems, cast };
     if (!prev || prev.key === key) return;
+    if (prev.cast !== cast) return;
     if (problems <= prev.problems) return;
     const added = problems - prev.problems;
     toast({
@@ -417,6 +437,16 @@ function useRefitOffer(
 // tool. Same information, said the way the rest of the panel already talks, in
 // the Pill primitive (tinted background + a *-text foreground, so 11px copy on a
 // tint still clears 4.5:1).
+//
+// That fixed how the panel SOUNDED and left what it could DO: it named a problem,
+// offered to select the pieces, and then stopped. The only way to act on any of it
+// was the whole-room Suggest button in the toolbar — a bigger move than most
+// findings deserve, and one that rearranges nine pieces to answer a question about
+// two. So each finding the solver can act on now carries its own fix, confined to
+// the pieces it names. Which findings those are is not decided here: `RULE_HANDLING`
+// in `lib/layout-score.ts` knows, because it is the same table that says which cost
+// term implements each rule, and `tests/layout-conformance.test.ts` holds it to the
+// findings `lib/clearance.ts` actually emits.
 
 const SEVERITY: Record<ClearanceSeverity, { tone: 'danger' | 'warn' | 'neutral'; label: string }> = {
   error: { tone: 'danger', label: 'Worth fixing' },
@@ -445,16 +475,88 @@ function TabActions({ children }: { children: ReactNode }) {
   );
 }
 
+/** Offer to clear one finding, by moving only the pieces it names.
+ *
+ *  Shown only where `RULE_HANDLING` says rearranging could actually help. The three
+ *  it stays away from are the ones where a button would be a lie: a piece taller
+ *  than the room is a size and the solver cannot resize, a crowded room needs a
+ *  piece removed rather than moved, and nothing costs turning space at all.
+ *
+ *  When the confined solve cannot find anything, it says so and names the wider
+ *  move — that is the honest answer, and it is better than a button that silently
+ *  does nothing. */
+function FixButton({
+  issue,
+  effParts,
+  footprint,
+}: {
+  issue: ClearanceIssue;
+  effParts: ScenePart[];
+  footprint: Footprint;
+}) {
+  const suggest = useSuggest(effParts, footprint);
+  const [busy, setBusy] = useState(false);
+  // Pressing again asks for a different attempt, the same way Suggest does.
+  const attempt = useRef(0);
+
+  // A finding with no pieces named (a cut-off patch of floor is about the floor)
+  // has nothing to confine to, so it falls back to the whole room.
+  const scope = issue.partIds.length > 0 ? issue.partIds : undefined;
+
+  function run() {
+    setBusy(true);
+    try {
+      const result = suggest('refit', ++attempt.current, scope);
+      if (!result) {
+        toast({
+          title: 'Moving those didn’t clear it',
+          message: scope
+            ? 'Nothing better was found without touching the rest of the room. Suggest can rearrange everything.'
+            : 'Nothing better was found. Try unlocking a piece, or making some space.',
+        });
+        return;
+      }
+      toast({
+        tone: 'success',
+        title: `Moved ${result.moved.length} ${result.moved.length === 1 ? 'piece' : 'pieces'}`,
+        message: whatChanged(result.breakdownBefore, result.breakdownAfter),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      onClick={run}
+      disabled={busy}
+      className="ds-btn"
+      title={
+        scope
+          ? 'Move just the pieces named here, leaving the rest of the room alone'
+          : 'Rearrange the unlocked furniture to open the floor up'
+      }
+      style={{ height: 24, fontSize: 10, padding: '0 8px', flexShrink: 0, alignSelf: 'flex-start' }}
+    >
+      {busy ? 'Trying…' : 'Try a fix'}
+    </button>
+  );
+}
+
 function CheckPanel({
   issues,
   freeShare,
   stepFree,
   onStepFree,
+  effParts,
+  footprint,
 }: {
   issues: ClearanceIssue[];
   freeShare: number;
   stepFree: boolean;
   onStepFree: (on: boolean) => void;
+  effParts: ScenePart[];
+  footprint: Footprint;
 }) {
   const setSelection = useStudio((s) => s.setSelection);
   const frameSelected = useStudio((s) => s.frameSelected);
@@ -498,41 +600,60 @@ function CheckPanel({
         issues.map((issue) => {
           const sev = SEVERITY[issue.severity];
           const canSelect = issue.partIds.length > 0;
+          // Whether the solver could plausibly clear this by rearranging. Read from
+          // the one table that knows, rather than re-deciding it here.
+          const canFix = RULE_HANDLING[issue.rule].movable;
           return (
-            <button
+            // A row, not a button: it holds two real buttons now — showing the
+            // pieces, and offering to move them — and a button inside a button is
+            // neither valid nor reachable by keyboard.
+            <div
               key={issue.id}
-              onClick={() => {
-                if (!canSelect) return;
-                setSelection(issue.partIds, issue.partIds[0]);
-                frameSelected();
-              }}
-              className="list-row"
-              title={canSelect ? 'Select the pieces involved and fly to them' : undefined}
               style={{
-                flexDirection: 'column',
-                alignItems: 'stretch',
-                gap: 4,
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 8,
                 padding: '10px 14px',
-                borderRadius: 0,
                 borderBottom: '1px solid var(--hairline)',
-                cursor: canSelect ? 'pointer' : 'default',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Pill tone={sev.tone}>{sev.label}</Pill>
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink)', flex: 1, minWidth: 0 }}>
-                  {issue.title}
-                </span>
-                {canSelect && (
-                  <span className="row-action" style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-text)', whiteSpace: 'nowrap' }}>
-                    Show me
+              <button
+                onClick={() => {
+                  if (!canSelect) return;
+                  setSelection(issue.partIds, issue.partIds[0]);
+                  frameSelected();
+                }}
+                className="list-row"
+                title={canSelect ? 'Select the pieces involved and fly to them' : undefined}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  flexDirection: 'column',
+                  alignItems: 'stretch',
+                  gap: 4,
+                  padding: 0,
+                  borderRadius: 0,
+                  background: 'none',
+                  cursor: canSelect ? 'pointer' : 'default',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Pill tone={sev.tone}>{sev.label}</Pill>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink)', flex: 1, minWidth: 0 }}>
+                    {issue.title}
                   </span>
-                )}
-              </div>
-              <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.45, whiteSpace: 'normal' }}>
-                {issue.detail}
-              </div>
-            </button>
+                  {canSelect && (
+                    <span className="row-action" style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-text)', whiteSpace: 'nowrap' }}>
+                      Show me
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.45, whiteSpace: 'normal' }}>
+                  {issue.detail}
+                </div>
+              </button>
+              {canFix && <FixButton issue={issue} effParts={effParts} footprint={footprint} />}
+            </div>
           );
         })
       )}

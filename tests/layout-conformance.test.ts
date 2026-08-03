@@ -23,11 +23,15 @@
 // is worse for unrelated reasons — a sofa 7° off square costs something too — and
 // would not prove the two modules agree about WHICH rule was broken.
 //
-// `CLASSIFIED` below is the single table this file works from. An earlier draft let
-// each fixture carry its own cost term as well, which is the same
-// duplication-that-drifts this test exists to police: pointing the door rule at a
-// taste weight left all 28 assertions green. The fixtures name a row in `CLASSIFIED`
-// and nothing else, so there is one place to be wrong.
+// The mapping this file checks against is `RULE_HANDLING` in `lib/layout-score.ts`,
+// which is production knowledge rather than a fixture: the room report reads the same
+// rows to decide which findings to offer a fix for. Two earlier drafts got this wrong
+// in the same way and are worth recording, because both bugs were the exact thing
+// this file exists to catch, reproduced inside it. The first kept the mapping
+// privately here, making the test a third restatement of the table. The second let
+// each fixture carry its own cost term beside the classification — aiming the door
+// rule at a taste weight left all 28 assertions green. A fixture now names a row and
+// nothing else.
 
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -36,12 +40,12 @@ import { analyzeRoom } from '@/lib/clearance';
 import {
   costBreakdown,
   prepare,
+  RULE_HANDLING,
   type CostBreakdown,
   type LayoutContext,
   type Placement,
-  type ScoreWeights,
 } from '@/lib/layout-score';
-import { routeWidth, WALK_MIN } from '@/lib/layout-rules';
+import { RULE_KINDS, routeWidth, WALK_MIN, type RuleKind } from '@/lib/layout-rules';
 import type { ScenePart } from '@/lib/scene-spec';
 import type { Footprint } from '@/lib/footprint';
 
@@ -79,59 +83,24 @@ function costAt(parts: ScenePart[], at: Placement[]): CostBreakdown {
   return costBreakdown(prepare(ctx), at);
 }
 
-const flagged = (parts: ScenePart[], at: Placement[], family: string) =>
-  issuesAt(parts, at).some((i) => i.id.startsWith(family));
+/** Does the report raise this rule for this arrangement? Matched on the finding's
+ *  `rule`, which is the contract — the id is built for React keys, and reading a
+ *  type out of its prefix is what `RuleKind` exists to stop. */
+const flagged = (parts: ScenePart[], at: Placement[], family: Family) =>
+  issuesAt(parts, at).some((i) => i.rule === family);
 
-// ─── The one table ──────────────────────────────────────────────────────────
+// ─── The one table, which lives in the app ──────────────────────────────────
+//
+// `RULE_HANDLING` in `lib/layout-score.ts` is what this file checks against, and it
+// is not a fixture: the room report reads the same rows to decide which findings to
+// offer a fix for. An earlier draft of this test kept its own private copy of the
+// mapping, which made the test the third restatement of a table whose duplication it
+// exists to police. Checking production knowledge is the point — a wrong row here is
+// a wrong button in the UI, not just a red test.
 
-/** Every issue family `clearance.ts` can emit, and what the solver does about it.
- *
- *  `term` names the cost that implements the same rule. `unpriced` carries the
- *  REASON, because those are decisions rather than omissions and the next person to
- *  read the list should not have to re-derive them. */
-const CLASSIFIED = {
-  door: { term: 'door' },
-  entry: { term: 'door' },
-  clash: { term: 'overlap' },
-  walk: { term: 'walkway' },
-  window: { term: 'window' },
-  tv: { term: 'relation' },
-  // The zone families, written through ZONE_ISSUE_ID: front / bed / seats / seat /
-  // push-back all come out of one loop over `accessRules`, so they are one row.
-  zone: { term: 'access' },
+type Family = RuleKind;
 
-  tall: {
-    unpriced:
-      'a fact about the piece’s SIZE, not its placement. The solver moves and turns, ' +
-      'and the type it works in has no field a dimension could travel in, so no ' +
-      'arrangement it can reach would fix this. Reported, never optimised.',
-  },
-  crowding: {
-    unpriced:
-      'a property of the whole room — too much furniture for the floor. No ' +
-      'rearrangement removes a piece, so there is nothing for a cost to descend.',
-  },
-  reach: {
-    unpriced:
-      'connectivity, priced by `navigabilityCost` rather than a scoreLayout term — it ' +
-      'needs the clearance field, which is too expensive per proposal and is run over ' +
-      'the finalists instead.',
-  },
-  'cut-off': { unpriced: 'as `reach` — a connected-component question, priced by `navigabilityCost`.' },
-  turning: {
-    unpriced:
-      'accessibility-only and off by default (`AnalyzeOptions.accessibility`). Costing ' +
-      'it unasked would move furniture to satisfy a rule the user never opted into.',
-  },
-} satisfies Record<string, { term: keyof ScoreWeights } | { unpriced: string }>;
-
-type Family = keyof typeof CLASSIFIED;
-
-/** The cost term for a family, or null when the solver deliberately does not price it. */
-function termFor(family: Family): keyof ScoreWeights | null {
-  const how = CLASSIFIED[family];
-  return 'term' in how ? how.term : null;
-}
+const termFor = (family: Family) => RULE_HANDLING[family].costTerm;
 
 // ─── Fixtures ───────────────────────────────────────────────────────────────
 
@@ -151,11 +120,8 @@ const window_ = () =>
 const halfDepth = (p: ScenePart) => p.dimMM[1] / 2000;
 
 type Case = {
-  /** The row in `CLASSIFIED` this pair exercises. The cost term comes from there. */
+  /** The `RULE_HANDLING` row this pair exercises. The cost term comes from there. */
   family: Family;
-  /** Prefix of the `ClearanceIssue.id` the checker reports it under. Usually the
-   *  family name, but the zone row reports under each rule's own id. */
-  reportedAs: string;
   what: string;
   parts: ScenePart[];
   bad: Placement[];
@@ -171,7 +137,6 @@ function cases(): Case[] {
     const c = chair();
     out.push({
       family: 'door',
-      reportedAs: 'door-',
       what: 'a chair standing in the door’s swing',
       parts: [d, c],
       bad: [here(d), { x: 0.3, z: -1.5, yaw: 0 }],
@@ -187,7 +152,6 @@ function cases(): Case[] {
     const s = sofa();
     out.push({
       family: 'entry',
-      reportedAs: 'entry-',
       what: 'a sofa across the way in from the door',
       parts: [d, s],
       bad: [here(d), { x: 0, z: -0.75, yaw: 0 }],
@@ -201,7 +165,6 @@ function cases(): Case[] {
     const w = wardrobe();
     out.push({
       family: 'clash',
-      reportedAs: 'clash-',
       what: 'a sofa and a wardrobe in the same place',
       parts: [s, w],
       bad: [
@@ -227,7 +190,6 @@ function cases(): Case[] {
     const clear = faces + ROUTE + 0.5;
     out.push({
       family: 'walk',
-      reportedAs: 'walk-',
       what: `a ${Math.round(WALK_MIN * 0.4 * 100)} cm gap between two bulky pieces`,
       parts: [s, w],
       bad: [
@@ -249,7 +211,6 @@ function cases(): Case[] {
     const c = chair();
     out.push({
       family: 'zone',
-      reportedAs: 'front-',
       what: 'a chair parked where the wardrobe doors open',
       parts: [w, c],
       bad: [
@@ -269,7 +230,6 @@ function cases(): Case[] {
     const w = wardrobe();
     out.push({
       family: 'window',
-      reportedAs: 'window-',
       what: 'a wardrobe standing in front of the window',
       parts: [win, w],
       bad: [here(win), { x: 0, z: 1.6, yaw: 0 }],
@@ -287,7 +247,6 @@ function cases(): Case[] {
     const s = sofa();
     out.push({
       family: 'tv',
-      reportedAs: 'tv-',
       what: 'a sofa closer to the screen than the diagonal allows',
       parts: [t, s],
       bad: [here(t), { x: 0, z: -1.0, yaw: 0 }],
@@ -302,19 +261,19 @@ describe('layout-rules · the checker and the solver agree', () => {
   for (const c of cases()) {
     const term = termFor(c.family);
 
-    describe(`${c.reportedAs} ↔ ${term}`, () => {
+    describe(`${c.family} ↔ ${term}`, () => {
       it('is a rule the solver claims to price', () => {
         expect(term, `${c.family} is classified unpriced, so this pair should not exist`).not.toBeNull();
       });
 
       it(`the room report flags ${c.what}`, () => {
-        expect(flagged(c.parts, c.bad, c.reportedAs)).toBe(true);
+        expect(flagged(c.parts, c.bad, c.family)).toBe(true);
       });
 
       it('the room report is quiet about the same pieces placed well', () => {
         // Without this the pair proves nothing: a rule that fires on every layout
         // would satisfy the assertion above and discriminate nothing.
-        expect(flagged(c.parts, c.good, c.reportedAs)).toBe(false);
+        expect(flagged(c.parts, c.good, c.family)).toBe(false);
       });
 
       it(`the solver charges ${term} for it`, () => {
@@ -322,7 +281,7 @@ describe('layout-rules · the checker and the solver agree', () => {
         const good = costAt(c.parts, c.good);
         expect(
           bad[term!],
-          `clearance flags ${c.reportedAs} but layout-score's ${term} does not rise: ` +
+          `clearance flags ${c.family} but layout-score's ${term} does not rise: ` +
             `${good[term!].toFixed(3)} → ${bad[term!].toFixed(3)}`,
         ).toBeGreaterThan(good[term!]);
       });
@@ -346,17 +305,7 @@ describe('layout-rules · the checker and the solver agree', () => {
 function emittedFamilies(): Set<string> {
   const src = readFileSync(join(process.cwd(), 'lib', 'clearance.ts'), 'utf8');
   const out = new Set<string>();
-  for (const m of src.matchAll(/^\s*id: (['`])(.*?)\1,$/gm)) {
-    const body = m[2];
-    // `${ZONE_ISSUE_ID[rule.id] ?? rule.id}-${p.id}` — the family is computed, so
-    // the whole access-zone group is classified under one name.
-    if (body.startsWith('${')) {
-      out.add('zone');
-      continue;
-    }
-    // `door-${door.id}` → door; 'crowding' → crowding.
-    out.add(body.split('${')[0].replace(/-+$/, ''));
-  }
+  for (const m of src.matchAll(/^\s*rule: '([a-z-]+)',$/gm)) out.add(m[1]);
   return out;
 }
 
@@ -370,29 +319,33 @@ describe('layout-rules · nothing is reported without a decision about the solve
     expect(found).toContain('zone');
   });
 
-  it('classifies every family clearance.ts can emit', () => {
-    const unclassified = [...emittedFamilies()].filter((f) => !(f in CLASSIFIED)).sort();
+  it('classifies every rule clearance.ts can emit', () => {
+    // `RULE_HANDLING` is a Record over `RuleKind`, so the compiler already refuses a
+    // kind that is declared and unhandled. This catches the step before that: a rule
+    // string that never made it into `RULE_KINDS` at all.
+    const unclassified = [...emittedFamilies()].filter((f) => !(f in RULE_HANDLING)).sort();
     expect(
       unclassified,
       `clearance.ts emits ${unclassified.join(', ')}, which the solver neither prices nor ` +
-        'declines. Add it to CLASSIFIED with a cost term, or with the reason a cost ' +
-        'cannot express it.',
+        'declines. Add it to RULE_KINDS and give it a row in RULE_HANDLING, saying either ' +
+        'which cost term implements it or why a cost cannot.',
     ).toEqual([]);
   });
 
-  it('classifies nothing that clearance.ts no longer emits', () => {
-    // The other direction: a stale entry would let a real family go unnoticed by
-    // making the list look complete.
+  it('classifies nothing clearance.ts no longer emits', () => {
+    // The other direction, and the one no type can check: a stale row makes the table
+    // look complete while a real rule goes unnoticed, and it also means the room
+    // report may be offering a fix for something that can no longer happen.
     const emitted = emittedFamilies();
-    const stale = Object.keys(CLASSIFIED).filter((f) => !emitted.has(f)).sort();
-    expect(stale, `CLASSIFIED still lists ${stale.join(', ')} — clearance.ts no longer emits it.`).toEqual([]);
+    const stale = Object.keys(RULE_HANDLING).filter((f) => !emitted.has(f)).sort();
+    expect(stale, `RULE_HANDLING still lists ${stale.join(', ')} — clearance.ts no longer emits it.`).toEqual([]);
   });
 
   it('exercises every family it claims the solver prices', () => {
     // Closes the last way this file could lie: a row could name a cost term with no
     // pair of layouts proving the two modules move together on it.
     const covered = new Set(cases().map((c) => c.family));
-    const priced = (Object.keys(CLASSIFIED) as Family[]).filter((f) => termFor(f) !== null);
+    const priced = (RULE_KINDS as readonly Family[]).filter((f) => termFor(f) !== null);
     const untested = priced.filter((f) => !covered.has(f)).sort();
     expect(
       untested,
