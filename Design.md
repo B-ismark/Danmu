@@ -644,12 +644,25 @@ toolbar, bottom-left; scale/comfort chips top-left; export top-right.
   a question about a real product. A user who types the 2700 mm wardrobe off a spec
   sheet and is told about a 2600 mm one has been lied to. The check reports
   `outOfRange` instead, and placing says the size was brought into range.
-  One thing worth knowing about the search: the starting POINT matters more than the RNG
-  seed, because the inertia term charges for movement so every run from one origin
+  Two things worth knowing about the search. The starting POINT matters more than the
+  RNG seed, because the inertia term charges for movement so every run from one origin
   explores the same neighbourhood. Starts are spread over `room-bays`' rectangles of
   real floor. Seeded only at the largest bay's centre, a dining chair in a room whose
-  table sits in that centre started inside its own anchor and four seeds all agreed on
+  table sits in that centre started inside its own anchor and every seed agreed on
   burying it there — "no room" for a chair in a room with a table in it.
+  And the cost is bounded deliberately, because this runs on a button press. Eight
+  attempts at 400 anneal steps (`solveLayout`'s own 1600 is tuned for rearranging a
+  whole room; here one piece moves and the rest are locked), with a room report on the
+  four cheapest placements. Measured on a ten-piece room: 42 ms for an obvious yes and
+  ~330 ms for one it has to work at, against 1.3 s for the first version — which was
+  fourteen full-length solves with a report on every one, i.e. a frozen tab.
+  **Cost sorts the candidates; the report decides between them.** Those rankings are
+  not interchangeable, and swapping them cost a regression worth recording: for a pair
+  `sharesFloor` exempts — a dining chair and its table — the solver's cheapest answer
+  is the chair at the table's dead centre, since the relation distance is zero and the
+  overlap it exempts costs nothing, while the report calls that same placement a clash.
+  Ranking on cost alone therefore answered "no room" for a chair in a room with a table
+  in it, all over again.
 - **The room report offers, it does not just report** (`RoomTools.tsx` `CheckPanel`).
   An earlier pass fixed how the panel *sounds* — findings badged FIX / TIGHT / NOTE
   in tracked caps became "Worth fixing" / "A bit tight" / "Just so you know", which

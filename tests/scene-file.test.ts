@@ -161,6 +161,18 @@ describe('scene file · what never leaves', () => {
     }
   });
 
+  it('does not touch the parts it was handed', () => {
+    // `buildSceneFile` resolves overrides and then sets `hidden` on the result. Those
+    // parts come straight out of the scene store, so writing through to them would be
+    // an export quietly editing the room — and `resolveParts` returns the SAME object
+    // when a part has no overrides, which is exactly when it would happen.
+    const parts = [SOFA];
+    const before = JSON.stringify(SOFA);
+    buildSceneFile(ROOM, parts, { ...NO_TRANSFORMS, hidden: { 'sofa-1': true } }, 1);
+    expect(JSON.stringify(SOFA)).toBe(before);
+    expect('hidden' in SOFA).toBe(false);
+  });
+
   it('leaves the exporting room’s identity behind', () => {
     // id / createdAt describe a record in one browser's IndexedDB, not the room.
     const json = sceneFileJson(buildSceneFile(ROOM, [SOFA], NO_TRANSFORMS, 1));

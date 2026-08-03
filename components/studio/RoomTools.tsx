@@ -36,7 +36,7 @@ import { RULE_HANDLING, type CostBreakdown } from '@/lib/layout-score';
 import { roomStore, type LayoutVariant, type Transforms } from '@/lib/storage';
 import { footprintBounds, type Footprint } from '@/lib/footprint';
 import { formatDim, fromMM, stepFor, toMM } from '@/lib/units';
-import { checkFit, PROBE_ID, type FitResult, type FitStatus } from '@/lib/fit-check';
+import { checkFit, PROBE_ID, type FitCandidate, type FitResult, type FitStatus } from '@/lib/fit-check';
 import { clampDims } from '@/lib/dimension-ranges';
 import { groundY } from '@/lib/physics';
 import { PRODUCT_PRESETS } from '@/lib/product-presets';
@@ -720,6 +720,7 @@ function FitPanel({ effParts, room }: { effParts: ScenePart[]; room: RoomShape }
   const [d, setD] = useState('');
   const [h, setH] = useState('');
   const [result, setResult] = useState<FitResult | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const kind = FIT_KINDS.find((k) => k.id === kindId) ?? FIT_KINDS[0];
   const dimMM: [number, number, number] = [
@@ -744,8 +745,20 @@ function FitPanel({ effParts, room }: { effParts: ScenePart[]; room: RoomShape }
   }
 
   function check() {
-    if (!ready) return;
-    setResult(checkFit({ category: kind.category, shape: kind.shape, dimMM, name: kind.label }, effParts, room));
+    if (!ready || busy) return;
+    // `checkFit` is synchronous and runs the solver several times — measured at 42 ms
+    // for an obvious yes and ~330 ms for a furnished room it has to work at. That is
+    // long enough to feel, and setting state alone would not show it: React cannot
+    // paint while the same tick is still solving. So yield one turn to let the busy
+    // label render, then block.
+    setBusy(true);
+    setTimeout(() => {
+      try {
+        setResult(checkFit({ category: kind.category, shape: kind.shape, dimMM, name: kind.label }, effParts, room));
+      } finally {
+        setBusy(false);
+      }
+    }, 0);
   }
 
   /** Put it in the room, where the check said it goes. This is the one path that
@@ -859,28 +872,36 @@ function FitPanel({ effParts, room }: { effParts: ScenePart[]; room: RoomShape }
 
       <button
         onClick={check}
-        disabled={!ready}
+        disabled={!ready || busy}
         className="ds-btn ds-btn--primary"
         style={{ height: 30, fontSize: 11.5 }}
       >
         <Icon name="ruler" size={12} />
-        Check the room
+        {busy ? 'Checking…' : 'Check the room'}
       </button>
 
-      {result && <FitAnswer result={result} kindLabel={kind.label} room={room} effParts={effParts} onPlace={place} />}
+      {result && (
+        <FitAnswer
+          result={result}
+          candidate={{ category: kind.category, shape: kind.shape, dimMM, name: kind.label }}
+          room={room}
+          effParts={effParts}
+          onPlace={place}
+        />
+      )}
     </div>
   );
 }
 
 function FitAnswer({
   result,
-  kindLabel,
+  candidate,
   room,
   effParts,
   onPlace,
 }: {
   result: FitResult;
-  kindLabel: string;
+  candidate: FitCandidate;
   room: RoomShape;
   effParts: ScenePart[];
   onPlace: () => void;
@@ -896,16 +917,21 @@ function FitAnswer({
       ...effParts,
       {
         id: PROBE_ID,
-        category: 'other',
-        name: kindLabel,
-        shape: 'box',
+        category: candidate.category,
+        name: candidate.name ?? 'This piece',
+        shape: candidate.shape,
         pos: [result.placement.x, 0, result.placement.z] as [number, number, number],
         rot: result.placement.yaw,
-        dimMM: [500, 500, 500] as [number, number, number],
+        // The candidate's OWN size. A hard-coded box here drew a 500 mm square where a
+        // 2.28 m sofa was supposed to be — a picture whose entire job is showing that
+        // the footprint fits, drawn at a size nobody entered. Rule 2's corollary: a
+        // displayed measurement is derived, never written next to the thing it
+        // describes.
+        dimMM: candidate.dimMM,
         locked: false,
       } as ScenePart,
     ];
-  }, [effParts, result.placement, kindLabel]);
+  }, [effParts, result.placement, candidate]);
 
   return (
     <div
