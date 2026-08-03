@@ -76,10 +76,14 @@ jobs:
       # than trusted. `actions/cache` saves it in a post step, and only when the
       # job succeeded.
       #
-      # Measured locally rather than taken on faith: from cold, `next build`
-      # compiles in 110s; with only `.next/cache` restored and the rest of
-      # `.next` deleted — exactly what this step reconstructs — it compiles in
-      # 14s. Nearly all of the on-disk ~230 MB is `cache/webpack`;
+      # Measured here rather than taken on faith. On this runner: 17.1s to
+      # compile with no cache, 4.0s on a hit. Locally, where the machine is
+      # slower and the contrast is starker, 110s cold against 14s with only
+      # `.next/cache` restored and the rest of `.next` deleted — which is
+      # exactly the state this step reconstructs, and why the local run is worth
+      # citing alongside the runner's own numbers.
+      #
+      # Nearly all of the on-disk ~230 MB is `cache/webpack`;
       # `cache/eslint` and `cache/swc` are 64 KB and 12 KB, so there is nothing
       # worth scoping out of the path.
       #
