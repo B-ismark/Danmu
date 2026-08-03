@@ -5,6 +5,9 @@ in 3D, then redecorate freely — move, recolour, restyle, relight, and arrange 
 piece. Runs entirely in the browser: no backend, no account. Optional AI is used
 **only to detect furniture from photos** — never to generate images.
 
+Installable, and it **works offline** after the first visit — the studio does its
+geometry on your device, so there is nothing for a network to be needed for.
+
 📖 **Full design & architecture → [Design.md](Design.md)** (product principles,
 every current feature, architecture, geometry engine, and roadmap).
 🤖 **Agents:** see [CLAUDE.md](CLAUDE.md) for working rules.

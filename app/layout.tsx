@@ -4,6 +4,7 @@ import { Fraunces, Nunito } from 'next/font/google';
 import { Providers } from './providers';
 import { ConfirmHost } from '@/components/ui/Confirm';
 import { StorageToast } from '@/components/ui/StorageToast';
+import { ServiceWorkerRegistrar } from '@/components/ServiceWorkerRegistrar';
 import './globals.css';
 
 // Warm editorial-casual pairing: a soft optical serif for display, a rounded
@@ -27,9 +28,9 @@ const nunito = Nunito({
 });
 
 // Danmu spreads by word of mouth — a shared link is the whole marketing surface,
-// so it needs to unfurl as something. openGraph carries no image file: there is
-// no public/ directory and no photoreal render to point at, and inventing a
-// screenshot claim would be worse than a text-only card.
+// so it needs to unfurl as something. openGraph carries no image file: the only
+// raster-shaped asset in the repo is app/icon.svg, there is no photoreal render to
+// point at, and inventing a screenshot claim would be worse than a text-only card.
 export const metadata: Metadata = {
   title: 'Danmu — Decorate your room in real 3D',
   description:
@@ -60,6 +61,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {children}
           <ConfirmHost />
           <StorageToast />
+          <ServiceWorkerRegistrar />
         </Providers>
       </body>
     </html>

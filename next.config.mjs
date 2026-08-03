@@ -36,6 +36,11 @@ const csp = [
   // Photo previews and the plan/snapshot exports are blob: and data: URLs.
   `img-src 'self' blob: data:`,
   `font-src 'self' data:`,
+  // Stated rather than left to the default-src fallback, because the manifest is
+  // now load-bearing (installability, and the offline splash) and a directive the
+  // app depends on should be visible in the policy. `worker-src 'self'` below
+  // already covers registering /sw.js — it was there for ORT's blob: workers.
+  `manifest-src 'self'`,
   // next/font self-hosts the Google fonts at build time, so no font CDN here.
   `connect-src 'self' blob: data: ${GEMINI} ${ORT_CDN} ${WEIGHTS.join(' ')}`,
   // ORT's threaded backend spawns workers from blob URLs.
@@ -120,7 +125,20 @@ const nextConfig = {
     // the first thing to try again — but measure before adding it back.
   },
   async headers() {
-    return [{ source: '/:path*', headers: securityHeaders }];
+    return [
+      { source: '/:path*', headers: securityHeaders },
+      // The service worker script itself must never be served from a long-lived
+      // cache. A worker that can pin its own replacement is a worker you cannot
+      // ship a fix to — the browser would keep handing back the old bytes, and
+      // the old bytes are what decide whether the new ones are ever fetched.
+      // Browsers already bypass the HTTP cache for the worker script after 24h,
+      // but 24h of a broken cache strategy is 24h too many, and static hosts are
+      // free to serve public/ with whatever max-age they like.
+      {
+        source: '/sw.js',
+        headers: [{ key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' }],
+      },
+    ];
   },
 };
 

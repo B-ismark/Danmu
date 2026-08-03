@@ -1008,6 +1008,41 @@ plus the sources a build reads — not `**/*.ts`, which would hash `node_modules
 as well. On the runner that takes the compile step from 17.1 s to 4.0 s; locally,
 from 110 s to 14 s.
 
+### Offline
+
+The app was always offline-*tolerant* — pull the network mid-session and the
+geometry engine, the solver, the room report and IndexedDB keep working, because
+none of them fetch. What failed was a **reload**: the browser had nowhere to get
+the document from, so it showed its own error page for an app that needed no
+network. `public/sw.js` closes that, and `app/manifest.ts` makes the result
+installable.
+
+| Request | Strategy | Why |
+|---|---|---|
+| Cross-origin | **not intercepted** | Gemini, the ORT CDN, the weights. A cache is storage; storing those is not the worker's business. |
+| `/_next/static/*` | cache-first | Content-hashed, so a URL match is always the right bytes. |
+| Navigations | network-first, then this exact URL, then `/` | A reload of `/room/<id>/model` must come back as that room, not the home page. |
+| Other same-origin | network-first, cache fallback | The manifest, the icon, RSC payloads for client-side navigation. |
+
+Verified in a real browser rather than reasoned about: after an offline reload of
+the studio, the room panel renders **identically** to online — same clear-floor
+percentage, same verdict — with no console errors. Non-GET and `Range` requests
+are passed through untouched.
+
+Two limits, both deliberate. **The first visit must be online**: there is no
+build-time precache manifest, because a hand-written file in `public/` cannot know
+Next's content-hashed chunk names, and generating one means writing into `public/`
+after a build that the target hosts have already snapshotted — it would work
+locally and ship empty. And **no `skipWaiting()`**: a new deployment's chunks do
+not match the old document, so the new worker waits for the next load rather than
+serving a half-updated app to someone mid-arrangement.
+
+`tests/service-worker.test.ts` runs the worker in a small
+`ServiceWorkerGlobalScope` (`tests/helpers/sw-harness.ts`) with a network that can
+be told to fail, so the strategy is tested as behaviour. Every assertion was
+mutation-checked — which is how a redundant `cache.match` in the navigation
+fallback was found to be dead code and removed.
+
 ### Third-party bytes, and the headers that bound them
 
 The optional local detector is the only part of the app that executes or parses

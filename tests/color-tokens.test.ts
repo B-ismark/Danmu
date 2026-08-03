@@ -13,6 +13,7 @@ import {
   type Rgb,
 } from './helpers/color';
 import { SCENE } from '@/lib/scene-palette';
+import { INK, PAPER_0 } from '@/app/manifest';
 
 // app/globals.css states a contrast ratio next to almost every colour it defines,
 // and CLAUDE.md turns those into a rule: fills are fills, and only the -ink and
@@ -157,6 +158,33 @@ describe('scene-palette really does match the CSS', () => {
     // Perceptual, not textual: what is being asserted is that nobody can see a
     // difference between the 3D layer and the panel that edits it.
     expect(deltaEOk(css, scene)).toBeLessThan(0.01);
+  });
+});
+
+describe('the web manifest matches the CSS too', () => {
+  // Third layer that cannot read a custom property, after Three.js materials and
+  // the plan canvas: a manifest is JSON parsed by the OS to paint the splash
+  // screen and the task-switcher card. Same failure mode, so the same guard —
+  // read the stylesheet, not a literal.
+  const pairs: Array<[string, string, string]> = [
+    ['PAPER_0', PAPER_0, 'paper-0'],
+    ['INK', INK, 'ink'],
+  ];
+
+  it.each(pairs)('%s is --%s', (_name, value, token) => {
+    const css = surface(token)!;
+    expect(css, `--${token} is not a hex token in globals.css`).toBeTruthy();
+    expect(deltaEOk(css, parseHex(value)!)).toBeLessThan(0.01);
+  });
+
+  it('paints the splash with the same colour the layout gives the browser chrome', () => {
+    // app/layout.tsx sets `viewport.themeColor` for the address bar and the
+    // manifest sets `theme_color` for the installed shell. Two files, one answer
+    // to "what colour is this app" — they were allowed to disagree before this.
+    const layout = readFileSync(join(process.cwd(), 'app', 'layout.tsx'), 'utf8');
+    const declared = layout.match(/themeColor:\s*'(#[0-9A-Fa-f]{6})'/)?.[1];
+    expect(declared, 'viewport.themeColor is no longer a plain hex in app/layout.tsx').toBeTruthy();
+    expect(deltaEOk(parseHex(declared!)!, parseHex(PAPER_0)!)).toBeLessThan(0.01);
   });
 });
 

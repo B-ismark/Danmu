@@ -89,10 +89,14 @@ backend, no account. The 3D studio *is* the product.
    inside its own scroll box. Tailwind is present for Preflight only — no utility
    classes are used and its theme is intentionally empty, so `globals.css` is the
    sole token source. **Any layer that cannot read a custom property** — the 3D
-   scene, the floor-plan canvas export — reads `lib/scene-palette.ts`
-   (`SCENE`, `PLAN`, `defaultBodyColor(category, shape)`), which is hand-synced to
-   these tokens and guarded by a test. Never put a literal hex in a renderer for
-   a surface the user can recolour.
+   scene, the floor-plan canvas export, **and the web manifest** — reads
+   `lib/scene-palette.ts` (`SCENE`, `PLAN`, `defaultBodyColor(category, shape)`) or,
+   for the manifest, exports its two colours from `app/manifest.ts`; all of it is
+   hand-synced to these tokens and guarded by `tests/color-tokens.test.ts`, which
+   **reads `globals.css`** rather than asserting a literal against a literal. Never
+   put a literal hex in a renderer for a surface the user can recolour. The manifest
+   and `viewport.themeColor` in `app/layout.tsx` are two files answering "what
+   colour is this app", so a test pins them to each other too.
 5. **Local-first.** Rooms → IndexedDB (`lib/storage.ts`); settings + key →
    localStorage. The only user-data egress is the optional direct Gemini
    detection (BYO key). Don't add a backend or send data anywhere else. A room
@@ -115,6 +119,30 @@ backend, no account. The 3D studio *is* the product.
    (`lib/geolocate.ts` ~11 km, `lib/compass.ts` 5° — precision the sun cannot use
    is precision not worth holding). Neither is ever requested on mount, only on a
    press.
+   **Offline is part of local-first, and it is now real:** `public/sw.js` caches the
+   app so it can be *opened* offline, not merely survive losing the network
+   mid-session (it always did that — nothing in the studio fetches). Three things
+   about it are deliberate and load-bearing:
+   · **Cross-origin is never intercepted or cached.** The origin check is the first
+     thing `fetch` does. A cache is storage, and storing a response to a call made
+     with the user's own Gemini key — over their own room photos — is not the
+     worker's business. `tests/service-worker.test.ts` asserts this per allow-listed
+     host, and asserts *declining to handle*, not merely "doesn't cache".
+   · **The first visit must be online.** There is no build-time precache manifest,
+     because Next's chunk names are content-hashed and a hand-written file in
+     `public/` cannot know them; generating one means writing into `public/` after
+     the build, which the hosts this app targets snapshot earlier — it would work
+     locally and ship empty. Assets are cached on first use instead. Stated in the
+     file, and the limit to fix first if offline needs to work from a cold install.
+   · **No `skipWaiting()`.** A new deployment's chunks do not match the old
+     document, so taking over a live tab would serve a half-updated app to someone
+     mid-arrangement. The new worker waits for the next load.
+   `sw.js` is the one piece of first-party source under `public/` — it has to sit at
+   the origin root to claim a `/` scope — so `eslint.config.mjs` un-ignores exactly
+   that file and gives it worker globals. "Cannot be bundled" is no reason to be the
+   only unlinted file we ship. It is also served `no-cache`
+   (`next.config.mjs`): a worker that can pin its own replacement is one you cannot
+   ship a fix to.
 6. **Do not reintroduce the carpenter spec** (cutlist / build-cost / pricing).
    Removed in the pivot.
 
@@ -179,6 +207,11 @@ tests import does not belong in `lib/`, where it reads as shipped code.
 - `components/studio/` — 2D UI (`Inspector`, `PartTree`, `CatalogPanel`,
   `ViewOptions`, `PlanView`, `SelectionBar`, `LibraryPicker`, `TopBar`, …).
 - `components/ui/` — primitives + `Icon` (lucide wrapper).
+- Offline: `public/sw.js` (the worker — raw, unbundled, root-scoped),
+  `app/manifest.ts` (served at `/manifest.webmanifest`; makes it installable) and
+  `components/ServiceWorkerRegistrar.tsx` (registers it, **production only** — a
+  worker registered by `next dev` caches recompiled chunks and then serves you
+  yesterday's component, and it outlives the dev server on that port).
 - `lib/` — state (`store.ts` = `useStudio`/`useSettings`/`useRoom`,
   `scene-store.ts` = `useScene`), geometry engine, detection, persistence.
   `geometry.ts` has **one rotation convention and it is three.js's** — a part's
