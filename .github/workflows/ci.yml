@@ -79,10 +79,15 @@ jobs:
       # Measured locally rather than taken on faith: from cold, `next build`
       # compiles in 110s; with only `.next/cache` restored and the rest of
       # `.next` deleted — exactly what this step reconstructs — it compiles in
-      # 14s. Nearly all of the ~230 MB is `cache/webpack`; `cache/eslint` and
-      # `cache/swc` are 64 KB and 12 KB, so there is nothing worth scoping out.
-      # That sits alongside the ~250 MB pnpm store cache, well inside the 10 GB
-      # a repository gets.
+      # 14s. Nearly all of the on-disk ~230 MB is `cache/webpack`;
+      # `cache/eslint` and `cache/swc` are 64 KB and 12 KB, so there is nothing
+      # worth scoping out of the path.
+      #
+      # What counts against the 10 GB a repository gets is the *compressed*
+      # archive, not that on-disk figure: this one stores as 20 MB, next to the
+      # 254 MB the pnpm store cache already uses. So the Next cache is the cheap
+      # one here by an order of magnitude — worth knowing before anyone trims it
+      # to save space.
       - name: Restore the Next build cache
         if: ${{ !cancelled() }}
         uses: actions/cache@v5
