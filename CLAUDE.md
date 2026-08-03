@@ -126,7 +126,7 @@ pnpm dev          # http://localhost:3000
 pnpm typecheck    # tsc --noEmit — run after edits
 pnpm test         # vitest run — pure-logic suite (+ jsdom files, see below)
 pnpm build        # next build
-pnpm lint         # eslint . — flat config in eslint.config.mjs
+pnpm lint         # eslint . --max-warnings 0 — flat config in eslint.config.mjs
 pnpm audit        # dependency advisories — see `pnpm.overrides` in package.json
 pnpm vendor:ort   # copy onnxruntime-web → public/ort/ (loads same-origin, not CDN)
 pnpm hash:models  # SHA-256 digests of public/models/ for MODEL_DIGESTS
@@ -211,6 +211,11 @@ tests import does not belong in `lib/`, where it reads as shipped code.
   ESLint 9, and **silently ignored** under flat config, which is the dangerous part:
   it does not error, it just starts linting `public/` and `.next/`). `eslint .` covers
   `tests/` and `scripts/` as well, which `next lint`'s default dirs did not.
+  **`--max-warnings 0`: a warning fails the command.** `next lint` let warnings pass,
+  which is how a lint result stops being read — the repo is at zero and stays there.
+  So a new `@next/next/*` or `jsx-a11y/*` warning is a red build, not a line of
+  output nobody looks at. Fix it or disable the rule on the line with a reason; do not
+  raise the ceiling.
 - `onnxruntime-web` must stay **runtime-loaded** with `webpackIgnore` — bundling
   it breaks the Next build. It is served from `public/ort/` after
   `pnpm vendor:ort` (same-origin, so the CSP can be tight); the jsDelivr CDN is
