@@ -47,12 +47,34 @@ const config = [
       'node_modules/**',
       '.next/**',
       'out/**',
-      'public/**',
+      // …except `sw.js`, which is the one piece of first-party source in there. It
+      // has to sit at the origin root to claim a '/' scope, so it cannot live in
+      // app/ or lib/ — but "cannot be bundled" is no reason to be the only
+      // unlinted file we ship.
+      'public/!(sw.js)',
+      'public/*/**',
       'weights/**',
       'next-env.d.ts',
     ],
   },
   ...compat.extends('next/core-web-vitals'),
+  {
+    // A service worker's globals are neither the browser's nor Node's: no
+    // `window`, and `self` is a ServiceWorkerGlobalScope. Without this, every
+    // `caches` / `clients` reference reads as an undefined global.
+    files: ['public/sw.js'],
+    languageOptions: {
+      globals: {
+        self: 'readonly',
+        caches: 'readonly',
+        clients: 'readonly',
+        fetch: 'readonly',
+        Request: 'readonly',
+        Response: 'readonly',
+        URL: 'readonly',
+      },
+    },
+  },
 ];
 
 export default config;
