@@ -215,7 +215,23 @@ tests import does not belong in `lib/`, where it reads as shipped code.
   which is how a lint result stops being read — the repo is at zero and stays there.
   So a new `@next/next/*` or `jsx-a11y/*` warning is a red build, not a line of
   output nobody looks at. Fix it or disable the rule on the line with a reason; do not
-  raise the ceiling.
+  raise the ceiling. And **do not add a stale directive:** ESLint 9 reports an
+  `eslint-disable` that suppressed nothing, so at `--max-warnings 0` a comment left
+  behind after the code stopped violating the rule is itself a red build.
+  Two properties of `eslint.config.mjs` are load-bearing for `next build`, which runs
+  its **own** lint pass over the same config, and both fail in the direction that looks
+  like success:
+  - **ESLint must stay `>= 9`.** Next only strips the eslintrc-era options
+    (`useEslintrc`, `extensions`, …) when the installed ESLint is 9+. On 8.57 it finds
+    the flat config, loads `FlatESLint`, hands it eslintrc options, prints
+    `⨯ ESLint: Invalid Options` — and **exits 0 having linted nothing.** Verified by
+    planting a `react/jsx-key` error: the build passed on 8.57 and fails on 9.
+  - **The config must not ignore itself.** Next detects its plugin by calling
+    `calculateConfigForFile('eslint.config.mjs')` and looking for `@next/next` in the
+    result, so a `*.config.mjs` ignore entry (what `.eslintignore` used to carry) makes
+    the build warn the plugin is missing while every Next rule is in fact firing. The
+    root config files are linted instead, which is why `postcss.config.mjs` and
+    `eslint.config.mjs` name their default export.
 - `onnxruntime-web` must stay **runtime-loaded** with `webpackIgnore` — bundling
   it breaks the Next build. It is served from `public/ort/` after
   `pnpm vendor:ort` (same-origin, so the CSP can be tight); the jsDelivr CDN is

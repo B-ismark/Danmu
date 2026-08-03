@@ -984,6 +984,7 @@ pnpm typecheck    # tsc --noEmit
 pnpm test         # vitest run — pure logic, plus the jsdom files (storage*, history)
 pnpm build        # next build
 pnpm lint         # eslint . --max-warnings 0 — `next lint` is gone in Next 16
+                  # flat config; ESLint must stay >= 9 or `next build` lints nothing
 pnpm audit        # dependency advisories; transitive fixes live in pnpm.overrides
 pnpm vendor:ort   # copy onnxruntime-web into public/ort/ so it loads same-origin
 pnpm hash:models  # print SHA-256 digests of public/models/ for MODEL_DIGESTS

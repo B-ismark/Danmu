@@ -504,7 +504,6 @@ export default function DetectPage() {
       urls.forEach(URL.revokeObjectURL);
     };
     // roomId only — see apiKeyRef above.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
   // Hybrid colour fill — sample the dominant colour from each detection's photo
