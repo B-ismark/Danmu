@@ -1003,6 +1003,11 @@ config that ignores `*.config.mjs` hides itself from Next's plugin detection.
 `tests/toolchain.test.ts` asserts both invariants directly, so they fail in
 `pnpm test` before CI ever sees them.
 
+Next's build cache (`.next/cache`) is carried between runs, keyed on the lockfile
+plus the sources a build reads — not `**/*.ts`, which would hash `node_modules`
+as well. On the runner that takes the compile step from 17.1 s to 4.0 s; locally,
+from 110 s to 14 s.
+
 ### Third-party bytes, and the headers that bound them
 
 The optional local detector is the only part of the app that executes or parses
