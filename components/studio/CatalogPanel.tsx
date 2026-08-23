@@ -1,6 +1,6 @@
 'use client';
 
-// Adding furniture — ONE surface, two triggers.
+// Adding pieces — ONE surface, two triggers.
 //
 // There used to be two. The rail's "Add furniture" opened a 520px modal with a
 // Catalog / Describe-it pair over `PART_LIBRARY` + real-product presets; the
@@ -10,9 +10,9 @@
 // described in words. Whichever one you found first was missing something.
 //
 // What is left is the strip, because a modal cannot be dragged out of: it covers
-// the room you are placing furniture into, and the drop point is the whole reason
+// the room you are placing pieces into, and the drop point is the whole reason
 // the canvas accepts a drag at all. It carries the modal's Describe-it tab and the
-// modal's full item list, and both triggers (`AddFurnitureButton` in the rail,
+// modal's full item list, and both triggers (`AddPiecesButton` in the rail,
 // `CatalogToggle` on the canvas) open this one panel through `useStudio`.
 
 import { useEffect, useState } from 'react';
@@ -33,7 +33,7 @@ import { isTypingOrDialog } from './KeyboardShortcuts';
 export const STUDIO_CANVAS_ID = 'studio-canvas';
 
 /** Rail trigger — the labelled one, in the Furniture section. */
-export function AddFurnitureButton() {
+export function AddPiecesButton() {
   const open = useStudio((s) => s.catalogOpen);
   const setOpen = useStudio((s) => s.setCatalogOpen);
   return (
@@ -66,7 +66,7 @@ export function AddFurnitureButton() {
       {/* The label says the action, not the state: a button that reads "Catalog is
           open" is a status line you can press. */}
       <Icon name={open ? 'x' : 'plus'} size={12} />
-      {open ? 'Close catalog' : 'Add furniture'}
+      {open ? 'Close catalog' : 'Browse catalog'}
     </button>
   );
 }
@@ -109,7 +109,7 @@ function spawn(category: ScenePart['category'], shape: ScenePart['shape'], dimMM
   useStudio.getState().setSelected(id);
 }
 
-/** Floating, non-blocking furniture catalog docked on the left edge of the
+/** Floating, non-blocking model catalog docked on the left edge of the
  *  viewport. Items can be DRAGGED onto the 3D room (Room's onDrop raycasts the
  *  drop point) or CLICKED to drop at room centre. Deliberately a narrow strip so
  *  the rest of the canvas stays a valid drop target. */
@@ -182,7 +182,7 @@ export function CatalogPanel({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 12px 8px' }}>
-        <span className="ds-label" style={{ flex: 1 }}>Add furniture</span>
+        <span className="ds-label" style={{ flex: 1 }}>Add pieces</span>
         <IconButton icon="x" label="Close catalog" onClick={() => setOpen(false)} size={24} iconSize={12} />
       </div>
 

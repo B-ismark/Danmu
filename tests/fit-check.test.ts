@@ -48,7 +48,7 @@ function part(p: Partial<ScenePart> & Pick<ScenePart, 'category' | 'shape' | 'di
   return { id: `${p.category}-${++n}`, name: p.category, rot: 0, locked: false, ...p } as ScenePart;
 }
 
-const SOFA: FitCandidate = { category: 'sofa', shape: 'sofa', dimMM: [2280, 950, 830], name: 'IKEA KIVIK' };
+const SOFA: FitCandidate = { category: 'sofa', shape: 'sofa', dimMM: [2280, 950, 830], name: 'Sofa' };
 const WARDROBE: FitCandidate = { category: 'wardrobe', shape: 'wardrobe', dimMM: [1500, 580, 2364] };
 
 describe('checkFit · the four answers', () => {

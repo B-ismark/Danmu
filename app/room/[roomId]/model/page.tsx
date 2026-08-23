@@ -30,7 +30,7 @@ const Room = dynamic(() => import('@/components/three/Room').then((m) => m.Room)
 });
 
 export default function ModelPage() {
-  // In the store, not in this page: the rail's "Add furniture" opens the same
+  // In the store, not in this page: the rail's catalog button opens the same
   // panel from the other side of the studio, and on the 2D tab as well.
   const catalogOpen = useStudio((s) => s.catalogOpen);
 

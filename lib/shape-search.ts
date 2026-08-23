@@ -5,10 +5,13 @@
 // override the preset (clamped into the trustable range as always).
 
 import { PART_LIBRARY, type LibraryItem, type Category, type Shape } from './scene-spec';
-import { PRODUCT_PRESETS } from './product-presets';
 import { clampDims, type Dim3 } from './dimension-ranges';
 
-const ALL: LibraryItem[] = [...PART_LIBRARY, ...PRODUCT_PRESETS];
+// The one catalog. This used to be PART_LIBRARY plus a separate "Real sizes"
+// sheet of manufacturer presets; everything in that sheet that was not already
+// here under another name moved into PART_LIBRARY's own groups, and the sheet
+// was deleted — two lists answering one question is how the answer drifts.
+const ALL: LibraryItem[] = PART_LIBRARY;
 
 // Common-language synonyms → catalog vocabulary. Keys are single tokens.
 const SYNONYM: Record<string, string> = {

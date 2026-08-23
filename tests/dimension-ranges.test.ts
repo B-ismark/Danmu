@@ -52,7 +52,8 @@ describe('clampDims', () => {
 
 describe('dimsWithinRange', () => {
   it('agrees with clampDims', () => {
-    expect(dimsWithinRange('monitor', 'laptop', [340, 240, 20])).toBe(true);
-    expect(dimsWithinRange('monitor', 'laptop', [1200, 240, 20])).toBe(false);
+    // H is open-lid height: 220 mm is the catalog's own laptop.
+    expect(dimsWithinRange('monitor', 'laptop', [340, 240, 220])).toBe(true);
+    expect(dimsWithinRange('monitor', 'laptop', [1200, 240, 220])).toBe(false);
   });
 });

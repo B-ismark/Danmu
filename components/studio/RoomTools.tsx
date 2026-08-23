@@ -43,7 +43,7 @@ import { formatDim, fromMM, stepFor, toMM } from '@/lib/units';
 import { checkFit, PROBE_ID, type FitCandidate, type FitResult, type FitStatus } from '@/lib/fit-check';
 import { clampDims } from '@/lib/dimension-ranges';
 import { groundY } from '@/lib/physics';
-import { PRODUCT_PRESETS } from '@/lib/product-presets';
+import { PART_LIBRARY } from '@/lib/scene-spec';
 import { Select } from '@/components/ui/Select';
 import { NumberField } from '@/components/ui/NumberField';
 import { v4 as uuid } from 'uuid';
@@ -758,7 +758,7 @@ const FIT_TONE: Record<FitStatus, { tone: 'sage' | 'warn' | 'danger'; lead: stri
 };
 
 /** The kinds someone is most likely to be shopping for, and the shape each maps to.
- *  Deliberately short: this is a fit check, not the catalog, and `lib/parts-catalog.ts`
+ *  Deliberately short: this is a fit check, not the catalog, and `lib/scene-spec.ts`
  *  is where the full list lives. */
 const FIT_KINDS: Array<{ id: string; label: string; category: ScenePart['category']; shape: ScenePart['shape'] }> = [
   { id: 'sofa', label: 'Sofa', category: 'sofa', shape: 'sofa' },
@@ -806,10 +806,10 @@ function FitPanel({ effParts, room }: { effParts: ScenePart[]; room: RoomShape }
   ];
   const ready = dimMM.every((v) => Number.isFinite(v) && v > 0);
 
-  // Real products, so someone can check the answer against a size they recognise
-  // before trusting it with a size they have typed.
+  // Recognisable sizes from the one catalog, so someone can check the answer
+  // against something they have seen before trusting it with a size they typed.
   const presets = useMemo(
-    () => PRODUCT_PRESETS.filter((p) => p.category === kind.category).slice(0, 4),
+    () => PART_LIBRARY.filter((p) => p.category === kind.category).slice(0, 4),
     [kind.category],
   );
 
@@ -940,7 +940,7 @@ function FitPanel({ effParts, room }: { effParts: ScenePart[]; room: RoomShape }
               style={{ cursor: 'pointer', fontSize: 10 }}
               title={`Fill in ${p.dimMM.join(' × ')} mm`}
             >
-              {p.label.replace(/^IKEA /, '')}
+              {p.label}
             </button>
           ))}
         </div>
@@ -1143,7 +1143,7 @@ function ListPanel({ parts }: { parts: ScenePart[] }) {
   return (
     <div>
       <TabActions>
-        <span style={{ flex: 1, fontSize: 11, color: 'var(--ink-3)' }}>Real sizes, in your unit</span>
+        <span style={{ flex: 1, fontSize: 11, color: 'var(--ink-3)' }}>Real dimensions, in your unit</span>
         <button onClick={copy} className="ds-btn" style={{ height: 24, fontSize: 10, padding: '0 8px' }}>
           {copied ? 'Copied ✓' : 'Copy'}
         </button>

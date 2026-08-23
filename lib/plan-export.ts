@@ -161,7 +161,7 @@ export function exportPlanPng(
   let ly = planH + MARGIN + 70;
   ctx.font = LEGEND_HEAD_FONT;
   ctx.fillStyle = PLAN.ink;
-  ctx.fillText('Furniture', MARGIN, ly);
+  ctx.fillText('Pieces', MARGIN, ly);
   ly += 8;
   floorParts.forEach((_, i) => {
     ly += LEGEND_LINE;

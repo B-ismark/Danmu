@@ -24,7 +24,10 @@ const BY_SHAPE: Partial<Record<Shape, DimRange>> = {
   // ── fixed — real products, tight bands ──────────────────────────────────
   tv: R('fixed', [700, 40, 400], [2000, 120, 1150]), // 32" … 88" panels
   monitor: R('fixed', [330, 150, 250], [1000, 300, 600]),
-  laptop: R('fixed', [280, 190, 10], [420, 300, 30]),
+  // H is the OPEN clamshell height — LaptopGeo raises the lid by it and the
+  // catalog ships 220 mm. A closed-lid 30 mm ceiling here silently flattened
+  // every laptop the picker, detection or a swap produced into a floor flap.
+  laptop: R('fixed', [280, 190, 150], [420, 300, 300]),
   soundbar: R('fixed', [600, 60, 50], [1300, 150, 160]),
   microwave: R('fixed', [440, 320, 250], [600, 500, 400]),
   'washing-machine': R('fixed', [550, 500, 800], [700, 700, 900]),

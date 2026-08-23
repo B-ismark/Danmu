@@ -1,6 +1,6 @@
 'use client';
 
-// The furniture picker, and the two controls that frame it everywhere it appears.
+// The model picker, and the two controls that frame it everywhere it appears.
 //
 // One list, three hosts: the catalog panel (docked over the canvas, one column,
 // items draggable onto the floor), the Inspector's swap flow, and anything else
@@ -11,10 +11,9 @@
 
 import { useState, type CSSProperties } from 'react';
 import { PART_LIBRARY, DND_MIME, type LibraryItem } from '@/lib/scene-spec';
-import { PRODUCT_PRESETS } from '@/lib/product-presets';
 import { Icon } from '@/components/ui/Icon';
 
-const ALL_ITEMS: LibraryItem[] = [...PART_LIBRARY, ...PRODUCT_PRESETS];
+const ALL_ITEMS: LibraryItem[] = PART_LIBRARY;
 
 export function LibraryPicker({
   onPick,
@@ -53,10 +52,10 @@ export function LibraryPicker({
       {/* A placeholder is not a label — it disappears the moment you type. */}
       <input
         className="field"
-        aria-label="Search furniture"
+        aria-label="Search the catalog"
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Search furniture…"
+        placeholder="Search the catalog…"
         autoFocus={autoFocus}
         style={{ marginBottom: 10, flexShrink: 0 }}
       />

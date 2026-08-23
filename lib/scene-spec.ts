@@ -768,7 +768,7 @@ function seats(part: ScenePart, placed: ScenePart[], poly: Footprint): boolean {
 // `group` only drives section headers in the Add-model picker.
 export type LibraryItem = {
   label: string;
-  group: 'Seating' | 'Tables' | 'Storage' | 'Bedroom' | 'Lighting' | 'Decor' | 'Tech' | 'Appliances' | 'Real sizes';
+  group: 'Seating' | 'Tables' | 'Storage' | 'Bedroom' | 'Lighting' | 'Decor' | 'Tech' | 'Appliances';
   category: Category;
   shape: Shape;
   dimMM: [number, number, number];
@@ -832,7 +832,7 @@ export function autoSurfaceDecor(category: Category, shape: Shape, dim: [number,
 
 export const PART_LIBRARY: LibraryItem[] = [
   // Seating
-  { label: 'Sofa · 3-seat', group: 'Seating', category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880] },
+  { label: 'Sofa', group: 'Seating', category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880] },
   { label: 'Armchair', group: 'Seating', category: 'chair', shape: 'chair-armchair', dimMM: [700, 700, 900] },
   { label: 'Dining chair', group: 'Seating', category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850] },
   { label: 'Office chair', group: 'Seating', category: 'chair', shape: 'chair-office', dimMM: [600, 600, 1100] },
@@ -844,21 +844,26 @@ export const PART_LIBRARY: LibraryItem[] = [
   { label: 'L-shaped desk', group: 'Tables', category: 'desk', shape: 'desk-l', dimMM: [1600, 1400, 750] },
   { label: 'Nightstand', group: 'Tables', category: 'nightstand', shape: 'nightstand', dimMM: [450, 400, 550] },
   // Storage
-  { label: 'Wardrobe · 4-bay', group: 'Storage', category: 'wardrobe', shape: 'wardrobe', dimMM: [2400, 600, 2200] },
+  { label: 'Wardrobe', group: 'Storage', category: 'wardrobe', shape: 'wardrobe', dimMM: [2400, 600, 2200] },
   { label: 'Bookshelf', group: 'Storage', category: 'shelf', shape: 'bookshelf', dimMM: [900, 350, 1800] },
   { label: 'Shoe rack', group: 'Storage', category: 'shelf', shape: 'shoe-rack', dimMM: [800, 300, 900] },
-  // Bedroom
+  // Bedroom. Beds are the one place where size classes are real products rather
+  // than variants of each other — a king will not fit where a single does — so
+  // the ladder is a deliberate three, authored INSIDE clampDims' bed bands (the
+  // old preset sheet's dims sat outside them and were silently clamped on add).
+  // Everything between the rungs is reachable by resizing.
   { label: 'Single bed', group: 'Bedroom', category: 'bed', shape: 'bed-single', dimMM: [1900, 1000, 600] },
   { label: 'Double bed', group: 'Bedroom', category: 'bed', shape: 'bed-double', dimMM: [2000, 1600, 600] },
+  { label: 'King bed', group: 'Bedroom', category: 'bed', shape: 'bed-double', dimMM: [2000, 1800, 1000] },
   // Lighting
   { label: 'Floor lamp', group: 'Lighting', category: 'lamp', shape: 'lamp-floor', dimMM: [300, 300, 1700] },
   { label: 'Table lamp', group: 'Lighting', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500] },
   { label: 'Pendant lamp', group: 'Lighting', category: 'lamp', shape: 'lamp-pendant', dimMM: [350, 350, 400] },
   // Decor
   { label: 'Rug', group: 'Decor', category: 'rug', shape: 'rug', dimMM: [2400, 1600, 5] },
-  { label: 'Potted plant', group: 'Decor', category: 'plant', shape: 'plant', dimMM: [400, 400, 1600] },
-  { label: 'Mirror · rectangular', group: 'Decor', category: 'mirror', shape: 'mirror', dimMM: [600, 30, 1400] },
-  { label: 'Mirror · oval', group: 'Decor', category: 'mirror', shape: 'mirror-oval', dimMM: [600, 30, 1100] },
+  { label: 'Plant', group: 'Decor', category: 'plant', shape: 'plant', dimMM: [400, 400, 1600] },
+  { label: 'Mirror', group: 'Decor', category: 'mirror', shape: 'mirror', dimMM: [600, 30, 1400] },
+  { label: 'Oval mirror', group: 'Decor', category: 'mirror', shape: 'mirror-oval', dimMM: [600, 30, 1100] },
   { label: 'Painting', group: 'Decor', category: 'painting', shape: 'painting', dimMM: [800, 30, 600] },
   { label: 'Curtain', group: 'Decor', category: 'curtain', shape: 'curtain', dimMM: [1600, 80, 2200] },
   { label: 'Window', group: 'Decor', category: 'other', shape: 'window', dimMM: [1200, 60, 1200] },
@@ -870,7 +875,10 @@ export const PART_LIBRARY: LibraryItem[] = [
   { label: 'Monitor', group: 'Tech', category: 'monitor', shape: 'monitor', dimMM: [600, 200, 400] },
   { label: 'Laptop', group: 'Tech', category: 'monitor', shape: 'laptop', dimMM: [340, 240, 220] },
   // Appliances
+  // Fridges are the other real-class item: the 60 cm freestanding box and the
+  // French door are footprints a kitchen actually chooses between, not variants.
   { label: 'Fridge', group: 'Appliances', category: 'fridge', shape: 'fridge', dimMM: [600, 650, 1700] },
+  { label: 'French door fridge', group: 'Appliances', category: 'fridge', shape: 'fridge', dimMM: [910, 720, 1780] },
   { label: 'Washing machine', group: 'Appliances', category: 'fridge', shape: 'washing-machine', dimMM: [600, 600, 850] },
   { label: 'Microwave', group: 'Appliances', category: 'fridge', shape: 'microwave', dimMM: [500, 380, 300] },
   { label: 'Water dispenser', group: 'Appliances', category: 'fridge', shape: 'water-dispenser', dimMM: [330, 330, 1000] },

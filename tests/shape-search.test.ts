@@ -13,9 +13,9 @@ describe('searchLibrary', () => {
     expect(top.category).toBe('wardrobe');
   });
 
-  it('surfaces real products by name', () => {
-    const r = searchLibrary('ikea billy');
-    expect(r.some((i) => i.label.toLowerCase().includes('billy'))).toBe(true);
+  it('surfaces a specific model by name', () => {
+    const r = searchLibrary('french door');
+    expect(r.some((i) => i.label.toLowerCase().includes('french door'))).toBe(true);
   });
 
   it('returns empty for gibberish', () => {

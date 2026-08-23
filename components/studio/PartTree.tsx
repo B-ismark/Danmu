@@ -13,7 +13,7 @@ import { RoomDimsEditor } from './RoomDimsEditor';
 import { RailSection } from './RailSection';
 import { RoomTools } from './RoomTools';
 import { ViewOptions } from './ViewOptions';
-import { AddFurnitureButton } from './CatalogPanel';
+import { AddPiecesButton } from './CatalogPanel';
 import { removeParts } from './KeyboardShortcuts';
 import { THEMES, themeColorFor, type Theme } from '@/lib/themes';
 
@@ -266,7 +266,7 @@ export function PartTree() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           aria-label="Search the furniture in this room"
-          placeholder="Search furniture…"
+          placeholder="Search the catalog…"
         />
         {/* Always mounted so the count is actually spoken: a live region that
             appears together with its text is announced unreliably. Typing in the
@@ -319,7 +319,7 @@ export function PartTree() {
           inside the Furniture section. The bulk revert joins it, and still only
           appears when there is something to revert. */}
       <div style={{ borderTop: '1px solid var(--hairline)', padding: '12px 16px', background: 'var(--paper-2)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <AddFurnitureButton />
+        <AddPiecesButton />
         {hasAnyOverride && (
           <button
             onClick={async () => {
