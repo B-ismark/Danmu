@@ -48,6 +48,13 @@ type StudioState = {
    *  canvas is the product, and 260 + 320px is 45% of a 1280px laptop. */
   railLeftOpen: boolean;
   railRightOpen: boolean;
+  /** Rail width in px, as the user last dragged it — `null` while they never
+   *  have, which is not the same as "the token's current value" and is why this
+   *  is nullable rather than seeded. A remembered width is a *preference*, and
+   *  the shell still renders it inside the token's `clamp()`, so a 520px rail
+   *  dragged on a monitor stays a ceiling rather than a promise on a laptop. */
+  railLeftW: number | null;
+  railRightW: number | null;
   /** scene lighting mood */
   lighting: Lighting;
   /** render quality (soft shadows + AO + material maps on 'high') */
@@ -113,6 +120,8 @@ type StudioState = {
   setCatalogOpen: (open: boolean) => void;
   toggleGrid: () => void;
   toggleRail: (side: 'left' | 'right') => void;
+  /** Commit a dragged rail width. `null` restores the token default. */
+  setRailWidth: (side: 'left' | 'right', px: number | null) => void;
   setLighting: (l: Lighting) => void;
   setQuality: (q: Quality) => void;
   setSunMinutes: (m: number) => void;
@@ -149,6 +158,8 @@ const STUDIO_PREFS = [
   'showGrid',
   'railLeftOpen',
   'railRightOpen',
+  'railLeftW',
+  'railRightW',
   'sunMinutes',
   'sunDayOfYear',
   'sunLive',
@@ -188,6 +199,8 @@ export const useStudio = create<StudioState>()(
   showGrid: true,
   railLeftOpen: true,
   railRightOpen: true,
+  railLeftW: null,
+  railRightW: null,
   lighting: 'day',
   quality: 'high',
   // 3 pm on the March equinox: the sun is up at every inhabited latitude and
@@ -238,6 +251,14 @@ export const useStudio = create<StudioState>()(
   toggleGrid: () => set((s) => ({ showGrid: !s.showGrid })),
   toggleRail: (side) =>
     set((s) => (side === 'left' ? { railLeftOpen: !s.railLeftOpen } : { railRightOpen: !s.railRightOpen })),
+  setRailWidth: (side, px) => {
+    // Only finiteness and a floor of zero are enforced here. The real bounds are
+    // the rail token's own `clamp()`, which is where the design values live and
+    // the only place that knows what a viewport can spare — a second opinion in
+    // JS would be a second answer to the same question.
+    const w = px == null || !Number.isFinite(px) ? null : Math.max(0, Math.round(px));
+    set(side === 'left' ? { railLeftW: w } : { railRightW: w });
+  },
   setLighting: (l) => set({ lighting: l }),
   setQuality: (q) => set({ quality: q }),
   setSunMinutes: (m) => set({ sunMinutes: clampMinutes(m), sunLive: false }),

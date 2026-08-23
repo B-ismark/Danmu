@@ -175,7 +175,9 @@ export function Inspector() {
 
       {/* Placement — surfaced as visible buttons (was buried in a ⋯ menu). */}
       <Section label="Where it sits">
-        <div style={{ display: 'grid', gridTemplateColumns: part.wallMounted ? '1fr' : 'repeat(3, 1fr)', gap: 6 }}>
+        {/* `rail-triple` is the hook the elastic rail's container query reflows —
+            three icon+word buttons are the first thing in here to stop fitting. */}
+        <div className="rail-triple" style={{ display: 'grid', gridTemplateColumns: part.wallMounted ? '1fr' : 'repeat(3, 1fr)', gap: 6 }}>
           <button onClick={snapToNearestWall} className="ds-btn" title="Move to the nearest wall and face the room" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
             <Icon name="snap-wall" size={13} /> Wall
           </button>
@@ -821,7 +823,11 @@ function PaintPicker({
         {SWATCH_GROUPS.map((g) => (
           <div key={g.label}>
             <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--ink-3)', marginBottom: 4 }}>{g.label}</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 4 }}>
+            {/* Eight, and the elastic rail's container query is what drops it to
+                six — an `auto-fit` here would also have changed the count on a
+                WIDE rail (nine or ten per row), which is a redesign of a shipping
+                panel rather than a reflow of a cramped one. */}
+            <div className="rail-swatches" style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 4 }}>
               {g.items.map((s) => {
                 const on = value?.toLowerCase() === s.hex.toLowerCase();
                 return (

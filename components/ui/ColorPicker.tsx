@@ -171,7 +171,12 @@ export function ColorPicker({ value, onChange }: { value: string; onChange: (hex
   const thumbShadow = '0 0 0 1px rgba(0,0,0,0.35)';
 
   return (
-    <div style={{ width: 220, userSelect: 'none' }}>
+    // 220px is what this wants, not what it demands. A bare `width: 220` made
+    // the picker the widest fixed thing in the inspector and therefore the floor
+    // of the whole right rail — a rail one pixel narrower clipped it silently,
+    // since `.rail` has no overflow of its own to put a scrollbar on. As a
+    // ceiling it costs nothing at full width and reflows below it.
+    <div style={{ width: 'min(220px, 100%)', userSelect: 'none' }}>
       {/* Saturation × value square */}
       <div
         ref={satRef}
