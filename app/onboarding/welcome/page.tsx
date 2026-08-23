@@ -43,7 +43,7 @@ export default function WelcomePage() {
           on a phone, which the old `top: 26` mark sat directly on top of. Same
           max-width as the grid below so the mark aligns with the headline rather
           than floating off in the left margin. */}
-      <div style={{ width: '100%', maxWidth: 1060, margin: '0 auto' }}>
+      <div style={{ width: '100%', maxWidth: 'var(--measure-page)', margin: '0 auto' }}>
         <DanmuMark size={15} />
       </div>
 
@@ -59,7 +59,7 @@ export default function WelcomePage() {
         // alignContent centres the rows in whatever height is left over, so the
         // composition still sits mid-viewport on a desktop without needing the
         // grid-in-grid centring that pinned the mark out of flow.
-        style={{ flex: 1, alignContent: 'center', width: '100%', maxWidth: 1060, margin: '0 auto', gap: '36px 44px', alignItems: 'start' }}
+        style={{ flex: 1, alignContent: 'center', width: '100%', maxWidth: 'var(--measure-page)', margin: '0 auto', gap: '36px 44px', alignItems: 'start' }}
       >
         {/* PITCH */}
         <div>
@@ -83,7 +83,7 @@ export default function WelcomePage() {
               the optional detect step really does POST wall photos to Gemini, so
               an unhedged "nothing leaves your device" would be untrue for anyone
               who switches it on. */}
-          <p style={{ fontSize: 15, color: 'var(--ink-2)', lineHeight: 1.6, margin: 0, maxWidth: 470 }}>
+          <p style={{ fontSize: 15, color: 'var(--ink-2)', lineHeight: 1.6, margin: 0, maxWidth: 'var(--measure-hero)' }}>
             Pick a room shape, drop in furniture, then move, recolour, restyle and relight every
             piece — live, in your browser. Nothing leaves your device, unless you switch on the
             optional AI step that spots furniture in a photo of a real room.
@@ -225,7 +225,7 @@ export default function WelcomePage() {
         </div>
 
         {/* DETAIL */}
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0, maxWidth: 470 }}>
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0, maxWidth: 'var(--measure-hero)' }}>
           <Feature
             icon="sofa"
             tint="var(--accent-tint)"

@@ -1,7 +1,55 @@
 # Danmu — Design & Architecture
 
-> Last updated: 2026-07-31 · reflects the codebase on `main`.
+> Last updated: 2026-08-23 · reflects the codebase on `main`.
 > Canonical design doc. Supersedes the older `DOCUMENTATION.md`.
+
+### If you are picking this codebase up cold, read two files
+
+**[`CLAUDE.md`](CLAUDE.md) first, then this one.** They do different jobs and
+neither substitutes for the other: CLAUDE.md holds the **non-negotiable rules and
+the trust boundaries** — no AI image generation, dimensions owned by code and not
+by a model, one source of truth per concern, tokens over literals, local-first —
+plus the environment hazards that have each cost someone a debugging session
+(PowerShell's UTF-8 round-trip, the `[roomId]` brackets, the runtime-loaded ONNX
+runtime, the node/jsdom test split). This document explains **what the system is
+and why each part is shaped the way it is**. Breaking a CLAUDE.md rule is a defect
+even when the code compiles and the tests pass.
+
+The rest are supporting, and two of them are **point-in-time snapshots, not
+current state** — do not read them as a description of `main` today:
+
+| File | What it is | Current? |
+|---|---|---|
+| [`CLAUDE.md`](CLAUDE.md) | Rules, non-negotiables, commands, env gotchas | **Yes — read first** |
+| **Design.md** (this file) | Product + architecture, feature by feature | **Yes — canonical** |
+| [`README.md`](README.md) | Quickstart, stack, route table | Yes |
+| [`PRODUCT.md`](PRODUCT.md) | Who it is for, what counts as success | Yes |
+| [`Research.md`](Research.md) | How the geometry maths works, where it is weakest, what the literature offers | Snapshot, 2026-07-30 |
+| [`Plan.md`](Plan.md) | Remediation plan for Research.md's findings, with per-phase status | Snapshot, 2026-07-30 |
+| [`AUDIT.md`](AUDIT.md) | A closed audit — 49 code findings, all fixed | Historical, 2026-07-29 |
+| [`DOCUMENTATION.md`](DOCUMENTATION.md) | Tombstone; redirects here | Dead |
+
+For *why the maths is the way it is* rather than *what it does*, `Research.md` is
+the companion to §4 — every proposal in it was already filtered against
+CLAUDE.md's non-negotiables, so it is the right place to look before redesigning
+part of the engine.
+
+`AUDIT.md` is a summary; its five detail files live in **[`audit/`](audit/)**
+(`findings-{security,data,performance,ui-code,visual}.md`) and are the only other
+tracked docs in the repo.
+
+### Directories that are not source, and are not in git
+
+A fresh clone has none of these; they appear as you run things. Do not read a
+missing one as breakage, and do not commit one.
+
+| Path | What it is | Ignored by |
+|---|---|---|
+| `public/ort/` | ONNX Runtime copied out of `node_modules` by `pnpm vendor:ort`, so the browser loads it same-origin. Build artifact of a pinned dependency | `public/ort` |
+| `public/models/` | The three detector files — two `.onnx` graphs plus the class-name JSON. Exported by `scripts/export-detector.py` or fetched from the HF mirror | `public/models/*.onnx`, `*.names.json` |
+| `weights/` | Fallout from that export, **not an input to the app**: `ultralytics` downloads the CLIP `ViT-B-32.pt` text encoder that YOLO-World needs, and it lands here. ~354 MB, safe to delete once the `.onnx` files exist | `*.pt` |
+| `.venv-export` | Throwaway Python env for the same export (torch + ultralytics) | `.venv-export` |
+| `.impeccable/` | Machine-local cache for the design-review hook — config, critique transcripts, live-annotation sessions. Tooling, unrelated to the app | `.impeccable` |
 
 Danmu is a **local-first interior decoration simulation**. You pick a footprint
 (or capture a real room with photos), Danmu rebuilds it as a scaled 1:1 3D space,
@@ -33,7 +81,25 @@ owned by a deterministic geometry engine, not by a model.
    behaviour flags come from `lib/scene-spec.ts` (+ `lib/parts-catalog.ts`). The
    3D scene, 2D plan, inspector tree, catalog and decor all read from it.
 5. **No hard-coded design values.** Colours / spacing / type flow through tokens
-   in `app/globals.css`; Tailwind reads them.
+   in `app/globals.css`, which is their sole source. Tailwind is present for
+   Preflight only — its theme is empty and no utility class is used anywhere, so
+   every `className` resolves to a hand-written class in `globals.css`.
+   **Three families were added late, because they had been escaping the rule.**
+   *Content measure* (`--measure-page`, `--measure-page-prose`, `--measure-text`,
+   `--measure-text-sm`, `--measure-hero`, `--measure-card`) replaced ten distinct
+   literals retyped across seventeen sites — no two pages agreed on how wide
+   content should get, and nothing said what a number was *for*. *Rail width*
+   (`--rail-left`, `--rail-right`) replaced the same two numbers inline in both
+   studio tabs. Reach for the token that describes the **content**, not the one
+   whose pixel count matches what was there. Two things are deliberately not
+   measures and keep their own numbers: `PlanView`'s `<svg>` cap (a drawing
+   viewport) and the room-name input (a control).
+   The third family is a *rule* rather than a value: `.ds-btn--primary` is the one
+   committing action on a page and `.ds-btn--accent` the one that advances an
+   onboarding flow — **one of each per screen state**, everything else plain. The
+   variants existed with no rule about when, so five files used one, five the
+   other, and two pages used both at once. `globals.css` states it where they are
+   defined.
 6. **Warm & playful visual direction.** Cream paper, terracotta (`--accent`) +
    sage (`--accent-2`) accents, Nunito (sans) / Fraunces (display) type, generous
    rounding. Matches the soft procedural 3D models.
@@ -370,6 +436,28 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
   seek a supporting surface.
 - **Double-click to open** drawers / doors (nightstand drawers slide, wardrobe
   doors swing per bay).
+- **The three mouse buttons are spoken for, and each means one thing**
+  (`CameraRig.tsx`, `SceneContextMenu.tsx`). Left selects and drags. **Space +
+  left-drag pans** — the gesture every 3D tool shares — which freed the right
+  button, and **right-click now opens a menu**: the piece under the cursor gets
+  the actions that were otherwise a trip to the Inspector or an undiscovered
+  single-key shortcut, empty floor gets the whole-scene ones. The menu **does not
+  raycast** — both the 3D room and the 2D plan already keep `hoveredPartId`
+  current and pass it in, which is why one component serves both surfaces without
+  knowing anything about either. A right-drag on a 3D view with no menu behind it
+  reads as broken, so do not hand the button back to the camera.
+- **What is drawn while you point** — `Highlight.tsx` renders hover (soft,
+  depth-tested) and selection (accent, `depthTest` **off**, so a selection is
+  never lost behind a wall) plus a footprint outline on the resting surface;
+  `MeasureGuides.tsx` draws live dimension lines from the dragged footprint to
+  the nearest wall on all four sides, in the user's display unit. Both size
+  themselves from the part's **base `dimMM`** and let the group's runtime scale
+  multiply them, exactly as the geometry is scaled.
+  Both read `lib/drag-live.ts`, **not** `useStudio`: a per-frame drag position in
+  the main store re-renders the entire part tree, so the high-frequency channel is
+  deliberately separate and only these few light consumers subscribe. `<Line>`
+  keys its geometry on the `points` identity, so those arrays are memoised — an
+  inline literal rebuilt and re-uploaded nine LineGeometries every drag tick.
 
 ### Walls — `RoomShell.tsx`, `WallHandles.tsx`
 - Click a wall (3D or 2D plan) to select it — mutually exclusive with part
@@ -393,7 +481,7 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
   would end up outside the room is left where it is and reported by
   `clearance.ts` — never resized, never shoved.
 
-### Multi-select & grouping — `SelectionBar.tsx`
+### Multi-select & grouping — `SelectionHeader.tsx`
 - Shift-click adds to `selection: string[]`. "Merge N" assigns a shared
   `groupId`; clicking any grouped part selects the whole group; group **move-as-
   one** on translate (rotate/scale-as-one is roadmap). "Ungroup" clears it.
@@ -550,33 +638,89 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
 - **Idle micro-motion** (`Motion.tsx`): fan spins, plant sways, pendant swings.
 
 ### Studio chrome — where a control lives
-The 3D canvas carries **three clusters and one transient bar**, and a new control
-joins one of them rather than starting a fourth. It reached seven at one point —
-transform modes, snap, a Catalog chip, a View popover, a Suggest button, three
-room-report buttons, a camera-preset row, a grid chip and a help chip — over a
-single view of a single room.
 
-| Where | What | Why together |
-|---|---|---|
-| **Top left** | `TransformToolbar` (Move/Scale/Rotate + snap) · `CatalogToggle`, with the one `CatalogPanel` hanging under it | Everything that puts a piece in the room or changes one |
-| **Bottom right** | `RoomTools` dock: `ViewPresetChips` · `ViewOptions` — divider — `Suggest` · `Room` | Left of the divider is looking at the room, right of it is changing and checking it |
-| **Bottom left** | The `?` button (`HelpToggle` / `HelpDock`), on `--z-canvas-hint` | The one place the studio explains itself, and no panel may paint over it |
-| **Bottom centre** | `SelectionBar` | Not a cluster: it exists only while something is selected |
+**Three slots, defined once in `components/studio/CanvasChrome.tsx`, used by both
+tabs.** The studio reached seven floating clusters, was consolidated to four, and
+four was still three more than either tool this was measured against — Drafted and
+Spline both leave bottom-left, bottom-centre and bottom-right empty (Spline's lone
+exception is its axis gizmo). Danmu used all of them, on both tabs, with each tab
+choosing differently.
 
-Two consolidations are load-bearing and should not be undone casually:
+| Slot | Holds | 3D tab | 2D tab |
+|---|---|---|---|
+| `CanvasTools` top-centre | What you do TO the room | `TransformToolbar` · `CatalogToggle` | Comfort-zones toggle |
+| `CanvasView` top-right | How you look at it, plus undo/redo | `UndoRedo` | `UndoRedo` · zoom / rotate / fit |
+| `CanvasAide` bottom-right | At most ONE thing | `ViewGizmo` | `ComfortLegend`, only while shading is on |
 
-- **Room check / List / Layouts are one button with three tabs.** They were three
-  buttons opening three cards that could never be open at once — a tab strip spread
-  along the canvas edge, costing three slots and making the second and third
-  readings invisible until you knew they existed.
-- **`ViewOptions` owns every display setting.** The floor grid was a chip in the
-  corner (a display toggle sitting apart from the other display toggle) and
-  "Re-scan room" was a second copy of the top bar's Rescan, which is about what is
-  *in* the room rather than how it looks. Lighting, Display, Quality — in that
-  order, and nothing else.
+Bottom-left and bottom-centre are **deliberately empty**. If you are reaching for
+a fourth slot, the answer is a rail.
 
-The 2D plan tab mirrors the same idea at smaller scale: help chip above the zoom
-toolbar, bottom-left; scale/comfort chips top-left; export top-right.
+Three things left the canvas to make that true:
+
+- **Help** → the top bar (`StudioHelp.tsx`). A 30px button pressed about once per
+  user was holding a corner permanently, with its own `--z-canvas-hint` rung so no
+  panel could bury it. The **coach marks moved with it** and now anchor under the
+  `?` they are teaching you to find — they still fire on the first drag and the
+  first wall-selection, which is the only reason those power features are
+  discoverable. Both tabs' shortcut content lives in that one file, because the two
+  used to describe the same app differently.
+- **The selection bar** → the Inspector's header (`SelectionHeader.tsx`). It was a
+  second surface answering the question the Inspector exists to answer. It now
+  appears only for a **set or a group** — one selected piece is the Inspector's
+  normal state and needs no banner.
+- **The room dock** → the left rail. See below.
+
+**The 2D tab's chrome was owned by `PlanView`** — 1,072 lines of drawing code that
+also held a help card, a zoom toolbar and a legend — while the 3D tab's lived in
+its page. That split in ownership is *why* the tabs drifted: nobody comparing them
+was looking at both. `PlanView` now exposes a `PlanViewHandle`
+(`zoomIn`/`zoomOut`/`rotateLeft`/`rotateRight`/`fit`) and reports `{ zoom, rot,
+hasCutOff }` upward; the chrome is `PlanChrome.tsx`, rendered by the page. The
+drawing still owns its transform, because wheel, pinch and drag all write it.
+
+### The left rail — state first, then sections
+
+`PartTree` is now a **sectioned scroll column with a pinned footer**, which is
+Drafted's rail finished rather than a new idea: each section states what it holds
+and closes when you are not using it.
+
+- **The room's health is a permanent chip at the top**, not a panel behind a
+  button. `analyzeRoom` already recomputed on every scene change; the only thing
+  wrong with it was that you had to find a dock in the corner of the canvas and
+  open a tab before it would tell you. Sage *"Room checks out"* or a
+  severity-coloured count. Its panel (Check / List / Layouts) is **fixed and
+  measured off the chip**, not absolutely positioned — a 260px rail with its own
+  scroll box clips an absolute card, the same reason and the same fix as
+  `ui/Select.tsx`'s portalled listbox. It opens to the *right* of the rail so the
+  room a finding flies to stays visible.
+- **Sections**: Room (dimensions + Re-scan) · Style (themes) · View
+  (`ViewOptions`) · Pieces (search + the listbox, and it takes the leftover
+  height). `RailSection.tsx` owns the header — a real `<button>` controlling a
+  region, with the count in `.section-meta`. Open/closed is **local, not
+  persisted**: which drawer you left open is not a preference worth carrying
+  between rooms, and `partialize` should stay about how the room *looks*.
+- **`+ Add furniture` is pinned to the bottom edge** and never scrolls away. It
+  used to sit mid-column inside the Furniture section.
+- **Re-scan moved here** from the top bar: it changes what is *in* the room, not
+  how the app is framed.
+
+**Both rails collapse** (`railLeftOpen` / `railRightOpen`, persisted next to
+`showGrid`). Two fixed rails spend 45% of a 1280px laptop on chrome in an app whose
+product is the 3D view. A collapsed rail keeps its `<aside>` and its toggle — the
+control that reopens it is always where the rail was — and a **stacked** layout
+never collapses, because there the rails are content below the room rather than
+chrome beside it.
+
+### The studio top bar — three controls, no primary
+
+`Rooms / <name>` as a breadcrumb, the tab switcher, then `?` · room switcher ·
+**Export**. It was undo/redo, a room switcher, Rescan and Snapshot — with Snapshot
+styled as the primary action, which downloading a PNG is not. Undo/redo went to
+`CanvasView`, Rescan to the rail, and every "take this away with you" action
+collapsed into one `ExportMenu.tsx`: the 3D snapshot (3D tab only — it captures
+that view), the floor-plan PNG, and the furniture CSV. Those were three actions in
+three places at three visual weights, which is how you end up not knowing the
+other two exist.
 
 ### Other studio tools
 - **Adding furniture is ONE surface** (`CatalogPanel.tsx`) — a docked, non-blocking
@@ -596,6 +740,13 @@ toolbar, bottom-left; scale/comfort chips top-left; export top-right.
   takes `columns` / `draggable`, so the dock and the swap modal cannot drift apart
   again. `draggable` is **off on the 2D plan**, which has no drop handler — a drag
   that cannot land is worse than no drag.
+- **Changing which model a piece uses is ONE surface** (`RegenerateModal.tsx`),
+  reusing the same `PickerTabs` / `DescribeField` pair as the Add flow. It was two
+  buttons — "Swap model" and "AI refine" — which were the same feature twice, and
+  the second advertised an AI that does not exist here: matching is local token
+  search (`lib/shape-search.ts`), instant and offline. The modal hands the swap
+  back to the caller, because re-grounding the piece for its new dimensions and
+  mount type is physics the Inspector owns.
 - **One-tap themes** (`lib/themes.ts`) — recolour all unlocked parts + set a
   matching lighting mood.
 - **2D plan** (`PlanView.tsx`) synced with the 3D scene; export via
@@ -642,7 +793,7 @@ undo — see `lib/storage.ts`).
   absent, so the 3D route threw `Cannot read properties of undefined (reading
   'ReactCurrentOwner')` on mount. The peer range Next advertises (`^18.2 || ^19`)
   describes the Pages Router, not this one — trust the runtime, not the range.
-- **Three.js 0.169** + **@react-three/fiber 9** + **drei 10** + **postprocessing 3** — declarative 3D.
+- **Three.js 0.184** + **@react-three/fiber 9** + **drei 10** + **postprocessing 3** — declarative 3D.
   This is the line that runs on React 19; fiber 8 + drei 9 cannot. Note fiber 9
   peers `react@>=19 <19.3` — an upper bound, so React is not a free-floating
   caret here; `tests/react-3d-peers.test.ts` fails if one drifts from the other.
@@ -662,11 +813,14 @@ undo — see `lib/storage.ts`).
   for `<input type="color">`, `ui/Confirm.tsx` for `window.confirm()`, and
   tokenised scrollbars in `globals.css`. `<input type="file">` stays, kept
   `sr-only` behind a styled trigger.
-- Loaded at runtime, not bundled: the ONNX model file; `onnxruntime-web` is
-  loaded via CDN with `webpackIgnore` (bundling ort breaks the Next build), so
-  it is a **devDependency** — installed for its types only. Its version is
-  pinned exactly and mirrored by `ORT_VERSION` in `lib/local-detect.ts`; move
-  both together or the compiled types drift from the executed wasm.
+- Loaded at runtime, not bundled: the ONNX weights, and `onnxruntime-web`
+  itself via a `webpackIgnore` dynamic `import()` (bundling ort breaks the Next
+  build), so ort is a **devDependency** — installed for its types only. It
+  resolves **`public/ort/` first** (`pnpm vendor:ort`, same-origin, which is what
+  lets the CSP stay tight) and keeps the jsDelivr CDN as the fallback for a fresh
+  clone — see §9. Its version is pinned exactly and mirrored by `ORT_VERSION` in
+  `lib/local-detect.ts`; move both together or the compiled types drift from the
+  executed wasm.
 
 ### State stores
 | Store | File | Holds |
@@ -692,12 +846,71 @@ undo — see `lib/storage.ts`).
 | `lib/light-units.ts` | Lumens → candela (isotropic and in-cone), and kelvin → sRGB via the Planckian locus. Pure and tested — the interface between how a lamp is described and how three renders it. |
 | `lib/themes.ts` | One-tap restyle palettes. |
 | `lib/product-presets.ts` | Real-product size presets. |
-| `lib/capture.ts` / `lib/image-quality.ts` / `lib/mask.ts` / `lib/color-sample.ts` | Photo capture + quality + masking + colour sampling. `capture.ts` also owns **photo normalisation**: every photo entering the app is re-encoded to ≤1600 px on its long edge (`normalizePhoto`) and screened against a raster allowlist (`isAcceptedPhoto` — `image/*` also matches SVG, which has no pixels to measure). Nothing downstream wants more resolution, and four untouched 12 MP uploads exceeded the detection endpoint's inline-request ceiling. It also **strips metadata** on the passthrough path via `lib/jpeg-strip.ts` — see §3. |
+| `lib/capture.ts` / `lib/image-quality.ts` / `lib/color-sample.ts` | Photo capture + quality + colour sampling. `capture.ts` also owns **photo normalisation**: every photo entering the app is re-encoded to ≤1600 px on its long edge (`normalizePhoto`) and screened against a raster allowlist (`isAcceptedPhoto` — `image/*` also matches SVG, which has no pixels to measure). Nothing downstream wants more resolution, and four untouched 12 MP uploads exceeded the detection endpoint's inline-request ceiling. It also **strips metadata** on the passthrough path via `lib/jpeg-strip.ts` — see §3. |
 | `lib/jpeg-strip.ts` | Removes EXIF (APP1), IPTC (APP13) and comment segments from a JPEG by byte surgery, so the image data is copied verbatim and the passthrough optimisation survives. Keeps JFIF density and the **ICC colour profile** — neither identifies anyone, and dropping the profile would shift the colours this app exists to get right. Returns the input untouched for anything it cannot parse: a photo that kept its metadata is a smaller problem than a photo we corrupted. **Read anything you need out of EXIF before calling it** — the focal length a future calibration pass wants lives in the segment this deletes. |
+| `lib/color.ts` | Colour arithmetic: WCAG contrast, and OKLab as a space where "same colour" means something. `globals.css` states a ratio next to almost every token and `CLAUDE.md` turns those into a rule, but nothing checked any of it — a comment claiming a ratio is a comment. It also lets `scene-palette.ts`' hand-copied duplicates be compared perceptually rather than by string equality, which is brittle one way and blind the other. |
+| `lib/drag-live.ts` | The high-frequency drag channel, deliberately **outside** `useStudio` — see §5. |
+| `lib/mesh-cache.ts` | Local GLB cache behind `CachedMesh.tsx`, which renders `null` while loading and expects the caller to keep the primitive shape up as a placeholder. `three-stdlib`'s `GLTFLoader` is browser-only, so both must stay client components. |
 | `lib/units.ts` | Unit conversion (persistence always mm). |
 | `lib/dates.ts` | Timestamp formatting — the counterpart to `units.ts`. Relative `editedLabel`, absolute `savedLabel`, and the workspace's recency buckets. |
 | `lib/csv.ts` | CSV writing that a spreadsheet opens correctly and does not execute: formula-injection escaping, quoting, CRLF, UTF-8 BOM. |
 | `lib/use-media-query.ts` | The one `matchMedia` hook. `useMediaQueryState` also returns `ready`, for callers that pick a whole layout and must not paint the wrong one first. |
+
+### Two shells, and what each route stands in
+
+Nine routes used to carry **four unrelated page skeletons**. They shared the
+tokens and the components and agreed on nothing structural, so a user crossing
+routes re-learned where things live and a developer adding a screen had four
+precedents to pick from. There are now two shells and two deliberate exceptions.
+
+| Shell | Owns | Used by |
+|---|---|---|
+| `components/studio/StudioShell.tsx` | The `--rail-left 1fr --rail-right` grid, the stacked fallback below ~1024px, both rails, the `ready` paint gate | `/room/[id]/model` · `/room/[id]/plan` |
+| `components/ui/DocShell.tsx` | The `.chrome-bar`, the mark (always a link), the breadcrumb, the content measure, and the `hero` wash | `/workspace` · `/settings` · `/onboarding/layout-pick` |
+
+`StudioShell` is pure de-duplication: both room tabs declared **byte-identical**
+shell code, differing only in the loading sentence. Two copies of a layout is two
+places for it to drift, and these tabs had already drifted everywhere else. What
+stays with each page is what goes **on** its work surface — genuinely different
+between a 3D room and a 2D drawing. A keyed `Fragment` wraps the caller's
+`<main>` so it remains the direct grid item and React does not re-mount a WebGL
+canvas every time the viewport crosses the stacking threshold.
+
+`DocShell` replaced three hand-built top bars that agreed on the class and
+nothing else: the mark was a plain graphic on the workspace and a labelled link
+on settings, so the one affordance every other page trains you to click did
+nothing there. It also retires `ds-label` as a page-identity device — a
+breadcrumb says what the label said *and* where you came from, in the same width,
+which is why Settings no longer needs a separate "Close" button. `back` is a slot
+rather than built in, because `router.back()` is history and the breadcrumb is a
+fixed destination; only the route knows which of the two it means.
+
+**Two routes deliberately opt out, and should stay out.** `/onboarding/welcome`
+is a hero — a breadcrumb on the first screen is a path from nowhere.
+`/onboarding/{capture,detect}` are a viewfinder and a review queue; a document
+shell has nothing to offer a live camera feed. Forcing either in would be the
+same mistake as leaving three bars.
+
+Those three were then **audited on their own terms**, and the opt-out held: no
+literal colour, no literal `z-index`, no `#fff` in either of the big two;
+`NOTICE_TONES` already splits fills from `-text` variants correctly; the
+`toRecord`/`fromRecord` codec is symmetric (`locked` is restored at the load site
+into the `confirmed` set, because it is per-index UI state rather than part of a
+`Detection`); and every absolutely-positioned overlay in capture is an annotation
+on a photo tile or the viewfinder, not chrome competing for a corner.
+
+What the audit did find was the **same drift, from the same cause, as the two
+studio tabs**: capture and detect each hand-built the identical bar lead — Back,
+a divider, the mark — and had diverged to 34px vs 32px buttons, `0 8px` vs
+`0 10px` padding, 12 vs 12.5px labels, and `aria-hidden` on only one of the two
+dividers. That triple is now `FlowBarLead` in `ui/primitives.tsx`.
+
+Its `markHref` is **optional on purpose**, and this is the one place in the app
+where the mark is not a link. Capture passes an href because `persistBlob` writes
+every shot to IndexedDB as it is taken, so leaving costs nothing. Detect passes
+none: its entire review — confirmations, edits, hand-drawn boxes — lives in
+component state until `finish()` writes it, and a logo is a low-intent click
+target in a way an explicit Back button is not. Do not "fix" detect's to match.
 
 ### UI primitives worth knowing (`components/ui/`)
 | File | Notes |
@@ -705,6 +918,7 @@ undo — see `lib/storage.ts`).
 | `Select.tsx` | Combobox trigger + listbox. The list is **portalled to `<body>`** and positioned fixed — the units picker lives inside the Inspector's scroll container, where an absolute popup gets clipped — and flips above the trigger when the room below is tight. Focus stays on the trigger (`aria-activedescendant`); Up/Down change the value while closed, plus type-ahead, Home/End, Esc (stopped, or it would also clear the studio selection). An outside scroll closes it, but a scroll *inside* the list does not: opening on a value far down the list scrolls it into view. `short` renders an abbreviation on the closed trigger when the full label will not fit. |
 | `NumberField.tsx` | Measurement input with our own two-chevron stepper (the native spinner is suppressed app-wide). Hold-to-repeat reads the clock and pays at most 3 steps per tick — a plain interval drifts badly when every step re-renders an inspector and a 3D scene, and pure clock catch-up turns one starved tick into a huge leap. It calls `onChange` through a ref, since callers rebuild that closure each render over their own local state. Chevrons are `aria-hidden` + `tabIndex -1`: the input is already a spinbutton and Up/Down step it. |
 | `StorageToast.tsx` | One live region for the whole app, plus the imperative `toast()`. Lifted clear of the studio's bottom-right control cluster on `/room/` routes — the card takes pointer events, so at the default offset it swallowed their clicks. |
+| `DocShell.tsx` | The document-route shell — see above. Takes `trail` (the breadcrumb), `actions`, `back`, `measure` (`page` \| `prose`) and `variant` (`plain` \| `hero`). |
 | `Confirm.tsx` · `ColorPicker.tsx` | Promise-based confirm modal; HSV picker. Both exist to keep an OS widget out of the UI. |
 
 ### Data flow (decoration loop)

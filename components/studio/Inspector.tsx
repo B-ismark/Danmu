@@ -209,7 +209,7 @@ export function Inspector() {
 
       {/* One entry point to the model library. Generic-box parts (low-confidence
           detections) read poorly, so for those the same button leads with why. */}
-      <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div className="section section--flush" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <button
           onClick={() => setSwapOpen(true)}
           className={isGeneric ? 'ds-btn' : 'ds-btn ds-btn--primary'}

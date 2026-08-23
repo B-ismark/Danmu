@@ -5,7 +5,7 @@ import Link from 'next/link';
 export default function NotFound() {
   return (
     <div style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', padding: 40 }}>
-      <div style={{ maxWidth: 440, textAlign: 'center' }}>
+      <div style={{ maxWidth: 'var(--measure-card)', textAlign: 'center' }}>
         {/* No "404" eyebrow: the heading already says what happened, and an HTTP
             status code is not this product's language. */}
         <h1 style={{ fontSize: 24, margin: '0 0 12px' }}>We can’t find that room</h1>

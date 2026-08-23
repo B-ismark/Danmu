@@ -12,7 +12,8 @@ every current feature, architecture, geometry engine, and roadmap).
 ## Stack
 
 - **Next.js 15.5** (App Router) + **React 19.2** + **TypeScript 5.9**
-- **Tailwind 3.4** — design tokens in [`app/globals.css`](app/globals.css)
+- **Tailwind 3.4** — Preflight only (empty theme, no utility classes). Design
+  tokens live in [`app/globals.css`](app/globals.css), which is their sole source
 - **Three.js** + **@react-three/fiber 9** + **drei 10** + **postprocessing 3** — declarative 3D
   (the React 19 line; see [Design.md](Design.md) — fiber 8 + drei 9 cannot run
   under Next 15's App Router)
@@ -21,8 +22,9 @@ every current feature, architecture, geometry engine, and roadmap).
 - **onnxruntime-web** — local, in-browser furniture detection (no key). Two
   YOLOv8 models run as an ensemble: a fixed 601-class Open Images detector plus
   an open-vocabulary one prompted with Danmu's own furniture words, because they
-  miss different things. CDN-loaded at runtime, so onnxruntime-web is a
-  devDependency (types only). The ~64 MB of weights are not in the repo: they
+  miss different things. The runtime is loaded at runtime, not bundled — from
+  same-origin `public/ort/` after `pnpm vendor:ort`, with a CDN fallback — so
+  onnxruntime-web is a devDependency (types only). The ~64 MB of weights are not in the repo: they
   are fetched on demand from
   [DearthAI/danmu-detector](https://huggingface.co/DearthAI/danmu-detector), or
   built locally with `python scripts/export-detector.py`. Those weights are
@@ -64,7 +66,9 @@ without any key: pick a footprint and start decorating.
 - **Single source of truth for furniture:** [`lib/scene-spec.ts`](lib/scene-spec.ts).
   3D scene, 2D plan, inspector tree, catalog, and decor all read from it.
 - **No hard-coded design values.** Colours / spacing / type go through tokens in
-  `app/globals.css`; Tailwind reads them.
+  `app/globals.css` — the sole token source. Tailwind is Preflight-only (empty
+  theme, no utility classes); anything a renderer cannot read a custom property
+  from goes through [`lib/scene-palette.ts`](lib/scene-palette.ts).
 - **Dimensions come from code, not AI.** All sizes pass through `clampDims`
   ([`lib/dimension-ranges.ts`](lib/dimension-ranges.ts)); a deterministic geometry
   engine owns sizing, placement, overlap and clearance. AI is a hint only.

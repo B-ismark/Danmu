@@ -58,13 +58,37 @@ function fileSlug(name: string): string {
 
 type RoomTab = 'check' | 'list' | 'layouts';
 
-export function RoomTools({ leading }: { leading?: ReactNode }) {
+export function RoomTools() {
   // One panel, three tabs. These were three sibling buttons opening three cards
   // that were already mutually exclusive — i.e. a tab strip with the tabs spread
   // along the bottom of the canvas. Saying so costs two buttons of width and makes
   // the second and third readings discoverable from the first.
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<RoomTab>('check');
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const [panelPos, setPanelPos] = useState({ left: 0, top: 0 });
+
+  // Measured on open and kept true through resize and scroll. Placed to the RIGHT
+  // of the rail rather than over it, so the room the panel is describing — and
+  // that clicking a finding flies to — stays visible.
+  useEffect(() => {
+    if (!open) return;
+    function place() {
+      const r = anchorRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const W = 324;
+      const left = Math.min(r.right + 10, window.innerWidth - W - 12);
+      const top = Math.max(12, Math.min(r.top, window.innerHeight - 200));
+      setPanelPos({ left, top });
+    }
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [open]);
   const { roomId } = useParams<{ roomId: string }>();
   const [roomName, setRoomName] = useState('Room');
 
@@ -133,31 +157,24 @@ export function RoomTools({ leading }: { leading?: ReactNode }) {
   }, [open]);
 
   return (
-    <div
-      style={{
-        position: 'absolute',
-        bottom: 12,
-        right: 12,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'flex-end',
-        gap: 8,
-        zIndex: 'var(--z-canvas-ui)',
-        // Leaves the selection bar its half of the bottom edge, and wraps rather
-        // than reaching into it when the canvas is narrow.
-        maxWidth: 'calc(100% - 24px)',
-        // Faded rather than unmounted mid-drag: this row hosts the Look popover
-        // and the camera presets, and remounting them on every drop would throw
-        // away their state for the sake of 30px of chrome.
-        opacity: draggingId ? 0 : 1,
-        pointerEvents: draggingId ? 'none' : 'auto',
-        transition: 'opacity .15s',
-      }}
-    >
+    <div ref={anchorRef} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {/* Fixed and measured, not absolute: this panel lives in a 260px rail with
+          its own scroll box, where an absolutely-positioned card gets clipped.
+          Same reason and same fix as ui/Select.tsx's portalled listbox. */}
       {open && (
         <div
           className="ds-card"
-          style={{ width: 324, maxHeight: 400, overflow: 'auto', padding: 0, boxShadow: 'var(--shadow-lift)' }}
+          style={{
+            position: 'fixed',
+            left: panelPos.left,
+            top: panelPos.top,
+            zIndex: 'var(--z-popover)',
+            width: 324,
+            maxHeight: 'min(440px, calc(100vh - 96px))',
+            overflow: 'auto',
+            padding: 0,
+            boxShadow: 'var(--shadow-lift)',
+          }}
         >
           <div
             style={{
@@ -204,48 +221,45 @@ export function RoomTools({ leading }: { leading?: ReactNode }) {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-        {leading}
-        {/* Two jobs, two groups: everything to the left of this line is about
-            looking at the room, everything to the right changes or checks it. */}
-        <span aria-hidden="true" style={{ width: 1, height: 20, background: 'var(--hairline-strong)', margin: '0 2px' }} />
-        <SuggestButton effParts={effParts} footprint={room.footprint} />
-        <button
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          className="ds-btn"
-          title="Room check, the furniture list and saved layouts"
-          style={{
-            height: 30,
-            fontSize: 11,
-            gap: 6,
-            background: open ? 'var(--accent-tint)' : 'var(--paper)',
-            borderColor: problems > 0 ? 'var(--danger)' : open ? 'var(--accent-text)' : 'var(--edge)',
-            color: problems > 0 ? 'var(--danger-text)' : open ? 'var(--accent-text)' : 'var(--ink-2)',
-            boxShadow: 'var(--shadow-soft)',
-          }}
-        >
-          <Icon name="info" size={12} />
-          Room
-          <span
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              minWidth: 17,
-              height: 16,
-              padding: '0 5px',
-              borderRadius: 'var(--r-full)',
-              fontSize: 10,
-              fontWeight: 700,
-              background: problems > 0 ? 'var(--danger)' : 'var(--accent-ink)',
-              color: 'var(--on-accent)',
-            }}
-          >
-            {problems > 0 ? <span className="mono">{problems}</span> : <Icon name="check" size={10} />}
-          </span>
-        </button>
-      </div>
+      {/* The room's health, stated — not hidden behind a press.
+          `analyzeRoom` already recomputed this on every scene change; the only
+          thing wrong with it was that you had to find a dock in the corner of the
+          canvas and open a tab before it would tell you. Drafted puts this kind of
+          state permanently beside the thing it describes, and that is all this is.
+
+          The severity colour is a FILL, so the text uses the matching -text token:
+          --danger / --warn are not legible as type on paper. */}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="ds-btn"
+        title="Room check, the furniture list and saved layouts"
+        style={{
+          height: 34,
+          width: '100%',
+          justifyContent: 'flex-start',
+          gap: 8,
+          fontSize: 12,
+          background: problems > 0 ? 'var(--danger-tint)' : 'var(--accent-2-tint)',
+          borderColor: problems > 0 ? 'var(--danger)' : 'var(--accent-2)',
+          color: problems > 0 ? 'var(--danger-text)' : 'var(--success-text)',
+        }}
+      >
+        <Icon name={problems > 0 ? 'info' : 'check'} size={13} />
+        <span style={{ fontWeight: 700 }}>
+          {problems > 0 ? (
+            <>
+              <span className="mono">{problems}</span> {problems === 1 ? 'issue' : 'issues'}
+            </>
+          ) : (
+            'Room checks out'
+          )}
+        </span>
+        <span style={{ flex: 1 }} />
+        <Icon name={open ? 'chevron-up' : 'chevron-right'} size={12} />
+      </button>
+
+      <SuggestButton effParts={effParts} footprint={room.footprint} />
     </div>
   );
 }

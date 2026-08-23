@@ -126,7 +126,11 @@ order.
 - `components/three/` — R3F scene (`Room`, `DynamicPart`, `Draggable`, `Pickable`,
   `RoomShell`, `WallHandles`, `Dressing`, `Motion`).
 - `components/studio/` — 2D UI (`Inspector`, `PartTree`, `CatalogPanel`,
-  `ViewOptions`, `PlanView`, `SelectionBar`, `LibraryPicker`, `TopBar`, …).
+  `ViewOptions`, `PlanView`, `SelectionHeader`, `LibraryPicker`, `TopBar`, …).
+  Layout lives in three shells — `StudioShell` (both room tabs),
+  `ui/DocShell` (workspace / settings / layout-pick) and `CanvasChrome`
+  (the studio's three canvas slots). A new control joins an existing slot or
+  a rail section; it does not start a fourth canvas corner.
 - `components/ui/` — primitives + `Icon` (lucide wrapper).
 - `lib/` — state (`store.ts` = `useStudio`/`useSettings`/`useRoom`,
   `scene-store.ts` = `useScene`), geometry engine, detection, persistence.

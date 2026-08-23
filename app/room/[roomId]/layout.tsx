@@ -10,18 +10,13 @@ import {
   StudioAnnouncer,
   studioSurfaceProps,
 } from '@/components/studio/KeyboardShortcuts';
-import { UndoRedo } from '@/components/studio/UndoRedo';
 import { RoomSwitcher } from '@/components/studio/RoomSwitcher';
+import { StudioHelp } from '@/components/studio/StudioHelp';
+import { ExportMenu } from '@/components/studio/ExportMenu';
 import { NarrowViewportBanner } from '@/components/studio/NarrowViewportBanner';
 import { DemoBanner } from '@/components/studio/DemoBanner';
-import { Icon } from '@/components/ui/Icon';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useSnapshot } from '@/lib/snapshot';
 
 export default function StudioLayout({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
-  const onModel = pathname?.endsWith('/model') ?? false;
   const surface = studioSurfaceProps();
 
   // The catalog is open state, not a preference, and it lives in a store that
@@ -37,25 +32,17 @@ export default function StudioLayout({ children }: { children: ReactNode }) {
     <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--paper)' }}>
       <TopBar
         centerSlot={<div style={{ marginLeft: 16 }}><StudioTabs /></div>}
+        // Four controls became three, and none of them claims to be the primary
+        // action any more. Undo/redo moved to the canvas's top-right with the view
+        // controls (where Drafted groups it); Rescan moved into the rail's Room
+        // section, because it changes what is IN the room rather than how the app
+        // is framed; and Snapshot is one item inside Export, since downloading a
+        // PNG is not the primary verb of a decoration app.
         right={
           <>
-            <UndoRedo />
+            <StudioHelp />
             <RoomSwitcher />
-            <Link href="/onboarding/detect" className="ds-btn" style={{ height: 28, fontSize: 12 }}>
-              <Icon name="refresh" size={12} />
-              Rescan
-            </Link>
-            {onModel && (
-              <button
-                onClick={() => useSnapshot.getState().request()}
-                className="ds-btn ds-btn--primary"
-                style={{ height: 28, fontSize: 12 }}
-                title="Download a PNG of the current 3D view"
-              >
-                <Icon name="image" size={12} />
-                Snapshot
-              </button>
-            )}
+            <ExportMenu />
           </>
         }
       />

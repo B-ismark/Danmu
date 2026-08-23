@@ -27,7 +27,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
     <html lang="en">
       <body style={{ margin: 0, fontFamily: 'system-ui, sans-serif', background: PAPER, color: INK }}>
         <div style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', padding: 40 }}>
-          <div style={{ maxWidth: 440, textAlign: 'center' }}>
+          <div style={{ maxWidth: 'var(--measure-card)', textAlign: 'center' }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: DANGER, marginBottom: 8 }}>Hiccup</div>
             <h1 style={{ fontSize: 24, margin: '0 0 12px' }}>Danmu didn’t finish loading</h1>
             <p style={{ fontSize: 14, lineHeight: 1.55, color: INK_2, marginBottom: 20 }}>

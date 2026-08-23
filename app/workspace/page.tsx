@@ -13,9 +13,10 @@ import {
   startOfToday,
   type RecencyGroupId,
 } from '@/lib/dates';
-import { DanmuMark, EditableText, IconButton, Pill } from '@/components/ui/primitives';
+import { EditableText, IconButton, Pill } from '@/components/ui/primitives';
 import { Icon } from '@/components/ui/Icon';
 import { useConfirmDeleteRooms } from '@/components/ui/Confirm';
+import { DocShell } from '@/components/ui/DocShell';
 import { toast } from '@/components/ui/StorageToast';
 import { PlanThumb } from '@/components/studio/PlanThumb';
 
@@ -137,24 +138,25 @@ export default function WorkspacePage() {
   const selectedRooms = rooms.filter((r) => selected.includes(r.id));
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--paper)', display: 'flex', flexDirection: 'column' }}>
-      <div className="chrome-bar">
-        <DanmuMark size={12} />
-        <div style={{ width: 1, height: 18, background: 'var(--hairline)' }} />
-        <span className="ds-label">Workspace</span>
-        <div className="chrome-bar__spacer" />
-        <Link href="/settings" className="ds-btn" style={{ height: 32, fontSize: 12 }}>
-          <Icon name="settings" size={12} />
-          Settings
-        </Link>
-        <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--primary" style={{ height: 32, fontSize: 12 }}>
-          <Icon name="plus" size={12} />
-          New Room
-        </Link>
-      </div>
-
-      <div style={{ flex: 1, position: 'relative', background: 'var(--paper-2)' }}>
-        <div className="page-pad" style={{ maxWidth: 1100, margin: '0 auto' }}>
+    <DocShell
+      // This IS the root, so the trail is one hop. It still replaces the
+      // `ds-label "Workspace"` that sat beside an h1 reading "Your rooms".
+      trail={[{ label: 'Rooms' }]}
+      actions={
+        <>
+          <Link href="/settings" className="ds-btn" style={{ height: 32, fontSize: 12 }}>
+            <Icon name="settings" size={12} />
+            Settings
+          </Link>
+          <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--primary" style={{ height: 32, fontSize: 12 }}>
+            <Icon name="plus" size={12} />
+            New Room
+          </Link>
+        </>
+      }
+    >
+      <div style={{ position: 'relative' }}>
+        <div>
           {!booted ? (
             <div style={{ textAlign: 'center', padding: 60, color: 'var(--ink-3)', fontSize: 13 }}>
               Loading rooms…
@@ -294,7 +296,7 @@ export default function WorkspacePage() {
           )}
         </div>
       </div>
-    </div>
+    </DocShell>
   );
 }
 
@@ -425,10 +427,12 @@ function RoomCard({
           </div>
         )}
 
+        {/* Plain: this repeats once per card, and the page's primary is the one
+            "New Room" in the bar. The thumbnail above is the other open target. */}
         <Link
           href={href}
           onClick={onOpen}
-          className="ds-btn ds-btn--primary"
+          className="ds-btn"
           style={{ height: 32, fontSize: 12, justifyContent: 'center' }}
         >
           <Icon name="cube" size={11} />
@@ -441,7 +445,7 @@ function RoomCard({
 
 function EmptyState() {
   return (
-    <div style={{ textAlign: 'center', padding: '80px 8px', maxWidth: 600, marginInline: 'auto' }}>
+    <div style={{ textAlign: 'center', padding: '80px 8px', maxWidth: 'var(--measure-text)', marginInline: 'auto' }}>
       <div className="ds-kicker" style={{ marginBottom: 12 }}>
         Ready when you are
       </div>
@@ -450,8 +454,9 @@ function EmptyState() {
         Pick a footprint and start arranging furniture in real 3D — move, recolour, restyle, and relight
         every piece. No account, no upload. Capturing your real room is optional.
       </p>
-      <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--accent" style={{ height: 40, padding: '0 20px', fontSize: 14 }}>
-        {/* inherits the button's own --on-accent foreground */}
+      {/* Same route as the bar's "New Room", so the same weight. It was accent,
+          which put two different claims to the main action on one screen. */}
+      <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--primary" style={{ height: 40, padding: '0 20px', fontSize: 14 }}>
         <Icon name="plus" size={13} />
         Create your first room
       </Link>
