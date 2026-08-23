@@ -4,22 +4,29 @@
 //
 // There were three, in three places, at three visual weights: Snapshot as the
 // PRIMARY button in the top bar (downloading a PNG is not the primary verb of a
-// decoration app), "Export plan" as a plain button at the 2D canvas's top-right,
-// and the furniture CSV buried in the Room panel's List tab. Same intent, three
-// placements — which is how you end up not knowing the other two exist.
+// decoration app), "Save file" as a plain button beside it, and "Export plan" at the
+// 2D canvas's top-right. Same intent, three placements — which is how you end up not
+// knowing the other two exist.
 //
-// Snapshot is offered only on the 3D tab because it captures that view. The plan
-// PNG and the CSV are derived from the scene, not from what is on screen, so they
-// are offered on both.
+// Snapshot is offered only on the 3D tab because it captures that view. The other two
+// describe the room rather than the way you happen to be looking at it, so they are
+// offered on both.
+//
+// The order is what each download is FOR: the two pictures first, then the room
+// itself — the only one of the three that can be opened again, which is why it is
+// last and says so.
+//
+// A fourth item, the furniture CSV, is deliberately absent — see lib/exports.
 
 import { useEffect, useRef, useState } from 'react';
 import { useParams, usePathname } from 'next/navigation';
 import { useScene } from '@/lib/scene-store';
-import { useStudio, useSettings } from '@/lib/store';
-import { useSnapshot, downloadBlob } from '@/lib/snapshot';
+import { useSettings } from '@/lib/store';
+import { currentRoomScene } from '@/lib/room-scene';
+import { useSnapshot } from '@/lib/snapshot';
 import { exportPlanPng } from '@/lib/plan-export';
 import { roomStore } from '@/lib/storage';
-import { applyTransforms, fileSlug, furnitureCsvBlob } from '@/lib/exports';
+import { saveSceneFile } from './SceneFile';
 import { Icon, type IconName } from '@/components/ui/Icon';
 
 export function ExportMenu() {
@@ -70,18 +77,11 @@ export function ExportMenu() {
     fn();
   }
 
-  /** The arranged scene — never the base parts. See lib/exports. */
-  function arranged() {
-    const { positions, rotations, dims } = useStudio.getState();
-    return applyTransforms(useScene.getState().parts, { positions, rotations, dims });
-  }
-
   function planPng() {
-    exportPlanPng(arranged(), useScene.getState().room, dimUnit, roomName);
-  }
-
-  function listCsv() {
-    downloadBlob(furnitureCsvBlob(arranged(), dimUnit), `${fileSlug(roomName)}-furniture.csv`);
+    // `currentRoomScene` reads the stores at call time and applies the user's
+    // overrides — an export built from `useScene.parts` alone would ship the room as
+    // it was before anyone arranged it. See lib/transforms.
+    exportPlanPng(currentRoomScene(), useScene.getState().room, dimUnit, roomName);
   }
 
   const items: Array<{ icon: IconName; label: string; hint: string; onClick: () => void }> = [
@@ -96,7 +96,16 @@ export function ExportMenu() {
         ]
       : []),
     { icon: 'grid', label: 'Floor plan', hint: 'To-scale PNG, measured in ' + dimUnit, onClick: planPng },
-    { icon: 'file', label: 'Furniture list', hint: 'CSV to take shopping', onClick: listCsv },
+    {
+      icon: 'download',
+      label: 'The room itself',
+      // The one download you can open again — said plainly, because "keep or send"
+      // does not distinguish it from the three PNGs and CSVs above it.
+      hint: 'A file you can reopen here, or send to someone',
+      onClick: () => {
+        if (roomId) void saveSceneFile(roomId);
+      },
+    },
   ];
 
   return (

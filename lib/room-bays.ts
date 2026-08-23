@@ -166,7 +166,7 @@ export function baySides(b: Bay, poly: Footprint): BaySide[] {
   return raw.map((s) => ({
     ...s,
     yaw: Math.atan2(s.nx, s.nz),
-    onWall: sideOnWall(s.mx, s.mz, s.nx, s.nz, s.length, poly as Poly),
+    onWall: sideOnWall(s.mx, s.mz, s.nx, s.length, poly as Poly),
   }));
 }
 
@@ -295,8 +295,11 @@ function segmentsCross(
  *  angle covers none of an axis-aligned side and the answer comes back false. That is
  *  the safe direction: `backWall` skips a side it is unsure about, and a bay whose
  *  every side is refused simply offers nothing to back furniture against. */
-function sideOnWall(mx: number, mz: number, nx: number, nz: number, length: number, poly: Poly): boolean {
-  // A side with a normal along X runs along Z, and vice versa.
+function sideOnWall(mx: number, mz: number, nx: number, length: number, poly: Poly): boolean {
+  // A side with a normal along X runs along Z, and vice versa. `nx` alone settles it,
+  // which is why the normal's other component is not a parameter: a bay is
+  // axis-aligned, so `nz` is 0 exactly when `nx` is not and carries no information
+  // this needs. Taking it and never reading it claimed a dependency that was not there.
   const alongX = nx === 0;
   const offset = alongX ? mz : mx;
   const half = length / 2 - EPS;

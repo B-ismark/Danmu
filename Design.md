@@ -1,7 +1,8 @@
 # Danmu — Design & Architecture
 
 > Last updated: 2026-08-23 · reflects the codebase on `main`.
-> Canonical design doc. Supersedes the older `DOCUMENTATION.md`.
+> Canonical design doc. Point-in-time studies that fed it — the platform audit,
+> the engine research, the remediation plan — are kept under `docs/history/`.
 
 ### If you are picking this codebase up cold, read two files
 
@@ -24,19 +25,24 @@ current state** — do not read them as a description of `main` today:
 | **Design.md** (this file) | Product + architecture, feature by feature | **Yes — canonical** |
 | [`README.md`](README.md) | Quickstart, stack, route table | Yes |
 | [`PRODUCT.md`](PRODUCT.md) | Who it is for, what counts as success | Yes |
-| [`Research.md`](Research.md) | How the geometry maths works, where it is weakest, what the literature offers | Snapshot, 2026-07-30 |
-| [`Plan.md`](Plan.md) | Remediation plan for Research.md's findings, with per-phase status | Snapshot, 2026-07-30 |
-| [`AUDIT.md`](AUDIT.md) | A closed audit — 49 code findings, all fixed | Historical, 2026-07-29 |
-| [`DOCUMENTATION.md`](DOCUMENTATION.md) | Tombstone; redirects here | Dead |
+| [`docs/history/Research.md`](docs/history/Research.md) | How the geometry maths works, where it is weakest, what the literature offers | Snapshot, 2026-07-30 |
+| [`docs/history/Plan.md`](docs/history/Plan.md) | Remediation plan for Research.md's findings, with per-phase status | Snapshot, 2026-07-30 |
+| [`docs/history/AUDIT.md`](docs/history/AUDIT.md) | A closed audit — 49 code findings, all fixed | Historical, 2026-07-29 |
 
-For *why the maths is the way it is* rather than *what it does*, `Research.md` is
-the companion to §4 — every proposal in it was already filtered against
-CLAUDE.md's non-negotiables, so it is the right place to look before redesigning
-part of the engine.
+The four live docs are at the root; everything under **`docs/history/`** is a
+point-in-time study that fed them and **loses to this file on any disagreement**.
+They were moved there because they had started competing: 2,100 lines describing a
+past state, sitting alongside the four that describe the present. `DOCUMENTATION.md`
+was a twelve-line tombstone pointing here, and is gone.
 
-`AUDIT.md` is a summary; its five detail files live in **[`audit/`](audit/)**
-(`findings-{security,data,performance,ui-code,visual}.md`) and are the only other
-tracked docs in the repo.
+For *why the maths is the way it is* rather than *what it does*,
+`docs/history/Research.md` is the companion to §4 — every proposal in it was already
+filtered against CLAUDE.md's non-negotiables, so it is the right place to look before
+redesigning part of the engine.
+
+`AUDIT.md` is a summary; its five detail files live beside it in
+**[`docs/history/audit/`](docs/history/audit/)**
+(`findings-{security,data,performance,ui-code,visual}.md`).
 
 ### Directories that are not source, and are not in git
 
@@ -314,12 +320,12 @@ This is what makes Danmu trustworthy. All pure math, all covered by tests.
 | `lib/device-tilt.ts` | Lens tilt at the shutter from `deviceorientation`, for the live-camera path only (EXIF has no tilt field). Reports a tilt only for an upright, unrolled phone — a wrong tilt is worse than none, since "none" is the level camera the engine already assumed. |
 | `lib/physics.ts` | Gravity/anchor rules — where a part sits (floor / ceiling / wall-mid / …), wall affinity + snap, support-under lookup for tabletop-prone items. |
 | `lib/layout-rules.ts` | **What each piece needs from the room, as geometry** — and the one table both the checker and the solver read. Roles (what a piece is *for*, which the catalog's shapes cannot say: `coffee-table` is used for both a 900 mm side table and an 1800 mm dining table, so height decides), access zones per functional side, functional relations between pairs, the room's own profile, and the route width the room is big enough to be asked for. Every number is derived from the piece it is about — a zone's depth is what the *activity* needs, its width comes from `dimMM`, and it lives in the piece's local frame — so resizing anything recalibrates by construction. |
-| `lib/clearance.ts` | Ergonomics checker over exact geometry: walkways, functional zones (storage fronts, bed sides, a table's seats, a desk's chair), door swings **and the route in from them**, windows kept unblocked, clashes, reachability, over-height. Every threshold comes from `layout-rules`; nothing is written twice — including `belongTogether`, which keeps the walkway rule off a pair the relation table put together: 450 mm between a sofa and its own coffee table is the figure the table asks for, and reporting it made the panel cry wolf about every correct living room (the solver's circulation term skips the same pairs). Reproducible findings, no AI. |
+| `lib/clearance.ts` | Ergonomics checker over exact geometry: walkways, functional zones (storage fronts, bed sides, a table's seats, a desk's chair), door swings **and the route in from them**, windows kept unblocked, clashes, reachability, over-height. Every threshold comes from `layout-rules`; nothing is written twice — including `belongTogether`, which keeps the walkway rule off a pair the relation table put together: 450 mm between a sofa and its own coffee table is the figure the table asks for, and reporting it made the panel cry wolf about every correct living room (the solver's circulation term skips the same pairs). Reproducible findings, no AI. Each finding carries a `rule: RuleKind` — the kind of thing that is wrong, as a value rather than as a prefix of its `id`, which is what lets the report ask `RULE_HANDLING` whether the solver could clear it. |
 | `lib/apertures.ts` | Turns wall-mounted `window` / `door` parts into rectangles in each wall's own 2D frame, which is all `THREE.Shape` needs to punch a hole (`Shape.holes` + Earcut — no CSG library). Pure, because the wall-local conversion is the part that goes wrong invisibly: get the tangent backwards and every opening mirrors about the middle of its wall. |
-| `lib/layout-score.ts` / `lib/layout-solve.ts` | `layout-rules` restated as **costs** rather than checks — collisions, doors and their approach, functional zones, windows, walkways, wall affinity, relations, alignment, balance — plus **inertia**, which charges for movement so a piece only moves if moving it buys something, and **navigability** over the clearance field for the handful of finalists. Then seeded simulated annealing over `(x, z, yaw)` of the unlocked pieces, with proposals that know the room's structure (snap to a wall, park beside the thing you belong to, face the screen, swap two pieces). Deterministic per seed; `mode: 'refit'` turns the inertia up to repair a layout after a resize rather than reinvent it. **Never writes `dimMM`** — it moves and turns, and the type it works in has no field a size could travel in. |
+| `lib/layout-score.ts` / `lib/layout-solve.ts` | `layout-rules` restated as **costs** rather than checks — collisions, doors and their approach, functional zones, windows, walkways, wall affinity, relations, alignment, balance — plus **inertia**, which charges for movement so a piece only moves if moving it buys something, and **navigability** over the clearance field for the handful of finalists. Then seeded simulated annealing over `(x, z, yaw)` of the unlocked pieces, with proposals that know the room's structure (snap to a wall, park beside the thing you belong to, face the screen, swap two pieces). Deterministic per seed; `mode: 'refit'` turns the inertia up to repair a layout after a resize rather than reinvent it. **Never writes `dimMM`** — it moves and turns, and the type it works in has no field a size could travel in. Restating a table is safe only while the restatements agree, so `tests/layout-conformance.test.ts` pins them to each other — see below. |
 | `lib/solar.ts` | NOAA / Meeus solar position — declination, equation of time, hour angle → altitude and azimuth, ~0.01°. No model, no network, no data file: pure astronomy, which is the one thing in this app a model could not do better. |
 | `lib/clearance-field.ts` | Circulation as a **field** rather than a list of pairs — see below. One 5 cm raster of the floor plus an exact Euclidean distance transform answers walkway width, reachability, turning space and crowding at once, and it also carries WHICH obstacle is nearest so a finding can name the pieces to select. |
-| `lib/dimension-ranges.ts` | `clampDims` — per-item sizing tiers (fixed / standard / flexible). **All sizes pass through this.** |
+| `lib/dimension-ranges.ts` | `clampDims` — per-item sizing tiers (fixed / standard / flexible). **All sizes pass through this**, including every size read out of a scene file (§6a). Also `ROOM_SIDE_M`, the one bound on a room's own side: the dims editor wrote `1` and `50` in a predicate and twice more into the sentences it shows, while `scene-store`'s wall-drag clamp independently held 40 — so a size you could type was a size a drag refused to reach. |
 | `lib/footprint.ts` | Footprint polygon math (preset shapes, containment, `offsetWall` / `wallOutwardNormal` for wall moves). The polygon — not `width`/`depth` — is the source of truth for room shape. |
 | `lib/wall-move.ts` + `lib/wall-actions.ts` | Moving a wall takes its furniture with it. The first is pure (who is attached, where they land); the second is the single action every wall-mover calls, spanning both stores. |
 | `lib/room-bays.ts` | **Where in the room there is actually room.** The footprint's maximal axis-aligned rectangles of real floor, largest first, plus each bay's sides (which of them are real walls, how deep the bay runs from each) and `splitBay` for putting two groups in one rectangle. Exact for rectilinear rooms — the candidate grid is the polygon's own vertex coordinates — and conservative for anything with a diagonal wall, since a candidate is only returned once it has been proved inside. This exists because arranging furniture against the polygon's *bounding box* furnished the quadrant an L / T / U cuts away: the starter scene put five of the L-shape's nine pieces outside the house. |
@@ -328,6 +334,38 @@ This is what makes Danmu trustworthy. All pure math, all covered by tests.
 On the detect page, `geoRefine` runs the geometry engine over **every** detection
 and manual box: geometry overrides AI dims/position; the AI contributes only
 label / category / a depth hint.
+
+### The checker and the solver are held to each other
+
+`clearance.ts` and `layout-score.ts` both restate `layout-rules.ts` — one as findings
+a user reads, one as costs an annealer descends. The docs and the code have said for
+a while that they must agree; nothing checked it, and the disagreement had already
+shipped once ("Suggest" parked a bed across a doorway and Room check reported the
+doorway as blocked). Neither module was wrong on its own terms, which is why no test
+of either one could have caught it.
+
+`tests/layout-conformance.test.ts` tests the relation instead. For each rule it holds
+a pair of layouts over the same pieces, differing only in placement, and asserts four
+things: the checker flags the rule in one, is quiet in the other, the solver's cost
+**for the term implementing that same rule** is strictly higher in the flagged one,
+and the total prefers the clean one. The per-term half is the point — comparing totals
+would pass on a layout that is merely worse for unrelated reasons and would not prove
+the two modules agree about *which* rule broke.
+
+The second half is a drift guard. Every issue family `clearance.ts` can emit is read
+out of its source and must appear in one classification table as either priced (with
+the cost term) or deliberately unpriced (with the reason). Three are legitimately
+unpriced and stay that way: `tall` is a fact about a piece's size and the solver has
+no field a dimension could travel in; `crowding` is a property of the whole room that
+no rearrangement fixes; `reach` / `cut-off` / `turning` are connectivity, priced by
+`navigabilityCost` over the finalists rather than per proposal. **Adding a check with
+no cost is allowed. Adding one silently is not** — a new finding fails the test until
+someone classifies it.
+
+One note for anyone extending it: the table is the *only* place a rule's cost term is
+named. An earlier draft let each fixture carry its own copy too, and pointing the door
+rule at a taste weight left every assertion green — the same duplication-that-drifts
+the file exists to police, reproduced inside it.
 
 ### Circulation is a field, not a list of pairs
 
@@ -714,15 +752,94 @@ chrome beside it.
 ### The studio top bar — three controls, no primary
 
 `Rooms / <name>` as a breadcrumb, the tab switcher, then `?` · room switcher ·
-**Export**. It was undo/redo, a room switcher, Rescan and Snapshot — with Snapshot
-styled as the primary action, which downloading a PNG is not. Undo/redo went to
-`CanvasView`, Rescan to the rail, and every "take this away with you" action
-collapsed into one `ExportMenu.tsx`: the 3D snapshot (3D tab only — it captures
-that view), the floor-plan PNG, and the furniture CSV. Those were three actions in
-three places at three visual weights, which is how you end up not knowing the
-other two exist.
+**Export**. It was undo/redo, a room switcher, Rescan, Save file and Snapshot — with
+Snapshot styled as the primary action, which downloading a PNG is not. Undo/redo went
+to `CanvasView`, Rescan to the rail, and every "take this away with you" action
+collapsed into one `ExportMenu.tsx`: the 3D snapshot (3D tab only — it captures that
+view), the floor-plan PNG, and the room itself as a `.danmu.json`. Those were three
+actions in three places at three visual weights, which is how you end up not knowing
+the other two exist. The scene file is last in the menu and labelled as the one you
+can open again, since that is what separates it from the two pictures.
+
+There is deliberately **no furniture CSV**. It existed, and was retired: a spreadsheet
+writer with formula-injection escaping is careful work aimed at the wrong target, and
+non-negotiable 6 forbids reinstating the carpenter spec — a parts list minus the
+prices is what that was. The Room panel's on-screen list and its plain-text **Copy**
+are what serve "communicate a plan", and they stay.
 
 ### Other studio tools
+- **"Will it fit?"** (`lib/fit-check.ts`, the `Will it fit` tab in `RoomTools.tsx`).
+  The gap between "I like this layout" and `PRODUCT.md`'s *confidence to commit* is one
+  question: does the sofa on the shop page go in THIS room, with what is already in it?
+  Type its W × D × H, say what kind of thing it is, and the geometry engine answers —
+  no backend, no scraping, no model.
+  It computes almost nothing itself: it asks `solveLayout` to seat the piece with every
+  existing piece **locked**, ends on `layout-settle` the way both scene paths do, then
+  asks `analyzeRoom` what it thinks and keeps the findings naming the candidate. Two
+  properties come free from composing it that way — the spot it suggests is one the room
+  report agrees with (which §4's conformance test pins), and a "no" is a no by the same
+  rules the rest of the app judges a room by. Locking is the premise, not an
+  optimisation: the user is asking whether the piece fits their room, not whether their
+  room could be rearranged around it, and **Suggest** is already the other question.
+  Four answers: **fits**, **tight** (it goes in, something is tighter than the
+  guidelines like), **no room** (and then it says the largest clear rectangle of floor
+  the room does have), and **too tall**, which is judged on its own because no
+  arrangement of the floor can help with a ceiling.
+  Two checks it makes itself rather than reading off the report, both because the two
+  have opposite error budgets — a panel must avoid crying wolf, a fit answer must avoid
+  a false yes. **Containment**, because the report has no finding for a piece that is
+  outside the room (`outside` is a cost with no checker counterpart); without it, a sofa
+  parked through the wall of a too-small room came back "fits". And **overlap**, because
+  the report's clash rule is a generous share of the smaller footprint so an ordinary
+  dining set is not called a collision; without it, a sofa 31% inside a bed came back
+  "a bit tight". The overlap gate defers to `sharesFloor`, whose polarity reads
+  backwards at a glance: TRUE means the pair MAY share the square metre (a chair tucked
+  under its table), so those are the ones to skip.
+  **Nothing is clamped on the way in.** `clampDims` gates sizes the app STORES, and it
+  belongs on **Put it there** — the path that adds the piece — not on the path answering
+  a question about a real product. A user who types the 2700 mm wardrobe off a spec
+  sheet and is told about a 2600 mm one has been lied to. The check reports
+  `outOfRange` instead, and placing says the size was brought into range.
+  Two things worth knowing about the search. The starting POINT matters more than the
+  RNG seed, because the inertia term charges for movement so every run from one origin
+  explores the same neighbourhood. Starts are spread over `room-bays`' rectangles of
+  real floor. Seeded only at the largest bay's centre, a dining chair in a room whose
+  table sits in that centre started inside its own anchor and every seed agreed on
+  burying it there — "no room" for a chair in a room with a table in it.
+  And the cost is bounded deliberately, because this runs on a button press. Eight
+  attempts at 400 anneal steps (`solveLayout`'s own 1600 is tuned for rearranging a
+  whole room; here one piece moves and the rest are locked), with a room report on the
+  four cheapest placements. Measured on a ten-piece room: 42 ms for an obvious yes and
+  ~330 ms for one it has to work at, against 1.3 s for the first version — which was
+  fourteen full-length solves with a report on every one, i.e. a frozen tab.
+  **Cost sorts the candidates; the report decides between them.** Those rankings are
+  not interchangeable, and swapping them cost a regression worth recording: for a pair
+  `sharesFloor` exempts — a dining chair and its table — the solver's cheapest answer
+  is the chair at the table's dead centre, since the relation distance is zero and the
+  overlap it exempts costs nothing, while the report calls that same placement a clash.
+  Ranking on cost alone therefore answered "no room" for a chair in a room with a table
+  in it, all over again.
+- **The room report offers, it does not just report** (`RoomTools.tsx` `CheckPanel`).
+  An earlier pass fixed how the panel *sounds* — findings badged FIX / TIGHT / NOTE
+  in tracked caps became "Worth fixing" / "A bit tight" / "Just so you know", which
+  is the same information said the way the rest of the product talks. What it could
+  *do* was still nothing: it named a problem, offered to select the pieces, and
+  stopped. The only way to act was the whole-room **Suggest** in the toolbar, which
+  is a bigger move than most findings deserve — it rearranges nine pieces to answer a
+  question about two.
+  So each finding the solver can act on carries **Try a fix**, which runs the same
+  solver confined to the pieces that finding names by locking everything else. That
+  confinement is the honest part: someone asking about one tight walkway has not
+  asked to have their room rearranged. When the confined solve finds nothing it says
+  so and names the wider move, rather than being a button that quietly does nothing.
+  **Which findings get one is not decided in the component.** `RULE_HANDLING` in
+  `lib/layout-score.ts` answers it, because that is already the table saying which
+  cost term implements each rule, and it distinguishes two questions that have
+  different answers: `reach` has no `scoreLayout` weight (it needs the clearance
+  field) yet is still fixable, because `solveLayout` scores it over the finalists
+  through `navigabilityCost`. Three findings deliberately get no button — a piece
+  taller than the room is a *size* and the solver cannot resize, a crowded room needs
+  a piece removed rather than moved, and nothing costs turning space at all.
 - **Adding furniture is ONE surface** (`CatalogPanel.tsx`) — a docked, non-blocking
   strip with the two ways in as tabs: **Catalog** (searchable, grouped, drag onto
   the 3D floor or click to drop at centre) and **Describe it** (local token search
@@ -753,6 +870,11 @@ other two exist.
   `lib/plan-export.ts`.
 - **Snapshot** (`lib/snapshot.ts`) — PNG of the 3D view (replaces the deleted
   photoreal render).
+- **The scene file** (`lib/scene-file.ts`, `components/studio/SceneFile.tsx`) —
+  `Save file` in the top bar writes the whole room as readable JSON
+  (`front-room.danmu.json`); `Open a file` on `/workspace` lands one as a **new**
+  room. See §6a — it is the app's only import path, and therefore its only
+  untrusted input.
 - **Undo/redo** (`lib/history.ts`, `UndoRedo.tsx`) — snapshots cover parts, room
   and transforms.
 - **Item-to-item snapping** (`lib/item-snap.ts`).
@@ -825,7 +947,7 @@ undo — see `lib/storage.ts`).
 ### State stores
 | Store | File | Holds |
 |---|---|---|
-| `useStudio` | `lib/store.ts` | selection, wall selection, positions/rotations/dims, lighting, quality, dressed, snap, open state, hidden, grid, view preset. **Only the view *preferences* persist** (`lighting`, `quality`, `dressed`, `snapMode`, `showGrid` → `danmu-studio-prefs`, via `partialize`). Selection / camera / open drawers are ephemeral; transforms and `hidden` are per-room and owned by `RoomSync`. |
+| `useStudio` | `lib/store.ts` | selection, wall selection, positions/rotations/dims, lighting, quality, dressed, snap, open state, hidden, grid, view preset. **Only the view *preferences* persist** (`lighting`, `quality`, `dressed`, `snapMode`, `showGrid` → `danmu-studio-prefs`, via `partialize`). Selection / camera / open drawers are ephemeral; transforms and `hidden` are per-room and owned by `RoomSync`. **Never read the transform maps directly** — see "Two layers, one fallback" below. |
 | `useSettings` | `lib/store.ts` | apiKey, dimUnit (the one display unit — a dead `units` metric/imperial flag was removed), key-valid cache. Persisted to localStorage (`danmu-settings`). |
 | `useRoom` | `lib/store.ts` | active room id. Persisted (`danmu-room`). |
 | `useScene` | `lib/scene-store.ts` | scene parts CRUD + group/ungroup + room. |
@@ -841,20 +963,22 @@ undo — see `lib/storage.ts`).
 | `lib/scene-store.ts` | Scene parts CRUD + grouping. |
 | `lib/storage.ts` | IndexedDB room persistence (`RoomData`, `wallColors`, `footprint`, per-room `hidden`, `version`). Deleting a room is a **soft delete** — keys move under `trash:{ts}:` and `restoreRoom` undoes it; `purgeTrash` expires them after 30 days and `destroyRoom` is the irreversible path. A `room:{id}:touched` key carries the real `updatedAt`. **`meta` is retired first on delete and written last on restore**: there is no transaction across keys, and `listRooms` decides visibility from `meta`, so ordering it this way makes the visible state flip exactly once instead of leaving a room that appears in the workspace and opens empty. `restoreRoom` refuses when a live room already holds the id. Each detection carries a `uid`, which becomes its ScenePart id so a user's transforms survive a re-detect; records written before that fall back to the positional `${category}-${n}`. |
 | `lib/scene-palette.ts` | Scene-side semantic colours — the one home for values the 3D layer, the canvas exports and the panels that edit them must agree on, since neither Three.js materials nor a 2D canvas can read a CSS custom property. Exports `SCENE` (selection / hover / locked / shell), `PLAN` (the floor-plan PNG's palette) and `defaultBodyColor(category, shape)`. Kept in sync with `globals.css` by hand, guarded by a test. **`defaultBodyColor` takes BOTH arguments**: within one category the shapes do not match (a dining chair is walnut, an office chair charcoal), and the renderer and the Inspector's "Default for this piece" swatch must return the same value. The predecessor took a single loosely-typed `category` and was keyed on material-group names, so 18 of 22 categories fell through to one tan default. |
-| `lib/room-scene.ts` | Build a scene from a room / detections. |
+| `lib/fit-check.ts` | **Will this actually fit?** `checkFit` seats one candidate with everything else locked and reports one of four answers with the room report's own reasons. Pure; see §5. |
+| `lib/transforms.ts` | **Where a piece actually is.** `resolvePart` / `resolveParts` merge the authored transform on `ScenePart` with the user's `useStudio` override, and this is the ONLY place that fallback is written — see below. Pure, no React, so the scene file and the wall mover resolve exactly the way the renderer does. |
+| `lib/room-scene.ts` | The React half of the above: `useRoomScene` (whole scene, memoised), `useRoomPart`, `usePartTransform` (one part, narrow subscription, for `Draggable` and `Dressing`), `useHasOverrides`, and `currentRoomScene()` for pointer handlers. The row here used to say "build a scene from a room / detections", which is `scene-spec`'s job, not this module's. |
 | `lib/textures.ts` | Procedural normal/roughness maps (offline, zero assets). |
 | `lib/light-units.ts` | Lumens → candela (isotropic and in-cone), and kelvin → sRGB via the Planckian locus. Pure and tested — the interface between how a lamp is described and how three renders it. |
 | `lib/themes.ts` | One-tap restyle palettes. |
-| `lib/product-presets.ts` | Real-product size presets. |
+| `lib/product-presets.ts` | Real-product size presets — the data half of "will it fit?", quoted from manufacturer spec sheets. Read by the fit panel's fill-in chips as well as the catalog. |
 | `lib/capture.ts` / `lib/image-quality.ts` / `lib/color-sample.ts` | Photo capture + quality + colour sampling. `capture.ts` also owns **photo normalisation**: every photo entering the app is re-encoded to ≤1600 px on its long edge (`normalizePhoto`) and screened against a raster allowlist (`isAcceptedPhoto` — `image/*` also matches SVG, which has no pixels to measure). Nothing downstream wants more resolution, and four untouched 12 MP uploads exceeded the detection endpoint's inline-request ceiling. It also **strips metadata** on the passthrough path via `lib/jpeg-strip.ts` — see §3. |
 | `lib/jpeg-strip.ts` | Removes EXIF (APP1), IPTC (APP13) and comment segments from a JPEG by byte surgery, so the image data is copied verbatim and the passthrough optimisation survives. Keeps JFIF density and the **ICC colour profile** — neither identifies anyone, and dropping the profile would shift the colours this app exists to get right. Returns the input untouched for anything it cannot parse: a photo that kept its metadata is a smaller problem than a photo we corrupted. **Read anything you need out of EXIF before calling it** — the focal length a future calibration pass wants lives in the segment this deletes. |
 | `lib/color.ts` | Colour arithmetic: WCAG contrast, and OKLab as a space where "same colour" means something. `globals.css` states a ratio next to almost every token and `CLAUDE.md` turns those into a rule, but nothing checked any of it — a comment claiming a ratio is a comment. It also lets `scene-palette.ts`' hand-copied duplicates be compared perceptually rather than by string equality, which is brittle one way and blind the other. |
 | `lib/drag-live.ts` | The high-frequency drag channel, deliberately **outside** `useStudio` — see §5. |
 | `lib/mesh-cache.ts` | Local GLB cache behind `CachedMesh.tsx`, which renders `null` while loading and expects the caller to keep the primitive shape up as a placeholder. `three-stdlib`'s `GLTFLoader` is browser-only, so both must stay client components. |
-| `lib/exports.ts` | Everything a "take this away with you" path needs. **`applyTransforms` is the load-bearing one**: the overrides in `useStudio` are the layer that wins, so an export built straight from `useScene` silently ships the room as it was *before* anyone arranged it — and that mapping had accumulated four copies. It takes an overrides bag rather than reading the store, so a saved layout's transforms go through the same precedence as the live ones. Also owns `fileSlug` and the one `furnitureCsvBlob`: the CSV existed twice, with a Qty-aggregated schema in the Room panel and a flat per-instance one in the export menu, **both writing `<room>-furniture.csv`**. Aggregated won — the file exists to be taken shopping. Tested in `tests/exports.test.ts`. |
+| `lib/scene-file.ts` | The `.danmu.json` scene file — build, serialise, and defensively parse. The app's only import path and so its only untrusted input; see §6a. `buildSceneFile` bakes the studio's transform overrides so the file holds one truth per piece, and `parseSceneFile` never throws: it returns a reason, or a file plus the list of what it dropped. Its filename comes from `exports.ts`' `fileSlug`. |
+| `lib/exports.ts` | **What to call a file the user is taking away** — `fileSlug`, and nothing else. The three downloads each named themselves: the scene file slugged the room's name with a length cap, the export menu slugged it without one, and the floor plan did not slug at all — it was `floor-plan.png` every time, so exporting three rooms left three files the browser silently numbered `(1)` and `(2)`. The cap earns its place too: a 300-character room name produces a filename the OS may refuse to write, which surfaces as a download that did nothing. Two things are deliberately NOT here — the furniture CSV (retired; see the top bar above) and the transform merge (that is `lib/transforms.ts`, enforced by `tests/room-scene.test.ts`). Tested in `tests/exports.test.ts`. |
 | `lib/units.ts` | Unit conversion (persistence always mm). |
 | `lib/dates.ts` | Timestamp formatting — the counterpart to `units.ts`. Relative `editedLabel`, absolute `savedLabel`, and the workspace's recency buckets. |
-| `lib/csv.ts` | CSV writing that a spreadsheet opens correctly and does not execute: formula-injection escaping, quoting, CRLF, UTF-8 BOM. |
 | `lib/use-media-query.ts` | The one `matchMedia` hook. `useMediaQueryState` also returns `ready`, for callers that pick a whole layout and must not paint the wrong one first. |
 
 ### Two shells, and what each route stands in
@@ -922,6 +1046,42 @@ target in a way an explicit Back button is not. Do not "fix" detect's to match.
 | `DocShell.tsx` | The document-route shell — see above. Takes `trail` (the breadcrumb), `actions`, `back`, `measure` (`page` \| `prose`) and `variant` (`plain` \| `hero`). |
 | `Confirm.tsx` · `ColorPicker.tsx` | Promise-based confirm modal; HSV picker. Both exist to keep an OS widget out of the UI. |
 
+### Two layers, one fallback
+
+A part's transform lives in two places, and it is meant to:
+
+| Layer | Holds |
+|---|---|
+| `useScene.parts` → `ScenePart.pos/rot/dimMM` | The **authored** scene — where `defaultScene` put a piece, or where the geometry engine resolved a detection to. |
+| `useStudio.positions/rotations/dims` | The user's **edits**, keyed by part id. These win. |
+
+**Do not collapse them.** The path that needs the separation is easy to miss: dragging
+a piece writes *only* the override map, so a detected room whose furniture the user
+has only moved carries overrides and **no scene snapshot at all**. Re-scanning then
+rebuilds `parts` from the new detections while those moves re-apply by id — which is
+what `storage.ts` means by "each detection carries a `uid` … so a user's transforms
+survive a re-detect". Folding the maps into `ScenePart` takes that survival with them,
+and any way to say "put this piece back where it was found".
+
+What the separation must **not** be is open-coded. `positions[p.id] ?? p.pos` written
+by hand is a silent bug the moment one of the three lines is forgotten: the piece
+renders, the numbers look plausible, and it is simply in the wrong place.
+`lib/room-scene.ts` had already declared itself the one place that merge happens —
+and four files used it while **thirteen** wrote the fallback out again, because the
+un-memoised version rebuilt the whole array on every render of every consumer and the
+hot paths could not afford it.
+
+So: the merge lives in `lib/transforms.ts` (pure) with memoised hooks over it in
+`lib/room-scene.ts`, and `tests/room-scene.test.ts` sweeps `app/`, `components/` and
+`lib/` for a hand-written fallback and fails on one. It found the thirteenth site
+itself — a shadow-camera fit in `Room.tsx` that grep had missed — which is the
+argument for the sweep over a comment.
+
+Reading a raw override *without* the fallback is still legitimate and stays allowed,
+because sometimes the question really is "has this been overridden": `Draggable` and
+`DynamicPart` divide a stored dim by the **authored** `dimMM` to get a scale factor,
+and the resolved value cannot express that (it would always be 1).
+
 ### Data flow (decoration loop)
 `scene-spec` defines a part → `scene-store` holds the instance → `Room` renders
 each part via `DynamicPart` (geometry) + `Dressing` (decor sibling) → `Pickable`
@@ -937,8 +1097,89 @@ debounce does not drop the last edit.
 
 ---
 
+## 6a. The scene file — `lib/scene-file.ts`
+
+A room lives in one browser's IndexedDB and nowhere else. That is the privacy
+promise working correctly, and it is also why two of the four success cases in
+`PRODUCT.md` had nothing to stand on: you could not show a layout to a partner or a
+landlord, and you could not survive the browser evicting its storage. A file answers
+both without a server.
+
+`Save file` (studio top bar, both tabs) → `front-room.danmu.json`. `Open a file`
+(`/workspace` chrome bar and its empty state) → a **new** room, never a replacement
+for the one you have open, because `roomStore.importScene` mints its own id.
+
+### What travels
+
+The room — name, footprint polygon, wall paint, site — and every piece with its
+size, position, rotation, colour, finish, decor and light. Transforms are **baked**:
+in the running app a part's position lives in both `ScenePart.pos` and
+`useStudio.positions`, reconciled by an unwritten "overrides win", and a file is the
+one place that ambiguity can be resolved rather than propagated. What the user is
+looking at is what gets written; `sceneFileToRoom` puts it back with empty override
+maps.
+
+### What deliberately does not
+
+- **The photographs.** `Capture` blobs stay behind, and this is the decision in the
+  format worth defending. A file exists to be sent to someone; the captures are
+  pictures of the inside of the user's home. Everything else in a room describes
+  furniture — the captures describe a place. Shipping them would mean the first time
+  anyone shared a layout they would also, invisibly, share photos of their living
+  room. (They are large, too, and the geometry has already been extracted.)
+- **`detectedObjects`** and per-part **`fromDetection`** — the photo pipeline's
+  intermediate representation, carrying boxes into images the file does not contain.
+  The parts *are* their resolved output.
+- **`meshHash`** — a key into the exporting browser's mesh cache, which the importing
+  one has no entry for. Honouring it would render nothing where a sofa should be, so
+  the piece falls back to its procedural `shape`.
+- **`id` / `createdAt`** — they describe a record in somebody's IndexedDB, not a room.
+
+### A file is untrusted input, and is treated exactly like an AI hint
+
+This is the first thing in the app that parses bytes a stranger produced, so the
+trust boundary of §4 applies with the same force: **a number from outside the
+geometry engine is a hint.** Every imported size goes through `clampDims`; every
+shape and category is checked against the runtime vocabularies (`SHAPES`,
+`CATEGORIES`, `DECOR_KINDS`, `FINISHES` in `scene-spec.ts`, `LAYOUT_IDS` in
+`storage.ts`); every colour must match `#rrggbb` before it reaches a Three.js
+material or a style attribute; and file length, part count, polygon vertices, string
+lengths and light units are all bounded, because "the user picked this file" is not a
+promise about its contents. `1e400` is the case worth remembering: JSON has no
+`Infinity` literal but that expression parses to one, and an infinite coordinate
+turns every comparison false and every matrix `NaN` without throwing anywhere.
+
+**Those vocabularies are `as const` arrays with the unions derived from them**, not
+unions with a parallel `Set`. A validator that can fall behind the type it validates
+would drift silently in the worst direction — quietly refusing a shape the app grew
+last week.
+
+The parse is **lossy on purpose and never silent**. An unknown shape drops the piece
+rather than guessing at it; an unreadable colour drops the field and keeps the piece;
+a broken footprint falls back to the layout preset. Every one of those is reported in
+`dropped`, which the import toast shows and makes sticky. Refusing a whole file over
+one bad field would make a version skew unrecoverable — and pretending nothing was
+lost is the other failure.
+
+A file whose `version` is *newer* than `SCENE_FILE_VERSION` is refused by naming the
+skew ("saved by a newer version of Danmu"), because the fix is on this side and the
+user cannot infer that from "invalid file". Older files are read: every change so far
+is additive, the same contract `RoomData` lives under.
+
+### Write order
+
+`importScene` writes the furniture first and `meta` **last**, mirroring `restoreRoom`
+for the same reason — there is no transaction across keys and `listRooms` decides a
+room exists by its `meta`, so an interrupted import leaves orphaned payload keys
+rather than a room that lists in the workspace and opens empty
+(`tests/storage-ordering.test.ts`).
+
+---
+
 ## 7. Known limitations
 - Group transforms are **move-only** (no rotate/scale-as-one yet).
+- A scene file carries no photos, so a captured room round-trips as furniture and
+  dimensions only — re-detecting needs the original device. This is deliberate (§6a).
 - WebXR / true measurement calibration deferred; 4-wall capture only.
 - The CC0 GLB library (`LibraryPicker` / `mesh-cache`) is a work in progress —
   most furniture is still procedural.
@@ -952,7 +1193,8 @@ debounce does not drop the last edit.
 - Bundle a curated **CC0 GLB library** for higher-fidelity pieces.
 - More parametric shapes + richer decor kinds.
 - Multi-room projects / rooms dashboard.
-- Export polish (image / layout / shareable scene file).
+- Export polish — the scene file and both PNG exports have shipped; what is left is
+  a nicer share affordance around them.
 
 > **Explicitly NOT planned:** reintroducing AI image generation (render / compose
 > / compare / share) or the carpenter spec / cutlist / build-cost feature. Both
@@ -968,11 +1210,65 @@ pnpm dev          # http://localhost:3000
 pnpm typecheck    # tsc --noEmit
 pnpm test         # vitest run — pure logic, plus the jsdom files (storage*, history)
 pnpm build        # next build
+pnpm lint         # eslint . --max-warnings 0 — `next lint` is gone in Next 16
+                  # flat config; ESLint must stay >= 9 or `next build` lints nothing
 pnpm audit        # dependency advisories; transitive fixes live in pnpm.overrides
 pnpm vendor:ort   # copy onnxruntime-web into public/ort/ so it loads same-origin
 pnpm hash:models  # print SHA-256 digests of public/models/ for MODEL_DIGESTS
 pnpm hash:models --verify   # …and check the mirror serves the same bytes (~62 MB)
 ```
+
+`.github/workflows/ci.yml` runs the first four on every push to `main` and every
+pull request. One job, `contents: read`, no secrets — a local-first app with no
+backend has nothing to give a build. Node is 22 and pnpm comes from
+`packageManager`, so CI does not carry a second copy of either version.
+
+The build step reads its **output** as well as its exit code, because
+`next build` runs an ESLint pass of its own that can fail while the build still
+exits 0 — an ESLint below 9 gets handed eslintrc options and lints nothing, and a
+config that ignores `*.config.mjs` hides itself from Next's plugin detection.
+`tests/toolchain.test.ts` asserts both invariants directly, so they fail in
+`pnpm test` before CI ever sees them.
+
+Next's build cache (`.next/cache`) is carried between runs, keyed on the lockfile
+plus the sources a build reads — not `**/*.ts`, which would hash `node_modules`
+as well. On the runner that takes the compile step from 17.1 s to 4.0 s; locally,
+from 110 s to 14 s.
+
+### Offline
+
+The app was always offline-*tolerant* — pull the network mid-session and the
+geometry engine, the solver, the room report and IndexedDB keep working, because
+none of them fetch. What failed was a **reload**: the browser had nowhere to get
+the document from, so it showed its own error page for an app that needed no
+network. `public/sw.js` closes that, and `app/manifest.ts` makes the result
+installable.
+
+| Request | Strategy | Why |
+|---|---|---|
+| Cross-origin | **not intercepted** | Gemini, the ORT CDN, the weights. A cache is storage; storing those is not the worker's business. |
+| `/_next/static/*` | cache-first | Content-hashed, so a URL match is always the right bytes. |
+| Navigations | network-first, then this exact URL, then `/` | A reload of `/room/<id>/model` must come back as that room, not the home page. |
+| Other same-origin | network-first, cache fallback | The manifest, the icon, RSC payloads for client-side navigation. |
+
+Verified in a real browser rather than reasoned about: after an offline reload of
+the studio, the room panel renders **identically** to online — same clear-floor
+percentage, same verdict — with no console errors. Non-GET and `Range` requests
+are passed through untouched.
+
+Two limits, both deliberate. **The first visit must be online**: there is no
+build-time precache manifest, because a hand-written file in `public/` cannot know
+Next's content-hashed chunk names, and generating one means writing into `public/`
+after a build that the target hosts have already snapshotted — it would work
+locally and ship empty. And **no `skipWaiting()`**: a new deployment's chunks do
+not match the old document, so the new worker waits for the next load rather than
+serving a half-updated app to someone mid-arrangement.
+
+`tests/service-worker.test.ts` runs the worker in a small
+`ServiceWorkerGlobalScope` (`tests/helpers/sw-harness.ts`) with a network that can
+be told to fail, so the strategy is tested as behaviour. Every assertion was
+mutation-checked — which is how a redundant `cache.match` in the navigation
+fallback was found to be dead code and removed.
 
 ### Third-party bytes, and the headers that bound them
 

@@ -108,7 +108,7 @@ export function obbIntersectionArea(a: OBB, b: OBB): number {
  *  Never greater than the true gap — so `> 0` proves they do not touch, and a
  *  caller that only cares about things within a threshold can reject the rest for
  *  a few flops instead of an exact test. */
-export function gapLowerBound(a: OBB, b: OBB): number {
+function gapLowerBound(a: OBB, b: OBB): number {
   return (
     Math.hypot(b.cx - a.cx, b.cz - a.cz) - Math.hypot(a.hw, a.hd) - Math.hypot(b.hw, b.hd)
   );
@@ -117,7 +117,7 @@ export function gapLowerBound(a: OBB, b: OBB): number {
 /** Area shared by two CONVEX polygons, both counter-clockwise. The general form
  *  of the above — a round footprint is a many-sided convex polygon, and the clip
  *  does not care how many sides it has. */
-export function polyIntersectionArea(subject: Vec2[], clip: Vec2[]): number {
+function polyIntersectionArea(subject: Vec2[], clip: Vec2[]): number {
   let poly = subject;
   for (let i = 0; i < clip.length && poly.length > 0; i++) {
     const [ex, ez] = clip[i];
@@ -205,7 +205,7 @@ export function obbGap(a: OBB, b: OBB): number {
   return best;
 }
 
-export function distPointToSegment(p: Vec2, a: Vec2, b: Vec2): number {
+function distPointToSegment(p: Vec2, a: Vec2, b: Vec2): number {
   const abx = b[0] - a[0];
   const abz = b[1] - a[1];
   const len2 = abx * abx + abz * abz;
@@ -327,7 +327,7 @@ export function pointInPoly(x: number, z: number, poly: Poly): boolean {
 /** Distance from (x,z) along unit direction (dx,dz) to the first entry into `b`,
  *  or Infinity if the ray never enters it. Analytic slab test in the OBB's own
  *  frame — exact, and constant-time. */
-export function rayToObb(x: number, z: number, dx: number, dz: number, b: OBB): number {
+function rayToObb(x: number, z: number, dx: number, dz: number, b: OBB): number {
   // World → OBB local, i.e. `worldToLocal`, inlined for both the origin and the
   // direction rather than allocating two pairs per ray.
   const c = Math.cos(b.rot);

@@ -4,7 +4,6 @@ import {
   frontVector,
   localToWorld,
   worldToLocal,
-  obbFromPart,
   obbCorners,
   obbOverlap,
   obbIntersectionArea,

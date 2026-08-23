@@ -1,5 +1,15 @@
 // Colour arithmetic — contrast, and a perceptual space to reason in.
 //
+// **This is test infrastructure, not product code.** It lives under `tests/`
+// because that is the truth of who calls it: its only consumer is
+// `tests/color-tokens.test.ts`, which holds `app/globals.css` to the contrast
+// ratios it states in its own comments. It sat in `lib/` for a while looking like
+// a runtime module, which is a standing invitation to import it into a component
+// and then wonder why the palette maths is untested from the app's side. If the
+// app ever needs perceptual colour — generated harmonies, an auto-readable label
+// colour over a user's hex — promote it back to `lib/` deliberately, with tests
+// that cover the app's use rather than the stylesheet's.
+//
 // Two jobs, both of which the codebase was doing in prose.
 //
 // **Contrast.** `app/globals.css` states a ratio next to almost every token
@@ -73,7 +83,7 @@ export function over(fg: Rgb, alpha: number, bg: Rgb): Rgb {
 
 // ─── OKLab / OKLCH ──────────────────────────────────────────────────────────
 
-export function rgbToOklab(c: Rgb): Oklab {
+function rgbToOklab(c: Rgb): Oklab {
   const r = toLinear(c.r);
   const g = toLinear(c.g);
   const b = toLinear(c.b);
@@ -87,7 +97,7 @@ export function rgbToOklab(c: Rgb): Oklab {
   };
 }
 
-export function oklabToRgb(c: Oklab): Rgb {
+function oklabToRgb(c: Oklab): Rgb {
   const l = (c.L + 0.3963377774 * c.a + 0.2158037573 * c.b) ** 3;
   const m = (c.L - 0.1055613458 * c.a - 0.0638541728 * c.b) ** 3;
   const s = (c.L - 0.0894841775 * c.a - 1.291485548 * c.b) ** 3;
@@ -98,12 +108,12 @@ export function oklabToRgb(c: Oklab): Rgb {
   };
 }
 
-export function oklabToOklch({ L, a, b }: Oklab): Oklch {
+function oklabToOklch({ L, a, b }: Oklab): Oklch {
   const h = (Math.atan2(b, a) * 180) / Math.PI;
   return { L, c: Math.hypot(a, b), h: h < 0 ? h + 360 : h };
 }
 
-export function oklchToOklab({ L, c, h }: Oklch): Oklab {
+function oklchToOklab({ L, c, h }: Oklch): Oklab {
   const rad = (h * Math.PI) / 180;
   return { L, a: c * Math.cos(rad), b: c * Math.sin(rad) };
 }

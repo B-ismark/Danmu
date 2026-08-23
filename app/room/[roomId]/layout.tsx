@@ -32,12 +32,14 @@ export default function StudioLayout({ children }: { children: ReactNode }) {
     <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--paper)' }}>
       <TopBar
         centerSlot={<div style={{ marginLeft: 16 }}><StudioTabs /></div>}
-        // Four controls became three, and none of them claims to be the primary
+        // Five controls became three, and none of them claims to be the primary
         // action any more. Undo/redo moved to the canvas's top-right with the view
         // controls (where Drafted groups it); Rescan moved into the rail's Room
         // section, because it changes what is IN the room rather than how the app
-        // is framed; and Snapshot is one item inside Export, since downloading a
-        // PNG is not the primary verb of a decoration app.
+        // is framed; and Snapshot, the plan PNG, the furniture CSV and the scene
+        // file are all items inside Export — downloading a PNG is not the primary
+        // verb of a decoration app, and four sibling download buttons is how you
+        // end up not knowing the other three exist.
         right={
           <>
             <StudioHelp />

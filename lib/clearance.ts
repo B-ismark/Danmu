@@ -49,12 +49,19 @@ import {
   zoneExempt,
   WALK_MIN,
   type AccessRule,
+  type RuleKind,
 } from './layout-rules';
 
 export type ClearanceSeverity = 'error' | 'warn' | 'info';
 
 export type ClearanceIssue = {
   id: string;
+  /** Which of `layout-rules`' rules this is, as a value rather than a prefix of
+   *  `id`. The id is built for React keys and uniqueness; anything that needs to
+   *  BRANCH on the kind of finding — the report deciding whether to offer a fix,
+   *  `lib/layout-score.ts`'s `RULE_HANDLING` deciding what the solver can do about
+   *  it — reads this instead of parsing that. */
+  rule: RuleKind;
   severity: ClearanceSeverity;
   title: string;
   detail: string;
@@ -234,6 +241,7 @@ export function analyzeRoom(
       if (blockers.length > 0) {
         issues.push({
           id: `door-${door.id}`,
+          rule: 'door',
           severity: 'error',
           title: 'Door can’t open fully',
           detail: `${blockers.map((b) => b.name).join(', ')} ${blockers.length === 1 ? 'sits' : 'sit'} inside the ${Math.round(swing.rule.depth * 100)} cm swing of “${door.name}”.`,
@@ -254,6 +262,7 @@ export function analyzeRoom(
     if (inTheWay.length > 0) {
       issues.push({
         id: `entry-${door.id}`,
+        rule: 'entry',
         severity: 'warn',
         title: 'The way in is blocked',
         detail: `${inTheWay.map((b) => b.name).join(', ')} ${inTheWay.length === 1 ? 'stands' : 'stand'} in the ${Math.round(route * 100)} cm route in from “${door.name}”.`,
@@ -295,6 +304,7 @@ export function analyzeRoom(
       if (smaller <= 0 || shared / smaller < clashShare(a, b)) continue;
       issues.push({
         id: `clash-${a.id}-${b.id}`,
+        rule: 'clash',
         severity: 'error',
         title: 'Two pieces in the same place',
         detail: `“${a.name}” and “${b.name}” overlap on the floor — one of them has to move before this arrangement is real.`,
@@ -337,6 +347,7 @@ export function analyzeRoom(
       if (gap - band <= 0.12 || gap + band >= MIN_WALKWAY) continue;
       issues.push({
         id: `walk-${a.id}-${b.id}`,
+        rule: 'walk',
         severity: 'warn',
         title: 'Tight walkway',
         detail: `Only ${Math.round(gap * 100)} cm between “${a.name}” and “${b.name}” — comfortable passage needs ${MIN_WALKWAY * 100} cm.`,
@@ -374,13 +385,17 @@ export function analyzeRoom(
       else entry.clear.push(zn.side);
       byRule.set(zn.rule.id, entry);
     }
-    for (const { rule, blocked, clear } of byRule.values()) {
-      if (clear.length >= rule.atLeast) continue;
+    // `access`, not `rule`: the issue itself now carries a `rule` field, and having
+    // an AccessRule of that name a line above `rule: 'zone'` reads like a bug even
+    // when it is not one.
+    for (const { rule: access, blocked, clear } of byRule.values()) {
+      if (clear.length >= access.atLeast) continue;
       issues.push({
-        id: `${ZONE_ISSUE_ID[rule.id] ?? rule.id}-${p.id}`,
+        id: `${ZONE_ISSUE_ID[access.id] ?? access.id}-${p.id}`,
+        rule: 'zone',
         severity: 'warn',
-        title: ZONE_TITLE[rule.id] ?? 'Not enough room to use it',
-        detail: zoneDetail(p, rule, blocked.length, clear.length, me, others, poly),
+        title: ZONE_TITLE[access.id] ?? 'Not enough room to use it',
+        detail: zoneDetail(p, access, blocked.length, clear.length, me, others, poly),
         partIds: [p.id],
       });
     }
@@ -403,6 +418,7 @@ export function analyzeRoom(
       if (blockers.length === 0) continue;
       issues.push({
         id: `window-${win.id}`,
+        rule: 'window',
         severity: 'warn',
         title: 'Window is blocked',
         detail: `${blockers.map((b) => b.name).join(', ')} ${blockers.length === 1 ? 'stands' : 'stand'} in front of “${win.name}” and ${blockers.length === 1 ? 'rises' : 'rise'} above its ${Math.round(zn.rule.aboveY * 100)} cm sill.`,
@@ -429,6 +445,7 @@ export function analyzeRoom(
     if (nd < diag * 1.0) {
       issues.push({
         id: `tv-${tv.id}`,
+        rule: 'tv',
         severity: 'warn',
         title: 'Sitting too close to the TV',
         detail: `“${nearest.name}” is ${nd.toFixed(1)} m from the ${Math.round((diag / 0.0254) * 10) / 10}″-class screen — comfortable viewing starts around ${(diag * 1.2).toFixed(1)} m.`,
@@ -437,6 +454,7 @@ export function analyzeRoom(
     } else if (nd > diag * 3.2) {
       issues.push({
         id: `tv-${tv.id}`,
+        rule: 'tv',
         severity: 'info',
         title: 'TV may feel small from the seat',
         detail: `“${nearest.name}” sits ${nd.toFixed(1)} m away — ideal range for this screen is ${(diag * 1.2).toFixed(1)}–${(diag * 2.5).toFixed(1)} m.`,
@@ -457,6 +475,7 @@ export function analyzeRoom(
     if (h <= room.height) continue;
     issues.push({
       id: `tall-${p.id}`,
+      rule: 'tall',
       severity: 'error',
       title: 'Taller than the room',
       detail: `“${p.name}” is ${Math.round(h * 100)} cm tall and the ceiling is ${Math.round(room.height * 100)} cm — it will not stand up in here. Danmu keeps the real size rather than shrinking it for you.`,
@@ -470,6 +489,7 @@ export function analyzeRoom(
   if (freeFloorShare < 0.4) {
     issues.push({
       id: 'crowding',
+      rule: 'crowding',
       severity: 'warn',
       title: 'Room is getting crowded',
       detail: `Furniture covers ${Math.round((1 - freeFloorShare) * 100)}% of the floor — most rooms breathe best under 50%.`,
@@ -491,7 +511,9 @@ export function analyzeRoom(
   const entrance = field ? entranceComponents(field, parts) : null;
   if (field && field.componentCount > 1 && entrance) {
     const reachable = entrance;
-    const stranded = solid.filter((p, i) => {
+    // Index only — `solidObbs` is built from `solid` and stays index-aligned with it,
+    // so the footprint is looked up by position rather than taken off the part.
+    const stranded = solid.filter((_, i) => {
       const near = componentsAround(field, solidObbs[i]);
       // Nothing walkable anywhere near it is "wedged in", not "unreachable" — a
       // stool in a corner reads that way and is perfectly reachable.
@@ -502,6 +524,7 @@ export function analyzeRoom(
     if (stranded.length > 0) {
       issues.push({
         id: 'reach',
+        rule: 'reach',
         severity: 'warn',
         title: 'You can’t walk to everything',
         detail: `${stranded.map((p) => `“${p.name}”`).join(', ')} ${stranded.length === 1 ? 'sits' : 'sit'} in part of the room that nothing connects to the door — every route in is under ${MIN_WALKWAY * 100} cm wide.`,
@@ -512,6 +535,7 @@ export function analyzeRoom(
     if (cutOff >= 1.5) {
       issues.push({
         id: 'cut-off',
+        rule: 'cut-off',
         severity: 'info',
         title: 'Part of the floor is cut off',
         detail: `About ${cutOff.toFixed(1)} m² of floor has no route to the door wider than ${MIN_WALKWAY * 100} cm.`,
@@ -530,6 +554,7 @@ export function analyzeRoom(
     if (diameter + field.cell < TURNING_DIAMETER) {
       issues.push({
         id: 'turning',
+        rule: 'turning',
         severity: 'warn',
         title: 'No room to turn a wheelchair',
         detail: `The largest clear circle in this room is about ${Math.round(diameter * 100)} cm across. A wheelchair needs ${TURNING_DIAMETER * 100} cm to turn on the spot.`,

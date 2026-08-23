@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import { defaultScene, buildSceneFromRoom, type ScenePart } from './scene-spec';
 import { ROOM as ROOM_DEFAULT } from './parts-catalog';
 import { footprintForLayout, offsetWall, footprintBounds, type Footprint, type LayoutId } from './footprint';
+import { ROOM_SIDE_M } from './dimension-ranges';
 import type { RoomData, Site } from './storage';
 
 export type RoomShape = {
@@ -22,9 +23,10 @@ export type RoomShape = {
   site?: Site;
 };
 
-/** Room resize clamps (metres) — match the dims editor's sane range. */
-const MIN_ROOM = 1.0;
-const MAX_ROOM = 40;
+// Room resize clamps come from `ROOM_SIDE_M`, the one place the bound is written.
+// The comment here used to say "match the dims editor's sane range" while holding a
+// max of 40 against the editor's 50 — so a size you could type was a size a wall
+// drag refused to reach, and neither number could be found from the other.
 
 type SceneState = {
   parts: ScenePart[];
@@ -152,7 +154,13 @@ export const useScene = create<SceneState>((set, get) => ({
     // that is on this wall by the SAME delta, and a rejected wall move with an
     // accepted furniture move would walk a sofa through the plaster one clamped
     // frame at a time.
-    if (b.width < MIN_ROOM || b.depth < MIN_ROOM || b.width > MAX_ROOM || b.depth > MAX_ROOM) return 0;
+    if (
+      b.width < ROOM_SIDE_M.min ||
+      b.depth < ROOM_SIDE_M.min ||
+      b.width > ROOM_SIDE_M.max ||
+      b.depth > ROOM_SIDE_M.max
+    )
+      return 0;
     set({ room: { ...s.room, footprint: poly, width: b.width, depth: b.depth, layoutId: 'custom' } });
     return delta;
   },

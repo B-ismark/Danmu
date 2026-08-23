@@ -11,6 +11,7 @@ import { ACESFilmicToneMapping, Raycaster, Vector2, Vector3, Plane, type Camera,
 import { v4 as uuid } from 'uuid';
 import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
+import { useRoomScene } from '@/lib/room-scene';
 import { placeNewPart, DND_MIME, type Category, type Shape } from '@/lib/scene-spec';
 import { footprintBounds } from '@/lib/footprint';
 import { sunPosition, sunDirection, daylightKelvin, localInstant } from '@/lib/solar';
@@ -440,16 +441,16 @@ function KeyLight({
 }) {
   const ref = useRef<DirectionalLight>(null);
   const footprint = useScene((s) => s.room.footprint);
-  const parts = useScene((s) => s.parts);
-  const dims = useStudio((s) => s.dims);
+  // Resolved, so a piece the user has stretched is measured at the size it is.
+  const parts = useRoomScene();
   const invalidate = useThree((s) => s.invalidate);
 
   const d = dir ?? KEY_DIR;
   const b = footprintBounds(footprint);
   // Tallest thing that actually casts — the ceiling does not, and the walls only
-  // receive. Honour a user's resize (`dims`) over the authored `dimMM`, or a
-  // stretched wardrobe would throw past the box fitted for its original height.
-  const tallest = parts.reduce((m, p) => Math.max(m, (dims[p.id] ?? p.dimMM)[2] / 1000), 0);
+  // receive. Read off the resolved parts, or a stretched wardrobe would throw past
+  // the box fitted for its original height.
+  const tallest = parts.reduce((m, p) => Math.max(m, p.dimMM[2] / 1000), 0);
   // Half the footprint diagonal covers the room from any light azimuth; the throw
   // term covers how far the tallest piece reaches at this light's elevation.
   // Quantised to 0.5m so dragging a wall re-fits in steps, not every tick.

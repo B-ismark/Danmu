@@ -22,7 +22,7 @@ import { useScene } from '@/lib/scene-store';
 // belong to a real phone rather than to this file.
 
 declare global {
-  // eslint-disable-next-line no-var
+  // `var` is load-bearing: only a var declaration lands on globalThis.
   var IS_REACT_ACT_ENVIRONMENT: boolean;
 }
 

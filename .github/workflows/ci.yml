@@ -1,0 +1,131 @@
+# The four gates, on every push to main and every pull request.
+#
+# There is no deploy step and nothing here needs a secret: Danmu is local-first,
+# the detection key is the user's own and lives in their browser, so a build has
+# nothing to be given. `permissions` is read-only for the same reason.
+#
+# Node and pnpm are not chosen here. `packageManager` in package.json pins pnpm
+# and Corepack honours it, so the version CI uses is the version the repo
+# declares — one place, not two that drift.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch makes the older run's answer worthless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    name: typecheck · lint · test · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      # v5 rather than v4 on both: v4 targets the Node 20 action runtime, which
+      # GitHub is deprecating — the runner already forces those steps onto Node 24
+      # and warns, so v4 is a failure with a date on it, not a working pin.
+      - uses: actions/checkout@v5
+
+      # Before setup-node, which needs pnpm on PATH to resolve its cache.
+      - name: Enable Corepack
+        run: corepack enable
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # `!cancelled()` rather than `always()`: one red gate should not hide the
+      # other three, but a cancelled run should stop.
+      - name: Typecheck
+        if: ${{ !cancelled() }}
+        run: pnpm typecheck
+
+      - name: Lint
+        if: ${{ !cancelled() }}
+        run: pnpm lint
+
+      - name: Test
+        if: ${{ !cancelled() }}
+        run: pnpm test
+
+      # Next's own build cache — without it every run rebuilds from cold and says
+      # so (`⚠ No build cache found`). `v5` for the same reason as the actions
+      # above: v4 targets the deprecated Node 20 runtime.
+      #
+      # The key is the lockfile plus the sources a build actually reads, NOT
+      # `**/*.ts` — that pattern would hash `node_modules` too, since this runs
+      # after the install. `restore-keys` is the point of the split: an ordinary
+      # source change misses the exact key and still starts from the last cache
+      # built against the same dependencies, rather than from nothing.
+      #
+      # Safe to reuse across runs because the cache is content-addressed — it
+      # holds compiler output keyed by input, so a stale entry is ignored rather
+      # than trusted. `actions/cache` saves it in a post step, and only when the
+      # job succeeded.
+      #
+      # Measured here rather than taken on faith. On this runner: 17.1s to
+      # compile with no cache, 4.0s on a hit. Locally, where the machine is
+      # slower and the contrast is starker, 110s cold against 14s with only
+      # `.next/cache` restored and the rest of `.next` deleted — which is
+      # exactly the state this step reconstructs, and why the local run is worth
+      # citing alongside the runner's own numbers.
+      #
+      # Nearly all of the on-disk ~230 MB is `cache/webpack`;
+      # `cache/eslint` and `cache/swc` are 64 KB and 12 KB, so there is nothing
+      # worth scoping out of the path.
+      #
+      # What counts against the 10 GB a repository gets is the *compressed*
+      # archive, not that on-disk figure: this one stores as 20 MB, next to the
+      # 254 MB the pnpm store cache already uses. So the Next cache is the cheap
+      # one here by an order of magnitude — worth knowing before anyone trims it
+      # to save space.
+      - name: Restore the Next build cache
+        if: ${{ !cancelled() }}
+        uses: actions/cache@v5
+        with:
+          path: .next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('app/**', 'components/**', 'lib/**', 'next.config.mjs', 'tsconfig.json') }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+
+      # `next build` runs its own ESLint pass over the same config, and two ways
+      # that pass can fail do NOT fail the build — it prints one line and exits
+      # 0. Both have happened here (an ESLint 8 / flat-config mismatch linted
+      # nothing; a `*.config.mjs` ignore entry hid the config from Next's plugin
+      # detection), and a green build is exactly what they look like. So the
+      # build's own output is read, not just its exit code.
+      #
+      # `tests/toolchain.test.ts` asserts the same two invariants structurally,
+      # which is the check that fails fast and locally; this one is the backstop
+      # for a *new* way of skipping the pass that no test anticipates yet.
+      - name: Build
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm build 2>&1 | tee build.log
+          if grep -qE 'ESLint: Invalid Options|plugin was not detected' build.log; then
+            echo "::error::next build ran its ESLint pass but the pass did not lint — see the line above. The build's exit code does not cover this."
+            exit 1
+          fi
+
+      # Advisory, and deliberately not a gate: an advisory published upstream
+      # overnight is not a defect in the pull request that happens to run next.
+      # Transitive fixes go in `pnpm.overrides`.
+      - name: Audit (advisory)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: pnpm audit

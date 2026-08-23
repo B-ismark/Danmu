@@ -1,85 +1,42 @@
-// What every "take this away with you" path needs, in one place.
+// What to call a file the user is taking away.
 //
-// Three things had accumulated copies: a slug for the filename, the mapping that
-// applies the user's live transforms, and a furniture CSV. The transform mapping
-// is the one that matters — an export built from the base parts silently ships
-// pre-drag geometry — and it had FOUR copies: the export menu, the plan page, the
-// Room panel's list, and the Inspector's snapshot. Four chances to hand someone a
-// floor plan of a room nobody arranged.
+// Three downloads leave the app — the 3D view as a PNG, the floor plan as a PNG, and
+// the room itself as a `.danmu.json` — and each of them was naming itself. The scene
+// file slugged the room's name with a length cap, the export menu slugged it without
+// one, and the floor plan did not slug anything at all: it downloaded as
+// `floor-plan.png` every time, so exporting three rooms left three files that a
+// browser silently numbered `(1)` and `(2)`. They agree here now.
 //
-// The CSV also existed twice with DIFFERENT content models and the SAME
-// filename: the Room panel wrote a Qty-aggregated list, the export menu wrote a
-// flat per-instance one, and both downloaded `<room>-furniture.csv`. Aggregated
-// wins — the file exists to be taken shopping, and "2 × dining chair" is what a
-// shopping list says.
+// The cap matters for the same reason the slug does. A room named by paste rather
+// than by hand can be arbitrarily long, and a 300-character filename is one the OS
+// may simply refuse to write — which surfaces as a download that did nothing.
+//
+// Two things this module used to hold, and deliberately no longer does:
+//
+//   · The furniture CSV. Retired in `9a75a42` on product grounds, not tidiness:
+//     non-negotiable 6 forbids reinstating the carpenter spec, and a parts list
+//     minus the prices is what that was. The on-screen list and its plain-text Copy
+//     — which do serve "communicate a plan" — are untouched. Do not bring it back
+//     with a spreadsheet writer attached.
+//   · Applying the user's live transforms. That merge belongs to `lib/transforms.ts`
+//     (`resolveParts`), and `tests/room-scene.test.ts` fails the build if a
+//     hand-written copy of the fallback reappears anywhere — this file having briefly
+//     carried one.
 
-import { csvBlob } from './csv';
-import { formatDim } from './units';
-import type { DimUnit } from './store';
-import type { ScenePart } from './scene-spec';
+/** Filenames are capped well under every filesystem's limit, and the caller adds an
+ *  extension on top — so the budget is for the name, not for the whole thing. */
+const MAX_SLUG = 60;
 
-/** Downloads carry the room's name, so a folder of exports from three rooms is
- *  still readable a week later. */
+/** Downloads carry the room's name, so a folder of exports from three rooms is still
+ *  readable a week later. `Front Room!` → `front-room`. */
 export function fileSlug(name: string): string {
-  return (
+  const slug =
     name
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'room'
-  );
-}
-
-/**
- * The scene as the user has actually arranged it: base parts with their position,
- * rotation and size overrides applied. EVERY export must go through this — the
- * overrides in `useStudio` are the layer that wins, and a part read straight from
- * `useScene` is the piece before anyone touched it.
- */
-export function applyTransforms(
-  parts: ScenePart[],
-  overrides: {
-    positions: Record<string, ScenePart['pos']>;
-    rotations: Record<string, number>;
-    dims: Record<string, ScenePart['dimMM']>;
-  },
-): ScenePart[] {
-  return parts.map((p) => ({
-    ...p,
-    pos: overrides.positions[p.id] ?? p.pos,
-    rot: overrides.rotations[p.id] ?? p.rot,
-    dimMM: overrides.dims[p.id] ?? p.dimMM,
-  }));
-}
-
-/** Identical pieces — same name, size and colour — collapse to one line with a count. */
-export function groupForList(parts: ScenePart[]): Array<{ part: ScenePart; count: number }> {
-  const map = new Map<string, { part: ScenePart; count: number }>();
-  for (const p of parts) {
-    const key = `${p.name}|${p.dimMM.join('x')}|${p.color ?? ''}`;
-    const e = map.get(key);
-    if (e) e.count += 1;
-    else map.set(key, { part: p, count: 1 });
-  }
-  return [...map.values()].sort((a, b) => a.part.name.localeCompare(b.part.name));
-}
-
-/**
- * The one furniture CSV. `lib/csv` owns the escaping — formula injection,
- * quoting, CRLF and the BOM — so a piece named `=HYPERLINK(...)` is written as
- * text rather than evaluated when the file is opened.
- */
-export function furnitureCsvBlob(parts: ScenePart[], dimUnit: DimUnit): Blob {
-  return csvBlob([
-    ['Qty', 'Name', 'Category', `Width (${dimUnit})`, `Depth (${dimUnit})`, `Height (${dimUnit})`, 'Colour'],
-    ...groupForList(parts).map(({ part: p, count }) => [
-      count,
-      p.name,
-      p.category,
-      formatDim(p.dimMM[0], dimUnit),
-      formatDim(p.dimMM[1], dimUnit),
-      formatDim(p.dimMM[2], dimUnit),
-      p.color ? p.color.toUpperCase() : '',
-    ]),
-  ]);
+      .replace(/^-+|-+$/g, '') || 'room';
+  // Trailing separator trimmed AGAIN after the cut: slicing mid-word can leave the
+  // name ending in a hyphen, which reads like the filename was truncated by accident.
+  return slug.slice(0, MAX_SLUG).replace(/-+$/, '') || 'room';
 }

@@ -1,84 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { applyTransforms, fileSlug, furnitureCsvBlob, groupForList } from '@/lib/exports';
-import type { ScenePart } from '@/lib/scene-spec';
+import { fileSlug } from '@/lib/exports';
+import { sceneFileName } from '@/lib/scene-file';
 
-/** Minimal part — only the fields these helpers touch matter. */
-function part(over: Partial<ScenePart> = {}): ScenePart {
-  return {
-    id: 'p1',
-    name: 'Sofa',
-    category: 'seating',
-    shape: 'box',
-    pos: [0, 0, 0],
-    rot: 0,
-    dimMM: [2000, 900, 800],
-    ...over,
-  } as ScenePart;
-}
-
-const NO_OVERRIDES = { positions: {}, rotations: {}, dims: {} };
-
-describe('applyTransforms', () => {
-  // This is the one that matters. Four copies of this mapping existed; an export
-  // that skips it silently ships the room as it was BEFORE anyone arranged it.
-  it('prefers the user override over the base value, per field', () => {
-    const [p] = applyTransforms([part()], {
-      positions: { p1: [1, 2, 3] },
-      rotations: { p1: Math.PI },
-      dims: { p1: [1, 2, 3] },
-    });
-    expect(p.pos).toEqual([1, 2, 3]);
-    expect(p.rot).toBe(Math.PI);
-    expect(p.dimMM).toEqual([1, 2, 3]);
-  });
-
-  it('falls back to the base value when no override exists', () => {
-    const [p] = applyTransforms([part()], NO_OVERRIDES);
-    expect(p.pos).toEqual([0, 0, 0]);
-    expect(p.rot).toBe(0);
-    expect(p.dimMM).toEqual([2000, 900, 800]);
-  });
-
-  it('keeps a rotation override of 0, which is falsy but meaningful', () => {
-    // `||` here instead of `??` would silently discard "turned back to square".
-    const [p] = applyTransforms([part({ rot: 1.5 })], { ...NO_OVERRIDES, rotations: { p1: 0 } });
-    expect(p.rot).toBe(0);
-  });
-
-  it('does not mutate the input parts', () => {
-    const base = part();
-    applyTransforms([base], { positions: { p1: [9, 9, 9] }, rotations: {}, dims: {} });
-    expect(base.pos).toEqual([0, 0, 0]);
-  });
-
-  it('leaves other parts untouched when one is overridden', () => {
-    const out = applyTransforms([part(), part({ id: 'p2' })], { ...NO_OVERRIDES, positions: { p1: [5, 0, 5] } });
-    expect(out[0].pos).toEqual([5, 0, 5]);
-    expect(out[1].pos).toEqual([0, 0, 0]);
-  });
-});
-
-describe('groupForList', () => {
-  it('collapses identical pieces into one counted row', () => {
-    const rows = groupForList([part(), part({ id: 'p2' }), part({ id: 'p3' })]);
-    expect(rows).toHaveLength(1);
-    expect(rows[0].count).toBe(3);
-  });
-
-  it('separates pieces that differ in size or colour', () => {
-    const rows = groupForList([
-      part(),
-      part({ id: 'p2', dimMM: [1400, 900, 800] }),
-      part({ id: 'p3', color: '#AABBCC' }),
-    ]);
-    expect(rows).toHaveLength(3);
-  });
-
-  it('sorts by name so the file is stable between exports', () => {
-    const rows = groupForList([part({ name: 'Table' }), part({ id: 'p2', name: 'Chair' })]);
-    expect(rows.map((r) => r.part.name)).toEqual(['Chair', 'Table']);
-  });
-});
+// Two things are deliberately NOT tested here, because they are not here:
+//
+//   · The furniture CSV, retired in `9a75a42` — non-negotiable 6 forbids reinstating
+//     the carpenter spec, and a parts list minus the prices is what that was.
+//   · Applying the user's transforms, which `lib/transforms.ts` owns and
+//     `tests/room-scene.test.ts` both tests and guards against being re-copied.
+//
+// What is left is the naming convention the three surviving downloads share.
 
 describe('fileSlug', () => {
   it('makes a filename-safe slug', () => {
@@ -86,33 +17,42 @@ describe('fileSlug', () => {
   });
 
   it('never returns an empty string', () => {
-    // An all-punctuation name would otherwise produce `-furniture.csv`.
+    // An all-punctuation name would otherwise produce a file called `.danmu.json`,
+    // which is a hidden file on macOS and Linux.
     expect(fileSlug('***')).toBe('room');
     expect(fileSlug('')).toBe('room');
+    expect(fileSlug('   ')).toBe('room');
+  });
+
+  it('caps the length, so the OS cannot refuse to write the file', () => {
+    expect(fileSlug('a'.repeat(200))).toHaveLength(60);
+  });
+
+  it('does not leave a trailing separator when the cap cuts mid-word', () => {
+    // `front-room-` reads as a filename truncated by accident. The cut lands on a
+    // separator here: 'ab ' × 40 puts a hyphen at index 60 exactly.
+    expect(fileSlug('ab '.repeat(40))).not.toMatch(/-$/);
+  });
+
+  it('still answers when the cap would leave nothing but separators', () => {
+    // A name whose first 60 characters are all punctuation slugs to '-'.repeat(n),
+    // and trimming that empties the string — which would name the file `.danmu.json`.
+    expect(fileSlug(`${'! '.repeat(60)}room`)).toBe('room');
   });
 });
 
-describe('furnitureCsvBlob', () => {
-  it('writes a Qty column and one row per group', async () => {
-    // csvCell quotes EVERY cell, so the header is fully quoted.
-    const text = await furnitureCsvBlob([part(), part({ id: 'p2' })], 'mm').text();
-    const lines = text.trim().split('\r\n');
-    expect(lines[0]).toBe('"Qty","Name","Category","Width (mm)","Depth (mm)","Height (mm)","Colour"');
-    expect(lines).toHaveLength(2);
-    expect(lines[1].startsWith('"2","Sofa"')).toBe(true);
+describe('the scene file and the slug agree', () => {
+  it('names itself with fileSlug plus the extension', () => {
+    // `scene-file.ts` carried a byte-identical copy of this slug. Two functions that
+    // must agree and are written twice are two functions that will stop agreeing.
+    expect(sceneFileName('My Front Room!')).toBe(`${fileSlug('My Front Room!')}.danmu.json`);
   });
 
-  it('starts with a UTF-8 BOM, so Excel on Windows does not use the ANSI codepage', async () => {
-    // Checked on the BYTES: Blob.text() decodes as UTF-8 and a conforming decoder
-    // strips a leading BOM, so the string form cannot see it at all.
-    const bytes = new Uint8Array(await furnitureCsvBlob([part()], 'mm').arrayBuffer());
-    expect([bytes[0], bytes[1], bytes[2]]).toEqual([0xef, 0xbb, 0xbf]);
-  });
-
-  it('neutralises a formula-injection name rather than writing it through', async () => {
-    const text = await furnitureCsvBlob([part({ name: '=HYPERLINK("http://x")' })], 'mm').text();
-    // The leading apostrophe is the escape a spreadsheet strips on display, so the
-    // cell shows the literal text instead of evaluating it.
-    expect(text).toContain('"\'=HYPERLINK(""http://x"")"');
+  it('carries the cap through, rather than capping the name plus extension', () => {
+    // The 60 is a budget for the NAME. Applying it after the extension would eat
+    // `.danmu.json` and produce a file the app could no longer recognise as its own.
+    const name = sceneFileName('a'.repeat(200));
+    expect(name).toBe(`${'a'.repeat(60)}.danmu.json`);
+    expect(name.endsWith('.danmu.json')).toBe(true);
   });
 });

@@ -59,6 +59,7 @@ import {
   type Relation,
   type Role,
   type RoomProfile,
+  type RuleKind,
 } from './layout-rules';
 
 /** A part reduced to what the solver moves. Deliberately not a `ScenePart`: the
@@ -119,6 +120,68 @@ export const DEFAULT_WEIGHTS: ScoreWeights = {
  *  the arrangement rather than reinvent it: everything that was still fine stays
  *  where it is, and only what the change broke gets moved. */
 export const REFIT_INERTIA = 14;
+
+/** What this module can do about each kind of finding the room report can make.
+ *
+ *  Two different questions, kept apart because they have different answers:
+ *
+ *  · `costTerm` — the weight above that implements the same rule, so a finding and
+ *    the number the annealer descends can be checked against each other. Null when a
+ *    per-proposal cost cannot express it.
+ *  · `movable` — can rearranging the pieces involved plausibly clear it? This is what
+ *    the room report reads to decide whether to OFFER a fix, and it is not the same
+ *    question: `reach` has no weight here because it needs the clearance field, which
+ *    is too expensive per proposal — but `solveLayout` scores it over the finalists
+ *    through `navigabilityCost`, so moving furniture genuinely does fix it.
+ *
+ *  The table is here rather than beside the findings because both answers are facts
+ *  about the solver. `tests/layout-conformance.test.ts` holds it to `clearance.ts`:
+ *  a new kind of finding fails that test until it appears here. */
+export const RULE_HANDLING: Record<
+  RuleKind,
+  { costTerm: keyof ScoreWeights | null; movable: boolean; why?: string }
+> = {
+  door: { costTerm: 'door', movable: true },
+  entry: { costTerm: 'door', movable: true },
+  clash: { costTerm: 'overlap', movable: true },
+  walk: { costTerm: 'walkway', movable: true },
+  zone: { costTerm: 'access', movable: true },
+  window: { costTerm: 'window', movable: true },
+  tv: { costTerm: 'relation', movable: true },
+
+  reach: {
+    costTerm: null,
+    movable: true,
+    why: 'priced by `navigabilityCost` over the finalists rather than per proposal — it needs the clearance field.',
+  },
+  'cut-off': {
+    costTerm: null,
+    movable: true,
+    why: 'as `reach`: a connected-component question, scored over the finalists.',
+  },
+
+  turning: {
+    costTerm: null,
+    movable: false,
+    why:
+      'accessibility-only and off by default, and nothing costs turning space — ' +
+      '`navigabilityCost` prices reachability, not the largest circle that fits. ' +
+      'Offering a fix would be offering a button that does nothing.',
+  },
+  tall: {
+    costTerm: null,
+    movable: false,
+    why:
+      'a fact about the piece’s SIZE, not its placement. This module moves and turns, ' +
+      'and `Placement` has no field a dimension could travel in, so no arrangement it ' +
+      'can reach would help.',
+  },
+  crowding: {
+    costTerm: null,
+    movable: false,
+    why: 'a property of the whole room — no rearrangement removes a piece, so there is nothing to descend.',
+  },
+};
 
 export type LayoutContext = {
   parts: ScenePart[];

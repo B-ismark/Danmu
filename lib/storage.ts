@@ -1,6 +1,7 @@
 'use client';
 
 import { get, set as idbSet, del, keys } from 'idb-keyval';
+import { v4 as uuid } from 'uuid';
 
 // Wrap set so QuotaExceededError fires a global event the StorageToast listens to.
 async function set<T>(key: IDBValidKey, value: T): Promise<void> {
@@ -73,13 +74,18 @@ export type Site = {
   bearingDeg: number;
 };
 
+/** Footprint presets, as an array so `lib/scene-file.ts` can check an imported
+ *  value at runtime — see the note on `SHAPES` in `lib/scene-spec.ts`. */
+export const LAYOUT_IDS = ['rect', 'l', 't', 'u', 'open', 'custom'] as const;
+export type LayoutId = (typeof LAYOUT_IDS)[number];
+
 export type RoomData = {
   id: string;
   createdAt: number;
   /** Absent on rooms written before the version stamp — treat as 0. */
   version?: number;
   name: string;
-  layoutId: 'rect' | 'l' | 't' | 'u' | 'open' | 'custom';
+  layoutId: LayoutId;
   width: number; // meters
   depth: number;
   height: number;
@@ -180,6 +186,32 @@ export const roomStore = {
     await set(k(roomId, 'meta'), { ...meta, name, version: ROOM_SCHEMA_VERSION });
     await touch(roomId);
   },
+  /** Land a scene file (`lib/scene-file.ts`) as a brand-new room, and return its id.
+   *
+   *  **Always additive.** It mints its own id rather than accepting one, so opening a
+   *  file can never overwrite the room the user is working in — including the room
+   *  the file was exported from, which is the case that would actually come up.
+   *
+   *  The room argument is typed structurally rather than as `SceneFileRoom` on
+   *  purpose: `scene-file.ts` reads `RoomData` from here, so importing its types back
+   *  would close a cycle. It is the same reason `saveSceneParts` takes `unknown`.
+   *
+   *  **`meta` is written last**, mirroring `restoreRoom`. There is no transaction
+   *  across keys and `listRooms` decides a room exists by its `meta`, so writing the
+   *  furniture first means a half-finished import is invisible rather than a room
+   *  that appears in the workspace and opens empty. */
+  async importScene(
+    room: Omit<RoomData, 'id' | 'createdAt' | 'version' | 'detectedObjects'>,
+    parts: unknown,
+    transforms: Transforms,
+  ): Promise<string> {
+    const id = uuid();
+    await set(k(id, 'scene'), parts);
+    await set(k(id, 'transforms'), transforms);
+    await set(k(id, 'meta'), { ...room, id, createdAt: Date.now(), version: ROOM_SCHEMA_VERSION });
+    await touch(id);
+    return id;
+  },
   async loadRoom(roomId: string): Promise<RoomData | undefined> {
     return get<RoomData>(k(roomId, 'meta'));
   },
@@ -256,9 +288,9 @@ export const roomStore = {
 
     const rows = await Promise.all(
       [...ids].map(async (id) => {
-        const [meta, transforms, touched] = await Promise.all([
+        const [meta, scene, touched] = await Promise.all([
           get<RoomData>(k(id, 'meta')),
-          get<Transforms>(k(id, 'transforms')),
+          get<unknown[]>(k(id, 'scene')),
           get<number>(k(id, 'touched')),
         ]);
         if (!meta) return null;
@@ -269,7 +301,13 @@ export const roomStore = {
           // Rooms saved before `touched` existed fall back to their creation
           // date — the honest answer for a room we have no edit record for.
           updatedAt: touched ?? meta.createdAt,
-          itemCount: transforms ? Object.keys(transforms.positions).length : 0,
+          // The furniture, counted from the furniture. This read `transforms.positions`
+          // — the pieces the user has MOVED — so a room full of starter furniture
+          // nobody had dragged yet advertised "0 pieces", and an imported room always
+          // would: a scene file bakes its transforms into the parts, so its override
+          // map is legitimately empty. One extra parallel get per room, on a path that
+          // was already reading three keys at once.
+          itemCount: Array.isArray(scene) ? scene.length : 0,
           captureCount: captureCounts.get(id) ?? 0,
           detected: !!(meta.detectedObjects && meta.detectedObjects.length > 0),
         } satisfies RoomSummary;

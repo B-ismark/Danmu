@@ -41,7 +41,7 @@
 //   · TV: 1.2–2.5 × the screen diagonal. A multiple, never a constant — which is
 //     why the relation table can carry a function.
 //
-// Sources are listed in `Research.md` §3.9. Nothing here is learned, sampled or
+// Sources are listed in `docs/history/Research.md` §3.9. Nothing here is learned, sampled or
 // downloaded; it is a table of numbers from design manuals with the geometry to
 // apply them.
 
@@ -187,6 +187,37 @@ export function roleOf(part: { category: Category; shape: Shape; dimMM: [number,
   return ROLE_BY_SHAPE[part.shape] ?? ROLE_BY_CATEGORY[part.category] ?? 'other';
 }
 
+// ─── What can be wrong with a room ──────────────────────────────────────────
+//
+// The kinds of finding this table's rules can produce, named once so that the two
+// consumers and the UI can all talk about the same thing.
+//
+// It exists because "which rule is this" used to be answerable only by matching the
+// prefix of a `ClearanceIssue.id` — a string built for React keys and being read as
+// a type. That is fine until something needs to BRANCH on it, and the room report
+// now does: whether a finding can be cleared by moving furniture decides whether it
+// is offered a fix, and getting that wrong means either a button that does nothing
+// or no button where one would have helped.
+//
+// The zone rules (a wardrobe's front, a bed's side, a table's seats) are one kind
+// here on purpose. They differ in which side of a piece they measure and not at all
+// in what to do about them.
+export const RULE_KINDS = [
+  'door',
+  'entry',
+  'clash',
+  'walk',
+  'zone',
+  'window',
+  'tv',
+  'tall',
+  'crowding',
+  'reach',
+  'cut-off',
+  'turning',
+] as const;
+export type RuleKind = (typeof RULE_KINDS)[number];
+
 // ─── Derived thresholds ─────────────────────────────────────────────────────
 
 /** The tight minimum walkway. DERIVED from the field's walk radius rather than
@@ -248,7 +279,7 @@ const DEFAULT_SILL = 0.9;
 
 /** Below this a piece is a step-over rather than an obstacle, and below this it
  *  cannot block a sightline either. Matches `floorBlockers`. */
-export const OBSTACLE_HEIGHT = 0.25;
+const OBSTACLE_HEIGHT = 0.25;
 
 // ─── Access zones ───────────────────────────────────────────────────────────
 
@@ -591,12 +622,6 @@ export function relationFor(self: ScenePart, anchor: ScenePart): Relation | null
     return { kind: spec.kind, min, max, weight: spec.weight, reason: spec.reason };
   }
   return null;
-}
-
-/** Does any relation in the table mention this role at all? Lets a caller skip
- *  the n² pass over pieces that can never be in one. */
-export function hasRelations(role: Role): boolean {
-  return RELATIONS.some((r) => r.self.includes(role) || r.anchor.includes(role));
 }
 
 /** May these two legitimately sit closer together than a walkway?

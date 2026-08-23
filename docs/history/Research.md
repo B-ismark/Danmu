@@ -1,13 +1,13 @@
 # Danmu — Engine Research & Improvement Study
 
-> Written 2026-07-30 against `main`. Companion to [`Design.md`](Design.md), which
+> Written 2026-07-30 against `main`. Companion to [`Design.md`](../../Design.md), which
 > describes what the system *is*. This document describes **how it works
 > mechanically**, **where the maths is weakest**, and **what the current
 > literature offers** that fits Danmu's constraints (local-first, browser-only,
 > no AI image generation, dimensions owned by code).
 >
 > Every proposal here was filtered against the non-negotiables in
-> [`CLAUDE.md`](CLAUDE.md). Anything that would put a model in charge of a
+> [`CLAUDE.md`](../../CLAUDE.md). Anything that would put a model in charge of a
 > dimension is marked as such and rejected or fenced.
 
 ---

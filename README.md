@@ -5,6 +5,9 @@ in 3D, then redecorate freely — move, recolour, restyle, relight, and arrange 
 piece. Runs entirely in the browser: no backend, no account. Optional AI is used
 **only to detect furniture from photos** — never to generate images.
 
+Installable, and it **works offline** after the first visit — the studio does its
+geometry on your device, so there is nothing for a network to be needed for.
+
 📖 **Full design & architecture → [Design.md](Design.md)** (product principles,
 every current feature, architecture, geometry engine, and roadmap).
 🤖 **Agents:** see [CLAUDE.md](CLAUDE.md) for working rules.
@@ -56,7 +59,7 @@ without any key: pick a footprint and start decorating.
 | `/onboarding/layout-pick` | Pick footprint preset (sets dims + starter scene) |
 | `/onboarding/capture` | 4-wall guided capture (`getUserMedia`) |
 | `/onboarding/detect` | Furniture detection (local ONNX → Gemini → manual) |
-| `/workspace` | Rooms list — create / resume / delete |
+| `/workspace` | Rooms list — create / resume / delete / **open a saved room file** |
 | `/room/[id]/model` | **3D decoration studio (default)** |
 | `/room/[id]/plan` | 2D floor plan |
 | `/settings` | Key, display unit, danger zone |
@@ -71,9 +74,19 @@ without any key: pick a footprint and start decorating.
   from goes through [`lib/scene-palette.ts`](lib/scene-palette.ts).
 - **Dimensions come from code, not AI.** All sizes pass through `clampDims`
   ([`lib/dimension-ranges.ts`](lib/dimension-ranges.ts)); a deterministic geometry
-  engine owns sizing, placement, overlap and clearance. AI is a hint only.
+  engine owns sizing, placement, overlap and clearance. AI is a hint only — and so
+  is a scene file, which is validated and clamped the same way.
 - **BYO key, no backend.** Browser → provider directly (optional Gemini
   detection). Scope the key with an HTTP-referrer + API restriction. AI is
   detection-only, never a dependency.
+- **"Will it fit?"** Type a real product's W × D × H and Danmu answers whether it goes
+  in *this* room, with what is already in it — by locking every existing piece and
+  asking the solver to find the new one a home
+  ([`lib/fit-check.ts`](lib/fit-check.ts)). Nothing is clamped on the way in: the
+  answer is about the size you entered.
+- **Rooms travel as files, not through a server.** `Save file` in the studio writes
+  a readable `.danmu.json` ([`lib/scene-file.ts`](lib/scene-file.ts)); `Open a file`
+  on `/workspace` lands one as a new room. It carries the room and its furniture and
+  deliberately **no photographs**.
 
 See [Design.md](Design.md) for the full feature list, data flow, and roadmap.
