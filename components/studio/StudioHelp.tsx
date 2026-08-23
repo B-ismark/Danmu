@@ -88,6 +88,9 @@ export function StudioHelp() {
       // Escape belongs to a field being edited, or to a dialog in front of us,
       // before it belongs to a hint.
       if (isTypingOrDialog(e.target)) return;
+      // See ExportMenu: a plain stop still lets a sibling capture listener on
+      // window fire, so one Esc closed both popovers.
+      e.stopImmediatePropagation();
       e.stopPropagation();
       if (coach) setCoach(null);
       else {

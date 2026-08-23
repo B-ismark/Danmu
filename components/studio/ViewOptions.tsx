@@ -9,9 +9,13 @@
 //
 // It has since absorbed two strays. The floor grid was a chip of its own down in
 // the corner — a display toggle sitting apart from the other display toggle — and
-// the "Re-scan room" link was a second copy of the top bar's Rescan, which is
-// about what is IN the room rather than how it is lit. Three groups now, in the
-// order someone reaches for them: Lighting, Display, Quality.
+// a "Re-scan room" link that duplicated a control belonging elsewhere, because it
+// is about what is IN the room rather than how it is lit. (That control now lives
+// in the rail's Room section; this panel is not it.) Three groups, in the order
+// someone reaches for them: Lighting, Display, Quality.
+//
+// This panel is itself now a rail section rather than a canvas popover — see
+// PartTree — so it no longer positions anything.
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useStudio, type Lighting } from '@/lib/store';

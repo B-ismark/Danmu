@@ -33,8 +33,10 @@ import { openSceneMenu } from './SceneContextMenu';
 
 const SCALE = 100; // px per metre at zoom = 1, in viewBox units
 const PAD = 80;
-const MIN_ZOOM = 0.4;
-const MAX_ZOOM = 4;
+/** Exported so the page's toolbar can disable at the limits — it used to own
+ *  the buttons and the bounds together. */
+export const MIN_ZOOM = 0.4;
+export const MAX_ZOOM = 4;
 /** How far one arrow press moves a wall. */
 const WALL_STEP = 0.05;
 

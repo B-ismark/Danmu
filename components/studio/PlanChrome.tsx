@@ -9,7 +9,7 @@ import type { RefObject } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { IconButton } from '@/components/ui/primitives';
 import { HelpGroup, HelpLine, Kb } from './HelpCard';
-import type { PlanViewHandle } from './PlanView';
+import { MAX_ZOOM, MIN_ZOOM, type PlanViewHandle } from './PlanView';
 
 /** Zoom, page rotation, fit — driven through PlanView's handle. */
 export function PlanViewControls({
@@ -26,10 +26,13 @@ export function PlanViewControls({
   const deg = (((rot * 180) / Math.PI) % 360).toFixed(0);
   return (
     <div className="toolbar" role="group" aria-label="Plan view" style={{ gap: 6, padding: 4 }}>
+      {/* Disabled at the bounds. The handle clamps silently, so without this the
+          buttons stay pressable at max/min and appear broken. */}
       <IconButton
         icon="minus"
         label="Zoom out"
         onClick={() => api.current?.zoomOut()}
+        disabled={zoom <= MIN_ZOOM + 0.001}
         variant="outline"
         size={28}
         iconSize={15}
@@ -56,6 +59,7 @@ export function PlanViewControls({
         icon="plus"
         label="Zoom in"
         onClick={() => api.current?.zoomIn()}
+        disabled={zoom >= MAX_ZOOM - 0.001}
         variant="outline"
         size={28}
         iconSize={15}

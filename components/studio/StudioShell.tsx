@@ -20,6 +20,7 @@ import { Icon } from '@/components/ui/Icon';
 import { PartTree } from './PartTree';
 import { Inspector } from './Inspector';
 import { SelectionHeader } from './SelectionHeader';
+import { RoomHealthDot } from './RoomTools';
 import { useStackedStudio } from './NarrowViewportBanner';
 
 export function StudioShell({
@@ -92,7 +93,15 @@ export function StudioShell({
   const tree = (
     <aside key="tree" className="rail rail--left" style={railStyle}>
       {!stacked && <RailToggle side="left" open={leftOpen} onToggle={() => toggleRail('left')} />}
-      {showLeft && <PartTree />}
+      {showLeft ? (
+        <PartTree />
+      ) : (
+        // Closing this rail must not hide the room's state — that state being
+        // always visible is the whole reason it moved out of a canvas dock.
+        <div style={{ padding: '8px 0' }}>
+          <RoomHealthDot />
+        </div>
+      )}
     </aside>
   );
 

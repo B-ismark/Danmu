@@ -16,6 +16,7 @@ import { removeParts } from './KeyboardShortcuts';
 import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { isWallMountedPart, supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, DECOR_KINDS, type LibraryItem, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
 import { findSupportUnder, groundY, snapToWall as snapToWallPhys } from '@/lib/physics';
+import { applyTransforms } from '@/lib/exports';
 import { wallSegments } from '@/lib/footprint';
 import { moveWallCarrying } from '@/lib/wall-actions';
 
@@ -71,11 +72,13 @@ export function Inspector() {
   /** Every part in its CURRENT effective transform, so surface snapping works
    *  against the world the user is looking at rather than the original scene. */
   function partSnapshot() {
-    return allParts.map((p) => ({
+    // The override precedence lives in lib/exports; this only projects the
+    // handful of fields the snapping maths reads.
+    return applyTransforms(allParts, { positions, rotations, dims }).map((p) => ({
       id: p.id,
-      pos: positions[p.id] ?? p.pos,
-      rot: rotations[p.id] ?? p.rot,
-      dimMM: dims[p.id] ?? p.dimMM,
+      pos: p.pos,
+      rot: p.rot,
+      dimMM: p.dimMM,
       category: p.category,
       wallMounted: p.wallMounted,
     }));

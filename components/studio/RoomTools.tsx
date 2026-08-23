@@ -33,8 +33,7 @@ import type { CostBreakdown } from '@/lib/layout-score';
 import { roomStore, type LayoutVariant, type Transforms } from '@/lib/storage';
 import { footprintBounds, type Footprint } from '@/lib/footprint';
 import { formatDim } from '@/lib/units';
-import { csvBlob } from '@/lib/csv';
-import { downloadBlob } from '@/lib/snapshot';
+import { applyTransforms, groupForList } from '@/lib/exports';
 import { savedLabel } from '@/lib/dates';
 import { Icon } from '@/components/ui/Icon';
 import { IconButton, Pill, Segmented } from '@/components/ui/primitives';
@@ -44,19 +43,62 @@ import { toast } from '@/components/ui/StorageToast';
 import { isTypingOrDialog } from './KeyboardShortcuts';
 import type { ScenePart } from '@/lib/scene-spec';
 
-/** Downloads carry the room's name, so a folder of exports from three rooms is
- *  still readable a week later. */
-function fileSlug(name: string): string {
-  return (
-    name
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'room'
+type RoomTab = 'check' | 'list' | 'layouts';
+
+/**
+ * The room's report, derived. Shared by the rail's health chip and by the compact
+ * dot the rail shows while it is COLLAPSED — the point of surfacing this state was
+ * that it is never behind a press, and a closed rail would have put it back there.
+ * Only one of the two is mounted at a time, so this runs once either way.
+ */
+export function useRoomReport() {
+  const parts = useScene((s) => s.parts);
+  const room = useScene((s) => s.room);
+  const positions = useStudio((s) => s.positions);
+  const rotations = useStudio((s) => s.rotations);
+  const dims = useStudio((s) => s.dims);
+  const stepFree = useSettings((s) => s.stepFree);
+
+  const effParts = useMemo<ScenePart[]>(
+    () => applyTransforms(parts, { positions, rotations, dims }),
+    [parts, positions, rotations, dims],
   );
+  const report = useMemo(
+    () => analyzeRoom(effParts, { footprint: room.footprint, height: room.height }, { accessibility: stepFree }),
+    [effParts, room.footprint, room.height, stepFree],
+  );
+  const problems = report.issues.filter((i) => i.severity !== 'info').length;
+  return { report, problems, effParts };
 }
 
-type RoomTab = 'check' | 'list' | 'layouts';
+/** The health chip reduced to what fits a 37px rail. Same number, same colours. */
+export function RoomHealthDot() {
+  const { problems } = useRoomReport();
+  const ok = problems === 0;
+  return (
+    <div
+      title={ok ? 'Room checks out' : `${problems} ${problems === 1 ? 'issue' : 'issues'} — open this panel to see them`}
+      aria-label={ok ? 'Room checks out' : `${problems} room ${problems === 1 ? 'issue' : 'issues'}`}
+      role="status"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 24,
+        height: 24,
+        margin: '0 auto',
+        borderRadius: 'var(--r-full)',
+        fontSize: 10,
+        fontWeight: 700,
+        border: `1px solid ${ok ? 'var(--accent-2)' : 'var(--danger)'}`,
+        background: ok ? 'var(--accent-2-tint)' : 'var(--danger-tint)',
+        color: ok ? 'var(--success-text)' : 'var(--danger-text)',
+      }}
+    >
+      {ok ? <Icon name="check" size={12} /> : <span className="mono">{problems}</span>}
+    </div>
+  );
+}
 
 export function RoomTools() {
   // One panel, three tabs. These were three sibling buttons opening three cards
@@ -92,10 +134,7 @@ export function RoomTools() {
   const { roomId } = useParams<{ roomId: string }>();
   const [roomName, setRoomName] = useState('Room');
 
-  const parts = useScene((s) => s.parts);
   const room = useScene((s) => s.room);
-  const positions = useStudio((s) => s.positions);
-  const rotations = useStudio((s) => s.rotations);
   const dims = useStudio((s) => s.dims);
   const draggingId = useStudio((s) => s.draggingId);
 
@@ -106,30 +145,14 @@ export function RoomTools() {
     });
   }, [roomId]);
 
-  // Effective scene = base parts + user transform overrides. Recomputed on
-  // commit (stores don't change during a live drag), so this stays cheap.
-  const effParts = useMemo<ScenePart[]>(
-    () =>
-      parts.map((p) => ({
-        ...p,
-        pos: positions[p.id] ?? p.pos,
-        rot: rotations[p.id] ?? p.rot,
-        dimMM: dims[p.id] ?? p.dimMM,
-      })),
-    [parts, positions, rotations, dims],
-  );
+  // One derivation, shared with the collapsed rail's dot — see useRoomReport.
+  const { report, problems, effParts } = useRoomReport();
 
   // Step-free findings are opt-in and remembered, because whether a room has to
   // meet them is a fact about the person, not about the room — asking again every
   // time someone opens the panel would be its own small insult.
   const stepFree = useSettings((s) => s.stepFree);
   const setStepFree = useSettings((s) => s.setStepFree);
-
-  const report = useMemo(
-    () => analyzeRoom(effParts, { footprint: room.footprint, height: room.height }, { accessibility: stepFree }),
-    [effParts, room.footprint, room.height, stepFree],
-  );
-  const problems = report.issues.filter((i) => i.severity !== 'info').length;
 
   // Offer a re-fit when a size change is what broke things. See `useRefitOffer`.
   useRefitOffer(effParts, room.footprint, dims, problems);
@@ -583,17 +606,9 @@ function ListPanel({ parts, roomName }: { parts: ScenePart[]; roomName: string }
   const dimUnit = useSettings((s) => s.dimUnit);
   const [copied, setCopied] = useState(false);
 
-  // Group identical pieces (same name + dims) into one line with a count.
-  const rows = useMemo(() => {
-    const map = new Map<string, { part: ScenePart; count: number }>();
-    for (const p of parts) {
-      const key = `${p.name}|${p.dimMM.join('x')}|${p.color ?? ''}`;
-      const e = map.get(key);
-      if (e) e.count += 1;
-      else map.set(key, { part: p, count: 1 });
-    }
-    return [...map.values()].sort((a, b) => a.part.name.localeCompare(b.part.name));
-  }, [parts]);
+  // Shared with the CSV, so the panel and the file can never disagree about what
+  // counts as "the same piece".
+  const rows = useMemo(() => groupForList(parts), [parts]);
 
   function asText(): string {
     return rows
@@ -620,26 +635,7 @@ function ListPanel({ parts, roomName }: { parts: ScenePart[]; roomName: string }
     }
   }
 
-  function downloadCsv() {
-    // lib/csv owns the escaping (formula injection, quoting, CRLF) and the BOM.
-    // This used to hand-roll quoting only, so a piece named "=HYPERLINK(...)" was
-    // written through verbatim and evaluated when the file was opened.
-    const blob = csvBlob([
-      ['Qty', 'Name', 'Category', `Width (${dimUnit})`, `Depth (${dimUnit})`, `Height (${dimUnit})`, 'Colour'],
-      ...rows.map(({ part: p, count }) => [
-        count,
-        p.name,
-        p.category,
-        formatDim(p.dimMM[0], dimUnit),
-        formatDim(p.dimMM[1], dimUnit),
-        formatDim(p.dimMM[2], dimUnit),
-        p.color ? p.color.toUpperCase() : '',
-      ]),
-    ]);
-    // The shared helper, which delays revoking the object URL — revoking it
-    // synchronously after .click() cancels the download in some browsers.
-    downloadBlob(blob, `${fileSlug(roomName)}-furniture.csv`);
-  }
+
 
   return (
     <div>
@@ -647,9 +643,6 @@ function ListPanel({ parts, roomName }: { parts: ScenePart[]; roomName: string }
         <span style={{ flex: 1, fontSize: 11, color: 'var(--ink-3)' }}>Real sizes, in your unit</span>
         <button onClick={copy} className="ds-btn" style={{ height: 24, fontSize: 10, padding: '0 8px' }}>
           {copied ? 'Copied ✓' : 'Copy'}
-        </button>
-        <button onClick={downloadCsv} className="ds-btn" style={{ height: 24, fontSize: 10, padding: '0 8px' }}>
-          CSV
         </button>
       </TabActions>
 
@@ -799,12 +792,9 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
         </div>
       ) : (
         layouts.map((v) => {
-          const vParts = (v.parts as ScenePart[]).map((p) => ({
-            ...p,
-            pos: v.transforms.positions[p.id] ?? p.pos,
-            rot: v.transforms.rotations[p.id] ?? p.rot,
-            dimMM: v.transforms.dims[p.id] ?? p.dimMM,
-          }));
+          // Same precedence rule as the live store, different source — so it
+          // goes through the same helper rather than restating it.
+          const vParts = applyTransforms(v.parts as ScenePart[], v.transforms);
           return (
             <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderBottom: '1px solid var(--hairline)' }}>
               <MiniPlan parts={vParts} footprint={footprint} />
@@ -812,7 +802,9 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
                 <div style={{ fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.name}</div>
                 <div style={{ fontSize: 10, color: 'var(--ink-3)' }}>{savedLabel(v.createdAt)}</div>
               </div>
-              <button onClick={() => requestApply(v)} className="ds-btn ds-btn--primary" style={{ height: 24, fontSize: 10, padding: '0 8px' }}>
+              {/* Plain, not primary: this repeats once per saved layout, and the
+                  rule beside the variants in globals.css excludes per-row actions. */}
+              <button onClick={() => requestApply(v)} className="ds-btn" style={{ height: 24, fontSize: 10, padding: '0 8px' }}>
                 Apply
               </button>
               <IconButton

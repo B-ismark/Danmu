@@ -148,10 +148,16 @@ export default function WorkspacePage() {
             <Icon name="settings" size={12} />
             Settings
           </Link>
-          <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--primary" style={{ height: 32, fontSize: 12 }}>
-            <Icon name="plus" size={12} />
-            New Room
-          </Link>
+          {/* Hidden while the workspace is empty, rather than carving an exception
+              into the one-primary rule: the EmptyState below offers the same route
+              at 40px in the middle of the page, so a second primary up here was
+              the rule's exact failure case — two claims to the main action. */}
+          {rooms.length > 0 && (
+            <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--primary" style={{ height: 32, fontSize: 12 }}>
+              <Icon name="plus" size={12} />
+              New Room
+            </Link>
+          )}
         </>
       }
     >
@@ -454,8 +460,8 @@ function EmptyState() {
         Pick a footprint and start arranging furniture in real 3D — move, recolour, restyle, and relight
         every piece. No account, no upload. Capturing your real room is optional.
       </p>
-      {/* Same route as the bar's "New Room", so the same weight. It was accent,
-          which put two different claims to the main action on one screen. */}
+      {/* The page's one primary while it is empty — the bar hides its "New Room"
+          in this state, so there is exactly one. */}
       <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--primary" style={{ height: 40, padding: '0 20px', fontSize: 14 }}>
         <Icon name="plus" size={13} />
         Create your first room

@@ -18,35 +18,9 @@ import { useScene } from '@/lib/scene-store';
 import { useStudio, useSettings } from '@/lib/store';
 import { useSnapshot, downloadBlob } from '@/lib/snapshot';
 import { exportPlanPng } from '@/lib/plan-export';
-import { csvBlob } from '@/lib/csv';
-import { formatDim } from '@/lib/units';
 import { roomStore } from '@/lib/storage';
+import { applyTransforms, fileSlug, furnitureCsvBlob } from '@/lib/exports';
 import { Icon, type IconName } from '@/components/ui/Icon';
-import type { ScenePart } from '@/lib/scene-spec';
-
-/** Downloads carry the room's name, so a folder of exports from three rooms is
- *  still readable a week later. */
-function fileSlug(name: string): string {
-  return (
-    name
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'room'
-  );
-}
-
-/** The scene with the user's live transforms applied — what any export must use. */
-function effectiveParts(): ScenePart[] {
-  const { parts } = useScene.getState();
-  const { positions, rotations, dims } = useStudio.getState();
-  return parts.map((p) => ({
-    ...p,
-    pos: positions[p.id] ?? p.pos,
-    rot: rotations[p.id] ?? p.rot,
-    dimMM: dims[p.id] ?? p.dimMM,
-  }));
-}
 
 export function ExportMenu() {
   const pathname = usePathname();
@@ -75,6 +49,10 @@ export function ExportMenu() {
     }
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return;
+      // stopImmediatePropagation, not stopPropagation: capture listeners on the
+      // SAME node (window) still run after a plain stop, so one Esc closed this
+      // and the help card together.
+      e.stopImmediatePropagation();
       e.stopPropagation();
       setOpen(false);
       btnRef.current?.focus();
@@ -92,25 +70,18 @@ export function ExportMenu() {
     fn();
   }
 
+  /** The arranged scene — never the base parts. See lib/exports. */
+  function arranged() {
+    const { positions, rotations, dims } = useStudio.getState();
+    return applyTransforms(useScene.getState().parts, { positions, rotations, dims });
+  }
+
   function planPng() {
-    exportPlanPng(effectiveParts(), useScene.getState().room, dimUnit, roomName);
+    exportPlanPng(arranged(), useScene.getState().room, dimUnit, roomName);
   }
 
   function listCsv() {
-    // lib/csv owns the escaping (formula injection, quoting, CRLF) and the BOM.
-    const parts = effectiveParts();
-    const blob = csvBlob([
-      ['Name', 'Category', `Width (${dimUnit})`, `Depth (${dimUnit})`, `Height (${dimUnit})`, 'Colour'],
-      ...parts.map((p) => [
-        p.name,
-        p.category,
-        formatDim(p.dimMM[0], dimUnit),
-        formatDim(p.dimMM[1], dimUnit),
-        formatDim(p.dimMM[2], dimUnit),
-        p.color ? p.color.toUpperCase() : '',
-      ]),
-    ]);
-    downloadBlob(blob, `${fileSlug(roomName)}-furniture.csv`);
+    downloadBlob(furnitureCsvBlob(arranged(), dimUnit), `${fileSlug(roomName)}-furniture.csv`);
   }
 
   const items: Array<{ icon: IconName; label: string; hint: string; onClick: () => void }> = [
@@ -134,7 +105,6 @@ export function ExportMenu() {
         ref={btnRef}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        aria-haspopup="menu"
         className="ds-btn"
         style={{ height: 28, fontSize: 12 }}
       >
@@ -143,9 +113,14 @@ export function ExportMenu() {
         <Icon name={open ? 'chevron-up' : 'chevron-down'} size={11} />
       </button>
 
+      {/* A group of buttons, not role="menu". A menu promises arrow-key roving
+          focus — the bar ui/Select.tsx sets — and these are three plain tabbable
+          buttons. Claiming the role without the behaviour is worse for a screen
+          reader than not claiming it. */}
       {open && (
         <div
-          role="menu"
+          role="group"
+          aria-label="Export"
           className="popover"
           style={{
             position: 'absolute',
@@ -162,7 +137,6 @@ export function ExportMenu() {
           {items.map((it) => (
             <button
               key={it.label}
-              role="menuitem"
               onClick={() => run(it.onClick)}
               className="list-row"
               style={{
