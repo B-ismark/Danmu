@@ -19,7 +19,7 @@ function part(over: Partial<ScenePart> = {}): ScenePart {
 const NO_OVERRIDES = { positions: {}, rotations: {}, dims: {} };
 
 describe('applyTransforms', () => {
-  // This is the one that matters. Three copies of this mapping existed; an export
+  // This is the one that matters. Four copies of this mapping existed; an export
   // that skips it silently ships the room as it was BEFORE anyone arranged it.
   it('prefers the user override over the base value, per field', () => {
     const [p] = applyTransforms([part()], {

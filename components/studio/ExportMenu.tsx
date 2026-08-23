@@ -101,6 +101,14 @@ export function ExportMenu() {
 
   return (
     <div ref={wrapRef} style={{ position: 'relative', display: 'flex' }}>
+      {/* No aria-haspopup, deliberately, and NOT because "true" is vaguer than
+          "menu": in ARIA the two are the same announcement — `true` is defined as
+          "the popup is a menu". It would re-promise the arrow-key roving focus the
+          popover below does not implement, which is the one thing to avoid here.
+          There is no value for "a group of buttons", and `aria-expanded` already
+          tells a screen reader this button discloses something. The two other
+          aria-haspopup in this codebase (ui/Select.tsx, capture) each name a role
+          they actually implement. */}
       <button
         ref={btnRef}
         onClick={() => setOpen((v) => !v)}

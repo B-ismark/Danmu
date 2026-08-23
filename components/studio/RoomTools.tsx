@@ -8,8 +8,9 @@
 //   · Check — deterministic ergonomics review (door swings, walkways, storage
 //     clearance, bed access, TV distance, crowding). Click a finding to select the
 //     pieces involved and fly to them.
-//   · List — every piece with its real dimensions in the user's display unit;
-//     copy as text or download a CSV to take shopping.
+//   · List — every piece with its real dimensions in the user's display unit,
+//     copyable as text. The CSV of the same list is in the top bar's Export menu,
+//     with the other two downloads.
 //   · Layouts — named arrangement snapshots with mini floor plans, so competing
 //     arrangements can be saved and flipped between.
 //

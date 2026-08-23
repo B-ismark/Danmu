@@ -1,10 +1,11 @@
 // What every "take this away with you" path needs, in one place.
 //
-// Three copies of the same three things had accumulated: a slug for the
-// filename, the mapping that applies the user's live transforms, and a furniture
-// CSV. The transform mapping is the one that matters — an export built from the
-// base parts silently ships pre-drag geometry, so three copies of it is three
-// chances to ship a floor plan of a room nobody arranged.
+// Three things had accumulated copies: a slug for the filename, the mapping that
+// applies the user's live transforms, and a furniture CSV. The transform mapping
+// is the one that matters — an export built from the base parts silently ships
+// pre-drag geometry — and it had FOUR copies: the export menu, the plan page, the
+// Room panel's list, and the Inspector's snapshot. Four chances to hand someone a
+// floor plan of a room nobody arranged.
 //
 // The CSV also existed twice with DIFFERENT content models and the SAME
 // filename: the Room panel wrote a Qty-aggregated list, the export menu wrote a
