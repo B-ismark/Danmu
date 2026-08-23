@@ -126,7 +126,12 @@ export function StudioShell({
   const surface = <Fragment key="surface">{children}</Fragment>;
 
   return (
-    <div className="split split--stack" style={shell}>
+    // `.split` only — NOT `.split--stack`, which capture and detect use to reflow
+    // in pure CSS. Carrying it here meant two thresholds for one decision (720px
+    // in the stylesheet, 1023px in `useStackedStudio`) and two row templates, and
+    // the CSS one describes two children while this shell has three. `stacked`
+    // above is the single answer.
+    <div className="split" style={shell}>
       {stacked ? [surface, tree, inspector] : [tree, surface, inspector]}
     </div>
   );

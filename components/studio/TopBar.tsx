@@ -50,26 +50,27 @@ export function TopBar({
   }
 
   return (
-    <div
-      style={{
-        height: 48,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 14,
-        padding: '0 16px',
-        borderBottom: '1px solid var(--hairline)',
-        background: 'var(--paper)',
-        flexShrink: 0,
-      }}
-    >
+    // The same `.chrome-bar` as onboarding and DocShell, in its `--tight` 48px
+    // size. It used to be a hand-rolled `height: 48` flex row that could not
+    // wrap, holding ~900px of nowrap content — a logo, a breadcrumb, a room name
+    // of unknown length, a save hint, two tabs and three controls — so on
+    // anything under about a 950px window it simply overflowed sideways. Nothing
+    // in it could shrink either: flex items default to `min-width: auto`, so the
+    // `flex: 1` spacer collapsed to nothing and then the row spilled.
+    <div className="chrome-bar chrome-bar--tight">
       <Link href="/workspace" aria-label="Danmu — back to your rooms" style={{ display: 'flex' }}>
         <DanmuMark size={12} />
       </Link>
-      <div aria-hidden="true" style={{ width: 1, height: 18, background: 'var(--hairline)' }} />
+      <div aria-hidden="true" style={{ width: 1, height: 18, background: 'var(--hairline)', flexShrink: 0 }} />
       {/* A path, not a field label. `ds-label "Project"` spent its width saying
           what the editable name beside it already made obvious, and left the room
-          with no route back except the logo. "Rooms" is that route, stated. */}
-      <nav aria-label="Breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          with no route back except the logo. "Rooms" is that route, stated — and
+          it stays at every width, because it is the way out. The room NAME is
+          what gives ground instead. */}
+      <nav
+        aria-label="Breadcrumb"
+        style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flexShrink: 0 }}
+      >
         <Link
           href="/workspace"
           style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-3)', textDecoration: 'none', whiteSpace: 'nowrap' }}
@@ -79,7 +80,13 @@ export function TopBar({
         <span aria-hidden="true" style={{ color: 'var(--ink-4)', fontSize: 12 }}>/</span>
       </nav>
       {/* Renaming is a real control now: reachable by keyboard, announced, and
-          it reverts a blank name instead of appearing to ignore it. */}
+          it reverts a blank name instead of appearing to ignore it.
+          This is the item in the bar that gives ground: `.editable` already
+          ellipsises, and `minWidth: 0` is what lets it — a flex item's automatic
+          minimum is its own content, so without this a room called by a whole
+          sentence pushed the bar wider than the window instead of shortening. The
+          full name stays in the tooltip, in the accessible name, and in the field
+          the moment you press it. */}
       <EditableText
         value={name}
         label="Room name"
@@ -87,15 +94,18 @@ export function TopBar({
         onReject={() =>
           toast({ title: 'Room kept its name', message: 'A room needs a name, so the old one stayed.' })
         }
-        style={{ fontSize: 13, fontWeight: 500 }}
-        inputStyle={{ fontSize: 13, fontWeight: 500, height: 28, minWidth: 200, maxWidth: 280 }}
+        style={{ fontSize: 13, fontWeight: 500, minWidth: 0 }}
+        // A 200px floor on the input is what forced the bar past the window on a
+        // narrow screen mid-rename; it can have up to 280 and no more than it has.
+        inputStyle={{ fontSize: 13, fontWeight: 500, height: 28, width: 'min(280px, 100%)' }}
       />
       {/* Save state says a word. A bare 6px dot claimed something it could not
           explain — and it is announced, because a silent colour change is not
           feedback for anyone using a screen reader. */}
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, flexShrink: 0 }}>
         <span
           aria-hidden="true"
+          title={savedHint ? 'Room saved' : 'Saves as you go'}
           style={{
             width: 6,
             height: 6,
@@ -106,16 +116,26 @@ export function TopBar({
             flexShrink: 0,
           }}
         />
-        <span style={{ color: savedHint ? 'var(--success-text)' : 'var(--ink-3)', fontWeight: 600, whiteSpace: 'nowrap' }}>
-          {savedHint ? 'Saved' : 'Saves as you go'}
-        </span>
+        {/* Two spans, not one ternary: the transient "Saved" is feedback and
+            always shows, while the idle sentence is reassurance and steps aside
+            on a small laptop rather than costing the canvas a second bar row. */}
+        {savedHint ? (
+          <span style={{ color: 'var(--success-text)', fontWeight: 600, whiteSpace: 'nowrap' }}>Saved</span>
+        ) : (
+          <span className="bar-idle-words" style={{ color: 'var(--ink-3)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            Saves as you go
+          </span>
+        )}
       </span>
       <span className="sr-only" role="status" aria-live="polite">
         {savedHint ? 'Room saved' : ''}
       </span>
       {centerSlot}
-      <div style={{ flex: 1 }} />
-      {right}
+      {/* `margin-left: auto`, not a `flex: 1` spacer. A spacer stays on row one
+          when the bar wraps, which left these three hanging off the left edge of
+          row two; this keeps them together and against the trailing edge on
+          whichever row they land on. */}
+      {right != null && <div className="chrome-bar__end">{right}</div>}
     </div>
   );
 }

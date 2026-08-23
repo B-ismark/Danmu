@@ -171,7 +171,10 @@ export function CatalogPanel({
         // Stops short of the bottom-left corner: the studio's help button lives
         // there, and this panel used to sit on top of it.
         bottom: bottomGap,
-        width: 268,
+        // Capped against the canvas, not just stated: at 268px flat this covered
+        // two thirds of a stacked layout's room, and you cannot drag a piece into
+        // a room the panel you are dragging from is sitting on.
+        width: 'min(268px, calc(100% - 24px))',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',

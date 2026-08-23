@@ -97,6 +97,26 @@ backend, no account. The 3D studio *is* the product.
    put a literal hex in a renderer for a surface the user can recolour. The manifest
    and `viewport.themeColor` in `app/layout.tsx` are two files answering "what
    colour is this app", so a test pins them to each other too.
+   **A control that does not fit must reflow, not spill or vanish** — the UI half
+   of rule 2's "never silently resize it to fit", and violated at least as often.
+   Widths here are ceilings, not promises: `min(Npx, calc(100vw - 32px))` for a
+   floating card, `clamp()` for the rails, `minWidth: 0` on the one flex item that
+   should ellipsise, `wrap` on a `Segmented` whose labels want more than the panel
+   has. **Both failure modes are silent, and they are different ones.** A
+   container that clips (`.toolbar`, `.rail`, a scroll box — all `overflow:
+   hidden`) eats what crosses its edge with no scrollbar and no clue: that is what
+   cut ~56px off the left of the "Look" panel, a 300px card opened inside a 260px
+   rail. An element with no `overflow` of its own does the opposite and prints
+   over its neighbours: `flex: 1 1 0` plus `minWidth: 0` sizes the *box*, so four
+   lighting moods in 272px gave "Evening" 68px for 82px of word and it ran into
+   "Day" and "Cool". Neither errors, neither fails a test, and the second one
+   looks like a font bug. Two corollaries with scars: **a rail section's body is
+   inline, never a popover** (`RailSection` is already the disclosure — if
+   something genuinely must float out of a rail it goes `position: fixed` and
+   *measured*, like `RoomTools` and `ui/Select.tsx`); and **one bar,
+   `.chrome-bar`, which wraps at every width** rather than below a breakpoint,
+   because nobody can name in a media query how wide a row holding a user-typed
+   room name gets.
 5. **Local-first.** Rooms → IndexedDB (`lib/storage.ts`); settings + key →
    localStorage. The only user-data egress is the optional direct Gemini
    detection (BYO key). Don't add a backend or send data anywhere else. A room

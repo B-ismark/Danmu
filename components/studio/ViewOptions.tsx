@@ -1,28 +1,44 @@
 'use client';
 
-// The "View" popover — one place for everything about how the room LOOKS.
+// Everything about how the room LOOKS, in one place.
 //
-// It no longer positions itself. It used to float alone at the top-right of the
-// canvas, which made it one of seven separate clusters over a single 3D view; the
-// dock at the bottom-right places it now, next to the camera presets it belongs
-// with, and this component only owns the button and the panel that hangs off it.
+// It used to float alone at the top-right of the canvas — one of seven separate
+// clusters over a single 3D view. It has since absorbed two strays: the floor
+// grid was a chip of its own down in the corner (a display toggle sitting apart
+// from the other display toggle), and a "Re-scan room" link that duplicated a
+// control belonging elsewhere, because it is about what is IN the room rather
+// than how it is lit. (That control now lives in the rail's Room section; this
+// panel is not it.) Three groups, in the order someone reaches for them:
+// Lighting, Display, Quality.
 //
-// It has since absorbed two strays. The floor grid was a chip of its own down in
-// the corner — a display toggle sitting apart from the other display toggle — and
-// a "Re-scan room" link that duplicated a control belonging elsewhere, because it
-// is about what is IN the room rather than how it is lit. (That control now lives
-// in the rail's Room section; this panel is not it.) Three groups, in the order
-// someone reaches for them: Lighting, Display, Quality.
+// It is now the body of the rail's "View" section, and NOT a popover. That was
+// half-finished for a while: the header claimed it "no longer positions
+// anything" while the code still hung a `position: absolute; width: 300` card
+// off a "Look" button. Two things were wrong with that, and both were visible:
 //
-// This panel is itself now a rail section rather than a canvas popover — see
-// PartTree — so it no longer positions anything.
+//   · The rail is 260px with 16px of padding, so a 300px panel opening to
+//     `right: 0` reached ~56px past the rail's own edge — into PartTree's
+//     `overflow: hidden` scroll box, which cut it off down the left. Both
+//     `ui/Select.tsx` and `RoomTools.tsx` had already hit this and fixed it by
+//     going `position: fixed` and measuring; a third copy of that machinery is
+//     the wrong answer here, because —
+//   · `RailSection` is already a disclosure. A button that opens a panel, inside
+//     a header that opens a section, is two locks on one door.
+//
+// So the groups render inline and the section header is the only disclosure.
+//
+// Inlining exposed a second fault the popover had been hiding badly rather than
+// avoiding. Even at 300px the Lighting set was broken: `stretch` split 272px of
+// content four ways, so "Evening" got 68px for 82px of word, and a segment with
+// no `overflow` of its own does not clip — it prints over the segments either
+// side. In a ~200px rail one row is hopeless, so it passes `wrap` instead, which
+// is 4-across wherever four fit and a 2×2 pad here.
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { useStudio, type Lighting } from '@/lib/store';
-import { Icon, type IconName } from '@/components/ui/Icon';
+import { type IconName } from '@/components/ui/Icon';
 import { Segmented, Toggle } from '@/components/ui/primitives';
 import { SunControls } from './SunControls';
-import { isTypingOrDialog } from './KeyboardShortcuts';
 
 // Lucide, not emoji. The emoji versions rendered in the system's colour font —
 // a red sun and a yellow moon in a panel that is otherwise warm neutrals — at
@@ -47,122 +63,62 @@ export function ViewOptions() {
   const toggleGrid = useStudio((s) => s.toggleGrid);
   const quality = useStudio((s) => s.quality);
   const setQuality = useStudio((s) => s.setQuality);
-  const [open, setOpen] = useState(false);
-  const wrap = useRef<HTMLDivElement>(null);
-  const btn = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function onDown(e: MouseEvent) {
-      if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false);
-    }
-    // Esc closes and hands focus back to the trigger. Without it the only ways
-    // out were clicking the button again or clicking somewhere harmless.
-    function onKey(e: KeyboardEvent) {
-      if (e.key !== 'Escape') return;
-      if (isTypingOrDialog(e.target)) return;
-      e.stopPropagation();
-      setOpen(false);
-      btn.current?.focus();
-    }
-    document.addEventListener('mousedown', onDown);
-    window.addEventListener('keydown', onKey, true);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      window.removeEventListener('keydown', onKey, true);
-    };
-  }, [open]);
 
   const hi = quality === 'high';
 
   return (
-    <div ref={wrap} style={{ position: 'relative' }}>
-      <button
-        ref={btn}
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="ds-btn"
-        title="Lighting, floor grid, decor and render quality"
-        style={{
-          height: 30,
-          fontSize: 11,
-          gap: 6,
-          background: open ? 'var(--accent-tint)' : 'var(--paper)',
-          borderColor: open ? 'var(--accent-text)' : 'var(--edge)',
-          color: open ? 'var(--accent-text)' : 'var(--ink-2)',
-          boxShadow: 'var(--shadow-soft)',
-        }}
-      >
-        <Icon name="sun" size={12} />
-        Look
-      </button>
+    // No width and no min-width: the section it sits in is the one that decides
+    // how much room there is, and every control below is happy to be told.
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
+      <Group label="Lighting">
+        <Segmented
+          ariaLabel="Lighting"
+          options={MOODS.map((m) => ({ value: m.id, label: m.label, icon: m.icon }))}
+          value={lighting}
+          onChange={setLighting}
+          wrap
+          // "Evening" is the widest label; below this the grid drops a column
+          // rather than clipping it.
+          minItem={88}
+        />
+        {lighting === 'sun' && (
+          <div style={{ marginTop: 12 }}>
+            <SunControls />
+          </div>
+        )}
+      </Group>
 
-      {open && (
-        <div
-          className="ds-card"
-          style={{
-            position: 'absolute',
-            // Opens upward: the button lives on the bottom edge of the canvas.
-            bottom: 'calc(100% + 8px)',
-            right: 0,
-            zIndex: 'var(--z-popover)',
-            // Wide enough for four lighting segments to hold icon + label on one
-            // line without the track clipping the last of them.
-            width: 300,
-            maxHeight: 'min(560px, 72vh)',
-            overflow: 'auto',
-            padding: 14,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 14,
-            boxShadow: 'var(--shadow-lift)',
-          }}
-        >
-          <Group label="Lighting">
-            <Segmented
-              ariaLabel="Lighting"
-              options={MOODS.map((m) => ({ value: m.id, label: m.label, icon: m.icon }))}
-              value={lighting}
-              onChange={setLighting}
-              stretch
-            />
-            {lighting === 'sun' && (
-              <div style={{ marginTop: 12 }}>
-                <SunControls />
-              </div>
-            )}
-          </Group>
+      <div style={{ height: 1, background: 'var(--hairline)' }} />
 
-          <div style={{ height: 1, background: 'var(--hairline)' }} />
+      <Group label="Display">
+        <SwitchRow
+          label="Floor grid"
+          hint="A metre grid under the furniture"
+          on={showGrid}
+          onToggle={toggleGrid}
+        />
+        <SwitchRow
+          label="Decor"
+          hint="Books, plants and props on surfaces"
+          on={dressed}
+          onToggle={toggleDressed}
+        />
+      </Group>
 
-          <Group label="Display">
-            <SwitchRow
-              label="Floor grid"
-              hint="A metre grid under the furniture"
-              on={showGrid}
-              onToggle={toggleGrid}
-            />
-            <SwitchRow
-              label="Decor"
-              hint="Books, plants and props on surfaces"
-              on={dressed}
-              onToggle={toggleDressed}
-            />
-          </Group>
+      <div style={{ height: 1, background: 'var(--hairline)' }} />
 
-          <Group label="Quality">
-            <Segmented
-              ariaLabel="Quality"
-              options={[{ value: 'high', label: 'High' }, { value: 'low', label: 'Fast' }]}
-              value={hi ? 'high' : 'low'}
-              onChange={(v) => setQuality(v === 'high' ? 'high' : 'low')}
-            />
-            <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 5, lineHeight: 1.4 }}>
-              High adds soft shadows + textured surfaces.
-            </div>
-          </Group>
+      <Group label="Quality">
+        <Segmented
+          ariaLabel="Quality"
+          options={[{ value: 'high', label: 'High' }, { value: 'low', label: 'Fast' }]}
+          value={hi ? 'high' : 'low'}
+          onChange={(v) => setQuality(v === 'high' ? 'high' : 'low')}
+          stretch
+        />
+        <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 5, lineHeight: 1.4 }}>
+          High adds soft shadows + textured surfaces.
         </div>
-      )}
+      </Group>
     </div>
   );
 }

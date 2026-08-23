@@ -55,6 +55,12 @@ const DEFAULT_SITE = { lat: 40, lon: 0, bearingDeg: 0 };
  *  minutes before the bisection below refines it to one. */
 const SAMPLE_STEP = 10;
 
+/** The graph's own coordinate space, NOT a pixel width — the `<svg>` is
+ *  `width: 100%`. It was both at once for a while, because the popover this used
+ *  to live in had a content box of exactly 272px, and that coincidence is what
+ *  made a fixed `viewBox` look like it was doing something. The rail it lives in
+ *  now is narrower and clamps, so the two numbers have come apart; see the
+ *  `preserveAspectRatio` note at the `<svg>`. */
 const GRAPH_W = 272;
 const GRAPH_H = 64;
 /** Baseline of the horizon inside the graph. Above it is daylight, below it is a
@@ -519,9 +525,24 @@ function DayGraph({
       <svg
         viewBox={`0 0 ${GRAPH_W} ${GRAPH_H}`}
         width="100%"
-        height={GRAPH_H}
         aria-hidden="true"
-        style={{ display: 'block', borderRadius: 'var(--r-2)', background: 'var(--paper-2)' }}
+        // The height FOLLOWS the width, via aspect-ratio, rather than being
+        // pinned at GRAPH_H. Pinned, the default `xMidYMid meet` letterboxed the
+        // drawing in any container narrower than GRAPH_W: the element's own
+        // `--paper-2` showed above and below the night rect's `--paper-3` as two
+        // mismatched grey bands, which is exactly what the move out of a 272px
+        // popover into a rail that clamps produced.
+        // `preserveAspectRatio="none"` would also fill the box, and is wrong —
+        // it scales the axes independently, so the "sun right now" marker
+        // becomes an ellipse and the vertical rules render thinner than the
+        // horizontal ones. A smaller graph beats a distorted one.
+        style={{
+          display: 'block',
+          height: 'auto',
+          aspectRatio: `${GRAPH_W} / ${GRAPH_H}`,
+          borderRadius: 'var(--r-2)',
+          background: 'var(--paper-2)',
+        }}
       >
         {/* Night is the floor and daylight is painted over it, rather than night
             being two rectangles at the ends. The day band is opaque `--paper-2`

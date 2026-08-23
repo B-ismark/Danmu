@@ -31,15 +31,18 @@ export default function StudioLayout({ children }: { children: ReactNode }) {
     // bottom row of studio chrome sat under it.
     <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--paper)' }}>
       <TopBar
-        centerSlot={<div style={{ marginLeft: 16 }}><StudioTabs /></div>}
+        // flexShrink: 0 — the bar wraps rather than squeezes, and these two are
+        // the studio's whole navigation; they move to a second row intact before
+        // they give up a pixel of label.
+        centerSlot={<div style={{ marginLeft: 2, flexShrink: 0 }}><StudioTabs /></div>}
         // Five controls became three, and none of them claims to be the primary
         // action any more. Undo/redo moved to the canvas's top-right with the view
         // controls (where Drafted groups it); Rescan moved into the rail's Room
         // section, because it changes what is IN the room rather than how the app
-        // is framed; and Snapshot, the plan PNG, the furniture CSV and the scene
-        // file are all items inside Export — downloading a PNG is not the primary
-        // verb of a decoration app, and four sibling download buttons is how you
-        // end up not knowing the other three exist.
+        // is framed; and Snapshot, the plan PNG and the scene file are all items
+        // inside Export — downloading a PNG is not the primary verb of a
+        // decoration app, and sibling download buttons are how you end up not
+        // knowing the other ones exist.
         right={
           <>
             <StudioHelp />

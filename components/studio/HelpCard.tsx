@@ -90,7 +90,9 @@ export function HelpCard({ title, onClose, children }: { title: string; onClose:
         boxShadow: 'var(--shadow-lift)',
         maxHeight: 'min(420px, 60vh)',
         overflow: 'auto',
-        width: 320,
+        // Capped against the window as well as stated: this card is placed by
+        // whoever renders it, and none of those slots can promise it 320px.
+        width: 'min(320px, calc(100vw - 32px))',
       }}
     >
       <div

@@ -103,6 +103,10 @@ export function EditableText({
   /** what is being renamed, e.g. "Room name" — used for the accessible name */
   label: string;
   maxLength?: number;
+  /** `.editable` already truncates (`max-width: 100%`, ellipsis, nowrap), so a
+   *  caller inside a flex row needs nothing here but `minWidth: 0` — without it
+   *  the item's automatic minimum is its content and it refuses to shrink at
+   *  all, which is what pushed the studio's top bar wider than the window. */
   style?: CSSProperties;
   inputStyle?: CSSProperties;
 }) {
@@ -165,7 +169,11 @@ export function EditableText({
         start();
       }}
       aria-label={`${label}: ${value}. Activate to rename.`}
-      title="Rename"
+      // Carries the FULL value as well as the verb. The title used to be the
+      // bare word "Rename", which is enough until the label is ellipsised —
+      // then the tooltip is the only place a sighted user can read the rest of
+      // their room's name.
+      title={`Rename “${value}”`}
       style={style}
     >
       {value}
@@ -398,6 +406,8 @@ export function Segmented<T extends string>({
   ariaLabel,
   size = 30,
   stretch = false,
+  wrap = false,
+  minItem = 84,
 }: {
   options: { value: T; label?: string; icon?: IconName }[];
   value: T;
@@ -408,13 +418,50 @@ export function Segmented<T extends string>({
    *  labels are too wide to sit at their natural size in a narrow panel — even
    *  thirds beat a track that overflows and clips its last segment. */
   stretch?: boolean;
+  /**
+   * Let the segments reflow onto more than one row.
+   *
+   * `stretch` divides ONE row evenly, which helps only while the row is wide
+   * enough for every label — and it hides the moment it isn't. Four
+   * `icon + word` segments want about 340px; the lighting set had 272px, so each
+   * got 68px while "Evening" needed 82. `flex: 1 1 0` with `minWidth: 0` sizes
+   * the BOX, not the text, and the segment had no `overflow` of its own, so the
+   * word simply printed over its neighbours — `justify-content: center` spilling
+   * it 7px into "Day" on one side and "Cool" on the other. Nothing errored and
+   * nothing was missing; the control just read as overlapping mush.
+   *
+   * This mode lays the segments out as an auto-fitting grid instead, so the same
+   * set is 4-across in a dialog and a 2×2 pad in a rail without either caller
+   * knowing which it got.
+   *
+   * No dividers are drawn between the rows, because none are drawn between the
+   * columns either — the filled active segment is what carries the state.
+   */
+  wrap?: boolean;
+  /** Narrowest a segment may be before the grid drops to fewer columns. Default
+   *  fits `icon + one word` at 12.5px; raise it for two-word labels. Ignored
+   *  unless `wrap`. */
+  minItem?: number;
 }) {
+  const fill = wrap || stretch;
   return (
     <div
       className="toolbar"
       role="group"
       aria-label={ariaLabel}
-      style={stretch ? { display: 'flex', width: '100%' } : undefined}
+      style={
+        wrap
+          ? {
+              display: 'grid',
+              width: '100%',
+              // `min(…, 100%)` so a container narrower than one segment gets a
+              // single squeezed column rather than a track that overflows it.
+              gridTemplateColumns: `repeat(auto-fit, minmax(min(${minItem}px, 100%), 1fr))`,
+            }
+          : stretch
+            ? { display: 'flex', width: '100%' }
+            : undefined
+      }
     >
       {options.map((o) => {
         const active = o.value === value;
@@ -428,9 +475,14 @@ export function Segmented<T extends string>({
             title={o.label ?? o.value}
             style={{
               height: size,
-              padding: o.label ? (stretch ? '0 6px' : '0 12px') : 0,
-              width: o.label ? 'auto' : size,
-              flex: stretch ? '1 1 0' : undefined,
+              padding: o.label ? (fill ? '0 6px' : '0 12px') : 0,
+              // Left alone under `wrap` — the grid track is what sizes the cell,
+              // and a `width` here would fight it. Otherwise: labels take their
+              // natural width, and an icon-only segment is square.
+              width: wrap ? undefined : o.label ? 'auto' : size,
+              // `flex` is meaningless in the grid, and setting it would read as
+              // if one of the two modes were still doing the other's work.
+              flex: wrap ? undefined : stretch ? '1 1 0' : undefined,
               minWidth: 0,
               display: 'inline-flex',
               alignItems: 'center',
@@ -439,6 +491,7 @@ export function Segmented<T extends string>({
               // An icon + label pair used to be one string with a space in it,
               // which wrapped to a second line inside a 30px-tall segment.
               whiteSpace: 'nowrap',
+              overflow: 'hidden',
               border: 'none',
               background: active ? 'var(--accent-tint)' : 'transparent',
               color: active ? 'var(--accent-text)' : 'var(--ink-2)',
@@ -448,8 +501,19 @@ export function Segmented<T extends string>({
               fontFamily: 'var(--font-sans)',
             }}
           >
+            {/* The icon never shrinks — it is the part that still identifies the
+                segment once the word has been cut. */}
             {o.icon && <Icon name={o.icon} size={14} />}
-            {o.label}
+            {/* Its own element so the ellipsis has something to apply to: a bare
+                text node inside a flex container is an anonymous flex item, and
+                `text-overflow` does not reach it. Below `minItem` there is no
+                column count that fits, so cutting the label here is the last
+                resort — and it is a real improvement on what a too-narrow
+                segment used to do, which was let the word print straight over
+                the segments either side of it. */}
+            {o.label && (
+              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.label}</span>
+            )}
           </button>
         );
       })}

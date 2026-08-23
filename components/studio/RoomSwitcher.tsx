@@ -69,7 +69,15 @@ export function RoomSwitcher() {
             top: 'calc(100% + 6px)',
             right: 0,
             zIndex: 'var(--z-popover)',
-            minWidth: 280,
+            // Both bounds are capped against the window, and the floor has to be:
+            // in CSS `min-width` beats `max-width`, so a bare `minWidth: 280`
+            // would have won the conflict and spilled anyway on the narrowest
+            // viewport — the ceiling alone is half a rule.
+            minWidth: 'min(280px, calc(100vw - 32px))',
+            // Room names are user text, and a long one widened this panel
+            // leftward out of the window, since `right: 0` pins the one edge it
+            // cannot grow past.
+            maxWidth: 'min(360px, calc(100vw - 32px))',
             maxHeight: 360,
             overflow: 'auto',
           }}
@@ -110,7 +118,22 @@ export function RoomSwitcher() {
                 }}
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{r.name}</div>
+                  {/* One line, ellipsised. A room called by a whole sentence used
+                      to wrap to four lines and make the rows different heights —
+                      or, if it was one long unbroken word, spill past the panel. */}
+                  <div
+                    title={r.name}
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: 'var(--ink)',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {r.name}
+                  </div>
                   <div style={{ fontSize: 10.5, color: 'var(--ink-3)' }}>
                     <span className="mono">{r.itemCount}</span> {r.itemCount === 1 ? 'piece' : 'pieces'}
                   </div>
