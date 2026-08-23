@@ -8,7 +8,8 @@ import { roomStore } from '@/lib/storage';
 import { footprintForLayout, type LayoutId } from '@/lib/footprint';
 import { polygonArea } from '@/lib/geometry';
 import { Icon } from '@/components/ui/Icon';
-import { DanmuMark, StepHeader } from '@/components/ui/primitives';
+import { StepHeader } from '@/components/ui/primitives';
+import { DocShell } from '@/components/ui/DocShell';
 
 const PRESETS = [
   { id: 'rect' as const, name: 'Rectangle', width: 6.0, depth: 4.0, starter: 'Living room' },
@@ -112,24 +113,19 @@ export default function LayoutPickPage() {
   }
 
   return (
-    <div
-      style={{
-        position: 'relative',
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        background:
-          'radial-gradient(1100px 560px at 12% -12%, var(--accent-tint), transparent 60%),' +
-          'radial-gradient(900px 520px at 108% 116%, var(--accent-2-tint), transparent 55%),' +
-          'var(--paper)',
-      }}
+    <DocShell
+      variant="hero"
+      trail={[{ label: 'Rooms', href: '/workspace' }, { label: 'New room' }]}
+      // Kept as history, not folded into the breadcrumb: arriving here from
+      // Welcome and arriving from the workspace are different journeys, and Back
+      // is the only control that honours both. The breadcrumb offers the fixed
+      // destination alongside it.
+      back={<BackButton onBack={() => router.back()} />}
     >
-      <Topbar onBack={() => router.back()} />
-
-      <div className="page-pad" style={{ flex: 1, display: 'grid', placeItems: 'center' }}>
+      <div className="page-pad" style={{ display: 'grid', placeItems: 'center' }}>
         {/* .auto-grid--wide collapses to one column on a phone; the old
             minmax(380px, 1fr) forced a track wider than the viewport. */}
-        <div className="auto-grid auto-grid--wide" style={{ width: '100%', maxWidth: 1100, gap: 32, alignItems: 'start' }}>
+        <div className="auto-grid auto-grid--wide" style={{ width: '100%', gap: 32, alignItems: 'start' }}>
           {/* INTRO + PICKER */}
           <div>
             <StepHeader
@@ -257,22 +253,18 @@ export default function LayoutPickPage() {
           </div>
         </div>
       </div>
-    </div>
+    </DocShell>
   );
 }
 
-function Topbar({ onBack }: { onBack: () => void }) {
-  // No step counter: the primary CTA on this screen goes straight to the studio,
-  // so "02 / 04" was promising a sequence most people never walk.
+// Just the button. The bar around it, the mark and the divider are DocShell's.
+// No step counter: the primary CTA on this screen goes straight to the studio,
+// so "02 / 04" was promising a sequence most people never walk.
+function BackButton({ onBack }: { onBack: () => void }) {
   return (
-    <div className="chrome-bar">
-      <button onClick={onBack} className="ds-btn ds-btn--ghost" style={{ height: 40, padding: '0 10px' }}>
-        <Icon name="chevron-left" size={14} />
-        <span style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>Back</span>
-      </button>
-      <div style={{ width: 1, height: 18, background: 'var(--hairline)' }} />
-      <DanmuMark size={12} />
-      <div className="chrome-bar__spacer" />
-    </div>
+    <button onClick={onBack} className="ds-btn ds-btn--ghost" style={{ height: 40, padding: '0 10px' }}>
+      <Icon name="chevron-left" size={14} />
+      <span style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>Back</span>
+    </button>
   );
 }

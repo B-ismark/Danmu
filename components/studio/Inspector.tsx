@@ -67,6 +67,8 @@ export function Inspector() {
   /** Every part in its CURRENT effective transform, so surface snapping works
    *  against the world the user is looking at rather than the original scene. */
   function partSnapshot() {
+    // Already resolved by `useRoomScene`; this only projects the handful of fields
+    // the snapping maths reads.
     return effParts.map((p) => ({
       id: p.id,
       pos: p.pos,
@@ -205,7 +207,7 @@ export function Inspector() {
 
       {/* One entry point to the model library. Generic-box parts (low-confidence
           detections) read poorly, so for those the same button leads with why. */}
-      <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div className="section section--flush" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <button
           onClick={() => setSwapOpen(true)}
           className={isGeneric ? 'ds-btn' : 'ds-btn ds-btn--primary'}

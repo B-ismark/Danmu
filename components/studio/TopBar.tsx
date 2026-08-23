@@ -62,11 +62,22 @@ export function TopBar({
         flexShrink: 0,
       }}
     >
-      <Link href="/workspace" style={{ display: 'flex' }}>
+      <Link href="/workspace" aria-label="Danmu — back to your rooms" style={{ display: 'flex' }}>
         <DanmuMark size={12} />
       </Link>
-      <div style={{ width: 1, height: 18, background: 'var(--hairline)' }} />
-      <span className="ds-label">Project</span>
+      <div aria-hidden="true" style={{ width: 1, height: 18, background: 'var(--hairline)' }} />
+      {/* A path, not a field label. `ds-label "Project"` spent its width saying
+          what the editable name beside it already made obvious, and left the room
+          with no route back except the logo. "Rooms" is that route, stated. */}
+      <nav aria-label="Breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+        <Link
+          href="/workspace"
+          style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-3)', textDecoration: 'none', whiteSpace: 'nowrap' }}
+        >
+          Rooms
+        </Link>
+        <span aria-hidden="true" style={{ color: 'var(--ink-4)', fontSize: 12 }}>/</span>
+      </nav>
       {/* Renaming is a real control now: reachable by keyboard, announced, and
           it reverts a blank name instead of appearing to ignore it. */}
       <EditableText

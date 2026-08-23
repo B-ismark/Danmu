@@ -8,7 +8,11 @@ import { Icon } from '@/components/ui/Icon';
 import { Dot, IconButton } from '@/components/ui/primitives';
 import { useConfirm } from '@/components/ui/Confirm';
 import { toast } from '@/components/ui/StorageToast';
+import Link from 'next/link';
 import { RoomDimsEditor } from './RoomDimsEditor';
+import { RailSection } from './RailSection';
+import { RoomTools } from './RoomTools';
+import { ViewOptions } from './ViewOptions';
 import { AddFurnitureButton } from './CatalogPanel';
 import { removeParts } from './KeyboardShortcuts';
 import { THEMES, themeColorFor, type Theme } from '@/lib/themes';
@@ -32,6 +36,7 @@ import { THEMES, themeColorFor, type Theme } from '@/lib/themes';
 
 export function PartTree() {
   const parts = useScene((s) => s.parts);
+  const room = useScene((s) => s.room);
   const selectedId = useStudio((s) => s.selectedPartId);
   const setSelected = useStudio((s) => s.setSelected);
   const frameSelected = useStudio((s) => s.frameSelected);
@@ -39,6 +44,12 @@ export function PartTree() {
   const lighting = useStudio((s) => s.lighting);
   const setLighting = useStudio((s) => s.setLighting);
   const [query, setQuery] = useState('');
+  // Local, not persisted: which drawer you left open is not a preference worth
+  // remembering across rooms, and `partialize` should stay about how the room
+  // LOOKS. Room and Pieces open by default — the dimensions and the piece list
+  // are what the rail is for; Style and View are occasional.
+  const [sec, setSec] = useState({ room: true, style: false, view: false, pieces: true });
+  const toggle = (k: keyof typeof sec) => setSec((v) => ({ ...v, [k]: !v[k] }));
   const hasAnyOverride = useStudio(
     (s) =>
       Object.keys(s.positions).length > 0 ||
@@ -152,17 +163,39 @@ export function PartTree() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', height: '100%' }}>
-      <RoomDimsEditor />
-      <div className="section">
-        <div className="section-head">
-          <span className="section-title">Furniture</span>
-          <span className="section-meta">
-            {parts.length} piece{parts.length === 1 ? '' : 's'}
-          </span>
-        </div>
-        <AddFurnitureButton />
+      {/* The room's state, always on screen — see RoomTools. Above the sections
+          because it is about the whole room, not one of its parts. */}
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--hairline)' }}>
+        <RoomTools />
+      </div>
 
-        <div style={{ marginTop: 12 }} role="group" aria-labelledby="restyle-label">
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+        <RailSection
+          title="Room"
+          meta={<span className="mono">{(room.width / 1000).toFixed(1)}×{(room.depth / 1000).toFixed(1)}m</span>}
+          open={sec.room}
+          onToggle={() => toggle('room')}
+        >
+          <RoomDimsEditor />
+          {/* Rescan changes what is IN the room, which is this section's subject.
+              It was in the top bar, next to controls about how the app is framed. */}
+          <Link
+            href="/onboarding/detect"
+            className="ds-btn"
+            style={{ width: '100%', height: 30, fontSize: 11.5, justifyContent: 'center', marginTop: 10 }}
+          >
+            <Icon name="refresh" size={12} />
+            Re-scan the room
+          </Link>
+        </RailSection>
+
+        <RailSection
+          title="Style"
+          meta={activeTheme ? THEMES.find((t) => t.id === activeTheme)?.label : undefined}
+          open={sec.style}
+          onToggle={() => toggle('style')}
+        >
+        <div role="group" aria-labelledby="restyle-label">
           <span id="restyle-label" className="ds-label" style={{ display: 'block', marginBottom: 8 }}>One-tap restyle</span>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {THEMES.map((t) => {
@@ -213,9 +246,20 @@ export function PartTree() {
             </button>
           </div>
         )}
-      </div>
+        </RailSection>
 
-      <div style={{ padding: '8px 10px 4px', borderBottom: '1px solid var(--hairline-soft)' }}>
+        <RailSection title="View" open={sec.view} onToggle={() => toggle('view')}>
+          <ViewOptions />
+        </RailSection>
+
+        <RailSection
+          title="Pieces"
+          meta={<span className="mono">{parts.length}</span>}
+          open={sec.pieces}
+          onToggle={() => toggle('pieces')}
+          grow
+        >
+        <div style={{ paddingBottom: 6 }}>
         {/* A placeholder is not a label — it disappears the moment you type. */}
         <input
           className="field"
@@ -236,7 +280,7 @@ export function PartTree() {
         </div>
       </div>
 
-      <div ref={listRef} className="list" role="listbox" aria-label="Furniture in this room">
+        <div ref={listRef} className="list" role="listbox" aria-label="Furniture in this room" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
         {visibleParts.length === 0 && (
           // role="presentation": a listbox may only own options, and this is copy.
           <div role="presentation" style={{ padding: '18px 14px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 12, lineHeight: 1.5 }}>
@@ -266,12 +310,17 @@ export function PartTree() {
             onDelete={() => removePart(i, part.id)}
           />
         ))}
+        </div>
+        </RailSection>
       </div>
 
-      {/* Footer carries one thing: the bulk revert, and only when there is
-          something to revert. */}
-      {hasAnyOverride && (
-        <div style={{ borderTop: '1px solid var(--hairline)', padding: '12px 16px', background: 'var(--paper-2)' }}>
+      {/* Pinned footer, the way Drafted pins Cancel / Create: the rail's own
+          action never scrolls away, and "Add" was previously buried mid-column
+          inside the Furniture section. The bulk revert joins it, and still only
+          appears when there is something to revert. */}
+      <div style={{ borderTop: '1px solid var(--hairline)', padding: '12px 16px', background: 'var(--paper-2)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <AddFurnitureButton />
+        {hasAnyOverride && (
           <button
             onClick={async () => {
               const ok = await confirm({
@@ -289,8 +338,8 @@ export function PartTree() {
           >
             <Icon name="refresh" size={11} /> Put everything back
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

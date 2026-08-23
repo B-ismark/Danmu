@@ -149,7 +149,13 @@ const FALLBACK = /\b(positions|rotations|dims)\s*\[[^\]]+\]\s*\?\?/;
 describe('the transform fallback is written once', () => {
   it('finds the source files at all', () => {
     // Without this the sweep below could pass by scanning nothing.
-    const files = sources();
+    //
+    // Separators are normalised before the comparison because `join` emits the
+    // platform's own: on Windows these come back as `lib\transforms.ts`, so the
+    // check for `lib/transforms.ts` failed there while passing on CI — a guard whose
+    // own smoke test only works on one of the two platforms CLAUDE.md documents.
+    // The offender scan below already normalises, which is why only this line broke.
+    const files = sources().map((f) => f.replace(/\\/g, '/'));
     expect(files.length).toBeGreaterThan(60);
     expect(files.some((f) => f.endsWith('lib/transforms.ts'))).toBe(true);
   });

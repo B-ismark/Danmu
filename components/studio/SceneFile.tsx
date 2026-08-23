@@ -25,72 +25,60 @@ import {
   sceneFileToRoom,
 } from '@/lib/scene-file';
 
-/** Save the current room to a file. Lives in the studio top bar next to Snapshot —
- *  a PNG of the view and the room itself are the two things one might want to keep,
- *  and they belong in the same place. */
-export function ExportSceneButton() {
-  const { roomId } = useParams<{ roomId: string }>();
-  const [busy, setBusy] = useState(false);
+/**
+ * Save the current room to a file.
+ *
+ * A plain async function rather than a button, because there is no longer a button:
+ * this is one item in the top bar's Export menu, beside the 3D snapshot, the floor
+ * plan and the furniture CSV. It sat next to Snapshot as its own control on the
+ * reasoning that a picture of the view and the room itself are the two things one
+ * might want to keep — which is right, and is the argument for putting it in the
+ * menu that already holds the other three rather than beside it. Four sibling
+ * download buttons is how you end up not knowing about three of them.
+ *
+ * Reports through a toast either way, so the caller does not have to.
+ */
+export async function saveSceneFile(roomId: string) {
+  try {
+    // The stores are the live truth; `meta` is written on a 300 ms debounce and
+    // supplies only the name, which nothing in the studio holds.
+    const meta = await roomStore.loadRoom(roomId);
+    const { parts, room } = useScene.getState();
+    const { positions, rotations, dims, hidden } = useStudio.getState();
 
-  async function save() {
-    if (!roomId || busy) return;
-    setBusy(true);
-    try {
-      // The stores are the live truth; `meta` is written on a 300 ms debounce and
-      // supplies only the name, which nothing in the studio holds.
-      const meta = await roomStore.loadRoom(roomId);
-      const { parts, room } = useScene.getState();
-      const { positions, rotations, dims, hidden } = useStudio.getState();
+    const file = buildSceneFile(
+      {
+        id: roomId,
+        createdAt: meta?.createdAt ?? Date.now(),
+        name: meta?.name ?? 'Room',
+        layoutId: room.layoutId,
+        width: room.width,
+        depth: room.depth,
+        height: room.height,
+        wallColors: room.wallColors,
+        // The polygon is written even for a preset shape, not just a customised
+        // one. It costs a few hundred bytes and makes the file say what the room
+        // IS rather than which preset to re-derive it from — so a room survives
+        // `footprintForLayout` ever changing its mind about a preset.
+        footprint: room.footprint,
+        site: room.site,
+      },
+      parts,
+      { positions, rotations, dims, hidden },
+      Date.now(),
+    );
 
-      const file = buildSceneFile(
-        {
-          id: roomId,
-          createdAt: meta?.createdAt ?? Date.now(),
-          name: meta?.name ?? 'Room',
-          layoutId: room.layoutId,
-          width: room.width,
-          depth: room.depth,
-          height: room.height,
-          wallColors: room.wallColors,
-          // The polygon is written even for a preset shape, not just a customised
-          // one. It costs a few hundred bytes and makes the file say what the room
-          // IS rather than which preset to re-derive it from — so a room survives
-          // `footprintForLayout` ever changing its mind about a preset.
-          footprint: room.footprint,
-          site: room.site,
-        },
-        parts,
-        { positions, rotations, dims, hidden },
-        Date.now(),
-      );
-
-      const name = sceneFileName(meta?.name ?? 'room');
-      downloadBlob(new Blob([sceneFileJson(file)], { type: 'application/json' }), name);
-      toast({ tone: 'success', title: 'Room saved to a file', message: name });
-    } catch (e) {
-      toast({
-        tone: 'danger',
-        title: "Couldn't save the file",
-        message: 'The room is still here — try again.',
-        detail: String(e),
-      });
-    } finally {
-      setBusy(false);
-    }
+    const name = sceneFileName(meta?.name ?? 'room');
+    downloadBlob(new Blob([sceneFileJson(file)], { type: 'application/json' }), name);
+    toast({ tone: 'success', title: 'Room saved to a file', message: name });
+  } catch (e) {
+    toast({
+      tone: 'danger',
+      title: "Couldn't save the file",
+      message: 'The room is still here — try again.',
+      detail: String(e),
+    });
   }
-
-  return (
-    <button
-      onClick={save}
-      disabled={busy}
-      className="ds-btn"
-      style={{ height: 28, fontSize: 12 }}
-      title="Download this room as a file you can keep or send to someone"
-    >
-      <Icon name="download" size={12} />
-      {busy ? 'Saving…' : 'Save file'}
-    </button>
-  );
 }
 
 /** Open a scene file as a NEW room, then go to it.

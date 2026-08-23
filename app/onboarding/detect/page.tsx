@@ -9,7 +9,7 @@ import { roomStore, blobToObjectUrl, type Capture, type CaptureSlot, type RoomDa
 import { detectAcrossImages, DetectError, type Detection } from '@/lib/detection';
 import { CAPTURE_SLOTS } from '@/lib/capture';
 import { Icon } from '@/components/ui/Icon';
-import { DanmuMark, EditableText, IconButton, StepHeader } from '@/components/ui/primitives';
+import { EditableText, FlowBarLead, IconButton, StepHeader } from '@/components/ui/primitives';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { Select } from '@/components/ui/Select';
 import { PhotoEditor } from '@/components/studio/PhotoEditor';
@@ -696,19 +696,18 @@ export default function DetectPage() {
     <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--paper)' }}>
       {/* .chrome-bar wraps instead of overflowing when the viewport narrows. */}
       <header className="chrome-bar">
-        <button onClick={() => router.back()} className="ds-btn ds-btn--ghost" style={{ height: 32, padding: '0 10px' }}>
-          <Icon name="chevron-left" size={14} />
-          <span style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>Back</span>
-        </button>
-        <div style={{ width: 1, height: 18, background: 'var(--hairline)' }} aria-hidden="true" />
-        <DanmuMark size={12} />
+        {/* No `markHref`, deliberately: this page's whole review — confirmations,
+            edits, boxes added by hand — lives in component state until `finish()`
+            writes it, so a stray click on a logo would discard it. Back is an
+            explicit, high-intent control; a logo is not. */}
+        <FlowBarLead onBack={() => router.back()} />
         <div className="chrome-bar__spacer" />
         <span role="status" aria-live="polite" style={{ fontSize: 13, color: 'var(--ink-2)' }}>
           {statusText}
         </span>
         {/* The way out of onboarding is the loudest thing here — it used to be a
             32px ghost-weight button, quieter than the add-a-box tool. */}
-        <button onClick={finish} disabled={running || saving} className="ds-btn ds-btn--primary">
+        <button onClick={finish} disabled={running || saving} className="ds-btn ds-btn--accent">
           {saving ? 'Opening your room…' : 'Continue to the studio'}
           <Icon name="arrow-right" size={13} />
         </button>
@@ -746,7 +745,7 @@ export default function DetectPage() {
       {notice && (
         <NoticeCard notice={notice} onDismiss={notice.tone === 'calm' ? () => setNotice(null) : undefined}>
           {notice.capture && (
-            <Link href="/onboarding/capture" className="ds-btn ds-btn--primary" style={{ height: 34, fontSize: 12.5 }}>
+            <Link href="/onboarding/capture" className="ds-btn" style={{ height: 34, fontSize: 12.5 }}>
               <Icon name="camera" size={13} />
               Take wall photos
             </Link>
@@ -928,7 +927,7 @@ export default function DetectPage() {
                         ref={padRef}
                         onClick={() => addManual(pending)}
                         onKeyDown={nudge}
-                        className="ds-btn ds-btn--accent"
+                        className="ds-btn"
                         style={{ height: 34, fontSize: 12.5 }}
                         aria-describedby="place-hint"
                       >

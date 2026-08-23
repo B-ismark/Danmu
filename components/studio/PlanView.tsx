@@ -15,7 +15,7 @@
 // It also no longer refuses work silently: a drag that collides tints red and
 // slides along whatever it hit, matching the 3D Draggable.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { useStudio, useSettings } from '@/lib/store';
 import { useRoomScene } from '@/lib/room-scene';
 import { useScene } from '@/lib/scene-store';
@@ -28,15 +28,15 @@ import { pointInFootprint, wallSegments, footprintBounds } from '@/lib/footprint
 import { moveWallCarrying, wallAttachments } from '@/lib/wall-actions';
 import { formatDim } from '@/lib/units';
 import { Icon } from '@/components/ui/Icon';
-import { IconButton } from '@/components/ui/primitives';
-import { HelpGroup, HelpLine, HelpToggle, Kb } from './HelpCard';
 import { announce, removeParts, studioSurfaceFocused } from './KeyboardShortcuts';
 import { openSceneMenu } from './SceneContextMenu';
 
 const SCALE = 100; // px per metre at zoom = 1, in viewBox units
 const PAD = 80;
-const MIN_ZOOM = 0.4;
-const MAX_ZOOM = 4;
+/** Exported so the page's toolbar can disable at the limits — it used to own
+ *  the buttons and the bounds together. */
+export const MIN_ZOOM = 0.4;
+export const MAX_ZOOM = 4;
 /** How far one arrow press moves a wall. */
 const WALL_STEP = 0.05;
 
@@ -58,14 +58,31 @@ const WALL_STEP = 0.05;
 const WALKABLE = 0;
 const CUT_OFF = 1;
 
-export function PlanView({
-  onViewChange,
-  showComfort = false,
-}: {
-  /** Reports the live magnification so the page's scale chip can tell the truth. */
-  onViewChange?: (v: { zoom: number }) => void;
+/**
+ * What the page can do to this drawing. The view controls used to live in here,
+ * which is why the 2D tab's chrome and the 3D tab's chrome drifted apart: one was
+ * owned by a component, the other by a page. The drawing owns its own transform
+ * (pinch, wheel and drag all write it) so the state stays here; the page drives it
+ * through this handle and reads it back through `onViewChange`.
+ */
+export type PlanViewHandle = {
+  zoomIn: () => void;
+  zoomOut: () => void;
+  rotateLeft: () => void;
+  rotateRight: () => void;
+  /** Back to the default framing. */
+  fit: () => void;
+};
+
+export const PlanView = forwardRef<PlanViewHandle, {
+  /**
+   * Reports live magnification, page rotation, and whether any walkable run is
+   * cut off from the door — the last is the only thing the page's comfort legend
+   * needs that it cannot compute for itself.
+   */
+  onViewChange?: (v: { zoom: number; rot: number; hasCutOff: boolean }) => void;
   showComfort?: boolean;
-}) {
+}>(function PlanView({ onViewChange, showComfort = false }, ref) {
   const ROOM_DYN = useScene((s) => s.room);
   // Footprints can be off-centre (independent wall moves), so map world↔pixels
   // through the bounding box, not ±width/2.
@@ -104,6 +121,10 @@ export function PlanView({
       return !entrance || entrance.has(id) ? WALKABLE : CUT_OFF;
     });
   }, [showComfort, parts, ROOM_DYN.footprint]);
+
+  // Hoisted to sit with walkRuns rather than with the view controls: the effect
+  // that reports it upward runs earlier in the body than `fit` does.
+  const hasCutOff = useMemo(() => walkRuns.some((r) => r.state === CUT_OFF), [walkRuns]);
 
   // Keyboard steps track the gizmo's snap setting so the two agree: 10 mm / 15°
   // fine, 50 mm / 45° coarse. "Off" still steps — a key press has to be discrete.
@@ -160,8 +181,8 @@ export function PlanView({
   }, []);
 
   useEffect(() => {
-    onViewChange?.({ zoom });
-  }, [zoom, onViewChange]);
+    onViewChange?.({ zoom, rot, hasCutOff });
+  }, [zoom, rot, hasCutOff, onViewChange]);
 
   const fit = useCallback(() => {
     setZoom(1);
@@ -169,6 +190,20 @@ export function PlanView({
     setRot(0);
   }, []);
 
+
+  // The page's toolbar drives these. Zoom steps are 1.15× to match the wheel, so
+  // the buttons and the wheel do not disagree about what "one step" means.
+  useImperativeHandle(
+    ref,
+    () => ({
+      zoomIn: () => setZoom((z) => Math.min(MAX_ZOOM, z * 1.15)),
+      zoomOut: () => setZoom((z) => Math.max(MIN_ZOOM, z / 1.15)),
+      rotateLeft: () => setRot((r) => r - Math.PI / 12),
+      rotateRight: () => setRot((r) => r + Math.PI / 12),
+      fit,
+    }),
+    [fit],
+  );
   function toViewBox(clientX: number, clientY: number): { x: number; y: number } {
     const svg = svgRef.current;
     if (!svg) return { x: 0, y: 0 };
@@ -861,178 +896,9 @@ export function PlanView({
         </g>
       </svg>
 
-      {/* The bottom-left cluster, laid out the way the 3D tab lays out its own:
-          the help chip sits above the controls and opens over them, so the drawing
-          itself is never covered by something the user did not ask for. */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: 16,
-          left: 16,
-          zIndex: 'var(--z-canvas-hint)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'flex-start',
-          gap: 8,
-          maxWidth: 'min(340px, calc(100% - 32px))',
-        }}
-      >
-        <HelpToggle>
-          <HelpGroup title="Moving furniture">
-            <HelpLine>Drag a piece to move it. It stops against whatever is in the way, and tints red if it cannot go there.</HelpLine>
-            <HelpLine>Drag the handle on a selected piece to turn it.</HelpLine>
-            <HelpLine>Click a wall to paint it, or drag it to make the room bigger or smaller.</HelpLine>
-          </HelpGroup>
-          <HelpGroup title="Getting around">
-            <HelpLine>Pinch or scroll to zoom. Two fingers, Shift-drag, or hold <Kb>Space</Kb> and drag, to pan.</HelpLine>
-            <HelpLine>Right-click a piece — or the plan — for what you can do to it.</HelpLine>
-            <HelpLine>Alt-drag turns the page — the drawing, not the furniture.</HelpLine>
-          </HelpGroup>
-          <HelpGroup title="Keys" note="Click the drawing first — these stay quiet while you are using a panel.">
-            <HelpLine>
-              <Kb>↑</Kb>
-              <Kb>↓</Kb>
-              <Kb>←</Kb>
-              <Kb>→</Kb> nudge whatever is focused · hold <Kb>Shift</Kb> to turn it
-            </HelpLine>
-            <HelpLine>
-              <Kb>Tab</Kb> steps through the pieces and the walls · <Kb>Esc</Kb> deselects
-            </HelpLine>
-          </HelpGroup>
-        </HelpToggle>
-
-        <div className="toolbar" role="group" aria-label="Plan view" style={{ gap: 6, padding: 4 }}>
-        <IconButton
-          icon="plus"
-          label="Zoom in"
-          onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z * 1.15))}
-          disabled={zoom >= MAX_ZOOM - 0.001}
-          variant="outline"
-          size={28}
-          iconSize={15}
-        />
-        <IconButton
-          icon="minus"
-          label="Zoom out"
-          onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z / 1.15))}
-          disabled={zoom <= MIN_ZOOM + 0.001}
-          variant="outline"
-          size={28}
-          iconSize={15}
-        />
-        <span
-          className="mono"
-          style={{
-            fontSize: 10,
-            color: 'var(--ink-3)',
-            letterSpacing: '0.06em',
-            display: 'flex',
-            alignItems: 'center',
-            padding: '0 8px',
-          }}
-        >
-          {(zoom * 100).toFixed(0)}%
-        </span>
-        <div style={{ width: 1, background: 'var(--hairline)' }} />
-        <IconButton
-          icon="rotate-ccw"
-          label="Turn the page left"
-          onClick={() => setRot((r) => r - Math.PI / 12)}
-          variant="outline"
-          size={28}
-          iconSize={14}
-        />
-        <IconButton
-          icon="rotate-cw"
-          label="Turn the page right"
-          onClick={() => setRot((r) => r + Math.PI / 12)}
-          variant="outline"
-          size={28}
-          iconSize={14}
-        />
-        <span
-          className="mono"
-          style={{
-            fontSize: 10,
-            color: 'var(--ink-3)',
-            letterSpacing: '0.06em',
-            display: 'flex',
-            alignItems: 'center',
-            padding: '0 8px',
-          }}
-        >
-          {(((rot * 180) / Math.PI) % 360).toFixed(0)}°
-        </span>
-        <div style={{ width: 1, background: 'var(--hairline)' }} />
-        <button
-          onClick={fit}
-          title="Back to the default view"
-          className="ds-btn"
-          style={{ height: 28, fontSize: 11, padding: '0 9px', gap: 5 }}
-        >
-          <Icon name="fit" size={12} />
-          Fit
-        </button>
-        </div>
-      </div>
-
-      {/* The key for the shading, and ONLY when the shading is on. It used to be a
-          permanent four-line paragraph pinned over the bottom-right of the drawing:
-          three of those lines were how-to-drive text, which belongs in the help card
-          exactly as it does on the 3D tab, and the fourth described colours that
-          were not on screen unless Comfort zones was switched on. */}
-      {showComfort && (
-        <div
-          className="popover"
-          style={{
-            position: 'absolute',
-            bottom: 16,
-            right: 16,
-            zIndex: 'var(--z-canvas-hint)',
-            padding: '7px 10px',
-            fontSize: 11,
-            color: 'var(--ink-3)',
-            lineHeight: 1.45,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 3,
-          }}
-        >
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Swatch fill="var(--accent-2-tint)" />
-            Room to stand and walk — {WALK_RADIUS * 200} cm across
-          </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Swatch fill="var(--accent-2-tint)" dashed />
-            Room each piece needs to be used
-          </span>
-          {walkRuns.some((r) => r.state === CUT_OFF) && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--warn-text)' }}>
-              <Swatch fill="var(--warn-tint)" />
-              No route from the door to here
-            </span>
-          )}
-        </div>
-      )}
     </div>
   );
-}
-
-function Swatch({ fill, dashed }: { fill: string; dashed?: boolean }) {
-  return (
-    <span
-      aria-hidden="true"
-      style={{
-        width: 14,
-        height: 10,
-        flexShrink: 0,
-        background: fill,
-        border: dashed ? '1px dashed var(--accent-2)' : '1px solid var(--edge)',
-        borderRadius: 2,
-      }}
-    />
-  );
-}
+});
 
 /** The comfort bands for one piece, drawn in its own local frame — which is
  *  exactly the frame `accessZones` authors them in, so this is a unit conversion

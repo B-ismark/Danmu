@@ -55,6 +55,7 @@ import {
 } from './scene-spec';
 import { clampDims, ROOM_SIDE_M } from './dimension-ranges';
 import { resolveParts } from './transforms';
+import { fileSlug } from './exports';
 import { LAYOUT_IDS, type LayoutId, type RoomData, type Site, type Transforms } from './storage';
 
 /** Marks the JSON as ours. Checked exactly — a file that does not say this is not
@@ -177,15 +178,11 @@ export function sceneFileJson(file: SceneFile): string {
 }
 
 /** `Front Room` → `front-room.danmu.json`, so a folder of exports from three rooms
- *  is still readable a week later. */
+ *  is still readable a week later. The slug itself is `exports.ts`' — this file's own
+ *  copy was byte-identical to it, and four downloads naming the same room three
+ *  different ways is a difference nobody chose. */
 export function sceneFileName(roomName: string): string {
-  const slug =
-    roomName
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'room';
-  return slug.slice(0, 60) + SCENE_FILE_EXT;
+  return fileSlug(roomName) + SCENE_FILE_EXT;
 }
 
 // ─── Import ─────────────────────────────────────────────────────────────────

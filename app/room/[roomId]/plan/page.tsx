@@ -1,33 +1,31 @@
 'use client';
 
-import { useCallback, useEffect, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { PartTree } from '@/components/studio/PartTree';
-import { Inspector } from '@/components/studio/Inspector';
-import { PlanView } from '@/components/studio/PlanView';
+import { PlanView, type PlanViewHandle } from '@/components/studio/PlanView';
+import { PlanViewControls, ComfortLegend } from '@/components/studio/PlanChrome';
+import { CanvasTools, CanvasView, CanvasAide, ChromeDivider } from '@/components/studio/CanvasChrome';
+import { UndoRedo } from '@/components/studio/UndoRedo';
 import { SceneContextMenu } from '@/components/studio/SceneContextMenu';
 import { CatalogPanel, STUDIO_CANVAS_ID } from '@/components/studio/CatalogPanel';
-import { useStackedStudio } from '@/components/studio/NarrowViewportBanner';
+import { StudioShell } from '@/components/studio/StudioShell';
 import { Icon } from '@/components/ui/Icon';
-import { useScene } from '@/lib/scene-store';
-import { currentRoomScene } from '@/lib/room-scene';
 import { useStudio, useSettings } from '@/lib/store';
-import { exportPlanPng } from '@/lib/plan-export';
 import { roomStore } from '@/lib/storage';
 import { UNIT_OPTIONS } from '@/lib/units';
 
 export default function PlanPage() {
   const dimUnit = useSettings((s) => s.dimUnit);
-  // See the note in the 3D page: `ready` keeps the first paint from using the
-  // wrong shell and then reflowing.
-  const { stacked, ready } = useStackedStudio();
   const { roomId } = useParams<{ roomId: string }>();
   const [roomName, setRoomName] = useState('Floor plan');
   // Live from PlanView, which owns the zoom. The old chip hard-coded "1:50 · cm"
   // while the drawing labelled millimetres, rendered at 100 px/m, and zoomed
   // 0.4×–4× — three false claims on the one screen someone might measure from.
-  const [zoom, setZoom] = useState(1);
+  const [view, setView] = useState({ zoom: 1, rot: 0, hasCutOff: false });
   const [comfort, setComfort] = useState(true);
+  // PlanView owns the drawing's transform (wheel, pinch and drag all write it);
+  // the page drives it through this handle. See PlanViewHandle.
+  const planApi = useRef<PlanViewHandle | null>(null);
   const catalogOpen = useStudio((s) => s.catalogOpen);
 
   useEffect(() => {
@@ -37,51 +35,19 @@ export default function PlanPage() {
     });
   }, [roomId]);
 
-  const onViewChange = useCallback((v: { zoom: number }) => setZoom(v.zoom), []);
+  const onViewChange = useCallback((v: { zoom: number; rot: number; hasCutOff: boolean }) => setView(v), []);
 
   const unitName = UNIT_OPTIONS.find((u) => u.id === dimUnit)?.label ?? dimUnit;
 
-  function exportPlan() {
-    exportPlanPng(currentRoomScene(), useScene.getState().room, dimUnit, roomName);
-  }
-
-  const shell: CSSProperties = stacked
-    ? {
-        gridTemplateColumns: '1fr',
-        gridTemplateRows: 'minmax(300px, 55vh) auto auto',
-        height: '100%',
-        overflow: 'auto',
-      }
-    : { gridTemplateColumns: '260px 1fr 320px', height: '100%' };
-
-  const railStyle: CSSProperties = stacked
-    ? {
-        minHeight: 0,
-        height: 'auto',
-        maxHeight: '60vh',
-        borderLeft: 0,
-        borderRight: 0,
-        borderTop: '1px solid var(--hairline)',
-      }
-    : { minHeight: 0 };
-
-  const tree = (
-    <aside key="tree" className="rail rail--left" style={railStyle}>
-      <PartTree />
-    </aside>
-  );
-
-  const inspector = (
-    <aside key="inspector" className="rail rail--right" style={railStyle}>
-      <Inspector />
-    </aside>
-  );
+  // No exportPlan() here any more: the plan PNG, the 3D snapshot and the furniture
+  // CSV are one Export menu in the top bar. A page-level copy is how the two tabs
+  // came to offer different subsets of the same three downloads.
 
   const plan = (
     <main
       key="plan"
       id={STUDIO_CANVAS_ID}
-      style={{ position: 'relative', overflow: 'hidden', minHeight: stacked ? 300 : 0 }}
+      style={{ position: 'relative', overflow: 'hidden', minHeight: 0 }}
       className="ds-grid-bg"
     >
       <h1 className="sr-only">Your room as a floor plan</h1>
@@ -95,32 +61,18 @@ export default function PlanPage() {
           padding: 40,
         }}
       >
-        <PlanView onViewChange={onViewChange} showComfort={comfort} />
+        <PlanView ref={planApi} onViewChange={onViewChange} showComfort={comfort} />
       </div>
 
       {/* Same right-click menu as the 3D tab; it positions itself against this
           element's box. */}
       <SceneContextMenu />
 
-      <div
-        style={{
-          position: 'absolute',
-          top: 12,
-          left: 12,
-          display: 'flex',
-          gap: 6,
-          flexWrap: 'wrap',
-          zIndex: 'var(--z-canvas-ui)',
-        }}
-      >
-        {/* Says only what is true: the drawing is to scale, its numbers are in
-            the unit Settings owns, and the magnification is whatever the user
-            has zoomed to. No printed ratio — the SVG scales to fit its pane, so
-            no fixed 1:n could survive a window resize. */}
-        <span className="ds-chip" title={`Drawn to scale. Every dimension is in ${unitName.toLowerCase()}.`}>
-          <Icon name="ruler" size={10} />
-          To scale in <span className="mono">{dimUnit}</span> · <span className="mono">{Math.round(zoom * 100)}%</span>
-        </span>
+      {/* ONE tool cluster, top-centre — the shared slot. What used to be here was
+          a readout chip and a toggle top-left, an export button top-right, a help
+          card and a zoom toolbar bottom-left (inside PlanView), and a legend
+          bottom-right: four corners, on the tab that also had the least to say. */}
+      <CanvasTools>
         <button
           onClick={() => setComfort((v) => !v)}
           aria-pressed={comfort}
@@ -136,40 +88,28 @@ export default function PlanPage() {
           <Icon name="crosshair" size={10} />
           Comfort zones
         </button>
-      </div>
+      </CanvasTools>
+
+      <CanvasView>
+        <UndoRedo />
+        <ChromeDivider />
+        <PlanViewControls api={planApi} zoom={view.zoom} rot={view.rot} dimUnit={unitName.toLowerCase()} />
+      </CanvasView>
+
+      {/* The tab's one bottom-right aide, and only while the shading is on. */}
+      {comfort && (
+        <CanvasAide>
+          <ComfortLegend hasCutOff={view.hasCutOff} />
+        </CanvasAide>
+      )}
 
       {/* The same catalog the 3D tab uses, opened by the same rail button. Its
           rows are not draggable here — nothing on this page catches a drop — so
           it offers click-to-drop-in-the-centre instead of pretending otherwise. */}
       {catalogOpen && <CatalogPanel bottomGap={100} />}
 
-      <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 'var(--z-canvas-ui)' }}>
-        <button
-          onClick={exportPlan}
-          className="ds-btn"
-          title="Download a to-scale floor plan PNG"
-          style={{ height: 30, fontSize: 11, borderColor: 'var(--edge)' }}
-        >
-          <Icon name="image" size={12} />
-          Export plan
-        </button>
-      </div>
     </main>
   );
 
-  if (!ready) {
-    return (
-      <div style={{ height: '100%', display: 'grid', placeItems: 'center', background: 'var(--paper-2)' }}>
-        <span role="status" style={{ fontSize: 13, color: 'var(--ink-3)' }}>
-          Drawing your floor plan…
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="split split--stack" style={shell}>
-      {stacked ? [plan, tree, inspector] : [tree, plan, inspector]}
-    </div>
-  );
+  return <StudioShell loadingLabel="Drawing your floor plan…">{plan}</StudioShell>;
 }

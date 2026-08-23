@@ -27,10 +27,23 @@ import semver from 'semver';
 const ROOT = join(__dirname, '..');
 const CONFIG = 'eslint.config.mjs';
 
+/** Loading ESLint and resolving `eslint-config-next` through `FlatCompat` is real
+ *  work — a cold call measured 5.8 s on Windows, which overran vitest's 5 s default
+ *  and failed the FIRST of these tests while the others passed on the warm module
+ *  cache. The instance is reused (`calculateConfigForFile` only reads) and the three
+ *  tests that resolve get a budget that is not a stopwatch: none of them is asserting
+ *  how fast the toolchain is. */
+const RESOLVE_TIMEOUT = 60_000;
+
+let eslintP: Promise<{ calculateConfigForFile: (f: string) => Promise<unknown> }> | null = null;
+
 /** The flat config, resolved the way Next resolves it. */
 async function resolveFor(file: string) {
-  const ESLint = await loadESLint({ useFlatConfig: true });
-  return new ESLint({ cwd: ROOT }).calculateConfigForFile(join(ROOT, file));
+  eslintP ??= loadESLint({ useFlatConfig: true }).then((ESLint) => new ESLint({ cwd: ROOT }));
+  const eslint = await eslintP;
+  return (await eslint.calculateConfigForFile(join(ROOT, file))) as
+    | { plugins?: unknown; rules?: Record<string, unknown> }
+    | undefined;
 }
 
 describe('ESLint major version', () => {
@@ -59,14 +72,14 @@ describe('the flat config, as `next build` reads it', () => {
     expect(plugins, `no config resolved for ${CONFIG} — is it self-ignored?`).toBeTruthy();
     const names = Array.isArray(plugins) ? plugins : Object.keys(plugins ?? {});
     expect(names).toContain('@next/next');
-  });
+  }, RESOLVE_TIMEOUT);
 
   it('does not ignore itself', async () => {
     // Belt and braces on the above: a resolved config with no rules at all is
     // what an ignored file looks like.
     const resolved = await resolveFor(CONFIG);
     expect(Object.keys(resolved?.rules ?? {}).length).toBeGreaterThan(0);
-  });
+  }, RESOLVE_TIMEOUT);
 
   it('still carries the Next rules for application source', async () => {
     // Guards the other direction — the config resolving *something* is not the
@@ -74,5 +87,5 @@ describe('the flat config, as `next build` reads it', () => {
     const resolved = await resolveFor('components/studio/TopBar.tsx');
     expect(resolved?.rules).toHaveProperty('@next/next/no-img-element');
     expect(resolved?.rules).toHaveProperty('react-hooks/exhaustive-deps');
-  });
+  }, RESOLVE_TIMEOUT);
 });

@@ -13,9 +13,10 @@ import {
   startOfToday,
   type RecencyGroupId,
 } from '@/lib/dates';
-import { DanmuMark, EditableText, IconButton, Pill } from '@/components/ui/primitives';
+import { EditableText, IconButton, Pill } from '@/components/ui/primitives';
 import { Icon } from '@/components/ui/Icon';
 import { useConfirmDeleteRooms } from '@/components/ui/Confirm';
+import { DocShell } from '@/components/ui/DocShell';
 import { toast } from '@/components/ui/StorageToast';
 import { PlanThumb } from '@/components/studio/PlanThumb';
 import { ImportSceneButton } from '@/components/studio/SceneFile';
@@ -138,27 +139,39 @@ export default function WorkspacePage() {
   const selectedRooms = rooms.filter((r) => selected.includes(r.id));
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--paper)', display: 'flex', flexDirection: 'column' }}>
-      <div className="chrome-bar">
-        <DanmuMark size={12} />
-        <div style={{ width: 1, height: 18, background: 'var(--hairline)' }} />
-        <span className="ds-label">Workspace</span>
-        <div className="chrome-bar__spacer" />
-        <Link href="/settings" className="ds-btn" style={{ height: 32, fontSize: 12 }}>
-          <Icon name="settings" size={12} />
-          Settings
-        </Link>
-        {/* Import belongs here rather than in a room: it makes a new room, so the
-            workspace is both where it lands and where you can see it land. */}
-        <ImportSceneButton />
-        <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--primary" style={{ height: 32, fontSize: 12 }}>
-          <Icon name="plus" size={12} />
-          New Room
-        </Link>
-      </div>
+    <DocShell
+      // This IS the root, so the trail is one hop. It still replaces the
+      // `ds-label "Workspace"` that sat beside an h1 reading "Your rooms".
+      trail={[{ label: 'Rooms' }]}
+      actions={
+        <>
+          <Link href="/settings" className="ds-btn" style={{ height: 32, fontSize: 12 }}>
+            <Icon name="settings" size={12} />
+            Settings
+          </Link>
+          {/* While the workspace is empty the EmptyState below owns BOTH of these
+              calls to action, at 40px in the middle of the page, and the bar carries
+              navigation only. Repeating them up here is the one-primary rule's exact
+              failure case — two claims to the main action — and the same argument
+              applies to Import: offering it twice on one screen is how neither
+              placement gets learned.
 
-      <div style={{ flex: 1, position: 'relative', background: 'var(--paper-2)' }}>
-        <div className="page-pad" style={{ maxWidth: 1100, margin: '0 auto' }}>
+              Import lives in the workspace rather than in a room because it MAKES a
+              room, so this is both where it lands and where you see it land. */}
+          {rooms.length > 0 && (
+            <>
+              <ImportSceneButton />
+              <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--primary" style={{ height: 32, fontSize: 12 }}>
+                <Icon name="plus" size={12} />
+                New Room
+              </Link>
+            </>
+          )}
+        </>
+      }
+    >
+      <div style={{ position: 'relative' }}>
+        <div>
           {!booted ? (
             <div style={{ textAlign: 'center', padding: 60, color: 'var(--ink-3)', fontSize: 13 }}>
               Loading rooms…
@@ -298,7 +311,7 @@ export default function WorkspacePage() {
           )}
         </div>
       </div>
-    </div>
+    </DocShell>
   );
 }
 
@@ -429,10 +442,12 @@ function RoomCard({
           </div>
         )}
 
+        {/* Plain: this repeats once per card, and the page's primary is the one
+            "New Room" in the bar. The thumbnail above is the other open target. */}
         <Link
           href={href}
           onClick={onOpen}
-          className="ds-btn ds-btn--primary"
+          className="ds-btn"
           style={{ height: 32, fontSize: 12, justifyContent: 'center' }}
         >
           <Icon name="cube" size={11} />
@@ -445,7 +460,7 @@ function RoomCard({
 
 function EmptyState() {
   return (
-    <div style={{ textAlign: 'center', padding: '80px 8px', maxWidth: 600, marginInline: 'auto' }}>
+    <div style={{ textAlign: 'center', padding: '80px 8px', maxWidth: 'var(--measure-text)', marginInline: 'auto' }}>
       <div className="ds-kicker" style={{ marginBottom: 12 }}>
         Ready when you are
       </div>
@@ -455,8 +470,12 @@ function EmptyState() {
         every piece. No account, no upload. Capturing your real room is optional.
       </p>
       <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-        <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--accent" style={{ height: 40, padding: '0 20px', fontSize: 14 }}>
-          {/* inherits the button's own --on-accent foreground */}
+        {/* --primary, not --accent. This is the page you are reading, not a step in
+            the onboarding flow, and the bar hides its own "New Room" in this state,
+            so there is exactly one. The pairing this replaces — an ink "New Room" in
+            the bar beside a terracotta "Create your first room" here, both pointing
+            at /onboarding/layout-pick — is the case the rule in globals.css cites. */}
+        <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--primary" style={{ height: 40, padding: '0 20px', fontSize: 14 }}>
           <Icon name="plus" size={13} />
           Create your first room
         </Link>

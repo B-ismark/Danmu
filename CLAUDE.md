@@ -144,7 +144,14 @@ backend, no account. The 3D studio *is* the product.
    (`next.config.mjs`): a worker that can pin its own replacement is one you cannot
    ship a fix to.
 6. **Do not reintroduce the carpenter spec** (cutlist / build-cost / pricing).
-   Removed in the pivot.
+   Removed in the pivot. **This covers a furniture CSV**, which is the corollary
+   that has already been violated twice: a parts list minus the prices is what the
+   carpenter spec *was*, so a spreadsheet writer — however careful its formula-
+   injection escaping — is careful work aimed at the wrong target. Neither success
+   case in `PRODUCT.md` is served by one: nobody relaxes over a CSV, and nobody
+   aligns a partner with one. The Room panel's on-screen list and its plain-text
+   **Copy** are the sanctioned form of "here is what is in the room", because
+   pasting it into a message is what showing someone a plan actually looks like.
 
 ## Commands
 
@@ -205,7 +212,11 @@ tests import does not belong in `lib/`, where it reads as shipped code.
 - `components/three/` — R3F scene (`Room`, `DynamicPart`, `Draggable`, `Pickable`,
   `RoomShell`, `WallHandles`, `Dressing`, `Motion`).
 - `components/studio/` — 2D UI (`Inspector`, `PartTree`, `CatalogPanel`,
-  `ViewOptions`, `PlanView`, `SelectionBar`, `LibraryPicker`, `TopBar`, …).
+  `ViewOptions`, `PlanView`, `SelectionHeader`, `LibraryPicker`, `TopBar`, …).
+  Layout lives in three shells — `StudioShell` (both room tabs),
+  `ui/DocShell` (workspace / settings / layout-pick) and `CanvasChrome`
+  (the studio's three canvas slots). A new control joins an existing slot or
+  a rail section; it does not start a fourth canvas corner.
 - `components/ui/` — primitives + `Icon` (lucide wrapper).
 - Offline: `public/sw.js` (the worker — raw, unbundled, root-scoped),
   `app/manifest.ts` (served at `/manifest.webmanifest`; makes it installable) and

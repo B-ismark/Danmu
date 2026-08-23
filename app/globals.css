@@ -76,6 +76,30 @@
   --grid-line: rgba(42, 37, 32, 0.03);
   --grid-line-major: rgba(42, 37, 32, 0.05);
 
+  /* Content measures. How wide a column of content is allowed to get is a design
+     value like a radius or a colour, and it was the one that never made it into
+     this file: ten distinct literals — 1100 / 1060 / 920 / 600 / 560 / 520 / 480
+     / 470 / 440 / 420 — were retyped across seventeen sites, so no two pages
+     agreed and nothing said what the number was FOR.
+
+     Six tokens, chosen by job rather than by page. Reach for the one that
+     describes the content, not the one whose pixel count matches what was there.
+     A drawing viewport (PlanView's <svg>) and a control width (the room-name
+     input) are NOT measures and stay as their own numbers. */
+  --measure-page: 1100px;       /* widest shell: card grids, the layout picker */
+  --measure-page-prose: 920px;  /* a page that is mostly reading + forms */
+  --measure-text: 600px;        /* body copy at 13-15px */
+  --measure-text-sm: 560px;     /* fine print at 11.5-12px */
+  --measure-hero: 470px;        /* hero copy set beside a visual */
+  --measure-card: 440px;        /* one centred card — errors, empty states, gates */
+
+  /* The studio's two rails. Same argument as the measures: both room tabs had
+     these numbers inline and identical, so a change meant editing two files and
+     hoping. `StudioShell` is the only consumer. */
+  --rail-left: 260px;           /* the piece tree — a list, so it can be narrow */
+  --rail-right: 320px;          /* the inspector — holds controls, needs the room */
+  --rail-closed: 37px;          /* just the reopen toggle: a closed rail must not vanish */
+
   --font-sans: var(--font-nunito), ui-rounded, 'SF Pro Rounded', -apple-system, sans-serif;
   /* Must reference a *different* source name than the one next/font defines,
      or the property is cyclic and the whole value (fallbacks included) is
@@ -189,6 +213,25 @@ h1, h2, h3 { margin: 0; }
 .ds-btn:hover { background: var(--paper-2); transform: translateY(-1px); box-shadow: var(--shadow-lift); }
 .ds-btn:active { transform: translateY(0); box-shadow: var(--shadow-soft); }
 .ds-btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+/* WHICH ONE TO REACH FOR. Both variants existed with no rule about when, so five
+   files used one, five used the other, and two pages used both at once — the
+   workspace showed an ink "New Room" beside a terracotta "Create your first
+   room" pointing at the same route. Two claims to being the main action is no
+   main action.
+
+   · --primary  the ONE committing action on a page you are reading. At most one
+                per screen state. Not for an action repeated per card or row:
+                N primaries cancel out, and the loudest thing on the workspace
+                should be "New Room", not thirty "Open"s.
+   · --accent   the ONE action that advances an onboarding flow. Louder than
+                primary on purpose, because leaving the flow is the goal. One per
+                screen STATE, not per file: capture legitimately has four, for
+                the gate, the main screen, the permission-denied card and the
+                camera-off card — none of which are ever visible together.
+   · plain      everything else, including recovery branches and tools that
+                happen to sit inside a flow.
+
+   Anything that is neither of the first two is the third. */
 .ds-btn--primary { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }
 .ds-btn--primary:hover { background: var(--ink-hover); }
 .ds-btn--accent { background: var(--accent-ink); color: var(--on-accent); border-color: var(--accent-ink); }

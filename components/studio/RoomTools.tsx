@@ -1,24 +1,28 @@
 'use client';
 
-// The bottom-right dock of the 3D view — one row, two halves.
+// What the room is like, and what to do about it. Sits at the top of the left rail
+// rather than in the canvas's bottom-right corner, because it is the room's STATE:
+// leaving it on the canvas meant the health of the room was chrome you could bury,
+// and it cost a corner that also had to hold the camera, the lighting and the grid.
 //
-// LEFT (passed in as `leading`): looking at the room — the camera presets and the
-// Look popover. RIGHT: changing and checking it — Suggest, and one "Room" button
-// whose panel carries four readings as tabs:
+// A health chip and Suggest, plus one "Room" button whose panel carries four
+// readings as tabs:
 //   · Check — deterministic ergonomics review (door swings, walkways, storage
 //     clearance, bed access, TV distance, crowding). Click a finding to select the
 //     pieces involved and fly to them, or offer it a fix where the solver can act.
 //   · Will it fit — a real product's W × D × H against THIS room, without moving
 //     anything in it. The bridge from playing to buying; see `lib/fit-check.ts`.
 //   · List — every piece with its real dimensions in the user's display unit,
-//     copyable as text.
+//     copyable as plain text. Text, and not a CSV: a spreadsheet of parts minus the
+//     prices is the carpenter spec non-negotiable 6 retired, while "paste it into a
+//     message" is what actually serves showing someone a plan.
 //   · Layouts — named arrangement snapshots with mini floor plans, so competing
 //     arrangements can be saved and flipped between.
 //
-// The first three of those were three buttons opening three cards that could never
-// be open at the same time — a tab strip, spread across the bottom of the canvas and
-// costing three slots in a corner that also had to hold the camera, the lighting,
-// the grid and the suggestion button.
+// Check, List and Layouts were three buttons opening three cards that could never
+// be open at the same time — a tab strip, spread across the bottom of the canvas.
+// Saying so left the room for "Will it fit" to be a fourth reading rather than a
+// fourth button.
 //
 // Layouts are the one feature that stores work OUTSIDE the undo stack (they live
 // in IndexedDB), so both of its destructive paths are guarded: deleting a layout
@@ -54,34 +58,105 @@ import type { LibraryItem, ScenePart } from '@/lib/scene-spec';
 
 type RoomTab = 'check' | 'fit' | 'list' | 'layouts';
 
-export function RoomTools({ leading }: { leading?: ReactNode }) {
-  // One panel, three tabs. These were three sibling buttons opening three cards
+/**
+ * The room's report, derived. Shared by the rail's health chip and by the compact
+ * dot the rail shows while it is COLLAPSED — the point of surfacing this state was
+ * that it is never behind a press, and a closed rail would have put it back there.
+ * Only one of the two is mounted at a time, so this runs once either way.
+ */
+export function useRoomReport() {
+  const room = useScene((s) => s.room);
+  const stepFree = useSettings((s) => s.stepFree);
+  // `useRoomScene` is memoised on the same four store slices this used to merge by
+  // hand, so sharing it costs nothing and is one fewer copy of the fallback.
+  const effParts = useRoomScene();
+  const report = useMemo(
+    () => analyzeRoom(effParts, { footprint: room.footprint, height: room.height }, { accessibility: stepFree }),
+    [effParts, room.footprint, room.height, stepFree],
+  );
+  const problems = report.issues.filter((i) => i.severity !== 'info').length;
+  return { report, problems, effParts };
+}
+
+/** The health chip reduced to what fits a 37px rail. Same number, same colours. */
+export function RoomHealthDot() {
+  const { problems } = useRoomReport();
+  const ok = problems === 0;
+  return (
+    <div
+      title={ok ? 'Room checks out' : `${problems} ${problems === 1 ? 'issue' : 'issues'} — open this panel to see them`}
+      aria-label={ok ? 'Room checks out' : `${problems} room ${problems === 1 ? 'issue' : 'issues'}`}
+      role="status"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 24,
+        height: 24,
+        margin: '0 auto',
+        borderRadius: 'var(--r-full)',
+        fontSize: 10,
+        fontWeight: 700,
+        border: `1px solid ${ok ? 'var(--accent-2)' : 'var(--danger)'}`,
+        background: ok ? 'var(--accent-2-tint)' : 'var(--danger-tint)',
+        color: ok ? 'var(--success-text)' : 'var(--danger-text)',
+      }}
+    >
+      {ok ? <Icon name="check" size={12} /> : <span className="mono">{problems}</span>}
+    </div>
+  );
+}
+
+export function RoomTools() {
+  // One panel, four tabs. Three of them were sibling buttons opening three cards
   // that were already mutually exclusive — i.e. a tab strip with the tabs spread
-  // along the bottom of the canvas. Saying so costs two buttons of width and makes
-  // the second and third readings discoverable from the first.
+  // along the bottom of the canvas. Saying so costs two buttons of width, makes the
+  // later readings discoverable from the first, and left room for a fourth.
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<RoomTab>('check');
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const [panelPos, setPanelPos] = useState({ left: 0, top: 0 });
+
+  // Measured on open and kept true through resize and scroll. Placed to the RIGHT
+  // of the rail rather than over it, so the room the panel is describing — and
+  // that clicking a finding flies to — stays visible.
+  useEffect(() => {
+    if (!open) return;
+    function place() {
+      const r = anchorRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const W = 324;
+      const left = Math.min(r.right + 10, window.innerWidth - W - 12);
+      const top = Math.max(12, Math.min(r.top, window.innerHeight - 200));
+      setPanelPos({ left, top });
+    }
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [open]);
 
   const room = useScene((s) => s.room);
   const draggingId = useStudio((s) => s.draggingId);
   // `dims` for the re-fit offer only, which watches sizes rather than reading them.
   const dims = useStudio((s) => s.dims);
 
-  // The scene as it stands. `useRoomScene` is memoised on the same four slices this
-  // used to merge by hand, so it costs no more and is one fewer copy of the fallback.
-  const effParts = useRoomScene();
+  // No roomId or roomName here. This component read the room out of IndexedDB on
+  // mount for one purpose — naming the furniture CSV — and that download is retired
+  // (see lib/exports). The Layouts panel keeps its own `useParams`, because layouts
+  // really are stored per room.
+
+  // One derivation, shared with the collapsed rail's dot — see useRoomReport.
+  const { report, problems, effParts } = useRoomReport();
 
   // Step-free findings are opt-in and remembered, because whether a room has to
   // meet them is a fact about the person, not about the room — asking again every
   // time someone opens the panel would be its own small insult.
   const stepFree = useSettings((s) => s.stepFree);
   const setStepFree = useSettings((s) => s.setStepFree);
-
-  const report = useMemo(
-    () => analyzeRoom(effParts, { footprint: room.footprint, height: room.height }, { accessibility: stepFree }),
-    [effParts, room.footprint, room.height, stepFree],
-  );
-  const problems = report.issues.filter((i) => i.severity !== 'info').length;
 
   // Offer a re-fit when a size change is what broke things. See `useRefitOffer`.
   useRefitOffer(effParts, room.footprint, dims, problems);
@@ -109,31 +184,24 @@ export function RoomTools({ leading }: { leading?: ReactNode }) {
   }, [open]);
 
   return (
-    <div
-      style={{
-        position: 'absolute',
-        bottom: 12,
-        right: 12,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'flex-end',
-        gap: 8,
-        zIndex: 'var(--z-canvas-ui)',
-        // Leaves the selection bar its half of the bottom edge, and wraps rather
-        // than reaching into it when the canvas is narrow.
-        maxWidth: 'calc(100% - 24px)',
-        // Faded rather than unmounted mid-drag: this row hosts the Look popover
-        // and the camera presets, and remounting them on every drop would throw
-        // away their state for the sake of 30px of chrome.
-        opacity: draggingId ? 0 : 1,
-        pointerEvents: draggingId ? 'none' : 'auto',
-        transition: 'opacity .15s',
-      }}
-    >
+    <div ref={anchorRef} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {/* Fixed and measured, not absolute: this panel lives in a 260px rail with
+          its own scroll box, where an absolutely-positioned card gets clipped.
+          Same reason and same fix as ui/Select.tsx's portalled listbox. */}
       {open && (
         <div
           className="ds-card"
-          style={{ width: 324, maxHeight: 400, overflow: 'auto', padding: 0, boxShadow: 'var(--shadow-lift)' }}
+          style={{
+            position: 'fixed',
+            left: panelPos.left,
+            top: panelPos.top,
+            zIndex: 'var(--z-popover)',
+            width: 324,
+            maxHeight: 'min(440px, calc(100vh - 96px))',
+            overflow: 'auto',
+            padding: 0,
+            boxShadow: 'var(--shadow-lift)',
+          }}
         >
           <div
             style={{
@@ -184,48 +252,45 @@ export function RoomTools({ leading }: { leading?: ReactNode }) {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-        {leading}
-        {/* Two jobs, two groups: everything to the left of this line is about
-            looking at the room, everything to the right changes or checks it. */}
-        <span aria-hidden="true" style={{ width: 1, height: 20, background: 'var(--hairline-strong)', margin: '0 2px' }} />
-        <SuggestButton effParts={effParts} footprint={room.footprint} />
-        <button
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          className="ds-btn"
-          title="Room check, the furniture list and saved layouts"
-          style={{
-            height: 30,
-            fontSize: 11,
-            gap: 6,
-            background: open ? 'var(--accent-tint)' : 'var(--paper)',
-            borderColor: problems > 0 ? 'var(--danger)' : open ? 'var(--accent-text)' : 'var(--edge)',
-            color: problems > 0 ? 'var(--danger-text)' : open ? 'var(--accent-text)' : 'var(--ink-2)',
-            boxShadow: 'var(--shadow-soft)',
-          }}
-        >
-          <Icon name="info" size={12} />
-          Room
-          <span
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              minWidth: 17,
-              height: 16,
-              padding: '0 5px',
-              borderRadius: 'var(--r-full)',
-              fontSize: 10,
-              fontWeight: 700,
-              background: problems > 0 ? 'var(--danger)' : 'var(--accent-ink)',
-              color: 'var(--on-accent)',
-            }}
-          >
-            {problems > 0 ? <span className="mono">{problems}</span> : <Icon name="check" size={10} />}
-          </span>
-        </button>
-      </div>
+      {/* The room's health, stated — not hidden behind a press.
+          `analyzeRoom` already recomputed this on every scene change; the only
+          thing wrong with it was that you had to find a dock in the corner of the
+          canvas and open a tab before it would tell you. Drafted puts this kind of
+          state permanently beside the thing it describes, and that is all this is.
+
+          The severity colour is a FILL, so the text uses the matching -text token:
+          --danger / --warn are not legible as type on paper. */}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="ds-btn"
+        title="Room check, the furniture list and saved layouts"
+        style={{
+          height: 34,
+          width: '100%',
+          justifyContent: 'flex-start',
+          gap: 8,
+          fontSize: 12,
+          background: problems > 0 ? 'var(--danger-tint)' : 'var(--accent-2-tint)',
+          borderColor: problems > 0 ? 'var(--danger)' : 'var(--accent-2)',
+          color: problems > 0 ? 'var(--danger-text)' : 'var(--success-text)',
+        }}
+      >
+        <Icon name={problems > 0 ? 'info' : 'check'} size={13} />
+        <span style={{ fontWeight: 700 }}>
+          {problems > 0 ? (
+            <>
+              <span className="mono">{problems}</span> {problems === 1 ? 'issue' : 'issues'}
+            </>
+          ) : (
+            'Room checks out'
+          )}
+        </span>
+        <span style={{ flex: 1 }} />
+        <Icon name={open ? 'chevron-up' : 'chevron-right'} size={12} />
+      </button>
+
+      <SuggestButton effParts={effParts} footprint={room.footprint} />
     </div>
   );
 }
@@ -1025,7 +1090,9 @@ function ListPanel({ parts }: { parts: ScenePart[] }) {
   const dimUnit = useSettings((s) => s.dimUnit);
   const [copied, setCopied] = useState(false);
 
-  // Group identical pieces (same name + dims) into one line with a count.
+  // Group identical pieces (same name + dims + colour) into one line with a count.
+  // Inline rather than shared: the CSV that was the second consumer is retired, and
+  // this is the only thing that reads it now.
   const rows = useMemo(() => {
     const map = new Map<string, { part: ScenePart; count: number }>();
     for (const p of parts) {
@@ -1218,7 +1285,7 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
       ) : (
         layouts.map((v) => {
           // A saved layout stores both layers as they were, so it resolves the same
-          // way the live scene does.
+          // way the live scene does — same helper, different source.
           const vParts = resolveParts(v.parts as ScenePart[], v.transforms);
           return (
             <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderBottom: '1px solid var(--hairline)' }}>
@@ -1227,7 +1294,9 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
                 <div style={{ fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.name}</div>
                 <div style={{ fontSize: 10, color: 'var(--ink-3)' }}>{savedLabel(v.createdAt)}</div>
               </div>
-              <button onClick={() => requestApply(v)} className="ds-btn ds-btn--primary" style={{ height: 24, fontSize: 10, padding: '0 8px' }}>
+              {/* Plain, not primary: this repeats once per saved layout, and the
+                  rule beside the variants in globals.css excludes per-row actions. */}
+              <button onClick={() => requestApply(v)} className="ds-btn" style={{ height: 24, fontSize: 10, padding: '0 8px' }}>
                 Apply
               </button>
               <IconButton

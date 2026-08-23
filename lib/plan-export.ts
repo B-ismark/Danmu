@@ -12,6 +12,7 @@ import { formatDim } from './units';
 import type { DimUnit } from './store';
 import { downloadBlob } from './snapshot';
 import { PLAN } from './scene-palette';
+import { fileSlug } from './exports';
 
 const PX_PER_M = 90; // plan scale on canvas
 const MARGIN = 70;
@@ -173,8 +174,20 @@ export function exportPlanPng(
   });
 
   c.toBlob((blob) => {
-    if (blob) downloadBlob(blob, 'floor-plan.png');
+    if (blob) downloadBlob(blob, planFileName(title));
   }, 'image/png');
+}
+
+/** `Front Room` → `front-room-floor-plan.png`.
+ *
+ *  Named for the room, not just for the artefact: `title` is already the room's name
+ *  — it is drawn at the top of the sheet — and a fixed `floor-plan.png` meant that
+ *  exporting three rooms left three files the browser silently numbered `(1)` and
+ *  `(2)`. The equality check is for the parameter's own default, which would otherwise
+ *  slug to `floor-plan-floor-plan.png`. */
+function planFileName(title: string): string {
+  const slug = fileSlug(title);
+  return slug === 'floor-plan' ? 'floor-plan.png' : `${slug}-floor-plan.png`;
 }
 
 function metaText(

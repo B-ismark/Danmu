@@ -44,6 +44,10 @@ type StudioState = {
   transformMode: 'translate' | 'rotate' | 'scale';
   /** floor grid visibility (Paralives-style toggle) */
   showGrid: boolean;
+  /** Rail collapse. A view preference, so it persists next to showGrid — the
+   *  canvas is the product, and 260 + 320px is 45% of a 1280px laptop. */
+  railLeftOpen: boolean;
+  railRightOpen: boolean;
   /** scene lighting mood */
   lighting: Lighting;
   /** render quality (soft shadows + AO + material maps on 'high') */
@@ -108,6 +112,7 @@ type StudioState = {
   setSnapMode: (m: 'off' | 'fine' | 'coarse') => void;
   setCatalogOpen: (open: boolean) => void;
   toggleGrid: () => void;
+  toggleRail: (side: 'left' | 'right') => void;
   setLighting: (l: Lighting) => void;
   setQuality: (q: Quality) => void;
   setSunMinutes: (m: number) => void;
@@ -142,6 +147,8 @@ const STUDIO_PREFS = [
   'dressed',
   'snapMode',
   'showGrid',
+  'railLeftOpen',
+  'railRightOpen',
   'sunMinutes',
   'sunDayOfYear',
   'sunLive',
@@ -179,6 +186,8 @@ export const useStudio = create<StudioState>()(
   transformMode: 'translate',
   snapMode: 'fine',
   showGrid: true,
+  railLeftOpen: true,
+  railRightOpen: true,
   lighting: 'day',
   quality: 'high',
   // 3 pm on the March equinox: the sun is up at every inhabited latitude and
@@ -227,6 +236,8 @@ export const useStudio = create<StudioState>()(
   setCatalogOpen: (open) => set({ catalogOpen: open }),
   setSnapMode: (m) => set({ snapMode: m }),
   toggleGrid: () => set((s) => ({ showGrid: !s.showGrid })),
+  toggleRail: (side) =>
+    set((s) => (side === 'left' ? { railLeftOpen: !s.railLeftOpen } : { railRightOpen: !s.railRightOpen })),
   setLighting: (l) => set({ lighting: l }),
   setQuality: (q) => set({ quality: q }),
   setSunMinutes: (m) => set({ sunMinutes: clampMinutes(m), sunLive: false }),

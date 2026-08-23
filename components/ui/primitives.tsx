@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
+import Link from 'next/link';
 import { Icon, type IconName } from './Icon';
 
 // The mark is the room the studio builds: a soft dollhouse volume with one
@@ -33,6 +34,51 @@ export function DanmuMark({ size = 16, color = 'var(--ink)' as string }: { size?
         Danmu
       </span>
     </div>
+  );
+}
+
+/**
+ * The lead of an onboarding step's bar: Back, a divider, and the mark.
+ *
+ * Capture and detect each built this triple by hand and had already drifted —
+ * 34px vs 32px buttons, `0 8px` vs `0 10px` padding, 12 vs 12.5px labels, and
+ * `aria-hidden` on only one of the two dividers. The same drift, from the same
+ * cause, as the two studio tabs.
+ *
+ * `markHref` is optional ON PURPOSE. Everywhere the mark is a link it goes to the
+ * workspace, and it should — except where a stray click on a logo would discard
+ * work. Detect holds its whole review (confirmations, edits, added boxes) in
+ * component state until `finish()` writes it, so it passes no href and keeps a
+ * bare mark. Capture persists every shot as it is taken, so leaving costs
+ * nothing and its mark links. Do not "fix" detect's to match.
+ */
+export function FlowBarLead({
+  onBack,
+  markHref,
+  children,
+}: {
+  onBack: () => void;
+  /** Omit where leaving would lose unsaved work. */
+  markHref?: string;
+  /** The step's own title / status, rendered after the mark. */
+  children?: ReactNode;
+}) {
+  return (
+    <>
+      <button onClick={onBack} className="ds-btn ds-btn--ghost" style={{ height: 32, padding: '0 10px' }}>
+        <Icon name="chevron-left" size={14} />
+        <span style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>Back</span>
+      </button>
+      <div aria-hidden="true" style={{ width: 1, height: 18, background: 'var(--hairline)' }} />
+      {markHref ? (
+        <Link href={markHref} aria-label="Danmu — back to your rooms" style={{ display: 'flex' }}>
+          <DanmuMark size={12} />
+        </Link>
+      ) : (
+        <DanmuMark size={12} />
+      )}
+      {children}
+    </>
   );
 }
 

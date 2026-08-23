@@ -9,8 +9,9 @@ import { validateKey, type KeyFailure, type KeyResult } from '@/lib/validate-key
 import { UNIT_OPTIONS } from '@/lib/units';
 import { quotaLimit, useQuota } from '@/lib/quota';
 import { Icon } from '@/components/ui/Icon';
-import { DanmuMark, Dot, IconButton, Segmented } from '@/components/ui/primitives';
+import { Dot, IconButton, Segmented } from '@/components/ui/primitives';
 import { useConfirm, useConfirmDeleteRooms } from '@/components/ui/Confirm';
+import { DocShell } from '@/components/ui/DocShell';
 import { toast } from '@/components/ui/StorageToast';
 
 // Authored copy per failure code. The old screen printed the raw exception,
@@ -167,24 +168,14 @@ export default function SettingsPage() {
   const dailyDetections = quotaLimit('flash');
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--paper)' }}>
-      <div className="chrome-bar">
-        <Link href="/workspace" style={{ display: 'flex' }} aria-label="Danmu — back to your rooms">
-          <DanmuMark size={12} />
-        </Link>
-        <div style={{ width: 1, height: 18, background: 'var(--hairline)' }} />
-        <span className="ds-label">Settings</span>
-        <div className="chrome-bar__spacer" />
-        <Link href="/workspace" className="ds-btn" style={{ height: 32, fontSize: 12 }}>
-          <Icon name="x" size={11} /> Close
-        </Link>
-      </div>
-
-      <div className="page-pad" style={{ maxWidth: 920 }}>
+    // "Close" is gone: the breadcrumb's "Rooms" is the way back, and a page that
+    // offers two of them is offering a choice nobody needs to make.
+    <DocShell trail={[{ label: 'Rooms', href: '/workspace' }, { label: 'Settings' }]} measure="prose">
+      <div>
         {/* The route had no heading element at all — no document outline, and the
             display serif (which globals.css hangs off h1/h2/h3) never rendered. */}
         <h1 style={{ fontSize: 30, letterSpacing: '-0.02em', marginBottom: 8 }}>Settings</h1>
-        <p style={{ fontSize: 13.5, color: 'var(--ink-2)', lineHeight: 1.55, margin: 0, maxWidth: 600 }}>
+        <p style={{ fontSize: 13.5, color: 'var(--ink-2)', lineHeight: 1.55, margin: 0, maxWidth: 'var(--measure-text)' }}>
           Everything here is kept in this browser. There is no account to manage.
         </p>
 
@@ -285,7 +276,7 @@ export default function SettingsPage() {
               <span className="ds-chip" style={{ borderColor: 'var(--danger)', color: 'var(--danger-text)' }}>
                 <Dot color="var(--danger)" size={5} /> {failure.lead}
               </span>
-              <p style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5, margin: '8px 0 0', maxWidth: 520 }}>
+              <p style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5, margin: '8px 0 0', maxWidth: 'var(--measure-text-sm)' }}>
                 {failure.help}
               </p>
             </div>
@@ -307,7 +298,7 @@ export default function SettingsPage() {
               background: 'var(--paper-2)',
               border: '1px solid var(--hairline)',
               borderRadius: 'var(--r-2)',
-              maxWidth: 560,
+              maxWidth: 'var(--measure-text-sm)',
             }}
           >
             <div style={{ fontSize: 11.5, fontWeight: 700, marginBottom: 4 }}>Where your key goes</div>
@@ -319,7 +310,7 @@ export default function SettingsPage() {
             </p>
           </div>
 
-          <p style={{ fontSize: 11.5, color: 'var(--ink-3)', margin: '10px 0 0', lineHeight: 1.5, maxWidth: 560 }}>
+          <p style={{ fontSize: 11.5, color: 'var(--ink-3)', margin: '10px 0 0', lineHeight: 1.5, maxWidth: 'var(--measure-text-sm)' }}>
             Detection works about {dailyDetections} times a day on a free key and resets each day. Testing here uses
             one of those. If detection stops responding late in the day, that is usually why — not your key.
           </p>
@@ -378,7 +369,7 @@ export default function SettingsPage() {
           )}
         </Row>
       </div>
-    </div>
+    </DocShell>
   );
 }
 
@@ -395,7 +386,7 @@ function SecHeader({ eyebrow, title, desc }: { eyebrow: string; title: string; d
       </div>
       {/* h2, so the sections are a real outline under the page h1 */}
       <h2 style={{ fontSize: 22, marginBottom: 6 }}>{title}</h2>
-      {desc && <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55, maxWidth: 600 }}>{desc}</div>}
+      {desc && <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55, maxWidth: 'var(--measure-text)' }}>{desc}</div>}
     </div>
   );
 }

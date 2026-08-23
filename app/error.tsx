@@ -17,7 +17,7 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
     <div style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', padding: 40 }}>
       <div
         style={{
-          maxWidth: 480,
+          maxWidth: 'var(--measure-card)',
           width: '100%',
           border: '1px solid var(--hairline-strong)',
           background: 'var(--paper)',

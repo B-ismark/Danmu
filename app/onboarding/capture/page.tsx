@@ -20,7 +20,7 @@ import { scoreQuality, flagHelp, flagLabel, flagTone, type Quality } from '@/lib
 import { useMediaQuery } from '@/lib/use-media-query';
 import { Icon } from '@/components/ui/Icon';
 import { NumberField } from '@/components/ui/NumberField';
-import { DanmuMark, Pill, Segmented } from '@/components/ui/primitives';
+import { FlowBarLead, Pill, Segmented } from '@/components/ui/primitives';
 import type { CaptureSlot, CapturePose } from '@/lib/storage';
 
 type Source = 'upload' | 'camera';
@@ -228,7 +228,7 @@ export default function CapturePage() {
   if (!roomId) {
     return (
       <div className="page-pad" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--paper)' }}>
-        <div className="ds-card" style={{ maxWidth: 420, padding: 24, textAlign: 'center' }}>
+        <div className="ds-card" style={{ maxWidth: 'var(--measure-card)', padding: 24, textAlign: 'center' }}>
           <Icon name="camera" size={22} color="var(--ink-3)" style={{ margin: '0 auto 10px' }} />
           <h1 style={{ fontSize: 19, marginBottom: 8 }}>Pick a room shape first</h1>
           <p style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.5, margin: '0 0 18px' }}>
@@ -359,13 +359,11 @@ export default function CapturePage() {
       {/* TOP BAR — .chrome-bar wraps to a second row instead of crushing the
           forward action off a 390px screen. */}
       <div className="chrome-bar">
-        <button onClick={() => router.back()} className="ds-btn ds-btn--ghost" style={{ height: 34, padding: '0 8px' }}>
-          <Icon name="chevron-left" size={14} />
-          <span style={{ fontSize: 12, color: 'var(--ink-2)' }}>Back</span>
-        </button>
-        <div style={{ width: 1, height: 18, background: 'var(--hairline)' }} />
-        <DanmuMark size={12} />
-        <span style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 700 }}>Photograph your room</span>
+        {/* The mark links here: `persistBlob` writes every shot to IndexedDB as it
+            is taken, so leaving this screen costs nothing. */}
+        <FlowBarLead onBack={() => router.back()} markHref="/workspace">
+          <span style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 700 }}>Photograph your room</span>
+        </FlowBarLead>
         <span role="status" aria-live="polite" style={{ fontSize: 12, color: 'var(--ink-3)' }}>
           {filled} of 4 walls added
         </span>
