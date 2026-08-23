@@ -835,7 +835,23 @@ function CameraPanel({
       <p style={{ fontSize: 12, color: 'var(--ink-2)', margin: '6px 0 10px', lineHeight: 1.45 }}>
         {CAPTURE_METHOD}
       </p>
-      <Segmented ariaLabel="Wall to shoot" value={target} onChange={onSetTarget} options={CAPTURE_SLOTS.map((s) => ({ value: s.id, label: s.label }))} />
+      {/* `wrap` for headroom, not for a bug that already happened: four "Wall n"
+          labels come to about 266px, and on a 320px phone — stacked, so this is
+          full width — the section leaves 288px. It fits by roughly 22px, and it
+          fits only if Nunito has loaded; the fallback stack (`ui-rounded`,
+          `-apple-system`) has its own metrics, and a segment that outgrows its
+          box does not clip, it prints over the segment beside it. 22px is not a
+          margin worth betting the one screen this flow is built for on.
+          `minItem` is short because the labels are — 4-across wherever they fit,
+          2×2 when they don't. */}
+      <Segmented
+        ariaLabel="Wall to shoot"
+        value={target}
+        onChange={onSetTarget}
+        wrap
+        minItem={68}
+        options={CAPTURE_SLOTS.map((s) => ({ value: s.id, label: s.label }))}
+      />
     </div>
   );
 

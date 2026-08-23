@@ -29,12 +29,12 @@ import {
  * Save the current room to a file.
  *
  * A plain async function rather than a button, because there is no longer a button:
- * this is one item in the top bar's Export menu, beside the 3D snapshot, the floor
- * plan and the furniture CSV. It sat next to Snapshot as its own control on the
- * reasoning that a picture of the view and the room itself are the two things one
- * might want to keep — which is right, and is the argument for putting it in the
- * menu that already holds the other three rather than beside it. Four sibling
- * download buttons is how you end up not knowing about three of them.
+ * this is one item in the top bar's Export menu, beside the 3D snapshot and the
+ * floor plan. It sat next to Snapshot as its own control on the reasoning that a
+ * picture of the view and the room itself are the two things one might want to
+ * keep — which is right, and is the argument for putting it in the menu that
+ * already holds the other two rather than beside it. Sibling download buttons are
+ * how you end up not knowing about all but one of them.
  *
  * Reports through a toast either way, so the caller does not have to.
  */

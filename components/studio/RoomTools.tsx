@@ -58,6 +58,11 @@ import type { LibraryItem, ScenePart } from '@/lib/scene-spec';
 
 type RoomTab = 'check' | 'fit' | 'list' | 'layouts';
 
+/** Widest the report panel gets. Four tab labels and a findings list want this
+ *  much; a narrow window gets less, and `place()` below is what decides how much,
+ *  because it also has to know the width to keep the panel on screen. */
+const PANEL_W = 324;
+
 /**
  * The room's report, derived. Shared by the rail's health chip and by the compact
  * dot the rail shows while it is COLLAPSED — the point of surfacing this state was
@@ -115,7 +120,7 @@ export function RoomTools() {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<RoomTab>('check');
   const anchorRef = useRef<HTMLDivElement>(null);
-  const [panelPos, setPanelPos] = useState({ left: 0, top: 0 });
+  const [panelPos, setPanelPos] = useState({ left: 0, top: 0, width: PANEL_W });
 
   // Measured on open and kept true through resize and scroll. Placed to the RIGHT
   // of the rail rather than over it, so the room the panel is describing — and
@@ -125,10 +130,16 @@ export function RoomTools() {
     function place() {
       const r = anchorRef.current?.getBoundingClientRect();
       if (!r) return;
-      const W = 324;
-      const left = Math.min(r.right + 10, window.innerWidth - W - 12);
+      // The width is measured, not declared, because `left` is computed from it:
+      // a CSS `min()` in the style and a constant here are two answers to one
+      // question, and the constant is the one that would be wrong. At the gate's
+      // 400px floor a flat 324 still fitted; below it — the gate is dismissible,
+      // and browser zoom reaches there too — the panel hung off the left edge,
+      // because only the right edge was ever clamped.
+      const width = Math.min(PANEL_W, window.innerWidth - 24);
+      const left = Math.max(12, Math.min(r.right + 10, window.innerWidth - width - 12));
       const top = Math.max(12, Math.min(r.top, window.innerHeight - 200));
-      setPanelPos({ left, top });
+      setPanelPos({ left, top, width });
     }
     place();
     window.addEventListener('resize', place);
@@ -196,7 +207,7 @@ export function RoomTools() {
             left: panelPos.left,
             top: panelPos.top,
             zIndex: 'var(--z-popover)',
-            width: 324,
+            width: panelPos.width,
             maxHeight: 'min(440px, calc(100vh - 96px))',
             overflow: 'auto',
             padding: 0,

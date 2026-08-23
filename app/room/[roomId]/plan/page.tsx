@@ -39,9 +39,9 @@ export default function PlanPage() {
 
   const unitName = UNIT_OPTIONS.find((u) => u.id === dimUnit)?.label ?? dimUnit;
 
-  // No exportPlan() here any more: the plan PNG, the 3D snapshot and the furniture
-  // CSV are one Export menu in the top bar. A page-level copy is how the two tabs
-  // came to offer different subsets of the same three downloads.
+  // No exportPlan() here any more: the plan PNG, the 3D snapshot and the scene
+  // file are one Export menu in the top bar. A page-level copy is how the two tabs
+  // came to offer different subsets of the same downloads.
 
   const plan = (
     <main

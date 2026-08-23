@@ -95,9 +95,21 @@
 
   /* The studio's two rails. Same argument as the measures: both room tabs had
      these numbers inline and identical, so a change meant editing two files and
-     hoping. `StudioShell` is the only consumer. */
-  --rail-left: 260px;           /* the piece tree — a list, so it can be narrow */
-  --rail-right: 320px;          /* the inspector — holds controls, needs the room */
+     hoping. `StudioShell` is the only consumer.
+
+     They CLAMP rather than sit still. Fixed at 260 + 320 the two rails cost 580px
+     of chrome whatever the screen: on a 1024px viewport — the widest one that
+     still gets three columns — that left the 3D room 444px, less than either rail
+     and less than half the window, on a product whose whole claim is that the
+     room is the thing. The vw term hands the squeeze to the panels, which are
+     lists and labelled rows and can take it, and stops at the old numbers so a
+     wide screen is unchanged. The floors are where the widest control inside each
+     rail stops fitting: the inspector holds a 220px colour picker plus 32px of
+     padding, and a room-report row needs its label and its measurement on one
+     line. Anything narrower than the floor is the stacked layout's job, not a
+     thinner rail's. */
+  --rail-left: clamp(228px, 19vw, 260px);   /* the piece tree — a list, so it can be narrow */
+  --rail-right: clamp(276px, 24vw, 320px);  /* the inspector — holds controls, needs the room */
   --rail-closed: 37px;          /* just the reopen toggle: a closed rail must not vanish */
 
   --font-sans: var(--font-nunito), ui-rounded, 'SF Pro Rounded', -apple-system, sans-serif;
@@ -485,25 +497,66 @@ textarea.field { border-radius: var(--r-2); }
    is the same size whether you own 2 rooms or 20. */
 .auto-grid--cards { gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr)); }
 
-/* A 56px chrome bar. Wraps to multiple rows instead of overflowing when the
-   viewport gets narrow. */
+/* The app's one chrome bar — onboarding steps, DocShell, and the studio's own
+   top bar (`--tight`). All four hand-rolled it once; the studio's was the last
+   holdout and the only one that could not wrap, which is why it was also the
+   only one that overflowed.
+
+   It wraps at ANY width, not below a breakpoint. A breakpoint has to be right
+   about the widest the contents can get, and the studio bar's contents are a
+   logo, a breadcrumb, an editable room name of unknown length, a save hint, two
+   tabs and three controls — about 900px of nowrap content whose true width
+   nobody can name in a media query. `min-height` rather than `height` so a
+   single row still centres at exactly the old size and only a genuinely full
+   row costs a second one. */
 .chrome-bar {
-  display: flex; align-items: center; gap: 10px;
-  height: 56px; flex-shrink: 0;
-  padding: 0 18px;
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: 10px; row-gap: 8px;
+  min-height: 56px; flex-shrink: 0;
+  padding: 8px 18px;
   border-bottom: 1px solid var(--hairline);
   background: var(--paper);
 }
+/* The studio's bar. Shorter, because the room is the product and every pixel
+   here is one the canvas does not get. `row-gap` is restated after `gap`, and has
+   to be: `gap` is the shorthand for both axes, so setting it here silently threw
+   away the 8px row gap above and wrapped rows drifted apart by the column gap. */
+.chrome-bar--tight { min-height: 48px; gap: 14px; row-gap: 8px; padding: 6px 16px; }
 .chrome-bar__spacer { flex: 1; min-width: 0; }
+/* Keeps a group together and hard against the trailing edge — including on a
+   second row, which a `flex: 1` spacer cannot do because the spacer stays behind
+   on row one. */
+.chrome-bar__end { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-left: auto; }
 
-/* Two-column work surface: fixed rail(s) + fluid content. */
+/* Two-column work surface: fixed rail(s) + fluid content. The `--stack` modifier
+   that turns those columns into rows lives in the 720px block below. */
 .split { display: grid; min-height: 0; }
+
+/* Reassurance, not feedback: "Saves as you go" is worth a laptop's pixels and
+   not a small laptop's. The dot keeps its tooltip and the live region keeps
+   announcing, so hiding the words costs a screen-reader user nothing — and the
+   transient "Saved" is a different span that never hides. */
+@media (max-width: 1180px) {
+  .bar-idle-words { display: none; }
+}
 
 @media (max-width: 720px) {
   .page-pad { padding: 24px 16px; }
-  .chrome-bar { height: auto; min-height: 56px; flex-wrap: wrap; row-gap: 8px; padding: 10px 14px; }
+  .chrome-bar { padding: 8px 14px; }
+  .chrome-bar--tight { padding: 6px 12px; gap: 10px; row-gap: 8px; }
   /* Rails become stacked sheets under the primary surface rather than fixed
-     tracks that squeeze the content to nothing. */
+     tracks that squeeze the content to nothing.
+
+     Capture and detect are the only users. Neither has a JS breakpoint, so this
+     rule is the whole of their reflow — and on capture it also covers the first
+     paint on a phone, before its own hook has resolved.
+
+     The studio does NOT use it. `StudioShell` decides the same thing in JS at
+     1023px, because it has to REORDER three children (the canvas comes first
+     when stacked) and a media query cannot reorder an inline-styled grid.
+     Carrying the class there as well meant two thresholds for one decision —
+     720 here, 1023 there — and two row templates, of which only the JS one was
+     ever right about the third child. */
   .split--stack { grid-template-columns: 1fr !important; grid-template-rows: minmax(280px, 55vh) auto; }
   .split--stack > .rail { border: 0; border-top: 1px solid var(--hairline); height: auto; }
   /* Label/control rows stop being a fixed 220px + 1fr grid. */

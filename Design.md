@@ -96,10 +96,17 @@ owned by a deterministic geometry engine, not by a model.
    literals retyped across seventeen sites — no two pages agreed on how wide
    content should get, and nothing said what a number was *for*. *Rail width*
    (`--rail-left`, `--rail-right`) replaced the same two numbers inline in both
-   studio tabs. Reach for the token that describes the **content**, not the one
-   whose pixel count matches what was there. Two things are deliberately not
-   measures and keep their own numbers: `PlanView`'s `<svg>` cap (a drawing
-   viewport) and the room-name input (a control).
+   studio tabs, and both are now `clamp(floor, vw, ceiling)` rather than fixed:
+   at 260 + 320 flat the two rails cost 580px of chrome on every screen, so a
+   1024px viewport — the widest that still gets three columns — left the 3D room
+   444px, less than either rail. The vw term hands the squeeze to the panels,
+   which are lists and labelled rows and can take it; the floors are where the
+   widest control inside each rail stops fitting (the inspector holds a 220px
+   colour picker plus its padding), and below a floor it is the stacked layout's
+   job, not a thinner rail's. Reach for the token that describes the **content**,
+   not the one whose pixel count matches what was there. Two things are
+   deliberately not measures and keep their own numbers: `PlanView`'s `<svg>` cap
+   (a drawing viewport) and the room-name input (a control).
    The third family is a *rule* rather than a value: `.ds-btn--primary` is the one
    committing action on a page and `.ds-btn--accent` the one that advances an
    onboarding flow — **one of each per screen state**, everything else plain. The
@@ -737,6 +744,13 @@ and closes when you are not using it.
   region, with the count in `.section-meta`. Open/closed is **local, not
   persisted**: which drawer you left open is not a preference worth carrying
   between rooms, and `partialize` should stay about how the room *looks*.
+  **A rail section's body is inline, never a popover.** `ViewOptions` shipped for
+  a while as a "Look" button opening a 300px absolute card inside a 260px rail:
+  it was cut off down the left by `PartTree`'s own scroll box, and it was a
+  disclosure inside a disclosure. If something in a rail genuinely must float,
+  it goes `position: fixed` and measured, like the room report and
+  `ui/Select.tsx` — but the first question is whether the section header is
+  already the affordance.
 - **`+ Add furniture` is pinned to the bottom edge** and never scrolls away. It
   used to sit mid-column inside the Furniture section.
 - **Re-scan moved here** from the top bar: it changes what is *in* the room, not
@@ -992,6 +1006,19 @@ precedents to pick from. There are now two shells and two deliberate exceptions.
 |---|---|---|
 | `components/studio/StudioShell.tsx` | The `--rail-left 1fr --rail-right` grid, the stacked fallback below ~1024px, both rails, the `ready` paint gate | `/room/[id]/model` · `/room/[id]/plan` |
 | `components/ui/DocShell.tsx` | The `.chrome-bar`, the mark (always a link), the breadcrumb, the content measure, and the `hero` wash | `/workspace` · `/settings` · `/onboarding/layout-pick` |
+
+**`.chrome-bar` is the app's one bar**, in two sizes — the 56px default and the
+studio top bar's `--tight` 48px. It **wraps at any width, not below a
+breakpoint**: a breakpoint has to be right about the widest its contents can get,
+and the studio bar holds a logo, a breadcrumb, a room name of unknown length, a
+save hint, two tabs and three controls — about 900px of nowrap content, which is
+why the hand-rolled `height: 48` version simply overflowed sideways under roughly
+a 950px window. `min-height` rather than `height`, so a single row still centres
+at exactly the old size. Two rules inside it: the group that must stay together
+and trailing uses `.chrome-bar__end` (`margin-left: auto`, because a `flex: 1`
+spacer stays behind on row one when the bar wraps), and exactly one item is given
+`minWidth: 0` so it ellipsises rather than widening the bar — in the studio that
+is the room name, never the breadcrumb, which is the way out.
 
 `StudioShell` is pure de-duplication: both room tabs declared **byte-identical**
 shell code, differing only in the loading sentence. Two copies of a layout is two

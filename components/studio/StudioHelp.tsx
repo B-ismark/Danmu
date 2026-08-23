@@ -135,7 +135,10 @@ export function StudioHelp() {
             top: 'calc(100% + 8px)',
             right: 0,
             zIndex: 'var(--z-popover)',
-            width: 300,
+            // Anchored to its right edge, so it grows LEFT — and at a flat 300 it
+            // grew straight off a narrow window. 100vw rather than 100%, because
+            // the trigger it hangs from is a 28px button.
+            width: 'min(300px, calc(100vw - 32px))',
             padding: '11px 12px 12px 14px',
             boxShadow: 'var(--shadow-lift)',
             textAlign: 'left',

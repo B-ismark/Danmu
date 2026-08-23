@@ -100,7 +100,7 @@ export function ExportMenu() {
       icon: 'download',
       label: 'The room itself',
       // The one download you can open again — said plainly, because "keep or send"
-      // does not distinguish it from the three PNGs and CSVs above it.
+      // does not distinguish it from the PNGs above it.
       hint: 'A file you can reopen here, or send to someone',
       onClick: () => {
         if (roomId) void saveSceneFile(roomId);
