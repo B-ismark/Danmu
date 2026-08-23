@@ -139,6 +139,18 @@ describe('scene file · round trip', () => {
     expect(transforms.positions).toEqual({});
     expect(parts[0].pos).toEqual([1, 0.44, 2]);
   });
+
+  it('carries a resting-on-top relationship, split back into transforms on the way in', () => {
+    const LAMP: ScenePart = { ...SOFA, id: 'lamp-1', name: 'Lamp' };
+    const { file } = roundTrip(ROOM, [SOFA, LAMP], { ...NO_TRANSFORMS, parentIds: { 'lamp-1': 'sofa-1' } });
+    expect(file.parts.find((p) => p.id === 'lamp-1')!.parentId).toBe('sofa-1');
+    expect(file.parts.find((p) => p.id === 'sofa-1')!.parentId).toBeUndefined();
+
+    const { parts, transforms } = sceneFileToRoom(file);
+    expect(transforms.parentIds).toEqual({ 'lamp-1': 'sofa-1' });
+    // Like `hidden`, this is per-room state, not a property of the piece.
+    expect(parts.every((p) => !('parentId' in p))).toBe(true);
+  });
 });
 
 describe('scene file · what never leaves', () => {
@@ -316,6 +328,40 @@ describe('scene file · a file is untrusted input', () => {
   it('coerces a non-boolean lock to false', () => {
     expect(withParts([rawPart({ locked: 'yes' })]).file.parts[0].locked).toBe(false);
     expect(withParts([rawPart({ locked: true })]).file.parts[0].locked).toBe(true);
+  });
+
+  it('drops a parentId that points at nothing in the file, and says so', () => {
+    const { file, dropped } = withParts([rawPart({ id: 'p1', parentId: 'ghost' })]);
+    expect(file.parts[0].parentId).toBeUndefined();
+    expect(dropped.join(' ')).toMatch(/relationship.*(missing|looping)/i);
+  });
+
+  it('refuses a piece parenting itself', () => {
+    const { file, dropped } = withParts([rawPart({ id: 'p1', parentId: 'p1' })]);
+    expect(file.parts[0].parentId).toBeUndefined();
+    expect(dropped.join(' ')).toMatch(/relationship/i);
+  });
+
+  it('resolves a parentId reference even when the REFERENCING piece itself needed a fresh id', () => {
+    // p1 is a valid, unique target; the second piece has no id of its own and
+    // gets reminted — its own remint must not stop its parentId from resolving.
+    const { file } = withParts([rawPart({ id: 'p1' }), rawPart({ id: '', parentId: 'p1' })]);
+    expect(file.parts).toHaveLength(2);
+    const child = file.parts.find((p) => p.id !== 'p1')!;
+    expect(child.parentId).toBe('p1');
+  });
+
+  it('breaks an in-file cycle at exactly one edge rather than refusing the whole chain', () => {
+    const { file, dropped } = withParts([
+      rawPart({ id: 'a', parentId: 'c' }),
+      rawPart({ id: 'b', parentId: 'a' }),
+      rawPart({ id: 'c', parentId: 'b' }),
+    ]);
+    expect(file.parts).toHaveLength(3);
+    const byId = new Map(file.parts.map((p) => [p.id, p.parentId]));
+    const links = [byId.get('a'), byId.get('b'), byId.get('c')].filter(Boolean);
+    expect(links).toHaveLength(2); // one edge refused; the other two survive
+    expect(dropped.join(' ')).toMatch(/relationship.*looping/i);
   });
 });
 

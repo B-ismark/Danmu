@@ -34,11 +34,12 @@ import { useScene } from '@/lib/scene-store';
 import { currentRoomScene } from '@/lib/room-scene';
 import { useDragLive } from '@/lib/drag-live';
 import { collidesAt, isParametric, isWallMountedPart, type ScenePart } from '@/lib/scene-spec';
-import { groundY, isFloorStanding, snapToWall } from '@/lib/physics';
+import { findSupportDetailed, groundY, isFloorStanding, snapToWall } from '@/lib/physics';
 import { pointInFootprint, footprintBounds } from '@/lib/footprint';
 import { clampDims } from '@/lib/dimension-ranges';
 import { obbFromPart, obbInsidePoly } from '@/lib/geometry';
 import { snapToNeighbors, type SnapLine } from '@/lib/item-snap';
+import { cascadeTransform, snapshotDescendants, wouldCreateCycle, type DescendantOffset } from '@/lib/rigid-parent';
 import { Pickable } from './Pickable';
 import { Highlight } from './Highlight';
 
@@ -168,6 +169,8 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   const setPosition = useStudio((s) => s.setPosition);
   const setRotation = useStudio((s) => s.setRotation);
   const setDim = useStudio((s) => s.setDim);
+  const setParent = useStudio((s) => s.setParent);
+  const clearParent = useStudio((s) => s.clearParent);
   const setDragging = useStudio((s) => s.setDragging);
   const setLive = useDragLive((s) => s.setLive);
 
@@ -227,6 +230,29 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     return effCache.current;
   }
 
+  // Rigid parenting: whatever is (physically, live) resting on this part,
+  // recursively. Computed once per gesture from the same frozen snapshot as
+  // `effParts()` — `parentIds` cannot change mid-gesture (`setParent`/
+  // `clearParent` are only ever called from `commit()`, after which both
+  // caches are cleared), so there's no staleness risk in caching this too.
+  const descCache = useRef<DescendantOffset[] | null>(null);
+  function descendants(): DescendantOffset[] {
+    if (!descCache.current) {
+      descCache.current = snapshotDescendants(partId, effParts(), useStudio.getState().parentIds);
+    }
+    return descCache.current;
+  }
+
+  /** `effParts()` with this part's own descendants filtered out — otherwise a
+   *  part being dragged can transiently resolve its own gravity/collision
+   *  against a child this same commit is about to move out from under it. */
+  function selfEffParts(): ScenePart[] {
+    const desc = descendants();
+    if (desc.length === 0) return effParts();
+    const skip = new Set(desc.map((d) => d.id));
+    return effParts().filter((p) => !skip.has(p.id));
+  }
+
   /** The shared deterministic placement pipeline: containment clamp → wall
    *  snap (wall-mounted) → gravity/support → vertical clamp. Returns the
    *  resolved position + whether it is a legal spot (in-room, collision-free). */
@@ -236,7 +262,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     rot: number,
     dim: [number, number, number],
     effParts: ScenePart[],
-  ): { pos: [number, number, number]; rot: number; valid: boolean; snapLines?: SnapLine[] } {
+  ): { pos: [number, number, number]; rot: number; valid: boolean; snapLines?: SnapLine[]; supportId?: string } {
     if (!part) return { pos: [rawX, 0, rawZ], rot, valid: false };
 
     // Containment clamp — keep the part's whole rotated footprint inside the
@@ -280,10 +306,13 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     const centered = !isFloorStanding(part.category, part.shape);
     const partH = dim[2] / 1000;
     let y: number;
+    let supportId: string | undefined;
     if (part.category === 'rug') {
       y = 0;
     } else if (!centered) {
-      y = topmostSupport(effParts, partId, x, z) ?? 0;
+      const support = findSupportDetailed(effParts, partId, x, z, dim, outRot, part.circle);
+      y = support?.y ?? 0;
+      supportId = support?.id;
     } else {
       // Wall/ceiling-mounted: keep the user's chosen mount height (set via the
       // gizmo's Y axis or the Inspector) while sliding along walls. Fresh parts
@@ -309,7 +338,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       (obbInsidePoly(slightlyShrunk, footprint) && pointInFootprint(x, z, footprint));
     const collides = collidesAt(effParts, partId, [x, y, z], outRot, dim);
 
-    return { pos: [x, y, z], rot: outRot, valid: inRoom && !collides, snapLines };
+    return { pos: [x, y, z], rot: outRot, valid: inRoom && !collides, snapLines, supportId };
   }
 
   /** Current dims from the group's live scale (the scale gizmo writes scale,
@@ -367,7 +396,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   function commit() {
     if (!ref.current || !part) return;
     const dim = currentDim();
-    const eff = effParts();
+    const eff = selfEffParts();
     const p = ref.current.position;
     let resolved = resolvePlacement(p.x, p.z, ref.current.rotation.y, dim, eff);
 
@@ -377,7 +406,9 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       const back = lastFreePos.current ?? lastValidPos.current;
       if (back) {
         const r = resolvePlacement(back[0], back[2], ref.current.rotation.y, dim, eff);
-        resolved = r.valid ? r : { pos: [back[0], back[1], back[2]], rot: ref.current.rotation.y, valid: true };
+        resolved = r.valid
+          ? r
+          : { pos: [back[0], back[1], back[2]], rot: ref.current.rotation.y, valid: true, supportId: r.supportId };
       }
     }
 
@@ -388,8 +419,34 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     setRotation(partId, resolved.rot);
     setDim(partId, dim);
 
+    // Rigid parenting: dropping ON something IS what creates the relationship;
+    // dropping onto the floor (or a refused cycle) breaks it. Established/
+    // broken before the cascade below, using `parentIds` as it stood at
+    // drag-start (this part's own link can't affect who its own descendants
+    // are, so the ordering here doesn't matter to `descendants()`).
+    if (resolved.supportId && !wouldCreateCycle(partId, resolved.supportId, useStudio.getState().parentIds)) {
+      setParent(partId, resolved.supportId);
+    } else {
+      clearParent(partId);
+    }
+
+    // Carry along whatever is (physically, still) resting on this part —
+    // rotation-correct, computed before the groupId loop below so that loop
+    // can skip anything already placed here.
+    const desc = descendants();
+    const descendantIds = new Set(desc.map((d) => d.id));
+    if (desc.length > 0) {
+      for (const m of cascadeTransform(partId, resolved.pos, resolved.rot, desc)) {
+        setPosition(m.id, m.pos);
+        setRotation(m.id, m.rot);
+      }
+    }
+
     // Merged group: shift every other group member by the same translation
-    // delta so the set moves as one. Only on a move (not scale/rotate).
+    // delta so the set moves as one. Only on a move (not scale/rotate). Skips
+    // anything the rigid cascade above already placed — that cascade is
+    // rotation-correct and must win over this translate-only one for a part
+    // that happens to be both a merge-group member and a resting-on-top child.
     if (part.groupId && dragStartPos.current) {
       const sx = dragStartPos.current;
       const dx = x - sx[0];
@@ -399,7 +456,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         // is — reading `o.pos` alone would snap every already-moved sibling back to
         // where the scene was authored.
         for (const o of currentRoomScene()) {
-          if (o.id === partId || o.groupId !== part.groupId) continue;
+          if (o.id === partId || o.groupId !== part.groupId || descendantIds.has(o.id)) continue;
           setPosition(o.id, [o.pos[0] + dx, o.pos[1], o.pos[2] + dz]);
         }
       }
@@ -410,33 +467,6 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     setDragInvalid(false);
     setLive(null);
     invalidate();
-  }
-
-  /** Return Y of the highest part top under (x,z) within mover's footprint, or null. */
-  function topmostSupport(
-    parts: ScenePart[],
-    movingId: string,
-    x: number,
-    z: number,
-  ): number | null {
-    let best: number | null = null;
-    for (const o of parts) {
-      if (o.id === movingId) continue;
-      if (o.category === 'rug') continue;
-      if (o.wallMounted) continue;
-      const ow = o.dimMM[0] / 1000;
-      const od = o.dimMM[1] / 1000;
-      const oh = o.dimMM[2] / 1000;
-      const dx = x - o.pos[0];
-      const dz = z - o.pos[2];
-      // Mover centre must sit over the support's footprint — a circle test
-      // grabbed a neighbour's top (mid-air) instead of dropping to the floor.
-      if (Math.abs(dx) < ow / 2 + 0.05 && Math.abs(dz) < od / 2 + 0.05) {
-        const top = o.pos[1] + oh;
-        if (best === null || top > best) best = top;
-      }
-    }
-    return best;
   }
 
   // ─── Coalesced resolve ────────────────────────────────────────────────────
@@ -459,7 +489,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     const z = pp ? pp[1] : ref.current.position.z;
     const rot = pr ?? ref.current.rotation.y;
     const dim = currentDim();
-    liveUpdate(resolvePlacement(x, z, rot, dim, effParts()), dim);
+    liveUpdate(resolvePlacement(x, z, rot, dim, selfEffParts()), dim);
   }
 
   function schedule() {
@@ -520,6 +550,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       dragStartPos.current = [ref.current.position.x, ref.current.position.y, ref.current.position.z];
       lastFreePos.current = null;
       effCache.current = buildEffSnapshot();
+      descCache.current = null;
     }
   }
 
@@ -693,6 +724,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       dragStartPos.current = [ref.current.position.x, ref.current.position.y, ref.current.position.z];
       lastFreePos.current = null;
       effCache.current = buildEffSnapshot(); // one world snapshot for the gesture
+      descCache.current = null;
       if (!inSelection) useStudio.getState().setSelected(partId);
       document.body.style.cursor = 'grabbing';
     }
@@ -727,6 +759,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       commit();
     }
     effCache.current = null;
+    descCache.current = null;
     if (d.armed) setDragging(null);
     setLive(null);
     setDragInvalid(false);
@@ -803,11 +836,13 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
             dragStartPos.current = pp ? [pp.x, pp.y, pp.z] : null;
             lastFreePos.current = null;
             effCache.current = buildEffSnapshot();
+            descCache.current = null;
           }}
           onMouseUp={() => {
             flushNow();
             commit();
             effCache.current = null;
+            descCache.current = null;
             setDragging(null);
             gizmoActive.current = false;
           }}

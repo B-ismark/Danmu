@@ -15,7 +15,7 @@ import { SwapModelModal } from './RegenerateModal';
 import { removeParts } from './KeyboardShortcuts';
 import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { isWallMountedPart, supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, DECOR_KINDS, type LibraryItem, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
-import { findSupportUnder, groundY, snapToWall as snapToWallPhys } from '@/lib/physics';
+import { findSupportDetailed, groundY, snapToWall as snapToWallPhys } from '@/lib/physics';
 import { wallSegments } from '@/lib/footprint';
 import { moveWallCarrying } from '@/lib/wall-actions';
 
@@ -37,6 +37,8 @@ export function Inspector() {
   const setDim = useStudio((s) => s.setDim);
   const setPosition = useStudio((s) => s.setPosition);
   const setRotation = useStudio((s) => s.setRotation);
+  const setParent = useStudio((s) => s.setParent);
+  const clearParent = useStudio((s) => s.clearParent);
   const resetTransforms = useStudio((s) => s.resetTransforms);
   const updatePart = useScene((s) => s.updatePart);
   // Resolved once for the whole panel: surface snapping and the dimension fields
@@ -76,12 +78,14 @@ export function Inspector() {
       dimMM: p.dimMM,
       category: p.category,
       wallMounted: p.wallMounted,
+      circle: p.circle,
     }));
   }
 
   function groundToFloor() {
     const [x, , z] = currentXYZ();
     setPosition(id!, [x, 0, z]);
+    clearParent(id!);
   }
 
   // Hybrid swap — replace this part's model with a library one, keeping its
@@ -95,17 +99,22 @@ export function Inspector() {
     const wallMounted = isWallMountedPart(item.category, item.shape);
     const h = dimMM[2] / 1000;
     let ny = y;
+    let support: { id: string; y: number } | null = null;
     if (wallMounted) {
       ny = Math.max(h / 2 + 0.02, Math.min(room.height - h / 2 - 0.02, groundY(item.category, item.shape, dimMM, room.height)));
     } else {
-      const support = findSupportUnder(partSnapshot(), id!, x, z, dimMM, baseRot);
-      ny = support !== null && support > 0.3 ? support : 0;
+      support = findSupportDetailed(partSnapshot(), id!, x, z, dimMM, baseRot);
+      ny = support !== null && support.y > 0.3 ? support.y : 0;
     }
-    resetTransforms(id!); // drop stale rotate/scale overrides
+    resetTransforms(id!); // drop stale rotate/scale overrides (and any rigid-parenting link)
     // Update the name too — leaving it stale is how a swapped-in door kept its
     // old "tall mirror" identity, so hover/tree showed a wrong, conflicting label.
     updatePart(id!, { name: item.label, category: item.category, shape: item.shape, dimMM, wallMounted });
     setPosition(id!, [x, ny, z]);
+    // Re-establish what `resetTransforms` just cleared — the swap moved the
+    // part, but didn't stop it resting on whatever it landed on.
+    if (!wallMounted && support && support.y > 0.3) setParent(id!, support.id);
+    else clearParent(id!);
     setSwapOpen(false);
   }
 
@@ -114,12 +123,15 @@ export function Inspector() {
     const snapped = snapToWallPhys([x, y, z], part!.dimMM, room.footprint);
     setPosition(id!, [snapped.x, y, snapped.z]);
     if (snapped.rot !== undefined) setRotation(id!, snapped.rot);
+    clearParent(id!);
   }
 
   function snapToSurface() {
     const [x, , z] = currentXYZ();
-    const support = findSupportUnder(partSnapshot(), id!, x, z, part!.dimMM, part!.rot);
-    setPosition(id!, [x, support ?? 0, z]);
+    const support = findSupportDetailed(partSnapshot(), id!, x, z, part!.dimMM, part!.rot);
+    setPosition(id!, [x, support?.y ?? 0, z]);
+    if (support) setParent(id!, support.id);
+    else clearParent(id!);
   }
 
   // No confirm — the shared delete path answers with an Undo toast instead of a
@@ -175,7 +187,9 @@ export function Inspector() {
 
       {/* Placement — surfaced as visible buttons (was buried in a ⋯ menu). */}
       <Section label="Where it sits">
-        <div style={{ display: 'grid', gridTemplateColumns: part.wallMounted ? '1fr' : 'repeat(3, 1fr)', gap: 6 }}>
+        {/* `rail-triple` is the hook the elastic rail's container query reflows —
+            three icon+word buttons are the first thing in here to stop fitting. */}
+        <div className="rail-triple" style={{ display: 'grid', gridTemplateColumns: part.wallMounted ? '1fr' : 'repeat(3, 1fr)', gap: 6 }}>
           <button onClick={snapToNearestWall} className="ds-btn" title="Move to the nearest wall and face the room" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
             <Icon name="snap-wall" size={13} /> Wall
           </button>
@@ -821,7 +835,11 @@ function PaintPicker({
         {SWATCH_GROUPS.map((g) => (
           <div key={g.label}>
             <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--ink-3)', marginBottom: 4 }}>{g.label}</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 4 }}>
+            {/* Eight, and the elastic rail's container query is what drops it to
+                six — an `auto-fit` here would also have changed the count on a
+                WIDE rail (nine or ten per row), which is a redesign of a shipping
+                panel rather than a reflow of a cramped one. */}
+            <div className="rail-swatches" style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 4 }}>
               {g.items.map((s) => {
                 const on = value?.toLowerCase() === s.hex.toLowerCase();
                 return (

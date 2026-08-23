@@ -156,7 +156,7 @@ const TABLETOP_PRONE_CATEGORIES = new Set<Category>([
  *  covers less than half of it: requiring more than 50% inside the support
  *  therefore also guarantees the centre is inside, which is the physical test
  *  (centre of mass over the support) stated as an area. */
-const MIN_SUPPORT_SHARE = 0.5;
+export const MIN_SUPPORT_SHARE = 0.5;
 
 /** Highest world-Y where a part at (x,z) with given XZ footprint would land on
  *  another part's top surface. Wall-mounted + rugs are ignored as supports.
@@ -187,23 +187,45 @@ export function findSupportUnder(
   selfRot = 0,
   selfCircle?: boolean,
 ): number | null {
+  return findSupportDetailed(parts, selfId, x, z, selfDim, selfRot, selfCircle)?.y ?? null;
+}
+
+/** Same test as `findSupportUnder`, but also names which part won — the signal
+ *  a rigid-parenting relationship is established from (see `lib/rigid-parent.ts`). */
+export function findSupportDetailed(
+  parts: Array<{
+    id: string;
+    pos: [number, number, number];
+    dimMM: [number, number, number];
+    category: Category;
+    rot?: number;
+    wallMounted?: boolean;
+    circle?: boolean;
+  }>,
+  selfId: string,
+  x: number,
+  z: number,
+  selfDim: [number, number, number],
+  selfRot = 0,
+  selfCircle?: boolean,
+): { id: string; y: number } | null {
   const mover = footFromPart([x, 0, z], selfRot, selfDim, selfCircle);
   const moverArea = footArea(mover);
   // A footprint with no area has nothing to rest ON — no share of it can meet
   // the bar, and dividing by it would produce Infinity or NaN.
   if (!(moverArea > 0)) return null;
 
-  let best: number | null = null;
+  let best: { id: string; y: number } | null = null;
   for (const o of parts) {
     if (o.id === selfId) continue;
     if (o.wallMounted) continue;
     if (o.category === 'rug') continue;
     const top = o.pos[1] + o.dimMM[2] / 1000;
     // Nothing lower than the best candidate can win — skip the area maths.
-    if (best !== null && top <= best) continue;
+    if (best !== null && top <= best.y) continue;
     const shared = footIntersectionArea(mover, footFromPart(o.pos, o.rot ?? 0, o.dimMM, o.circle));
     if (shared / moverArea < MIN_SUPPORT_SHARE) continue;
-    best = top;
+    best = { id: o.id, y: top };
   }
   return best;
 }

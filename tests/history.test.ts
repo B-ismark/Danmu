@@ -26,6 +26,7 @@ function snapshot(over: Partial<Snapshot> = {}): Snapshot {
     positions: t.positions,
     rotations: t.rotations,
     dims: t.dims,
+    parentIds: t.parentIds,
     parts: sc.parts,
     room: sc.room,
     lighting: t.lighting,
@@ -36,10 +37,12 @@ function snapshot(over: Partial<Snapshot> = {}): Snapshot {
 
 beforeEach(() => {
   useHistory.setState({ past: [], future: [], suspended: false });
-  // `hidden` is not part of loadTransforms — applySnapshot restores it through
-  // setHiddenMap for the same reason, so reset it the same way.
+  // `hidden`/`parentIds` are not part of loadTransforms — applySnapshot
+  // restores them through their own setters for the same reason, so reset
+  // them the same way.
   useStudio.getState().loadTransforms({ positions: {}, rotations: {}, dims: {} });
   useStudio.getState().setHiddenMap({});
+  useStudio.getState().setParentIds({});
 });
 
 describe('the stack', () => {
@@ -129,6 +132,22 @@ describe('what a snapshot covers', () => {
     expect(restored?.hidden).toEqual({});
     applySnapshot(restored!);
     expect(useStudio.getState().hidden).toEqual({});
+  });
+
+  it('carries rigid-parenting relationships, so undoing a desk-move-with-cascade also undoes the relationship', () => {
+    seedHistory();
+    const before = useHistory.getState().past[0];
+    expect(before.parentIds).toEqual({});
+
+    useStudio.getState().setParent('laptop-1', 'desk-1');
+    const after = snapshot();
+    expect(after.parentIds).toEqual({ 'laptop-1': 'desk-1' });
+    useHistory.getState().push(after);
+
+    const restored = useHistory.getState().undo();
+    expect(restored?.parentIds).toEqual({});
+    applySnapshot(restored!);
+    expect(useStudio.getState().parentIds).toEqual({});
   });
 
   it('carries the lighting mood, so undoing a theme does not leave its light', () => {

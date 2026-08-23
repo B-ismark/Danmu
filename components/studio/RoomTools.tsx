@@ -1191,6 +1191,7 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
   const setParts = useScene((s) => s.setParts);
   const baseParts = useScene((s) => s.parts);
   const loadTransforms = useStudio((s) => s.loadTransforms);
+  const setParentIds = useStudio((s) => s.setParentIds);
   const confirm = useConfirm();
 
   useEffect(() => {
@@ -1201,7 +1202,7 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
   async function saveCurrent(): Promise<LayoutVariant | null> {
     if (!roomId) return null;
     const t = useStudio.getState();
-    const transforms: Transforms = { positions: t.positions, rotations: t.rotations, dims: t.dims };
+    const transforms: Transforms = { positions: t.positions, rotations: t.rotations, dims: t.dims, parentIds: t.parentIds };
     const v: LayoutVariant = {
       id: `l-${Date.now().toString(36)}`,
       name: `Layout ${String.fromCharCode(65 + (layouts.length % 26))}`,
@@ -1217,6 +1218,9 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
   function apply(v: LayoutVariant) {
     setParts(v.parts as ScenePart[]);
     loadTransforms(v.transforms);
+    // Layouts saved before this shipped simply have nothing here — reset
+    // rather than leave whatever the room had live before applying.
+    setParentIds(v.transforms.parentIds ?? {});
     toast({
       title: `${v.name} applied`,
       message: 'Undo puts the previous arrangement back.',

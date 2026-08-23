@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { snapToWall, findSupportUnder } from '@/lib/physics';
+import { snapToWall, findSupportUnder, findSupportDetailed } from '@/lib/physics';
 import { footArea, footFromPart, footIntersectionArea } from '@/lib/geometry';
 import type { Footprint } from '@/lib/footprint';
 
@@ -129,5 +129,34 @@ describe('findSupportUnder', () => {
     const tv: SupportPart = { id: 'tv', pos: [0, 1.3, 0], dimMM: [1400, 60, 800], category: 'tv', wallMounted: true };
     expect(findSupportUnder([rug, tv], 'laptop', 0, 0, LAPTOP)).toBeNull();
     expect(findSupportUnder([DESK], 'desk', 0, 0, LAPTOP)).toBeNull();
+  });
+});
+
+// ─── findSupportDetailed ────────────────────────────────────────────────────
+// Same test as findSupportUnder, but names which part won — the signal
+// rigid-parenting establishes a relationship from (lib/rigid-parent.ts).
+
+describe('findSupportDetailed', () => {
+  it('names the supporting id alongside the height', () => {
+    expect(findSupportDetailed([DESK], 'laptop', 0, 0, LAPTOP)).toEqual({ id: 'desk', y: 0.75 });
+  });
+
+  it('stays rotation-correct, same as findSupportUnder', () => {
+    const turned: SupportPart = { ...DESK, rot: Math.PI / 2 };
+    expect(findSupportDetailed([turned], 'laptop', 0.5, 0, LAPTOP)).toBeNull();
+    expect(findSupportDetailed([turned], 'laptop', 0, 0.5, LAPTOP)?.y).toBeCloseTo(0.75, 6);
+  });
+
+  it('picks the highest qualifying surface, by id', () => {
+    const shelf: SupportPart = { id: 'shelf', pos: [0, 0.8, 0], dimMM: [800, 400, 40], category: 'shelf' };
+    expect(findSupportDetailed([DESK, shelf], 'laptop', 0, 0, LAPTOP)?.id).toBe('shelf');
+    expect(findSupportDetailed([shelf, DESK], 'laptop', 0, 0, LAPTOP)?.id).toBe('shelf');
+  });
+
+  it('breaks a tie between two equal-height supports deterministically (first in order wins)', () => {
+    const deskA: SupportPart = { ...DESK, id: 'desk-a' };
+    const deskB: SupportPart = { ...DESK, id: 'desk-b' };
+    expect(findSupportDetailed([deskA, deskB], 'laptop', 0, 0, LAPTOP)?.id).toBe('desk-a');
+    expect(findSupportDetailed([deskB, deskA], 'laptop', 0, 0, LAPTOP)?.id).toBe('desk-b');
   });
 });

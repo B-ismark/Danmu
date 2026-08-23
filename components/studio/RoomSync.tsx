@@ -20,6 +20,7 @@ export function RoomSync() {
   const setParts = useScene((s) => s.setParts);
   const loadTransforms = useStudio((s) => s.loadTransforms);
   const setHiddenMap = useStudio((s) => s.setHiddenMap);
+  const setParentIds = useStudio((s) => s.setParentIds);
   const transformTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sceneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const roomTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -46,6 +47,14 @@ export function RoomSync() {
         loadTransforms(t);
         if (t.hidden) setHiddenMap(t.hidden);
       }
+      // Unconditional, unlike `hidden` above: part ids are deterministic
+      // (`${category}-${counter}`), so a room with no saved transforms of its
+      // own would otherwise inherit whatever `parentIds` the PREVIOUS room
+      // left live in the store. `snapshotDescendants` re-validates every edge
+      // physically before trusting it, so a leaked entry can't cause a wrong
+      // cascade — but there's no reason to leave it live when a clean reset
+      // costs nothing.
+      setParentIds(t?.parentIds ?? {});
       ready.current = true;
       // Record the loaded room as the state undo returns *to*. Without a
       // baseline, `undo()` has nothing before the current entry and the first
@@ -55,7 +64,7 @@ export function RoomSync() {
       // default starter scene and the first undo would wipe the real room.
       seedHistory();
     })();
-  }, [roomId, loadFromRoom, setParts, loadTransforms, setHiddenMap]);
+  }, [roomId, loadFromRoom, setParts, loadTransforms, setHiddenMap, setParentIds]);
 
   // Persist transform changes
   useEffect(() => {
@@ -66,6 +75,7 @@ export function RoomSync() {
         state.positions === prev.positions &&
         state.rotations === prev.rotations &&
         state.dims === prev.dims &&
+        state.parentIds === prev.parentIds &&
         state.hidden === prev.hidden
       )
         return;
@@ -75,6 +85,7 @@ export function RoomSync() {
           positions: state.positions,
           rotations: state.rotations,
           dims: state.dims,
+          parentIds: state.parentIds,
           hidden: state.hidden,
         });
       }, DEBOUNCE_MS);
@@ -90,6 +101,7 @@ export function RoomSync() {
           positions: s.positions,
           rotations: s.rotations,
           dims: s.dims,
+          parentIds: s.parentIds,
           hidden: s.hidden,
         });
       }

@@ -40,6 +40,14 @@ type StudioState = {
   rotations: Record<string, number>;
   /** runtime dimension overrides — [W, D, H] mm. Drives mesh scale + spec PDF. */
   dims: Record<string, [number, number, number]>;
+  /** rigid-parenting: childId -> parentId, established/broken automatically at
+   *  drag-commit time (see `components/three/Draggable.tsx`'s `commit()`) when
+   *  a floor-standing part lands on / off another. An edge here is a HINT, not
+   *  a guarantee — `lib/rigid-parent.ts`'s `snapshotDescendants` re-validates
+   *  each one physically against live positions before trusting it, so a
+   *  relationship left stale by a programmatic mover (Suggest layout, a saved
+   *  Layout A/B, a wall carrying furniture) is inert rather than wrong. */
+  parentIds: Record<string, string>;
   /** active gizmo mode (Maya-style) */
   transformMode: 'translate' | 'rotate' | 'scale';
   /** floor grid visibility (Paralives-style toggle) */
@@ -48,6 +56,13 @@ type StudioState = {
    *  canvas is the product, and 260 + 320px is 45% of a 1280px laptop. */
   railLeftOpen: boolean;
   railRightOpen: boolean;
+  /** Rail width in px, as the user last dragged it — `null` while they never
+   *  have, which is not the same as "the token's current value" and is why this
+   *  is nullable rather than seeded. A remembered width is a *preference*, and
+   *  the shell still renders it inside the token's `clamp()`, so a 520px rail
+   *  dragged on a monitor stays a ceiling rather than a promise on a laptop. */
+  railLeftW: number | null;
+  railRightW: number | null;
   /** scene lighting mood */
   lighting: Lighting;
   /** render quality (soft shadows + AO + material maps on 'high') */
@@ -108,11 +123,18 @@ type StudioState = {
   setPositionsFor: (moves: Array<{ id: string; pos: [number, number, number] }>) => void;
   setRotation: (id: string, rot: number) => void;
   setDim: (id: string, dim: [number, number, number]) => void;
+  /** Establish (or overwrite) a rigid-parenting relationship. */
+  setParent: (childId: string, parentId: string) => void;
+  clearParent: (childId: string) => void;
+  /** restore the whole parentIds map from persistence (per-room, via RoomSync) */
+  setParentIds: (map: Record<string, string>) => void;
   setTransformMode: (m: 'translate' | 'rotate' | 'scale') => void;
   setSnapMode: (m: 'off' | 'fine' | 'coarse') => void;
   setCatalogOpen: (open: boolean) => void;
   toggleGrid: () => void;
   toggleRail: (side: 'left' | 'right') => void;
+  /** Commit a dragged rail width. `null` restores the token default. */
+  setRailWidth: (side: 'left' | 'right', px: number | null) => void;
   setLighting: (l: Lighting) => void;
   setQuality: (q: Quality) => void;
   setSunMinutes: (m: number) => void;
@@ -149,6 +171,8 @@ const STUDIO_PREFS = [
   'showGrid',
   'railLeftOpen',
   'railRightOpen',
+  'railLeftW',
+  'railRightW',
   'sunMinutes',
   'sunDayOfYear',
   'sunLive',
@@ -183,11 +207,14 @@ export const useStudio = create<StudioState>()(
   positions: {},
   rotations: {},
   dims: {},
+  parentIds: {},
   transformMode: 'translate',
   snapMode: 'fine',
   showGrid: true,
   railLeftOpen: true,
   railRightOpen: true,
+  railLeftW: null,
+  railRightW: null,
   lighting: 'day',
   quality: 'high',
   // 3 pm on the March equinox: the sun is up at every inhabited latitude and
@@ -232,12 +259,29 @@ export const useStudio = create<StudioState>()(
     }),
   setRotation: (id, rot) => set((s) => ({ rotations: { ...s.rotations, [id]: rot } })),
   setDim: (id, dim) => set((s) => ({ dims: { ...s.dims, [id]: dim } })),
+  setParent: (childId, parentId) => set((s) => ({ parentIds: { ...s.parentIds, [childId]: parentId } })),
+  clearParent: (childId) =>
+    set((s) => {
+      if (!(childId in s.parentIds)) return {};
+      const p = { ...s.parentIds };
+      delete p[childId];
+      return { parentIds: p };
+    }),
+  setParentIds: (parentIds) => set({ parentIds }),
   setTransformMode: (m) => set({ transformMode: m }),
   setCatalogOpen: (open) => set({ catalogOpen: open }),
   setSnapMode: (m) => set({ snapMode: m }),
   toggleGrid: () => set((s) => ({ showGrid: !s.showGrid })),
   toggleRail: (side) =>
     set((s) => (side === 'left' ? { railLeftOpen: !s.railLeftOpen } : { railRightOpen: !s.railRightOpen })),
+  setRailWidth: (side, px) => {
+    // Only finiteness and a floor of zero are enforced here. The real bounds are
+    // the rail token's own `clamp()`, which is where the design values live and
+    // the only place that knows what a viewport can spare — a second opinion in
+    // JS would be a second answer to the same question.
+    const w = px == null || !Number.isFinite(px) ? null : Math.max(0, Math.round(px));
+    set(side === 'left' ? { railLeftW: w } : { railRightW: w });
+  },
   setLighting: (l) => set({ lighting: l }),
   setQuality: (q) => set({ quality: q }),
   setSunMinutes: (m) => set({ sunMinutes: clampMinutes(m), sunLive: false }),
@@ -252,14 +296,16 @@ export const useStudio = create<StudioState>()(
     set({ positions: data.positions ?? {}, rotations: data.rotations ?? {}, dims: data.dims ?? {} }),
   resetTransforms: (id) =>
     set((s) => {
-      if (!id) return { positions: {}, rotations: {}, dims: {} };
+      if (!id) return { positions: {}, rotations: {}, dims: {}, parentIds: {} };
       const p = { ...s.positions };
       const r = { ...s.rotations };
       const d = { ...s.dims };
+      const pr = { ...s.parentIds };
       delete p[id];
       delete r[id];
       delete d[id];
-      return { positions: p, rotations: r, dims: d };
+      delete pr[id];
+      return { positions: p, rotations: r, dims: d, parentIds: pr };
     }),
   frameSelected: () => set((s) => ({ frameSelectedToken: s.frameSelectedToken + 1 })),
   toggleHidden: (id) => set((s) => ({ hidden: { ...s.hidden, [id]: !s.hidden[id] } })),

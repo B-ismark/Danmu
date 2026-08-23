@@ -150,6 +150,9 @@ export type Transforms = {
    *  refresh silently brought hidden parts back while the top bar had been
    *  showing a "saved" state the whole time. */
   hidden?: Record<string, boolean>;
+  /** rigid-parenting relationships (childId -> parentId), same optional/
+   *  per-room shape as `hidden` — rooms saved before this shipped have none. */
+  parentIds?: Record<string, string>;
 };
 
 /** A named furniture-arrangement snapshot ("Layout A / B") — lets the user

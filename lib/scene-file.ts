@@ -56,6 +56,7 @@ import {
 import { clampDims, ROOM_SIDE_M } from './dimension-ranges';
 import { resolveParts } from './transforms';
 import { fileSlug } from './exports';
+import { wouldCreateCycle } from './rigid-parent';
 import { LAYOUT_IDS, type LayoutId, type RoomData, type Site, type Transforms } from './storage';
 
 /** Marks the JSON as ours. Checked exactly — a file that does not say this is not
@@ -117,8 +118,14 @@ export type SceneFileRoom = {
  *
  *  `hidden` is per-room state in `Transforms`, not a property of the piece, but a
  *  file with a side-table of overrides would reproduce inside the format the exact
- *  split that makes the live app confusing. One truth per piece. */
-export type SceneFilePart = ScenePart & { hidden?: boolean };
+ *  split that makes the live app confusing. One truth per piece.
+ *
+ *  `parentId` follows the same pattern — rigid-parenting relationships live in
+ *  `Transforms.parentIds` in the running app (an override map, not authored
+ *  geometry), but a file has no side-table to keep them in, so each part
+ *  carries its own on the way out and it's split back into a map on the way
+ *  back in (`sceneFileToRoom`). */
+export type SceneFilePart = ScenePart & { hidden?: boolean; parentId?: string };
 
 export type SceneFile = {
   format: typeof SCENE_FILE_FORMAT;
@@ -145,7 +152,7 @@ export function buildSceneFile(
   transforms: Transforms,
   exportedAt: number,
 ): SceneFile {
-  const { positions, rotations, dims, hidden } = transforms;
+  const { positions, rotations, dims, hidden, parentIds } = transforms;
   return {
     format: SCENE_FILE_FORMAT,
     version: SCENE_FILE_VERSION,
@@ -166,6 +173,7 @@ export function buildSceneFile(
       // would be a reference into nothing.
       const { fromDetection: _drop, ...part } = resolved;
       if (hidden?.[part.id]) (part as SceneFilePart).hidden = true;
+      if (parentIds?.[part.id]) (part as SceneFilePart).parentId = parentIds[part.id];
       return part as SceneFilePart;
     }),
   };
@@ -266,14 +274,44 @@ export function parseSceneFile(text: string): SceneFileParse {
 
   const parts: SceneFilePart[] = [];
   const seen = new Set<string>();
+  const originalToFinal = new Map<string, string>();
   let unreadable = 0;
   for (const candidate of partsIn.slice(0, MAX_PARTS)) {
-    const part = readPart(candidate, seen);
-    if (part) parts.push(part);
-    else unreadable++;
+    const read = readPart(candidate, seen);
+    if (read) {
+      parts.push(read.part);
+      if (read.originalId) originalToFinal.set(read.originalId, read.part.id);
+    } else {
+      unreadable++;
+    }
   }
   if (unreadable > 0) {
     dropped.push(`${unreadable} ${unreadable === 1 ? 'piece' : 'pieces'} could not be read and were left out`);
+  }
+
+  // Resolve `parentId` now that every part's (possibly reminted) final id is
+  // known, and refuse anything that would create a cycle — a hand-edited file
+  // can encode a loop directly, and nothing upstream of this checks for one.
+  // Accepted incrementally against what this same pass has already accepted,
+  // so an in-file A -> B -> C -> A cycle is broken at exactly one edge rather
+  // than refusing the whole chain.
+  const acceptedParents: Record<string, string> = {};
+  let droppedRelationships = 0;
+  for (const part of parts) {
+    if (!part.parentId) continue;
+    const resolved = originalToFinal.get(part.parentId);
+    if (!resolved || wouldCreateCycle(part.id, resolved, acceptedParents)) {
+      delete part.parentId;
+      droppedRelationships++;
+      continue;
+    }
+    part.parentId = resolved;
+    acceptedParents[part.id] = resolved;
+  }
+  if (droppedRelationships > 0) {
+    dropped.push(
+      `${droppedRelationships} surface ${droppedRelationships === 1 ? 'relationship' : 'relationships'} pointed at a missing or looping piece and ${droppedRelationships === 1 ? 'was' : 'were'} dropped`,
+    );
   }
 
   return {
@@ -365,7 +403,7 @@ function readSite(v: unknown): Site | null {
  *  could do anything sensible without it. An unknown `shape` has no geometry, so the
  *  piece goes; an unreadable `color` just means the shape's default, so the field
  *  goes and the piece stays. */
-function readPart(v: unknown, seen: Set<string>): SceneFilePart | null {
+function readPart(v: unknown, seen: Set<string>): { part: SceneFilePart; originalId: string } | null {
   if (!isObj(v)) return null;
 
   const shape = oneOf<Shape>(v.shape, SHAPES);
@@ -385,7 +423,11 @@ function readPart(v: unknown, seen: Set<string>): SceneFilePart | null {
   // Ids key React lists, the transform maps and the group relation. A duplicate
   // would make two pieces move as one; an absent one would collide with the next
   // absent one. Either way we mint a fresh id rather than refuse the piece.
-  let id = str(v.id) ?? '';
+  // `originalId` is kept separately (returned below) — a `parentId` elsewhere
+  // in the file references THIS string, not whatever id the piece ends up
+  // with, so `parseSceneFile` needs both to resolve it once every part is read.
+  const originalId = str(v.id) ?? '';
+  let id = originalId;
   if (!id || seen.has(id)) id = `imported-${seen.size}-${shape}`;
   seen.add(id);
 
@@ -413,6 +455,12 @@ function readPart(v: unknown, seen: Set<string>): SceneFilePart | null {
   const groupId = str(v.groupId);
   if (groupId) part.groupId = groupId;
 
+  // Left unresolved (raw, may reference an id not parsed yet, one that gets
+  // reminted, or nothing at all) — `parseSceneFile` resolves and cycle-checks
+  // it once every part in the file has been read.
+  const parentId = str(v.parentId);
+  if (parentId) part.parentId = parentId;
+
   // `meshHash` is deliberately not carried across. It points into THIS browser's
   // mesh cache, which an imported file has no entries in, so honouring it would
   // render nothing where a sofa should be. Dropping it falls the piece back to its
@@ -424,7 +472,7 @@ function readPart(v: unknown, seen: Set<string>): SceneFilePart | null {
   const light = readLight(v.light);
   if (light) part.light = light;
 
-  return part;
+  return { part, originalId };
 }
 
 function readDecor(v: unknown): DecorItem[] | null {
@@ -462,10 +510,12 @@ function readLight(v: unknown): PartLight | null {
  *  live — is written into `Transforms`. */
 export function sceneFileToRoom(file: SceneFile): { parts: ScenePart[]; transforms: Transforms } {
   const hidden: Record<string, boolean> = {};
+  const parentIds: Record<string, string> = {};
   const parts = file.parts.map((p) => {
-    const { hidden: isHidden, ...part } = p;
+    const { hidden: isHidden, parentId, ...part } = p;
     if (isHidden) hidden[part.id] = true;
+    if (parentId) parentIds[part.id] = parentId;
     return part;
   });
-  return { parts, transforms: { positions: {}, rotations: {}, dims: {}, hidden } };
+  return { parts, transforms: { positions: {}, rotations: {}, dims: {}, hidden, parentIds } };
 }

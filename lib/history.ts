@@ -14,6 +14,11 @@ export type Snapshot = {
   positions: Record<string, [number, number, number]>;
   rotations: Record<string, number>;
   dims: Record<string, [number, number, number]>;
+  /** rigid-parenting relationships (childId -> parentId). An edit to the
+   *  arrangement, not a view preference — undoing a desk-move-with-cascade
+   *  should also undo whatever it carried along, and undoing further should
+   *  put the relationship itself back the way it was. */
+  parentIds: Record<string, string>;
   parts: ScenePart[];
   room: RoomShape;
   /** Lighting mood belongs in history because applying a theme changes it in
@@ -82,6 +87,7 @@ function takeSnapshot(): Snapshot {
     positions: t.positions,
     rotations: t.rotations,
     dims: t.dims,
+    parentIds: t.parentIds,
     parts: sc.parts,
     room: sc.room,
     lighting: t.lighting,
@@ -123,6 +129,7 @@ export function startHistoryRecording() {
       state.positions === prev.positions &&
       state.rotations === prev.rotations &&
       state.dims === prev.dims &&
+      state.parentIds === prev.parentIds &&
       state.lighting === prev.lighting &&
       state.hidden === prev.hidden
     )
@@ -144,6 +151,7 @@ function shallowEq(a: Snapshot, b: Snapshot): boolean {
     a.positions === b.positions &&
     a.rotations === b.rotations &&
     a.dims === b.dims &&
+    a.parentIds === b.parentIds &&
     a.parts === b.parts &&
     a.room === b.room &&
     a.lighting === b.lighting &&
@@ -166,6 +174,7 @@ export function applySnapshot(snap: Snapshot) {
   useStudio.getState().loadTransforms(snap);
   useStudio.getState().setLighting(snap.lighting);
   useStudio.getState().setHiddenMap(snap.hidden);
+  useStudio.getState().setParentIds(snap.parentIds);
   useScene.setState({ parts: snap.parts, room: snap.room });
   // small async unsuspend so subscribe fires after state settles
   setTimeout(() => {
