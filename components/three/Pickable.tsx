@@ -3,7 +3,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { type ThreeEvent } from '@react-three/fiber';
 import { Group } from 'three';
-import { useStudio } from '@/lib/store';
+import { gestureOwnedByOther, useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 
 // Wraps any subtree with hover/click handling that drives the studio store.
@@ -41,6 +41,10 @@ export function Pickable({
       ref={ref}
       onPointerOver={(e: ThreeEvent<PointerEvent>) => {
         e.stopPropagation();
+        // A part mid-drag/gizmo-transform owns the gesture; the cursor sweeping
+        // over another part's screen space (a wide rotate arc, say) must not
+        // steal hover out from under it.
+        if (gestureOwnedByOther(partId)) return;
         setHovered(partId);
         document.body.style.cursor = 'pointer';
       }}
@@ -51,6 +55,9 @@ export function Pickable({
       }}
       onClick={(e: ThreeEvent<MouseEvent>) => {
         e.stopPropagation();
+        // Same exclusivity as onPointerOver, for the click that would otherwise
+        // reselect whatever the cursor ended up over when the gesture released.
+        if (gestureOwnedByOther(partId)) return;
         // A Space + left-drag that happens to pass over furniture is a camera
         // pan; it must not re-select whatever it flew across.
         if (useStudio.getState().panKeyHeld) return;
@@ -74,6 +81,7 @@ export function Pickable({
       // (nightstand, wardrobe); harmless no-op otherwise.
       onDoubleClick={(e: ThreeEvent<MouseEvent>) => {
         e.stopPropagation();
+        if (gestureOwnedByOther(partId)) return;
         toggleOpen(partId);
       }}
     >

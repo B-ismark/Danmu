@@ -274,6 +274,17 @@ export const useStudio = create<StudioState>()(
   ),
 );
 
+/** Whether some OTHER part/handle currently owns the active drag/gizmo gesture
+ *  — the shared gate behind every pointer handler in Pickable/Draggable that
+ *  must not let the cursor's screen position steal hover, selection or a new
+ *  drag out from under whatever `draggingId` already names. `id` may be a real
+ *  part id or a sentinel like `'__wall__'` (see WallHandles/PlanView); either
+ *  way, ownership by anything other than `id` blocks. */
+export function gestureOwnedByOther(id: string): boolean {
+  const draggingId = useStudio.getState().draggingId;
+  return draggingId !== null && draggingId !== id;
+}
+
 // Settings. Persisted to localStorage. API key kept here only on this device.
 export type DimUnit = 'mm' | 'cm' | 'm' | 'in' | 'ft';
 

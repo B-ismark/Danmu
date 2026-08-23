@@ -29,7 +29,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { TransformControls } from '@react-three/drei';
 import { useThree, type ThreeEvent } from '@react-three/fiber';
 import { Group, Mesh, MeshStandardMaterial, Plane, Vector3 } from 'three';
-import { useStudio } from '@/lib/store';
+import { gestureOwnedByOther, useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { currentRoomScene } from '@/lib/room-scene';
 import { useDragLive } from '@/lib/drag-live';
@@ -490,6 +490,12 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     offZ: number;
   } | null>(null);
 
+  // True for the life of a TransformControls (gizmo) grab on this part — set in
+  // its onMouseDown, cleared in its onMouseUp. Guards onPointerDown above
+  // against a second touch point starting a competing direct-drag on the same
+  // mesh while the gizmo is already writing its transform.
+  const gizmoActive = useRef(false);
+
   // Two-finger twist. Tracked at window level so the second finger does not have
   // to land on the part itself — on a nightstand there is barely room for one.
   const touchPts = useRef(new Map<number, [number, number]>());
@@ -573,12 +579,18 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     twist.current = null;
   }
 
-  // Release everything if the part unmounts mid-gesture (deleted, room swapped).
+  // Release everything if the part unmounts mid-gesture (deleted, undone, room
+  // swapped). Without this, `draggingId` is left pointing at a part that no
+  // longer exists — onPointerUp/TransformControls' onMouseUp are the only other
+  // places that clear it, and an unmount skips both — which the exclusivity
+  // guards in Pickable/Draggable would then read as "some other gesture owns
+  // every part, forever," freezing hover/select/drag on the whole room.
   useEffect(
     () => () => {
       if (raf.current) cancelAnimationFrame(raf.current);
       if (drag.current?.hold) window.clearTimeout(drag.current.hold);
       if (_gestureOwner === partId) _gestureOwner = null;
+      if (useStudio.getState().draggingId === partId) setDragging(null);
       detachTouch();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -597,10 +609,18 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // part body itself.
     e.stopPropagation();
 
+    // The gizmo already owns this part's transform — a second finger pressing
+    // its mesh body (not the handle) must not start a competing direct-drag
+    // that fights the gizmo for the same position/rotation.
+    if (gizmoActive.current) return;
     // A second finger is a twist, not a new grab — whether it lands on this part
     // or on the sideboard next to it.
     if (_gestureOwner && _gestureOwner !== partId) return;
     if (drag.current && e.pointerType === 'touch' && e.pointerId !== drag.current.pointerId) return;
+    // A gizmo transform (or another part's direct drag) already owns the
+    // gesture — the cursor landing on this part mid-rotate must not start a
+    // second one here.
+    if (gestureOwnedByOther(partId)) return;
 
     const planeY = isFloorStanding(part.category, part.shape) ? ref.current.position.y : 0;
     _plane.set(_plane.normal.set(0, 1, 0), -planeY);
@@ -777,6 +797,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
           rotationSnap={mode === 'rotate' ? rotationSnap : null}
           onObjectChange={onGizmoChange}
           onMouseDown={() => {
+            gizmoActive.current = true;
             setDragging(partId);
             const pp = ref.current?.position;
             dragStartPos.current = pp ? [pp.x, pp.y, pp.z] : null;
@@ -788,6 +809,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
             commit();
             effCache.current = null;
             setDragging(null);
+            gizmoActive.current = false;
           }}
         />
       )}
