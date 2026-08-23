@@ -262,6 +262,26 @@ export function Room() {
       shadows={hi}
       camera={{ fov: 38, position: [5, 4.5, 5.5], near: 0.05, far: 100 }}
       dpr={[1, dprMax]}
+      // Which of these two numbers does what is not what the names suggest, and it
+      // is worth stating because the obvious reading is wrong. `react-use-measure`
+      // wires its **ResizeObserver** callback through `debounce.scroll` and only
+      // the window `resize` **event** listener through `debounce.resize`. R3F
+      // defaults to `{ scroll: 50, resize: 0 }`, so:
+      //
+      //   · an element resize — a rail collapsing, a divider being dragged, the
+      //     stacked layout reflowing — was already debounced 50ms, and a trailing
+      //     debounce means a continuous drag costs no setSize at all until the
+      //     pointer settles. That path was fine.
+      //   · dragging the window's own edge was NOT debounced, and each of those
+      //     intermediate widths buys a setSize plus a render, which here is SSAO +
+      //     SMAA + a shadow pass.
+      //
+      // So 90 is for the window drag. `scroll` is restated rather than inherited
+      // because R3F spreads this object over its defaults — `debounce` is replaced
+      // wholesale, not merged, so leaving it out would take the observer's own
+      // debounce from 50 to 0 and make the element-resize path worse than it was.
+      // Same shape of trap as `gap` / `row-gap` in globals.css.
+      resize={{ debounce: { scroll: 50, resize: 90 } }}
       // ACES tone mapping + sRGB output = the single biggest realism win for
       // zero runtime cost: it maps linear HDR lighting to a filmic curve so
       // bright surfaces roll off instead of clipping to flat white.

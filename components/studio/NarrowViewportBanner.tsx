@@ -27,6 +27,12 @@ import { useMediaQuery, useMediaQueryState } from '@/lib/use-media-query';
 const MIN_WIDTH = 400;
 /** At or below this the rails stack under the canvas instead of flanking it. */
 const STACK_WIDTH = 1023;
+/** At or below this there is room for three columns but not three comfortable
+ *  ones: 1024px with both rails at their token widths leaves the room less width
+ *  than the panels beside it. A step between "stack everything" and "full
+ *  width", which one boolean cannot express — tldraw carries a 0–7 ladder for
+ *  the same reason. */
+const COMPACT_WIDTH = 1279;
 const DISMISS_KEY = 'danmu-studio-gate-dismissed';
 
 /** Whether the studio should stack its rails under the canvas rather than sit in
@@ -39,8 +45,27 @@ const DISMISS_KEY = 'danmu-studio-gate-dismissed';
  *  re-flowed to the stacked one — a layout shift on exactly the devices least able
  *  to absorb it. Callers hold their shell back until this is true. */
 export function useStackedStudio(): { stacked: boolean; ready: boolean } {
-  const { matches, ready } = useMediaQueryState(`(max-width: ${STACK_WIDTH}px)`);
-  return { stacked: matches, ready };
+  const { layout, ready } = useStudioLayout();
+  return { stacked: layout === 'stacked', ready };
+}
+
+/** How much room the studio has, as three steps rather than one boolean.
+ *
+ *  `wide`    — rails at their token widths, which is what they were sized for.
+ *  `compact` — three columns, rails at their floors. The room gets the difference.
+ *  `stacked` — rails below the room; see `useStackedStudio`.
+ *
+ *  Derived here, beside the thresholds, so a consumer can never introduce a
+ *  fourth number for the same decision. */
+export function useStudioLayout(): { layout: 'wide' | 'compact' | 'stacked'; ready: boolean } {
+  const stack = useMediaQueryState(`(max-width: ${STACK_WIDTH}px)`);
+  const compact = useMediaQueryState(`(max-width: ${COMPACT_WIDTH}px)`);
+  return {
+    layout: stack.matches ? 'stacked' : compact.matches ? 'compact' : 'wide',
+    // Both, or a first paint can be told "not stacked" by one query while the
+    // other has not answered — which is the layout shift `ready` exists to stop.
+    ready: stack.ready && compact.ready,
+  };
 }
 
 export function NarrowViewportBanner() {

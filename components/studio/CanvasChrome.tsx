@@ -23,6 +23,11 @@
 
 import type { ReactNode } from 'react';
 
+// Every slot carries `.canvas-chrome`, which makes the cluster itself
+// transparent to the pointer and hands pointer events back to its children. The
+// gaps in a cluster are not controls, and while they were part of a solid box a
+// press that landed between two buttons was swallowed — no selection change, no
+// drag, no clue why.
 const BASE = {
   position: 'absolute' as const,
   zIndex: 'var(--z-canvas-ui)',
@@ -31,18 +36,31 @@ const BASE = {
   gap: 8,
 };
 
+// How much of each edge something else is covering. Zero unless a shell says
+// otherwise, so the docked layouts — where a rail takes its own column and
+// covers nothing — are unaffected. `OverlayShell` sets them to its panel widths,
+// which is what keeps the tool cluster centred on the room you can SEE rather
+// than on an element two panels are sitting on top of.
+const INSET_L = 'var(--canvas-inset-left, 0px)';
+const INSET_R = 'var(--canvas-inset-right, 0px)';
+/** The gap between a cluster and its edge. */
+const EDGE = 12;
+
 /** Top-centre: what you do to the room. */
 export function CanvasTools({ children }: { children: ReactNode }) {
   return (
     <div
+      className="canvas-chrome"
       style={{
         ...BASE,
-        top: 12,
-        left: '50%',
+        top: EDGE,
+        // The centre of the *visible* canvas: shifted by half the difference
+        // between what is covered on each side.
+        left: `calc(50% + (${INSET_L} - ${INSET_R}) / 2)`,
         transform: 'translateX(-50%)',
         flexWrap: 'wrap',
         justifyContent: 'center',
-        maxWidth: 'calc(100% - 24px)',
+        maxWidth: `calc(100% - ${INSET_L} - ${INSET_R} - ${EDGE * 2}px)`,
       }}
     >
       {children}
@@ -52,7 +70,20 @@ export function CanvasTools({ children }: { children: ReactNode }) {
 
 /** Top-right: how you look at it. Undo/redo lives here, the way Drafted groups it. */
 export function CanvasView({ children }: { children: ReactNode }) {
-  return <div style={{ ...BASE, top: 12, right: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>{children}</div>;
+  return (
+    <div
+      className="canvas-chrome"
+      style={{
+        ...BASE,
+        top: EDGE,
+        right: `calc(${EDGE}px + ${INSET_R})`,
+        flexWrap: 'wrap',
+        justifyContent: 'flex-end',
+      }}
+    >
+      {children}
+    </div>
+  );
 }
 
 /**
@@ -62,12 +93,13 @@ export function CanvasView({ children }: { children: ReactNode }) {
 export function CanvasAide({ children }: { children: ReactNode }) {
   return (
     <div
+      className="canvas-chrome"
       style={{
         ...BASE,
-        bottom: 12,
-        right: 12,
+        bottom: EDGE,
+        right: `calc(${EDGE}px + ${INSET_R})`,
         zIndex: 'var(--z-canvas-hint)',
-        maxWidth: 'min(320px, calc(100% - 24px))',
+        maxWidth: `min(320px, calc(100% - ${INSET_L} - ${INSET_R} - ${EDGE * 2}px))`,
       }}
     >
       {children}

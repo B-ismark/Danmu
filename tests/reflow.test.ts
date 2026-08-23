@@ -38,6 +38,24 @@ function token(name: string): string {
   return m![1].trim();
 }
 
+/** The px floor a rail token clamps to, following one level of `var()`.
+ *
+ *  The floors are tokens of their own now (`--rail-left-min`), because a rail the
+ *  user has *dragged* has to be held to the same floor as one the stylesheet
+ *  sized — and a pointer handler can only do that by naming the token. This
+ *  resolves either shape, so the assertions below keep asking the question they
+ *  were written to ask rather than the question the syntax happens to allow. */
+function railFloor(name: string): number {
+  const first = /clamp\(\s*([^,]+),/.exec(token(name));
+  expect(first, `--${name} is not a clamp()`).toBeTruthy();
+  const arg = first![1].trim();
+  const indirect = /^var\(\s*(--[\w-]+)\s*\)$/.exec(arg);
+  const resolved = indirect ? token(indirect[1].slice(2)) : arg;
+  const px = /^(\d+(?:\.\d+)?)px$/.exec(resolved);
+  expect(px, `--${name}'s floor does not resolve to a px length (got \`${arg}\`)`).toBeTruthy();
+  return Number(px![1]);
+}
+
 describe('.chrome-bar reflows instead of overflowing', () => {
   const body = rule('.chrome-bar');
 
@@ -72,16 +90,32 @@ describe('the studio rails give ground', () => {
     expect(token(name)).toMatch(/^clamp\(/);
   });
 
-  it('leaves the inspector room for the widest control it holds', () => {
-    // The colour picker is that control, and it states its own width. A floor
-    // below `picker + section padding` is a rail that clips its own contents at
-    // every viewport, which no breakpoint would reveal.
-    const picker = /width:\s*(\d+)/.exec(readFileSync(root('components', 'ui', 'ColorPicker.tsx'), 'utf8'));
-    expect(picker, 'ColorPicker no longer declares a width — re-derive this floor').toBeTruthy();
-    // `.section` is `padding: 14px 16px`.
-    const needed = Number(picker![1]) + 32;
-    const floor = Number(/clamp\(\s*(\d+)px/.exec(token('rail-right'))![1]);
-    expect(floor).toBeGreaterThanOrEqual(needed);
+  it('holds its widest control to a ceiling, so the control cannot pin the floor', () => {
+    // The colour picker is that control. It used to declare `width: 220`, which
+    // made the rail's floor a hostage: one pixel narrower and the picker was cut
+    // off silently, because `.rail` has no overflow of its own to hang a
+    // scrollbar on. As `min(220px, 100%)` it asks for 220 and accepts less.
+    //
+    // Matching the whole declaration rather than the first `width:` in the file
+    // matters: `/width:\s*(\d+)/` went on passing after the change by finding a
+    // 14px swatch further down, and an assertion that reads the wrong number is
+    // worse than no assertion.
+    const src = readFileSync(root('components', 'ui', 'ColorPicker.tsx'), 'utf8');
+    const capped = /width: 'min\((\d+)px, 100%\)'/.exec(src);
+    expect(capped, 'ColorPicker should cap its width with min(), not state a bare one').toBeTruthy();
+    // Comments stripped, like the sun-graph assertion below: the note above that
+    // declaration NAMES the `width: 220` it is telling you not to write, and a
+    // negative assertion that reads prose fails on the explanation.
+    const code = src
+      .split('\n')
+      .filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*'))
+      .join('\n');
+    expect(code, 'a three-digit pixel width in here re-pins the rail floor').not.toMatch(/width: \d{3}\b/);
+
+    // A fluid control that never gets near what it asks for is a different bug,
+    // so the floor still has to leave it most of its ideal. `.section` is
+    // `padding: 14px 16px`.
+    expect(railFloor('rail-right') - 32).toBeGreaterThanOrEqual(Number(capped![1]));
   });
 
   it('does not clamp the closed rail — a reopen toggle is one fixed size', () => {
@@ -118,7 +152,7 @@ describe('Segmented can lay its options out on more than one row', () => {
 
   it('keeps the four-mood lighting set inside the narrowest rail', () => {
     const minItem = Number(/minItem=\{(\d+)\}/.exec(readFileSync(root('components', 'studio', 'ViewOptions.tsx'), 'utf8'))![1]);
-    const floor = Number(/clamp\(\s*(\d+)px/.exec(token('rail-left'))![1]);
+    const floor = railFloor('rail-left');
     // Two columns is the layout this set is meant to fall back to. One column
     // would be four full-width rows of a mood picker, which is a list, not a
     // segmented control.
@@ -168,5 +202,117 @@ describe('a floating card is capped against the window, not just stated', () => 
     const src = readFileSync(root('components', 'studio', 'RoomTools.tsx'), 'utf8');
     expect(src).toMatch(/const width = Math\.min\(PANEL_W,\s*window\.innerWidth/);
     expect(src, 'left must be clamped at BOTH edges').toMatch(/const left = Math\.max\(\s*\d+,\s*Math\.min\(/);
+  });
+});
+
+describe('the canvas is not resized once per frame of a window drag', () => {
+  // `react-use-measure` routes its ResizeObserver through `debounce.scroll` and
+  // the window `resize` EVENT through `debounce.resize` — not the split the names
+  // imply. R3F's defaults are `{ scroll: 50, resize: 0 }`, so element resizes (a
+  // rail collapsing, a sash drag) were already debounced and dragging the window's
+  // own edge was not. With `frameloop="demand"` plus SSAO and SMAA, each of those
+  // intermediate widths buys a full effect chain.
+  const SRC = readFileSync(root('components', 'three', 'Room.tsx'), 'utf8');
+  const debounce = /resize=\{\{\s*debounce:\s*\{([^}]*)\}/.exec(SRC);
+
+  it('debounces the window-resize path, which shipped at zero', () => {
+    expect(debounce, 'the <Canvas> should declare resize={{ debounce: { … } }}').toBeTruthy();
+    const resize = /resize:\s*(\d+)/.exec(debounce![1]);
+    expect(resize, 'no `resize` entry in the debounce config').toBeTruthy();
+    expect(Number(resize![1])).toBeGreaterThan(0);
+  });
+
+  it('restates the observer debounce it would otherwise drop to zero', () => {
+    // R3F spreads this object over its defaults, so `debounce` is replaced whole
+    // rather than merged. Omitting `scroll` here does not inherit 50 — it takes
+    // the ResizeObserver's own debounce to 0 and makes the element-resize path
+    // worse than it was before this line existed.
+    const scroll = /scroll:\s*(\d+)/.exec(debounce![1]);
+    expect(scroll, 'the scroll entry carries the ResizeObserver debounce').toBeTruthy();
+    expect(Number(scroll![1])).toBeGreaterThan(0);
+  });
+});
+
+describe('the studio shells', () => {
+  const DOCKED = readFileSync(root('components', 'studio', 'shells', 'DockedShell.tsx'), 'utf8');
+  const SASH = readFileSync(root('components', 'studio', 'shells', 'RailSash.tsx'), 'utf8');
+
+  it.each([
+    ['shells/DockedShell.tsx', DOCKED],
+    ['shells/OverlayShell.tsx', readFileSync(root('components', 'studio', 'shells', 'OverlayShell.tsx'), 'utf8')],
+  ])('%s measures the stacked room in dvh, not vh', (_f, src) => {
+    // These rows sit inside a `100dvh` wrapper. `vh` includes the collapsing URL
+    // bar, so the row was sized against a taller viewport than its own container.
+    expect(src).not.toMatch(/[^d]vh\b/);
+  });
+
+  it('renders a dragged width inside the token bounds rather than instead of them', () => {
+    // A 520px rail dragged on a monitor must still be a ceiling on a laptop.
+    expect(DOCKED).toMatch(/clamp\(var\(--rail-\$\{side\}-min\), \$\{stored\}px, var\(--rail-max\)\)/);
+  });
+
+  it('gives the sash the window-splitter role and its keys', () => {
+    expect(SASH).toMatch(/role="separator"/);
+    expect(SASH).toMatch(/aria-valuenow/);
+    expect(SASH, 'a separator that cannot be focused cannot be operated').toMatch(/tabIndex=\{0\}/);
+    for (const key of ['Enter', 'Home', 'End', 'ArrowRight', 'ArrowLeft']) {
+      expect(SASH, `the splitter pattern binds ${key}`).toContain(`'${key}'`);
+    }
+  });
+
+  it('drags by writing CSS, never React state', () => {
+    // A setState per pointermove re-renders the piece tree, the inspector and the
+    // R3F tree ~60×/second while the user is judging a panel width.
+    expect(SASH).toMatch(/requestAnimationFrame\(paint\)/);
+    expect(SASH).toMatch(/style\.setProperty\(WIDTH_PROP\[side\]/);
+    expect(SASH, 'the ResizeObserver must stand down mid-drag or it re-renders anyway').toMatch(
+      /if \(drag\.current\) return;/,
+    );
+  });
+
+  it('takes its floor and ceiling from tokens', () => {
+    // A number copied into a pointer handler is a floor that stops moving when
+    // the stylesheet's does.
+    expect(SASH).toMatch(/--rail-left-min/);
+    expect(SASH).toMatch(/--rail-max-share/);
+    expect(SASH, 'no invented pixel floors').not.toMatch(/floor = \d/);
+  });
+});
+
+describe('the elastic rail asks about itself', () => {
+  it('is a query container, and only under its own modifier', () => {
+    // Scoped to `.rail--elastic`: it is a candidate, and the shell it is measured
+    // against has to stay unchanged.
+    expect(rule('.rail--elastic')).toMatch(/container-type:\s*inline-size/);
+    expect(rule('.rail')).not.toMatch(/container-type/);
+  });
+
+  it('actually queries it', () => {
+    const blocks = CSS.match(/@container rail \(max-width: \d+px\)/g) ?? [];
+    expect(blocks.length, 'a container with no queries is a declaration, not a behaviour').toBeGreaterThan(0);
+    // Inline `grid-template-columns` outranks any author rule, query or not —
+    // same reason `.row-grid` carries one.
+    expect(CSS).toMatch(/\.rail-triple \{ grid-template-columns: 1fr 1fr !important; \}/);
+  });
+
+  it('has a hook in the rail to reflow', () => {
+    expect(readFileSync(root('components', 'studio', 'Inspector.tsx'), 'utf8')).toMatch(/className="rail-triple"/);
+  });
+
+  it('only goes tighter than the shipping floor where the contents reflow', () => {
+    // The tight tokens exist so lowering them cannot quietly move the layout that
+    // ships; they must be narrower than the ordinary floors, or they are pointless.
+    for (const side of ['left', 'right']) {
+      const tight = Number(/^(\d+)px$/.exec(token(`rail-${side}-tight`))![1]);
+      const floor = railFloor(`rail-${side}`);
+      expect(tight).toBeLessThan(floor);
+    }
+    // And the left one still has to hold the four-mood lighting set two-up, which
+    // is the same derivation the token floor answers to.
+    const minItem = Number(
+      /minItem=\{(\d+)\}/.exec(readFileSync(root('components', 'studio', 'ViewOptions.tsx'), 'utf8'))![1],
+    );
+    const tightLeft = Number(/^(\d+)px$/.exec(token('rail-left-tight'))![1]);
+    expect(tightLeft - 32).toBeGreaterThanOrEqual(minItem * 2);
   });
 });

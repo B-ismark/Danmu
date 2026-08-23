@@ -27,6 +27,7 @@ import { obbFromPart } from '@/lib/geometry';
 import { pointInFootprint, wallSegments, footprintBounds } from '@/lib/footprint';
 import { moveWallCarrying, wallAttachments } from '@/lib/wall-actions';
 import { formatDim } from '@/lib/units';
+import { clientDeltaToViewBox, clientToViewBox } from '@/lib/plan-view-transform';
 import { Icon } from '@/components/ui/Icon';
 import { announce, removeParts, studioSurfaceFocused } from './KeyboardShortcuts';
 import { openSceneMenu } from './SceneContextMenu';
@@ -207,8 +208,12 @@ export const PlanView = forwardRef<PlanViewHandle, {
   function toViewBox(clientX: number, clientY: number): { x: number; y: number } {
     const svg = svgRef.current;
     if (!svg) return { x: 0, y: 0 };
-    const rect = svg.getBoundingClientRect();
-    return { x: (clientX - rect.left) * (baseW / rect.width), y: (clientY - rect.top) * (baseH / rect.height) };
+    // Through lib/plan-view-transform, which knows the <svg> is `xMidYMid meet`
+    // and so maps by one uniform scale plus a centring offset. Doing it by
+    // `baseW / rect.width` per axis is the mapping for a drawing we do not draw,
+    // and it is wrong by both terms whenever the canvas's aspect is not the
+    // room's — i.e. whenever a rail has been resized.
+    return clientToViewBox(svg.getBoundingClientRect(), baseW, baseH, clientX, clientY);
   }
 
   function svgToWorld(e: React.PointerEvent | PointerEvent): { x: number; z: number } {
@@ -390,10 +395,15 @@ export const PlanView = forwardRef<PlanViewHandle, {
     if (panRef.current) {
       const svg = svgRef.current;
       if (!svg) return;
-      const rect = svg.getBoundingClientRect();
-      const dx = (e.clientX - panRef.current.startX) * (baseW / rect.width);
-      const dy = (e.clientY - panRef.current.startY) * (baseH / rect.height);
-      setOffset({ x: panRef.current.ox + dx, y: panRef.current.oy + dy });
+      // One scale for both axes, or a diagonal drag pans off its own angle.
+      const d = clientDeltaToViewBox(
+        svg.getBoundingClientRect(),
+        baseW,
+        baseH,
+        e.clientX - panRef.current.startX,
+        e.clientY - panRef.current.startY,
+      );
+      setOffset({ x: panRef.current.ox + d.x, y: panRef.current.oy + d.y });
       return;
     }
 
