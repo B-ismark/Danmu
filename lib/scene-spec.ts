@@ -524,457 +524,457 @@ export function defaultScene(
   if (bays.length === 0) return [];
 
   const build = (plan: SeedPlan): ScenePart[] => {
-  const parts: ScenePart[] = [];
-  const counters: Record<string, number> = {};
+    const parts: ScenePart[] = [];
+    const counters: Record<string, number> = {};
 
-  // ── The openings, before any furniture ───────────────────────────────────
-  //
-  // A room with no door has no reason for any wall to be its back wall, which is
-  // exactly why the arrangements below used to be decided by wall arithmetic and read
-  // as arbitrary. Placed first so every group is arranged AGAINST them: the screen
-  // avoids the door's wall and the windows, the door's swing and the way in from it
-  // are floor nothing may be seeded onto, and a desk can find its daylight. See
-  // `lib/room-openings.ts` for the two rules that choose them.
-  const openings = openingsForRoom(poly);
-  for (const o of openings) {
-    const category: Category = o.kind === 'door' ? 'door' : 'other';
-    const shape: Shape = o.kind === 'door' ? 'door' : 'window';
-    counters[category] = (counters[category] ?? 0) + 1;
-    parts.push({
-      id: `${category}-${counters[category]}`,
-      category,
-      name: o.name,
-      shape,
-      pos: [o.x, o.y, o.z],
-      rot: o.rot,
-      dimMM: clampDims(category, shape, o.dimMM),
-      locked: false,
-      wallMounted: true,
-    });
-  }
-  /** The floor an opening claims: a door's swing, and the route in from it. Nothing
-   *  is seeded into either — the room report would report it on the first open, and
-   *  a starter room that fails its own check is the worst possible first impression. */
-  const openingZones: Foot[] = [];
-  for (const p of parts) {
-    if (p.category === 'door') {
-      for (const zn of accessZones(p, p.pos[0], p.pos[2], p.rot)) openingZones.push(zn.foot);
-      openingZones.push(doorPath(p, routeWidth(poly)));
+    // ── The openings, before any furniture ───────────────────────────────────
+    //
+    // A room with no door has no reason for any wall to be its back wall, which is
+    // exactly why the arrangements below used to be decided by wall arithmetic and read
+    // as arbitrary. Placed first so every group is arranged AGAINST them: the screen
+    // avoids the door's wall and the windows, the door's swing and the way in from it
+    // are floor nothing may be seeded onto, and a desk can find its daylight. See
+    // `lib/room-openings.ts` for the two rules that choose them.
+    const openings = openingsForRoom(poly);
+    for (const o of openings) {
+      const category: Category = o.kind === 'door' ? 'door' : 'other';
+      const shape: Shape = o.kind === 'door' ? 'door' : 'window';
+      counters[category] = (counters[category] ?? 0) + 1;
+      parts.push({
+        id: `${category}-${counters[category]}`,
+        category,
+        name: o.name,
+        shape,
+        pos: [o.x, o.y, o.z],
+        rot: o.rot,
+        dimMM: clampDims(category, shape, o.dimMM),
+        locked: false,
+        wallMounted: true,
+      });
     }
-  }
-
-  /** Place one piece in a frame, or don't. Returns null when the piece would end up
-   *  outside the room or inside something already placed — the caller can then try
-   *  another spot, or do without. The id counter only advances on a piece that was
-   *  actually kept, so ids stay dense. */
-  const place = (
-    category: Category,
-    name: string,
-    shape: Shape,
-    dimMM: [number, number, number],
-    frame: SeedFrame,
-    u: number,
-    v: number,
-    opt: { turn?: number; extra?: Partial<ScenePart>; keepClear?: boolean } = {},
-  ): ScenePart | null => {
-    const dim = clampDims(category, shape, dimMM);
-    const [x, z] = frame.at(u, v);
-    const candidate: ScenePart = {
-      id: '',
-      category,
-      name,
-      shape,
-      pos: [x, groundY(category, shape, dim, height), z],
-      rot: frame.yaw + (opt.turn ?? 0),
-      dimMM: dim,
-      locked: false,
-      ...opt.extra,
-    };
-    if (!seats(candidate, parts, poly)) return null;
-    if (blocksOpening(candidate, openingZones)) return null;
-    if (opt.keepClear && pinches(candidate, parts)) return null;
-    counters[category] = (counters[category] ?? 0) + 1;
-    candidate.id = `${category}-${counters[category]}`;
-    parts.push(candidate);
-    return candidate;
-  };
-
-  /** The first of several spots that works.
-   *
-   *  `away` reorders the candidates furthest-first from a point — how a bookshelf
-   *  ends up at the far end of the wall from the armchair rather than 340 mm from
-   *  its side table, which is a gap the room report calls a tight walkway and is
-   *  right to. Spacing is not something a fit test can see. */
-  const placeSomewhere = (
-    category: Category,
-    name: string,
-    shape: Shape,
-    dimMM: [number, number, number],
-    frame: SeedFrame,
-    spots: Array<{ u: number; v: number; turn?: number }>,
-    extra: Partial<ScenePart> = {},
-    away?: ScenePart | null,
-    keepClear = false,
-  ): ScenePart | null => {
-    const ordered = away
-      ? [...spots].sort((a, b) => spotDistance(frame, b, away) - spotDistance(frame, a, away))
-      : spots;
-    for (const s of ordered) {
-      const hit = place(category, name, shape, dimMM, frame, s.u, s.v, { turn: s.turn, extra, keepClear });
-      if (hit) return hit;
-    }
-    return null;
-  };
-
-  // ── Living room: a screen on the wall, a sofa the right distance from it ───
-  const living = (bay: Bay, opt: { routeBehind?: boolean; wall?: number } = {}) => {
-    const frames = seedFrames(bay, poly);
-    const candidates = viewingWalls(frames, SOFA[1], openings);
-    const f = candidates[opt.wall ?? 0] ?? candidates[0] ?? frames[0];
-
-    // A three-seater only where the wall can still leave a route past one. A bay
-    // narrower than that gets a two-seater, which is a different piece of furniture
-    // rather than a shrunken one — see `LOVESEAT`, and rule 2.
-    const sofaDim = f.width >= SOFA[0] / 1000 + WALK_MIN ? SOFA : LOVESEAT;
-    const sofaHalf = sofaDim[1] / 2000;
-    // Backed onto the far side of the bay — unless another group is on the other
-    // side of that edge, in which case a route comes first. Circulation outranks
-    // screen size here for the same reason it does in `layout-score`'s weights: a
-    // walkway you cannot use is a worse room than a screen one size down. In the
-    // T-shape this is the whole difference — 25 cm between the sofa's back and a
-    // dining chair, or 60 cm and a 43″ set.
-    //
-    // …and never further from the screen than any screen can be watched from. A bay
-    // deeper than `MAX_VIEW` stops being a reason to back the sofa further away and
-    // starts being a room with a walkway behind the sofa, which is what it is.
-    const behind = opt.routeBehind && !oppositeFrame(frames, f)?.onWall ? WALK_MIN : SEED_WALL_GAP;
-    const vSofa = Math.max(
-      sofaHalf + SEED_WALL_GAP,
-      Math.min(f.depth - sofaHalf - behind, MAX_VIEW),
-    );
-    // The screen is CHOSEN, not scaled: the biggest panel in the catalog whose own
-    // 1.2 × diagonal minimum fits the distance this wall can actually offer. A 43″
-    // set in a shallow room is a different product, not a 65″ one drawn small — the
-    // same distinction as a single bed instead of a double.
-    const screen = screenFor(vSofa - 0.06);
-
-    // ── Where along the wall the group sits ──────────────────────────────────
-    //
-    // Not `u = 0`. Two different things push it off centre, and both were reported
-    // as faults on the app's own starter rooms before it did:
-    //
-    //   · **A seat across a narrow alcove is a wall.** The T's stem is 2.42 m and a
-    //     centred two-seater leaves 410 mm at each end, so the room report said what
-    //     it should — "Coffee table sits in part of the room that nothing connects to
-    //     the door". Slid to one side the same furniture leaves one 600 mm route in.
-    //   · **A door on the NEXT wall reaches round the corner.** The open plan's sofa
-    //     clipped the swing of a door on the wall beside it by 5 % of its own
-    //     footprint, so the placement was refused and the room came out with a
-    //     television, a coffee table and nowhere to sit.
-    //
-    // So the offset is searched rather than computed: the composed answer first, then
-    // steps out along the wall either way. Whatever the sofa accepts is where the
-    // whole group goes, so the screen still faces the seat.
-    const sofaW = sofaDim[0] / 1000;
-    const travel = Math.max(0, (f.width - sofaW) / 2);
-    const uBase = offCentre(f.width, sofaW);
-    const uTries = [uBase];
-    for (let step = 0.3; step <= travel + 1e-9; step += 0.3) {
-      uTries.push(clampU(uBase + step, travel), clampU(uBase - step, travel));
-    }
-    const sofa = placeSomewhere(
-      'sofa',
-      'Sofa',
-      'sofa',
-      sofaDim,
-      f,
-      uTries.map((u) => ({ u, v: vSofa, turn: Math.PI })),
-    );
-    const uGroup = sofa ? frameU(f, sofa) : uBase;
-    place('tv', screen.name, 'tv', screen.dimMM, f, uGroup, 0.06, { extra: { wallMounted: true } });
-
-    // 450 mm off the sofa — the middle of layout-rules' reach-from-the-seat band —
-    // but never through the screen wall behind it. Pulling the sofa forward for a
-    // route (above) walks the table toward that wall, and in the T's stem it walked
-    // 20 mm past it: the gap the relation wants is not always a gap the room has, and
-    // the wall wins. The 400 mm end of the band absorbs the difference.
-    const tableDim: [number, number, number] = [1100, 600, 420];
-    const tableHalf = tableDim[1] / 2000;
-    const vTable = Math.max(tableHalf + SEED_WALL_GAP, vSofa - sofaHalf - 0.45 - tableHalf);
-    const table = place('table', 'Coffee table', 'coffee-table', tableDim, f, uGroup, vTable);
-
-    // A rug under whichever of the two got placed, anchoring the group. Rugs come in
-    // sizes, so a narrow bay gets a smaller one rather than a large one shoved through
-    // the wall — the T's stem is 2.42 m across and a 2.4 m rug touches both sides of
-    // it. Largest first; if neither fits, the group does without, which is honest.
-    const vRug = table ? (vSofa + vTable) / 2 : vSofa - 0.4;
-    if (sofa) {
-      for (const dim of RUGS) {
-        if (place('rug', 'Area rug', 'rug', dim, f, uGroup, vRug)) break;
+    /** The floor an opening claims: a door's swing, and the route in from it. Nothing
+     *  is seeded into either — the room report would report it on the first open, and
+     *  a starter room that fails its own check is the worst possible first impression. */
+    const openingZones: Foot[] = [];
+    for (const p of parts) {
+      if (p.category === 'door') {
+        for (const zn of accessZones(p, p.pos[0], p.pos[2], p.rot)) openingZones.push(zn.foot);
+        openingZones.push(doorPath(p, routeWidth(poly)));
       }
     }
 
-    // A plant in the corner by the screen — but only where it is not in the way of
-    // anything. It is the one piece here that is pure filler: it has no relation to
-    // the group, so a walkway it narrows is a walkway narrowed for nothing, and a
-    // narrow bay is better off without it than with a tight-passage finding. Tried at
-    // both ends, furthest from the sofa first.
-    placeSomewhere(
-      'plant',
-      'Plant',
-      'plant',
-      [400, 400, 1600],
-      f,
-      [
-        { u: -(f.width / 2 - 0.4), v: 0.4 },
-        { u: f.width / 2 - 0.4, v: 0.4 },
-        { u: -(f.width / 2 - 0.4), v: f.depth - 0.4 },
-      ],
-      { circle: true },
-      sofa,
-      true,
-    );
-    // Beside the sofa, at either end — and never in FRONT of it. A fallback spot at
-    // `vSofa − 0.6` used to land the lamp inside the sofa's own 350 mm stand-up zone
-    // in a narrow bay, which the room report then reported: "Sofa has 0 cm in front".
-    // A floor lamp is not one of the sofa's zone guests, and it should not be.
-    placeSomewhere(
-      'lamp',
-      'Floor lamp',
-      'lamp-floor',
-      [300, 300, 1700],
-      f,
-      [
-        { u: f.width / 2 - 0.25, v: vSofa },
-        { u: -(f.width / 2 - 0.25), v: vSofa },
-        { u: sofaDim[0] / 2000 + 0.3, v: vSofa },
-        { u: -(sofaDim[0] / 2000 + 0.3), v: vSofa },
-      ],
-      { circle: true },
-    );
-  };
+    /** Place one piece in a frame, or don't. Returns null when the piece would end up
+     *  outside the room or inside something already placed — the caller can then try
+     *  another spot, or do without. The id counter only advances on a piece that was
+     *  actually kept, so ids stay dense. */
+    const place = (
+      category: Category,
+      name: string,
+      shape: Shape,
+      dimMM: [number, number, number],
+      frame: SeedFrame,
+      u: number,
+      v: number,
+      opt: { turn?: number; extra?: Partial<ScenePart>; keepClear?: boolean } = {},
+    ): ScenePart | null => {
+      const dim = clampDims(category, shape, dimMM);
+      const [x, z] = frame.at(u, v);
+      const candidate: ScenePart = {
+        id: '',
+        category,
+        name,
+        shape,
+        pos: [x, groundY(category, shape, dim, height), z],
+        rot: frame.yaw + (opt.turn ?? 0),
+        dimMM: dim,
+        locked: false,
+        ...opt.extra,
+      };
+      if (!seats(candidate, parts, poly)) return null;
+      if (blocksOpening(candidate, openingZones)) return null;
+      if (opt.keepClear && pinches(candidate, parts)) return null;
+      counters[category] = (counters[category] ?? 0) + 1;
+      candidate.id = `${category}-${counters[category]}`;
+      parts.push(candidate);
+      return candidate;
+    };
 
-  // ── Dining: a table off the middle of the bay, chairs tucked under it ──────
-  const dining = (bay: Bay, opt: { wall?: number } = {}) => {
-    const frames = seedFrames(bay, poly);
-    const f = frames[opt.wall ?? 0] ?? frames[0];
-    const dim: [number, number, number] = [1500, 850, 750];
-    const hw = dim[0] / 2000;
-    const hd = dim[1] / 2000;
-    // Centred if the bay can give a seated diner the 900 mm pull-back on BOTH long
-    // sides; otherwise against the wall, which is what `layout-rules` means by
-    // asking for three sides of four. Centring a table in a 2.1 m-deep bay gives
-    // 630 mm on each side — two sides too tight instead of one side against a wall
-    // and three that work, which is the arrangement people actually build.
-    const vTable = f.depth / 2 - hd >= WALK_COMFORT ? f.depth / 2 : hd + SEED_WALL_GAP;
-    if (!place('table', 'Dining table', 'desk-standard', dim, f, 0, vTable)) return;
+    /** The first of several spots that works.
+     *
+     *  `away` reorders the candidates furthest-first from a point — how a bookshelf
+     *  ends up at the far end of the wall from the armchair rather than 340 mm from
+     *  its side table, which is a gap the room report calls a tight walkway and is
+     *  right to. Spacing is not something a fit test can see. */
+    const placeSomewhere = (
+      category: Category,
+      name: string,
+      shape: Shape,
+      dimMM: [number, number, number],
+      frame: SeedFrame,
+      spots: Array<{ u: number; v: number; turn?: number }>,
+      extra: Partial<ScenePart> = {},
+      away?: ScenePart | null,
+      keepClear = false,
+    ): ScenePart | null => {
+      const ordered = away
+        ? [...spots].sort((a, b) => spotDistance(frame, b, away) - spotDistance(frame, a, away))
+        : spots;
+      for (const s of ordered) {
+        const hit = place(category, name, shape, dimMM, frame, s.u, s.v, { turn: s.turn, extra, keepClear });
+        if (hit) return hit;
+      }
+      return null;
+    };
 
-    const chair: [number, number, number] = [480, 520, 850];
-    const reach = chair[1] / 2000 - CHAIR_TUCK;
-    for (const spot of [
-      { u: 0, v: vTable - hd - reach, turn: 0 },
-      { u: 0, v: vTable + hd + reach, turn: Math.PI },
-      { u: -(hw + reach), v: vTable, turn: Math.PI / 2 },
-      { u: hw + reach, v: vTable, turn: -Math.PI / 2 },
-    ]) {
-      place('chair', 'Dining chair', 'chair-dining', chair, f, spot.u, spot.v, { turn: spot.turn });
-    }
-  };
+    // ── Living room: a screen on the wall, a sofa the right distance from it ───
+    const living = (bay: Bay, opt: { routeBehind?: boolean; wall?: number } = {}) => {
+      const frames = seedFrames(bay, poly);
+      const candidates = viewingWalls(frames, SOFA[1], openings);
+      const f = candidates[opt.wall ?? 0] ?? candidates[0] ?? frames[0];
 
-  // ── Bedroom: head of the bed to the wall, a side to get in on ─────────────
-  const bedroom = (bay: Bay, opt: { wall?: number } = {}) => {
-    const frames = seedFrames(bay, poly);
-    const f = frames[opt.wall ?? 0] ?? frames[0];
-    const bed: [number, number, number] = [2000, 1600, 600];
-    const bedHalfW = bed[0] / 2000;
-    const vBed = bed[1] / 2000 + SEED_WALL_GAP;
-    let sleeper = place('bed', 'Double bed', 'bed-double', bed, f, 0, vBed);
-    if (!sleeper) {
-      // No room for a double. A single is a different piece of furniture, not a
-      // resized one — the catalog size stands.
-      sleeper = place('bed', 'Single bed', 'bed-single', [1900, 1000, 600], f, 0, 1000 / 2000 + SEED_WALL_GAP);
-    }
+      // A three-seater only where the wall can still leave a route past one. A bay
+      // narrower than that gets a two-seater, which is a different piece of furniture
+      // rather than a shrunken one — see `LOVESEAT`, and rule 2.
+      const sofaDim = f.width >= SOFA[0] / 1000 + WALK_MIN ? SOFA : LOVESEAT;
+      const sofaHalf = sofaDim[1] / 2000;
+      // Backed onto the far side of the bay — unless another group is on the other
+      // side of that edge, in which case a route comes first. Circulation outranks
+      // screen size here for the same reason it does in `layout-score`'s weights: a
+      // walkway you cannot use is a worse room than a screen one size down. In the
+      // T-shape this is the whole difference — 25 cm between the sofa's back and a
+      // dining chair, or 60 cm and a 43″ set.
+      //
+      // …and never further from the screen than any screen can be watched from. A bay
+      // deeper than `MAX_VIEW` stops being a reason to back the sofa further away and
+      // starts being a room with a walkway behind the sofa, which is what it is.
+      const behind = opt.routeBehind && !oppositeFrame(frames, f)?.onWall ? WALK_MIN : SEED_WALL_GAP;
+      const vSofa = Math.max(
+        sofaHalf + SEED_WALL_GAP,
+        Math.min(f.depth - sofaHalf - behind, MAX_VIEW),
+      );
+      // The screen is CHOSEN, not scaled: the biggest panel in the catalog whose own
+      // 1.2 × diagonal minimum fits the distance this wall can actually offer. A 43″
+      // set in a shallow room is a different product, not a 65″ one drawn small — the
+      // same distinction as a single bed instead of a double.
+      const screen = screenFor(vSofa - 0.06);
 
-    // Touching the head end on both sides — layout-rules wants a nightstand within
-    // 150 mm of the bed, and both sides of a double are somebody's side.
-    const stand: [number, number, number] = [450, 400, 550];
-    const uStand = bedHalfW + stand[0] / 2000 + SEED_WALL_GAP;
-    for (const u of [-uStand, uStand]) {
-      place('nightstand', 'Nightstand', 'nightstand', stand, f, u, stand[1] / 2000 + SEED_WALL_GAP);
-    }
+      // ── Where along the wall the group sits ──────────────────────────────────
+      //
+      // Not `u = 0`. Two different things push it off centre, and both were reported
+      // as faults on the app's own starter rooms before it did:
+      //
+      //   · **A seat across a narrow alcove is a wall.** The T's stem is 2.42 m and a
+      //     centred two-seater leaves 410 mm at each end, so the room report said what
+      //     it should — "Coffee table sits in part of the room that nothing connects to
+      //     the door". Slid to one side the same furniture leaves one 600 mm route in.
+      //   · **A door on the NEXT wall reaches round the corner.** The open plan's sofa
+      //     clipped the swing of a door on the wall beside it by 5 % of its own
+      //     footprint, so the placement was refused and the room came out with a
+      //     television, a coffee table and nowhere to sit.
+      //
+      // So the offset is searched rather than computed: the composed answer first, then
+      // steps out along the wall either way. Whatever the sofa accepts is where the
+      // whole group goes, so the screen still faces the seat.
+      const sofaW = sofaDim[0] / 1000;
+      const travel = Math.max(0, (f.width - sofaW) / 2);
+      const uBase = offCentre(f.width, sofaW);
+      const uTries = [uBase];
+      for (let step = 0.3; step <= travel + 1e-9; step += 0.3) {
+        uTries.push(clampU(uBase + step, travel), clampU(uBase - step, travel));
+      }
+      const sofa = placeSomewhere(
+        'sofa',
+        'Sofa',
+        'sofa',
+        sofaDim,
+        f,
+        uTries.map((u) => ({ u, v: vSofa, turn: Math.PI })),
+      );
+      const uGroup = sofa ? frameU(f, sofa) : uBase;
+      place('tv', screen.name, 'tv', screen.dimMM, f, uGroup, 0.06, { extra: { wallMounted: true } });
 
-    // Wardrobe on a side wall, where its 600 mm of door swing is not the bed.
-    const side = crossFrame(frames, f, openings) ?? f;
-    const wardrobe: [number, number, number] = [1800, 600, 2100];
-    const vWardrobe = wardrobe[1] / 2000 + SEED_WALL_GAP;
-    placeSomewhere(
-      'wardrobe',
-      'Wardrobe',
-      'wardrobe',
-      wardrobe,
-      side,
-      [
-        { u: 0, v: vWardrobe },
-        { u: -side.width / 4, v: vWardrobe },
-        { u: side.width / 4, v: vWardrobe },
-      ],
-      {},
-      sleeper,
-    );
-  };
+      // 450 mm off the sofa — the middle of layout-rules' reach-from-the-seat band —
+      // but never through the screen wall behind it. Pulling the sofa forward for a
+      // route (above) walks the table toward that wall, and in the T's stem it walked
+      // 20 mm past it: the gap the relation wants is not always a gap the room has, and
+      // the wall wins. The 400 mm end of the band absorbs the difference.
+      const tableDim: [number, number, number] = [1100, 600, 420];
+      const tableHalf = tableDim[1] / 2000;
+      const vTable = Math.max(tableHalf + SEED_WALL_GAP, vSofa - sofaHalf - 0.45 - tableHalf);
+      const table = place('table', 'Coffee table', 'coffee-table', tableDim, f, uGroup, vTable);
 
-  // ── A reading nook, for the wing of an L (or any leftover corner) ─────────
-  const nook = (bay: Bay, opt: { wall?: number } = {}) => {
-    const frames = seedFrames(bay, poly);
-    const f = frames[opt.wall ?? 0] ?? frames[0];
-    const chair: [number, number, number] = [800, 800, 900];
-    const chairHalf = chair[1] / 2000;
-    const vChair = Math.min(f.depth - chairHalf - SEED_WALL_GAP, chairHalf + 0.35);
-    // Along the wing, AWAY from the living group and not pinching it. A wing opens off
-    // the room's main bay, so the nook's default end is the shared edge — which put
-    // the armchair 250 mm behind the sofa's back, i.e. across the only route from one
-    // half of the room to the other.
-    const group = parts.find((p) => p.category === 'sofa') ?? null;
-    const armchair = placeSomewhere(
-      'chair',
-      'Armchair',
-      'chair-armchair',
-      chair,
-      f,
-      [
-        { u: 0.35, v: vChair },
-        { u: -0.35, v: vChair },
-        { u: 0, v: vChair },
-      ],
-      {},
-      group,
-      true,
-    );
-    if (armchair) {
-      // Within reach of the arm of the chair, on whichever side has the room.
-      const [uChair] = worldToLocal(f.yaw, armchair.pos[0] - f.mx, armchair.pos[2] - f.mz);
-      const reach = chair[0] / 2000 + 0.25;
+      // A rug under whichever of the two got placed, anchoring the group. Rugs come in
+      // sizes, so a narrow bay gets a smaller one rather than a large one shoved through
+      // the wall — the T's stem is 2.42 m across and a 2.4 m rug touches both sides of
+      // it. Largest first; if neither fits, the group does without, which is honest.
+      const vRug = table ? (vSofa + vTable) / 2 : vSofa - 0.4;
+      if (sofa) {
+        for (const dim of RUGS) {
+          if (place('rug', 'Area rug', 'rug', dim, f, uGroup, vRug)) break;
+        }
+      }
+
+      // A plant in the corner by the screen — but only where it is not in the way of
+      // anything. It is the one piece here that is pure filler: it has no relation to
+      // the group, so a walkway it narrows is a walkway narrowed for nothing, and a
+      // narrow bay is better off without it than with a tight-passage finding. Tried at
+      // both ends, furthest from the sofa first.
       placeSomewhere(
-        'table',
-        'Side table',
-        'side-table',
-        [450, 450, 550],
+        'plant',
+        'Plant',
+        'plant',
+        [400, 400, 1600],
         f,
         [
-          { u: uChair + reach, v: vChair },
-          { u: uChair - reach, v: vChair },
+          { u: -(f.width / 2 - 0.4), v: 0.4 },
+          { u: f.width / 2 - 0.4, v: 0.4 },
+          { u: -(f.width / 2 - 0.4), v: f.depth - 0.4 },
+        ],
+        { circle: true },
+        sofa,
+        true,
+      );
+      // Beside the sofa, at either end — and never in FRONT of it. A fallback spot at
+      // `vSofa − 0.6` used to land the lamp inside the sofa's own 350 mm stand-up zone
+      // in a narrow bay, which the room report then reported: "Sofa has 0 cm in front".
+      // A floor lamp is not one of the sofa's zone guests, and it should not be.
+      placeSomewhere(
+        'lamp',
+        'Floor lamp',
+        'lamp-floor',
+        [300, 300, 1700],
+        f,
+        [
+          { u: f.width / 2 - 0.25, v: vSofa },
+          { u: -(f.width / 2 - 0.25), v: vSofa },
+          { u: sofaDim[0] / 2000 + 0.3, v: vSofa },
+          { u: -(sofaDim[0] / 2000 + 0.3), v: vSofa },
+        ],
+        { circle: true },
+      );
+    };
+
+    // ── Dining: a table off the middle of the bay, chairs tucked under it ──────
+    const dining = (bay: Bay, opt: { wall?: number } = {}) => {
+      const frames = seedFrames(bay, poly);
+      const f = frames[opt.wall ?? 0] ?? frames[0];
+      const dim: [number, number, number] = [1500, 850, 750];
+      const hw = dim[0] / 2000;
+      const hd = dim[1] / 2000;
+      // Centred if the bay can give a seated diner the 900 mm pull-back on BOTH long
+      // sides; otherwise against the wall, which is what `layout-rules` means by
+      // asking for three sides of four. Centring a table in a 2.1 m-deep bay gives
+      // 630 mm on each side — two sides too tight instead of one side against a wall
+      // and three that work, which is the arrangement people actually build.
+      const vTable = f.depth / 2 - hd >= WALK_COMFORT ? f.depth / 2 : hd + SEED_WALL_GAP;
+      if (!place('table', 'Dining table', 'desk-standard', dim, f, 0, vTable)) return;
+
+      const chair: [number, number, number] = [480, 520, 850];
+      const reach = chair[1] / 2000 - CHAIR_TUCK;
+      for (const spot of [
+        { u: 0, v: vTable - hd - reach, turn: 0 },
+        { u: 0, v: vTable + hd + reach, turn: Math.PI },
+        { u: -(hw + reach), v: vTable, turn: Math.PI / 2 },
+        { u: hw + reach, v: vTable, turn: -Math.PI / 2 },
+      ]) {
+        place('chair', 'Dining chair', 'chair-dining', chair, f, spot.u, spot.v, { turn: spot.turn });
+      }
+    };
+
+    // ── Bedroom: head of the bed to the wall, a side to get in on ─────────────
+    const bedroom = (bay: Bay, opt: { wall?: number } = {}) => {
+      const frames = seedFrames(bay, poly);
+      const f = frames[opt.wall ?? 0] ?? frames[0];
+      const bed: [number, number, number] = [2000, 1600, 600];
+      const bedHalfW = bed[0] / 2000;
+      const vBed = bed[1] / 2000 + SEED_WALL_GAP;
+      let sleeper = place('bed', 'Double bed', 'bed-double', bed, f, 0, vBed);
+      if (!sleeper) {
+        // No room for a double. A single is a different piece of furniture, not a
+        // resized one — the catalog size stands.
+        sleeper = place('bed', 'Single bed', 'bed-single', [1900, 1000, 600], f, 0, 1000 / 2000 + SEED_WALL_GAP);
+      }
+
+      // Touching the head end on both sides — layout-rules wants a nightstand within
+      // 150 mm of the bed, and both sides of a double are somebody's side.
+      const stand: [number, number, number] = [450, 400, 550];
+      const uStand = bedHalfW + stand[0] / 2000 + SEED_WALL_GAP;
+      for (const u of [-uStand, uStand]) {
+        place('nightstand', 'Nightstand', 'nightstand', stand, f, u, stand[1] / 2000 + SEED_WALL_GAP);
+      }
+
+      // Wardrobe on a side wall, where its 600 mm of door swing is not the bed.
+      const side = crossFrame(frames, f, openings) ?? f;
+      const wardrobe: [number, number, number] = [1800, 600, 2100];
+      const vWardrobe = wardrobe[1] / 2000 + SEED_WALL_GAP;
+      placeSomewhere(
+        'wardrobe',
+        'Wardrobe',
+        'wardrobe',
+        wardrobe,
+        side,
+        [
+          { u: 0, v: vWardrobe },
+          { u: -side.width / 4, v: vWardrobe },
+          { u: side.width / 4, v: vWardrobe },
+        ],
+        {},
+        sleeper,
+      );
+    };
+
+    // ── A reading nook, for the wing of an L (or any leftover corner) ─────────
+    const nook = (bay: Bay, opt: { wall?: number } = {}) => {
+      const frames = seedFrames(bay, poly);
+      const f = frames[opt.wall ?? 0] ?? frames[0];
+      const chair: [number, number, number] = [800, 800, 900];
+      const chairHalf = chair[1] / 2000;
+      const vChair = Math.min(f.depth - chairHalf - SEED_WALL_GAP, chairHalf + 0.35);
+      // Along the wing, AWAY from the living group and not pinching it. A wing opens off
+      // the room's main bay, so the nook's default end is the shared edge — which put
+      // the armchair 250 mm behind the sofa's back, i.e. across the only route from one
+      // half of the room to the other.
+      const group = parts.find((p) => p.category === 'sofa') ?? null;
+      const armchair = placeSomewhere(
+        'chair',
+        'Armchair',
+        'chair-armchair',
+        chair,
+        f,
+        [
+          { u: 0.35, v: vChair },
+          { u: -0.35, v: vChair },
+          { u: 0, v: vChair },
         ],
         {},
         group,
+        true,
       );
-    }
-    const shelf: [number, number, number] = [900, 350, 1800];
-    const side = crossFrame(frames, f, openings) ?? f;
-    const vShelf = shelf[1] / 2000 + SEED_WALL_GAP;
-    placeSomewhere(
-      'shelf',
-      'Bookshelf',
-      'bookshelf',
-      shelf,
-      side,
-      [
-        { u: -side.width / 3, v: vShelf },
-        { u: side.width / 3, v: vShelf },
-        { u: 0, v: vShelf },
-      ],
-      {},
-      armchair,
-    );
-  };
-
-  /** Somewhere green, for a bay too small to furnish. */
-  const alcove = (bay: Bay) => {
-    const f = seedFrames(bay, poly)[0];
-    placeSomewhere(
-      'plant',
-      'Plant',
-      'plant',
-      [400, 400, 1600],
-      f,
-      [
-        { u: 0, v: 0.4 },
-        { u: 0, v: f.depth / 2 },
-      ],
-      { circle: true },
-    );
-  };
-
-  // Which bay gets what. The layout preset states an intention — layout-pick sells
-  // the U as a bedroom and the T as "living + dining" — but the BAYS decide whether
-  // the room can keep the promise, so every secondary group is conditional on there
-  // being somewhere to put it.
-  const second = (minArea: number) => secondBay(bays, minArea);
-  const halves = (minArea: number) => halveBays(bays, minArea);
-
-  switch (layoutId) {
-    case 'u': {
-      bedroom(bays[0], { wall: plan.livingWall });
-      const spare = second(1.2);
-      if (spare) alcove(spare);
-      break;
-    }
-    case 't':
-    case 'open': {
-      const pair = halves(4.5);
-      if (pair) {
-        // The living group goes where the VIEWING DEPTH is, not where the floor is.
-        // Handing it the larger bay by area put the sofa 1.6 m from a 65″ screen in
-        // the T's 2.1 m-deep bar while its 2.6 m-deep stem — which needs no viewing
-        // distance to seat four at a table — got the dining set. Swapping the two
-        // costs nothing and is what a person would have done.
-        //
-        // That reading is still the plan the search starts from — `plan.swap` is
-        // false for the first candidate — but it is now a starting point and not the
-        // answer: viewing depth is one bay's opinion of itself, and which bay should
-        // hold the sofa also depends on where the dining set then has to go.
-        const [a, b] = pair;
-        const deeper = viewingDepth(b, poly, openings) > viewingDepth(a, poly, openings) + 0.05;
-        const flip = plan.swap ? !deeper : deeper;
-        living(flip ? b : a, { routeBehind: true, wall: plan.livingWall });
-        dining(flip ? a : b, { wall: plan.secondWall });
-      } else {
-        living(bays[0], { wall: plan.livingWall });
+      if (armchair) {
+        // Within reach of the arm of the chair, on whichever side has the room.
+        const [uChair] = worldToLocal(f.yaw, armchair.pos[0] - f.mx, armchair.pos[2] - f.mz);
+        const reach = chair[0] / 2000 + 0.25;
+        placeSomewhere(
+          'table',
+          'Side table',
+          'side-table',
+          [450, 450, 550],
+          f,
+          [
+            { u: uChair + reach, v: vChair },
+            { u: uChair - reach, v: vChair },
+          ],
+          {},
+          group,
+        );
       }
-      break;
-    }
-    case 'l': {
-      living(bays[0], { wall: plan.livingWall });
-      const wing = second(2.5);
-      if (wing) nook(wing, { wall: plan.secondWall });
-      break;
-    }
-    default: {
-      living(bays[0], { wall: plan.livingWall });
-      // A custom footprint can have a wing the presets don't; furnish it if so.
-      const wing = second(2.5);
-      if (wing) nook(wing, { wall: plan.secondWall });
-    }
-  }
+      const shelf: [number, number, number] = [900, 350, 1800];
+      const side = crossFrame(frames, f, openings) ?? f;
+      const vShelf = shelf[1] / 2000 + SEED_WALL_GAP;
+      placeSomewhere(
+        'shelf',
+        'Bookshelf',
+        'bookshelf',
+        shelf,
+        side,
+        [
+          { u: -side.width / 3, v: vShelf },
+          { u: side.width / 3, v: vShelf },
+          { u: 0, v: vShelf },
+        ],
+        {},
+        armchair,
+      );
+    };
 
-  // ── Dressing, once the furniture is settled ──────────────────────────────
-  //
-  // The other half of "it doesn't look like a room someone lives in". Everything
-  // above answers where the furniture goes; none of it answers why the room looks
-  // like a showroom, and the answer to that is that a showroom has no pictures, no
-  // curtains and one light. Five to nine pieces of furniture on bare walls is a
-  // vignette.
-  //
-  // Every piece here is **wall- or ceiling-mounted**, which is what makes it safe to
-  // add late: `isObstacle` is false for all of them, so none of it takes floor, blocks
-  // a route, narrows a walkway or enters anybody's access zone. It costs nothing in
-  // the room report and it is most of the difference in the scene. The catalog already
-  // carries every one of them.
-  dress(parts, poly, height, counters);
+    /** Somewhere green, for a bay too small to furnish. */
+    const alcove = (bay: Bay) => {
+      const f = seedFrames(bay, poly)[0];
+      placeSomewhere(
+        'plant',
+        'Plant',
+        'plant',
+        [400, 400, 1600],
+        f,
+        [
+          { u: 0, v: 0.4 },
+          { u: 0, v: f.depth / 2 },
+        ],
+        { circle: true },
+      );
+    };
 
-  // Belt and braces. Everything above is gated on fitting, so this normally has
-  // nothing to do — but it is the same guarantee the detection path needs, and one
-  // function making it for both beats two hand-checked seeds.
-  return settleParts(parts, poly);
+    // Which bay gets what. The layout preset states an intention — layout-pick sells
+    // the U as a bedroom and the T as "living + dining" — but the BAYS decide whether
+    // the room can keep the promise, so every secondary group is conditional on there
+    // being somewhere to put it.
+    const second = (minArea: number) => secondBay(bays, minArea);
+    const halves = (minArea: number) => halveBays(bays, minArea);
+
+    switch (layoutId) {
+      case 'u': {
+        bedroom(bays[0], { wall: plan.livingWall });
+        const spare = second(1.2);
+        if (spare) alcove(spare);
+        break;
+      }
+      case 't':
+      case 'open': {
+        const pair = halves(4.5);
+        if (pair) {
+          // The living group goes where the VIEWING DEPTH is, not where the floor is.
+          // Handing it the larger bay by area put the sofa 1.6 m from a 65″ screen in
+          // the T's 2.1 m-deep bar while its 2.6 m-deep stem — which needs no viewing
+          // distance to seat four at a table — got the dining set. Swapping the two
+          // costs nothing and is what a person would have done.
+          //
+          // That reading is still the plan the search starts from — `plan.swap` is
+          // false for the first candidate — but it is now a starting point and not the
+          // answer: viewing depth is one bay's opinion of itself, and which bay should
+          // hold the sofa also depends on where the dining set then has to go.
+          const [a, b] = pair;
+          const deeper = viewingDepth(b, poly, openings) > viewingDepth(a, poly, openings) + 0.05;
+          const flip = plan.swap ? !deeper : deeper;
+          living(flip ? b : a, { routeBehind: true, wall: plan.livingWall });
+          dining(flip ? a : b, { wall: plan.secondWall });
+        } else {
+          living(bays[0], { wall: plan.livingWall });
+        }
+        break;
+      }
+      case 'l': {
+        living(bays[0], { wall: plan.livingWall });
+        const wing = second(2.5);
+        if (wing) nook(wing, { wall: plan.secondWall });
+        break;
+      }
+      default: {
+        living(bays[0], { wall: plan.livingWall });
+        // A custom footprint can have a wing the presets don't; furnish it if so.
+        const wing = second(2.5);
+        if (wing) nook(wing, { wall: plan.secondWall });
+      }
+    }
+
+    // ── Dressing, once the furniture is settled ──────────────────────────────
+    //
+    // The other half of "it doesn't look like a room someone lives in". Everything
+    // above answers where the furniture goes; none of it answers why the room looks
+    // like a showroom, and the answer to that is that a showroom has no pictures, no
+    // curtains and one light. Five to nine pieces of furniture on bare walls is a
+    // vignette.
+    //
+    // Every piece here is **wall- or ceiling-mounted**, which is what makes it safe to
+    // add late: `isObstacle` is false for all of them, so none of it takes floor, blocks
+    // a route, narrows a walkway or enters anybody's access zone. It costs nothing in
+    // the room report and it is most of the difference in the scene. The catalog already
+    // carries every one of them.
+    dress(parts, poly, height, counters);
+
+    // Belt and braces. Everything above is gated on fitting, so this normally has
+    // nothing to do — but it is the same guarantee the detection path needs, and one
+    // function making it for both beats two hand-checked seeds.
+    return settleParts(parts, poly);
   };
 
   // ── The search: build a few whole rooms and keep the one that scores best ──
