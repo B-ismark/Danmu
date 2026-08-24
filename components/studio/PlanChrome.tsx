@@ -25,7 +25,14 @@ export function PlanViewControls({
 }) {
   const deg = (((rot * 180) / Math.PI) % 360).toFixed(0);
   return (
-    <div className="toolbar" role="group" aria-label="Plan view" style={{ gap: 6, padding: 4 }}>
+    // `flexWrap`, because this row is about 450px of zoom, rotation and fit and
+    // the 2D canvas is not always 450px wide. `.toolbar` is `overflow: hidden`
+    // (it clips its segment fills to the rounded corners), so without a wrap the
+    // last controls were simply cut off at the border — no scrollbar, no ellipsis,
+    // and the Fit button unreachable with nothing on screen saying why. Folding
+    // into two short rows costs a little height in the one slot that has height to
+    // spare: the canvas's bottom-left and bottom-centre are deliberately empty.
+    <div className="toolbar" role="group" aria-label="Plan view" style={{ gap: 6, padding: 4, flexWrap: 'wrap' }}>
       {/* Disabled at the bounds. The handle clamps silently, so without this the
           buttons stay pressable at max/min and appear broken. */}
       <IconButton
@@ -64,7 +71,7 @@ export function PlanViewControls({
         size={28}
         iconSize={15}
       />
-      <span aria-hidden="true" style={{ width: 1, background: 'var(--hairline)' }} />
+      <span aria-hidden="true" style={{ width: 1, flexShrink: 0, alignSelf: 'stretch', background: 'var(--hairline)' }} />
       <IconButton
         icon="rotate-ccw"
         label="Turn the page left"
@@ -94,7 +101,7 @@ export function PlanViewControls({
         size={28}
         iconSize={14}
       />
-      <span aria-hidden="true" style={{ width: 1, background: 'var(--hairline)' }} />
+      <span aria-hidden="true" style={{ width: 1, flexShrink: 0, alignSelf: 'stretch', background: 'var(--hairline)' }} />
       <button
         onClick={() => api.current?.fit()}
         title="Back to the default view"

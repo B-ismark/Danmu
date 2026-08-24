@@ -131,7 +131,12 @@ export default function WelcomePage() {
               // minHeight rather than the class's fixed height: this is the
               // longest label in the card and it has to be allowed to wrap in a
               // narrow single-column card instead of spilling out of a 44px box.
-              style={{ height: 'auto', minHeight: 44, fontSize: 13, lineHeight: 1.35, padding: '8px 6px', color: 'var(--ink-2)', width: '100%', justifyContent: 'space-between', textAlign: 'left' }}
+              // `whiteSpace: 'normal'` is the opt-out from `.ds-btn`'s `nowrap`,
+              // and the pair `height: 'auto'` + `normal` is what says "this is a
+              // sentence, not a pill label". Without it the class's nowrap won and
+              // the trailing chevron was cut off at the card's edge on a phone —
+              // the same sentence, clipped instead of spilled.
+              style={{ height: 'auto', whiteSpace: 'normal', minHeight: 44, fontSize: 13, lineHeight: 1.35, padding: '8px 6px', color: 'var(--ink-2)', width: '100%', justifyContent: 'space-between', textAlign: 'left' }}
             >
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                 <Icon name="sparkles" size={13} color={keyState === 'valid' ? 'var(--accent-2)' : 'var(--ink-3)'} />

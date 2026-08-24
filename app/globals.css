@@ -246,6 +246,22 @@ h1, h2, h3 { margin: 0; }
   cursor: pointer;
   display: inline-flex; align-items: center; gap: 8px;
   box-shadow: var(--shadow-soft);
+  /* A button in this system states its own `height`, so its label wrapping is
+     never the reflow anyone wanted — the second line prints out through the
+     bottom of the border. Most labels here are a bare text node beside an icon,
+     which is an anonymous flex item and therefore addressable by nothing: no
+     per-site `nowrap` can reach it, only this. Where a button genuinely has no
+     room, the answer is for its ROW to wrap (`.chrome-bar`, `.canvas-chrome`) or
+     for the label to get its own element and ellipsise — not for the text to
+     break inside a pill.
+
+     THE OPT-OUT: a button whose label is a sentence rather than a pill label sets
+     `height: auto` AND `white-space: normal` together. The pair is the signal —
+     `height: auto` alone is not enough, because this rule still wins and the
+     sentence gets clipped at its container's edge instead. The welcome screen's
+     "Add an AI key for furniture detection (optional)" is the one such button, and
+     it lost its trailing chevron on a phone until it said so. */
+  white-space: nowrap;
   transition: background .15s, border-color .15s, transform .12s, box-shadow .15s;
 }
 .ds-btn:hover { background: var(--paper-2); transform: translateY(-1px); box-shadow: var(--shadow-lift); }
@@ -319,6 +335,10 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
 .ds-chip {
   display: inline-flex; align-items: center; gap: 6px;
   height: 28px; padding: 0 12px;
+  /* Same reason as `.ds-btn`: a stated `height` and a fully-rounded border mean a
+     wrapped label prints out through the bottom of the pill. "Comfort zones" did
+     exactly that on the plan tab. */
+  white-space: nowrap;
   border-radius: var(--r-full);
   border: 1px solid var(--edge);
   background: var(--paper);
