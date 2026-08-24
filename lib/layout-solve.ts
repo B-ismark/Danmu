@@ -306,7 +306,11 @@ export function solveLayout(
   // passes below start from. It costs `GROUP_STEPS` evaluations — a few milliseconds
   // against a solve of a few hundred — and is skipped entirely when the room has no
   // intact group, which is exactly the scrambled case.
-  if (groups.length > 0) {
+  // …and never in `refit`, whose entire job is to change as little as possible after a
+  // resize. Hopping between basins is the definition of reinventing the arrangement, so
+  // the pass would be spending three hundred evaluations proposing the one thing this
+  // mode exists to refuse.
+  if (groups.length > 0 && !refit) {
     for (let step = 0; step < GROUP_STEPS; step++) {
       const t = step / GROUP_STEPS;
       const temp = Math.max(1e-4, 8 * Math.pow(0.02, t));
@@ -747,7 +751,7 @@ function intactGroups(m: LayoutModel, placements: Placement[], movable: boolean[
   return [...byRoot.values()].filter((g) => g.length >= 2);
 }
 
-/** Move a whole group at once. Returns how many placements it touched.
+/** Move a whole group at once, recording what it touched through `stash`.
  *
  *  Three shapes, and the first is the one part III exists for:
  *
@@ -768,7 +772,7 @@ function proposeGroup(
   reach: number,
   rng: () => number,
   stash: (k: number) => void,
-): number {
+): void {
   const pick = (n: number) => Math.floor(rng() * n) % n;
   const centre = (g: number[]): [number, number] => {
     let x = 0;
@@ -807,7 +811,7 @@ function proposeGroup(
     // rejected for one of two unrelated reasons.
     carry(a, ca, 0, cb[0] - ca[0], cb[1] - ca[1]);
     carry(other, cb, 0, ca[0] - cb[0], ca[1] - cb[1]);
-    return a.length + other.length;
+    return;
   }
 
   const c = centre(a);
@@ -817,7 +821,6 @@ function proposeGroup(
     const turn = [Math.PI / 2, -Math.PI / 2, Math.PI][pick(3)];
     carry(a, c, turn, 0, 0);
   }
-  return a.length;
 }
 
 /** One candidate move. Turns are quarter-turn snapped most of the time, because a
