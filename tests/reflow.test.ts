@@ -436,3 +436,32 @@ describe('the elastic rail asks about itself', () => {
     expect(tightLeft - 32).toBeGreaterThanOrEqual(minItem * 2);
   });
 });
+
+describe('the inspector folds its options away', () => {
+  const INSPECTOR = readFileSync(root('components', 'studio', 'Inspector.tsx'), 'utf8');
+
+  it('discloses colour and surface props through RailSection, not always-on grids', () => {
+    // Selecting a part used to open 24 swatches, 5 finish chips and 5 prop
+    // chips at once — every option, no decision. The fold is the LEFT rail's
+    // own component, so the app keeps exactly one disclosure, not one per rail.
+    expect(INSPECTOR).toMatch(/import \{ RailSection \} from '\.\/RailSection'/);
+    expect(INSPECTOR).toMatch(/<RailSection[\s\S]{0,80}title=\{label\}/);
+    expect(INSPECTOR).toMatch(/<RailSection title="On the surface"/);
+  });
+
+  it('names the state in the collapsed row — the summary is the point of the fold', () => {
+    // A folded row that said only "Colour" would force the expand just to see
+    // where you stand. RailSection's meta is the derived state: swatch + name +
+    // finish for paint, "Suggested · 3" for props.
+    expect(INSPECTOR).toMatch(/finishLabel=\{part\.finish/);
+    expect(INSPECTOR).toMatch(/meta=\{summary\}/);
+  });
+
+  it('keeps Finish inside the Colour decision', () => {
+    // Five near-synonym chips competing with the real verbs was a section
+    // looking for a reason; as half of the material decision they are one
+    // click away, and the choice still shows in the collapsed summary.
+    expect(INSPECTOR).not.toMatch(/Section label="Finish"/);
+    expect(INSPECTOR).toMatch(/function FinishChips/);
+  });
+});

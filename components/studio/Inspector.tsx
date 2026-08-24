@@ -13,17 +13,23 @@ import { NumberField } from '@/components/ui/NumberField';
 import { EditableText, IconButton, Pill } from '@/components/ui/primitives';
 import { SwapModelModal } from './RegenerateModal';
 import { removeParts } from './KeyboardShortcuts';
+import { RailSection } from './RailSection';
 import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { isWallMountedPart, supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, DECOR_KINDS, type LibraryItem, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
 import { findSupportDetailed, groundY, snapToWall as snapToWallPhys } from '@/lib/physics';
 import { wallSegments } from '@/lib/footprint';
 import { moveWallCarrying } from '@/lib/wall-actions';
 
-// The right rail is a DECORATING panel, not a properties palette. Order matters:
-// colour → finish → decor → where it sits → which model → and only then the
-// exact millimetres, folded away behind a disclosure. Selecting a sofa used to
-// open on a mono W / D / H triple and a unit dropdown, which reads as CAD; every
-// warm verb was below the fold. Nothing was removed, only re-ranked.
+// The right rail is a DECORATING panel, not a properties palette — and it now
+// practises the disclosure the left rail has always had. Every decorating
+// decision folds to ONE summary line: Colour (swatch · name · finish), On the
+// surface ("Suggested · 3"), Exact size (the millimetres). The fold is
+// RailSection, the left rail's own component, and its meta slot carries the
+// derived state — so the row tells you where you stand without spending a
+// screen of options on it. Where it sits, the model swap and Delete stay
+// permanently out because they are verbs, not options. The old panel opened a
+// sofa onto 24 swatches, 5 finish chips and 5 prop chips at once — every
+// option, no decision. Nothing was removed, only re-ranked and folded.
 export function Inspector() {
   const id = useStudio((s) => s.selectedPartId);
   const selectedWall = useStudio((s) => s.selectedWall);
@@ -162,7 +168,7 @@ export function Inspector() {
         </div>
       </div>
 
-      {/* ── The decorating verbs, first ─────────────────────────────────── */}
+      {/* ── The decorating decisions, folded to a line each ────────────────── */}
       <PaintPicker
         label="Colour"
         value={part.color}
@@ -173,9 +179,12 @@ export function Inspector() {
         fallbackNote="Default for this piece"
         onChange={(c) => updatePart(id!, { color: c })}
         onReset={() => updatePart(id!, { color: undefined })}
+        // Finish rides inside the Colour disclosure — the second half of the same
+        // "how does this material read" decision — and its choice joins the
+        // collapsed row's summary so it stays visible without its own section.
+        finishLabel={part.finish && part.finish !== 'auto' ? FINISH_LABEL[part.finish] : undefined}
+        extra={<FinishChips value={part.finish} onChange={(f) => updatePart(id!, { finish: f })} />}
       />
-
-      <SurfaceFinish value={part.finish} onChange={(f) => updatePart(id!, { finish: f })} />
 
       {isLightFixture(part.shape) && (
         <LightControls part={part} onChange={(light) => updatePart(id!, { light })} />
@@ -295,7 +304,16 @@ const SURFACE_FINISHES: Array<{ id: NonNullable<ScenePart['finish']>; label: str
   { id: 'metal', label: 'Metal' },
 ];
 
-function SurfaceFinish({
+const FINISH_LABEL = Object.fromEntries(SURFACE_FINISHES.map((f) => [f.id, f.label])) as Record<
+  NonNullable<ScenePart['finish']>,
+  string
+>;
+
+// The five sheens as chips — but never a section of their own again. Finish is
+// the second half of the Colour decision (how the same paint reads under
+// light), so the chips live inside the Colour disclosure under their own
+// mini-label, and the chosen one is named in the Colour row's summary.
+function FinishChips({
   value,
   onChange,
 }: {
@@ -304,24 +322,22 @@ function SurfaceFinish({
 }) {
   const active = value ?? 'auto';
   return (
-    <Section label="Finish">
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-        {SURFACE_FINISHES.map((f) => {
-          const on = active === f.id;
-          return (
-            <button
-              key={f.id}
-              onClick={() => onChange(f.id)}
-              aria-pressed={on}
-              className={`ds-chip ${on ? 'ds-chip--accent' : ''}`}
-              style={{ cursor: 'pointer', height: 28, fontWeight: 600, background: on ? 'var(--accent-tint)' : 'var(--paper)' }}
-            >
-              {f.label}
-            </button>
-          );
-        })}
-      </div>
-    </Section>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      {SURFACE_FINISHES.map((f) => {
+        const on = active === f.id;
+        return (
+          <button
+            key={f.id}
+            onClick={() => onChange(f.id)}
+            aria-pressed={on}
+            className={`ds-chip ${on ? 'ds-chip--accent' : ''}`}
+            style={{ cursor: 'pointer', height: 28, fontWeight: 600, background: on ? 'var(--accent-tint)' : 'var(--paper)' }}
+          >
+            {f.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -415,8 +431,21 @@ function DecorCollection({ part, onChange }: { part: ScenePart; onChange: (decor
     onChange([...items, next]); // materialises the suggested set, then appends
   }
 
+  // The collapsed row's summary — derived, never typed (RailSection's contract
+  // for its meta). "Suggested" has to stay visible while the props are still
+  // the auto set: someone who never opens this should still learn that the
+  // arrangement is editable rather than fixed.
+  const summary = isAuto
+    ? items.length > 0
+      ? `Suggested · ${items.length}`
+      : 'None'
+    : items.length > 0
+      ? `${items.length}`
+      : 'Bare';
+  const [open, setOpen] = useState(false);
+
   return (
-    <Section label="On the surface">
+    <RailSection title="On the surface" meta={summary} open={open} onToggle={() => setOpen((v) => !v)}>
       {isAuto && (
         <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 8, lineHeight: 1.4 }}>
           Showing suggested props. Add or remove to make it your own.
@@ -460,7 +489,7 @@ function DecorCollection({ part, onChange }: { part: ScenePart; onChange: (decor
           </button>
         )}
       </div>
-    </Section>
+    </RailSection>
   );
 }
 
@@ -767,6 +796,12 @@ const SWATCH_NAME = new Map(
 
 // One paint control, used for furniture AND for walls — the two used to be
 // separate 24-swatch grids that could drift apart.
+//
+// The palette is a decision to make, not a state to watch, so it lives behind
+// the rail's standard disclosure. Collapsed, the row is one glanceable summary
+// — swatch, colour name, finish — and the 24 swatches, the finish chips and the
+// custom mixer are one click away instead of permanently on screen. The
+// summary is RailSection's `meta`, derived here so no call site types it.
 function PaintPicker({
   label,
   value,
@@ -775,6 +810,8 @@ function PaintPicker({
   onChange,
   onReset,
   footer,
+  finishLabel,
+  extra,
 }: {
   label: string;
   /** the user's chosen colour, or undefined while the default applies */
@@ -785,53 +822,46 @@ function PaintPicker({
   onChange: (hex: string) => void;
   onReset: () => void;
   footer?: React.ReactNode;
+  /** a non-auto finish to name in the summary (parts; walls have no sheen) */
+  finishLabel?: string;
+  /** body content after the swatch groups — the finish chips for parts */
+  extra?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [mixing, setMixing] = useState(false);
   const current = value ?? fallback;
   const named = value ? SWATCH_NAME.get(value.toLowerCase()) : undefined;
 
   return (
-    <div className="section section--flush">
-      <div className="section-head">
-        <span className="section-title">{label}</span>
-        {value && (
-          <button
-            onClick={onReset}
-            className="ds-btn ds-btn--ghost"
-            title="Back to the default colour"
-            style={{ height: 24, padding: '0 8px', fontSize: 11, fontWeight: 600, color: 'var(--accent-text)', gap: 4 }}
-          >
-            <Icon name="refresh" size={11} /> Default
-          </button>
-        )}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, position: 'relative' }}>
-        {/* Brand-styled picker (replaces the unthemeable native <input type=color>). */}
-        <button
-          onClick={() => setOpen((o) => !o)}
-          aria-label="Mix a custom colour"
-          aria-expanded={open}
-          title="Mix a custom colour"
-          className="swatch"
-          style={{ width: 34, height: 34, flexShrink: 0, background: current, aspectRatio: 'auto' }}
-        />
-        <span style={{ fontSize: 12, color: value ? 'var(--ink)' : 'var(--ink-3)', minWidth: 0 }}>
-          {value ? (
-            named ?? <span className="mono" style={{ letterSpacing: '0.04em' }}>{value.toUpperCase()}</span>
-          ) : (
-            fallbackNote
-          )}
+    <RailSection
+      title={label}
+      open={open}
+      onToggle={() => {
+        // Collapsing unmounts the body, which takes the mixer's popover with it;
+        // drop `mixing` too, or re-opening the row resurrects a popover the user
+        // dismissed by folding rather than by closing it.
+        if (open) setMixing(false);
+        setOpen((v) => !v);
+      }}
+      meta={
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {/* The dot is half the point of the summary: the colour itself, no words. */}
+          <span
+            aria-hidden="true"
+            style={{ width: 14, height: 14, flexShrink: 0, borderRadius: 'var(--r-1)', border: '1px solid var(--edge)', background: current }}
+          />
+          <span style={{ color: value ? 'var(--ink)' : 'var(--ink-3)' }}>
+            {value ? (
+              named ?? <span className="mono" style={{ letterSpacing: '0.04em' }}>{value.toUpperCase()}</span>
+            ) : (
+              fallbackNote
+            )}
+            {finishLabel && <span style={{ color: 'var(--ink-3)' }}> · {finishLabel}</span>}
+          </span>
         </span>
-        {open && (
-          <>
-            <div style={{ position: 'fixed', inset: 0, zIndex: 'var(--z-popover)' }} onClick={() => setOpen(false)} />
-            <div className="popover" style={{ position: 'absolute', top: 42, left: 0, zIndex: 'var(--z-popover)', padding: 12 }}>
-              <ColorPicker value={current} onChange={onChange} />
-            </div>
-          </>
-        )}
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 2 }}>
         {SWATCH_GROUPS.map((g) => (
           <div key={g.label}>
             <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--ink-3)', marginBottom: 4 }}>{g.label}</div>
@@ -858,8 +888,50 @@ function PaintPicker({
           </div>
         ))}
       </div>
-      {footer}
-    </div>
+
+      {extra && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--ink-3)', marginBottom: 6 }}>Finish</div>
+          {extra}
+        </div>
+      )}
+
+      {/* The two rare paths — a bespoke colour, and the way back — share the last
+          row of the open panel. The mixer used to hide behind the swatch itself,
+          which read as "this swatch does something" with no hint of what. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, position: 'relative' }}>
+        <button
+          onClick={() => setMixing((o) => !o)}
+          aria-expanded={mixing}
+          title="Mix a custom colour"
+          className="ds-btn"
+          style={{ flex: 1, height: 28, fontSize: 11, justifyContent: 'center', gap: 6, minWidth: 0 }}
+        >
+          <Icon name="edit" size={11} /> Mix a custom colour
+        </button>
+        {value && (
+          <button
+            onClick={onReset}
+            className="ds-btn"
+            title="Back to the default colour"
+            style={{ height: 28, padding: '0 10px', fontSize: 11, fontWeight: 600, color: 'var(--accent-text)', gap: 4, flexShrink: 0 }}
+          >
+            <Icon name="refresh" size={11} /> Default
+          </button>
+        )}
+        {/* Brand-styled mixer (replaces the unthemeable native <input type=color>). */}
+        {mixing && (
+          <>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 'var(--z-popover)' }} onClick={() => setMixing(false)} />
+            <div className="popover" style={{ position: 'absolute', top: 36, left: 0, right: 0, zIndex: 'var(--z-popover)', padding: 12 }}>
+              <ColorPicker value={current} onChange={onChange} />
+            </div>
+          </>
+        )}
+      </div>
+
+      {footer && <div style={{ marginTop: 10 }}>{footer}</div>}
+    </RailSection>
   );
 }
 
