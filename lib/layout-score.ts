@@ -27,6 +27,7 @@ import type { ScenePart } from './scene-spec';
 import type { Footprint } from './footprint';
 import {
   buildClearanceField,
+  FIELD_CELL,
   componentAreas,
   componentsAround,
   componentsNear,
@@ -460,21 +461,32 @@ const ZERO: CostBreakdown = {
   total: 0,
 };
 
-/** Grid the navigation term is read off when a caller asks for it, metres.
+/** Grid the navigation term is read off, metres — the room report's own.
  *
- *  Coarser than the room report's own `FIELD_CELL` (0.05 m) on purpose, and the
- *  numbers are why. Measured on a 6 × 4 room against one `costBreakdown`:
+ *  It is `FIELD_CELL` and not a number of its own, because the moment the two differ
+ *  the solver and the report disagree about which floor is walkable, and disagreeing
+ *  about a rule is the exact failure `lib/layout-rules.ts` exists to prevent. That is
+ *  not hypothetical: at 0.1 m the seeded T room read 2.02 m² stranded and at 0.05,
+ *  0.075 and 0.15 it read zero — pure quantisation, and it would have had Suggest
+ *  rearranging a room the report was quite right to be quiet about.
+ *
+ *  It is expensive, and that is the whole reason `costBreakdown` leaves the term off
+ *  by default. Measured on a 6 × 4 room against one evaluation:
  *
  *    · 0.05 m — 10 004 cells, 1 190 µs, **10–22×** an evaluation
  *    · 0.10 m —  2 604 cells,   325 µs, **2.6–6×**
  *    · 0.15 m —  1 218 cells,   155 µs, **1.2–3×**
  *
- *  So the fine field cannot go anywhere near a search that evaluates sixteen hundred
- *  times, and 0.1 m can — for the few hundred steps of a repair pass. The cost of that
- *  choice is quantisation: clearance carries ±half a cell, so a gap within 50 mm of
- *  the 600 mm walk width may be read either way. That errs toward calling a marginal
- *  gap impassable, which is the safe direction for a pass whose job is to open one. */
-export const NAV_CELL = 0.1;
+ *  So it is paid a handful of times per solve — the two reported breakdowns, and the
+ *  check that decides whether a repair pass is needed at all — and never inside the
+ *  search. The repair pass's own inner loop uses a coarser grid and then re-checks its
+ *  answer against this one; see `REPAIR_CELL` in `lib/layout-solve.ts`. */
+export const NAV_CELL = FIELD_CELL;
+
+/** What a piece nobody can get to is worth, in the same units as a square metre of
+ *  unreachable floor. A wardrobe you cannot open is worse than an equivalent patch of
+ *  empty carpet, which is why it is more than one. */
+const STRANDED_PIECE = 2;
 
 export function costBreakdown(
   m: LayoutModel,
@@ -816,8 +828,10 @@ export function navigabilityCost(m: LayoutModel, placements: Placement[], cell?:
     const zones = accessZones(parts[i], placements[i].x, placements[i].z, placements[i].yaw);
     if (zones.length === 0) continue;
     let anyReachable = false;
+    let anyWalkable = false;
     for (const zn of zones) {
       for (const id of componentsAround(field, zn.foot, 0)) {
+        anyWalkable = true;
         if (reachable.has(id)) {
           anyReachable = true;
           break;
@@ -825,7 +839,14 @@ export function navigabilityCost(m: LayoutModel, placements: Placement[], cell?:
       }
       if (anyReachable) break;
     }
-    if (!anyReachable) cost += 2;
+    // Nothing walkable anywhere near it is "wedged in", not "unreachable" — a chest in
+    // an alcove reads that way and is perfectly reachable, you just cannot stand in a
+    // walkable-sized disc while you open it. `lib/clearance.ts`'s own `reach` rule has
+    // carried this guard from the start and this did not, which is a disagreement
+    // nobody could see while the term was only a tiebreak over four finalists: every
+    // seeded T and L room scored 240 units of `navigation` for a piece the room report
+    // was quite right to say nothing about.
+    if (anyWalkable && !anyReachable) cost += STRANDED_PIECE;
   }
   return cost;
 }

@@ -28,6 +28,7 @@ import {
   footIntersectionArea,
   footOverlap,
   localToWorld,
+  nearestEdge,
   obbGap,
   worldToLocal,
   type Foot,
@@ -900,10 +901,151 @@ export function defaultScene(
     }
   }
 
+  // ── Dressing, once the furniture is settled ──────────────────────────────
+  //
+  // The other half of "it doesn't look like a room someone lives in". Everything
+  // above answers where the furniture goes; none of it answers why the room looks
+  // like a showroom, and the answer to that is that a showroom has no pictures, no
+  // curtains and one light. Five to nine pieces of furniture on bare walls is a
+  // vignette.
+  //
+  // Every piece here is **wall- or ceiling-mounted**, which is what makes it safe to
+  // add late: `isObstacle` is false for all of them, so none of it takes floor, blocks
+  // a route, narrows a walkway or enters anybody's access zone. It costs nothing in
+  // the room report and it is most of the difference in the scene. The catalog already
+  // carries every one of them.
+  dress(parts, poly, height, counters);
+
   // Belt and braces. Everything above is gated on fitting, so this normally has
   // nothing to do — but it is the same guarantee the detection path needs, and one
   // function making it for both beats two hand-checked seeds.
   return settleParts(parts, poly);
+}
+
+// ─── Dressing ───────────────────────────────────────────────────────────────
+//
+// What turns a plan into a room. Each rule is one sentence of ordinary domestic
+// sense, applied to whatever the seeder actually managed to place:
+//
+//   · a picture goes over the sofa or the bed, centred on it, at gallery height;
+//   · every window gets curtains;
+//   · a pendant hangs over the dining table;
+//   · a lamp stands on each nightstand.
+//
+// Nothing here is placed unless the thing it belongs to exists, so a room with no bed
+// gets no bedside lamp and a room with no window gets no curtains. And nothing here
+// takes floor: `isObstacle` is false for every one of them.
+
+/** Centre height of a picture hung over furniture. Museums hang to a 1.45 m centre
+ *  and living rooms hang lower over a sofa; this is the compromise both look right
+ *  at, and it is clamped to the room so a low ceiling does not put art in the coving. */
+const ART_CENTRE = 1.45;
+
+/** How far a curtain overhangs the window it dresses, each side. Curtains that stop
+ *  at the reveal look like blinds. */
+const CURTAIN_OVERHANG = 0.2;
+
+/** Add the wall- and ceiling-mounted pieces that make a room look inhabited.
+ *
+ *  Mutates `parts`, which is what everything else in `defaultScene` does — it runs
+ *  once, at the end, and `settleParts` leaves wall-mounted pieces alone. */
+function dress(
+  parts: ScenePart[],
+  poly: Footprint,
+  height: number,
+  counters: Record<string, number>,
+): void {
+  const add = (
+    category: Category,
+    name: string,
+    shape: Shape,
+    dimMM: [number, number, number],
+    pos: [number, number, number],
+    rot: number,
+    extra: Partial<ScenePart> = {},
+  ) => {
+    counters[category] = (counters[category] ?? 0) + 1;
+    parts.push({
+      id: `${category}-${counters[category]}`,
+      category,
+      name,
+      shape,
+      pos,
+      rot,
+      dimMM: clampDims(category, shape, dimMM),
+      locked: false,
+      wallMounted: true,
+      ...extra,
+    });
+  };
+
+  const roles = parts.map(roleOf);
+  const at = (i: number) => parts[i];
+
+  // ── Curtains, one pair per window ────────────────────────────────────────
+  for (let i = 0; i < parts.length; i++) {
+    if (roles[i] !== 'window') continue;
+    const w = at(i);
+    const width = w.dimMM[0] / 1000 + CURTAIN_OVERHANG * 2;
+    // Hung from the ceiling, on the window's own wall and facing the way it does, so
+    // a window on any wall of any footprint is dressed by the same two lines. The Y
+    // comes from `groundY`, which is the one place that knows a curtain is ceiling-
+    // anchored — writing 0 here left every pair of curtains lying on the floor.
+    // Floor to just under the ceiling, and positioned at its MESH CENTRE — which is
+    // what `placementForSlot` does for a curtain and what `groundY` does not: its
+    // `ceiling` branch is for a pendant or a fan, small things hung just below the
+    // slab, and using it put a 2.6 m curtain's centre at 2.65 m, i.e. most of it
+    // through the ceiling.
+    const drop = Math.max(1.2, height - 0.2);
+    const dim: [number, number, number] = [width * 1000, 80, drop * 1000];
+    add('curtain', 'Curtains', 'curtain', dim, [w.pos[0], height - drop / 2 - 0.05, w.pos[2]], w.rot);
+  }
+
+  // ── A picture over the sofa, or over the bed ─────────────────────────────
+  //
+  // Only when the piece has a wall behind it to hang on. `nearestEdge` from the
+  // piece's own BACK rather than its centre, because that is the wall it is against.
+  for (const want of ['sofa', 'bed'] as const) {
+    const i = parts.findIndex((_, k) => roles[k] === want);
+    if (i < 0) continue;
+    const p = at(i);
+    const [bx, bz] = localToWorld(p.rot, 0, -(p.dimMM[1] / 2000));
+    const back = nearestEdge(poly, p.pos[0] + bx, p.pos[2] + bz);
+    if (!back || back.dist > 0.35) continue;
+    // Facing the same way the piece does: the wall behind a sofa faces the room.
+    if (Math.cos(back.yaw - p.rot) < 0.9) continue;
+    const w = Math.min(1.2, (p.dimMM[0] / 1000) * 0.6);
+    add(
+      'painting',
+      'Framed print',
+      'painting',
+      [w * 1000, 30, w * 700],
+      [back.px + back.nx * 0.03, Math.min(ART_CENTRE, height - 0.5), back.pz + back.nz * 0.03],
+      back.yaw,
+    );
+  }
+
+  // ── A pendant over the dining table ──────────────────────────────────────
+  const table = parts.findIndex((_, k) => roles[k] === 'dining-table');
+  if (table >= 0) {
+    const t = at(table);
+    // Ceiling-anchored, so `groundY` decides the height rather than a number here.
+    add('lamp', 'Pendant', 'lamp-pendant', [350, 350, 400], [t.pos[0], 0, t.pos[2]], t.rot, {
+      wallMounted: false,
+      circle: true,
+    });
+    const last = parts[parts.length - 1];
+    last.pos[1] = groundY('lamp', 'lamp-pendant', last.dimMM, height);
+  }
+
+  // ── A lamp on each nightstand ────────────────────────────────────────────
+  for (let i = 0; i < parts.length; i++) {
+    if (roles[i] !== 'nightstand') continue;
+    const s = at(i);
+    add('lamp', 'Bedside lamp', 'lamp-table', [250, 250, 500], [s.pos[0], s.pos[1] + s.dimMM[2] / 1000, s.pos[2]], s.rot, {
+      wallMounted: false,
+    });
+  }
 }
 
 /** Would this piece leave a gap too narrow to walk down, against anything already

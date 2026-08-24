@@ -4,6 +4,19 @@ import { footprintForLayout, offsetWall, pointInFootprint, type Footprint, type 
 import { footFromPart, footInsidePoly, footIntersectionArea, footArea, distToBoundary, obbGap } from '../lib/geometry';
 import { isObstacle, roleOf, sharesFloor, WALK_MIN } from '../lib/layout-rules';
 import { analyzeRoom } from '../lib/clearance';
+import {
+  costBreakdown,
+  navigabilityCost,
+  prepare,
+  DEFAULT_WEIGHTS,
+  NAV_CELL,
+  type LayoutContext,
+  type Placement,
+} from '../lib/layout-score';
+import type { ScenePart } from '../lib/scene-spec';
+
+/** Where a part already is, as a placement. */
+const here = (p: ScenePart): Placement => ({ x: p.pos[0], z: p.pos[2], yaw: p.rot });
 
 // The starter furniture a brand-new room opens with. It is the FIRST thing anyone
 // sees of this product, and until this file existed it was hand-authored against the
@@ -96,6 +109,29 @@ describe.each(PRESETS)('starter scene · $id', ({ id, w, d }) => {
   it('leaves most of the floor free to walk on', () => {
     const { freeFloorShare } = analyzeRoom(parts, { footprint: poly, height: HEIGHT });
     expect(freeFloorShare).toBeGreaterThan(0.6);
+  });
+
+  it('seeds an arrangement the solver also thinks is good', () => {
+    // The report being quiet is necessary and not sufficient: it says nothing about
+    // the gradients — a rug owing a group it is nowhere near, a sofa off its wall, a
+    // piece facing the plaster — and those are what a user sees when Suggest then
+    // moves eight pieces on a brand-new room. The seeder never called `costBreakdown`,
+    // so it could not know: the shipped costs were 43.1 for the L and 85.5 for the T,
+    // which is a starter room the app's own solver considers broken.
+    //
+    // A ceiling rather than an exact figure, so ordinary tuning does not fail it and a
+    // regression of that size cannot pass. Measured after the fixes: 4.8, 24.7, 16.9,
+    // 4.9, 13.4.
+    const ctx: LayoutContext = { parts, movable: parts.map(() => true), footprint: poly };
+    const cost = costBreakdown(prepare(ctx), parts.map(here), DEFAULT_WEIGHTS, NAV_CELL);
+    expect(cost.total).toBeLessThan(40);
+  });
+
+  it('seeds a room you can walk all of', () => {
+    // Read on the room report's OWN grid, so this and rule 9 cannot disagree. They
+    // did: at a coarser cell the T read 2.02 m² stranded and the report read none.
+    const ctx: LayoutContext = { parts, movable: parts.map(() => true), footprint: poly };
+    expect(navigabilityCost(prepare(ctx), parts.map(here), NAV_CELL)).toBe(0);
   });
 });
 

@@ -175,6 +175,12 @@ const FINALISTS = 4;
  *  find that out, and nothing more. */
 const REPAIR_STEPS = 260;
 
+/** …and the grid its inner loop reads, which is coarser than `NAV_CELL` because it is
+ *  paid per proposal: 325 us against 1 190. Quantisation errs toward calling a
+ *  marginal gap impassable, which is the safe direction for a pass whose job is to
+ *  open one — and the answer is re-checked on the fine grid before it is kept. */
+const REPAIR_CELL = 0.1;
+
 /** Seeded PRNG (mulberry32). Explicit because a layout suggestion that differs
  *  between two runs of the same room is not a suggestion, it is a slot machine. */
 function makeRng(seed: number): () => number {
@@ -378,6 +384,9 @@ function openRoutes(
   rng: () => number,
 ): Placement[] {
   if (m.doors.length === 0 || weights.navigation <= 0) return placements;
+  // Triggered on the FINE grid — the one the room report reads — so this never runs on
+  // a room the report is happy with. The loop below then optimises the coarse proxy,
+  // and its answer is accepted only if the fine grid agrees it is an improvement.
   const stranded = navigabilityCost(m, placements, NAV_CELL);
   if (stranded <= 0) return placements;
 
@@ -389,7 +398,7 @@ function openRoutes(
   }
   if (pool.length === 0) return placements;
 
-  const cost = (p: Placement[]) => costBreakdown(m, p, weights, NAV_CELL).total;
+  const cost = (p: Placement[]) => costBreakdown(m, p, weights, REPAIR_CELL).total;
   const current = placements.map((p) => ({ ...p }));
   let best = current.map((p) => ({ ...p }));
   let bestCost = cost(current);
