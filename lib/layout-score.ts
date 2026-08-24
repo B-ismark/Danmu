@@ -85,6 +85,19 @@ export type ScoreWeights = {
   walkway: number;
   /** Something tall in front of a window. */
   window: number;
+  /** Floor, and pieces, that nobody coming through the door can reach.
+   *
+   *  The one term that is not pairwise, and the reason it is here at all: every
+   *  individual gap in a room can pass and the room still be cut in two, because
+   *  circulation is a property of the whole floor. Measured on a 6 × 4 room with seven
+   *  dining chairs strung across it — nothing overlapping, no zone blocked, no door
+   *  touched, and chairs are not route-formers so the walkway term is blind — the
+   *  scored total was **0.4**, a near-perfect room, with **5.2 m² of floor** that has
+   *  no route to the door. The solver moved nothing, at every seed.
+   *
+   *  It costs a raster and a distance transform, so it is NOT computed on the
+   *  annealer's fast path — see `costBreakdown`'s `navCell`. */
+  navigation: number;
   /** A piece that wants a wall and has not got one, or wants the middle. */
   wall: number;
   middle: number;
@@ -109,6 +122,9 @@ export const DEFAULT_WEIGHTS: ScoreWeights = {
   overlap: 1000,
   outside: 1000,
   door: 800,
+  // A square metre of floor nobody can reach is the same tier as a blocked door,
+  // because it is the same failure: part of the room is not part of the room.
+  navigation: 120,
   access: 60,
   walkway: 40,
   window: 20,
@@ -135,6 +151,11 @@ const FACING_GAIN = 4;
  *  the arrangement rather than reinvent it: everything that was still fine stays
  *  where it is, and only what the change broke gets moved. */
 export const REFIT_INERTIA = 14;
+
+/** How much dearer it is to move a piece the user placed by hand than one the app
+ *  put there. A multiplier on that piece's inertia, not a lock: a hand placement can
+ *  still be overruled, it just has to buy several times more than a guess does. */
+const PLACED_INERTIA = 4;
 
 /** What this module can do about each kind of finding the room report can make.
  *
@@ -164,16 +185,17 @@ export const RULE_HANDLING: Record<
   window: { costTerm: 'window', movable: true },
   tv: { costTerm: 'relation', movable: true },
 
-  reach: {
-    costTerm: null,
-    movable: true,
-    why: 'priced by `navigabilityCost` over the finalists rather than per proposal — it needs the clearance field.',
-  },
-  'cut-off': {
-    costTerm: null,
-    movable: true,
-    why: 'as `reach`: a connected-component question, scored over the finalists.',
-  },
+  // Both of these used to say `costTerm: null` with a note that they were "priced by
+  // navigabilityCost over the finalists rather than per proposal". That was not true
+  // in the way that matters, and the room report was reading these rows to decide
+  // whether to offer a **Try a fix** button. Ranking a handful of finalists only helps
+  // when the pool contains a candidate that is better; when the arrangement is already
+  // a local minimum on every other term the annealer never leaves it, the pool holds
+  // one candidate, and ranking one candidate is a no-op. Measured on a room with 5.2 m²
+  // sealed off: nothing moved, at six seeds out of six — a button that did nothing.
+  // Now a real term, computed where it is affordable to compute. See `navCell`.
+  reach: { costTerm: 'navigation', movable: true },
+  'cut-off': { costTerm: 'navigation', movable: true },
 
   turning: {
     costTerm: null,
@@ -207,6 +229,15 @@ export type LayoutContext = {
   /** Where each piece started. Present so the inertia term has something to
    *  measure against; when absent that term is simply off. */
   origin?: Placement[];
+  /** Index-aligned; true for a piece the USER put where it is, rather than one the
+   *  seeder or a detection did.
+   *
+   *  Inertia was uniform, which treats "the app guessed this" and "I dragged this
+   *  here on purpose" as the same claim on staying put. They are not: moving the
+   *  first is a suggestion, moving the second is overruling somebody. The store
+   *  already knows which is which — `useStudio.positions` holds an entry only for a
+   *  piece that has been moved by hand — so this costs a lookup and nothing else. */
+  placed?: boolean[];
   /** Cached reading of the room — roles, anchor, focals, openings. Computed once
    *  per solve rather than tens of thousands of times inside the annealer. */
   profile?: RoomProfile;
@@ -416,6 +447,7 @@ const ZERO: CostBreakdown = {
   overlap: 0,
   outside: 0,
   door: 0,
+  navigation: 0,
   access: 0,
   walkway: 0,
   window: 0,
@@ -428,10 +460,33 @@ const ZERO: CostBreakdown = {
   total: 0,
 };
 
+/** Grid the navigation term is read off when a caller asks for it, metres.
+ *
+ *  Coarser than the room report's own `FIELD_CELL` (0.05 m) on purpose, and the
+ *  numbers are why. Measured on a 6 × 4 room against one `costBreakdown`:
+ *
+ *    · 0.05 m — 10 004 cells, 1 190 µs, **10–22×** an evaluation
+ *    · 0.10 m —  2 604 cells,   325 µs, **2.6–6×**
+ *    · 0.15 m —  1 218 cells,   155 µs, **1.2–3×**
+ *
+ *  So the fine field cannot go anywhere near a search that evaluates sixteen hundred
+ *  times, and 0.1 m can — for the few hundred steps of a repair pass. The cost of that
+ *  choice is quantisation: clearance carries ±half a cell, so a gap within 50 mm of
+ *  the 600 mm walk width may be read either way. That errs toward calling a marginal
+ *  gap impassable, which is the safe direction for a pass whose job is to open one. */
+export const NAV_CELL = 0.1;
+
 export function costBreakdown(
   m: LayoutModel,
   placements: Placement[],
   weights: ScoreWeights = DEFAULT_WEIGHTS,
+  /** Grid for the navigation term, or `null` to leave it at zero.
+   *
+   *  Off by default, and that default is the annealer's: a distance transform per
+   *  proposal costs more than the entire search. Every other caller — the finalists,
+   *  the repair pass, the breakdown a suggestion is reported with — passes a cell and
+   *  pays for it once. */
+  navCell: number | null = null,
 ): CostBreakdown {
   const { ctx, poly, roles, obstacle, top, radius, area } = m;
   const parts = ctx.parts;
@@ -675,7 +730,11 @@ export function costBreakdown(
     for (let i = 0; i < placements.length; i++) {
       if (!ctx.movable[i]) continue;
       const d = Math.hypot(placements[i].x - origin[i].x, placements[i].z - origin[i].z);
-      c.inertia += d + 0.4 * Math.abs(angleDelta(placements[i].yaw, origin[i].yaw));
+      // A piece the user placed by hand is dearer to move than one the app guessed at
+      // — see `LayoutContext.placed`. Not immovable: the solver may still overrule a
+      // hand placement, it just has to be worth several times more to do it.
+      const claim = ctx.placed?.[i] ? PLACED_INERTIA : 1;
+      c.inertia += claim * (d + 0.4 * Math.abs(angleDelta(placements[i].yaw, origin[i].yaw)));
     }
   }
 
@@ -683,7 +742,9 @@ export function costBreakdown(
   // twelve-string array on every evaluation.
   c.overlap *= weights.overlap;
   c.outside *= weights.outside;
+  if (navCell !== null) c.navigation = navigabilityCost(m, placements, navCell);
   c.door *= weights.door;
+  c.navigation *= weights.navigation;
   c.access *= weights.access;
   c.walkway *= weights.walkway;
   c.window *= weights.window;
@@ -697,6 +758,7 @@ export function costBreakdown(
     c.overlap +
     c.outside +
     c.door +
+    c.navigation +
     c.access +
     c.walkway +
     c.window +
@@ -725,13 +787,13 @@ export function costBreakdown(
 /** Square metres of floor, and pieces, that a person coming through the door
  *  cannot reach. Zero when the room has no door — without one there is no telling
  *  which side anybody arrives from, and every claim would be a guess. */
-export function navigabilityCost(m: LayoutModel, placements: Placement[]): number {
+export function navigabilityCost(m: LayoutModel, placements: Placement[], cell?: number): number {
   if (m.doors.length === 0) return 0;
   const parts = m.ctx.parts;
   const solid: number[] = [];
   for (let i = 0; i < parts.length; i++) if (m.obstacle[i]) solid.push(i);
   const feet = solid.map((i) => footAt(parts[i], placements[i].x, placements[i].z, placements[i].yaw));
-  const field = buildClearanceField(feet, m.poly);
+  const field = buildClearanceField(feet, m.poly, cell);
   if (!field || field.componentCount === 0) return 0;
 
   const reachable = new Set<number>();

@@ -46,6 +46,7 @@ import {
   angleDelta,
   costBreakdown,
   navigabilityCost,
+  NAV_CELL,
   prepare,
   scoreLayout,
   DEFAULT_WEIGHTS,
@@ -77,6 +78,9 @@ export type SolveOptions = {
    *  after the room or a piece has been resized, where the layout was fine until
    *  one number changed and reinventing it would throw away the user's work. */
   mode?: 'arrange' | 'refit';
+  /** Ids of pieces the USER placed by hand. Those cost more to move than ones the
+   *  app guessed at — see `LayoutContext.placed`. */
+  placed?: Set<string>;
 };
 
 /** Why one piece ended up somewhere else.
@@ -157,9 +161,19 @@ const MOVE_EPSILON = 0.02;
 /** How many finalists get the expensive navigability check. Small: each one costs
  *  a distance transform over the room. */
 const FINALISTS = 4;
-/** Metres² of unreachable floor is worth this much cost — the same tier as a
- *  blocked door, because it is the same failure. */
-const NAV_WEIGHT = 120;
+/** Steps in the pass that opens a route, and the whole reason it exists.
+ *
+ *  Ranking finalists on navigation only helps when the pool holds a candidate that is
+ *  better. When the arrangement is already a local minimum on every other term the
+ *  annealer never leaves it, the pool holds ONE candidate, and ranking one candidate
+ *  is a no-op. Measured on a 6 × 4 room with seven chairs strung across it: scored
+ *  total 0.4 — a near-perfect room — with 5.2 m² of floor that has no route to the
+ *  door, and nothing moved at six seeds out of six.
+ *
+ *  So when the room is cut, the search runs again with navigation actually in the
+ *  objective. Only then: a room that is not cut pays one coarse field (~325 µs) to
+ *  find that out, and nothing more. */
+const REPAIR_STEPS = 260;
 
 /** Seeded PRNG (mulberry32). Explicit because a layout suggestion that differs
  *  between two runs of the same room is not a suggestion, it is a slot machine. */
@@ -197,11 +211,20 @@ export function solveLayout(
 
   const movable = parts.map((p, i) => !locked[i] && !p.wallMounted);
   const origin: Placement[] = parts.map((p) => ({ x: p.pos[0], z: p.pos[2], yaw: p.rot }));
-  const ctx: LayoutContext = { parts, movable, footprint, origin };
+  const ctx: LayoutContext = {
+    parts,
+    movable,
+    footprint,
+    origin,
+    placed: opts.placed ? parts.map((p) => opts.placed!.has(p.id)) : undefined,
+  };
   const model = prepare(ctx);
 
   const current: Placement[] = origin.map((p) => ({ ...p }));
-  const breakdownBefore = costBreakdown(model, current, weights);
+  // Navigation is priced in from the very first number, so `before` and `after` are
+  // comparable and a suggestion that opens a sealed-off half of the room is
+  // recognised as the large improvement it is.
+  const breakdownBefore = costBreakdown(model, current, weights, NAV_CELL);
   const before = breakdownBefore.total;
 
   const b = footprintBounds(footprint);
@@ -278,10 +301,10 @@ export function solveLayout(
   // ── Finalists: the question the annealer's terms cannot ask ────────────────
   remember(pool, best, bestCost);
   let winner = best;
-  let winnerCost = bestCost + NAV_WEIGHT * navigabilityCost(model, best);
+  let winnerCost = bestCost + weights.navigation * navigabilityCost(model, best, NAV_CELL);
   for (const cand of pool) {
     if (cand.placements === best) continue;
-    const total = cand.cost + NAV_WEIGHT * navigabilityCost(model, cand.placements);
+    const total = cand.cost + weights.navigation * navigabilityCost(model, cand.placements, NAV_CELL);
     if (total < winnerCost) {
       winnerCost = total;
       winner = cand.placements;
@@ -298,8 +321,11 @@ export function solveLayout(
   // see, not about one three degrees off it.
   winner = snapYaws(model, winner, weights);
   winner = pruneMoves(model, origin, winner, weights);
+  // …and last, because it is the only pass whose objective the prune cannot see: a
+  // move that opens a route would be reverted by a prune scoring without navigation.
+  winner = openRoutes(model, winner, weights, b, rng);
 
-  let breakdownAfter = costBreakdown(model, winner, weights);
+  let breakdownAfter = costBreakdown(model, winner, weights, NAV_CELL);
   // …and never hand back something worse than what we were given. The prune spends a
   // small slack budget to buy back pointless moves, and on a layout that was already
   // near-optimal that slack can eat the entire gain — at which point the honest
@@ -330,6 +356,66 @@ function displaced(from: Placement, to: Placement): boolean {
     Math.hypot(to.x - from.x, to.z - from.z) > MOVE_EPSILON ||
     Math.abs(angleDelta(to.yaw, from.yaw)) > TURN_EPSILON
   );
+}
+
+/** Open a route to any part of the room that has been sealed off.
+ *
+ *  A short second anneal whose objective INCLUDES navigation, run only when the room
+ *  is actually cut. That condition is the whole design: navigation costs a raster and
+ *  a distance transform, which at the report's own 0.05 m grid is 10–22× a single
+ *  evaluation and could never sit in the main search — but a few hundred proposals at
+ *  `NAV_CELL` is affordable, and a room that is not cut never pays for even one.
+ *
+ *  Restricted to the pieces that are part of the problem: an obstacle whose own
+ *  footprint touches the stranded region, or borders it. Moving a wardrobe on the
+ *  other side of the room cannot open a route past a chair, and letting the search
+ *  try is how a repair turns back into a shuffle. */
+function openRoutes(
+  m: LayoutModel,
+  placements: Placement[],
+  weights: ScoreWeights,
+  b: { minX: number; maxX: number; minZ: number; maxZ: number },
+  rng: () => number,
+): Placement[] {
+  if (m.doors.length === 0 || weights.navigation <= 0) return placements;
+  const stranded = navigabilityCost(m, placements, NAV_CELL);
+  if (stranded <= 0) return placements;
+
+  // Everything movable that could plausibly be in the way. The obstacle test is what
+  // keeps a rug or a wall-mounted piece out of it; `movable` keeps the user's locks.
+  const pool: number[] = [];
+  for (let i = 0; i < placements.length; i++) {
+    if (m.ctx.movable[i] && m.obstacle[i]) pool.push(i);
+  }
+  if (pool.length === 0) return placements;
+
+  const cost = (p: Placement[]) => costBreakdown(m, p, weights, NAV_CELL).total;
+  const current = placements.map((p) => ({ ...p }));
+  let best = current.map((p) => ({ ...p }));
+  let bestCost = cost(current);
+  let now = bestCost;
+  const span = Math.max(b.maxX - b.minX, b.maxZ - b.minZ);
+
+  for (let step = 0; step < REPAIR_STEPS; step++) {
+    const t = step / REPAIR_STEPS;
+    const temp = Math.max(1e-4, 20 * Math.pow(0.02, t));
+    const reach = span * 0.4 * (1 - t) + 0.05;
+    const i = pool[Math.floor(rng() * pool.length) % pool.length];
+    const prev = current[i];
+    current[i] = propose(m, current, i, reach, rng, b);
+    const trial = cost(current);
+    if (trial - now <= 0 || rng() < Math.exp(-(trial - now) / temp)) {
+      now = trial;
+      if (now < bestCost) {
+        bestCost = now;
+        best = current.map((p) => ({ ...p }));
+      }
+    } else {
+      current[i] = prev;
+    }
+  }
+  for (const p of best) p.yaw = normaliseYaw(p.yaw);
+  return best;
 }
 
 /** Square up anything that is nearly square, and keep the change only if the room

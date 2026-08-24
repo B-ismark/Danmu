@@ -39,6 +39,7 @@ import { join } from 'node:path';
 import { analyzeRoom } from '@/lib/clearance';
 import {
   costBreakdown,
+  NAV_CELL,
   prepare,
   RULE_HANDLING,
   type CostBreakdown,
@@ -80,7 +81,9 @@ const issuesAt = (parts: ScenePart[], at: Placement[]) => analyzeRoom(moved(part
 
 function costAt(parts: ScenePart[], at: Placement[]): CostBreakdown {
   const ctx: LayoutContext = { parts, movable: parts.map(() => true), footprint: RECT };
-  return costBreakdown(prepare(ctx), at);
+  // With the navigation term ON: it is the term `reach` and `cut-off` name, and a
+  // conformance test that left it at zero could never hold them to anything.
+  return costBreakdown(prepare(ctx), at, undefined, NAV_CELL);
 }
 
 /** Does the report raise this rule for this arrangement? Matched on the finding's
@@ -157,7 +160,12 @@ function cases(): Case[] {
       what: 'a sofa across the way in from the door',
       parts: [d, s],
       bad: [here(d), { x: 0, z: -0.75, yaw: 0 }],
-      good: [here(d), { x: 0, z: 1.5, yaw: 0 }],
+      // Turned round. At yaw 0 this "good" layout had the sofa 20 mm from the south
+      // wall and facing it — the report raised `zone` on it ("2 cm in front") and the
+      // navigation term found 2 m² with no route to the door. It passed anyway while
+      // facing the wrong way cost four units and nothing priced reachability; the
+      // fixture was clean only on the one rule it was named for.
+      good: [here(d), { x: 0, z: 1.5, yaw: Math.PI }],
     });
   }
 
@@ -246,6 +254,49 @@ function cases(): Case[] {
       parts: [win, w],
       bad: [here(win), { x: 0, z: 1.6, yaw: 0 }],
       good: [here(win), { x: 0, z: -1.6, yaw: 0 }],
+    });
+  }
+
+  // ── Half the room sealed off ──────────────────────────────────────────────
+  //
+  // The case that had no fixture, and no term, for as long as `reach` and `cut-off`
+  // claimed to be "priced over the finalists". A line of dining chairs across the
+  // room: nothing overlaps, no zone is blocked, the door swings freely and its route
+  // in is clear, and chairs are not route-formers so the walkway term is blind. Every
+  // pairwise term is happy and half the floor has no way to it.
+  //
+  // The good layout is the same seven chairs stacked in a corner, which is untidy and
+  // is not a fault — the point of the pair is that only reachability separates them.
+  {
+    const d = door();
+    const w = wardrobe();
+    const chairs = Array.from({ length: 7 }, () => chair());
+    const across: Placement[] = chairs.map((_, i) => ({ x: -2.6 + i * 0.867, z: 0.2, yaw: 0 }));
+    // Clear of every wall by more than a walkway, and clear of the door's swing and
+    // the route in from it — otherwise the "good" layout seals a strip of floor behind
+    // itself and is no better than the bad one, which is exactly what a first draft of
+    // this fixture did: 2.66 m² stranded behind a block pushed against the west wall.
+    const stacked: Placement[] = chairs.map((_, i) => ({
+      x: -1.2 + (i % 4) * 0.6,
+      z: i < 4 ? -0.3 : 0.3,
+      yaw: 0,
+    }));
+    // Behind the line, so it is the piece that cannot be got to.
+    const stranded: Placement = { x: 2, z: 1.6, yaw: Math.PI };
+
+    out.push({
+      family: 'cut-off',
+      what: 'a line of chairs sealing off half the floor',
+      parts: [d, w, ...chairs],
+      bad: [here(d), stranded, ...across],
+      good: [here(d), stranded, ...stacked],
+    });
+    out.push({
+      family: 'reach',
+      what: 'a wardrobe on the far side of that line',
+      parts: [d, w, ...chairs],
+      bad: [here(d), stranded, ...across],
+      good: [here(d), stranded, ...stacked],
     });
   }
 

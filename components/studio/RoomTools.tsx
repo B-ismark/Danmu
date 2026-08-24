@@ -395,11 +395,17 @@ function useSuggest(effParts: ScenePart[], footprint: Footprint) {
     (mode: 'arrange' | 'refit', seed: number, only?: string[]) => {
       const t = useStudio.getState();
       const confined = only && only.length > 0 ? new Set(only) : null;
+      // Which pieces the user put where they are, rather than the app. An override in
+      // `positions` exists only for a piece that has been moved by hand, so this is the
+      // store already answering the question — and it is what stops a suggestion
+      // treating "I dragged this here on purpose" and "the seeder guessed" as equal
+      // claims on staying put.
+      const placed = new Set([...Object.keys(t.positions), ...Object.keys(t.rotations)]);
       const result = solveLayout(
         effParts,
         footprint,
         effParts.map((p) => p.locked || (confined ? !confined.has(p.id) : false)),
-        { seed, mode },
+        { seed, mode, placed },
       );
       // A material gain, not merely a smaller number. `isWorthOffering` is the bar:
       // a solve that trims 3.1 to 2.4 by sliding a sofa 10 cm and a rug 10 cm has

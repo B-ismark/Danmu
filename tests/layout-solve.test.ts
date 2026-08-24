@@ -3,6 +3,7 @@ import {
   costBreakdown,
   scoreLayout,
   navigabilityCost,
+  NAV_CELL,
   prepare,
   DEFAULT_WEIGHTS,
   type LayoutContext,
@@ -430,6 +431,67 @@ describe('a suggestion is only the moves that bought something', () => {
     expect(isWorthOffering(3.1, 2.4)).toBe(false);
     expect(isWorthOffering(85.5, 18.2)).toBe(true);
     expect(isWorthOffering(4.0, 4.0)).toBe(false);
+  });
+});
+
+// ─── Circulation is a term, not a tiebreak ──────────────────────────────────
+//
+// `navigabilityCost` was applied only to the handful of finalists, which helps only
+// when the pool holds a candidate that is better. When the arrangement is already a
+// local minimum on every other term the annealer never leaves it, the pool holds ONE
+// candidate, and ranking one candidate is a no-op. So `RULE_HANDLING` claimed the
+// solver could fix `reach` and `cut-off` — the room report reads that to decide
+// whether to offer a **Try a fix** button — and the button did nothing.
+
+describe('the solver can open a route', () => {
+  /** Seven dining chairs strung across a 6 × 4 room, and a door on the north wall.
+   *  Nothing overlaps, no zone is blocked, the door swings freely and its route in is
+   *  clear — and chairs are not route-formers, so the walkway term is blind to them.
+   *  Every pairwise term is happy; half the floor has no way to it. */
+  function barricade(): ScenePart[] {
+    const out = [doorPart(-2)];
+    for (let i = 0; i < 7; i++) {
+      out.push(part({ category: 'chair', shape: 'chair-dining', dimMM: [480, 520, 850], pos: [-2.7 + i * 0.9, 0, 0.2] }));
+    }
+    return out;
+  }
+
+  it('sees floor that nothing connects to the door', () => {
+    const parts = barricade();
+    const m = prepare(ctxOf(parts));
+    const at = parts.map((p) => ({ x: p.pos[0], z: p.pos[2], yaw: p.rot }));
+    // Every OTHER term calls this a near-perfect room. That is the trap.
+    const plain = costBreakdown(m, at, DEFAULT_WEIGHTS);
+    expect(plain.total).toBeLessThan(2);
+    expect(navigabilityCost(m, at, NAV_CELL)).toBeGreaterThan(4);
+    expect(costBreakdown(m, at, DEFAULT_WEIGHTS, NAV_CELL).navigation).toBeGreaterThan(400);
+  });
+
+  it('opens it, at every seed', () => {
+    // Was 0 of 6 before the repair pass existed: the annealer had no reason to leave
+    // the arrangement, so the finalist pool held one candidate and ranking it changed
+    // nothing. The room report raised `cut-off` on the solver's own output.
+    const parts = barricade();
+    const m = prepare(ctxOf(parts));
+    for (let seed = 1; seed <= 6; seed++) {
+      const r = solveLayout(parts, RECT, parts.map(() => false), { seed });
+      expect(navigabilityCost(m, r.placements, NAV_CELL), `seed ${seed} left the room cut`).toBeLessThan(0.5);
+      expect(r.breakdownAfter.navigation).toBeLessThan(r.breakdownBefore.navigation);
+    }
+  });
+
+  it('costs a clean room almost nothing to check', () => {
+    // The repair pass runs only on a room that is actually cut. A clean one pays for
+    // one coarse field to find that out, and the search itself is untouched.
+    const parts = [doorPart(-2), sofa(), wardrobe(), table()];
+    const at: Placement[] = [
+      { x: -2, z: -1.975, yaw: 0 },
+      { x: 0, z: 1.5, yaw: Math.PI },
+      { x: 2.4, z: -1.7, yaw: 0 },
+      { x: 0, z: 0.4, yaw: 0 },
+    ];
+    const m = prepare(ctxOf(parts));
+    expect(navigabilityCost(m, at, NAV_CELL)).toBe(0);
   });
 });
 
