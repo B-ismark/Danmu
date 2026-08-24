@@ -59,6 +59,22 @@ const config = [
   },
   ...compat.extends('next/core-web-vitals'),
   {
+    // Next's generated-image routes. `next/og` renders their JSX with satori, in
+    // Node, at build time — there is no browser, no layout, and no `next/image`
+    // runtime to reach for, so `no-img-element`'s advice ("use `<Image />`") is not
+    // applicable rather than merely inconvenient. A plain `<img>` is what satori
+    // rasterises.
+    //
+    // Off HERE rather than with a per-line `eslint-disable`, because that directive
+    // was not portable: the rule fired on Windows and not on Linux, so the same
+    // `eslint .` saw the comment as suppressing something locally and as an unused
+    // directive in CI — and an unused directive is itself a warning, which at
+    // `--max-warnings 0` is a red build. Two platforms, two answers, no line that
+    // satisfies both. A config entry has one answer and states its reason once.
+    files: ['app/opengraph-image.tsx', 'app/apple-icon.tsx', 'app/**/opengraph-image.tsx', 'app/**/icon.tsx'],
+    rules: { '@next/next/no-img-element': 'off' },
+  },
+  {
     // A service worker's globals are neither the browser's nor Node's: no
     // `window`, and `self` is a ServiceWorkerGlobalScope. Without this, every
     // `caches` / `clients` reference reads as an undefined global.

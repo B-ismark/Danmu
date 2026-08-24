@@ -88,4 +88,25 @@ describe('the flat config, as `next build` reads it', () => {
     expect(resolved?.rules).toHaveProperty('@next/next/no-img-element');
     expect(resolved?.rules).toHaveProperty('react-hooks/exhaustive-deps');
   }, RESOLVE_TIMEOUT);
+
+  it('turns no-img-element off for the generated-image routes, and only those', async () => {
+    // `next/og` renders these with satori in Node at build time, so `next/image`
+    // has nothing to optimise and the rule does not apply.
+    //
+    // This is pinned HERE, in a test that runs on every platform, because a
+    // per-line `eslint-disable` could not do the job: the rule fired on Windows
+    // and not on Linux, so the same directive read as suppressing a real warning
+    // locally and as an UNUSED directive in CI — which is itself a warning, and at
+    // `--max-warnings 0` a red build. `pnpm lint` passing on one machine says
+    // nothing about the other for this rule; this assertion does.
+    for (const f of ['app/opengraph-image.tsx', 'app/apple-icon.tsx']) {
+      const rule = (await resolveFor(f))?.rules?.['@next/next/no-img-element'];
+      expect(rule, `${f} should have the rule resolved`).toBeDefined();
+      // Normalised: ESLint reports severity as `[0]`, or `0`, depending on shape.
+      expect([rule].flat()[0], `${f} must have no-img-element off`).toBe(0);
+    }
+    // And nowhere else — a blanket "off" would hide a real `<img>` in the app.
+    const app = (await resolveFor('components/ui/primitives.tsx'))?.rules?.['@next/next/no-img-element'];
+    expect([app].flat()[0], 'the rule must still be live for ordinary components').not.toBe(0);
+  }, RESOLVE_TIMEOUT);
 });

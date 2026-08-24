@@ -60,9 +60,6 @@ export default function OpenGraphImage() {
         {/* Lockup: the mark at a size where its furniture block is legible, and
             the wordmark beside it. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element -- Satori renders
-              a plain <img>; next/image is a browser-runtime component and has no
-              meaning inside an ImageResponse. */}
           <img src={markDataUri({ size: 132 })} width={132} height={132} alt="" />
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 86, fontWeight: 700, color: '#2A2520', letterSpacing: '-0.03em' }}>Danmu</div>

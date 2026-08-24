@@ -36,8 +36,6 @@ export default function AppleIcon() {
       >
         {/* The mark at 74% of the square: iOS crops a few pixels at the corners of
             its mask, and a glyph run to the edge loses its outline stroke there. */}
-        {/* eslint-disable-next-line @next/next/no-img-element -- Satori renders a
-            plain <img>; next/image has no meaning inside an ImageResponse. */}
         <img src={markDataUri({ size: 134, tile: false })} width={134} height={134} alt="" />
       </div>
     ),
