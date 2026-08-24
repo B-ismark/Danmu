@@ -50,6 +50,17 @@ import {
 } from './layout-rules';
 import { openingsForRoom, type Opening } from './room-openings';
 import { settleParts } from './layout-settle';
+// Runtime, but not a cycle: `layout-score` takes only `ScenePart` from here and takes
+// it as a TYPE, so the edge back is erased at compile.
+import {
+  costBreakdown,
+  navigabilityCost,
+  prepare,
+  DEFAULT_WEIGHTS,
+  NAV_CELL,
+  STRANDED_PIECE,
+  type LayoutContext,
+} from './layout-score';
 
 // The shape / category / decor vocabularies are written as `as const` arrays with
 // the union DERIVED from each, rather than as hand-written unions.
@@ -415,6 +426,19 @@ const VIEW_DEPTH_ENOUGH = 3.3;
  *  Where no wall can hold the sofa, `null` hands the choice back to the default
  *  ordering, which at least puts the screen on a real wall. */
 function viewingWall(frames: SeedFrame[], sofaDepthMM: number, openings: Opening[] = []): SeedFrame | null {
+  return viewingWalls(frames, sofaDepthMM, openings)[0] ?? null;
+}
+
+/** Every wall that could carry the screen, best first — the ranked form of the
+ *  choice above, and the reason `defaultScene` can search at all.
+ *
+ *  The score is a local opinion about one bay, formed before the seeder knows what
+ *  the other bay will do, where the sofa will actually fit along the wall, or whether
+ *  the result leaves a route. Those are the things that turn out to decide whether a
+ *  room reads as arranged. So the runner-up walls are kept rather than discarded, and
+ *  §3.10.3 part VI's constructive search builds a whole room on each of the first few
+ *  and lets `costBreakdown` settle it. */
+function viewingWalls(frames: SeedFrame[], sofaDepthMM: number, openings: Opening[] = []): SeedFrame[] {
   // Two walls are ruled out before any arithmetic, and this is where the starter
   // room stops being decided by arithmetic at all:
   //
@@ -429,20 +453,19 @@ function viewingWall(frames: SeedFrame[], sofaDepthMM: number, openings: Opening
   // still needs somewhere for the screen, and a reported window beats no room.
   const clear = frames.filter((f) => !openings.some((o) => frameCarries(f, o)));
   const pool = clear.length > 0 ? clear : frames;
-  let best: SeedFrame | null = null;
-  let bestScore = -Infinity;
+  const ok: Array<{ f: SeedFrame; score: number }> = [];
   for (const f of pool) {
     if (!f.onWall) continue;
     if (f.width < wallFor(SOFA[0])) continue;
     // Depth has to seat the sofa at all before it is worth comparing.
     if (f.depth < sofaDepthMM / 1000 + 0.3) continue;
-    const score = Math.min(f.depth, VIEW_DEPTH_ENOUGH) * 2 + f.width;
-    if (score > bestScore) {
-      bestScore = score;
-      best = f;
-    }
+    ok.push({ f, score: Math.min(f.depth, VIEW_DEPTH_ENOUGH) * 2 + f.width });
   }
-  return best;
+  // `pool` comes out of `seedFrames` in a deterministic order and the sort is stable,
+  // so equal-scoring walls keep it: the search below must enumerate the same plans in
+  // the same order every time, or a room would seed differently on its second open.
+  ok.sort((a, b) => b.score - a.score);
+  return ok.map((e) => e.f);
 }
 
 /** How far a group could sit from a screen in this bay — the depth of the wall the
@@ -459,6 +482,28 @@ function oppositeFrame(frames: SeedFrame[], f: SeedFrame): SeedFrame | undefined
   return frames.find((c) => c.nx * f.nx + c.nz * f.nz < -0.9);
 }
 
+/** The choices a starter room is made of that the seeder cannot make well on its own.
+ *
+ *  Each one used to be decided greedily, in isolation, before the thing that would
+ *  settle it was known — which wall a group backs onto is chosen by one bay's own
+ *  arithmetic, and which bay a group gets is chosen from a viewing depth, both of them
+ *  blind to what the other group is about to do with the room. See §3.10.3 part VI. */
+type SeedPlan = {
+  /** Swap the living and dining groups between the two bays. */
+  swap: boolean;
+  /** Rank into `viewingWalls` for the living group. */
+  livingWall: number;
+  /** Rank into `seedFrames` for whatever the second bay gets. */
+  secondWall: number;
+};
+
+/** How many runners-up each choice keeps. Three, because the search is a product of
+ *  them and the build is the expensive part: 2 × 3 × 3 = **18 plans at most**, and one
+ *  build-and-score is 264–461 µs on the presets, so the whole search is bounded at
+ *  well under 20 ms. §3.10.3 part VI's arithmetic for why it is not 200. */
+const PLAN_RANKS = 3;
+
+
 export function defaultScene(
   layoutId: LayoutId = 'rect',
   w: number = ROOM.width,
@@ -471,6 +516,7 @@ export function defaultScene(
   const bays = roomBays(poly, { max: 2, minSide: 0.9, minArea: 1.2 });
   if (bays.length === 0) return [];
 
+  const build = (plan: SeedPlan): ScenePart[] => {
   const parts: ScenePart[] = [];
   const counters: Record<string, number> = {};
 
@@ -574,9 +620,10 @@ export function defaultScene(
   };
 
   // ── Living room: a screen on the wall, a sofa the right distance from it ───
-  const living = (bay: Bay, opt: { routeBehind?: boolean } = {}) => {
+  const living = (bay: Bay, opt: { routeBehind?: boolean; wall?: number } = {}) => {
     const frames = seedFrames(bay, poly);
-    const f = viewingWall(frames, SOFA[1], openings) ?? frames[0];
+    const candidates = viewingWalls(frames, SOFA[1], openings);
+    const f = candidates[opt.wall ?? 0] ?? candidates[0] ?? frames[0];
 
     // A three-seater only where the wall can still leave a route past one. A bay
     // narrower than that gets a two-seater, which is a different piece of furniture
@@ -701,8 +748,9 @@ export function defaultScene(
   };
 
   // ── Dining: a table off the middle of the bay, chairs tucked under it ──────
-  const dining = (bay: Bay) => {
-    const f = seedFrames(bay, poly)[0];
+  const dining = (bay: Bay, opt: { wall?: number } = {}) => {
+    const frames = seedFrames(bay, poly);
+    const f = frames[opt.wall ?? 0] ?? frames[0];
     const dim: [number, number, number] = [1500, 850, 750];
     const hw = dim[0] / 2000;
     const hd = dim[1] / 2000;
@@ -727,9 +775,9 @@ export function defaultScene(
   };
 
   // ── Bedroom: head of the bed to the wall, a side to get in on ─────────────
-  const bedroom = (bay: Bay) => {
+  const bedroom = (bay: Bay, opt: { wall?: number } = {}) => {
     const frames = seedFrames(bay, poly);
-    const f = frames[0];
+    const f = frames[opt.wall ?? 0] ?? frames[0];
     const bed: [number, number, number] = [2000, 1600, 600];
     const bedHalfW = bed[0] / 2000;
     const vBed = bed[1] / 2000 + SEED_WALL_GAP;
@@ -769,9 +817,9 @@ export function defaultScene(
   };
 
   // ── A reading nook, for the wing of an L (or any leftover corner) ─────────
-  const nook = (bay: Bay) => {
+  const nook = (bay: Bay, opt: { wall?: number } = {}) => {
     const frames = seedFrames(bay, poly);
-    const f = frames[0];
+    const f = frames[opt.wall ?? 0] ?? frames[0];
     const chair: [number, number, number] = [800, 800, 900];
     const chairHalf = chair[1] / 2000;
     const vChair = Math.min(f.depth - chairHalf - SEED_WALL_GAP, chairHalf + 0.35);
@@ -853,18 +901,12 @@ export function defaultScene(
   // the U as a bedroom and the T as "living + dining" — but the BAYS decide whether
   // the room can keep the promise, so every secondary group is conditional on there
   // being somewhere to put it.
-  const second = (minArea: number): Bay | null => (bays[1] && bays[1].area >= minArea ? bays[1] : null);
-  /** Two groups, one rectangle: cut it in half the long way. */
-  const halves = (minArea: number): [Bay, Bay] | null => {
-    const b = second(minArea);
-    if (b) return [bays[0], b];
-    if (bays[0].area >= minArea * 2.4) return splitBay(bays[0]);
-    return null;
-  };
+  const second = (minArea: number) => secondBay(bays, minArea);
+  const halves = (minArea: number) => halveBays(bays, minArea);
 
   switch (layoutId) {
     case 'u': {
-      bedroom(bays[0]);
+      bedroom(bays[0], { wall: plan.livingWall });
       const spare = second(1.2);
       if (spare) alcove(spare);
       break;
@@ -878,26 +920,32 @@ export function defaultScene(
         // the T's 2.1 m-deep bar while its 2.6 m-deep stem — which needs no viewing
         // distance to seat four at a table — got the dining set. Swapping the two
         // costs nothing and is what a person would have done.
+        //
+        // That reading is still the plan the search starts from — `plan.swap` is
+        // false for the first candidate — but it is now a starting point and not the
+        // answer: viewing depth is one bay's opinion of itself, and which bay should
+        // hold the sofa also depends on where the dining set then has to go.
         const [a, b] = pair;
-        const flip = viewingDepth(b, poly, openings) > viewingDepth(a, poly, openings) + 0.05;
-        living(flip ? b : a, { routeBehind: true });
-        dining(flip ? a : b);
+        const deeper = viewingDepth(b, poly, openings) > viewingDepth(a, poly, openings) + 0.05;
+        const flip = plan.swap ? !deeper : deeper;
+        living(flip ? b : a, { routeBehind: true, wall: plan.livingWall });
+        dining(flip ? a : b, { wall: plan.secondWall });
       } else {
-        living(bays[0]);
+        living(bays[0], { wall: plan.livingWall });
       }
       break;
     }
     case 'l': {
-      living(bays[0]);
+      living(bays[0], { wall: plan.livingWall });
       const wing = second(2.5);
-      if (wing) nook(wing);
+      if (wing) nook(wing, { wall: plan.secondWall });
       break;
     }
     default: {
-      living(bays[0]);
+      living(bays[0], { wall: plan.livingWall });
       // A custom footprint can have a wing the presets don't; furnish it if so.
       const wing = second(2.5);
-      if (wing) nook(wing);
+      if (wing) nook(wing, { wall: plan.secondWall });
     }
   }
 
@@ -920,6 +968,146 @@ export function defaultScene(
   // nothing to do — but it is the same guarantee the detection path needs, and one
   // function making it for both beats two hand-checked seeds.
   return settleParts(parts, poly);
+  };
+
+  // ── The search: build a few whole rooms and keep the one that scores best ──
+  //
+  // §3.10.3 part VI. Every choice above is a local one: which wall the sofa backs
+  // onto is decided from one bay's own width and depth, and which bay the living
+  // group gets is decided from a viewing depth — both of them before the seeder knows
+  // what the other group will do, where the sofa will actually fit along that wall, or
+  // whether the result leaves anyone a way through. That is measurable rather than
+  // aesthetic: the seeded T scored **85.5** against a cost function that was sitting
+  // right there and was never asked.
+  //
+  // So the choices become a plan, a few plans get built in full, and `costBreakdown`
+  // — the same function the solver descends — says which room won. The seeder can no
+  // longer emit a room its own cost function hates, because that room now has to beat
+  // the others.
+  //
+  // **Including the clearance field, on every candidate.** The solver cannot afford
+  // that and tiers instead; this does not have to, and the difference is the size of
+  // the candidate set, not a difference of opinion about the cost. `solveLayout`
+  // evaluates around sixteen thousand proposals, where a term 65–92× an evaluation is
+  // the entire budget; `enumeratePlans` returns **eighteen at the very most**, where
+  // the same term is ~1.5 ms each and the whole search lands inside 35 ms.
+  //
+  // Two tiers were tried here first, and were wrong twice over. Circulation is not
+  // predictable from the other terms — that is the whole reason it exists as a term —
+  // so any filter that ranks without it drops rooms that would have won. Measured on
+  // the T, where every plan but one strands floor: a 15-piece plan sealing off 2.36 m²
+  // filled all four finalist slots, and reserving a slot per part count only moved the
+  // failure down a level, since the cheapest 14-piece plan strands 2.43 m² while the
+  // third-cheapest strands none. The room that shipped had two clearance findings on
+  // its first open. A cheap filter in front of an unpredictable term is a way of not
+  // asking the question.
+  const plans = enumeratePlans(layoutId, bays, poly);
+  if (plans.length === 1) return build(plans[0]);
+
+  const built = plans.map(build);
+  // A plan that simply failed to place things is not a tidy room, it is an empty one,
+  // and every term here gets CHEAPER as furniture is removed. So a piece that could
+  // not be placed is charged at exactly what a piece nobody can reach is charged —
+  // `STRANDED_PIECE` at the navigation weight — which is the same failure stated
+  // twice: part of the room is not part of the room.
+  const most = Math.max(...built.map((p) => p.length));
+
+  let best = built[0];
+  let bestCost = Infinity;
+  for (const parts of built) {
+    const ctx: LayoutContext = { parts, movable: parts.map(() => true), footprint: poly };
+    const model = prepare(ctx);
+    const places = parts.map((p) => ({ x: p.pos[0], z: p.pos[2], yaw: p.rot }));
+    const missing = (most - parts.length) * STRANDED_PIECE * DEFAULT_WEIGHTS.navigation;
+    // Strictly less than, so an exact tie keeps the earlier plan — and plan zero is
+    // the greedy one, so a room the search cannot improve on comes out unchanged.
+    const total = costBreakdown(model, places, DEFAULT_WEIGHTS, NAV_CELL).total + missing;
+    if (total < bestCost) {
+      bestCost = total;
+      best = parts;
+    }
+  }
+  return best;
+}
+
+/** Which bay a second group would get, and how a lone bay is cut in half for two. */
+function secondBay(bays: Bay[], minArea: number): Bay | null {
+  return bays[1] && bays[1].area >= minArea ? bays[1] : null;
+}
+function halveBays(bays: Bay[], minArea: number): [Bay, Bay] | null {
+  const b = secondBay(bays, minArea);
+  if (b) return [bays[0], b];
+  if (bays[0].area >= minArea * 2.4) return splitBay(bays[0]);
+  return null;
+}
+
+/** The plans worth building for this room.
+ *
+ *  Bounded by construction rather than by a budget: the product of how many real
+ *  alternatives each choice has, capped at `PLAN_RANKS`. A room with one usable
+ *  viewing wall and no second group therefore gets **one plan and no search at all**,
+ *  which is the common case and costs exactly what the seeder cost before.
+ *
+ *  It mirrors the switch in `defaultScene` rather than approximating it, and that is
+ *  load-bearing in both directions: enumerating a knob the layout does not read builds
+ *  the identical room several times over — the first draft did, three times for a plain
+ *  rectangle — and enumerating too few silently narrows the search to the greedy
+ *  answer. Both are invisible; only the second is harmful, and it is the one that
+ *  looks like success.
+ *
+ *  Plan zero is always the greedy plan — no swap, top-ranked wall for both groups —
+ *  which is the room the seeder produced before this existed. The search can therefore
+ *  only ever return that room or one that scores better than it. */
+function enumeratePlans(layoutId: LayoutId, bays: Bay[], poly: Footprint): SeedPlan[] {
+  const openings = openingsForRoom(poly);
+  /** How many walls of this bay are genuinely different choices for this group. */
+  const ranks = (bay: Bay | null | undefined, viewing: boolean): number => {
+    if (!bay) return 1;
+    const frames = seedFrames(bay, poly);
+    const n = viewing ? viewingWalls(frames, SOFA[1], openings).length : frames.length;
+    return Math.max(1, Math.min(PLAN_RANKS, n));
+  };
+
+  let first = 1;
+  let second = 1;
+  let swaps = [false];
+  switch (layoutId) {
+    case 'u':
+      // The bed's wall is the whole room's axis, and the alcove is a plant: nothing
+      // to swap and no second wall to choose.
+      first = ranks(bays[0], false);
+      break;
+    case 't':
+    case 'open': {
+      const pair = halveBays(bays, 4.5);
+      if (pair) {
+        // Either half may end up holding the living group, so the index has to span
+        // whichever offers more — a rank that no plan can use costs one build.
+        first = Math.max(ranks(pair[0], true), ranks(pair[1], true));
+        second = Math.max(ranks(pair[0], false), ranks(pair[1], false));
+        swaps = [false, true];
+      } else {
+        first = ranks(bays[0], true);
+      }
+      break;
+    }
+    default: {
+      // `l`, and any footprint the presets do not name. A wing is furnished if there
+      // is one; if there is not, the second wall is not a choice.
+      first = ranks(bays[0], true);
+      second = ranks(secondBay(bays, 2.5), false);
+    }
+  }
+
+  const plans: SeedPlan[] = [];
+  for (const swap of swaps) {
+    for (let livingWall = 0; livingWall < first; livingWall++) {
+      for (let secondWall = 0; secondWall < second; secondWall++) {
+        plans.push({ swap, livingWall, secondWall });
+      }
+    }
+  }
+  return plans;
 }
 
 // ─── Dressing ───────────────────────────────────────────────────────────────

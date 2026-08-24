@@ -121,10 +121,13 @@ describe.each(PRESETS)('starter scene · $id', ({ id, w, d }) => {
     //
     // A ceiling rather than an exact figure, so ordinary tuning does not fail it and a
     // regression of that size cannot pass. Measured after the fixes: 4.8, 24.7, 16.9,
-    // 4.9, 13.4.
+    // 4.9, 13.4 — and after the seeder started SEARCHING (§3.10.3 part VI): 4.8, 14.7,
+    // 5.5, 4.9, 13.4, with the T gaining a piece as well as losing two thirds of its
+    // cost. The ceiling comes down with them; 40 would now pass a room that had lost
+    // everything the search buys.
     const ctx: LayoutContext = { parts, movable: parts.map(() => true), footprint: poly };
     const cost = costBreakdown(prepare(ctx), parts.map(here), DEFAULT_WEIGHTS, NAV_CELL);
-    expect(cost.total).toBeLessThan(40);
+    expect(cost.total).toBeLessThan(20);
   });
 
   it('seeds a room you can walk all of', () => {
@@ -132,6 +135,18 @@ describe.each(PRESETS)('starter scene · $id', ({ id, w, d }) => {
     // did: at a coarser cell the T read 2.02 m² stranded and the report read none.
     const ctx: LayoutContext = { parts, movable: parts.map(() => true), footprint: poly };
     expect(navigabilityCost(prepare(ctx), parts.map(here), NAV_CELL)).toBe(0);
+  });
+
+  it('seeds the same room every time it is asked', () => {
+    // The seeder now BUILDS SEVERAL ROOMS and keeps the best (§3.10.3 part VI), so
+    // "deterministic" stopped being free the moment the answer came out of a search:
+    // an unstable sort, a `Map` iterated for its keys, or a tie broken by insertion
+    // order would each show up here and nowhere else. A room that reseeds differently
+    // on its second open is not a room the user can trust.
+    const key = (ps: ScenePart[]) =>
+      ps.map((p) => `${p.id}@${p.pos.map((v) => v.toFixed(6)).join(',')}/${p.rot.toFixed(6)}`).join('|');
+    const again = defaultScene(id, w, d, { footprint: poly, height: HEIGHT });
+    expect(key(again)).toBe(key(parts));
   });
 });
 

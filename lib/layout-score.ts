@@ -495,7 +495,7 @@ export const NAV_CELL = FIELD_CELL;
 /** What a piece nobody can get to is worth, in the same units as a square metre of
  *  unreachable floor. A wardrobe you cannot open is worse than an equivalent patch of
  *  empty carpet, which is why it is more than one. */
-const STRANDED_PIECE = 2;
+export const STRANDED_PIECE = 2;
 
 export function costBreakdown(
   m: LayoutModel,

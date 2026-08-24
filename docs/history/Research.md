@@ -949,18 +949,48 @@ clearance field is **eight to thirteen times dearer** — 65–92× an evaluatio
 each* is **296–453 ms**, which is not "once, on room creation, and nobody notices" — it
 is a visible hitch on the first screen of the product.
 
-The measurement therefore chooses the design rather than merely costing it. Part VI
-must use the two tiers `solveLayout` already uses: score **every** candidate on
-`costBreakdown` alone, then pay for the field on a **handful of finalists** only.
+The measurement therefore chooses the design rather than merely costing it. The first
+answer was the two tiers `solveLayout` uses — score every candidate on `costBreakdown`
+alone, pay for the field on four finalists — which brings 200 candidates from 296–453 ms
+down to 9–16 ms.
 
-| 200 candidates | `rect` | `t` | `open` |
-|---|---|---|---|
-| field on every one | 296 ms | 297 ms | 453 ms |
-| scored, then field on 4 finalists | **9.1 ms** | **12.3 ms** | **15.8 ms** |
+**That was tried, and it was the wrong answer.** Two tiers only work when the filter's
+ranking is informative about the arbiter's, and circulation is specifically the term
+that is not predictable from the others — which is the entire reason it exists. Every
+filter dropped rooms that would have won:
 
-Which is the shape the repair pass in part IV already has, for the same reason:
-circulation is a property of the whole floor, so it cannot be a per-candidate filter —
-only a final arbiter.
+- Top four outright, on the seeded T: a 15-piece plan that seals off 2.36 m² of floor
+  scored **2.2** before the field and filled all four slots. No 14-piece plan was ever
+  compared against it. The room that shipped had two clearance findings on first open.
+- Reserving a finalist slot per part count moved the failure one level down: the
+  *cheapest* 14-piece plan strands 2.43 m², and the one that strands nothing is third.
+
+The real correction is that part VI's candidate set is nothing like 200. It is the
+product of how many genuinely different walls and bay assignments a room has, capped
+at three each: **eighteen at the very most**, and one — no search at all — for a plain
+rectangle whose openings leave a single usable viewing wall. Eighteen × ~1.9 ms is
+about 35 ms, once, on room creation. Measured end-to-end, `defaultScene` per preset:
+
+| | `rect` | `l` | `t` | `u` | `open` |
+|---|---|---|---|---|---|
+| plans built | 1 | 3 | 18 | 3 | 6 |
+| seed time | 0.4 ms | 7.3 ms | 34.3 ms | 7.0 ms | 17.5 ms |
+| cost, greedy → searched | 4.8 | 24.7 → **14.7** | 16.9 → **5.5** | 4.9 | 13.4 |
+| pieces placed | 12 | 14 | 14 → **15** | 12 | 17 |
+| clearance findings | 0 | 0 | 0 | 0 | 0 |
+
+The T is the case worth reading: the search found a room with **one more piece, a third
+of the cost, and no stranded floor**, and it is a room no filter would have let through.
+So the seeder scores every candidate in full, and `solveLayout` — which evaluates around
+sixteen thousand proposals rather than eighteen — keeps its tiers. Same term, same
+weight, different budget.
+
+One more thing the enumeration must get right, since both failure modes are silent:
+enumerating a knob the layout does not read builds the identical room several times
+(the first draft did, three times over, for a plain rectangle), and enumerating too few
+narrows the search back to the greedy answer. Only the second is harmful, and it is the
+one that looks like success — so `enumeratePlans` mirrors `defaultScene`'s own switch
+rather than approximating it.
 
 **VII — Make the room look lived-in.** Tiered fill, each tier placed only if it fits
 *and* does not raise the score:
@@ -992,7 +1022,8 @@ the openings are.
 | 3 | I — one walkway rule; affinity by role | The phantom 40 in the T; the drifting side table | **shipped** |
 | 4 | V — doors and windows in the presets | Most of "no rationale"; four dormant rules turned back on | **shipped** |
 | 5 | III — group-rigid solve | Chairs stop permuting; arrangements stay recognisable | not needed yet — see below |
-| 6 | VI + VII — scored seeding, tiered fill | Rooms that score well by construction, and read as lived-in | open |
+| 6 | VII — dressing | Art, curtains, a pendant, bedside lamps — all wall- or ceiling-mounted, so free | **shipped** |
+| 7 | VI — scored constructive seeding | Rooms that score well by construction | **shipped** |
 
 1–3 are small and cover most of the first complaint. 4 covers most of the second.
 5–6 are what make the result good rather than merely not wrong.
@@ -1022,7 +1053,38 @@ Every remaining move can be named, which is the test that matters: the sofa move
 the wall, the lamp moves to the seat it lights, the armchair turns to face the sofa.
 Nothing moves 2 m for a rounding error any more.
 
-**Why part III is not next.** It was the structural answer to chairs permuting around
+#### 3.10.6 What shipping VII and VI then did
+
+Same five presets. VII hangs a picture over the sofa or bed, curtains at every window,
+a pendant over the dining table and a lamp on each nightstand — all wall- or
+ceiling-mounted, so `isObstacle` is false for every one of them and none of it takes
+floor, blocks a route or enters an access zone. It costs nothing in the room report
+and it is most of the difference on screen.
+
+VI turned every greedy choice in the seeder — which wall a group backs onto, which bay
+the living group gets — into a plan, built the plans in full, and let `costBreakdown`
+pick. Costs are on the report's own grid, with the navigation term on:
+
+| room | pieces, VII → VI | seeded cost, VII → VI | plans built | seed time |
+|---|---|---|---|---|
+| `rect 6×4` | 12 | 4.8 | 1 | 0.4 ms |
+| `l 6×4.7` | 14 | 24.7 → **14.7** | 3 | 7.3 ms |
+| `t 5.5×4.7` | 14 → **15** | 16.9 → **5.5** | 18 | 34.3 ms |
+| `u 6×5` | 12 | 4.9 | 3 | 7.0 ms |
+| `open 7.5×5.6` | 17 | 13.4 | 6 | 17.5 ms |
+
+Zero clearance findings and zero stranded floor throughout. Two presets improved and
+three were already at the greedy optimum — which is the honest result, and the reason
+plan zero is always the greedy plan: a room the search cannot improve on comes out
+unchanged, and `rect` does not search at all.
+
+The T is the case that justifies the whole part. Its winning room has **one more piece,
+a third of the cost, and no floor anyone is cut off from** — and it is a room that no
+cheap pre-filter would have surfaced, because the plans that score best before the
+clearance field runs are the ones that seal a corner off. Details in the part VI note
+above.
+
+**Why part III is still not next.** It was the structural answer to chairs permuting around
 their table and to a group being reassembled somewhere else on every press. Both of
 those turned out to be symptoms of causes 1 and 2 rather than of the flat search: with
 the relation an assignment and the walkway rule shared, the dining sets stop moving at
