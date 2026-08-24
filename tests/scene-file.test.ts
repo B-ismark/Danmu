@@ -351,6 +351,23 @@ describe('scene file · a file is untrusted input', () => {
     expect(child.parentId).toBe('p1');
   });
 
+  it('resolves a parentId to the piece that KEPT the duplicated id, not the reminted one', () => {
+    // Two pieces both claim `desk`. The first keeps it; the second is reminted.
+    // A reference to `desk` means the one still answering to that name — last
+    // writer wins in the id map pointed it at the piece that lost the name.
+    const { file } = withParts([
+      rawPart({ id: 'desk', name: 'Keeper' }),
+      rawPart({ id: 'desk', name: 'Reminted' }),
+      rawPart({ id: 'lamp', parentId: 'desk' }),
+    ]);
+    expect(file.parts).toHaveLength(3);
+    const keeper = file.parts.find((p) => p.name === 'Keeper')!;
+    const reminted = file.parts.find((p) => p.name === 'Reminted')!;
+    expect(keeper.id).toBe('desk');
+    expect(reminted.id).not.toBe('desk');
+    expect(file.parts.find((p) => p.id === 'lamp')!.parentId).toBe(keeper.id);
+  });
+
   it('breaks an in-file cycle at exactly one edge rather than refusing the whole chain', () => {
     const { file, dropped } = withParts([
       rawPart({ id: 'a', parentId: 'c' }),

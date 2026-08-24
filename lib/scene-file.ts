@@ -280,7 +280,13 @@ export function parseSceneFile(text: string): SceneFileParse {
     const read = readPart(candidate, seen);
     if (read) {
       parts.push(read.part);
-      if (read.originalId) originalToFinal.set(read.originalId, read.part.id);
+      // First writer wins. On a duplicate id the FIRST piece keeps it and every
+      // later one is reminted, so overwriting here would point `parentId: "desk-1"`
+      // at `imported-3-desk` — the piece that lost the name — instead of the one
+      // still answering to it.
+      if (read.originalId && !originalToFinal.has(read.originalId)) {
+        originalToFinal.set(read.originalId, read.part.id);
+      }
     } else {
       unreadable++;
     }

@@ -233,6 +233,43 @@ describe('the canvas is not resized once per frame of a window drag', () => {
   });
 });
 
+describe('a rail section reflows instead of clipping', () => {
+  const SRC = readFileSync(root('components', 'studio', 'RailSection.tsx'), 'utf8');
+
+  it('lets the title shrink and ellipsise rather than shoving the meta out', () => {
+    // `flex: 1` sizes the BOX. Without `minWidth: 0` the span refuses to go below
+    // its own text and pushes the meta through the rail's `overflow: hidden` — no
+    // scrollbar, no ellipsis, nothing to notice. The four properties are one
+    // mechanism; any of them on its own does nothing.
+    const title = /className="section-title"[^>]*>/.exec(SRC);
+    expect(title, 'no section-title span in RailSection').toBeTruthy();
+    for (const prop of ['minWidth: 0', "overflow: 'hidden'", "textOverflow: 'ellipsis'", "whiteSpace: 'nowrap'"]) {
+      expect(title![0], `the title needs ${prop} to ellipsise`).toContain(prop);
+    }
+  });
+
+  it('holds the meta at its natural width', () => {
+    // The meta is the derived half — a count, a theme name. A clipped number is
+    // lost outright, where a clipped word is still recognisable from its start.
+    const meta = /className="section-meta"[^>]*>/.exec(SRC);
+    expect(meta, 'no section-meta span in RailSection').toBeTruthy();
+    expect(meta![0]).toContain('flexShrink: 0');
+  });
+
+  it('states its padding in CSS, where a container query can reach it', () => {
+    // Inline padding is padding the rail's own container queries cannot narrow.
+    // RailSection is what the LEFT rail is built from, so while its padding was
+    // stated inline the 240px relief below reached the Inspector and nothing else.
+    expect(SRC).toMatch(/className="rail-section-head"/);
+    expect(SRC).toMatch(/className="rail-section-body"/);
+    expect(SRC, 'padding belongs in globals.css now').not.toMatch(/padding: '[^']*16px/);
+    const tight = /@container rail \(max-width: 240px\) \{([^}]*)\}/.exec(CSS);
+    expect(tight, 'no 240px container query in globals.css').toBeTruthy();
+    expect(tight![1]).toContain('.rail-section-head');
+    expect(tight![1]).toContain('.rail-section-body');
+  });
+});
+
 describe('the studio shells', () => {
   const DOCKED = readFileSync(root('components', 'studio', 'shells', 'DockedShell.tsx'), 'utf8');
   const SASH = readFileSync(root('components', 'studio', 'shells', 'RailSash.tsx'), 'utf8');

@@ -50,8 +50,16 @@ export function Pickable({
       }}
       onPointerOut={(e: ThreeEvent<PointerEvent>) => {
         e.stopPropagation();
-        setHovered(null);
-        document.body.style.cursor = '';
+        // Surrender only hover this part actually HOLDS. `onPointerOver` above
+        // declines to take hover while another part owns the gesture, but the
+        // matching out still fires — so a rotate arc sweeping off a neighbour
+        // cleared the *dragged* part's highlight, which is the same theft the
+        // guard above exists to stop, arriving one event later. Same shape as the
+        // unmount effect a few lines up.
+        if (useStudio.getState().hoveredPartId === partId) setHovered(null);
+        // The cursor belongs to whoever owns the gesture: `grabbing` has to
+        // outlive the pointer leaving this mesh, which a fast drag does routinely.
+        if (useStudio.getState().draggingId === null) document.body.style.cursor = '';
       }}
       onClick={(e: ThreeEvent<MouseEvent>) => {
         e.stopPropagation();

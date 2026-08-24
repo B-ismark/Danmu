@@ -123,6 +123,29 @@ export function cascadeTransform(
   return out;
 }
 
+/** Drop edges whose child or parent no longer exists.
+ *
+ *  Structural only — it says nothing about whether an edge is still physically
+ *  true, which is `snapshotDescendants`' job on every read and the reason a stale
+ *  edge is harmless in the first place. This exists for the OTHER cost: the map is
+ *  persisted per room, deleting a piece leaves its edges behind on both sides
+ *  (`resetTransforms(id)` clears only the child side), and nothing else ever
+ *  removes them. Called on room load, not on delete — delete is undoable, and an
+ *  edge that survives is what makes the cascade work again when the piece comes
+ *  back to the same spot. */
+export function livingParents(
+  parentIds: Record<string, string> | undefined,
+  parts: Array<{ id: string }>,
+): Record<string, string> {
+  if (!parentIds) return {};
+  const alive = new Set(parts.map((p) => p.id));
+  const out: Record<string, string> = {};
+  for (const [child, parent] of Object.entries(parentIds)) {
+    if (alive.has(child) && alive.has(parent)) out[child] = parent;
+  }
+  return out;
+}
+
 /** Would linking `childId` under `candidateParentId` create a cycle? Checked
  *  both when a live drag auto-establishes a relationship and when a scene
  *  file imports one (a hand-edited file can encode a loop directly). */

@@ -19,12 +19,24 @@
 // real room) rather than in three mock routes. In a production build there is one
 // shell and this is a straight call to `DockedShell`.
 
+import dynamic from 'next/dynamic';
 import { Fragment, type ReactNode } from 'react';
 import { useStackedStudio } from './NarrowViewportBanner';
 import { useShellVariant } from './shell-variant';
 import { DockedShell } from './shells/DockedShell';
-import { ElasticShell } from './shells/ElasticShell';
-import { OverlayShell } from './shells/OverlayShell';
+
+// The two prototype-only shells, behind `next/dynamic` rather than a static
+// import. `useShellVariant` compiles down to a constant `'current'` in a
+// production build, but THIS switch reads it as runtime state, so no bundler can
+// prove the other branches dead — statically imported, both of these rode into
+// the production bundle behind a branch that can never run there. Now each is its
+// own async chunk, fetched only when a `?shell=` actually selects one.
+//
+// The cost is a dev-only frame where the prototype has not arrived yet. That is
+// the right side to pay it on: the comparison this switch exists for measures the
+// three shells against each other, and all three now load the same way.
+const ElasticShell = dynamic(() => import('./shells/ElasticShell').then((m) => m.ElasticShell), { ssr: false });
+const OverlayShell = dynamic(() => import('./shells/OverlayShell').then((m) => m.OverlayShell), { ssr: false });
 
 export function StudioShell({
   children,
