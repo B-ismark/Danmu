@@ -497,11 +497,18 @@ type SeedPlan = {
   secondWall: number;
 };
 
-/** How many runners-up each choice keeps. Three, because the search is a product of
- *  them and the build is the expensive part: 2 × 3 × 3 = **18 plans at most**, and one
- *  build-and-score is 264–461 µs on the presets, so the whole search is bounded at
- *  well under 20 ms. §3.10.3 part VI's arithmetic for why it is not 200. */
-const PLAN_RANKS = 3;
+/** How many runners-up each choice keeps — **four, because a bay has four sides.**
+ *
+ *  Not a budget. It was three to begin with, which is a budget wearing the clothes of a
+ *  cap: it silently withheld one wall of every rectangular bay from the search, and the
+ *  T's seeded cost went **5.5 → 1.6, with a sixteenth piece placed**, the moment the
+ *  fourth was allowed. Five measures identical to four in every preset, which is the
+ *  confirmation that four is the real ceiling and not another guess.
+ *
+ *  The product is what it bounds: 2 × 4 × 4 = **32 plans at most**, one build-and-score
+ *  being 264–461 µs plus the clearance field, so the worst preset seeds in ~53 ms and a
+ *  plain rectangle in 0.5 ms. §3.10.3 part VI has the arithmetic for why it is not 200. */
+const PLAN_RANKS = 4;
 
 
 export function defaultScene(
@@ -989,8 +996,8 @@ export function defaultScene(
   // that and tiers instead; this does not have to, and the difference is the size of
   // the candidate set, not a difference of opinion about the cost. `solveLayout`
   // evaluates around sixteen thousand proposals, where a term 65–92× an evaluation is
-  // the entire budget; `enumeratePlans` returns **eighteen at the very most**, where
-  // the same term is ~1.5 ms each and the whole search lands inside 35 ms.
+  // the entire budget; `enumeratePlans` returns **thirty-two at the very most**, where
+  // the same term is ~1.5 ms each and the worst preset seeds in 48 ms.
   //
   // Two tiers were tried here first, and were wrong twice over. Circulation is not
   // predictable from the other terms — that is the whole reason it exists as a term —

@@ -238,13 +238,28 @@ describe('starter scene keeps the preset’s promise', () => {
     expect(parts.filter((p) => p.shape === 'chair-dining').every((c) => c.pos[2] < 0)).toBe(true);
   });
 
-  it('pushes a shallow room’s dining table to the wall and seats three at it', () => {
-    // 900 mm of pull-back on both long sides needs 2.6 m of depth; the T's bar has
-    // 2.1. One end against the wall and three sides that work is what `layout-rules`
-    // means by `atLeast: 3`, and the fourth chair is not placed rather than being
-    // wedged into the plaster.
+  it('seats four at the dining table by choosing a wall that can, not by wedging one in', () => {
+    // This test used to assert THREE, and the reasoning was sound as far as it went:
+    // 900 mm of pull-back on both long sides needs 2.6 m of depth, the T's bar has
+    // 2.1, so a table centred there leaves 630 mm on each side. Against one wall with
+    // three sides that work is what `layout-rules` means by `atLeast: 3`, and the
+    // fourth chair was refused rather than wedged into the plaster — which is rule 2,
+    // and still is.
+    //
+    // What was wrong was treating that as the end of the matter. The seeder was
+    // choosing the wall greedily and then making the best of it; once `enumeratePlans`
+    // could try the bay's fourth side too (`PLAN_RANKS`), it found a plan that seats
+    // four with the table clear of every wall — and that plan also scores 1.6 against
+    // the three-chair one's 5.5, with a sixteenth piece placed and no clearance
+    // finding. Four chairs was the right answer all along; the way to get there was a
+    // better plan, never a laxer fit test.
     const parts = seed('t', 5.5, 4.7);
-    expect(parts.filter((p) => p.shape === 'chair-dining')).toHaveLength(3);
+    expect(parts.filter((p) => p.shape === 'chair-dining')).toHaveLength(4);
+    // …and all four sit AT it — one per side, which is what four chairs means.
+    const table = parts.find((p) => p.name === 'Dining table')!;
+    for (const c of parts.filter((p) => p.shape === 'chair-dining')) {
+      expect(Math.hypot(c.pos[0] - table.pos[0], c.pos[2] - table.pos[2])).toBeLessThan(1.1);
+    }
   });
 
   it('a U is a bedroom', () => {

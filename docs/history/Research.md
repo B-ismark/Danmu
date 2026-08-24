@@ -824,27 +824,43 @@ shallow, i.e. nearly free in floor terms.
 the fourth chair's spot is then inside that wall, so `seats()` refuses it. Measured on
 the T: `chair-1`, `chair-2`, `chair-3`. Nobody owns a table with three chairs.~~
 
-**Withdrawn — this was not a cause.** The mechanism above is right and the conclusion
-drawn from it is wrong, and it contradicts a rule this repo already states in
-`lib/layout-rules.ts`: the `seats` access rule is `atLeast: 3` of four sides,
-commented *"a table with one end against a wall is not reported as a fault — that is a
-real arrangement."* Three chairs is what the room can carry, not a piece the seeder
-dropped. The T's bar is 2.1 m deep and a seated diner needs `WALK_COMFORT` = 900 mm of
-pull-back, so centring the table there leaves 630 mm on each long side — two sides too
-tight, against one side in the wall and three that work. Re-measured over the presets,
-the seeder does seat four the moment a bay can hold four:
+**Reopened, then answered — and both halves of that are worth keeping.**
 
-| room | dining table | chairs |
-|---|---|---|
-| `t 5.5×4.7` (bar 2.1 m deep) | yes | **3** |
-| `open 7.5×5.6` | yes | **4** |
-| `open 8×7` | yes | **4** |
+*First reading (wrong).* The cause was withdrawn as an appeal to intuition, on the
+grounds that it contradicts a rule this repo already states: `layout-rules.ts`'s `seats`
+rule is `atLeast: 3` of four sides, commented *"a table with one end against a wall is
+not reported as a fault — that is a real arrangement."* The arithmetic backed it up. The
+T's bar is 2.1 m deep and a seated diner needs `WALK_COMFORT` = 900 mm of pull-back, so
+centring a table there leaves 630 mm on each long side: two sides too tight, against one
+wall with three that work. And the seeder already seated four wherever a bay could hold
+four — `open 7.5×5.6` and `open 8×7` both did. So: not a fault, not a bug, count is a
+reading of the room.
 
-`tests/scene-seed.test.ts` asserts exactly three on the T and says why. That test is
-the correct behaviour and this cause was the outlier; the count is a reading of the
-room, not a bug. Left struck through rather than deleted because the misdiagnosis is
-the point: *"nobody owns a table with three chairs"* is an appeal to intuition, and it
-lost to the arithmetic in a table this repo had already written down.
+*What that missed.* All of it is true and none of it is the question. "Three chairs is
+not a **fault**" and "three chairs is the **best this room can do**" are different
+claims, and only the first was established. The seeder was picking the dining wall
+greedily and then making the best of the wall it had picked.
+
+*The answer.* Once part VI could enumerate plans, and `PLAN_RANKS` was raised from three
+to four — a bay has four sides, and capping at three was a budget wearing the clothes of
+a cap — the search found a plan that puts the table clear of every wall with **a chair
+on each of its four sides**:
+
+| T 5.5 × 4.7 | greedy | searched, ranks 3 | searched, ranks 4 |
+|---|---|---|---|
+| dining chairs | 3 | 3 | **4** |
+| pieces | 14 | 15 | **16** |
+| seeded cost | 16.9 | 5.5 | **1.6** |
+| clearance findings | 0 | 0 | 0 |
+
+So cause 9 was pointing at something real, and the fix was never the one its wording
+implied. **A wrong plan and a laxed fit test produce the same fourth chair, and only one
+of them is a room.** Rule 2 holds throughout: nothing was resized, nothing was allowed
+through a fit test it failed, and the three-chair arrangement remains a legitimate answer
+in a room that genuinely has no better wall. `tests/scene-seed.test.ts` now asserts four,
+and records both readings, because the near-miss is the lesson: an intuition that
+contradicts a written rule is usually wrong about the *rule* and can still be right about
+the *room*.
 
 **10. The seeder emits layouts its own cost function scores badly, and cannot know.**
 Seeded cost before any solve: `rect 5×4` **3.1**, `6.5×5` **8.8**, `L` **43.1**,
@@ -967,22 +983,24 @@ filter dropped rooms that would have won:
 
 The real correction is that part VI's candidate set is nothing like 200. It is the
 product of how many genuinely different walls and bay assignments a room has, capped
-at three each: **eighteen at the very most**, and one — no search at all — for a plain
-rectangle whose openings leave a single usable viewing wall. Eighteen × ~1.9 ms is
-about 35 ms, once, on room creation. Measured end-to-end, `defaultScene` per preset:
+at four each — a bay has four sides — so **thirty-two at the very most**, and one, with
+no search at all, for a plain rectangle whose openings leave a single usable viewing
+wall. Measured end-to-end, `defaultScene` per preset:
 
 | | `rect` | `l` | `t` | `u` | `open` |
 |---|---|---|---|---|---|
-| plans built | 1 | 3 | 18 | 3 | 6 |
-| seed time | 0.4 ms | 7.3 ms | 34.3 ms | 7.0 ms | 17.5 ms |
-| cost, greedy → searched | 4.8 | 24.7 → **14.7** | 16.9 → **5.5** | 4.9 | 13.4 |
-| pieces placed | 12 | 14 | 14 → **15** | 12 | 17 |
+| seed time | 0.6 ms | 9.1 ms | 48.3 ms | 7.9 ms | 21.0 ms |
+| cost, greedy → searched | 4.8 | 24.7 → **14.7** | 16.9 → **1.6** | 4.9 | 13.4 |
+| pieces placed | 12 | 14 | 14 → **16** | 12 | 17 |
 | clearance findings | 0 | 0 | 0 | 0 | 0 |
+| free floor | 88 % | 82 % | 76 % | 80 % | 88 % |
 
-The T is the case worth reading: the search found a room with **one more piece, a third
-of the cost, and no stranded floor**, and it is a room no filter would have let through.
+The T is the case worth reading: the search found a room with **two more pieces, a
+tenth of the cost, and no stranded floor** — a dining table clear of every wall with a
+chair on each of its four sides (see cause 9) — and it is a room no cheap filter would
+have let through.
 So the seeder scores every candidate in full, and `solveLayout` — which evaluates around
-sixteen thousand proposals rather than eighteen — keeps its tiers. Same term, same
+sixteen thousand proposals rather than thirty-two — keeps its tiers. Same term, same
 weight, different budget.
 
 One more thing the enumeration must get right, since both failure modes are silent:
@@ -1067,18 +1085,25 @@ VI turned every greedy choice in the seeder — which wall a group backs onto, w
 the living group gets — into a plan, built the plans in full, and let `costBreakdown`
 pick. Costs are on the report's own grid, with the navigation term on:
 
-| room | pieces, VII → VI | seeded cost, VII → VI | plans built | seed time |
+| room | pieces, VII → VI | seeded cost, VII → VI | seed time | Suggest moves, 3 seeds |
 |---|---|---|---|---|
-| `rect 6×4` | 12 | 4.8 | 1 | 0.4 ms |
-| `l 6×4.7` | 14 | 24.7 → **14.7** | 3 | 7.3 ms |
-| `t 5.5×4.7` | 14 → **15** | 16.9 → **5.5** | 18 | 34.3 ms |
-| `u 6×5` | 12 | 4.9 | 3 | 7.0 ms |
-| `open 7.5×5.6` | 17 | 13.4 | 6 | 17.5 ms |
+| `rect 6×4` | 12 | 4.8 | 0.6 ms | 0, 0, 1 |
+| `l 6×4.7` | 14 | 24.7 → **14.7** | 9.1 ms | 0, 7, 5 |
+| `t 5.5×4.7` | 14 → **16** | 16.9 → **1.6** | 48.3 ms | 0, 0, 0 |
+| `u 6×5` | 12 | 4.9 | 7.9 ms | 0, 0, 0 |
+| `open 7.5×5.6` | 17 | 13.4 | 21.0 ms | 1, 1, 1 |
 
-Zero clearance findings and zero stranded floor throughout. Two presets improved and
-three were already at the greedy optimum — which is the honest result, and the reason
-plan zero is always the greedy plan: a room the search cannot improve on comes out
-unchanged, and `rect` does not search at all.
+Zero clearance findings and zero stranded floor throughout, and 76–88 % of the floor
+free to walk on. Two presets improved and three were already at the greedy optimum —
+which is the honest result, and the reason plan zero is always the greedy plan: a room
+the search cannot improve on comes out unchanged, and `rect` does not search at all.
+
+The last column is the one that says whether any of this worked, because it is what the
+user sees. `t` and `u` answer Suggest with *"this is already a good arrangement"* at
+every seed. The `l` is the honest remainder: it seeds at 14.7 and the solver still finds
+9.8–13.2, so Suggest has something real to offer there — the search fixed its bay
+assignment but not everything about its wing, and no rank raise changes that, since the
+L’s bay has four sides and all four are already enumerated.
 
 The T is the case that justifies the whole part. Its winning room has **one more piece,
 a third of the cost, and no floor anyone is cut off from** — and it is a room that no
