@@ -14,10 +14,16 @@
 // prototype that tests whether that verdict holds for a room you are arranging
 // furniture inside.
 
+import dynamic from 'next/dynamic';
 import { type CSSProperties, type ReactNode, useRef } from 'react';
 import { useStudio } from '@/lib/store';
 import { LeftRailBody, RailToggle, RightRailBody, useRails } from './shell-parts';
-import { RailSash } from './RailSash';
+
+// Dynamic for the same reason the two prototype shells are in `StudioShell`: this
+// file ships, `sash` never becomes true in a production build, and no bundler can
+// see that from here — so a static import put the whole splitter widget in the
+// bundle every visitor downloads to look at a room they cannot resize.
+const RailSash = dynamic(() => import('./RailSash').then((m) => m.RailSash), { ssr: false });
 
 export const RAIL_ID = { left: 'studio-rail-left', right: 'studio-rail-right' } as const;
 

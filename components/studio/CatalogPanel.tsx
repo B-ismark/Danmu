@@ -87,6 +87,10 @@ export function CatalogToggle() {
         fontSize: 12,
         fontWeight: 700,
         gap: 6,
+        // It sits in `CanvasTools`, which wraps. Holding its width there is what
+        // sends it to a row of its own rather than letting it be compressed to
+        // an icon and half a word.
+        flexShrink: 0,
         background: open ? 'var(--accent-tint)' : 'var(--paper)',
         borderColor: open ? 'var(--accent-text)' : 'var(--edge)',
         color: open ? 'var(--accent-text)' : 'var(--ink-2)',

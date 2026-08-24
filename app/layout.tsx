@@ -5,6 +5,7 @@ import { Providers } from './providers';
 import { ConfirmHost } from '@/components/ui/Confirm';
 import { StorageToast } from '@/components/ui/StorageToast';
 import { ServiceWorkerRegistrar } from '@/components/ServiceWorkerRegistrar';
+import { SITE_URL } from '@/lib/site-url';
 import './globals.css';
 
 // Warm editorial-casual pairing: a soft optical serif for display, a rounded
@@ -28,10 +29,22 @@ const nunito = Nunito({
 });
 
 // Danmu spreads by word of mouth — a shared link is the whole marketing surface,
-// so it needs to unfurl as something. openGraph carries no image file: the only
-// raster-shaped asset in the repo is app/icon.svg, there is no photoreal render to
-// point at, and inventing a screenshot claim would be worse than a text-only card.
+// so it needs to unfurl as something.
+//
+// It now unfurls with a picture: `app/opengraph-image.tsx`, rasterised at build
+// time. That file is not a screenshot and deliberately never will be — the reason
+// this card carried no image for so long was that inventing a render of "your
+// room" would be a claim the app has not earned, and that still holds. It is a
+// brand card: the mark, the name, the sentence, three true claims.
+//
+// No `images` entry here, and none wanted. The file conventions
+// (`opengraph-image`, `apple-icon`, `icon.svg`) are discovered by Next and turned
+// into tags with their real content-hashed urls; naming them again in this object
+// would be a second, hand-maintained answer that goes stale the moment one is
+// renamed. `metadataBase` is the one thing the convention cannot work out for
+// itself — see `lib/site-url.ts` for why it is resolved rather than written down.
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: 'Danmu — Decorate your room in real 3D',
   description:
     'A warm, local-first interior decoration studio. Arrange, recolour, restyle and relight furniture in a scaled 3D room — right in your browser. No account, nothing leaves your device.',
@@ -39,6 +52,16 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     siteName: 'Danmu',
+    title: 'Danmu — Decorate your room in real 3D',
+    description:
+      'Pick a footprint, get a scaled 3D room, and redecorate it. Real dimensions, computed on your device. No account, no uploads.',
+  },
+  // Stated rather than left to be inferred: without a `twitter` block Next emits
+  // no `twitter:card`, and a reader with no card type gets the small square
+  // thumbnail treatment — a 1200×630 card cropped to a postage stamp. This is
+  // also what Slack and several others read in preference to the og tags.
+  twitter: {
+    card: 'summary_large_image',
     title: 'Danmu — Decorate your room in real 3D',
     description:
       'Pick a footprint, get a scaled 3D room, and redecorate it. Real dimensions, computed on your device. No account, no uploads.',

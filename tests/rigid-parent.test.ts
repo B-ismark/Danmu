@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { snapshotDescendants, cascadeTransform, wouldCreateCycle } from '@/lib/rigid-parent';
+import { snapshotDescendants, cascadeTransform, livingParents, wouldCreateCycle } from '@/lib/rigid-parent';
 import type { ScenePart } from '@/lib/scene-spec';
 
 function part(overrides: Partial<ScenePart> & Pick<ScenePart, 'id' | 'pos' | 'dimMM'>): ScenePart {
@@ -133,5 +133,33 @@ describe('wouldCreateCycle', () => {
 
   it('bounds a pre-existing corrupted/self-referential map rather than looping forever', () => {
     expect(wouldCreateCycle('y', 'x', { x: 'x' })).toBe(true);
+  });
+});
+
+describe('livingParents', () => {
+  it('keeps an edge whose two ends both still exist', () => {
+    const laptop = part({ id: 'laptop', pos: [0, 0.75, 0], dimMM: [340, 240, 220] });
+    expect(livingParents({ laptop: 'desk' }, [DESK, laptop])).toEqual({ laptop: 'desk' });
+  });
+
+  it('drops an edge whose child was deleted', () => {
+    expect(livingParents({ laptop: 'desk' }, [DESK])).toEqual({});
+  });
+
+  it('drops an edge whose PARENT was deleted — the side resetTransforms never clears', () => {
+    const laptop = part({ id: 'laptop', pos: [0, 0.75, 0], dimMM: [340, 240, 220] });
+    expect(livingParents({ laptop: 'desk' }, [laptop])).toEqual({});
+  });
+
+  it('treats an absent map as empty rather than returning undefined', () => {
+    // Rooms saved before rigid parenting shipped have no `parentIds` at all, and
+    // the store's field is not optional.
+    expect(livingParents(undefined, [DESK])).toEqual({});
+  });
+
+  it('does not mutate the map it was handed', () => {
+    const original = { laptop: 'desk', tray: 'ghost' };
+    livingParents(original, [DESK]);
+    expect(original).toEqual({ laptop: 'desk', tray: 'ghost' });
   });
 });

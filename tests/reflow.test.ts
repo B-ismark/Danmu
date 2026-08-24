@@ -233,6 +233,126 @@ describe('the canvas is not resized once per frame of a window drag', () => {
   });
 });
 
+describe('the canvas tool cluster reflows instead of mangling', () => {
+  const SRC = readFileSync(root('components', 'studio', 'TransformToolbar.tsx'), 'utf8');
+  const CHROME = readFileSync(root('components', 'studio', 'CanvasChrome.tsx'), 'utf8');
+
+  it('hands its two groups to the cluster instead of boxing them together', () => {
+    // This is the whole bug. `CanvasTools` wraps; a wrapper div here presented
+    // both groups to it as ONE unwrappable item, so the snap pill was compressed
+    // instead of moving to a second row — and a compressed pill wrapped
+    // `Snap · Coarse` onto two lines inside a `height: 30` border.
+    expect(SRC, 'the two groups must be siblings in the cluster').toMatch(/<Fragment>/);
+    expect(SRC, 'no inline-flex wrapper may come back around them').not.toMatch(/display: 'inline-flex', gap: 8/);
+    // And the cluster it hands them to has to actually wrap.
+    expect(/export function CanvasTools[\s\S]*?^}/m.exec(CHROME)?.[0]).toMatch(/flexWrap: 'wrap'/);
+  });
+
+  it('keeps the snap pill whole and lets it take a row of its own', () => {
+    // One short phrase in a fixed-height fully-rounded border has no graceful
+    // narrow form, so it must not be given one.
+    const pill = /function SnapCycleButton[\s\S]*$/.exec(SRC)?.[0] ?? '';
+    expect(pill).toMatch(/flexShrink: 0/);
+    expect(pill).toMatch(/whiteSpace: 'nowrap'/);
+    expect(pill, 'a bare text node is an anonymous flex item nothing can address').toMatch(
+      /<span>Snap · \{cur\.label\}<\/span>/,
+    );
+  });
+
+  it('lets the mode labels give ground before the toolbar clips them', () => {
+    // `.toolbar` is `overflow: hidden`, so once the row is too narrow for three
+    // labelled buttons something is cut. Shrinkable buttons with an ellipsising
+    // label choose WHAT: the icon and the keycap survive, the word truncates.
+    // Everything above `SnapCycleButton` is the mode toolbar.
+    const modes = SRC.slice(0, SRC.indexOf('function SnapCycleButton'));
+    expect(modes, 'a flex item will not shrink below its own content without this').toMatch(/minWidth: 0/);
+    expect(modes, 'the label needs its own element to ellipsise in').toMatch(/textOverflow: 'ellipsis'/);
+    expect(modes, 'the icon identifies the mode once the word is cut').toMatch(/flexShrink: 0/);
+  });
+
+  it('gives every fixed-height button and chip a nowrap label at the source', () => {
+    // `.ds-btn` and `.ds-chip` both state their own `height`, and most of their
+    // labels are a bare text node beside an icon — an anonymous flex item, which
+    // no per-site style can reach. Only the class can.
+    expect(rule('.ds-btn')).toMatch(/white-space:\s*nowrap/);
+    expect(rule('.ds-chip')).toMatch(/white-space:\s*nowrap/);
+  });
+
+  it('lets a button whose label is a sentence opt out of that nowrap', () => {
+    // The pair is the signal, and `height: auto` alone is NOT enough — the class
+    // still wins and clips. This button lost its trailing chevron on a phone until
+    // it said both.
+    const src = readFileSync(root('app', 'onboarding', 'welcome', 'page.tsx'), 'utf8');
+    const sentence = /height: 'auto'[^}]*/.exec(src)?.[0] ?? '';
+    expect(sentence, 'the sentence button must say `whiteSpace: normal` too').toMatch(/whiteSpace: 'normal'/);
+  });
+
+  it('keeps the centred tool cluster out from under the right-hand one', () => {
+    // Both clusters sit at the same `top` and nothing made them aware of each
+    // other, so the 3D tab printed undo/redo over "Snap · Fine" and the 2D tab
+    // printed "Comfort zones" over the zoom toolbar.
+    expect(CHROME, 'the view cluster has to publish its width').toMatch(/--canvas-reserve-right/);
+    // As padding inside the span, never as an opposing offset: `left` + `right`
+    // both carrying the reserve is what collapsed the 2D tab's cluster to 0px.
+    const tools = /export function CanvasTools[\s\S]*?^}/m.exec(CHROME)?.[0] ?? '';
+    expect(tools).toMatch(/paddingRight:/);
+    expect(tools, 'a reserve on both offsets can make the box cross itself').not.toMatch(
+      /left: `calc\([^`]*RESERVE/,
+    );
+    // And a floor, so a right-hand cluster wider than the canvas cannot collapse
+    // the tools from the other direction.
+    expect(tools).toMatch(/MIN_TOOLS/);
+  });
+
+  it('lets the plan toolbar fold rather than clip its last controls', () => {
+    // ~450px of zoom / rotate / fit in a `.toolbar`, which is `overflow: hidden`.
+    // Without a wrap the Fit button was simply cut off at the border.
+    const src = readFileSync(root('components', 'studio', 'PlanChrome.tsx'), 'utf8');
+    const bar = /function PlanViewControls[\s\S]*?<div className="toolbar"[^>]*>/.exec(src)?.[0] ?? '';
+    expect(bar).toMatch(/flexWrap: 'wrap'/);
+    // Its dividers have no content, so without a cross-axis size they were 1×0 —
+    // present in the DOM and invisible on screen.
+    expect(src).toMatch(/width: 1, flexShrink: 0, alignSelf: 'stretch'/);
+  });
+});
+
+describe('a rail section reflows instead of clipping', () => {
+  const SRC = readFileSync(root('components', 'studio', 'RailSection.tsx'), 'utf8');
+
+  it('lets the title shrink and ellipsise rather than shoving the meta out', () => {
+    // `flex: 1` sizes the BOX. Without `minWidth: 0` the span refuses to go below
+    // its own text and pushes the meta through the rail's `overflow: hidden` — no
+    // scrollbar, no ellipsis, nothing to notice. The four properties are one
+    // mechanism; any of them on its own does nothing.
+    const title = /className="section-title"[^>]*>/.exec(SRC);
+    expect(title, 'no section-title span in RailSection').toBeTruthy();
+    for (const prop of ['minWidth: 0', "overflow: 'hidden'", "textOverflow: 'ellipsis'", "whiteSpace: 'nowrap'"]) {
+      expect(title![0], `the title needs ${prop} to ellipsise`).toContain(prop);
+    }
+  });
+
+  it('holds the meta at its natural width', () => {
+    // The meta is the derived half — a count, a theme name. A clipped number is
+    // lost outright, where a clipped word is still recognisable from its start.
+    const meta = /className="section-meta"[^>]*>/.exec(SRC);
+    expect(meta, 'no section-meta span in RailSection').toBeTruthy();
+    expect(meta![0]).toContain('flexShrink: 0');
+  });
+
+  it('states its padding in CSS, where a container query can reach it', () => {
+    // Inline padding is padding the rail's own container queries cannot narrow.
+    // RailSection is what the LEFT rail is built from, so while its padding was
+    // stated inline the 240px relief below reached the Inspector and nothing else.
+    expect(SRC).toMatch(/className="rail-section-head"/);
+    expect(SRC).toMatch(/className="rail-section-body"/);
+    expect(SRC, 'padding belongs in globals.css now').not.toMatch(/padding: '[^']*16px/);
+    const tight = /@container rail \(max-width: 240px\) \{([^}]*)\}/.exec(CSS);
+    expect(tight, 'no 240px container query in globals.css').toBeTruthy();
+    expect(tight![1]).toContain('.rail-section-head');
+    expect(tight![1]).toContain('.rail-section-body');
+  });
+});
+
 describe('the studio shells', () => {
   const DOCKED = readFileSync(root('components', 'studio', 'shells', 'DockedShell.tsx'), 'utf8');
   const SASH = readFileSync(root('components', 'studio', 'shells', 'RailSash.tsx'), 'utf8');

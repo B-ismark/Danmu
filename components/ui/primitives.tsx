@@ -2,26 +2,43 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import Link from 'next/link';
+import {
+  MARK_FILL_OPACITY,
+  MARK_LINES,
+  MARK_PIECE,
+  MARK_SOLID,
+  MARK_STROKE_WIDTH,
+  MARK_VIEWBOX,
+} from '@/lib/brand-mark';
 import { Icon, type IconName } from './Icon';
 
-// The mark is the room the studio builds: a soft dollhouse volume with one
-// piece of furniture in it, matching app/icon.svg. It replaced a hard-cornered
-// square with tracked monospace caps — a drafting-instrument signature that
-// contradicted the brand's "warm, playful, deliberately not CAD" commitment on
-// every screen it appeared.
+// The mark is the room the studio builds: a soft dollhouse volume with one piece
+// of furniture in it. It replaced a hard-cornered square with tracked monospace
+// caps — a drafting-instrument signature that contradicted the brand's "warm,
+// playful, deliberately not CAD" commitment on every screen it appeared.
+//
+// The path data is `lib/brand-mark.ts`'. It used to be written out here and
+// written out again in app/icon.svg, and the two had already drifted a stroke
+// width and a fill opacity apart before a share card and an iOS icon wanted the
+// same drawing. Colour still belongs to the consumer: this one can read custom
+// properties, so it does — and it strokes with `currentColor` so the mark takes
+// the colour of whatever bar it is sitting in.
+//
+// `nowrap` on the wordmark: this whole thing lives in `.chrome-bar`, which wraps,
+// and a two-line "Dan / mu" beside a 16px glyph is not a reflow anyone wanted.
 export function DanmuMark({ size = 16, color = 'var(--ink)' as string }: { size?: number; color?: string }) {
   return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color }}>
-      <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden="true">
-        <path d="M6 21.5 16 26l10-4.5V11L16 6.5 6 11z" fill="var(--accent)" opacity="0.16" />
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color, flexShrink: 0 }}>
+      <svg width={size} height={size} viewBox={MARK_VIEWBOX} fill="none" aria-hidden="true">
+        <path d={MARK_SOLID} fill="var(--accent)" opacity={MARK_FILL_OPACITY} />
         <path
-          d="M6 21.5V11l10-4.5L26 11v10.5L16 26zM6 11l10 4.5L26 11M16 15.5V26"
+          d={MARK_LINES}
           stroke="currentColor"
-          strokeWidth="1.8"
+          strokeWidth={MARK_STROKE_WIDTH}
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        <rect x="12.6" y="17.9" width="6.8" height="4.2" rx="1.6" fill="var(--accent-2)" />
+        <rect {...MARK_PIECE} fill="var(--accent-2)" />
       </svg>
       <span
         style={{
@@ -29,6 +46,7 @@ export function DanmuMark({ size = 16, color = 'var(--ink)' as string }: { size?
           fontSize: size + 1,
           fontWeight: 560,
           letterSpacing: '-0.015em',
+          whiteSpace: 'nowrap',
         }}
       >
         Danmu

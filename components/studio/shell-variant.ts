@@ -50,10 +50,18 @@ export function useShellVariant(): { variant: ShellVariant; ready: boolean } {
 
   useIsomorphicLayoutEffect(() => {
     // Compiled out of a production build, so a `?shell=` in a shared URL can
-    // never hand a visitor a prototype. The three prototype modules are still
-    // imported by `StudioShell`; they are side-effect-free and drop out of the
-    // bundle with the branch, and they are meant to be deleted down to one
-    // anyway.
+    // never hand a visitor a prototype.
+    //
+    // That is the whole of what this branch guarantees, and it is worth being
+    // exact about, because the claim that used to stand here — that the prototype
+    // modules "drop out of the bundle with the branch" — was false. Terser does
+    // eliminate the dead half of THIS function, but `StudioShell` switches on the
+    // variant as runtime state, and a bundler cannot prove a branch dead across
+    // that boundary: all three prototypes shipped to every visitor, unreachable
+    // but downloaded. They are behind `next/dynamic` now, which is what actually
+    // keeps them out. Verify with the First Load JS for `/room/[roomId]/model` in
+    // `pnpm build`'s route table, not by grepping `.next/static/chunks` — a lazy
+    // chunk is still a file on disk.
     if (process.env.NODE_ENV === 'production') {
       setState({ variant: 'current', ready: true });
       return;

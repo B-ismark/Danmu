@@ -1,12 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Danmu">
   <!-- Tab identity: the dollhouse room the studio builds — cream floor, clay
-       walls, one piece of furniture. Same palette as the app tokens
-       (--paper, --accent, --accent-2); hand-authored so no asset is fetched. -->
+       walls, one piece of furniture.
+
+       Every number here is `lib/brand-mark.ts`', and it is repeated rather than
+       imported because Next's favicon convention is a static file and a static
+       file cannot import TypeScript. `tests/brand-mark.test.ts` fails the build
+       if this drifts from that module, which is how it earns being a copy — the
+       previous copy carried a 1.7 stroke and a 0.14 fill against the app's own
+       1.8 and 0.16, and nothing ever showed the two at the same size.
+
+       Stroked in --accent rather than --ink: an icon has no inherited colour to
+       take (an SVG favicon's `currentColor` resolves to plain black), and at
+       16px on unknown browser chrome the terracotta is what reads. -->
   <rect width="32" height="32" rx="9" fill="#FBF8F2"/>
-  <path d="M6 21.5 16 26l10-4.5V11L16 6.5 6 11z" fill="#E2613A" opacity="0.14"/>
-  <path d="M6 11l10 4.5L26 11M16 15.5V26" stroke="#E2613A" stroke-width="1.7"
-        stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  <path d="M6 21.5V11l10-4.5L26 11v10.5L16 26z" stroke="#E2613A" stroke-width="1.7"
-        stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M6 21.5 16 26l10-4.5V11L16 6.5 6 11z" fill="#E2613A" opacity="0.16"/>
+  <path d="M6 21.5V11l10-4.5L26 11v10.5L16 26zM6 11l10 4.5L26 11M16 15.5V26" fill="none"
+        stroke="#E2613A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
   <rect x="12.6" y="17.9" width="6.8" height="4.2" rx="1.6" fill="#5E8B6E"/>
 </svg>

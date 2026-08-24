@@ -220,8 +220,15 @@ export function RailSash({
     setRailWidth(side, null);
   }
 
-  const now = metrics ? Math.round(metrics.width) : null;
-  const max = metrics && Number.isFinite(metrics.ceiling) ? Math.round(metrics.ceiling) : null;
+  // A closed rail has no range to report. It measures `--rail-closed` (37px),
+  // which sits BELOW `aria-valuemin`, so claiming the trio there describes an
+  // impossible slider — and the sash stays mounted while closed on purpose, since
+  // Enter is what restores it. `aria-expanded` on the rail's own toggle is what
+  // carries "closed"; a separator with no value is the honest alternative to one
+  // with a wrong value.
+  const shown = open ? metrics : null;
+  const now = shown ? Math.round(shown.width) : null;
+  const max = shown && Number.isFinite(shown.ceiling) ? Math.round(shown.ceiling) : null;
 
   return (
     <div
@@ -233,7 +240,7 @@ export function RailSash({
       // Only claimed once measured. A separator advertising a range it has not
       // read yet is worse than one that has no value on it for a frame.
       aria-valuenow={now ?? undefined}
-      aria-valuemin={metrics ? Math.round(metrics.floor) : undefined}
+      aria-valuemin={shown ? Math.round(shown.floor) : undefined}
       aria-valuemax={max ?? undefined}
       aria-valuetext={now != null ? `${now} pixels` : undefined}
       title="Drag to resize · double-click to reset · Enter to collapse"

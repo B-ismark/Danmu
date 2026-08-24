@@ -854,7 +854,11 @@ export const PART_LIBRARY: LibraryItem[] = [
   // Everything between the rungs is reachable by resizing.
   { label: 'Single bed', group: 'Bedroom', category: 'bed', shape: 'bed-single', dimMM: [1900, 1000, 600] },
   { label: 'Double bed', group: 'Bedroom', category: 'bed', shape: 'bed-double', dimMM: [2000, 1600, 600] },
-  { label: 'King bed', group: 'Bedroom', category: 'bed', shape: 'bed-double', dimMM: [2000, 1800, 1000] },
+  // 600 mm, the same as the other two: `BedGeo` scales the frame, mattress,
+  // duvet, pillows AND a `h * 1.4` headboard off dimMM[2], so a taller number
+  // here does not make a king-size bed — it makes a 67%-larger bed with a 1.4 m
+  // headboard. A king is WIDER than a double, which is dimMM[1]'s job.
+  { label: 'King bed', group: 'Bedroom', category: 'bed', shape: 'bed-double', dimMM: [2000, 1800, 600] },
   // Lighting
   { label: 'Floor lamp', group: 'Lighting', category: 'lamp', shape: 'lamp-floor', dimMM: [300, 300, 1700] },
   { label: 'Table lamp', group: 'Lighting', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500] },

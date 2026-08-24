@@ -9,6 +9,7 @@ import { useParams } from 'next/navigation';
 import { roomStore } from '@/lib/storage';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
+import { livingParents } from '@/lib/rigid-parent';
 import { seedHistory } from '@/lib/history';
 import type { ScenePart } from '@/lib/scene-spec';
 
@@ -54,7 +55,14 @@ export function RoomSync() {
       // physically before trusting it, so a leaked entry can't cause a wrong
       // cascade — but there's no reason to leave it live when a clean reset
       // costs nothing.
-      setParentIds(t?.parentIds ?? {});
+      //
+      // Pruned to the pieces that actually exist, and pruned HERE rather than
+      // where parts are deleted: `removeParts` hands the user an Undo that
+      // re-inserts them, and a delete-time prune would bring them back
+      // unparented — where a surviving edge simply re-validates at the position
+      // they returned to. So the map is allowed to go stale for a session and is
+      // swept on the next load, which is what stops it growing forever in IDB.
+      setParentIds(livingParents(t?.parentIds, useScene.getState().parts));
       ready.current = true;
       // Record the loaded room as the state undo returns *to*. Without a
       // baseline, `undo()` has nothing before the current entry and the first

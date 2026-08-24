@@ -13,6 +13,7 @@ import {
   type Rgb,
 } from './helpers/color';
 import { SCENE } from '@/lib/scene-palette';
+import { MARK_COLORS } from '@/lib/brand-mark';
 import { PAPER_0 } from '@/app/manifest';
 
 // app/globals.css states a contrast ratio next to almost every colour it defines,
@@ -172,6 +173,20 @@ describe('the layers that cannot read a custom property', () => {
     const css = surface('paper-0');
     expect(css, '--paper-0 is not a hex token in globals.css').toBeTruthy();
     expect(deltaEOk(css!, parseHex(PAPER_0)!)).toBeLessThan(0.01);
+  });
+
+  // The brand mark is rasterised into a favicon, an iOS icon and a share card,
+  // none of which can resolve a custom property — so `lib/brand-mark.ts` names its
+  // three colours as literals, the same bargain scene-palette and the manifest
+  // make. This is the half of that bargain that keeps them honest.
+  it.each([
+    ['tile', 'paper'],
+    ['accent', 'accent'],
+    ['piece', 'accent-2'],
+  ] as Array<[keyof typeof MARK_COLORS, string]>)('MARK_COLORS.%s is --%s', (key, token) => {
+    const css = surface(token);
+    expect(css, `--${token} is not a hex token in globals.css`).toBeTruthy();
+    expect(deltaEOk(css!, parseHex(MARK_COLORS[key])!)).toBeLessThan(0.01);
   });
 
   it('the manifest and the layout agree on what colour the app is', () => {
