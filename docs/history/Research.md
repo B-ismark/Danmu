@@ -1021,12 +1021,14 @@ the openings are.
 | 2 | II — relation as `min` over anchors | The wandering rug and the wandering lamp | **shipped** |
 | 3 | I — one walkway rule; affinity by role | The phantom 40 in the T; the drifting side table | **shipped** |
 | 4 | V — doors and windows in the presets | Most of "no rationale"; four dormant rules turned back on | **shipped** |
-| 5 | III — group-rigid solve | Chairs stop permuting; arrangements stay recognisable | not needed yet — see below |
+| 5 | III — group-rigid solve | A group that must cross the room can | **shipped** — deferred twice first, see §3.10.7 |
 | 6 | VII — dressing | Art, curtains, a pendant, bedside lamps — all wall- or ceiling-mounted, so free | **shipped** |
 | 7 | VI — scored constructive seeding | Rooms that score well by construction | **shipped** |
 
 1–3 are small and cover most of the first complaint. 4 covers most of the second.
-5–6 are what make the result good rather than merely not wrong.
+5–7 are what make the result good rather than merely not wrong. Part III kept its place in
+the order and lost it twice on the evidence before a probe finally produced a room that
+needed it — §3.10.7.
 
 #### 3.10.5 What shipping 1–4 actually did
 
@@ -1084,14 +1086,69 @@ cheap pre-filter would have surfaced, because the plans that score best before t
 clearance field runs are the ones that seal a corner off. Details in the part VI note
 above.
 
-**Why part III is still not next.** It was the structural answer to chairs permuting around
-their table and to a group being reassembled somewhere else on every press. Both of
-those turned out to be symptoms of causes 1 and 2 rather than of the flat search: with
-the relation an assignment and the walkway rule shared, the dining sets stop moving at
-all. Group-rigid moves are still the right shape for a room the user has genuinely
-made a mess of — the case where a whole group must cross the room — and the parent
-forest that part II now computes is most of the work. It is worth doing when there is
-a room that needs it, not before.
+#### 3.10.7 Part III, and the case that finally justified it
+
+Part III was deferred twice, on the grounds that chairs permuting around their table
+and groups being reassembled elsewhere on every press turned out to be symptoms of
+causes 1 and 2 rather than of the flat search — which was true, and is why it was right
+to wait. The note said *"it is worth doing when there is a room that needs it."* Two
+probes were built to find out whether such a room exists.
+
+**Probe 1 — a room someone has scrambled.** Living group in a corner facing the wall,
+dining set strewn across the other half, ten pieces, one door. The flat search handles
+it comfortably: **363.7 → 6.8–12.1** over six seeds, relation cost 279.5 → 0.8–6.2,
+nothing stranded, and every unmet relation left under half a metre out of band. No
+group machinery needed, and the earlier judgement holds exactly.
+
+**Probe 2 — two intact groups, each standing where the other belongs.** Take a seeded
+preset and exchange the two groups bodily, so nothing inside a group has moved relative
+to its own members. This is a different problem, and the flat search cannot do it:
+
+> On the open plan the exchanged room costs **23.2** against the **13.4** of the same
+> furniture the right way round, and the solver moved **0–1 pieces of eleven at every
+> seed**, landing at 19.7–23.2. It is a textbook local minimum — taking any single
+> piece out of a coherent group makes the room worse, so no single-piece move is
+> downhill and the whole group has to move at once or not at all.
+
+So part III ships, as **its own pass rather than extra proposals**. Mixing group moves
+into the piece passes was tried first and measured worse: over twenty seeds it improved
+the best case sharply (the T's 7.4 → 1.2, the open plan's 17.5 → 4.4) and left the mean
+where it was or raised it, while a merely-scrambled room went from a mean of 3.8 to 5.4
+— because every proposal spent hopping between basins is one the single-piece moves did
+not get for settling, and settling is what most rooms actually need. Confining the mixed
+moves to the hot half of the schedule did not fix it either.
+
+Given its own budget ahead of the piece passes, forty seeds, pass off → on:
+
+| | off | on |
+|---|---|---|
+| `t`, median | 30.6 | **9.3** |
+| `t`, mean | 47.0 | 31.1 |
+| `t`, best | 8.9 | **0.6** |
+| open plan, mean | 19.3 | **16.9** |
+| solve time | 218 / 87 ms | 233 / 105 ms |
+
+Read the median. The T's mean is dominated by a handful of seeds that end with hard
+violations either way — its worst is 379.9 with the pass *off* — and picking a budget
+on a statistic that noisy is fitting noise. On the nine-seed fixture the test pins, the
+whole distribution moves: median 30.2 → 1.6, best 11.8 → 0.6, and even the worst run
+with the pass (25.4) beats the median without it.
+
+Three details are load-bearing:
+
+- **Groups come from the arrangement, not from the relation table.** `intactGroups`
+  unions only relation edges that are *currently satisfied* (`GROUP_INTACT`, about half
+  a metre out of band). A scrambled room therefore has no groups, the pass is skipped,
+  and probe 1's result is preserved by construction rather than by luck.
+- **Movable members only.** A sofa `faces` its wall-mounted screen, so the screen would
+  otherwise join the living group and a group move would try to drag a television off
+  its wall. Leaving it out is also right in substance: a fixed screen is exactly what
+  should make a seating group reluctant to move, and it does that through the relation
+  cost, from outside the group.
+- **The pass restarts from `best`,** so it cannot hand the piece passes a worse
+  arrangement than it was given. The only thing it changes for them is the RNG stream,
+  which is why an already-solved room measures ±10 % either way and neither direction
+  means anything.
 
 ---
 

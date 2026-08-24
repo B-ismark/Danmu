@@ -13,6 +13,8 @@ import {
 import { isWorthOffering, solveLayout } from '@/lib/layout-solve';
 import { analyzeRoom } from '@/lib/clearance';
 import { footprintBounds } from '@/lib/footprint';
+import { footprintForLayout } from '@/lib/footprint';
+import { defaultScene } from '@/lib/scene-spec';
 import type { ScenePart } from '@/lib/scene-spec';
 import type { Footprint } from '@/lib/footprint';
 
@@ -760,5 +762,92 @@ describe('which anchor an obligation is discharged by', () => {
     const other = parentOf([l, b, a], [lampAt, right, left], 0);
     expect(one).toBe(other);
     expect([a.id, b.id]).toContain(one);
+  });
+});
+
+describe('the solver moves groups, not only pieces', () => {
+  // §3.10.3 part III, and the one case the flat search provably cannot do. Two groups,
+  // each internally correct, standing where the other one belongs: taking any single
+  // piece out of a coherent group makes the room worse, so every single-piece move is
+  // uphill and the annealer stays where it is. Measured on the open plan before the
+  // group pass existed — 0–1 pieces moved of eleven, at every seed.
+  const LIVING = new Set(['sofa', 'coffee-table', 'rug', 'lamp-floor']);
+  const DINING = new Set(['desk-standard', 'chair-dining']);
+
+  /** A seeded preset with its two groups exchanged bodily. Nothing inside a group has
+   *  moved relative to its own members — only the groups are in the wrong places. */
+  function groupsExchanged(id: 't' | 'open', w: number, d: number) {
+    const poly = footprintForLayout(id, w, d);
+    const seeded = defaultScene(id, w, d, { footprint: poly, height: 2.8 });
+    const mid = (set: Set<string>) => {
+      const g = seeded.filter((p) => set.has(p.shape) && !p.wallMounted);
+      return [
+        g.reduce((s, p) => s + p.pos[0], 0) / g.length,
+        g.reduce((s, p) => s + p.pos[2], 0) / g.length,
+      ];
+    };
+    const [lx, lz] = mid(LIVING);
+    const [dx, dz] = mid(DINING);
+    const parts = seeded.map((p) => {
+      if (p.wallMounted) return { ...p };
+      const set = LIVING.has(p.shape) ? LIVING : DINING.has(p.shape) ? DINING : null;
+      if (!set) return { ...p };
+      const [ox, oz] = set === LIVING ? [dx - lx, dz - lz] : [lx - dx, lz - dz];
+      return { ...p, pos: [p.pos[0] + ox, p.pos[1], p.pos[2] + oz] as [number, number, number] };
+    });
+    const sctx: LayoutContext = { parts: seeded, movable: seeded.map(() => true), footprint: poly };
+    const target = costBreakdown(prepare(sctx), at(seeded), DEFAULT_WEIGHTS, NAV_CELL).total;
+    return { parts, poly, target };
+  }
+
+  it('carries two exchanged groups back where they belong', () => {
+    const { parts, poly, target } = groupsExchanged('t', 5.5, 4.7);
+    const model = prepare({ parts, movable: parts.map((p) => !p.wallMounted), footprint: poly });
+
+    // Nine seeds, because one run of a stochastic search proves nothing either way,
+    // and on the MEDIAN, because this fixture's mean is dominated by a couple of seeds
+    // that end badly with the pass on or off. Measured, group pass off → on:
+    //
+    //   median  30.2 → 1.6      best  11.8 → 0.6      worst of nine  39.7 → 25.4
+    //
+    // The whole distribution moves: even the worst run with the pass beats the median
+    // without it. Both bars below are checked by mutation — setting `GROUP_STEPS = 0`
+    // fails each of them, which an earlier version of this test did not.
+    const costs = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+      .map((seed) => solveLayout(parts, poly, parts.map(() => false), { seed }))
+      .map((r) => costBreakdown(model, r.placements, DEFAULT_WEIGHTS, NAV_CELL).total)
+      .sort((a, b) => a - b);
+
+    expect(costs[4]).toBeLessThan(10);
+    // …and the best run gets under the room it was built from, which no run does
+    // without the pass: the flat search's best of nine is 11.8 against a 5.5 target.
+    expect(costs[0]).toBeLessThan(target);
+  });
+
+  it('finds the swap in an open plan the flat search sits still in', () => {
+    // The gentler case — the two halves are similar enough that exchanging the groups
+    // breaks no wall, so the room is merely worse rather than invalid, and every single
+    // piece move out of it is uphill. Off → on, over nine seeds: median 19.9 → 16.0.
+    const { parts, poly } = groupsExchanged('open', 7.5, 5.6);
+    const model = prepare({ parts, movable: parts.map((p) => !p.wallMounted), footprint: poly });
+    const costs = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+      .map((seed) => solveLayout(parts, poly, parts.map(() => false), { seed }))
+      .map((r) => costBreakdown(model, r.placements, DEFAULT_WEIGHTS, NAV_CELL).total)
+      .sort((a, b) => a - b);
+    expect(costs[4]).toBeLessThan(19);
+  });
+
+  it('finds no group in a room nobody has arranged', () => {
+    // The complement, and why `intactGroups` reads the arrangement rather than the
+    // relation table: where nothing is currently grouped there is nothing to carry, the
+    // pass finds nothing and is skipped, and the flat search does the work — which is
+    // measurably the right answer there (363.7 → 6.8 over six seeds).
+    const parts = [
+      part({ category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880], pos: [1.6, 0.44, 1.6], rot: 0.4 }),
+      part({ category: 'table', shape: 'coffee-table', dimMM: [1100, 600, 420], pos: [-2.4, 0.21, -1.5], rot: 1.1 }),
+      part({ category: 'lamp', shape: 'lamp-floor', dimMM: [400, 400, 1500], pos: [2.5, 0.75, -1.6], rot: 0, circle: true }),
+    ];
+    const model = prepare(ctxOf(parts));
+    expect(relationParents(model, at(parts)).every((e) => e.cost > 0.25)).toBe(true);
   });
 });
