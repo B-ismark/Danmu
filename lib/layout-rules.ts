@@ -273,6 +273,92 @@ export function routeWidth(footprint: Footprint): number {
   return WALK_MIN + (WALK_COMFORT - WALK_MIN) * t;
 }
 
+/** Which pieces' pairwise gaps are walkways people actually use.
+ *
+ *  Moved here from `lib/clearance.ts`, where it lived as `WALKWAY_CATEGORIES` and was
+ *  the report's alone. The solver had no equivalent and charged EVERY obstacle pair,
+ *  which is how three dining chairs 400 mm apart around their own table came to cost
+ *  `walkway 40.4` on a room `analyzeRoom` reported nothing about — and how "Suggest"
+ *  came to fling a dining set across the room and announce that it had "widened the
+ *  walkways". Chairs at one table are not a corridor. One predicate, three readers:
+ *  the report, the solver, and the seeder's own `pinches`.
+ *
+ *  Bulky, floor-standing, and the thing you walk AROUND rather than sit at. A dining
+ *  table is deliberately absent for the same reason a chair is: the gap between a
+ *  table and its own chairs is the arrangement, and `belongTogether` would have to
+ *  undo pair by pair what this settles once. */
+const ROUTE_FORMING = new Set<Role>(['sofa', 'bed', 'wardrobe', 'bookshelf', 'fridge', 'desk']);
+
+export function formsRoute(role: Role): boolean {
+  return ROUTE_FORMING.has(role);
+}
+
+// ─── Where a piece wants to stand ───────────────────────────────────────────
+
+/** What a piece wants from the room's walls.
+ *
+ *  `wallAffinity` in `lib/physics.ts` answers the same question keyed on `Category`,
+ *  and that is the right key for the job it does — deciding where a piece the user
+ *  has just added should land. It is the wrong key for SCORING, because `Category`
+ *  cannot tell a coffee table from a dining table from a side table: all three are
+ *  `table`, all three came out `prefers-middle`, and so the solver charged a coffee
+ *  table for sitting in front of the sofa where the relation table had just put it,
+ *  and dragged a side table 0.59–1.21 m away from the armchair whose arm it exists
+ *  to be within reach of. §3.9's "a role is not a category" lesson, one file short.
+ *
+ *  `'by-relation'` is the addition: a piece whose place is decided by what it belongs
+ *  to has no opinion of its own about walls or middles, and a term that gives it one
+ *  is a term fighting the relation. It applies only when the anchor is actually in
+ *  the room — see `fallbackAffinity`. */
+export type PlaceAffinity = 'must-wall' | 'prefers-wall' | 'prefers-middle' | 'by-relation' | 'free';
+
+const AFFINITY_BY_ROLE: Partial<Record<Role, PlaceAffinity>> = {
+  door: 'must-wall',
+  window: 'must-wall',
+  'wall-art': 'must-wall',
+  tv: 'must-wall',
+  monitor: 'must-wall',
+
+  bed: 'prefers-wall',
+  sofa: 'prefers-wall',
+  wardrobe: 'prefers-wall',
+  bookshelf: 'prefers-wall',
+  'shoe-rack': 'prefers-wall',
+  fridge: 'prefers-wall',
+  appliance: 'prefers-wall',
+  desk: 'prefers-wall',
+
+  'dining-table': 'prefers-middle',
+
+  // Placed by what they belong to, not by the room.
+  'coffee-table': 'by-relation',
+  'side-table': 'by-relation',
+  nightstand: 'by-relation',
+  rug: 'by-relation',
+  ottoman: 'by-relation',
+  'floor-lamp': 'by-relation',
+  'table-lamp': 'by-relation',
+  'dining-chair': 'by-relation',
+  'office-chair': 'by-relation',
+  armchair: 'by-relation',
+
+  plant: 'free',
+};
+
+export function placeAffinity(role: Role): PlaceAffinity {
+  return AFFINITY_BY_ROLE[role] ?? 'free';
+}
+
+/** What a `'by-relation'` piece wants when the thing it belongs to is not in the
+ *  room at all.
+ *
+ *  Without this a lone coffee table has no opinion whatsoever and the solver will
+ *  leave it wherever it lands, which is worse than the rule it replaced. A surface
+ *  with nothing to serve still reads better off the wall; everything else is free. */
+export function fallbackAffinity(role: Role): PlaceAffinity {
+  return role === 'coffee-table' || role === 'side-table' ? 'prefers-middle' : 'free';
+}
+
 /** Sill height of a window whose part we cannot measure — only used when a window
  *  part carries no usable Y. Ordinary domestic sills sit at about this. */
 const DEFAULT_SILL = 0.9;
@@ -500,6 +586,11 @@ export type RelationKind =
   | 'near';
 
 export type Relation = {
+  /** Which spec this came from. Carried so a consumer can tell one OBLIGATION from
+   *  another: a piece owes each spec once, over whichever of that spec's anchors
+   *  suits it best, and grouping by this id is what turns the table from a
+   *  conjunction into a choice. See `relationSpecId`. */
+  specId: string;
   kind: RelationKind;
   /** Metres. `min`/`max` are resolved for the actual pair, so a viewing distance
    *  can be a multiple of the screen it is about. */
@@ -511,6 +602,8 @@ export type Relation = {
 };
 
 type RelationSpec = {
+  /** Stable, and the identity of the obligation — see `Relation.specId`. */
+  id: string;
   self: Role[];
   anchor: Role[];
   kind: RelationKind;
@@ -523,6 +616,7 @@ const band = (min: number, max: number) => () => [min, max] as [number, number];
 
 const RELATIONS: RelationSpec[] = [
   {
+    id: 'nightstand-bed',
     self: ['nightstand'],
     anchor: ['bed'],
     kind: 'beside',
@@ -531,6 +625,7 @@ const RELATIONS: RelationSpec[] = [
     reason: 'a nightstand wants to touch the head of the bed',
   },
   {
+    id: 'coffee-table-sofa',
     self: ['coffee-table'],
     anchor: ['sofa'],
     kind: 'in-front',
@@ -539,6 +634,7 @@ const RELATIONS: RelationSpec[] = [
     reason: 'close enough to reach from the sofa, far enough to get past',
   },
   {
+    id: 'side-table-seat',
     self: ['side-table'],
     anchor: ['sofa', 'armchair'],
     kind: 'beside',
@@ -547,6 +643,7 @@ const RELATIONS: RelationSpec[] = [
     reason: 'within reach of the arm of the chair',
   },
   {
+    id: 'lamp-seat',
     self: ['floor-lamp', 'table-lamp'],
     anchor: ['sofa', 'armchair', 'bed'],
     kind: 'beside',
@@ -557,6 +654,7 @@ const RELATIONS: RelationSpec[] = [
   {
     // 600 mm is the figure a chair-at-a-table rule wants: further and the chair is
     // not at the table, nearer and it is under it, which is also fine.
+    id: 'chair-table',
     self: ['dining-chair', 'office-chair'],
     anchor: ['dining-table', 'desk'],
     kind: 'in-front',
@@ -565,6 +663,7 @@ const RELATIONS: RelationSpec[] = [
     reason: 'a chair belongs at the table it is for',
   },
   {
+    id: 'ottoman-seat',
     self: ['ottoman'],
     anchor: ['sofa', 'armchair'],
     kind: 'in-front',
@@ -575,6 +674,7 @@ const RELATIONS: RelationSpec[] = [
   {
     // The viewing distance is a property of the SCREEN, so it is computed from
     // the screen — 1.2–2.5 × the diagonal, the same rule the room report states.
+    id: 'seat-tv',
     self: ['sofa', 'armchair'],
     anchor: ['tv'],
     kind: 'faces',
@@ -586,6 +686,7 @@ const RELATIONS: RelationSpec[] = [
     reason: 'comfortable viewing distance for a screen this size',
   },
   {
+    id: 'armchair-sofa',
     self: ['armchair'],
     anchor: ['sofa'],
     kind: 'faces',
@@ -594,6 +695,7 @@ const RELATIONS: RelationSpec[] = [
     reason: 'close enough to talk across without raising your voice',
   },
   {
+    id: 'rug-group',
     self: ['rug'],
     anchor: ['sofa', 'bed', 'dining-table'],
     kind: 'near',
@@ -602,6 +704,7 @@ const RELATIONS: RelationSpec[] = [
     reason: 'a rug anchors the group it sits under',
   },
   {
+    id: 'desk-window',
     self: ['desk'],
     anchor: ['window'],
     kind: 'beside',
@@ -611,7 +714,14 @@ const RELATIONS: RelationSpec[] = [
   },
 ];
 
-/** The relation `self` has to `anchor`, if any — resolved for this actual pair. */
+/** The relation `self` has to `anchor`, if any — resolved for this actual pair.
+ *
+ *  One relation per ordered pair: the first spec that matches wins. Two DIFFERENT
+ *  specs can still both apply to one piece — an armchair owes "face the screen" and
+ *  "sit across from the sofa", which are separate obligations — and they stay
+ *  separate because they carry different `specId`s. What must not happen is one
+ *  spec being owed several times over because it lists several anchors; that is what
+ *  `relationOptions` is for. */
 export function relationFor(self: ScenePart, anchor: ScenePart): Relation | null {
   const a = roleOf(self);
   const b = roleOf(anchor);
@@ -619,9 +729,43 @@ export function relationFor(self: ScenePart, anchor: ScenePart): Relation | null
     if (!spec.self.includes(a) || !spec.anchor.includes(b)) continue;
     const [min, max] = spec.band(self, anchor);
     if (!(max > 0)) continue;
-    return { kind: spec.kind, min, max, weight: spec.weight, reason: spec.reason };
+    return { specId: spec.id, kind: spec.kind, min, max, weight: spec.weight, reason: spec.reason };
   }
   return null;
+}
+
+/** Every obligation `self` has, each with all the anchors that could discharge it.
+ *
+ *  The fix for the single largest source of nonsense in a suggestion. `RELATIONS`
+ *  lists a rug's anchors as `['sofa', 'bed', 'dining-table']`, meaning *a rug goes
+ *  under a group* — but a consumer that walks pairs reads it as *a rug goes under
+ *  every group*, and charges the rug for not being under the dining table it is not
+ *  under. Measured on the seeded T room: `rug → sofa` cost 0 at 0.61 m, and
+ *  `rug → dining-table` cost **38.3** at 3.57 m, which was the whole of that room's
+ *  relation term. The solver's answer was to drag the rug out from under the sofa
+ *  to a point between the two groups, 1.36–2.28 m depending on the seed. The floor
+ *  lamp went the same way, for the same reason, on the L.
+ *
+ *  A rug is under one group and a lamp is beside one seat. So the anchors of a spec
+ *  are ALTERNATIVES: group them, and let the consumer take the best one. */
+export function relationOptions(
+  self: ScenePart,
+  candidates: ScenePart[],
+): Array<{ specId: string; options: Array<{ anchor: number; rel: Relation }> }> {
+  // The band is resolved PER PAIR — a viewing distance is a multiple of the screen
+  // it is about — so each option carries its own resolved relation rather than the
+  // group carrying one for all of them. Two screens of different sizes in one room
+  // is unusual and would otherwise be scored against whichever was found first.
+  const groups = new Map<string, { specId: string; options: Array<{ anchor: number; rel: Relation }> }>();
+  for (let j = 0; j < candidates.length; j++) {
+    if (candidates[j] === self) continue;
+    const rel = relationFor(self, candidates[j]);
+    if (!rel) continue;
+    const g = groups.get(rel.specId);
+    if (g) g.options.push({ anchor: j, rel });
+    else groups.set(rel.specId, { specId: rel.specId, options: [{ anchor: j, rel }] });
+  }
+  return [...groups.values()];
 }
 
 /** May these two legitimately sit closer together than a walkway?

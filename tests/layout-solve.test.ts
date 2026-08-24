@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  costBreakdown,
   scoreLayout,
   navigabilityCost,
   prepare,
@@ -7,7 +8,7 @@ import {
   type LayoutContext,
   type Placement,
 } from '@/lib/layout-score';
-import { solveLayout } from '@/lib/layout-solve';
+import { isWorthOffering, solveLayout } from '@/lib/layout-solve';
 import { analyzeRoom } from '@/lib/clearance';
 import { footprintBounds } from '@/lib/footprint';
 import type { ScenePart } from '@/lib/scene-spec';
@@ -101,21 +102,27 @@ describe('scoreLayout', () => {
     expect(clash).toBeGreaterThan(tucked * 5);
   });
 
-  it('costs a gap you cannot walk through, and not a flush one', () => {
+  it('costs a gap you cannot walk through, and neither a flush one nor a clear one', () => {
     const a = sofa();
     const b = wardrobe();
-    const ctx = ctxOf([a, b]);
-    // Wardrobe back at z −2, front at −1.4. Sofa at z −1.1 is flush; at −0.9 it
-    // leaves 20 cm, which is the pinch.
-    const flush = scoreLayout(ctx, [
-      { x: 0, z: -0.925, yaw: 0 },
-      { x: 0, z: -1.7, yaw: 0 },
-    ]);
-    const pinched = scoreLayout(ctx, [
-      { x: 0, z: -0.7, yaw: 0 },
-      { x: 0, z: -1.7, yaw: 0 },
-    ]);
-    expect(pinched).toBeGreaterThan(flush);
+    const m = prepare(ctxOf([a, b]));
+    // Wardrobe back at z −2, front at −1.4. The sofa's back edge is 475 mm behind
+    // its centre, so z −0.925 is flush against the wardrobe, −0.7 leaves 225 mm,
+    // and 0.5 leaves well over a walkway.
+    const walkwayAt = (z: number) =>
+      costBreakdown(m, [
+        { x: 0, z, yaw: 0 },
+        { x: 0, z: -1.7, yaw: 0 },
+      ]).walkway;
+
+    // On the TERM, not on the total. Two pieces flush is also a wardrobe whose doors
+    // are completely blocked, and the access term says so far more loudly than the
+    // walkway term ever could — so a total-based comparison here was measuring the
+    // wrong rule, and only passed while the solver policed a wider walkway (900 mm)
+    // than the room report ever reports (600 mm). Those two are one number now.
+    expect(walkwayAt(-0.925)).toBe(0); // flush is deliberate composition
+    expect(walkwayAt(-0.7)).toBeGreaterThan(0); // 225 mm is the pinch
+    expect(walkwayAt(0.5)).toBe(0); // and past a walkway there is nothing to say
   });
 
   it('wants seating to face the television, at a sensible distance', () => {
@@ -369,6 +376,68 @@ describe('it leaves alone what was already right', () => {
     }
   });
 });
+
+// ─── Every move has to pay for itself ───────────────────────────────────────
+//
+// The annealer accepts uphill moves on purpose, and never goes back to ask whether
+// each one was worth it — so what shipped was whatever its best snapshot happened to
+// hold, noise included. Measured over the five presets at three seeds, offering each
+// moved piece its old place back reverted 40–63 % of the moves and left the total
+// cost equal or LOWER in eight of the twelve runs.
+
+describe('a suggestion is only the moves that bought something', () => {
+  it('never returns a layout worse than the one it was given', () => {
+    // The invariant every caller downstream assumes, and the one the prune's slack
+    // budget could otherwise spend: better, or unchanged, never worse.
+    for (let seed = 1; seed <= 8; seed++) {
+      const parts = messy();
+      const r = solveLayout(parts, RECT, parts.map(() => false), { seed });
+      expect(r.after).toBeLessThanOrEqual(r.before);
+      if (r.moved.length === 0) expect(r.after).toBe(r.before);
+    }
+  });
+
+  it('says what each move bought, and never blames the moving', () => {
+    const parts = messy();
+    const r = solveLayout(parts, RECT, parts.map(() => false), { seed: 3, steps: 2500 });
+    expect(r.moves.map((m) => m.index)).toEqual(r.moved);
+    for (const m of r.moves) {
+      // `inertia` measures the move itself, so it is always the term that got worse;
+      // crediting a move to it would have every explanation read "because it moved".
+      expect(m.term).not.toBe('inertia');
+      expect(m.gain).toBeGreaterThan(0);
+      expect(m.distance > MOVE_MIN || m.turn > TURN_MIN).toBe(true);
+    }
+  });
+
+  it('does not count a piece that only wobbled as moved', () => {
+    // `MOVE_EPSILON` guarded translation and had no sibling for yaw, so 0.02 rad —
+    // 1.1°, invisible — counted as a moved piece and inflated every "moved N pieces".
+    const parts = messy();
+    for (let seed = 1; seed <= 6; seed++) {
+      const r = solveLayout(parts, RECT, parts.map(() => false), { seed });
+      for (const i of r.moved) {
+        const d = Math.hypot(r.placements[i].x - parts[i].pos[0], r.placements[i].z - parts[i].pos[2]);
+        const turn = Math.abs(r.placements[i].yaw - parts[i].rot);
+        expect(d > MOVE_MIN || turn > TURN_MIN).toBe(true);
+      }
+    }
+  });
+
+  it('is not worth offering for a rounding error', () => {
+    // A solve that trims 3.1 to 2.4 by sliding a sofa 10 cm and a rug 10 cm has found
+    // a real improvement and is still not an answer to "give me an idea".
+    expect(isWorthOffering(3.1, 2.4)).toBe(false);
+    expect(isWorthOffering(85.5, 18.2)).toBe(true);
+    expect(isWorthOffering(4.0, 4.0)).toBe(false);
+  });
+});
+
+/** The thresholds the solver reports a move at — a couple of centimetres, and about
+ *  three degrees. Spelled here because the tests above assert against them and a
+ *  number typed twice is a number that drifts. */
+const MOVE_MIN = 0.02;
+const TURN_MIN = 0.05;
 
 describe('re-fitting after a change', () => {
   /** A working bedroom whose wardrobe has been made much wider — which is exactly

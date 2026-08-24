@@ -25,7 +25,6 @@
 
 import type { ScenePart } from './scene-spec';
 import type { Footprint } from './footprint';
-import { wallAffinity } from './physics';
 import {
   buildClearanceField,
   componentAreas,
@@ -46,9 +45,13 @@ import {
 import {
   accessZones,
   doorPath,
+  fallbackAffinity,
   footAt,
+  formsRoute,
   isObstacle,
+  placeAffinity,
   relationFor,
+  relationOptions,
   roleOf,
   roomProfile,
   routeWidth,
@@ -56,6 +59,7 @@ import {
   WALK_MIN,
   zoneExempt,
   type AccessRule,
+  type PlaceAffinity,
   type Relation,
   type Role,
   type RoomProfile,
@@ -115,6 +119,17 @@ export const DEFAULT_WEIGHTS: ScoreWeights = {
   balance: 2,
   inertia: 1.5,
 };
+
+/** How much dearer facing the WRONG WAY is than being a few degrees off square.
+ *
+ *  `angleCost` is normalised to 0…1 over a half turn, so without this a piece turned
+ *  completely backwards cost exactly one `alignment` unit — four, at the weight
+ *  above. Which is less than the inertia of moving it 2.7 m, and a third of what a
+ *  300 mm walkway pinch costs. The solver duly returned sofas with their backs to
+ *  the room and called it an improvement. Applied only where the heading is a fact
+ *  rather than a preference: a piece against a wall faces the room, full stop. The
+ *  gentler `quarterTurnCost` still governs everything else. */
+const FACING_GAIN = 4;
 
 /** Turned up when the room or a piece has been resized and the job is to repair
  *  the arrangement rather than reinvent it: everything that was still fine stays
@@ -238,10 +253,26 @@ export type LayoutModel = {
   apertures: Array<{ owner: number; rule: AccessRule; foot: Foot }>;
   /** Routes in from each door, likewise static. */
   paths: Array<{ owner: number; foot: Foot }>;
-  /** The pairs that actually have a functional relation, resolved once. The table
-   *  is scanned for every ordered pair otherwise, which for thirty pieces is 870
-   *  lookups against eleven specs per evaluation. */
-  relations: Array<{ i: number; j: number; rel: Relation }>;
+  /** What each piece OWES, resolved once, grouped by obligation.
+   *
+   *  Not a flat list of pairs. A spec that names several anchors — a rug's
+   *  `['sofa', 'bed', 'dining-table']` — is one obligation with several ways to
+   *  discharge it, and flattening it made the rug owe every group in the room at
+   *  once. See `relationOptions`, which owns that reading, and §3.10.1 of
+   *  `docs/history/Research.md` for the 38.3 it used to cost.
+   *
+   *  Resolved here rather than per evaluation for the same reason everything else in
+   *  this model is: the table would otherwise be scanned for all 870 ordered pairs of
+   *  a thirty-piece room, tens of thousands of times. */
+  obligations: Array<{ i: number; options: Array<{ j: number; rel: Relation }> }>;
+  /** Does this piece have any anchor at all in this room? Read by `affinity` — a
+   *  coffee table with a sofa is placed by the sofa; one on its own has to fall back
+   *  to an opinion of its own or it will be left wherever it lands. */
+  anchored: boolean[];
+  /** Where each piece wants to stand, already resolved through `anchored`. */
+  affinity: PlaceAffinity[];
+  /** Does this piece's gap with another form a route someone walks down? */
+  routeFormer: boolean[];
   /** The pairs allowed to sit closer than a walkway, as an unordered membership
    *  test, `i * n + j` both ways.
    *
@@ -305,17 +336,18 @@ export function prepare(ctx: LayoutContext): LayoutModel {
   }
   const paths = doors.map((i) => ({ owner: i, foot: doorPath(parts[i], route) }));
 
-  const relations: LayoutModel['relations'] = [];
+  const obligations: LayoutModel['obligations'] = [];
+  const anchored = parts.map(() => false);
   const related = new Set<number>();
   for (let i = 0; i < parts.length; i++) {
-    for (let j = 0; j < parts.length; j++) {
-      if (i === j) continue;
-      const rel = relationFor(parts[i], parts[j]);
-      if (!rel) continue;
-      relations.push({ i, j, rel });
-      if (rel.min < WALK_MIN) {
-        related.add(i * parts.length + j);
-        related.add(j * parts.length + i);
+    for (const group of relationOptions(parts[i], parts)) {
+      obligations.push({ i, options: group.options.map((o) => ({ j: o.anchor, rel: o.rel })) });
+      anchored[i] = true;
+      for (const o of group.options) {
+        if (o.rel.min < WALK_MIN) {
+          related.add(i * parts.length + o.anchor);
+          related.add(o.anchor * parts.length + i);
+        }
       }
     }
   }
@@ -337,7 +369,13 @@ export function prepare(ctx: LayoutContext): LayoutModel {
     zoneGroups,
     apertures,
     paths,
-    relations,
+    obligations,
+    anchored,
+    affinity: roles.map((r, i) => {
+      const want = placeAffinity(r);
+      return want === 'by-relation' && !anchored[i] ? fallbackAffinity(r) : want;
+    }),
+    routeFormer: roles.map(formsRoute),
     related,
     route,
     centre: polyCentroid(ctx.footprint as Poly),
@@ -516,21 +554,36 @@ export function costBreakdown(
   }
 
   // ── Circulation: gaps that are neither flush nor passable ─────────────────
+  //
+  // Two things here were the solver's alone and are now the report's rule, read
+  // through `layout-rules`:
+  //
+  //   · **Which pairs.** Only a gap between BULKY pieces is a walkway. Every
+  //     obstacle pair used to count, so three dining chairs 400 mm apart around
+  //     their own table cost `walkway 40.4` on a room `analyzeRoom` reported nothing
+  //     about — and the solver flung the dining set across the floor to fix it. See
+  //     `formsRoute`.
+  //   · **The bar.** `WALK_MIN`, the same fixed 600 mm the report calls a fault at.
+  //     This used to be `routeWidth`, which scales to 900 mm in a large room, so the
+  //     solver policed a rule the report would never raise and the two disagreed by
+  //     construction on every room over 20 m². Comfort beyond 600 mm is expressed
+  //     where it is actually a requirement — a diner's pull-back, a desk chair's
+  //     push-back — by the access zones, which measure it per activity instead of
+  //     applying one number to every gap in the room.
   for (let i = 0; i < feet.length; i++) {
-    if (!obstacle[i]) continue;
+    if (!obstacle[i] || !m.routeFormer[i]) continue;
     for (let j = i + 1; j < feet.length; j++) {
-      if (!obstacle[j]) continue;
+      if (!obstacle[j] || !m.routeFormer[j]) continue;
       // Pieces that belong together are exempt — see `related`.
       if (m.related.has(i * feet.length + j)) continue;
-      // `boxGap` never overstates how close they are, so anything it puts beyond a
-      // route's width cannot be a pinch and never needs the exact corner-to-corner
-      // answer. This one reject is worth a third of an evaluation.
-      if (boxGap(i, j) >= m.route) continue;
+      // `boxGap` never overstates how close they are, so anything it puts beyond the
+      // bar cannot be a pinch and never needs the exact corner-to-corner answer.
+      if (boxGap(i, j) >= WALK_MIN) continue;
       const gap = obbGap(feet[i], feet[j]);
       // A pinch is a gap someone would try to walk through and could not. Flush is
       // deliberate composition, and the cost has to go back to zero there or the
       // solver will pull everything apart to escape a penalty it cannot.
-      if (gap > 0.12 && gap < m.route) c.walkway += m.route - gap;
+      if (gap > 0.12 && gap < WALK_MIN) c.walkway += WALK_MIN - gap;
     }
   }
 
@@ -544,7 +597,11 @@ export function costBreakdown(
     if (p.wallMounted) continue;
     const f = feet[i];
     const edge = nearestEdge(poly, f.cx, f.cz, m.centre);
-    const affinity = wallAffinity(p.category);
+    // By ROLE, not by category — a coffee table, a side table and a dining table are
+    // all `table` and want three different things. And `'by-relation'` pieces get
+    // neither term: their place is the relation's answer, and a wall or middle term
+    // beside it is a second answer pulling the other way. See `placeAffinity`.
+    const affinity = m.affinity[i];
 
     if (edge) {
       // Distance from the piece's BACK to the wall, not from its centre: a deep
@@ -555,7 +612,12 @@ export function costBreakdown(
         c.wall += Math.max(0, back);
         // …and facing INTO the room, which is the other half of being against a
         // wall. A wardrobe with its doors in the plaster is flush and useless.
-        c.alignment += angleCost(placements[i].yaw, edge.yaw);
+        //
+        // `FACING_GAIN` because it was not: `angleCost` tops out at 1, so a piece
+        // turned COMPLETELY the wrong way used to cost four units — less than moving
+        // it 2.7 m costs in inertia, and a rounding error against a walkway pinch.
+        // Which way a sofa faces is not a matter of taste, and it was priced as one.
+        c.alignment += FACING_GAIN * angleCost(placements[i].yaw, edge.yaw);
       } else if (affinity === 'prefers-middle') {
         c.middle += Math.max(0, 1.2 - edge.dist);
       } else {
@@ -578,23 +640,23 @@ export function costBreakdown(
   // The half of "is this a room" that no clearance rule can see. Every distance is
   // a BAND: zero cost inside it, growing outside, so the rule says "these go
   // together" without dictating exactly where.
-  for (const { i, j, rel } of m.relations) {
-    let d: number;
-    if (rel.kind === 'faces' || rel.kind === 'near') {
-      d = Math.hypot(feet[j].cx - feet[i].cx, feet[j].cz - feet[i].cz);
-    } else {
-      d = obbGap(feet[i], feet[j]);
+  // …and every obligation is discharged by its BEST anchor, not by all of them. A
+  // rug is under one group; a reading lamp is beside one seat. Summing over a spec's
+  // anchors charged a rug for every group in the room it was not under, which was
+  // the whole of the seeded T's 38.3 and the reason the rug ended up parked between
+  // the sofa and the dining table where it served neither.
+  for (const ob of m.obligations) {
+    const i = ob.i;
+    let best = Infinity;
+    let bestWeight = 0;
+    for (const { j, rel } of ob.options) {
+      const cost = relationCost(feet, placements, i, j, rel);
+      if (cost < best) {
+        best = cost;
+        bestWeight = rel.weight;
+      }
     }
-    let cost = bandCost(d, rel.min, rel.max);
-    if (rel.kind === 'faces') {
-      // Turned toward it, not merely near it. A sofa with its back to the
-      // television is at a perfect viewing distance and useless.
-      cost += 2 * angleCost(placements[i].yaw, Math.atan2(feet[j].cx - feet[i].cx, feet[j].cz - feet[i].cz));
-    } else if (rel.kind === 'in-front') {
-      // …and actually in front, rather than round the side at the right gap.
-      cost += 1.5 * offAxis(feet[j], feet[i]);
-    }
-    c.relation += rel.weight * cost;
+    if (best < Infinity) c.relation += bestWeight * best;
   }
 
   // ── Balance: the room's weight near its middle ────────────────────────────
@@ -743,6 +805,40 @@ function far2(a: Foot, b: Foot, reach: number): boolean {
   const dx = b.cx - a.cx;
   const dz = b.cz - a.cz;
   return dx * dx + dz * dz > reach * reach;
+}
+
+/** How badly `i` discharges one relation against one candidate anchor `j`.
+ *
+ *  Distance in the band the relation asks for, plus — for the two kinds where the
+ *  heading is half the point — being turned toward the anchor. `in-front` carries a
+ *  facing term for the same reason `faces` does, and did not: a dining chair beside
+ *  its table at the right gap and rotated 98° is not at the table, and nothing in the
+ *  cost function said so. Measured yaws coming back from the solver on chairs before
+ *  this: 8°, 15°, 98°, −113°, and one at 203° — facing away from its own table. */
+function relationCost(
+  feet: Foot[],
+  placements: Placement[],
+  i: number,
+  j: number,
+  rel: Relation,
+): number {
+  const d =
+    rel.kind === 'faces' || rel.kind === 'near'
+      ? Math.hypot(feet[j].cx - feet[i].cx, feet[j].cz - feet[i].cz)
+      : obbGap(feet[i], feet[j]);
+  let cost = bandCost(d, rel.min, rel.max);
+  const toward = () => angleCost(placements[i].yaw, Math.atan2(feet[j].cx - feet[i].cx, feet[j].cz - feet[i].cz));
+  if (rel.kind === 'faces') {
+    // Turned toward it, not merely near it. A sofa with its back to the television
+    // is at a perfect viewing distance and useless.
+    cost += 2 * toward();
+  } else if (rel.kind === 'in-front') {
+    // Squarely in front, rather than round the side at the right gap…
+    cost += 1.5 * offAxis(feet[j], feet[i]);
+    // …and turned to it, which is what sitting AT a table means.
+    cost += 1.5 * toward();
+  }
+  return cost;
 }
 
 /** Merrell's `t`: zero inside `[min, max]`, growing quadratically outside. In

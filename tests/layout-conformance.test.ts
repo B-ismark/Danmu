@@ -107,6 +107,8 @@ const termFor = (family: Family) => RULE_HANDLING[family].costTerm;
 const chair = () => part({ category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850], pos: [0, 0, 0] });
 const sofa = () => part({ category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880], pos: [0, 0, 0] });
 const wardrobe = () => part({ category: 'wardrobe', shape: 'wardrobe', dimMM: [2000, 600, 2100], pos: [0, 0, 0] });
+const diningTable = () =>
+  part({ category: 'table', shape: 'desk-standard', dimMM: [1400, 800, 750], pos: [0, 0, 0] });
 const tv = () => part({ category: 'tv', shape: 'tv', dimMM: [1450, 60, 830], pos: [0, 1.2, -1.95], wallMounted: true });
 const door = () => part({ category: 'door', shape: 'door', dimMM: [900, 50, 2100], pos: [0, 0, -1.95], wallMounted: true });
 // On the NORTH wall, so it faces the room down -Z and carries `rot: π` to say so.
@@ -188,18 +190,28 @@ function cases(): Case[] {
     const faces = halfDepth(s) + halfDepth(w);
     const tight = faces + WALK_MIN * 0.4;
     const clear = faces + ROUTE + 0.5;
+    // …and a dining table with two chairs beside each other, identical in both
+    // layouts and 400 mm apart, which is what a laid table looks like. They are here
+    // to hold the OTHER direction: the report does not count a chair-to-chair gap as
+    // a walkway, and until `formsRoute` was shared the solver counted every obstacle
+    // pair and charged this arrangement `walkway 40.4`. It then flung the dining set
+    // across the room to fix a fault nothing had reported, and said so in the toast.
+    // Without these three pieces the case below passes whether or not that is fixed.
+    const t = diningTable();
+    const c1 = chair();
+    const c2 = chair();
+    const seat = { z: 0.4 + halfDepth(c1) - 0.12, gap: 0.44 };
+    const laid: Placement[] = [
+      { x: 1.6, z: 0, yaw: 0 },
+      { x: 1.6 - seat.gap, z: seat.z, yaw: Math.PI },
+      { x: 1.6 + seat.gap, z: seat.z, yaw: Math.PI },
+    ];
     out.push({
       family: 'walk',
       what: `a ${Math.round(WALK_MIN * 0.4 * 100)} cm gap between two bulky pieces`,
-      parts: [s, w],
-      bad: [
-        { x: 0, z: -tight / 2, yaw: 0 },
-        { x: 0, z: tight / 2, yaw: 0 },
-      ],
-      good: [
-        { x: 0, z: -clear / 2, yaw: 0 },
-        { x: 0, z: clear / 2, yaw: 0 },
-      ],
+      parts: [s, w, t, c1, c2],
+      bad: [{ x: -1.6, z: -tight / 2, yaw: 0 }, { x: -1.6, z: tight / 2, yaw: 0 }, ...laid],
+      good: [{ x: -1.6, z: -clear / 2, yaw: 0 }, { x: -1.6, z: clear / 2, yaw: 0 }, ...laid],
     });
   }
 
@@ -249,8 +261,14 @@ function cases(): Case[] {
       family: 'tv',
       what: 'a sofa closer to the screen than the diagonal allows',
       parts: [t, s],
-      bad: [here(t), { x: 0, z: -1.0, yaw: 0 }],
-      good: [here(t), { x: 0, z: 0.6, yaw: 0 }],
+      // Both sofas face the screen on the north wall, so the pair differs in
+      // DISTANCE and nothing else — which is the rule under test. The good one used
+      // to be left at yaw 0, i.e. backed onto the screen it is supposed to be
+      // watching and facing the south wall; that cost nothing while a backwards
+      // piece was priced at four units, and became the more expensive of the two the
+      // moment facing the wrong way started costing what it is worth.
+      bad: [here(t), { x: 0, z: -1.0, yaw: Math.PI }],
+      good: [here(t), { x: 0, z: 0.6, yaw: Math.PI }],
     });
   }
 
@@ -290,6 +308,29 @@ describe('layout-rules · the checker and the solver agree', () => {
         // The weights are a hierarchy, so a fault should also dominate whatever
         // taste terms the two layouts happen to differ on.
         expect(costAt(c.parts, c.good).total).toBeLessThan(costAt(c.parts, c.bad).total);
+      });
+
+      it('and charges nothing on that term for the layout it is happy with', () => {
+        // The direction this file was missing, and the one that let 40 cost units
+        // through. It held the solver to the report — no arrangement the solver
+        // finishes with may still be one the report calls broken — but never the
+        // report to the solver, so the solver was free to police rules the report
+        // does not have. It did: it charged EVERY obstacle pair for a walkway,
+        // against a route that widened to 900 mm in a large room, while the report
+        // only ever counts bulky pairs at 600 mm. Three dining chairs 400 mm apart
+        // around their own table cost `walkway 40.4` on a room `analyzeRoom` reported
+        // nothing about — so "Suggest" flung the dining set across the floor and
+        // announced that it had widened the walkways.
+        //
+        // A term may still be non-zero where the report is quiet: `wall`, `relation`
+        // and the other taste terms are gradients with no finding behind them. This
+        // holds only the terms that implement a REPORTED rule, which is exactly the
+        // set `RULE_HANDLING` names.
+        expect(
+          costAt(c.parts, c.good)[term!],
+          `the room report is quiet about this layout, but layout-score charges ${term} for it — ` +
+            'the two are policing different rules again',
+        ).toBe(0);
       });
     });
   }
