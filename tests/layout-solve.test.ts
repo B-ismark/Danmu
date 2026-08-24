@@ -5,6 +5,7 @@ import {
   navigabilityCost,
   NAV_CELL,
   prepare,
+  relationParents,
   DEFAULT_WEIGHTS,
   type LayoutContext,
   type Placement,
@@ -690,5 +691,74 @@ describe('navigability', () => {
     // "you cannot get to this" claim would be a guess dressed as a measurement.
     const model = prepare(boxCtx(wardrobes()));
     expect(navigabilityCost(model, ACROSS)).toBe(0);
+  });
+});
+
+describe('which anchor an obligation is discharged by', () => {
+  // `relationParents` is the argmin `costBreakdown` computes and used to throw away.
+  // Part III of §3.10.3 builds a group forest out of it, so it has to answer the same
+  // way twice — and a band costs ZERO everywhere inside it, so equal-cost anchors are
+  // the common case rather than the exotic one.
+  const lamp = () =>
+    part({ category: 'lamp', shape: 'lamp-floor', dimMM: [400, 400, 1500], pos: [0, 0, 0] });
+  const armchair = () =>
+    part({ category: 'chair', shape: 'chair-armchair', dimMM: [700, 700, 900], pos: [0, 0, 0] });
+
+  const parentOf = (parts: ScenePart[], places: Placement[], childIdx: number): string => {
+    const m = prepare(ctxOf(parts));
+    const edge = relationParents(m, places).find((e) => e.child === childIdx)!;
+    return parts[edge.parent].id;
+  };
+
+  it('gives a lamp to the nearer of two seats it is equally close enough to', () => {
+    // Both gaps are inside `lamp-seat`'s 0–0.7 m band, so both cost exactly 0 and
+    // the argmin is a dead heat on cost alone. A lamp belongs to the chair it is
+    // actually beside.
+    // The FAR chair is listed first on purpose: with array order deciding, this is
+    // the case that comes back wrong, and a fixture that listed the near one first
+    // would pass either way.
+    const l = lamp();
+    const far = armchair();
+    const near = armchair();
+    const parts = [l, far, near];
+    const places: Placement[] = [
+      { x: 0, z: 0, yaw: 0 },
+      { x: -1.05, z: 0, yaw: 0 }, // gap 0.50 m
+      { x: 0.75, z: 0, yaw: 0 }, // gap 0.20 m
+    ];
+    const m = prepare(ctxOf(parts));
+    const edge = relationParents(m, places).find((e) => e.child === 0)!;
+    expect(edge.cost).toBe(0);
+    expect(parts[edge.parent].id).toBe(near.id);
+  });
+
+  it('answers the same when the two seats are listed the other way round', () => {
+    // The regression this exists for: before the tie-break the winner was whichever
+    // came first in `parts`, and `parts` order changes whenever a piece is added or
+    // deleted anywhere in the room.
+    const l = lamp();
+    const near = armchair();
+    const far = armchair();
+    const nearAt: Placement = { x: 0.75, z: 0, yaw: 0 };
+    const farAt: Placement = { x: -1.05, z: 0, yaw: 0 };
+    const lampAt: Placement = { x: 0, z: 0, yaw: 0 };
+    expect(parentOf([l, near, far], [lampAt, nearAt, farAt], 0)).toBe(near.id);
+    expect(parentOf([l, far, near], [lampAt, farAt, nearAt], 0)).toBe(near.id);
+  });
+
+  it('still decides an exactly symmetric room, and decides it the same way twice', () => {
+    // Mirrored seeding produces exact ties on cost AND distance — the one place
+    // floating point will not separate them for us. The id is the last rung, and it
+    // is stable across every reordering because it does not depend on position.
+    const l = lamp();
+    const a = armchair();
+    const b = armchair();
+    const lampAt: Placement = { x: 0, z: 0, yaw: 0 };
+    const left: Placement = { x: -0.75, z: 0, yaw: 0 };
+    const right: Placement = { x: 0.75, z: 0, yaw: 0 };
+    const one = parentOf([l, a, b], [lampAt, left, right], 0);
+    const other = parentOf([l, b, a], [lampAt, right, left], 0);
+    expect(one).toBe(other);
+    expect([a.id, b.id]).toContain(one);
   });
 });

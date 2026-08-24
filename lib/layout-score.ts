@@ -471,16 +471,25 @@ const ZERO: CostBreakdown = {
  *  rearranging a room the report was quite right to be quiet about.
  *
  *  It is expensive, and that is the whole reason `costBreakdown` leaves the term off
- *  by default. Measured on a 6 × 4 room against one evaluation:
+ *  by default. Measured on the seeded `rect` 6 × 4 (12 parts) and `open` 7.5 × 5.6
+ *  (17 parts), against **one `costBreakdown` on an already-prepared model** — which
+ *  is what the annealer actually pays per proposal:
  *
- *    · 0.05 m — 10 004 cells, 1 190 µs, **10–22×** an evaluation
- *    · 0.10 m —  2 604 cells,   325 µs, **2.6–6×**
- *    · 0.15 m —  1 218 cells,   155 µs, **1.2–3×**
+ *    | cell   | field        | vs one evaluation |
+ *    |--------|--------------|-------------------|
+ *    | 0.05 m | 1374–2284 µs | **65–92×**        |
+ *    | 0.10 m |  370– 594 µs | **17–25×**        |
+ *    | 0.15 m |  161– 275 µs | **8–11×**         |
  *
- *  So it is paid a handful of times per solve — the two reported breakdowns, and the
- *  check that decides whether a repair pass is needed at all — and never inside the
- *  search. The repair pass's own inner loop uses a coarser grid and then re-checks its
- *  answer against this one; see `REPAIR_CELL` in `lib/layout-solve.ts`. */
+ *  An earlier draft of this comment put the first row at 10–22×, which was measured
+ *  against `scoreLayout(ctx, …)` — a call that re-runs `prepare` and so costs 74–118 µs
+ *  rather than the 15–35 µs an evaluation costs. Comparing an inner-loop cost against
+ *  a baseline that includes the setup the inner loop exists to hoist out understates
+ *  it by about five times. The conclusion is unchanged and stronger: it is paid a
+ *  handful of times per solve — the two reported breakdowns, and the check that decides
+ *  whether a repair pass is needed at all — and never inside the search. The repair
+ *  pass's own inner loop uses a coarser grid and then re-checks its answer against this
+ *  one; see `REPAIR_CELL` in `lib/layout-solve.ts`. */
 export const NAV_CELL = FIELD_CELL;
 
 /** What a piece nobody can get to is worth, in the same units as a square metre of
@@ -715,15 +724,21 @@ export function costBreakdown(
   for (const ob of m.obligations) {
     const i = ob.i;
     let best = Infinity;
+    let bestD2 = Infinity;
+    let bestJ = -1;
     let bestWeight = 0;
     for (const { j, rel } of ob.options) {
       const cost = relationCost(feet, placements, i, j, rel);
-      if (cost < best) {
+      const dx = feet[j].cx - feet[i].cx;
+      const dz = feet[j].cz - feet[i].cz;
+      if (bestJ < 0 || beatsAnchor(m, cost, dx * dx + dz * dz, j, best, bestD2, bestJ)) {
         best = cost;
+        bestD2 = dx * dx + dz * dz;
+        bestJ = j;
         bestWeight = rel.weight;
       }
     }
-    if (best < Infinity) c.relation += bestWeight * best;
+    if (bestJ >= 0) c.relation += bestWeight * best;
   }
 
   // ── Balance: the room's weight near its middle ────────────────────────────
@@ -922,6 +937,90 @@ function relationCost(
     cost += 1.5 * toward();
   }
   return cost;
+}
+
+/** Ties in the relation term, broken so the winner does not depend on array order.
+ *
+ *  The obligation is discharged by its BEST anchor, and "best" is an argmin — which
+ *  means the moment two anchors are equally good, something has to choose, and until
+ *  now that something was `parts` order. Two anchors costing *exactly* the same is
+ *  not the exotic case it sounds like: a band costs **zero** everywhere inside it, so
+ *  a floor lamp between two armchairs that are both within reach is a dead heat, and
+ *  so is a rug that covers both ends of a sofa-and-loveseat group. Whichever came
+ *  first in `parts` won, and `parts` order changes when a piece is added or deleted
+ *  — so the same room could hand back a different parent on the next press.
+ *
+ *  That was survivable while the argmin only picked which weight to multiply. It
+ *  stops being survivable the moment anything reads the argmin as structure, which
+ *  is exactly what `relationParents` exposes and what part III of §3.10.3 builds a
+ *  forest out of: a group whose membership flips is a group the solver would carry
+ *  across the room and back.
+ *
+ *  So: cost, then the physically NEARER anchor (a lamp belongs to the chair it is
+ *  actually beside), then the anchor's `id`. The first two are properties of the
+ *  arrangement and the third is stable across every reordering, so no rung of it
+ *  can be changed by inserting a piece elsewhere in the list. */
+function beatsAnchor(
+  m: LayoutModel,
+  cost: number,
+  d2: number,
+  j: number,
+  best: number,
+  bestD2: number,
+  bestJ: number,
+): boolean {
+  if (cost < best - TIE_EPS) return true;
+  if (cost > best + TIE_EPS) return false;
+  if (d2 < bestD2 - TIE_EPS) return true;
+  if (d2 > bestD2 + TIE_EPS) return false;
+  return m.ctx.parts[j].id < m.ctx.parts[bestJ].id;
+}
+
+/** Metres² and cost units are both far coarser than this; it exists so that two
+ *  arithmetically-identical costs computed by different routes still tie. */
+const TIE_EPS = 1e-9;
+
+/** Which anchor actually discharges each obligation, for this arrangement.
+ *
+ *  The argmin `costBreakdown` computes and throws away. A child and its parent are
+ *  the edge of the relation forest — `rug → sofa`, `chair → dining-table`,
+ *  `nightstand → bed` — and the connected components of that forest are the *groups*
+ *  a room is made of. Exposed rather than inlined so there is one answer to "what
+ *  does this belong to" and not one per reader.
+ *
+ *  Uses the model's scratch feet, so it has the same rule as `costBreakdown`: one
+ *  model, one evaluation at a time. */
+export function relationParents(
+  m: LayoutModel,
+  placements: Placement[],
+): Array<{ child: number; parent: number; specId: string; cost: number }> {
+  const feet = m.feet;
+  for (let i = 0; i < feet.length; i++) {
+    feet[i].cx = placements[i].x;
+    feet[i].cz = placements[i].z;
+    feet[i].rot = placements[i].yaw;
+  }
+  const out: Array<{ child: number; parent: number; specId: string; cost: number }> = [];
+  for (const ob of m.obligations) {
+    const i = ob.i;
+    let best = Infinity;
+    let bestD2 = Infinity;
+    let bestJ = -1;
+    let bestSpec = '';
+    for (const { j, rel } of ob.options) {
+      const cost = relationCost(feet, placements, i, j, rel);
+      const dx = feet[j].cx - feet[i].cx;
+      const dz = feet[j].cz - feet[i].cz;
+      if (bestJ < 0 || beatsAnchor(m, cost, dx * dx + dz * dz, j, best, bestD2, bestJ)) {
+        best = cost;
+        bestD2 = dx * dx + dz * dz;
+        bestJ = j;
+        bestSpec = rel.specId;
+      }
+    }
+    if (bestJ >= 0) out.push({ child: i, parent: bestJ, specId: bestSpec, cost: best });
+  }
+  return out;
 }
 
 /** Merrell's `t`: zero inside `[min, max]`, growing quadratically outside. In

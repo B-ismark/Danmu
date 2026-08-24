@@ -819,10 +819,32 @@ ceiling light — though `painting`, `mirror`, `curtain`, `lamp-pendant`, `books
 and `shoe-rack` are all already in the catalog, and all of them are wall-mounted or
 shallow, i.e. nearly free in floor terms.
 
-**9. The dining set seeds three chairs.** When the bay cannot give a seated diner
+**9. The dining set seeds three chairs.** ~~When the bay cannot give a seated diner
 900 mm on both long sides the table goes against the wall (`vTable = hd + gap`), and
 the fourth chair's spot is then inside that wall, so `seats()` refuses it. Measured on
-the T: `chair-1`, `chair-2`, `chair-3`. Nobody owns a table with three chairs.
+the T: `chair-1`, `chair-2`, `chair-3`. Nobody owns a table with three chairs.~~
+
+**Withdrawn — this was not a cause.** The mechanism above is right and the conclusion
+drawn from it is wrong, and it contradicts a rule this repo already states in
+`lib/layout-rules.ts`: the `seats` access rule is `atLeast: 3` of four sides,
+commented *"a table with one end against a wall is not reported as a fault — that is a
+real arrangement."* Three chairs is what the room can carry, not a piece the seeder
+dropped. The T's bar is 2.1 m deep and a seated diner needs `WALK_COMFORT` = 900 mm of
+pull-back, so centring the table there leaves 630 mm on each long side — two sides too
+tight, against one side in the wall and three that work. Re-measured over the presets,
+the seeder does seat four the moment a bay can hold four:
+
+| room | dining table | chairs |
+|---|---|---|
+| `t 5.5×4.7` (bar 2.1 m deep) | yes | **3** |
+| `open 7.5×5.6` | yes | **4** |
+| `open 8×7` | yes | **4** |
+
+`tests/scene-seed.test.ts` asserts exactly three on the T and says why. That test is
+the correct behaviour and this cause was the outlier; the count is a reading of the
+room, not a bug. Left struck through rather than deleted because the misdiagnosis is
+the point: *"nobody owns a table with three chairs"* is an appeal to intuition, and it
+lost to the arithmetic in a table this repo had already written down.
 
 **10. The seeder emits layouts its own cost function scores badly, and cannot know.**
 Seeded cost before any solve: `rect 5×4` **3.1**, `6.5×5` **8.8**, `L` **43.1**,
@@ -906,10 +928,39 @@ that bay) × the two flips along that wall, a few dozen to a couple of hundred f
 presets — build each with the existing `place()` / `seats()` machinery, and score it
 with the very same `costBreakdown` + `navigabilityCost` the solver uses. Keep the
 best; optionally polish it through `solveLayout` in `refit` mode, which already exists
-and already means "change as little as possible". §3.9.4 measures an evaluation at
-~0.17 ms, so 200 candidates is ~35 ms, once, on room creation. This retires cause 10
-by construction: the seeder can no longer emit an 85.5 room, because 85.5 loses to
+and already means "change as little as possible". This retires cause 10 by
+construction: the seeder can no longer emit an 85.5 room, because 85.5 loses to
 whatever else it tried.
+
+~~§3.9.4 measures an evaluation at ~0.17 ms, so 200 candidates is ~35 ms, once, on room
+creation.~~ **Wrong in both directions, and the correction picks the design.** That
+figure was `scoreLayout(ctx, …)`, which re-runs `prepare` on every call. Measured on
+the seeded presets (12–17 parts) against an already-prepared model:
+
+| | `rect 6×4` | `t 5.5×4.7` | `open 7.5×5.6` |
+|---|---|---|---|
+| one `costBreakdown` | 16 µs | 32 µs | 34 µs |
+| `navigabilityCost` at `NAV_CELL` | 1466 µs | 1452 µs | 2230 µs |
+
+So an evaluation is **five to ten times cheaper** than the old figure, and the
+clearance field is **eight to thirteen times dearer** — 65–92× an evaluation, not the
+10–22× an earlier note claimed, which was the same baseline error (the ratio in
+`NAV_CELL`'s own comment is corrected too). Scoring 200 candidates *with the field on
+each* is **296–453 ms**, which is not "once, on room creation, and nobody notices" — it
+is a visible hitch on the first screen of the product.
+
+The measurement therefore chooses the design rather than merely costing it. Part VI
+must use the two tiers `solveLayout` already uses: score **every** candidate on
+`costBreakdown` alone, then pay for the field on a **handful of finalists** only.
+
+| 200 candidates | `rect` | `t` | `open` |
+|---|---|---|---|
+| field on every one | 296 ms | 297 ms | 453 ms |
+| scored, then field on 4 finalists | **9.1 ms** | **12.3 ms** | **15.8 ms** |
+
+Which is the shape the repair pass in part IV already has, for the same reason:
+circulation is a property of the whole floor, so it cannot be a per-candidate filter —
+only a final arbiter.
 
 **VII — Make the room look lived-in.** Tiered fill, each tier placed only if it fits
 *and* does not raise the score:
