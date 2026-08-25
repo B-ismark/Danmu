@@ -5,20 +5,7 @@
 // The right button used to pan the camera. Panning moved to Space + left-drag —
 // the gesture every 3D tool shares — which freed the one press in this app that
 // had no meaning, and right-click on a 3D view with no menu behind it reads as
-// broken. Two menus, chosen by what is under the cursor:
-//
-//   · on a piece — the handful of actions that were otherwise a trip to the
-//     Inspector or a single-character shortcut nobody had discovered yet
-//   · on the room — the things that are about the whole scene
-//
-// The menu itself still knows nothing about either surface: the caller passes in
-// the piece under the pointer, which both surfaces now genuinely know — the plan
-// did NOT write `hoveredPartId` until the pass that added the picker below, so
-// this comment used to claim a parity that existed in one tab only, and a
-// right-click in the plan opened the room's menu on top of a piece.
-//
-// Three menus now, not two, and the third is the reason the other two are worth
-// reading together:
+// broken. Three menus, chosen by what is under the cursor:
 //
 //   · on a piece — the handful of actions that were otherwise a trip to the
 //     Inspector or a single-character shortcut nobody had discovered yet
@@ -28,6 +15,12 @@
 //     that the first two grow when the caller can say what else is under the
 //     cursor. That row is the picker's only route on a touch screen, which has
 //     no modifier keys at all.
+//
+// The menu itself still knows nothing about either surface: the caller passes in
+// the piece under the pointer, which both surfaces now genuinely know — the plan
+// did NOT write `hoveredPartId` until the pass that added the picker, so this
+// comment used to claim a parity that existed in one tab only, and a right-click
+// in the plan opened the room's menu on top of a piece.
 
 import {
   useCallback,

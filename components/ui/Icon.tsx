@@ -85,10 +85,22 @@ export function Icon({ name, size = 16, color = 'currentColor', strokeWidth = 1.
   return <Cmp size={size} color={color} strokeWidth={strokeWidth} style={base} />;
 }
 
-/** A furniture category's glyph. One map, so every list that shows a piece —
- *  the disambiguation menu today, any panel that wants it next — labels a sofa
- *  the same way. Categories with no obvious glyph fall back to the neutral cube
- *  rather than borrowing a wrong one. */
+/** A furniture category's glyph. One map, so every list that shows a piece — the
+ *  disambiguation menu today, any panel that wants it next — labels a sofa the same
+ *  way.
+ *
+ *  The icon set is smaller than the catalog, so most categories take the nearest
+ *  honest glyph rather than an exact one: a chair borrows the sofa, a desk the
+ *  table, a monitor the TV, a door the key. The neutral cube is the fallback only
+ *  where nothing in the set is closer. These are 14 px labels beside a name, not a
+ *  taxonomy — an earlier version of this comment claimed everything without an
+ *  obvious glyph fell through to the cube, which was true of four of the twenty-two.
+ *
+ *  Exhaustive on purpose. `Record<Category, IconName>` means adding a category to
+ *  `lib/scene-spec.ts` fails `pnpm typecheck` HERE until somebody decides what it
+ *  looks like, which is the same bargain `RULE_HANDLING` strikes in
+ *  lib/layout-score.ts: a new member of a closed set should cost one decision, not
+ *  silently ship a default. */
 export const CATEGORY_ICON: Record<Category, IconName> = {
   sofa: 'sofa',
   tv: 'tv',
