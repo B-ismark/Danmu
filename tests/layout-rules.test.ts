@@ -4,6 +4,7 @@ import {
   accessZones,
   belongTogether,
   doorPath,
+  fixedBand,
   relationFor,
   roleOf,
   roomProfile,
@@ -363,5 +364,44 @@ describe('WALL_GAP', () => {
   it('is small enough to read as against the wall, not floating', () => {
     expect(WALL_GAP).toBeGreaterThan(0);
     expect(WALL_GAP).toBeLessThan(0.05);
+  });
+});
+
+describe('fixedBand', () => {
+  // The seeder has to satisfy a relation before the two pieces exist as a pair to
+  // resolve it against, so it reads the band from here instead of restating the
+  // number. What makes that safe is knowing WHICH bands have one answer.
+  it('gives the band for a relation that asks the same of every pair', () => {
+    expect(fixedBand('lamp-seat')).toEqual([0, 0.7]);
+    expect(fixedBand('side-table-seat')).toEqual([0, 0.4]);
+    expect(fixedBand('coffee-table-sofa')).toEqual([0.4, 0.5]);
+  });
+
+  it('refuses the ones resolved out of the pair', () => {
+    // A viewing distance is a multiple of the screen it is about, so there is no one
+    // answer to hand a seeder — and handing it the first pair's answer would be worse
+    // than refusing, because it would look right on a 55″ and be wrong on a 65″.
+    expect(fixedBand('seat-tv')).toBeNull();
+  });
+
+  it('says nothing about a spec that does not exist', () => {
+    expect(fixedBand('no-such-relation')).toBeNull();
+  });
+
+  it('agrees with what relationFor resolves for a real pair', () => {
+    // The tie that makes this safe to read from two places: if the probe trick ever
+    // stopped matching the real resolution, the seeder would be placing to a band
+    // nothing scores against.
+    const sofa = {
+      id: 's', name: 'Sofa', category: 'sofa', shape: 'sofa',
+      dimMM: [2200, 950, 880], pos: [0, 0, 0], rot: 0, locked: false,
+    } as unknown as Parameters<typeof relationFor>[0];
+    const lamp = {
+      id: 'l', name: 'Floor lamp', category: 'lamp', shape: 'lamp-floor',
+      dimMM: [300, 300, 1700], pos: [0, 0, 0], rot: 0, locked: false,
+    } as unknown as Parameters<typeof relationFor>[0];
+    const rel = relationFor(lamp, sofa)!;
+    expect(rel.specId).toBe('lamp-seat');
+    expect([rel.min, rel.max]).toEqual(fixedBand('lamp-seat'));
   });
 });

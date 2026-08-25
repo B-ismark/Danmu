@@ -734,6 +734,35 @@ export function relationFor(self: ScenePart, anchor: ScenePart): Relation | null
   return null;
 }
 
+/** The gap a spec asks for, when it asks for the same one of every pair — read by the
+ *  SEEDER, which has to choose a spot that satisfies a relation before the two pieces
+ *  exist as a pair to resolve it against.
+ *
+ *  Null for the bands that are genuinely per-pair: a viewing distance is a multiple of
+ *  the screen it is about, so there is no one answer to give.
+ *
+ *  This exists because the alternative is the copy rule 3 forbids. The seeder used to
+ *  stand a floor lamp at `sofaHalf + 0.3`, with a comment saying *"lamp-seat wants a
+ *  0-0.7 m gap"* — a hand-typed restatement of a number that lives here, three files
+ *  away, and free to move without it. That drifts in the direction nobody notices: the
+ *  rule changes, the seeder does not, and the starter room quietly stops satisfying a
+ *  relation it is still being scored against. */
+export function fixedBand(specId: string): [number, number] | null {
+  const spec = RELATIONS.find((r) => r.id === specId);
+  if (!spec) return null;
+  // A constant band ignores its arguments, so calling it with two different pairs and
+  // getting the same answer is the test for whether there IS one answer. Cheap, and it
+  // cannot go stale the way a hand-kept list of "the constant ones" would.
+  const a = spec.band(PROBE_A, PROBE_B);
+  const b = spec.band(PROBE_B, PROBE_A);
+  return a[0] === b[0] && a[1] === b[1] ? a : null;
+}
+
+/** Two differently-sized stand-ins, so `fixedBand` can tell a constant band from one
+ *  resolved out of the pair. Never placed, never scored — only measured. */
+const PROBE_A = { dimMM: [1000, 1000, 1000], shape: 'sofa' } as unknown as ScenePart;
+const PROBE_B = { dimMM: [2500, 400, 1400], shape: 'tv' } as unknown as ScenePart;
+
 /** Every obligation `self` has, each with all the anchors that could discharge it.
  *
  *  The fix for the single largest source of nonsense in a suggestion. `RELATIONS`

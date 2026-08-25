@@ -334,7 +334,29 @@ export function solveLayout(
     cost = bestCost;
   }
 
-  for (const pool_ of [bigIdx.length >= 2 ? bigIdx : [], allIdx]) {
+  // ── Pass 1: the piece the room is arranged around, on its own ─────────────
+  //
+  // `RoomProfile.anchor` — a bed in a bedroom, a sofa in a living room — and until
+  // now it was computed by `roomProfile` and read by nothing, while its own doc
+  // comment claimed *"settling it first is what makes a hierarchical solve behave"*.
+  // A field asserting a behaviour the code does not have is worse than an absent one,
+  // because the next reader believes it.
+  //
+  // It is true now, and it earns its place in the TAIL rather than the median. Twelve
+  // seeds per preset on a scrambled room, worst run, without → with:
+  //
+  //   rect 9.7 → 8.7 · l 1081 → 136 · t 310 → 67 · u 155 → 6.9 · open 37 → 22
+  //
+  // Medians move a little (18.6 → 15.8 on the L, 46.7 → 28.7 on the T); the disasters
+  // stop happening. Which is what the idea predicts: a catastrophic run is one where
+  // the biggest piece never found its wall, and everything else spent the budget
+  // arranging itself around a bed in the middle of the floor.
+  //
+  // Costs one pool of one, and `passSteps` is pro rata, so it is the 120-step floor.
+  const anchorIdx =
+    model.profile.anchor !== null && movable[model.profile.anchor] ? [model.profile.anchor] : [];
+
+  for (const pool_ of [anchorIdx, bigIdx.length >= 2 ? bigIdx : [], allIdx]) {
     if (pool_.length === 0) continue;
     // Pro rata: a pass that may only move five of seventeen pieces needs five
     // seventeenths of the proposals, and charging it the full budget was a third of

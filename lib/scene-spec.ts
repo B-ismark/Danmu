@@ -39,6 +39,7 @@ import {
   accessZones,
   belongTogether,
   doorPath,
+  fixedBand,
   formsRoute,
   isObstacle,
   roleOf,
@@ -259,6 +260,11 @@ const SEED_TOUCH_SHARE = 0.02;
 /** How far a dining chair is pushed under the table. Seating tucked under a work
  *  surface is what `sharesFloor` is about — and it is how a laid table looks. */
 const CHAIR_TUCK = 0.12;
+
+/** The seeded floor lamp. Named because its own width is part of where it stands:
+ *  `lamp-seat` is a GAP between footprints, so an offset that ignores the lamp's half
+ *  width is off by that much. */
+const LAMP_DIM: [number, number, number] = [300, 300, 1700];
 
 /** The three-seater the living group is built around. Named because two different
  *  decisions read it: what to place, and how much wall a room needs before that
@@ -739,15 +745,19 @@ export function defaultScene(
       // in a narrow bay, which the room report then reported: "Sofa has 0 cm in front".
       // A floor lamp is not one of the sofa's zone guests, and it should not be.
       //
-      // Half the sofa plus a hand's width: `lamp-seat` wants a 0–0.7 m gap, and this
-      // lands at 0.15 m of it. Derived from the sofa actually placed, so a loveseat
-      // gets its lamp closer in rather than at a three-seater's offset.
-      const lampU = sofaDim[0] / 2000 + 0.3;
+      // Beside the sofa, at a gap taken from `lamp-seat` itself rather than restated
+      // here. A quarter of the band keeps the lamp at the near end of what the rule
+      // allows — "beside the seat it lights" means beside it — while staying inside
+      // whatever the rule currently says, which a copied figure cannot promise.
+      // Derived from the sofa actually placed too, so a loveseat's lamp comes in
+      // closer rather than sitting at a three-seater's offset.
+      const lampGap = (fixedBand('lamp-seat')?.[1] ?? 0.7) * 0.25;
+      const lampU = sofaDim[0] / 2000 + LAMP_DIM[0] / 2000 + lampGap;
       placeSomewhere(
         'lamp',
         'Floor lamp',
         'lamp-floor',
-        [300, 300, 1700],
+        LAMP_DIM,
         f,
         // Beside the sofa FIRST, the ends of the wall only as a fallback — and beside
         // the sofa where the sofa actually is, not where `u = 0` is.

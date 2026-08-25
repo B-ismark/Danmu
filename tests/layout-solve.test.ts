@@ -856,3 +856,59 @@ describe('the solver moves groups, not only pieces', () => {
     expect(relationParents(model, at(parts)).every((e) => e.cost > 0.25)).toBe(true);
   });
 });
+
+describe('the room’s anchor is settled first', () => {
+  // `RoomProfile.anchor` was computed by `roomProfile` and read by NOTHING, while its
+  // own doc comment claimed "settling it first is what makes a hierarchical solve
+  // behave". Two tests in layout-rules asserted its value, which made it look alive.
+  // A field that asserts a behaviour the code does not have is worse than an absent
+  // one, because the next reader believes it.
+  //
+  // What it buys is the tail, not the median. Twelve seeds on a scrambled U, worst
+  // run: 154.7 without the pass, 6.9 with it. A catastrophic run is one where the
+  // biggest piece never found its wall and everything else spent the budget arranging
+  // itself around a bed in the middle of the floor.
+  it('stops a scrambled bedroom from ending in the occasional disaster', () => {
+    const poly = footprintForLayout('u', 6, 5);
+    const base = defaultScene('u', 6, 5, { footprint: poly, height: 2.8 });
+    const messy = base.map((q, i) =>
+      q.wallMounted
+        ? { ...q }
+        : {
+            ...q,
+            pos: [-q.pos[0] * 0.8 + (i % 3) * 0.4, q.pos[1], -q.pos[2] * 0.7] as [number, number, number],
+            rot: q.rot + 0.6,
+          },
+    );
+    const model = prepare({
+      parts: messy,
+      movable: messy.map((q) => !q.wallMounted),
+      footprint: poly,
+    } as LayoutContext);
+
+    const costs = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((seed) =>
+      costBreakdown(
+        model,
+        solveLayout(messy, poly, messy.map(() => false), { seed }).placements,
+        DEFAULT_WEIGHTS,
+        NAV_CELL,
+      ).total,
+    );
+
+    // The bar is the WORST run, which is the one this pass exists for. Without it the
+    // twelve seeds spread 3.3 … 154.7; with it, 3.3 … 6.9.
+    expect(Math.max(...costs)).toBeLessThan(40);
+    // …and the median must not have paid for it.
+    expect([...costs].sort((a, b) => a - b)[6]).toBeLessThan(10);
+  }, 120_000);
+
+  it('is the piece the room is named after', () => {
+    // The tie between the field and this pass: if `roomProfile` ever stopped picking
+    // the bed, the pass above would still run and would be settling a nightstand.
+    const poly = footprintForLayout('u', 6, 5);
+    const parts = defaultScene('u', 6, 5, { footprint: poly, height: 2.8 });
+    const model = prepare({ parts, movable: parts.map(() => true), footprint: poly } as LayoutContext);
+    expect(model.profile.anchor).not.toBeNull();
+    expect(parts[model.profile.anchor!].category).toBe('bed');
+  });
+});
