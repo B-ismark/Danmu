@@ -30,7 +30,18 @@ correction is folded in with a note.
 | 3b — drop label equality | **deferred to Phase 8** | Decided, not blocked. It trades precision for recall and Phase 8 is what makes the trade measurable |
 | 3c — tiered merge distance | **done** | `mergeDistanceFor(category)` in `lib/detect-refine.ts`. Fixes the live over-merge bug 3a uncovered, independently of 3b |
 | 4 — range-based label repair | **done** | `lib/label-repair.ts` + the review-screen surfacing. Decisions 1 and 2 answered: re-measure, and suggest-then-confirm |
-| 5–9 | not started | Each carries an open §10 decision except 6 |
+| 5 — bearing auto-slot | not started | **Decided: ingest AND retire the four-slot grid.** The larger of the two options, and a product change — see §10.5 |
+| 6 — confidence honesty | not started | No open decision. Needs the `source` field in both codec directions |
+| 7 — measure ceiling items | not started | **Decided: width only.** See §10.7 for why height is not measurable here |
+| 8 — pipeline harness | not started | **Decided: analytic ground truth only**, no renderer |
+| 9 — dead-field removal | not started | **Decided: cut `alsoSeenIn`** from the prompt and the type |
+
+**Order from here: 9 → 7 → 8 → 5.** This departs from §6, deliberately. §6 put 5
+before 8 so the harness could measure a SigLIP decision, but Phase 5 has since become
+a capture-screen rebuild rather than an ingest tweak, which makes it both the most
+invasive remaining phase and the one most likely to collide with UX work in the same
+tree. The harness should exist before it, not after. 9 and 7 are small and go first
+because they are cheap and independent.
 
 Gates after Phase 4: 999 tests, 55 files, typecheck / lint / build clean.
 
@@ -581,16 +592,43 @@ Flag these and stop; do not pick a default.
 2. ~~**Phase 4 surfacing.**~~ **Decided: suggest, user confirms.** A warn-toned line
    under the row name, with up to two chips for the words the size fits. The detect
    screen gained no new state — the verdicts are a `useMemo` over `detections`.
-3. **Phase 9 `alsoSeenIn`.** Cut from the prompt, or consume as a weak dedupe prior.
+3. ~~**Phase 9 `alsoSeenIn`.**~~ **Decided: cut it.** Field and all three prompt
+   clauses. The merge now runs on measured positions, which is a better signal than
+   the model's own opinion about which walls it saw something in — and keeping it as
+   a prior would put AI judgement back into the decision Phase 3a just moved onto
+   measurements. Note the comment referencing it has already followed
+   `dedupeDetections` into `lib/detect-refine.ts` and needs updating there too.
+   `Detection.position.y` is listed in the same phase and is a **separate** question:
+   `groundY` overrides it unconditionally, but cutting it from the prompt while the
+   type still requires `y: number` would leave a field typed non-optional and
+   arriving undefined. Decide that when the phase is done, not by assuming it rides
+   along.
 4. ~~**Phase 3 tiering vs overlap-support.**~~ **Decided: tiering.** Shipped as 3c
    above. Reprojection support — project one detection's position into the other
    slot's camera and require it to land inside that box — remains the principled
    alternative and needs no threshold at all, but it makes the merge
    calibration-aware. Worth revisiting only if the tiers turn out to be the thing
    Phase 8 measures as wrong.
-5. **Whether Phase 5 changes the capture UX or only the ingest.** Auto-slotting
-   removes the reason for the four-slot grid; removing the grid is a product change,
-   not a detection fix.
+5. ~~**Whether Phase 5 changes the capture UX or only the ingest.**~~ **Decided:
+   both.** Bearing assigns the slot, and the four-slot grid goes — `capture/page.tsx`
+   becomes "add photos" rather than four labelled bays. This is what makes an
+   arbitrary upload first-class instead of force-fitting it to a ritual, and it is
+   the phase that retires the one-photo problem. It is also a product change to
+   onboarding, so it wants its own PR and a look at whatever `PlanUX` is doing to the
+   same screens. Photos with no bearing still need the vanishing-point relative-slot
+   path plus one rotation control that relabels the whole set at once.
+
+7. **Phase 7 measures width only. Decided, and the reason is geometric, not lazy.**
+   A ceiling fan seen from below projects as a disc: its bbox VERTICAL extent is the
+   foreshortened diameter, not the thickness. Deriving H from it manufactures a
+   1200 mm-tall fan, which `clampDims` then squashes to 450 — a fake measurement
+   followed by a silent resize. W alone catches both ceiling rows in §3's table (fan
+   1200 against a lamp's 800 ceiling; hook 100 against a fan's 900 floor), so nothing
+   is lost. Two consequences for whoever writes it: `placeCeilingObject` **cannot**
+   copy `placeWallObject`'s signature as §3 says, because the ceiling plane needs
+   `room.height` and `RoomDims` carries only width and depth; and the Phase 1
+   contract test asserting a ceiling anchor comes back untouched must be updated
+   deliberately, not deleted.
 6. **Whether Phase 8 ever renders pixels at all.** Analytic ground truth covers the
    pipeline and runs in CI; a real renderer would additionally exercise the detector
    and the colour sampler, at the cost of software GL in the build. Recommendation is
@@ -645,7 +683,10 @@ Acceptance per phase:
   relative-slot + rotation-control path.
 - **7** — ceiling fixtures measure; `geoRefine`'s ceiling contract test from Phase 1
   is updated deliberately, not deleted.
-- **8** — harness runs in CI and reports a number.
+- **8** — harness runs in CI and reports a number. Analytic ground truth only; if
+  a renderer ever appears it is an opt-in local script and never a CI dependency.
+- **9** — the field, the three prompt clauses and the stale comment in
+  `lib/detect-refine.ts` all go together. `position.y` is a separate decision.
 
 ### Not covered by tests, and worth knowing
 
