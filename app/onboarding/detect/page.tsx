@@ -28,66 +28,15 @@ import {
 import { hfovFromFocal35 } from '@/lib/exif';
 import { geoRefine, refineDetections, type CalMap, type RoomDims } from '@/lib/detect-refine';
 import { judgeLabels, type LabelCandidate, type LabelVerdict } from '@/lib/label-repair';
+import { cleanLabelOf, fromRecord, toRecord, type SavedDetection } from '@/lib/detection-record';
 import { formatDim } from '@/lib/units';
 import type { DimUnit } from '@/lib/store';
 
 type SlotEntry = { slot: CaptureSlot; url: string; cap: Capture };
 type Box = [number, number, number, number];
-type SavedDetection = NonNullable<RoomData['detectedObjects']>[number];
 
 /** How many colour samples decode at once. See the sampling effect below. */
 const COLOR_BATCH = 4;
-
-// ─── Persistence codec ──────────────────────────────────────────────────────
-//
-// ONE pair of functions, because these two directions used to be written out by
-// hand at opposite ends of the file and had drifted: the record written by
-// finish() carried `position`, `yaw` and `shape` — the placement geoRefine()
-// derived from the calibrated camera — and the cache read that runs when the
-// screen is re-entered rebuilt Detection objects WITHOUT them. Since finish() is
-// the only way forward off this screen and its button is always enabled, the next
-// press wrote `undefined` over all three. The studio's Rescan button links
-// straight here, so it was one click from silently discarding the geometry pass
-// and falling back to wall-snapping and shape guessing.
-//
-// If a field is added to one of these, the other fails to compile.
-
-function toRecord(d: Detection, index: number, locked: boolean): SavedDetection {
-  return {
-    id: index,
-    // Minted once and then carried, so the ScenePart id stays attached to the
-    // same piece of furniture across a re-detect.
-    uid: d.uid ?? uuid(),
-    label: `${cleanLabelOf(d)}__slot:${d.slot}`,
-    conf: d.conf,
-    locked,
-    box: d.box,
-    category: d.category,
-    dimMM: d.dimMM,
-    position: d.position,
-    yaw: d.yaw,
-    shape: d.shape,
-    color: d.color,
-    meshHash: d.meshHash,
-  };
-}
-
-function fromRecord(r: SavedDetection): Detection {
-  return {
-    uid: r.uid,
-    label: r.label.replace(/__slot:[nesw]$/, ''),
-    conf: r.conf,
-    box: r.box,
-    category: (r.category ?? 'other') as Detection['category'],
-    slot: ((r.label.match(/__slot:([nesw])$/) ?? [])[1] ?? 'n') as CaptureSlot,
-    dimMM: r.dimMM,
-    position: r.position,
-    yaw: r.yaw,
-    shape: r.shape,
-    color: r.color,
-    meshHash: r.meshHash,
-  };
-}
 
 /** Give every detection a key the moment it enters state, so React rows and the
  *  eventual ScenePart id are both stable. Rows used to be keyed by array index
@@ -171,10 +120,6 @@ function slotLabel(slot: CaptureSlot): string {
 
 function categoryLabel(cat?: string): string {
   return MANUAL_CATEGORIES.find((c) => c.value === cat)?.label ?? 'Furniture';
-}
-
-function cleanLabelOf(d: Detection): string {
-  return d.label.replace(/__slot:[nesw]$/, '');
 }
 
 // Per-photo camera calibration. Deterministic at every step — no model decides a
@@ -660,7 +605,7 @@ export default function DetectPage() {
     try {
       const room = await roomStore.loadRoom(roomId);
       if (!room) return;
-      const flat = detections.map((d, i) => toRecord(d, i, confirmed.has(i)));
+      const flat = detections.map((d, i) => toRecord(d, i, confirmed.has(i), uuid));
       await roomStore.saveRoom({ ...room, detectedObjects: flat });
       router.push(`/room/${roomId}/model`);
     } finally {
