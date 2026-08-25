@@ -266,6 +266,10 @@ const CHAIR_TUCK = 0.12;
  *  width is off by that much. */
 const LAMP_DIM: [number, number, number] = [300, 300, 1700];
 
+/** The seeded side table, named for the same reason as `LAMP_DIM`: `side-table-seat`
+ *  is a gap between footprints, so an offset that ignores this width is off by it. */
+const SIDE_TABLE_DIM: [number, number, number] = [450, 450, 550];
+
 /** The three-seater the living group is built around. Named because two different
  *  decisions read it: what to place, and how much wall a room needs before that
  *  wall can hold it. */
@@ -882,14 +886,18 @@ export function defaultScene(
         true,
       );
       if (armchair) {
-        // Within reach of the arm of the chair, on whichever side has the room.
+        // Within reach of the arm of the chair, on whichever side has the room — at a
+        // gap taken from `side-table-seat` rather than restated here, for the same
+        // reason the floor lamp's is. A quarter of the band: "within reach of the arm"
+        // means the near end of what the rule allows, not the middle of it.
         const [uChair] = worldToLocal(f.yaw, armchair.pos[0] - f.mx, armchair.pos[2] - f.mz);
-        const reach = chair[0] / 2000 + 0.25;
+        const sideGap = (fixedBand('side-table-seat')?.[1] ?? 0.4) * 0.25;
+        const reach = chair[0] / 2000 + SIDE_TABLE_DIM[0] / 2000 + sideGap;
         placeSomewhere(
           'table',
           'Side table',
           'side-table',
-          [450, 450, 550],
+          SIDE_TABLE_DIM,
           f,
           [
             { u: uChair + reach, v: vChair },
