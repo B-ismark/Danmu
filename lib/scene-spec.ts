@@ -1732,25 +1732,33 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
       refined,
       aiDim && aiDim.every((n) => Number.isFinite(n) && n > 0) ? (aiDim as [number, number, number]) : cfg.dim,
     );
-    // Prefer AI-estimated position/yaw when present and in-room; otherwise snap to wall.
+    // Prefer the estimated position/yaw when present and in-room; otherwise snap
+    // to wall. "Estimated" is either measured (lib/detect-refine.ts wrote it from
+    // the calibrated camera) or the model's own guess on an uncalibrated slot;
+    // this cannot tell them apart and does not need to, because the only axes it
+    // reads are the two a photo can actually locate.
+    //
+    // **Y is deliberately neither read nor tested here.** `groundY` overwrites
+    // pos[1] unconditionally just below, so passing `aiPos.y` through was
+    // dead. The height check was worse than dead: it gated x and z — the axes we
+    // keep — on an axis nothing consumes, so a detection whose Y was out of the
+    // room lost its perfectly good floor position and fell back to slot-snapping.
+    // A fan the model put 3.2 m up in a 2.8 m room is a fan with a wrong height,
+    // not a fan in the wrong corner. Y is owned by the anchor, and only there.
     const aiPos = (d as { position?: { x: number; y: number; z: number } }).position;
     const aiYaw = (d as { yaw?: number }).yaw;
     let placement: { pos: [number, number, number]; rot: number };
     const w = rw / 2;
     const dHalf = rd / 2;
-    const h = rh;
     if (
       aiPos &&
       typeof aiPos.x === 'number' &&
-      typeof aiPos.y === 'number' &&
       typeof aiPos.z === 'number' &&
       Math.abs(aiPos.x) <= w + 0.2 &&
-      Math.abs(aiPos.z) <= dHalf + 0.2 &&
-      aiPos.y >= 0 &&
-      aiPos.y <= h
+      Math.abs(aiPos.z) <= dHalf + 0.2
     ) {
       placement = {
-        pos: [aiPos.x, aiPos.y, aiPos.z],
+        pos: [aiPos.x, 0, aiPos.z],
         rot: typeof aiYaw === 'number' ? aiYaw : 0,
       };
     } else {

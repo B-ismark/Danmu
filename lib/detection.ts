@@ -95,8 +95,7 @@ For each unique object return JSON with these fields:
     1. bbox center horizontal → world axis perpendicular to camera direction.
     2. bbox bottom-y → distance along camera direction (lower = closer to camera).
     3. apparent size → confirm distance.
-  - y for floor-standing = dimMM[2]/2000 (half height in m).
-  - y for wall-mounted (TV, mirror, painting, AC, curtain rod, fan) = mounting height (TV ~1.2, fan ~ceiling-0.15, curtain rod ~ ceiling-0.05).
+  - y: send 0 and do not estimate it. Standing and mounting heights are computed from the room and the object's own size, so whatever you put here is discarded. Only x and z are read.
   - Items in MIDDLE of room (rugs, coffee tables, dining table) MUST have small |x| and |z| — do NOT snap to walls.
   - Items against walls have one of x/z near ±${hw}/±${hd} minus their depth/2.
 - yaw: rotation in radians around vertical axis. 0 = facing +Z (south). π = facing -Z (north). -π/2 = +X (east). +π/2 = -X (west). Most furniture faces room interior.

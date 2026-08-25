@@ -104,6 +104,29 @@ describe('buildSceneFromRoom', () => {
     expect(parts[0].pos[1]).toBe(0);
   });
 
+  it('does not let a nonsense Y throw away a good X and Z', () => {
+    // Y is owned by `groundY`, which overwrites pos[1] unconditionally. The
+    // placement gate used to ALSO test Y and reject the whole position when it was
+    // out of the room — so a fan the model put 3.2 m up in a 2.8 m room lost its
+    // perfectly good floor position too and fell back to slot-snapping. A wrong
+    // height is not a wrong corner.
+    //
+    // `chair` is wall-affinity `free`, so no snap or nudge sits between the gate
+    // and the assertion.
+    const at = (y: number) =>
+      buildSceneFromRoom(
+        room([saved(0, { label: 'chair__slot:n', category: 'chair', position: { x: 1.4, y, z: 0.9 } })]),
+      )[0];
+    const sane = at(0.45);
+    const absurd = at(99);
+    // Premise: the recorded position is being honoured at all, rather than both
+    // rows quietly falling back to the same slot placement.
+    expect(sane.pos[0]).toBeCloseTo(1.4, 3);
+    expect(sane.pos[2]).toBeCloseTo(0.9, 3);
+    // The claim: Y changes nothing about where it stands.
+    expect(absurd.pos).toEqual(sane.pos);
+  });
+
   it('keeps every part inside the room footprint', () => {
     const parts = buildSceneFromRoom(
       room([saved(0, { position: { x: 40, y: 0, z: 40 } }), saved(1, { uid: 'b' })]),
