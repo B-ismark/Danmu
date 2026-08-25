@@ -29,7 +29,38 @@ correction is folded in with a note.
 | 3a — dedupe after `geoRefine` | **done** | `refineDetections()` in `lib/detect-refine.ts`; `dedupeDetections` + `SAME_OBJECT_M` moved there out of `lib/detection.ts`. Label equality **kept** |
 | 3b — drop label equality | **deferred to Phase 8** | Decided, not blocked. It trades precision for recall and Phase 8 is what makes the trade measurable |
 | 3c — tiered merge distance | **done** | `mergeDistanceFor(category)` in `lib/detect-refine.ts`. Fixes the live over-merge bug 3a uncovered, independently of 3b |
-| 4–9 | not started | |
+| 4 — range-based label repair | **done** | `lib/label-repair.ts` + the review-screen surfacing. Decisions 1 and 2 answered: re-measure, and suggest-then-confirm |
+| 5–9 | not started | Each carries an open §10 decision except 6 |
+
+Gates after Phase 4: 999 tests, 55 files, typecheck / lint / build clean.
+
+**Phase 4's real yield, measured against the benchmark rather than estimated.**
+Ranges reject **four** of the six documented failures, not the two or three §3
+guessed — the ceiling-hook row is caught on width arithmetic (100 mm against a
+fan's 900 mm floor) even though `geoRefine` never measures it, so the finding is
+real and only its *delivery* waits on Phase 7. The two it cannot reach are the two
+§8 already named: a garment rail that genuinely is wardrobe-shaped, and a 400 mm
+square that genuinely could be a framed print.
+
+**The repair half is weaker than the rejection half, and the module says so.** For
+1400 × 2300 both `curtain` and `wardrobe` fit, and the discriminator between them
+is thinness — the one axis a single photo cannot see. So the honest output is a
+shortlist the user picks from, not an answer. Rejection is the reliable win: the
+bed that would have been placed across the room is stopped either way.
+
+Three design calls worth knowing about, all taken inside Phase 4:
+
+- **Measurability is established by identity**, not by a new field. `geoRefine`
+  returns its input unchanged when it cannot measure, so `judgeLabel` re-runs it
+  and compares references. That keeps trap #9 load-bearing — and tested — and
+  avoids the persisted-schema change Phase 6 needs for provenance.
+- **Verdicts are a parallel array, never a field on `Detection`.** A verdict is
+  about the current measurement; persisting one lets a stale accusation outlive
+  the row it was about.
+- **Auto-confirm now skips suspect rows.** A 0.9 self-report beside a size no bed
+  could have is one row saying two different things, and locking it filed the
+  finding behind a padlock before anyone read it. Small enough to belong here
+  rather than wait for Phase 6.
 
 Gates green after each: `pnpm typecheck`, `pnpm test` (974 passing), `pnpm lint`,
 `pnpm build`. `tests/layout-solve.test.ts`'s twenty-piece timing case fails under a
@@ -541,12 +572,15 @@ Each of these was found the hard way while writing this plan. All of them fail
 
 Flag these and stop; do not pick a default.
 
-1. **Phase 4 re-entrancy.** Either (a) re-measure after a re-label — two geometry
-   passes, more code, correct; or (b) restrict repair to re-labels that preserve
-   `anchorFor` — cheaper, and drops the curtain case, which is the single best catch
-   in §3's table. This choice sets the feature's actual yield.
-2. **Phase 4 surfacing.** Auto-apply the repair with an undo, or present it as a
-   suggestion the user confirms. Affects whether the detect screen gains a new state.
+1. ~~**Phase 4 re-entrancy.**~~ **Decided: re-measure.** Every candidate is
+   re-measured under its own anchor before being offered, and one that no longer
+   fits its own band is dropped rather than shown. The case for it turned out to be
+   sharper than expected: the same box that measures 480 × 360 as a hung painting
+   measures 480 × 1680 as something standing on the floor, so a repair carrying the
+   old numbers is measuring a curtain as though it stood on the floor.
+2. ~~**Phase 4 surfacing.**~~ **Decided: suggest, user confirms.** A warn-toned line
+   under the row name, with up to two chips for the words the size fits. The detect
+   screen gained no new state — the verdicts are a `useMemo` over `detections`.
 3. **Phase 9 `alsoSeenIn`.** Cut from the prompt, or consume as a weak dedupe prior.
 4. ~~**Phase 3 tiering vs overlap-support.**~~ **Decided: tiering.** Shipped as 3c
    above. Reprojection support — project one detection's position into the other
@@ -612,3 +646,13 @@ Acceptance per phase:
 - **7** — ceiling fixtures measure; `geoRefine`'s ceiling contract test from Phase 1
   is updated deliberately, not deleted.
 - **8** — harness runs in CI and reports a number.
+
+### Not covered by tests, and worth knowing
+
+The review-screen wiring is not under test, because this repo has no component
+tests and adding a jsdom React harness for one row is a bigger change than the row.
+Three behaviours therefore rest on review alone: the suspect line renders only for
+`status: 'suspect'`, accepting a chip replaces the row **in place** (trap #10 —
+`confirmed` is index-keyed), and auto-confirm skips suspect rows. All three are
+one-line conditions, and the logic underneath them is fully covered; but they are
+the three places a refactor could break this quietly.
