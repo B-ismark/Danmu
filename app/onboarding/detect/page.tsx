@@ -22,19 +22,13 @@ import {
   heightFromFloorLine,
   findFloorLine,
   imageAspect,
-  placeFloorObject,
-  placeWallObject,
-  type CameraCal,
   type CameraView,
   calibrateFromPhoto,
 } from '@/lib/photo-geometry';
 import { hfovFromFocal35 } from '@/lib/exif';
-import { anchorFor } from '@/lib/physics';
-import type { Category, Shape } from '@/lib/scene-spec';
+import { geoRefine, type CalMap, type RoomDims } from '@/lib/detect-refine';
 
 type SlotEntry = { slot: CaptureSlot; url: string; cap: Capture };
-type RoomDims = { width: number; depth: number };
-type CalMap = Partial<Record<CaptureSlot, CameraCal>>;
 type Box = [number, number, number, number];
 type SavedDetection = NonNullable<RoomData['detectedObjects']>[number];
 
@@ -237,29 +231,6 @@ async function buildCals(entries: SlotEntry[], room: RoomDims): Promise<CalMap> 
       };
   }
   return map;
-}
-
-// Replace the AI's guessed position/size with values computed from projective
-// geometry: bbox bottom edge → floor position; angular size × distance → real
-// W and H. Depth stays a category default (single photo can't observe it) and
-// clampDims gates everything downstream. AI keeps naming/classifying only.
-function geoRefine(d: Detection, cals: CalMap, room: RoomDims): Detection {
-  const cal = cals[d.slot];
-  if (!cal) return d;
-  const anchor = anchorFor((d.category ?? 'other') as Category, (d.shape ?? 'box') as Shape);
-  if (anchor === 'ceiling' && d.category !== 'curtain') return d; // fan/pendant: not on the wall plane
-  const g =
-    anchor === 'floor'
-      ? placeFloorObject(d.box, d.slot, room, cal)
-      : placeWallObject(d.box, d.slot, room, cal);
-  if (!g) return d;
-  const depth = d.dimMM?.[1] ?? 500;
-  return {
-    ...d,
-    position: g.position,
-    yaw: typeof d.yaw === 'number' ? d.yaw : g.yaw,
-    dimMM: [g.widthMM, depth, g.heightMM],
-  };
 }
 
 // Every outcome of a detect attempt, in the product's own language. Two of these
