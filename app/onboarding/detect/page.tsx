@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { v4 as uuid } from 'uuid';
@@ -27,6 +27,9 @@ import {
 } from '@/lib/photo-geometry';
 import { hfovFromFocal35 } from '@/lib/exif';
 import { geoRefine, refineDetections, type CalMap, type RoomDims } from '@/lib/detect-refine';
+import { judgeLabels, type LabelCandidate, type LabelVerdict } from '@/lib/label-repair';
+import { formatDim } from '@/lib/units';
+import type { DimUnit } from '@/lib/store';
 
 type SlotEntry = { slot: CaptureSlot; url: string; cap: Capture };
 type Box = [number, number, number, number];
@@ -323,6 +326,7 @@ export default function DetectPage() {
   const router = useRouter();
   const roomId = useRoom((s) => s.roomId);
   const apiKey = useSettings((s) => s.apiKey);
+  const dimUnit = useSettings((s) => s.dimUnit);
   const [running, setRunning] = useState(false);
   const [saving, setSaving] = useState(false);
   const [slots, setSlots] = useState<SlotEntry[]>([]);
@@ -434,13 +438,17 @@ export default function DetectPage() {
         // Geometry pass, then the merge — in that order, which is the whole
         // reason this is one call into lib. The AI result only contributes
         // label/category and a depth hint.
-        const refined = keyed(
-          refineDetections(dets, calMap, room ? { width: room.width, depth: room.depth } : null),
-        );
+        const dims = room ? { width: room.width, depth: room.depth } : null;
+        const refined = keyed(refineDetections(dets, calMap, dims));
         setDetections(refined);
+        // Auto-confirm the detector's own high-confidence rows — but never one the
+        // measurement contradicts. A 0.9 self-report next to a size no bed could
+        // have is one row saying two different things, and locking it would file
+        // the finding away behind a padlock before anyone read it.
+        const judged = judgeLabels(refined, calMap, dims);
         const marks = new Set<number>();
         refined.forEach((d, i) => {
-          if (d.conf >= 0.85) marks.add(i);
+          if (d.conf >= 0.85 && judged[i].status !== 'suspect') marks.add(i);
         });
         setConfirmed(marks);
         if (refined.length === 0) {
@@ -527,6 +535,21 @@ export default function DetectPage() {
       else next.add(i);
       return next;
     });
+  }
+
+  // Only the geometry may accuse a word, and only the user may change it. The
+  // verdicts are recomputed from `detections` rather than stored on them: a
+  // verdict is about the current measurement, so persisting one would let a stale
+  // accusation outlive the row it was about.
+  const verdicts = useMemo(() => judgeLabels(detections, cals, roomDims), [detections, cals, roomDims]);
+
+  function applyRepair(i: number, cand: LabelCandidate) {
+    // In place, never a filter or a re-sort: `confirmed` is a Set of array
+    // INDICES, so reordering here would silently move every confirmation onto a
+    // different piece of furniture.
+    setDetections((arr) =>
+      arr.map((x, idx) => (idx === i ? { ...cand.detection, label: categoryLabel(cand.category) } : x)),
+    );
   }
 
   function deleteDetection(i: number) {
@@ -957,6 +980,9 @@ export default function DetectPage() {
                 key={d.uid ?? `row-${i}`}
                 d={d}
                 confirmed={confirmed.has(i)}
+                verdict={verdicts[i] ?? { status: 'unmeasured' }}
+                dimUnit={dimUnit}
+                onRepair={(cand) => applyRepair(i, cand)}
                 highlighted={linked === i}
                 onThisPhoto={d.slot === activeSlot}
                 onToggle={() => toggleConfirm(i)}
@@ -1041,25 +1067,43 @@ function NoticeCard({
 function DetectionRow({
   d,
   confirmed,
+  verdict,
+  dimUnit,
   highlighted,
   onThisPhoto,
   onToggle,
   onRename,
+  onRepair,
   onDelete,
   onLink,
   onShow,
 }: {
   d: Detection;
   confirmed: boolean;
+  verdict: LabelVerdict;
+  dimUnit: DimUnit;
   highlighted: boolean;
   onThisPhoto: boolean;
   onToggle: () => void;
   onRename: (label: string) => void;
+  onRepair: (cand: LabelCandidate) => void;
   onDelete: () => void;
   onLink: (on: boolean) => void;
   onShow: () => void;
 }) {
   const label = cleanLabelOf(d);
+  // Derived from the range itself, never typed next to the number it describes,
+  // and only the axes that actually missed get mentioned.
+  const miss =
+    verdict.status === 'suspect'
+      ? verdict.failed
+          .map((axis) =>
+            axis === 'width'
+              ? `${formatDim(verdict.allowed.width[0], dimUnit)}–${formatDim(verdict.allowed.width[1], dimUnit)} ${dimUnit} wide`
+              : `${formatDim(verdict.allowed.height[0], dimUnit)}–${formatDim(verdict.allowed.height[1], dimUnit)} ${dimUnit} tall`,
+          )
+          .join(' and ')
+      : '';
   return (
     // Hover AND focus drive the same highlight, so a keyboard user gets the
     // row↔photo link too. onFocus/onBlur bubble from the child buttons.
@@ -1114,6 +1158,40 @@ function DetectionRow({
         <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>
           {categoryLabel(d.category)} · {slotLabel(d.slot)}
         </div>
+        {/* The measurement disagreeing with the word. Said out loud rather than
+            acted on: a silent re-label is the same mistake as a silent resize.
+            Wraps rather than clips — the sentence is as long as the unit setting
+            and the category name make it. */}
+        {verdict.status === 'suspect' && (
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              gap: 6,
+              marginTop: 5,
+              fontSize: 11,
+              lineHeight: 1.45,
+              color: 'var(--warn-text)',
+            }}
+          >
+            <span style={{ flex: '1 1 auto', minWidth: 0 }}>
+              Measured {formatDim(verdict.measured.width, dimUnit)} × {formatDim(verdict.measured.height, dimUnit)}{' '}
+              {dimUnit} — {categoryLabel(d.category)} range is {miss}
+            </span>
+            {verdict.candidates.slice(0, 2).map((cand) => (
+              <button
+                key={cand.category}
+                onClick={() => onRepair(cand)}
+                className="ds-chip"
+                title={`Measure this again as ${categoryLabel(cand.category)}`}
+                style={{ height: 22, fontSize: 11, padding: '0 8px', flex: '0 0 auto' }}
+              >
+                {categoryLabel(cand.category)}?
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       {!onThisPhoto && (
         <button
