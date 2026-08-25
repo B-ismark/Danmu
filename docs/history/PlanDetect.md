@@ -32,7 +32,7 @@ correction is folded in with a note.
 | 4 — range-based label repair | **done** | `lib/label-repair.ts` + the review-screen surfacing. Decisions 1 and 2 answered: re-measure, and suggest-then-confirm |
 | 5 — bearing auto-slot | not started | **Decided: ingest AND retire the four-slot grid.** The larger of the two options, and a product change — see §10.5 |
 | 6 — confidence honesty | not started | No open decision. Needs the `source` field in both codec directions |
-| 7 — measure ceiling items | not started | **Decided: width only.** See §10.7 for why height is not measurable here |
+| 7 — measure ceiling items | **done** | `placeCeilingObject`, width only. Two corrections to §3 below — the row it intersects, and what happens past the wall |
 | 8 — pipeline harness | not started | **Decided: analytic ground truth only**, no renderer |
 | 9 — dead-field removal | **done** | `alsoSeenIn` cut from the type and all three prompt clauses. `position.y` turned out **not** to be dead — see the correction below |
 
@@ -43,7 +43,62 @@ invasive remaining phase and the one most likely to collide with UX work in the 
 tree. The harness should exist before it, not after. 9 and 7 are small and go first
 because they are cheap and independent.
 
-Gates after Phase 9: 1000 tests, 55 files, typecheck / lint / build clean.
+Gates after Phase 7: 1014 tests, 55 files, typecheck / lint / build clean.
+
+**Phase 7, and two things §3 got wrong about it.** §10.7 already corrected the
+signature (the ceiling plane needs `room.height`, so `RoomDims` gained it — as a
+REQUIRED field, so a caller that forgets it fails to compile rather than silently
+stopping measuring every fan). Writing it turned up two more, both found by
+arithmetic rather than by reading:
+
+1. **It intersects the MIDDLE bbox row, not the top edge.** The obvious design —
+   mirror `placeFloorObject`, whose bottom edge is on the floor — is wrong here,
+   because a floor object is a vertical thing at one distance while a ceiling fan
+   is a horizontal PLATE seen obliquely. Its image spans a range of distances and
+   the top of the bbox is its NEAREST rim, so intersecting there measures the near
+   rim and then applies the disc's full angular width at that shorter distance. For
+   a 1.2 m fan 2.0 m away that reads **881 mm — further from the truth than the
+   1000 mm catalogue default it was supposed to improve on.** The centre row reads
+   1145 mm. Pinned in `tests/photo-geometry.test.ts` as arithmetic, including the
+   "worse than not measuring" comparison, and mutation-verified.
+
+2. **An intersection past the far wall is REFUSED, not clamped** — the one place
+   this deliberately departs from `placeFloorObject`. The floor is visible right up
+   to the wall, so a foot landing slightly beyond it is measurement error and the
+   clamp recovers it. A ceiling is different: **a level camera in a normal room does
+   not see the ceiling at all.** At 66° hFOV on 4:3 the vertical half-angle is ~24°,
+   so from 1.5 m the ceiling of a 2.8 m room first enters frame 2.9 m away, past the
+   wall being photographed — the same fact `calibrateFromFloorLine` meets at the
+   other edge of the image. So a high pixel in such a frame is WALL, and the first
+   draft clamped it onto the ceiling plane and read a picture frame out as a 576 mm
+   ceiling fan. That was caught by a test whose premise was wrong, not by review.
+
+So Phase 7 pays off on an ultrawide (~106°, ceiling in frame from 1.3 m out), on a
+camera tilted up, or in a tall room — not on the nominal four-slot rig. Worth having
+anyway: the module header already notes that a wall shot in a small room is often
+taken on the ultrawide, and Phase 5 is heading for arbitrary uploads where tilt is
+normal. Where it cannot measure, it returns null and `geoRefine` hands the detection
+back untouched, which is precisely the pre-Phase-7 behaviour.
+
+**Phase 4's yield goes from three delivered to four.** The benchmark's ceiling-hook
+row — 100 mm against a fan's 900 mm floor — was a real finding waiting on a
+measurement, and now has one.
+
+**The consumer needed the same restriction, and the type is what enforced it.**
+`judgeLabel` tested both axes; a ceiling item's H is now a catalogue default or the
+AI's own hint, so judging it would be judging the model's number against the model's
+word — they agree by construction, which is the premise the whole module rests on.
+`measuredAxes(category, shape)` returns width alone for a ceiling anchor, and
+`LabelVerdict.measured.height` became **optional**, which immediately failed the
+build at the one place that would have printed a catalogue default on screen
+directly after the word "Measured".
+
+**A test that had quietly lost its teeth.** Phase 1's "a ceiling anchor comes back
+untouched" contract kept passing after `placeCeilingObject` shipped — but for a new
+reason: its fixture box sits below the horizon, so the refusal was the lens's, not
+the anchor's. Replaced by three tests that say which. The depth sweep's
+`if (category === 'fan') continue` is also gone: a skip whose stated reason has
+expired is a coverage hole that nothing reports.
 
 **Correction to §3 and §10.9: `position.y` was not dead metadata. It was a gate,
 and the gate was a bug.** The audit read `groundY` overwriting `pos[1]`
@@ -650,7 +705,10 @@ Flag these and stop; do not pick a default.
    same screens. Photos with no bearing still need the vanishing-point relative-slot
    path plus one rotation control that relabels the whole set at once.
 
-7. **Phase 7 measures width only. Decided, and the reason is geometric, not lazy.**
+7. ~~**Phase 7 measures width only.**~~ **Done.** The decision held; see §0 for the
+   two things this section got wrong about how. Original reasoning kept below.
+
+   **Phase 7 measures width only. Decided, and the reason is geometric, not lazy.**
    A ceiling fan seen from below projects as a disc: its bbox VERTICAL extent is the
    foreshortened diameter, not the thickness. Deriving H from it manufactures a
    1200 mm-tall fan, which `clampDims` then squashes to 450 — a fake measurement
