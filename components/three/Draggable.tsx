@@ -33,12 +33,11 @@ import { gestureOwnedByOther, useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { currentRoomScene } from '@/lib/room-scene';
 import { useDragLive } from '@/lib/drag-live';
-import { collidesAt, isParametric, isWallMountedPart, type ScenePart } from '@/lib/scene-spec';
-import { findSupportDetailed, groundY, isFloorStanding, snapToWall, wallStandoff } from '@/lib/physics';
-import { pointInFootprint, footprintBounds } from '@/lib/footprint';
+import { collidesAt, isParametric, type ScenePart } from '@/lib/scene-spec';
+import { isFloorStanding } from '@/lib/physics';
 import { clampDims } from '@/lib/dimension-ranges';
-import { obbFromPart, obbInsidePoly } from '@/lib/geometry';
-import { snapToNeighbors, type SnapLine } from '@/lib/item-snap';
+import { type SnapLine } from '@/lib/item-snap';
+import { resolvePlacement as resolveDrag, snapSteps } from '@/lib/drag-resolve';
 import { cascadeTransform, snapshotDescendants, wouldCreateCycle, type DescendantOffset } from '@/lib/rigid-parent';
 import { Pickable } from './Pickable';
 import { Highlight } from './Highlight';
@@ -159,12 +158,9 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   const isHovered = useStudio((s) => s.hoveredPartId === partId);
   const mode = useStudio((s) => s.transformMode);
   const snapMode = useStudio((s) => s.snapMode);
-  // Snap increments. 'fine' = 10mm / 15° (nudging); 'coarse' = 50mm / 45° (which
-  // also lands cleanly on 90/135/180°); 'off' = free drag.
-  const translationSnap =
-    snapMode === 'off' ? null : snapMode === 'fine' ? 0.01 : 0.05;
-  const rotationSnap =
-    snapMode === 'off' ? null : snapMode === 'fine' ? Math.PI / 12 : Math.PI / 4;
+  // Snap increments, from the same module that applies them during a resolve, so
+  // the gizmo's steps and the drag's magnetism can never drift apart.
+  const { translate: translationSnap, rotate: rotationSnap } = snapSteps(snapMode);
 
   const setPosition = useStudio((s) => s.setPosition);
   const setRotation = useStudio((s) => s.setRotation);
@@ -253,9 +249,10 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     return effParts().filter((p) => !skip.has(p.id));
   }
 
-  /** The shared deterministic placement pipeline: containment clamp → wall
-   *  snap (wall-mounted) → gravity/support → vertical clamp. Returns the
-   *  resolved position + whether it is a legal spot (in-room, collision-free). */
+  /** The deterministic placement pipeline, which now lives in
+   *  `lib/drag-resolve.ts` so the 2D plan resolves a drag the same way this does.
+   *  What stays here is only what is genuinely three-side: the live mount height
+   *  off the object3D being animated. */
   function resolvePlacement(
     rawX: number,
     rawZ: number,
@@ -264,81 +261,18 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     effParts: ScenePart[],
   ): { pos: [number, number, number]; rot: number; valid: boolean; snapLines?: SnapLine[]; supportId?: string } {
     if (!part) return { pos: [rawX, 0, rawZ], rot, valid: false };
-
-    // Containment clamp — keep the part's whole rotated footprint inside the
-    // bounding box of the room (footprints can be off-centre after independent
-    // wall moves).
-    const halfW = dim[0] / 2000;
-    const halfD = dim[1] / 2000;
-    const c = Math.abs(Math.cos(rot));
-    const sn = Math.abs(Math.sin(rot));
-    const extX = halfW * c + halfD * sn;
-    const extZ = halfW * sn + halfD * c;
-    const bnd = footprintBounds(footprint);
-    let x = Math.max(bnd.minX + extX, Math.min(bnd.maxX - extX, rawX));
-    let z = Math.max(bnd.minZ + extZ, Math.min(bnd.maxZ - extZ, rawZ));
-    let outRot = rot;
-    let snapLines: SnapLine[] | undefined;
-
-    // Wall-mounted items (TV, mirror, painting, AC, curtain) ride the NEAREST
-    // wall — edge-exact against the footprint polygon, so they slide along
-    // L/T/U inner walls too, always facing into the room.
-    const wallMounted = isWallMountedPart(part.category, part.shape);
-    if (wallMounted) {
-      const snapped = snapToWall([x, 0, z], dim, footprint, wallStandoff(part.shape));
-      x = snapped.x;
-      z = snapped.z;
-      if (snapped.rot !== undefined) outRot = snapped.rot;
-    } else if (snapMode !== 'off') {
-      // Magnetic item-to-item snapping — edges flush / centres aligned against
-      // neighbouring furniture (Sims-style). Reported lines drive the green
-      // alignment guides in MeasureGuides.
-      const snapped = snapToNeighbors(x, z, outRot, dim, effParts, partId);
-      x = Math.max(bnd.minX + extX, Math.min(bnd.maxX - extX, snapped.x));
-      z = Math.max(bnd.minZ + extZ, Math.min(bnd.maxZ - extZ, snapped.z));
-      if (snapped.lines.length > 0) snapLines = snapped.lines;
-    }
-
-    // Gravity rules:
-    //   floor-standing items (sofa, bed, fridge, wardrobe, etc.) MUST sit on a
-    //     surface — top of another part if XZ overlap exists, else the floor.
-    //   wall / ceiling-mounted items anchor to their canonical mounting height.
-    const centered = !isFloorStanding(part.category, part.shape);
-    const partH = dim[2] / 1000;
-    let y: number;
-    let supportId: string | undefined;
-    if (part.category === 'rug') {
-      y = 0;
-    } else if (!centered) {
-      const support = findSupportDetailed(effParts, partId, x, z, dim, outRot, part.circle);
-      y = support?.y ?? 0;
-      supportId = support?.id;
-    } else {
-      // Wall/ceiling-mounted: keep the user's chosen mount height (set via the
-      // gizmo's Y axis or the Inspector) while sliding along walls. Fresh parts
-      // (no meaningful current y yet) fall back to the canonical height.
-      const curY = ref.current?.position.y ?? NaN;
-      y = Number.isFinite(curY) && curY > 0.01 ? curY : groundY(part.category, part.shape, dim, roomHeight);
-    }
-
-    // Vertical containment — keep the whole part between floor and ceiling.
-    if (centered) {
-      y = Math.max(partH / 2 + 0.02, Math.min(roomHeight - partH / 2 - 0.02, y));
-    } else if (y + partH > roomHeight - 0.02) {
-      y = Math.max(0, roomHeight - 0.02 - partH);
-    }
-
-    // Legality: inside the actual polygon (catches L/T/U notches the bounding
-    // box can't) + collision-free. Wall-mounted parts skip the polygon check —
-    // the snap just put them exactly on an edge.
-    const slightlyShrunk = obbFromPart([x, y, z], outRot, [dim[0] - 10, dim[1] - 10, dim[2]]);
-    const inRoom =
-      wallMounted ||
-      part.category === 'rug' ||
-      (obbInsidePoly(slightlyShrunk, footprint) && pointInFootprint(x, z, footprint));
-    const collides = collidesAt(effParts, partId, [x, y, z], outRot, dim);
-
-    return { pos: [x, y, z], rot: outRot, valid: inRoom && !collides, snapLines, supportId };
+    return resolveDrag({
+      part,
+      rawX,
+      rawZ,
+      rot,
+      dim,
+      parts: effParts,
+      footprint,
+      roomHeight,
+      snapMode,
+      currentY: ref.current?.position.y,
+    });
   }
 
   /** Current dims from the group's live scale (the scale gizmo writes scale,
@@ -636,6 +570,11 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // gesture; OrbitControls listens on the canvas element directly and gets the
     // event either way, but setDragging below would have switched it off.
     if (useStudio.getState().panKeyHeld) return;
+    // Alt held = the press is asking WHICH piece, not moving one. `Pickable`
+    // answers it on the click; starting a drag here first would nudge the very
+    // piece the user is saying they did not mean. Same reasoning as the pan guard
+    // above, and checked in the same place for the same reason.
+    if (e.altKey) return;
     // The gizmo's own handles run their interaction — only grab presses on the
     // part body itself.
     e.stopPropagation();
