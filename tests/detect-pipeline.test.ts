@@ -211,6 +211,12 @@ const SNAP_M = 0.2;
 describe('detection pipeline over a known room', () => {
   // Printed unconditionally, because "the harness reports a number" is the point and
   // a number only visible on failure is not reported.
+  //
+  // That takes a flag. vitest 4's default reporter DISCARDS console output from a
+  // passing run, so for a while this printed to nobody and the gate stayed green
+  // over an invisible baseline. `pnpm test` passes `--disableConsoleIntercept`, and
+  // `tests/toolchain.test.ts` pins it — running vitest directly without it is why
+  // you would see no table here.
   const fmt = (n: number) => (Number.isNaN(n) ? '  --  ' : n.toFixed(4).padStart(7));
   console.log(
     [
@@ -315,7 +321,11 @@ describe('detection pipeline over a known room', () => {
 // real piece of furniture silently deleted; the other is a duplicate one tap away
 // from gone. That asymmetry is the whole argument, and it points the same way as
 // every other decision in lib/detect-refine.ts.
-describe('the cross-slot label test, measured rather than argued', () => {
+// Two of the three fixtures below are SAME-slot, which is not a slip: the label
+// test guards rule 2, and rule 2 carries no slot test (see its note in
+// lib/detect-refine.ts). Dropping label equality would cost the gallery pair
+// whichever photo they came from.
+describe('the merge label test, measured rather than argued', () => {
   const near = (label: string, x: number): Detection => ({
     label,
     conf: 0.9,

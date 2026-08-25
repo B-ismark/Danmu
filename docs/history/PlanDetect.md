@@ -86,6 +86,17 @@ evidence; it is one. Four mutations verified, including that one.
   floor or ceiling backprojection that HIT the wall clamp is one whose geometry was
   overridden rather than measured. `distance` returns the clamped value, so a caller
   cannot tell. That wants a flag on `GeoPlacement`, and it is a real follow-up.
+- **A repair does not re-run the merge.** `refineDetections` runs once, before any
+  uid exists, and `applyRepair` only re-measures the one row the user pressed. So a
+  piece mislabelled differently in two photos — a curtain read as a Bed from N and a
+  Wardrobe from W — stays two rows even after the user repairs one of them into
+  agreement with the other. Re-running the merge on a repair would mean merging rows
+  that already carry uids and confirmations, which is a survivorship question this
+  screen has never had to answer (`confirmed` is a Set of array INDICES). Left as
+  two rows, which is the safe direction — one tap to delete — and worth a sentence
+  in Phase 5, since auto-slotting changes how often the same object is photographed
+  twice. Raised by a second reviewer, not by the harness: it is a UI-state gap, and
+  the harness deliberately stops at the pure pipeline.
 - **`lib/image-quality.ts` discounting a blurry photo's detections.** `Quality` is
   scored at capture time and shown there, but `Capture` does not persist it, so the
   detect screen has nothing to read. Either a persisted-schema change or a re-score
@@ -104,7 +115,21 @@ scale-free by construction. Deliberately not intersection-over-minimum: that wou
 merge a shelf boxed inside its own bookcase, and keeping both is the safe way to be
 wrong here.
 
-**The baseline is exact, and that is the point.** With a perfect detector, eight of
+**The report was invisible for as long as the harness existed.** Found in review, not
+by a failing test, because there is no failing test to have: vitest 4's default
+reporter discards `console.log` from a run where nothing fails. Probed three
+placements — module scope, `describe` body, inside an `it` — and all three vanish.
+So the file that says in its own comments that it prints "unconditionally, because a
+number only visible on failure is not reported" was reporting to nobody, on a green
+gate, over a baseline nobody could see. `pnpm test` now carries
+`--disableConsoleIntercept`; `tests/toolchain.test.ts` pins both the flag and the
+harness's `console.log` call, since losing either raises nothing. Both assertions
+mutation-verified.
+
+That is also how the count below got corrected from *eight* to *nine*: with the
+report finally on screen it could be counted rather than remembered.
+
+**The baseline is exact, and that is the point.** With a perfect detector, nine of
 the ten pieces come back at **0.0000 m** position error and **0 mm** width error;
 all ten keep their label with no false accusation; eleven detections become ten
 parts, merging exactly the one object that was photographed twice. Anything not in

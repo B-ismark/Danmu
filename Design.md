@@ -399,7 +399,7 @@ read did not, so the next press of the always-enabled Finish button wrote
 **`tests/detect-pipeline.test.ts`** regression-tests the whole chain over one
 synthetic room whose contents are known, from analytic ground truth — boxes are
 projected through a test-side camera model, so there is no renderer in CI. With a
-perfect detector, eight of its ten pieces come back at **0.0000 m** and **0 mm**, so
+perfect detector, nine of its ten pieces come back at **0.0000 m** and **0 mm**, so
 anything not in its allowance table is a defect rather than noise. It cannot test the
 projection itself (both directions share a camera model, and
 `tests/photo-geometry.test.ts`'s hand-computed cases own that), and it is not a

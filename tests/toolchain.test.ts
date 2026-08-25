@@ -17,6 +17,11 @@
 //
 // These assertions are the fast, local half of that guard; `.github/workflows/ci.yml`
 // reads the build's own output as a backstop for a third way nobody has found yet.
+//
+// A third invariant of the same shape lives at the bottom of this file, about the
+// `test` script rather than the lint one: vitest 4's default reporter DISCARDS
+// `console.log` from a passing run, so a test file that reports a measurement
+// reports it to nobody.
 
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -90,6 +95,7 @@ describe('the flat config, as `next build` reads it', () => {
   }, RESOLVE_TIMEOUT);
 
   it('turns no-img-element off for the generated-image routes, and only those', async () => {
+    // (see the end of this file for the third invariant, about `pnpm test`)
     // `next/og` renders these with satori in Node at build time, so `next/image`
     // has nothing to optimise and the rule does not apply.
     //
@@ -109,4 +115,35 @@ describe('the flat config, as `next build` reads it', () => {
     const app = (await resolveFor('components/ui/primitives.tsx'))?.rules?.['@next/next/no-img-element'];
     expect([app].flat()[0], 'the rule must still be live for ordinary components').not.toBe(0);
   }, RESOLVE_TIMEOUT);
+});
+
+// The `test` script's own flag, which is load-bearing and invisible when missing.
+//
+// vitest 4's default reporter swallows `console.log` from a run where nothing
+// fails — verified by probe: a log at module scope, in a `describe` body and inside
+// an `it` all three vanish. `tests/detect-pipeline.test.ts` exists to REPORT a
+// measurement (ten pieces of furniture, their position and width error against
+// analytic ground truth) and says in its own comments that it prints
+// unconditionally, "because a number only visible on failure is not reported".
+// Without `--disableConsoleIntercept` that claim was simply false, and had been for
+// as long as the file existed: the assertions passed, the gate went green, and the
+// baseline nobody could see was the whole point of building it.
+//
+// Pinned here rather than trusted, because there is no failure mode to notice. A
+// dropped flag does not error; the report just stops appearing, and a report that
+// stops appearing is indistinguishable from one nobody read.
+describe('the test script keeps its console output', () => {
+  it('runs vitest with console interception off', () => {
+    const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+    for (const script of ['test', 'test:watch']) {
+      expect(pkg.scripts[script], `pnpm ${script}`).toContain('--disableConsoleIntercept');
+    }
+  });
+
+  it('and the file that depends on that actually logs', () => {
+    // The other half: the flag is pointless if the harness stops reporting, and a
+    // reporting call is easy to lose in a refactor. Cheap, and it fails loudly.
+    const src = readFileSync(join(ROOT, 'tests', 'detect-pipeline.test.ts'), 'utf8');
+    expect(src).toContain('console.log');
+  });
 });

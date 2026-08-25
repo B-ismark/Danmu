@@ -179,7 +179,7 @@ backend, no account. The 3D studio *is* the product.
 pnpm install
 pnpm dev          # http://localhost:3000
 pnpm typecheck    # tsc --noEmit — run after edits
-pnpm test         # vitest run — pure-logic suite (+ jsdom files, see below)
+pnpm test         # vitest run --disableConsoleIntercept — pure-logic suite
 pnpm build        # next build
 pnpm lint         # eslint . --max-warnings 0 — flat config in eslint.config.mjs
 pnpm audit        # dependency advisories — see `pnpm.overrides` in package.json
@@ -209,7 +209,18 @@ fit-check all have tests
 in
 `tests/`).
 
-The suite runs in the **node** environment by default. Files that need a browser
+The `--disableConsoleIntercept` on `pnpm test` is load-bearing, not tidy-up.
+vitest 4's default reporter **discards `console.log` from a passing run** — at module
+scope, in a `describe` body and inside an `it` alike — and
+`tests/detect-pipeline.test.ts` exists to *report* a measurement: ten pieces of
+furniture, their position and width error against analytic ground truth, printed on
+every green run so a drifting baseline is visible without reading a diff. Without the
+flag that table printed to nobody while the gate stayed green, which is the failure
+shape this repo keeps finding: not a broken check, an invisible one.
+`tests/toolchain.test.ts` pins the flag and pins the harness's own call to
+`console.log`, because losing either is silent.
+
+The suite runs in the **node** environment by default (+ jsdom files, see below). Files that need a browser
 opt in individually with `// @vitest-environment jsdom` — `storage*.test.ts`
 (IndexedDB via `fake-indexeddb`) and `history.test.ts` (zustand `persist` wants
 localStorage). Don't switch the whole suite over. Two properties there can only be
