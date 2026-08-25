@@ -11,6 +11,7 @@
 import { useMemo, type ReactNode } from 'react';
 import { usePartTransform } from '@/lib/room-scene';
 import { supportsDecor, autoSurfaceDecor, type DecorItem, type DecorKind, type ScenePart } from '@/lib/scene-spec';
+import { DECOR } from '@/lib/scene-palette';
 
 const NOPICK = () => {};
 
@@ -37,10 +38,10 @@ function mulberry32(a: number) {
 }
 const seeded = (s: string) => mulberry32(xmur3(s)());
 
-const BOOK_C = ['#7A2A2A', '#2A4A7A', '#5D3820', '#A88A4A', '#3A5A3A', '#6A3A6A'];
-const POT_C = ['#B5774D', '#C9B79C', '#3E5A52', '#8A8A86'];
-const VASE_C = ['#D9CFC0', '#6E8C84', '#B5734D', '#2E2A26'];
-const PILLOW_C = ['#C9A98E', '#8FA98C', '#C57B53', '#3F5670', '#D6C7AE'];
+// The colours themselves live in lib/scene-palette, with the rest of what the 3D
+// layer cannot read from a custom property. These are the whole body colour of
+// the thing being drawn, picked per item from the set by the seeded RNG.
+const { book: BOOK_C, pot: POT_C, vase: VASE_C, pillow: PILLOW_C } = DECOR;
 
 // ─── ornament primitives (non-pickable) ──────────────────────────────────────
 function BookStack({ rand }: { rand: () => number }) {

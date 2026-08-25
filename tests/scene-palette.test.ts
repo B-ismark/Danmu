@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SCENE, PLAN, defaultBodyColor, wallColor } from '../lib/scene-palette';
+import { SCENE, PLAN, DETAIL, DECOR, defaultBodyColor, wallColor } from '../lib/scene-palette';
 import type { Category, Shape } from '../lib/scene-spec';
 
 // The point of this module is that the 3D layer, the exported plan, and the
@@ -117,5 +117,54 @@ describe('defaultBodyColor', () => {
     // as anonymous filler.
     expect(defaultBodyColor('bed', 'box')).toBe(defaultBodyColor('bed', 'bed-single'));
     expect(defaultBodyColor('fridge', 'cylinder')).toBe(defaultBodyColor('fridge', 'fridge'));
+  });
+});
+
+describe('furniture detail + decor palettes', () => {
+  it('exposes every detail colour as a full hex', () => {
+    for (const [key, value] of Object.entries(DETAIL)) {
+      expect(value, key).toMatch(HEX);
+    }
+  });
+
+  it('gives every decor kind a non-empty set of distinct colours', () => {
+    for (const [kind, set] of Object.entries(DECOR)) {
+      expect(set.length, kind).toBeGreaterThan(1);
+      for (const c of set) expect(c, kind).toMatch(HEX);
+      // A repeat inside one set is a colour that shows up twice as often as it
+      // looks like it will, which is not a decision anybody made.
+      expect(new Set(set).size, kind).toBe(set.length);
+    }
+  });
+
+  // ── The guard that matters ────────────────────────────────────────────────
+  // This module's whole reason for existing is that a shared colour written out
+  // in several renderers is several colours pretending to be one — and that is
+  // exactly what was found here: `Box`'s outline, dark walnut legs, near-black
+  // hardware, and TWO different book-spine palettes (`Dressing` had six spines,
+  // `BookshelfGeo` eight, so the books on a shelf did not match the books beside
+  // it). Adding them to this file fixes today; this stops tomorrow.
+  it('is not re-declared as a literal in any renderer', async () => {
+    const { readdirSync, readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const dir = join(process.cwd(), 'components', 'three');
+    const owned = new Set(
+      [...Object.values(DETAIL), ...Object.values(DECOR).flat()].map((c) => c.toLowerCase()),
+    );
+    // Three-digit shorthand counts: '#222' and '#222222' are the same colour to
+    // the renderer and a different string to a grep, which is how one of these
+    // survived a previous sweep.
+    const expand = (h: string) =>
+      h.length === 4 ? `#${h[1]}${h[1]}${h[2]}${h[2]}${h[3]}${h[3]}` : h;
+
+    const offenders: string[] = [];
+    for (const file of readdirSync(dir).filter((f) => f.endsWith('.tsx'))) {
+      const src = readFileSync(join(dir, file), 'utf8');
+      for (const m of src.matchAll(/#[0-9A-Fa-f]{3}(?:[0-9A-Fa-f]{3})?\b/g)) {
+        const hex = expand(m[0]).toLowerCase();
+        if (owned.has(hex)) offenders.push(`${file}: ${m[0]}`);
+      }
+    }
+    expect(offenders, 'read it from lib/scene-palette instead').toEqual([]);
   });
 });
