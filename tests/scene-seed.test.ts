@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { defaultScene, PART_LIBRARY } from '../lib/scene-spec';
 import { footprintForLayout, offsetWall, pointInFootprint, type Footprint, type LayoutId } from '../lib/footprint';
-import { footFromPart, footInsidePoly, footIntersectionArea, footArea, distToBoundary, obbGap } from '../lib/geometry';
+import { footFromPart, footInsidePoly, footIntersectionArea, footArea, distToBoundary, nearestEdge, obbGap } from '../lib/geometry';
 import { isObstacle, relationFor, roleOf, sharesFloor, WALK_MIN } from '../lib/layout-rules';
 import { analyzeRoom } from '../lib/clearance';
+import { solveLayout } from '../lib/layout-solve';
 import {
   costBreakdown,
   navigabilityCost,
@@ -161,9 +162,13 @@ describe.each(PRESETS)('starter scene · $id', ({ id, w, d }) => {
     // 5.5, 4.9, 13.4, with the T gaining a piece as well as losing two thirds of its
     // cost. The ceiling comes down with them; 40 would now pass a room that had lost
     // everything the search buys.
+    //
+    // …and again after `wallDebt` stopped charging a finished back for a gap that is
+    // a route: 2.2, 10.8, 1.6, 4.9, 8.8. The open plan was 13.1 of which 11.5 was one
+    // sofa standing where the seeder had deliberately put it.
     const ctx: LayoutContext = { parts, movable: parts.map(() => true), footprint: poly };
     const cost = costBreakdown(prepare(ctx), parts.map(here), DEFAULT_WEIGHTS, NAV_CELL);
-    expect(cost.total).toBeLessThan(20);
+    expect(cost.total).toBeLessThan(15);
   });
 
   it('seeds a room you can walk all of', () => {
@@ -340,4 +345,49 @@ describe('starter scene in a room that is not a preset', () => {
   it('survives a degenerate footprint', () => {
     expect(defaultScene('custom', 1, 1, { footprint: [[0, 0], [0.1, 0]] as Footprint })).toEqual([]);
   });
+});
+
+describe('the open plan keeps the route it was seeded with', () => {
+  // The one preset `Suggest` would not leave alone. `living()` puts a walkway rather
+  // than a wall gap behind the sofa when another group sits on the far side of that
+  // edge — that is what an open plan IS — and says so. `layout-score`'s wall term then
+  // charged 12 per metre for the same gap, which was 11.53 of the preset's whole 13.08.
+  // So the solver pulled the sofa 0.27-0.53 m back in at every seed and stopped there,
+  // leaving a route too tight to walk down and too wide to read as flush.
+  //
+  // Two consumers of one rule, each with its own copy — CLAUDE.md rule 3 — so the
+  // number moved to `wallDebt` in `layout-rules` and both read it.
+  const W = 7.5;
+  const D = 5.6;
+  const poly = footprintForLayout('open', W, D);
+  const parts = defaultScene('open', W, D);
+
+  /** Gap between a piece's back and the wall behind it, metres. */
+  function backGap(p: ScenePart, at: Placement): number {
+    const f = footFromPart([at.x, p.pos[1], at.z], at.yaw, p.dimMM, p.circle);
+    const e = nearestEdge(poly, f.cx, f.cz);
+    if (!e) return Infinity;
+    const c = Math.cos(f.rot);
+    const sn = Math.sin(f.rot);
+    return e.dist - (Math.abs(c * e.nx - sn * e.nz) * f.hw + Math.abs(sn * e.nx + c * e.nz) * f.hd);
+  }
+
+  const sofaIdx = parts.findIndex((p) => roleOf(p) === 'sofa');
+
+  it('seeds a walkway behind the sofa, not a wall gap', () => {
+    expect(sofaIdx).toBeGreaterThanOrEqual(0);
+    expect(backGap(parts[sofaIdx], here(parts[sofaIdx]))).toBeGreaterThanOrEqual(WALK_MIN);
+  });
+
+  it('is left alone by the solver, at every seed', () => {
+    for (let seed = 1; seed <= 6; seed++) {
+      const r = solveLayout(parts, poly, parts.map(() => false), { seed });
+      // Not just 'the sofa did not move' — nothing in the room did. A starter room
+      // the app's own solver immediately rearranges is a starter room that was wrong.
+      expect(r.moves, `seed ${seed}`).toEqual([]);
+      expect(backGap(parts[sofaIdx], r.placements[sofaIdx]), `seed ${seed}`).toBeGreaterThanOrEqual(
+        WALK_MIN,
+      );
+    }
+  }, 60_000);
 });

@@ -10,6 +10,7 @@ import {
   roomProfile,
   routeWidth,
   sharesFloor,
+  wallDebt,
   zoneExempt,
   WALK_MIN,
   WALK_COMFORT,
@@ -415,5 +416,42 @@ describe('fixedBand', () => {
     const rel = relationFor(lamp, sofa)!;
     expect(rel.specId).toBe('lamp-seat');
     expect([rel.min, rel.max]).toEqual(fixedBand('lamp-seat'));
+  });
+});
+
+describe('wallDebt', () => {
+  it('charges the gap behind any piece, metre for metre, while it is dead space', () => {
+    for (const role of ['sofa', 'wardrobe'] as const) {
+      expect(wallDebt(role, 0)).toBe(0);
+      expect(wallDebt(role, 0.2)).toBeCloseTo(0.2, 6);
+      // Never negative — a piece whose back has crossed INTO the wall is an overlap,
+      // and that is a different term's fault to report.
+      expect(wallDebt(role, -0.3)).toBe(0);
+    }
+  });
+
+  it('stops charging a finished back once the gap is a walkway', () => {
+    // The property that matters is FLATNESS, not the value: a term that keeps
+    // rising is a gradient, and a gradient is an instruction. This is what made
+    // `Suggest` pull the open plan's sofa 0.27-0.53 m back toward the wall at every
+    // seed, narrowing a route the seeder had left there on purpose.
+    expect(wallDebt('sofa', WALK_MIN)).toBeCloseTo(WALK_MIN, 6);
+    expect(wallDebt('sofa', WALK_MIN + 0.4)).toBeCloseTo(WALK_MIN, 6);
+    expect(wallDebt('sofa', 3)).toBeCloseTo(WALK_MIN, 6);
+  });
+
+  it('keeps charging a piece whose back is not meant to be seen', () => {
+    // A wardrobe's back is bare board and a fridge's is a compressor. No width of
+    // walkway behind those makes it a composition, so the debt stays linear and the
+    // solver keeps a reason to put them back.
+    expect(wallDebt('wardrobe', 3)).toBeCloseTo(3, 6);
+    expect(wallDebt('bookshelf', 3)).toBeCloseTo(3, 6);
+    expect(wallDebt('fridge', 3)).toBeCloseTo(3, 6);
+  });
+
+  it('still prefers the wall over the float for a sofa', () => {
+    // The cap must not read as permission. Flush still costs strictly less than
+    // floating, so nothing pushes a sofa off a wall it is already against.
+    expect(wallDebt('sofa', 0.02)).toBeLessThan(wallDebt('sofa', WALK_MIN));
   });
 });
