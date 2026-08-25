@@ -1085,13 +1085,13 @@ VI turned every greedy choice in the seeder — which wall a group backs onto, w
 the living group gets — into a plan, built the plans in full, and let `costBreakdown`
 pick. Costs are on the report's own grid, with the navigation term on:
 
-| room | pieces, VII → VI | seeded cost, VII → VI | seed time | Suggest moves, 3 seeds |
-|---|---|---|---|---|
-| `rect 6×4` | 12 | 4.8 | 0.6 ms | 0, 0, 1 |
-| `l 6×4.7` | 14 | 24.7 → **14.7** | 9.1 ms | 0, 7, 5 |
-| `t 5.5×4.7` | 14 → **16** | 16.9 → **1.6** | 48.3 ms | 0, 0, 0 |
-| `u 6×5` | 12 | 4.9 | 7.9 ms | 0, 0, 0 |
-| `open 7.5×5.6` | 17 | 13.4 | 21.0 ms | 1, 1, 1 |
+| room | pieces | seeded cost, VII → VI → lamp | Suggest moves, 3 seeds |
+|---|---|---|---|
+| `rect 6×4` | 12 | 4.8 → 4.8 → **2.2** | 0, 0, 1 → **0, 0, 0** |
+| `l 6×4.7` | 14 | 24.7 → 14.7 → **10.8** | 0, 7, 5 → **1, 1, 1** |
+| `t 5.5×4.7` | 14 → **16** | 16.9 → **1.6** | 0, 0, 0 |
+| `u 6×5` | 12 | 4.9 | 0, 0, 0 |
+| `open 7.5×5.6` | 17 | 13.4 → **13.1** | 1, 1, 1 → 2, 1, 1 |
 
 Zero clearance findings and zero stranded floor throughout, and 76–88 % of the floor
 free to walk on. Two presets improved and three were already at the greedy optimum —
@@ -1099,11 +1099,26 @@ which is the honest result, and the reason plan zero is always the greedy plan: 
 the search cannot improve on comes out unchanged, and `rect` does not search at all.
 
 The last column is the one that says whether any of this worked, because it is what the
-user sees. `t` and `u` answer Suggest with *"this is already a good arrangement"* at
-every seed. The `l` is the honest remainder: it seeds at 14.7 and the solver still finds
-9.8–13.2, so Suggest has something real to offer there — the search fixed its bay
-assignment but not everything about its wing, and no rank raise changes that, since the
-L’s bay has four sides and all four are already enumerated.
+user sees.
+
+The `l` was the honest remainder for a while: it seeded at 14.7 while the solver reached
+9.8, so Suggest moved five to seven pieces on a brand-new room. Chasing that number is
+what found the last bug, and it was not in any of the machinery above — it was one line
+of candidate spots. **The living group’s floor lamp listed the ends of its wall before
+the places beside the sofa**, and an end fits, so the lamp took one: 2.75 m from the seat
+it lights, against `lamp-seat`’s 0–0.7 m band. That single piece was 3.7–5.0 of the L’s
+6.63 relation cost *and* the whole of its 2.34 window cost, because the far end of that
+wall is where the window is. The same list was also still anchored at `u = 0` from before
+the group’s position was searched, so on any wall the search had shifted, "beside the
+sofa" pointed at empty floor.
+
+With it fixed, three of five presets answer Suggest with *"this is already a good
+arrangement"* at every seed and the `l` moves one piece instead of seven. Worth stating
+plainly: a scored constructive search, a circulation term and a group-rigid solver are
+all in this section, and the last four cost units came off a starter room because
+somebody put a lamp in the wrong order in a list. The machinery is what made that
+visible — `costBreakdown` named the term, `moves` named the piece — but it was not what
+was wrong.
 
 The T is the case that justifies the whole part. Its winning room has **one more piece,
 a third of the cost, and no floor anyone is cut off from** — and it is a room that no
