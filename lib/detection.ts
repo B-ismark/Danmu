@@ -234,55 +234,11 @@ export async function detectAcrossImages(
   if (!Array.isArray(parsed)) {
     throw new DetectError('BAD_RESPONSE', 'The detection service replied in an unexpected shape.', parsed);
   }
-  const valid = (parsed as Detection[]).filter((d) => d.box && d.box.length === 4 && d.slot);
-  return dedupeDetections(valid);
-}
-
-/** Two detections are the same physical object if their estimated 3D centres are
- *  within this many metres of each other. Generous enough to catch one object
- *  reported twice from two walls, tight enough that a pair of nightstands either
- *  side of a bed (~1.5 m apart) stays two objects. */
-const SAME_OBJECT_M = 0.6;
-
-/** Drop near-identical detections. Two rules:
- *
- *  1. Same slot + same category + bbox centres within ~12% on each axis — one
- *     object boxed twice in the same photo.
- *  2. Same label + same category ACROSS slots, but only when their estimated 3D
- *     positions agree — one object seen from two walls with `alsoSeenIn` omitted.
- *
- *  Rule 2 used to match on the label alone, with no positional test at all, so any
- *  two objects the model named identically collapsed into one: four matching
- *  dining chairs, a pair of bedside tables, two curtains on the same wall. On the
- *  one path in the product that spends the user's quota, that quietly threw away
- *  correct results. When either detection has no `position` there is nothing to
- *  compare, and we keep both — a duplicate the user can delete beats a real piece
- *  of furniture that never appears.
- *
- *  Exported for tests: this is pure logic that decides what the user gets from the
- *  one call that spends their quota. */
-export function dedupeDetections(items: Detection[]): Detection[] {
-  const out: Detection[] = [];
-  for (const d of items) {
-    const cx = d.box[0] + d.box[2] / 2;
-    const cy = d.box[1] + d.box[3] / 2;
-    const isDup = out.some((o) => {
-      if (o.category !== d.category) return false;
-      // Same photo — overlapping bbox centres mean one object boxed twice.
-      if (o.slot === d.slot) {
-        const ocx = o.box[0] + o.box[2] / 2;
-        const ocy = o.box[1] + o.box[3] / 2;
-        if (Math.abs(ocx - cx) < 0.12 && Math.abs(ocy - cy) < 0.12) return true;
-      }
-      // Different photos — same name AND same place.
-      if (o.label.toLowerCase().trim() !== d.label.toLowerCase().trim()) return false;
-      if (!o.position || !d.position) return false;
-      const dist = Math.hypot(o.position.x - d.position.x, o.position.z - d.position.z);
-      return dist < SAME_OBJECT_M;
-    });
-    if (!isDup) out.push(d);
-  }
-  return out;
+  // NOT deduped here. Merging two detections is a decision about what EXISTS,
+  // and it used to be taken on the model's own guessed `position` — the exact
+  // numbers the geometry pass then overwrote. It now runs in lib/detect-refine.ts
+  // AFTER refinement, which also means the on-device path gets it too.
+  return (parsed as Detection[]).filter((d) => d.box && d.box.length === 4 && d.slot);
 }
 
 function blobToBase64(blob: Blob): Promise<string> {

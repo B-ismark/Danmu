@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { geoRefine, type CalMap, type RoomDims } from '@/lib/detect-refine';
+import { dedupeDetections, geoRefine, refineDetections, type CalMap, type RoomDims } from '@/lib/detect-refine';
 import { placeFloorObject, placeWallObject, type CameraCal } from '@/lib/photo-geometry';
 import type { Detection } from '@/lib/detection';
 import { CATEGORIES, SHAPES, defaultDepthFor } from '@/lib/scene-spec';
@@ -175,5 +175,44 @@ describe('defaultDepthFor', () => {
     expect(defaultDepthFor('painting', 'painting')).toBeLessThanOrEqual(60);
     // wardrobe D default 600, but a curtain's shape range caps depth at 200.
     expect(defaultDepthFor('wardrobe', 'curtain')).toBeLessThanOrEqual(200);
+  });
+});
+
+describe('refineDetections', () => {
+  // Two real chairs at opposite ends of the same wall, which the model reported
+  // at the SAME made-up 3D position. Gemini guessing a position badly is not
+  // hypothetical — replacing those guesses is the only reason geoRefine exists.
+  const chairs = (): Detection[] => [
+    det({ label: 'dining chair', category: 'chair', slot: 'n', box: [0.05, 0.55, 0.12, 0.3], position: { x: 0, y: 0.4, z: 0 } }),
+    det({ label: 'dining chair', category: 'chair', slot: 'n', box: [0.80, 0.55, 0.12, 0.3], position: { x: 0, y: 0.4, z: 0 } }),
+  ];
+
+  it('merges on measured positions, not on the ones the AI guessed', () => {
+    // The old order — dedupe inside the Gemini call, geometry afterwards on the
+    // detect screen — saw only the guess, and threw one of the two chairs away.
+    expect(dedupeDetections(chairs())).toHaveLength(1);
+    // Measured first, the two are metres apart and both survive.
+    const out = refineDetections(chairs(), CALS, ROOM);
+    expect(out).toHaveLength(2);
+    const [a, b] = out;
+    expect(Math.hypot(a.position!.x - b.position!.x, a.position!.z - b.position!.z)).toBeGreaterThan(0.6);
+  });
+
+  it('still merges on the AI position when the room cannot be measured', () => {
+    // No room dimensions means no calibration means nothing to measure. The
+    // self-reported position is then all there is, and merging on it is the old
+    // behaviour, kept on purpose: an unmeasurable photo is not a reason to stop
+    // merging. Same two inputs as above — only the measurement is missing.
+    expect(refineDetections(chairs(), CALS, null)).toHaveLength(1);
+  });
+
+  it('refines every detection it passes through', () => {
+    const out = refineDetections(
+      [det({ category: 'sofa', slot: 'n' }), det({ category: 'painting', shape: 'painting', slot: 'e', box: WALL_BOX })],
+      CALS,
+      ROOM,
+    );
+    expect(out).toHaveLength(2);
+    for (const d of out) expect(d.dimMM).toBeDefined();
   });
 });

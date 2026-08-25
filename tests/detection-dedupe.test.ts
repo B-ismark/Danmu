@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { dedupeDetections, type Detection } from '../lib/detection';
+import { dedupeDetections } from '../lib/detect-refine';
+import type { Detection } from '../lib/detection';
 
 function det(p: Partial<Detection> & Pick<Detection, 'label' | 'category' | 'slot'>): Detection {
   return { conf: 0.9, box: [0.1, 0.1, 0.2, 0.3], ...p };

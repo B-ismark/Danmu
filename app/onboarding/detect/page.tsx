@@ -26,7 +26,7 @@ import {
   calibrateFromPhoto,
 } from '@/lib/photo-geometry';
 import { hfovFromFocal35 } from '@/lib/exif';
-import { geoRefine, type CalMap, type RoomDims } from '@/lib/detect-refine';
+import { geoRefine, refineDetections, type CalMap, type RoomDims } from '@/lib/detect-refine';
 
 type SlotEntry = { slot: CaptureSlot; url: string; cap: Capture };
 type Box = [number, number, number, number];
@@ -431,10 +431,11 @@ export default function DetectPage() {
           );
         }
         if (cancelled || stopped.current) return;
-        // Geometry pass — deterministic position + W/H from the calibrated
-        // camera; the AI result only contributes label/category/depth hint.
+        // Geometry pass, then the merge — in that order, which is the whole
+        // reason this is one call into lib. The AI result only contributes
+        // label/category and a depth hint.
         const refined = keyed(
-          room ? dets.map((d) => geoRefine(d, calMap, { width: room.width, depth: room.depth })) : dets,
+          refineDetections(dets, calMap, room ? { width: room.width, depth: room.depth } : null),
         );
         setDetections(refined);
         const marks = new Set<number>();
