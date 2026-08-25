@@ -223,7 +223,12 @@ export function Room() {
     if (!_raycaster.ray.intersectPlane(_floor, _hit)) return;
 
     const { room: r, parts: ps } = useScene.getState();
-    const { pos, wallMounted } = placeNewPart(item.category, item.shape, item.dimMM, r, ps);
+    // The drop point goes in: a wall part takes the wall nearest where it was
+    // aimed rather than the wall nearest the room's centre.
+    const { pos, rot, wallMounted } = placeNewPart(item.category, item.shape, item.dimMM, r, ps, [
+      _hit.x,
+      _hit.z,
+    ]);
     let [x, y, z] = pos;
     if (!wallMounted) {
       // Drop where the pointer hit the floor, kept inside the (possibly
@@ -237,7 +242,7 @@ export function Room() {
     const id = `${item.category}-${uuid().slice(0, 6)}`;
     useScene.getState().addPart({
       id, category: item.category, name: item.label, shape: item.shape,
-      pos: [x, y, z], rot: 0, dimMM: item.dimMM, locked: false, wallMounted,
+      pos: [x, y, z], rot, dimMM: item.dimMM, locked: false, wallMounted,
     });
     useStudio.getState().setSelected(id);
   }

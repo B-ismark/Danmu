@@ -13,7 +13,10 @@ import {
   anchorFor,
   groundY,
   isFloorStanding,
+  ridesWall,
   wallAffinity,
+  wallStandoff,
+  CURTAIN_STANDOFF,
   snapToWall,
   pullToward,
   findSupportUnder,
@@ -1179,6 +1182,7 @@ const ART_CENTRE = 1.45;
  *  at the reveal look like blinds. */
 const CURTAIN_OVERHANG = 0.2;
 
+
 /** Add the wall- and ceiling-mounted pieces that make a room look inhabited.
  *
  *  Mutates `parts`, which is what everything else in `defaultScene` does — it runs
@@ -1232,7 +1236,11 @@ function dress(
     // through the ceiling.
     const drop = Math.max(1.2, height - 0.2);
     const dim: [number, number, number] = [width * 1000, 80, drop * 1000];
-    add('curtain', 'Curtains', 'curtain', dim, [w.pos[0], height - drop / 2 - 0.05, w.pos[2]], w.rot);
+    // In FRONT of the glass, along the window's own facing direction — `w.rot` is
+    // the wall's yaw and local +Z faces into the room, so `localToWorld` is the
+    // one expression that gets this right on all four walls of any footprint.
+    const [ox, oz] = localToWorld(w.rot, 0, w.dimMM[1] / 2000 + CURTAIN_STANDOFF);
+    add('curtain', 'Curtains', 'curtain', dim, [w.pos[0] + ox, height - drop / 2 - 0.05, w.pos[2] + oz], w.rot);
   }
 
   // ── A picture over the sofa, or over the bed ─────────────────────────────
@@ -1614,15 +1622,20 @@ function placementForSlot(
       : Math.max(1.2, room.height - hM / 2 - 0.2)
     : 0;
 
+  // How far the part's centre stands off the wall. A curtain takes the extra
+  // standoff for the same reason the seeded pair does: hung flush it is coplanar
+  // with the window it dresses, and the two z-fight.
+  const inset = dM / 2 + 0.05 + (shape === 'curtain' ? CURTAIN_STANDOFF : 0);
+
   switch (slot) {
     case 'n':
-      return { pos: [(cx - 0.5) * (w * 0.85), yPos, -d / 2 + dM / 2 + 0.05], rot: 0 };
+      return { pos: [(cx - 0.5) * (w * 0.85), yPos, -d / 2 + inset], rot: 0 };
     case 's':
-      return { pos: [(0.5 - cx) * (w * 0.85), yPos, d / 2 - dM / 2 - 0.05], rot: Math.PI };
+      return { pos: [(0.5 - cx) * (w * 0.85), yPos, d / 2 - inset], rot: Math.PI };
     case 'e':
-      return { pos: [w / 2 - dM / 2 - 0.05, yPos, (cx - 0.5) * (d * 0.85)], rot: -Math.PI / 2 };
+      return { pos: [w / 2 - inset, yPos, (cx - 0.5) * (d * 0.85)], rot: -Math.PI / 2 };
     case 'w':
-      return { pos: [-w / 2 + dM / 2 + 0.05, yPos, (0.5 - cx) * (d * 0.85)], rot: Math.PI / 2 };
+      return { pos: [-w / 2 + inset, yPos, (0.5 - cx) * (d * 0.85)], rot: Math.PI / 2 };
   }
 }
 
@@ -1732,7 +1745,7 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
     // parameter for the rest of the block.
     const bounds = { width: rw, depth: rd };
     if (aff === 'must-wall') {
-      const snapped = snapToWall(placement.pos, dim, footprint);
+      const snapped = snapToWall(placement.pos, dim, footprint, wallStandoff(refined));
       placement.pos[0] = snapped.x;
       placement.pos[2] = snapped.z;
       if (snapped.rot !== undefined && (typeof aiYaw !== 'number' || Math.abs(aiYaw) < 0.05)) {
@@ -1749,7 +1762,7 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
       );
       // Always snap via footprint-aware snapToWall — works for L/T/U inner edges too.
       if (distFromWall > 0.2) {
-        const snapped = snapToWall(placement.pos, dim, footprint);
+        const snapped = snapToWall(placement.pos, dim, footprint, wallStandoff(refined));
         placement.pos[0] = snapped.x;
         placement.pos[2] = snapped.z;
         if (snapped.rot !== undefined && (typeof aiYaw !== 'number' || Math.abs(aiYaw) < 0.05)) {
@@ -1867,22 +1880,41 @@ export function placeNewPart(
   cat: Category,
   shape: Shape,
   dimMM: [number, number, number],
-  room: { width: number; depth: number; height: number },
+  room: { width: number; depth: number; height: number; footprint?: Footprint },
   existing: ScenePart[],
-): { pos: [number, number, number]; wallMounted: boolean } {
+  /** Where the user aimed, if they aimed — the drop point on the floor. A wall
+   *  part takes the wall nearest it; a floor part ignores it, because the caller
+   *  clamps the drop into the footprint itself. */
+  at?: [number, number],
+): { pos: [number, number, number]; rot: number; wallMounted: boolean } {
   const wallMounted = isWallMountedPart(cat, shape);
+  const ax = at?.[0] ?? 0;
+  const az = at?.[1] ?? 0;
   if (wallMounted) {
     const h = dimMM[2] / 1000;
     // Centre-anchored: clamp so the bottom edge never dips below the floor and
-    // the top never passes the ceiling, regardless of the canonical height.
+    // the top never passes the ceiling, regardless of the canonical height. The
+    // bound is exactly h/2 rather than h/2 + a pad, because a door's canonical
+    // height IS h/2 — padding it stood every door 2 cm off its own threshold.
     let y = groundY(cat, shape, dimMM, room.height);
-    y = Math.max(h / 2 + 0.02, Math.min(room.height - h / 2 - 0.02, y));
-    return { pos: [0, y, 0], wallMounted };
+    y = Math.max(h / 2, Math.min(room.height - h / 2, y));
+    // Against a wall, facing into the room — not hovering in the middle of it.
+    // `Draggable` already snaps these on the first drag, so spawning at the
+    // centre only meant the piece jumped the moment it was touched; for a DOOR
+    // it was worse than cosmetic, since `wallApertures` cuts its hole in
+    // whichever wall is nearest and a door at the centre cut one in a wall it
+    // was nowhere near. Ceiling parts (fan, pendant) are wall-mounted by the
+    // centred-geometry test but do not ride a wall — hence `ridesWall`.
+    if (room.footprint && ridesWall(cat, shape)) {
+      const snapped = snapToWall([ax, 0, az], dimMM, room.footprint, wallStandoff(shape));
+      return { pos: [snapped.x, y, snapped.z], rot: snapped.rot ?? 0, wallMounted };
+    }
+    return { pos: [ax, y, az], rot: 0, wallMounted };
   }
   // Only small "goes on a table" items seek a surface; everything else floors.
-  const support = isTabletopProne(cat) ? findSupportUnder(existing, '__new__', 0, 0, dimMM) : null;
+  const support = isTabletopProne(cat) ? findSupportUnder(existing, '__new__', ax, az, dimMM) : null;
   const y = support !== null && support > 0.3 ? support : 0;
-  return { pos: [0, y, 0], wallMounted };
+  return { pos: [ax, y, az], rot: 0, wallMounted };
 }
 
 /** Y-aware collision. Used for placement clamping. Rugs/mats exempt.

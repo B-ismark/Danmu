@@ -11,7 +11,7 @@ import { SURFACE } from './materials';
 import { Spin, Sway } from './Motion';
 import { isParametric, type ScenePart } from '@/lib/scene-spec';
 import { useStudio } from '@/lib/store';
-import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
+import { DECOR, DETAIL, SCENE, defaultBodyColor } from '@/lib/scene-palette';
 
 // Body albedo for a part's main surfaces. An explicit colour (photo-sampled on
 // detection, or chosen in the Inspector) ALWAYS wins — otherwise recolouring a
@@ -197,7 +197,7 @@ function SofaGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
         );
       })}
       {legs.map(([x, z], i) => (
-        <Box key={i} size={[0.06, legH, 0.06]} position={[x, legH / 2, z]} color="#3A2818" roughness={0.7} />
+        <Box key={i} size={[0.06, legH, 0.06]} position={[x, legH / 2, z]} color={DETAIL.darkWood} roughness={0.7} />
       ))}
     </>
   );
@@ -302,7 +302,7 @@ function OfficeChairGeo({ part, locked }: { part: ScenePart; locked: boolean }) 
             <Box size={[0.32, 0.025, 0.05]} position={[x / 2, 0.045, z / 2]} rotation={[0, -a, 0]} color={metal} edgeOpacity={0.4} />
             <mesh position={[x, 0.03, z]}>
               <sphereGeometry args={[0.03, 8, 8]} />
-              <meshStandardMaterial color="#222" />
+              <meshStandardMaterial color={DETAIL.hardware} />
             </mesh>
           </group>
         );
@@ -319,8 +319,8 @@ function OfficeChairGeo({ part, locked }: { part: ScenePart; locked: boolean }) 
       {/* lumbar curve hint — slightly protruding box gives depth */}
       <Box size={[0.44, 0.18, 0.04]} position={[0, 0.7, -0.19]} color={shade(cushion, -8)} roughness={0.97} />
       {/* armrests */}
-      <Box size={[0.04, 0.04, 0.32]} position={[-0.27, 0.62, -0.05]} color="#222" roughness={0.55} metalness={0.3} edgeOpacity={0.4} />
-      <Box size={[0.04, 0.04, 0.32]} position={[0.27, 0.62, -0.05]} color="#222" roughness={0.55} metalness={0.3} edgeOpacity={0.4} />
+      <Box size={[0.04, 0.04, 0.32]} position={[-0.27, 0.62, -0.05]} color={DETAIL.hardware} roughness={0.55} metalness={0.3} edgeOpacity={0.4} />
+      <Box size={[0.04, 0.04, 0.32]} position={[0.27, 0.62, -0.05]} color={DETAIL.hardware} roughness={0.55} metalness={0.3} edgeOpacity={0.4} />
     </>
   );
 }
@@ -452,7 +452,7 @@ function PendantLampGeo({ part }: { part: ScenePart }) {
       <Sway amp={0.05} speed={0.7} axis="x">
         <group position={[0, -0.6, 0]}>
           {/* cord */}
-          <Box size={[0.01, 0.6, 0.01]} position={[0, 0.3, 0]} color="#222" edgeOpacity={0.2} />
+          <Box size={[0.01, 0.6, 0.01]} position={[0, 0.3, 0]} color={DETAIL.hardware} edgeOpacity={0.2} />
           {/* dome */}
           <mesh position={[0, -0.1, 0]} rotation={[Math.PI, 0, 0]}>
             <coneGeometry args={[0.15, 0.2, 16, 1, true]} />
@@ -520,7 +520,7 @@ function WardrobeGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
 
 // Parametric: shelf count derives from height, books fill the width — so a
 // taller shelf gains rows and a wider one gains books, never a stretched slab.
-const BOOK_COLORS = ['#7A2A2A', '#2A4A7A', '#5D3820', '#A88A4A', '#3A5A3A', '#6A3A6A', '#8A6A2A', '#3A6A6A'];
+const BOOK_COLORS = DECOR.book;
 function BookshelfGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
@@ -629,7 +629,7 @@ function BedGeo({ part, locked, double }: { part: ScenePart; locked: boolean; do
         [-w / 2 + 0.04, d / 2 - 0.04],
         [w / 2 - 0.04, d / 2 - 0.04],
       ].map(([x, z], i) => (
-        <Box key={i} size={[0.04, h * 0.2, 0.04]} position={[x, h * 0.1, z]} color="#3A2818" roughness={0.7} edgeOpacity={0.5} />
+        <Box key={i} size={[0.04, h * 0.2, 0.04]} position={[x, h * 0.1, z]} color={DETAIL.darkWood} roughness={0.7} edgeOpacity={0.5} />
       ))}
     </>
   );
@@ -1013,7 +1013,7 @@ function PaintingGeo({ part }: { part: ScenePart }) {
   const h = part.dimMM[2] / 1000;
   return (
     <>
-      <Box size={[w + 0.04, h + 0.04, 0.025]} position={[0, 0, 0]} color="#3A2818" />
+      <Box size={[w + 0.04, h + 0.04, 0.025]} position={[0, 0, 0]} color={DETAIL.darkWood} />
       <mesh position={[0, 0, 0.014]}>
         <planeGeometry args={[w, h]} />
         <meshStandardMaterial color={tint(part)} roughness={0.85} />
@@ -1050,16 +1050,16 @@ function ACUnitGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
 function DoorGeo({ part }: { part: ScenePart }) {
   const w = part.dimMM[0] / 1000;
   const h = part.dimMM[2] / 1000;
-  // A door is floor-anchored (anchorFor → 'floor', groundY → 0), so the group
-  // origin sits ON the floor. The panel must therefore be bottom-anchored
-  // (center at h/2) — authoring it centered at y=0 sank half the door through
-  // the floor, and snap-to-floor / surface couldn't fix it because y=0 was
-  // already "correct" for a bottom-anchored mesh.
+  // A door anchors 'wall-floor' (physics.ts): CENTRED on the group origin like
+  // every other wall-mounted part, with `groundY` putting that origin at h/2 so
+  // the panel still reaches the floor. Bottom-anchoring it here is what made a
+  // seeded door hang a metre up the wall — `wallApertures` cut the hole from the
+  // mesh centre while this drew upwards from it, and the two disagreed by h/2.
   return (
     <>
-      <Box size={[w, h, 0.04]} position={[0, h / 2, 0]} color={tint(part)} />
-      {/* handle at ~1 m from the floor */}
-      <mesh position={[w / 2 - 0.06, Math.min(1.0, h * 0.45), 0.025]}>
+      <Box size={[w, h, 0.04]} position={[0, 0, 0]} color={tint(part)} />
+      {/* handle at ~1 m from the floor, i.e. 1 m up from the panel's bottom edge */}
+      <mesh position={[w / 2 - 0.06, -h / 2 + Math.min(1.0, h * 0.45), 0.025]}>
         <sphereGeometry args={[0.025, 12, 12]} />
         <meshStandardMaterial color="#B89060" />
       </mesh>
