@@ -116,7 +116,15 @@ export function mergeDistanceFor(category: Category): number {
  *     object boxed twice in the same photo.
  *  2. Same label + same category ACROSS slots, but only when their estimated 3D
  *     positions agree to within that category's own merge distance — one object
- *     seen from two walls with `alsoSeenIn` omitted.
+ *     seen from two walls.
+ *
+ *  Rule 2 is the ONLY mechanism for that second case, deliberately. The prompt
+ *  used to ask the model to name the other slots in an `alsoSeenIn` field, which
+ *  no code ever read. Two independent measurements
+ *  landing in the same place is better evidence than the model's own opinion about
+ *  which walls it saw something in — and asking for that opinion would put AI
+ *  judgement back into the decision `refineDetections` just moved onto
+ *  measurements.
  *
  *  Rule 2 used to match on the label alone, with no positional test at all, so any
  *  two objects the model named identically collapsed into one: four matching

@@ -24,8 +24,6 @@ export type Detection = {
   box: [number, number, number, number];
   category: 'sofa' | 'tv' | 'chair' | 'table' | 'lamp' | 'plant' | 'shelf' | 'rug' | 'bed' | 'desk' | 'curtain' | 'fan' | 'monitor' | 'fridge' | 'wardrobe' | 'mirror' | 'painting' | 'nightstand' | 'ottoman' | 'ac' | 'door' | 'other';
   slot: CaptureSlot;
-  /** non-null if this is the same physical object detected in another wall too */
-  alsoSeenIn?: CaptureSlot[];
   /** AI-estimated real-world dimensions in mm [W, D, H]. Optional — falls back to category default. */
   dimMM?: [number, number, number];
   /** AI-estimated 3D placement in the room. All in METERS, room-centered.
@@ -83,7 +81,7 @@ DEPTH ESTIMATION:
 - Items higher up (top half of image with low bottom-y) and small in bbox → near far wall.
 - Items LARGE in bbox + low in image → close to camera (mid-room).
 
-Identify ALL distinct furniture / fixtures / appliances / textiles. Reason about the WHOLE room — if part of an object is seen in two photos (e.g. one bed corner in N and the rest in S), classify by the BEST view (largest bbox), and list the other slot in alsoSeenIn. Do NOT split one object into two detections.
+Identify ALL distinct furniture / fixtures / appliances / textiles. Reason about the WHOLE room — if part of an object is seen in two photos (e.g. one bed corner in N and the rest in S), classify by the BEST view (largest bbox). Do NOT split one object into two detections.
 
 For each unique object return JSON with these fields:
 - label: short noun phrase (e.g. "single bed", "65 inch tv", "patterned curtain")
@@ -91,7 +89,6 @@ For each unique object return JSON with these fields:
 - category: ONE of [sofa, tv, chair, table, lamp, plant, shelf, rug, bed, desk, curtain, fan, monitor, fridge, wardrobe, mirror, painting, nightstand, ottoman, ac, door, other]
 - slot: the wall where the BEST view appears — one of "n", "e", "s", "w"
 - box: [x, y, w, h] as fractions of THAT slot's image (0..1). Encompass the WHOLE visible part — generous, not tight.
-- alsoSeenIn: array of other slot codes where the same object is partially visible (omit if none)
 - dimMM: estimated real-world dimensions in millimetres [W, D, H].
 - position: { x, y, z } in METRES, room-centered (see coordinate system + camera notes above).
   - For the OBJECT CENTER in 3D, infer FROM:
@@ -109,7 +106,7 @@ For each unique object return JSON with these fields:
   box (LAST RESORT only — use a real shape whenever possible).
 
 CRITICAL RULES (REPEAT BEFORE OUTPUT):
-1. Each PHYSICAL object → exactly ONE entry. Bed half in N + rest in S = ONE bed (slot=s, alsoSeenIn=[n]). Never duplicate.
+1. Each PHYSICAL object → exactly ONE entry. Bed half in N + rest in S = ONE bed (slot=s). Never duplicate.
 2. Skip near-duplicate items (don't list every cushion separately).
 3. If unsure between two shapes, pick the more specific one. Never invent shapes.
 4. Mid-room items (rugs, coffee table, dining table) MUST have small |x|,|z| — do NOT snap to walls.
