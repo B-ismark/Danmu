@@ -74,6 +74,27 @@ backend, no account. The 3D studio *is* the product.
    validator quietly refusing a shape the app grew last week. Parsing is lossy on
    purpose and **never silent** — whatever is dropped comes back in `dropped` and is
    shown. And a room's own side is bounded by `ROOM_SIDE_M`, not by a fresh literal.
+
+   **One drag, one resolve.** Where a dragged piece ends up is
+   `lib/drag-resolve.ts` — containment → wall snap → magnetic item snap →
+   gravity/support → vertical clamp → OBB collision — and **both** the 3D
+   `Draggable` and the 2D `PlanView` call it. It used to live inside the 3D
+   component, so the plan carried a two-step imitation of it and the same drag
+   behaved differently per tab: snap did nothing to a mouse drag, a merged group
+   did not move as one, rigid-parented children stayed behind, and a vase dragged
+   off its table hung in the air at table height — which you cannot see from
+   directly above. Same shape of scar as `layout-rules.ts`. `snapSteps` there is
+   also the only home for the 10 mm / 15° / 50 mm / 45° increments. The companion
+   for *what is under the pointer* is `lib/plan-hit.ts` (footprint geometry, so a
+   round piece is tested against the ellipse it draws, not its box) and
+   `lib/pick-through.ts` (a raycast's hits mapped back to pieces, everything that
+   is not furniture dropped). Both surfaces cycle Alt-click through the same
+   function; `planPaintOrder` is what stops "topmost" meaning "added last".
+   **The two lists beside the canvas are named for what they hold:** the rail's
+   **Catalog** is what is in this room, the panel's **Library** is what you can
+   add. They are not interchangeable words, and one screen may not hold two of
+   either.
+
 4. **No hard-coded design values.** Colours / spacing / type / radii go through
    CSS tokens in `app/globals.css` (`--paper`, `--ink`, `--accent` terracotta,
    `--accent-2` sage, `--r-*`, `--font-sans` Nunito / `--font-display`
