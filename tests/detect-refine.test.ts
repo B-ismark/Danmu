@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { geoRefine, type CalMap, type RoomDims } from '@/lib/detect-refine';
 import { placeFloorObject, placeWallObject, type CameraCal } from '@/lib/photo-geometry';
 import type { Detection } from '@/lib/detection';
+import { CATEGORIES, SHAPES, defaultDepthFor } from '@/lib/scene-spec';
+import { dimRangeFor } from '@/lib/dimension-ranges';
 
 // The five contracts below are the ones every later phase of the detection plan
 // has to keep. They deliberately do NOT re-test the projection maths — that is
@@ -61,7 +63,7 @@ describe('geoRefine', () => {
     const out = geoRefine(d, CALS, ROOM);
     expect(out.position).toEqual(wall!.position);
     expect(out.position).not.toEqual(floor!.position);
-    expect(out.dimMM).toEqual([wall!.widthMM, 500, wall!.heightMM]);
+    expect(out.dimMM).toEqual([wall!.widthMM, defaultDepthFor('painting', 'painting'), wall!.heightMM]);
     // A hung picture is off the floor; the floor placer would have said y = 0.
     expect(out.position!.y).toBeGreaterThan(0);
   });
@@ -101,13 +103,77 @@ describe('geoRefine', () => {
     expect(geoRefine(det({ category: 'sofa', slot: 'w', yaw: 0 }), CALS, ROOM).yaw).toBe(0);
   });
 
-  it('falls back to a 500 mm depth when the AI gave none', () => {
-    // PINS CURRENT BEHAVIOUR AND IS MEANT TO CHANGE. One photo cannot observe
-    // depth, but 500 mm is a literal, not a derivation, and it sits outside the
-    // allowed depth range of every thin category (painting 15–60, rug 3–40 …).
-    // Phase 2 of docs/history/PlanDetect.md replaces it with a derived default;
-    // update this expectation there deliberately rather than deleting it.
-    const out = geoRefine(det({ category: 'painting', shape: 'painting', slot: 'n', box: WALL_BOX }), CALS, ROOM);
-    expect(out.dimMM![1]).toBe(500);
+  it('derives an in-range depth for every category when the AI gave none', () => {
+    // The local detector supplies no dimMM at all, so this is its normal path,
+    // not an edge case. The old literal 500 was outside the legal depth of four
+    // of these — see the next test.
+    for (const category of CATEGORIES) {
+      if (category === 'fan') continue; // ceiling anchor: never measured at all
+      const out = geoRefine(det({ category, slot: 'n' }), CALS, ROOM);
+      const r = dimRangeFor(category, 'box'); // 'box' is what geoRefine casts an absent shape to
+      expect(out.dimMM, category).toBeDefined();
+      expect(out.dimMM![1], category).toBeGreaterThanOrEqual(r.min[1]);
+      expect(out.dimMM![1], category).toBeLessThanOrEqual(r.max[1]);
+    }
+  });
+
+  it('gives the thin wall-mounted categories a depth the old literal could not', () => {
+    // Proof of teeth that does not depend on the deleted code: 500 mm really is
+    // illegal for each of these, so a regression to any literal near it fails
+    // here. Note the list is FOUR, not five — a rug's D range is 400–4000 (its
+    // 3–40 band is the H axis, the pile thickness), so 500 was always legal for
+    // a rug. Anything that reads a "thin" category off the H axis is reading the
+    // wrong number.
+    const thin: Array<[Detection['category'], string]> = [
+      ['tv', 'tv'],
+      ['mirror', 'mirror'],
+      ['painting', 'painting'],
+      ['curtain', 'curtain'],
+    ];
+    for (const [category, shape] of thin) {
+      const r = dimRangeFor(category, shape as never);
+      expect(500, category).toBeGreaterThan(r.max[1]);
+      const out = geoRefine(det({ category, shape, slot: 'n' }), CALS, ROOM);
+      expect(out.dimMM![1], category).toBeGreaterThanOrEqual(r.min[1]);
+      expect(out.dimMM![1], category).toBeLessThanOrEqual(r.max[1]);
+    }
+  });
+
+  it('still prefers the AI depth hint over the derived one', () => {
+    // Depth is the one axis the cloud detector's guess is better than nothing on,
+    // which is why lib/detection.ts keeps asking for dimMM. 45 mm is inside a
+    // painting's 15–60 band, so this cannot pass by accident of clamping.
+    const out = geoRefine(
+      det({ category: 'painting', shape: 'painting', slot: 'n', box: WALL_BOX, dimMM: [700, 45, 500] }),
+      CALS,
+      ROOM,
+    );
+    expect(out.dimMM![1]).toBe(45);
+  });
+});
+
+// Lives in lib/scene-spec.ts, next to the CATEGORY_DEFAULTS table it reads, but
+// geoRefine is its only consumer — so it is tested here.
+describe('defaultDepthFor', () => {
+  it('never returns a depth outside the governing range, for any category × shape', () => {
+    for (const category of CATEGORIES) {
+      for (const shape of SHAPES) {
+        const r = dimRangeFor(category, shape);
+        const d = defaultDepthFor(category, shape);
+        expect(d, category + '/' + shape).toBeGreaterThanOrEqual(r.min[1]);
+        expect(d, category + '/' + shape).toBeLessThanOrEqual(r.max[1]);
+      }
+    }
+  });
+
+  it('lets the named shape narrow the category default', () => {
+    // A pendant lamp is not a floor lamp. The category default is the floor
+    // lamp's 300 mm; 'lamp-pendant' caps at 800, 'lamp-table' at 450 — so this
+    // asserts the shape is consulted at all, which a category-only lookup would
+    // not be.
+    expect(defaultDepthFor('lamp', 'lamp-floor')).toBe(300);
+    expect(defaultDepthFor('painting', 'painting')).toBeLessThanOrEqual(60);
+    // wardrobe D default 600, but a curtain's shape range caps depth at 200.
+    expect(defaultDepthFor('wardrobe', 'curtain')).toBeLessThanOrEqual(200);
   });
 });

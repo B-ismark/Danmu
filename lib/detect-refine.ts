@@ -10,7 +10,7 @@
 import { anchorFor } from './physics';
 import { placeFloorObject, placeWallObject, type CameraCal } from './photo-geometry';
 import type { Detection } from './detection';
-import type { Category, Shape } from './scene-spec';
+import { defaultDepthFor, type Category, type Shape } from './scene-spec';
 import type { CaptureSlot } from './storage';
 
 /** Room floor extent in METRES. `depth` is the N–S dimension. */
@@ -23,19 +23,23 @@ export type CalMap = Partial<Record<CaptureSlot, CameraCal>>;
 
 // Replace the AI's guessed position/size with values computed from projective
 // geometry: bbox bottom edge → floor position; angular size × distance → real
-// W and H. Depth stays a category default (single photo can't observe it) and
-// clampDims gates everything downstream. AI keeps naming/classifying only.
+// W and H. Depth genuinely cannot be observed from one photo, so it falls back
+// to the category's typical depth narrowed by the shape's range — never a
+// literal — and clampDims gates everything downstream. AI keeps naming and
+// classifying only.
 export function geoRefine(d: Detection, cals: CalMap, room: RoomDims): Detection {
   const cal = cals[d.slot];
   if (!cal) return d;
-  const anchor = anchorFor((d.category ?? 'other') as Category, (d.shape ?? 'box') as Shape);
+  const cat = (d.category ?? 'other') as Category;
+  const shape = (d.shape ?? 'box') as Shape;
+  const anchor = anchorFor(cat, shape);
   if (anchor === 'ceiling' && d.category !== 'curtain') return d; // fan/pendant: not on the wall plane
   const g =
     anchor === 'floor'
       ? placeFloorObject(d.box, d.slot, room, cal)
       : placeWallObject(d.box, d.slot, room, cal);
   if (!g) return d;
-  const depth = d.dimMM?.[1] ?? 500;
+  const depth = d.dimMM?.[1] ?? defaultDepthFor(cat, shape);
   return {
     ...d,
     position: g.position,

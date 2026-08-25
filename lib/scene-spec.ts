@@ -23,7 +23,7 @@ import {
   isTabletopProne,
 } from './physics';
 import type { CaptureSlot, RoomData } from './storage';
-import { clampDims } from './dimension-ranges';
+import { clampDims, dimRangeFor } from './dimension-ranges';
 import {
   footArea,
   footFromPart,
@@ -1522,6 +1522,29 @@ const CATEGORY_DEFAULTS: Record<
   door: { shape: 'door', dim: [900, 50, 2100], wallMounted: true },
   other: { shape: 'box', dim: [600, 600, 800] },
 };
+
+/** The D axis of a category's typical size, narrowed by whatever range governs
+ *  the shape actually named.
+ *
+ *  This exists because ONE photo cannot observe depth — `GeoPlacement` in
+ *  lib/photo-geometry.ts returns W and H and says so in the type — so the
+ *  detection path has to supply the third number from somewhere, and the honest
+ *  somewhere is the two tables that already hold typical sizes and legal bounds.
+ *  It used to be a bare `?? 500` on the detect screen, which sits outside the
+ *  allowed depth of a TV (40–120), a mirror or a painting (15–60) and a curtain
+ *  (40–200): every thin wall-mounted piece the on-device detector found arrived
+ *  half a metre deep, because that path sends no dimension hint at all.
+ *
+ *  Clamping an INVENTED number is not the "silently resize it to fit" that rule 2
+ *  forbids. That rule protects measurements; this axis has none to protect.
+ *
+ *  `CATEGORY_DEFAULTS` stays unexported on purpose — handing out the whole table
+ *  invites a caller to read `.dim` and skip `clampDims` altogether. */
+export function defaultDepthFor(category: Category, shape: Shape): number {
+  const typical = (CATEGORY_DEFAULTS[category] ?? CATEGORY_DEFAULTS.other).dim[1];
+  const r = dimRangeFor(category, shape);
+  return Math.min(Math.max(typical, r.min[1]), r.max[1]);
+}
 
 /** The shapes a detector — cloud or on-device — is allowed to name, in the order
  *  the detection prompt lists them.
