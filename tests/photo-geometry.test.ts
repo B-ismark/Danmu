@@ -354,8 +354,10 @@ describe('placeCeilingObject', () => {
     // ABOVE the horizon, so the old code found an intersection 4.35 m out, pulled it
     // back to the 2 m wall, and reported the angular width at that distance. In a
     // level 66° frame there is no ceiling in shot at all, so what it was measuring
-    // was a picture frame — read out as a 576 mm ceiling fan. Refusing hands the
-    // detection back untouched, which is what happened before this function existed.
+    // was a picture frame, read out as an undersized ceiling fan: the width is
+    // computed at the CLAMPED distance, so it is wrong by however far the clamp
+    // moved it. Refusing hands the detection back untouched, which is what happened
+    // before this function existed.
     expect(placeCeilingObject([0.3, 0.3, 0.3, 0.1], 'n', ROOM, WIDE)).toBeNull();
     expect(placeCeilingObject(fanBox(WIDE), 'e', ROOM, CAL)).toBeNull();
     // The same geometry on the axis that IS long enough still measures.

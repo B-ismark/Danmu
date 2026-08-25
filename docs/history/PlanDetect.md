@@ -175,8 +175,15 @@ arithmetic rather than by reading:
    so from 1.5 m the ceiling of a 2.8 m room first enters frame 2.9 m away, past the
    wall being photographed — the same fact `calibrateFromFloorLine` meets at the
    other edge of the image. So a high pixel in such a frame is WALL, and the first
-   draft clamped it onto the ceiling plane and read a picture frame out as a 576 mm
-   ceiling fan. That was caught by a test whose premise was wrong, not by review.
+   draft clamped it onto the ceiling plane and read a picture frame out as an
+   undersized ceiling fan, its width taken at the clamped distance. That was caught
+   by a test whose premise was wrong, not by review.
+
+   (An earlier revision of this note, and of the comments in the source, quoted
+   "576 mm". That was a real figure for the fixture that found the bug, and the
+   fixture has since been retuned — so it was an unpinned measurement sitting beside
+   the thing it describes, which is the failure mode rule 2 names. The mechanism is
+   pinned by the refusal test; the digit was not, so it is gone.)
 
 So Phase 7 pays off on an ultrawide (~106°, ceiling in frame from 1.3 m out), on a
 camera tilted up, or in a tall room — not on the nominal four-slot rig. Worth having

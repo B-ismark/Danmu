@@ -350,7 +350,9 @@ export type GeoCeilingPlacement = Omit<GeoPlacement, 'heightMM'>;
  * visible right up to the wall, so a foot landing slightly beyond it is measurement
  * error and clamping recovers it. The ceiling of a level 66° shot is not in frame at
  * all — so a high pixel there is WALL, and clamping it onto the ceiling plane
- * measures a picture frame as a 576 mm ceiling fan. Refusing hands the detection
+ * measures a picture frame as an undersized ceiling fan — the width comes out at
+ * the wall distance rather than the true one, so it is wrong by whatever the clamp
+ * moved. Refusing hands the detection
  * back untouched, which is exactly the behaviour that existed before this function
  * did. Being no better than before beats being confidently wrong.
  */

@@ -307,8 +307,9 @@ Furniture detection runs through a fallback chain, best-effort:
 3. **Manual boxes** — `PhotoEditor.tsx`: lock / delete / add-box by hand when no
    detector is available.
 
-Detection returns labels + boxes only. The **geometry engine derives real sizes
-and positions** — see §4.
+Detection returns labels + boxes only. The **geometry engine derives real sizes and
+positions**, and then checks the label against the size it measured — see §4's
+pipeline, which also covers what each source's `conf` is actually worth.
 
 > Note: `@huggingface/inference` and `clsx` were removed in the cleanup — both
 > were dead leftovers from the deleted render pipeline.
@@ -322,7 +323,7 @@ This is what makes Danmu trustworthy. All pure math, all covered by tests.
 | File | Role |
 |---|---|
 | `lib/geometry.ts` | Oriented rectangles (OBB) in the XZ plane; separating-axis overlap, gaps, face clearance, point-in-poly, nearest-edge. Also `Foot` — a footprint that may be **round**, meaning the ellipse inscribed in the OBB (a true circle when W = D, which is how round parts are authored, and the ellipse the renderer draws if an axis is scaled). A circle's bounding square is 27% bigger than the circle and all of it is in the corners, which is where the chairs go; `collidesAt` used to refuse a chair tucked diagonally under a round table for corners the table does not have. Containment is the exact closed form; two true circles use the closed-form lens area, and anything else round uses an inscribed 32-gon (99.4% of the area — inscribed on purpose, so a round piece is never reported as hitting what it does not touch). **One rotation convention, and it is three.js's:** `rot` is what the renderer assigns to `rotation.y`, so a part's front (local +Z) is `(sin rot, cos rot)`. Rotating the other way is invisible at 0°/180° and inverts every directional answer on the side walls — it was reporting "doors can't open" on wardrobes correctly snapped to the east and west walls. `localToWorld` / `worldToLocal` / `frontVector` are the shared helpers, pinned against three's own `Euler` by a test. |
-| `lib/photo-geometry.ts` | Pinhole camera at room centre + entered room dims → ray/plane intersection gives real position + W/H from any bbox. `CameraCal` carries the lens (`k`), and optionally the camera's `height` and `tiltRad`; absent values fall back to 1.5 m and level, which is what it always assumed. Tilt matters: 5° of ordinary handheld droop mis-reads distance by ~20%. |
+| `lib/photo-geometry.ts` | Pinhole camera at room centre + entered room dims → ray/plane intersection gives real position + W/H from any bbox. `CameraCal` carries the lens (`k`), and optionally the camera's `height` and `tiltRad`; absent values fall back to 1.5 m and level, which is what it always assumed. Tilt matters: 5° of ordinary handheld droop mis-reads distance by ~20%. Three placers, one per surface: `placeFloorObject` intersects the bbox's **bottom** edge with the floor (a vertical thing standing at one distance), `placeWallObject` uses the wall's known distance, and `placeCeilingObject` intersects the **middle** row with the ceiling plane and returns **no height at all** — a `GeoCeilingPlacement` is an `Omit`, so nothing downstream can read a measurement never taken. The middle row rather than an edge because a ceiling fan is a horizontal PLATE seen obliquely: its image spans a range of distances and the top of the bbox is its nearest rim, which reads a 1.2 m fan as 881 mm — further from the truth than the 1000 mm catalogue default it was meant to improve on. It also **refuses** an intersection past the far wall instead of clamping to it, unlike the floor: a level 66° camera in a normal room sees no ceiling at all (the vertical half-angle is ~24°, so from 1.5 m a 2.8 m ceiling first enters frame 2.9 m away, past the wall being photographed), so a high pixel there is wall, and clamping it read a picture frame out as an undersized ceiling fan — the width being computed at the clamped distance rather than the real one. Ceilings need an ultrawide, a camera tilted up, or a tall room. |
 | `lib/exif.ts` | Reads the camera fields a photo carries about itself — 35 mm-equivalent focal length (→ `hfovFromFocal35`), orientation, compass bearing. Pure byte parsing; browsers expose no EXIF API. **Does not read GPS coordinates**, deliberately: nothing needs them, and moving them from the file into IndexedDB would relocate the exposure rather than remove it. |
 | `lib/device-tilt.ts` | Lens tilt at the shutter from `deviceorientation`, for the live-camera path only (EXIF has no tilt field). Reports a tilt only for an upright, unrolled phone — a wrong tilt is worse than none, since "none" is the level camera the engine already assumed. |
 | `lib/physics.ts` | Gravity/anchor rules — where a part sits (floor / ceiling / wall-mid / …), wall affinity + snap, support-under lookup for tabletop-prone items. Two anchors are worth naming because each was three files disagreeing. **`wall-floor`** is a door: centred on the group origin like the rest of the wall-mounted family, because `apertures.ts` cuts its hole from the mesh centre, but standing ON the floor, because the alternative is a doorway with a step in it. It shipped wrong three ways at once — `room-openings` seeded the centre while `DoorGeo` drew upward from the origin, so a seeded door hung a metre above its own hole; `groundY` said 0, so a *detected* door got a hole half its height; and `'floor'` made `isWallMountedPart` false, so a door from the catalog cut no hole at all. And a **curtain is `wall-high`, not `ceiling`**: that branch hangs a small thing just under the slab, which put a 2.6 m curtain's centre at 2.55 m and most of the cloth through the ceiling. `wallStandoff` is the companion — how far in FRONT of the wall a part hangs, which is non-zero only for a curtain, whose whole job is to be in front of a window; flush, the two are coplanar and z-fight, and the seeder, the detection placement and every drag each used to answer it separately. |
@@ -340,9 +341,70 @@ This is what makes Danmu trustworthy. All pure math, all covered by tests.
 | `lib/room-bays.ts` | **Where in the room there is actually room.** The footprint's maximal axis-aligned rectangles of real floor, largest first, plus each bay's sides (which of them are real walls, how deep the bay runs from each) and `splitBay` for putting two groups in one rectangle. Exact for rectilinear rooms — the candidate grid is the polygon's own vertex coordinates — and conservative for anything with a diagonal wall, since a candidate is only returned once it has been proved inside. This exists because arranging furniture against the polygon's *bounding box* furnished the quadrant an L / T / U cuts away: the starter scene put five of the L-shape's nine pieces outside the house. |
 | `lib/layout-settle.ts` | The guarantee both scene paths end on: nothing outside the room, nothing inside anything else. Containment pushes a piece in by its own half-extent along the wall it overhangs (clamping the *centre* leaves a 2.2 m sofa half in the garden), then clashing pairs are separated smaller-piece-first using the room report's own clash bar, `sharesFloor` and rug exemptions. Cheap and deterministic on purpose — it runs on every room open, where the annealer has no business. It never resizes, never moves a wall-mounted piece, and when a room is genuinely too full it leaves the piece where it was for `clearance.ts` to report. |
 
-On the detect page, `geoRefine` runs the geometry engine over **every** detection
-and manual box: geometry overrides AI dims/position; the AI contributes only
-label / category / a depth hint.
+### The detection pipeline, in order
+
+The order is the design. `lib/detect-refine.ts` owns it — pure, no React — and it
+used to be two lines inside the detect page, where nothing could test the one
+decision it makes.
+
+1. **Measure** — `geoRefine` runs the geometry engine over every detection and every
+   manual box, replacing the AI's guessed position and size with values computed
+   from the calibrated camera. What comes back measured depends on the piece's own
+   anchor: a floor or wall piece gets position, W and H; a **ceiling** piece gets
+   **width only** (a fan seen from below projects as a disc, so its bbox holds a
+   foreshortened diameter and no thickness); an uncalibrated slot gets nothing at
+   all. Unmeasured means the function returns **its own input object**, so callers
+   establish measurability by reference identity rather than by a flag nobody
+   maintains.
+2. **Judge the word** — `lib/label-repair.ts` reads `clampDims` backwards. Forward,
+   everywhere else: the detector said "bed", so clamp the size into a bed's range —
+   the size is the suspect. Backwards, here: the camera measured 1400 × 2300 and no
+   bed is that shape, so the WORD is the suspect. It only ever judges axes the anchor
+   actually observed, because judging the AI's own number against the AI's own word
+   proves nothing — they agree by construction. **It rewrites nothing**: it reports,
+   and the review screen offers the better words as chips the user presses. Every
+   candidate is re-measured under its own anchor first, since the same box that
+   measures 480 × 360 as a hung painting measures 480 × 1680 as something standing
+   on the floor.
+3. **Merge** — `dedupeDetections`, and it runs **after** the measurement, not before.
+   Deciding what EXISTS in the room on the model's guessed coordinates is rule 2
+   violated one layer above where rule 2 is enforced. Both of its thresholds are now
+   relative rather than absolute, each after deleting real furniture: same-photo
+   duplicates go by bounding-box **IoU** (a fixed 12% of the image ate two bedside
+   tables 0.55 m apart, whose boxes did not touch), and cross-photo duplicates go by
+   a **per-category** merge distance (a flat 0.6 m collapsed four dining chairs to
+   two).
+4. **Build** — `buildSceneFromRoom` clamps, snaps and settles. It reads only the two
+   axes a photograph can locate: `groundY` owns Y outright, and the placement gate
+   used to test Y as well, so a fan the model put 3.2 m up in a 2.8 m room lost its
+   perfectly good floor position too.
+
+The AI's remaining contribution is a label, a category, a shape and a depth hint —
+and the label is no longer taken on trust either.
+
+**Whose answer is this, and is it worth ticking?** `lib/detect-confidence.ts`.
+`Detection.conf` carries three unrelated scales — a class score off the ONNX head, a
+number a language model wrote about its own answer, and a literal `1` meaning the
+user drew the box — so `source` says which, and the review screen shows it. Auto-
+confirming a row requires **independent corroboration**: the geometry must have
+measured it and agreed with its word. A model's opinion of itself is not evidence
+about itself.
+
+**`lib/detection-record.ts`** is the one pair of functions converting to and from the
+persisted form. One pair because there were two, written by hand at opposite ends of
+the detect page, and they had drifted: the write carried the geometry pass and the
+read did not, so the next press of the always-enabled Finish button wrote
+`undefined` over all of it.
+
+**`tests/detect-pipeline.test.ts`** regression-tests the whole chain over one
+synthetic room whose contents are known, from analytic ground truth — boxes are
+projected through a test-side camera model, so there is no renderer in CI. With a
+perfect detector, eight of its ten pieces come back at **0.0000 m** and **0 mm**, so
+anything not in its allowance table is a defect rather than noise. It cannot test the
+projection itself (both directions share a camera model, and
+`tests/photo-geometry.test.ts`'s hand-computed cases own that), and it is not a
+detector score — it assumes a perfect detector and asks what our code does with a
+perfect answer.
 
 ### The checker and the solver are held to each other
 
