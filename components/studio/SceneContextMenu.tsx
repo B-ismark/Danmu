@@ -11,10 +11,23 @@
 //     Inspector or a single-character shortcut nobody had discovered yet
 //   · on the room — the things that are about the whole scene
 //
-// It does not raycast. Both surfaces keep `hoveredPartId` current, so the piece
-// under the pointer is already known by the time the press lands; the caller
-// passes it in. That also means the two surfaces answer identically without the
-// menu knowing anything about either.
+// The menu itself still knows nothing about either surface: the caller passes in
+// the piece under the pointer, which both surfaces now genuinely know — the plan
+// did NOT write `hoveredPartId` until the pass that added the picker below, so
+// this comment used to claim a parity that existed in one tab only, and a
+// right-click in the plan opened the room's menu on top of a piece.
+//
+// Three menus now, not two, and the third is the reason the other two are worth
+// reading together:
+//
+//   · on a piece — the handful of actions that were otherwise a trip to the
+//     Inspector or a single-character shortcut nobody had discovered yet
+//   · on the room — the things that are about the whole scene
+//   · over a STACK — which of these overlapping pieces did you mean (`pick`),
+//     raised by Alt-click on either surface and by the "Select what's here" row
+//     that the first two grow when the caller can say what else is under the
+//     cursor. That row is the picker's only route on a touch screen, which has
+//     no modifier keys at all.
 
 import {
   useCallback,
@@ -24,10 +37,11 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
-import { useStudio } from '@/lib/store';
+import { useStudio, useSettings } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { hasOverride } from '@/lib/transforms';
-import { Icon, type IconName } from '@/components/ui/Icon';
+import { formatDim } from '@/lib/units';
+import { CATEGORY_ICON, Icon, type IconName } from '@/components/ui/Icon';
 import {
   STUDIO_SURFACE_ID,
   duplicateSelection,
@@ -46,14 +60,35 @@ type MenuRequest = {
   y: number;
   /** the piece under the cursor, or null for bare room */
   partId: string | null;
+  /**
+   * Present when this is a *disambiguation* menu rather than an action menu:
+   * every piece under the cursor, front-to-back, for the user to choose between.
+   * The two share this component because they share everything that is hard
+   * about a floating menu — clamping into the canvas, dismissal, focus, arrow
+   * keys — and differ only in what the rows do.
+   */
+  pick?: string[];
+  /** Everything under the cursor, when the surface could work it out. Turns into
+   *  the "Select what's here" row — the route to the picker that needs no
+   *  modifier, and therefore the only one available on a touch screen or under a
+   *  window manager that claims Alt for itself. */
+  candidates?: string[];
 };
 
 /** Open the studio context menu at a viewport point. Called from the 3D canvas
  *  and the 2D plan; a window event rather than a store field so neither surface
  *  needs a store contract to raise one. */
-export function openSceneMenu(x: number, y: number, partId: string | null) {
+export function openSceneMenu(x: number, y: number, partId: string | null, candidates?: string[]) {
   if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent<MenuRequest>(MENU_EVENT, { detail: { x, y, partId } }));
+  window.dispatchEvent(new CustomEvent<MenuRequest>(MENU_EVENT, { detail: { x, y, partId, candidates } }));
+}
+
+/** Open the "which of these did you mean" menu over a stack of overlapping
+ *  pieces. Both studio surfaces raise it: the 3D tab from the depth-sorted
+ *  raycast it already has, the plan from `lib/plan-hit`. */
+export function openPickMenu(x: number, y: number, ids: string[]) {
+  if (typeof window === 'undefined' || ids.length === 0) return;
+  window.dispatchEvent(new CustomEvent<MenuRequest>(MENU_EVENT, { detail: { x, y, partId: null, pick: ids } }));
 }
 
 type MenuEntry =
@@ -66,6 +101,11 @@ type MenuEntry =
       /** the keyboard route to the same action, so the menu teaches it */
       hint?: string;
       danger?: boolean;
+      /** Highlight this piece in the room while the row is under the pointer or
+       *  focused. A disambiguation list is names; the room is where you actually
+       *  recognise which one you meant — two chairs of the same model produce two
+       *  identical rows, and this is the only thing that tells them apart. */
+      hoverId?: string;
       run: () => void;
     };
 
@@ -95,8 +135,10 @@ export function SceneContextMenu() {
       if (!detail) return;
       // Right-clicking a piece that is not in the selection selects it — the menu
       // acts on the selection, so what it will affect has to be visible first. A
-      // piece already inside a multi-selection keeps the rest of it.
-      if (detail.partId && !useStudio.getState().selection.includes(detail.partId)) {
+      // piece already inside a multi-selection keeps the rest of it. A pick menu
+      // changes nothing by opening: the caller has already selected the topmost
+      // candidate, and choosing a row is what changes the selection.
+      if (detail.partId && !detail.pick && !useStudio.getState().selection.includes(detail.partId)) {
         useStudio.getState().setSelected(detail.partId);
       }
       setAt(null);
@@ -105,6 +147,34 @@ export function SceneContextMenu() {
     window.addEventListener(MENU_EVENT, onOpen);
     return () => window.removeEventListener(MENU_EVENT, onOpen);
   }, []);
+
+  // A menu is built from a snapshot of the scene taken at the press. If the scene
+  // changes under it — an undo, a delete, a re-scan — its rows are describing
+  // pieces that may no longer exist, so it closes instead of acting on them. It
+  // already closes for anything that moves the camera; this is the same argument
+  // one layer in.
+  const parts = useScene((s) => s.parts);
+  const partsAtOpen = useRef(parts);
+  useEffect(() => {
+    if (!req) {
+      partsAtOpen.current = parts;
+      return;
+    }
+    if (partsAtOpen.current !== parts) {
+      partsAtOpen.current = parts;
+      close();
+    }
+  }, [parts, req, close]);
+
+  // A pick menu borrows the hover highlight to show which candidate a row means,
+  // so it has to give it back — otherwise the room stays lit up around whatever
+  // row the pointer left by.
+  useEffect(() => {
+    if (!req?.pick) return;
+    return () => {
+      if (useStudio.getState().hoveredPartId) useStudio.getState().setHovered(null);
+    };
+  }, [req?.pick]);
 
   // Clamp into the canvas once the menu has a measured size. Opening near the
   // bottom-right corner is the common case — that is where the room dock lives,
@@ -154,7 +224,7 @@ export function SceneContextMenu() {
   }, [req, close]);
 
   if (!req) return null;
-  const entries = req.partId ? partEntries(req.partId) : roomEntries();
+  const entries = req.pick ? pickEntries(req.pick) : req.partId ? partEntries(req.partId, req) : roomEntries();
   if (entries.length === 0) return null;
 
   function onMenuKey(e: ReactKeyboardEvent<HTMLDivElement>) {
@@ -173,7 +243,7 @@ export function SceneContextMenu() {
     <div
       ref={menuRef}
       role="menu"
-      aria-label="Studio actions"
+      aria-label={req.pick ? 'Pieces under the pointer' : 'Studio actions'}
       className="popover"
       onKeyDown={onMenuKey}
       onContextMenu={(e) => e.preventDefault()}
@@ -208,6 +278,10 @@ export function SceneContextMenu() {
               entry.run();
               close();
             }}
+            // Pointer AND focus, so the room highlights the candidate for someone
+            // arrowing down the list as well as for someone reading it.
+            onPointerEnter={entry.hoverId ? () => useStudio.getState().setHovered(entry.hoverId!) : undefined}
+            onFocus={entry.hoverId ? () => useStudio.getState().setHovered(entry.hoverId!) : undefined}
             style={{ fontSize: 12.5, padding: '7px 9px', color: entry.danger ? 'var(--danger-text)' : undefined }}
           >
             <Icon name={entry.icon} size={14} />
@@ -226,9 +300,46 @@ export function SceneContextMenu() {
   );
 }
 
+/**
+ * One row per piece under the cursor, front-to-back — the answer to "I meant the
+ * other one". Ids come from the caller's own hit test (the 3D raycast, or
+ * `lib/plan-hit`), so this only has to turn them into rows and decline the ones
+ * that have since gone.
+ *
+ * The measurement in each row is DERIVED from the piece, never a stored string,
+ * and it is the footprint rather than all three dimensions because the question
+ * being answered is "which of these overlapping shapes".
+ */
+function pickEntries(ids: string[]): MenuEntry[] {
+  const parts = useScene.getState().parts;
+  const dimUnit = useSettings.getState().dimUnit;
+  const entries: MenuEntry[] = [];
+  for (const id of ids) {
+    const part = parts.find((p) => p.id === id);
+    // Deleted or undone between the press and the paint. Dropping the row is the
+    // honest answer; selecting a dead id is not.
+    if (!part) continue;
+    entries.push({
+      kind: 'item',
+      id: `pick-${id}`,
+      label: part.name,
+      icon: CATEGORY_ICON[part.category] ?? 'cube',
+      hint: `${formatDim(part.dimMM[0], dimUnit)} × ${formatDim(part.dimMM[1], dimUnit)}`,
+      hoverId: id,
+      run: () => {
+        // The member, not its group: choosing from this list is the one gesture
+        // whose entire point is picking out one specific piece. What it belongs to
+        // is the Inspector's job to say.
+        useStudio.getState().setSelected(id);
+      },
+    });
+  }
+  return entries;
+}
+
 /** Actions on the piece under the cursor. Read through getState() rather than a
  *  subscription: the menu is built once, at the moment of the press. */
-function partEntries(partId: string): MenuEntry[] {
+function partEntries(partId: string, req: MenuRequest): MenuEntry[] {
   const s = useStudio.getState();
   const sc = useScene.getState();
   const part = sc.parts.find((p) => p.id === partId);
@@ -253,6 +364,24 @@ function partEntries(partId: string): MenuEntry[] {
       run: () => s.toggleHidden(partId),
     },
   ];
+
+  // Only worth offering when there IS something else under the cursor. The count
+  // is in the label because the value of the row is knowing the answer is more
+  // than one before you open it.
+  const others = req.candidates ?? [];
+  if (others.length > 1) {
+    entries.push({
+      kind: 'item',
+      id: 'pick',
+      label: `Select what's here (${others.length})`,
+      icon: 'layers',
+      hint: 'Alt click',
+      // A microtask, because the row's own handler calls `close()` immediately
+      // after `run()` — opening the pick menu synchronously would be undone by
+      // the close that follows it.
+      run: () => queueMicrotask(() => openPickMenu(req.x, req.y, others)),
+    });
+  }
 
   if (hasOverrides) {
     entries.push({
@@ -304,9 +433,12 @@ function partEntries(partId: string): MenuEntry[] {
 function roomEntries(): MenuEntry[] {
   const s = useStudio.getState();
   return [
-    // "Catalog", not "furniture": the same panel holds doors, windows, curtains,
+    // "Library", not "furniture": the same panel holds doors, windows, curtains,
     // appliances and lighting, so the narrower word described about half of it.
-    { kind: 'item', id: 'add', label: 'Add from catalog…', icon: 'plus', run: () => s.setCatalogOpen(true) },
+    // And the LIBRARY rather than the catalog, because the rail's list of what is
+    // already in the room is the Catalog now — one screen may not hold two lists
+    // with one name.
+    { kind: 'item', id: 'add', label: 'Add from library…', icon: 'plus', run: () => s.setCatalogOpen(true) },
     { kind: 'item', id: 'all', label: 'Select everything', icon: 'layers', hint: 'Ctrl A', run: selectAllParts },
     { kind: 'separator', id: 'sep-view' },
     { kind: 'item', id: 'view', label: 'Reset the view', icon: 'fit', run: () => s.setView('iso') },

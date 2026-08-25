@@ -7,7 +7,7 @@ import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { Suspense, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { ContactShadows, Environment, Lightformer, AdaptiveDpr, PerformanceMonitor } from '@react-three/drei';
 import { EffectComposer, N8AO, SMAA } from '@react-three/postprocessing';
-import { ACESFilmicToneMapping, Raycaster, Vector2, Vector3, Plane, type Camera, type DirectionalLight, type WebGLRenderer } from 'three';
+import { ACESFilmicToneMapping, Raycaster, Vector2, Vector3, Plane, type Camera, type DirectionalLight, type Scene, type WebGLRenderer } from 'three';
 import { v4 as uuid } from 'uuid';
 import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
@@ -17,6 +17,7 @@ import { footprintBounds } from '@/lib/footprint';
 import { sunPosition, sunDirection, daylightKelvin, localInstant } from '@/lib/solar';
 import { hexFromKelvin } from '@/lib/light-units';
 import { useSnapshot, downloadBlob } from '@/lib/snapshot';
+import { pickIdsFrom } from '@/lib/pick-through';
 import { openSceneMenu } from '@/components/studio/SceneContextMenu';
 import { RoomShell } from './RoomShell';
 import { WallHandles } from './WallHandles';
@@ -69,6 +70,9 @@ function HoverReset() {
 type DropItem = { label: string; category: Category; shape: Shape; dimMM: [number, number, number] };
 
 // Reused across drops — raycast the pointer onto the floor plane (y=0).
+/** What a DOM handler outside the R3F tree needs to raycast back into it. */
+type SceneApi = { camera: Camera; gl: WebGLRenderer; scene: Scene };
+
 const _raycaster = new Raycaster();
 const _ndc = new Vector2();
 const _floor = new Plane(new Vector3(0, 1, 0), 0);
@@ -205,9 +209,24 @@ export function Room() {
   // True only while frames are flowing continuously — see FrameRateGate.
   const hotLoop = useRef(false);
 
-  // Camera + canvas handle, stashed by DropConnector so the DOM drop handler
-  // (outside the R3F tree) can raycast the drop point into the scene.
-  const dropApi = useRef<{ camera: Camera; gl: WebGLRenderer } | null>(null);
+  // Camera, canvas and scene, stashed by DropConnector so the DOM handlers that
+  // sit OUTSIDE the R3F tree can still raycast into it. Two need to: the drop
+  // handler, which turns a drop point into a floor position, and the right-click
+  // handler, which has to know everything under the cursor and not just the piece
+  // that happens to be hovered.
+  const dropApi = useRef<SceneApi | null>(null);
+
+  /** Every piece under a viewport point, nearest first. The R3F pointer events
+   *  give this away for free (`e.intersections`), but a native contextmenu on the
+   *  wrapper element is not one of them, so it is cast by hand. */
+  function partsUnder(clientX: number, clientY: number): string[] {
+    const api = dropApi.current;
+    if (!api) return [];
+    const rect = api.gl.domElement.getBoundingClientRect();
+    _ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+    _raycaster.setFromCamera(_ndc, api.camera);
+    return pickIdsFrom(_raycaster.intersectObjects(api.scene.children, true));
+  }
 
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
@@ -260,7 +279,11 @@ export function Room() {
       // one (hover already knows which), on the room if there is not.
       onContextMenu={(e) => {
         e.preventDefault();
-        openSceneMenu(e.clientX, e.clientY, useStudio.getState().hoveredPartId);
+        // The candidates come along so the menu can offer "Select what's here" —
+        // the second door to the Alt-click picker, for a window manager that eats
+        // Alt, a browser that claims it, and a touch screen that has no modifiers
+        // at all.
+        openSceneMenu(e.clientX, e.clientY, useStudio.getState().hoveredPartId, partsUnder(e.clientX, e.clientY));
       }}
     >
     <Canvas
@@ -636,12 +659,13 @@ function FrameRateGate({ hot }: { hot: MutableRefObject<boolean> }) {
 }
 
 // Publishes the live camera + renderer to a ref the DOM drop handler can read.
-function DropConnector({ apiRef }: { apiRef: React.MutableRefObject<{ camera: Camera; gl: WebGLRenderer } | null> }) {
+function DropConnector({ apiRef }: { apiRef: React.MutableRefObject<SceneApi | null> }) {
   const camera = useThree((s) => s.camera);
   const gl = useThree((s) => s.gl);
+  const scene = useThree((s) => s.scene);
   useEffect(() => {
-    apiRef.current = { camera, gl };
-  }, [apiRef, camera, gl]);
+    apiRef.current = { camera, gl, scene };
+  }, [apiRef, camera, gl, scene]);
   return null;
 }
 
