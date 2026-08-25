@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { dedupeDetections } from '../lib/detect-refine';
+import { dedupeDetections, mergeDistanceFor } from '../lib/detect-refine';
+import { CATEGORIES } from '../lib/scene-spec';
 import type { Detection } from '../lib/detection';
 
 function det(p: Partial<Detection> & Pick<Detection, 'label' | 'category' | 'slot'>): Detection {
@@ -67,5 +68,58 @@ describe('dedupeDetections', () => {
       det({ label: 'unit', category: 'shelf', slot: 'n', position: { x: 0, y: 1, z: 0 } }),
     ];
     expect(dedupeDetections(two)).toHaveLength(2);
+  });
+});
+
+describe('mergeDistanceFor', () => {
+  // The regression this whole tier exists for. Four chairs tucked around a table
+  // at 0.55 m centres collapsed to TWO under the old flat 0.6 m: the first ate
+  // the second, the third survived by being 1.1 m from the first, and the fourth
+  // was eaten by the third. Nothing told the user.
+  it('keeps four dining chairs tucked 0.55 m apart around a table', () => {
+    const chairs: Detection[] = [0, 1, 2, 3].map((i) => ({
+      label: 'dining chair',
+      conf: 0.9,
+      category: 'chair' as const,
+      slot: (i < 2 ? 'n' : 's') as Detection['slot'],
+      // Distinct bboxes too, so rule 1 is not what separates them.
+      box: [0.1 + i * 0.2, 0.5, 0.1, 0.2] as Detection['box'],
+      position: { x: -0.825 + i * 0.55, y: 0.4, z: 0 },
+    }));
+    expect(dedupeDetections(chairs)).toHaveLength(4);
+  });
+
+  it('still merges one chair genuinely seen twice', () => {
+    // A tight tier is not "never merge". Two views of the same chair land within
+    // the calibration error of each other, which is well inside 0.35 m.
+    const same: Detection[] = [
+      det({ label: 'dining chair', category: 'chair', slot: 'n', position: { x: 0.4, y: 0.4, z: -1.0 } }),
+      det({ label: 'dining chair', category: 'chair', slot: 'e', box: [0.6, 0.5, 0.1, 0.2], position: { x: 0.5, y: 0.4, z: -0.9 } }),
+    ];
+    expect(dedupeDetections(same)).toHaveLength(1);
+  });
+
+  it('merges a bed whose two views disagree by more than a chair may', () => {
+    // 0.7 m apart: beyond the old flat threshold as well as the tight tier, but
+    // a plausible disagreement between two photos of one 2 m bed, and there is
+    // no arrangement in which two beds sit 0.7 m apart.
+    const same: Detection[] = [
+      det({ label: 'double bed', category: 'bed', slot: 'n', position: { x: 0, y: 0.3, z: -1.2 } }),
+      det({ label: 'double bed', category: 'bed', slot: 'w', box: [0.3, 0.5, 0.3, 0.3], position: { x: 0.7, y: 0.3, z: -1.2 } }),
+    ];
+    expect(dedupeDetections(same)).toHaveLength(1);
+    // Proof the tier is what carries it: the old flat 0.6 m would not have.
+    expect(mergeDistanceFor('bed')).toBeGreaterThan(0.7);
+  });
+
+  it('gives every category a distance, and orders the tiers', () => {
+    for (const category of CATEGORIES) {
+      expect(mergeDistanceFor(category), category).toBeGreaterThan(0);
+    }
+    expect(mergeDistanceFor('chair')).toBeLessThan(mergeDistanceFor('desk'));
+    expect(mergeDistanceFor('desk')).toBeLessThan(mergeDistanceFor('wardrobe'));
+    // An unlisted category falls back to the flat value this replaced, so nothing
+    // silently loosens when a category is added.
+    expect(mergeDistanceFor('other')).toBe(0.6);
   });
 });

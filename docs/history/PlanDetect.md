@@ -27,7 +27,8 @@ correction is folded in with a note.
 | 1 — move `geoRefine` to `lib/` | **done** | `lib/detect-refine.ts`, verbatim. `CalMap` / `RoomDims` moved with it. `tests/detect-refine.test.ts` holds the five contracts, each mutation-verified |
 | 2 — derived depth | **done** | `defaultDepthFor(category, shape)` in `lib/scene-spec.ts` beside `CATEGORY_DEFAULTS`. §4's rug claim was wrong — see the correction there |
 | 3a — dedupe after `geoRefine` | **done** | `refineDetections()` in `lib/detect-refine.ts`; `dedupeDetections` + `SAME_OBJECT_M` moved there out of `lib/detection.ts`. Label equality **kept** |
-| 3b — drop label equality | **blocked** | §10 decision 4, plus a live bug found while doing 3a — see Phase 3 |
+| 3b — drop label equality | **deferred to Phase 8** | Decided, not blocked. It trades precision for recall and Phase 8 is what makes the trade measurable |
+| 3c — tiered merge distance | **done** | `mergeDistanceFor(category)` in `lib/detect-refine.ts`. Fixes the live over-merge bug 3a uncovered, independently of 3b |
 | 4–9 | not started | |
 
 Gates green after each: `pnpm typecheck`, `pnpm test` (974 passing), `pnpm lint`,
@@ -279,14 +280,27 @@ equality would *widen*. And 3a made it likelier to fire, because the positions i
 compares are measured ones that genuinely agree, where before they were guesses that
 mostly did not.
 
-A fourth option therefore joins §10 decision 4, and it is available independently of
-3b: **derive the merge distance instead of authoring one.** Two objects of the same
-category are the same object only if they are closer than roughly half that
-category's own typical width — chair 500 mm → 0.25 m, bed 1900 mm → 0.95 m, sofa
-2200 mm → 1.1 m. `CATEGORY_DEFAULTS` and `dimRangeFor` already hold every number
-this needs, exactly as `defaultDepthFor` does after Phase 2, so it invents nothing.
-It errs toward under-merging, which is the direction this file already argues for: a
-duplicate the user can delete beats a real piece that never appears.
+**Resolved as 3c, shipped, and independent of 3b.** Three named bands —
+`tight` 0.35 m, `medium` 0.6 m, `loose` 0.9 m — with a per-category tier, behind
+`mergeDistanceFor(category)`. `medium` is the flat value it replaces, and it is also
+the fallback, so adding a category never silently loosens the rule.
+
+The tier answers "how close can two DIFFERENT items of this category legitimately
+sit", which tracks the item's footprint: chairs, nightstands, ottomans, lamps,
+plants, monitors, paintings and mirrors are `tight` (a gallery wall hangs frames
+0.4 m apart); sofas, beds, wardrobes, rugs and curtains are `loose` (nothing puts
+two beds 0.9 m apart, and being large they are the items one wall photo clips, so
+two views of one disagree the most).
+
+A derived version was considered and declined — half the category's typical width
+lands near these numbers, so the formula was available. Two reasons not to: three
+named bands can be reasoned about at a glance where a formula's output cannot, and
+the merge distance is not actually the same quantity as the furniture's size. It is
+how far two MEASUREMENTS of one object may drift, which depends on the calibration
+and on how much of the object a single wall photo clips.
+
+Either way it errs toward under-merging, the direction this file already argues for:
+a duplicate the user can delete beats a real piece that never appears.
 
 Current call, at the tail of `detectAcrossImages` (grep `return dedupeDetections`):
 
@@ -534,8 +548,12 @@ Flag these and stop; do not pick a default.
 2. **Phase 4 surfacing.** Auto-apply the repair with an undo, or present it as a
    suggestion the user confirms. Affects whether the detect screen gains a new state.
 3. **Phase 9 `alsoSeenIn`.** Cut from the prompt, or consume as a weak dedupe prior.
-4. **Phase 3 tiering vs overlap-support.** Category-tiered distances are simpler;
-   requiring cross-slot bbox support is more principled and needs more code.
+4. ~~**Phase 3 tiering vs overlap-support.**~~ **Decided: tiering.** Shipped as 3c
+   above. Reprojection support — project one detection's position into the other
+   slot's camera and require it to land inside that box — remains the principled
+   alternative and needs no threshold at all, but it makes the merge
+   calibration-aware. Worth revisiting only if the tiers turn out to be the thing
+   Phase 8 measures as wrong.
 5. **Whether Phase 5 changes the capture UX or only the ingest.** Auto-slotting
    removes the reason for the four-slot grid; removing the grid is a product change,
    not a detection fix.
@@ -556,6 +574,9 @@ collision the earlier draft of this section worried about never materialised. Ph
 1, 2 and 3a then touched `lib/detect-refine.ts` (new), `tests/detect-refine.test.ts`
 (new), `lib/scene-spec.ts`, `lib/detection.ts`, `tests/detection-dedupe.test.ts` and
 `app/onboarding/detect/page.tsx`.
+
+Work landed on `feat/detect-pipeline-order`, branched from `6a899f8`, as four
+commits: the move, the derived depth, the reordering, and the tiered distance.
 
 `geoRefine` no longer lives in `app/onboarding/detect/page.tsx`, so the coordination
 point that draft flagged is closed: the page imports `geoRefine` and

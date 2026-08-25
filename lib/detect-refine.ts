@@ -55,18 +55,68 @@ export function geoRefine(d: Detection, cals: CalMap, room: RoomDims): Detection
   };
 }
 
-/** Two detections are the same physical object if their estimated 3D centres are
- *  within this many metres of each other. Generous enough to catch one object
- *  reported twice from two walls, tight enough that a pair of nightstands either
- *  side of a bed (~1.5 m apart) stays two objects. */
-const SAME_OBJECT_M = 0.6;
+/** How close two same-category detections have to be, in metres, before they are
+ *  judged one object seen twice.
+ *
+ *  Tiered, because one number cannot serve both ends of the catalogue. At the flat
+ *  0.6 m this replaces, four identical dining chairs 0.55 m apart collapsed to
+ *  TWO — real furniture deleted by the rule whose whole job is deleting
+ *  duplicates — and loosening the number to better catch a bed seen from two
+ *  walls would have eaten more of them.
+ *
+ *  What each tier answers is "how close can two DIFFERENT items of this category
+ *  legitimately sit", so it tracks the item's own footprint: dining chairs tuck
+ *  against each other, wardrobes do not. The other direction is one object
+ *  measured from two walls, where the two estimates disagree by roughly the
+ *  calibration error, so a tight tier means such a pair survives as two rows.
+ *  That is the safe way to be wrong, and this file already argues why: a
+ *  duplicate the user deletes in one tap beats a real piece that never appears.
+ *
+ *  Not derived from the catalogue's own widths, though it could be — half a
+ *  typical width lands close to these numbers. Three named bands are easier to
+ *  reason about at a glance than a formula whose output nobody can predict, and
+ *  the merge distance is not the same quantity as the furniture's size: it is
+ *  about how far two MEASUREMENTS of one thing can drift. */
+type MergeTier = 'tight' | 'medium' | 'loose';
+
+const MERGE_M: Record<MergeTier, number> = { tight: 0.35, medium: 0.6, loose: 0.9 };
+
+/** Anything not named here is `medium`, which is the flat value this replaced. */
+const MERGE_TIER: Partial<Record<Category, MergeTier>> = {
+  // Small things that legitimately sit shoulder to shoulder: dining chairs at
+  // ~0.5 m centres, two table lamps on one sideboard, a cluster of pots, dual
+  // monitors, a gallery wall of frames, a pair of nightstands.
+  chair: 'tight',
+  nightstand: 'tight',
+  ottoman: 'tight',
+  lamp: 'tight',
+  plant: 'tight',
+  monitor: 'tight',
+  painting: 'tight',
+  mirror: 'tight',
+  // Metre-and-a-half-plus footprints. Two of these are never 0.9 m apart, and
+  // being large they are also the ones a single wall photo clips, so two views
+  // of one item disagree the most.
+  sofa: 'loose',
+  bed: 'loose',
+  wardrobe: 'loose',
+  rug: 'loose',
+  curtain: 'loose',
+};
+
+/** Exported for tests, and because a wrong tier is a piece of furniture the user
+ *  loses without being told. */
+export function mergeDistanceFor(category: Category): number {
+  return MERGE_M[MERGE_TIER[category] ?? 'medium'];
+}
 
 /** Drop near-identical detections. Two rules:
  *
  *  1. Same slot + same category + bbox centres within ~12% on each axis — one
  *     object boxed twice in the same photo.
  *  2. Same label + same category ACROSS slots, but only when their estimated 3D
- *     positions agree — one object seen from two walls with `alsoSeenIn` omitted.
+ *     positions agree to within that category's own merge distance — one object
+ *     seen from two walls with `alsoSeenIn` omitted.
  *
  *  Rule 2 used to match on the label alone, with no positional test at all, so any
  *  two objects the model named identically collapsed into one: four matching
@@ -95,7 +145,7 @@ export function dedupeDetections(items: Detection[]): Detection[] {
       if (o.label.toLowerCase().trim() !== d.label.toLowerCase().trim()) return false;
       if (!o.position || !d.position) return false;
       const dist = Math.hypot(o.position.x - d.position.x, o.position.z - d.position.z);
-      return dist < SAME_OBJECT_M;
+      return dist < mergeDistanceFor(d.category);
     });
     if (!isDup) out.push(d);
   }
