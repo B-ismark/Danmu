@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { defaultScene, PART_LIBRARY } from '../lib/scene-spec';
 import { footprintForLayout, offsetWall, pointInFootprint, type Footprint, type LayoutId } from '../lib/footprint';
 import { footFromPart, footInsidePoly, footIntersectionArea, footArea, distToBoundary, obbGap } from '../lib/geometry';
-import { isObstacle, roleOf, sharesFloor, WALK_MIN } from '../lib/layout-rules';
+import { isObstacle, relationFor, roleOf, sharesFloor, WALK_MIN } from '../lib/layout-rules';
 import { analyzeRoom } from '../lib/clearance';
 import {
   costBreakdown,
@@ -104,6 +104,42 @@ describe.each(PRESETS)('starter scene · $id', ({ id, w, d }) => {
     // worth making deliberately rather than discovering in the panel.
     const { issues } = analyzeRoom(parts, { footprint: poly, height: HEIGHT });
     expect(issues.map((i) => `${i.severity}: ${i.detail}`)).toEqual([]);
+  });
+
+  it('puts every piece within the band of the thing it belongs to', () => {
+    // Read through `relationFor`, so the bar is whatever `layout-rules` currently says
+    // rather than a number copied next to it — the same reason `clearance.ts` and
+    // `layout-score.ts` both read that table instead of restating it.
+    //
+    // The regression this exists for was one piece and two cost terms. The living
+    // group's floor lamp listed the ENDS OF THE WALL before the spots beside the sofa,
+    // and the end fit, so the lamp took it: 2.75 m from the seat it lights, against a
+    // 0–0.7 m band. On the L that was 3.7–5.0 of a 6.63 relation cost AND the whole of
+    // a 2.34 window cost, because the far end of that wall is where the window is. It
+    // made the biggest single move Suggest could offer on a brand-new room — which is
+    // the app shipping a room and then immediately offering to fix it.
+    const solid = parts.filter((q) => !q.wallMounted);
+    const bad: string[] = [];
+    for (const a of solid) {
+      for (const b of solid) {
+        if (a === b) continue;
+        const rel = relationFor(a, b);
+        // Only the bands that mean "beside" — a `faces` band across a room is a
+        // viewing distance, and its far end is a legitimate place to be.
+        if (!rel || rel.kind !== 'beside' || rel.max > 1) continue;
+        const gap = obbGap(
+          footFromPart(a.pos, a.rot, a.dimMM, a.circle),
+          footFromPart(b.pos, b.rot, b.dimMM, b.circle),
+        );
+        // Discharged by its BEST anchor, so one in range is enough — see
+        // `relationOptions`. Collect, then check for any that found none.
+        if (gap <= rel.max) bad.push(`OK:${a.id}:${rel.specId}`);
+        else bad.push(`MISS:${a.id}:${rel.specId}:${gap.toFixed(2)}m>${rel.max}m`);
+      }
+    }
+    const owed = new Set(bad.map((e) => e.split(':').slice(1, 3).join(':')));
+    const met = new Set(bad.filter((e) => e.startsWith('OK')).map((e) => e.split(':').slice(1, 3).join(':')));
+    expect([...owed].filter((k) => !met.has(k))).toEqual([]);
   });
 
   it('leaves most of the floor free to walk on', () => {

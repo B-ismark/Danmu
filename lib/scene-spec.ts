@@ -738,17 +738,38 @@ export function defaultScene(
       // `vSofa − 0.6` used to land the lamp inside the sofa's own 350 mm stand-up zone
       // in a narrow bay, which the room report then reported: "Sofa has 0 cm in front".
       // A floor lamp is not one of the sofa's zone guests, and it should not be.
+      //
+      // Half the sofa plus a hand's width: `lamp-seat` wants a 0–0.7 m gap, and this
+      // lands at 0.15 m of it. Derived from the sofa actually placed, so a loveseat
+      // gets its lamp closer in rather than at a three-seater's offset.
+      const lampU = sofaDim[0] / 2000 + 0.3;
       placeSomewhere(
         'lamp',
         'Floor lamp',
         'lamp-floor',
         [300, 300, 1700],
         f,
+        // Beside the sofa FIRST, the ends of the wall only as a fallback — and beside
+        // the sofa where the sofa actually is, not where `u = 0` is.
+        //
+        // Both halves of that were wrong, and together they were the single largest
+        // fault left in any starter room. `lamp-seat` asks for a 0–0.7 m gap to the
+        // seat it lights; the wall-end spots came first in this list and fit, so the
+        // lamp took one — 2.75 m from the sofa on the L's 6 m wall. That one piece was
+        // 3.7–5.0 of the L's 6.63 relation cost, and moving it was the biggest single
+        // gain Suggest could find on a brand-new room. Which is the complaint this
+        // whole line of work started from: the app shipping a room, then immediately
+        // offering to fix it.
+        //
+        // The `u = 0` half is drift. These offsets were written when the group was
+        // centred on its wall; the sofa's `u` is SEARCHED now (see `uTries`), and
+        // nothing moved these with it — so on any wall where the search shifted the
+        // group, "beside the sofa" pointed at empty floor.
         [
+          { u: uGroup + lampU, v: vSofa },
+          { u: uGroup - lampU, v: vSofa },
           { u: f.width / 2 - 0.25, v: vSofa },
           { u: -(f.width / 2 - 0.25), v: vSofa },
-          { u: sofaDim[0] / 2000 + 0.3, v: vSofa },
-          { u: -(sofaDim[0] / 2000 + 0.3), v: vSofa },
         ],
         { circle: true },
       );
