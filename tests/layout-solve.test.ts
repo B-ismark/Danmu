@@ -822,7 +822,12 @@ describe('the solver moves groups, not only pieces', () => {
     // …and the best run gets under the room it was built from, which no run does
     // without the pass: the flat search's best of nine is 11.8 against a 5.5 target.
     expect(costs[0]).toBeLessThan(target);
-  });
+    // Nine anneals on a sixteen-piece room. Nothing here is a timing assertion — the
+    // explicit budget exists because vitest's 5 s default is not one either, and this
+    // test sat just under it: green run after run, then red the first time the whole
+    // suite ran on a busier machine. A test whose result depends on what else is using
+    // the CPU is a flaky test even when every number it checks is deterministic.
+  }, 60_000);
 
   it('finds the swap in an open plan the flat search sits still in', () => {
     // The gentler case — the two halves are similar enough that exchanging the groups
@@ -835,7 +840,7 @@ describe('the solver moves groups, not only pieces', () => {
       .map((r) => costBreakdown(model, r.placements, DEFAULT_WEIGHTS, NAV_CELL).total)
       .sort((a, b) => a - b);
     expect(costs[4]).toBeLessThan(19);
-  });
+  }, 60_000);
 
   it('finds no group in a room nobody has arranged', () => {
     // The complement, and why `intactGroups` reads the arrangement rather than the
