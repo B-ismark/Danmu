@@ -823,10 +823,8 @@ function maySnug(rel: Relation | null): boolean {
 
 // ─── Reading the room ───────────────────────────────────────────────────────
 
-export type RoomKind = 'bedroom' | 'living' | 'dining' | 'workspace' | 'mixed';
 
 export type RoomProfile = {
-  kind: RoomKind;
   /** The piece the room is arranged around, by index into the parts array, or
    *  null when nothing in here is big enough to be one. Settling it first is what
    *  makes a hierarchical solve behave: a bed's position decides a bedroom, and
@@ -838,47 +836,45 @@ export type RoomProfile = {
   apertures: number[];
 };
 
-/** Which roles make a room what it is. First match wins, in this order — a room
- *  with a bed in it is a bedroom even if there is also a sofa. */
-const KIND_BY_ANCHOR: Array<[Role, RoomKind]> = [
-  ['bed', 'bedroom'],
-  ['sofa', 'living'],
-  ['dining-table', 'dining'],
-  ['desk', 'workspace'],
-];
+/** Which roles can be the piece a room is arranged around, in priority order — a
+ *  room with a bed in it is arranged around the bed even if there is also a sofa.
+ *
+ *  The order is the point, and it used to be decoration. This list also produced a
+ *  `kind` field ('bedroom', 'living', …) that nothing read, and the ANCHOR was chosen
+ *  by footprint area across all four roles at once — so a 2200 × 950 sofa (2.09 m²)
+ *  outranked a 1900 × 1000 single bed (1.90 m²) and the profile came back saying the
+ *  room was a bedroom arranged around the sofa. Harmless while `anchor` had no reader.
+ *  It has one now (`solveLayout`'s first pass), so rank decides first and area only
+ *  breaks ties within a rank — two sofas, the bigger one. */
+const ANCHOR_ROLES: Role[] = ['bed', 'sofa', 'dining-table', 'desk'];
 
 const FOCAL_ROLES = new Set<Role>(['tv', 'dining-table', 'coffee-table']);
 const APERTURE_ROLES = new Set<Role>(['door', 'window']);
 
-/** What kind of room this is, what it is arranged around, and where its openings
- *  are. Everything the score needs that is a property of the whole room rather
- *  than of one piece. */
+/** What a room is arranged around, what is worth facing in it, and where its
+ *  openings are. Everything the score needs that is a property of the whole room
+ *  rather than of one piece. */
 export function roomProfile(parts: ScenePart[]): RoomProfile {
   const focals: number[] = [];
   const apertures: number[] = [];
   let anchor: number | null = null;
+  let anchorRank = ANCHOR_ROLES.length;
   let anchorArea = 0;
-  let kind: RoomKind = 'mixed';
-  let kindRank = KIND_BY_ANCHOR.length;
 
   for (let i = 0; i < parts.length; i++) {
     const role = roleOf(parts[i]);
     if (APERTURE_ROLES.has(role)) apertures.push(i);
     if (FOCAL_ROLES.has(role)) focals.push(i);
-    const rank = KIND_BY_ANCHOR.findIndex(([r]) => r === role);
-    if (rank >= 0) {
-      if (rank < kindRank) {
-        kindRank = rank;
-        kind = KIND_BY_ANCHOR[rank][1];
-      }
-      const area = (parts[i].dimMM[0] / 1000) * (parts[i].dimMM[1] / 1000);
-      if (area > anchorArea) {
-        anchorArea = area;
-        anchor = i;
-      }
+    const rank = ANCHOR_ROLES.indexOf(role);
+    if (rank < 0) continue;
+    const area = (parts[i].dimMM[0] / 1000) * (parts[i].dimMM[1] / 1000);
+    if (rank < anchorRank || (rank === anchorRank && area > anchorArea)) {
+      anchorRank = rank;
+      anchorArea = area;
+      anchor = i;
     }
   }
-  return { kind, anchor, focals, apertures };
+  return { anchor, focals, apertures };
 }
 
 /** Where a person entering through this door arrives, and how wide their route

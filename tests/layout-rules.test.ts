@@ -220,20 +220,32 @@ describe('relationFor', () => {
 });
 
 describe('roomProfile', () => {
-  it('names the room after what is in it, and finds what it is arranged around', () => {
+  it('finds what the room is arranged around', () => {
     const bed = part({ category: 'bed', shape: 'bed-double', dimMM: [1600, 2000, 600] });
     const stand = part({ category: 'nightstand', shape: 'nightstand', dimMM: [450, 400, 550] });
-    const p = roomProfile([stand, bed]);
-    expect(p.kind).toBe('bedroom');
-    expect(p.anchor).toBe(1);
+    expect(roomProfile([stand, bed]).anchor).toBe(1);
   });
 
-  it('prefers a bed to a sofa when a room has both', () => {
+  it('prefers a bed to a sofa when a room has both, even a bigger sofa', () => {
+    // The regression, and it only became reachable when `anchor` got a reader. The
+    // anchor used to be the largest FOOTPRINT among all the anchor roles at once, so a
+    // 2200 × 950 sofa (2.09 m²) beat a 1900 × 1000 single bed (1.90 m²) — and the
+    // profile said the room was a bedroom arranged around the sofa, which is two
+    // answers to one question. Rank decides first now.
     const parts = [
       part({ category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880] }),
-      part({ category: 'bed', shape: 'bed-double', dimMM: [1600, 2000, 600] }),
+      part({ category: 'bed', shape: 'bed-single', dimMM: [1900, 1000, 600] }),
     ];
-    expect(roomProfile(parts).kind).toBe('bedroom');
+    expect(roomProfile(parts).anchor).toBe(1);
+  });
+
+  it('breaks a tie inside one rank by size', () => {
+    // Two sofas is a real room, and the bigger one is the one to settle first.
+    const parts = [
+      part({ category: 'sofa', shape: 'sofa', dimMM: [1600, 900, 880] }),
+      part({ category: 'sofa', shape: 'sofa', dimMM: [2400, 950, 880] }),
+    ];
+    expect(roomProfile(parts).anchor).toBe(1);
   });
 
   it('collects the openings and the things worth facing', () => {
