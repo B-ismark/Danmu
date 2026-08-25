@@ -19,7 +19,7 @@
 // shell instead.
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { v4 as uuid } from 'uuid';
 import { useStudio, useSettings } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
@@ -236,8 +236,11 @@ function deleteSelection() {
   removeParts(selectedIds());
 }
 
-export function duplicateSelection() {
-  const ids = selectedIds();
+/** @param explicit which pieces to copy, when the gesture names them rather than
+ *  meaning "the selection" — Ctrl-clicking one row in the rail says add another of
+ *  THAT, whatever happens to be selected. */
+export function duplicateSelection(explicit?: string[]) {
+  const ids = explicit ?? selectedIds();
   if (ids.length === 0) return;
   const sc = useScene.getState();
   const created: string[] = [];
@@ -316,6 +319,11 @@ export function KeyboardShortcuts() {
   const router = useRouter();
   const routerRef = useRef(router);
   routerRef.current = router;
+  // Which tab is on screen. Read through a ref for the same reason the router is:
+  // the key handler is installed once and must not be re-bound per navigation.
+  const pathname = usePathname();
+  const onPlanTab = useRef(false);
+  onPlanTab.current = !!pathname?.endsWith('/plan');
 
   useEffect(() => {
     const unsubHistory = startHistoryRecording();
@@ -371,16 +379,23 @@ export function KeyboardShortcuts() {
           deleteSelection();
           return;
       }
+      // The gizmo's three modes only exist on the 3D tab. Armed on the plan they
+      // silently changed a setting on the other screen — press R over a floor plan
+      // and nothing happens here, while the 3D gizmo quietly becomes Rotate.
+      if (!onPlanTab.current) {
+        switch (key) {
+          case 'w':
+            s.setTransformMode('translate');
+            return;
+          case 's':
+            s.setTransformMode('scale');
+            return;
+          case 'r':
+            s.setTransformMode('rotate');
+            return;
+        }
+      }
       switch (key) {
-        case 'w':
-          s.setTransformMode('translate');
-          break;
-        case 's':
-          s.setTransformMode('scale');
-          break;
-        case 'r':
-          s.setTransformMode('rotate');
-          break;
         case 'f':
           if (s.selectedPartId) s.frameSelected();
           break;
