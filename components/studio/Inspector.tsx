@@ -16,7 +16,7 @@ import { removeParts } from './KeyboardShortcuts';
 import { RailSection } from './RailSection';
 import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { isWallMountedPart, supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, DECOR_KINDS, type LibraryItem, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
-import { findSupportDetailed, groundY, snapToWall as snapToWallPhys } from '@/lib/physics';
+import { findSupportDetailed, groundY, snapToWall as snapToWallPhys, wallStandoff } from '@/lib/physics';
 import { wallSegments } from '@/lib/footprint';
 import { moveWallCarrying } from '@/lib/wall-actions';
 
@@ -126,7 +126,7 @@ export function Inspector() {
 
   function snapToNearestWall() {
     const [x, y, z] = currentXYZ();
-    const snapped = snapToWallPhys([x, y, z], part!.dimMM, room.footprint);
+    const snapped = snapToWallPhys([x, y, z], part!.dimMM, room.footprint, wallStandoff(part!.shape));
     setPosition(id!, [snapped.x, y, snapped.z]);
     if (snapped.rot !== undefined) setRotation(id!, snapped.rot);
     clearParent(id!);

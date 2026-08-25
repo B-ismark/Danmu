@@ -57,6 +57,7 @@ import {
   roomProfile,
   routeWidth,
   sharesFloor,
+  wallDebt,
   WALK_MIN,
   zoneExempt,
   type AccessRule,
@@ -685,7 +686,11 @@ export function costBreakdown(
       // centre distances, and using the centre asks the wardrobe to bury itself.
       const back = edge.dist - halfDepthToward(f, edge.nx, edge.nz);
       if (affinity === 'must-wall' || affinity === 'prefers-wall') {
-        c.wall += Math.max(0, back);
+        // Not `max(0, back)`. Past a walkway's width the gap behind a piece with a
+        // finished back stops being dead space and becomes a route, and the debt
+        // goes flat — see `wallDebt`, and the open plan's sofa, which was the whole
+        // of that preset's residual cost.
+        c.wall += wallDebt(roles[i], back);
         // …and facing INTO the room, which is the other half of being against a
         // wall. A wardrobe with its doors in the plaster is flush and useless.
         //

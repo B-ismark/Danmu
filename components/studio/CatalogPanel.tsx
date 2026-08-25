@@ -81,7 +81,7 @@ export function CatalogToggle() {
       onClick={() => setOpen(!open)}
       aria-expanded={open}
       className="ds-btn"
-      title="Browse furniture — drag a piece into the room, or click to drop it in the centre"
+      title="Browse the catalog — drag a piece into the room, or click to drop it in the centre"
       style={{
         height: 30,
         fontSize: 12,
@@ -107,9 +107,9 @@ export function CatalogToggle() {
  *  you picked and the piece you described land the same way. */
 function spawn(category: ScenePart['category'], shape: ScenePart['shape'], dimMM: [number, number, number], name: string) {
   const { room, parts, addPart } = useScene.getState();
-  const { pos, wallMounted } = placeNewPart(category, shape, dimMM, room, parts);
+  const { pos, rot, wallMounted } = placeNewPart(category, shape, dimMM, room, parts);
   const id = `${category}-${uuid().slice(0, 6)}`;
-  addPart({ id, category, name, shape, pos, rot: 0, dimMM, locked: false, wallMounted });
+  addPart({ id, category, name, shape, pos, rot, dimMM, locked: false, wallMounted });
   useStudio.getState().setSelected(id);
 }
 

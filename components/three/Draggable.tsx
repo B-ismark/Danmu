@@ -34,7 +34,7 @@ import { useScene } from '@/lib/scene-store';
 import { currentRoomScene } from '@/lib/room-scene';
 import { useDragLive } from '@/lib/drag-live';
 import { collidesAt, isParametric, isWallMountedPart, type ScenePart } from '@/lib/scene-spec';
-import { findSupportDetailed, groundY, isFloorStanding, snapToWall } from '@/lib/physics';
+import { findSupportDetailed, groundY, isFloorStanding, snapToWall, wallStandoff } from '@/lib/physics';
 import { pointInFootprint, footprintBounds } from '@/lib/footprint';
 import { clampDims } from '@/lib/dimension-ranges';
 import { obbFromPart, obbInsidePoly } from '@/lib/geometry';
@@ -285,7 +285,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // L/T/U inner walls too, always facing into the room.
     const wallMounted = isWallMountedPart(part.category, part.shape);
     if (wallMounted) {
-      const snapped = snapToWall([x, 0, z], dim, footprint);
+      const snapped = snapToWall([x, 0, z], dim, footprint, wallStandoff(part.shape));
       x = snapped.x;
       z = snapped.z;
       if (snapped.rot !== undefined) outRot = snapped.rot;

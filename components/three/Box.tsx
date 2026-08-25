@@ -26,6 +26,7 @@ import type { ThreeElements } from '@react-three/fiber';
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { Color, DoubleSide, Euler, Matrix4, Quaternion, Vector3, type InstancedMesh } from 'three';
 import { PHYSICAL_SURFACES, SURFACE, type SurfaceKey } from './materials';
+import { DETAIL } from '@/lib/scene-palette';
 
 /** Below this (metres) the clamped bevel is invisible — skip RoundedBox. */
 const BEVEL_FLOOR = 0.05;
@@ -55,7 +56,7 @@ export function Box({
   position = [0, 0, 0],
   rotation = [0, 0, 0],
   color,
-  edgeColor = '#3a352e',
+  edgeColor = DETAIL.edge,
   edgeOpacity = 0,
   emissive,
   emissiveIntensity = 0,

@@ -273,12 +273,26 @@ export default function WorkspacePage() {
                   </button>
                 </div>
               ) : (
-                grouped.map((g) => (
+                grouped.map((g, gi) => (
                   <section key={g.id} style={{ marginBottom: 26 }}>
                     <h2 className="ds-label" style={{ marginBottom: 10 }}>
                       {g.label} · <span className="mono">{g.rooms.length}</span>
                     </h2>
                     <div className="auto-grid auto-grid--cards">
+                      {/* Making a room is the thing this page exists for, and the
+                          only control for it sat in the far corner of the bar — a
+                          diagonal across the whole viewport from where the eye
+                          starts. It joins the grid instead, in the first group,
+                          where a new room would land anyway.
+
+                          Deliberately NOT a second `--primary`: the bar's "New
+                          Room" is this page's one primary (see EmptyState), so
+                          this is the quiet empty slot beside the rooms that
+                          exist, not a competing claim to the same action.
+
+                          Hidden while the filter is on. A filtered grid is a set
+                          of search results, and "create" is not one of them. */}
+                      {gi === 0 && query.trim() === '' && <NewRoomCard />}
                       {g.rooms.map((r) => (
                         <RoomCard
                           key={r.id}
@@ -312,6 +326,59 @@ export default function WorkspacePage() {
         </div>
       </div>
     </DocShell>
+  );
+}
+
+/** The empty slot in the room grid — "start another one", where the rooms are.
+ *
+ *  A tile rather than a card: dashed `--edge` (interactive, so not a
+ *  `--hairline`) and no `.ds-card` fill, so it reads as the space a room would
+ *  go in rather than as a room that has lost its drawing. It stretches to the
+ *  row's height on its own — grid items default to `stretch` — which is why it
+ *  carries no height of its own to drift out of step with `RoomCard`. */
+function NewRoomCard() {
+  const [hover, setHover] = useState(false);
+  return (
+    <Link
+      href="/onboarding/layout-pick"
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        // The cards it sits beside are a thumbnail plus three rows of text, so
+        // an empty tile with nothing in it would collapse to its own content.
+        minHeight: 200,
+        padding: 16,
+        textAlign: 'center',
+        borderRadius: 'var(--r-card)',
+        border: '1.5px dashed var(--edge)',
+        background: hover ? 'var(--accent-tint)' : 'transparent',
+        borderColor: hover ? 'var(--accent-text)' : 'var(--edge)',
+        color: hover ? 'var(--accent-text)' : 'var(--ink-2)',
+        transition: 'background .15s, border-color .15s, color .15s',
+      }}
+    >
+      <span
+        style={{
+          display: 'grid',
+          placeItems: 'center',
+          width: 38,
+          height: 38,
+          borderRadius: '50%',
+          border: '1.5px dashed currentColor',
+        }}
+      >
+        <Icon name="plus" size={16} />
+      </span>
+      <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em' }}>New room</span>
+      <span style={{ fontSize: 11.5, color: hover ? 'var(--accent-text)' : 'var(--ink-3)' }}>
+        Pick a footprint to start
+      </span>
+    </Link>
   );
 }
 

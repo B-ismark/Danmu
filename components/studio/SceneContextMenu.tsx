@@ -304,7 +304,9 @@ function partEntries(partId: string): MenuEntry[] {
 function roomEntries(): MenuEntry[] {
   const s = useStudio.getState();
   return [
-    { kind: 'item', id: 'add', label: 'Add furniture…', icon: 'plus', run: () => s.setCatalogOpen(true) },
+    // "Catalog", not "furniture": the same panel holds doors, windows, curtains,
+    // appliances and lighting, so the narrower word described about half of it.
+    { kind: 'item', id: 'add', label: 'Add from catalog…', icon: 'plus', run: () => s.setCatalogOpen(true) },
     { kind: 'item', id: 'all', label: 'Select everything', icon: 'layers', hint: 'Ctrl A', run: selectAllParts },
     { kind: 'separator', id: 'sep-view' },
     { kind: 'item', id: 'view', label: 'Reset the view', icon: 'fit', run: () => s.setView('iso') },

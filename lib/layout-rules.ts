@@ -349,6 +349,41 @@ export function placeAffinity(role: Role): PlaceAffinity {
   return AFFINITY_BY_ROLE[role] ?? 'free';
 }
 
+/** Roles whose BACK is a finished surface — pieces that may legitimately stand off
+ *  their wall with a route behind them, dividing a room rather than failing to
+ *  reach the plaster.
+ *
+ *  A sofa's back is upholstered and is the first thing you see walking into an open
+ *  plan; a desk's is a modesty panel. A wardrobe's, a bookshelf's and a fridge's are
+ *  bare board, hinges and a compressor — no width of walkway behind those makes it a
+ *  composition, so they keep the plain distance term. */
+const FINISHED_BACK = new Set<Role>(['sofa', 'desk']);
+
+/** What a piece standing off its wall costs, in metres of debt.
+ *
+ *  Linear in the gap — and for a piece with a finished back, only until `WALK_MIN`,
+ *  where the gap stops being dead space and becomes a route. Past that the debt is
+ *  FLAT, which is the property that actually matters: a term that keeps rising is a
+ *  gradient, and a gradient is an instruction.
+ *
+ *  This is `lib/scene-spec`'s open plan and `lib/layout-score` disagreeing about one
+ *  rule, which is exactly what rule 3 says to fix HERE rather than in either of them.
+ *  The seeder leaves `WALK_MIN` behind the sofa on purpose so the living and dining
+ *  groups have a way past each other, and says so; the wall term then charged 12/m
+ *  for the same gap, which was the ENTIRE residual cost of the open preset (11.53 of
+ *  13.08, all of it one sofa). `Suggest` answered by pulling that sofa 0.27–0.53 m
+ *  back in at every seed — narrowing the route to something too tight to walk down
+ *  and too wide to read as flush, then stopping there because the walkway term
+ *  outweighed the rest of the gain. Neither end of that is a room anyone asked for.
+ *
+ *  Flat past a walkway, so there is nothing to descend; and the only route back to
+ *  the wall runs across the dead band, where `walkway` (weight 40) costs more per
+ *  metre than `wall` (12) gains. */
+export function wallDebt(role: Role, back: number): number {
+  const gap = Math.max(0, back);
+  return FINISHED_BACK.has(role) ? Math.min(gap, WALK_MIN) : gap;
+}
+
 /** What a `'by-relation'` piece wants when the thing it belongs to is not in the
  *  room at all.
  *

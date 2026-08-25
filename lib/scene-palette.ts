@@ -36,6 +36,40 @@ export const SCENE = {
   ceiling: '#F5F1E8',
 } as const;
 
+// ─── Furniture detail ───────────────────────────────────────────────────────
+// The parts of a piece that are NOT its body: legs, brackets, hardware, and the
+// outline every Box draws. They are deliberately absent from `BY_SHAPE` — these
+// are not recolourable, because repainting a sofa should not repaint its feet,
+// and the Inspector's "Default for this piece" swatch must keep showing the body.
+//
+// They are here anyway, for the reason the rest of this file exists: each was a
+// literal repeated across several renderers, so it was several values pretending
+// to be one, and the one that drifts is never the one you are looking at.
+export const DETAIL = {
+  /** The outline every `Box` draws, at whatever `edgeOpacity` the caller asks for.
+   *  `components/three/Box.tsx` is its only writer — it lives out here so that a
+   *  renderer wanting a different edge has to change the edge, not invent one. */
+  edge: '#3A352E',
+  /** Dark walnut — table legs, chair frames, a mirror's surround. */
+  darkWood: '#3A2818',
+  /** Near-black hardware — castors, brackets, a monitor's stem. */
+  hardware: '#222222',
+} as const;
+
+// ─── Decor accents ──────────────────────────────────────────────────────────
+// The small things `components/three/Dressing.tsx` scatters on a surface. Unlike
+// DETAIL these ARE the object's whole body colour — but one drawn at random per
+// item from a set, which is the one thing a single per-shape default cannot say.
+export const DECOR = {
+  /** Book spines. Two lists once: `Dressing`'s stack of six and
+   *  `BookshelfGeo`'s row of eight, so the books ON a shelf and the books
+   *  BESIDE it were different books. */
+  book: ['#7A2A2A', '#2A4A7A', '#5D3820', '#A88A4A', '#3A5A3A', '#6A3A6A', '#8A6A2A', '#3A6A6A'],
+  pot: ['#B5774D', '#C9B79C', '#3E5A52', '#8A8A86'],
+  vase: ['#D9CFC0', '#6E8C84', '#B5734D', '#2E2A26'],
+  pillow: ['#C9A98E', '#8FA98C', '#C57B53', '#3F5670', '#D6C7AE'],
+} as const;
+
 // ─── Exported-artifact palette ──────────────────────────────────────────────
 // lib/plan-export.ts draws to a <canvas>, which cannot read a custom property
 // either — so it reads these rather than carrying its own hex set. It used to

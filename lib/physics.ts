@@ -8,18 +8,25 @@ import type { Footprint } from './footprint';
 import { nearestEdge, footArea, footFromPart, footIntersectionArea } from './geometry';
 import { WALL_GAP } from './layout-rules';
 
-export type Anchor = 'floor' | 'ceiling' | 'wall-high' | 'wall-mid' | 'wall-low';
+export type Anchor = 'floor' | 'ceiling' | 'wall-high' | 'wall-mid' | 'wall-low' | 'wall-floor';
 
 const ANCHOR_BY_CATEGORY: Partial<Record<Category, Anchor>> = {
   // ceiling
   fan: 'ceiling',
-  // wall-high (near ceiling top)
-  curtain: 'ceiling',
+  // wall-high (near ceiling top). NOT 'ceiling': that branch hangs a small thing
+  // just under the slab, which for a 2.6 m curtain put its CENTRE at 2.55 m and
+  // most of the cloth through the ceiling. `scene-spec`'s dressing pass worked
+  // around it by computing its own Y; the detection path did not, and got the
+  // through-the-ceiling curtain.
+  curtain: 'wall-high',
   // wall-mid (mounted at viewing height)
   tv: 'wall-mid',
   mirror: 'wall-mid',
   painting: 'wall-mid',
   ac: 'wall-high',
+  // A door reaches the floor but is still a hole in a wall, so it is centred like
+  // the rest of the wall-mounted family — see the 'wall-floor' note below.
+  door: 'wall-floor',
   // NOTE: a monitor is NOT wall-mounted — a desktop monitor rests on a desk.
   // Anchoring it wall-mid made added monitors float at 1.4 m ("hovering in the
   // sky") and snap back up on every drag. It's floor-anchored + tabletop-prone
@@ -29,9 +36,10 @@ const ANCHOR_BY_CATEGORY: Partial<Record<Category, Anchor>> = {
 };
 
 const ANCHOR_BY_SHAPE: Partial<Record<Shape, Anchor>> = {
+  door: 'wall-floor',
   fan: 'ceiling',
   'lamp-pendant': 'ceiling',
-  curtain: 'ceiling',
+  curtain: 'wall-high',
   tv: 'wall-mid',
   mirror: 'wall-mid',
   'mirror-oval': 'wall-mid',
@@ -67,12 +75,53 @@ export function groundY(
       return Math.min(1.4, roomHeight - h / 2 - 0.1);
     case 'wall-low':
       return 0.4;
+    case 'wall-floor':
+      // A door: centred like every other wall-mounted part, but standing ON the
+      // floor rather than hung at a height. It has to be centred, because the
+      // thing that reads its `pos[1]` is `wallApertures`, which cuts the hole in
+      // the wall from the part's mesh centre — and it has to reach the floor,
+      // because the alternative is a doorway with a step in it.
+      //
+      // Getting this wrong is not subtle and it shipped anyway, three different
+      // ways at once: `room-openings.ts` seeded the centre (h/2) while `DoorGeo`
+      // drew from the origin UPWARDS, so a seeded door floated a metre up the
+      // wall above its own hole; `groundY` said 0 here, so a DETECTED door got a
+      // hole half its height; and 'floor' made `isWallMountedPart` false, so a
+      // door added from the catalog cut no hole at all. One convention, one bug
+      // class gone.
+      return h / 2;
   }
 }
 
 /** True when a part can rest on the floor. False for wall-mounted / ceiling-mounted items. */
 export function isFloorStanding(category: Category, shape: Shape): boolean {
   return anchorFor(category, shape) === 'floor';
+}
+
+/** How far a curtain hangs in FRONT of the window's front face.
+ *
+ *  Curtains sat at the window's exact x/z, so the cloth, the rod and the window's
+ *  mullions were coplanar and z-fought — which reads as a rendering fault rather
+ *  than as a curtain. It has to clear the window's frame and sill (both stand
+ *  proud of the glass) and the pleats' own depth (they are rotated planes, so
+ *  they have some). A real curtain rod does stand about a hand's width off the
+ *  wall, so this is the honest figure, not a fudge to dodge the z-fight. */
+export const CURTAIN_STANDOFF = 0.09;
+
+/** Extra clearance in front of the wall for a part that hangs over ANOTHER wall
+ *  part rather than against the plaster. Only a curtain does. Lives here so the
+ *  seeded pair, the detection placement and every drag / snap answer with one
+ *  number — the three of them disagreeing is what put the cloth inside the glass. */
+export function wallStandoff(shape: Shape): number {
+  return shape === 'curtain' ? CURTAIN_STANDOFF : 0;
+}
+
+/** True when a part belongs flat against a wall — the wall-* anchors, and only
+ *  those. `isWallMountedPart` is the wider question ("is its geometry centred on
+ *  the origin"), and answers yes for a ceiling fan and a pendant, which do NOT
+ *  want to be slid onto the nearest wall. */
+export function ridesWall(category: Category, shape: Shape): boolean {
+  return anchorFor(category, shape).startsWith('wall-');
 }
 
 // ─── Wall affinity ────────────────────────────────────────────────────────
@@ -123,12 +172,14 @@ export function snapToWall(
   pos: [number, number, number],
   dimMM: [number, number, number],
   footprint: Footprint,
+  /** Extra distance in front of the wall — see `wallStandoff`. */
+  standoff = 0,
 ): { x: number; z: number; rot?: number } {
   const edge = nearestEdge(footprint, pos[0], pos[2]);
   if (!edge) return { x: pos[0], z: pos[2] };
   // Part depth/2, plus the shared wall gap — the same figure the seeded arrangements
   // and the settle pass use, so all three put a back against a wall in one place.
-  const inset = dimMM[1] / 2000 + WALL_GAP;
+  const inset = dimMM[1] / 2000 + WALL_GAP + standoff;
   return {
     x: edge.px + edge.nx * inset,
     z: edge.pz + edge.nz * inset,
