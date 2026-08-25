@@ -187,8 +187,6 @@ export const PlanView = forwardRef<PlanViewHandle, {
     moved: boolean;
     /** Where the piece was before the gesture, so Escape can put it back. */
     startPos: [number, number, number];
-    /** Where it was last put, for the merged-group delta. */
-    lastPos: [number, number, number];
     /**
      * What is resting on it, and what it is merged with — both resolved ONCE at
      * pointer-down. Re-resolving per frame is what lets a piece near the tolerance
@@ -196,7 +194,18 @@ export const PlanView = forwardRef<PlanViewHandle, {
      * walls and the reason the 3D drag caches its own.
      */
     descendants: DescendantOffset[];
-    groupSiblings: string[];
+    /**
+     * The merged-group siblings AND where each of them started. Both halves matter:
+     * `moveTo` translates them by the total delta from `startPos` rather than by a
+     * per-frame one, and Escape needs somewhere to put them back to.
+     *
+     * The per-frame version read each sibling's current position out of `parts`,
+     * which is a RENDER MEMO — two pointermoves between two renders and the
+     * siblings silently dropped a delta while the dragged piece, tracking a ref,
+     * kept it. A fast drag pulled the group apart. Deriving every frame from the
+     * start transform cannot drift and cannot go stale.
+     */
+    groupStart: Array<{ id: string; pos: [number, number, number] }>;
   } | null>(null);
   const [, force] = useState(0);
 
@@ -254,6 +263,13 @@ export const PlanView = forwardRef<PlanViewHandle, {
   // Escape (which means "deselect"), and it declines the key whenever no drag is
   // in flight, so that global meaning is untouched the rest of the time.
   //
+  // It puts back EVERYTHING the drag moved, not just the piece under the pointer.
+  // It used to restore only that one, which left a lamp that had ridden along on a
+  // desk hanging in mid-air where the cancelled drag had abandoned it, and every
+  // member of a merged group scattered. `cascadeTransform` is pure, so replaying it
+  // from the start transform reproduces the descendants' original transforms
+  // exactly — there is nothing extra to snapshot for them.
+  //
   // Only a piece-drag is undone, not a wall-drag: a wall moves incrementally and
   // carries what is mounted on it, so "where it started" is not one number to put
   // back. Ctrl+Z is the route there, and it is one gesture in history.
@@ -266,6 +282,11 @@ export const PlanView = forwardRef<PlanViewHandle, {
       e.stopPropagation();
       setPosition(d.id, d.startPos);
       setRotation(d.id, d.startRot);
+      for (const m of cascadeTransform(d.id, d.startPos, d.startRot, d.descendants)) {
+        setPosition(m.id, m.pos);
+        setRotation(m.id, m.rot);
+      }
+      for (const g of d.groupStart) setPosition(g.id, g.pos);
       dragRef.current = null;
       setDragging(null);
       if (blockedRef.current) clearBlocked();
@@ -379,10 +400,18 @@ export const PlanView = forwardRef<PlanViewHandle, {
       return;
     }
     const { room, parts: existing, addPart } = useScene.getState();
-    const { pos, rot, wallMounted } = placeNewPart(item.category, item.shape, item.dimMM, room, existing);
+    // The drop point goes IN, exactly as it does on the 3D tab: a wall-mounted piece
+    // takes the wall nearest where it was aimed rather than the wall nearest the
+    // room's centre. Leaving it out is what made "same contract as the 3D tab's
+    // onDrop" false above — a TV let go against the left wall landed on whichever
+    // wall the default picked.
+    const w = svgToWorldAt(e.clientX, e.clientY);
+    const { pos, rot, wallMounted } = placeNewPart(item.category, item.shape, item.dimMM, room, existing, [
+      w.x,
+      w.z,
+    ]);
     let [x, y, z] = pos;
     if (!wallMounted) {
-      const w = svgToWorldAt(e.clientX, e.clientY);
       const insetX = item.dimMM[0] / 2000;
       const insetZ = item.dimMM[1] / 2000;
       x = clamp(w.x, bounds.minX + insetX, bounds.maxX - insetX);
@@ -495,20 +524,15 @@ export const PlanView = forwardRef<PlanViewHandle, {
           setRotation(m.id, m.rot);
         }
       }
-      // A merged group moves as one, by the same translation delta.
-      const group = dragRef.current?.groupSiblings;
-      if (moved && group && group.length > 0) {
-        const dx = r.pos[0] - (dragRef.current?.lastPos?.[0] ?? part.pos[0]);
-        const dz = r.pos[2] - (dragRef.current?.lastPos?.[2] ?? part.pos[2]);
-        if (dx !== 0 || dz !== 0) {
-          for (const sib of group) {
-            const cur = parts.find((p) => p.id === sib);
-            if (!cur) continue;
-            setPosition(sib, [cur.pos[0] + dx, cur.pos[1], cur.pos[2] + dz]);
-          }
-        }
+      // A merged group moves as one — every member from where it STARTED, by the
+      // total delta, rather than each frame nudging the last frame's answer. See
+      // `groupStart` on the drag ref for what the per-frame version got wrong.
+      const drag = dragRef.current;
+      if (moved && drag && drag.groupStart.length > 0) {
+        const dx = r.pos[0] - drag.startPos[0];
+        const dz = r.pos[2] - drag.startPos[2];
+        for (const g of drag.groupStart) setPosition(g.id, [g.pos[0] + dx, g.pos[1], g.pos[2] + dz]);
       }
-      if (dragRef.current) dragRef.current.lastPos = r.pos;
       if (blockedRef.current) clearBlocked();
       return true;
     }
@@ -550,7 +574,10 @@ export const PlanView = forwardRef<PlanViewHandle, {
     altRef.current = null;
     if (!a || e.pointerId !== a.pointerId) return;
     if (Math.hypot(e.clientX - a.sx, e.clientY - a.sy) > MOVE_SLOP) return;
-    const step = nextInCycle(a.x, a.z, visible, cycleRef.current);
+    // World decides which pieces are candidates, screen decides whether this is the
+    // same press repeated — and the screen point is the PRESS, not this release, so
+    // it pairs with the world point beside it. See lib/plan-hit.
+    const step = nextInCycle({ x: a.x, z: a.z }, { x: a.sx, y: a.sy }, visible, cycleRef.current);
     cycleRef.current = step.state;
     // Bare floor under an Alt-click is not a click on nothing: it does not clear
     // the selection, it simply has no answer.
@@ -564,7 +591,20 @@ export const PlanView = forwardRef<PlanViewHandle, {
 
   function onCanvasPointerDown(e: React.PointerEvent) {
     if (dragRef.current) return;
-    if (e.target !== svgRef.current) return;
+    // There is deliberately NO test that the press landed on the <svg> itself.
+    // There was one, and it quietly killed almost everything below it: the room
+    // floor is a FILLED <path>, so every press inside the room outline arrives with
+    // `e.target` set to that path and returned here. Marquee, one-finger touch pan,
+    // two-finger pinch, middle-drag pan and Space-drag pan therefore worked only in
+    // the grey margin outside the walls — and the help card was busy advertising
+    // "drag across empty floor to lasso several".
+    //
+    // It was redundant as well as wrong. Pieces and walls claim their own presses by
+    // calling `stopPropagation`, which is why this handler never sees them; anything
+    // that does reach it is floor or decoration, and for both of those a marquee is
+    // the right answer. Do not reintroduce a target check here: the forgiving
+    // direction is to act, and the failure mode of the strict one is a dead canvas
+    // with nothing in the console.
     if (beginAltPick(e)) return;
 
     // Touch: one finger pans, two fingers pinch. There are no modifier keys on a
@@ -659,17 +699,18 @@ export const PlanView = forwardRef<PlanViewHandle, {
 
     const startPos: [number, number, number] = [part.pos[0], part.pos[1], part.pos[2]];
     const descendants = snapshotDescendants(id, parts, useStudio.getState().parentIds);
-    const groupSiblings = part.groupId
-      ? parts.filter((p) => p.groupId === part.groupId && p.id !== id).map((p) => p.id)
+    const groupStart = part.groupId
+      ? parts
+          .filter((p) => p.groupId === part.groupId && p.id !== id)
+          .map((p) => ({ id: p.id, pos: [p.pos[0], p.pos[1], p.pos[2]] as [number, number, number] }))
       : [];
     const common = {
       startX: e.clientX,
       startY: e.clientY,
       moved: false,
       startPos,
-      lastPos: startPos,
       descendants,
-      groupSiblings,
+      groupStart,
     };
     if (mode === 'rotate') {
       const w = svgToWorld(e);
