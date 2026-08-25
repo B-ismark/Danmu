@@ -645,6 +645,127 @@ describing the other panel, which is very likely why the two read as one thing.
   measurements instead. Drawing the alignment guides there too is a small,
   self-contained follow-up.
 
+
+---
+
+## Part 3 — What the review found, 2026-08-25
+
+The work above was written, typechecked, linted, tested and pushed **without a
+browser ever being opened on it**, and Part 2's phases were marked SHIPPED on that
+basis. A read-back of the whole diff afterwards found seven defects. Every one of
+them is in pointer plumbing; none of them could fail a test in this repo, because
+nothing here drives a pointer. That is the finding behind the findings: for this
+kind of change, green CI is evidence about the parts that were already easy.
+
+Two were bad enough to have blocked the merge.
+
+### 1 · A hit-test guard that ate most of the canvas · BLOCKER
+
+`onCanvasPointerDown` opened with `if (e.target !== svgRef.current) return`. The
+room floor is a **filled** `<path>`, so every press inside the walls arrives with
+`e.target` set to that path and returned immediately. Dead inside the room:
+
+- the **marquee** — the headline gesture of Phase 3, and the help card was by then
+  advertising it in as many words
+- **Alt-click on bare floor** (Alt-click on a *piece* survived: the piece's own
+  handler calls `beginAltPick` before propagation ever reaches here, so the picker
+  itself was never broken — only its route over empty floor)
+- **one-finger touch pan** and **two-finger pinch** — a regression against `main`,
+  on the input mode this view's own header comment claims it exists to serve
+- **middle-drag pan** and **Space + left-drag pan** — also regressions, the latter
+  including the deliberate case where the press starts *on* a piece
+
+It was redundant as well as wrong: pieces and walls claim their presses with
+`stopPropagation`, which is why the canvas handler never sees them. Anything that
+does reach it is floor or decoration, and a marquee is the right answer for both.
+Deleted, with the reasoning left in place so it is not reintroduced.
+
+### 2 · The snap grid did not travel with the extraction · BLOCKER
+
+Phase 0's whole justification was that the plan's drag ran different physics from
+the 3D drag. `resolvePlacement` was extracted faithfully — but the **grid
+quantisation was never inside it**. It sat two frames upstream in `Draggable`'s
+pointer-move handler, rounding the pointer position before the call, and `PlanView`
+had no equivalent. So after the fix, `fine` / `coarse` still changed the magnetic
+snap and the keyboard nudge in the plan while leaving a mouse drag off-grid, and
+still changed a 3D mouse drag. The exact defect the extraction existed to remove,
+surviving the removal — and the PR description listed it as fixed.
+
+The step is now the **first** thing `resolvePlacement` does, `ResolveInput.rawX`
+documents that callers must not pre-round, and `Draggable` no longer does.
+Quantising *before* the containment clamp is deliberate: rounding a clamped edge
+afterwards would shove the piece back through the wall the clamp had just pulled it
+out of, which `tests/drag-resolve.test.ts` now pins with an 870 mm-deep sofa whose
+clamped edge lands off-lattice on purpose.
+
+**The transferable lesson:** extracting a pipeline means extracting the steps that
+live in the *caller*, and those are precisely the ones a diff of the extracted
+function cannot show you are missing.
+
+### 3 · `Esc` restored the piece, not the gesture
+
+Cancelling a drag put back the dragged part alone. A lamp that had ridden along on
+a desk stayed in mid-air where the cancelled drag had abandoned it, and every member
+of a merged group stayed scattered. The comment above the handler reasoned carefully
+about why a *wall* drag cannot be reversed and never noticed that a piece drag has
+the same multi-body shape. `cascadeTransform` is pure, so replaying it from the start
+transform reproduces the descendants exactly — no extra snapshot needed. Group
+members needed one, and now carry it.
+
+### 4 · A merged group read a render memo mid-drag
+
+The per-frame delta was `r.pos - lastPos`, and siblings were looked up with
+`parts.find(...)` — `parts` being a `useMemo` from the last render, while the dragged
+piece tracked a ref. Two pointermoves between two renders and the siblings silently
+dropped a delta the dragged piece kept: a fast drag pulls the group apart. The 3D
+drag freezes one world snapshot per gesture for exactly this reason. Now every member
+is derived from **where it started** plus the total delta, which cannot go stale and
+cannot accumulate error.
+
+### 5 · The Alt cycle was measured in the wrong space
+
+`SAME_SPOT_M = 0.06` compared **world metres** to decide whether a second Alt-click
+was the same press. That makes the tolerance a function of the camera: pulled back in
+the 3D tab, 60 mm of floor is a pixel or two, so the cycle restarted on a twitch and
+Alt-click could not step past the second piece; pushed in close it forgave a press
+half a sofa away. The plan's own press was already recording client pixels for its
+click-versus-drag test, so one gesture was being measured in two units inside one
+diff. `SAME_SPOT_PX = 10` now, with world and screen named as separate arguments so
+they cannot be swapped, and a test that holds the pixel still while moving the world
+point 300 mm.
+
+### 6 · The plan's drop threw away the aim point
+
+`placeNewPart` takes an optional drop point so a wall-mounted piece can take the wall
+nearest where it was *aimed*. The 3D tab passes it. The plan's `onDrop` did not —
+under a comment reading "Same contract as the 3D tab's `onDrop`". A TV let go against
+the left wall landed on whichever wall the default picked.
+
+### 7 · Two comments and a claim that were not true
+
+The `SceneContextMenu` header grew a second copy of its own bullet list. `CATEGORY_ICON`
+claimed categories without an obvious glyph fall back to the neutral cube, which was
+true of four of the twenty-two — the rest borrow (`chair` → sofa, `desk` → table,
+`door` → key), which is fine and is now what it says. And the PR body claimed
+`preventDefault` guarded the macOS Ctrl-click collision; no such call exists. It did not
+need one — Cmd-click is the macOS route and it works — so the prose was corrected rather
+than the code.
+
+### One finding that was wrong
+
+The review also filed an inconsistency between `hitsAt` (inscribed ellipse) and
+`hitsInRect` (bounding box) for round pieces. There is none: `footOverlap` branches on
+the circle flag and runs SAT over `footCorners`, which is an inscribed 32-gon. Nothing
+needed fixing; what was missing was the assertion saying so, which now exists so that
+nobody corrects it in the wrong direction.
+
+### What this changes about Part 2
+
+Nothing in the phases is withdrawn. But **SHIPPED in Part 2 means "written, and
+verified as far as static tooling reaches"** — for pointer work that is a weaker claim
+than it reads as, and the seven above are the measure of the gap. The remaining open
+items below are unaffected.
+
 ---
 
 Sources for the conventions cited:

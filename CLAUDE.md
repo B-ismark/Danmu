@@ -76,20 +76,49 @@ backend, no account. The 3D studio *is* the product.
    shown. And a room's own side is bounded by `ROOM_SIDE_M`, not by a fresh literal.
 
    **One drag, one resolve.** Where a dragged piece ends up is
-   `lib/drag-resolve.ts` — containment → wall snap → magnetic item snap →
-   gravity/support → vertical clamp → OBB collision — and **both** the 3D
+   `lib/drag-resolve.ts` — **grid snap** → containment → wall snap → magnetic item
+   snap → gravity/support → vertical clamp → OBB collision — and **both** the 3D
    `Draggable` and the 2D `PlanView` call it. It used to live inside the 3D
    component, so the plan carried a two-step imitation of it and the same drag
    behaved differently per tab: snap did nothing to a mouse drag, a merged group
    did not move as one, rigid-parented children stayed behind, and a vase dragged
    off its table hung in the air at table height — which you cannot see from
    directly above. Same shape of scar as `layout-rules.ts`. `snapSteps` there is
-   also the only home for the 10 mm / 15° / 50 mm / 45° increments. The companion
+   also the only home for the 10 mm / 15° / 50 mm / 45° increments, and the grid
+   step **is inside the resolve**, first, so callers hand it the pointer position
+   unrounded. That step is the extraction's own scar: it had been sitting in the 3D
+   pointer-move handler rather than in the pipeline, so it did not travel, and the
+   move that was supposed to end "snap works in one tab only" shipped with snap
+   working in one tab only. **Extracting a pipeline means extracting all of it** —
+   go looking for the steps that live in the caller, because those are exactly the
+   ones a diff of the extracted function cannot show you were missing. The companion
    for *what is under the pointer* is `lib/plan-hit.ts` (footprint geometry, so a
    round piece is tested against the ellipse it draws, not its box) and
    `lib/pick-through.ts` (a raycast's hits mapped back to pieces, everything that
    is not furniture dropped). Both surfaces cycle Alt-click through the same
    function; `planPaintOrder` is what stops "topmost" meaning "added last".
+   **A canvas-level pointer handler must not test what the press landed on.**
+   `PlanView`'s did — `if (e.target !== svgRef.current) return` — and the room floor
+   is a *filled* `<path>`, so every press inside the walls returned there: marquee,
+   one-finger touch pan, pinch, middle-drag and Space-drag pan all worked only in
+   the grey margin outside the room, while the help card cheerfully advertised the
+   marquee. It was redundant as well as wrong, because pieces and walls claim their
+   own presses with `stopPropagation` and the canvas handler never sees them.
+   Whatever does reach it is floor or decoration, and for both of those acting is
+   the forgiving direction — the strict one fails as a dead canvas with nothing in
+   the console and no failing test.
+   **A gesture is measured in the space it happens in.** Alt-click's "is this the
+   same press again" compared world metres against a 60 mm tolerance, which makes
+   the tolerance a function of the camera: pulled back, 60 mm of floor is one pixel
+   and the cycle restarted on a twitch. It is client pixels now (`SAME_SPOT_PX`),
+   while *which pieces are candidates* stays a world-space question — two spaces,
+   named separately in the signature so they cannot be swapped by accident.
+   **And restore what a gesture moved, not what it was aimed at:** `Esc` mid-drag
+   put back the dragged piece and left the lamp riding on it in mid-air, plus every
+   merged sibling scattered. `cascadeTransform` is pure, so replaying it from the
+   start transform is the whole fix — and a merged group's per-frame delta must come
+   off that same start transform, never off a render memo, or a drag faster than
+   React renders quietly pulls the group apart.
    **The two lists beside the canvas are named for what they hold:** the rail's
    **Catalog** is what is in this room, the panel's **Library** is what you can
    add. They are not interchangeable words, and one screen may not hold two of

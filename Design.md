@@ -946,8 +946,9 @@ are what serve "communicate a plan", and they stay.
 - **Item-to-item snapping** (`lib/item-snap.ts`).
 
 ### One resolve, two surfaces — `lib/drag-resolve.ts`
-Where a dragged piece ends up: containment clamp → wall snap (wall-mounted) or
-magnetic item snap → gravity/support → vertical clamp → exact OBB collision. It
+Where a dragged piece ends up: grid snap → containment clamp → wall snap
+(wall-mounted) or magnetic item snap → gravity/support → vertical clamp → exact
+OBB collision. It
 lived inside `Draggable.tsx` and was therefore 3D-only, so the plan ran its own
 much shorter version — clamp into the bounding box, then `collidesAt`. The same
 gesture on the same sofa behaved differently depending on which tab you were
@@ -959,7 +960,13 @@ see it.
 
 Both surfaces call it now, and `snapSteps` is the single home for the 10 mm / 15°
 and 50 mm / 45° increments the gizmo, the drag magnetism and both sets of arrow
-keys share. What stays in the components is only what is genuinely theirs: the 3D
+keys share. The grid snap is the *first* step and lives inside the resolve, so a
+caller passes the pointer position unrounded — it had been left behind in the 3D
+component's pointer-move handler when the rest of the pipeline moved out, which
+meant the extraction that existed to end "snap works in one tab only" shipped with
+snap working in one tab only. It is quantised before the clamp on purpose: rounding
+a clamped edge afterwards would push the piece back through the wall the clamp had
+just pulled it out of. What stays in the components is only what is genuinely theirs: the 3D
 view reads a live mount height off the object3D it is animating, the plan reads
 it off the stored transform, and each decides for itself what to say when a spot
 is refused. **A new snap, clearance or gravity rule goes in the lib** — this is
