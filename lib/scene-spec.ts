@@ -1540,10 +1540,22 @@ const CATEGORY_DEFAULTS: Record<
  *
  *  `CATEGORY_DEFAULTS` stays unexported on purpose — handing out the whole table
  *  invites a caller to read `.dim` and skip `clampDims` altogether. */
-export function defaultDepthFor(category: Category, shape: Shape): number {
-  const typical = (CATEGORY_DEFAULTS[category] ?? CATEGORY_DEFAULTS.other).dim[1];
+/** The catalogue's typical size on ONE axis for a category, narrowed to the
+ *  shape's own legal range. Axis 0 = W, 1 = D, 2 = H.
+ *
+ *  For the axes a photo cannot see. Every caller is a measurement that came back
+ *  short, so this is the number that fills the gap — derived from the same two
+ *  tables the scene builder uses, never a literal at the call site. */
+export function defaultAxisFor(category: Category, shape: Shape, axis: 0 | 1 | 2): number {
+  const typical = (CATEGORY_DEFAULTS[category] ?? CATEGORY_DEFAULTS.other).dim[axis];
   const r = dimRangeFor(category, shape);
-  return Math.min(Math.max(typical, r.min[1]), r.max[1]);
+  return Math.min(Math.max(typical, r.min[axis]), r.max[axis]);
+}
+
+/** Depth — the axis NO single photo can observe. Kept as its own name because
+ *  that fact is a property of photography, not of a particular anchor. */
+export function defaultDepthFor(category: Category, shape: Shape): number {
+  return defaultAxisFor(category, shape, 1);
 }
 
 /** The shapes a detector — cloud or on-device — is allowed to name, in the order
