@@ -12,118 +12,13 @@ import {
   type CameraCal,
 } from '@/lib/photo-geometry';
 import { hfovFromFocal35 } from '@/lib/exif';
-import type { CaptureSlot } from '@/lib/storage';
+import { bboxOfCeilingDisc, bboxOfFloorObject, bboxOfWallPanel, project } from './helpers/project';
 
 const ROOM = { width: 6, depth: 4, height: 2.8 };
 /** ~106° hFOV — a phone ultrawide. The only common lens whose frame contains any
  *  ceiling at all from 1.5 m in a 2.8 m room; see `placeCeilingObject`. */
 const WIDE: CameraCal = { k: 2 * Math.tan(((106 / 2) * Math.PI) / 180), aspect: 4 / 3 };
 const CAL: CameraCal = { k: 1.2, aspect: 4 / 3 };
-
-// ── Synthetic projector — the inverse of the lib, written independently ─────
-// Project a world point seen from the slot camera into normalized image coords.
-// Honours cal.height and cal.tiltRad, so the same helper generates the level
-// cases and the tilted ones.
-function project(slot: CaptureSlot, x: number, y: number, z: number, cal: CameraCal): [number, number] {
-  // world → camera frame (forward, right, up)
-  let forward = 0;
-  let right = 0;
-  switch (slot) {
-    case 'n':
-      forward = -z;
-      right = x;
-      break;
-    case 's':
-      forward = z;
-      right = -x;
-      break;
-    case 'e':
-      forward = x;
-      right = z;
-      break;
-    case 'w':
-      forward = -x;
-      right = -z;
-      break;
-  }
-  const up = y - (cal.height ?? CAM_HEIGHT);
-  // Rotate the world offset back into the untilted lens frame — the inverse of
-  // the rotation lib/photo-geometry applies to each ray.
-  const th = cal.tiltRad ?? 0;
-  const c = Math.cos(th);
-  const s = Math.sin(th);
-  const upCam = up * c + forward * s;
-  const fwdCam = -up * s + forward * c;
-  const u = right / fwdCam / cal.k + 0.5;
-  const v = 0.5 - (upCam / fwdCam) * (cal.aspect / cal.k);
-  return [u, v];
-}
-
-/** bbox of a wall-parallel rectangle (width w, height h) standing on the floor
- *  at world centre (x, z), as seen from the slot camera.
- *
- *  Projects the four corners and takes their extent rather than deriving a
- *  half-width analytically: under tilt a fronto-parallel rectangle images as a
- *  trapezoid, and the bounding box of a trapezoid is what a detector would
- *  actually hand us. */
-function bboxOfFloorObject(
-  slot: CaptureSlot,
-  x: number,
-  z: number,
-  wM: number,
-  hM: number,
-  cal: CameraCal,
-): [number, number, number, number] {
-  // The face spans ±w/2 along the camera's "right" axis, which is a different
-  // world axis per slot.
-  const along: Record<CaptureSlot, [number, number]> = {
-    n: [1, 0],
-    s: [-1, 0],
-    e: [0, 1],
-    w: [0, -1],
-  };
-  const [ax, az] = along[slot];
-  const pts: Array<[number, number]> = [];
-  for (const sgn of [-1, 1]) {
-    for (const y of [0, hM]) {
-      pts.push(project(slot, x + ax * sgn * (wM / 2), y, z + az * sgn * (wM / 2), cal));
-    }
-  }
-  const us = pts.map((p) => p[0]);
-  const vs = pts.map((p) => p[1]);
-  const u0 = Math.min(...us);
-  const v0 = Math.min(...vs);
-  return [u0, v0, Math.max(...us) - u0, Math.max(...vs) - v0];
-}
-
-/** bbox of a flat horizontal DISC of diameter `dM` lying on the ceiling, centred
- *  at world (x, z) — a ceiling fan or a flush pendant.
- *
- *  Sampled around the rim rather than at four corners, because the silhouette of a
- *  circle is not the projection of its bounding square: the widest image point is
- *  where the ray is TANGENT to the rim, which sits nearer the camera than the
- *  circle's lateral extreme. Getting that wrong would build the placer's own
- *  approximation into the thing meant to check it. */
-function bboxOfCeilingDisc(
-  slot: CaptureSlot,
-  x: number,
-  z: number,
-  dM: number,
-  cal: CameraCal,
-  ceilingM: number,
-): [number, number, number, number] {
-  const r = dM / 2;
-  const pts: Array<[number, number]> = [];
-  for (let i = 0; i < 720; i++) {
-    const a = (i / 720) * 2 * Math.PI;
-    pts.push(project(slot, x + r * Math.cos(a), ceilingM, z + r * Math.sin(a), cal));
-  }
-  const us = pts.map((p) => p[0]);
-  const vs = pts.map((p) => p[1]);
-  const u0 = Math.min(...us);
-  const v0 = Math.min(...vs);
-  return [u0, v0, Math.max(...us) - u0, Math.max(...vs) - v0];
-}
 
 describe('wallDistance', () => {
   it('n/s walls sit at depth/2; e/w at width/2', () => {
@@ -226,29 +121,6 @@ describe('defaultCal', () => {
 
 const DOWN_5: CameraCal = { k: 1.2, aspect: 4 / 3, tiltRad: (5 * Math.PI) / 180 };
 const UP_5: CameraCal = { k: 1.2, aspect: 4 / 3, tiltRad: (-5 * Math.PI) / 180 };
-
-/** bbox of a panel lying ON the framed wall, from its four corners. */
-function bboxOfWallPanel(
-  slot: CaptureSlot,
-  x: number,
-  y: number,
-  z: number,
-  wM: number,
-  hM: number,
-  cal: CameraCal,
-): [number, number, number, number] {
-  const pts: Array<[number, number]> = [];
-  for (const dx of [-wM / 2, wM / 2]) {
-    for (const dy of [-hM / 2, hM / 2]) {
-      pts.push(project(slot, x + dx, y + dy, z, cal));
-    }
-  }
-  const us = pts.map((p) => p[0]);
-  const vs = pts.map((p) => p[1]);
-  const u0 = Math.min(...us);
-  const v0 = Math.min(...vs);
-  return [u0, v0, Math.max(...us) - u0, Math.max(...vs) - v0];
-}
 
 describe('camera tilt', () => {
   it('recovers a centred object exactly when the tilt is known', () => {
