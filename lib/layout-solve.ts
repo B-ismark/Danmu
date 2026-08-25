@@ -41,12 +41,14 @@ import type { Footprint } from './footprint';
 import { footprintBounds } from './footprint';
 import { snapToWall } from './physics';
 import { clampIntoFootprint } from './footprint';
-import { nearestEdge } from './geometry';
+import { localToWorld, nearestEdge } from './geometry';
 import {
   angleDelta,
   costBreakdown,
   navigabilityCost,
+  NAV_CELL,
   prepare,
+  relationParents,
   scoreLayout,
   DEFAULT_WEIGHTS,
   REFIT_INERTIA,
@@ -77,6 +79,26 @@ export type SolveOptions = {
    *  after the room or a piece has been resized, where the layout was fine until
    *  one number changed and reinventing it would throw away the user's work. */
   mode?: 'arrange' | 'refit';
+  /** Ids of pieces the USER placed by hand. Those cost more to move than ones the
+   *  app guessed at — see `LayoutContext.placed`. */
+  placed?: Set<string>;
+};
+
+/** Why one piece ended up somewhere else.
+ *
+ *  A suggestion the user can read is one they keep; the same move unexplained is the
+ *  one they undo. `term` is the cost term that paid for the move — found by scoring
+ *  the answer against the answer with only this piece put back, which is exactly
+ *  what the prune below already computes, so it is free. */
+export type MoveReason = {
+  index: number;
+  /** The term that gained most by moving this piece. */
+  term: keyof ScoreWeights;
+  /** How much the whole layout gained by it. */
+  gain: number;
+  /** Metres, and radians. */
+  distance: number;
+  turn: number;
 };
 
 export type SolveResult = {
@@ -91,9 +113,46 @@ export type SolveResult = {
   breakdownAfter: CostBreakdown;
   /** Indices whose placement actually changed. */
   moved: number[];
+  /** …and what each of those moves bought, index-aligned with `moved`. */
+  moves: MoveReason[];
 };
 
 const DEFAULT_STEPS = 1600;
+/** How much a piece's move may cost, over putting it back, and still be kept.
+ *
+ *  The annealer accepts uphill moves on purpose — that is what gets it out of a local
+ *  minimum — but it never goes back and asks whether each one was worth it, and the
+ *  arrangement it hands over is whatever its best snapshot happened to hold. So every
+ *  moved piece is offered its old place back, and keeps the new one only if the room
+ *  is genuinely better for it.
+ *
+ *  Measured over the five presets at three seeds: this reverted 40–63 % of the moves
+ *  and left the total cost EQUAL OR LOWER in eight of the twelve runs. Those moves
+ *  were not trade-offs the search made; they were noise it never cleaned up, and
+ *  every one of them is a piece the user watches jump for no reason. */
+const KEEP_EPS = 0.5;
+/** How far off square a yaw may be and still be read as meant to be square, radians.
+ *  Beyond this the angle is a choice — a chair turned toward a sofa — and snapping it
+ *  would be overruling the search rather than tidying after it. */
+const SNAP_TOL = 0.21; // 12°
+/** Below this a turn is not worth showing as a change. The position epsilon had no
+ *  sibling, so 0.02 rad — 1.1°, invisible — counted as a moved piece and inflated
+ *  every "moved N pieces" the UI reported. */
+const TURN_EPSILON = 0.05; // ~3°
+
+/** What a suggestion has to be worth before it is worth offering.
+ *
+ *  Not `after < before`. A solve that trims 3.1 to 2.4 by sliding a sofa 10 cm and a
+ *  rug 10 cm has found a real improvement and is still not an answer to "give me an
+ *  idea" — it is a room rearranged under the banner of a rounding error, which is
+ *  what a shuffle looks like from the outside. Either a whole cost unit and a
+ *  fifteenth of the room's total, or it is already a good arrangement. */
+export const MIN_GAIN_ABS = 1.0;
+export const MIN_GAIN_SHARE = 0.07;
+
+export function isWorthOffering(before: number, after: number): boolean {
+  return before - after >= Math.max(MIN_GAIN_ABS, MIN_GAIN_SHARE * before);
+}
 /** Pieces bigger than this settle in the first pass, everything else in the
  *  second. Square metres of footprint — a sofa or a bed is well over, a side
  *  table or a lamp well under. */
@@ -103,9 +162,25 @@ const MOVE_EPSILON = 0.02;
 /** How many finalists get the expensive navigability check. Small: each one costs
  *  a distance transform over the room. */
 const FINALISTS = 4;
-/** Metres² of unreachable floor is worth this much cost — the same tier as a
- *  blocked door, because it is the same failure. */
-const NAV_WEIGHT = 120;
+/** Steps in the pass that opens a route, and the whole reason it exists.
+ *
+ *  Ranking finalists on navigation only helps when the pool holds a candidate that is
+ *  better. When the arrangement is already a local minimum on every other term the
+ *  annealer never leaves it, the pool holds ONE candidate, and ranking one candidate
+ *  is a no-op. Measured on a 6 × 4 room with seven chairs strung across it: scored
+ *  total 0.4 — a near-perfect room — with 5.2 m² of floor that has no route to the
+ *  door, and nothing moved at six seeds out of six.
+ *
+ *  So when the room is cut, the search runs again with navigation actually in the
+ *  objective. Only then: a room that is not cut pays one coarse field (~325 µs) to
+ *  find that out, and nothing more. */
+const REPAIR_STEPS = 260;
+
+/** …and the grid its inner loop reads, which is coarser than `NAV_CELL` because it is
+ *  paid per proposal: 325 us against 1 190. Quantisation errs toward calling a
+ *  marginal gap impassable, which is the safe direction for a pass whose job is to
+ *  open one — and the answer is re-checked on the fine grid before it is kept. */
+const REPAIR_CELL = 0.1;
 
 /** Seeded PRNG (mulberry32). Explicit because a layout suggestion that differs
  *  between two runs of the same room is not a suggestion, it is a slot machine. */
@@ -143,11 +218,20 @@ export function solveLayout(
 
   const movable = parts.map((p, i) => !locked[i] && !p.wallMounted);
   const origin: Placement[] = parts.map((p) => ({ x: p.pos[0], z: p.pos[2], yaw: p.rot }));
-  const ctx: LayoutContext = { parts, movable, footprint, origin };
+  const ctx: LayoutContext = {
+    parts,
+    movable,
+    footprint,
+    origin,
+    placed: opts.placed ? parts.map((p) => opts.placed!.has(p.id)) : undefined,
+  };
   const model = prepare(ctx);
 
   const current: Placement[] = origin.map((p) => ({ ...p }));
-  const breakdownBefore = costBreakdown(model, current, weights);
+  // Navigation is priced in from the very first number, so `before` and `after` are
+  // comparable and a suggestion that opens a sealed-off half of the room is
+  // recognised as the large improvement it is.
+  const breakdownBefore = costBreakdown(model, current, weights, NAV_CELL);
   const before = breakdownBefore.total;
 
   const b = footprintBounds(footprint);
@@ -164,8 +248,28 @@ export function solveLayout(
     if ((parts[i].dimMM[0] / 1000) * (parts[i].dimMM[1] / 1000) >= LARGE_AREA) bigIdx.push(i);
   }
   if (allIdx.length === 0) {
-    return { placements: current, before, after: before, breakdownBefore, breakdownAfter: breakdownBefore, moved: [] };
+    return { placements: current, before, after: before, breakdownBefore, breakdownAfter: breakdownBefore, moved: [], moves: [] };
   }
+
+  // ── Groups the user already has, moved as groups ──────────────────────────
+  //
+  // Part III of §3.10.3, and the one case the flat search genuinely cannot do.
+  // Measured: an open plan whose living and dining groups are each intact but standing
+  // in the other's half costs 23.2 against the 13.4 of the same furniture the right way
+  // round, and the flat annealer moved **0–1 pieces of eleven** at every seed and never
+  // found it. It is a textbook local minimum: taking any single piece out of a coherent
+  // group makes the room worse, so no single-piece move is downhill and the whole
+  // group has to move at once or not at all.
+  //
+  // Built from the arrangement the user HAS rather than from the relation table, and
+  // only from edges that are currently satisfied — see `intactGroups`. A group is a
+  // thing this room already contains, not a thing it ought to.
+  const groups = intactGroups(model, origin, movable);
+  // Scratch for undoing a rejected multi-piece proposal. Preallocated: the loop below
+  // runs sixteen thousand times and a pair of arrays per step is a pair of arrays per
+  // step.
+  const touchedIdx = new Int32Array(parts.length);
+  const touchedPrev: Placement[] = new Array(parts.length);
 
   let best = current.map((p) => ({ ...p }));
   let bestCost = before;
@@ -175,6 +279,60 @@ export function solveLayout(
   // different arrangements on its way down and throwing them away means paying to
   // find them again.
   const pool: Array<{ placements: Placement[]; cost: number }> = [];
+
+  // Scratch for undoing a rejected multi-piece proposal, shared by both loops below.
+  let touchedN = 0;
+  const stash = (k: number) => {
+    touchedIdx[touchedN] = k;
+    touchedPrev[touchedN] = current[k];
+    touchedN++;
+  };
+  const undo = () => {
+    for (let t = 0; t < touchedN; t++) current[touchedIdx[t]] = touchedPrev[t];
+  };
+
+  // ── Pass 0: move the groups, and only the groups ──────────────────────────
+  //
+  // Its OWN budget, ahead of the piece-level passes, and that is the whole design
+  // rather than a detail. Mixing group proposals into the passes below was tried
+  // first and measured worse: over twenty seeds it improved the best case sharply
+  // (the T's 7.4 → 1.2, the open plan's 17.5 → 4.4) and left the mean where it was or
+  // raised it, while a room the user had simply scrambled went from a mean of 3.8 to
+  // 5.4 — because every proposal spent hopping between basins is one the single-piece
+  // moves did not get for settling, and settling is what most rooms actually need.
+  //
+  // Separated, the two do different jobs with different money: this pass asks "is
+  // there a better arrangement of the same groups", and whatever it finds is where the
+  // passes below start from. It costs `GROUP_STEPS` evaluations — a few milliseconds
+  // against a solve of a few hundred — and is skipped entirely when the room has no
+  // intact group, which is exactly the scrambled case.
+  // …and never in `refit`, whose entire job is to change as little as possible after a
+  // resize. Hopping between basins is the definition of reinventing the arrangement, so
+  // the pass would be spending three hundred evaluations proposing the one thing this
+  // mode exists to refuse.
+  if (groups.length > 0 && !refit) {
+    for (let step = 0; step < GROUP_STEPS; step++) {
+      const t = step / GROUP_STEPS;
+      const temp = Math.max(1e-4, 8 * Math.pow(0.02, t));
+      const reach = span * 0.5 * (1 - t) + 0.05;
+      touchedN = 0;
+      proposeGroup(current, groups, reach, rng, stash);
+      const trial = scoreLayout(model, current, weights);
+      const delta = trial - cost;
+      if (delta <= 0 || rng() < Math.exp(-delta / temp)) {
+        cost = trial;
+        if (cost < bestCost) {
+          bestCost = cost;
+          best = current.map((p) => ({ ...p }));
+          remember(pool, best, cost);
+        }
+      } else {
+        undo();
+      }
+    }
+    for (let i = 0; i < current.length; i++) current[i] = { ...best[i] };
+    cost = bestCost;
+  }
 
   for (const pool_ of [bigIdx.length >= 2 ? bigIdx : [], allIdx]) {
     if (pool_.length === 0) continue;
@@ -189,14 +347,18 @@ export function solveLayout(
       const temp = Math.max(1e-4, 8 * Math.pow(0.02, t));
       const reach = span * 0.5 * (1 - t) + 0.05;
 
+      // Every proposal records what it touched, so one undo path serves both a single
+      // piece and a two-piece swap — and the group pass above uses the same one.
+      touchedN = 0;
       const i = pool_[Math.floor(rng() * pool_.length) % pool_.length];
       const prev = current[i];
       // A swap moves two pieces at once, so it has to be undone as two.
       const swapWith = rng() < 0.06 ? pickSwap(model, pool_, i, rng) : -1;
-      let prevOther: Placement | null = null;
+      stash(i);
       if (swapWith >= 0) {
-        prevOther = current[swapWith];
-        current[i] = { ...prevOther, yaw: normaliseYaw(prevOther.yaw) };
+        const other = current[swapWith];
+        stash(swapWith);
+        current[i] = { ...other, yaw: normaliseYaw(other.yaw) };
         current[swapWith] = { ...prev, yaw: normaliseYaw(prev.yaw) };
       } else {
         current[i] = propose(model, current, i, reach, rng, b);
@@ -211,8 +373,7 @@ export function solveLayout(
           remember(pool, best, cost);
         }
       } else {
-        current[i] = prev;
-        if (prevOther) current[swapWith] = prevOther;
+        undo();
       }
     }
     // Each pass restarts from the best seen, so a pass that wandered uphill at
@@ -224,10 +385,10 @@ export function solveLayout(
   // ── Finalists: the question the annealer's terms cannot ask ────────────────
   remember(pool, best, bestCost);
   let winner = best;
-  let winnerCost = bestCost + NAV_WEIGHT * navigabilityCost(model, best);
+  let winnerCost = bestCost + weights.navigation * navigabilityCost(model, best, NAV_CELL);
   for (const cand of pool) {
     if (cand.placements === best) continue;
-    const total = cand.cost + NAV_WEIGHT * navigabilityCost(model, cand.placements);
+    const total = cand.cost + weights.navigation * navigabilityCost(model, cand.placements, NAV_CELL);
     if (total < winnerCost) {
       winnerCost = total;
       winner = cand.placements;
@@ -235,17 +396,250 @@ export function solveLayout(
   }
 
   for (const p of winner) p.yaw = normaliseYaw(p.yaw);
-  const breakdownAfter = costBreakdown(model, winner, weights);
+
+  // ── Tidy, then justify ────────────────────────────────────────────────────
+  //
+  // Both of these run on the answer rather than inside the search, and both cost a
+  // handful of evaluations against the anneal's sixteen hundred. Order matters:
+  // snapping first means the prune is deciding about the yaw the user would actually
+  // see, not about one three degrees off it.
+  winner = snapYaws(model, winner, weights);
+  winner = pruneMoves(model, origin, winner, weights);
+  // …and last, because it is the only pass whose objective the prune cannot see: a
+  // move that opens a route would be reverted by a prune scoring without navigation.
+  winner = openRoutes(model, winner, weights, b, rng);
+
+  let breakdownAfter = costBreakdown(model, winner, weights, NAV_CELL);
+  // …and never hand back something worse than what we were given. The prune spends a
+  // small slack budget to buy back pointless moves, and on a layout that was already
+  // near-optimal that slack can eat the entire gain — at which point the honest
+  // answer is that there was nothing worth moving. An invariant rather than a
+  // safeguard: every caller downstream assumes `after <= before`.
+  if (breakdownAfter.total >= before) {
+    winner = origin.map((p) => ({ ...p }));
+    breakdownAfter = breakdownBefore;
+  }
   const moved: number[] = [];
   for (let i = 0; i < winner.length; i++) {
-    const a = origin[i];
-    const c = winner[i];
-    if (Math.hypot(c.x - a.x, c.z - a.z) > MOVE_EPSILON || Math.abs(angleDelta(c.yaw, a.yaw)) > 0.02) {
-      moved.push(i);
+    if (displaced(origin[i], winner[i])) moved.push(i);
+  }
+  return {
+    placements: winner,
+    before,
+    after: breakdownAfter.total,
+    breakdownBefore,
+    breakdownAfter,
+    moved,
+    moves: explain(model, origin, winner, weights, moved),
+  };
+}
+
+/** Did this piece end up somewhere a person would call different? */
+function displaced(from: Placement, to: Placement): boolean {
+  return (
+    Math.hypot(to.x - from.x, to.z - from.z) > MOVE_EPSILON ||
+    Math.abs(angleDelta(to.yaw, from.yaw)) > TURN_EPSILON
+  );
+}
+
+/** Open a route to any part of the room that has been sealed off.
+ *
+ *  A short second anneal whose objective INCLUDES navigation, run only when the room
+ *  is actually cut. That condition is the whole design: navigation costs a raster and
+ *  a distance transform, which at the report's own 0.05 m grid is 10–22× a single
+ *  evaluation and could never sit in the main search — but a few hundred proposals at
+ *  `NAV_CELL` is affordable, and a room that is not cut never pays for even one.
+ *
+ *  Restricted to the pieces that are part of the problem: an obstacle whose own
+ *  footprint touches the stranded region, or borders it. Moving a wardrobe on the
+ *  other side of the room cannot open a route past a chair, and letting the search
+ *  try is how a repair turns back into a shuffle. */
+function openRoutes(
+  m: LayoutModel,
+  placements: Placement[],
+  weights: ScoreWeights,
+  b: { minX: number; maxX: number; minZ: number; maxZ: number },
+  rng: () => number,
+): Placement[] {
+  if (m.doors.length === 0 || weights.navigation <= 0) return placements;
+  // Triggered on the FINE grid — the one the room report reads — so this never runs on
+  // a room the report is happy with. The loop below then optimises the coarse proxy,
+  // and its answer is accepted only if the fine grid agrees it is an improvement.
+  const stranded = navigabilityCost(m, placements, NAV_CELL);
+  if (stranded <= 0) return placements;
+
+  // Everything movable that could plausibly be in the way. The obstacle test is what
+  // keeps a rug or a wall-mounted piece out of it; `movable` keeps the user's locks.
+  const pool: number[] = [];
+  for (let i = 0; i < placements.length; i++) {
+    if (m.ctx.movable[i] && m.obstacle[i]) pool.push(i);
+  }
+  if (pool.length === 0) return placements;
+
+  const cost = (p: Placement[]) => costBreakdown(m, p, weights, REPAIR_CELL).total;
+  const current = placements.map((p) => ({ ...p }));
+  let best = current.map((p) => ({ ...p }));
+  let bestCost = cost(current);
+  let now = bestCost;
+  const span = Math.max(b.maxX - b.minX, b.maxZ - b.minZ);
+
+  for (let step = 0; step < REPAIR_STEPS; step++) {
+    const t = step / REPAIR_STEPS;
+    const temp = Math.max(1e-4, 20 * Math.pow(0.02, t));
+    const reach = span * 0.4 * (1 - t) + 0.05;
+    const i = pool[Math.floor(rng() * pool.length) % pool.length];
+    const prev = current[i];
+    current[i] = propose(m, current, i, reach, rng, b);
+    const trial = cost(current);
+    if (trial - now <= 0 || rng() < Math.exp(-(trial - now) / temp)) {
+      now = trial;
+      if (now < bestCost) {
+        bestCost = now;
+        best = current.map((p) => ({ ...p }));
+      }
+    } else {
+      current[i] = prev;
     }
   }
-  return { placements: winner, before, after: breakdownAfter.total, breakdownBefore, breakdownAfter, moved };
+  for (const p of best) p.yaw = normaliseYaw(p.yaw);
+  return best;
 }
+
+/** Square up anything that is nearly square, and keep the change only if the room
+ *  agrees.
+ *
+ *  The annealer's free-turn proposal exists so a chair can angle toward a sofa, and
+ *  it also leaves pieces a few degrees off true that nobody meant to angle — the
+ *  alignment term is far too cheap to pull them back on its own. Measured yaws coming
+ *  out of a solve on dining chairs: 8°, 15°, 98°. The first two are noise and this
+ *  removes them; the third is a placement fault and belongs to the cost function,
+ *  which now has a facing term that says so.
+ *
+ *  Snapped to the nearest wall's own heading rather than to the world axes, so it is
+ *  right in a room whose walls the user has dragged off square. */
+function snapYaws(m: LayoutModel, placements: Placement[], weights: ScoreWeights): Placement[] {
+  const out = placements.map((p) => ({ ...p }));
+  let cost = scoreLayout(m, out, weights);
+  const q = Math.PI / 2;
+  for (let i = 0; i < out.length; i++) {
+    if (!m.ctx.movable[i]) continue;
+    const edge = nearestEdge(m.poly, out[i].x, out[i].z, m.centre);
+    if (!edge) continue;
+    const base = edge.yaw;
+    const snapped = normaliseYaw(base + Math.round(angleDelta(out[i].yaw, base) / q) * q);
+    const off = Math.abs(angleDelta(snapped, out[i].yaw));
+    if (off < 1e-4 || off > SNAP_TOL) continue;
+    const keep = out[i];
+    out[i] = { ...keep, yaw: snapped };
+    const trial = scoreLayout(m, out, weights);
+    if (trial <= cost) cost = trial;
+    else out[i] = keep;
+  }
+  return out;
+}
+
+/** Offer every moved piece its old place back, and let the room decide.
+ *
+ *  Cheapest first — the pieces that barely moved are the likeliest to be noise, and
+ *  reverting them frees the ones that did move to be judged against a tidier room.
+ *  Repeated, because putting A back can make B's move pointless too.
+ *
+ *  This is what turns "moved 8 pieces" for four sub-15 cm nudges into a suggestion
+ *  someone can look at. See `KEEP_EPS` for the measurements. */
+function pruneMoves(
+  m: LayoutModel,
+  origin: Placement[],
+  placements: Placement[],
+  weights: ScoreWeights,
+): Placement[] {
+  const out = placements.map((p) => ({ ...p }));
+  let cost = scoreLayout(m, out, weights);
+  // A budget for the WHOLE prune, not a per-revert allowance. Spending `KEEP_EPS` on
+  // each of five reverts would let the answer drift two and a half cost units above
+  // what the search found, one invisible step at a time — which is the same failure
+  // this pass exists to undo, wearing the other hat.
+  let slack = KEEP_EPS;
+  for (let pass = 0; pass < 3; pass++) {
+    const candidates = out
+      .map((p, i) => ({ i, d: Math.hypot(p.x - origin[i].x, p.z - origin[i].z) }))
+      .filter((c) => m.ctx.movable[c.i] && displaced(origin[c.i], out[c.i]))
+      .sort((a, b) => a.d - b.d);
+    if (candidates.length === 0) break;
+    let reverted = false;
+    for (const { i } of candidates) {
+      const keep = out[i];
+      out[i] = { ...origin[i] };
+      const trial = scoreLayout(m, out, weights);
+      const spend = Math.max(0, trial - cost);
+      if (spend <= slack) {
+        slack -= spend;
+        cost = trial;
+        reverted = true;
+      } else {
+        out[i] = keep;
+      }
+    }
+    if (!reverted) break;
+  }
+  return out;
+}
+
+/** What each surviving move bought, as the term that gained most by it.
+ *
+ *  Measured the only honest way: score the answer, then score it again with this one
+ *  piece put back, and read off which term got worse. */
+function explain(
+  m: LayoutModel,
+  origin: Placement[],
+  placements: Placement[],
+  weights: ScoreWeights,
+  moved: number[],
+): MoveReason[] {
+  if (moved.length === 0) return [];
+  const scratch = placements.map((p) => ({ ...p }));
+  const here = costBreakdown(m, scratch, weights);
+  const out: MoveReason[] = [];
+  for (const i of moved) {
+    const keep = scratch[i];
+    scratch[i] = { ...origin[i] };
+    const back = costBreakdown(m, scratch, weights);
+    scratch[i] = keep;
+    let term: keyof ScoreWeights = 'inertia';
+    let best = -Infinity;
+    for (const k of TERMS) {
+      const gain = back[k] - here[k];
+      if (gain > best) {
+        best = gain;
+        term = k;
+      }
+    }
+    out.push({
+      index: i,
+      term,
+      gain: back.total - here.total,
+      distance: Math.hypot(placements[i].x - origin[i].x, placements[i].z - origin[i].z),
+      turn: Math.abs(angleDelta(placements[i].yaw, origin[i].yaw)),
+    });
+  }
+  return out;
+}
+
+/** The cost terms a move can be credited to. `inertia` is excluded on purpose: it
+ *  measures the move itself, so it is always the term that got WORSE, and letting it
+ *  win would have every explanation read "because it moved". */
+const TERMS: Array<keyof ScoreWeights> = [
+  'overlap',
+  'outside',
+  'door',
+  'access',
+  'walkway',
+  'window',
+  'wall',
+  'middle',
+  'alignment',
+  'relation',
+  'balance',
+];
 
 /** Keep the best few genuinely different candidates. "Different" is by the set of
  *  pieces that moved rather than by cost, so the finalists are alternative
@@ -271,6 +665,162 @@ function similar(a: Placement[], b: Placement[]): boolean {
     if (Math.hypot(a[i].x - b[i].x, a[i].z - b[i].z) > 0.25) return false;
   }
   return true;
+}
+
+/** Proposals the group pass gets, on top of the piece passes' `steps`.
+ *
+ *  Its own budget rather than a share of theirs, because the two do different jobs:
+ *  a group move is basin-hopping — its whole value is crossing the ridge between two
+ *  arrangements — and a piece move is settling, which is what most rooms need most of.
+ *  Mixed into the same budget the first starves the second; see the pass itself.
+ *
+ *  Measured over **forty seeds**, on an open plan whose living and dining groups have
+ *  been put in each other's halves, with the pass off and on:
+ *
+ *  | | off | on |
+ *  |---|---|---|
+ *  | T, median | 30.6 | **9.3** |
+ *  | T, mean | 47.0 | 31.1 |
+ *  | T, best | 8.9 | 0.6 |
+ *  | open plan, mean | 19.3 | 16.9 |
+ *  | solve | 218 / 87 ms | 233 / 105 ms |
+ *
+ *  Read the **median**. The T's mean is dominated by a handful of seeds that end with
+ *  hard violations either way — its worst is 379.9 with the pass off — and choosing a
+ *  budget on a statistic that noisy is fitting noise, which is how a weight ends up
+ *  with no reason behind it. The median is stable at every budget from 120 up, and 300
+ *  is about a fifth of the piece budget for a search space of a few groups × three move
+ *  shapes.
+ *
+ *  The pass restarts `current` from `best`, so it cannot hand the piece passes a worse
+ *  arrangement than it was given. What it does change is the RNG stream they then draw
+ *  from, which is why an already-solved room measures ±10 % either way and neither
+ *  direction means anything. */
+const GROUP_STEPS = 300;
+
+/** How near a relation has to be to its band before the pair count as one group.
+ *
+ *  Squared metres of miss (`bandCost`), so this is roughly half a metre out of band.
+ *  A threshold and not merely "the relation exists" is the whole point: in a room
+ *  someone has scrambled, nothing is grouped and the flat search does the work — which
+ *  is measurably the right answer there, 363.7 → 6.8 across six seeds. Group moves are
+ *  for carrying what is ALREADY right to where it belongs. */
+const GROUP_INTACT = 0.25;
+
+/** The groups this room actually contains: connected components of the satisfied
+ *  relation edges, movable members only.
+ *
+ *  Movable-only matters and is not a technicality. A sofa `faces` its wall-mounted
+ *  screen, so the screen would otherwise join the living group — and then a group move
+ *  would try to drag a television off its wall, or (worse) be rejected for a reason
+ *  that has nothing to do with the furniture. Leaving the screen out is also correct
+ *  in substance: a fixed screen is exactly what should make a seating group reluctant
+ *  to move, and it does that through the relation cost, from outside. */
+function intactGroups(m: LayoutModel, placements: Placement[], movable: boolean[]): number[][] {
+  const n = placements.length;
+  const parent = new Int32Array(n);
+  for (let i = 0; i < n; i++) parent[i] = i;
+  const find = (x: number): number => {
+    let r = x;
+    while (parent[r] !== r) r = parent[r];
+    while (parent[x] !== r) {
+      const up = parent[x];
+      parent[x] = r;
+      x = up;
+    }
+    return r;
+  };
+
+  for (const e of relationParents(m, placements)) {
+    if (e.cost > GROUP_INTACT) continue;
+    if (!movable[e.child] || !movable[e.parent]) continue;
+    const a = find(e.child);
+    const bRoot = find(e.parent);
+    if (a !== bRoot) parent[a] = bRoot;
+  }
+
+  const byRoot = new Map<number, number[]>();
+  for (let i = 0; i < n; i++) {
+    if (!movable[i]) continue;
+    const r = find(i);
+    const g = byRoot.get(r);
+    if (g) g.push(i);
+    else byRoot.set(r, [i]);
+  }
+  // A group of one is just a piece, and the single-piece proposals already own it.
+  return [...byRoot.values()].filter((g) => g.length >= 2);
+}
+
+/** Move a whole group at once, recording what it touched through `stash`.
+ *
+ *  Three shapes, and the first is the one part III exists for:
+ *
+ *   · **swap** two groups by their centroids — the move that gets a living group and a
+ *     dining set out of each other's halves, and the one no sequence of single-piece
+ *     moves can reach downhill;
+ *   · **slide** a group bodily, which is how a group backs onto a different wall;
+ *   · **turn** a group about its own centroid by a quarter or half turn, which is how
+ *     a group that is in the right place but the wrong way round is put right.
+ *
+ *  Every one is RIGID: members keep their positions and headings relative to each
+ *  other, so a group that was arranged stays arranged. That is the difference between
+ *  this and the flat search finding its way back piece by piece — which it will not do,
+ *  because the way back is uphill. */
+function proposeGroup(
+  current: Placement[],
+  groups: number[][],
+  reach: number,
+  rng: () => number,
+  stash: (k: number) => void,
+): void {
+  const pick = (n: number) => Math.floor(rng() * n) % n;
+  const centre = (g: number[]): [number, number] => {
+    let x = 0;
+    let z = 0;
+    for (const k of g) {
+      x += current[k].x;
+      z += current[k].z;
+    }
+    return [x / g.length, z / g.length];
+  };
+  /** Rigid transform about a pivot: `localToWorld` is the sanctioned rotation here,
+   *  so the sign convention is three.js's and matches every other heading in the app. */
+  const carry = (g: number[], pivot: [number, number], turn: number, dx: number, dz: number) => {
+    for (const k of g) {
+      stash(k);
+      const p = current[k];
+      const [ox, oz] = localToWorld(turn, p.x - pivot[0], p.z - pivot[1]);
+      current[k] = {
+        x: pivot[0] + ox + dx,
+        z: pivot[1] + oz + dz,
+        yaw: normaliseYaw(p.yaw + turn),
+      };
+    }
+  };
+
+  const a = groups[pick(groups.length)];
+  const roll = rng();
+
+  if (groups.length >= 2 && roll < 0.4) {
+    let other = groups[pick(groups.length)];
+    if (other === a) other = groups[(groups.indexOf(a) + 1) % groups.length];
+    const ca = centre(a);
+    const cb = centre(other);
+    // Each group keeps its own heading and simply changes ends. Turning them as well
+    // is a separate proposal; conflating the two makes a move that is nearly always
+    // rejected for one of two unrelated reasons.
+    carry(a, ca, 0, cb[0] - ca[0], cb[1] - ca[1]);
+    carry(other, cb, 0, ca[0] - cb[0], ca[1] - cb[1]);
+    return;
+  }
+
+  const c = centre(a);
+  if (roll < 0.7) {
+    carry(a, c, 0, (rng() * 2 - 1) * reach, (rng() * 2 - 1) * reach);
+  } else {
+    const turn = [Math.PI / 2, -Math.PI / 2, Math.PI][pick(3)];
+    carry(a, c, turn, 0, 0);
+  }
 }
 
 /** One candidate move. Turns are quarter-turn snapped most of the time, because a

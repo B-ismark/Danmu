@@ -4,6 +4,19 @@ import { footprintForLayout, offsetWall, pointInFootprint, type Footprint, type 
 import { footFromPart, footInsidePoly, footIntersectionArea, footArea, distToBoundary, obbGap } from '../lib/geometry';
 import { isObstacle, roleOf, sharesFloor, WALK_MIN } from '../lib/layout-rules';
 import { analyzeRoom } from '../lib/clearance';
+import {
+  costBreakdown,
+  navigabilityCost,
+  prepare,
+  DEFAULT_WEIGHTS,
+  NAV_CELL,
+  type LayoutContext,
+  type Placement,
+} from '../lib/layout-score';
+import type { ScenePart } from '../lib/scene-spec';
+
+/** Where a part already is, as a placement. */
+const here = (p: ScenePart): Placement => ({ x: p.pos[0], z: p.pos[2], yaw: p.rot });
 
 // The starter furniture a brand-new room opens with. It is the FIRST thing anyone
 // sees of this product, and until this file existed it was hand-authored against the
@@ -97,6 +110,44 @@ describe.each(PRESETS)('starter scene · $id', ({ id, w, d }) => {
     const { freeFloorShare } = analyzeRoom(parts, { footprint: poly, height: HEIGHT });
     expect(freeFloorShare).toBeGreaterThan(0.6);
   });
+
+  it('seeds an arrangement the solver also thinks is good', () => {
+    // The report being quiet is necessary and not sufficient: it says nothing about
+    // the gradients — a rug owing a group it is nowhere near, a sofa off its wall, a
+    // piece facing the plaster — and those are what a user sees when Suggest then
+    // moves eight pieces on a brand-new room. The seeder never called `costBreakdown`,
+    // so it could not know: the shipped costs were 43.1 for the L and 85.5 for the T,
+    // which is a starter room the app's own solver considers broken.
+    //
+    // A ceiling rather than an exact figure, so ordinary tuning does not fail it and a
+    // regression of that size cannot pass. Measured after the fixes: 4.8, 24.7, 16.9,
+    // 4.9, 13.4 — and after the seeder started SEARCHING (§3.10.3 part VI): 4.8, 14.7,
+    // 5.5, 4.9, 13.4, with the T gaining a piece as well as losing two thirds of its
+    // cost. The ceiling comes down with them; 40 would now pass a room that had lost
+    // everything the search buys.
+    const ctx: LayoutContext = { parts, movable: parts.map(() => true), footprint: poly };
+    const cost = costBreakdown(prepare(ctx), parts.map(here), DEFAULT_WEIGHTS, NAV_CELL);
+    expect(cost.total).toBeLessThan(20);
+  });
+
+  it('seeds a room you can walk all of', () => {
+    // Read on the room report's OWN grid, so this and rule 9 cannot disagree. They
+    // did: at a coarser cell the T read 2.02 m² stranded and the report read none.
+    const ctx: LayoutContext = { parts, movable: parts.map(() => true), footprint: poly };
+    expect(navigabilityCost(prepare(ctx), parts.map(here), NAV_CELL)).toBe(0);
+  });
+
+  it('seeds the same room every time it is asked', () => {
+    // The seeder now BUILDS SEVERAL ROOMS and keeps the best (§3.10.3 part VI), so
+    // "deterministic" stopped being free the moment the answer came out of a search:
+    // an unstable sort, a `Map` iterated for its keys, or a tie broken by insertion
+    // order would each show up here and nowhere else. A room that reseeds differently
+    // on its second open is not a room the user can trust.
+    const key = (ps: ScenePart[]) =>
+      ps.map((p) => `${p.id}@${p.pos.map((v) => v.toFixed(6)).join(',')}/${p.rot.toFixed(6)}`).join('|');
+    const again = defaultScene(id, w, d, { footprint: poly, height: HEIGHT });
+    expect(key(again)).toBe(key(parts));
+  });
 });
 
 // Each preset promises something on the layout-pick screen ("Starts as a bedroom").
@@ -187,13 +238,28 @@ describe('starter scene keeps the preset’s promise', () => {
     expect(parts.filter((p) => p.shape === 'chair-dining').every((c) => c.pos[2] < 0)).toBe(true);
   });
 
-  it('pushes a shallow room’s dining table to the wall and seats three at it', () => {
-    // 900 mm of pull-back on both long sides needs 2.6 m of depth; the T's bar has
-    // 2.1. One end against the wall and three sides that work is what `layout-rules`
-    // means by `atLeast: 3`, and the fourth chair is not placed rather than being
-    // wedged into the plaster.
+  it('seats four at the dining table by choosing a wall that can, not by wedging one in', () => {
+    // This test used to assert THREE, and the reasoning was sound as far as it went:
+    // 900 mm of pull-back on both long sides needs 2.6 m of depth, the T's bar has
+    // 2.1, so a table centred there leaves 630 mm on each side. Against one wall with
+    // three sides that work is what `layout-rules` means by `atLeast: 3`, and the
+    // fourth chair was refused rather than wedged into the plaster — which is rule 2,
+    // and still is.
+    //
+    // What was wrong was treating that as the end of the matter. The seeder was
+    // choosing the wall greedily and then making the best of it; once `enumeratePlans`
+    // could try the bay's fourth side too (`PLAN_RANKS`), it found a plan that seats
+    // four with the table clear of every wall — and that plan also scores 1.6 against
+    // the three-chair one's 5.5, with a sixteenth piece placed and no clearance
+    // finding. Four chairs was the right answer all along; the way to get there was a
+    // better plan, never a laxer fit test.
     const parts = seed('t', 5.5, 4.7);
-    expect(parts.filter((p) => p.shape === 'chair-dining')).toHaveLength(3);
+    expect(parts.filter((p) => p.shape === 'chair-dining')).toHaveLength(4);
+    // …and all four sit AT it — one per side, which is what four chairs means.
+    const table = parts.find((p) => p.name === 'Dining table')!;
+    for (const c of parts.filter((p) => p.shape === 'chair-dining')) {
+      expect(Math.hypot(c.pos[0] - table.pos[0], c.pos[2] - table.pos[2])).toBeLessThan(1.1);
+    }
   });
 
   it('a U is a bedroom', () => {

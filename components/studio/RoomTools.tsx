@@ -35,7 +35,7 @@ import { useScene, type RoomShape } from '@/lib/scene-store';
 import { resolveParts, useRoomScene } from '@/lib/room-scene';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
 import { analyzeRoom, type ClearanceIssue, type ClearanceSeverity } from '@/lib/clearance';
-import { solveLayout } from '@/lib/layout-solve';
+import { isWorthOffering, solveLayout, type MoveReason } from '@/lib/layout-solve';
 import { RULE_HANDLING, type CostBreakdown } from '@/lib/layout-score';
 import { roomStore, type LayoutVariant, type Transforms } from '@/lib/storage';
 import { footprintBounds, type Footprint } from '@/lib/footprint';
@@ -348,6 +348,37 @@ function whatChanged(before: CostBreakdown, after: CostBreakdown): string {
   return `It ${gains.join(' and ')}. Undo puts the previous arrangement back.`;
 }
 
+/** …and the same thing said about ONE piece, which is what a person actually
+ *  watches happen. A room-level summary is true and abstract; "the floor lamp moved
+ *  beside the sofa it lights" is the sentence that makes a suggestion legible instead
+ *  of surprising. `SolveResult.moves` names the term each move bought. */
+const MOVE_PHRASE: Partial<Record<keyof CostBreakdown, string>> = {
+  overlap: 'out of what it was standing in',
+  outside: 'back inside the room',
+  door: 'clear of the doorway',
+  access: 'out of the space another piece needs',
+  walkway: 'to widen the way past',
+  window: 'clear of the window',
+  wall: 'back against the wall',
+  middle: 'off the wall',
+  alignment: 'square to the room',
+  relation: 'beside what it belongs with',
+  balance: 'to even out the room',
+};
+
+/** The single biggest move, named. Null when the answer is better told room-wide —
+ *  a piece that only turned, or a term with no sentence for it. */
+function biggestMove(moves: MoveReason[], parts: ScenePart[]): string | null {
+  const top = [...moves].sort((a, b) => b.gain - a.gain)[0];
+  if (!top) return null;
+  const phrase = MOVE_PHRASE[top.term];
+  const name = parts[top.index]?.name;
+  if (!phrase || !name) return null;
+  return top.distance < 0.05
+    ? `“${name}” turned ${phrase}.`
+    : `“${name}” moved ${phrase}.`;
+}
+
 /** Run the solver and write the result as one history entry. Shared, because the
  *  same thing happens whether the user asked for an idea, accepted a re-fit after
  *  resizing something, or asked the room report to clear one finding.
@@ -364,13 +395,25 @@ function useSuggest(effParts: ScenePart[], footprint: Footprint) {
     (mode: 'arrange' | 'refit', seed: number, only?: string[]) => {
       const t = useStudio.getState();
       const confined = only && only.length > 0 ? new Set(only) : null;
+      // Which pieces the user put where they are, rather than the app. An override in
+      // `positions` exists only for a piece that has been moved by hand, so this is the
+      // store already answering the question — and it is what stops a suggestion
+      // treating "I dragged this here on purpose" and "the seeder guessed" as equal
+      // claims on staying put.
+      const placed = new Set([...Object.keys(t.positions), ...Object.keys(t.rotations)]);
       const result = solveLayout(
         effParts,
         footprint,
         effParts.map((p) => p.locked || (confined ? !confined.has(p.id) : false)),
-        { seed, mode },
+        { seed, mode, placed },
       );
-      if (result.moved.length === 0 || result.after >= result.before) return null;
+      // A material gain, not merely a smaller number. `isWorthOffering` is the bar:
+      // a solve that trims 3.1 to 2.4 by sliding a sofa 10 cm and a rug 10 cm has
+      // found a real improvement and is still not an answer to "give me an idea".
+      // Confined fixes are exempt — someone who pressed "Try a fix" on one finding
+      // has asked for that finding cleared, however small the room-wide number moves.
+      if (result.moved.length === 0) return null;
+      if (!confined && !isWorthOffering(result.before, result.after)) return null;
       const positions = { ...t.positions };
       const rotations = { ...t.rotations };
       for (const i of result.moved) {
@@ -407,9 +450,18 @@ function SuggestButton({ effParts, footprint }: { effParts: ScenePart[]; footpri
         });
         return;
       }
+      // One piece named beats a count. A single move says exactly what happened; a
+      // handful still gets the biggest one first, then the room-level summary.
+      const lead = biggestMove(result.moves, effParts);
       toast({
-        title: `Moved ${result.moved.length} ${result.moved.length === 1 ? 'piece' : 'pieces'}`,
-        message: whatChanged(result.breakdownBefore, result.breakdownAfter),
+        title:
+          result.moved.length === 1 && lead
+            ? lead
+            : `Moved ${result.moved.length} ${result.moved.length === 1 ? 'piece' : 'pieces'}`,
+        message:
+          result.moved.length === 1 || !lead
+            ? whatChanged(result.breakdownBefore, result.breakdownAfter)
+            : `${lead} ${whatChanged(result.breakdownBefore, result.breakdownAfter)}`,
       });
     } finally {
       setBusy(false);
@@ -593,10 +645,17 @@ function FixButton({
         });
         return;
       }
+      const lead = biggestMove(result.moves, effParts);
       toast({
         tone: 'success',
-        title: `Moved ${result.moved.length} ${result.moved.length === 1 ? 'piece' : 'pieces'}`,
-        message: whatChanged(result.breakdownBefore, result.breakdownAfter),
+        title:
+          result.moved.length === 1 && lead
+            ? lead
+            : `Moved ${result.moved.length} ${result.moved.length === 1 ? 'piece' : 'pieces'}`,
+        message:
+          result.moved.length === 1 || !lead
+            ? whatChanged(result.breakdownBefore, result.breakdownAfter)
+            : `${lead} ${whatChanged(result.breakdownBefore, result.breakdownAfter)}`,
       });
     } finally {
       setBusy(false);

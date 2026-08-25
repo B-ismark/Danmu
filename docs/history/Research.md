@@ -693,6 +693,488 @@ them lives in `lib/layout-rules.ts` and nowhere else.
   A guard test holds it. The remaining factor of ~5 would come from delta-scoring a
   single moved piece instead of the whole room; it is not needed yet.
 
+
+### 3.10 Layout intelligence, third pass: groups, assignment, and a room you can walk into
+
+> Added 2026-08-24, after the same two complaints came back in a different shape:
+> *"the Suggest algorithm doesn't make a lot of sense with how it repositions
+> things, sometimes it even gets positioning wrong"* and *"the generated default
+> rooms sometimes don't have a great rationale — the arrangement doesn't look like
+> an actual room someone will live in"*. §3.9 fixed the three causes it names and
+> they have stayed fixed; these are different ones, each measured on the presets the
+> app actually ships. Numbers below come from `defaultScene` output for
+> `rect 5×4`, `rect 6.5×5`, `l 6×5`, `u 5×4.5` and `t 7×5.5`, solved at seeds 1–3.
+
+#### 3.10.1 Why Suggest still reads as random — six causes, each measured
+
+**1. A relation is a conjunction over every candidate anchor, not an assignment.**
+`prepare` walks every ordered pair and keeps one entry per pair `relationFor`
+matches. The rug spec lists `anchor: ['sofa', 'bed', 'dining-table']`, so in a room
+with both a sofa and a dining table the rug owes **both** — it is charged for not
+being under the table it is not under. Measured on the seeded T:
+
+| pair | band | distance | `bandCost` | × weight × `relation` |
+|---|---|---|---|---|
+| `rug → sofa` | 0–0.80 m | 0.61 m | 0.00 | 0 |
+| `rug → dining-table` | 0–0.80 m | 3.57 m | 7.67 | **38.3** |
+
+That 38.3 is the *entire* `relation` term of the seeded T room, and the solver's
+answer is to drag the rug out from under the sofa to a point between the two groups
+— 1.36 m, 1.60 m and 2.28 m of travel at seeds 3, 1 and 2. The same mechanism moves
+the L's floor lamp 1.42–2.62 m: `lamp → sofa` is satisfied at 0.01 m and
+`lamp → armchair` is charged 4.46 for the armchair across the room. A lamp cannot be
+beside two seats and a rug cannot be under two groups. **The cost of a relation
+should be the minimum over its candidate anchors, not the sum.**
+
+**2. The walkway rule is implemented three times, with three thresholds and three
+exempt sets.**
+
+| | which pairs | threshold | how measured |
+|---|---|---|---|
+| `clearance.ts` rule 3 | one side in `WALKWAY_CATEGORIES` (sofa / bed / wardrobe / shelf / fridge / desk) | `MIN_WALKWAY` = `WALK_MIN` = **0.60 m**, fixed | medial axis off the field, ± half a cell |
+| `layout-score.ts` circulation | every `isObstacle` pair | `routeWidth(footprint)` = **0.60 → 0.90 m** with area | pairwise `obbGap` |
+| `scene-spec.ts` `pinches` | every obstacle pair | `WALK_MIN` = **0.60 m** | pairwise `obbGap` |
+
+Measured on the seeded 7×5.5 T: `analyzeRoom` returns **0 findings**;
+`costBreakdown` charges **walkway 40.4**, all of it from two chair↔chair gaps of
+0.40 m around a dining table, against a route the solver has widened to 0.90 m
+because the room is large. Chairs at one table are not a corridor and the report
+knows it; the solver does not. So Suggest scatters the dining set — chair travel
+0.70 / 1.08 / **2.18 m** at seed 1 — to relieve a violation nothing ever reported,
+and the toast says *"widened the walkways"*. Both halves of "doesn't make sense" out
+of one term. `tests/layout-conformance.test.ts` holds the two consumers to each
+other in one direction only (solver output must not leave behind an `error` the
+report raises); the missing direction — **an arrangement the report is silent about
+must not be charged by the solver** — is exactly what let 40 units through.
+
+**3. Nothing requires a move to pay for itself.** `inertia` at 1.5 per metre is real
+but small, and `useSuggest`'s gate is `result.after >= result.before` — *any*
+improvement is applied wholesale. What ships is whatever the final `best` snapshot
+happened to hold, including displacements the annealer accepted uphill and never
+revisited. Measured with a greedy revert-to-origin pass over the solver's own output
+(cheapest first, three passes, keep the revert unless the total rises by > 0.5):
+
+| room, seed | solver moved | after prune | cost solver → pruned |
+|---|---|---|---|
+| 6.5×5 living, 1 | 5 | **1** | 6.3 → **6.1** |
+| L 6×5, 2 | 8 | **3** | 12.7 → **10.2** |
+| L 6×5, 3 | 8 | **3** | 12.7 → **11.9** |
+| U 5×4.5, 1 | 2 | **1** | 5.7 → **5.6** |
+| T 7×5.5, 1 | 8 | **6** | 27.7 → **26.4** |
+
+Across twelve runs the prune removed **40–63 %** of the moves and left the cost
+*equal or lower* in eight of them. Those moves were not trade-offs the search made;
+they were noise it never cleaned up — and every one of them is a piece the user
+watches jump for no reason. In the L at seed 2 the solver reports "moved 8 pieces"
+for four displacements under 15 cm.
+
+**4. Wall affinity is keyed on `Category` while everything else is keyed on `Role`.**
+`wallAffinity` (`physics.ts`) says `table: 'prefers-middle'`, which covers the coffee
+table, the side table and the dining table alike, and `chair: 'free'`, which covers a
+dining chair. So the coffee table is charged `middle` for sitting in front of the sofa
+where the relation table put it (T: `middle 5.1`), and the L's side table — whose
+whole job is to touch the arm of the armchair — is pulled toward the room's centre by
+0.59–1.21 m. That one survives the prune, which is the tell: the cost function
+genuinely wants it there. This is §3.9's "a role is not a category" lesson, one file
+short of being finished.
+
+**5. Orientation is nearly free.** `alignment` weight 4 × `angleCost` (0…1) caps a
+*completely backwards* wall piece at **4 cost units** — less than moving it 2.7 m
+costs in inertia. A `free` piece gets `0.4 × quarterTurnCost × 4`, at most 1.6.
+Measured yaws coming back from the solver on dining chairs: 8°, 15°, 98°, −113°, and
+at seed 3 one chair turned **203°** from where it started, facing away from its own
+table. `MOVE_EPSILON` guards translation only (0.02 m); a yaw change of 0.02 rad is
+1.1°, so the "moved N pieces" count includes pieces that merely wobbled.
+
+**6. `RoomProfile.anchor` is computed and read by nothing.** Its own comment says
+settling it first is what makes a hierarchical solve behave. `layout-solve`'s first
+pass is keyed on `LARGE_AREA` footprint area instead, so a bed and a dining table are
+peers and there is no group structure anywhere in the solver: every piece is an
+independent variable. That is why a group can be reassembled somewhere else on every
+press, and why three chairs permute around one table.
+
+#### 3.10.2 Why the default rooms have no rationale — four more
+
+**7. No preset room has a door, or a window.** `footprintForLayout` returns a bare
+polygon; `defaultScene` places tv / sofa / table / rug / plant / lamp / bed /
+nightstands / wardrobe / chairs / shelf and never a `door` or a `window`.
+`roomProfile.apertures` is empty in all five presets. Consequences, all live:
+
+- `navigabilityCost` returns 0 by its own no-door guard, so the finalist re-ranking
+  that exists to catch "you can't get there" is **inert on every starter room**.
+- `entranceComponents` returns null, so the report's `reach` and `cut-off` rules say
+  nothing, and the `door` and `entry` rules never fire.
+- The `desk ← window` relation is unreachable.
+- Above all: **with no door, no wall has a reason to be the back wall.** The seeder
+  picks by `min(depth, 3.3) × 2 + width` arithmetic — a defensible tiebreak, but not a
+  rationale a person can read, because the thing that decides it in a real room (what
+  you see when you come in, and where the light is) is not in the room at all.
+
+A room you cannot walk into is also, plainly, not a room someone lives in.
+
+**8. The seed is a vignette.** Five to nine pieces, every group centred at `u = 0` of
+its frame, nothing on the walls. The starter living room is sofa, coffee table, rug,
+TV, plant, lamp: no side table, no storage under the screen, no art, no curtains, no
+ceiling light — though `painting`, `mirror`, `curtain`, `lamp-pendant`, `bookshelf`
+and `shoe-rack` are all already in the catalog, and all of them are wall-mounted or
+shallow, i.e. nearly free in floor terms.
+
+**9. The dining set seeds three chairs.** ~~When the bay cannot give a seated diner
+900 mm on both long sides the table goes against the wall (`vTable = hd + gap`), and
+the fourth chair's spot is then inside that wall, so `seats()` refuses it. Measured on
+the T: `chair-1`, `chair-2`, `chair-3`. Nobody owns a table with three chairs.~~
+
+**Reopened, then answered — and both halves of that are worth keeping.**
+
+*First reading (wrong).* The cause was withdrawn as an appeal to intuition, on the
+grounds that it contradicts a rule this repo already states: `layout-rules.ts`'s `seats`
+rule is `atLeast: 3` of four sides, commented *"a table with one end against a wall is
+not reported as a fault — that is a real arrangement."* The arithmetic backed it up. The
+T's bar is 2.1 m deep and a seated diner needs `WALK_COMFORT` = 900 mm of pull-back, so
+centring a table there leaves 630 mm on each long side: two sides too tight, against one
+wall with three that work. And the seeder already seated four wherever a bay could hold
+four — `open 7.5×5.6` and `open 8×7` both did. So: not a fault, not a bug, count is a
+reading of the room.
+
+*What that missed.* All of it is true and none of it is the question. "Three chairs is
+not a **fault**" and "three chairs is the **best this room can do**" are different
+claims, and only the first was established. The seeder was picking the dining wall
+greedily and then making the best of the wall it had picked.
+
+*The answer.* Once part VI could enumerate plans, and `PLAN_RANKS` was raised from three
+to four — a bay has four sides, and capping at three was a budget wearing the clothes of
+a cap — the search found a plan that puts the table clear of every wall with **a chair
+on each of its four sides**:
+
+| T 5.5 × 4.7 | greedy | searched, ranks 3 | searched, ranks 4 |
+|---|---|---|---|
+| dining chairs | 3 | 3 | **4** |
+| pieces | 14 | 15 | **16** |
+| seeded cost | 16.9 | 5.5 | **1.6** |
+| clearance findings | 0 | 0 | 0 |
+
+So cause 9 was pointing at something real, and the fix was never the one its wording
+implied. **A wrong plan and a laxed fit test produce the same fourth chair, and only one
+of them is a room.** Rule 2 holds throughout: nothing was resized, nothing was allowed
+through a fit test it failed, and the three-chair arrangement remains a legitimate answer
+in a room that genuinely has no better wall. `tests/scene-seed.test.ts` now asserts four,
+and records both readings, because the near-miss is the lesson: an intuition that
+contradicts a written rule is usually wrong about the *rule* and can still be right about
+the *room*.
+
+**10. The seeder emits layouts its own cost function scores badly, and cannot know.**
+Seeded cost before any solve: `rect 5×4` **3.1**, `6.5×5` **8.8**, `L` **43.1**,
+`U` **16.1**, `T` **85.5**. `defaultScene` never calls `costBreakdown`. The U's 16.1
+is `walkway 11.5` — a nightstand 0.55 m from the wardrobe — and the solver's answer at
+seed 1 is to pull the bed **0.64 m off its headboard wall**, which is worse than the
+fault it clears.
+
+#### 3.10.3 The shape of the fix
+
+Seven parts, ordered so each is independently shippable and the cheap ones come
+first.
+
+**I — One rule, one place (prerequisite).** Promote the report's
+`WALKWAY_CATEGORIES` into `layout-rules.ts` as a predicate over `Role`, alongside the
+`routeWidth` that already lives there, and have all three consumers read it. Re-key
+`wallAffinity` on `Role` too, and give the roles that have a *relation* — coffee
+table, side table, nightstand — an affinity of `'by-relation'`: no wall term, no
+middle term, their place is decided by what they belong to. Then add the missing
+direction to `tests/layout-conformance.test.ts`: an arrangement the report is silent
+about must cost the solver nothing on the term implementing that rule.
+
+**II — Relations become an assignment.** Group the prepared relations by
+(self, spec) and take the **minimum** over candidate anchors rather than the sum. The
+`argmin` anchor is remembered: that is the piece's *parent*, and the parent edges form
+a forest Part III needs. Where exclusivity matters — two nightstands must not claim
+the same side of one bed — give the `beside` band a side index off `accessZones` and
+let the existing overlap term separate them; a Hungarian assignment is available if
+that proves insufficient and is almost certainly not needed at these sizes.
+
+**III — The solver moves groups, not pieces.** The structural change, and the one
+that makes output look intentional.
+
+1. Extend `roomProfile` with `groups`: the connected components of Part II's parent
+   forest, each rooted at its anchor (`RoomProfile.anchor` finally gets a reader).
+2. Three tiers instead of two — **A**: whole groups moved rigidly, variables
+   (position, quarter-turn), proposals being *back the anchor onto a wall of a bay*,
+   *face the group at a focal*, *swap two groups' bays*, *slide along the wall*;
+   **B**: members refined inside their group, with the anchor as the frame and the
+   group's extent as the search radius rather than the room's; **C**: free pieces as
+   today.
+3. `lib/rigid-parent.ts` already carries a subtree through a translate-and-rotate
+   about a pivot — reuse that offset maths with the relation forest in place of the
+   support tree.
+
+Under this schedule a dining set moves as a set, so chairs stop permuting around
+their table, and a rug travels with the sofa it is under.
+
+**IV — Every move must pay for itself.** Between the anneal and the offer:
+
+1. **Snap.** Quarter-turn-snap each yaw to its group axis or its wall's yaw when
+   within ~12°, re-score, keep if not worse. Ends the 8° chairs.
+2. **Prune.** The greedy revert measured in §3.10.1(3): −40 to −63 % of moves, cost
+   equal or better in eight runs of twelve. Cost is one `scoreLayout` per moved piece
+   per pass — about 30 evaluations against the anneal's 1600, under 2 % of the solve.
+3. **Gate on a material margin**, not on `after < before`: something like
+   `before − after ≥ max(ABS_GAIN, 0.08 × before)`, so the 3.1 → 2.4 nudge on the
+   rect room becomes *"this is already a good arrangement"* instead of a sofa and a
+   rug each moving 10 cm under the banner of a rearrangement.
+4. **Explain per piece.** `moved` should carry the term that paid for each move
+   (`{ index, term, gain }`) — the prune already computes exactly that delta.
+   *"The lamp moved to the armchair it lights"* is a suggestion someone trusts; the
+   same move unexplained is the one they undo. And give `MOVE_EPSILON` a yaw sibling
+   of ~3°, so wobble stops being counted as a move.
+
+**V — The room gets a door and a window, and the seeder reads them.** A companion to
+`footprintForLayout` returns each preset's openings — a door on a named wall, one or
+two windows — sized from the catalog (900 × 2100, 1200 × 1200), placed and settled
+like everything else. `layout-pick` shows the door; the wall-move machinery in
+`wall-actions.ts` / `wall-move.ts` already carries wall-mounted pieces when a wall
+moves, so dragging it along its wall is nearly free. The seeder's wall choice then
+becomes readable in one sentence: **the focal wall is the one you face coming in,
+that is not the door's wall, and not a window wall for a screen** — and a desk goes
+beside the window, which the relation table has wanted all along. This single change
+is most of "the default rooms have no rationale", and it turns four dormant rules
+(`door`, `entry`, `reach`, `cut-off`) back on.
+
+**VI — Seeding becomes a scored constructive search.** Keep the templates; change how
+a placement is *chosen*. Enumerate candidate plans — (bay → group) × (group → wall of
+that bay) × the two flips along that wall, a few dozen to a couple of hundred for the
+presets — build each with the existing `place()` / `seats()` machinery, and score it
+with the very same `costBreakdown` + `navigabilityCost` the solver uses. Keep the
+best; optionally polish it through `solveLayout` in `refit` mode, which already exists
+and already means "change as little as possible". This retires cause 10 by
+construction: the seeder can no longer emit an 85.5 room, because 85.5 loses to
+whatever else it tried.
+
+~~§3.9.4 measures an evaluation at ~0.17 ms, so 200 candidates is ~35 ms, once, on room
+creation.~~ **Wrong in both directions, and the correction picks the design.** That
+figure was `scoreLayout(ctx, …)`, which re-runs `prepare` on every call. Measured on
+the seeded presets (12–17 parts) against an already-prepared model:
+
+| | `rect 6×4` | `t 5.5×4.7` | `open 7.5×5.6` |
+|---|---|---|---|
+| one `costBreakdown` | 16 µs | 32 µs | 34 µs |
+| `navigabilityCost` at `NAV_CELL` | 1466 µs | 1452 µs | 2230 µs |
+
+So an evaluation is **five to ten times cheaper** than the old figure, and the
+clearance field is **eight to thirteen times dearer** — 65–92× an evaluation, not the
+10–22× an earlier note claimed, which was the same baseline error (the ratio in
+`NAV_CELL`'s own comment is corrected too). Scoring 200 candidates *with the field on
+each* is **296–453 ms**, which is not "once, on room creation, and nobody notices" — it
+is a visible hitch on the first screen of the product.
+
+The measurement therefore chooses the design rather than merely costing it. The first
+answer was the two tiers `solveLayout` uses — score every candidate on `costBreakdown`
+alone, pay for the field on four finalists — which brings 200 candidates from 296–453 ms
+down to 9–16 ms.
+
+**That was tried, and it was the wrong answer.** Two tiers only work when the filter's
+ranking is informative about the arbiter's, and circulation is specifically the term
+that is not predictable from the others — which is the entire reason it exists. Every
+filter dropped rooms that would have won:
+
+- Top four outright, on the seeded T: a 15-piece plan that seals off 2.36 m² of floor
+  scored **2.2** before the field and filled all four slots. No 14-piece plan was ever
+  compared against it. The room that shipped had two clearance findings on first open.
+- Reserving a finalist slot per part count moved the failure one level down: the
+  *cheapest* 14-piece plan strands 2.43 m², and the one that strands nothing is third.
+
+The real correction is that part VI's candidate set is nothing like 200. It is the
+product of how many genuinely different walls and bay assignments a room has, capped
+at four each — a bay has four sides — so **thirty-two at the very most**, and one, with
+no search at all, for a plain rectangle whose openings leave a single usable viewing
+wall. Measured end-to-end, `defaultScene` per preset:
+
+| | `rect` | `l` | `t` | `u` | `open` |
+|---|---|---|---|---|---|
+| seed time | 0.6 ms | 9.1 ms | 48.3 ms | 7.9 ms | 21.0 ms |
+| cost, greedy → searched | 4.8 | 24.7 → **14.7** | 16.9 → **1.6** | 4.9 | 13.4 |
+| pieces placed | 12 | 14 | 14 → **16** | 12 | 17 |
+| clearance findings | 0 | 0 | 0 | 0 | 0 |
+| free floor | 88 % | 82 % | 76 % | 80 % | 88 % |
+
+The T is the case worth reading: the search found a room with **two more pieces, a
+tenth of the cost, and no stranded floor** — a dining table clear of every wall with a
+chair on each of its four sides (see cause 9) — and it is a room no cheap filter would
+have let through.
+So the seeder scores every candidate in full, and `solveLayout` — which evaluates around
+sixteen thousand proposals rather than thirty-two — keeps its tiers. Same term, same
+weight, different budget.
+
+One more thing the enumeration must get right, since both failure modes are silent:
+enumerating a knob the layout does not read builds the identical room several times
+(the first draft did, three times over, for a plain rectangle), and enumerating too few
+narrows the search back to the greedy answer. Only the second is harmful, and it is the
+one that looks like success — so `enumeratePlans` mirrors `defaultScene`'s own switch
+rather than approximating it.
+
+**VII — Make the room look lived-in.** Tiered fill, each tier placed only if it fits
+*and* does not raise the score:
+
+- **Tier 1, identity** — the anchor group: bed + nightstands, sofa + coffee table +
+  rug, table + chairs (four of them, from the sides that are actually usable), desk +
+  chair.
+- **Tier 2, function** — storage against a wall (media unit under the screen,
+  wardrobe, bookshelf), the second seat, a side table.
+- **Tier 3, dressing** — art centred over the sofa or bed with its centre at ~1.45 m,
+  a mirror beside or opposite the window, curtains on every window, a pendant over the
+  dining table, a floor lamp in the reading corner, greenery in a corner no route
+  uses.
+
+Tier 3 is nearly free geometrically and is the whole difference between a showroom and
+a home. It also gets a stopping rule rather than a hand-tuned piece count:
+`freeFloorFraction` is already exported, and a target band — roughly 50–65 % free
+floor for a living room, more for a bedroom — says when to stop adding. And **stop
+centring everything at `u = 0`**: a wall's furniture reads better centred on that
+wall's *usable run*, which is a number the seeder will have as soon as it knows where
+the openings are.
+
+#### 3.10.4 Order of work
+
+| # | Part | Buys | Status |
+|---|---|---|---|
+| 1 | IV — prune, snap, gate, per-piece reason | The visible half of "doesn't make sense", with no new concepts | **shipped** |
+| 2 | II — relation as `min` over anchors | The wandering rug and the wandering lamp | **shipped** |
+| 3 | I — one walkway rule; affinity by role | The phantom 40 in the T; the drifting side table | **shipped** |
+| 4 | V — doors and windows in the presets | Most of "no rationale"; four dormant rules turned back on | **shipped** |
+| 5 | III — group-rigid solve | A group that must cross the room can | **shipped** — deferred twice first, see §3.10.7 |
+| 6 | VII — dressing | Art, curtains, a pendant, bedside lamps — all wall- or ceiling-mounted, so free | **shipped** |
+| 7 | VI — scored constructive seeding | Rooms that score well by construction | **shipped** |
+
+1–3 are small and cover most of the first complaint. 4 covers most of the second.
+5–7 are what make the result good rather than merely not wrong. Part III kept its place in
+the order and lost it twice on the evidence before a probe finally produced a room that
+needed it — §3.10.7.
+
+#### 3.10.5 What shipping 1–4 actually did
+
+Same probe, same five presets, same three seeds. Seeded cost is before any solve;
+"moves" is what pressing Suggest does to that seeded room.
+
+| room | seeded cost, before → after | Suggest moved, before → after |
+|---|---|---|
+| `rect 5×4` | 3.1 → **2.6** | 1–2 → **0** |
+| `rect 6.5×5` | 8.8 → 11.0 | 2–5 → **2–3** |
+| `l 6×5` | 43.1 → **24.7** | 8 → **3–5** |
+| `u 5×4.5` | 16.1 → **4.3** | 2 → **0** |
+| `t 7×5.5` | 85.5 → **6.1** | 8 → **0** |
+
+The T's `walkway 40.4` and `relation 38.3` are both zero. The chairs stay at their
+table, the rug stays under the sofa, and three of the five presets now answer Suggest
+with *"this is already a good arrangement"* — which they always should have. The
+6.5 × 5 room's seeded cost went *up* because it has a door and two windows in it now
+and three more pieces to be scored; what it does under Suggest is move the sofa 340 mm
+back against its wall and the floor lamp to the end of that sofa, which are the two
+moves a person would make.
+
+Every remaining move can be named, which is the test that matters: the sofa moves to
+the wall, the lamp moves to the seat it lights, the armchair turns to face the sofa.
+Nothing moves 2 m for a rounding error any more.
+
+#### 3.10.6 What shipping VII and VI then did
+
+Same five presets. VII hangs a picture over the sofa or bed, curtains at every window,
+a pendant over the dining table and a lamp on each nightstand — all wall- or
+ceiling-mounted, so `isObstacle` is false for every one of them and none of it takes
+floor, blocks a route or enters an access zone. It costs nothing in the room report
+and it is most of the difference on screen.
+
+VI turned every greedy choice in the seeder — which wall a group backs onto, which bay
+the living group gets — into a plan, built the plans in full, and let `costBreakdown`
+pick. Costs are on the report's own grid, with the navigation term on:
+
+| room | pieces, VII → VI | seeded cost, VII → VI | seed time | Suggest moves, 3 seeds |
+|---|---|---|---|---|
+| `rect 6×4` | 12 | 4.8 | 0.6 ms | 0, 0, 1 |
+| `l 6×4.7` | 14 | 24.7 → **14.7** | 9.1 ms | 0, 7, 5 |
+| `t 5.5×4.7` | 14 → **16** | 16.9 → **1.6** | 48.3 ms | 0, 0, 0 |
+| `u 6×5` | 12 | 4.9 | 7.9 ms | 0, 0, 0 |
+| `open 7.5×5.6` | 17 | 13.4 | 21.0 ms | 1, 1, 1 |
+
+Zero clearance findings and zero stranded floor throughout, and 76–88 % of the floor
+free to walk on. Two presets improved and three were already at the greedy optimum —
+which is the honest result, and the reason plan zero is always the greedy plan: a room
+the search cannot improve on comes out unchanged, and `rect` does not search at all.
+
+The last column is the one that says whether any of this worked, because it is what the
+user sees. `t` and `u` answer Suggest with *"this is already a good arrangement"* at
+every seed. The `l` is the honest remainder: it seeds at 14.7 and the solver still finds
+9.8–13.2, so Suggest has something real to offer there — the search fixed its bay
+assignment but not everything about its wing, and no rank raise changes that, since the
+L’s bay has four sides and all four are already enumerated.
+
+The T is the case that justifies the whole part. Its winning room has **one more piece,
+a third of the cost, and no floor anyone is cut off from** — and it is a room that no
+cheap pre-filter would have surfaced, because the plans that score best before the
+clearance field runs are the ones that seal a corner off. Details in the part VI note
+above.
+
+#### 3.10.7 Part III, and the case that finally justified it
+
+Part III was deferred twice, on the grounds that chairs permuting around their table
+and groups being reassembled elsewhere on every press turned out to be symptoms of
+causes 1 and 2 rather than of the flat search — which was true, and is why it was right
+to wait. The note said *"it is worth doing when there is a room that needs it."* Two
+probes were built to find out whether such a room exists.
+
+**Probe 1 — a room someone has scrambled.** Living group in a corner facing the wall,
+dining set strewn across the other half, ten pieces, one door. The flat search handles
+it comfortably: **363.7 → 6.8–12.1** over six seeds, relation cost 279.5 → 0.8–6.2,
+nothing stranded, and every unmet relation left under half a metre out of band. No
+group machinery needed, and the earlier judgement holds exactly.
+
+**Probe 2 — two intact groups, each standing where the other belongs.** Take a seeded
+preset and exchange the two groups bodily, so nothing inside a group has moved relative
+to its own members. This is a different problem, and the flat search cannot do it:
+
+> On the open plan the exchanged room costs **23.2** against the **13.4** of the same
+> furniture the right way round, and the solver moved **0–1 pieces of eleven at every
+> seed**, landing at 19.7–23.2. It is a textbook local minimum — taking any single
+> piece out of a coherent group makes the room worse, so no single-piece move is
+> downhill and the whole group has to move at once or not at all.
+
+So part III ships, as **its own pass rather than extra proposals**. Mixing group moves
+into the piece passes was tried first and measured worse: over twenty seeds it improved
+the best case sharply (the T's 7.4 → 1.2, the open plan's 17.5 → 4.4) and left the mean
+where it was or raised it, while a merely-scrambled room went from a mean of 3.8 to 5.4
+— because every proposal spent hopping between basins is one the single-piece moves did
+not get for settling, and settling is what most rooms actually need. Confining the mixed
+moves to the hot half of the schedule did not fix it either.
+
+Given its own budget ahead of the piece passes, forty seeds, pass off → on:
+
+| | off | on |
+|---|---|---|
+| `t`, median | 30.6 | **9.3** |
+| `t`, mean | 47.0 | 31.1 |
+| `t`, best | 8.9 | **0.6** |
+| open plan, mean | 19.3 | **16.9** |
+| solve time | 218 / 87 ms | 233 / 105 ms |
+
+Read the median. The T's mean is dominated by a handful of seeds that end with hard
+violations either way — its worst is 379.9 with the pass *off* — and picking a budget
+on a statistic that noisy is fitting noise. On the nine-seed fixture the test pins, the
+whole distribution moves: median 30.2 → 1.6, best 11.8 → 0.6, and even the worst run
+with the pass (25.4) beats the median without it.
+
+Three details are load-bearing:
+
+- **Groups come from the arrangement, not from the relation table.** `intactGroups`
+  unions only relation edges that are *currently satisfied* (`GROUP_INTACT`, about half
+  a metre out of band). A scrambled room therefore has no groups, the pass is skipped,
+  and probe 1's result is preserved by construction rather than by luck.
+- **Movable members only.** A sofa `faces` its wall-mounted screen, so the screen would
+  otherwise join the living group and a group move would try to drag a television off
+  its wall. Leaving it out is also right in substance: a fixed screen is exactly what
+  should make a seating group reluctant to move, and it does that through the relation
+  cost, from outside the group.
+- **The pass restarts from `best`,** so it cannot hand the piece passes a worse
+  arrangement than it was given. The only thing it changes for them is the RNG stream,
+  which is why an already-solved room measures ±10 % either way and neither direction
+  means anything.
+
 ---
 
 ## 4. Proposals ranked by value ÷ effort

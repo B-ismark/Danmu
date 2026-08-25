@@ -43,6 +43,7 @@ import {
   accessZones,
   belongTogether,
   doorPath,
+  formsRoute,
   routeWidth,
   roleOf,
   sharesFloor,
@@ -85,10 +86,15 @@ export type AnalyzeOptions = {
   accessibility?: boolean;
 };
 
-// Bulky pieces whose pairwise gaps form walkways people actually use.
-const WALKWAY_CATEGORIES = new Set<Category>([
-  'sofa', 'bed', 'wardrobe', 'shelf', 'fridge', 'desk',
-]);
+// Which pieces' pairwise gaps form walkways people actually use now lives in
+// `lib/layout-rules.ts` as `formsRoute`, keyed on ROLE — see the import below.
+//
+// It was a `Set<Category>` here, and the solver had nothing equivalent: it charged
+// every obstacle pair, so three dining chairs around their own table cost it
+// `walkway 40.4` on a room this file reported nothing about, and "Suggest" flung the
+// dining set across the floor to fix a fault nobody had raised. The set was right;
+// being only this file's was the bug. Same lesson as `MIN_WALKWAY` below, one rule
+// over.
 
 // DERIVED, not restated — `WALK_MIN` is `WALK_RADIUS × 2`, and `WALK_RADIUS` is
 // documented as half the 600 mm walkway rule. Writing 0.6 here spelled the same
@@ -339,7 +345,7 @@ export function analyzeRoom(
       const a = solid[ai];
       const b = solid[bi];
       if (!a || !b) continue;
-      if (!WALKWAY_CATEGORIES.has(a.category) && !WALKWAY_CATEGORIES.has(b.category)) continue;
+      if (!formsRoute(roleOf(a)) || !formsRoute(roleOf(b))) continue;
       // A pair the relation table puts together is not a walkway: 450 mm between a
       // sofa and its own coffee table is the figure `layout-rules` asks for, and
       // reporting it taught people that this panel cries wolf about correct rooms.

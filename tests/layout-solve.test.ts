@@ -1,15 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import {
+  costBreakdown,
   scoreLayout,
   navigabilityCost,
+  NAV_CELL,
   prepare,
+  relationParents,
   DEFAULT_WEIGHTS,
   type LayoutContext,
   type Placement,
 } from '@/lib/layout-score';
-import { solveLayout } from '@/lib/layout-solve';
+import { isWorthOffering, solveLayout } from '@/lib/layout-solve';
 import { analyzeRoom } from '@/lib/clearance';
 import { footprintBounds } from '@/lib/footprint';
+import { footprintForLayout } from '@/lib/footprint';
+import { defaultScene } from '@/lib/scene-spec';
 import type { ScenePart } from '@/lib/scene-spec';
 import type { Footprint } from '@/lib/footprint';
 
@@ -101,21 +106,27 @@ describe('scoreLayout', () => {
     expect(clash).toBeGreaterThan(tucked * 5);
   });
 
-  it('costs a gap you cannot walk through, and not a flush one', () => {
+  it('costs a gap you cannot walk through, and neither a flush one nor a clear one', () => {
     const a = sofa();
     const b = wardrobe();
-    const ctx = ctxOf([a, b]);
-    // Wardrobe back at z −2, front at −1.4. Sofa at z −1.1 is flush; at −0.9 it
-    // leaves 20 cm, which is the pinch.
-    const flush = scoreLayout(ctx, [
-      { x: 0, z: -0.925, yaw: 0 },
-      { x: 0, z: -1.7, yaw: 0 },
-    ]);
-    const pinched = scoreLayout(ctx, [
-      { x: 0, z: -0.7, yaw: 0 },
-      { x: 0, z: -1.7, yaw: 0 },
-    ]);
-    expect(pinched).toBeGreaterThan(flush);
+    const m = prepare(ctxOf([a, b]));
+    // Wardrobe back at z −2, front at −1.4. The sofa's back edge is 475 mm behind
+    // its centre, so z −0.925 is flush against the wardrobe, −0.7 leaves 225 mm,
+    // and 0.5 leaves well over a walkway.
+    const walkwayAt = (z: number) =>
+      costBreakdown(m, [
+        { x: 0, z, yaw: 0 },
+        { x: 0, z: -1.7, yaw: 0 },
+      ]).walkway;
+
+    // On the TERM, not on the total. Two pieces flush is also a wardrobe whose doors
+    // are completely blocked, and the access term says so far more loudly than the
+    // walkway term ever could — so a total-based comparison here was measuring the
+    // wrong rule, and only passed while the solver policed a wider walkway (900 mm)
+    // than the room report ever reports (600 mm). Those two are one number now.
+    expect(walkwayAt(-0.925)).toBe(0); // flush is deliberate composition
+    expect(walkwayAt(-0.7)).toBeGreaterThan(0); // 225 mm is the pinch
+    expect(walkwayAt(0.5)).toBe(0); // and past a walkway there is nothing to say
   });
 
   it('wants seating to face the television, at a sensible distance', () => {
@@ -370,6 +381,129 @@ describe('it leaves alone what was already right', () => {
   });
 });
 
+// ─── Every move has to pay for itself ───────────────────────────────────────
+//
+// The annealer accepts uphill moves on purpose, and never goes back to ask whether
+// each one was worth it — so what shipped was whatever its best snapshot happened to
+// hold, noise included. Measured over the five presets at three seeds, offering each
+// moved piece its old place back reverted 40–63 % of the moves and left the total
+// cost equal or LOWER in eight of the twelve runs.
+
+describe('a suggestion is only the moves that bought something', () => {
+  it('never returns a layout worse than the one it was given', () => {
+    // The invariant every caller downstream assumes, and the one the prune's slack
+    // budget could otherwise spend: better, or unchanged, never worse.
+    for (let seed = 1; seed <= 8; seed++) {
+      const parts = messy();
+      const r = solveLayout(parts, RECT, parts.map(() => false), { seed });
+      expect(r.after).toBeLessThanOrEqual(r.before);
+      if (r.moved.length === 0) expect(r.after).toBe(r.before);
+    }
+  });
+
+  it('says what each move bought, and never blames the moving', () => {
+    const parts = messy();
+    const r = solveLayout(parts, RECT, parts.map(() => false), { seed: 3, steps: 2500 });
+    expect(r.moves.map((m) => m.index)).toEqual(r.moved);
+    for (const m of r.moves) {
+      // `inertia` measures the move itself, so it is always the term that got worse;
+      // crediting a move to it would have every explanation read "because it moved".
+      expect(m.term).not.toBe('inertia');
+      expect(m.gain).toBeGreaterThan(0);
+      expect(m.distance > MOVE_MIN || m.turn > TURN_MIN).toBe(true);
+    }
+  });
+
+  it('does not count a piece that only wobbled as moved', () => {
+    // `MOVE_EPSILON` guarded translation and had no sibling for yaw, so 0.02 rad —
+    // 1.1°, invisible — counted as a moved piece and inflated every "moved N pieces".
+    const parts = messy();
+    for (let seed = 1; seed <= 6; seed++) {
+      const r = solveLayout(parts, RECT, parts.map(() => false), { seed });
+      for (const i of r.moved) {
+        const d = Math.hypot(r.placements[i].x - parts[i].pos[0], r.placements[i].z - parts[i].pos[2]);
+        const turn = Math.abs(r.placements[i].yaw - parts[i].rot);
+        expect(d > MOVE_MIN || turn > TURN_MIN).toBe(true);
+      }
+    }
+  });
+
+  it('is not worth offering for a rounding error', () => {
+    // A solve that trims 3.1 to 2.4 by sliding a sofa 10 cm and a rug 10 cm has found
+    // a real improvement and is still not an answer to "give me an idea".
+    expect(isWorthOffering(3.1, 2.4)).toBe(false);
+    expect(isWorthOffering(85.5, 18.2)).toBe(true);
+    expect(isWorthOffering(4.0, 4.0)).toBe(false);
+  });
+});
+
+// ─── Circulation is a term, not a tiebreak ──────────────────────────────────
+//
+// `navigabilityCost` was applied only to the handful of finalists, which helps only
+// when the pool holds a candidate that is better. When the arrangement is already a
+// local minimum on every other term the annealer never leaves it, the pool holds ONE
+// candidate, and ranking one candidate is a no-op. So `RULE_HANDLING` claimed the
+// solver could fix `reach` and `cut-off` — the room report reads that to decide
+// whether to offer a **Try a fix** button — and the button did nothing.
+
+describe('the solver can open a route', () => {
+  /** Seven dining chairs strung across a 6 × 4 room, and a door on the north wall.
+   *  Nothing overlaps, no zone is blocked, the door swings freely and its route in is
+   *  clear — and chairs are not route-formers, so the walkway term is blind to them.
+   *  Every pairwise term is happy; half the floor has no way to it. */
+  function barricade(): ScenePart[] {
+    const out = [doorPart(-2)];
+    for (let i = 0; i < 7; i++) {
+      out.push(part({ category: 'chair', shape: 'chair-dining', dimMM: [480, 520, 850], pos: [-2.7 + i * 0.9, 0, 0.2] }));
+    }
+    return out;
+  }
+
+  it('sees floor that nothing connects to the door', () => {
+    const parts = barricade();
+    const m = prepare(ctxOf(parts));
+    const at = parts.map((p) => ({ x: p.pos[0], z: p.pos[2], yaw: p.rot }));
+    // Every OTHER term calls this a near-perfect room. That is the trap.
+    const plain = costBreakdown(m, at, DEFAULT_WEIGHTS);
+    expect(plain.total).toBeLessThan(2);
+    expect(navigabilityCost(m, at, NAV_CELL)).toBeGreaterThan(4);
+    expect(costBreakdown(m, at, DEFAULT_WEIGHTS, NAV_CELL).navigation).toBeGreaterThan(400);
+  });
+
+  it('opens it, at every seed', () => {
+    // Was 0 of 6 before the repair pass existed: the annealer had no reason to leave
+    // the arrangement, so the finalist pool held one candidate and ranking it changed
+    // nothing. The room report raised `cut-off` on the solver's own output.
+    const parts = barricade();
+    const m = prepare(ctxOf(parts));
+    for (let seed = 1; seed <= 6; seed++) {
+      const r = solveLayout(parts, RECT, parts.map(() => false), { seed });
+      expect(navigabilityCost(m, r.placements, NAV_CELL), `seed ${seed} left the room cut`).toBeLessThan(0.5);
+      expect(r.breakdownAfter.navigation).toBeLessThan(r.breakdownBefore.navigation);
+    }
+  });
+
+  it('costs a clean room almost nothing to check', () => {
+    // The repair pass runs only on a room that is actually cut. A clean one pays for
+    // one coarse field to find that out, and the search itself is untouched.
+    const parts = [doorPart(-2), sofa(), wardrobe(), table()];
+    const at: Placement[] = [
+      { x: -2, z: -1.975, yaw: 0 },
+      { x: 0, z: 1.5, yaw: Math.PI },
+      { x: 2.4, z: -1.7, yaw: 0 },
+      { x: 0, z: 0.4, yaw: 0 },
+    ];
+    const m = prepare(ctxOf(parts));
+    expect(navigabilityCost(m, at, NAV_CELL)).toBe(0);
+  });
+});
+
+/** The thresholds the solver reports a move at — a couple of centimetres, and about
+ *  three degrees. Spelled here because the tests above assert against them and a
+ *  number typed twice is a number that drifts. */
+const MOVE_MIN = 0.02;
+const TURN_MIN = 0.05;
+
 describe('re-fitting after a change', () => {
   /** A working bedroom whose wardrobe has been made much wider — which is exactly
    *  what happens when someone types a real product's size in. */
@@ -559,5 +693,161 @@ describe('navigability', () => {
     // "you cannot get to this" claim would be a guess dressed as a measurement.
     const model = prepare(boxCtx(wardrobes()));
     expect(navigabilityCost(model, ACROSS)).toBe(0);
+  });
+});
+
+describe('which anchor an obligation is discharged by', () => {
+  // `relationParents` is the argmin `costBreakdown` computes and used to throw away.
+  // Part III of §3.10.3 builds a group forest out of it, so it has to answer the same
+  // way twice — and a band costs ZERO everywhere inside it, so equal-cost anchors are
+  // the common case rather than the exotic one.
+  const lamp = () =>
+    part({ category: 'lamp', shape: 'lamp-floor', dimMM: [400, 400, 1500], pos: [0, 0, 0] });
+  const armchair = () =>
+    part({ category: 'chair', shape: 'chair-armchair', dimMM: [700, 700, 900], pos: [0, 0, 0] });
+
+  const parentOf = (parts: ScenePart[], places: Placement[], childIdx: number): string => {
+    const m = prepare(ctxOf(parts));
+    const edge = relationParents(m, places).find((e) => e.child === childIdx)!;
+    return parts[edge.parent].id;
+  };
+
+  it('gives a lamp to the nearer of two seats it is equally close enough to', () => {
+    // Both gaps are inside `lamp-seat`'s 0–0.7 m band, so both cost exactly 0 and
+    // the argmin is a dead heat on cost alone. A lamp belongs to the chair it is
+    // actually beside.
+    // The FAR chair is listed first on purpose: with array order deciding, this is
+    // the case that comes back wrong, and a fixture that listed the near one first
+    // would pass either way.
+    const l = lamp();
+    const far = armchair();
+    const near = armchair();
+    const parts = [l, far, near];
+    const places: Placement[] = [
+      { x: 0, z: 0, yaw: 0 },
+      { x: -1.05, z: 0, yaw: 0 }, // gap 0.50 m
+      { x: 0.75, z: 0, yaw: 0 }, // gap 0.20 m
+    ];
+    const m = prepare(ctxOf(parts));
+    const edge = relationParents(m, places).find((e) => e.child === 0)!;
+    expect(edge.cost).toBe(0);
+    expect(parts[edge.parent].id).toBe(near.id);
+  });
+
+  it('answers the same when the two seats are listed the other way round', () => {
+    // The regression this exists for: before the tie-break the winner was whichever
+    // came first in `parts`, and `parts` order changes whenever a piece is added or
+    // deleted anywhere in the room.
+    const l = lamp();
+    const near = armchair();
+    const far = armchair();
+    const nearAt: Placement = { x: 0.75, z: 0, yaw: 0 };
+    const farAt: Placement = { x: -1.05, z: 0, yaw: 0 };
+    const lampAt: Placement = { x: 0, z: 0, yaw: 0 };
+    expect(parentOf([l, near, far], [lampAt, nearAt, farAt], 0)).toBe(near.id);
+    expect(parentOf([l, far, near], [lampAt, farAt, nearAt], 0)).toBe(near.id);
+  });
+
+  it('still decides an exactly symmetric room, and decides it the same way twice', () => {
+    // Mirrored seeding produces exact ties on cost AND distance — the one place
+    // floating point will not separate them for us. The id is the last rung, and it
+    // is stable across every reordering because it does not depend on position.
+    const l = lamp();
+    const a = armchair();
+    const b = armchair();
+    const lampAt: Placement = { x: 0, z: 0, yaw: 0 };
+    const left: Placement = { x: -0.75, z: 0, yaw: 0 };
+    const right: Placement = { x: 0.75, z: 0, yaw: 0 };
+    const one = parentOf([l, a, b], [lampAt, left, right], 0);
+    const other = parentOf([l, b, a], [lampAt, right, left], 0);
+    expect(one).toBe(other);
+    expect([a.id, b.id]).toContain(one);
+  });
+});
+
+describe('the solver moves groups, not only pieces', () => {
+  // §3.10.3 part III, and the one case the flat search provably cannot do. Two groups,
+  // each internally correct, standing where the other one belongs: taking any single
+  // piece out of a coherent group makes the room worse, so every single-piece move is
+  // uphill and the annealer stays where it is. Measured on the open plan before the
+  // group pass existed — 0–1 pieces moved of eleven, at every seed.
+  const LIVING = new Set(['sofa', 'coffee-table', 'rug', 'lamp-floor']);
+  const DINING = new Set(['desk-standard', 'chair-dining']);
+
+  /** A seeded preset with its two groups exchanged bodily. Nothing inside a group has
+   *  moved relative to its own members — only the groups are in the wrong places. */
+  function groupsExchanged(id: 't' | 'open', w: number, d: number) {
+    const poly = footprintForLayout(id, w, d);
+    const seeded = defaultScene(id, w, d, { footprint: poly, height: 2.8 });
+    const mid = (set: Set<string>) => {
+      const g = seeded.filter((p) => set.has(p.shape) && !p.wallMounted);
+      return [
+        g.reduce((s, p) => s + p.pos[0], 0) / g.length,
+        g.reduce((s, p) => s + p.pos[2], 0) / g.length,
+      ];
+    };
+    const [lx, lz] = mid(LIVING);
+    const [dx, dz] = mid(DINING);
+    const parts = seeded.map((p) => {
+      if (p.wallMounted) return { ...p };
+      const set = LIVING.has(p.shape) ? LIVING : DINING.has(p.shape) ? DINING : null;
+      if (!set) return { ...p };
+      const [ox, oz] = set === LIVING ? [dx - lx, dz - lz] : [lx - dx, lz - dz];
+      return { ...p, pos: [p.pos[0] + ox, p.pos[1], p.pos[2] + oz] as [number, number, number] };
+    });
+    const sctx: LayoutContext = { parts: seeded, movable: seeded.map(() => true), footprint: poly };
+    const target = costBreakdown(prepare(sctx), at(seeded), DEFAULT_WEIGHTS, NAV_CELL).total;
+    return { parts, poly, target };
+  }
+
+  it('carries two exchanged groups back where they belong', () => {
+    const { parts, poly, target } = groupsExchanged('t', 5.5, 4.7);
+    const model = prepare({ parts, movable: parts.map((p) => !p.wallMounted), footprint: poly });
+
+    // Nine seeds, because one run of a stochastic search proves nothing either way,
+    // and on the MEDIAN, because this fixture's mean is dominated by a couple of seeds
+    // that end badly with the pass on or off. Measured, group pass off → on:
+    //
+    //   median  30.2 → 1.6      best  11.8 → 0.6      worst of nine  39.7 → 25.4
+    //
+    // The whole distribution moves: even the worst run with the pass beats the median
+    // without it. Both bars below are checked by mutation — setting `GROUP_STEPS = 0`
+    // fails each of them, which an earlier version of this test did not.
+    const costs = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+      .map((seed) => solveLayout(parts, poly, parts.map(() => false), { seed }))
+      .map((r) => costBreakdown(model, r.placements, DEFAULT_WEIGHTS, NAV_CELL).total)
+      .sort((a, b) => a - b);
+
+    expect(costs[4]).toBeLessThan(10);
+    // …and the best run gets under the room it was built from, which no run does
+    // without the pass: the flat search's best of nine is 11.8 against a 5.5 target.
+    expect(costs[0]).toBeLessThan(target);
+  });
+
+  it('finds the swap in an open plan the flat search sits still in', () => {
+    // The gentler case — the two halves are similar enough that exchanging the groups
+    // breaks no wall, so the room is merely worse rather than invalid, and every single
+    // piece move out of it is uphill. Off → on, over nine seeds: median 19.9 → 16.0.
+    const { parts, poly } = groupsExchanged('open', 7.5, 5.6);
+    const model = prepare({ parts, movable: parts.map((p) => !p.wallMounted), footprint: poly });
+    const costs = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+      .map((seed) => solveLayout(parts, poly, parts.map(() => false), { seed }))
+      .map((r) => costBreakdown(model, r.placements, DEFAULT_WEIGHTS, NAV_CELL).total)
+      .sort((a, b) => a - b);
+    expect(costs[4]).toBeLessThan(19);
+  });
+
+  it('finds no group in a room nobody has arranged', () => {
+    // The complement, and why `intactGroups` reads the arrangement rather than the
+    // relation table: where nothing is currently grouped there is nothing to carry, the
+    // pass finds nothing and is skipped, and the flat search does the work — which is
+    // measurably the right answer there (363.7 → 6.8 over six seeds).
+    const parts = [
+      part({ category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880], pos: [1.6, 0.44, 1.6], rot: 0.4 }),
+      part({ category: 'table', shape: 'coffee-table', dimMM: [1100, 600, 420], pos: [-2.4, 0.21, -1.5], rot: 1.1 }),
+      part({ category: 'lamp', shape: 'lamp-floor', dimMM: [400, 400, 1500], pos: [2.5, 0.75, -1.6], rot: 0, circle: true }),
+    ];
+    const model = prepare(ctxOf(parts));
+    expect(relationParents(model, at(parts)).every((e) => e.cost > 0.25)).toBe(true);
   });
 });
