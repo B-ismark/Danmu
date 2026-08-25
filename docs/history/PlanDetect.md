@@ -34,7 +34,7 @@ correction is folded in with a note.
 | 6 — confidence honesty | not started | No open decision. Needs the `source` field in both codec directions |
 | 7 — measure ceiling items | not started | **Decided: width only.** See §10.7 for why height is not measurable here |
 | 8 — pipeline harness | not started | **Decided: analytic ground truth only**, no renderer |
-| 9 — dead-field removal | not started | **Decided: cut `alsoSeenIn`** from the prompt and the type |
+| 9 — dead-field removal | **done** | `alsoSeenIn` cut from the type and all three prompt clauses. `position.y` turned out **not** to be dead — see the correction below |
 
 **Order from here: 9 → 7 → 8 → 5.** This departs from §6, deliberately. §6 put 5
 before 8 so the harness could measure a SigLIP decision, but Phase 5 has since become
@@ -43,7 +43,39 @@ invasive remaining phase and the one most likely to collide with UX work in the 
 tree. The harness should exist before it, not after. 9 and 7 are small and go first
 because they are cheap and independent.
 
-Gates after Phase 4: 999 tests, 55 files, typecheck / lint / build clean.
+Gates after Phase 9: 1000 tests, 55 files, typecheck / lint / build clean.
+
+**Correction to §3 and §10.9: `position.y` was not dead metadata. It was a gate,
+and the gate was a bug.** The audit read `groundY` overwriting `pos[1]`
+unconditionally and concluded the AI's `y` had no consumer. Reading
+`buildSceneFromRoom` rather than the audit's summary of it found **two** uses, of
+which only the first is dead:
+
+1. `pos: [aiPos.x, aiPos.y, aiPos.z]` — dead, overwritten two lines later.
+2. `typeof aiPos.y === 'number' && aiPos.y >= 0 && aiPos.y <= h` — **a validity
+   test on the whole position.** Fail it and x and z are discarded too, and the
+   part falls back to `placementForSlot`.
+
+So cutting `y` from the prompt while that gate stood would have rejected every
+position and silently returned the whole detected-room path to slot-snapping — the
+exact shape of failure this plan exists to remove, introduced by the phase whose
+brief was "delete fields with no reader". The reader was there; it was reading the
+wrong axis.
+
+The gate now tests x and z only. A fan the model put 3.2 m up in a 2.8 m room is a
+fan with a wrong height, not a fan in the wrong corner, and its floor position was
+being thrown away for it. `tests/scene-build.test.ts` pins it: same detection at
+y = 0.45 and y = 99 must land in the same place, with a premise assertion that the
+recorded position is honoured at all so the test cannot pass by both rows falling
+back together. Mutation-verified — restoring the height check moves the part from
+(1.4, 0.9) to (−0.64, −1.7), i.e. snapped to the N wall.
+
+**What was done about `y`, and what was declined.** The prompt no longer asks the
+model to compute mounting or standing heights — that was tokens spent on a number
+`groundY` owns and overwrites. It is asked to send 0. The field stays required in
+all three declarations (`Detection.position`, `GeoPlacement.position`, the
+persisted `detectedObjects[].position`): making it optional in three places,
+one of them a persisted schema, buys nothing once nothing reads it.
 
 **Phase 4's real yield, measured against the benchmark rather than estimated.**
 Ranges reject **four** of the six documented failures, not the two or three §3
@@ -685,8 +717,10 @@ Acceptance per phase:
   is updated deliberately, not deleted.
 - **8** — harness runs in CI and reports a number. Analytic ground truth only; if
   a renderer ever appears it is an opt-in local script and never a CI dependency.
-- **9** — the field, the three prompt clauses and the stale comment in
-  `lib/detect-refine.ts` all go together. `position.y` is a separate decision.
+- **9** — ~~the field, the three prompt clauses and the stale comment in
+  `lib/detect-refine.ts` all go together. `position.y` is a separate decision.~~
+  Done, and `position.y` was a separate decision for a better reason than expected:
+  it was load-bearing. See the correction in §0.
 
 ### Not covered by tests, and worth knowing
 
