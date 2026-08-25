@@ -394,8 +394,15 @@ export default function DetectPage() {
       // Calibrate every photo up front (floor-line → exact, else default FOV)
       // so geometry-derived dims are available to detections + manual adds.
       let calMap: CalMap = {};
-      if (room) {
-        const dims = { width: room.width, depth: room.depth };
+      // Built ONCE and shared by the calibration, the geometry pass and the label
+      // verdicts. It used to be constructed twice from the same `room`, which is
+      // how a third dimension gets added to one copy and not the other — and the
+      // one that would have silently lost it is the geometry pass, where a missing
+      // ceiling means every fan in the room stops being measured.
+      const dims: RoomDims | null = room
+        ? { width: room.width, depth: room.depth, height: room.height }
+        : null;
+      if (dims) {
         calMap = await buildCals(entries, dims);
         if (!cancelled) {
           setCals(calMap);
@@ -438,7 +445,6 @@ export default function DetectPage() {
         // Geometry pass, then the merge — in that order, which is the whole
         // reason this is one call into lib. The AI result only contributes
         // label/category and a depth hint.
-        const dims = room ? { width: room.width, depth: room.depth } : null;
         const refined = keyed(refineDetections(dets, calMap, dims));
         setDetections(refined);
         // Auto-confirm the detector's own high-confidence rows — but never one the
@@ -1104,6 +1110,16 @@ function DetectionRow({
           )
           .join(' and ')
       : '';
+  // Only the axes that were actually measured. A ceiling item is measured on width
+  // alone, so printing a "×" and a second number there would put a catalogue
+  // default on screen in the sentence that says "Measured".
+  const took =
+    verdict.status === 'suspect'
+      ? [
+          formatDim(verdict.measured.width, dimUnit),
+          ...(verdict.measured.height === undefined ? [] : [formatDim(verdict.measured.height, dimUnit)]),
+        ].join(' × ')
+      : '';
   return (
     // Hover AND focus drive the same highlight, so a keyboard user gets the
     // row↔photo link too. onFocus/onBlur bubble from the child buttons.
@@ -1176,8 +1192,7 @@ function DetectionRow({
             }}
           >
             <span style={{ flex: '1 1 auto', minWidth: 0 }}>
-              Measured {formatDim(verdict.measured.width, dimUnit)} × {formatDim(verdict.measured.height, dimUnit)}{' '}
-              {dimUnit} — {categoryLabel(d.category)} range is {miss}
+              Measured {took} {dimUnit} — {categoryLabel(d.category)} range is {miss}
             </span>
             {verdict.candidates.slice(0, 2).map((cand) => (
               <button

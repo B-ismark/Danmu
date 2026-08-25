@@ -6,11 +6,19 @@ import { dimRangeFor } from '@/lib/dimension-ranges';
 import type { CalMap, RoomDims } from '@/lib/detect-refine';
 import type { Detection } from '@/lib/detection';
 
-const ROOM: RoomDims = { width: 6, depth: 4 };
+const ROOM: RoomDims = { width: 6, depth: 4, height: 2.8 };
 const CAL: CameraCal = { k: 1.2, aspect: 4 / 3 };
 const CALS: CalMap = { n: CAL, e: CAL, w: CAL }; // 's' deliberately uncalibrated
 const WALL_BOX: Detection['box'] = [0.4, 0.4, 0.2, 0.2];
 const FLOOR_BOX: Detection['box'] = [0.4, 0.55, 0.2, 0.3];
+// A ~106° phone ultrawide: the only common lens whose frame contains any ceiling
+// from 1.5 m in a 2.8 m room. See placeCeilingObject.
+const WIDE: CameraCal = { k: 2 * Math.tan(((106 / 2) * Math.PI) / 180), aspect: 4 / 3 };
+const WIDE_CALS: CalMap = { n: WIDE, e: WIDE, w: WIDE };
+// Centre row high above the horizon — where a ceiling fixture lands. The wide one
+// measures ~1.26 m (a plausible fan); the narrow one ~0.1 m (a hook).
+const CEILING_BOX: Detection['box'] = [0.33, 0.03, 0.29, 0.14];
+const HOOK_BOX: Detection['box'] = [0.47, 0.03, 0.023, 0.14];
 
 function det(p: Partial<Detection> & Pick<Detection, 'category' | 'slot'>): Detection {
   return { label: 'thing', conf: 0.9, box: FLOOR_BOX, ...p };
@@ -242,5 +250,52 @@ describe('judgeLabels', () => {
     // in particular none is `ok` — the geometry never agreed with anything.
     const dets = [det({ category: 'bed', slot: 'n', box: WALL_BOX })];
     expect(judgeLabels(dets, CALS, null).map((v) => v.status)).toEqual(['unmeasured']);
+  });
+});
+
+describe('judgeLabel — ceiling items', () => {
+  it('delivers the benchmark’s ceiling-hook row, on width alone', () => {
+    // §3 of the detection plan listed "a ceiling hook called a ceiling fan" as a
+    // real finding that arithmetic could reach but geoRefine could not, because
+    // nothing measured a ceiling. 100 mm against a fan's 900 mm floor is now an
+    // actual measurement rather than a table lookup.
+    const v = judgeLabel(det({ category: 'fan', shape: 'fan', slot: 'n', box: HOOK_BOX }), WIDE_CALS, ROOM);
+    expect(v.status).toBe('suspect');
+    if (v.status !== 'suspect') return;
+    expect(v.failed).toEqual(['width']);
+    // Nothing measured a height, so none is reported. A caller printing a fallback
+    // here would put a catalogue default on screen after the word "Measured".
+    expect(v.measured.height).toBeUndefined();
+    expect(v.measured.width).toBeLessThan(dimRangeFor('fan', 'fan').min[0]);
+  });
+
+  it('never accuses a ceiling word on a height it did not measure', () => {
+    // A plausible fan width, carrying an AI height hint far outside the fan band.
+    // The hint survives into dimMM — clampDims gates it downstream, as it gates
+    // every hint — but it is NOT evidence against the word, because one model
+    // produced both the word and the number. They agree by construction.
+    const tall = det({
+      category: 'fan',
+      shape: 'fan',
+      slot: 'n',
+      box: CEILING_BOX,
+      dimMM: [1, 1000, 3000],
+    });
+    expect(3000).toBeGreaterThan(dimRangeFor('fan', 'fan').max[2]); // premise
+    expect(sizeFitsLabel('fan', 'fan', 1260, 3000)).toBe(false); // …and would fail
+    expect(judgeLabel(tall, WIDE_CALS, ROOM).status).toBe('ok');
+  });
+
+  it('clears a plausible fan', () => {
+    const v = judgeLabel(det({ category: 'fan', shape: 'fan', slot: 'n', box: CEILING_BOX }), WIDE_CALS, ROOM);
+    expect(v).toEqual({ status: 'ok' });
+  });
+
+  it('still says nothing when no ceiling is in frame', () => {
+    // Narrow level lens: placeCeilingObject refuses, geoRefine returns its input,
+    // and identity is still how measurability is established.
+    expect(judgeLabel(det({ category: 'fan', shape: 'fan', slot: 'n', box: CEILING_BOX }), CALS, ROOM).status).toBe(
+      'unmeasured',
+    );
   });
 });

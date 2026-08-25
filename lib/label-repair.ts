@@ -23,6 +23,7 @@
 
 import { dimRangeFor } from './dimension-ranges';
 import { geoRefine, type CalMap, type RoomDims } from './detect-refine';
+import { anchorFor } from './physics';
 import { CATEGORIES, type Category, type Shape } from './scene-spec';
 import type { Detection } from './detection';
 
@@ -55,8 +56,11 @@ export type LabelVerdict =
       failed: SizeAxis[];
       /** What the detector's own word allows, mm, as [min, max] per axis. */
       allowed: { width: [number, number]; height: [number, number] };
-      /** What the camera measured, mm. */
-      measured: { width: number; height: number };
+      /** What the camera measured, mm. `height` is ABSENT when the anchor could
+       *  not observe it — a ceiling placement measures width only. A caller that
+       *  prints a fallback there is printing a catalogue default as a
+       *  measurement. */
+      measured: { width: number; height?: number };
       /** Better words, most comfortable fit first, each already re-measured under
        *  its own anchor. **Empty is a real answer** — it means nothing in the
        *  vocabulary is that shape, so the finding is a flag with no repair. */
@@ -84,6 +88,18 @@ function failedAxes(category: Category, shape: Shape, widthMM: number, heightMM:
   return out;
 }
 
+/** Which axes a measurement under this word's own anchor actually observed.
+ *
+ *  A ceiling placement sees WIDTH only: the bbox's vertical extent for something
+ *  photographed from below is a foreshortened diameter, not a height (see
+ *  `placeCeilingObject`), so the H that comes back is a catalogue default or the
+ *  AI's own hint. Judging a word against either is judging the model's number
+ *  against the model's word — they agree by construction, which is the whole
+ *  reason this module exists. */
+function measuredAxes(category: Category, shape: Shape): readonly SizeAxis[] {
+  return anchorFor(category, shape) === 'ceiling' ? ['width'] : ['width', 'height'];
+}
+
 /** How far inside a band a value sits, as a fraction of the band's span. 0 is on a
  *  bound, 0.5 is dead centre, negative is outside. */
 function axisMargin(v: number, lo: number, hi: number): number {
@@ -92,9 +108,17 @@ function axisMargin(v: number, lo: number, hi: number): number {
   return Math.min(v - lo, hi - v) / span;
 }
 
-function sizeMargin(category: Category, shape: Shape, widthMM: number, heightMM: number): number {
+function sizeMargin(
+  category: Category,
+  shape: Shape,
+  widthMM: number,
+  heightMM: number,
+  axes: readonly SizeAxis[] = ['width', 'height'],
+): number {
   const r = dimRangeFor(category, shape);
-  return Math.min(axisMargin(widthMM, r.min[0], r.max[0]), axisMargin(heightMM, r.min[2], r.max[2]));
+  const w = axes.includes('width') ? axisMargin(widthMM, r.min[0], r.max[0]) : Infinity;
+  const h = axes.includes('height') ? axisMargin(heightMM, r.min[2], r.max[2]) : Infinity;
+  return Math.min(w, h);
 }
 
 /** Which categories could be this size, most comfortable fit first.
@@ -134,7 +158,12 @@ export function judgeLabel(d: Detection, cals: CalMap, room: RoomDims): LabelVer
   const widthMM = measured.dimMM[0];
   const heightMM = measured.dimMM[2];
 
-  const failed = failedAxes(category, shape, widthMM, heightMM);
+  // Only the axes this anchor could see may accuse the word. For a ceiling item
+  // that is width alone — enough for both ceiling rows of the benchmark (a hook
+  // at 100 mm against a fan's 900 mm floor, a fan at 1200 mm against a lamp's
+  // 800 mm ceiling), and honest about the rest.
+  const axes = measuredAxes(category, shape);
+  const failed = failedAxes(category, shape, widthMM, heightMM).filter((a) => axes.includes(a));
   if (failed.length === 0) return { status: 'ok' };
 
   const r = dimRangeFor(category, shape);
@@ -151,9 +180,18 @@ export function judgeLabel(d: Detection, cals: CalMap, room: RoomDims): LabelVer
     // measured finding.
     if (trial === seed || !trial.dimMM) continue;
     // Re-measured, so check again: changing the word can change the projection,
-    // and a candidate that only fitted the old measurement is not a repair.
-    if (!sizeFitsLabel(c, 'box', trial.dimMM[0], trial.dimMM[2])) continue;
-    candidates.push({ category: c, detection: trial, margin: sizeMargin(c, 'box', trial.dimMM[0], trial.dimMM[2]) });
+    // and a candidate that only fitted the old measurement is not a repair. Same
+    // axis restriction as above — a ceiling candidate is checked on width, because
+    // width is what measuring it as a ceiling item produced. The pre-filter above
+    // has already tested BOTH axes against the original measurement, so a fan is
+    // only ever shortlisted for something whose real height was fan-plausible.
+    const cAxes = measuredAxes(c, 'box');
+    if (failedAxes(c, 'box', trial.dimMM[0], trial.dimMM[2]).some((a) => cAxes.includes(a))) continue;
+    candidates.push({
+      category: c,
+      detection: trial,
+      margin: sizeMargin(c, 'box', trial.dimMM[0], trial.dimMM[2], cAxes),
+    });
   }
   candidates.sort((a, b) => b.margin - a.margin);
 
@@ -161,7 +199,7 @@ export function judgeLabel(d: Detection, cals: CalMap, room: RoomDims): LabelVer
     status: 'suspect',
     failed,
     allowed: { width: [r.min[0], r.max[0]], height: [r.min[2], r.max[2]] },
-    measured: { width: widthMM, height: heightMM },
+    measured: { width: widthMM, ...(axes.includes('height') ? { height: heightMM } : {}) },
     candidates,
   };
 }
