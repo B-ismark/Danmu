@@ -21,6 +21,7 @@
 // persisted-schema change for cosmetics, and `RoomData.version` exists for the
 // first change that actually needs it.
 
+import type { DetectSource } from './detect-confidence';
 import type { Detection } from './detection';
 import type { CaptureSlot, RoomData } from './storage';
 
@@ -45,6 +46,7 @@ export function toRecord(d: Detection, index: number, locked: boolean, mintUid: 
     uid: d.uid ?? mintUid(),
     label: `${cleanLabelOf(d)}__slot:${d.slot}`,
     conf: d.conf,
+    source: d.source,
     locked,
     box: d.box,
     category: d.category,
@@ -66,6 +68,10 @@ export function fromRecord(r: SavedDetection): Detection {
     uid: r.uid,
     label: r.label.replace(SLOT_SUFFIX, ''),
     conf: r.conf,
+    // Widened to `string` in the record and narrowed back here, the same way
+    // `category` is. An unrecognised value reads as undefined rather than being
+    // trusted, and `sourceOf` then supplies the historical default.
+    source: (['local', 'cloud', 'manual'] as const).find((s) => s === r.source) as DetectSource | undefined,
     box: r.box,
     category: (r.category ?? 'other') as Detection['category'],
     slot: ((r.label.match(/__slot:([nesw])$/) ?? [])[1] ?? 'n') as CaptureSlot,

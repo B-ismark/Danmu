@@ -113,6 +113,11 @@ export type RoomData = {
     uid?: string;
     label: string;
     conf: number;
+    /** Which detector produced this — 'local' | 'cloud' | 'manual'. A string rather
+     *  than the union, like `category` beside it, because a record written by a
+     *  later build must not fail to parse in an earlier one. Absent on rooms saved
+     *  before it existed; lib/detect-confidence.ts reads those as 'cloud'. */
+    source?: string;
     locked: boolean;
     box: [number, number, number, number];
     category?: string;

@@ -28,6 +28,7 @@ import {
 import { hfovFromFocal35 } from '@/lib/exif';
 import { geoRefine, refineDetections, type CalMap, type RoomDims } from '@/lib/detect-refine';
 import { judgeLabels, type LabelCandidate, type LabelVerdict } from '@/lib/label-repair';
+import { shouldAutoConfirm, sourceLabel, sourceOf } from '@/lib/detect-confidence';
 import { cleanLabelOf, fromRecord, toRecord, type SavedDetection } from '@/lib/detection-record';
 import { formatDim } from '@/lib/units';
 import type { DimUnit } from '@/lib/store';
@@ -392,14 +393,13 @@ export default function DetectPage() {
         // label/category and a depth hint.
         const refined = keyed(refineDetections(dets, calMap, dims));
         setDetections(refined);
-        // Auto-confirm the detector's own high-confidence rows — but never one the
-        // measurement contradicts. A 0.9 self-report next to a size no bed could
-        // have is one row saying two different things, and locking it would file
-        // the finding away behind a padlock before anyone read it.
+        // Which rows to tick before the user has looked at them. The whole policy
+        // lives in lib/detect-confidence.ts, because it was three unrelated
+        // confidence scales being compared against one literal here.
         const judged = judgeLabels(refined, calMap, dims);
         const marks = new Set<number>();
         refined.forEach((d, i) => {
-          if (d.conf >= 0.85 && judged[i].status !== 'suspect') marks.add(i);
+          if (shouldAutoConfirm(d, judged[i].status)) marks.add(i);
         });
         setConfirmed(marks);
         if (refined.length === 0) {
@@ -524,7 +524,10 @@ export default function DetectPage() {
     let det: Detection = {
       uid: uuid(),
       label: categoryLabel(manualCat),
+      // Not a confidence. A sentinel for "the user drew this", which is why
+      // `source` carries the meaning and this number is never compared.
       conf: 1,
+      source: 'manual',
       box,
       category: manualCat,
       slot: activeSlot,
@@ -1117,7 +1120,10 @@ function DetectionRow({
         {/* Confidence percentages and slot codes were telemetry. What helps is
             which photo it came from and what Danmu thinks it is. */}
         <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>
-          {categoryLabel(d.category)} · {slotLabel(d.slot)}
+          {/* Who found it, said plainly. A row the user drew and a row a language
+              model guessed at look identical otherwise, and they are not the same
+              claim. */}
+          {categoryLabel(d.category)} · {slotLabel(d.slot)} · {sourceLabel(sourceOf(d))}
         </div>
         {/* The measurement disagreeing with the word. Said out loud rather than
             acted on: a silent re-label is the same mistake as a silent resize.

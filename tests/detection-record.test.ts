@@ -15,6 +15,7 @@ const full: Detection = {
   uid: 'stable-key',
   label: 'double bed',
   conf: 0.83,
+  source: 'cloud',
   box: [0.1, 0.2, 0.3, 0.4],
   category: 'bed',
   slot: 'e',
@@ -36,6 +37,28 @@ describe('toRecord / fromRecord', () => {
     // position, no shape, no colour. That path must survive the codec too.
     const bare: Detection = { uid: 'k', label: 'chair', conf: 0.4, box: [0, 0, 0.2, 0.2], category: 'chair', slot: 'n' };
     expect(fromRecord(toRecord(bare, 3, true, uid))).toEqual(bare);
+  });
+
+  it('round-trips each source, and refuses a value it does not recognise', () => {
+    // `source` is a union in Detection and a bare string in the record, so this is
+    // the boundary where a room written by a later build meets an earlier one. An
+    // unrecognised value must come back UNDEFINED rather than be trusted through —
+    // `sourceOf` then supplies the historical default, which is a decision made in
+    // one place instead of a bad string propagating into a threshold lookup.
+    for (const source of ['local', 'cloud', 'manual'] as const) {
+      expect(fromRecord(toRecord({ ...full, source }, 0, false, uid)).source, source).toBe(source);
+    }
+    const forged: SavedDetection = {
+      id: 0,
+      label: 'thing__slot:n',
+      conf: 0.5,
+      locked: false,
+      box: [0, 0, 1, 1],
+      source: 'satellite',
+    };
+    expect(fromRecord(forged).source).toBeUndefined();
+    // And a record from before the field existed is not an error either.
+    expect(fromRecord({ ...forged, source: undefined }).source).toBeUndefined();
   });
 
   it('keeps a uid it was given and mints one only when there is none', () => {

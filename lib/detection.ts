@@ -4,6 +4,7 @@ import { GoogleGenAI } from '@google/genai';
 import { useQuota } from './quota';
 import { footprintForLayout, type LayoutId } from './footprint';
 import { CATALOG_SHAPES_ORDERED } from './scene-spec';
+import type { DetectSource } from './detect-confidence';
 import type { CaptureSlot } from './storage';
 
 export type PromptRoom = { width: number; depth: number; height: number; layoutId?: LayoutId };
@@ -19,7 +20,14 @@ export type Detection = {
    *  survive a re-detect. Absent until the detection is first saved. */
   uid?: string;
   label: string;
+  /** Confidence, on a scale that depends entirely on `source` — a class score, an
+   *  LLM's opinion of itself, or a literal 1 meaning "the user drew this". Never
+   *  compare it against a bare number; `shouldAutoConfirm` knows which scale it is
+   *  on. See lib/detect-confidence.ts. */
   conf: number;
+  /** Who produced this detection. Absent on rooms saved before the field existed,
+   *  which were all the cloud path — see `sourceOf`. */
+  source?: DetectSource;
   /** [x, y, w, h] normalized 0..1 within the image of `slot` */
   box: [number, number, number, number];
   category: 'sofa' | 'tv' | 'chair' | 'table' | 'lamp' | 'plant' | 'shelf' | 'rug' | 'bed' | 'desk' | 'curtain' | 'fan' | 'monitor' | 'fridge' | 'wardrobe' | 'mirror' | 'painting' | 'nightstand' | 'ottoman' | 'ac' | 'door' | 'other';
@@ -234,7 +242,11 @@ export async function detectAcrossImages(
   // and it used to be taken on the model's own guessed `position` — the exact
   // numbers the geometry pass then overwrote. It now runs in lib/detect-refine.ts
   // AFTER refinement, which also means the on-device path gets it too.
-  return (parsed as Detection[]).filter((d) => d.box && d.box.length === 4 && d.slot);
+  return (parsed as Detection[])
+    .filter((d) => d.box && d.box.length === 4 && d.slot)
+    // Stamped here rather than at the call site, so the one function that talks to
+    // Gemini is the one function that can claim its output came from Gemini.
+    .map((d) => ({ ...d, source: 'cloud' as const }));
 }
 
 function blobToBase64(blob: Blob): Promise<string> {
