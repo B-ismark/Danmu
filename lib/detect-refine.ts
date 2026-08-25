@@ -166,17 +166,23 @@ const SAME_BOX_IOU = 0.5;
  *
  *  1. Same slot + same category + bounding boxes overlapping by `SAME_BOX_IOU` —
  *     one object boxed twice in the same photo.
- *  2. Same label + same category ACROSS slots, but only when their estimated 3D
- *     positions agree to within that category's own merge distance — one object
- *     seen from two walls.
+ *  2. Same label + same category, in ANY slot including the same one, but only
+ *     when their estimated 3D positions agree to within that category's own merge
+ *     distance — one object seen from two walls, or boxed twice in one photo
+ *     without the boxes overlapping enough for rule 1.
  *
- *  Rule 2 is the ONLY mechanism for that second case, deliberately. The prompt
- *  used to ask the model to name the other slots in an `alsoSeenIn` field, which
- *  no code ever read. Two independent measurements
- *  landing in the same place is better evidence than the model's own opinion about
- *  which walls it saw something in — and asking for that opinion would put AI
- *  judgement back into the decision `refineDetections` just moved onto
- *  measurements.
+ *  Rule 2 carries no slot test on purpose. Its headline case is cross-slot, but a
+ *  detector that boxes one sofa as two non-overlapping halves in a single photo is
+ *  caught here rather than by rule 1, and both are the same question: do these two
+ *  rows measure to one place. `tests/detect-pipeline.test.ts` depends on the wider
+ *  reading — its gallery-pair fixtures are same-slot.
+ *
+ *  Rule 2 is the ONLY mechanism for the cross-slot case, deliberately. The prompt
+ *  used to ask the model to name the other slots in an `alsoSeenIn` field, which no
+ *  code ever read. Two independent measurements landing in the same place is better
+ *  evidence than the model's own opinion about which walls it saw something in — and
+ *  asking for that opinion would put AI judgement back into the decision
+ *  `refineDetections` just moved onto measurements.
  *
  *  Rule 2 used to match on the label alone, with no positional test at all, so any
  *  two objects the model named identically collapsed into one: four matching
@@ -186,13 +192,19 @@ const SAME_BOX_IOU = 0.5;
  *  compare, and we keep both — a duplicate the user can delete beats a real piece
  *  of furniture that never appears.
  *
+ *  **The label test that survives at the bottom of rule 2 is a decision, not a
+ *  leftover.** Dropping it — so that position alone decides — was proposed, priced
+ *  and refused: see the second describe block in `tests/detect-pipeline.test.ts`,
+ *  which holds both directions as tests. It costs a real piece of furniture on
+ *  every run where two same-category pieces sit closer than their tier (two
+ *  paintings 0.30 m apart against painting's 0.35 m), and buys back a duplicate
+ *  that is one tap from gone. Same asymmetry as everywhere else in this file.
+ *
  *  Exported for tests: this is pure logic that decides what the user gets from the
  *  one call that spends their quota. */
 export function dedupeDetections(items: Detection[]): Detection[] {
   const out: Detection[] = [];
   for (const d of items) {
-    const cx = d.box[0] + d.box[2] / 2;
-    const cy = d.box[1] + d.box[3] / 2;
     const isDup = out.some((o) => {
       if (o.category !== d.category) return false;
       // Same photo — heavily overlapping boxes mean one object boxed twice.

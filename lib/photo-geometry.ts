@@ -208,8 +208,10 @@ function slotToWorld(
 
 export type GeoPlacement = {
   /** world position — x/z centre; y = 0 floor anchor (floor), mount centre
-   *  (wall), or the ceiling plane (ceiling, where the TOP edge is what was
-   *  intersected). Downstream, `groundY` owns this axis outright. */
+   *  (wall), or the ceiling plane itself (ceiling — the surface intersected, not an
+   *  estimate; the row of the bbox that is intersected is the MIDDLE one, and
+   *  `placeCeilingObject` is where that matters). Downstream, `groundY` owns this
+   *  axis outright. */
   position: { x: number; y: number; z: number };
   /** real size estimate in mm — [W, H]; depth is NOT observable from one photo. */
   widthMM: number;

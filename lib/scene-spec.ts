@@ -1523,29 +1523,18 @@ const CATEGORY_DEFAULTS: Record<
   other: { shape: 'box', dim: [600, 600, 800] },
 };
 
-/** The D axis of a category's typical size, narrowed by whatever range governs
- *  the shape actually named.
- *
- *  This exists because ONE photo cannot observe depth — `GeoPlacement` in
- *  lib/photo-geometry.ts returns W and H and says so in the type — so the
- *  detection path has to supply the third number from somewhere, and the honest
- *  somewhere is the two tables that already hold typical sizes and legal bounds.
- *  It used to be a bare `?? 500` on the detect screen, which sits outside the
- *  allowed depth of a TV (40–120), a mirror or a painting (15–60) and a curtain
- *  (40–200): every thin wall-mounted piece the on-device detector found arrived
- *  half a metre deep, because that path sends no dimension hint at all.
- *
- *  Clamping an INVENTED number is not the "silently resize it to fit" that rule 2
- *  forbids. That rule protects measurements; this axis has none to protect.
- *
- *  `CATEGORY_DEFAULTS` stays unexported on purpose — handing out the whole table
- *  invites a caller to read `.dim` and skip `clampDims` altogether. */
 /** The catalogue's typical size on ONE axis for a category, narrowed to the
  *  shape's own legal range. Axis 0 = W, 1 = D, 2 = H.
  *
  *  For the axes a photo cannot see. Every caller is a measurement that came back
  *  short, so this is the number that fills the gap — derived from the same two
- *  tables the scene builder uses, never a literal at the call site. */
+ *  tables the scene builder uses, never a literal at the call site.
+ *
+ *  Clamping an INVENTED number is not the "silently resize it to fit" that rule 2
+ *  forbids. That rule protects measurements; these axes have none to protect.
+ *
+ *  `CATEGORY_DEFAULTS` stays unexported on purpose — handing out the whole table
+ *  invites a caller to read `.dim` and skip `clampDims` altogether. */
 export function defaultAxisFor(category: Category, shape: Shape, axis: 0 | 1 | 2): number {
   const typical = (CATEGORY_DEFAULTS[category] ?? CATEGORY_DEFAULTS.other).dim[axis];
   const r = dimRangeFor(category, shape);
@@ -1553,7 +1542,15 @@ export function defaultAxisFor(category: Category, shape: Shape, axis: 0 | 1 | 2
 }
 
 /** Depth — the axis NO single photo can observe. Kept as its own name because
- *  that fact is a property of photography, not of a particular anchor. */
+ *  that fact is a property of photography, not of a particular anchor.
+ *
+ *  `GeoPlacement` in lib/photo-geometry.ts returns W and H and says so in the type,
+ *  so the detection path has to supply the third number from somewhere, and the
+ *  honest somewhere is the two tables that already hold typical sizes and legal
+ *  bounds. It used to be a bare `?? 500` on the detect screen, which sits outside
+ *  the allowed depth of a TV (40–120), a mirror or a painting (15–60) and a curtain
+ *  (40–200): every thin wall-mounted piece the on-device detector found arrived half
+ *  a metre deep, because that path sends no dimension hint at all. */
 export function defaultDepthFor(category: Category, shape: Shape): number {
   return defaultAxisFor(category, shape, 1);
 }

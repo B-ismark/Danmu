@@ -63,7 +63,8 @@ export function sourceOf(d: Pick<Detection, 'source'>): DetectSource {
  *  row the camera never got a look at. `lib/label-repair.ts` says so in as many
  *  words — "a caller that treats `unmeasured` as `ok` claims the geometry agreed
  *  with the AI" — and the review screen was that caller. An uncalibrated
- *  self-report and no measurement is not two pieces of evidence; it is none. */
+ *  self-report and no measurement is not two pieces of evidence; it is one, and it
+ *  is the weakest one available. */
 export function shouldAutoConfirm(d: Pick<Detection, 'conf' | 'source'>, verdict: LabelVerdict['status']): boolean {
   const bar = AUTO_CONFIRM[sourceOf(d)];
   if (bar === 'always') return true;
