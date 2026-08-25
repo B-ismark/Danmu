@@ -31,19 +31,66 @@ correction is folded in with a note.
 | 3c — tiered merge distance | **done** | `mergeDistanceFor(category)` in `lib/detect-refine.ts`. Fixes the live over-merge bug 3a uncovered, independently of 3b |
 | 4 — range-based label repair | **done** | `lib/label-repair.ts` + the review-screen surfacing. Decisions 1 and 2 answered: re-measure, and suggest-then-confirm |
 | 5 — bearing auto-slot | not started | **Decided: ingest AND retire the four-slot grid.** The larger of the two options, and a product change — see §10.5 |
-| 6 — confidence honesty | not started | No open decision. Needs the `source` field in both codec directions |
+| 6 — confidence honesty | **done, two items declined** | `lib/detect-confidence.ts` + `source` in both codec directions. `distance` and image quality declined with reasons — see below |
 | 7 — measure ceiling items | **done** | `placeCeilingObject`, width only. Two corrections to §3 below — the row it intersects, and what happens past the wall |
 | 8 — pipeline harness | **done, except the detector metric** | `tests/detect-pipeline.test.ts`, analytic, in CI. The detector half needs photos that must not be committed — see below |
 | 9 — dead-field removal | **done** | `alsoSeenIn` cut from the type and all three prompt clauses. `position.y` turned out **not** to be dead — see the correction below |
 
-**Order from here: 9 → 7 → 8 → 5.** This departs from §6, deliberately. §6 put 5
+**Order from here: 5 only** — 6, 7, 8 and 9 are done. Phase 5 should wait for the
+UX branch's pull request to land, since it rebuilds the same capture screen.
+
+**Order as it was written: 9 → 7 → 8 → 5.** This departs from §6, deliberately. §6 put 5
 before 8 so the harness could measure a SigLIP decision, but Phase 5 has since become
 a capture-screen rebuild rather than an ingest tweak, which makes it both the most
 invasive remaining phase and the one most likely to collide with UX work in the same
 tree. The harness should exist before it, not after. 9 and 7 are small and go first
 because they are cheap and independent.
 
-Gates after Phase 8: 1038 tests, 57 files, typecheck / lint / build clean.
+Gates after Phase 6: 1045 tests, 58 files, typecheck / lint / build clean.
+
+**Phase 6 had an open decision after all, and it was hiding inside "split the
+threshold per source".** The plan said no decision was open. Reading the three
+sources' confidences showed why one is:
+
+- **local** — a class score off the ONNX head, emitted above 0.35 after NMS.
+  Discriminative. Most true positives never reach 0.85.
+- **cloud** — a number the language model wrote about its own answer. Self-reports
+  from an LLM cluster high and narrow, so 0.85 is barely a bar.
+- **manual** — a literal `1`, written by the code because the USER drew the box. Not
+  a confidence at all; a sentinel for "not applicable".
+
+One `0.85` compared against all three auto-confirmed nearly every cloud row and
+nearly no local row, in a UI where "confirmed" means the user has vouched for it.
+
+**The decision was what to do about it, and inventing a second digit was the wrong
+answer.** Raising an uncalibrated self-report from 0.85 to 0.9 looks like calibration
+and is a guess. So the numbers in `AUTO_CONFIRM` are deliberately not the interesting
+part: local and cloud share 0.85, `manual` is `'always'`, and what changed is that
+auto-confirm now requires **independent corroboration** — the geometry must have
+measured the piece and agreed with its word. The camera is the one voice in the
+pipeline that did not come from a model.
+
+**That turned up a live bug in Phase 4's own wiring.** The auto-confirm test was
+`status !== 'suspect'`, which let through every row the camera never looked at.
+`lib/label-repair.ts` says in as many words that "a caller that treats `unmeasured`
+as `ok` claims the geometry agreed with the AI", and the review screen was that
+caller. An uncalibrated self-report plus no measurement is not two pieces of
+evidence; it is one. Four mutations verified, including that one.
+
+**Two of the four items in §5's Phase 6 list are declined, not forgotten.**
+
+- **`GeoPlacement.distance` as a confidence discount.** A far detection is a less
+  certain measurement, which is true and unquantified — turning it into a weight
+  needs a calibration this branch does not have, and a made-up curve would be the
+  same theatre as a made-up threshold. There IS a hard signal hiding next to it: a
+  floor or ceiling backprojection that HIT the wall clamp is one whose geometry was
+  overridden rather than measured. `distance` returns the clamped value, so a caller
+  cannot tell. That wants a flag on `GeoPlacement`, and it is a real follow-up.
+- **`lib/image-quality.ts` discounting a blurry photo's detections.** `Quality` is
+  scored at capture time and shown there, but `Capture` does not persist it, so the
+  detect screen has nothing to read. Either a persisted-schema change or a re-score
+  in the browser — and the payoff is a threshold nudge, which is the part of this
+  phase that just turned out to be worth the least.
 
 **Phase 8 found a live bug on its first run, which is the best argument for it.**
 `in=11 refined=9` for a room with ten things in it. The missing piece was one of two
@@ -663,7 +710,8 @@ wrote the tag; no call site needs adding.
 6. **Phase 8** — pipeline harness; defines the metric
 7. **Phase 7** — ceiling measurement
 8. **Phase 6**, **Phase 9** — any time; independent
-9. SigLIP, only if Phase 8 shows Phase 4 fell short
+9. SigLIP, only if Phase 8 shows Phase 4 fell short — **still undecidable on this
+   branch**: that measurement needs the private photo set, which does not ship
 
 1–2 can be one PR. 3 must be its own, for the test reason in Phase 3.
 
