@@ -15,13 +15,17 @@
 // in the Gemini SDK.
 
 import { anchorFor } from './physics';
-import { placeFloorObject, placeWallObject, type CameraCal } from './photo-geometry';
+import { placeCeilingObject, placeFloorObject, placeWallObject, type CameraCal } from './photo-geometry';
 import type { Detection } from './detection';
-import { defaultDepthFor, type Category, type Shape } from './scene-spec';
+import { defaultAxisFor, defaultDepthFor, type Category, type Shape } from './scene-spec';
 import type { CaptureSlot } from './storage';
 
-/** Room floor extent in METRES. `depth` is the N–S dimension. */
-export type RoomDims = { width: number; depth: number };
+/** Room extent in METRES. `depth` is the N–S dimension.
+ *
+ *  `height` is required, not optional, and that is the point: it is the only thing
+ *  that locates the ceiling plane, so a caller that forgot it would silently stop
+ *  measuring every fan and pendant in the room rather than fail to compile. */
+export type RoomDims = { width: number; depth: number; height: number };
 
 /** One calibrated camera per wall the user actually photographed. A slot with no
  *  entry has no calibration — a normal outcome for a partial capture, not a
@@ -40,13 +44,31 @@ export function geoRefine(d: Detection, cals: CalMap, room: RoomDims): Detection
   const cat = (d.category ?? 'other') as Category;
   const shape = (d.shape ?? 'box') as Shape;
   const anchor = anchorFor(cat, shape);
-  if (anchor === 'ceiling' && d.category !== 'curtain') return d; // fan/pendant: not on the wall plane
+  const depth = d.dimMM?.[1] ?? defaultDepthFor(cat, shape);
+
+  // A curtain whose shape resolves to the ceiling is still CLOTH ON A WALL — the
+  // exception predates the ceiling placer and survives it, because the question
+  // that branch answers is "which plane is this object on", and cloth is on the
+  // wall plane whatever the anchor table calls it.
+  if (anchor === 'ceiling' && d.category !== 'curtain') {
+    const g = placeCeilingObject(d.box, d.slot, room, cal);
+    if (!g) return d;
+    // Width is measured. HEIGHT IS NOT — the bbox of something seen from below
+    // has a foreshortened diameter in it, not a thickness (see
+    // `placeCeilingObject`), so it falls back the same way depth does.
+    return {
+      ...d,
+      position: g.position,
+      yaw: typeof d.yaw === 'number' ? d.yaw : g.yaw,
+      dimMM: [g.widthMM, depth, d.dimMM?.[2] ?? defaultAxisFor(cat, shape, 2)],
+    };
+  }
+
   const g =
     anchor === 'floor'
       ? placeFloorObject(d.box, d.slot, room, cal)
       : placeWallObject(d.box, d.slot, room, cal);
   if (!g) return d;
-  const depth = d.dimMM?.[1] ?? defaultDepthFor(cat, shape);
   return {
     ...d,
     position: g.position,

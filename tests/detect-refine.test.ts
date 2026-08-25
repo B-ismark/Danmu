@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { dedupeDetections, geoRefine, refineDetections, type CalMap, type RoomDims } from '@/lib/detect-refine';
-import { placeFloorObject, placeWallObject, type CameraCal } from '@/lib/photo-geometry';
+import { placeCeilingObject, placeFloorObject, placeWallObject, type CameraCal } from '@/lib/photo-geometry';
 import type { Detection } from '@/lib/detection';
-import { CATEGORIES, SHAPES, defaultDepthFor } from '@/lib/scene-spec';
+import { anchorFor } from '@/lib/physics';
+import { CATEGORIES, SHAPES, defaultAxisFor, defaultDepthFor, type Category } from '@/lib/scene-spec';
 import { dimRangeFor } from '@/lib/dimension-ranges';
 
 // The five contracts below are the ones every later phase of the detection plan
@@ -13,10 +14,15 @@ import { dimRangeFor } from '@/lib/dimension-ranges';
 // placer this detection should have gone through and asserting it did not go
 // through the other one.
 
-const ROOM: RoomDims = { width: 6, depth: 4 };
+const ROOM: RoomDims = { width: 6, depth: 4, height: 2.8 };
 const CAL: CameraCal = { k: 1.2, aspect: 4 / 3 };
 // 's' is deliberately absent — an unphotographed wall is a normal outcome.
 const CALS: CalMap = { n: CAL, e: CAL, w: CAL };
+// A ceiling needs a lens that can actually see one: at 66° level, a 2.8 m ceiling
+// first enters frame 2.9 m away, past the wall being photographed. ~106° is a phone
+// ultrawide. See placeCeilingObject.
+const WIDE: CameraCal = { k: 2 * Math.tan(((106 / 2) * Math.PI) / 180), aspect: 4 / 3 };
+const WIDE_CALS: CalMap = { n: WIDE, e: WIDE, w: WIDE };
 
 // Bottom edge at v = 0.85, well below the horizon of a level camera, so
 // placeFloorObject has a floor intersection to find.
@@ -24,6 +30,10 @@ const FLOOR_BOX: Detection['box'] = [0.4, 0.55, 0.2, 0.3];
 // Bottom edge at v = 0.60 — still below the horizon, so BOTH placers return a
 // result for it. That is what makes the wall case able to prove which one ran.
 const WALL_BOX: Detection['box'] = [0.4, 0.4, 0.2, 0.2];
+// Centre row at v = 0.17 — high in the frame and well ABOVE the horizon, which
+// is where a ceiling fan lands. Only reachable with WIDE; under CAL the same box
+// would be wall, and the anchor table is what routes it, not the box.
+const CEILING_BOX: Detection['box'] = [0.33, 0.03, 0.29, 0.14];
 
 function det(p: Partial<Detection> & Pick<Detection, 'category' | 'slot'>): Detection {
   return { label: 'thing', conf: 0.9, box: FLOOR_BOX, ...p };
@@ -68,11 +78,46 @@ describe('geoRefine', () => {
     expect(out.position!.y).toBeGreaterThan(0);
   });
 
-  it('leaves a ceiling-anchored detection completely untouched', () => {
+  it('measures a ceiling item’s WIDTH and refuses to invent its height', () => {
+    // This replaces the original "a ceiling anchor comes back untouched" contract,
+    // changed deliberately rather than deleted. What is untouched is now the HEIGHT
+    // — a fan photographed from below projects as a disc, so its bbox carries a
+    // foreshortened diameter and no thickness at all.
+    const g = placeCeilingObject(CEILING_BOX, 'n', ROOM, WIDE)!;
+    expect(g).not.toBeNull(); // premise: this lens can see this ceiling
+    const d = det({ category: 'fan', shape: 'fan', slot: 'n', box: CEILING_BOX });
+    const out = geoRefine(d, WIDE_CALS, ROOM);
+    expect(out).not.toBe(d);
+    expect(out.dimMM![0]).toBe(g.widthMM);
+    expect(out.position).toEqual(g.position);
+    // Catalogue height, derived — never a literal, and never the bbox.
+    expect(out.dimMM![2]).toBe(defaultAxisFor('fan', 'fan', 2));
+  });
+
+  it('still leaves a ceiling item untouched when no ceiling is in frame', () => {
+    // The honest "nothing was measured here" answer that three later phases read by
+    // reference identity. It survives Phase 7 — the refusal simply moved from the
+    // anchor table to the lens. FLOOR_BOX sits below the horizon, which is where a
+    // detector's fan box lands in every 66° level shot.
     const d = det({ category: 'fan', shape: 'fan', slot: 'n' });
-    // Same object back, not a copy: three later phases read this as the honest
-    // "nothing was measured here" answer.
     expect(geoRefine(d, CALS, ROOM)).toBe(d);
+    expect(geoRefine(d, WIDE_CALS, ROOM)).toBe(d);
+  });
+
+  it('keeps the AI’s height hint for a ceiling item, and discards its width', () => {
+    // Same split as everywhere else: an axis the camera measured overrides the
+    // hint, an axis it cannot see falls back to one. clampDims gates both.
+    const d = det({
+      category: 'fan',
+      shape: 'fan',
+      slot: 'n',
+      box: CEILING_BOX,
+      dimMM: [4321, 1100, 333],
+    });
+    const out = geoRefine(d, WIDE_CALS, ROOM);
+    expect(out.dimMM![0]).not.toBe(4321);
+    expect(out.dimMM![1]).toBe(1100);
+    expect(out.dimMM![2]).toBe(333);
   });
 
   it('still measures a curtain whose shape resolves to the ceiling', () => {
@@ -108,8 +153,16 @@ describe('geoRefine', () => {
     // not an edge case. The old literal 500 was outside the legal depth of four
     // of these — see the next test.
     for (const category of CATEGORIES) {
-      if (category === 'fan') continue; // ceiling anchor: never measured at all
-      const out = geoRefine(det({ category, slot: 'n' }), CALS, ROOM);
+      // A ceiling category needs the lens and the frame position that can reach a
+      // ceiling; every other category is measured from the nominal rig. The skip
+      // this replaces ("ceiling anchor: never measured at all") stopped being true
+      // in Phase 7, and a skip is a coverage hole that goes stale silently.
+      const ceiling = anchorFor(category as Category, 'box') === 'ceiling';
+      const out = geoRefine(
+        det({ category, slot: 'n', box: ceiling ? CEILING_BOX : FLOOR_BOX }),
+        ceiling ? WIDE_CALS : CALS,
+        ROOM,
+      );
       const r = dimRangeFor(category, 'box'); // 'box' is what geoRefine casts an absent shape to
       expect(out.dimMM, category).toBeDefined();
       expect(out.dimMM![1], category).toBeGreaterThanOrEqual(r.min[1]);
