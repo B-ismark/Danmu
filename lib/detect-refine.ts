@@ -132,10 +132,40 @@ export function mergeDistanceFor(category: Category): number {
   return MERGE_M[MERGE_TIER[category] ?? 'medium'];
 }
 
+/** How much two boxes in the same photo overlap, as intersection over union.
+ *
+ *  The standard measure, and it is here because the fixed 12%-of-the-image centre
+ *  distance it replaces was SCALE-BLIND. Two bedside tables 0.55 m apart against a
+ *  far wall image as two 7%-wide boxes 9% apart — they do not touch, and there is a
+ *  visible gap between them, and the old rule merged them because 9% < 12%. That is
+ *  the same failure as the flat 0.6 m cross-slot distance: one absolute number
+ *  standing in for a question about proportion. A duplicate box from one detector
+ *  overlaps its twin almost entirely; two small neighbours overlap not at all, at
+ *  any distance from the camera.
+ *
+ *  Deliberately NOT intersection-over-minimum, which would also merge a box nested
+ *  inside a much larger one — a shelf inside a bookcase, both called 'shelf'. IoU
+ *  keeps both, and keeping both is the safe way to be wrong here: a duplicate the
+ *  user deletes in one tap beats a real piece that never appears. */
+function boxIoU(a: Detection['box'], b: Detection['box']): number {
+  const ix = Math.max(0, Math.min(a[0] + a[2], b[0] + b[2]) - Math.max(a[0], b[0]));
+  const iy = Math.max(0, Math.min(a[1] + a[3], b[1] + b[3]) - Math.max(a[1], b[1]));
+  const inter = ix * iy;
+  const union = a[2] * a[3] + b[2] * b[3] - inter;
+  return union > 0 ? inter / union : 0;
+}
+
+/** Two boxes in one photo are the same object at or above this overlap. Mid-range
+ *  for non-maximum suppression, which normally runs 0.5–0.7; the low end, because
+ *  the two boxes here come from one pass over one image rather than from a sliding
+ *  window, so a genuine double-box is nearly coincident and anything ambiguous is
+ *  better kept. */
+const SAME_BOX_IOU = 0.5;
+
 /** Drop near-identical detections. Two rules:
  *
- *  1. Same slot + same category + bbox centres within ~12% on each axis — one
- *     object boxed twice in the same photo.
+ *  1. Same slot + same category + bounding boxes overlapping by `SAME_BOX_IOU` —
+ *     one object boxed twice in the same photo.
  *  2. Same label + same category ACROSS slots, but only when their estimated 3D
  *     positions agree to within that category's own merge distance — one object
  *     seen from two walls.
@@ -165,12 +195,8 @@ export function dedupeDetections(items: Detection[]): Detection[] {
     const cy = d.box[1] + d.box[3] / 2;
     const isDup = out.some((o) => {
       if (o.category !== d.category) return false;
-      // Same photo — overlapping bbox centres mean one object boxed twice.
-      if (o.slot === d.slot) {
-        const ocx = o.box[0] + o.box[2] / 2;
-        const ocy = o.box[1] + o.box[3] / 2;
-        if (Math.abs(ocx - cx) < 0.12 && Math.abs(ocy - cy) < 0.12) return true;
-      }
+      // Same photo — heavily overlapping boxes mean one object boxed twice.
+      if (o.slot === d.slot && boxIoU(o.box, d.box) >= SAME_BOX_IOU) return true;
       // Different photos — same name AND same place.
       if (o.label.toLowerCase().trim() !== d.label.toLowerCase().trim()) return false;
       if (!o.position || !d.position) return false;

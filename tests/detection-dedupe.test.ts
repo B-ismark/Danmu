@@ -20,6 +20,53 @@ describe('dedupeDetections', () => {
     expect(dedupeDetections([left, right])).toHaveLength(2);
   });
 
+  it('keeps two SMALL neighbours whose boxes do not even touch', () => {
+    // The scale-blindness the same-photo rule used to have, found by
+    // tests/detect-pipeline.test.ts on its first run: two bedside tables 0.55 m
+    // apart against a far wall image as 7%-wide boxes 9% apart. There is visible
+    // daylight between them, and the old "centres within 12% of the image" test
+    // merged them — deleting a real piece of furniture on the one path that spends
+    // the user's quota. A fixed fraction of the IMAGE cannot answer a question
+    // about two objects' PROPORTIONS.
+    const a = det({
+      label: 'bedside table',
+      category: 'nightstand',
+      slot: 'n',
+      box: [0.578, 0.79, 0.074, 0.06],
+      position: { x: 0.8, y: 0.27, z: -2.8 },
+    });
+    const b = det({
+      label: 'bedside table',
+      category: 'nightstand',
+      slot: 'n',
+      box: [0.668, 0.79, 0.074, 0.06],
+      position: { x: 1.35, y: 0.27, z: -2.8 },
+    });
+    // Both premises stated, so this cannot come to pass by the fixtures drifting.
+    expect(Math.abs(b.box[0] + b.box[2] / 2 - (a.box[0] + a.box[2] / 2))).toBeLessThan(0.12);
+    expect(b.box[0]).toBeGreaterThan(a.box[0] + a.box[2]);
+    expect(dedupeDetections([a, b])).toHaveLength(2);
+  });
+
+  it('still collapses a double-box that is offset rather than smaller', () => {
+    // The other direction, so the fix cannot be "stop merging". One object boxed
+    // twice in one pass sits nearly on top of itself, and IoU here is ~0.66.
+    const a = det({ label: 'wardrobe', category: 'wardrobe', slot: 'n', box: [0.3, 0.2, 0.2, 0.5] });
+    const b = det({ label: 'wardrobe unit', category: 'wardrobe', slot: 'n', box: [0.33, 0.24, 0.2, 0.5] });
+    expect(dedupeDetections([a, b])).toHaveLength(1);
+  });
+
+  it('keeps a small box nested inside a big one of the same category', () => {
+    // Intersection-over-union, not intersection-over-minimum, and this is the case
+    // that separates them: one shelf of a bookcase, boxed inside the bookcase, both
+    // called 'shelf'. IoM would be ~1.0 and would eat the bookcase. Keeping both is
+    // the safe way to be wrong — a duplicate is one tap to delete, a missing piece
+    // of furniture is invisible.
+    const unit = det({ label: 'shelf', category: 'shelf', slot: 'e', box: [0.2, 0.1, 0.4, 0.7] });
+    const oneShelf = det({ label: 'shelf', category: 'shelf', slot: 'e', box: [0.25, 0.3, 0.3, 0.08] });
+    expect(dedupeDetections([unit, oneShelf])).toHaveLength(2);
+  });
+
   // The regression this file exists for. The cross-slot rule used to match on
   // label + category with NO positional test, so any two identically-named
   // objects anywhere in the room collapsed into one — four matching chairs became
