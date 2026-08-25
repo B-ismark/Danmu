@@ -50,6 +50,57 @@ describe('snapSteps', () => {
   });
 });
 
+describe('grid snap', () => {
+  // The step this pipeline was shipped without. It lived in `Draggable`'s
+  // pointer-move handler and did not travel with the extraction, so the 3D drag
+  // quantised and the 2D drag did not — the snap setting visibly worked in one tab
+  // and did nothing in the other, which is the exact defect the extraction was
+  // supposed to make impossible. It is the first step of `resolvePlacement` now, and
+  // callers must pass the pointer position unrounded.
+  const table = () => part({ id: 'table', pos: [2, 0, 1.5], dimMM: [1200, 800, 400] });
+
+  it('leaves the target alone when snapping is off', () => {
+    const r = resolve(table(), 1.234, 1.567, [], 'off');
+    expect(r.pos[0]).toBeCloseTo(1.234);
+    expect(r.pos[2]).toBeCloseTo(1.567);
+  });
+
+  it('rounds to 10 mm on fine', () => {
+    const r = resolve(table(), 1.234, 1.567, [], 'fine');
+    expect(r.pos[0]).toBeCloseTo(1.23);
+    expect(r.pos[2]).toBeCloseTo(1.57);
+  });
+
+  it('rounds to 50 mm on coarse', () => {
+    const r = resolve(table(), 1.234, 1.567, [], 'coarse');
+    expect(r.pos[0]).toBeCloseTo(1.25);
+    expect(r.pos[2]).toBeCloseTo(1.55);
+  });
+
+  it('runs BEFORE containment, so a clamped edge is not re-rounded', () => {
+    // 870 mm deep, so the clamp lands the piece at z = 0.435 — deliberately off the
+    // 50 mm lattice. Quantising after the clamp instead of before it would drag the
+    // piece to 0.45 and push 15 mm of it through the wall, which is the one thing
+    // the clamp exists to prevent.
+    const sofa = part({ id: 'sofa', category: 'sofa', shape: 'sofa', pos: [2, 0, 1.5], dimMM: [2000, 870, 800] });
+    const r = resolve(sofa, -5, -5, [], 'coarse');
+    expect(r.pos[0]).toBeCloseTo(1.0);
+    expect(r.pos[2]).toBeCloseTo(0.435);
+    expect(r.valid).toBe(true);
+  });
+
+  it('steps by exactly one cell for a nudge of one step, from anywhere', () => {
+    // What the plan's arrow keys rely on: `moveTo(pos + step)` must always land one
+    // cell further on, even from an off-grid start. q(p + s) == q(p) + s for the same
+    // s, so an off-grid piece aligns AND advances on the first press rather than
+    // appearing to ignore it.
+    const step = snapSteps('fine').translate!;
+    const start = resolve(table(), 1.2345, 1.5, [], 'fine');
+    const next = resolve(table(), start.pos[0] + step, 1.5, [], 'fine');
+    expect(next.pos[0] - start.pos[0]).toBeCloseTo(step);
+  });
+});
+
 describe('containment', () => {
   it('keeps the whole footprint inside the room', () => {
     const sofa = part({ id: 'sofa', category: 'sofa', shape: 'sofa', pos: [2, 0, 1.5], dimMM: [2000, 900, 800] });

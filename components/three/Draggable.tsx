@@ -670,13 +670,10 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     e.stopPropagation();
     _plane.set(_plane.normal.set(0, 1, 0), -d.planeY);
     if (!e.ray.intersectPlane(_plane, _hit)) return;
-    let nx = _hit.x - d.offX;
-    let nz = _hit.z - d.offZ;
-    if (translationSnap) {
-      nx = Math.round(nx / translationSnap) * translationSnap;
-      nz = Math.round(nz / translationSnap) * translationSnap;
-    }
-    pendingPos.current = [nx, nz];
+    // Raw, deliberately. `resolvePlacement` quantises to the snap grid as its
+    // first step now, so both tabs get the grid from one place; rounding here as
+    // well is how the 3D view and the plan came to disagree about where it is.
+    pendingPos.current = [_hit.x - d.offX, _hit.z - d.offZ];
     schedule();
   }
 

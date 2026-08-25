@@ -40,7 +40,9 @@ export function snapSteps(mode: SnapMode): { translate: number | null; rotate: n
 export type ResolveInput = {
   /** The piece being moved, at its authored identity — category, shape, circle. */
   part: ScenePart;
-  /** Where the pointer is asking it to go. */
+  /** Where the pointer is asking it to go, UNROUNDED. Quantising to the snap grid
+   *  is this function's first step, so a caller must not pre-round: rounding in two
+   *  places is how two surfaces drift apart over where the grid is. */
   rawX: number;
   rawZ: number;
   rot: number;
@@ -78,11 +80,29 @@ export type Resolved = {
 
 /**
  * The deterministic placement pipeline. Order matters and each step feeds the
- * next: containment → wall snap OR magnetic item snap → gravity/support →
- * vertical clamp → legality.
+ * next: grid snap → containment → wall snap OR magnetic item snap →
+ * gravity/support → vertical clamp → legality.
  */
 export function resolvePlacement(input: ResolveInput): Resolved {
   const { part, rawX, rawZ, rot, dim, parts, footprint, roomHeight, snapMode } = input;
+
+  // Snap the RAW target onto the grid, before anything else touches it. First
+  // because everything downstream is a correction — a clamp, a wall, a neighbour —
+  // and a correction must not then be re-rounded off the very thing it corrected
+  // to.
+  //
+  // This step used to live in `Draggable`'s pointer-move handler and did NOT come
+  // along when the pipeline moved out of the component, so the 2D plan's mouse drag
+  // ignored the snap setting outright while the 3D tab's honoured it: exactly the
+  // "two consumers, one rule" split this module exists to close, reopened by the
+  // move that closed it. It lives here now, and both surfaces read it from one
+  // place.
+  //
+  // The magnetic item snap below may pull a piece straight back off the grid, and
+  // should: flush against a real neighbour beats aligned to an arbitrary lattice.
+  const grid = snapSteps(snapMode).translate;
+  const gx = grid ? Math.round(rawX / grid) * grid : rawX;
+  const gz = grid ? Math.round(rawZ / grid) * grid : rawZ;
 
   // Containment clamp — keep the whole rotated footprint inside the room's
   // bounding box. Footprints can be off-centre after independent wall moves, so
@@ -94,8 +114,8 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   const extX = halfW * c + halfD * sn;
   const extZ = halfW * sn + halfD * c;
   const bnd = footprintBounds(footprint);
-  let x = Math.max(bnd.minX + extX, Math.min(bnd.maxX - extX, rawX));
-  let z = Math.max(bnd.minZ + extZ, Math.min(bnd.maxZ - extZ, rawZ));
+  let x = Math.max(bnd.minX + extX, Math.min(bnd.maxX - extX, gx));
+  let z = Math.max(bnd.minZ + extZ, Math.min(bnd.maxZ - extZ, gz));
   let outRot = rot;
   let snapLines: SnapLine[] | undefined;
 
