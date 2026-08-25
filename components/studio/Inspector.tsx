@@ -744,55 +744,49 @@ function DimensionEditor({
   );
 }
 
-// Curated palette — named, and grouped so no single decision is 24 options wide.
+// Curated palette — named, and ORDERED in three runs of eight: neutrals, then
+// woods & metals, then colours.
+//
+// Three runs, not three labelled groups. The labels cost a caption and a gap each
+// and told nobody anything a swatch does not — neutrals look neutral — while the
+// run length is 8 and the grid is 8 or 6 wide, so each run is exactly one row and
+// the grouping draws itself. At 6 the merged block still tiles (24 = 6 × 4); it was
+// the SEPARATED version that went ragged there, three groups of 6 + 2.
+//
 // The names are what a screen reader announces and what the tooltip shows: "#E8E5DB"
 // told nobody anything. 8 columns keeps every target ≥ 32px in a 320px rail.
 type Swatch = { hex: string; name: string };
-const SWATCH_GROUPS: Array<{ label: string; items: Swatch[] }> = [
-  {
-    label: 'Neutrals',
-    items: [
-      { hex: '#E8E5DB', name: 'Chalk' },
-      { hex: '#EDE6D6', name: 'Cream' },
-      { hex: '#D6C7AE', name: 'Linen' },
-      { hex: '#DCE4E2', name: 'Mist' },
-      { hex: '#D8C7A8', name: 'Oat' },
-      { hex: '#3A3733', name: 'Charcoal' },
-      { hex: '#3A3A3A', name: 'Graphite' },
-      { hex: '#131311', name: 'Ink' },
-    ],
-  },
-  {
-    label: 'Woods & metals',
-    items: [
-      { hex: '#C9A98E', name: 'Pale oak' },
-      { hex: '#C9A87C', name: 'Warm oak' },
-      { hex: '#9A6A48', name: 'Teak' },
-      { hex: '#6F4A2F', name: 'Walnut' },
-      { hex: '#5D3820', name: 'Espresso' },
-      { hex: '#A86E5A', name: 'Clay' },
-      { hex: '#B08D4F', name: 'Brass' },
-      { hex: '#D8C36A', name: 'Ochre' },
-    ],
-  },
-  {
-    label: 'Colours',
-    items: [
-      { hex: '#8FA98C', name: 'Sage' },
-      { hex: '#5D8A5D', name: 'Fern' },
-      { hex: '#A9C4C0', name: 'Eucalyptus' },
-      { hex: '#6E94C8', name: 'Cornflower' },
-      { hex: '#4F6D8C', name: 'Denim' },
-      { hex: '#3F5670', name: 'Navy' },
-      { hex: '#C57B53', name: 'Terracotta' },
-      { hex: '#C44A3A', name: 'Paprika' },
-    ],
-  },
+const SWATCHES: Swatch[] = [
+  // Neutrals
+  { hex: '#E8E5DB', name: 'Chalk' },
+  { hex: '#EDE6D6', name: 'Cream' },
+  { hex: '#D6C7AE', name: 'Linen' },
+  { hex: '#DCE4E2', name: 'Mist' },
+  { hex: '#D8C7A8', name: 'Oat' },
+  { hex: '#3A3733', name: 'Charcoal' },
+  { hex: '#3A3A3A', name: 'Graphite' },
+  { hex: '#131311', name: 'Ink' },
+  // Woods & metals
+  { hex: '#C9A98E', name: 'Pale oak' },
+  { hex: '#C9A87C', name: 'Warm oak' },
+  { hex: '#9A6A48', name: 'Teak' },
+  { hex: '#6F4A2F', name: 'Walnut' },
+  { hex: '#5D3820', name: 'Espresso' },
+  { hex: '#A86E5A', name: 'Clay' },
+  { hex: '#B08D4F', name: 'Brass' },
+  { hex: '#D8C36A', name: 'Ochre' },
+  // Colours
+  { hex: '#8FA98C', name: 'Sage' },
+  { hex: '#5D8A5D', name: 'Fern' },
+  { hex: '#A9C4C0', name: 'Eucalyptus' },
+  { hex: '#6E94C8', name: 'Cornflower' },
+  { hex: '#4F6D8C', name: 'Denim' },
+  { hex: '#3F5670', name: 'Navy' },
+  { hex: '#C57B53', name: 'Terracotta' },
+  { hex: '#C44A3A', name: 'Paprika' },
 ];
 
-const SWATCH_NAME = new Map(
-  SWATCH_GROUPS.flatMap((g) => g.items).map((s) => [s.hex.toLowerCase(), s.name] as const),
-);
+const SWATCH_NAME = new Map(SWATCHES.map((s) => [s.hex.toLowerCase(), s.name] as const));
 
 // One paint control, used for furniture AND for walls — the two used to be
 // separate 24-swatch grids that could drift apart.
@@ -861,32 +855,35 @@ function PaintPicker({
         </span>
       }
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 2 }}>
-        {SWATCH_GROUPS.map((g) => (
-          <div key={g.label}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--ink-3)', marginBottom: 4 }}>{g.label}</div>
-            {/* Eight, and the elastic rail's container query is what drops it to
-                six — an `auto-fit` here would also have changed the count on a
-                WIDE rail (nine or ten per row), which is a redesign of a shipping
-                panel rather than a reflow of a cramped one. */}
-            <div className="rail-swatches" style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 4 }}>
-              {g.items.map((s) => {
-                const on = value?.toLowerCase() === s.hex.toLowerCase();
-                return (
-                  <button
-                    key={s.hex}
-                    onClick={() => onChange(s.hex)}
-                    title={s.name}
-                    aria-label={s.name}
-                    aria-pressed={on}
-                    className={`swatch${on ? ' is-selected' : ''}`}
-                    style={{ background: s.hex }}
-                  />
-                );
-              })}
-            </div>
-          </div>
-        ))}
+      {/* ONE grid, not three captioned ones. Eight columns, and the elastic rail's
+          container query is what drops it to six — an `auto-fit` here would also
+          have changed the count on a WIDE rail (nine or ten per row), which is a
+          redesign of a shipping panel rather than a reflow of a cramped one.
+
+          Either count divides 24, so the three runs of the palette still land as
+          whole rows and the grouping reads without three labels and three gaps
+          paying for it. `role="group"` + the section's own title is what a screen
+          reader gets instead; each swatch already announces its name. */}
+      <div
+        role="group"
+        aria-label={`${label} swatches`}
+        className="rail-swatches"
+        style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 4, paddingTop: 2 }}
+      >
+        {SWATCHES.map((s) => {
+          const on = value?.toLowerCase() === s.hex.toLowerCase();
+          return (
+            <button
+              key={s.hex}
+              onClick={() => onChange(s.hex)}
+              title={s.name}
+              aria-label={s.name}
+              aria-pressed={on}
+              className={`swatch${on ? ' is-selected' : ''}`}
+              style={{ background: s.hex }}
+            />
+          );
+        })}
       </div>
 
       {extra && (
