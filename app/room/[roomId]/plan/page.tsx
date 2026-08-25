@@ -7,6 +7,7 @@ import { PlanViewControls, ComfortLegend } from '@/components/studio/PlanChrome'
 import { CanvasTools, CanvasView, CanvasAide, ChromeDivider } from '@/components/studio/CanvasChrome';
 import { UndoRedo } from '@/components/studio/UndoRedo';
 import { SceneContextMenu } from '@/components/studio/SceneContextMenu';
+import { HoverCard } from '@/components/studio/HoverCard';
 import { CatalogPanel, STUDIO_CANVAS_ID } from '@/components/studio/CatalogPanel';
 import { StudioShell } from '@/components/studio/StudioShell';
 import { Icon } from '@/components/ui/Icon';
@@ -68,6 +69,12 @@ export default function PlanPage() {
           element's box. */}
       <SceneContextMenu />
 
+      {/* And the same hover card. It only ever worked on the 3D tab because the
+          plan never wrote `hoveredPartId`; now that it does, the card is a mount
+          away — it is `position: fixed` and tracks the pointer itself, so it does
+          not care which surface is underneath. */}
+      <HoverCard />
+
       {/* ONE tool cluster, top-centre — the shared slot. What used to be here was
           a readout chip and a toggle top-left, an export button top-right, a help
           card and a zoom toolbar bottom-left (inside PlanView), and a legend
@@ -103,10 +110,12 @@ export default function PlanPage() {
         </CanvasAide>
       )}
 
-      {/* The same catalog the 3D tab uses, opened by the same rail button. Its
-          rows are not draggable here — nothing on this page catches a drop — so
-          it offers click-to-drop-in-the-centre instead of pretending otherwise. */}
-      {catalogOpen && <CatalogPanel bottomGap={100} />}
+      {/* The same library the 3D tab uses, opened by the same rail button — and
+          its rows ARE draggable here now: `PlanView` catches the drop and puts the
+          piece where the pointer let go, which on a map of the floor is the whole
+          point. Click-to-drop-in-the-centre still works for anyone who would
+          rather not drag. */}
+      {catalogOpen && <CatalogPanel bottomGap={100} canDrag />}
 
     </main>
   );
