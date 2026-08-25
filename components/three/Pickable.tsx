@@ -99,7 +99,10 @@ export function Pickable({
           // manager may claim Alt-drag; neither should reach the browser.
           e.nativeEvent.preventDefault();
           const ids = pickIdsFrom(e.intersections);
-          const step = cycleThrough(e.point.x, e.point.z, ids, altCycle);
+          // Client pixels, not `e.point`: whether this is the same press repeated
+          // is a question about the hand, and in world units the answer depends on
+          // how far the camera happens to be pulled back. See `SAME_SPOT_PX`.
+          const step = cycleThrough(e.nativeEvent.clientX, e.nativeEvent.clientY, ids, altCycle);
           altCycle = step.state;
           if (!step.id) return;
           if (e.shiftKey) toggleInSelection(step.id);

@@ -20,6 +20,15 @@
 // Hidden parts are NOT filtered here. Whether a hidden piece can be picked is the
 // caller's policy (the plan filters them out, matching the 3D tree), and a
 // geometry helper that silently drops candidates is one nobody can reuse.
+//
+// EVERY function here reads `part.pos` / `part.rot` / `part.dimMM` straight, so the
+// parts handed in must already be at their EFFECTIVE transform — `useRoomScene()`
+// or `resolveParts`, never `useScene.getState().parts`. A part's authored transform
+// and the user's override live in two layers (see CLAUDE.md), and hit-testing the
+// authored one is wrong the instant anything has been dragged: the outline gets
+// drawn where the piece is and the click lands where it was born. `ResolveInput`
+// in lib/drag-resolve.ts spells the same requirement out about the same trap; this
+// file was missing the sentence.
 
 import { footFromPart, footOverlap, footArea, pointInFoot, type Foot } from './geometry';
 import type { ScenePart } from './scene-spec';
@@ -33,6 +42,8 @@ export function footOf(part: ScenePart): Foot {
  * Back-to-front: what to paint first, so the biggest piece ends up underneath.
  * Stable — equal areas keep their original relative order — so the drawing does
  * not reshuffle when two pieces happen to match.
+ *
+ * Parts at their EFFECTIVE transform, as everywhere in this file.
  */
 export function planPaintOrder<T extends ScenePart>(parts: T[]): T[] {
   return parts
@@ -81,27 +92,50 @@ export function hitsInRect(rect: PlanRect, parts: ScenePart[]): string[] {
   return ids;
 }
 
-/** How far apart two presses may be and still count as the same spot, in metres.
- *  Alt-click cycling compares against this; it is deliberately generous, because
- *  the hand moves between clicks and a cycle that resets on a 2px twitch reads as
- *  broken. */
-export const SAME_SPOT_M = 0.06;
+/** How far apart two presses may be and still count as the same spot, in SCREEN
+ *  pixels.
+ *
+ *  Screen rather than world, which is the correction: Alt-click is a gesture of the
+ *  hand, and "did the hand stay put" is a question about pixels. Measured in metres
+ *  of floor — as this was — the tolerance becomes a function of the camera. Pulled
+ *  back in the 3D tab, 60 mm of floor is a pixel or two, so the cycle restarted on
+ *  a twitch and Alt-click could not step past the second piece; pushed in close it
+ *  forgave a press half a sofa away. The plan's own press was already recording
+ *  client pixels for its click-versus-drag test, so the two halves of one gesture
+ *  were being measured in different units.
+ *
+ *  Deliberately larger than that 4 px slop: every press still close enough to count
+ *  as a click must also still count as the same spot, or the cycle resets at exactly
+ *  the moment a click registers. */
+export const SAME_SPOT_PX = 10;
 
-/** The state one Alt-click cycle carries between presses. Held in a ref, never in
- *  a store: it is the memory of a gesture, and it must not survive a scene edit. */
-export type CycleState = { x: number; z: number; ids: string[]; index: number };
+/** The state one Alt-click cycle carries between presses — where the press was in
+ *  client pixels, what it found there, and how deep into the stack we are. Held in
+ *  a ref, never in a store: it is the memory of a gesture, and it must not survive
+ *  a scene edit. */
+export type CycleState = { sx: number; sy: number; ids: string[]; index: number };
 
 /**
- * Where the next Alt-click at (x, z) should land, given the last one.
+ * Where the next Alt-click should land, given the last one.
  *
- * Returns the id to select plus the cycle state to remember. The candidate list
- * has to be re-derived every press — a piece may have been deleted, hidden,
- * moved or undone since the last one — so the previous cycle is honoured only
- * while its id sequence still matches. Otherwise this is a fresh press at a new
- * spot, which is the safe reading.
+ * Two coordinate spaces, and they are not interchangeable: `world` is the point on
+ * the floor, which decides WHICH pieces are candidates; `screen` is where the
+ * pointer was in client pixels, which decides whether this is the same press
+ * repeated. See `SAME_SPOT_PX`.
+ *
+ * Returns the id to select plus the cycle state to remember. The candidate list has
+ * to be re-derived every press — a piece may have been deleted, hidden, moved or
+ * undone since the last one — so the previous cycle is honoured only while its id
+ * sequence still matches. Otherwise this is a fresh press, which is the safe
+ * reading.
  */
-export function nextInCycle(x: number, z: number, parts: ScenePart[], prev: CycleState | null) {
-  return cycleThrough(x, z, hitsAt(x, z, parts), prev);
+export function nextInCycle(
+  world: { x: number; z: number },
+  screen: { x: number; y: number },
+  parts: ScenePart[],
+  prev: CycleState | null,
+) {
+  return cycleThrough(screen.x, screen.y, hitsAt(world.x, world.z, parts), prev);
 }
 
 /**
@@ -111,15 +145,16 @@ export function nextInCycle(x: number, z: number, parts: ScenePart[], prev: Cycl
  * in one view and dead-ended in the other would be two features.
  */
 export function cycleThrough(
-  x: number,
-  z: number,
+  /** The press, in CLIENT PIXELS — not world units. See `SAME_SPOT_PX`. */
+  sx: number,
+  sy: number,
   candidates: string[],
   prev: CycleState | null,
 ): { id: string | null; state: CycleState | null; candidates: string[]; fresh: boolean } {
   if (candidates.length === 0) return { id: null, state: null, candidates, fresh: true };
 
   const sameSpot =
-    !!prev && Math.hypot(prev.x - x, prev.z - z) <= SAME_SPOT_M && sameSequence(prev.ids, candidates);
+    !!prev && Math.hypot(prev.sx - sx, prev.sy - sy) <= SAME_SPOT_PX && sameSequence(prev.ids, candidates);
   // Wrapping rather than stopping at the end is what makes this read as cycling
   // and not as a dead end.
   const index = sameSpot ? (prev.index + 1) % candidates.length : 0;
@@ -127,7 +162,7 @@ export function cycleThrough(
   // step of one already being asked — which is how the menu knows to open on the
   // first press and stay out of the way afterwards. Inferring it from `index === 0`
   // would also fire on the wrap-around, reopening the menu mid-cycle.
-  return { id: candidates[index], state: { x, z, ids: candidates, index }, candidates, fresh: !sameSpot };
+  return { id: candidates[index], state: { sx, sy, ids: candidates, index }, candidates, fresh: !sameSpot };
 }
 
 function sameSequence(a: string[], b: string[]): boolean {
