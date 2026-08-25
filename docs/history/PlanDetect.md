@@ -27,13 +27,13 @@ correction is folded in with a note.
 | 1 — move `geoRefine` to `lib/` | **done** | `lib/detect-refine.ts`, verbatim. `CalMap` / `RoomDims` moved with it. `tests/detect-refine.test.ts` holds the five contracts, each mutation-verified |
 | 2 — derived depth | **done** | `defaultDepthFor(category, shape)` in `lib/scene-spec.ts` beside `CATEGORY_DEFAULTS`. §4's rug claim was wrong — see the correction there |
 | 3a — dedupe after `geoRefine` | **done** | `refineDetections()` in `lib/detect-refine.ts`; `dedupeDetections` + `SAME_OBJECT_M` moved there out of `lib/detection.ts`. Label equality **kept** |
-| 3b — drop label equality | **deferred to Phase 8** | Decided, not blocked. It trades precision for recall and Phase 8 is what makes the trade measurable |
+| 3b — drop label equality | **deferred, and now measured** | Phase 8 priced it: the cost is a real piece of furniture per gallery pair, the gain is a duplicate that was one tap away anyway. Recommend NOT doing it |
 | 3c — tiered merge distance | **done** | `mergeDistanceFor(category)` in `lib/detect-refine.ts`. Fixes the live over-merge bug 3a uncovered, independently of 3b |
 | 4 — range-based label repair | **done** | `lib/label-repair.ts` + the review-screen surfacing. Decisions 1 and 2 answered: re-measure, and suggest-then-confirm |
 | 5 — bearing auto-slot | not started | **Decided: ingest AND retire the four-slot grid.** The larger of the two options, and a product change — see §10.5 |
 | 6 — confidence honesty | not started | No open decision. Needs the `source` field in both codec directions |
 | 7 — measure ceiling items | **done** | `placeCeilingObject`, width only. Two corrections to §3 below — the row it intersects, and what happens past the wall |
-| 8 — pipeline harness | not started | **Decided: analytic ground truth only**, no renderer |
+| 8 — pipeline harness | **done, except the detector metric** | `tests/detect-pipeline.test.ts`, analytic, in CI. The detector half needs photos that must not be committed — see below |
 | 9 — dead-field removal | **done** | `alsoSeenIn` cut from the type and all three prompt clauses. `position.y` turned out **not** to be dead — see the correction below |
 
 **Order from here: 9 → 7 → 8 → 5.** This departs from §6, deliberately. §6 put 5
@@ -43,7 +43,65 @@ invasive remaining phase and the one most likely to collide with UX work in the 
 tree. The harness should exist before it, not after. 9 and 7 are small and go first
 because they are cheap and independent.
 
-Gates after Phase 7: 1014 tests, 55 files, typecheck / lint / build clean.
+Gates after Phase 8: 1038 tests, 57 files, typecheck / lint / build clean.
+
+**Phase 8 found a live bug on its first run, which is the best argument for it.**
+`in=11 refined=9` for a room with ten things in it. The missing piece was one of two
+bedside tables 0.55 m apart against a far wall: they image as 7%-wide boxes 9%
+apart, with visible daylight between them, and the same-photo merge rule collapsed
+them because its threshold was "centres within 12% OF THE IMAGE". That is the same
+mistake as the flat 0.6 m cross-slot distance Phase 3c fixed — one absolute number
+standing in for a question about proportion — and it survived 3c because 3c was
+looking at the other rule. It is now intersection-over-union at 0.5, which is
+scale-free by construction. Deliberately not intersection-over-minimum: that would
+merge a shelf boxed inside its own bookcase, and keeping both is the safe way to be
+wrong here.
+
+**The baseline is exact, and that is the point.** With a perfect detector, eight of
+the ten pieces come back at **0.0000 m** position error and **0 mm** width error;
+all ten keep their label with no false accusation; eleven detections become ten
+parts, merging exactly the one object that was photographed twice. Anything not in
+the allowance table must be exact, so the day any of those numbers moves, something
+changed. The two that are not exact are documented approximations: the fan at
+0.114 m / −26 mm (`placeCeilingObject` reads one bbox row for a plate spanning a
+range of distances), and up to 0.150 m of scene movement, which is `snapToWall` and
+`settleParts` doing their job rather than error.
+
+**Three things the harness cannot do, stated rather than skipped.**
+
+- **It cannot test the projection.** Boxes are made by projecting through a camera
+  model and then inverted by a camera model, so a wrong shared convention cancels
+  out. `tests/photo-geometry.test.ts`'s hand-computed cases own that, and the two now
+  share one forward model in `tests/helpers/project.ts` rather than keeping a copy
+  each.
+- **It cannot report a DETECTOR metric.** That needs the private photo set, which
+  stays out of the repo because it is pictures of somebody's bedroom. The harness is
+  shaped so that half can be added later — feed real boxes instead of projected ones
+  and every metric still computes — but "Phase 4 moved 13/19" is not a number this
+  branch can produce, and pretending otherwise would make the SigLIP gate in §7 look
+  decidable when it is not.
+- **The room is 7 × 6 m, larger than the bedroom this product is aimed at.** The
+  FRAME is the binding constraint, not the furniture: floor is only visible past
+  1.51 m and ceiling past 1.21 m, so a small room leaves no distance at which a piece
+  is both inside the walls and inside the picture. Every fixture asserts `inFrame`,
+  which caught two of my own bad fixtures before they became mystery position errors.
+
+**Phase 3b now has its number, and it says don't.** Label equality is the only thing
+separating two distinct same-category pieces closer together than their merge tier —
+two paintings 0.30 m apart against a 0.35 m tier. Drop it and that pair becomes one
+painting, every run. What it buys back is one object named differently in two photos
+surviving as two rows, which is a duplicate the user deletes in one tap. Both cases
+are now tests. The asymmetry is the same one the rest of `detect-refine.ts` argues
+from: a missing piece of furniture leaves no trace, a duplicate leaves a button.
+
+**One refactor came out of this rather than being planned.** `toRecord` / `fromRecord`
+moved from `app/onboarding/detect/page.tsx` to `lib/detection-record.ts`. The harness
+has to cross that boundary to be a pipeline test at all, and a harness with its own
+copy of the codec would be a third implementation of the thing whose entire
+documented failure mode is having two. It is now round-trip tested — nine tests over
+a fully populated detection rather than a field list, so a field added to one
+direction and not the other fails without anyone remembering to extend an
+assertion.
 
 **Phase 7, and two things §3 got wrong about it.** §10.7 already corrected the
 signature (the ceiling plane needs `room.height`, so `RoomDims` gained it — as a
@@ -719,7 +777,10 @@ Flag these and stop; do not pick a default.
    `room.height` and `RoomDims` carries only width and depth; and the Phase 1
    contract test asserting a ceiling anchor comes back untouched must be updated
    deliberately, not deleted.
-6. **Whether Phase 8 ever renders pixels at all.** Analytic ground truth covers the
+6. ~~**Whether Phase 8 ever renders pixels at all.**~~ **Decided and shipped:
+   analytic only, and no renderer appeared.** Original note below.
+
+   **Whether Phase 8 ever renders pixels at all.** Analytic ground truth covers the
    pipeline and runs in CI; a real renderer would additionally exercise the detector
    and the colour sampler, at the cost of software GL in the build. Recommendation is
    analytic-only in CI, renderer as an opt-in local script — but "we never test on
@@ -773,7 +834,10 @@ Acceptance per phase:
   relative-slot + rotation-control path.
 - **7** — ceiling fixtures measure; `geoRefine`'s ceiling contract test from Phase 1
   is updated deliberately, not deleted.
-- **8** — harness runs in CI and reports a number. Analytic ground truth only; if
+- **8** — ~~harness runs in CI and reports a number.~~ **Done for the pipeline
+  half.** It prints its table on success, not only on failure, because a number
+  visible only when something breaks is not reported. The detector half is blocked
+  on the private photo set and says so in the file. Analytic ground truth only; if
   a renderer ever appears it is an opt-in local script and never a CI dependency.
 - **9** — ~~the field, the three prompt clauses and the stale comment in
   `lib/detect-refine.ts` all go together. `position.y` is a separate decision.~~
