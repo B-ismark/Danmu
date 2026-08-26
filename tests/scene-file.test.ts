@@ -102,11 +102,11 @@ describe('scene file · round trip', () => {
         [5, 4],
         [0, 4],
       ],
-      site: { lat: 5.6, lon: -0.2, bearingDeg: 90 },
+      site: { bearingDeg: 90 },
     });
     expect(file.room.wallColors).toEqual({ 0: '#aabbcc', 2: '#112233' });
     expect(file.room.footprint).toHaveLength(4);
-    expect(file.room.site).toEqual({ lat: 5.6, lon: -0.2, bearingDeg: 90 });
+    expect(file.room.site).toEqual({ bearingDeg: 90 });
   });
 
   it('bakes the studio overrides, so the file shows what the user is looking at', () => {
@@ -421,15 +421,48 @@ describe('scene file · degrading a room rather than refusing it', () => {
     if (out.ok) expect(out.file.room.wallColors).toEqual({ 0: '#aabbcc' });
   });
 
-  it('drops a site outside the coordinates the earth has, and says so', () => {
+  it('drops a bearing that is not a direction, and says so', () => {
     const out = parseSceneFile(
-      rawFile({ room: { name: 'R', layoutId: 'rect', width: 5, depth: 4, height: 2.6, site: { lat: 200, lon: 0, bearingDeg: 0 } } }),
+      rawFile({ room: { name: 'R', layoutId: 'rect', width: 5, depth: 4, height: 2.6, site: { bearingDeg: 900 } } }),
     );
     expect(out.ok).toBe(true);
     if (out.ok) {
       expect(out.file.room.site).toBeUndefined();
-      expect(out.dropped.join(' ')).toMatch(/location was unreadable/i);
+      expect(out.dropped.join(' ')).toMatch(/which way the room faces/i);
     }
+  });
+
+  it('reads past the latitude and longitude an older file carries', () => {
+    // `Site` held a `lat` and a `lon` while the sun mood computed a real solar
+    // position from them. Both are gone from the type (see `lib/storage.ts`), and
+    // a file written by that build must still import — with its bearing kept and
+    // the coordinates simply not brought across. They are NOT reported in
+    // `dropped`: that list is for content the user would notice missing from
+    // their room, and a latitude nothing renders is not.
+    const out = parseSceneFile(
+      rawFile({
+        room: { name: 'R', layoutId: 'rect', width: 5, depth: 4, height: 2.6, site: { lat: 5.6, lon: -0.2, bearingDeg: 90 } },
+      }),
+    );
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.file.room.site).toEqual({ bearingDeg: 90 });
+      expect(out.dropped.join(' ')).not.toMatch(/faces|latitude|location/i);
+    }
+  });
+
+  it('keeps a bearing whose file also carries an impossible latitude', () => {
+    // The order these are checked in matters, and getting it wrong is silent: if
+    // `readSite` still validated the coordinates it no longer keeps, one bad
+    // legacy number would throw away a perfectly good bearing and the room would
+    // import facing the wrong way.
+    const out = parseSceneFile(
+      rawFile({
+        room: { name: 'R', layoutId: 'rect', width: 5, depth: 4, height: 2.6, site: { lat: 200, lon: 999, bearingDeg: 45 } },
+      }),
+    );
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.file.room.site).toEqual({ bearingDeg: 45 });
   });
 
   it('falls back to a custom layout for an unknown preset, keeping the sizes', () => {

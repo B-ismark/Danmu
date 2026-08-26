@@ -367,7 +367,9 @@ This is what makes Danmu trustworthy. All pure math, all covered by tests.
 | `lib/apertures.ts` | Turns wall-mounted `window` / `door` parts into rectangles in each wall's own 2D frame, which is all `THREE.Shape` needs to punch a hole (`Shape.holes` + Earcut — no CSG library). Pure, because the wall-local conversion is the part that goes wrong invisibly: get the tangent backwards and every opening mirrors about the middle of its wall. |
 | `lib/layout-score.ts` / `lib/layout-solve.ts` | `layout-rules` restated as **costs** rather than checks — collisions, doors and their approach, functional zones, windows, walkways, wall affinity, relations, alignment, balance — plus **inertia**, which charges for movement so a piece only moves if moving it buys something, and **navigability** over the clearance field for the handful of finalists. Then seeded simulated annealing over `(x, z, yaw)` of the unlocked pieces, with proposals that know the room's structure (snap to a wall, park beside the thing you belong to, face the screen, swap two pieces). Deterministic per seed; `mode: 'refit'` turns the inertia up to repair a layout after a resize rather than reinvent it. **Never writes `dimMM`** — it moves and turns, and the type it works in has no field a size could travel in. Restating a table is safe only while the restatements agree, so `tests/layout-conformance.test.ts` pins them to each other — see below. Three properties are worth naming because each one was a bug: a relation is discharged by its **best** anchor and not by all of them (a rug's `['sofa','bed','dining-table']` means *a rug goes under a group*, and read pairwise it charged the rug for every group it was not under — 38.3 of a seeded T's total, and the reason the rug ended up parked between the two); wall affinity is keyed on **role**, since `Category` cannot tell a coffee table from a dining table and gave both `prefers-middle`; the wall gap is measured **along that wall’s normal**, because `nearestEdge` clamps to the segment and hands back a DIAGONAL distance to an endpoint whenever a piece stands off the end of a wall, while `halfDepthToward` returns an AXIAL half-extent — the difference of the two is not a gap, and no `RuleKind` maps to `wall`, so this term has one consumer and no second opinion to contradict it (on the L, whose notch runs x 0.48→3.00 at z 0.38, a sofa centred at x = 0 with its back 24 mm off that plane was charged 0.215, 91% of the preset’s whole wall term, and the solver collected it by sliding the sofa 200 mm PAST a wall that does not reach that far); and facing the wrong way costs `FACING_GAIN ×` what being a few degrees off square does, because `angleCost` tops out at 1 and a completely backwards sofa was therefore cheaper than moving it 2.7 m.The best anchor is also an **argmin**, so it needs a tie-break that is not array order: a relation band costs zero everywhere inside it, so a lamp between two armchairs both within reach is a dead heat, and `parts` order changes whenever a piece is added or deleted. `beatsAnchor` settles it on cost, then the physically nearer anchor, then the anchor id — and `relationParents` exposes those `child → parent` edges, so anything that wants to know what a piece belongs to reads one answer rather than recomputing its own.The solver's **first pass** settles one piece alone — `RoomProfile.anchor`, the bed in a bedroom or the sofa in a living room — before the big-furniture and all-pieces passes run. It buys the tail rather than the median: twelve seeds on a scrambled room, worst run, without → with, `l` 1081 → 136 and `u` 155 → 6.9, because a catastrophic run is one where the biggest piece never found its wall and everything else spent the budget arranging itself around a bed in the middle of the floor. The anchor is picked by ROLE PRIORITY first (bed, then sofa, then dining table, then desk) and footprint area only within a rank, so a large sofa cannot outrank a single bed. Those edges are what the solver’s **group pass** moves: before the piece-level passes, a short anneal of its own proposes whole groups — swap two groups by their centroids, slide one bodily, turn one about its own centre — every one rigid, so a group that was arranged stays arranged. It exists for the one case single-piece moves provably cannot reach: two intact groups standing where the other belongs is a local minimum, because taking any one piece out of a coherent group makes the room worse, and the flat search duly moved 0–1 pieces of eleven at every seed. Groups are read from the ARRANGEMENT — only relation edges currently satisfied, movable members only — so a room nobody has arranged has none and the pass is skipped, which is measurably the right answer there. |
 | `lib/layout-solve.ts`, after the anneal | Three passes that turn a search result into a **suggestion**. *Snap* squares any yaw within 12° of its wall's own heading, keeping the change only if the room agrees — the free-turn proposal exists so a chair can angle toward a sofa, and it also leaves pieces at 8° that nobody meant to angle. *Prune* offers every moved piece its old place back, cheapest first, spending a bounded slack budget: measured over the five presets at three seeds this reverted **40–63 %** of the moves and left the total cost equal or lower in eight of twelve runs, because the annealer accepts uphill moves and never revisits them. *Explain* names, per piece, the cost term that paid for its move, which is what lets the toast say *"the floor lamp moved beside what it belongs with"* instead of *"moved 8 pieces"*. `isWorthOffering` is then the bar for showing a suggestion at all — a material gain, not merely a smaller number. |
-| `lib/solar.ts` | NOAA / Meeus solar position — declination, equation of time, hour angle → altitude and azimuth, ~0.01°. No model, no network, no data file: pure astronomy, which is the one thing in this app a model could not do better. |
+| `lib/solar.ts` | Sunlight as the two things a room can show you: `sunDirection` (a compass azimuth and an elevation → a unit vector in scene axes, null below the horizon) and `daylightKelvin` (warm at the horizon, neutral overhead, on the same Planckian locus as the lamps). It was a full NOAA / Meeus solar-position calculator accurate to ~0.01°, driven by a latitude, a longitude, a date and a clock; that went, and the file states why in its own header. **Correct is not the same as useful:** nobody arranging furniture can verify a hundredth of a degree, and the four fixed presets in `Room`'s `LIGHTING` table are the four pictures it existed to produce. |
+| `lib/lighting-moods.ts` | `LIGHTING` — what each of the seven moods looks like, and for the four sun angles where the light comes from. Read by the 3D scene, by the north dial that draws the sun on its rim, and by its own test. It was inside `Room.tsx` first, which was wrong the moment a second consumer appeared: a table in one renderer becomes a table each consumer copies (rule 3, the `layout-rules.ts` argument). The dial had drawn the sun for as long as the sun existed, and putting the angles behind an R3F import is what silently dropped the marker. Hex rather than tokens because none of it is reachable from CSS — the `lib/scene-palette.ts` reason, and the reason it belongs in `lib/` beside it. |
+| `lib/bearings.ts` | Averaging bearings, which is not averaging numbers — `circularMeanDeg` (359° and 1° average to 0°, not 180°) and `circularSpreadDeg`. Was `lib/compass.ts`, most of which was a device-magnetometer read for the sun mood; the read went with the mood and the maths stayed, because `lib/capture-slots.ts` averages the EXIF bearings of a set of room photos to work out which wall each one is. Renamed with its contents: a module named for the deleted half is the scar rule 1 of CLAUDE.md describes. |
 | `lib/clearance-field.ts` | Circulation as a **field** rather than a list of pairs — see below. One 5 cm raster of the floor plus an exact Euclidean distance transform answers walkway width, reachability, turning space and crowding at once, and it also carries WHICH obstacle is nearest so a finding can name the pieces to select. |
 | `lib/dimension-ranges.ts` | `clampDims` — per-item sizing tiers (fixed / standard / flexible). **All sizes pass through this**, including every size read out of a scene file (§6a). Also `ROOM_SIDE_M`, the one bound on a room's own side: the dims editor wrote `1` and `50` in a predicate and twice more into the sentences it shows, while `scene-store`'s wall-drag clamp independently held 40 — so a size you could type was a size a drag refused to reach. |
 | `lib/footprint.ts` | Footprint polygon math (preset shapes, containment, `offsetWall` / `wallOutwardNormal` for wall moves). The polygon — not `width`/`depth` — is the source of truth for room shape. |
@@ -712,7 +714,10 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
   map) may cast, only on `high`, and only the two brightest in the room.
   `LIGHT_SCALE` re-bases candela into the scene's artistic exposure; the ratios
   between fixtures survive it, which is the part that matters.
-- **Lighting moods** Day / Evening / Cool (`ViewOptions.tsx` → Room `LIGHTING`)
+- **Lighting moods** — seven, in one `Segmented` (`ViewOptions.tsx` →
+  `LIGHTING` in `lib/lighting-moods.ts`). Three are studio looks: Day / Evening / Cool. Four are sun angles:
+  Sunrise / Noon / Golden / Sunset (see the next two entries). Every mood's
+  `hemi` / `fill` / `env` / `envMul` / `exposure` terms
   set the **ambient** conditions only. Evening is deliberately low now — its job
   is to leave room for the fixtures rather than to be an orange filter over a
   fully-lit room, so a room with no lamps in it reads as genuinely dim there.
@@ -721,82 +726,92 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
   is not enough: every material has `envMapIntensity: 0.5`, so the environment
   supplies most of the light in the scene, and a nominally dark Evening still
   rendered as a fully-lit amber room. Both halves move together or neither does.
-- **Sunlight is a fourth mood, and it is a measurement rather than a look.**
-  Day / Evening / Cool are studio lighting; `Sun` asks `lib/solar.ts` where the sun
-  actually is for this room's latitude, on a chosen date, at a chosen time, and
-  points the key light there. Its colour comes off the same Planckian locus the
-  lamps use (warm at the horizon, neutral overhead) and its strength falls with
-  `sin(altitude)` — the first-order air-mass term, which is what makes a 7 am room
-  read as 7 am. **When the sun is down there is no key light at all**, because that
-  is the honest picture of 9 pm in December.
-  Latitude, longitude and the room's compass bearing are stored **on the room**
-  (`RoomData.site`): a flat and a holiday cottage do not share a latitude. The date
-  and time being asked about are device prefs — a question, not a property of the
-  furniture. Nothing is read from a photo; `lib/exif.ts` does not read GPS.
-  **`Use my location` fills latitude and longitude from the device** on a press —
-  never on mount, because an unprompted permission dialog is the fastest route to
-  being denied one permanently. `lib/geolocate.ts` **coarsens the fix to one decimal
-  place (~11 km) before it is stored**: across that distance the sun's altitude
-  moves 0.1° and solar noon 24 seconds, both under the width of the sun's own disc,
-  so the room keeps enough to be lit correctly and not enough to say which building
-  it is in. High accuracy is never requested for the same reason. The fix goes to
-  `RoomData.site` in IndexedDB and nowhere else — this is not egress, and the
-  browser's location service is the only party that holds the precise position.
-  The bearing is deliberately left alone: a fix says where the room is, not which
-  way it points.
-  **`Compass` reads the bearing off the phone's magnetometer** (`lib/compass.ts`),
-  which is the last of the three facts nobody knows about their own living room.
-  The gesture is defined so that no conversion is needed, and that is the point: a
-  compass heading is clockwise from true north and describes the device's **top
-  edge**, while `site.bearingDeg` is the true bearing of the plan's **up** direction
-  (scene `-Z`) — so *aim the phone's top edge at the wall drawn at the top of the
-  plan* makes the heading the bearing. A sign error here is invisible at 0° and 180°
-  and inverts every side wall, the same trap `lib/geometry.ts` documents for
-  rotations. Two APIs are needed: iOS's `webkitCompassHeading` behind
-  `DeviceOrientationEvent.requestPermission()` (which must be reached synchronously
-  from the tap), and `deviceorientationabsolute`'s `alpha` elsewhere — measured
-  *counter*-clockwise from north, hence `360 - alpha`. A `deviceorientation` event
-  **without** `absolute` is refused rather than used: it is relative to wherever the
-  phone was when listening began, and would produce a confident wrong bearing.
-  The reading is a ~1.4 s window averaged as unit vectors, not a single event —
-  arithmetic on bearings averages 359° and 1° to 180°, the exact opposite answer —
-  and the resultant length doubles as an agreement measure: below 0.6 the read is
-  refused, above ~15° of circular spread the value is applied but reported as shaky,
-  because a bearing taken next to a radiator looks identical to a good one on the
-  dial. Snapped to 5°, which is the dial's step and about as far as a phone
-  magnetometer should be believed.
-  Both buttons needed `Permissions-Policy` changes in `next.config.mjs`:
-  `geolocation=(self)`, and `accelerometer` / `gyroscope` / `magnetometer=(self)`
-  (Chrome gates the orientation events on all three). `()` there overrides the
-  user's own grant, so a feature and its header entry move together.
-  **`Now` pins that moment to the device clock** (`sunLive`), and a ticker in `Room`
-  advances it on the minute so the room stays lit by the light that is outside the
-  window; scrubbing the day or picking a month unpins it, because the clock and the
-  panel cannot both own the value. Off by default — the moment you want to look at is
-  rarely the moment you opened the app, and a room asked about at 1 am is correctly
-  black. Both directions of the local-clock ↔ UTC-instant conversion live together
-  in `lib/solar.ts` (`localInstant` / `localClock`, and `daysInYear` so 31 December
-  is reachable in a leap year), because they had already drifted apart: the panel's
-  date label was formatted against a fixed non-leap year while the scene built its
-  instant from the real one, so through a leap year the label read a day later than
-  the light it described.
-  **The controls are `SunControls.tsx`, and they show the answer rather than the
-  parameters.** The day is drawn — sun altitude across 24 hours, night shaded,
-  sunrise/sunset/solar-noon marked — from the same `sunPosition` the scene is lit
-  by, sampled every 10 minutes and bisected to the minute at the horizon crossings,
-  so the picture and the presets (`Sunrise` / `Noon` / `Golden` / `Sunset`, which
-  are *this* place's real times) can never disagree with the light. A native
-  `<input type="range">` lies over the graph with a transparent track (`.sun-scrub`),
-  which is what keeps arrow keys, Home/End and a spoken value for free. The date is
-  twelve month buttons rather than a 365-step slider — a sun path moves little
-  within a month — and the compass bearing is a dial with the room square in the
-  middle and the sun drawn where it actually is, because "which way does the room
-  face" is a picture, not a number between 0 and 359. The dial is a real
-  `role="slider"` with arrow keys, since pointing is otherwise a mouse-only gesture.
+- **The sun is four of those moods, and they are angles rather than a
+  measurement.** `Sunrise` / `Noon` / `Golden` / `Sunset` each carry one azimuth
+  and one elevation in the same `LIGHTING` table (`lib/lighting-moods.ts` — a
+  `lib/` module and not a renderer, because the north dial reads the same rows to
+  draw the sun on its rim), and everything else about the
+  key light is *derived* from those two numbers: its direction through
+  `sunDirection` (which is where the axis convention lives — scene +X east, +Z
+  south, so scene north is −Z), its colour through `daylightKelvin` on the same
+  Planckian locus the lamps use, and its strength through `sin(elevation)`, the
+  first-order air-mass term that makes Sunrise read as sunrise rather than as
+  Noon pointed sideways. **When an angle is below the horizon there is no key
+  light at all** — `sunDirection` returns null rather than a downward vector,
+  because a light shining up through the floor is worse than no light. No shipped
+  preset is below it; the branch stays because the function decides, not the call
+  site.
+  The one per-room input is **`Site.bearingDeg`**, which rotates all four
+  together — so *which wall* the light comes through is still the user's answer,
+  and it is set on the dial in the rail's Room section (`NorthDial.tsx`). That is
+  a `role="slider"` with arrow keys, because pointing is otherwise a mouse-only
+  gesture, and it draws the room square in the middle with north on the rim:
+  "which way does the room face" is a picture, not a number between 0 and 359.
   The key light's shadow frustum is fitted per direction, not per room: a sun near
   the horizon throws shadows an order of magnitude longer than a studio light, so
   the throw-per-metre term is derived from the light vector and capped, and the
   shadow camera's `far` follows the fitted distance.
+
+- **What the sun used to be, and why it is not that any more.** This was a single
+  `Sun` mood that computed a real solar position: `lib/solar.ts` carried the full
+  NOAA / Meeus algorithm — mean longitude, equation of centre, obliquity, equation
+  of time, hour angle — accurate to ~0.01°, driven by a latitude, a longitude, a
+  day of the year and a clock. `SunControls.tsx` was 759 lines and the studio's
+  largest component: a "Where the room is" section with lat/lon fields and a
+  `Use my location` button (`lib/geolocate.ts`, coarsening the fix to ~11 km), a
+  `Compass` button reading the bearing off the phone's magnetometer
+  (`lib/compass.ts`), a drawn solar-elevation arc with sunrise / noon / sunset
+  marked, a twelve-month strip, a scrub slider and a `Now` pin with a ticker in
+  `Room` following the device clock minute by minute.
+
+  All of it worked. It was deleted anyway, for three reasons worth keeping:
+
+  · **Accuracy the user cannot verify is accuracy not worth holding.** This repo
+    already argues the same thing one level down, where it coarsens a geolocation
+    fix because "precision the sun cannot use is precision not worth holding".
+    Nobody arranging furniture inside a room can tell a correct 4 pm in December
+    from a plausible one — and the four presets are the four pictures that
+    apparatus existed to produce.
+  · **The `Compass` button was measurably dead, not merely doubtful.** Its own
+    help text read "On a phone: aim its top edge at the wall at the top of the
+    plan and tap Compass", while `NarrowViewportBanner` matches
+    `(hover: none) and (pointer: coarse)` and shows phone users a go-away modal.
+    The one device that could answer it is the one device the studio refuses.
+  · **It cost two device permissions and a stored coordinate pair.** `geolocation`
+    and the `accelerometer`/`gyroscope`/`magnetometer` trio are back to `()` in
+    `next.config.mjs`, and `Site` no longer has a `lat` or a `lon` — a coordinate
+    for the inside of someone's home, held for a feature that is gone, reads as
+    something the app keeps about you. See §3 and rule 5 in `CLAUDE.md`.
+
+  **What survived, and where it went.** `lib/solar.ts` keeps `sunDirection` and
+  `daylightKelvin` (68 lines, down from 229) — the axis convention and the colour
+  ramp, neither of which was ever a guess. `lib/compass.ts` became
+  **`lib/bearings.ts`**: the sensor read went and the circular-mean maths stayed,
+  because `lib/capture-slots.ts` needs it to average the EXIF bearings of a set of
+  room photos. Renaming was not tidying — a module named for the half that was
+  deleted is exactly the scar rule 1 of `CLAUDE.md` describes, and the next reader
+  cannot tell a deliberate trim from a half-finished deletion. `lib/geolocate.ts`
+  is gone. The bearing dial moved out of the lighting mood that consumed it and
+  into the Room section, where `lib/storage.ts` had always said it belonged: "a
+  property of the room, not of the device".
+
+  **What holds the shape.** `LIGHTINGS` in `lib/store.ts` is an `as const` array
+  with the `Lighting` union derived from it, and its consumers are typed
+  `Record<Lighting, …>` — so a mood missing from the scene table or from the chip
+  set is a compile error rather than an `undefined` row that takes the scene down
+  on first paint. `tests/lighting-moods.test.ts` covers what the compiler cannot
+  see: a sun preset authored at or below the horizon (selectable,
+  plausible-looking, and casting nothing, because `sunDirection` returns null
+  there), four presets arriving from one direction, four presets at one height, a
+  mood that is somehow both a studio look and a sun angle, and a leftover row for
+  a mood that was renamed. It **imports** `LIGHTING` to do that. It could not
+  while the table lived in `Room.tsx` — it parsed the component’s source with
+  regexes, which tests a transcript of the data rather than the data, and *that*
+  is the second reason the table moved to `lib/`. If a check in that file ever
+  needs a regex again, the data is in the wrong place. The persist
+  config carries a `merge` that checks the stored `lighting` against `LIGHTINGS`,
+  because a browser holding the retired `'sun'` would otherwise index a row that
+  no longer exists.
 - **Windows and doors are holes in the wall**, not panels in front of it
   (`lib/apertures.ts` → `RoomShell`). Each wall is a `THREE.Shape` with one hole per
   opening; `ShapeGeometry` faces +Z exactly as the `planeGeometry` it replaced, so

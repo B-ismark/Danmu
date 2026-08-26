@@ -14,7 +14,8 @@ import { useScene } from '@/lib/scene-store';
 import { useRoomScene } from '@/lib/room-scene';
 import { placeNewPart, DND_MIME, type Category, type Shape } from '@/lib/scene-spec';
 import { footprintBounds } from '@/lib/footprint';
-import { sunPosition, sunDirection, daylightKelvin, localInstant } from '@/lib/solar';
+import { sunDirection, daylightKelvin } from '@/lib/solar';
+import { LIGHTING } from '@/lib/lighting-moods';
 import { hexFromKelvin } from '@/lib/light-units';
 import { useSnapshot, downloadBlob } from '@/lib/snapshot';
 import { pickIdsFrom } from '@/lib/pick-through';
@@ -78,76 +79,13 @@ const _ndc = new Vector2();
 const _floor = new Plane(new Vector3(0, 1, 0), 0);
 const _hit = new Vector3();
 
-// Lighting moods — background, hemisphere sky/ground, key + fill, and the
-// emissive environment panels all shift together so the room reads as daylight,
-// warm evening, or cool overcast.
-//
-// These are the AMBIENT conditions only. Since lamps became real emitters
-// (components/three/PartLight.tsx) the moods no longer have to fake the whole
-// result: Evening in particular is pulled well down, because its job is to leave
-// room for the fixtures in the scene rather than to be an orange filter over a
-// fully-lit room. A room with no lamps in it will read as genuinely dim at
-// Evening — which is correct, and is what a lighting study is for.
-const LIGHTING = {
-  day: {
-    bg: '#FBF8F2',
-    hemi: ['#ffffff', '#cfc7b6', 0.85] as [string, string, number],
-    key: { color: '#fff4e2', intensity: 1.1 },
-    fill: { color: '#dfe7ff', intensity: 0.25 },
-    env: ['#fffaf0', '#eef3ff', '#fff3e0'] as [string, string, string],
-    // Scales the studio environment with the mood. Dimming the three lights and
-    // leaving this at full strength was the reason a "dark" Evening still read as
-    // a fully-lit amber room: every material has envMapIntensity 0.5, so the
-    // environment was quietly supplying most of the light in the scene.
-    envMul: 1,
-    exposure: 1.0,
-  },
-  evening: {
-    bg: '#27201C',
-    // Ambient pulled down hard — this is the mood where the lamps are supposed to
-    // do the work. At the old levels (hemi 0.5, key 1.25) a shadeless room was
-    // already fully lit, so adding a real 800 lm floor lamp changed nothing
-    // visible and the whole point was lost.
-    hemi: ['#ffd9a8', '#3a2c20', 0.07] as [string, string, number],
-    key: { color: '#ffb15e', intensity: 0.12 },
-    fill: { color: '#6a4b8a', intensity: 0.06 },
-    env: ['#ffce93', '#ff9d5c', '#5b4a8a'] as [string, string, string],
-    envMul: 0.2,
-    exposure: 1.15,
-  },
-  cool: {
-    bg: '#EAEEF1',
-    hemi: ['#eaf1ff', '#c4cdd4', 0.95] as [string, string, number],
-    key: { color: '#eef4ff', intensity: 0.95 },
-    fill: { color: '#d6e2ee', intensity: 0.4 },
-    env: ['#f2f6ff', '#dfe9f5', '#e8eef5'] as [string, string, string],
-    envMul: 1,
-    exposure: 0.95,
-  },
-  // Real sunlight. These are the AMBIENT terms only — sky and bounce; the key
-  // light's direction, colour and strength all come from `lib/solar.ts` for the
-  // room's latitude, the chosen date and the chosen time. They are the sky, not
-  // the sun, which is why they are lower than 'day': anything they contribute is
-  // light the sun is not responsible for, and the point of this mood is to see
-  // exactly where the sun does and does not reach.
-  sun: {
-    bg: '#EDF1F5',
-    hemi: ['#cfe0f5', '#b8ad98', 0.35] as [string, string, number],
-    key: { color: '#fff4e2', intensity: 1.0 },
-    fill: { color: '#cfe0f5', intensity: 0.12 },
-    env: ['#eef5ff', '#e6eefb', '#f6f1e6'] as [string, string, string],
-    envMul: 0.7,
-    exposure: 1.0,
-  },
-} as const;
-
-/** Where the sun is asked about when the room has no site yet.
+/** The bearing used when a room has no site yet: square to the compass.
  *
- *  40° N is a compromise, not a guess dressed as a fact: the UI shows these
- *  numbers as editable fields the moment the mood is selected, so a room whose
- *  latitude nobody has set says so rather than quietly rendering somebody else's
- *  daylight. */
-const DEFAULT_SITE = { lat: 40, lon: 0, bearingDeg: 0 };
+ *  Zero is the honest default here in a way a latitude never was — "nobody has
+ *  told us which way this room faces" and "the plan's top edge really is north"
+ *  produce the same picture, and the dial in the Room section shows the number
+ *  it is using either way. */
+const DEFAULT_BEARING_DEG = 0;
 
 export function Room() {
   const hidden = useStudio((s) => s.hidden);
@@ -159,50 +97,33 @@ export function Room() {
   const L = LIGHTING[lighting];
   const parts = useScene((s) => s.parts).filter((p) => !hidden[p.id]);
 
-  // The sun, when the sun mood is on. Null in every other mood, and null when the
-  // sun is below the horizon — which is a real answer, not a missing one, and the
-  // key light has to go out rather than shine up through the floor.
-  const site = useScene((s) => s.room.site);
-  const sunMinutes = useStudio((s) => s.sunMinutes);
-  const sunDayOfYear = useStudio((s) => s.sunDayOfYear);
-  // While the moment is pinned to "Now", follow the device clock. This is the app's
-  // only such ticker and it lives here rather than in the View panel, because the
-  // panel is closed most of the time and the room still has to keep up.
+  // The sun, in the moods that have one. Null in a studio mood, and null when the
+  // angle is below the horizon — which is a real answer, not a missing one, and
+  // the key light has to go out rather than shine up through the floor. No
+  // shipped preset is below it, but the branch stays because `sunDirection` is
+  // the thing that decides, not this call site.
   //
-  // Aligned to the next minute rather than a bare 60s interval: the readout is a
-  // clock, and a clock that changes 40 seconds after the minute does is wrong twice
-  // over. Nothing runs in the other moods — the sun is not consulted there, so a
-  // timer waking the scene up every minute would be pure battery.
-  const sunLive = useStudio((s) => s.sunLive);
-  const syncSunToNow = useStudio((s) => s.syncSunToNow);
-  useEffect(() => {
-    if (!sunLive || lighting !== 'sun') return;
-    syncSunToNow();
-    let tick: ReturnType<typeof setInterval> | undefined;
-    const align = setTimeout(() => {
-      syncSunToNow();
-      tick = setInterval(syncSunToNow, 60_000);
-    }, 60_000 - (Date.now() % 60_000));
-    return () => {
-      clearTimeout(align);
-      if (tick) clearInterval(tick);
-    };
-  }, [sunLive, lighting, syncSunToNow]);
+  // The only per-room input is the bearing: it rotates all four angles together,
+  // so which wall the light comes through is still the user's answer. Everything
+  // else is derived from the preset's two numbers, which is why there is no
+  // ticker here any more — the app's one `setInterval` existed to follow the
+  // device clock for a mood that no longer asks what time it is.
+  const bearingDeg = useScene((s) => s.room.site?.bearingDeg) ?? DEFAULT_BEARING_DEG;
   const sun = useMemo(() => {
-    if (lighting !== 'sun') return null;
-    const s = site ?? DEFAULT_SITE;
-    const p = sunPosition(localInstant(sunDayOfYear, sunMinutes), s.lat, s.lon);
-    const dir = sunDirection(p.altitudeDeg, p.azimuthDeg, s.bearingDeg);
+    if (!L.sun) return null;
+    const { azimuthDeg, elevationDeg } = L.sun;
+    const dir = sunDirection(elevationDeg, azimuthDeg, bearingDeg);
     if (!dir) return null;
     return {
       dir,
-      color: hexFromKelvin(daylightKelvin(p.altitudeDeg)),
+      color: hexFromKelvin(daylightKelvin(elevationDeg)),
       // Air mass, roughly: the sun is dimmer near the horizon because its light
       // takes a longer path through the atmosphere. sin(altitude) is the standard
-      // first approximation and it is what makes a 7 am room read as 7 am.
-      intensity: 0.25 + 1.35 * Math.sin((p.altitudeDeg * Math.PI) / 180),
+      // first approximation and it is what makes Sunrise read as sunrise rather
+      // than as Noon pointed sideways.
+      intensity: 0.25 + 1.35 * Math.sin((elevationDeg * Math.PI) / 180),
     };
-  }, [lighting, site, sunDayOfYear, sunMinutes]);
+  }, [L.sun, bearingDeg]);
   // Drop the upper DPR bound when FPS regresses (large scenes / weak GPUs);
   // AdaptiveDpr cuts further while interacting. Keeps AO affordable.
   const [dprMax, setDprMax] = useState(2);
@@ -351,10 +272,11 @@ export function Room() {
           cast a real shadow map on 'high' (see KeyLight); ContactShadows below is
           the soft contact grounding on top of it, not a replacement for it. */}
       <hemisphereLight args={L.hemi} />
-      {/* In the sun mood the key light IS the sun — and when the sun is down there
-          is no key light at all, which is the honest picture of 9 pm in December
-          and the reason this is a conditional rather than a dimmer. */}
-      {lighting === 'sun' ? (
+      {/* In a sun mood the key light IS the sun — and if the angle is below the
+          horizon there is no key light at all, which is the honest picture of a
+          room after dark and the reason this is a conditional rather than a
+          dimmer. */}
+      {L.sun ? (
         sun && <KeyLight intensity={sun.intensity} color={sun.color} cast={hi} dir={sun.dir} />
       ) : (
         <KeyLight intensity={L.key.intensity} color={L.key.color} cast={hi} />

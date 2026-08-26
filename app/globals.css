@@ -546,32 +546,6 @@ input[type='number']::-webkit-inner-spin-button { -webkit-appearance: none; marg
    let the corner read as ours. */
 textarea.field { border-radius: var(--r-2); }
 
-/* The sun scrubber — a range input laid over the drawn sun path (SunControls).
-   Only the thumb is painted: the track IS the graph underneath, and the native
-   input is kept because it is the entire keyboard + screen-reader story for
-   scrubbing a value. The thumb carries a paper ring so it stays visible over both
-   the daylight tint and the night band. */
-.sun-scrub {
-  appearance: none; -webkit-appearance: none;
-  height: 20px; margin: 0; background: transparent;
-  cursor: ew-resize;
-}
-.sun-scrub::-webkit-slider-runnable-track { height: 20px; background: transparent; }
-.sun-scrub::-moz-range-track { height: 20px; background: transparent; }
-.sun-scrub::-webkit-slider-thumb {
-  -webkit-appearance: none; margin-top: 3px;
-  width: 14px; height: 14px; border-radius: var(--r-full);
-  background: var(--accent); border: 2px solid var(--paper);
-  box-shadow: var(--shadow-soft); cursor: ew-resize;
-}
-.sun-scrub::-moz-range-thumb {
-  width: 14px; height: 14px; border-radius: var(--r-full);
-  background: var(--accent); border: 2px solid var(--paper);
-  box-shadow: var(--shadow-soft); cursor: ew-resize;
-}
-.sun-scrub:focus-visible { outline: none; }
-.sun-scrub:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--accent-tint); }
-.sun-scrub:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px var(--accent-tint); }
 
 /* Scrollbars. The default is an OS widget — grey, square, and (on Windows) 17px
    of chrome inside every panel. Thin + tokenised keeps long lists, the part rail

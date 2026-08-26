@@ -12,6 +12,7 @@ import Link from 'next/link';
 import { RoomDimsEditor } from './RoomDimsEditor';
 import { RailSection } from './RailSection';
 import { RoomTools } from './RoomTools';
+import { NorthDial } from './NorthDial';
 import { ViewOptions } from './ViewOptions';
 import { AddPiecesButton } from './CatalogPanel';
 import { duplicateSelection, removeParts } from './KeyboardShortcuts';
@@ -237,6 +238,14 @@ export function PartTree() {
           onToggle={() => toggle('room')}
         >
           <RoomDimsEditor />
+          {/* Which way the room faces. It used to live inside the Lighting mood
+              that consumed it, alongside a latitude and a longitude; it is a
+              property of the ROOM — `lib/storage.ts` says so in as many words —
+              so it belongs with the room's other dimensions. See NorthDial. */}
+          <div style={{ marginTop: 12 }}>
+            <span className="ds-label" style={{ display: 'block', marginBottom: 6 }}>Facing</span>
+            <NorthDial />
+          </div>
           {/* Rescan changes what is IN the room, which is this section's subject.
               It was in the top bar, next to controls about how the app is framed. */}
           <Link

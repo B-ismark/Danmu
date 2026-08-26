@@ -32,27 +32,43 @@
 // content four ways, so "Evening" got 68px for 82px of word, and a segment with
 // no `overflow` of its own does not clip — it prints over the segments either
 // side. In a ~200px rail one row is hopeless, so it passes `wrap` instead, which
-// is 4-across wherever four fit and a 2×2 pad here.
+// is as many across as fit and however many rows that takes.
+//
+// The set is seven now, not four — three studio looks plus four sun angles,
+// which is what replaced the old "Sun" mood and the panel of latitude,
+// longitude, date and clock fields that hung below it. Nothing about the
+// reflow changed: `wrap` was already the answer to "the labels want more room
+// than the rail has", and it does not care how many labels there are.
 
 import { type ReactNode } from 'react';
-import { useStudio, type Lighting } from '@/lib/store';
+import { useStudio, LIGHTINGS, type Lighting } from '@/lib/store';
 import { type IconName } from '@/components/ui/Icon';
 import { Segmented, Toggle } from '@/components/ui/primitives';
-import { SunControls } from './SunControls';
 
 // Lucide, not emoji. The emoji versions rendered in the system's colour font —
 // a red sun and a yellow moon in a panel that is otherwise warm neutrals — at
 // sizes and baselines nothing here controls. They also lived inside the label
 // string, so the space between glyph and word was a line-break opportunity and
 // every segment wrapped onto two lines inside a 30px-tall control.
-const MOODS: Array<{ id: Lighting; label: string; icon: IconName }> = [
-  { id: 'day', label: 'Day', icon: 'sun' },
-  { id: 'evening', label: 'Evening', icon: 'moon' },
-  { id: 'cool', label: 'Cool', icon: 'cloud' },
-  // The other three are studio moods — a look. This one is a measurement: the
-  // sun's real position for this room's latitude, on this date, at this time.
-  { id: 'sun', label: 'Sun', icon: 'compass' },
-];
+// A `Record` keyed by the union, not a hand-kept array: it is what makes a mood
+// added to `LIGHTINGS` a compile error here rather than a mood with no way to
+// reach it. The order comes from `LIGHTINGS` itself for the same reason — three
+// studio looks, then the four sun angles, low to high and round the room.
+const MOODS: Record<Lighting, { label: string; icon: IconName }> = {
+  day: { label: 'Day', icon: 'sun' },
+  evening: { label: 'Evening', icon: 'moon' },
+  cool: { label: 'Cool', icon: 'cloud' },
+  // The four below are sun angles rather than looks — each a fixed azimuth and
+  // elevation in `Room`'s mood table. They replaced a single "Sun" mood that
+  // wanted a latitude, a longitude, a date and a clock first, and then answered
+  // with a solar position nobody in the room could check. These are the four
+  // moments that apparatus was for: which wall the light comes through is still
+  // the room's own bearing, on the dial in the Room section.
+  sunrise: { label: 'Sunrise', icon: 'sunrise' },
+  noon: { label: 'Noon', icon: 'sun-medium' },
+  golden: { label: 'Golden', icon: 'sun-dim' },
+  sunset: { label: 'Sunset', icon: 'sunset' },
+};
 
 export function ViewOptions() {
   const lighting = useStudio((s) => s.lighting);
@@ -73,19 +89,17 @@ export function ViewOptions() {
       <Group label="Lighting">
         <Segmented
           ariaLabel="Lighting"
-          options={MOODS.map((m) => ({ value: m.id, label: m.label, icon: m.icon }))}
+          // Order from `LIGHTINGS`, labels from `MOODS`. Mapping over the
+          // vocabulary rather than over a list of its own is what keeps this
+          // control from silently offering six of seven moods.
+          options={LIGHTINGS.map((id) => ({ value: id, label: MOODS[id].label, icon: MOODS[id].icon }))}
           value={lighting}
           onChange={setLighting}
           wrap
-          // "Evening" is the widest label; below this the grid drops a column
-          // rather than clipping it.
+          // "Evening" and "Sunrise" tie as the widest label; below this the grid
+          // drops a column rather than clipping one.
           minItem={88}
         />
-        {lighting === 'sun' && (
-          <div style={{ marginTop: 12 }}>
-            <SunControls />
-          </div>
-        )}
       </Group>
 
       <div style={{ height: 1, background: 'var(--hairline)' }} />

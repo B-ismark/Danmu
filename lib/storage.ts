@@ -75,12 +75,19 @@ export type Capture = {
  *  this existed read back as version 0. */
 export const ROOM_SCHEMA_VERSION = 1;
 
-/** Where a room is and how it is oriented, for the sun path. */
+/** How a room is oriented, for the sun.
+ *
+ *  This carried a `lat` and a `lon` as well, feeding a full solar-position
+ *  calculation. Both are gone with the apparatus that needed them (see the header
+ *  of `lib/solar.ts`), and they are gone from the *type* rather than left in place
+ *  unread: a persisted field nobody consumes reads as something the app keeps
+ *  about you, and this one was a coordinate pair for the inside of someone's home.
+ *
+ *  Records written before this still have the two keys. Nothing reads them, they
+ *  are dropped on the next save, and `lib/scene-file.ts` ignores them on import —
+ *  no version bump, because narrowing an optional field is as additive as growing
+ *  one for every reader that exists. */
 export type Site = {
-  /** Degrees north, -90…90. */
-  lat: number;
-  /** Degrees east, -180…180. */
-  lon: number;
   /** True bearing the room's own north edge faces, degrees clockwise. 0 = the
    *  plan's north really is north. */
   bearingDeg: number;
@@ -104,13 +111,14 @@ export type RoomData = {
   /** per-wall paint colour, keyed by footprint-edge index. Optional — absent on
    *  rooms created before wall painting shipped (defensive read on load). */
   wallColors?: Record<number, string>;
-  /** Where on earth this room is, and which way it faces — the inputs the sun
-   *  path needs (`lib/solar.ts`). A property of the room, not of the device, so a
-   *  flat and a holiday cottage do not have to share a latitude.
+  /** Which way this room faces — the one input the sun still takes
+   *  (`lib/solar.ts`). A property of the room, not of the device, which is why it
+   *  is saved per room and edited in the rail's Room section rather than in a
+   *  lighting mood.
    *
-   *  Entered by the user and never derived from a photo: EXIF carries GPS
-   *  coordinates, and `lib/exif.ts` deliberately does not read them — see §3 of
-   *  Design.md. Additive, so no version bump. */
+   *  It never held GPS coordinates derived from a photo, and now it holds no
+   *  coordinates at all: EXIF carries them and `lib/exif.ts` deliberately refuses
+   *  to read them — see §3 of Design.md. Additive, so no version bump. */
   site?: Site;
   /** custom footprint polygon (XZ metres) after independent wall moves. When
    *  present it overrides the layout-derived shape on load. Optional. */

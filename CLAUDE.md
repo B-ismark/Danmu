@@ -219,15 +219,27 @@ backend, no account. The 3D studio *is* the product.
    Every
    third-party host is allow-listed with a reason in `next.config.mjs`'s CSP;
    adding a fetch target means adding it there too. The same file's
-   `Permissions-Policy` allows only the features the app actually uses —
-   `camera=(self)` for capture, `geolocation=(self)` for the sun mood's latitude,
-   and `accelerometer`/`gyroscope`/`magnetometer=(self)` for its compass — and
-   denies the rest; `()` there overrides the user's own grant, so a feature and
-   its header entry move together. None of them send anything: a device
-   permission is not egress, and a reading is coarsened before it is stored
-   (`lib/geolocate.ts` ~11 km, `lib/compass.ts` 5° — precision the sun cannot use
-   is precision not worth holding). Neither is ever requested on mount, only on a
-   press.
+   `Permissions-Policy` allows only the features the app actually uses — which is
+   now exactly one, `camera=(self)` for capture — and denies the rest; `()` there
+   overrides the user's own grant, so a feature and its header entry move
+   together. **In both directions, and the removing one is the direction that gets
+   forgotten:** four entries sat at `(self)` for the sun mood — `geolocation` for
+   its latitude, and `accelerometer`/`gyroscope`/`magnetometer` for the phone
+   compass that read the room's bearing. Collapsing that mood to fixed presets
+   (see §Lighting in `Design.md`) deleted every caller, and leaving the four at
+   `(self)` would have broken nothing, failed no test and shown no warning — it
+   would simply have left the app permanently asking for two sensors and a
+   location it can no longer use. A permission with no consumer reads as
+   something the app keeps about you, which is the same rule the EXIF budget
+   above answers to. `lib/geolocate.ts` is gone entirely; `lib/compass.ts` is
+   `lib/bearings.ts` now, because the compass read went and what is left is the
+   circular-mean maths `lib/capture-slots.ts` needs for photo bearings — **a
+   module still named for the half that was deleted is the scar rule 1
+   describes.** The surviving coarsening principle is unchanged and still worth
+   quoting at anything new: precision the sun cannot use is precision not worth
+   holding — and its corollary, which is what actually retired the sun apparatus,
+   *accuracy the user cannot verify is accuracy not worth holding*. A permission
+   is never requested on mount, only on a press.
    **Offline is part of local-first, and it is now real:** `public/sw.js` caches the
    app so it can be *opened* offline, not merely survive losing the network
    mid-session (it always did that — nothing in the studio fetches). Three things

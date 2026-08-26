@@ -115,7 +115,7 @@ describe('the studio rails give ground', () => {
     const src = readFileSync(root('components', 'ui', 'ColorPicker.tsx'), 'utf8');
     const capped = /width: 'min\((\d+)px, 100%\)'/.exec(src);
     expect(capped, 'ColorPicker should cap its width with min(), not state a bare one').toBeTruthy();
-    // Comments stripped, like the sun-graph assertion below: the note above that
+    // Comments stripped, the same guard the deleted sun-graph assertion used: the note above that
     // declaration NAMES the `width: 220` it is telling you not to write, and a
     // negative assertion that reads prose fails on the explanation.
     const code = src
@@ -165,12 +165,19 @@ describe('Segmented can lay its options out on more than one row', () => {
     }
   });
 
-  it('keeps the four-mood lighting set inside the narrowest rail', () => {
+  it('keeps the lighting set inside the narrowest rail, whatever it holds', () => {
     const minItem = Number(/minItem=\{(\d+)\}/.exec(readFileSync(root('components', 'studio', 'ViewOptions.tsx'), 'utf8'))![1]);
     const floor = railFloor('rail-left');
     // Two columns is the layout this set is meant to fall back to. One column
-    // would be four full-width rows of a mood picker, which is a list, not a
-    // segmented control.
+    // would be a stack of full-width rows, which is a list, not a segmented
+    // control.
+    //
+    // Deliberately NOT a function of how many moods there are. The set was four
+    // when this was written and is seven now — three studio looks plus four sun
+    // angles — and `wrap` does not care: it fits as many columns as the width
+    // allows and takes however many rows that needs. What must hold is that the
+    // narrowest rail affords at least two columns of the widest label, and that
+    // is a claim about the rail and the label, not about the count.
     expect(floor - 32).toBeGreaterThanOrEqual(minItem * 2);
   });
 });
@@ -187,28 +194,16 @@ describe('a floating card is capped against the window, not just stated', () => 
     expect(readFileSync(root(...file.split('/')), 'utf8')).toMatch(pattern);
   });
 
-  it("the sun graph's height follows its width", () => {
-    // Its viewBox is 272 wide because the popover it used to live in had exactly
-    // 272px of content. That coincidence is gone, so a pinned `height` would let
-    // the default `xMidYMid meet` letterbox the drawing and show the element's
-    // own background above and below the night rect as two mismatched bands.
-    // `preserveAspectRatio="none"` is the other way to fill the box and is not
-    // allowed here: it scales the axes independently, so the "sun right now"
-    // marker becomes an ellipse.
-    const src = readFileSync(root('components', 'studio', 'SunControls.tsx'), 'utf8');
-    const raw = /<svg\s+viewBox=\{`0 0 \$\{GRAPH_W\} \$\{GRAPH_H\}`\}[\s\S]*?\n {6}>/.exec(src);
-    expect(raw, 'the day-path <svg> is no longer recognisable — re-derive this').toBeTruthy();
-    // Comments stripped, because the reasoning above the tag NAMES the attribute
-    // it is telling you not to use — and a negative assertion that reads prose
-    // fails on the explanation rather than on the code.
-    const tag = raw![0]
-      .split('\n')
-      .filter((l) => !l.trim().startsWith('//'))
-      .join('\n');
-    expect(tag).not.toMatch(/height=\{GRAPH_H\}/);
-    expect(tag).not.toMatch(/preserveAspectRatio=/);
-    expect(tag).toMatch(/aspectRatio: `\$\{GRAPH_W\} \/ \$\{GRAPH_H\}`/);
-  });
+  // A third guard stood here: the sun graph's `<svg>` had a 272-wide viewBox left
+  // over from the popover it used to live in, and this test held its height to an
+  // `aspectRatio` so the drawing filled its box instead of being letterboxed into
+  // two mismatched bands. Both the graph and `SunControls.tsx` are gone — the sun
+  // is four fixed presets now (see `lib/solar.ts`) — so the guard goes with the
+  // element rather than being kept pointing at a file that does not exist.
+  //
+  // The lesson it recorded is still live and belongs to whoever draws the next
+  // SVG in a rail: a viewBox whose numbers came from one container's width is a
+  // coincidence, not a layout.
 
   it('the room report measures its own width so it can clamp its left edge', () => {
     // A CSS `min()` in the style plus a constant in `place()` would be two answers
@@ -468,8 +463,10 @@ describe('the rail asks about itself', () => {
       const floor = railFloor(`rail-${side}`);
       expect(tight).toBeLessThan(floor);
     }
-    // And the left one still has to hold the four-mood lighting set two-up, which
-    // is the same derivation the token floor answers to.
+    // And the left one still has to hold the lighting set two columns wide, which
+    // is the same derivation the token floor answers to. Two columns of the widest
+    // label — not two columns of four moods: the set grew to seven when the sun
+    // became four fixed presets, and `wrap` absorbed that without moving a token.
     const minItem = Number(
       /minItem=\{(\d+)\}/.exec(readFileSync(root('components', 'studio', 'ViewOptions.tsx'), 'utf8'))![1],
     );

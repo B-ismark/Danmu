@@ -2,15 +2,29 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { daysInYear, localClock } from './solar';
 
 // Studio view + interaction state. Mostly session-scoped: only the handful of
 // fields in STUDIO_PREFS below survive a reload (see the persist config at the
 // bottom of this store). Everything else — selection, transforms, camera, open
 // drawers — is either per-room (saved by RoomSync) or genuinely ephemeral.
 type ViewPreset = 'free' | 'front' | 'top' | 'iso';
-/** Scene lighting mood — drives lights, environment + background in Room. */
-export type Lighting = 'day' | 'evening' | 'cool' | 'sun';
+/** Scene lighting moods — each drives lights, environment + background in Room.
+ *
+ *  An `as const` array with the union derived from it, for the reason
+ *  `SHAPES`/`LAYOUT_IDS` are: a persisted value has to be checked against the
+ *  vocabulary at runtime (see `merge` at the bottom of this store), and a union
+ *  beside a hand-kept list drifts in the direction nobody notices.
+ *
+ *  The last four are sun angles rather than studio looks: `LIGHTING` in
+ *  `lib/lighting-moods.ts` gives each an azimuth and an elevation, and the key
+ *  light's direction, colour and strength are derived from those two numbers.
+ *  (That table is a `lib/` module rather than part of the 3D scene because the
+ *  north dial reads the same rows to draw the sun on its rim.) There used to be a
+ *  single 'sun' mood driven by a latitude, a longitude, a date and a clock —
+ *  four facts the user could not verify from inside a room they were arranging
+ *  furniture in. These are the four moments that apparatus existed to reach. */
+export const LIGHTINGS = ['day', 'evening', 'cool', 'sunrise', 'noon', 'golden', 'sunset'] as const;
+export type Lighting = (typeof LIGHTINGS)[number];
 /** Render quality — 'high' enables soft cast shadows, ambient occlusion and
  *  per-part procedural material maps. */
 export type Quality = 'low' | 'high';
@@ -67,21 +81,6 @@ type StudioState = {
   lighting: Lighting;
   /** render quality (soft shadows + AO + material maps on 'high') */
   quality: Quality;
-  /** Which moment the 'sun' mood is showing: minutes past local midnight, and the
-   *  day of the year. A time of day rather than a slider labelled "brightness" —
-   *  the whole value of a real sun path is being able to ask about 4 pm in
-   *  December, and the answer only means something if the question is a date. */
-  sunMinutes: number;
-  sunDayOfYear: number;
-  /** Whether the two fields above are pinned to the device's own clock, ticking
-   *  with it minute by minute (the ticker lives in `Room`, the only always-mounted
-   *  consumer). Off by default: the moment someone wants to see is usually not the
-   *  moment they opened the app, and a room asked about at 1 am is correctly black.
-   *
-   *  Scrubbing either slider clears it — the clock and the sliders cannot both own
-   *  the value, and moving one is an unambiguous request to stop following the
-   *  other. */
-  sunLive: boolean;
   /** auto set-dressing — decorative props on furniture surfaces */
   dressed: boolean;
   /** Snap granularity for the gizmo. 'off' = free move, 'fine' = 10mm / 15°,
@@ -137,13 +136,6 @@ type StudioState = {
   setRailWidth: (side: 'left' | 'right', px: number | null) => void;
   setLighting: (l: Lighting) => void;
   setQuality: (q: Quality) => void;
-  setSunMinutes: (m: number) => void;
-  setSunDayOfYear: (d: number) => void;
-  setSunLive: (on: boolean) => void;
-  /** Snap the shown moment to the device clock. The one setter that leaves
-   *  `sunLive` alone, which is what lets the ticker call it every minute without
-   *  unpinning itself. */
-  syncSunToNow: (now?: number) => void;
   toggleDressed: () => void;
   frameSelected: () => void;
   toggleHidden: (id: string) => void;
@@ -173,25 +165,7 @@ const STUDIO_PREFS = [
   'railRightOpen',
   'railLeftW',
   'railRightW',
-  'sunMinutes',
-  'sunDayOfYear',
-  'sunLive',
 ] as const;
-
-const clampMinutes = (m: number) => Math.min(1439, Math.max(0, Math.round(m)));
-
-/** Day-of-year is clamped against the CURRENT year's length, not a flat 365, so
- *  31 December is reachable in a leap year. `localInstant` clamps the same way, so
- *  a 366 persisted in 2028 and read back in 2029 lands on 31 December rather than
- *  rolling into January. */
-const clampDayOfYear = (d: number) =>
-  Math.min(daysInYear(new Date().getFullYear()), Math.max(1, Math.round(d)));
-
-/** The device clock, as the two fields the sun mood stores. */
-function sunMomentNow(now?: number): { sunMinutes: number; sunDayOfYear: number } {
-  const { dayOfYear, minutes } = localClock(now);
-  return { sunMinutes: clampMinutes(minutes), sunDayOfYear: clampDayOfYear(dayOfYear) };
-}
 
 export const useStudio = create<StudioState>()(
   persist(
@@ -217,12 +191,6 @@ export const useStudio = create<StudioState>()(
   railRightW: null,
   lighting: 'day',
   quality: 'high',
-  // 3 pm on the March equinox: the sun is up at every inhabited latitude and
-  // clearly to one side, so the first thing anyone sees when they pick the sun
-  // mood is a room with a direction to its light.
-  sunMinutes: 15 * 60,
-  sunDayOfYear: 80,
-  sunLive: false,
   dressed: true,
   catalogOpen: false,
   frameSelectedToken: 0,
@@ -284,13 +252,6 @@ export const useStudio = create<StudioState>()(
   },
   setLighting: (l) => set({ lighting: l }),
   setQuality: (q) => set({ quality: q }),
-  setSunMinutes: (m) => set({ sunMinutes: clampMinutes(m), sunLive: false }),
-  setSunDayOfYear: (d) => set({ sunDayOfYear: clampDayOfYear(d), sunLive: false }),
-  setSunLive: (on) =>
-    // Turning it on has to move the moment too, or the pin is announced while the
-    // room stays lit by whatever hour was last scrubbed to.
-    set(on ? { sunLive: true, ...sunMomentNow() } : { sunLive: false }),
-  syncSunToNow: (now) => set(sunMomentNow(now)),
   toggleDressed: () => set((s) => ({ dressed: !s.dressed })),
   loadTransforms: (data) =>
     set({ positions: data.positions ?? {}, rotations: data.rotations ?? {}, dims: data.dims ?? {} }),
@@ -316,6 +277,21 @@ export const useStudio = create<StudioState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (s) =>
         Object.fromEntries(STUDIO_PREFS.map((key) => [key, s[key]])) as Partial<StudioState>,
+      // localStorage holds whatever vocabulary the app had when it was last
+      // written, and `Room` indexes its mood table by this value — so a browser
+      // carrying the retired `'sun'` mood would look up a row that no longer
+      // exists and take the whole scene down on the first paint. The persisted
+      // value is therefore checked against `LIGHTINGS` rather than trusted, the
+      // same boundary an imported scene file crosses.
+      //
+      // It is a fall back to the default, not a remap: `'sun'` had no fixed
+      // angle of its own (it was a latitude and a clock), so there is no honest
+      // "the one you meant" among the four that replaced it.
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<StudioState>;
+        const known = p.lighting !== undefined && (LIGHTINGS as readonly string[]).includes(p.lighting);
+        return { ...current, ...p, lighting: known ? (p.lighting as Lighting) : current.lighting };
+      },
     },
   ),
 );

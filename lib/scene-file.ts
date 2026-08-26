@@ -362,7 +362,7 @@ function readRoom(v: unknown, dropped: string[]): SceneFileRoom | null {
 
   const site = readSite(v.site);
   if (site) room.site = site;
-  else if (v.site !== undefined) dropped.push("the room's location was unreadable and was left off");
+  else if (v.site !== undefined) dropped.push("which way the room faces was unreadable and was left off");
 
   return room;
 }
@@ -395,12 +395,18 @@ function readWallColors(v: unknown): Record<number, string> | null {
   return out;
 }
 
+/** The room's orientation, and nothing else.
+ *
+ *  Files written by an older build carry a `lat` and a `lon` here as well. They
+ *  are read past rather than validated: the app no longer holds a coordinate for
+ *  the inside of someone's home (see `Site` in `lib/storage.ts`), and a field with
+ *  no consumer has no business surviving a round trip through this parser. It is
+ *  not reported in `dropped` either — that list is for content the user would
+ *  notice missing from their room, and a latitude nothing renders is not. */
 function readSite(v: unknown): Site | null {
   if (!isObj(v)) return null;
-  const lat = num(v.lat, -90, 90);
-  const lon = num(v.lon, -180, 180);
   const bearingDeg = num(v.bearingDeg, -360, 360);
-  return lat === null || lon === null || bearingDeg === null ? null : { lat, lon, bearingDeg };
+  return bearingDeg === null ? null : { bearingDeg };
 }
 
 /** One part, or null if it cannot be rendered at all.

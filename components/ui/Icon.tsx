@@ -6,7 +6,7 @@ import {
   Download, Share2, FileText, FileArchive, ChevronRight, ChevronLeft, ChevronDown, ChevronUp,
   Zap, Leaf, Crosshair, Sofa, Bed, Tv, Lamp, Table, Sprout, KeyRound,
   Eye, EyeOff, Info, HelpCircle, BarChart3, ExternalLink, Pencil, Trash2, RefreshCw,
-  Image, Play, Replace, Circle, Sun, Moon, Cloud, Compass, Clock,
+  Image, Play, Replace, Circle, Sun, SunMedium, SunDim, Sunrise, Sunset, Moon, Cloud, Compass,
   RotateCcw, RotateCw, Maximize, Copy, type LucideIcon,
 } from 'lucide-react';
 
@@ -32,7 +32,8 @@ export type IconName =
   | 'edit' | 'trash' | 'refresh' | 'copy'
   | 'image' | 'play'
   | 'rotate-ccw' | 'rotate-cw' | 'fit'
-  | 'sun' | 'moon' | 'cloud' | 'compass' | 'clock'
+  | 'sun' | 'sun-medium' | 'sun-dim' | 'sunrise' | 'sunset'
+  | 'moon' | 'cloud' | 'compass'
   | 'swap' | 'snap-wall' | 'snap-floor' | 'snap-surface';
 
 const MAP: Record<Exclude<IconName, 'whatsapp' | 'snap-wall' | 'snap-floor' | 'snap-surface'>, LucideIcon> = {
@@ -51,7 +52,8 @@ const MAP: Record<Exclude<IconName, 'whatsapp' | 'snap-wall' | 'snap-floor' | 's
   edit: Pencil, trash: Trash2, refresh: RefreshCw, copy: Copy,
   image: Image, play: Play, swap: Replace,
   'rotate-ccw': RotateCcw, 'rotate-cw': RotateCw, fit: Maximize,
-  sun: Sun, moon: Moon, cloud: Cloud, compass: Compass, clock: Clock,
+  sun: Sun, 'sun-medium': SunMedium, 'sun-dim': SunDim, sunrise: Sunrise, sunset: Sunset,
+  moon: Moon, cloud: Cloud, compass: Compass,
 };
 
 type Props = { name: IconName; size?: number; color?: string; strokeWidth?: number; style?: CSSProperties };
