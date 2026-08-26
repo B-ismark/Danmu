@@ -468,3 +468,40 @@ describe('the inspector folds its options away', () => {
     expect(INSPECTOR).toMatch(/function FinishChips/);
   });
 });
+
+describe('a capture card holds its own chrome', () => {
+  const SRC = readFileSync(root('app', 'onboarding', 'capture', 'page.tsx'), 'utf8');
+
+  it('sizes its cards from a floor rather than a column count', () => {
+    // `repeat(auto-fill, minmax(min(Npx, 100%), 1fr))` — the inner `min` is what
+    // stops the floor becoming a floor the container cannot meet, which is the
+    // same trick `Segmented`'s wrap mode uses.
+    const m = /minmax\(min\((\d+)px, 100%\), 1fr\)/.exec(SRC);
+    expect(m, 'the gallery grid should auto-fill from a floor').toBeTruthy();
+    expect(Number(m![1])).toBeGreaterThanOrEqual(200);
+  });
+
+  it('does not pin a second opaque overlay to the same edge as the first', () => {
+    // `photoChrome()` is opaque on purpose — a translucent pill over an unknown
+    // photograph cannot promise a contrast ratio — so two of them pinned to
+    // opposite ends of one edge do not blend when they meet. They print over each
+    // other. Measured at 11px/700: the wall label runs ~159px and the three action
+    // chips ~189px, and the narrowest card gives 224px of content. That is 132px
+    // of overlap, and the buttons landed on top of the wall name. One wrapping row
+    // now holds both, which is what rule 4 asks for: reflow, do not spill.
+    expect(SRC.match(/top: 8,\s*\n?\s*right: 8/g) ?? []).toEqual([]);
+  });
+
+  it('pairs space-between with wrap everywhere it uses it', () => {
+    // `space-between` alone is a squeeze instruction: it distributes slack, and
+    // when there is none it lets the items overlap rather than moving one down.
+    const hits = [...SRC.matchAll(/justifyContent: 'space-between'/g)];
+    expect(hits.length).toBeGreaterThan(0);
+    for (const m of hits) {
+      const around = SRC.slice(Math.max(0, m.index - 240), m.index + 240);
+      expect(around, `space-between at index ${m.index} has no flexWrap near it`).toContain(
+        "flexWrap: 'wrap'",
+      );
+    }
+  });
+});

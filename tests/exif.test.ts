@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readExifFromJpeg, hfovFromFocal35, exifDateToMs } from '@/lib/exif';
+import { stripJpegMetadata } from '@/lib/jpeg-strip';
 
 // ── Minimal EXIF writer, so the fixtures are readable rather than a blob of hex ─
 
@@ -257,5 +258,43 @@ describe('hfovFromFocal35', () => {
     expect(hfovFromFocal35(26, 0)).toBeNull();
     expect(hfovFromFocal35(26, NaN)).toBeNull();
     expect(hfovFromFocal35(2000, 4 / 3)).toBeNull(); // a telescope, not a phone
+  });
+});
+
+// The privacy claim in `lib/capture.ts`, made testable across the two modules that
+// both have to be right for it to hold. `readCaptureFacts` reads the shutter time
+// off the ORIGINAL file — before `normalizePhoto` — precisely because the strip
+// then destroys it. That is only true while the strip and the reader agree about
+// where the fields live, and nothing said so until now: `jpeg-strip`'s own suite
+// checks that bytes went away, and this one checks that the parser can no longer
+// find anything in what is left.
+describe('what the strip leaves for the reader', () => {
+  const LOADED = {
+    focal35: 26,
+    orientation: 6,
+    bearing: [21500, 100] as [number, number],
+    bearingRef: 'T',
+    shotAt: '2026:08:26 09:41:07',
+  };
+
+  it('removes every field this parser can find, the shutter time included', () => {
+    const jpeg = jpegWithExif(LOADED);
+
+    const before = readExifFromJpeg(jpeg)!;
+    expect(before.focalLength35mm).toBe(26);
+    expect(before.bearingDeg).toBeCloseTo(215, 6);
+    expect(before.orientation).toBe(6);
+    expect(before.shotAt).toBe(Date.UTC(2026, 7, 26, 9, 41, 7));
+
+    expect(readExifFromJpeg(stripJpegMetadata(jpeg))).toBeNull();
+  });
+
+  it('and the strip actually shortened the file, rather than the reader going blind', () => {
+    // Both halves, because "the parser finds nothing" is also what a broken
+    // parser reports about an untouched file.
+    const jpeg = jpegWithExif(LOADED);
+    const stripped = stripJpegMetadata(jpeg);
+    expect(stripped.length).toBeLessThan(jpeg.length);
+    expect(readExifFromJpeg(jpeg)).not.toBeNull();
   });
 });

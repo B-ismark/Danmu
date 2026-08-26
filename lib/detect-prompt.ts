@@ -38,6 +38,16 @@ const SLOT_CAMERA: Record<CaptureSlot, string> = {
 const inOrder = (slots: readonly CaptureSlot[]): CaptureSlot[] =>
   (['n', 'e', 's', 'w'] as const).filter((s) => slots.includes(s));
 
+/** "A", "A and B", "A, B and C". A bare comma list reads as a fragment in the
+ *  middle of an instruction, and this prompt is prose the model has to follow. */
+const andList = (parts: string[]): string =>
+  parts.length < 2 ? (parts[0] ?? '') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+
+/** Duplicate slots collapse (`inOrder` filters the canonical four), and the
+ *  caller is expected to have at least one — `detectAcrossImages` returns early
+ *  on an empty set, before this is reached. Handed none, this would compose a
+ *  perfectly grammatical prompt for zero photographs; there is no sensible thing
+ *  for it to say instead, so the guard stays where the decision is. */
 export function buildDetectPrompt(room: PromptRoom, slots: readonly CaptureSlot[]): string {
   const w = room.width;
   const d = room.depth;
@@ -66,12 +76,12 @@ export function buildDetectPrompt(room: PromptRoom, slots: readonly CaptureSlot[
   // all four.
   const missing = (['n', 'e', 's', 'w'] as const).filter((s) => !present.includes(s));
   const missingClause = missing.length
-    ? `\n\nONLY ${n} of the four walls ${n === 1 ? 'was' : 'were'} photographed. The ${missing
-        .map((s) => SLOT_NAME[s])
-        .join(', ')} wall${missing.length > 1 ? 's' : ''} ${missing.length > 1 ? 'were' : 'was'} NOT. Report only what you can see in the ${n === 1 ? 'photo' : 'photos'} attached; do not infer furniture for a wall you were not shown, and never return a slot that is not in the list above.`
+    ? `\n\nONLY ${n} of the four walls ${n === 1 ? 'was' : 'were'} photographed. The ${andList(
+        missing.map((s) => SLOT_NAME[s]),
+      )} wall${missing.length > 1 ? 's' : ''} ${missing.length > 1 ? 'were' : 'was'} NOT. Report only what you can see in the ${n === 1 ? 'photo' : 'photos'} attached; do not infer furniture for a wall you were not shown, and never return any slot other than ${codes}.`
     : '';
 
-  return `You will receive ${n} photo${n === 1 ? '' : 's'} of a single room, one per wall (${named}). ${n === 1 ? 'It is' : 'They are'} taken from the ROOM CENTER at (0, 1.5, 0) — chest height${n > 1 ? ', rotating clockwise' : ''}. Each shot frames one wall straight-on. Room is roughly ${w.toFixed(1)} m × ${d.toFixed(1)} m × ${h.toFixed(1)} m (W × D × H).
+  return `You will receive ${n === 1 ? `1 photo of a single room, showing the ${named} wall` : `${n} photos of a single room, one per wall (${named})`}. ${n === 1 ? 'It is' : 'They are'} taken from the ROOM CENTER at (0, 1.5, 0) — chest height${n > 1 ? ', rotating clockwise' : ''}. ${n === 1 ? 'The shot frames that wall' : 'Each shot frames one wall'} straight-on. Room is roughly ${w.toFixed(1)} m × ${d.toFixed(1)} m × ${h.toFixed(1)} m (W × D × H).
 
 COORDINATE SYSTEM (very important):
 - Origin = room center, on the floor.
