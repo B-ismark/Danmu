@@ -243,6 +243,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         parts: effParts(),
         selection: useStudio.getState().selection,
         parentIds: useStudio.getState().parentIds,
+        footprint,
       });
     }
     return convoyCache.current;
@@ -300,6 +301,9 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       roomHeight,
       snapMode,
       currentY: ref.current?.position.y,
+      // Null unless this piece rides a wall and has company: a wall flip mid-drag
+      // is a jump the whole set would translate by. See `Convoy.leadEdge`.
+      wallEdge: convoy().leadEdge,
     });
   }
 

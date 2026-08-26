@@ -63,6 +63,13 @@ export type ResolveInput = {
    * shape, which is what a freshly added piece wants.
    */
   currentY?: number;
+  /**
+   * The footprint edge a wall-riding piece must KEEP, rather than sliding onto
+   * whichever wall is nearest. Set only while company is following it — see
+   * `Convoy.leadEdge`, which is where the decision is made and where the reason
+   * is written down.
+   */
+  wallEdge?: number | null;
 };
 
 export type Resolved = {
@@ -124,7 +131,7 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   // walls too, always facing into the room.
   const wallMounted = isWallMountedPart(part.category, part.shape);
   if (wallMounted) {
-    const snapped = snapToWall([x, 0, z], dim, footprint, wallStandoff(part.shape));
+    const snapped = snapToWall([x, 0, z], dim, footprint, wallStandoff(part.shape), input.wallEdge);
     x = snapped.x;
     z = snapped.z;
     if (snapped.rot !== undefined) outRot = snapped.rot;

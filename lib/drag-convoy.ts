@@ -29,7 +29,7 @@
 import { isWallMountedPart, type ScenePart } from './scene-spec';
 import { resolvePlacement } from './drag-resolve';
 import { cascadeTransform, snapshotDescendants, type DescendantOffset } from './rigid-parent';
-import type { Poly } from './geometry';
+import { nearestEdge, type Poly } from './geometry';
 
 /** How far a convoy member may be corrected sideways by its own resolve and still
  *  count as having gone where the set sent it. Metres — a micron, i.e. only
@@ -50,6 +50,12 @@ export type ConvoyMember = {
   /** What is resting on IT, snapshotted at the same moment, with anything already
    *  travelling under its own name removed. */
   descendants: DescendantOffset[];
+  /** The footprint edge it rides, for a wall-mounted member, or null. Pinned for
+   *  the same reason as `leadEdge`: a member handed a delta with a wall-normal
+   *  component in it is nearer some other wall than its own, so an unpinned member
+   *  slides round the corner and arrives facing a different direction from the set
+   *  it left with. */
+  edge: number | null;
 };
 
 export type Convoy = {
@@ -57,6 +63,25 @@ export type Convoy = {
    *  rotation, which is why they are not members. */
   own: DescendantOffset[];
   members: ConvoyMember[];
+  /**
+   * The footprint edge the DRAGGED piece must stay on, or null to let it choose.
+   *
+   * Non-null only when the piece rides a wall AND something is following it, and
+   * that conjunction is the whole rule. A wall rider's position is not the
+   * pointer's answer but the wall's, and `nearestEdge` changes its mind
+   * discontinuously: drag a TV off the north wall of a 6 × 4 m room towards the
+   * middle and it appears on the east wall 1.6 m away, turned 90°, from a pointer
+   * move of 0.4 m. Alone that is the feature — it is how you move a picture to
+   * another wall. With a chair in the selection it is a 1.6 m teleport for the
+   * chair, whose reported reason was worse than the bug: the set refused, and
+   * named the CHAIR as the piece that would not fit.
+   *
+   * So the pin is not a correction applied afterwards — the flip is simply not
+   * offered while a set is following, and the TV slides along the wall it started
+   * on and stops at its end (`edgeProjection` clamps to the segment). Dragging it
+   * on its own is untouched.
+   */
+  leadEdge: number | null;
   /** Every id this gesture moves, the dragged piece included.
    *
    *  The set every resolve in the gesture must subtract from the world: a piece
@@ -132,10 +157,16 @@ export function planConvoy(input: {
   parts: ScenePart[];
   selection: readonly string[];
   parentIds: Record<string, string>;
+  /** Needed only to name the wall each wall-riding piece starts on — see
+   *  `Convoy.leadEdge`. Resolved here, at pointer-down, because a wall read per
+   *  frame is a wall that can change mid-gesture, which is the thing being fixed. */
+  footprint: Poly;
 }): Convoy {
-  const { draggedId, parts, selection, parentIds } = input;
+  const { draggedId, parts, selection, parentIds, footprint } = input;
   const byId = new Map(parts.map((p) => [p.id, p]));
-  if (!byId.has(draggedId)) return { own: [], members: [], travelling: new Set([draggedId]) };
+  if (!byId.has(draggedId)) {
+    return { own: [], members: [], travelling: new Set([draggedId]), leadEdge: null };
+  }
 
   const own = snapshotDescendants(draggedId, parts, parentIds);
   const travelling = new Set<string>([draggedId, ...own.map((d) => d.id)]);
@@ -161,6 +192,16 @@ export function planConvoy(input: {
     for (const p of parts) if (p.groupId && groups.has(p.groupId)) wanted.add(p.id);
   }
 
+  /** The wall a piece is against now, by footprint edge index.
+   *
+   *  Gated on the SAME predicate as the wall branch in `resolvePlacement`, not on
+   *  the narrower `ridesWall`: a pin that is absent where the snap is present
+   *  leaves the flip in place for exactly the pieces nobody remembered to check. */
+  const wallEdgeOf = (p: ScenePart): number | null =>
+    isWallMountedPart(p.category, p.shape)
+      ? (nearestEdge(footprint, p.pos[0], p.pos[2])?.index ?? null)
+      : null;
+
   const members: ConvoyMember[] = [];
   for (const p of parts) {
     // `travelling` already holds the dragged piece and its rigid children. A child
@@ -169,7 +210,12 @@ export function planConvoy(input: {
     // something resting on the piece being dragged.
     if (!wanted.has(p.id) || travelling.has(p.id)) continue;
     travelling.add(p.id);
-    members.push({ part: p, startPos: [p.pos[0], p.pos[1], p.pos[2]], descendants: [] });
+    members.push({
+      part: p,
+      startPos: [p.pos[0], p.pos[1], p.pos[2]],
+      descendants: [],
+      edge: wallEdgeOf(p),
+    });
   }
 
   // Members' own children, after membership is closed so that a child which is
@@ -180,7 +226,12 @@ export function planConvoy(input: {
     for (const d of desc) travelling.add(d.id);
   }
 
-  return { own, members, travelling };
+  // Only worth pinning if something is actually following: a lone wall rider
+  // should still be able to move a picture from one wall to another.
+  const lead = byId.get(draggedId)!;
+  const leadEdge = members.length > 0 ? wallEdgeOf(lead) : null;
+
+  return { own, members, travelling, leadEdge };
 }
 
 /**
@@ -255,6 +306,8 @@ export function resolveConvoy(input: {
       // delta the dragged piece has already committed to.
       snapMode: 'off',
       currentY: m.startPos[1],
+      // Its own wall, held for the length of the gesture — see `ConvoyMember.edge`.
+      wallEdge: m.edge,
     });
     // Vertically the member is NOT carried — the resolve's gravity answer wins, so
     // a piece translated off the table it stood on lands on the floor instead of
@@ -265,6 +318,10 @@ export function resolveConvoy(input: {
     // set is then not flat. Deliberate: one dragged chair already climbs a table it
     // is pulled across, refusing instead would make a set nearly immovable in a
     // furnished room, and "the set stays level" is a promise no gesture here made.
+    // A wall rider cannot accept the wall-normal half of the delta — its wall
+    // discards it — so it legitimately arrives short and must not count as
+    // deformed. What bounds that exemption is `ConvoyMember.edge`: the correction
+    // can only be along one known wall now, not a jump to some other one.
     const wallRider = isWallMountedPart(m.part.category, m.part.shape);
     const rigid =
       wallRider || (Math.abs(r.pos[0] - tx) < RIGID_EPS && Math.abs(r.pos[2] - tz) < RIGID_EPS);

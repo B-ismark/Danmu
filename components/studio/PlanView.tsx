@@ -489,6 +489,9 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // is the answer — which is also what keeps a picture at picture height when
       // it is slid along a wall from up here.
       currentY: part.pos[1],
+      // Null unless this piece rides a wall and has company: a wall flip mid-drag
+      // is a jump the whole set would translate by. See `Convoy.leadEdge`.
+      wallEdge: convoy.leadEdge,
     });
   }
 
@@ -516,6 +519,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
         parts,
         selection: useStudio.getState().selection,
         parentIds: useStudio.getState().parentIds,
+        footprint: ROOM_DYN.footprint,
       });
     const startPos = drag?.startPos ?? part.pos;
     const candidates: Array<[number, number]> = [
@@ -747,6 +751,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
       parts,
       selection: useStudio.getState().selection,
       parentIds: useStudio.getState().parentIds,
+      footprint: ROOM_DYN.footprint,
     });
     const common = {
       startX: e.clientX,

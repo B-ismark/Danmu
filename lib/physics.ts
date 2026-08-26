@@ -5,7 +5,7 @@
 
 import type { Category, Shape } from './scene-spec';
 import type { Footprint } from './footprint';
-import { nearestEdge, footArea, footFromPart, footIntersectionArea } from './geometry';
+import { edgeProjection, nearestEdge, footArea, footFromPart, footIntersectionArea } from './geometry';
 import { WALL_GAP } from './layout-rules';
 
 export type Anchor = 'floor' | 'ceiling' | 'wall-high' | 'wall-mid' | 'wall-low' | 'wall-floor';
@@ -174,8 +174,19 @@ export function snapToWall(
   footprint: Footprint,
   /** Extra distance in front of the wall — see `wallStandoff`. */
   standoff = 0,
+  /** Keep THIS footprint edge instead of taking the nearest — see
+   *  `Convoy.leadEdge`. A piece free to choose its own wall flips to another the
+   *  moment the pointer is nearer one, which is right on its own and wrong the
+   *  instant anything is following it: the flip moves the piece a wall's width in
+   *  one frame, and that jump becomes the delta the whole set translates by. A
+   *  stale or degenerate index falls back to the nearest wall rather than
+   *  refusing, because a footprint can change under a held index (a wall drag) and
+   *  the nearest wall is never a wrong answer, only a less constrained one. */
+  edgeIndex?: number | null,
 ): { x: number; z: number; rot?: number } {
-  const edge = nearestEdge(footprint, pos[0], pos[2]);
+  const edge =
+    (edgeIndex == null ? null : edgeProjection(footprint, edgeIndex, pos[0], pos[2])) ??
+    nearestEdge(footprint, pos[0], pos[2]);
   if (!edge) return { x: pos[0], z: pos[2] };
   // Part depth/2, plus the shared wall gap — the same figure the seeded arrangements
   // and the settle pass use, so all three put a back against a wall in one place.

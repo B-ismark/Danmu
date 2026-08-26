@@ -1158,6 +1158,28 @@ Two properties of a `ConvoyMove` that read as details and are not:
   the hand is the problem then `blocked` is the honest word and naming a member
   points at the wrong piece.
 
+**A wall rider cannot lead a set anywhere its wall did not agree to.** A
+wall-mounted piece's position is not the pointer's answer but the nearest wall's,
+and `nearestEdge` changes its mind discontinuously: drag a TV off the north wall
+of a 6 × 4 m room towards the middle and it reappears on the **east** wall, 1.6 m
+away and turned 90°, off a pointer move of 0.4 m. Alone that is the feature — it
+is how a picture gets moved to another wall. With a chair in the selection it was
+a 1.6 m teleport for the chair, and the reported reason was worse than the bug:
+the set refused and named **the chair** as the piece that would not fit. So
+`Convoy.leadEdge` names the footprint edge the dragged piece must keep — non-null
+only when it rides a wall *and* something is following — and `ConvoyMember.edge`
+does the same for each wall-mounted member, which had the identical flip one seat
+over, hidden there by the rigidity exemption wall riders get for legitimately
+arriving short. The flip is not corrected after the fact, it is simply not
+offered: `edgeProjection` clamps to its segment, so a pinned piece slides along
+its own wall and stops at the end of it. Dragging one on its own is untouched,
+and a stale index (a wall moved under a held gesture) falls back to the nearest
+wall rather than refusing. That same `edgeProjection` is why `lib/geometry.ts` no
+longer answers *which* edge and *where on this* edge with two copies of one
+projection — `nearestEdge` is a loop over it now, at the cost of one short-lived
+`EdgeHit` per edge instead of one per improvement, which is written down where the
+trade was made.
+
 ### The click a drag ends with — `lib/drag-click.ts`
 A 3D drag that moved finishes as a DOM `click`, and `Pickable`'s click handler
 means *select just this piece* — so the click ending a multi-piece drag collapsed

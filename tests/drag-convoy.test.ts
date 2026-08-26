@@ -61,7 +61,7 @@ function carry(
 }
 
 function plan(draggedId: string, world: ScenePart[], selection: string[] = [], parentIds: Record<string, string> = {}) {
-  return planConvoy({ draggedId, parts: world, selection, parentIds });
+  return planConvoy({ draggedId, parts: world, selection, parentIds, footprint: ROOM });
 }
 
 const posOf = (moves: Array<{ id: string; pos: [number, number, number] }>, id: string) =>
@@ -426,5 +426,118 @@ describe('resolveConvoy — what a move is allowed to write', () => {
     expect(r.valid).toBe(true);
     expect(r.moves).toEqual([]);
     expect(r.blocked).toBeUndefined();
+  });
+});
+
+describe('a wall rider leading a set', () => {
+  // Measured before it was fixed, in a 6 x 4 m room: a pointer move of 0.4 m took
+  // the TV from (5.000, 0.070) facing 0 deg to (5.930, 1.400) facing -90 deg — the
+  // north wall to the east wall, 1.6 m in one frame. The chair in the selection
+  // translated by that same 1.6 m, and the set then refused and named the CHAIR as
+  // the piece that would not fit. Three wrongs from one flip: the jump, the
+  // divergent rotation, and a message about the wrong piece.
+  const tv = () =>
+    part({ id: 'tv', category: 'tv', shape: 'tv', dimMM: [1200, 100, 700], pos: [2, 1.4, 0.07] });
+  const chair = () =>
+    part({ id: 'chair', category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 900], pos: [2, 0, 2] });
+
+  /** The dragged piece's own resolve, exactly as either surface performs it. */
+  function lead(p: ScenePart, world: ScenePart[], rawX: number, rawZ: number, wallEdge: number | null) {
+    return resolvePlacement({
+      part: p,
+      rawX,
+      rawZ,
+      rot: p.rot,
+      dim: p.dimMM,
+      parts: world,
+      footprint: ROOM,
+      roomHeight: H,
+      snapMode: 'off',
+      currentY: p.pos[1],
+      wallEdge,
+    });
+  }
+
+  it('keeps the wall it started on, so the set is never handed a corner jump', () => {
+    const world = [tv(), chair()];
+    const c = plan('tv', world, ['tv', 'chair']);
+    expect(c.leadEdge).toBe(0); // the z = 0 edge, [0,0] -> [6,0]
+
+    const start: [number, number, number] = [2, 1.4, 0.07];
+    // Pointer 1.4 m into the room — past the midline, where it used to flip.
+    const r = lead(world[0], world, 5, 1.4, c.leadEdge);
+    // toBeCloseTo, not toBe: the inward normal of the z = 0 edge is (-0, 1), so the
+    // yaw is atan2(-0, 1) = -0. Pre-existing and harmless — three.js does not care
+    // — but -0 is not +0 under Object.is.
+    expect(r.rot).toBeCloseTo(0, 12);
+    expect(r.pos[2]).toBeCloseTo(0.07, 5);
+    expect(r.pos[0]).toBeCloseTo(5, 5);
+
+    const co = carry(c, 'tv', world, start, r.pos, r.rot);
+    expect(co.valid).toBe(true);
+    expect(co.blocked).toBeUndefined();
+    // The chair takes the along-wall delta and nothing else.
+    expect(posOf(co.moves, 'chair')).toEqual([5, 0, 2]);
+  });
+
+  it('still lets a lone wall rider move to another wall', () => {
+    // The flip is the feature when nothing is following — it is how a picture gets
+    // moved from one wall to the next. Pinning unconditionally would have taken
+    // that away, silently, to fix a multi-selection bug.
+    const world = [tv(), chair()];
+    const c = plan('tv', world, ['tv']);
+    expect(c.leadEdge).toBeNull();
+    const r = lead(world[0], world, 5, 1.4, c.leadEdge);
+    expect(r.rot).toBeCloseTo(-Math.PI / 2, 5);
+    expect(r.pos[0]).toBeGreaterThan(5.5);
+  });
+
+  it('pins a wall-riding MEMBER to its own wall too', () => {
+    // Same flip, one seat over: a TV carried along by a chair is handed a delta
+    // with a wall-normal component, which puts it nearer some other wall than its
+    // own. Unpinned it rounded the corner and arrived facing a different way from
+    // the set it left with — and the rigidity exemption for wall riders hid it,
+    // because a flip is a "correction" of any size.
+    const world = [tv(), chair()];
+    const c = plan('chair', world, ['chair', 'tv']);
+    expect(c.members.map((m) => [m.part.id, m.edge])).toEqual([['tv', 0]]);
+
+    // Drag the chair 2 m south — a delta that is almost entirely wall-normal for
+    // the TV, and enough to make the south wall the nearer one.
+    const co = carry(c, 'chair', world, [2, 0, 2], [2, 0, 3.7]);
+    const mv = co.moves.find((m) => m.id === 'tv');
+    expect(mv).toBeDefined();
+    expect(mv!.rot).toBeUndefined(); // no rotation written, so no override created
+    expect(mv!.pos[2]).toBeCloseTo(0.07, 5);
+  });
+
+  it('holds a pinned lead at the end of its wall rather than past it', () => {
+    // `edgeProjection` clamps to the segment, so the pin cannot walk a piece off
+    // the end of its own wall and out of the room. In this room the containment
+    // clamp bites first (a 1200 mm TV cannot pass x = 5.4), which is the belt to
+    // the pin's braces — both are asserted because either alone is a silent floor.
+    const world = [tv(), chair()];
+    const c = plan('tv', world, ['tv', 'chair']);
+    const r = lead(world[0], world, 99, 0.1, c.leadEdge);
+    expect(r.pos[0]).toBeLessThanOrEqual(5.4 + 1e-9);
+    expect(r.pos[2]).toBeCloseTo(0.07, 5);
+    expect(r.rot).toBeCloseTo(0, 12);
+  });
+});
+
+describe('a wall pin is only ever put on a piece that rides a wall', () => {
+  // `resolvePlacement` reads `wallEdge` only inside its wall branch, so a pin on a
+  // chair would change nothing today — which is exactly why it needs a test. A
+  // non-null edge on a free-standing piece is a claim about that piece that is
+  // false, and the next reader of `Convoy` would have to go and check.
+  it('leaves a free-standing lead unpinned even with a set following', () => {
+    const world = [
+      part({ id: 'chair', category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 900], pos: [2, 0, 2] }),
+      part({ id: 'table', dimMM: [900, 900, 450], pos: [3.5, 0, 2] }),
+    ];
+    const c = plan('chair', world, ['chair', 'table']);
+    expect(c.members.length).toBe(1);
+    expect(c.leadEdge).toBeNull();
+    expect(c.members[0].edge).toBeNull();
   });
 });

@@ -160,3 +160,33 @@ describe('findSupportDetailed', () => {
     expect(findSupportDetailed([deskB, deskA], 'laptop', 0, 0, LAPTOP)?.id).toBe('desk-b');
   });
 });
+
+describe('snapToWall pinned to one edge', () => {
+  // The wall a piece is allowed to ride is a caller's decision when anything is
+  // following it: `nearestEdge` changes its mind discontinuously at the midline
+  // between two walls, and that flip becomes the delta a whole selection
+  // translates by. See `Convoy.leadEdge`.
+  it('keeps the named wall even when another is nearer', () => {
+    const free = snapToWall([2.8, 0, 1.5], TV, RECT);
+    const pinned = snapToWall([2.8, 0, 1.5], TV, RECT, 0, 0);
+    expect(free.rot).not.toBeCloseTo(0);
+    expect(pinned.rot).toBeCloseTo(0);
+    expect(pinned.z).toBeCloseTo(-2 + TV[1] / 2000 + 0.02);
+    // Along the wall it still tracks the pointer.
+    expect(pinned.x).toBeCloseTo(2.8);
+  });
+
+  it('falls back to the nearest wall for an index the footprint no longer has', () => {
+    // A wall drag can shorten the outline under a held index. Falling back is the
+    // forgiving direction: the nearest wall is a less constrained answer, never a
+    // wrong one, where a refusal would strand the piece.
+    const stale = snapToWall([2.8, 0, 1.5], TV, RECT, 0, 99);
+    const free = snapToWall([2.8, 0, 1.5], TV, RECT);
+    expect(stale).toEqual(free);
+  });
+
+  it('is unchanged when no edge is named', () => {
+    expect(snapToWall([0, 0, -1.5], TV, RECT, 0, null)).toEqual(snapToWall([0, 0, -1.5], TV, RECT));
+    expect(snapToWall([0, 0, -1.5], TV, RECT, 0, undefined)).toEqual(snapToWall([0, 0, -1.5], TV, RECT));
+  });
+});
