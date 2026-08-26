@@ -25,7 +25,7 @@ import { placeNewPart, type LibraryItem, type ScenePart } from '@/lib/scene-spec
 import { Icon } from '@/components/ui/Icon';
 import { IconButton } from '@/components/ui/primitives';
 import { LibraryPicker, PickerTabs, DescribeField, type PickerTab } from './LibraryPicker';
-import { isTypingOrDialog } from './KeyboardShortcuts';
+import { announce, isTypingOrDialog } from './KeyboardShortcuts';
 
 /** The id the pages put on their canvas element, so the rail's trigger can bring
  *  the panel into view when the studio is stacked and the rail sits below the
@@ -49,7 +49,7 @@ export function AddPiecesButton() {
           ?.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
       }}
       aria-expanded={open}
-      title="Browse the catalog, or describe the piece you want"
+      title="Browse the library, or describe the piece you want"
       className="ds-btn"
       style={{
         width: '100%',
@@ -63,10 +63,10 @@ export function AddPiecesButton() {
         color: 'var(--accent-text)',
       }}
     >
-      {/* The label says the action, not the state: a button that reads "Catalog is
+      {/* The label says the action, not the state: a button that reads "Library is
           open" is a status line you can press. */}
       <Icon name={open ? 'x' : 'plus'} size={12} />
-      {open ? 'Close catalog' : 'Browse catalog'}
+      {open ? 'Close library' : 'Browse library'}
     </button>
   );
 }
@@ -81,7 +81,7 @@ export function CatalogToggle() {
       onClick={() => setOpen(!open)}
       aria-expanded={open}
       className="ds-btn"
-      title="Browse the catalog — drag a piece into the room, or click to drop it in the centre"
+      title="Browse the library — drag a piece into the room, click to drop it in the centre, or Shift-click to mark several"
       style={{
         height: 30,
         fontSize: 12,
@@ -97,7 +97,7 @@ export function CatalogToggle() {
         boxShadow: 'var(--shadow-soft)',
       }}
     >
-      <Icon name="plus" size={12} /> Catalog
+      <Icon name="plus" size={12} /> Library
     </button>
   );
 }
@@ -111,6 +111,22 @@ function spawn(category: ScenePart['category'], shape: ScenePart['shape'], dimMM
   const id = `${category}-${uuid().slice(0, 6)}`;
   addPart({ id, category, name, shape, pos, rot, dimMM, locked: false, wallMounted });
   useStudio.getState().setSelected(id);
+  return id;
+}
+
+/** Several at once, from a marked set.
+ *
+ *  Placed one after another rather than in parallel: `placeNewPart` reads the
+ *  parts already in the room, so each piece avoids the one before it and four
+ *  chairs land as four chairs instead of one chair four times. Nothing already in
+ *  the room moves — "add three of these" is not permission to rearrange what is
+ *  there. */
+function spawnMany(items: LibraryItem[]) {
+  const ids: string[] = [];
+  for (const item of items) ids.push(spawn(item.category, item.shape, [...item.dimMM], item.label));
+  if (ids.length === 0) return;
+  useStudio.getState().setSelection(ids, ids[ids.length - 1]);
+  announce(`${ids.length} ${ids.length === 1 ? 'piece' : 'pieces'} added.`);
 }
 
 /** Floating, non-blocking model catalog docked on the left edge of the
@@ -187,7 +203,7 @@ export function CatalogPanel({
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 12px 8px' }}>
         <span className="ds-label" style={{ flex: 1 }}>Add pieces</span>
-        <IconButton icon="x" label="Close catalog" onClick={() => setOpen(false)} size={24} iconSize={12} />
+        <IconButton icon="x" label="Close library" onClick={() => setOpen(false)} size={24} iconSize={12} />
       </div>
 
       <div style={{ padding: '0 12px 8px' }}>
@@ -198,10 +214,10 @@ export function CatalogPanel({
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '0 12px 12px' }}>
           <div style={{ fontSize: 11, color: 'var(--ink-3)', margin: '0 0 8px', lineHeight: 1.4 }}>
             {canDrag
-              ? 'Drag a piece into the room, or click to drop it in the centre.'
-              : 'Click a piece to drop it into the middle of the room.'}
+              ? 'Drag a piece in, click to drop it in the centre, or Shift-click to mark several.'
+              : 'Click a piece to drop it into the middle of the room. Shift-click to mark several.'}
           </div>
-          <LibraryPicker onPick={addItem} columns={1} draggable={canDrag} maxHeight={null} />
+          <LibraryPicker onPick={addItem} onPickMany={spawnMany} columns={1} draggable={canDrag} maxHeight={null} />
         </div>
       ) : (
         <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '0 12px 12px' }}>
@@ -236,7 +252,7 @@ export function CatalogPanel({
           )}
           {prompt.trim().length > 1 && matches.length === 0 && (
             <div style={{ fontSize: 12, color: 'var(--ink-3)', padding: '4px 0', lineHeight: 1.5 }}>
-              Nothing matches yet — keep typing, or browse the Catalog tab.
+              Nothing matches yet — keep typing, or browse the Library tab.
             </div>
           )}
         </div>

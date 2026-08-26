@@ -564,11 +564,33 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
   left-drag pans** — the gesture every 3D tool shares — which freed the right
   button, and **right-click now opens a menu**: the piece under the cursor gets
   the actions that were otherwise a trip to the Inspector or an undiscovered
-  single-key shortcut, empty floor gets the whole-scene ones. The menu **does not
-  raycast** — both the 3D room and the 2D plan already keep `hoveredPartId`
-  current and pass it in, which is why one component serves both surfaces without
-  knowing anything about either. A right-drag on a 3D view with no menu behind it
-  reads as broken, so do not hand the button back to the camera.
+  single-key shortcut, empty floor gets the whole-scene ones. The caller passes the
+  piece in rather than the menu finding it, which is why one component serves both
+  surfaces without knowing anything about either. This paragraph used to add "both
+  surfaces already keep `hoveredPartId` current"; **they did not** — nothing in the
+  2D plan ever wrote it, so a right-click there opened the *room's* menu on top of a
+  piece, or offered the actions of whatever had last been hovered in 3D. The plan
+  writes hover now (geometrically, through `lib/plan-hit`), which is also what gives
+  it a hover outline and the shared `HoverCard` it never showed. A right-drag on a
+  3D view with no menu behind it reads as broken, so do not hand the button back to
+  the camera.
+- **Alt-click chooses between pieces that overlap on screen** — the one question a
+  click cannot answer, since only the frontmost handler runs. It selects the
+  topmost, and opens a **third** kind of menu listing everything under the pointer
+  (`pick` in `SceneContextMenu.tsx`); Alt-clicking the same spot again steps down
+  through the stack instead of reopening the list, and Shift-Alt takes the chosen
+  piece into the selection rather than replacing it. This is Blender's gesture,
+  including the Shift-Alt half. Candidates come from `e.intersections` in 3D
+  (mapped back to pieces by `lib/pick-through.ts`, which drops the shell, the wall
+  planes, gizmo arcs, guides and light helpers) and from `lib/plan-hit.ts` in the
+  plan. Both cycle through the SAME function, so the two views cannot disagree
+  about what "next" means. Alt was free for this only because the plan's Alt-drag
+  page-rotation was retired in the same pass — stepped rotation on `[` / `]` and
+  the toolbar is what a measured drawing wants anyway.
+- **The picker has a second door**, because nobody guesses a modifier: the
+  right-click menu grows a **"Select what's here (n)"** row whenever the surface
+  can say what else is under the cursor. It is also the only route on a touch
+  screen, which has no modifier keys at all.
 - **What is drawn while you point** — `Highlight.tsx` renders hover (soft,
   depth-tested) and selection (accent, `depthTest` **off**, so a selection is
   never lost behind a wall) plus a footprint outline on the resting surface;
@@ -961,7 +983,19 @@ are what serve "communicate a plan", and they stay.
 - **One-tap themes** (`lib/themes.ts`) — recolour all unlocked parts + set a
   matching lighting mood.
 - **2D plan** (`PlanView.tsx`) synced with the 3D scene; export via
-  `lib/plan-export.ts`.
+  `lib/plan-export.ts`. It is a peer of the 3D view rather than a lesser copy of
+  it: a drag resolves through the same pipeline (see **One resolve, two surfaces**
+  below), a left-drag across empty floor is a **marquee**, Shift-click extends the
+  selection, Alt-click disambiguates, `Esc` mid-drag puts the piece back, the
+  library's rows can be **dropped** onto it at the pointer, and it measures the
+  clearance to the nearest wall on each axis while you move something. Its
+  controls (rotate handle, focus ring, wall grab bands, labels) are counter-scaled
+  by `1 / zoom`, so they stay the size they were drawn at instead of becoming a
+  4-unit dot at 0.4x and a 36-unit blob at 4x. Pieces are painted **largest
+  footprint first** (`planPaintOrder`), so the rug ends up under the table and
+  "what a click selects" stops depending on the order furniture was added in.
+  `V` hides a piece from the plan exactly as it hides one from the 3D tree —
+  before that it was a no-op here, on a key armed for both tabs.
 - **Snapshot** (`lib/snapshot.ts`) — PNG of the 3D view (replaces the deleted
   photoreal render).
 - **The scene file** (`lib/scene-file.ts`, `components/studio/SceneFile.tsx`) —
@@ -972,6 +1006,35 @@ are what serve "communicate a plan", and they stay.
 - **Undo/redo** (`lib/history.ts`, `UndoRedo.tsx`) — snapshots cover parts, room
   and transforms.
 - **Item-to-item snapping** (`lib/item-snap.ts`).
+
+### One resolve, two surfaces — `lib/drag-resolve.ts`
+Where a dragged piece ends up: grid snap → containment clamp → wall snap
+(wall-mounted) or magnetic item snap → gravity/support → vertical clamp → exact
+OBB collision. It
+lived inside `Draggable.tsx` and was therefore 3D-only, so the plan ran its own
+much shorter version — clamp into the bounding box, then `collidesAt`. The same
+gesture on the same sofa behaved differently depending on which tab you were
+looking at: the snap setting did nothing to a mouse drag in the plan, edges never
+went flush, a merged group did not move as one, whatever was resting on a piece
+stayed behind, and dragging a vase off its table left it **floating at table
+height** — invisible from directly above, which is the one view where you cannot
+see it.
+
+Both surfaces call it now, and `snapSteps` is the single home for the 10 mm / 15°
+and 50 mm / 45° increments the gizmo, the drag magnetism and both sets of arrow
+keys share. The grid snap is the *first* step and lives inside the resolve, so a
+caller passes the pointer position unrounded — it had been left behind in the 3D
+component's pointer-move handler when the rest of the pipeline moved out, which
+meant the extraction that existed to end "snap works in one tab only" shipped with
+snap working in one tab only. It is quantised before the clamp on purpose: rounding
+a clamped edge afterwards would push the piece back through the wall the clamp had
+just pulled it out of. What stays in the components is only what is genuinely theirs: the 3D
+view reads a live mount height off the object3D it is animating, the plan reads
+it off the stored transform, and each decides for itself what to say when a spot
+is refused. **A new snap, clearance or gravity rule goes in the lib** — this is
+the same "two consumers, one rule, two copies" failure that `layout-rules.ts`
+exists to prevent, and `tests/drag-resolve.test.ts` pins the pipeline step by
+step so a change that suits one surface fails there first.
 
 ### Removing a piece — `removeParts` in `KeyboardShortcuts.tsx`
 One path for every surface: the row trash, the Inspector button, the Delete key

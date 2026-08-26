@@ -5,6 +5,16 @@ import { type ThreeEvent } from '@react-three/fiber';
 import { Group } from 'three';
 import { gestureOwnedByOther, useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
+import { cycleThrough, type CycleState } from '@/lib/plan-hit';
+import { pickIdsFrom, PART_ID_KEY } from '@/lib/pick-through';
+import { openPickMenu } from '@/components/studio/SceneContextMenu';
+
+// The Alt-click cycle's memory. Module-scoped rather than per-component because
+// the handler that fires belongs to whichever piece is in FRONT, and that changes
+// as you step through the stack — a ref inside one Pickable would be the wrong
+// one by the second press. `cycleThrough` restarts by itself whenever the pointer
+// has moved or the candidates changed, so this needs no invalidation of its own.
+let altCycle: CycleState | null = null;
 
 // Wraps any subtree with hover/click handling that drives the studio store.
 // Stops propagation so nested pickables don't double-fire.
@@ -39,6 +49,12 @@ export function Pickable({
   return (
     <group
       ref={ref}
+      // What makes a hit on any mesh in this subtree traceable back to a piece —
+      // read by `lib/pick-through` when Alt-click asks what else is under the
+      // cursor. The scene is full of things that are not furniture (the shell,
+      // wall hit planes, gizmo arcs, guides, light helpers) and this is what tells
+      // them apart.
+      userData={{ [PART_ID_KEY]: partId }}
       onPointerOver={(e: ThreeEvent<PointerEvent>) => {
         e.stopPropagation();
         // A part mid-drag/gizmo-transform owns the gesture; the cursor sweeping
@@ -69,6 +85,36 @@ export function Pickable({
         // A Space + left-drag that happens to pass over furniture is a camera
         // pan; it must not re-select whatever it flew across.
         if (useStudio.getState().panKeyHeld) return;
+        // ── Alt: choose between pieces that overlap on screen ────────────────
+        // The one question a plain click cannot answer, because only the frontmost
+        // handler runs. `e.intersections` is the whole depth-sorted list from this
+        // same raycast, so the candidates cost nothing extra.
+        //
+        // Alt rather than Ctrl deliberately: Ctrl+click IS right-click on macOS,
+        // and Shift already toggles the multi-selection. It matches Blender, where
+        // Alt-click pops the list of everything under the cursor and Shift-Alt adds
+        // to the selection instead of replacing it.
+        if (e.altKey) {
+          // Firefox reads Alt+click on some elements as "download", and a window
+          // manager may claim Alt-drag; neither should reach the browser.
+          e.nativeEvent.preventDefault();
+          const ids = pickIdsFrom(e.intersections);
+          // Client pixels, not `e.point`: whether this is the same press repeated
+          // is a question about the hand, and in world units the answer depends on
+          // how far the camera happens to be pulled back. See `SAME_SPOT_PX`.
+          const step = cycleThrough(e.nativeEvent.clientX, e.nativeEvent.clientY, ids, altCycle);
+          altCycle = step.state;
+          if (!step.id) return;
+          if (e.shiftKey) toggleInSelection(step.id);
+          else setSelected(step.id);
+          // The list opens on the first Alt-click of a spot — seeing what is there
+          // is the point — and stays out of the way while you keep pressing to step
+          // deeper. One piece under the cursor needs no list at all.
+          if (step.fresh && ids.length > 1) {
+            openPickMenu(e.nativeEvent.clientX, e.nativeEvent.clientY, ids);
+          }
+          return;
+        }
         // Shift-click toggles this part in/out of the multi-selection.
         if (e.shiftKey) {
           toggleInSelection(partId);

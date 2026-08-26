@@ -234,7 +234,7 @@ export function Inspector() {
         <button
           onClick={() => setSwapOpen(true)}
           className={isGeneric ? 'ds-btn' : 'ds-btn ds-btn--primary'}
-          title="Browse the catalog, or describe the piece in words"
+          title="Browse the library, or describe the piece in words"
           style={{
             width: '100%',
             height: 34,

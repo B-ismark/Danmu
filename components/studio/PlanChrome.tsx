@@ -169,16 +169,33 @@ export function planHelp() {
   return (
     <>
       <HelpGroup title="Moving furniture">
-        <HelpLine>Drag a piece to move it. It stops against whatever is in the way, and tints red if it cannot go there.</HelpLine>
+        <HelpLine>Drag a piece to move it. It stops against whatever is in the way, tints red if it cannot go there, and measures its way to the nearest walls as it goes.</HelpLine>
+        <HelpLine>
+          <Kb>Esc</Kb> part-way through a drag puts the piece back where it was.
+        </HelpLine>
         <HelpLine>Drag the handle on a selected piece to turn it.</HelpLine>
         <HelpLine>Click a wall to paint it, or drag it to make the room bigger or smaller.</HelpLine>
       </HelpGroup>
+      <HelpGroup title="Choosing pieces">
+        <HelpLine>
+          Drag across empty floor to lasso several. Hold <Kb>Shift</Kb> to add to what is already chosen — by
+          lasso, or by clicking one piece at a time.
+        </HelpLine>
+        <HelpLine>
+          Where pieces overlap, <Kb>Alt</Kb>-click lists everything under the pointer and lets you pick. Keep
+          <Kb>Alt</Kb>-clicking the same spot to step down through them one at a time.
+        </HelpLine>
+        <HelpLine>Right-click a piece — or the plan — for what you can do to it, including that same list.</HelpLine>
+      </HelpGroup>
       <HelpGroup title="Getting around">
         <HelpLine>
-          Pinch or scroll to zoom. Two fingers, Shift-drag, or hold <Kb>Space</Kb> and drag, to pan.
+          Pinch or scroll to zoom. Two fingers, a middle-drag, <Kb>Shift</Kb>-scroll, or hold <Kb>Space</Kb> and
+          drag, to pan.
         </HelpLine>
-        <HelpLine>Right-click a piece — or the plan — for what you can do to it.</HelpLine>
-        <HelpLine>Alt-drag turns the page — the drawing, not the furniture.</HelpLine>
+        <HelpLine>
+          <Kb>[</Kb>
+          <Kb>]</Kb> turn the page — the drawing, not the furniture. <Kb>0</Kb> puts the view back.
+        </HelpLine>
       </HelpGroup>
       <HelpGroup title="Keys" note="Click the drawing first — these stay quiet while you are using a panel.">
         <HelpLine>
@@ -186,6 +203,9 @@ export function planHelp() {
           <Kb>↓</Kb>
           <Kb>←</Kb>
           <Kb>→</Kb> nudge whatever is focused · hold <Kb>Shift</Kb> to turn it
+        </HelpLine>
+        <HelpLine>
+          <Kb>F</Kb> brings the selected piece to the middle · <Kb>V</Kb> hides it
         </HelpLine>
         <HelpLine>
           <Kb>Tab</Kb> steps through the pieces and the walls · <Kb>Esc</Kb> deselects

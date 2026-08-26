@@ -17,20 +17,24 @@
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { useStudio, useSettings } from '@/lib/store';
-import { useRoomScene } from '@/lib/room-scene';
+import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { useScene } from '@/lib/scene-store';
-import { collidesAt, type ScenePart } from '@/lib/scene-spec';
+import { DND_MIME, placeNewPart, type Category, type ScenePart, type Shape } from '@/lib/scene-spec';
 import { entranceComponents, floorBlockers } from '@/lib/clearance';
 import { buildClearanceField, fieldRuns, FREE_CELL, WALK_RADIUS } from '@/lib/clearance-field';
 import { accessZones } from '@/lib/layout-rules';
-import { obbFromPart } from '@/lib/geometry';
-import { pointInFootprint, wallSegments, footprintBounds } from '@/lib/footprint';
+import { footFromPart, obbExtentAlong, obbFromPart, rayToBoundary } from '@/lib/geometry';
+import { hitsAt, hitsInRect, nextInCycle, planPaintOrder, type CycleState } from '@/lib/plan-hit';
+import { wallSegments, footprintBounds } from '@/lib/footprint';
 import { moveWallCarrying, wallAttachments } from '@/lib/wall-actions';
+import { resolvePlacement, snapSteps } from '@/lib/drag-resolve';
+import { cascadeTransform, snapshotDescendants, type DescendantOffset } from '@/lib/rigid-parent';
 import { formatDim } from '@/lib/units';
 import { clientDeltaToViewBox, clientToViewBox } from '@/lib/plan-view-transform';
 import { Icon } from '@/components/ui/Icon';
+import { v4 as uuid } from 'uuid';
 import { announce, removeParts, studioSurfaceFocused } from './KeyboardShortcuts';
-import { openSceneMenu } from './SceneContextMenu';
+import { openPickMenu, openSceneMenu } from './SceneContextMenu';
 
 const SCALE = 100; // px per metre at zoom = 1, in viewBox units
 const PAD = 80;
@@ -73,6 +77,8 @@ export type PlanViewHandle = {
   rotateRight: () => void;
   /** Back to the default framing. */
   fit: () => void;
+  /** Bring the selected piece to the middle, at the current magnification. */
+  frameSelection: () => void;
 };
 
 export const PlanView = forwardRef<PlanViewHandle, {
@@ -93,7 +99,10 @@ export const PlanView = forwardRef<PlanViewHandle, {
   const parts = useRoomScene();
   const dimUnit = useSettings((s) => s.dimUnit);
   const selected = useStudio((s) => s.selectedPartId);
+  const selection = useStudio((s) => s.selection);
   const setSelected = useStudio((s) => s.setSelected);
+  const setSelection = useStudio((s) => s.setSelection);
+  const toggleInSelection = useStudio((s) => s.toggleInSelection);
   const setPosition = useStudio((s) => s.setPosition);
   const setRotation = useStudio((s) => s.setRotation);
   const setDragging = useStudio((s) => s.setDragging);
@@ -101,6 +110,24 @@ export const PlanView = forwardRef<PlanViewHandle, {
   const selectedWall = useStudio((s) => s.selectedWall);
   const setSelectedWall = useStudio((s) => s.setSelectedWall);
   const snapMode = useStudio((s) => s.snapMode);
+  const hovered = useStudio((s) => s.hoveredPartId);
+  const setHovered = useStudio((s) => s.setHovered);
+  const hidden = useStudio((s) => s.hidden);
+
+  // What the drawing shows, and what a pointer can therefore reach. `V` hides a
+  // piece from the plan exactly as it hides one from the 3D tree
+  // (`Room.tsx` filters the same way) — a piece that is invisible in one tab and
+  // draggable in the other is not a state the UI can name.
+  //
+  // `parts` stays the full list everywhere the ROOM is being measured rather than
+  // drawn: collision, the circulation field and the comfort rules all keep hidden
+  // furniture, because hiding is a way of looking at the arrangement and not a
+  // deletion from it — and because Room check counts hidden pieces too. Hiding a
+  // sofa must not make the room read as walkable through the sofa.
+  const visible = useMemo(() => parts.filter((p) => !hidden[p.id]), [parts, hidden]);
+  // Back-to-front, so the rug ends up under the table and a click lands on the
+  // smallest thing under the cursor rather than on whatever was added last.
+  const painted = useMemo(() => planPaintOrder(visible), [visible]);
 
   // Circulation, straight off the same field lib/clearance.ts reports from — and
   // only while the overlay is on, since building it costs a distance transform.
@@ -128,9 +155,12 @@ export const PlanView = forwardRef<PlanViewHandle, {
   const hasCutOff = useMemo(() => walkRuns.some((r) => r.state === CUT_OFF), [walkRuns]);
 
   // Keyboard steps track the gizmo's snap setting so the two agree: 10 mm / 15°
-  // fine, 50 mm / 45° coarse. "Off" still steps — a key press has to be discrete.
-  const nudge = snapMode === 'coarse' ? 0.05 : 0.01;
-  const spin = snapMode === 'coarse' ? Math.PI / 4 : Math.PI / 12;
+  // fine, 50 mm / 45° coarse. "Off" still steps — a key press has to be discrete —
+  // which is why this asks `snapSteps` for the coarse/fine pair and then supplies
+  // its own floor rather than using the null it returns for 'off'.
+  const steps = snapSteps(snapMode === 'off' ? 'fine' : snapMode);
+  const nudge = steps.translate ?? 0.01;
+  const spin = steps.rotate ?? Math.PI / 12;
 
   // Wall-drag bookkeeping — measure the pointer along the wall's outward normal
   // and feed incremental deltas to the store (matches the 3D handle). `attached`
@@ -155,6 +185,27 @@ export const PlanView = forwardRef<PlanViewHandle, {
     startX: number;
     startY: number;
     moved: boolean;
+    /** Where the piece was before the gesture, so Escape can put it back. */
+    startPos: [number, number, number];
+    /**
+     * What is resting on it, and what it is merged with — both resolved ONCE at
+     * pointer-down. Re-resolving per frame is what lets a piece near the tolerance
+     * detach mid-drag, which is the same trap `wallAttachments` documents for
+     * walls and the reason the 3D drag caches its own.
+     */
+    descendants: DescendantOffset[];
+    /**
+     * The merged-group siblings AND where each of them started. Both halves matter:
+     * `moveTo` translates them by the total delta from `startPos` rather than by a
+     * per-frame one, and Escape needs somewhere to put them back to.
+     *
+     * The per-frame version read each sibling's current position out of `parts`,
+     * which is a RENDER MEMO — two pointermoves between two renders and the
+     * siblings silently dropped a delta while the dragged piece, tracking a ref,
+     * kept it. A fast drag pulled the group apart. Deriving every frame from the
+     * start transform cannot drift and cannot go stale.
+     */
+    groupStart: Array<{ id: string; pos: [number, number, number] }>;
   } | null>(null);
   const [, force] = useState(0);
 
@@ -171,7 +222,24 @@ export const PlanView = forwardRef<PlanViewHandle, {
   /** view rotation in radians around viewport center */
   const [rot, setRot] = useState(0);
   const panRef = useRef<{ startX: number; startY: number; ox: number; oy: number } | null>(null);
-  const rotRef = useRef<{ startAngle: number; startRot: number } | null>(null);
+  // An Alt-press waiting to become a pick on release, and the cycle it belongs to.
+  // The cycle lives in a ref rather than in the store: it is the memory of one
+  // gesture, and `nextInCycle` already restarts itself when the pointer moves or
+  // the candidates change under it.
+  const altRef = useRef<{ x: number; z: number; sx: number; sy: number; pointerId: number } | null>(null);
+  const cycleRef = useRef<CycleState | null>(null);
+  // A marquee in progress. The live rectangle is state (it has to paint) while the
+  // gesture itself is a ref (it must not re-render per frame to stay correct).
+  const marqueeRef = useRef<{
+    x0: number;
+    y0: number;
+    left: number;
+    top: number;
+    pointerId: number;
+    extend: boolean;
+    moved: boolean;
+  } | null>(null);
+  const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   // Live touch points, so two fingers can pinch. Without this the plan was
   // buttons-only for zoom and had no pan gesture at all on a touch screen.
   const touchRef = useRef<Map<number, { x: number; y: number }>>(new Map());
@@ -179,11 +247,55 @@ export const PlanView = forwardRef<PlanViewHandle, {
 
   useEffect(() => () => {
     if (blockTimer.current) clearTimeout(blockTimer.current);
+    // Leaving this tab must not leave a hover behind. `hoveredPartId` is studio-
+    // wide — the 3D tab's Highlight and the shared HoverCard both read it — so an
+    // id written here outlives the view that wrote it, which is the same trap
+    // `Pickable`'s unmount effect exists for.
+    if (useStudio.getState().hoveredPartId) useStudio.getState().setHovered(null);
   }, []);
 
   useEffect(() => {
     onViewChange?.({ zoom, rot, hasCutOff });
   }, [zoom, rot, hasCutOff, onViewChange]);
+
+  // Escape, during a drag, puts the piece back — the way it does in every 3D
+  // tool. It is bound in the capture phase so it beats the studio's global
+  // Escape (which means "deselect"), and it declines the key whenever no drag is
+  // in flight, so that global meaning is untouched the rest of the time.
+  //
+  // It puts back EVERYTHING the drag moved, not just the piece under the pointer.
+  // It used to restore only that one, which left a lamp that had ridden along on a
+  // desk hanging in mid-air where the cancelled drag had abandoned it, and every
+  // member of a merged group scattered. `cascadeTransform` is pure, so replaying it
+  // from the start transform reproduces the descendants' original transforms
+  // exactly — there is nothing extra to snapshot for them.
+  //
+  // Only a piece-drag is undone, not a wall-drag: a wall moves incrementally and
+  // carries what is mounted on it, so "where it started" is not one number to put
+  // back. Ctrl+Z is the route there, and it is one gesture in history.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      const d = dragRef.current;
+      if (!d) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setPosition(d.id, d.startPos);
+      setRotation(d.id, d.startRot);
+      for (const m of cascadeTransform(d.id, d.startPos, d.startRot, d.descendants)) {
+        setPosition(m.id, m.pos);
+        setRotation(m.id, m.rot);
+      }
+      for (const g of d.groupStart) setPosition(g.id, g.pos);
+      dragRef.current = null;
+      setDragging(null);
+      if (blockedRef.current) clearBlocked();
+      announce('Put back where it was.');
+      force((v) => v + 1);
+    }
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [setPosition, setRotation, setDragging]);
 
   const fit = useCallback(() => {
     setZoom(1);
@@ -194,6 +306,23 @@ export const PlanView = forwardRef<PlanViewHandle, {
 
   // The page's toolbar drives these. Zoom steps are 1.15× to match the wheel, so
   // the buttons and the wheel do not disagree about what "one step" means.
+  /** Put the selected piece in the middle of the view, keeping the current
+   *  magnification. `fit` resets the whole view, which is a different question —
+   *  and the reason `F` did nothing here at all: it is bound to the CAMERA's
+   *  frameSelected, and the plan has no camera. */
+  const frameSelection = useCallback(() => {
+    const id = useStudio.getState().selectedPartId;
+    if (!id) return;
+    const part = currentRoomScene().find((p) => p.id === id);
+    if (!part) return;
+    // Where the piece sits in the un-panned drawing, then the pan that brings
+    // that point to the centre of the viewBox. Rotation is applied about the
+    // centre, so a centred point stays centred whatever the page angle.
+    const sx = PAD + (part.pos[0] - bounds.minX) * SCALE;
+    const sy = PAD + (part.pos[2] - bounds.minZ) * SCALE;
+    setOffset({ x: baseW / 2 - sx * zoom, y: baseH / 2 - sy * zoom });
+  }, [bounds.minX, bounds.minZ, baseW, baseH, zoom]);
+
   useImperativeHandle(
     ref,
     () => ({
@@ -202,8 +331,9 @@ export const PlanView = forwardRef<PlanViewHandle, {
       rotateLeft: () => setRot((r) => r - Math.PI / 12),
       rotateRight: () => setRot((r) => r + Math.PI / 12),
       fit,
+      frameSelection,
     }),
-    [fit],
+    [fit, frameSelection],
   );
   function toViewBox(clientX: number, clientY: number): { x: number; y: number } {
     const svg = svgRef.current;
@@ -217,7 +347,13 @@ export const PlanView = forwardRef<PlanViewHandle, {
   }
 
   function svgToWorld(e: React.PointerEvent | PointerEvent): { x: number; z: number } {
-    const p = toViewBox(e.clientX, e.clientY);
+    return svgToWorldAt(e.clientX, e.clientY);
+  }
+
+  /** The same mapping from a bare point, which a marquee needs: its first corner
+   *  is remembered from a press that is long over by the time it is resolved. */
+  function svgToWorldAt(clientX: number, clientY: number): { x: number; z: number } {
+    const p = toViewBox(clientX, clientY);
     // undo view rotation around viewport center
     const cx = baseW / 2;
     const cy = baseH / 2;
@@ -242,24 +378,116 @@ export const PlanView = forwardRef<PlanViewHandle, {
     setZoom(next);
   }
 
+  /**
+   * A piece dragged out of the library, dropped where the pointer is.
+   *
+   * The plan used to catch no drop at all, so the library's rows were made
+   * un-draggable here and it offered click-to-drop-in-the-centre instead — a
+   * reasonable answer to "there is nowhere to drop", and a strange one for the
+   * view that is literally a map of the floor. Same contract as the 3D tab's
+   * `onDrop`: `placeNewPart` decides the piece's own rules (wall-mounted pieces go
+   * on a wall regardless of where you let go), and the pointer only supplies the
+   * spot for the ones that stand on the floor.
+   */
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    const raw = e.dataTransfer.getData(DND_MIME);
+    if (!raw) return;
+    let item: { label: string; category: Category; shape: Shape; dimMM: [number, number, number] };
+    try {
+      item = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    const { room, parts: existing, addPart } = useScene.getState();
+    // The drop point goes IN, exactly as it does on the 3D tab: a wall-mounted piece
+    // takes the wall nearest where it was aimed rather than the wall nearest the
+    // room's centre. Leaving it out is what made "same contract as the 3D tab's
+    // onDrop" false above — a TV let go against the left wall landed on whichever
+    // wall the default picked.
+    const w = svgToWorldAt(e.clientX, e.clientY);
+    const { pos, rot, wallMounted } = placeNewPart(item.category, item.shape, item.dimMM, room, existing, [
+      w.x,
+      w.z,
+    ]);
+    let [x, y, z] = pos;
+    if (!wallMounted) {
+      const insetX = item.dimMM[0] / 2000;
+      const insetZ = item.dimMM[1] / 2000;
+      x = clamp(w.x, bounds.minX + insetX, bounds.maxX - insetX);
+      z = clamp(w.z, bounds.minZ + insetZ, bounds.maxZ - insetZ);
+    }
+    const id = `${item.category}-${uuid().slice(0, 6)}`;
+    addPart({
+      id,
+      category: item.category,
+      name: item.label,
+      shape: item.shape,
+      pos: [x, y, z],
+      rot,
+      dimMM: item.dimMM,
+      locked: false,
+      wallMounted,
+    });
+    setSelected(id);
+    announce(`${item.label} added.`);
+  }
+
   function onWheel(e: React.WheelEvent) {
     e.preventDefault();
     const p = toViewBox(e.clientX, e.clientY);
+
+    // A trackpad's two-finger scroll arrives here as a wheel event, which is why
+    // this view had no pan on a laptop at all: every scroll was a zoom, and the
+    // three pans left all wanted a key or a button a laptop does not have.
+    //
+    //   · Ctrl + wheel is what a PINCH reports on macOS and Windows, so it stays
+    //     zoom. (Blender spends Ctrl+wheel on panning; here pinch wins — losing
+    //     pinch-to-zoom on a laptop costs more than a third pan gesture gains.)
+    //   · A horizontal component means a real two-axis gesture: a mouse wheel
+    //     essentially never sends deltaX, a trackpad routinely does. Pan.
+    //   · Shift + wheel pans sideways, as it does in most 2D editors.
+    //   · Everything else is a mouse wheel, and keeps zooming exactly as before.
+    const svg = svgRef.current;
+    const pan = !e.ctrlKey && (e.shiftKey || e.deltaX !== 0);
+    if (pan && svg) {
+      const dx = e.shiftKey && e.deltaX === 0 ? -e.deltaY : -e.deltaX;
+      const dy = e.shiftKey && e.deltaX === 0 ? 0 : -e.deltaY;
+      const d = clientDeltaToViewBox(svg.getBoundingClientRect(), baseW, baseH, dx, dy);
+      setOffset({ x: offset.x + d.x, y: offset.y + d.y });
+      return;
+    }
+
     const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
     zoomAbout(clamp(zoom * factor, MIN_ZOOM, MAX_ZOOM), p.x, p.y, zoom, offset.x, offset.y);
   }
 
   // ── Moving a piece ────────────────────────────────────────────────────────
 
-  /** Keep a rotated footprint inside the room's bounding box. */
-  function clampToRoom(part: ScenePart, x: number, z: number): [number, number] {
-    const halfW = part.dimMM[0] / 2000;
-    const halfD = part.dimMM[1] / 2000;
-    const c = Math.abs(Math.cos(part.rot));
-    const s = Math.abs(Math.sin(part.rot));
-    const extX = halfW * c + halfD * s;
-    const extZ = halfW * s + halfD * c;
-    return [clamp(x, bounds.minX + extX, bounds.maxX - extX), clamp(z, bounds.minZ + extZ, bounds.maxZ - extZ)];
+  /** Resolve a target through the SHARED pipeline — the same one the 3D drag
+   *  uses (`lib/drag-resolve`), so the snap setting, the wall magnetism, the
+   *  item-to-item alignment and gravity all behave identically in both tabs.
+   *
+   *  `parts` rather than `visible`: a hidden piece is still furniture in the way,
+   *  and dragging through one because you cannot see it would be a trap. */
+  function resolveAt(part: ScenePart, rawX: number, rawZ: number) {
+    const desc = dragRef.current?.descendants ?? [];
+    const skip = new Set(desc.map((d) => d.id));
+    return resolvePlacement({
+      part,
+      rawX,
+      rawZ,
+      rot: part.rot,
+      dim: part.dimMM,
+      parts: desc.length > 0 ? parts.filter((p) => !skip.has(p.id)) : parts,
+      footprint: ROOM_DYN.footprint,
+      roomHeight: ROOM_DYN.height,
+      snapMode,
+      // The plan has no live object to read a mount height off, so the stored one
+      // is the answer — which is also what keeps a picture at picture height when
+      // it is slid along a wall from up here.
+      currentY: part.pos[1],
+    });
   }
 
   function clearBlocked() {
@@ -274,16 +502,37 @@ export const PlanView = forwardRef<PlanViewHandle, {
    *  hit rather than freezing. Returns false if nothing was possible — and says
    *  so, out loud and in colour, instead of returning silently. */
   function moveTo(part: ScenePart, rawX: number, rawZ: number): boolean {
-    const [x, z] = clampToRoom(part, rawX, rawZ);
     const candidates: Array<[number, number]> = [
-      [x, z],
-      [x, part.pos[2]],
-      [part.pos[0], z],
+      [rawX, rawZ],
+      [rawX, part.pos[2]],
+      [part.pos[0], rawZ],
     ];
     for (const [tx, tz] of candidates) {
-      if (!pointInFootprint(tx, tz, ROOM_DYN.footprint)) continue;
-      if (collidesAt(parts, part.id, [tx, part.pos[1], tz], part.rot, part.dimMM)) continue;
-      if (tx !== part.pos[0] || tz !== part.pos[2]) setPosition(part.id, [tx, part.pos[1], tz]);
+      const r = resolveAt(part, tx, tz);
+      if (!r.valid) continue;
+      const moved = r.pos[0] !== part.pos[0] || r.pos[1] !== part.pos[1] || r.pos[2] !== part.pos[2];
+      if (moved) setPosition(part.id, r.pos);
+      // A wall-mounted piece is turned by the wall it lands on, not by the drag.
+      if (r.rot !== part.rot) setRotation(part.id, r.rot);
+      // Whatever is resting ON this piece comes too. The plan wrote `setPosition`
+      // straight out before this, so a lamp on a desk stayed behind while the desk
+      // moved — in the 3D tab it followed, from the same store.
+      const desc = dragRef.current?.descendants ?? [];
+      if (moved && desc.length > 0) {
+        for (const m of cascadeTransform(part.id, r.pos, r.rot, desc)) {
+          setPosition(m.id, m.pos);
+          setRotation(m.id, m.rot);
+        }
+      }
+      // A merged group moves as one — every member from where it STARTED, by the
+      // total delta, rather than each frame nudging the last frame's answer. See
+      // `groupStart` on the drag ref for what the per-frame version got wrong.
+      const drag = dragRef.current;
+      if (moved && drag && drag.groupStart.length > 0) {
+        const dx = r.pos[0] - drag.startPos[0];
+        const dz = r.pos[2] - drag.startPos[2];
+        for (const g of drag.groupStart) setPosition(g.id, [g.pos[0] + dx, g.pos[1], g.pos[2] + dz]);
+      }
       if (blockedRef.current) clearBlocked();
       return true;
     }
@@ -300,12 +549,63 @@ export const PlanView = forwardRef<PlanViewHandle, {
 
   // ── Pointer handling ──────────────────────────────────────────────────────
 
+  /** How far a press may travel and still count as a click, in screen pixels. The
+   *  same slop the piece-drag already used, shared so a marquee, an Alt-pick and a
+   *  drag all agree on what "did not move" means. */
+  const MOVE_SLOP = 4;
+
+  /**
+   * Alt-press: the user is asking WHICH piece, not moving one. Answered on the
+   * release, because a press that turns into a drag is not a pick — and because
+   * Alt-drag has to stay inert now that it no longer turns the page.
+   */
+  function beginAltPick(e: React.PointerEvent): boolean {
+    if (!e.altKey || e.button !== 0 || e.pointerType === 'touch') return false;
+    const w = svgToWorld(e);
+    altRef.current = { x: w.x, z: w.z, sx: e.clientX, sy: e.clientY, pointerId: e.pointerId };
+    // Firefox treats Alt+click as "download this"; a Linux window manager may
+    // treat Alt-drag as "move the window". Neither belongs to the plan.
+    e.preventDefault();
+    return true;
+  }
+
+  function finishAltPick(e: React.PointerEvent) {
+    const a = altRef.current;
+    altRef.current = null;
+    if (!a || e.pointerId !== a.pointerId) return;
+    if (Math.hypot(e.clientX - a.sx, e.clientY - a.sy) > MOVE_SLOP) return;
+    // World decides which pieces are candidates, screen decides whether this is the
+    // same press repeated — and the screen point is the PRESS, not this release, so
+    // it pairs with the world point beside it. See lib/plan-hit.
+    const step = nextInCycle({ x: a.x, z: a.z }, { x: a.sx, y: a.sy }, visible, cycleRef.current);
+    cycleRef.current = step.state;
+    // Bare floor under an Alt-click is not a click on nothing: it does not clear
+    // the selection, it simply has no answer.
+    if (!step.id) return;
+    if (e.shiftKey) toggleInSelection(step.id);
+    else setSelected(step.id);
+    if (step.fresh && step.candidates.length > 1) {
+      openPickMenu(e.clientX, e.clientY, step.candidates);
+    }
+  }
+
   function onCanvasPointerDown(e: React.PointerEvent) {
     if (dragRef.current) return;
-    if (e.target !== svgRef.current) return;
-    if (e.button === 0 && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
-      setSelected(null);
-    }
+    // There is deliberately NO test that the press landed on the <svg> itself.
+    // There was one, and it quietly killed almost everything below it: the room
+    // floor is a FILLED <path>, so every press inside the room outline arrives with
+    // `e.target` set to that path and returned here. Marquee, one-finger touch pan,
+    // two-finger pinch, middle-drag pan and Space-drag pan therefore worked only in
+    // the grey margin outside the walls — and the help card was busy advertising
+    // "drag across empty floor to lasso several".
+    //
+    // It was redundant as well as wrong. Pieces and walls claim their own presses by
+    // calling `stopPropagation`, which is why this handler never sees them; anything
+    // that does reach it is floor or decoration, and for both of those a marquee is
+    // the right answer. Do not reintroduce a target check here: the forgiving
+    // direction is to act, and the failure mode of the strict one is a dead canvas
+    // with nothing in the console.
+    if (beginAltPick(e)) return;
 
     // Touch: one finger pans, two fingers pinch. There are no modifier keys on a
     // touch screen, so the desktop gestures below are unreachable there.
@@ -331,23 +631,43 @@ export const PlanView = forwardRef<PlanViewHandle, {
       return;
     }
 
-    // Alt+drag → rotate view; Middle / right / Shift+left → pan.
-    if (e.altKey) {
-      const p = toViewBox(e.clientX, e.clientY);
-      rotRef.current = {
-        startAngle: Math.atan2(p.y - baseH / 2, p.x - baseW / 2),
-        startRot: rot,
-      };
+    // Alt used to free-rotate the drawing from here. It does not any more: the
+    // page turns in 15° steps from `[` / `]` and the two toolbar buttons, which is
+    // what a measured drawing wants (a freely rotated plan has every label and
+    // dimension line fighting its own angle), and Alt is worth more as the
+    // modifier that chooses between overlapping pieces — the one thing the plan
+    // could not do at all.
+    //
+    // Space + left-drag, as in the 3D tab, or the middle button. Shift-drag used
+    // to pan too and does not any more: a left-drag from empty floor is a marquee
+    // in every 2D tool there is, and that gesture was doing nothing here at all
+    // while pan already had two other routes (three, counting the wheel).
+    const startPan = e.button === 1 || (e.button === 0 && useStudio.getState().panKeyHeld);
+    if (startPan) {
+      panRef.current = { startX: e.clientX, startY: e.clientY, ox: offset.x, oy: offset.y };
       (e.target as Element).setPointerCapture?.(e.pointerId);
       e.preventDefault();
       return;
     }
-    // Space + left-drag, as in the 3D tab. The right button used to pan here too
-    // and now opens the context menu instead; middle-drag and Shift-drag stay.
-    const startPan =
-      e.button === 1 || (e.button === 0 && (useStudio.getState().panKeyHeld || e.shiftKey));
-    if (!startPan) return;
-    panRef.current = { startX: e.clientX, startY: e.clientY, ox: offset.x, oy: offset.y };
+
+    // Marquee. Deliberately NOT clearing the selection here: that waits for the
+    // release, so a press that turns out to be a drag replaces the selection with
+    // what it caught, and a Shift-drag adds to it. Clearing on press made the
+    // selection flicker away under every marquee.
+    if (e.button !== 0) return;
+    const box = rootRef.current?.getBoundingClientRect();
+    marqueeRef.current = {
+      x0: e.clientX,
+      y0: e.clientY,
+      // The container's own origin, taken once: the box cannot move mid-gesture,
+      // and reading it per frame would be a layout flush per pointermove.
+      left: box?.left ?? 0,
+      top: box?.top ?? 0,
+      pointerId: e.pointerId,
+      extend: e.shiftKey,
+      moved: false,
+    };
+    setMarquee(null);
     (e.target as Element).setPointerCapture?.(e.pointerId);
     e.preventDefault();
   }
@@ -356,7 +676,20 @@ export const PlanView = forwardRef<PlanViewHandle, {
     // Space held = the press belongs to the pan. Left unstopped so it reaches the
     // svg's own handler, which is where panning starts.
     if (useStudio.getState().panKeyHeld) return;
+    // Alt on a piece is the same question as Alt on the floor — which piece did I
+    // mean — so it is answered by the same code and must not start a drag.
+    if (beginAltPick(e)) {
+      e.stopPropagation();
+      return;
+    }
     e.stopPropagation();
+    // Shift adds to (or removes from) the selection, matching the 3D tab. A piece
+    // toggled into a set must not also become the thing a drag moves, so this
+    // returns before the drag bookkeeping below.
+    if (e.shiftKey && mode === 'translate') {
+      toggleInSelection(id);
+      return;
+    }
     setSelected(id);
     setDragging(id);
     (e.target as Element).setPointerCapture?.(e.pointerId);
@@ -364,16 +697,53 @@ export const PlanView = forwardRef<PlanViewHandle, {
     const part = parts.find((p) => p.id === id);
     if (!part) return;
 
+    const startPos: [number, number, number] = [part.pos[0], part.pos[1], part.pos[2]];
+    const descendants = snapshotDescendants(id, parts, useStudio.getState().parentIds);
+    const groupStart = part.groupId
+      ? parts
+          .filter((p) => p.groupId === part.groupId && p.id !== id)
+          .map((p) => ({ id: p.id, pos: [p.pos[0], p.pos[1], p.pos[2]] as [number, number, number] }))
+      : [];
+    const common = {
+      startX: e.clientX,
+      startY: e.clientY,
+      moved: false,
+      startPos,
+      descendants,
+      groupStart,
+    };
     if (mode === 'rotate') {
       const w = svgToWorld(e);
       const startAngle = Math.atan2(w.z - part.pos[2], w.x - part.pos[0]);
-      dragRef.current = { id, mode, startAngle, startRot: part.rot, startX: e.clientX, startY: e.clientY, moved: false };
+      dragRef.current = { id, mode, startAngle, startRot: part.rot, ...common };
     } else {
-      dragRef.current = { id, mode: 'translate', startAngle: 0, startRot: 0, startX: e.clientX, startY: e.clientY, moved: false };
+      dragRef.current = { id, mode: 'translate', startAngle: 0, startRot: part.rot, ...common };
     }
   }
 
+  /**
+   * Hover, geometrically. The plan never wrote `hoveredPartId` at all before
+   * this, which is why it had no hover feedback, never showed the HoverCard, and
+   * handed the right-click menu either nothing or a stale id from the 3D tab —
+   * the menu's own comment claimed both surfaces kept this current.
+   *
+   * It asks `hitsAt` rather than relying on per-shape pointer events so that the
+   * outline and the click can never disagree about which piece is on top, and so
+   * that it stays right when Alt-click starts choosing between them.
+   */
+  function updateHover(e: React.PointerEvent) {
+    // No hover on touch: there is no pointer at rest, and a tap would leave a
+    // highlight behind with nothing to clear it.
+    if (e.pointerType === 'touch') return;
+    // A gesture owns the pointer — the piece being dragged keeps the highlight.
+    if (dragRef.current || panRef.current || wallDragRef.current) return;
+    const w = svgToWorld(e);
+    const next = hitsAt(w.x, w.z, visible)[0] ?? null;
+    if (useStudio.getState().hoveredPartId !== next) setHovered(next);
+  }
+
   function onPointerMove(e: React.PointerEvent) {
+    updateHover(e);
     if (e.pointerType === 'touch' && touchRef.current.has(e.pointerId)) {
       touchRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     }
@@ -385,13 +755,23 @@ export const PlanView = forwardRef<PlanViewHandle, {
       return;
     }
 
-    // Rotate-view handling first
-    if (rotRef.current) {
-      const p = toViewBox(e.clientX, e.clientY);
-      const a = Math.atan2(p.y - baseH / 2, p.x - baseW / 2);
-      setRot(rotRef.current.startRot + (a - rotRef.current.startAngle));
+    if (marqueeRef.current) {
+      const m = marqueeRef.current;
+      if (!m.moved && Math.hypot(e.clientX - m.x0, e.clientY - m.y0) > MOVE_SLOP) m.moved = true;
+      if (m.moved) {
+        // Drawn in viewport pixels over the drawing, not in the rotated/zoomed
+        // group: a marquee is a screen gesture and must stay a screen-aligned
+        // rectangle however the page is turned.
+        setMarquee({
+          x: Math.min(m.x0, e.clientX) - m.left,
+          y: Math.min(m.y0, e.clientY) - m.top,
+          w: Math.abs(e.clientX - m.x0),
+          h: Math.abs(e.clientY - m.y0),
+        });
+      }
       return;
     }
+
     if (panRef.current) {
       const svg = svgRef.current;
       if (!svg) return;
@@ -436,7 +816,12 @@ export const PlanView = forwardRef<PlanViewHandle, {
     } else {
       const a = Math.atan2(w.z - part.pos[2], w.x - part.pos[0]);
       const delta = -(a - dragRef.current.startAngle);
-      setRotation(id, dragRef.current.startRot + delta);
+      const raw = dragRef.current.startRot + delta;
+      // Quantised the way the 3D gizmo quantises it. The plan took the raw pointer
+      // angle, so the same snap setting gave you 45° steps in one tab and 0.7° in
+      // the other.
+      const step = snapSteps(snapMode).rotate;
+      setRotation(id, step ? Math.round(raw / step) * step : raw);
     }
     force((v) => v + 1);
   }
@@ -464,6 +849,32 @@ export const PlanView = forwardRef<PlanViewHandle, {
   }
 
   function onPointerUp(e: React.PointerEvent) {
+    finishAltPick(e);
+
+    if (marqueeRef.current && marqueeRef.current.pointerId === e.pointerId) {
+      const m = marqueeRef.current;
+      marqueeRef.current = null;
+      setMarquee(null);
+      (e.target as Element).releasePointerCapture?.(e.pointerId);
+      if (m.moved) {
+        // World coordinates, so the catch is right whatever the view rotation:
+        // `svgToWorld` undoes rotation, pan and zoom in that order.
+        const a = svgToWorldAt(m.x0, m.y0);
+        const b = svgToWorldAt(e.clientX, e.clientY);
+        const caught = hitsInRect({ x0: a.x, z0: a.z, x1: b.x, z1: b.z }, visible);
+        if (caught.length > 0) {
+          const ids = m.extend ? [...new Set([...selection, ...caught])] : caught;
+          setSelection(ids, ids[ids.length - 1]);
+          announce(`${ids.length} ${ids.length === 1 ? 'piece' : 'pieces'} selected.`);
+        } else if (!m.extend) {
+          setSelected(null);
+        }
+      } else if (!m.extend) {
+        // A press on bare floor that went nowhere is still a click on nothing.
+        setSelected(null);
+      }
+    }
+
     if (e.pointerType === 'touch') {
       touchRef.current.delete(e.pointerId);
       if (touchRef.current.size < 2) pinchRef.current = null;
@@ -473,15 +884,13 @@ export const PlanView = forwardRef<PlanViewHandle, {
       setDragging(null);
       (e.target as Element).releasePointerCapture?.(e.pointerId);
     }
-    if (rotRef.current) {
-      rotRef.current = null;
-      (e.target as Element).releasePointerCapture?.(e.pointerId);
-    }
     if (panRef.current) {
       panRef.current = null;
       (e.target as Element).releasePointerCapture?.(e.pointerId);
     }
     if (dragRef.current) {
+      // The per-gesture snapshots (descendants, group siblings) die with it — see
+      // the comment on the ref.
       dragRef.current = null;
       setDragging(null);
       (e.target as Element).releasePointerCapture?.(e.pointerId);
@@ -505,7 +914,12 @@ export const PlanView = forwardRef<PlanViewHandle, {
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (!armed()) return;
-      if (e.key === '0') fit();
+      if (e.key === '0' || e.key === 'Home') fit();
+      // `f` is the studio's "look at this" key. On the 3D tab it flies the camera;
+      // here there is no camera, so it does the 2D equivalent and centres the
+      // piece. Before this it was a key that appeared to do nothing on one of the
+      // two tabs it was armed on.
+      else if (e.key === 'f' || e.key === 'F') frameSelection();
       else if (e.key === '=' || e.key === '+') setZoom((z) => Math.min(MAX_ZOOM, z * 1.15));
       else if (e.key === '-' || e.key === '_') setZoom((z) => Math.max(MIN_ZOOM, z / 1.15));
       else if (e.key === '[') setRot((r) => r - Math.PI / 12);
@@ -515,7 +929,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [fit]);
+  }, [fit, frameSelection]);
 
   const ARROWS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
 
@@ -586,6 +1000,63 @@ export const PlanView = forwardRef<PlanViewHandle, {
     y: PAD + (z - bounds.minZ) * SCALE,
   });
 
+  // Everything in the drawing lives inside one `scale(zoom)` group, which is
+  // right for the room and wrong for the controls: at 0.4x the rotate handle was a
+  // 4-unit dot and the wall grab lines were 6 units wide, and at 4x the same handle
+  // was a 36-unit blob sitting over the furniture. Dividing a control's size by the
+  // magnification keeps it the size it was drawn at — the way a gizmo behaves in
+  // every tool that has one — while the room itself still zooms.
+  //
+  // "Constant" here means constant against the drawing's own fitted size: the <svg>
+  // additionally scales itself into whatever box the rails leave it, which is a
+  // factor no element inside can see. That outer fit is stable during a zoom, which
+  // is the case this fixes.
+  const k = 1 / zoom;
+  /** Below this the label cannot be read anyway, so it is dropped rather than
+   *  drawn as a smudge — the footprint and its colour still say what the piece is,
+   *  and the hover card names it. */
+  const LABEL_MIN_PX = 22;
+
+  // The piece under an active translate-drag, and its clearance to the nearest
+  // wall on each axis. Recomputed per frame — `onPointerMove` already forces a
+  // render for the move itself, so this costs two ray casts on a frame that was
+  // happening anyway.
+  const measuring = (() => {
+    const d = dragRef.current;
+    if (!d || d.mode !== 'translate') return null;
+    const part = visible.find((p) => p.id === d.id);
+    if (!part) return null;
+    const foot = footFromPart(part.pos, part.rot, part.dimMM, part.circle);
+    const [cx, , cz] = part.pos;
+    const axes: Array<{ axis: 'x' | 'z'; dirs: Array<[number, number]> }> = [
+      { axis: 'x', dirs: [[-1, 0], [1, 0]] },
+      { axis: 'z', dirs: [[0, -1], [0, 1]] },
+    ];
+    const gaps = [];
+    for (const { axis, dirs } of axes) {
+      let best: { gap: number; dir: [number, number] } | null = null;
+      for (const dir of dirs) {
+        const reach = rayToBoundary(cx, cz, dir[0], dir[1], ROOM_DYN.footprint);
+        const gap = reach - obbExtentAlong(foot, dir[0], dir[1]);
+        if (!best || gap < best.gap) best = { gap, dir };
+      }
+      // A negative gap means the piece is already through the plaster, which
+      // `clearance.ts` is the thing that reports. A measurement line pointing
+      // backwards would just be wrong, so it is left out.
+      if (!best || best.gap < 0) continue;
+      const ext = obbExtentAlong(foot, best.dir[0], best.dir[1]);
+      gaps.push({
+        axis,
+        gap: best.gap,
+        fromX: cx + best.dir[0] * ext,
+        fromZ: cz + best.dir[1] * ext,
+        toX: cx + best.dir[0] * (ext + best.gap),
+        toZ: cz + best.dir[1] * (ext + best.gap),
+      });
+    }
+    return gaps.length > 0 ? { gaps } : null;
+  })();
+
   const segs = wallSegments(ROOM_DYN.footprint);
   // Compass names only mean something on a four-edge room. An L / T / U footprint
   // has six or eight edges, and the Inspector already falls back to "Wall n".
@@ -598,7 +1069,15 @@ export const PlanView = forwardRef<PlanViewHandle, {
   const planH = bounds.depth * SCALE;
 
   return (
-    <div ref={rootRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
+    <div
+      ref={rootRef}
+      style={{ width: '100%', height: '100%', position: 'relative' }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+      }}
+      onDrop={onDrop}
+    >
       <svg
         ref={svgRef}
         viewBox={`0 0 ${baseW} ${baseH}`}
@@ -606,10 +1085,22 @@ export const PlanView = forwardRef<PlanViewHandle, {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-        onPointerLeave={onPointerUp}
+        // Leaving the drawing ends any gesture AND surrenders the hover. Without
+        // the second half, sweeping off the edge leaves the last piece
+        // highlighted, and the studio-wide `hoveredPartId` it is written to is
+        // read by the shared HoverCard and by the right-click menu.
+        onPointerLeave={(e) => {
+          onPointerUp(e);
+          if (useStudio.getState().hoveredPartId) setHovered(null);
+        }}
         onContextMenu={(e) => {
           e.preventDefault();
-          openSceneMenu(e.clientX, e.clientY, useStudio.getState().hoveredPartId);
+          // Hover is now written by this view (it never was before), so the piece
+          // this menu acts on is finally the piece under the pointer. The full
+          // stack goes with it, for the "Select what's here" row — the picker's
+          // no-modifier route, and the only one a touch screen has.
+          const w = svgToWorldAt(e.clientX, e.clientY);
+          openSceneMenu(e.clientX, e.clientY, useStudio.getState().hoveredPartId, hitsAt(w.x, w.z, visible));
         }}
         onWheel={onWheel}
         style={{ width: '100%', height: '100%', maxWidth: 1100, touchAction: 'none', cursor: panRef.current ? 'grabbing' : panKey ? 'grab' : 'default' }}
@@ -664,7 +1155,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
               the furniture so a piece is never obscured by its own band. */}
           {showComfort && (
             <g style={{ pointerEvents: 'none' }}>
-              {parts.map((part) => {
+              {visible.map((part) => {
                 const bands = comfortBands(part);
                 if (!bands) return null;
                 const c = toLocal(part.pos[0], part.pos[2]);
@@ -698,7 +1189,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
                 onFocus={() => setFocusKey(`wall:${i}`)}
                 onBlur={() => setFocusKey(null)}
               >
-                <line x1={la.x} y1={la.y} x2={lb.x} y2={lb.y} stroke="transparent" strokeWidth={16} strokeLinecap="round" />
+                <line x1={la.x} y1={la.y} x2={lb.x} y2={lb.y} stroke="transparent" strokeWidth={16 * k} strokeLinecap="round" />
                 {(sel || focused) && (
                   <line
                     x1={la.x}
@@ -706,9 +1197,9 @@ export const PlanView = forwardRef<PlanViewHandle, {
                     x2={lb.x}
                     y2={lb.y}
                     stroke="var(--accent)"
-                    strokeWidth={5}
+                    strokeWidth={5 * k}
                     strokeLinecap="round"
-                    strokeDasharray={focused && !sel ? '7 4' : undefined}
+                    strokeDasharray={focused && !sel ? `${7 * k} ${4 * k}` : undefined}
                   />
                 )}
               </g>
@@ -774,7 +1265,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
             </g>
           </g>
 
-          {parts.map((part) => {
+          {painted.map((part) => {
             const pos = part.pos;
             const rotY = part.rot;
             const fpW = part.dimMM[0] / 1000;
@@ -788,7 +1279,12 @@ export const PlanView = forwardRef<PlanViewHandle, {
             const color = blocked ? 'var(--danger)' : part.locked ? 'var(--locked)' : 'var(--accent)';
             const labelColor = blocked ? 'var(--danger-text)' : part.locked ? 'var(--locked)' : 'var(--accent-text)';
             const fill = blocked ? 'var(--danger-tint)' : part.locked ? 'var(--locked-tint)' : 'var(--accent-tint)';
-            const isSel = selected === part.id;
+            // In the selection, and separately whether it is the PRIMARY of it:
+            // every selected piece draws heavier, but only one carries the rotate
+            // handle, or a five-piece selection would sprout five of them.
+            const isSel = selection.includes(part.id);
+            const isPrimary = selected === part.id;
+            const isHovered = hovered === part.id && !isSel;
             const focused = focusKey === `part:${part.id}`;
             const rotDeg = -(rotY * 180) / Math.PI;
             return (
@@ -804,17 +1300,35 @@ export const PlanView = forwardRef<PlanViewHandle, {
                 onBlur={() => setFocusKey(null)}
                 style={{ cursor: 'grab', outline: 'none' }}
               >
-                {focused && (
+                {/* Hover. The plan had no hover state at all before it wrote
+                    `hoveredPartId`, so a piece under the pointer looked exactly
+                    like one that was not — and with Alt-click choosing between
+                    overlapping pieces, "which one is the pointer on" became a
+                    question the drawing has to answer. Solid, where focus is
+                    dashed, so the two never read as the same thing. */}
+                {isHovered && (
                   <rect
-                    x={-wpx / 2 - 5}
-                    y={-hpx / 2 - 5}
-                    width={wpx + 10}
-                    height={hpx + 10}
+                    x={-wpx / 2 - 3 * k}
+                    y={-hpx / 2 - 3 * k}
+                    width={wpx + 6 * k}
+                    height={hpx + 6 * k}
                     fill="none"
                     stroke="var(--accent-text)"
-                    strokeWidth={1.5}
-                    strokeDasharray="4 3"
-                    rx={4}
+                    strokeWidth={1.2 * k}
+                    rx={3 * k}
+                  />
+                )}
+                {focused && (
+                  <rect
+                    x={-wpx / 2 - 5 * k}
+                    y={-hpx / 2 - 5 * k}
+                    width={wpx + 10 * k}
+                    height={hpx + 10 * k}
+                    fill="none"
+                    stroke="var(--accent-text)"
+                    strokeWidth={1.5 * k}
+                    strokeDasharray={`${4 * k} ${3 * k}`}
+                    rx={4 * k}
                   />
                 )}
                 {part.circle ? (
@@ -830,8 +1344,8 @@ export const PlanView = forwardRef<PlanViewHandle, {
                     ry={hpx / 2}
                     fill={fill}
                     stroke={color}
-                    strokeWidth={isSel ? 2.5 : 1.4}
-                    strokeDasharray={part.locked ? undefined : '4 3'}
+                    strokeWidth={(isSel ? 2.5 : 1.4) * k}
+                    strokeDasharray={part.locked ? undefined : `${4 * k} ${3 * k}`}
                   />
                 ) : (
                   <>
@@ -842,39 +1356,54 @@ export const PlanView = forwardRef<PlanViewHandle, {
                       height={hpx}
                       fill={fill}
                       stroke={color}
-                      strokeWidth={isSel ? 2.5 : 1.4}
-                      strokeDasharray={part.locked ? undefined : '4 3'}
+                      strokeWidth={(isSel ? 2.5 : 1.4) * k}
+                      strokeDasharray={part.locked ? undefined : `${4 * k} ${3 * k}`}
                     />
                     {part.locked && <rect x={-wpx / 2} y={-hpx / 2} width={wpx} height={hpx} fill="url(#lockHatch)" />}
-                    <line x1={0} y1={-hpx / 2} x2={0} y2={-hpx / 2 - 8} stroke={color} strokeWidth="1.4" />
+                    <line x1={0} y1={-hpx / 2} x2={0} y2={-hpx / 2 - 8 * k} stroke={color} strokeWidth={1.4 * k} />
                   </>
                 )}
                 {/* Counter-rotate label so it stays upright regardless of part + view rotation */}
-                <g transform={`rotate(${-rotDeg - viewRotDeg})`}>
-                  <text
-                    x={0}
-                    y={3}
-                    textAnchor="middle"
-                    fontFamily="var(--font-sans)"
-                    fontSize="9"
-                    fill={labelColor}
-                    fontWeight="600"
-                    style={{ pointerEvents: 'none' }}
-                  >
-                    {part.name.split(' ')[0].slice(0, 8)}
-                  </text>
-                </g>
+                {/* The label used to be the first WORD, cut to eight characters, so two
+                    dining chairs both read "Dining" and a "TV bench" read "TV". It is
+                    the whole name now, cut to what the footprint can actually hold at
+                    the current magnification — and dropped entirely when that is
+                    nothing, rather than drawn illegibly. */}
+                {Math.min(wpx, hpx) > LABEL_MIN_PX * k && (
+                  <g transform={`rotate(${-rotDeg - viewRotDeg})`}>
+                    <text
+                      x={0}
+                      y={3 * k}
+                      textAnchor="middle"
+                      fontFamily="var(--font-sans)"
+                      fontSize={9 * k}
+                      fill={labelColor}
+                      fontWeight="600"
+                      style={{ pointerEvents: 'none' }}
+                    >
+                      {fitLabel(part.name, Math.max(wpx, hpx), 9 * k)}
+                    </text>
+                  </g>
+                )}
 
-                {isSel && (
-                  <g transform={`translate(0 ${-hpx / 2 - 26})`}>
-                    <line x1={0} y1={18} x2={0} y2={hpx / 2 + 26 - 8} stroke={color} strokeWidth="1.2" strokeDasharray="2 2" />
+                {isPrimary && (
+                  <g transform={`translate(0 ${-hpx / 2 - 26 * k})`}>
+                    <line
+                      x1={0}
+                      y1={18 * k}
+                      x2={0}
+                      y2={hpx / 2 + (26 - 8) * k}
+                      stroke={color}
+                      strokeWidth={1.2 * k}
+                      strokeDasharray={`${2 * k} ${2 * k}`}
+                    />
                     <circle
                       cx={0}
                       cy={0}
-                      r={9}
+                      r={9 * k}
                       fill="var(--paper)"
                       stroke={focusKey === `rot:${part.id}` ? 'var(--accent-text)' : color}
-                      strokeWidth={focusKey === `rot:${part.id}` ? 3 : 2}
+                      strokeWidth={(focusKey === `rot:${part.id}` ? 3 : 2) * k}
                       tabIndex={0}
                       role="button"
                       aria-label={`Turn ${part.name}. Arrow keys turn it.`}
@@ -884,13 +1413,72 @@ export const PlanView = forwardRef<PlanViewHandle, {
                       onBlur={() => setFocusKey(null)}
                       style={{ cursor: 'grab', outline: 'none' }}
                     />
-                    <path d="M -4 -1 A 4 4 0 1 1 4 -1" fill="none" stroke={color} strokeWidth="1.4" style={{ pointerEvents: 'none' }} />
-                    <polygon points="3,-1 5,-3 3,-3" fill={color} style={{ pointerEvents: 'none' }} />
+                    <g transform={`scale(${k})`} style={{ pointerEvents: 'none' }}>
+                      <path d="M -4 -1 A 4 4 0 1 1 4 -1" fill="none" stroke={color} strokeWidth="1.4" />
+                      <polygon points="3,-1 5,-3 3,-3" fill={color} />
+                    </g>
                   </g>
                 )}
               </g>
             );
           })}
+
+          {/* How far the piece being moved is from the walls it is heading for.
+              This is the tab whose whole premise is that the dimensions are real,
+              and it measured nothing while you moved something. Two numbers, one
+              per axis, each to the NEARER wall — the question while dragging is
+              "does it fit here", and four numbers answer a different one.
+
+              Both are derived: the reach comes from `rayToBoundary` against the
+              actual footprint polygon (so an L-shaped room is measured as an L),
+              less the piece's own extent along that direction from
+              `obbExtentAlong`. Nothing here is a typed-in string. */}
+          {measuring && (
+            <g style={{ pointerEvents: 'none' }}>
+              {measuring.gaps.map((g) => {
+                const from = toLocal(g.fromX, g.fromZ);
+                const to = toLocal(g.toX, g.toZ);
+                const mx = (from.x + to.x) / 2;
+                const my = (from.y + to.y) / 2;
+                const label = `${formatDim(g.gap * 1000, dimUnit)} ${dimUnit}`;
+                return (
+                  <g key={g.axis}>
+                    <line
+                      x1={from.x}
+                      y1={from.y}
+                      x2={to.x}
+                      y2={to.y}
+                      stroke="var(--accent-text)"
+                      strokeWidth={1 * k}
+                      strokeDasharray={`${3 * k} ${2 * k}`}
+                    />
+                    <g transform={`rotate(${-viewRotDeg} ${mx} ${my})`}>
+                      <rect
+                        x={mx - (label.length * 2.6 + 4) * k}
+                        y={my - 7 * k}
+                        width={(label.length * 5.2 + 8) * k}
+                        height={13 * k}
+                        rx={3 * k}
+                        fill="var(--paper)"
+                        stroke="var(--hairline)"
+                        strokeWidth={0.75 * k}
+                      />
+                      <text
+                        x={mx}
+                        y={my + 2.5 * k}
+                        textAnchor="middle"
+                        fontFamily="var(--font-mono)"
+                        fontSize={8.5 * k}
+                        fill="var(--accent-text)"
+                      >
+                        {label}
+                      </text>
+                    </g>
+                  </g>
+                );
+              })}
+            </g>
+          )}
 
           {/* North rose. The needle turns with the drawing — that is the point of
               it — but the letter stays upright and readable. */}
@@ -906,6 +1494,26 @@ export const PlanView = forwardRef<PlanViewHandle, {
         </g>
       </svg>
 
+      {/* The marquee. An overlay rather than part of the drawing, because it is a
+          screen gesture: inside the rotated / zoomed group it would shear with the
+          page and stop matching the two corners the pointer actually described. */}
+      {marquee && (
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            left: marquee.x,
+            top: marquee.y,
+            width: marquee.w,
+            height: marquee.h,
+            border: '1px solid var(--accent-text)',
+            background: 'var(--accent-tint)',
+            opacity: 0.55,
+            borderRadius: 2,
+            pointerEvents: 'none',
+          }}
+        />
+      )}
     </div>
   );
 });
@@ -932,6 +1540,17 @@ function comfortBands(part: ScenePart): React.ReactNode[] | null {
       fillOpacity={0.9}
     />
   ));
+}
+
+/** As much of a name as a footprint can hold, with an ellipsis when it is cut.
+ *  SVG text has no `text-overflow`, so the budget is estimated from the font size —
+ *  0.55em is a fair average for Nunito's lowercase, and erring narrow costs a
+ *  character rather than spilling over the furniture. */
+function fitLabel(name: string, widthPx: number, fontSize: number): string {
+  const budget = Math.floor(widthPx / (fontSize * 0.55));
+  if (budget >= name.length) return name;
+  if (budget <= 1) return name.slice(0, 1);
+  return name.slice(0, budget - 1).trimEnd() + '…';
 }
 
 /** Mirrors the Inspector's wall naming so the two screens can never disagree. */

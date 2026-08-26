@@ -14,7 +14,7 @@ import { RailSection } from './RailSection';
 import { RoomTools } from './RoomTools';
 import { ViewOptions } from './ViewOptions';
 import { AddPiecesButton } from './CatalogPanel';
-import { removeParts } from './KeyboardShortcuts';
+import { duplicateSelection, removeParts } from './KeyboardShortcuts';
 import { THEMES, themeColorFor, type Theme } from '@/lib/themes';
 
 // This rail is the accessible twin of the 3D canvas. A WebGL canvas exposes
@@ -38,7 +38,10 @@ export function PartTree() {
   const parts = useScene((s) => s.parts);
   const room = useScene((s) => s.room);
   const selectedId = useStudio((s) => s.selectedPartId);
+  const selection = useStudio((s) => s.selection);
   const setSelected = useStudio((s) => s.setSelected);
+  const setSelection = useStudio((s) => s.setSelection);
+  const toggleInSelection = useStudio((s) => s.toggleInSelection);
   const frameSelected = useStudio((s) => s.frameSelected);
   const resetTransforms = useStudio((s) => s.resetTransforms);
   const lighting = useStudio((s) => s.lighting);
@@ -46,7 +49,7 @@ export function PartTree() {
   const [query, setQuery] = useState('');
   // Local, not persisted: which drawer you left open is not a preference worth
   // remembering across rooms, and `partialize` should stay about how the room
-  // LOOKS. Room and Pieces open by default — the dimensions and the piece list
+  // LOOKS. Room and Catalog open by default — the dimensions and the piece list
   // are what the rail is for; Style and View are occasional.
   const [sec, setSec] = useState({ room: true, style: false, view: false, pieces: true });
   const toggle = (k: keyof typeof sec) => setSec((v) => ({ ...v, [k]: !v[k] }));
@@ -58,6 +61,10 @@ export function PartTree() {
   );
   const confirm = useConfirm();
   const listRef = useRef<HTMLDivElement>(null);
+  // Where a Shift-range starts. Every plain click moves it; a range never does, so
+  // Shift-clicking twice re-measures from the same place instead of crawling down
+  // the list a row at a time.
+  const anchorRef = useRef<string | null>(null);
 
   const q = query.trim().toLowerCase();
   const visibleParts = q
@@ -107,7 +114,7 @@ export function PartTree() {
     if (matched.size === 0) {
       toast({
         title: 'No matches by name',
-        message: 'None of these names look like a piece in the catalog. Select one and pick its model in the panel on the right.',
+        message: 'None of these names look like a piece in the library. Select one and pick its model in the panel on the right.',
       });
       return;
     }
@@ -131,7 +138,7 @@ export function PartTree() {
     listRef.current?.querySelector<HTMLElement>(`[data-part-id="${id}"]`)?.focus();
   }
 
-  function navigate(from: number, to: 'prev' | 'next' | 'first' | 'last') {
+  function navigate(from: number, to: 'prev' | 'next' | 'first' | 'last', extend = false) {
     const last = visibleParts.length - 1;
     if (last < 0) return;
     const i =
@@ -140,10 +147,63 @@ export function PartTree() {
       : Math.min(last, Math.max(0, from + (to === 'next' ? 1 : -1)));
     const part = visibleParts[i];
     if (!part) return;
-    // Selection follows focus, so arrowing down the list also walks the
-    // highlight through the 3D scene — the point of the whole rail.
-    setSelected(part.id);
+    // Shift+Arrow grows the range rather than moving a single selection — the
+    // keyboard half of Shift-click, which the ARIA listbox pattern expects. This
+    // rail exists BECAUSE the canvas is opaque to assistive tech, so a
+    // mouse-only multi-select here would defeat the point of it.
+    if (extend) selectRange(part.id);
+    else {
+      // Selection follows focus, so arrowing down the list also walks the
+      // highlight through the 3D scene — the point of the whole rail.
+      setSelected(part.id);
+      anchorRef.current = part.id;
+    }
     focusRow(part.id);
+  }
+
+  /** Everything between the anchor and `id`, inclusive. Measured over the rows the
+   *  user can SEE: this list is searchable, and a range computed over every part in
+   *  the room would quietly take in pieces the filter is hiding. */
+  function selectRange(id: string) {
+    const from = visibleParts.findIndex((p) => p.id === anchorRef.current);
+    const to = visibleParts.findIndex((p) => p.id === id);
+    if (to < 0) return;
+    // No anchor, or one the filter has hidden: there is no range to take, so this
+    // press behaves as a plain click and becomes the new anchor.
+    if (from < 0) {
+      setSelected(id);
+      anchorRef.current = id;
+      return;
+    }
+    const ids = visibleParts.slice(Math.min(from, to), Math.max(from, to) + 1).map((p) => p.id);
+    setSelection(ids, id);
+  }
+
+  /**
+   * What a press on a row means. Three gestures, and only two of them are about
+   * selection at all:
+   *
+   *   - plain: select this piece, and anchor a future range here
+   *   - Shift: extend the range from the anchor. The LIST convention; on the
+   *     canvas Shift toggles one piece instead, which is the same split Figma
+   *     draws between its layer panel and its artboard.
+   *   - Ctrl / Cmd: add another of this piece to the room.
+   *
+   * That last one is a deliberate trade: Ctrl-click means "toggle this row" in
+   * every file manager, so per-row toggling moves to Ctrl+Space — which the
+   * listbox pattern requires regardless.
+   */
+  function pickRow(e: React.MouseEvent, id: string) {
+    if (e.metaKey || e.ctrlKey) {
+      duplicateSelection([id]);
+      return;
+    }
+    if (e.shiftKey) {
+      selectRange(id);
+      return;
+    }
+    setSelected(id);
+    anchorRef.current = id;
   }
 
   // No confirm: `removeParts` is the single delete path and it offers Undo in a
@@ -253,7 +313,7 @@ export function PartTree() {
         </RailSection>
 
         <RailSection
-          title="Pieces"
+          title="Catalog"
           meta={<span className="mono">{parts.length}</span>}
           open={sec.pieces}
           onToggle={() => toggle('pieces')}
@@ -266,7 +326,7 @@ export function PartTree() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           aria-label="Search the furniture in this room"
-          placeholder="Search the catalog…"
+          placeholder="Search this room…"
         />
         {/* Always mounted so the count is actually spoken: a live region that
             appears together with its text is announced unreliably. Typing in the
@@ -280,7 +340,14 @@ export function PartTree() {
         </div>
       </div>
 
-        <div ref={listRef} className="list" role="listbox" aria-label="Furniture in this room" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        <div
+          ref={listRef}
+          className="list"
+          role="listbox"
+          aria-label="Furniture in this room"
+          aria-multiselectable="true"
+          style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}
+        >
         {visibleParts.length === 0 && (
           // role="presentation": a listbox may only own options, and this is copy.
           <div role="presentation" style={{ padding: '18px 14px', textAlign: 'center', color: 'var(--ink-3)', fontSize: 12, lineHeight: 1.5 }}>
@@ -298,14 +365,16 @@ export function PartTree() {
             name={part.name}
             category={part.category}
             locked={part.locked}
-            selected={selectedId === part.id}
+            selected={selection.includes(part.id)}
             tabbable={i === tabStop}
-            onSelect={() => setSelected(part.id)}
+            onSelect={(e) => pickRow(e, part.id)}
+            onToggleSelect={() => toggleInSelection(part.id)}
             onFrame={() => {
               setSelected(part.id);
+              anchorRef.current = part.id;
               frameSelected();
             }}
-            onNavigate={(to) => navigate(i, to)}
+            onNavigate={(to, extend) => navigate(i, to, extend)}
             onToggleHidden={() => useStudio.getState().toggleHidden(part.id)}
             onDelete={() => removePart(i, part.id)}
           />
@@ -352,6 +421,7 @@ function PartRow({
   selected,
   tabbable,
   onSelect,
+  onToggleSelect,
   onFrame,
   onNavigate,
   onToggleHidden,
@@ -364,9 +434,12 @@ function PartRow({
   selected: boolean;
   /** roving tabindex: exactly one row in the list is a tab stop */
   tabbable: boolean;
-  onSelect: () => void;
+  onSelect: (e: React.MouseEvent) => void;
+  /** Ctrl+Space: the keyboard's per-row toggle, since Ctrl-click is spent on
+   *  adding a piece. */
+  onToggleSelect: () => void;
   onFrame: () => void;
-  onNavigate: (to: 'prev' | 'next' | 'first' | 'last') => void;
+  onNavigate: (to: 'prev' | 'next' | 'first' | 'last', extend?: boolean) => void;
   onToggleHidden: () => void;
   onDelete: () => void;
 }) {
@@ -397,14 +470,22 @@ function PartRow({
     // they also carry focus back out of an action button onto a row.
     const onRow = e.target === e.currentTarget;
     switch (e.key) {
-      case 'ArrowDown': mine(); onNavigate('next'); break;
-      case 'ArrowUp': mine(); onNavigate('prev'); break;
+      case 'ArrowDown': mine(); onNavigate('next', e.shiftKey); break;
+      case 'ArrowUp': mine(); onNavigate('prev', e.shiftKey); break;
       case 'Home': mine(); onNavigate('first'); break;
       case 'End': mine(); onNavigate('last'); break;
       // Enter/Space selects and brings the camera to it — the keyboard's only
       // way to actually *look* at a piece.
       case 'Enter':
-      case ' ': if (onRow) { mine(); onFrame(); } break;
+      case ' ':
+        if (onRow) {
+          mine();
+          // Ctrl+Space takes this row in or out of the selection without
+          // disturbing the rest of it; bare Space still flies the camera to it.
+          if (e.ctrlKey || e.metaKey) onToggleSelect();
+          else onFrame();
+        }
+        break;
       case 'Delete':
       case 'Backspace': if (onRow) { mine(); onDelete(); } break;
     }

@@ -197,6 +197,21 @@ function ModelHelp() {
           Shift-click a second piece, then <b>Merge</b>, and they move as one.
         </HelpLine>
         <HelpLine>Double-click a wardrobe or a nightstand to open its doors and drawers.</HelpLine>
+        <HelpLine>
+          Where pieces overlap, <Kb>Alt</Kb>-click lists everything under the pointer so you can pick the one you
+          meant — and <Kb>Alt</Kb>-clicking again steps down through them. Add <Kb>Shift</Kb> to take one into the
+          selection instead of replacing it.
+        </HelpLine>
+      </HelpGroup>
+
+      <HelpGroup title="The lists on the left">
+        <HelpLine>
+          <b>Catalog</b> is what is in this room; <b>Library</b> is what you can add.
+        </HelpLine>
+        <HelpLine>
+          In either list, <Kb>Shift</Kb>-click picks a run of rows at once, and <Kb>Ctrl</Kb>-click adds that
+          piece to the room.
+        </HelpLine>
       </HelpGroup>
 
       <HelpGroup title="Walls and the room">
