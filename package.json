@@ -8,8 +8,8 @@
     "start": "next start",
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run --disableConsoleIntercept",
+    "test:watch": "vitest --disableConsoleIntercept",
     "vendor:ort": "node scripts/vendor-ort.mjs",
     "hash:models": "node scripts/hash-models.mjs"
   },

@@ -23,7 +23,7 @@ import {
   isTabletopProne,
 } from './physics';
 import type { CaptureSlot, RoomData } from './storage';
-import { clampDims } from './dimension-ranges';
+import { clampDims, dimRangeFor } from './dimension-ranges';
 import {
   footArea,
   footFromPart,
@@ -1523,6 +1523,38 @@ const CATEGORY_DEFAULTS: Record<
   other: { shape: 'box', dim: [600, 600, 800] },
 };
 
+/** The catalogue's typical size on ONE axis for a category, narrowed to the
+ *  shape's own legal range. Axis 0 = W, 1 = D, 2 = H.
+ *
+ *  For the axes a photo cannot see. Every caller is a measurement that came back
+ *  short, so this is the number that fills the gap — derived from the same two
+ *  tables the scene builder uses, never a literal at the call site.
+ *
+ *  Clamping an INVENTED number is not the "silently resize it to fit" that rule 2
+ *  forbids. That rule protects measurements; these axes have none to protect.
+ *
+ *  `CATEGORY_DEFAULTS` stays unexported on purpose — handing out the whole table
+ *  invites a caller to read `.dim` and skip `clampDims` altogether. */
+export function defaultAxisFor(category: Category, shape: Shape, axis: 0 | 1 | 2): number {
+  const typical = (CATEGORY_DEFAULTS[category] ?? CATEGORY_DEFAULTS.other).dim[axis];
+  const r = dimRangeFor(category, shape);
+  return Math.min(Math.max(typical, r.min[axis]), r.max[axis]);
+}
+
+/** Depth — the axis NO single photo can observe. Kept as its own name because
+ *  that fact is a property of photography, not of a particular anchor.
+ *
+ *  `GeoPlacement` in lib/photo-geometry.ts returns W and H and says so in the type,
+ *  so the detection path has to supply the third number from somewhere, and the
+ *  honest somewhere is the two tables that already hold typical sizes and legal
+ *  bounds. It used to be a bare `?? 500` on the detect screen, which sits outside
+ *  the allowed depth of a TV (40–120), a mirror or a painting (15–60) and a curtain
+ *  (40–200): every thin wall-mounted piece the on-device detector found arrived half
+ *  a metre deep, because that path sends no dimension hint at all. */
+export function defaultDepthFor(category: Category, shape: Shape): number {
+  return defaultAxisFor(category, shape, 1);
+}
+
 /** The shapes a detector — cloud or on-device — is allowed to name, in the order
  *  the detection prompt lists them.
  *
@@ -1709,25 +1741,33 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
       refined,
       aiDim && aiDim.every((n) => Number.isFinite(n) && n > 0) ? (aiDim as [number, number, number]) : cfg.dim,
     );
-    // Prefer AI-estimated position/yaw when present and in-room; otherwise snap to wall.
+    // Prefer the estimated position/yaw when present and in-room; otherwise snap
+    // to wall. "Estimated" is either measured (lib/detect-refine.ts wrote it from
+    // the calibrated camera) or the model's own guess on an uncalibrated slot;
+    // this cannot tell them apart and does not need to, because the only axes it
+    // reads are the two a photo can actually locate.
+    //
+    // **Y is deliberately neither read nor tested here.** `groundY` overwrites
+    // pos[1] unconditionally just below, so passing `aiPos.y` through was
+    // dead. The height check was worse than dead: it gated x and z — the axes we
+    // keep — on an axis nothing consumes, so a detection whose Y was out of the
+    // room lost its perfectly good floor position and fell back to slot-snapping.
+    // A fan the model put 3.2 m up in a 2.8 m room is a fan with a wrong height,
+    // not a fan in the wrong corner. Y is owned by the anchor, and only there.
     const aiPos = (d as { position?: { x: number; y: number; z: number } }).position;
     const aiYaw = (d as { yaw?: number }).yaw;
     let placement: { pos: [number, number, number]; rot: number };
     const w = rw / 2;
     const dHalf = rd / 2;
-    const h = rh;
     if (
       aiPos &&
       typeof aiPos.x === 'number' &&
-      typeof aiPos.y === 'number' &&
       typeof aiPos.z === 'number' &&
       Math.abs(aiPos.x) <= w + 0.2 &&
-      Math.abs(aiPos.z) <= dHalf + 0.2 &&
-      aiPos.y >= 0 &&
-      aiPos.y <= h
+      Math.abs(aiPos.z) <= dHalf + 0.2
     ) {
       placement = {
-        pos: [aiPos.x, aiPos.y, aiPos.z],
+        pos: [aiPos.x, 0, aiPos.z],
         rot: typeof aiYaw === 'number' ? aiYaw : 0,
       };
     } else {

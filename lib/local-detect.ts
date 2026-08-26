@@ -676,7 +676,11 @@ async function runDetection(
       if (b.w <= 0.01 || b.h <= 0.01) continue;
       out.push({
         label: b.label,
+        // A class score off the detector head, not a probability of correctness.
+        // `source` is what tells the review screen which scale that is on — see
+        // lib/detect-confidence.ts.
         conf: Math.min(1, b.conf),
+        source: 'local',
         box: [
           Math.max(0, Math.min(1, nx)),
           Math.max(0, Math.min(1, ny)),

@@ -6,91 +6,19 @@ import {
   wallDistance,
   calibrateFromFloorLine,
   heightFromFloorLine,
+  placeCeilingObject,
   placeFloorObject,
   placeWallObject,
   type CameraCal,
 } from '@/lib/photo-geometry';
 import { hfovFromFocal35 } from '@/lib/exif';
-import type { CaptureSlot } from '@/lib/storage';
+import { bboxOfCeilingDisc, bboxOfFloorObject, bboxOfWallPanel, project } from './helpers/project';
 
-const ROOM = { width: 6, depth: 4 };
+const ROOM = { width: 6, depth: 4, height: 2.8 };
+/** ~106° hFOV — a phone ultrawide. The only common lens whose frame contains any
+ *  ceiling at all from 1.5 m in a 2.8 m room; see `placeCeilingObject`. */
+const WIDE: CameraCal = { k: 2 * Math.tan(((106 / 2) * Math.PI) / 180), aspect: 4 / 3 };
 const CAL: CameraCal = { k: 1.2, aspect: 4 / 3 };
-
-// ── Synthetic projector — the inverse of the lib, written independently ─────
-// Project a world point seen from the slot camera into normalized image coords.
-// Honours cal.height and cal.tiltRad, so the same helper generates the level
-// cases and the tilted ones.
-function project(slot: CaptureSlot, x: number, y: number, z: number, cal: CameraCal): [number, number] {
-  // world → camera frame (forward, right, up)
-  let forward = 0;
-  let right = 0;
-  switch (slot) {
-    case 'n':
-      forward = -z;
-      right = x;
-      break;
-    case 's':
-      forward = z;
-      right = -x;
-      break;
-    case 'e':
-      forward = x;
-      right = z;
-      break;
-    case 'w':
-      forward = -x;
-      right = -z;
-      break;
-  }
-  const up = y - (cal.height ?? CAM_HEIGHT);
-  // Rotate the world offset back into the untilted lens frame — the inverse of
-  // the rotation lib/photo-geometry applies to each ray.
-  const th = cal.tiltRad ?? 0;
-  const c = Math.cos(th);
-  const s = Math.sin(th);
-  const upCam = up * c + forward * s;
-  const fwdCam = -up * s + forward * c;
-  const u = right / fwdCam / cal.k + 0.5;
-  const v = 0.5 - (upCam / fwdCam) * (cal.aspect / cal.k);
-  return [u, v];
-}
-
-/** bbox of a wall-parallel rectangle (width w, height h) standing on the floor
- *  at world centre (x, z), as seen from the slot camera.
- *
- *  Projects the four corners and takes their extent rather than deriving a
- *  half-width analytically: under tilt a fronto-parallel rectangle images as a
- *  trapezoid, and the bounding box of a trapezoid is what a detector would
- *  actually hand us. */
-function bboxOfFloorObject(
-  slot: CaptureSlot,
-  x: number,
-  z: number,
-  wM: number,
-  hM: number,
-  cal: CameraCal,
-): [number, number, number, number] {
-  // The face spans ±w/2 along the camera's "right" axis, which is a different
-  // world axis per slot.
-  const along: Record<CaptureSlot, [number, number]> = {
-    n: [1, 0],
-    s: [-1, 0],
-    e: [0, 1],
-    w: [0, -1],
-  };
-  const [ax, az] = along[slot];
-  const pts: Array<[number, number]> = [];
-  for (const sgn of [-1, 1]) {
-    for (const y of [0, hM]) {
-      pts.push(project(slot, x + ax * sgn * (wM / 2), y, z + az * sgn * (wM / 2), cal));
-    }
-  }
-  const us = pts.map((p) => p[0]);
-  const vs = pts.map((p) => p[1]);
-  const u0 = Math.min(...us);
-  const v0 = Math.min(...vs);
-  return [u0, v0, Math.max(...us) - u0, Math.max(...vs) - v0];
-}
 
 describe('wallDistance', () => {
   it('n/s walls sit at depth/2; e/w at width/2', () => {
@@ -193,29 +121,6 @@ describe('defaultCal', () => {
 
 const DOWN_5: CameraCal = { k: 1.2, aspect: 4 / 3, tiltRad: (5 * Math.PI) / 180 };
 const UP_5: CameraCal = { k: 1.2, aspect: 4 / 3, tiltRad: (-5 * Math.PI) / 180 };
-
-/** bbox of a panel lying ON the framed wall, from its four corners. */
-function bboxOfWallPanel(
-  slot: CaptureSlot,
-  x: number,
-  y: number,
-  z: number,
-  wM: number,
-  hM: number,
-  cal: CameraCal,
-): [number, number, number, number] {
-  const pts: Array<[number, number]> = [];
-  for (const dx of [-wM / 2, wM / 2]) {
-    for (const dy of [-hM / 2, hM / 2]) {
-      pts.push(project(slot, x + dx, y + dy, z, cal));
-    }
-  }
-  const us = pts.map((p) => p[0]);
-  const vs = pts.map((p) => p[1]);
-  const u0 = Math.min(...us);
-  const v0 = Math.min(...vs);
-  return [u0, v0, Math.max(...us) - u0, Math.max(...vs) - v0];
-}
 
 describe('camera tilt', () => {
   it('recovers a centred object exactly when the tilt is known', () => {
@@ -359,5 +264,109 @@ describe('calFromHfov', () => {
     const assumed = placeFloorObject(box, 'n', ROOM, defaultCal(4 / 3))!;
     expect(assumed.distance).toBe(wallDistance('n', ROOM));
     expect(assumed.widthMM).toBeLessThan(right.widthMM * 0.7);
+  });
+});
+
+describe('placeCeilingObject', () => {
+  // A 1.2 m fan that is BOTH fully inside the room and fully inside an ultrawide
+  // frame only exists on the long axis: it has to sit past ~1.9 m for its near rim
+  // to drop into frame, and its far rim must still clear the wall. On the 4 m axis
+  // those two windows do not overlap — which is itself the finding, and the reason
+  // the fixtures below use slot 'e' at x = 2.0 in a 6 m-wide room.
+  const FAN_M = 1.2;
+  const fanBox = (cal: CameraCal) => bboxOfCeilingDisc('e', 2.0, 0, FAN_M, cal, ROOM.height);
+
+  it('recovers a fan’s diameter from an ultrawide shot', () => {
+    const box = fanBox(WIDE);
+    expect(box[1]).toBeGreaterThan(0); // premise: the whole disc is inside the frame
+    expect(box[1] + box[3]).toBeLessThan(1);
+    const g = placeCeilingObject(box, 'e', ROOM, WIDE)!;
+    expect(g).not.toBeNull();
+    expect(g.distance).toBeLessThan(wallDistance('e', ROOM)); // premise: unclamped
+    // Within 8%, and UNDER rather than over. The residual is the plate's own
+    // foreshortening — the bbox spans a range of distances and one row has to
+    // stand for all of them — so this reads a fan slightly small rather than
+    // inventing one slightly large.
+    expect(g.widthMM).toBeLessThan(FAN_M * 1000);
+    expect(g.widthMM).toBeGreaterThan(FAN_M * 1000 * 0.92);
+  });
+
+  it('reads the MIDDLE row, not the top — the top under-reads by a quarter', () => {
+    // The mutation this test exists to catch, as arithmetic rather than a comment.
+    // Intersecting the bbox's TOP edge measures the disc's nearest rim and then
+    // applies its full angular width at that shorter distance, which lands further
+    // from the truth than the catalogue default it was meant to improve on.
+    const box = fanBox(WIDE);
+    const g = placeCeilingObject(box, 'e', ROOM, WIDE)!;
+    // Same maths as the placer, with `by` in place of `by + bh / 2`.
+    const rise = ROOM.height - CAM_HEIGHT;
+    const upTop = ((0.5 - box[1]) * WIDE.k) / WIDE.aspect;
+    const wTop = (rise / upTop) * box[2] * WIDE.k;
+    expect(wTop).toBeLessThan(FAN_M * 0.8);
+    expect(g.widthMM / 1000).toBeGreaterThan(wTop * 1.2);
+    // And the reason it matters: the top row is WORSE than not measuring at all.
+    // 1000 mm is the fan entry in CATEGORY_DEFAULTS.
+    expect(Math.abs(wTop * 1000 - FAN_M * 1000)).toBeGreaterThan(Math.abs(1000 - FAN_M * 1000));
+    expect(Math.abs(g.widthMM - FAN_M * 1000)).toBeLessThan(Math.abs(1000 - FAN_M * 1000));
+  });
+
+  it('measures no height at all, and the type says so', () => {
+    const box = fanBox(WIDE);
+    const g = placeCeilingObject(box, 'e', ROOM, WIDE)!;
+    // A disc has no thickness in its bbox — the vertical extent IS the
+    // foreshortened diameter. Anything derived from it would be a fabrication, so
+    // the shape carries no height key to fabricate into.
+    expect('heightMM' in g).toBe(false);
+    expect(box[3]).toBeGreaterThan(0.01); // there IS vertical extent, deliberately unread
+  });
+
+  it('puts it on the ceiling plane and inside the room', () => {
+    const box = bboxOfCeilingDisc('e', 1.2, 0, 1.1, WIDE, ROOM.height);
+    const g = placeCeilingObject(box, 'e', ROOM, WIDE)!;
+    expect(g.position.y).toBe(ROOM.height);
+    expect(g.distance).toBeLessThanOrEqual(wallDistance('e', ROOM));
+    expect(Math.abs(g.position.x)).toBeLessThanOrEqual(ROOM.width / 2 + 1e-9);
+    expect(Math.abs(g.position.z)).toBeLessThanOrEqual(ROOM.depth / 2 + 1e-9);
+  });
+
+  it('a level 66° frame contains no ceiling to measure', () => {
+    // Not a limitation being tolerated — a fact being reported, and the reason
+    // Phase 7 of the detection plan pays off on real phone captures rather than on
+    // the nominal capture rig. From 1.5 m with a ~24° vertical half-angle the
+    // ceiling of a 2.8 m room first appears 2.9 m away, past the wall being
+    // photographed. It is the same geometry that puts the wall-FLOOR line outside
+    // a landscape frame, at the other edge of the image.
+    const box = fanBox(CAL);
+    expect(box[1] + box[3]).toBeLessThan(0); // the whole disc is above the frame
+    // The ultrawide is what changes the answer — same fan, same room, in frame.
+    expect(fanBox(WIDE)[1]).toBeGreaterThan(0);
+  });
+
+  it('refuses a box at or below the horizon', () => {
+    // A box whose centre row is at or below the horizon cannot be on the ceiling
+    // from a camera looking level or up: the ray never rises to the slab.
+    expect(placeCeilingObject([0.3, 0.5, 0.3, 0.2], 'n', ROOM, CAL)).toBeNull();
+    expect(placeCeilingObject([0.3, 0.7, 0.3, 0.2], 'n', ROOM, WIDE)).toBeNull();
+  });
+
+  it('refuses a shallow ray that reaches the ceiling only past the wall', () => {
+    // The refusal that replaced a clamp, and the one that matters most: this box is
+    // ABOVE the horizon, so the old code found an intersection 4.35 m out, pulled it
+    // back to the 2 m wall, and reported the angular width at that distance. In a
+    // level 66° frame there is no ceiling in shot at all, so what it was measuring
+    // was a picture frame, read out as an undersized ceiling fan: the width is
+    // computed at the CLAMPED distance, so it is wrong by however far the clamp
+    // moved it. Refusing hands the detection back untouched, which is what happened
+    // before this function existed.
+    expect(placeCeilingObject([0.3, 0.3, 0.3, 0.1], 'n', ROOM, WIDE)).toBeNull();
+    expect(placeCeilingObject(fanBox(WIDE), 'e', ROOM, CAL)).toBeNull();
+    // The same geometry on the axis that IS long enough still measures.
+    expect(placeCeilingObject(fanBox(WIDE), 'e', ROOM, WIDE)).not.toBeNull();
+  });
+
+  it('refuses a camera at or above the slab', () => {
+    const box = bboxOfCeilingDisc('n', 0, -2.5, 1.2, WIDE, ROOM.height);
+    expect(placeCeilingObject(box, 'n', { ...ROOM, height: 1.5 }, WIDE)).toBeNull();
+    expect(placeCeilingObject(box, 'n', { ...ROOM, height: 1.2 }, WIDE)).toBeNull();
   });
 });

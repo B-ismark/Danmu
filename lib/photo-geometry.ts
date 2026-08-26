@@ -11,7 +11,10 @@
 //   · its real width and height — angular size × distance
 //
 // Only depth (front-to-back) is unobservable from one photo; it stays with the
-// category default and clampDims guards it like everything else.
+// category default and clampDims guards it like everything else. The one
+// exception is a CEILING object, where height is unobservable too — a fan seen
+// from below projects as a disc, so its bbox has no thickness in it. See
+// `placeCeilingObject`.
 //
 // World frame matches lib/detection.ts: origin = room-centre floor, +X East,
 // +Y up, +Z toward the South wall. Slot cameras: n looks −Z, s +Z, e +X, w −X.
@@ -204,7 +207,11 @@ function slotToWorld(
 }
 
 export type GeoPlacement = {
-  /** world position — x/z centre; y = 0 floor anchor (floor) or mount centre (wall). */
+  /** world position — x/z centre; y = 0 floor anchor (floor), mount centre
+   *  (wall), or the ceiling plane itself (ceiling — the surface intersected, not an
+   *  estimate; the row of the bbox that is intersected is the MIDDLE one, and
+   *  `placeCeilingObject` is where that matters). Downstream, `groundY` owns this
+   *  axis outright. */
   position: { x: number; y: number; z: number };
   /** real size estimate in mm — [W, H]; depth is NOT observable from one photo. */
   widthMM: number;
@@ -299,6 +306,93 @@ export function placeWallObject(
     position: { x, y: (topM + bottomM) / 2, z },
     widthMM: Math.round(widthM * 1000),
     heightMM: Math.round(heightM * 1000),
+    yaw,
+    distance: d,
+  };
+}
+
+/** A ceiling placement carries NO height — see `placeCeilingObject`. Modelled as
+ *  an `Omit` rather than a `heightMM` of 0 or null so that nothing downstream can
+ *  read a measurement which was never taken. */
+export type GeoCeilingPlacement = Omit<GeoPlacement, 'heightMM'>;
+
+/**
+ * Ceiling-mounted object (fan, pendant): it lies ON the ceiling plane at a known
+ * HEIGHT above the camera, which makes it the mirror of `placeWallObject` — that
+ * one knows the plane's distance, this one knows its rise — rather than of
+ * `placeFloorObject`.
+ *
+ * **The MIDDLE bbox row is what gets intersected, not an edge, and that is the
+ * whole accuracy of this function.** A floor object is a vertical thing whose
+ * bottom edge is at one distance, so backprojecting that edge is right. A ceiling
+ * fan is a horizontal PLATE seen obliquely: its image spans a range of distances,
+ * with the top of the bbox being its NEAREST edge. Intersecting the top row
+ * measures the near edge and then applies the disc's full angular width at that
+ * shorter distance — for a 1.2 m fan 2.5 m away, 0.94 m, a 22% under-read that is
+ * further from the truth than the catalogue default it was supposed to improve on.
+ * The centre row lands within a few percent.
+ *
+ * **Width only, and the reason is geometric rather than lazy.** That same plate
+ * has no thickness in its bbox: the vertical extent is the foreshortened diameter.
+ * Deriving H from it manufactures a fan 1200 mm tall, which `clampDims` then
+ * squashes to 450 — a fake measurement followed by a silent resize, both halves of
+ * what CLAUDE.md rule 2 forbids, in one function. Height stays with the catalogue.
+ *
+ * **A level camera in a normal room does not see the ceiling at all**, and this
+ * refuses every such shot rather than pretending. At 66° hFOV on 4:3 the vertical
+ * half-angle is ~24°, so from 1.5 m the ceiling of a 2.8 m room first enters frame
+ * 2.9 m away — beyond the wall being photographed. It is the same fact
+ * `calibrateFromFloorLine` runs into at the other end of the frame. What DOES see a
+ * ceiling: an ultrawide (~106°, in frame from 1.3 m out), a camera tilted up, or a
+ * tall room. So this earns its keep on real phone captures and on the arbitrary
+ * uploads the capture rig is heading toward, not on the nominal rig.
+ *
+ * Which is why an intersection PAST the far wall is refused rather than clamped to
+ * it, the one place this deliberately departs from `placeFloorObject`. The floor is
+ * visible right up to the wall, so a foot landing slightly beyond it is measurement
+ * error and clamping recovers it. The ceiling of a level 66° shot is not in frame at
+ * all — so a high pixel there is WALL, and clamping it onto the ceiling plane
+ * measures a picture frame as an undersized ceiling fan — the width comes out at
+ * the wall distance rather than the true one, so it is wrong by whatever the clamp
+ * moved. Refusing hands the detection
+ * back untouched, which is exactly the behaviour that existed before this function
+ * did. Being no better than before beats being confidently wrong.
+ */
+export function placeCeilingObject(
+  box: [number, number, number, number],
+  slot: CaptureSlot,
+  room: { width: number; depth: number; height: number },
+  cal: CameraCal,
+): GeoCeilingPlacement | null {
+  const [bx, by, bw, bh] = box;
+  const uC = bx + bw / 2;
+  const rise = room.height - heightOf(cal);
+  if (!(rise > 0.05)) return null; // camera at or above the slab — not a room
+
+  // The one row that is read. `bh` is used ONLY to find its centre — no height is
+  // derived from it, which is the point of the whole function.
+  const mid = ray(uC, by + bh / 2, cal);
+  if (mid.up <= 0.02) return null; // at or below the horizon — not on the ceiling
+  const t = rise / mid.up; // along the ray
+  const d = t * mid.fwd; // forward distance from the camera
+  if (!(d > 0)) return null;
+
+  // Nothing on this room's ceiling is beyond the wall being photographed, so a ray
+  // that only reaches the ceiling plane out there never touched the ceiling at all.
+  // REFUSED, not clamped — see the note above.
+  if (d > wallDistance(slot, room)) return null;
+
+  const right = t * mid.right;
+  const widthM = t * (tanX(bx + bw, cal) - tanX(bx, cal));
+  if (widthM <= 0.01) return null;
+
+  const { x, z, yaw } = slotToWorld(slot, d, right);
+  return {
+    // y is the ceiling plane itself: unlike the other two placers this is not an
+    // estimate, it is the surface that was intersected. `groundY` still owns the
+    // axis downstream and hangs the part just under the slab.
+    position: { x, y: room.height, z },
+    widthMM: Math.round(widthM * 1000),
     yaw,
     distance: d,
   };

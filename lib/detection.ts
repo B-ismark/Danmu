@@ -4,6 +4,7 @@ import { GoogleGenAI } from '@google/genai';
 import { useQuota } from './quota';
 import { footprintForLayout, type LayoutId } from './footprint';
 import { CATALOG_SHAPES_ORDERED } from './scene-spec';
+import type { DetectSource } from './detect-confidence';
 import type { CaptureSlot } from './storage';
 
 export type PromptRoom = { width: number; depth: number; height: number; layoutId?: LayoutId };
@@ -19,13 +20,18 @@ export type Detection = {
    *  survive a re-detect. Absent until the detection is first saved. */
   uid?: string;
   label: string;
+  /** Confidence, on a scale that depends entirely on `source` — a class score, an
+   *  LLM's opinion of itself, or a literal 1 meaning "the user drew this". Never
+   *  compare it against a bare number; `shouldAutoConfirm` knows which scale it is
+   *  on. See lib/detect-confidence.ts. */
   conf: number;
+  /** Who produced this detection. Absent on rooms saved before the field existed,
+   *  which were all the cloud path — see `sourceOf`. */
+  source?: DetectSource;
   /** [x, y, w, h] normalized 0..1 within the image of `slot` */
   box: [number, number, number, number];
   category: 'sofa' | 'tv' | 'chair' | 'table' | 'lamp' | 'plant' | 'shelf' | 'rug' | 'bed' | 'desk' | 'curtain' | 'fan' | 'monitor' | 'fridge' | 'wardrobe' | 'mirror' | 'painting' | 'nightstand' | 'ottoman' | 'ac' | 'door' | 'other';
   slot: CaptureSlot;
-  /** non-null if this is the same physical object detected in another wall too */
-  alsoSeenIn?: CaptureSlot[];
   /** AI-estimated real-world dimensions in mm [W, D, H]. Optional — falls back to category default. */
   dimMM?: [number, number, number];
   /** AI-estimated 3D placement in the room. All in METERS, room-centered.
@@ -83,7 +89,7 @@ DEPTH ESTIMATION:
 - Items higher up (top half of image with low bottom-y) and small in bbox → near far wall.
 - Items LARGE in bbox + low in image → close to camera (mid-room).
 
-Identify ALL distinct furniture / fixtures / appliances / textiles. Reason about the WHOLE room — if part of an object is seen in two photos (e.g. one bed corner in N and the rest in S), classify by the BEST view (largest bbox), and list the other slot in alsoSeenIn. Do NOT split one object into two detections.
+Identify ALL distinct furniture / fixtures / appliances / textiles. Reason about the WHOLE room — if part of an object is seen in two photos (e.g. one bed corner in N and the rest in S), classify by the BEST view (largest bbox). Do NOT split one object into two detections.
 
 For each unique object return JSON with these fields:
 - label: short noun phrase (e.g. "single bed", "65 inch tv", "patterned curtain")
@@ -91,15 +97,13 @@ For each unique object return JSON with these fields:
 - category: ONE of [sofa, tv, chair, table, lamp, plant, shelf, rug, bed, desk, curtain, fan, monitor, fridge, wardrobe, mirror, painting, nightstand, ottoman, ac, door, other]
 - slot: the wall where the BEST view appears — one of "n", "e", "s", "w"
 - box: [x, y, w, h] as fractions of THAT slot's image (0..1). Encompass the WHOLE visible part — generous, not tight.
-- alsoSeenIn: array of other slot codes where the same object is partially visible (omit if none)
 - dimMM: estimated real-world dimensions in millimetres [W, D, H].
 - position: { x, y, z } in METRES, room-centered (see coordinate system + camera notes above).
   - For the OBJECT CENTER in 3D, infer FROM:
     1. bbox center horizontal → world axis perpendicular to camera direction.
     2. bbox bottom-y → distance along camera direction (lower = closer to camera).
     3. apparent size → confirm distance.
-  - y for floor-standing = dimMM[2]/2000 (half height in m).
-  - y for wall-mounted (TV, mirror, painting, AC, curtain rod, fan) = mounting height (TV ~1.2, fan ~ceiling-0.15, curtain rod ~ ceiling-0.05).
+  - y: send 0 and do not estimate it. Standing and mounting heights are computed from the room and the object's own size, so whatever you put here is discarded. Only x and z are read.
   - Items in MIDDLE of room (rugs, coffee tables, dining table) MUST have small |x| and |z| — do NOT snap to walls.
   - Items against walls have one of x/z near ±${hw}/±${hd} minus their depth/2.
 - yaw: rotation in radians around vertical axis. 0 = facing +Z (south). π = facing -Z (north). -π/2 = +X (east). +π/2 = -X (west). Most furniture faces room interior.
@@ -109,7 +113,7 @@ For each unique object return JSON with these fields:
   box (LAST RESORT only — use a real shape whenever possible).
 
 CRITICAL RULES (REPEAT BEFORE OUTPUT):
-1. Each PHYSICAL object → exactly ONE entry. Bed half in N + rest in S = ONE bed (slot=s, alsoSeenIn=[n]). Never duplicate.
+1. Each PHYSICAL object → exactly ONE entry. Bed half in N + rest in S = ONE bed (slot=s). Never duplicate.
 2. Skip near-duplicate items (don't list every cushion separately).
 3. If unsure between two shapes, pick the more specific one. Never invent shapes.
 4. Mid-room items (rugs, coffee table, dining table) MUST have small |x|,|z| — do NOT snap to walls.
@@ -234,55 +238,15 @@ export async function detectAcrossImages(
   if (!Array.isArray(parsed)) {
     throw new DetectError('BAD_RESPONSE', 'The detection service replied in an unexpected shape.', parsed);
   }
-  const valid = (parsed as Detection[]).filter((d) => d.box && d.box.length === 4 && d.slot);
-  return dedupeDetections(valid);
-}
-
-/** Two detections are the same physical object if their estimated 3D centres are
- *  within this many metres of each other. Generous enough to catch one object
- *  reported twice from two walls, tight enough that a pair of nightstands either
- *  side of a bed (~1.5 m apart) stays two objects. */
-const SAME_OBJECT_M = 0.6;
-
-/** Drop near-identical detections. Two rules:
- *
- *  1. Same slot + same category + bbox centres within ~12% on each axis — one
- *     object boxed twice in the same photo.
- *  2. Same label + same category ACROSS slots, but only when their estimated 3D
- *     positions agree — one object seen from two walls with `alsoSeenIn` omitted.
- *
- *  Rule 2 used to match on the label alone, with no positional test at all, so any
- *  two objects the model named identically collapsed into one: four matching
- *  dining chairs, a pair of bedside tables, two curtains on the same wall. On the
- *  one path in the product that spends the user's quota, that quietly threw away
- *  correct results. When either detection has no `position` there is nothing to
- *  compare, and we keep both — a duplicate the user can delete beats a real piece
- *  of furniture that never appears.
- *
- *  Exported for tests: this is pure logic that decides what the user gets from the
- *  one call that spends their quota. */
-export function dedupeDetections(items: Detection[]): Detection[] {
-  const out: Detection[] = [];
-  for (const d of items) {
-    const cx = d.box[0] + d.box[2] / 2;
-    const cy = d.box[1] + d.box[3] / 2;
-    const isDup = out.some((o) => {
-      if (o.category !== d.category) return false;
-      // Same photo — overlapping bbox centres mean one object boxed twice.
-      if (o.slot === d.slot) {
-        const ocx = o.box[0] + o.box[2] / 2;
-        const ocy = o.box[1] + o.box[3] / 2;
-        if (Math.abs(ocx - cx) < 0.12 && Math.abs(ocy - cy) < 0.12) return true;
-      }
-      // Different photos — same name AND same place.
-      if (o.label.toLowerCase().trim() !== d.label.toLowerCase().trim()) return false;
-      if (!o.position || !d.position) return false;
-      const dist = Math.hypot(o.position.x - d.position.x, o.position.z - d.position.z);
-      return dist < SAME_OBJECT_M;
-    });
-    if (!isDup) out.push(d);
-  }
-  return out;
+  // NOT deduped here. Merging two detections is a decision about what EXISTS,
+  // and it used to be taken on the model's own guessed `position` — the exact
+  // numbers the geometry pass then overwrote. It now runs in lib/detect-refine.ts
+  // AFTER refinement, which also means the on-device path gets it too.
+  return (parsed as Detection[])
+    .filter((d) => d.box && d.box.length === 4 && d.slot)
+    // Stamped here rather than at the call site, so the one function that talks to
+    // Gemini is the one function that can claim its output came from Gemini.
+    .map((d) => ({ ...d, source: 'cloud' as const }));
 }
 
 function blobToBase64(blob: Blob): Promise<string> {

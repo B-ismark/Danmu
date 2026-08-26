@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { dedupeDetections, type Detection } from '../lib/detection';
+import { dedupeDetections, mergeDistanceFor } from '../lib/detect-refine';
+import { CATEGORIES } from '../lib/scene-spec';
+import type { Detection } from '../lib/detection';
 
 function det(p: Partial<Detection> & Pick<Detection, 'label' | 'category' | 'slot'>): Detection {
   return { conf: 0.9, box: [0.1, 0.1, 0.2, 0.3], ...p };
@@ -16,6 +18,53 @@ describe('dedupeDetections', () => {
     const left = det({ label: 'dining chair', category: 'chair', slot: 'n', box: [0.05, 0.5, 0.15, 0.3] });
     const right = det({ label: 'dining chair', category: 'chair', slot: 'n', box: [0.7, 0.5, 0.15, 0.3] });
     expect(dedupeDetections([left, right])).toHaveLength(2);
+  });
+
+  it('keeps two SMALL neighbours whose boxes do not even touch', () => {
+    // The scale-blindness the same-photo rule used to have, found by
+    // tests/detect-pipeline.test.ts on its first run: two bedside tables 0.55 m
+    // apart against a far wall image as 7%-wide boxes 9% apart. There is visible
+    // daylight between them, and the old "centres within 12% of the image" test
+    // merged them — deleting a real piece of furniture on the one path that spends
+    // the user's quota. A fixed fraction of the IMAGE cannot answer a question
+    // about two objects' PROPORTIONS.
+    const a = det({
+      label: 'bedside table',
+      category: 'nightstand',
+      slot: 'n',
+      box: [0.578, 0.79, 0.074, 0.06],
+      position: { x: 0.8, y: 0.27, z: -2.8 },
+    });
+    const b = det({
+      label: 'bedside table',
+      category: 'nightstand',
+      slot: 'n',
+      box: [0.668, 0.79, 0.074, 0.06],
+      position: { x: 1.35, y: 0.27, z: -2.8 },
+    });
+    // Both premises stated, so this cannot come to pass by the fixtures drifting.
+    expect(Math.abs(b.box[0] + b.box[2] / 2 - (a.box[0] + a.box[2] / 2))).toBeLessThan(0.12);
+    expect(b.box[0]).toBeGreaterThan(a.box[0] + a.box[2]);
+    expect(dedupeDetections([a, b])).toHaveLength(2);
+  });
+
+  it('still collapses a double-box that is offset rather than smaller', () => {
+    // The other direction, so the fix cannot be "stop merging". One object boxed
+    // twice in one pass sits nearly on top of itself, and IoU here is ~0.66.
+    const a = det({ label: 'wardrobe', category: 'wardrobe', slot: 'n', box: [0.3, 0.2, 0.2, 0.5] });
+    const b = det({ label: 'wardrobe unit', category: 'wardrobe', slot: 'n', box: [0.33, 0.24, 0.2, 0.5] });
+    expect(dedupeDetections([a, b])).toHaveLength(1);
+  });
+
+  it('keeps a small box nested inside a big one of the same category', () => {
+    // Intersection-over-union, not intersection-over-minimum, and this is the case
+    // that separates them: one shelf of a bookcase, boxed inside the bookcase, both
+    // called 'shelf'. IoM would be ~1.0 and would eat the bookcase. Keeping both is
+    // the safe way to be wrong — a duplicate is one tap to delete, a missing piece
+    // of furniture is invisible.
+    const unit = det({ label: 'shelf', category: 'shelf', slot: 'e', box: [0.2, 0.1, 0.4, 0.7] });
+    const oneShelf = det({ label: 'shelf', category: 'shelf', slot: 'e', box: [0.25, 0.3, 0.3, 0.08] });
+    expect(dedupeDetections([unit, oneShelf])).toHaveLength(2);
   });
 
   // The regression this file exists for. The cross-slot rule used to match on
@@ -66,5 +115,58 @@ describe('dedupeDetections', () => {
       det({ label: 'unit', category: 'shelf', slot: 'n', position: { x: 0, y: 1, z: 0 } }),
     ];
     expect(dedupeDetections(two)).toHaveLength(2);
+  });
+});
+
+describe('mergeDistanceFor', () => {
+  // The regression this whole tier exists for. Four chairs tucked around a table
+  // at 0.55 m centres collapsed to TWO under the old flat 0.6 m: the first ate
+  // the second, the third survived by being 1.1 m from the first, and the fourth
+  // was eaten by the third. Nothing told the user.
+  it('keeps four dining chairs tucked 0.55 m apart around a table', () => {
+    const chairs: Detection[] = [0, 1, 2, 3].map((i) => ({
+      label: 'dining chair',
+      conf: 0.9,
+      category: 'chair' as const,
+      slot: (i < 2 ? 'n' : 's') as Detection['slot'],
+      // Distinct bboxes too, so rule 1 is not what separates them.
+      box: [0.1 + i * 0.2, 0.5, 0.1, 0.2] as Detection['box'],
+      position: { x: -0.825 + i * 0.55, y: 0.4, z: 0 },
+    }));
+    expect(dedupeDetections(chairs)).toHaveLength(4);
+  });
+
+  it('still merges one chair genuinely seen twice', () => {
+    // A tight tier is not "never merge". Two views of the same chair land within
+    // the calibration error of each other, which is well inside 0.35 m.
+    const same: Detection[] = [
+      det({ label: 'dining chair', category: 'chair', slot: 'n', position: { x: 0.4, y: 0.4, z: -1.0 } }),
+      det({ label: 'dining chair', category: 'chair', slot: 'e', box: [0.6, 0.5, 0.1, 0.2], position: { x: 0.5, y: 0.4, z: -0.9 } }),
+    ];
+    expect(dedupeDetections(same)).toHaveLength(1);
+  });
+
+  it('merges a bed whose two views disagree by more than a chair may', () => {
+    // 0.7 m apart: beyond the old flat threshold as well as the tight tier, but
+    // a plausible disagreement between two photos of one 2 m bed, and there is
+    // no arrangement in which two beds sit 0.7 m apart.
+    const same: Detection[] = [
+      det({ label: 'double bed', category: 'bed', slot: 'n', position: { x: 0, y: 0.3, z: -1.2 } }),
+      det({ label: 'double bed', category: 'bed', slot: 'w', box: [0.3, 0.5, 0.3, 0.3], position: { x: 0.7, y: 0.3, z: -1.2 } }),
+    ];
+    expect(dedupeDetections(same)).toHaveLength(1);
+    // Proof the tier is what carries it: the old flat 0.6 m would not have.
+    expect(mergeDistanceFor('bed')).toBeGreaterThan(0.7);
+  });
+
+  it('gives every category a distance, and orders the tiers', () => {
+    for (const category of CATEGORIES) {
+      expect(mergeDistanceFor(category), category).toBeGreaterThan(0);
+    }
+    expect(mergeDistanceFor('chair')).toBeLessThan(mergeDistanceFor('desk'));
+    expect(mergeDistanceFor('desk')).toBeLessThan(mergeDistanceFor('wardrobe'));
+    // An unlisted category falls back to the flat value this replaced, so nothing
+    // silently loosens when a category is added.
+    expect(mergeDistanceFor('other')).toBe(0.6);
   });
 });
