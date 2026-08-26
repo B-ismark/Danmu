@@ -231,7 +231,22 @@ export type GeoPlacement = {
   heightMM: number;
   /** facing-into-the-room yaw for wall-adjacent items. */
   yaw: number;
-  /** forward distance from the camera (m) — useful for confidence weighting. */
+  /** Forward distance from the camera, in metres.
+   *
+   *  Not a confidence input, though it read as one for a while — the doc used to
+   *  say "useful for confidence weighting" and PlanDetect's Phase 6 listed wiring
+   *  it in. It was declined there and the reason belongs here: `lib/detect-confidence.ts`
+   *  argues that the fix for an uncalibrated number is corroboration, not a second
+   *  invented threshold, and "a detection more than X metres away is Y less certain"
+   *  is exactly that second invented threshold.
+   *
+   *  What it IS for: the observable these placements are tested through. A caller
+   *  reads `pos` and `dimMM`, but a test cannot tell a tilt-aware solve from a naive
+   *  one by looking at a position — the distance is the term the calibration
+   *  actually moves, so `tests/photo-geometry.test.ts` asserts on it directly
+   *  (clamped to the wall, ratio against the assumed-height solve, and so on).
+   *  `RoomTools`' `top.distance` is a different type; nothing reads this one at
+   *  runtime, and that is correct rather than an oversight. */
   distance: number;
 };
 

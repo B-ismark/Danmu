@@ -17,6 +17,13 @@ backend, no account. The 3D studio *is* the product.
    image-to-3D) was **deleted permanently**. Do not reintroduce it or any AI
    render / model-name / cost / quota language in the user-facing UI. AI here is
    **detection-only and optional**.
+   The last remnant of it was `lib/mesh-cache.ts` + `CachedMesh.tsx` — an IndexedDB
+   store of GLB blobs whose providers were literally named `meshy` and `tripo`.
+   Nothing had written to it since the pipeline went, so `ScenePart.meshHash` could
+   never be set and the component could never render; it is deleted too. **Dead
+   plumbing wearing a deleted feature's names reads as this rule being broken**, and
+   the next person to find it cannot tell the difference from code. Every piece is
+   procedural; there is no mesh download path to restore.
 2. **Dimensions come from code, not AI.** Every size passes through `clampDims`
    (`lib/dimension-ranges.ts`). The geometry engine (`lib/geometry.ts`,
    `lib/photo-geometry.ts`, `lib/physics.ts`, `lib/clearance.ts`,
@@ -35,7 +42,15 @@ backend, no account. The 3D studio *is* the product.
    long wall filed under a short one is measured from the wrong distance and every
    size taken off it is wrong. So it is a **ladder that names its rung** — EXIF
    compass bearing, EXIF shutter time, arrival order, the user — rather than a
-   guess in an answer's clothes, and a bearing pointing at a wall that is already
+   guess in an answer's clothes. **Rung one almost never fires, and that is
+   measured, not feared:** run against four real photographs of a real bedroom off a
+   Pixel 6 Pro, not one carried `GPSImgDirection` — nor any focal length, so the
+   geometry's assumed-66° fallback is the normal path too. What carried all four was
+   `DateTimeOriginal`, the rung the plan did not have. `tests/exif-in-the-wild.test.ts`
+   holds that shape. Do not delete the bearing rung — a phone that writes it is the
+   difference between naming the walls and guessing at them — and do not build
+   anything on the assumption it is there.
+   A bearing pointing at a wall that is already
    taken is *reported*, not honoured. The ids are a cyclic order, not compass
    directions, and that is what makes it safe: nothing outside that file cares
    where north is (the room's own bearing lives in `Site.bearingDeg`), so any
@@ -279,9 +294,20 @@ they fail faster.
 Run `pnpm typecheck` after non-trivial edits. Add a Vitest test when you touch
 pure logic in `lib/` (geometry / physics / clearance / footprint / dimension-
 ranges / shape-search / item-snap / units / dates / scene-file / transforms /
-fit-check / capture-slots / detect-prompt all have tests
+fit-check / capture-slots / detect-prompt / exif all have tests
 in
 `tests/`).
+
+**A dead-code sweep that does not read `tests/` is not a sweep.** Two kinds of
+false positive here, and each nearly cost something real. A class or token reached
+through a template string (`` `rail-sash rail-sash--${side}` ``, or a name a test
+builds per side in a loop) matches no literal grep. And a token can have **no
+`var()` reader at all and still be load-bearing**: `--rail-left-tight` /
+`--rail-right-tight` are applied to nothing on purpose — they are the width a
+future tightening is allowed to reach, and their consumer is
+`tests/reflow.test.ts`, which holds each below its shipping floor. Deleting them
+was caught by that test, which is the good outcome; the bad one is deleting the
+test as well to make the sweep look right.
 
 The `--disableConsoleIntercept` on `pnpm test` is load-bearing, not tidy-up.
 vitest 4's default reporter **discards `console.log` from a passing run** — at module

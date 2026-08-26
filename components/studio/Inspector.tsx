@@ -159,7 +159,9 @@ export function Inspector() {
             style={{ flex: 1, minWidth: 0, fontSize: 16, fontWeight: 500, letterSpacing: '-0.01em' }}
             inputStyle={{ fontSize: 16, fontWeight: 500, height: 32 }}
           />
-          {part.locked && <Pill tone="locked" style={{ flexShrink: 0 }}>Locked</Pill>}
+          {/* Not "Locked": the piece drags, resizes and recolours like any other.
+              What the flag means is where it came from — see ScenePart.locked. */}
+          {part.locked && <Pill tone="locked" style={{ flexShrink: 0 }}>From photo</Pill>}
         </div>
 
         <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2, paddingLeft: 4, textTransform: 'capitalize' }}>

@@ -1,84 +1,20 @@
 'use client';
 
-// How the studio explains itself — one component, both tabs.
+// The parts a help panel is built from — the card, its groups, its lines, its
+// keycaps. Both studio tabs' help is assembled out of these, so the two describe
+// the same app in the same chrome; only the content differs, and it lives in
+// `StudioHelp.tsx` for both rather than in either page.
 //
-// The 3D view had this: a single "How this works" chip in the bottom-left corner
-// that opens a card, closes on Esc, and gives the focus back to the chip it came
-// from. The 2D plan instead nailed a permanent four-line paragraph to the
-// bottom-right corner of the drawing, where it covered the room and could not be
-// dismissed — a different answer to the same question, on the tab where it got in
-// the way most.
-//
-// The content differs per tab, because the two are genuinely driven differently.
-// The chrome does not.
+// The chip that OPENS the card is not here. It used to be — a `HelpToggle` that
+// bundled chip and card together for the canvas's bottom-left corner — and
+// `StudioHelp` replaced it by moving help into the top bar and anchoring the coach
+// marks under the same "?". The bundled version stayed behind unused for a while
+// afterwards, which is the only reason to mention it: help is one surface, and a
+// second control that opens the same card in a different corner is not a spare, it
+// is a fork.
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Icon } from '@/components/ui/Icon';
+import { type ReactNode } from 'react';
 import { IconButton } from '@/components/ui/primitives';
-import { isTypingOrDialog } from './KeyboardShortcuts';
-
-/** The chip and the card it opens, as one control. Anchor it with a positioned
- *  parent; it fills that parent's width up to the card's own. */
-export function HelpToggle({ children, label = 'How this works' }: { children: ReactNode; label?: string }) {
-  const [open, setOpen] = useState(false);
-  const btnRef = useRef<HTMLButtonElement>(null);
-
-  // Esc closes it, and the key must not also reach the canvas underneath — the
-  // studio's global handler reads Esc as "deselect", and one press doing both is
-  // two things the user did not ask for.
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key !== 'Escape' || isTypingOrDialog(e.target)) return;
-      e.stopPropagation();
-      setOpen(false);
-      btnRef.current?.focus();
-    }
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [open]);
-
-  return (
-    <>
-      {open && (
-        <HelpCard
-          title={label}
-          onClose={() => {
-            setOpen(false);
-            btnRef.current?.focus();
-          }}
-        >
-          {children}
-        </HelpCard>
-      )}
-      {/* A question mark rather than the sentence. The label is still the
-          accessible name and the tooltip — it just stops taking 150px of a corner
-          the drawing wants, on a control that gets pressed once. */}
-      <button
-        ref={btnRef}
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-label={label}
-        title={label}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: 30,
-          height: 30,
-          borderRadius: 'var(--r-full)',
-          cursor: 'pointer',
-          border: `1px solid ${open ? 'var(--accent-text)' : 'var(--edge)'}`,
-          background: open ? 'var(--accent-tint)' : 'var(--paper)',
-          color: open ? 'var(--accent-text)' : 'var(--ink-2)',
-          boxShadow: 'var(--shadow-soft)',
-        }}
-      >
-        <Icon name="help" size={15} />
-      </button>
-    </>
-  );
-}
 
 export function HelpCard({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (

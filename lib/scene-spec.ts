@@ -63,6 +63,7 @@ import {
   DEFAULT_WEIGHTS,
   NAV_CELL,
   STRANDED_PIECE,
+  angleDelta,
   type LayoutContext,
 } from './layout-score';
 
@@ -167,7 +168,17 @@ export type ScenePart = {
   pos: [number, number, number];
   rot: number;
   dimMM: [number, number, number];
-  /** locked = preserved from photo (blue tint). false = new build (orange/dashed). */
+  /** True for a piece that came out of the user's own photo, false for one they
+   *  added from the Library. Two consequences: a theme restyle skips it
+   *  (`PartTree`), and it draws in `--locked` aubergine rather than `--accent`
+   *  terracotta, solid rather than dashed, everywhere a plan or thumbnail draws
+   *  furniture.
+   *
+   *  **The field name is the last place the word "locked" survives, and it is
+   *  wrong.** Nothing about such a piece is locked — it drags, resizes, recolours
+   *  and deletes like any other. The user-facing surfaces say "From photo" now;
+   *  the name stays because `lib/scene-file.ts` writes this key into a saved room
+   *  file, so renaming it is a file-format break for a word only developers read. */
   locked: boolean;
   /** circular footprint in plan */
   circle?: boolean;
@@ -192,9 +203,6 @@ export type ScenePart = {
   light?: PartLight;
   /** group id — parts sharing one move together (multi-select merge). */
   groupId?: string;
-  /** Reference into the local mesh cache (lib/mesh-cache.ts). When set, the 3D
-   *  scene renders the cached GLB instead of the primitive shape. */
-  meshHash?: string;
 };
 
 // ─── Default scene (used until detection runs) ────────────────────────────
@@ -598,7 +606,11 @@ export function defaultScene(
         name,
         shape,
         pos: [x, groundY(category, shape, dim, height), z],
-        rot: frame.yaw + (opt.turn ?? 0),
+        // Wrapped to (−π, π]. `angleDelta(x, 0)` is that, and reusing it beats a second
+        // way of saying the same thing. A frame on the −π wall plus any turn away from
+        // the room lands outside the principal range — the same rotation, written as
+        // −188°, which is what `PlanChrome` would then print at the user.
+        rot: angleDelta(frame.yaw + (opt.turn ?? 0), 0),
         dimMM: dim,
         locked: false,
         ...opt.extra,
@@ -873,17 +885,31 @@ export function defaultScene(
       // the armchair 250 mm behind the sofa's back, i.e. across the only route from one
       // half of the room to the other.
       const group = parts.find((p) => p.category === 'sofa') ?? null;
+      // …and TURNED TOWARD it, which is the half of `armchair-sofa` that a distance
+      // cannot state. `relationCost` charges a `faces` relation twice: once for the gap,
+      // once for the heading — `2 × angleCost` — and the seeder was only ever answering
+      // the first. On the L that was the WHOLE of its relation cost: the armchair sat
+      // 2.355 m from the sofa with a 1.2–2.6 m band, i.e. dead centre, and was still
+      // charged 0.479 for sitting square to its own wall while the sofa lay 43° off its
+      // nose. `Suggest` then answered the only way it could — by shoving a chair that
+      // was already in the right place, up to 735 mm, on every seed.
+      //
+      // Derived from the spot, not chosen: each candidate carries the turn that aims it
+      // at the group from THERE, so `seats` tests the footprint the chair will actually
+      // have. An angled chair is also free under `alignment`, which asks for a quarter
+      // turn from something and forgives 45° outright.
+      const aimAtGroup = (u: number, v: number): number => {
+        if (!group) return 0;
+        const [x, z] = f.at(u, v);
+        return angleDelta(Math.atan2(group.pos[0] - x, group.pos[2] - z), f.yaw);
+      };
       const armchair = placeSomewhere(
         'chair',
         'Armchair',
         'chair-armchair',
         chair,
         f,
-        [
-          { u: 0.35, v: vChair },
-          { u: -0.35, v: vChair },
-          { u: 0, v: vChair },
-        ],
+        [0.35, -0.35, 0].map((u) => ({ u, v: vChair, turn: aimAtGroup(u, vChair) })),
         {},
         group,
         true,
@@ -1842,7 +1868,6 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
       circle: cfg.circle,
       wallMounted: cfg.wallMounted,
       fromDetection: { slot: realSlot, bbox: d.box, conf: d.conf },
-      meshHash: (d as { meshHash?: string }).meshHash,
       color: (d as { color?: string }).color,
     });
   }

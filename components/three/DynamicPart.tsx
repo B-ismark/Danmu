@@ -5,7 +5,6 @@
 // double bed, etc).
 
 import { Box, BoxInstances, PlaneInstances, type InstanceItem } from './Box';
-import { CachedMesh } from './CachedMesh';
 import { PartLight } from './PartLight';
 import { SURFACE } from './materials';
 import { Spin, Sway } from './Motion';
@@ -16,7 +15,7 @@ import { DECOR, DETAIL, SCENE, defaultBodyColor } from '@/lib/scene-palette';
 // Body albedo for a part's main surfaces. An explicit colour (photo-sampled on
 // detection, or chosen in the Inspector) ALWAYS wins — otherwise recolouring a
 // locked item did nothing, since most detections auto-lock. Falls back to the
-// "kept as-is" tint for locked items with no colour, else the shape default.
+// "from your photo" tint for locked items with no colour, else the shape default.
 // (Locked status still reads from the PartTree dot, Inspector badge + plan view.)
 //
 // Both the tint and the shape default come from lib/scene-palette. The tint used
@@ -40,7 +39,7 @@ function body(part: ScenePart, locked: boolean, fallback?: string): string {
 }
 
 /** `body()` for the shapes whose renderer takes no `locked` flag. These have
- *  always shown their own colour rather than the "kept as-is" tint; keeping that
+ *  always shown their own colour rather than the "from your photo" tint; keeping that
  *  behaviour is deliberate, so this is a narrower helper rather than a call with
  *  `locked: false` hard-coded. */
 function tint(part: ScenePart): string {
@@ -48,24 +47,19 @@ function tint(part: ScenePart): string {
 }
 
 export function PartGeometry({ part, locked }: { part: ScenePart; locked: boolean }) {
-  // A cached GLB always wins over the primitive shape. The CachedMesh component
-  // renders nothing until the blob resolves, so we also render the primitive as
-  // a placeholder underneath via a fragment — it disappears visually when the
-  // GLB overlays it (CachedMesh re-anchors to the same world origin).
-  //
-  // PartLight rides along either way: a lamp emits because it is a lamp, not
+  // PartLight rides alongside the shape: a lamp emits because it is a lamp, not
   // because of which mesh happens to represent it. It renders nothing for the
   // overwhelming majority of parts, which are not fixtures.
   return (
     <>
-      {part.meshHash ? <CachedMesh part={part} /> : <ShapeDispatch part={part} locked={locked} />}
+      <ShapeDispatch part={part} locked={locked} />
       <PartLight part={part} />
     </>
   );
 }
 
-// Split from PartGeometry so we can use a hook (effective-dim lookup) without
-// it running on the meshHash early-return path above.
+// Split from PartGeometry so the effective-dim hook below sits in a component of
+// its own rather than in one that also renders the light.
 function ShapeDispatch({ part, locked }: { part: ScenePart; locked: boolean }) {
   // Parametric parts rebuild from the CURRENT (overridden) dim. Feed them an
   // effective part whose dimMM reflects the user's resize, so module counts

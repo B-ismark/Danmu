@@ -256,27 +256,6 @@ export function StepHeader({
   );
 }
 
-export function IOSFrame({
-  children,
-  width = 402,
-  height = 874,
-  dark,
-}: {
-  children: ReactNode;
-  width?: number;
-  height?: number;
-  dark?: boolean;
-}) {
-  return (
-    <div className="ios-frame" style={{ width, height }}>
-      <div className="ios-frame__notch" />
-      <div className="ios-frame__inner" style={dark ? { background: '#0A0A08' } : undefined}>
-        {children}
-      </div>
-    </div>
-  );
-}
-
 export function Toggle({ on, onClick, label }: { on: boolean; onClick?: () => void; label?: string }) {
   return (
     <button

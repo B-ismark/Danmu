@@ -24,7 +24,6 @@ const full: Detection = {
   yaw: 1.5708,
   shape: 'bed-double',
   color: '#a1b2c3',
-  meshHash: 'deadbeef',
 };
 
 describe('toRecord / fromRecord', () => {

@@ -111,3 +111,32 @@ export function snapToNeighbors(
   if (bestZ) lines.push(bestZ.line);
   return { x: bestX ? bestX.target : x, z: bestZ ? bestZ.target : z, lines };
 }
+
+/** How far a guide runs past each end of the span it measures, in metres.
+ *
+ *  Not decoration: a line that stops exactly on the two edges it connects reads
+ *  as part of the furniture rather than as a statement about it. */
+export const GUIDE_OVERHANG_M = 0.15;
+
+/**
+ * The two world (x, z) ends of the line to draw for a snap.
+ *
+ * Here rather than in either renderer because BOTH draw it — `MeasureGuides.tsx`
+ * in 3D and `PlanView.tsx` in the plan — and the mapping is easy to get wrong in
+ * a way that looks plausible: for an `x`-axis line the constant is x and the span
+ * runs along z, and reading it the other way round produces a guide at right
+ * angles to the edge it is claiming to align, which is only obviously wrong if
+ * you happen to be dragging along the other axis at the time.
+ *
+ * Same reason `lib/drag-resolve.ts` exists: this is one rule with two consumers.
+ */
+export function snapGuideEnds(
+  line: SnapLine,
+  overhang = GUIDE_OVERHANG_M,
+): { from: [number, number]; to: [number, number] } {
+  const lo = Math.min(line.span[0], line.span[1]) - overhang;
+  const hi = Math.max(line.span[0], line.span[1]) + overhang;
+  return line.axis === 'x'
+    ? { from: [line.at, lo], to: [line.at, hi] }
+    : { from: [lo, line.at], to: [hi, line.at] };
+}

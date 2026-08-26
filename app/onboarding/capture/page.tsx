@@ -51,6 +51,19 @@ type Source = 'upload' | 'camera';
 type Photo = {
   blob: Blob;
   url: string;
+  /** Rescored from the blob on every visit, deliberately never persisted beside it.
+   *
+   *  Two reasons, and the first is the rule. A `Quality` is a MEASUREMENT of a
+   *  photograph, and a stored measurement stops being derived the moment
+   *  `scoreQuality`'s thresholds move: the chip would then describe the photo as an
+   *  older build saw it, with nothing on screen to say so. Rule 2 is about sizes,
+   *  but "blurry" is the same kind of claim about the same photo.
+   *
+   *  The second is that it costs nearly nothing to be right. `scoreQuality`
+   *  downsamples to 320 px on the long edge before it reads a pixel, it is async,
+   *  and the chip already arrives after the picture does (`patchIfSame`) — so the
+   *  work being saved is one small canvas pass per wall, on a screen the user
+   *  reaches at most a handful of times. */
   quality: Quality | null;
   pose?: CapturePose;
   /** Which rung of the ladder put it on this wall. Absent for a photo read back

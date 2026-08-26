@@ -34,6 +34,17 @@ export const SCENE = {
   wall: '#ECE9E1',
   floor: '#D8C9B4',
   ceiling: '#F5F1E8',
+  /** An alignment guide from `lib/item-snap.ts`: "this edge is locked to that
+   *  one". A separate semantic from selection / hover / invalid, and it must read
+   *  as none of them — so a green, deliberately outside the brand's sage.
+   *
+   *  Mirrors `--snap-edge`. The 2D plan draws the same guide from the CSS token
+   *  directly, because it is SVG in the document and can; this copy exists for the
+   *  same reason every other entry here does — a Three.js material cannot. */
+  snapEdge: '#1E9E54',
+  /** …and the centre-line variant, drawn dashed and a shade lighter. Mirrors
+   *  `--snap-center`. */
+  snapCenter: '#27A06A',
 } as const;
 
 // ─── Furniture detail ───────────────────────────────────────────────────────

@@ -151,6 +151,10 @@ describe('scene-palette really does match the CSS', () => {
     ['accentHover', 'accent-2'],
     ['invalid', 'danger'],
     ['locked', 'locked'],
+    // Both studio tabs draw the same alignment guide — the plan from the CSS
+    // token, the 3D scene from here — so the two greens have to be one green.
+    ['snapEdge', 'snap-edge'],
+    ['snapCenter', 'snap-center'],
   ];
 
   it.each(pairs)('SCENE.%s is --%s', (key, token) => {

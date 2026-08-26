@@ -55,7 +55,6 @@ export function toRecord(d: Detection, index: number, locked: boolean, mintUid: 
     yaw: d.yaw,
     shape: d.shape,
     color: d.color,
-    meshHash: d.meshHash,
   };
 }
 
@@ -80,6 +79,5 @@ export function fromRecord(r: SavedDetection): Detection {
     yaw: r.yaw,
     shape: r.shape,
     color: r.color,
-    meshHash: r.meshHash,
   };
 }

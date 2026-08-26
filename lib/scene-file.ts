@@ -467,11 +467,6 @@ function readPart(v: unknown, seen: Set<string>): { part: SceneFilePart; origina
   const parentId = str(v.parentId);
   if (parentId) part.parentId = parentId;
 
-  // `meshHash` is deliberately not carried across. It points into THIS browser's
-  // mesh cache, which an imported file has no entries in, so honouring it would
-  // render nothing where a sofa should be. Dropping it falls the piece back to its
-  // procedural shape, which is exactly what `shape` is for.
-
   const decor = readDecor(v.decor);
   if (decor) part.decor = decor;
 

@@ -144,6 +144,3 @@ export function Pickable({
   );
 }
 
-export function useSelected(partId: string) {
-  return useStudio((s) => s.selectedPartId === partId);
-}
