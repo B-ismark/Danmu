@@ -11,6 +11,7 @@ import {
   prepare,
   DEFAULT_WEIGHTS,
   NAV_CELL,
+  angleDelta,
   type LayoutContext,
   type Placement,
 } from '../lib/layout-score';
@@ -166,16 +167,48 @@ describe.each(PRESETS)('starter scene · $id', ({ id, w, d }) => {
     // …and again after `wallDebt` stopped charging a finished back for a gap that is
     // a route: 2.2, 10.8, 1.6, 4.9, 8.8. The open plan was 13.1 of which 11.5 was one
     // sofa standing where the seeder had deliberately put it.
+    //
+    // …and again once a seeded seat was TURNED toward its group and not merely put at
+    // the right distance from it: 2.2, 4.4, 1.6, 4.9, 8.8. Only the L moved, because
+    // only the L seeds a second seat, and 5.1 of its 10.8 was that one chair's heading.
     const ctx: LayoutContext = { parts, movable: parts.map(() => true), footprint: poly };
     const cost = costBreakdown(prepare(ctx), parts.map(here), DEFAULT_WEIGHTS, NAV_CELL);
-    expect(cost.total).toBeLessThan(15);
+    expect(cost.total).toBeLessThan(10);
   });
+
+  it('seeds an arrangement the solver then leaves alone', () => {
+    // The strongest form of the test above, and the one a user actually performs:
+    // open a brand-new room, press Suggest, and see whether the app immediately
+    // rearranges what it just gave you. A cost ceiling permits a room that is cheap
+    // overall and still has one piece the solver can obviously improve — which is
+    // what every preset but `rect` had, and what `open` got its own describe block
+    // for before all five could pass this.
+    //
+    // Not `moves.length` — the moves themselves, so a failure names the piece.
+    for (let seed = 1; seed <= 6; seed++) {
+      const r = solveLayout(parts, poly, parts.map(() => false), { seed });
+      expect(
+        r.moves.map((m) => `${parts[m.index].name} ${(m.distance * 1000).toFixed(0)}mm via ${m.term}`),
+        `${id} seed ${seed}`,
+      ).toEqual([]);
+    }
+  }, 60_000);
 
   it('seeds a room you can walk all of', () => {
     // Read on the room report's OWN grid, so this and rule 9 cannot disagree. They
     // did: at a coarser cell the T read 2.02 m² stranded and the report read none.
     const ctx: LayoutContext = { parts, movable: parts.map(() => true), footprint: poly };
     expect(navigabilityCost(prepare(ctx), parts.map(here), NAV_CELL)).toBe(0);
+  });
+
+  it('states every rotation in the principal range', () => {
+    // `place` composes a rotation as `frame.yaw + turn`, and a frame on the −π wall
+    // plus any turn away from the room leaves that range: the L's armchair came out
+    // at −188°, which is the right rotation written wrong and which `PlanChrome`
+    // would have printed at the user as it stood.
+    for (const part of parts) {
+      expect(Math.abs(part.rot), `${part.name} rot`).toBeLessThanOrEqual(Math.PI + 1e-9);
+    }
   });
 
   it('seeds the same room every time it is asked', () => {
@@ -388,6 +421,55 @@ describe('the open plan keeps the route it was seeded with', () => {
       expect(backGap(parts[sofaIdx], r.placements[sofaIdx]), `seed ${seed}`).toBeGreaterThanOrEqual(
         WALK_MIN,
       );
+    }
+  }, 60_000);
+});
+
+describe('a seeded seat is turned toward the group it belongs to', () => {
+  // `relationCost` charges a `faces` relation TWICE — once for the gap, once for the
+  // heading, `2 × angleCost` — and the seeder only ever answered the first. On the L
+  // that was the WHOLE of its relation cost: the armchair sat 2.355 m from the sofa
+  // inside a 1.2–2.6 m band, i.e. dead centre, and was still charged 0.479 for sitting
+  // square to its own wall with the sofa 43° off its nose. `Suggest` could then only
+  // answer the way it did — by shoving a chair that was already in the right place, up
+  // to 735 mm, on every seed — because distance was the only lever the seed had left it.
+  //
+  // Asserted as GEOMETRY, not by recomputing the cost here. A test carrying its own
+  // copy of `relationCost` is the second consumer CLAUDE.md rule 3 is about, and it
+  // would pass a seeder that had drifted in exactly the same direction.
+  const W = 6.0;
+  const D = 4.7;
+  const poly = footprintForLayout('l', W, D);
+  const parts = defaultScene('l', W, D, { footprint: poly, height: HEIGHT });
+  const chairIdx = parts.findIndex((p) => roleOf(p) === 'armchair');
+  const sofaIdx = parts.findIndex((p) => roleOf(p) === 'sofa');
+
+  it('seeds the L with both a reading chair and a sofa', () => {
+    // The premise of everything below. A preset that stopped placing one of them would
+    // otherwise make the rest of this file vacuously green.
+    expect(chairIdx).toBeGreaterThanOrEqual(0);
+    expect(sofaIdx).toBeGreaterThanOrEqual(0);
+  });
+
+  it('aims the chair at the sofa, not at whatever its own wall faced', () => {
+    const chair = parts[chairIdx];
+    const sofa = parts[sofaIdx];
+    // three.js' convention, the one `lib/geometry` states: a part's front is
+    // (sin rot, cos rot), so the heading that points at a target is atan2(dx, dz).
+    const bearing = Math.atan2(sofa.pos[0] - chair.pos[0], sofa.pos[2] - chair.pos[2]);
+    // 15°, not 0: `placeSomewhere` takes the first spot that FITS, and the turn it
+    // carries aims at the group from THAT spot, so a chair nudged by `settleParts`
+    // ends a few degrees off. 43° is the failure this exists for.
+    expect(Math.abs(angleDelta(chair.rot, bearing))).toBeLessThan((15 * Math.PI) / 180);
+  });
+
+  it('is a chair the solver leaves alone, at every seed', () => {
+    for (let seed = 1; seed <= 6; seed++) {
+      const r = solveLayout(parts, poly, parts.map(() => false), { seed });
+      expect(
+        r.moves.map((m) => m.index),
+        `seed ${seed}`,
+      ).not.toContain(chairIdx);
     }
   }, 60_000);
 });

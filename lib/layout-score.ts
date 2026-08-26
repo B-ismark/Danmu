@@ -684,7 +684,20 @@ export function costBreakdown(
       // Distance from the piece's BACK to the wall, not from its centre: a deep
       // wardrobe and a shallow shelf are both against the wall at very different
       // centre distances, and using the centre asks the wardrobe to bury itself.
-      const back = edge.dist - halfDepthToward(f, edge.nx, edge.nz);
+      // …and along the wall's NORMAL, which `edge.dist` is only when the nearest point
+      // on it is an interior one. `nearestEdge` clamps to the segment, so against a
+      // concave corner it returns a DIAGONAL distance to an endpoint while
+      // `halfDepthToward` returns an AXIAL half-extent, and the difference of the two
+      // is not a gap at all. Measured on the L, whose notch edge runs x 0.48→3.00 at
+      // z 0.38: a sofa centred at x 0 with its back 24 mm off that plane was charged
+      // 0.215 — 0.690 diagonal minus 0.475 axial — which was 91% of the preset's whole
+      // wall term, and the solver duly collected it by sliding the sofa 200 mm PAST a
+      // wall that does not extend that far. Projecting onto the normal is a no-op
+      // wherever the foot of the perpendicular already lies on the segment.
+      const back =
+        (f.cx - edge.px) * edge.nx +
+        (f.cz - edge.pz) * edge.nz -
+        halfDepthToward(f, edge.nx, edge.nz);
       if (affinity === 'must-wall' || affinity === 'prefers-wall') {
         // Not `max(0, back)`. Past a walkway's width the gap behind a piece with a
         // finished back stops being dead space and becomes a route, and the debt

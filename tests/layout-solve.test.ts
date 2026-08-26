@@ -912,3 +912,48 @@ describe('the room’s anchor is settled first', () => {
     expect(parts[model.profile.anchor!].category).toBe('bed');
   });
 });
+
+describe('the wall term measures along the wall, not to its corner', () => {
+  // `nearestEdge` clamps to the SEGMENT, so a piece standing off the end of a wall
+  // gets back a DIAGONAL distance to that wall's endpoint — while `halfDepthToward`
+  // returns an AXIAL half-extent along the same wall's normal. Subtracting one from
+  // the other is not a gap, and nothing in the room report contradicts it because no
+  // `RuleKind` maps to `wall`: this term has exactly one consumer and no second
+  // opinion.
+  //
+  // Measured on the L, whose notch runs x 0.48→3.00 at z 0.38. A sofa centred at
+  // x = 0 sits in that corner's shadow: its back was 24 mm off the plane and it was
+  // charged 0.215 — 0.690 diagonal minus 0.475 axial — which was 91% of the preset's
+  // whole wall term. The solver collected it by sliding the sofa 200 mm PAST a wall
+  // that does not reach that far, at every seed, on a brand-new room.
+  const L = footprintForLayout('l', 6.0, 4.7);
+
+  /** The wall term alone, for one sofa backed onto the notch at `x`. */
+  const wallCostAt = (x: number) => {
+    const parts = [sofa()];
+    const ctx: LayoutContext = { parts, movable: [true], footprint: L };
+    // yaw π puts its back to the notch, whose inward normal is −z.
+    return costBreakdown(prepare(ctx), [{ x, z: -0.119, yaw: Math.PI }], DEFAULT_WEIGHTS).wall;
+  };
+
+  it('charges the same for the same gap, on and off the end of the wall', () => {
+    // Both sofas have their backs an identical distance from the plane z = 0.38.
+    // The only difference is that one's perpendicular foot lands ON the notch
+    // segment and the other's clamps to its corner — which is a fact about the
+    // polygon's vertex list, not about the room, and must not change the price.
+    //
+    // Stated as an invariance rather than against a literal: a number here would
+    // pass a term that had drifted, so long as it drifted to the number.
+    expect(wallCostAt(1.8)).toBeCloseTo(wallCostAt(0), 6);
+  });
+
+  it('still charges a sofa that is genuinely off its wall', () => {
+    // The other direction, or the fix above would pass by charging nothing at all.
+    // Same corner shadow, pulled a third of a metre into the room.
+    const parts = [sofa()];
+    const ctx: LayoutContext = { parts, movable: [true], footprint: L };
+    const flush = costBreakdown(prepare(ctx), [{ x: 0, z: -0.119, yaw: Math.PI }], DEFAULT_WEIGHTS).wall;
+    const adrift = costBreakdown(prepare(ctx), [{ x: 0, z: -0.45, yaw: Math.PI }], DEFAULT_WEIGHTS).wall;
+    expect(adrift).toBeGreaterThan(flush + DEFAULT_WEIGHTS.wall * 0.2);
+  });
+});
