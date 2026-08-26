@@ -235,6 +235,41 @@ export const roomStore = {
     await del(k(roomId, `cap:${slot}`));
     await touch(roomId);
   },
+  /**
+   * Move every photo to a new wall at once — the "rotate them all" control, and
+   * the keyboard Move on one card.
+   *
+   * One operation rather than a loop of `saveCapture` calls at the call site, for
+   * three reasons that each cost something the last time they were not honoured:
+   *
+   *  · **The whole record travels.** The old pairwise swap re-wrote a capture as
+   *    `{ slot, blob, takenAt }`, silently dropping `pose` — so reordering photos
+   *    threw away the focal length, the tilt and the very bearing that now decides
+   *    the wall. `Capture.pose` being optional is what let it typecheck.
+   *  · **Writes happen before deletes.** A vacated key that outlives its write is
+   *    a duplicate the next reload shows twice; a deleted key whose write never
+   *    lands is a photograph the user has lost. Only one of those is recoverable.
+   *  · **A mapping that collides is refused.** Two photos onto one wall loses
+   *    one of them. Every real caller is a rotation or a swap, both bijections,
+   *    so a collision here is a bug upstream and saying so beats absorbing it.
+   *
+   * Slots absent from `mapping` stay where they are.
+   */
+  async reslotCaptures(roomId: string, mapping: Partial<Record<CaptureSlot, CaptureSlot>>) {
+    const current = await this.loadCaptures(roomId);
+    const moved = current.map((c) => ({ ...c, slot: mapping[c.slot] ?? c.slot }));
+    const landing = new Set<CaptureSlot>();
+    for (const c of moved) {
+      if (landing.has(c.slot)) {
+        throw new Error(`reslotCaptures: two photos would land on ${c.slot}`);
+      }
+      landing.add(c.slot);
+    }
+    await Promise.all(moved.map((c) => set(k(roomId, `cap:${c.slot}`), c)));
+    const vacated = current.map((c) => c.slot).filter((s) => !landing.has(s));
+    await Promise.all(vacated.map((s) => del(k(roomId, `cap:${s}`))));
+    await touch(roomId);
+  },
   async loadCaptures(roomId: string): Promise<Capture[]> {
     const all = await keys();
     const prefix = k(roomId, 'cap:');

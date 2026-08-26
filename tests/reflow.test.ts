@@ -136,16 +136,19 @@ describe('Segmented can lay its options out on more than one row', () => {
     );
   });
 
-  it('is what the two four-option sets in narrow containers actually use', () => {
-    // Lighting had already broken — 272px shared four ways, with "Evening"
-    // overrunning its 68px segment. The capture picker had not: four short labels
-    // fit a 320px phone by about 22px, which is a margin that depends on the
-    // webfont having loaded. One is a fix and one is headroom; both want the same
-    // mode, and both are here so a later edit cannot quietly drop either.
-    for (const f of [
-      join('components', 'studio', 'ViewOptions.tsx'),
-      join('app', 'onboarding', 'capture', 'page.tsx'),
-    ]) {
+  it('is what the four-option set in a narrow container actually uses', () => {
+    // Lighting broke for real: 272px shared four ways, with "Evening" overrunning
+    // its 68px segment and printing over "Day".
+    //
+    // This used to cover a second file. The capture screen had a four-option "Wall
+    // to shoot" picker in a 360px rail — headroom rather than a fix, fitting a
+    // 320px phone by about 22px on a webfont that may not have loaded — and it is
+    // gone, along with the four-bay grid it drove: the wall is now worked out from
+    // the photo (`lib/capture-slots.ts`) instead of asked for. The Segmented left
+    // on that screen picks Upload or Camera, two options inside `.chrome-bar`,
+    // which wraps at every width. So the guard is dropped there because the
+    // control it guarded no longer exists, not because it started failing.
+    for (const f of [join('components', 'studio', 'ViewOptions.tsx')]) {
       expect(readFileSync(root(f), 'utf8'), `${f} should pass wrap to Segmented`).toMatch(/^\s+wrap$/m);
     }
   });

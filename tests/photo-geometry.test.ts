@@ -4,6 +4,7 @@ import {
   defaultCal,
   calFromHfov,
   wallDistance,
+  wallSpan,
   calibrateFromFloorLine,
   heightFromFloorLine,
   placeCeilingObject,
@@ -26,6 +27,21 @@ describe('wallDistance', () => {
     expect(wallDistance('s', ROOM)).toBe(2);
     expect(wallDistance('e', ROOM)).toBe(3);
     expect(wallDistance('w', ROOM)).toBe(3);
+  });
+
+  // The other half of the same convention, and the reason both live in this file:
+  // the wall you stand `depth/2` from is the one that runs the room's full WIDTH.
+  // A version of `wallSpan` that agreed with itself but not with `wallDistance`
+  // would file every photo against the wrong axis and still look reasonable.
+  it('and the wall you are depth/2 from is the one that is width wide', () => {
+    for (const slot of ['n', 'e', 's', 'w'] as const) {
+      const near = wallDistance(slot, ROOM) * 2;
+      const across = wallSpan(slot, ROOM);
+      expect(near + across).toBe(ROOM.width + ROOM.depth);
+      expect(across).not.toBe(near);
+    }
+    expect(wallSpan('n', ROOM)).toBe(6);
+    expect(wallSpan('e', ROOM)).toBe(4);
   });
 });
 

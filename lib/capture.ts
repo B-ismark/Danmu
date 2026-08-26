@@ -1,6 +1,7 @@
 'use client';
 
 import type { CaptureSlot, CapturePose } from './storage';
+import type { PhotoFacts } from './capture-slots';
 import { stripJpegMetadata } from './jpeg-strip';
 import { readExifFromJpeg } from './exif';
 
@@ -13,11 +14,22 @@ import { readExifFromJpeg } from './exif';
 // know "the one with the window". The pipeline only needs four consecutive walls
 // in clockwise order, so the absolute bearing was never information — it was a
 // question the user couldn't answer.
-export const CAPTURE_SLOTS: { id: CaptureSlot; label: string; turn: string; instruction: string }[] = [
-  { id: 'n', label: 'Wall 1', turn: 'start anywhere', instruction: 'Any wall you like — frame it corner to corner.' },
-  { id: 'e', label: 'Wall 2', turn: 'turn right', instruction: 'Turn a quarter-turn right and frame the next wall.' },
-  { id: 's', label: 'Wall 3', turn: 'opposite the first', instruction: 'Keep turning — this is the wall facing Wall 1.' },
-  { id: 'w', label: 'Wall 4', turn: 'turn right again', instruction: 'One last quarter-turn right for the final wall.' },
+//
+// The user is no longer asked WHICH of the four a photo is, either:
+// `lib/capture-slots.ts` works it out from the photo's own compass tag, its
+// shutter time, or the order it arrived in, and says which of those answered.
+// `turn` and `instruction` survive that change because the live camera still
+// needs them — someone standing in the room turning right is being given a
+// sequence, and arrival order is the strongest signal there is for it.
+// `turn` — a second, shorter gloss on each wall ("start anywhere", "turn right")
+// — went with the bays it labelled. It had exactly one reader, the empty card's
+// aria-label, and there are no empty cards now; leaving it would be the same
+// demanded-and-ignored field Phase 9 cut `alsoSeenIn` for.
+export const CAPTURE_SLOTS: { id: CaptureSlot; label: string; instruction: string }[] = [
+  { id: 'n', label: 'Wall 1', instruction: 'Any wall you like — frame it corner to corner.' },
+  { id: 'e', label: 'Wall 2', instruction: 'Turn a quarter-turn right and frame the next wall.' },
+  { id: 's', label: 'Wall 3', instruction: 'Keep turning — this is the wall facing Wall 1.' },
+  { id: 'w', label: 'Wall 4', instruction: 'One last quarter-turn right for the final wall.' },
 ];
 
 /** The shooting method the geometry step assumes (room centre, ~chest height,
@@ -76,25 +88,45 @@ export function isAcceptedPhoto(file: File | Blob): boolean {
  * measured or the user told us.
  *
  * MUST run on the ORIGINAL file, before `normalizePhoto` — the re-encode and the
- * metadata strip both destroy EXIF, which is the point of the strip. Returns
- * undefined when there is nothing to record, so an absent pose means "we know
- * nothing", not "we measured nothing".
+ * metadata strip both destroy EXIF, which is the point of the strip.
+ *
+ * Two return values because they have two lifetimes. `pose` is persisted onto the
+ * `Capture` and read by the geometry engine for as long as the room exists;
+ * `facts` exists only long enough to decide which wall this photo goes on
+ * (`lib/capture-slots.ts`) and is then dropped. Reading them together is what
+ * keeps that one EXIF parse one parse — and keeps the shutter time from drifting
+ * into storage by looking like it belonged there.
+ *
+ * `pose` is undefined when there is nothing to record, so an absent pose means
+ * "we know nothing", not "we measured nothing".
  */
-export async function readCapturePose(
+export async function readCaptureFacts(
   input: Blob,
   measured?: { tiltDeg?: number; heightM?: number },
-): Promise<CapturePose | undefined> {
+): Promise<{ pose?: CapturePose; facts: PhotoFacts }> {
   const pose: CapturePose = {};
+  const facts: PhotoFacts = {};
   try {
     const exif = readExifFromJpeg(new Uint8Array(await input.arrayBuffer()));
     if (exif?.focalLength35mm !== undefined) pose.focal35mm = exif.focalLength35mm;
-    if (exif?.bearingDeg !== undefined) pose.bearingDeg = exif.bearingDeg;
+    if (exif?.bearingDeg !== undefined) {
+      pose.bearingDeg = exif.bearingDeg;
+      facts.bearingDeg = exif.bearingDeg;
+    }
+    // `bearingRef` is read by the parser and deliberately not carried here. The
+    // slot only ever uses DIFFERENCES between bearings, and true-vs-magnetic is a
+    // constant offset that cancels out of a difference — so the distinction
+    // cannot change an answer, and a field nothing can act on is a field that
+    // invites someone to act on it wrongly. A set mixing two phones that disagree
+    // about the reference is off by the local declination, well inside the 45°
+    // a slot has to spare.
+    if (exif?.shotAt !== undefined) facts.shotAt = exif.shotAt;
   } catch {
     /* unreadable file — the geometry engine has a fallback for every field */
   }
   if (measured?.tiltDeg !== undefined) pose.tiltDeg = measured.tiltDeg;
   if (measured?.heightM !== undefined) pose.heightM = measured.heightM;
-  return Object.keys(pose).length > 0 ? pose : undefined;
+  return { pose: Object.keys(pose).length > 0 ? pose : undefined, facts };
 }
 
 /** Normalise a photo for storage and for the one request that leaves the device:

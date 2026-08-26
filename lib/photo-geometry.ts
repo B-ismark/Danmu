@@ -77,6 +77,19 @@ export function wallDistance(slot: CaptureSlot, room: { width: number; depth: nu
   return slot === 'n' || slot === 's' ? room.depth / 2 : room.width / 2;
 }
 
+/** How wide the wall in this slot is — the other half of the same convention, so
+ *  it lives beside it rather than in the screen that shows it. `slotToWorld` puts
+ *  n and s across the room's width and e and w across its depth, and getting one
+ *  of these two functions right while the other disagrees is a room measured off
+ *  the wrong axis.
+ *
+ *  Read by `lib/capture-slots.ts` for the one check a person can make against
+ *  their own photograph: a slot whose wall should be 5.6 m wide, holding a
+ *  picture of a 4.2 m wall, is a set that wants rotating. */
+export function wallSpan(slot: CaptureSlot, room: { width: number; depth: number }): number {
+  return slot === 'n' || slot === 's' ? room.width : room.depth;
+}
+
 /**
  * The wall-floor line ties camera height, focal length and tilt together in one
  * equation — which means it can solve for ONE of them when the other two are

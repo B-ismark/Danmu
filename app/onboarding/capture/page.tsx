@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useRoom, useSettings, CAM_HEIGHT_MIN, CAM_HEIGHT_MAX } from '@/lib/store';
@@ -11,29 +11,66 @@ import {
   CAPTURE_SLOTS,
   isAcceptedPhoto,
   normalizePhoto,
-  readCapturePose,
+  readCaptureFacts,
   snapToBlob,
   startCamera,
 } from '@/lib/capture';
+import { SLOT_ORDER, placePhotos, rotateSlot, type PlacedPhoto, type SlotSignal } from '@/lib/capture-slots';
+import { wallSpan } from '@/lib/photo-geometry';
 import { useDeviceTilt } from '@/lib/device-tilt';
 import { scoreQuality, flagHelp, flagLabel, flagTone, type Quality } from '@/lib/image-quality';
 import { useMediaQuery } from '@/lib/use-media-query';
+import { formatDim } from '@/lib/units';
 import { Icon } from '@/components/ui/Icon';
 import { NumberField } from '@/components/ui/NumberField';
 import { FlowBarLead, Pill, Segmented } from '@/components/ui/primitives';
 import type { CaptureSlot, CapturePose } from '@/lib/storage';
 
 type Source = 'upload' | 'camera';
-type SlotDef = (typeof CAPTURE_SLOTS)[number];
 
-const SLOT_IDS = CAPTURE_SLOTS.map((s) => s.id);
+/** One photo, everything this screen knows about it.
+ *
+ *  Was four parallel `Record<CaptureSlot, T | null>` maps, which is fine until
+ *  the walls can be permuted: rotating the set then means permuting four maps in
+ *  step, and the quality read is the one that got left behind last time and ended
+ *  up describing a different image. One record moves as one thing. */
+type Photo = {
+  blob: Blob;
+  url: string;
+  quality: Quality | null;
+  pose?: CapturePose;
+  /** Which rung of the ladder put it on this wall. Absent for a photo read back
+   *  out of IndexedDB on a fresh visit — the reasoning was a fact about the
+   *  moment it was added, and inventing one after the fact would be worse than
+   *  saying nothing. */
+  by?: SlotSignal;
+  /** The wall its own compass pointed at, when that wall was already taken. */
+  clashedWith?: CaptureSlot;
+};
+
+type PhotoMap = Record<CaptureSlot, Photo | null>;
+const emptyPhotos = (): PhotoMap => ({ n: null, e: null, s: null, w: null });
+
 const labelOf = (id: CaptureSlot) => CAPTURE_SLOTS.find((s) => s.id === id)!.label;
-function emptyMap<T>(): Record<CaptureSlot, T | null> {
-  return { n: null, e: null, s: null, w: null };
-}
+const turnOf = (id: CaptureSlot) => CAPTURE_SLOTS.find((s) => s.id === id)!.instruction;
+
+/** What the wall assignment is standing on, in words. The screen says this per
+ *  photo because a wrong wall is a wrong room — `wallDistance` reads n/s at
+ *  depth/2 and e/w at width/2 — and the user is the only one who can see whether
+ *  we got it right. */
+const REASON: Record<SlotSignal, string> = {
+  bearing: 'from this photo’s compass',
+  time: 'from when it was taken',
+  order: 'from the order you added it',
+  manual: 'wall you chose',
+};
+
+/** The photos already placed, in the shape `placePhotos` reads. */
+const placedIn = (photos: PhotoMap): PlacedPhoto[] =>
+  SLOT_ORDER.filter((s) => photos[s]).map((s) => ({ slot: s, bearingDeg: photos[s]!.pose?.bearingDeg }));
 
 /** Capture is the one step people really do on a phone, and the layout genuinely
- *  differs there (camera full-bleed, slots as a filmstrip) rather than just
+ *  differs there (camera full-bleed, photos as a filmstrip) rather than just
  *  reflowing — so it needs a JS breakpoint, not only the CSS one. The shared hook
  *  replaced a third hand-rolled copy of the same matchMedia body. */
 const NARROW = '(max-width: 720px)';
@@ -43,16 +80,12 @@ export default function CapturePage() {
   const roomId = useRoom((s) => s.roomId);
   const narrow = useMediaQuery(NARROW);
   const [source, setSource] = useState<Source>('upload');
-  /** which wall the camera shoots into. Selected from the camera panel itself —
-   *  it used to depend on clicking a card in the grid, which no keyboard user
-   *  could do. */
-  const [target, setTarget] = useState<CaptureSlot>('n');
-  const [blobs, setBlobs] = useState(emptyMap<Blob>());
-  const [previews, setPreviews] = useState(emptyMap<string>());
-  const [qualities, setQualities] = useState(emptyMap<Quality>());
+  const [photos, setPhotos] = useState<PhotoMap>(emptyPhotos());
+  const [room, setRoom] = useState<{ width: number; depth: number } | null>(null);
   const [draggingFrom, setDraggingFrom] = useState<CaptureSlot | null>(null);
   /** single polite live region for everything that happens without a page change */
   const [announce, setAnnounce] = useState('');
+  const dimUnit = useSettings((s) => s.dimUnit);
   // How high the phone is held. Remembered per person, not per room, and written
   // onto each photo's pose as it is saved.
   const camHeightM = useSettings((s) => s.camHeightM);
@@ -65,18 +98,19 @@ export default function CapturePage() {
   const [heightDraft, setHeightDraft] = useState(String(camHeightM));
   const { tilt, requestAccess } = useDeviceTilt();
 
-  // Mirror of `previews` readable from async handlers, so replacing or removing a
-  // photo can revoke the URL it is retiring.
-  const previewsRef = useRef(previews);
+  // Mirror of `photos` readable from async handlers, so replacing or removing a
+  // photo can revoke the URL it is retiring — and so `addFiles` can ask what is
+  // already placed without closing over a stale render.
+  const photosRef = useRef(photos);
   useEffect(() => {
-    previewsRef.current = previews;
-  }, [previews]);
+    photosRef.current = photos;
+  }, [photos]);
 
   // Every object URL this page mints is released on unmount. The old cleanup only
   // covered the ones created while rehydrating, so each upload leaked one.
   useEffect(
     () => () => {
-      Object.values(previewsRef.current).forEach((u) => u && URL.revokeObjectURL(u));
+      Object.values(photosRef.current).forEach((p) => p && URL.revokeObjectURL(p.url));
     },
     [],
   );
@@ -95,6 +129,17 @@ export default function CapturePage() {
         await Promise.all(
           caps.map((c) => roomStore.saveCapture(roomId, { ...c, pose: { ...c.pose, heightM: n } })),
         );
+        // …and on screen too, so what is in state is what is in the store. The
+        // bearing lives in the same object and now decides a wall, so a `pose`
+        // that has drifted from its record is no longer a cosmetic difference.
+        setPhotos((prev) => {
+          const next = { ...prev };
+          for (const s of SLOT_ORDER) {
+            const p = next[s];
+            if (p) next[s] = { ...p, pose: { ...p.pose, heightM: n } };
+          }
+          return next;
+        });
       })();
     }, 500);
     return () => clearTimeout(t);
@@ -105,20 +150,21 @@ export default function CapturePage() {
     if (!roomId) return;
     let stale = false;
     (async () => {
-      const caps = await roomStore.loadCaptures(roomId);
+      const [caps, meta] = await Promise.all([roomStore.loadCaptures(roomId), roomStore.loadRoom(roomId)]);
       if (stale) return;
-      Object.values(previewsRef.current).forEach((u) => u && URL.revokeObjectURL(u));
-      const nextB = emptyMap<Blob>();
-      const nextU = emptyMap<string>();
+      Object.values(photosRef.current).forEach((p) => p && URL.revokeObjectURL(p.url));
+      const next = emptyPhotos();
       for (const c of caps) {
-        nextB[c.slot] = c.blob;
-        nextU[c.slot] = blobToObjectUrl(c.blob);
+        next[c.slot] = { blob: c.blob, url: blobToObjectUrl(c.blob), quality: null, pose: c.pose };
       }
-      setBlobs(nextB);
-      setPreviews(nextU);
-      setQualities(emptyMap<Quality>());
+      setPhotos(next);
+      // Width and depth are what make "Wall 2 · the 4.2 m wall" possible, and that
+      // line is the only check a person can make against their own photograph.
+      if (meta) setRoom({ width: meta.width, depth: meta.depth });
       for (const c of caps) {
-        scoreQuality(c.blob).then((q) => setQualities((prev) => ({ ...prev, [c.slot]: q })));
+        scoreQuality(c.blob).then((q) =>
+          setPhotos((prev) => (prev[c.slot] ? { ...prev, [c.slot]: { ...prev[c.slot]!, quality: q } } : prev)),
+        );
       }
     })();
     return () => {
@@ -129,22 +175,33 @@ export default function CapturePage() {
   /** `blob` is stored as given — callers normalise first (see addFiles / shoot),
    *  so nothing full-resolution reaches IndexedDB or the detection request.
    *  `pose` is what we managed to learn about the camera, read from the ORIGINAL
-   *  file before normalising stripped it (see readCapturePose). */
-  async function persistBlob(slot: CaptureSlot, blob: Blob, pose?: CapturePose) {
+   *  file before normalising stripped it (see readCaptureFacts). */
+  async function persistPhoto(
+    slot: CaptureSlot,
+    blob: Blob,
+    pose: CapturePose | undefined,
+    by: SlotSignal,
+    clashedWith?: CaptureSlot,
+  ) {
     if (!roomId) return;
     await roomStore.saveCapture(roomId, { slot, blob, takenAt: Date.now(), pose });
-    const retiring = previewsRef.current[slot];
-    setBlobs((p) => ({ ...p, [slot]: blob }));
-    setPreviews((p) => ({ ...p, [slot]: blobToObjectUrl(blob) }));
+    const retiring = photosRef.current[slot]?.url;
+    setPhotos((p) => ({ ...p, [slot]: { blob, url: blobToObjectUrl(blob), quality: null, pose, by, clashedWith } }));
     if (retiring) URL.revokeObjectURL(retiring);
-    setQualities((q) => ({ ...q, [slot]: null }));
-    scoreQuality(blob).then((q) => setQualities((prev) => ({ ...prev, [slot]: q })));
+    scoreQuality(blob).then((q) =>
+      setPhotos((prev) => (prev[slot] ? { ...prev, [slot]: { ...prev[slot]!, quality: q } } : prev)),
+    );
   }
 
-  /** Dropping or picking four photos at once is the obvious move on this screen;
-   *  the old handler took files[0] and silently threw the rest away. Extras fill
-   *  the following empty walls in shooting order. */
-  async function addFiles(startSlot: CaptureSlot, list: FileList | File[] | null) {
+  /**
+   * Take in photos and work out which wall each one is.
+   *
+   * The four labelled bays are gone, so this is the whole ingest: drop or pick
+   * any number in any order and `placePhotos` files them, saying which rung of
+   * its ladder answered. It no longer takes a starting slot, because there is no
+   * longer a card to have dropped them on.
+   */
+  async function addFiles(list: FileList | File[] | null) {
     const picked = Array.from(list ?? []);
     // An explicit raster allowlist, not `image/*` — that also matched SVG, which
     // has no pixels for the quality score or the colour sampler to read.
@@ -157,71 +214,137 @@ export default function CapturePage() {
       );
       return;
     }
-    const start = SLOT_IDS.indexOf(startSlot);
-    const followers = [...SLOT_IDS.slice(start + 1), ...SLOT_IDS.slice(0, start)].filter(
-      (id) => !previewsRef.current[id],
+
+    // Read what each ORIGINAL file knows about itself first: `normalizePhoto`
+    // strips exactly the metadata the wall is decided from, which is the point of
+    // the strip. Then place, then normalise — in that order, and never the other.
+    const read = await Promise.all(files.map((f) => readCaptureFacts(f, { heightM: statedHeight })));
+    const { placed, rejected } = placePhotos(
+      placedIn(photosRef.current),
+      read.map((r) => r.facts),
     );
-    const targets = [startSlot, ...followers].slice(0, files.length);
+
     // Decode + re-encode all of them at once; each was a full serialised decode
     // before, so four photos meant four round trips of nothing happening.
-    // The pose is read from the ORIGINAL file: normalizePhoto strips the metadata
-    // it comes from, which is the whole point of the strip.
     const prepared = await Promise.all(
-      targets.map(async (_, i) => ({
-        blob: await normalizePhoto(files[i]),
-        pose: await readCapturePose(files[i], { heightM: statedHeight }),
-      })),
+      placed.map(async (p) => ({ p, blob: await normalizePhoto(files[p.index]) })),
     );
-    for (let i = 0; i < targets.length; i++) {
-      await persistBlob(targets[i], prepared[i].blob, prepared[i].pose);
+    for (const { p, blob } of prepared) {
+      await persistPhoto(p.slot, blob, read[p.index].pose, p.by, p.clashedWith);
     }
-    const spare = files.length - targets.length;
+
+    const walls = placed.map((p) => labelOf(p.slot)).join(', ');
+    const compass = placed.filter((p) => p.by === 'bearing').length;
+    const timed = placed.filter((p) => p.by === 'time').length;
+    const clashes = placed.filter((p) => p.clashedWith);
     setAnnounce(
-      `${targets.length} photo${targets.length > 1 ? 's' : ''} added: ${targets.map(labelOf).join(', ')}.` +
-        (spare > 0 ? ` ${spare} could not be added — all four walls are already filled.` : ''),
+      [
+        `${placed.length} photo${placed.length > 1 ? 's' : ''} added: ${walls}.`,
+        compass > 0 ? `${compass} placed from the photo’s own compass.` : '',
+        timed > 0 ? `Ordered by when they were taken.` : '',
+        ...clashes.map(
+          (p) => `${labelOf(p.slot)} may be a second photo of ${labelOf(p.clashedWith!)} — check it.`,
+        ),
+        rejected.length
+          ? `${rejected.length} could not be added — all four walls already have a photo.`
+          : '',
+      ]
+        .filter(Boolean)
+        .join(' '),
     );
   }
 
-  async function removeSlot(slot: CaptureSlot) {
+  /** Replace one wall's photo in place. Distinct from `addFiles`, which would
+   *  auto-place it: the user pointed at a card, so the wall is already decided. */
+  async function replacePhoto(slot: CaptureSlot, list: FileList | File[] | null) {
+    const file = Array.from(list ?? []).filter(isAcceptedPhoto)[0];
+    if (!file) {
+      setAnnounce('Danmu can’t read that kind of file. Choose a photo — JPEG, PNG, WebP or HEIC.');
+      return;
+    }
+    const { pose } = await readCaptureFacts(file, { heightM: statedHeight });
+    await persistPhoto(slot, await normalizePhoto(file), pose, 'manual');
+    setAnnounce(`${labelOf(slot)} photo replaced.`);
+  }
+
+  async function removePhoto(slot: CaptureSlot) {
     if (!roomId) return;
     await roomStore.deleteCapture(roomId, slot);
-    const retiring = previewsRef.current[slot];
-    setBlobs((p) => ({ ...p, [slot]: null }));
-    setPreviews((p) => ({ ...p, [slot]: null }));
-    setQualities((q) => ({ ...q, [slot]: null }));
+    const retiring = photosRef.current[slot]?.url;
+    setPhotos((p) => ({ ...p, [slot]: null }));
     if (retiring) URL.revokeObjectURL(retiring);
     setAnnounce(`${labelOf(slot)} photo removed.`);
   }
 
-  async function moveSlot(from: CaptureSlot, to: CaptureSlot) {
+  async function movePhoto(from: CaptureSlot, to: CaptureSlot) {
     if (!roomId || from === to) return;
-    const fromBlob = blobs[from];
-    const toBlob = blobs[to];
-    if (!fromBlob) return;
-    await roomStore.saveCapture(roomId, { slot: to, blob: fromBlob, takenAt: Date.now() });
-    if (toBlob) {
-      await roomStore.saveCapture(roomId, { slot: from, blob: toBlob, takenAt: Date.now() });
-    } else {
-      // Moving onto an empty wall vacates the source. Without this the photo
-      // stayed in IndexedDB, so a reload showed the same shot in BOTH slots and
-      // fed a duplicate wall into detection.
-      await roomStore.deleteCapture(roomId, from);
-    }
-    setBlobs((p) => ({ ...p, [from]: toBlob, [to]: fromBlob }));
-    setPreviews((p) => ({ ...p, [from]: p[to], [to]: p[from] }));
-    // The quality read travels with its photo. It used to stay behind and end up
-    // describing a different image.
-    setQualities((p) => ({ ...p, [from]: p[to], [to]: p[from] }));
-    setAnnounce(toBlob ? `Swapped ${labelOf(from)} and ${labelOf(to)}.` : `Moved photo to ${labelOf(to)}.`);
+    const moving = photosRef.current[from];
+    if (!moving) return;
+    const displaced = photosRef.current[to];
+    // One store operation rather than two saves and a delete: `reslotCaptures`
+    // carries the whole record — pose included — and writes before it deletes.
+    // The version this replaces re-wrote `{ slot, blob, takenAt }` and dropped
+    // the pose, so reordering photos threw away the focal length, the tilt, and
+    // the bearing.
+    const mapping: Partial<Record<CaptureSlot, CaptureSlot>> = {};
+    mapping[from] = to;
+    if (displaced) mapping[to] = from;
+    await roomStore.reslotCaptures(roomId, mapping);
+    setPhotos((p) => ({
+      ...p,
+      [from]: displaced ? { ...displaced, by: 'manual' } : null,
+      [to]: { ...moving, by: 'manual' },
+    }));
+    setAnnounce(
+      displaced ? `Swapped ${labelOf(from)} and ${labelOf(to)}.` : `Moved photo to ${labelOf(to)}.`,
+    );
   }
 
-  const filled = SLOT_IDS.filter((id) => previews[id]).length;
-  const allCaptured = filled === SLOT_IDS.length;
+  /** Turn every label one wall round. The set stays four consecutive walls in
+   *  order; only where it starts changes — and because the anchor is derived from
+   *  where the photos now sit, the next photo to arrive follows the correction
+   *  without anything having to remember it. */
+  async function rotateAll(steps: number) {
+    if (!roomId) return;
+    const mapping: Partial<Record<CaptureSlot, CaptureSlot>> = {};
+    for (const s of SLOT_ORDER) mapping[s] = rotateSlot(s, steps);
+    await roomStore.reslotCaptures(roomId, mapping);
+    setPhotos((prev) => {
+      const next = emptyPhotos();
+      for (const s of SLOT_ORDER) {
+        const p = prev[s];
+        if (!p) continue;
+        next[rotateSlot(s, steps)] = {
+          ...p,
+          by: 'manual',
+          // The clash travels with the pair. Rotating the labels does not make two
+          // photos of one wall into two walls.
+          clashedWith: p.clashedWith ? rotateSlot(p.clashedWith, steps) : undefined,
+        };
+      }
+      return next;
+    });
+    setAnnounce(`Walls turned ${steps > 0 ? 'forwards' : 'back'} one.`);
+  }
+
+  const filledSlots = SLOT_ORDER.filter((s) => photos[s]);
+  const filled = filledSlots.length;
   const anyCaptured = filled > 0;
-  const flaggedCount = SLOT_IDS.filter((id) => {
-    const q = qualities[id];
+  const allCaptured = filled === SLOT_ORDER.length;
+  const flaggedCount = filledSlots.filter((s) => {
+    const q = photos[s]!.quality;
     return !!q && !q.flags.includes('ok');
   }).length;
+  // Which wall the camera is shooting next, from the same function that places an
+  // upload — so the viewfinder's promise and the ingest cannot disagree.
+  const nextSlot = useMemo(
+    () => placePhotos(placedIn(photos), [{}]).placed[0]?.slot ?? null,
+    [photos],
+  );
+  /** Only worth showing when the walls are actually different lengths; in a square
+   *  room every rotation measures the same and the number would be noise. */
+  const spanLabel = (slot: CaptureSlot) =>
+    room && room.width !== room.depth ? formatDim(wallSpan(slot, room) * 1000, dimUnit) : null;
 
   // Arriving here without a room (a shared link, a cleared browser) used to do
   // nothing at all — every upload silently no-oped.
@@ -262,31 +385,16 @@ export default function CapturePage() {
     </button>
   );
 
-  const slotCards = (compact: boolean) =>
-    CAPTURE_SLOTS.map((slot) => (
-      <SlotCard
-        key={slot.id}
-        slot={slot}
-        url={previews[slot.id]}
-        quality={qualities[slot.id]}
-        isTarget={source === 'camera' && target === slot.id}
-        compact={compact}
-        filledMap={previews}
-        onFiles={(list) => addFiles(slot.id, list)}
-        onRemove={() => removeSlot(slot.id)}
-        onMoveTo={(to) => moveSlot(slot.id, to)}
-        draggingFrom={draggingFrom}
-        setDraggingFrom={setDraggingFrom}
-        onDropFrom={(from) => moveSlot(from, slot.id)}
-      />
-    ));
-
   const method = (
     <div style={{ padding: narrow ? '12px 14px 0' : '14px 16px 0' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
         <Icon name="info" size={14} color="var(--accent-text)" style={{ marginTop: 2 }} />
-        <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.45, color: 'var(--ink-2)' }}>
-          {CAPTURE_METHOD} <span style={{ color: 'var(--ink-3)' }}>One photo is enough to start; four gets the closest room.</span>
+        <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.45, color: 'var(--ink-2)', minWidth: 0 }}>
+          {CAPTURE_METHOD}{' '}
+          <span style={{ color: 'var(--ink-3)' }}>
+            One photo is enough to start; four gets the closest room. Add them in any order — each photo’s own compass
+            names its wall where it has one.
+          </span>
         </p>
       </div>
       {/* "Chest height" above is the one number the geometry engine cannot see and
@@ -324,24 +432,48 @@ export default function CapturePage() {
     </div>
   );
 
+  const gallery = (compact: boolean) => (
+    <>
+      {filledSlots.map((slot) => (
+        <PhotoCard
+          key={slot}
+          slot={slot}
+          photo={photos[slot]!}
+          span={spanLabel(slot)}
+          compact={compact}
+          filled={photos}
+          isNext={source === 'camera' && nextSlot === slot}
+          onReplace={(list) => replacePhoto(slot, list)}
+          onRemove={() => removePhoto(slot)}
+          onMoveTo={(to) => movePhoto(slot, to)}
+          draggingFrom={draggingFrom}
+          setDraggingFrom={setDraggingFrom}
+          onDropFrom={(from) => movePhoto(from, slot)}
+        />
+      ))}
+      {!allCaptured && <AddTile compact={compact} first={!anyCaptured} onFiles={addFiles} />}
+    </>
+  );
+
   const cameraPanel = (
     <CameraPanel
-      targetLabel={labelOf(target)}
-      target={target}
-      onSetTarget={setTarget}
+      nextSlot={nextSlot}
       onStart={requestAccess}
       onCapture={(blob) => {
+        if (!nextSlot) return;
         // A canvas snapshot carries no EXIF, so the pose here is only what the
         // device measured — the tilt an uploaded photo can never tell us, and
-        // the height the user gave us.
+        // the height the user gave us. The WALL is arrival order, which on this
+        // path is the strongest signal there is: the instruction on screen is
+        // telling them to make it true, and they are standing in the room.
         void (async () => {
-          const pose = await readCapturePose(blob, {
+          const { pose } = await readCaptureFacts(blob, {
             tiltDeg: tilt ?? undefined,
             heightM: statedHeight,
           });
-          await persistBlob(target, blob, pose);
+          await persistPhoto(nextSlot, blob, pose, 'order');
         })();
-        setAnnounce(`Photo taken for ${labelOf(target)}.`);
+        setAnnounce(`Photo taken for ${labelOf(nextSlot)}.`);
       }}
       onUseUpload={() => setSource('upload')}
     />
@@ -359,8 +491,8 @@ export default function CapturePage() {
       {/* TOP BAR — .chrome-bar wraps to a second row instead of crushing the
           forward action off a 390px screen. */}
       <div className="chrome-bar">
-        {/* The mark links here: `persistBlob` writes every shot to IndexedDB as it
-            is taken, so leaving this screen costs nothing. */}
+        {/* The mark links here: `persistPhoto` writes every shot to IndexedDB as
+            it is taken, so leaving this screen costs nothing. */}
         <FlowBarLead onBack={() => router.back()} markHref="/workspace">
           <span style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 700 }}>Photograph your room</span>
         </FlowBarLead>
@@ -395,12 +527,12 @@ export default function CapturePage() {
       </div>
 
       {narrow && source === 'camera' ? (
-        // Phone + camera: the viewfinder gets the screen, the walls become a
+        // Phone + camera: the viewfinder gets the screen, the photos become a
         // filmstrip under the shutter. A 360px side rail here left ~30px for the
-        // grid the old copy told people to click.
+        // gallery the old copy told people to click.
         <>
           <div style={{ display: 'flex', flexDirection: 'column', minHeight: 320 }}>{cameraPanel}</div>
-          <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '10px 14px' }}>{slotCards(true)}</div>
+          <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '10px 14px' }}>{gallery(true)}</div>
         </>
       ) : (
         <div
@@ -409,26 +541,34 @@ export default function CapturePage() {
           className={`split${source === 'camera' ? ' split--stack' : ''}`}
           style={{ flex: 1, gridTemplateColumns: source === 'camera' ? '1fr 360px' : '1fr', minHeight: 0 }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: 'auto' }}>
             {method}
+            {anyCaptured && (
+              <WallControls
+                filled={filled}
+                square={!!room && room.width === room.depth}
+                onRotate={rotateAll}
+              />
+            )}
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gridTemplateRows: narrow ? 'auto auto' : '1fr 1fr',
+                // auto-fill, not two fixed columns: the gallery now holds one to
+                // four cards plus an add tile, and a 2×2 grid left a lone photo
+                // occupying a quarter of the screen next to three empty cells.
+                gridTemplateColumns: 'repeat(auto-fill, minmax(min(220px, 100%), 1fr))',
                 gap: 8,
                 padding: narrow ? 14 : 16,
+                alignContent: 'start',
                 flex: 1,
                 minHeight: 0,
               }}
             >
-              {slotCards(false)}
+              {gallery(false)}
             </div>
           </div>
 
-          {source === 'camera' && (
-            <div className="rail rail--right">{cameraPanel}</div>
-          )}
+          {source === 'camera' && <div className="rail rail--right">{cameraPanel}</div>}
         </div>
       )}
 
@@ -466,171 +606,133 @@ function photoChrome(): CSSProperties {
   };
 }
 
-function SlotCard({
-  slot,
-  url,
-  quality,
-  isTarget,
-  compact,
-  filledMap,
-  onFiles,
-  onRemove,
-  onMoveTo,
-  draggingFrom,
-  setDraggingFrom,
-  onDropFrom,
+/** Turn the whole set of labels round by one wall.
+ *
+ *  This is the control the no-bearing case needs, and the one a bad magnetometer
+ *  reading needs too. A set can only ever be wrong by a whole number of
+ *  quarter-turns — the photos are four consecutive walls whatever else is true —
+ *  so one control fixes every case of it at once. */
+function WallControls({
+  filled,
+  square,
+  onRotate,
 }: {
-  slot: SlotDef;
-  url: string | null;
-  quality: Quality | null;
-  isTarget: boolean;
+  filled: number;
+  square: boolean;
+  onRotate: (steps: number) => void;
+}) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        flexWrap: 'wrap',
+        padding: '12px 16px 0',
+      }}
+    >
+      <span style={{ fontSize: 12.5, color: 'var(--ink-2)', minWidth: 0 }}>
+        {square
+          ? 'Wrong wall on a photo? Move it, or turn the whole set round.'
+          : 'Check each photo against the wall length beside it — if the whole set is one wall out, turn it round.'}
+      </span>
+      <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
+        <button
+          className="ds-btn"
+          style={{ height: 30, fontSize: 12 }}
+          disabled={filled === 0}
+          onClick={() => onRotate(-1)}
+          title="Every photo moves back one wall"
+        >
+          <Icon name="rotate-ccw" size={12} />
+          Back one
+        </button>
+        <button
+          className="ds-btn"
+          style={{ height: 30, fontSize: 12 }}
+          disabled={filled === 0}
+          onClick={() => onRotate(1)}
+          title="Every photo moves on one wall"
+        >
+          <Icon name="rotate-cw" size={12} />
+          On one
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** The way photos get in, now that there are no bays to drop them onto. */
+function AddTile({
+  compact,
+  first,
+  onFiles,
+}: {
   compact: boolean;
-  filledMap: Record<CaptureSlot, string | null>;
+  first: boolean;
   onFiles: (list: FileList | File[] | null) => void;
-  onRemove: () => void;
-  onMoveTo: (to: CaptureSlot) => void;
-  draggingFrom: CaptureSlot | null;
-  setDraggingFrom: (s: CaptureSlot | null) => void;
-  onDropFrom: (from: CaptureSlot) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
 
-  const dropProps = {
-    onDragOver: (e: React.DragEvent) => {
-      e.preventDefault();
-      setOver(true);
-    },
-    onDragLeave: () => setOver(false),
-    onDrop: (e: React.DragEvent) => {
-      e.preventDefault();
-      setOver(false);
-      // External file drop — all of them, not just the first.
-      const files = e.dataTransfer.files;
-      if (files && files.length) {
-        onFiles(files);
-        return;
-      }
-      if (draggingFrom && draggingFrom !== slot.id) onDropFrom(draggingFrom);
-    },
-  };
-
   return (
     <div
-      {...dropProps}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        if (e.dataTransfer.files?.length) onFiles(e.dataTransfer.files);
+      }}
       style={{
-        position: 'relative',
         display: 'flex',
         borderRadius: 'var(--r-3)',
-        background: url ? 'var(--ink)' : 'var(--paper-2)',
-        border: over || isTarget ? '2px solid var(--accent)' : url ? '1px solid var(--edge)' : '1px dashed var(--edge)',
+        background: 'var(--paper-2)',
+        border: over ? '2px solid var(--accent)' : '1px dashed var(--edge)',
         minHeight: compact ? 96 : 132,
-        ...(compact ? { flex: '0 0 148px' } : { minWidth: 0 }),
+        // The first tile is the whole screen's call to action, so it may run wider
+        // than one column; every later one is just the next card along.
+        ...(compact ? { flex: '0 0 148px' } : { minWidth: 0, ...(first ? { gridColumn: '1 / -1' } : {}) }),
       }}
     >
-      {url ? (
-        <>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={url}
-            alt={`Your photo of ${slot.label}`}
-            draggable
-            onDragStart={(e) => {
-              setDraggingFrom(slot.id);
-              e.dataTransfer.effectAllowed = 'move';
-            }}
-            onDragEnd={() => setDraggingFrom(null)}
-            style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit', cursor: 'grab' }}
-          />
-
-          <span style={{ ...photoChrome(), position: 'absolute', top: 8, left: 8, cursor: 'default' }}>
-            <Icon name="check" size={11} color="var(--on-ink)" />
-            {slot.label}
+      <button
+        type="button"
+        className="slot-card"
+        onClick={() => inputRef.current?.click()}
+        aria-label="Add photos of your room. We work out which wall each one is."
+        style={{
+          flex: 1,
+          minWidth: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 5,
+          padding: compact ? 8 : 18,
+          background: 'transparent',
+          border: 0,
+          borderRadius: 'inherit',
+          cursor: 'pointer',
+          textAlign: 'center',
+        }}
+      >
+        <Icon name="plus" size={compact ? 18 : 22} color="var(--ink-3)" />
+        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>
+          {first ? 'Add photos' : 'Add another'}
+        </span>
+        {!compact && (
+          <span style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.35 }}>
+            Tap to choose, or drop them here. Up to four — one per wall.
           </span>
-
-          <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4 }}>
-            <button type="button" style={photoChrome()} onClick={() => inputRef.current?.click()}>
-              Replace
-            </button>
-            {/* There was previously no way to take a photo back out — someone who
-                uploaded a shot with family in it was stuck with it. */}
-            <button type="button" style={photoChrome()} onClick={onRemove}>
-              Remove
-            </button>
-            {/* Reordering was drag-only, i.e. impossible without a mouse. */}
-            <MoveMenu slot={slot} filledMap={filledMap} onMoveTo={onMoveTo} />
-          </div>
-
-          <div style={{ position: 'absolute', bottom: 8, left: 8, right: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {quality ? (
-              quality.flags.map((f) => {
-                const good = flagTone(f) === 'good';
-                return (
-                  <span
-                    key={f}
-                    title={flagHelp(f)}
-                    style={{
-                      ...photoChrome(),
-                      cursor: 'default',
-                      background: good ? 'var(--success-text)' : 'var(--warn)',
-                      color: 'var(--on-accent)',
-                    }}
-                  >
-                    {/* Icon + words: the badge used to lean on colour and a bare
-                        ✓ / ⚠ glyph, which renders differently on every platform. */}
-                    <Icon name={good ? 'check' : 'info'} size={11} color="var(--on-accent)" />
-                    {flagLabel(f)}
-                    <span className="sr-only"> — {flagHelp(f)}</span>
-                  </span>
-                );
-              })
-            ) : (
-              <span role="status" aria-live="polite" style={{ ...photoChrome(), cursor: 'default' }}>
-                Checking this photo…
-              </span>
-            )}
-          </div>
-        </>
-      ) : (
-        <button
-          type="button"
-          className="slot-card"
-          onClick={() => inputRef.current?.click()}
-          aria-label={`${slot.label}, ${slot.turn}. ${slot.instruction} Activate to choose photos.`}
-          style={{
-            flex: 1,
-            minWidth: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 5,
-            padding: compact ? 8 : 14,
-            background: 'transparent',
-            border: 0,
-            borderRadius: 'inherit',
-            cursor: 'pointer',
-            textAlign: 'center',
-          }}
-        >
-          <Icon name="plus" size={compact ? 18 : 22} color="var(--ink-3)" />
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>
-            {slot.label}
-            {!compact && <span style={{ fontWeight: 600, color: 'var(--ink-2)' }}> · {slot.turn}</span>}
-          </span>
-          {!compact && (
-            <>
-              {/* The instruction existed in the data model and was never rendered. */}
-              <span style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.35 }}>{slot.instruction}</span>
-              <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>Tap to choose photos, or drop them here</span>
-            </>
-          )}
-        </button>
-      )}
+        )}
+      </button>
 
       {/* .sr-only, never display:none — a hidden-by-display file input is gone
           from the accessibility tree entirely. `multiple` so one pick can fill
-          several walls. */}
+          every wall at once. */}
       <input
         ref={inputRef}
         type="file"
@@ -639,9 +741,162 @@ function SlotCard({
         accept={ACCEPTED_PHOTO_TYPES.join(',')}
         multiple
         className="sr-only"
-        aria-label={`Choose photos for ${slot.label}`}
+        aria-label="Choose photos of your room"
         onChange={(e) => {
           onFiles(e.target.files);
+          e.target.value = '';
+        }}
+      />
+    </div>
+  );
+}
+
+function PhotoCard({
+  slot,
+  photo,
+  span,
+  compact,
+  filled,
+  isNext,
+  onReplace,
+  onRemove,
+  onMoveTo,
+  draggingFrom,
+  setDraggingFrom,
+  onDropFrom,
+}: {
+  slot: CaptureSlot;
+  photo: Photo;
+  span: string | null;
+  compact: boolean;
+  filled: PhotoMap;
+  isNext: boolean;
+  onReplace: (list: FileList | File[] | null) => void;
+  onRemove: () => void;
+  onMoveTo: (to: CaptureSlot) => void;
+  draggingFrom: CaptureSlot | null;
+  setDraggingFrom: (s: CaptureSlot | null) => void;
+  onDropFrom: (from: CaptureSlot) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [over, setOver] = useState(false);
+  const label = labelOf(slot);
+
+  return (
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        // A file dropped onto a card replaces that card's photo — the wall is
+        // already decided by where it landed.
+        if (e.dataTransfer.files?.length) {
+          onReplace(e.dataTransfer.files);
+          return;
+        }
+        if (draggingFrom && draggingFrom !== slot) onDropFrom(draggingFrom);
+      }}
+      style={{
+        position: 'relative',
+        display: 'flex',
+        borderRadius: 'var(--r-3)',
+        background: 'var(--ink)',
+        border: over || isNext ? '2px solid var(--accent)' : '1px solid var(--edge)',
+        minHeight: compact ? 96 : 132,
+        ...(compact ? { flex: '0 0 148px' } : { minWidth: 0 }),
+      }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={photo.url}
+        alt={`Your photo of ${label}`}
+        draggable
+        onDragStart={(e) => {
+          setDraggingFrom(slot);
+          e.dataTransfer.effectAllowed = 'move';
+        }}
+        onDragEnd={() => setDraggingFrom(null)}
+        style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit', cursor: 'grab' }}
+      />
+
+      <span style={{ ...photoChrome(), position: 'absolute', top: 8, left: 8, cursor: 'default' }}>
+        <Icon name="check" size={11} color="var(--on-ink)" />
+        {label}
+        {/* Derived from the room's own width and depth — never a number typed in
+            beside the thing it describes. It is what makes "turn the set round"
+            a decision the user can take rather than a guess. */}
+        {span && <span style={{ fontWeight: 600, opacity: 0.8 }}>· {span} wall</span>}
+      </span>
+
+      <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <button type="button" style={photoChrome()} onClick={() => inputRef.current?.click()}>
+          Replace
+        </button>
+        {/* There was previously no way to take a photo back out — someone who
+            uploaded a shot with family in it was stuck with it. */}
+        <button type="button" style={photoChrome()} onClick={onRemove}>
+          Remove
+        </button>
+        {/* Reordering was drag-only, i.e. impossible without a mouse. */}
+        <MoveMenu slot={slot} filled={filled} onMoveTo={onMoveTo} />
+      </div>
+
+      <div style={{ position: 'absolute', bottom: 8, left: 8, right: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {photo.clashedWith && (
+          <span
+            title={`This photo’s compass pointed at ${labelOf(photo.clashedWith)}, which already had one. It may be a second photo of the same wall.`}
+            style={{ ...photoChrome(), cursor: 'default', background: 'var(--warn)', color: 'var(--on-accent)' }}
+          >
+            <Icon name="info" size={11} color="var(--on-accent)" />
+            Maybe {labelOf(photo.clashedWith)} again
+          </span>
+        )}
+        {photo.by && (
+          <span style={{ ...photoChrome(), cursor: 'default', background: 'var(--paper)', color: 'var(--ink-2)' }}>
+            {REASON[photo.by]}
+          </span>
+        )}
+        {photo.quality ? (
+          photo.quality.flags.map((f) => {
+            const good = flagTone(f) === 'good';
+            return (
+              <span
+                key={f}
+                title={flagHelp(f)}
+                style={{
+                  ...photoChrome(),
+                  cursor: 'default',
+                  background: good ? 'var(--success-text)' : 'var(--warn)',
+                  color: 'var(--on-accent)',
+                }}
+              >
+                {/* Icon + words: the badge used to lean on colour and a bare
+                    ✓ / ⚠ glyph, which renders differently on every platform. */}
+                <Icon name={good ? 'check' : 'info'} size={11} color="var(--on-accent)" />
+                {flagLabel(f)}
+                <span className="sr-only"> — {flagHelp(f)}</span>
+              </span>
+            );
+          })
+        ) : (
+          <span role="status" aria-live="polite" style={{ ...photoChrome(), cursor: 'default' }}>
+            Checking this photo…
+          </span>
+        )}
+      </div>
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept={ACCEPTED_PHOTO_TYPES.join(',')}
+        className="sr-only"
+        aria-label={`Choose a different photo for ${label}`}
+        onChange={(e) => {
+          onReplace(e.target.files);
           e.target.value = '';
         }}
       />
@@ -653,16 +908,16 @@ function SlotCard({
  *  only way to get a photo onto the right wall. */
 function MoveMenu({
   slot,
-  filledMap,
+  filled,
   onMoveTo,
 }: {
-  slot: SlotDef;
-  filledMap: Record<CaptureSlot, string | null>;
+  slot: CaptureSlot;
+  filled: PhotoMap;
   onMoveTo: (to: CaptureSlot) => void;
 }) {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
-  const others = CAPTURE_SLOTS.filter((s) => s.id !== slot.id);
+  const others = SLOT_ORDER.filter((s) => s !== slot);
 
   return (
     <div
@@ -691,7 +946,7 @@ function MoveMenu({
         <div
           className="popover"
           role="menu"
-          aria-label={`Move the ${slot.label} photo`}
+          aria-label={`Move the ${labelOf(slot)} photo`}
           style={{
             position: 'absolute',
             top: 'calc(100% + 6px)',
@@ -709,19 +964,19 @@ function MoveMenu({
           </span>
           {others.map((o) => (
             <button
-              key={o.id}
+              key={o}
               type="button"
               role="menuitem"
               className="list-row"
               style={{ fontSize: 12.5 }}
               onClick={() => {
-                onMoveTo(o.id);
+                onMoveTo(o);
                 setOpen(false);
               }}
             >
-              {o.label}
+              {labelOf(o)}
               <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--ink-3)' }}>
-                {filledMap[o.id] ? 'swap' : 'empty'}
+                {filled[o] ? 'swap' : 'empty'}
               </span>
             </button>
           ))}
@@ -763,16 +1018,18 @@ const CAMERA_ERROR_FALLBACK = {
 };
 
 function CameraPanel({
-  target,
-  targetLabel,
-  onSetTarget,
+  nextSlot,
   onCapture,
   onStart,
   onUseUpload,
 }: {
-  target: CaptureSlot;
-  targetLabel: string;
-  onSetTarget: (s: CaptureSlot) => void;
+  /** The wall the next shot goes on, or null when all four have a photo. Decided
+   *  by `placePhotos`, not by a picker — the "wall to shoot" segmented control
+   *  existed to drive the four-bay grid, and asking someone to keep a bookkeeping
+   *  promise while turning on the spot is exactly the ritual this phase retires.
+   *  Arrival order is the answer here, and the instruction below is what makes
+   *  it true. */
+  nextSlot: CaptureSlot | null;
   onCapture: (blob: Blob) => void;
   /** Runs alongside the camera permission prompt. iOS only exposes the
    *  orientation sensors from inside a user gesture, and "turn on the camera" is
@@ -786,6 +1043,7 @@ function CameraPanel({
   const [phase, setPhase] = useState<'idle' | 'starting' | 'live'>('idle');
   const [errorName, setErrorName] = useState<string | null>(null);
   const [shooting, setShooting] = useState(false);
+  const nextLabel = nextSlot ? labelOf(nextSlot) : null;
 
   // Never leave the camera light on because someone switched tab or navigated.
   useEffect(
@@ -820,7 +1078,7 @@ function CameraPanel({
   }
 
   async function shoot() {
-    if (!videoRef.current || shooting) return;
+    if (!videoRef.current || shooting || !nextSlot) return;
     setShooting(true);
     try {
       onCapture(await snapToBlob(videoRef.current));
@@ -832,26 +1090,23 @@ function CameraPanel({
   const head = (
     <div className="section">
       <span className="ds-label">Camera</span>
-      <p style={{ fontSize: 12, color: 'var(--ink-2)', margin: '6px 0 10px', lineHeight: 1.45 }}>
+      <p style={{ fontSize: 12, color: 'var(--ink-2)', margin: '6px 0 8px', lineHeight: 1.45 }}>
         {CAPTURE_METHOD}
       </p>
-      {/* `wrap` for headroom, not for a bug that already happened: four "Wall n"
-          labels come to about 266px, and on a 320px phone — stacked, so this is
-          full width — the section leaves 288px. It fits by roughly 22px, and it
-          fits only if Nunito has loaded; the fallback stack (`ui-rounded`,
-          `-apple-system`) has its own metrics, and a segment that outgrows its
-          box does not clip, it prints over the segment beside it. 22px is not a
-          margin worth betting the one screen this flow is built for on.
-          `minItem` is short because the labels are — 4-across wherever they fit,
-          2×2 when they don't. */}
-      <Segmented
-        ariaLabel="Wall to shoot"
-        value={target}
-        onChange={onSetTarget}
-        wrap
-        minItem={68}
-        options={CAPTURE_SLOTS.map((s) => ({ value: s.id, label: s.label }))}
-      />
+      {/* What used to be a four-way "Wall to shoot" picker. The sequence is the
+          answer, so the panel states where you are in it instead of asking. */}
+      <p style={{ fontSize: 12.5, color: 'var(--ink)', margin: 0, lineHeight: 1.45 }}>
+        {nextSlot ? (
+          <>
+            <strong>Next: {nextLabel}</strong>{' '}
+            <span style={{ color: 'var(--ink-2)' }}>{turnOf(nextSlot)}</span>
+          </>
+        ) : (
+          <span style={{ color: 'var(--ink-2)' }}>
+            All four walls have a photo. Remove one to retake it.
+          </span>
+        )}
+      </p>
     </div>
   );
 
@@ -895,7 +1150,9 @@ function CameraPanel({
       <>
         {head}
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}>
-          <h2 style={{ fontSize: 15, color: 'var(--ink)' }}>Shoot {targetLabel} with this device</h2>
+          <h2 style={{ fontSize: 15, color: 'var(--ink)' }}>
+            {nextLabel ? `Shoot ${nextLabel} with this device` : 'Every wall has a photo'}
+          </h2>
           <p style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.5, margin: 0 }}>
             Your photos stay on this device — there is nowhere for them to go. Your browser will ask permission when you
             turn the camera on.
@@ -922,25 +1179,25 @@ function CameraPanel({
           ref={videoRef}
           playsInline
           muted
-          aria-label={`Live camera preview, aimed at ${targetLabel}`}
+          aria-label={nextLabel ? `Live camera preview, aimed at ${nextLabel}` : 'Live camera preview'}
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         />
         <span style={{ ...photoChrome(), position: 'absolute', top: 8, left: 8, cursor: 'default' }}>
-          Shooting · {targetLabel}
+          {nextLabel ? `Shooting · ${nextLabel}` : 'All four walls done'}
         </span>
         <div style={{ position: 'absolute', bottom: 16, left: 0, right: 0, display: 'flex', justifyContent: 'center' }}>
           <button
             onClick={shoot}
-            disabled={shooting}
-            aria-label={`Take the photo for ${targetLabel}`}
+            disabled={shooting || !nextSlot}
+            aria-label={nextLabel ? `Take the photo for ${nextLabel}` : 'All four walls already have a photo'}
             style={{
               width: 60,
               height: 60,
               borderRadius: 'var(--r-full)',
               background: 'var(--paper)',
               border: '4px solid var(--accent-tint-strong)',
-              cursor: shooting ? 'progress' : 'pointer',
-              opacity: shooting ? 0.6 : 1,
+              cursor: shooting ? 'progress' : nextSlot ? 'pointer' : 'not-allowed',
+              opacity: shooting || !nextSlot ? 0.6 : 1,
             }}
           >
             <div style={{ width: 44, height: 44, borderRadius: 'var(--r-full)', background: 'var(--accent)', margin: 'auto' }} />
