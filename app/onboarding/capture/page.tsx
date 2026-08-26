@@ -344,7 +344,11 @@ export default function CapturePage() {
   /** Only worth showing when the walls are actually different lengths; in a square
    *  room every rotation measures the same and the number would be noise. */
   const spanLabel = (slot: CaptureSlot) =>
-    room && room.width !== room.depth ? formatDim(wallSpan(slot, room) * 1000, dimUnit) : null;
+    room && room.width !== room.depth
+      ? // `formatDim` returns the number alone, so the unit has to come from the
+        // setting beside it — a bare "5.60 wall" is not a measurement.
+        `${formatDim(wallSpan(slot, room) * 1000, dimUnit)} ${dimUnit}`
+      : null;
 
   // Arriving here without a room (a shared link, a cleared browser) used to do
   // nothing at all — every upload silently no-oped.
@@ -411,9 +415,10 @@ export default function CapturePage() {
           paddingLeft: 22,
         }}
       >
-        <label htmlFor="cam-height" style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>
-          Phone height off the floor
-        </label>
+        {/* A span, not a label: NumberField takes no `id`, so the `htmlFor` that
+            used to be here pointed at nothing. The field carries its own
+            accessible name via `ariaLabel`. */}
+        <span style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>Phone height off the floor</span>
         <NumberField
           value={heightDraft}
           onChange={setHeightDraft}
@@ -442,7 +447,6 @@ export default function CapturePage() {
           span={spanLabel(slot)}
           compact={compact}
           filled={photos}
-          isNext={source === 'camera' && nextSlot === slot}
           onReplace={(list) => replacePhoto(slot, list)}
           onRemove={() => removePhoto(slot)}
           onMoveTo={(to) => movePhoto(slot, to)}
@@ -459,20 +463,23 @@ export default function CapturePage() {
     <CameraPanel
       nextSlot={nextSlot}
       onStart={requestAccess}
-      onCapture={(blob) => {
+      // Awaited by the shutter, deliberately. The wall is now the FIRST FREE one
+      // rather than a wall the user picked, so two presses landing before the
+      // first write completes would both aim at the same slot and the second
+      // would overwrite the first — a photo lost, silently. While `target` was a
+      // picker that was merely a re-take of the wall you had chosen.
+      onCapture={async (blob) => {
         if (!nextSlot) return;
         // A canvas snapshot carries no EXIF, so the pose here is only what the
         // device measured — the tilt an uploaded photo can never tell us, and
         // the height the user gave us. The WALL is arrival order, which on this
         // path is the strongest signal there is: the instruction on screen is
         // telling them to make it true, and they are standing in the room.
-        void (async () => {
-          const { pose } = await readCaptureFacts(blob, {
-            tiltDeg: tilt ?? undefined,
-            heightM: statedHeight,
-          });
-          await persistPhoto(nextSlot, blob, pose, 'order');
-        })();
+        const { pose } = await readCaptureFacts(blob, {
+          tiltDeg: tilt ?? undefined,
+          heightM: statedHeight,
+        });
+        await persistPhoto(nextSlot, blob, pose, 'order');
         setAnnounce(`Photo taken for ${labelOf(nextSlot)}.`);
       }}
       onUseUpload={() => setSource('upload')}
@@ -556,7 +563,7 @@ export default function CapturePage() {
                 // auto-fill, not two fixed columns: the gallery now holds one to
                 // four cards plus an add tile, and a 2×2 grid left a lone photo
                 // occupying a quarter of the screen next to three empty cells.
-                gridTemplateColumns: 'repeat(auto-fill, minmax(min(220px, 100%), 1fr))',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(min(240px, 100%), 1fr))',
                 gap: 8,
                 padding: narrow ? 14 : 16,
                 alignContent: 'start',
@@ -757,7 +764,6 @@ function PhotoCard({
   span,
   compact,
   filled,
-  isNext,
   onReplace,
   onRemove,
   onMoveTo,
@@ -770,7 +776,6 @@ function PhotoCard({
   span: string | null;
   compact: boolean;
   filled: PhotoMap;
-  isNext: boolean;
   onReplace: (list: FileList | File[] | null) => void;
   onRemove: () => void;
   onMoveTo: (to: CaptureSlot) => void;
@@ -805,8 +810,8 @@ function PhotoCard({
         display: 'flex',
         borderRadius: 'var(--r-3)',
         background: 'var(--ink)',
-        border: over || isNext ? '2px solid var(--accent)' : '1px solid var(--edge)',
-        minHeight: compact ? 96 : 132,
+        border: over ? '2px solid var(--accent)' : '1px solid var(--edge)',
+        minHeight: compact ? 96 : 150,
         ...(compact ? { flex: '0 0 148px' } : { minWidth: 0 }),
       }}
     >
@@ -855,7 +860,7 @@ function PhotoCard({
             Maybe {labelOf(photo.clashedWith)} again
           </span>
         )}
-        {photo.by && (
+        {photo.by && !photo.clashedWith && (
           <span style={{ ...photoChrome(), cursor: 'default', background: 'var(--paper)', color: 'var(--ink-2)' }}>
             {REASON[photo.by]}
           </span>
@@ -1030,7 +1035,8 @@ function CameraPanel({
    *  Arrival order is the answer here, and the instruction below is what makes
    *  it true. */
   nextSlot: CaptureSlot | null;
-  onCapture: (blob: Blob) => void;
+  /** Awaited: the shutter must not fire twice into one wall. See the call site. */
+  onCapture: (blob: Blob) => void | Promise<void>;
   /** Runs alongside the camera permission prompt. iOS only exposes the
    *  orientation sensors from inside a user gesture, and "turn on the camera" is
    *  the gesture — declining just means the geometry assumes a level phone. */
@@ -1081,7 +1087,7 @@ function CameraPanel({
     if (!videoRef.current || shooting || !nextSlot) return;
     setShooting(true);
     try {
-      onCapture(await snapToBlob(videoRef.current));
+      await onCapture(await snapToBlob(videoRef.current));
     } finally {
       setShooting(false);
     }
