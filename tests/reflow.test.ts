@@ -15,11 +15,23 @@
 // each is a single property that reads as harmless to delete.
 
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = (...p: string[]) => join(process.cwd(), ...p);
 const CSS = readFileSync(root('app', 'globals.css'), 'utf8');
+
+/** A source file with its comments removed — CSS, TS and JSX alike.
+ *
+ *  Every negative assertion below has to read code rather than prose, because the
+ *  comments in this codebase NAME the thing they tell you not to write: the
+ *  ColorPicker note quotes the `width: 220` it replaced, and the shell notes name
+ *  the `rail--elastic` modifier and the `?shell=` flag whose deletion they record.
+ *  An assertion that reads the explanation fails on the explanation — which two of
+ *  these did, the first time they were written. */
+function codeOnly(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+}
 
 /** The body of one CSS rule, by exact selector. */
 function rule(selector: string): string {
@@ -362,11 +374,32 @@ describe('the studio shells', () => {
 
   it.each([
     ['shells/DockedShell.tsx', DOCKED],
-    ['shells/OverlayShell.tsx', readFileSync(root('components', 'studio', 'shells', 'OverlayShell.tsx'), 'utf8')],
+    ['StudioShell.tsx', readFileSync(root('components', 'studio', 'StudioShell.tsx'), 'utf8')],
   ])('%s measures the stacked room in dvh, not vh', (_f, src) => {
     // These rows sit inside a `100dvh` wrapper. `vh` includes the collapsing URL
     // bar, so the row was sized against a taller viewport than its own container.
     expect(src).not.toMatch(/[^d]vh\b/);
+  });
+
+  it('is the only shell — the prototype switch is gone, not merely unused', () => {
+    // Three shells were compared behind a dev-only `?shell=` flag. Two lost. A
+    // flag left behind after its comparison is a second layout nobody measures
+    // again, and `shell-variant.ts` forced `'current'` in production, so the two
+    // losers were unreachable code that still had to typecheck and be read.
+    for (const gone of ['shell-variant.ts', 'shells/ElasticShell.tsx', 'shells/OverlayShell.tsx']) {
+      expect(existsSync(root('components', 'studio', ...gone.split('/'))), `${gone} should be deleted`).toBe(false);
+    }
+    expect(codeOnly(readFileSync(root('components', 'studio', 'StudioShell.tsx'), 'utf8'))).not.toMatch(
+      /useShellVariant|\?shell=/,
+    );
+  });
+
+  it('always offers the sash on a three-column layout', () => {
+    // The sash used to be opt-in per variant. It ships now, so the only thing that
+    // withholds it is the stacked layout, where a vertical divider between rails
+    // stacked BELOW the room would resize nothing.
+    expect(DOCKED).not.toMatch(/sashable/);
+    expect(DOCKED, 'the sash is gated on layout alone').toMatch(/\{!stacked && \(\s*<RailSash/);
   });
 
   it('renders a dragged width inside the token bounds rather than instead of them', () => {
@@ -402,12 +435,16 @@ describe('the studio shells', () => {
   });
 });
 
-describe('the elastic rail asks about itself', () => {
-  it('is a query container, and only under its own modifier', () => {
-    // Scoped to `.rail--elastic`: it is a candidate, and the shell it is measured
-    // against has to stay unchanged.
-    expect(rule('.rail--elastic')).toMatch(/container-type:\s*inline-size/);
-    expect(rule('.rail')).not.toMatch(/container-type/);
+describe('the rail asks about itself', () => {
+  it('is a query container, unconditionally', () => {
+    // This spent one round behind a `.rail--elastic` modifier, because an A/B whose
+    // control drifts measures nothing. The comparison is over and this won, so it
+    // is on `.rail` itself — and the modifier must not come back, since a rail
+    // whose contents cannot ask about the rail is what `--rail-*-tight` and every
+    // dragged-narrow width would be lying about.
+    expect(rule('.rail')).toMatch(/container-type:\s*inline-size/);
+    expect(rule('.rail')).toMatch(/container-name:\s*rail/);
+    expect(codeOnly(CSS), 'the prototype modifier should be gone, not merely unselected').not.toMatch(/rail--elastic/);
   });
 
   it('actually queries it', () => {
@@ -423,8 +460,9 @@ describe('the elastic rail asks about itself', () => {
   });
 
   it('only goes tighter than the shipping floor where the contents reflow', () => {
-    // The tight tokens exist so lowering them cannot quietly move the layout that
-    // ships; they must be narrower than the ordinary floors, or they are pointless.
+    // The tight tokens are the `compact` step (1024–1279px), not a lower version of
+    // the wide widths — a 1920px window has no reason to lose 94px of Inspector.
+    // They must be narrower than the ordinary floors, or the step does nothing.
     for (const side of ['left', 'right']) {
       const tight = Number(/^(\d+)px$/.exec(token(`rail-${side}-tight`))![1]);
       const floor = railFloor(`rail-${side}`);

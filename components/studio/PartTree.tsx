@@ -255,6 +255,20 @@ export function PartTree() {
           open={sec.style}
           onToggle={() => toggle('style')}
         >
+        {/* Palettes, not names.
+            A theme is four hex values and a lighting mood. It used to present as
+            five *named* chips — "Studio Loft", "Coastal" — which name whole design
+            languages and promise a redecoration the recolour cannot deliver; the
+            swatch is both the more honest label and the more informative one, since
+            `#DCE4E2 #A9C4C0 #7C9C8E` tells you more about the result than the word
+            "Coastal" does.
+            It also fits. Labelled, these wrapped to four rows (~162px) in the
+            1024–1279px rail, which is 208px wide with 176px of content: "Warm
+            Minimal" alone is ~116px. Five 30px swatches and four gaps are 174px —
+            one row, in the narrowest rail there is.
+            The name is not lost: it is the accessible name, the tooltip, and the
+            section's collapsed `meta` above, which is where a *chosen* theme should
+            be reported anyway. */}
         <div role="group" aria-labelledby="restyle-label">
           <span id="restyle-label" className="ds-label" style={{ display: 'block', marginBottom: 8 }}>One-tap restyle</span>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -265,19 +279,52 @@ export function PartTree() {
                   key={t.id}
                   onClick={() => applyTheme(t)}
                   title={`Restyle the room — ${t.label}`}
+                  aria-label={`Restyle the room — ${t.label}`}
                   aria-pressed={on}
                   className={`ds-chip${on ? ' ds-chip--accent' : ''}`}
-                  style={{ cursor: 'pointer', height: 30, paddingLeft: 6, fontWeight: 600 }}
+                  style={{
+                    cursor: 'pointer',
+                    height: 30,
+                    width: 30,
+                    padding: 0,
+                    justifyContent: 'center',
+                    position: 'relative',
+                  }}
                 >
-                  <span style={{ display: 'inline-flex', borderRadius: 'var(--r-full)', overflow: 'hidden', width: 22, height: 12 }}>
+                  <span
+                    aria-hidden
+                    style={{
+                      display: 'inline-flex',
+                      borderRadius: 'var(--r-full)',
+                      overflow: 'hidden',
+                      width: 18,
+                      height: 18,
+                    }}
+                  >
                     {t.swatch.map((c) => (
                       <span key={c} style={{ flex: 1, background: c }} />
                     ))}
                   </span>
-                  {t.label}
-                  {/* The active chip can't be tint-and-colour only: a check mark
-                      carries the state without relying on hue. */}
-                  {on && <Icon name="check" size={11} />}
+                  {/* The active swatch can't be tint-and-border only: a check mark
+                      carries the state without relying on hue — and it sits OVER the
+                      palette rather than beside it, because a swatch-sized button has
+                      no beside. `--on-ink` on a scrim, since what is underneath is an
+                      arbitrary colour and no token can be legible on all of them. */}
+                  {on && (
+                    <span
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        display: 'grid',
+                        placeItems: 'center',
+                        borderRadius: 'inherit',
+                        background: 'rgba(0,0,0,0.42)',
+                        color: 'var(--on-ink)',
+                      }}
+                    >
+                      <Icon name="check" size={13} />
+                    </span>
+                  )}
                 </button>
               );
             })}

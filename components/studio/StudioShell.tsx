@@ -14,29 +14,14 @@
 // different between a 3D room and a 2D drawing, and pretending otherwise would
 // be the opposite mistake.
 //
-// It now also *chooses* the framing, between what ships and three candidates —
-// see `shell-variant.ts` for why the switch is here (in the real studio, over the
-// real room) rather than in three mock routes. In a production build there is one
-// shell and this is a straight call to `DockedShell`.
+// This file briefly *chose* the framing, between what shipped and three
+// candidates behind a dev-only `?shell=` flag. That comparison is settled — see
+// the header of `shells/DockedShell.tsx` for which won and why — so there is one
+// shell again and this is a straight call.
 
-import dynamic from 'next/dynamic';
 import { Fragment, type ReactNode } from 'react';
-import { useStackedStudio } from './NarrowViewportBanner';
-import { useShellVariant } from './shell-variant';
+import { useStudioLayout } from './NarrowViewportBanner';
 import { DockedShell } from './shells/DockedShell';
-
-// The two prototype-only shells, behind `next/dynamic` rather than a static
-// import. `useShellVariant` compiles down to a constant `'current'` in a
-// production build, but THIS switch reads it as runtime state, so no bundler can
-// prove the other branches dead — statically imported, both of these rode into
-// the production bundle behind a branch that can never run there. Now each is its
-// own async chunk, fetched only when a `?shell=` actually selects one.
-//
-// The cost is a dev-only frame where the prototype has not arrived yet. That is
-// the right side to pay it on: the comparison this switch exists for measures the
-// three shells against each other, and all three now load the same way.
-const ElasticShell = dynamic(() => import('./shells/ElasticShell').then((m) => m.ElasticShell), { ssr: false });
-const OverlayShell = dynamic(() => import('./shells/OverlayShell').then((m) => m.OverlayShell), { ssr: false });
 
 export function StudioShell({
   children,
@@ -47,19 +32,16 @@ export function StudioShell({
   /** Spoken while the shell decides its own shape. Names the thing being built. */
   loadingLabel: string;
 }) {
-  // Below ~1024px the rails stack under the work surface instead of squeezing it
-  // to nothing. Done in JS rather than CSS because the surface has to come FIRST
-  // in the stacked order and a media query cannot reorder an inline-styled grid.
+  // Three steps, not a boolean: below ~1024px the rails stack under the work
+  // surface instead of squeezing it to nothing, and between there and 1279px they
+  // narrow instead. Done in JS rather than CSS because the stacked order has to
+  // put the surface FIRST, and a media query cannot reorder an inline-styled grid.
   //
   // `ready` gates the first paint: without it a narrow viewport lays out the
   // three-column shell, then re-orders and re-flows once matchMedia answers.
-  const { stacked, ready } = useStackedStudio();
-  // Held behind the same gate, and for a sharper version of the same reason:
-  // painting the control shell and then swapping would re-mount the WebGL canvas
-  // and spoil the frame timings this comparison exists to collect.
-  const { variant, ready: variantReady } = useShellVariant();
+  const { layout, ready } = useStudioLayout();
 
-  if (!ready || !variantReady) {
+  if (!ready) {
     return (
       <div style={{ height: '100%', display: 'grid', placeItems: 'center', background: 'var(--paper-2)' }}>
         <span role="status" style={{ fontSize: 13, color: 'var(--ink-3)' }}>
@@ -74,16 +56,5 @@ export function StudioShell({
   // time the viewport crosses the stacking threshold and the children are
   // reordered. A `display: contents` div would also work and is one more thing to
   // be wrong about.
-  const surface = <Fragment key="surface">{children}</Fragment>;
-
-  switch (variant) {
-    case 'sash':
-      return <DockedShell surface={surface} stacked={stacked} sash widths="stored" />;
-    case 'elastic':
-      return <ElasticShell surface={surface} />;
-    case 'overlay':
-      return <OverlayShell surface={surface} stacked={stacked} />;
-    default:
-      return <DockedShell surface={surface} stacked={stacked} />;
-  }
+  return <DockedShell surface={<Fragment key="surface">{children}</Fragment>} layout={layout} />;
 }
