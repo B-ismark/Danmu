@@ -250,7 +250,9 @@ export type SlotMap<T> = Record<CaptureSlot, T | null>;
  *  decisions write onto it. Everything else rides along untouched. */
 export type Slotted = { by?: SlotSignal; clashedWith?: CaptureSlot };
 
-const emptyMap = <T>(): SlotMap<T> => ({ n: null, e: null, s: null, w: null });
+/** A set with no photos in it. Exported so the screen does not keep a second
+ *  copy of the same literal — the one place four slot ids are written down. */
+export const emptySlotMap = <T>(): SlotMap<T> => ({ n: null, e: null, s: null, w: null });
 
 /** The `from → to` mapping a rotation implies, for `roomStore.reslotCaptures`.
  *  Derived from the same `rotateSlot` the screen's own state uses, so the store
@@ -277,7 +279,7 @@ export function swapMapping<T>(
  *  becomes `manual`, because after this the reason it is where it is *is* the
  *  user; and a clash reference is relabelled along with the walls it names. */
 export function rotateSet<T extends Slotted>(map: SlotMap<T>, steps: number): SlotMap<T> {
-  const next = emptyMap<T>();
+  const next = emptySlotMap<T>();
   for (const s of SLOT_ORDER) {
     const p = map[s];
     if (!p) continue;
@@ -319,7 +321,7 @@ export function clearSlot<T extends Slotted>(map: SlotMap<T>, slot: CaptureSlot)
 
 /** Every photo, with no clash flags. */
 export function withoutClashes<T extends Slotted>(map: SlotMap<T>): SlotMap<T> {
-  const next = emptyMap<T>();
+  const next = emptySlotMap<T>();
   for (const s of SLOT_ORDER) {
     const p = map[s];
     next[s] = p ? { ...p, clashedWith: undefined } : null;

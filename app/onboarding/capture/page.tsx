@@ -19,6 +19,7 @@ import {
   SLOT_ORDER,
   clearSlot,
   describePlacement,
+  emptySlotMap,
   patchIfSame,
   placePhotos,
   rotateSet,
@@ -62,7 +63,7 @@ type Photo = {
 };
 
 type PhotoMap = SlotMap<Photo>;
-const emptyPhotos = (): PhotoMap => ({ n: null, e: null, s: null, w: null });
+const emptyPhotos = (): PhotoMap => emptySlotMap<Photo>();
 
 const labelOf = (id: CaptureSlot) => CAPTURE_SLOTS.find((s) => s.id === id)!.label;
 const turnOf = (id: CaptureSlot) => CAPTURE_SLOTS.find((s) => s.id === id)!.instruction;
