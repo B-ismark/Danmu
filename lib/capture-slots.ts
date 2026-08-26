@@ -319,8 +319,10 @@ export function clearSlot<T extends Slotted>(map: SlotMap<T>, slot: CaptureSlot)
   return next;
 }
 
-/** Every photo, with no clash flags. */
-export function withoutClashes<T extends Slotted>(map: SlotMap<T>): SlotMap<T> {
+/** Every photo, with no clash flags. Internal: `swapSet` and `clearSlot` are the
+ *  two gestures that mean the user is assigning walls themselves, and clearing the
+ *  flags is part of what each of them IS rather than a step a caller may skip. */
+function withoutClashes<T extends Slotted>(map: SlotMap<T>): SlotMap<T> {
   const next = emptySlotMap<T>();
   for (const s of SLOT_ORDER) {
     const p = map[s];

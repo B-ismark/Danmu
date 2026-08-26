@@ -21,7 +21,7 @@ import { useSettings } from '@/lib/store';
 import { useDragLive } from '@/lib/drag-live';
 import { SCENE } from '@/lib/scene-palette';
 import { rayToBoundary, obbExtentAlong, obbFromPart } from '@/lib/geometry';
-import { aabbExtents } from '@/lib/item-snap';
+import { aabbExtents, snapGuideEnds } from '@/lib/item-snap';
 import { formatDim } from '@/lib/units';
 
 const GUIDE_Y = 0.02;
@@ -31,11 +31,11 @@ const DIRS: Array<[number, number]> = [
   [0, 1],
   [0, -1],
 ];
-// Snapped-alignment greens. A separate semantic from selection / hover / invalid
-// (which come from lib/scene-palette): these say "these two edges are locked",
-// and must not read as either the terracotta selection or the sage hover.
-const SNAP_EDGE = '#1E9E54';
-const SNAP_CENTER = '#27A06A';
+// Snapped-alignment greens live in lib/scene-palette beside the rest of the
+// scene's colours — the 2D plan draws the same two guides from the same two
+// values, and a literal here was the start of a second copy.
+const SNAP_EDGE = SCENE.snapEdge;
+const SNAP_CENTER = SCENE.snapCenter;
 
 type Pt = [number, number, number];
 
@@ -88,18 +88,18 @@ export function MeasureGuides() {
       });
     }
 
-    const snaps = (live.snapLines ?? []).map((s) => ({
-      points: (s.axis === 'x'
-        ? [
-            [s.at, GUIDE_Y, s.span[0] - 0.15],
-            [s.at, GUIDE_Y, s.span[1] + 0.15],
-          ]
-        : [
-            [s.span[0] - 0.15, GUIDE_Y, s.at],
-            [s.span[1] + 0.15, GUIDE_Y, s.at],
-          ]) as [Pt, Pt],
-      center: s.kind === 'center',
-    }));
+    // Ends from `lib/item-snap.ts`, not worked out here: the plan draws the same
+    // guide, and the axis→span mapping is the part that is easy to transpose.
+    const snaps = (live.snapLines ?? []).map((s) => {
+      const { from, to } = snapGuideEnds(s);
+      return {
+        points: [
+          [from[0], GUIDE_Y, from[1]],
+          [to[0], GUIDE_Y, to[1]],
+        ] as [Pt, Pt],
+        center: s.kind === 'center',
+      };
+    });
 
     return { guides: out, snapGuides: snaps };
   }, [live, footprint, parts, dimUnit]);

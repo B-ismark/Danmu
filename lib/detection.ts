@@ -46,9 +46,6 @@ export type Detection = {
   /** Dominant colour as a #rrggbb hex. Used as a fallback when client-side pixel
    *  sampling of the photo fails (occluded / tiny region). See lib/color-sample.ts. */
   color?: string;
-  /** Stable perceptual-hash key into the local mesh cache (lib/mesh-cache.ts).
-   *  When set, 3D scene loads the cached GLB instead of the primitive shape. */
-  meshHash?: string;
 };
 
 

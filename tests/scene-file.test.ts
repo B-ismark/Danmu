@@ -192,9 +192,17 @@ describe('scene file · what never leaves', () => {
     expect(JSON.parse(json).room.createdAt).toBeUndefined();
   });
 
-  it('drops a mesh hash, which points into the exporting browser’s cache', () => {
-    const { file } = withParts([rawPart({ meshHash: 'abc123' })]);
-    expect(file.parts[0].meshHash).toBeUndefined();
+  it('ignores a key it does not know, rather than refusing the piece', () => {
+    // The general case of a test that used to name one field (`meshHash`, from the
+    // deleted mesh cache): a part is read key by key against a whitelist, so a file
+    // written by a newer build — or an older one carrying a field since removed —
+    // imports as far as this build understands it instead of failing whole.
+    const { file, dropped } = withParts([rawPart({ meshHash: 'abc123', somethingNewer: 7 })]);
+    expect(dropped).toEqual([]);
+    expect(file.parts).toHaveLength(1);
+    expect(file.parts[0]).not.toHaveProperty('meshHash');
+    expect(file.parts[0]).not.toHaveProperty('somethingNewer');
+    expect(file.parts[0].name).toBe('Sofa');
   });
 });
 

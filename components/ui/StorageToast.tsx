@@ -71,10 +71,6 @@ export function toast(spec: ToastSpec): number {
   return useToasts.getState().push(spec);
 }
 
-export function dismissToast(id: number) {
-  useToasts.getState().dismiss(id);
-}
-
 const TONE: Record<ToastTone, { border: string; lead: string }> = {
   neutral: { border: 'var(--edge)', lead: 'var(--ink)' },
   danger: { border: 'var(--danger)', lead: 'var(--danger-text)' },

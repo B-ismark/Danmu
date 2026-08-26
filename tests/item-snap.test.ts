@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { snapToNeighbors, aabbExtents } from '@/lib/item-snap';
+import { snapToNeighbors, aabbExtents, snapGuideEnds, GUIDE_OVERHANG_M } from '@/lib/item-snap';
 import type { ScenePart } from '@/lib/scene-spec';
 
 function part(p: Partial<ScenePart> & Pick<ScenePart, 'id' | 'dimMM' | 'pos'>): ScenePart {
@@ -71,5 +71,54 @@ describe('snapToNeighbors', () => {
     // Just assert it snaps to a sensible nearest target.
     const r = snapToNeighbors(1.03, 0, 0, DIM, [neighbor, other], 'mover');
     expect(r.x).toBeCloseTo(1.0);
+  });
+});
+
+describe('snapGuideEnds', () => {
+  // Both studio tabs draw this line, so its endpoints live in the lib. The reason
+  // for the test is the transposition: an `x`-axis line holds x CONSTANT and runs
+  // along z, and swapping the two produces a guide at right angles to the edge it
+  // claims to align — which looks like a real guide unless you notice it is
+  // perpendicular.
+
+  it('holds the axis coordinate constant and runs along the other one', () => {
+    const { from, to } = snapGuideEnds({ axis: 'x', at: 1.4, span: [-0.5, 0.5], kind: 'edge' });
+    expect(from[0]).toBeCloseTo(1.4);
+    expect(to[0]).toBeCloseTo(1.4);
+    expect(from[1]).toBeCloseTo(-0.5 - GUIDE_OVERHANG_M);
+    expect(to[1]).toBeCloseTo(0.5 + GUIDE_OVERHANG_M);
+  });
+
+  it('does the same for a z line, with x and z the other way round', () => {
+    const { from, to } = snapGuideEnds({ axis: 'z', at: -2.1, span: [1, 3], kind: 'center' });
+    expect(from[1]).toBeCloseTo(-2.1);
+    expect(to[1]).toBeCloseTo(-2.1);
+    expect(from[0]).toBeCloseTo(1 - GUIDE_OVERHANG_M);
+    expect(to[0]).toBeCloseTo(3 + GUIDE_OVERHANG_M);
+  });
+
+  it('overhangs outward at both ends even when the span is given backwards', () => {
+    // Not a bug that was happening: `snapToNeighbors` builds every span as
+    // `[min, max]`, so its own lines always arrive ordered. This pins the contract
+    // now that the function is public and a second caller could construct one —
+    // the naive `span[0] - k` / `span[1] + k` shortens a reversed span at both ends
+    // instead of extending it, and under 300 mm it inverts, drawing backwards.
+    const back = snapGuideEnds({ axis: 'x', at: 0, span: [0.6, -0.4], kind: 'edge' });
+    const fwd = snapGuideEnds({ axis: 'x', at: 0, span: [-0.4, 0.6], kind: 'edge' });
+    expect(back).toEqual(fwd);
+    expect(back.to[1] - back.from[1]).toBeCloseTo(1.0 + 2 * GUIDE_OVERHANG_M);
+  });
+
+  it('draws a guide for a zero-length span rather than nothing', () => {
+    // Two centres aligned on a piece of zero cross-extent is degenerate but real
+    // (a plane, a curtain seen edge-on), and the overhang is what makes it visible.
+    const { from, to } = snapGuideEnds({ axis: 'z', at: 0, span: [2, 2], kind: 'center' });
+    // Stated as a LENGTH, not as `2 * GUIDE_OVERHANG_M`. Every other expectation
+    // here is written in terms of that constant, which means none of them notice it
+    // going to zero — a mutation run found exactly that, and at zero this test was
+    // asserting 0 === 0 while claiming to be about visibility. The value itself is
+    // taste and stays out of the suite; that it is not nothing is the behaviour.
+    expect(to[0] - from[0]).toBeGreaterThan(0.05);
+    expect(to[0] - from[0]).toBeCloseTo(2 * GUIDE_OVERHANG_M);
   });
 });

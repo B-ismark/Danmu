@@ -17,8 +17,7 @@
   --paper-3: #E9E2D4;
   --ink: #2A2520;           /* warm soft-black, not pure ink */
   --ink-2: #5A5147;
-  --ink-3: #675E55;         /* 5.99:1 on --paper, 4.92:1 on --paper-3 — safe for 10-12px hint text */
-  --ink-3-soft: #8F857A;    /* decorative only (2.99-3.41:1). Never text. */
+  --ink-3: #675E55;         /* 5.99:1 on --paper, 4.92:1 on --paper-3 — safe for 10-12px hint text */    /* decorative only (2.99-3.41:1). Never text. */
   --ink-4: #BBB1A3;         /* decorative fills only (1.99:1) */
   --ink-hover: #3A342C;     /* --ink one step darker, for primary-button hover */
 
@@ -29,18 +28,29 @@
 
   --accent: #E2613A;        /* warm clay-terracotta — fills, tints, 3D highlights. NOT for text. */
   --accent-tint: rgba(226, 97, 58, 0.12);
-  --accent-tint-strong: rgba(226, 97, 58, 0.20);
-  --accent-strong: #C9542F;   /* darker terracotta — decorative hover fills */
+  --accent-tint-strong: rgba(226, 97, 58, 0.20);   /* darker terracotta — decorative hover fills */
   --accent-ink: #C24A22;      /* 4.73:1 with white — the accent-button surface */
   --accent-ink-hover: #A83D1A;/* 6.27:1 with white */
   --accent-text: #B03F1E;     /* 5.54:1 on --paper, 4.85:1 on --accent-tint — accent-coloured type */
   --accent-2: #5E8B6E;      /* friendly sage — fills */
   --accent-2-tint: rgba(94, 139, 110, 0.14);
 
-  /* "Kept as-is" used to be an institutional CAD blue. Warm aubergine instead:
-     a third brand-compatible hue that reads deliberate next to clay + sage. */
+  /* Furniture that came out of the user's own photo. Used to be an institutional
+     CAD blue; warm aubergine instead, a third brand-compatible hue that reads
+     deliberate next to clay + sage. Named for a word the UI no longer says — see
+     `ScenePart.locked`, which cannot be renamed without breaking the saved-file
+     format. */
   --locked: #7A4B63;        /* 6.27:1 on --paper */
   --locked-tint: rgba(122, 75, 99, 0.14);
+
+  /* Alignment guides while a piece is being dragged: "this edge is level with
+     that one". Neither selection (clay) nor hover (sage) nor invalid (red), so a
+     green that is none of them. Both studio tabs draw the same guide — the plan
+     reads these tokens, the 3D scene reads SCENE.snapEdge / .snapCenter, and
+     tests/color-tokens.test.ts holds the two to each other. Guides, never type:
+     they are 1.6px lines on a drawing, so no contrast ratio is claimed here. */
+  --snap-edge: #1E9E54;
+  --snap-center: #27A06A;
 
   --danger: #C8472A;        /* 4.51:1 on --paper */
   --danger-tint: rgba(200, 71, 42, 0.10);
@@ -123,6 +133,16 @@
      answers to one question, and the JS one would be the stale one. */
   --rail-max-share: 0.4;
   --rail-max: calc(var(--rail-max-share) * 100vw);
+
+  /* How narrow a rail may go if its contents are reflowed to suit — deliberately
+     BELOW the two floors above, and deliberately not applied to anything: they are
+     the width a future tightening is allowed to reach, not a width that ships.
+     `var()` reads them nowhere, which is exactly why they look like dead tokens on
+     a grep. Their consumer is `tests/reflow.test.ts`, which holds each below its
+     own floor and holds the left one wide enough for the four lighting moods
+     two-up, so lowering a floor to one of these cannot quietly break that. */
+  --rail-left-tight: 208px;
+  --rail-right-tight: 248px;
   /* The narrowest the rails go once their contents answer to their OWN width
      rather than the viewport's — i.e. only under `rail--elastic`, whose container
      queries are what make these honest. Both are derived, not chosen:
@@ -132,8 +152,6 @@
      They are separate tokens from `--rail-*-min` on purpose: those are the floors
      for a rail whose contents do NOT reflow, and lowering them would quietly
      change the layout that ships. */
-  --rail-left-tight: 208px;
-  --rail-right-tight: 248px;
   --rail-left: clamp(var(--rail-left-min), 19vw, 260px);   /* the piece tree — a list, so it can be narrow */
   --rail-right: clamp(var(--rail-right-min), 24vw, 320px); /* the inspector — holds controls, needs the room */
   --rail-closed: 37px;          /* just the reopen toggle: a closed rail must not vanish */
@@ -146,7 +164,6 @@
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
   /* Generously rounded — softness is the whole point. */
-  --r-0: 0;
   --r-1: 6px;
   --r-2: 10px;
   --r-3: 16px;
@@ -205,7 +222,6 @@ h1, h2, h3 { margin: 0; }
   color: var(--accent-text);
   font-weight: 700;
 }
-.ds-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
 .ds-grid-bg {
   background-color: var(--paper);
@@ -743,25 +759,6 @@ textarea.field { border-radius: var(--r-2); }
   .ds-btn:hover, .ds-btn:active, .ds-card:hover { transform: none !important; }
 }
 
-/* iOS frame for prototype mobile preview */
-.ios-frame {
-  width: 402px; height: 874px;
-  border-radius: 48px;
-  border: 8px solid #1a1a1a;
-  background: #000;
-  overflow: hidden;
-  position: relative;
-  box-shadow: 0 30px 60px rgba(0,0,0,0.18);
-}
-.ios-frame__notch {
-  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-  width: 110px; height: 30px; background: #000; border-radius: 16px; z-index: var(--z-popover);
-}
-.ios-frame__inner { position: absolute; inset: 0; background: var(--paper); overflow: auto; }
-
-/* hide scrollbars cosmetically */
-.no-scrollbar::-webkit-scrollbar { display: none; }
-.no-scrollbar { scrollbar-width: none; }
 
 /* ─── Front-door vignette motion ───────────────────────────────────────────
    The welcome page's isometric room demonstrates the two core verbs — move a

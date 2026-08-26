@@ -28,6 +28,7 @@ import { hitsAt, hitsInRect, nextInCycle, planPaintOrder, type CycleState } from
 import { wallSegments, footprintBounds } from '@/lib/footprint';
 import { moveWallCarrying, wallAttachments } from '@/lib/wall-actions';
 import { resolvePlacement, snapSteps } from '@/lib/drag-resolve';
+import { snapGuideEnds, type SnapLine } from '@/lib/item-snap';
 import { cascadeTransform, snapshotDescendants, type DescendantOffset } from '@/lib/rigid-parent';
 import { formatDim } from '@/lib/units';
 import { clientDeltaToViewBox, clientToViewBox } from '@/lib/plan-view-transform';
@@ -206,6 +207,19 @@ export const PlanView = forwardRef<PlanViewHandle, {
      * start transform cannot drift and cannot go stale.
      */
     groupStart: Array<{ id: string; pos: [number, number, number] }>;
+    /**
+     * The alignment guides the last accepted resolve produced, so the drawing can
+     * show them. `resolvePlacement` has always returned these and the 3D tab has
+     * always drawn them (`MeasureGuides`); the plan silently dropped them, which
+     * made the shared pipeline's most visible output tab-specific — and this is the
+     * tab where "is that level with the wardrobe?" is the question being asked.
+     *
+     * Written from `moveTo`, not from a memo: `moveTo` tries the full move and then
+     * each axis alone, so only IT knows which candidate was accepted, and the lines
+     * belong to that one. Recomputing them for the render would re-run the snap
+     * against a position the piece may not have taken.
+     */
+    snapLines: SnapLine[];
   } | null>(null);
   const [, force] = useState(0);
 
@@ -510,6 +524,10 @@ export const PlanView = forwardRef<PlanViewHandle, {
     for (const [tx, tz] of candidates) {
       const r = resolveAt(part, tx, tz);
       if (!r.valid) continue;
+      // The guides belong to the candidate that was ACCEPTED — assigned here
+      // rather than derived in the render, for the reason on `snapLines` above.
+      // Empty when nothing snapped, which is the common case and draws nothing.
+      if (dragRef.current) dragRef.current.snapLines = r.snapLines ?? [];
       const moved = r.pos[0] !== part.pos[0] || r.pos[1] !== part.pos[1] || r.pos[2] !== part.pos[2];
       if (moved) setPosition(part.id, r.pos);
       // A wall-mounted piece is turned by the wall it lands on, not by the drag.
@@ -536,6 +554,10 @@ export const PlanView = forwardRef<PlanViewHandle, {
       if (blockedRef.current) clearBlocked();
       return true;
     }
+    // Nothing was possible, so no alignment holds either — a guide left over from
+    // the last frame that DID move would keep claiming an edge is level while the
+    // piece sits refusing to go there.
+    if (dragRef.current) dragRef.current.snapLines = [];
     // Cancel any pending fade — a second refusal must not be wiped by the
     // timer the first one left behind.
     if (blockTimer.current) clearTimeout(blockTimer.current);
@@ -711,6 +733,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
       startPos,
       descendants,
       groupStart,
+      snapLines: [] as SnapLine[],
     };
     if (mode === 'rotate') {
       const w = svgToWorld(e);
@@ -1054,7 +1077,11 @@ export const PlanView = forwardRef<PlanViewHandle, {
         toZ: cz + best.dir[1] * (ext + best.gap),
       });
     }
-    return gaps.length > 0 ? { gaps } : null;
+    // The alignment guides ride along in the same derivation, but they are NOT
+    // gated on it: a piece already through the plaster has no wall gap worth
+    // drawing (see above) and can still be dead level with the wardrobe.
+    const lines = d.snapLines;
+    return gaps.length > 0 || lines.length > 0 ? { gaps, lines } : null;
   })();
 
   const segs = wallSegments(ROOM_DYN.footprint);
@@ -1435,6 +1462,37 @@ export const PlanView = forwardRef<PlanViewHandle, {
               `obbExtentAlong`. Nothing here is a typed-in string. */}
           {measuring && (
             <g style={{ pointerEvents: 'none' }}>
+              {/* Item-to-item alignment guides, first so the wall measurements
+                  above paint over them. `lib/item-snap.ts` produced these, the
+                  shared resolve returned them, and until now only the 3D tab drew
+                  them — leaving the plan snapping pieces into line with no way to
+                  see what they had lined up with. A centre line is dashed and a
+                  shade lighter, exactly as `MeasureGuides` draws it, so the same
+                  event looks the same in both tabs.
+
+                  Where the line's two ends are is `snapGuideEnds` in
+                  `lib/item-snap.ts`, beside the code that decided the snap — the
+                  axis-to-span mapping transposes silently, and having written it
+                  out in both renderers once is enough. */}
+              {measuring.lines.map((s, i) => {
+                const { from, to } = snapGuideEnds(s);
+                const a = toLocal(from[0], from[1]);
+                const b = toLocal(to[0], to[1]);
+                const centre = s.kind === 'center';
+                return (
+                  <line
+                    key={`snap-${s.axis}-${i}`}
+                    x1={a.x}
+                    y1={a.y}
+                    x2={b.x}
+                    y2={b.y}
+                    stroke={centre ? 'var(--snap-center)' : 'var(--snap-edge)'}
+                    strokeWidth={(centre ? 1.2 : 1.6) * k}
+                    strokeDasharray={centre ? `${4 * k} ${2.5 * k}` : undefined}
+                    strokeLinecap="round"
+                  />
+                );
+              })}
               {measuring.gaps.map((g) => {
                 const from = toLocal(g.fromX, g.fromZ);
                 const to = toLocal(g.toX, g.toZ);

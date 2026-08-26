@@ -679,9 +679,15 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
   modules from width, bookshelf derives shelves from height, wardrobe derives
   door bays from width, etc. The scale gizmo live-stretches; commit converts
   scale → dimension and the geometry redraws cleanly.
-- **Local model library** — `LibraryPicker.tsx` + `lib/mesh-cache.ts` +
-  `lib/shape-search.ts` (token + synonym + text-size parser). A part can point at
-  a cached GLB via `meshHash` (CC0 library is a work in progress).
+- **Model picking is local text search** — `LibraryPicker.tsx` +
+  `lib/shape-search.ts` (token + synonym + text-size parser). Every piece is
+  procedural: it resolves to a `Shape` this app draws, never to a downloaded mesh.
+  A `lib/mesh-cache.ts` used to sit here — an IndexedDB store of GLB blobs keyed by
+  a crop hash, with providers named `meshy` and `tripo` — and it was deleted, not
+  refactored. Nothing had written to it since the image-to-3D pipeline went (rule 1),
+  so `meshHash` could never be set and `CachedMesh` could never render; what was
+  left was a dead subsystem wearing the names of a permanently removed feature,
+  which reads as a rule-1 violation to whoever finds it next.
 
 ### Set-dressing & decor — `Dressing.tsx`
 - Surface-capable parts carry props (books, vase, plant, bowl, candle),
@@ -1040,7 +1046,17 @@ are what serve "communicate a plan", and they stay.
   untrusted input.
 - **Undo/redo** (`lib/history.ts`, `UndoRedo.tsx`) — snapshots cover parts, room
   and transforms.
-- **Item-to-item snapping** (`lib/item-snap.ts`).
+- **Item-to-item snapping** (`lib/item-snap.ts`), and its **alignment guides draw
+  in both tabs**. `resolvePlacement` has always returned the lines that fired and
+  `MeasureGuides.tsx` has always drawn them in 3D; the plan dropped them, so the tab
+  whose whole premise is that the dimensions are real snapped pieces into line with
+  nothing on screen to say what they had lined up with. `PlanView` keeps them on the
+  drag ref — written from `moveTo`, which is the only thing that knows which of its
+  three candidate moves was accepted — and draws them under the wall measurements.
+  The two greens are `--snap-edge` / `--snap-center` for the plan (SVG in the
+  document, so it reads tokens) and `SCENE.snapEdge` / `.snapCenter` for the scene
+  (a Three.js material cannot), pinned to each other by `tests/color-tokens.test.ts`
+  like every other pair in §"Two layers".
 
 ### One resolve, two surfaces — `lib/drag-resolve.ts`
 Where a dragged piece ends up: grid snap → containment clamp → wall snap
@@ -1165,7 +1181,6 @@ undo — see `lib/storage.ts`).
 | `lib/jpeg-strip.ts` | Removes EXIF (APP1), IPTC (APP13) and comment segments from a JPEG by byte surgery, so the image data is copied verbatim and the passthrough optimisation survives. Keeps JFIF density and the **ICC colour profile** — neither identifies anyone, and dropping the profile would shift the colours this app exists to get right. Returns the input untouched for anything it cannot parse: a photo that kept its metadata is a smaller problem than a photo we corrupted. **Read anything you need out of EXIF before calling it** — the focal length a future calibration pass wants lives in the segment this deletes. |
 | `lib/color.ts` | Colour arithmetic: WCAG contrast, and OKLab as a space where "same colour" means something. `globals.css` states a ratio next to almost every token and `CLAUDE.md` turns those into a rule, but nothing checked any of it — a comment claiming a ratio is a comment. It also lets `scene-palette.ts`' hand-copied duplicates be compared perceptually rather than by string equality, which is brittle one way and blind the other. |
 | `lib/drag-live.ts` | The high-frequency drag channel, deliberately **outside** `useStudio` — see §5. |
-| `lib/mesh-cache.ts` | Local GLB cache behind `CachedMesh.tsx`, which renders `null` while loading and expects the caller to keep the primitive shape up as a placeholder. `three-stdlib`'s `GLTFLoader` is browser-only, so both must stay client components. |
 | `lib/scene-file.ts` | The `.danmu.json` scene file — build, serialise, and defensively parse. The app's only import path and so its only untrusted input; see §6a. `buildSceneFile` bakes the studio's transform overrides so the file holds one truth per piece, and `parseSceneFile` never throws: it returns a reason, or a file plus the list of what it dropped. Its filename comes from `exports.ts`' `fileSlug`. |
 | `lib/exports.ts` | **What to call a file the user is taking away** — `fileSlug`, and nothing else. The three downloads each named themselves: the scene file slugged the room's name with a length cap, the export menu slugged it without one, and the floor plan did not slug at all — it was `floor-plan.png` every time, so exporting three rooms left three files the browser silently numbered `(1)` and `(2)`. The cap earns its place too: a 300-character room name produces a filename the OS may refuse to write, which surfaces as a download that did nothing. Two things are deliberately NOT here — the furniture CSV (retired; see the top bar above) and the transform merge (that is `lib/transforms.ts`, enforced by `tests/room-scene.test.ts`). Tested in `tests/exports.test.ts`. |
 | `lib/units.ts` | Unit conversion (persistence always mm). |
@@ -1342,9 +1357,6 @@ maps.
 - **`detectedObjects`** and per-part **`fromDetection`** — the photo pipeline's
   intermediate representation, carrying boxes into images the file does not contain.
   The parts *are* their resolved output.
-- **`meshHash`** — a key into the exporting browser's mesh cache, which the importing
-  one has no entry for. Honouring it would render nothing where a sofa should be, so
-  the piece falls back to its procedural `shape`.
 - **`id` / `createdAt`** — they describe a record in somebody's IndexedDB, not a room.
 
 ### A file is untrusted input, and is treated exactly like an AI hint
@@ -1393,8 +1405,8 @@ rather than a room that lists in the workspace and opens empty
 - A scene file carries no photos, so a captured room round-trips as furniture and
   dimensions only — re-detecting needs the original device. This is deliberate (§6a).
 - WebXR / true measurement calibration deferred; 4-wall capture only.
-- The CC0 GLB library (`LibraryPicker` / `mesh-cache`) is a work in progress —
-  most furniture is still procedural.
+- **All** furniture is procedural, by design rather than by omission: a piece is a
+  `Shape` this app draws. There is no mesh download path and no mesh cache.
 - BYO key lives in browser memory — Settings warns users to scope / referrer-
   restrict it.
 

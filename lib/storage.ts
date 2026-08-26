@@ -42,8 +42,20 @@ export type CapturePose = {
   tiltDeg?: number;
   /** Camera height off the floor in metres, when the user told us. */
   heightM?: number;
-  /** Compass bearing the lens faced, degrees clockwise from north. Unused today;
-   *  a daylight model would want it. */
+  /** Compass bearing the lens faced, degrees clockwise from north.
+   *
+   *  This is the top rung of `lib/capture-slots.ts`'s ladder: the bearings of the
+   *  photos already placed derive an anchor, and an arriving photo's own bearing is
+   *  read against it to name its wall. Only DIFFERENCES between bearings are ever
+   *  used, which is what makes it safe to store one number with no reference —
+   *  see that file's header.
+   *
+   *  Measured against the four real photos this app was tested on: **absent.** A
+   *  Pixel 6 Pro's own EXIF carries no `GPSImgDirection`, and anything that has
+   *  passed through a share sheet has been stripped further still. Persisted
+   *  anyway, because a phone that does write it makes the difference between
+   *  naming the walls and guessing at them — but do not build on the assumption
+   *  that it is there. */
   bearingDeg?: number;
 };
 
@@ -127,8 +139,6 @@ export type RoomData = {
     shape?: string;
     /** Dominant colour (#rrggbb) — photo-sampled, Gemini hex fallback. */
     color?: string;
-    /** Cached mesh hash → lib/mesh-cache.ts. */
-    meshHash?: string;
   }>;
 };
 

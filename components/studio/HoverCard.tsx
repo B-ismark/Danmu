@@ -85,7 +85,11 @@ export function HoverCard() {
         <span style={{ fontSize: 13, fontWeight: 600, textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {part.name || part.category}
         </span>
-        {part.locked && <Pill tone="locked" style={{ flexShrink: 0 }}>Locked</Pill>}
+        {/* Kept even though the "From" row below usually says the same thing more
+            precisely: a room imported from a scene file carries `locked` but not
+            `fromDetection` (scene-file.ts drops it), so for those pieces this pill
+            is the only thing that says where they came from. */}
+        {part.locked && <Pill tone="locked" style={{ flexShrink: 0 }}>From photo</Pill>}
       </div>
       <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
         <Row label="Size" value={dimDisplay} mono />

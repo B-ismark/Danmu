@@ -97,7 +97,7 @@ export function PartTree() {
     setLighting(theme.lighting);
     toast({
       title: `${theme.label} applied`,
-      message: 'Recoloured everything except the pieces kept as-is, and set the light to match.',
+      message: 'Recoloured everything except the pieces from your photo, and set the light to match.',
       ttl: 5000,
     });
   }
@@ -499,17 +499,18 @@ function PartRow({
       aria-selected={selected}
       // Explicit name: without it the row's name is computed from its contents,
       // which would swallow the nested buttons' labels ("Sofa Hide Remove").
-      aria-label={`${name}${locked ? ', kept as-is' : ''}${isHidden ? ', hidden' : ''}`}
+      aria-label={`${name}${locked ? ', from your photo' : ''}${isHidden ? ', hidden' : ''}`}
       tabIndex={tabbable ? 0 : -1}
       className={`list-row${selected ? ' is-selected' : ''}`}
-      title={`${name} · ${category}${isHidden ? ' · hidden' : ''}${locked ? ' · kept as-is' : ''}`}
+      title={`${name} · ${category}${isHidden ? ' · hidden' : ''}${locked ? ' · from your photo' : ''}`}
       onClick={onSelect}
       onKeyDown={onKeyDown}
     >
-      {/* Status glyph. Shape, not just hue: a lock reads as "kept as-is" even
-          where the aubergine and the clay look the same. */}
+      {/* Status glyph. Shape, not just hue: a camera reads as "came out of your
+          photo" even where the aubergine and the clay look the same. A padlock sat
+          here and said the wrong thing — see ScenePart.locked. */}
       <span aria-hidden="true" style={{ display: 'inline-flex', justifyContent: 'center', width: 12, flexShrink: 0 }}>
-        {locked ? <Icon name="lock" size={11} color="var(--locked)" /> : <Dot size={7} />}
+        {locked ? <Icon name="camera" size={11} color="var(--locked)" /> : <Dot size={7} />}
       </span>
       <span
         style={{
