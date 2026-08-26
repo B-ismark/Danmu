@@ -346,39 +346,6 @@ export function gestureOwnedByOther(id: string): boolean {
   return draggingId !== null && draggingId !== id;
 }
 
-// ─── The click a drag ends with ─────────────────────────────────────────────
-// A 3D drag that moved finishes as a DOM click on the same mesh, and `Pickable`'s
-// click handler means "select just this piece". Together those two silently undid
-// every multi-piece drag in the 3D tab: the set moved, and then the click ending
-// the gesture collapsed the selection down to the piece under the cursor. Harmless
-// for a single selection (it was already selected) and hidden for a MERGED group,
-// whose plain click re-selects the whole group — which is why the symptom read as
-// "sometimes only one moves" rather than as a plain bug.
-//
-// Module state rather than a store field: it is written and consumed inside one
-// event-loop turn, nothing renders from it, and a store write here would re-run
-// every selector between the pointerup and the click.
-let _dragClick: string | null = null;
-
-/** Called on pointer-up by a drag that actually moved. */
-export function suppressClickAfterDrag(id: string) {
-  _dragClick = id;
-}
-
-/** True once, for the click that ends that drag. Cleared whether or not the click
- *  ever arrives (a gesture released off-mesh produces none), because a flag left
- *  standing would swallow the next real click on that piece instead. */
-export function consumeDragClick(id: string): boolean {
-  const mine = _dragClick === id;
-  _dragClick = null;
-  return mine;
-}
-
-/** Drop a flag no click came for — called when the next press begins. */
-export function clearDragClick() {
-  _dragClick = null;
-}
-
 // Settings. Persisted to localStorage. API key kept here only on this device.
 export type DimUnit = 'mm' | 'cm' | 'm' | 'in' | 'ft';
 

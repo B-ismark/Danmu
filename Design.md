@@ -1140,6 +1140,47 @@ cascade from the start transforms rather than snapshotting a second copy of them
 (a collision that must still be seen, a snap that must not fire) rather than as
 array shapes.
 
+Two properties of a `ConvoyMove` that read as details and are not:
+
+- **`rot` is optional, and absent is different from equal.** `setTransformsFor`
+  writing a rotation *creates* an override in `useStudio.rotations`, and per
+  `lib/transforms.ts` an override pins that value against a re-detect and persists
+  into IndexedDB and the scene file. A member translates and does not turn, so the
+  field is omitted unless the resolve really changed it — which for a member means
+  a wall rider `snapToWall` re-aimed, since `snapMode: 'off'` leaves `outRot`
+  alone for everything else. `convoyRestore` carries the same asymmetry, or Escape
+  would leave behind exactly the override the resolve avoided.
+- **`blocked` only counts if the caller says it.** It was computed in both tabs
+  and spoken in one: the plan outlined the member and named it, while the 3D tab
+  stopped the set dead with a red tint and no explanation. The name travels on
+  `DragLiveInfo.blockedBy` now and appears in the size tag `MeasureGuides` already
+  draws — set only when the dragged piece itself fits, because if the thing under
+  the hand is the problem then `blocked` is the honest word and naming a member
+  points at the wrong piece.
+
+### The click a drag ends with — `lib/drag-click.ts`
+A 3D drag that moved finishes as a DOM `click`, and `Pickable`'s click handler
+means *select just this piece* — so the click ending a multi-piece drag collapsed
+the selection the drag had just carried. Invisible for a single selection (already
+selected) and for a merged group (whose plain click re-selects the whole group),
+which is the other half of why the bug reported as "sometimes only one moves".
+
+**The gate takes no part id, and that absence is the design.** Asking "is this
+flag mine?" and clearing it either way let a click that raycast onto a different
+piece consume the flag, get `false`, and select itself. It is reachable: the
+dragged piece follows the pointer, but a rug dragged under a table ends up behind
+it. `Pickable`'s `gestureOwnedByOther` guard cannot cover it either, because
+`Draggable` releases the pointer capture and clears `draggingId` before the click
+is dispatched. A drag is not a click on anything.
+
+Module state rather than a store field: written and consumed inside one event-loop
+turn, nothing renders from it, and a store write would re-run every selector
+between the pointerup and the click. Outside the store it is also testable in
+plain node — importing `lib/store.ts` pulls in zustand's `persist` and needs
+localStorage. `tests/drag-click.test.ts` reads the flag's initial value **at
+import**, because a `beforeEach` reset hides a module that started armed, and one
+that did would swallow the first click of the session.
+
 ### Removing a piece — `removeParts` in `KeyboardShortcuts.tsx`
 One path for every surface: the row trash, the Inspector button, the Delete key
 and the 2D plan all call it.

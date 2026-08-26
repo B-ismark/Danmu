@@ -144,9 +144,25 @@ backend, no account. The 3D studio *is* the product.
    refused is not the piece under the hand. Separately: **a press must not collapse
    the selection it is about to drag.** The plan's did, unconditionally, so the set
    was gone before the first `pointermove`; the 3D tab's survived the press and then
-   lost it to the DOM *click* that ends every drag (`suppressClickAfterDrag`).
-   Collapsing to one piece is what a click means, so it belongs on the release, and
-   only when the press never moved. The companion
+   lost it to the DOM *click* that ends every drag. Collapsing to one piece is what
+   a click means, so it belongs on the release, and only when the press never moved.
+   That gate is `lib/drag-click.ts`, and **it deliberately has no part id** — the
+   first version recorded which piece was dragged and asked the arriving click
+   whether it was that piece, clearing the flag either way, so a click landing on a
+   DIFFERENT piece ate the flag and selected itself: the same collapse one mesh
+   over. A rug dragged under a table ends up behind it and the ray hits the table,
+   and `gestureOwnedByOther` cannot help because the capture is released and
+   `draggingId` cleared before the click is dispatched. **A drag is not a click on
+   anything**, so there is nothing to compare; an id nothing branches on would be
+   dead plumbing wearing a decision's name. It lives outside `store.ts` for a
+   second reason too — a gate parked there could only be tested under jsdom,
+   because importing the store drags in zustand's `persist`.
+   **A finding the caller drops is a finding that does not exist:** `blocked` was
+   computed in both tabs and *said* in one, so 3D refused a set in silence for a
+   whole commit. It rides `blockedBy` on the live drag channel now and lands in the
+   size tag. And **a transform write is never free** — `ConvoyMove.rot` is optional
+   because writing back an unchanged rotation still CREATES an override, which
+   `lib/transforms.ts` then pins against a re-detect and persists. The companion
    for *what is under the pointer* is `lib/plan-hit.ts` (footprint geometry, so a
    round piece is tested against the ellipse it draws, not its box) and
    `lib/pick-through.ts` (a raycast's hits mapped back to pieces, everything that

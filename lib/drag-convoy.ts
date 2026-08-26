@@ -92,7 +92,15 @@ export function worldFor(convoy: Convoy, self: ScenePart, parts: ScenePart[]): S
   return out;
 }
 
-export type ConvoyMove = { id: string; pos: [number, number, number]; rot: number };
+/** `rot` is present only when the gesture actually turned that piece: a rigid
+ *  child cascaded about a turning parent, or a wall-mounted member the wall
+ *  re-aimed. Writing an unchanged rotation is not free — `setTransformsFor`
+ *  CREATES an override in `useStudio.rotations`, and per lib/transforms.ts an
+ *  override pins that value against a re-detect and persists into IndexedDB and
+ *  the scene file. The first version made it mandatory and so stamped one on
+ *  every member of every dragged set; the plan's own dragged-piece path had been
+ *  guarding it all along (`if (r.rot !== part.rot) setRotation(...)`). */
+export type ConvoyMove = { id: string; pos: [number, number, number]; rot?: number };
 
 export type ConvoyResult = {
   /** Returned whether or not the step is legal, so a caller can hold the set at
@@ -206,6 +214,11 @@ export function resolveConvoy(input: {
   // company that rotates with it.
   if (convoy.own.length > 0) moves.push(...cascadeTransform(draggedId, pos, rot, convoy.own));
 
+  // Nothing is coming, so there is no delta to take and no world to build. Every
+  // ordinary single-piece drag lands here at input rate, and the `staying` copy
+  // below is O(parts) — it was being paid for a loop that runs zero times.
+  if (convoy.members.length === 0) return { moves, valid: true };
+
   const dx = pos[0] - startPos[0];
   const dz = pos[2] - startPos[2];
   // A rotate or a scale moves nothing sideways, so the company has nothing to do
@@ -259,7 +272,14 @@ export function resolveConvoy(input: {
       valid = false;
       if (!blocked) blocked = m.part;
     }
-    moves.push({ id: m.part.id, pos: r.pos, rot: r.rot });
+    // Only a wall-mounted member can come back turned (`snapMode: 'off'` leaves
+    // `outRot` alone for everything else), so for the rest this omits the field
+    // rather than writing back the value it already had. See `ConvoyMove`.
+    moves.push(
+      r.rot === m.part.rot
+        ? { id: m.part.id, pos: r.pos }
+        : { id: m.part.id, pos: r.pos, rot: r.rot },
+    );
     if (m.descendants.length > 0) {
       moves.push(...cascadeTransform(m.part.id, r.pos, r.rot, m.descendants));
     }
@@ -286,7 +306,15 @@ export function convoyRestore(
   const moves: ConvoyMove[] = [{ id: draggedId, pos: startPos, rot: startRot }];
   moves.push(...cascadeTransform(draggedId, startPos, startRot, convoy.own));
   for (const m of convoy.members) {
-    moves.push({ id: m.part.id, pos: m.startPos, rot: m.part.rot });
+    // Same asymmetry as `resolveConvoy`, for the same reason: restoring a rotation
+    // that never moved would leave behind exactly the override the resolve was
+    // careful not to create. Only a wall rider can have been turned by the
+    // gesture, so only a wall rider needs one put back.
+    moves.push(
+      isWallMountedPart(m.part.category, m.part.shape)
+        ? { id: m.part.id, pos: m.startPos, rot: m.part.rot }
+        : { id: m.part.id, pos: m.startPos },
+    );
     moves.push(...cascadeTransform(m.part.id, m.startPos, m.part.rot, m.descendants));
   }
   return moves;

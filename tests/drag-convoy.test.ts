@@ -344,4 +344,87 @@ describe('convoyRestore — what Escape puts back', () => {
     expect(posOf(back, 'lampB')![1]).toBeCloseTo(0.75);
     expect(posOf(back, 'lampA')![0]).toBeCloseTo(1.2);
   });
+
+  it('puts back a rotation only for a member the gesture could have turned', () => {
+    // The mirror image of `resolveConvoy`'s omission. Escape must not leave behind
+    // the very override the drag was careful not to create — so a member that only
+    // slid gets its position back and nothing else, while a wall rider (whose
+    // `snapToWall` really can have re-aimed it) gets both.
+    const sofa = part({ id: 'sofa', pos: [3, 0, 2], dimMM: [2000, 900, 800], category: 'sofa', shape: 'sofa' });
+    const stool = part({ id: 'stool', pos: [1, 0, 2], dimMM: [400, 400, 450], rot: 0.4 });
+    const art = part({ id: 'art', pos: [2, 1.4, 0.05], dimMM: [900, 40, 600], category: 'painting', shape: 'painting', rot: 2 });
+    const world = [sofa, stool, art];
+    const c = plan('sofa', world, ['sofa', 'stool', 'art']);
+
+    const back = convoyRestore(c, 'sofa', [3, 0, 2], 0);
+    const m = (id: string) => back.find((x) => x.id === id)!;
+    expect('rot' in m('stool')).toBe(false);
+    expect('rot' in m('art')).toBe(true);
+    expect(m('art').rot).toBe(2);
+    // The dragged piece always carries its own rotation back: it is the one thing
+    // the gesture was free to turn on purpose.
+    expect(m('sofa').rot).toBe(0);
+  });
+});
+
+describe('resolveConvoy — what a move is allowed to write', () => {
+  const moveOf = (moves: Array<{ id: string; pos: [number, number, number]; rot?: number }>, id: string) =>
+    moves.find((m) => m.id === id);
+
+  it('writes no rotation for a member that only translated', () => {
+    // A set TRANSLATES; members never turn with it. Writing back the rotation
+    // they already had is not a no-op — it materialises an override in
+    // `useStudio.rotations`, which per lib/transforms.ts pins that value against a
+    // re-detect and persists into IndexedDB and the scene file. So the field must
+    // be ABSENT, not merely equal.
+    const a = part({ id: 'a', pos: [1, 0, 1], dimMM: [800, 800, 400], rot: 0.7 });
+    const b = part({ id: 'b', pos: [3, 0, 1], dimMM: [800, 800, 400], rot: 0.7 });
+    const world = [a, b];
+    const c = plan('a', world, ['a', 'b']);
+    const r = carry(c, 'a', world, [1, 0, 1], [1.5, 0, 1], 0.7);
+
+    expect(r.valid).toBe(true);
+    const m = moveOf(r.moves, 'b')!;
+    expect(m.pos[0]).toBeCloseTo(3.5);
+    expect('rot' in m).toBe(false);
+  });
+
+  it('writes the rotation a wall re-aimed, because that one really changed', () => {
+    // The exception the omission above is carved around. A wall-mounted member is
+    // turned by `snapToWall` inside its own resolve — `snapMode: 'off'` does not
+    // reach that branch — so its rotation genuinely is the gesture's output and
+    // dropping it would leave the piece facing the wrong way.
+    const sofa = part({ id: 'sofa', pos: [3, 0, 2], dimMM: [2000, 900, 800], category: 'sofa', shape: 'sofa' });
+    const art = part({
+      id: 'art',
+      pos: [2, 1.4, 0.05],
+      dimMM: [900, 40, 600],
+      category: 'painting',
+      shape: 'painting',
+      // Deliberately not what the north wall implies, so the snap has to correct it.
+      rot: 1,
+    });
+    const world = [sofa, art];
+    const c = plan('sofa', world, ['sofa', 'art']);
+    const r = carry(c, 'sofa', world, [3, 0, 2], [3.4, 0, 2]);
+
+    const m = moveOf(r.moves, 'art')!;
+    expect('rot' in m).toBe(true);
+    expect(m.rot).not.toBe(1);
+  });
+
+  it('asks the world nothing when no company is coming', () => {
+    // The dragged piece's own legality belongs to the caller, so an empty convoy is
+    // valid by definition — and must reach that answer without walking the room.
+    // Every single-piece drag in the app takes this path at input rate.
+    const a = part({ id: 'a', pos: [1, 0, 1], dimMM: [800, 800, 400] });
+    const wall = part({ id: 'wall', pos: [2, 0, 1], dimMM: [800, 800, 2000], category: 'wardrobe', shape: 'wardrobe' });
+    const world = [a, wall];
+    const c = plan('a', world, ['a']);
+
+    const r = carry(c, 'a', world, [1, 0, 1], [2, 0, 1]);
+    expect(r.valid).toBe(true);
+    expect(r.moves).toEqual([]);
+    expect(r.blocked).toBeUndefined();
+  });
 });

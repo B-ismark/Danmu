@@ -3,7 +3,8 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { type ThreeEvent } from '@react-three/fiber';
 import { Group } from 'three';
-import { consumeDragClick, gestureOwnedByOther, useStudio } from '@/lib/store';
+import { gestureOwnedByOther, useStudio } from '@/lib/store';
+import { consumeDragClick } from '@/lib/drag-click';
 import { useScene } from '@/lib/scene-store';
 import { cycleThrough, type CycleState } from '@/lib/plan-hit';
 import { pickIdsFrom, PART_ID_KEY } from '@/lib/pick-through';
@@ -90,7 +91,11 @@ export function Pickable({
         // multi-selection the drag had just finished carrying — see
         // `suppressClickAfterDrag` in lib/store.ts. Checked before Alt, because a
         // drag is not a request to open the what-is-under-here list either.
-        if (consumeDragClick(partId)) return;
+        // Not `consumeDragClick(partId)`: the click ending a drag does not always
+        // land on the piece that was dragged. See lib/drag-click.ts — asking whose
+        // flag it was let a click that raycast onto a DIFFERENT piece eat the flag
+        // and select itself, which is the collapse this guard exists to stop.
+        if (consumeDragClick()) return;
         // ── Alt: choose between pieces that overlap on screen ────────────────
         // The one question a plain click cannot answer, because only the frontmost
         // handler runs. `e.intersections` is the whole depth-sorted list from this

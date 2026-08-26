@@ -169,7 +169,7 @@ export function MeasureGuides() {
           }}
         >
           {formatDim(live.dimMM[0], dimUnit)} × {formatDim(live.dimMM[1], dimUnit)} {dimUnit}
-          {!live.valid && ' · blocked'}
+          {!live.valid && (live.blockedBy ? ` · ${live.blockedBy} will not fit` : ' · blocked')}
         </div>
       </Html>
     </group>

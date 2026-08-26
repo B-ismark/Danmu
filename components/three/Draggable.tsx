@@ -29,7 +29,8 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { TransformControls } from '@react-three/drei';
 import { useThree, type ThreeEvent } from '@react-three/fiber';
 import { Group, Mesh, MeshStandardMaterial, Plane, Vector3 } from 'three';
-import { clearDragClick, gestureOwnedByOther, suppressClickAfterDrag, useStudio } from '@/lib/store';
+import { gestureOwnedByOther, useStudio } from '@/lib/store';
+import { clearDragClick, suppressClickAfterDrag } from '@/lib/drag-click';
 import { useScene } from '@/lib/scene-store';
 import { currentRoomScene } from '@/lib/room-scene';
 import { useDragLive } from '@/lib/drag-live';
@@ -364,6 +365,12 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       dimMM: dim,
       floor: isFloorStanding(part.category, part.shape),
       valid,
+      // Only when this piece itself fits: if the thing under the hand is the
+      // problem, `blocked` is already the right word and naming a member would
+      // point at the wrong piece. `co.blocked` was computed here from the start
+      // and then dropped on the floor, so the 3D tab refused a set in silence
+      // while the plan named the piece — one rule, two consumers, again.
+      blockedBy: resolved.valid && co.blocked ? co.blocked.name : undefined,
       snapLines: resolved.snapLines,
     });
     setDragInvalid((prev) => (prev === !valid ? prev : !valid));
@@ -724,7 +731,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       commit();
       // The DOM click that ends this gesture means "select just this piece" to
       // `Pickable`, which would collapse the very selection the drag just moved.
-      suppressClickAfterDrag(partId);
+      suppressClickAfterDrag();
     }
     effCache.current = null;
     convoyCache.current = null;
