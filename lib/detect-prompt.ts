@@ -38,6 +38,11 @@ const SLOT_CAMERA: Record<CaptureSlot, string> = {
 const inOrder = (slots: readonly CaptureSlot[]): CaptureSlot[] =>
   (['n', 'e', 's', 'w'] as const).filter((s) => slots.includes(s));
 
+/** Duplicate slots collapse (`inOrder` filters the canonical four), and the
+ *  caller is expected to have at least one — `detectAcrossImages` returns early
+ *  on an empty set, before this is reached. Handed none, this would compose a
+ *  perfectly grammatical prompt for zero photographs; there is no sensible thing
+ *  for it to say instead, so the guard stays where the decision is. */
 export function buildDetectPrompt(room: PromptRoom, slots: readonly CaptureSlot[]): string {
   const w = room.width;
   const d = room.depth;

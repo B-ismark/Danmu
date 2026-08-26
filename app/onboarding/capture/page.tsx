@@ -15,7 +15,20 @@ import {
   snapToBlob,
   startCamera,
 } from '@/lib/capture';
-import { SLOT_ORDER, placePhotos, rotateSlot, type PlacedPhoto, type SlotSignal } from '@/lib/capture-slots';
+import {
+  SLOT_ORDER,
+  clearSlot,
+  describePlacement,
+  patchIfSame,
+  placePhotos,
+  rotateSet,
+  rotationMapping,
+  swapMapping,
+  swapSet,
+  type PlacedPhoto,
+  type SlotMap,
+  type SlotSignal,
+} from '@/lib/capture-slots';
 import { wallSpan } from '@/lib/photo-geometry';
 import { useDeviceTilt } from '@/lib/device-tilt';
 import { scoreQuality, flagHelp, flagLabel, flagTone, type Quality } from '@/lib/image-quality';
@@ -48,7 +61,7 @@ type Photo = {
   clashedWith?: CaptureSlot;
 };
 
-type PhotoMap = Record<CaptureSlot, Photo | null>;
+type PhotoMap = SlotMap<Photo>;
 const emptyPhotos = (): PhotoMap => ({ n: null, e: null, s: null, w: null });
 
 const labelOf = (id: CaptureSlot) => CAPTURE_SLOTS.find((s) => s.id === id)!.label;
@@ -162,9 +175,9 @@ export default function CapturePage() {
       // line is the only check a person can make against their own photograph.
       if (meta) setRoom({ width: meta.width, depth: meta.depth });
       for (const c of caps) {
-        scoreQuality(c.blob).then((q) =>
-          setPhotos((prev) => (prev[c.slot] ? { ...prev, [c.slot]: { ...prev[c.slot]!, quality: q } } : prev)),
-        );
+        // `patchIfSame`, not a write by slot: scoring is async and the user can
+        // rotate the set while it is still running.
+        scoreQuality(c.blob).then((q) => setPhotos((prev) => patchIfSame(prev, c.slot, c.blob, { quality: q })));
       }
     })();
     return () => {
@@ -188,9 +201,10 @@ export default function CapturePage() {
     const retiring = photosRef.current[slot]?.url;
     setPhotos((p) => ({ ...p, [slot]: { blob, url: blobToObjectUrl(blob), quality: null, pose, by, clashedWith } }));
     if (retiring) URL.revokeObjectURL(retiring);
-    scoreQuality(blob).then((q) =>
-      setPhotos((prev) => (prev[slot] ? { ...prev, [slot]: { ...prev[slot]!, quality: q } } : prev)),
-    );
+    // Keyed on the blob, not the wall. A score started for this photo must not
+    // land on whichever photo occupies this wall by the time it resolves — which
+    // is exactly what a rotation mid-scoring used to make happen.
+    scoreQuality(blob).then((q) => setPhotos((prev) => patchIfSame(prev, slot, blob, { quality: q })));
   }
 
   /**
@@ -233,25 +247,7 @@ export default function CapturePage() {
       await persistPhoto(p.slot, blob, read[p.index].pose, p.by, p.clashedWith);
     }
 
-    const walls = placed.map((p) => labelOf(p.slot)).join(', ');
-    const compass = placed.filter((p) => p.by === 'bearing').length;
-    const timed = placed.filter((p) => p.by === 'time').length;
-    const clashes = placed.filter((p) => p.clashedWith);
-    setAnnounce(
-      [
-        `${placed.length} photo${placed.length > 1 ? 's' : ''} added: ${walls}.`,
-        compass > 0 ? `${compass} placed from the photo’s own compass.` : '',
-        timed > 0 ? `Ordered by when they were taken.` : '',
-        ...clashes.map(
-          (p) => `${labelOf(p.slot)} may be a second photo of ${labelOf(p.clashedWith!)} — check it.`,
-        ),
-        rejected.length
-          ? `${rejected.length} could not be added — all four walls already have a photo.`
-          : '',
-      ]
-        .filter(Boolean)
-        .join(' '),
-    );
+    setAnnounce(describePlacement({ placed, rejected }, labelOf));
   }
 
   /** Replace one wall's photo in place. Distinct from `addFiles`, which would
@@ -271,7 +267,7 @@ export default function CapturePage() {
     if (!roomId) return;
     await roomStore.deleteCapture(roomId, slot);
     const retiring = photosRef.current[slot]?.url;
-    setPhotos((p) => ({ ...p, [slot]: null }));
+    setPhotos((p) => clearSlot(p, slot));
     if (retiring) URL.revokeObjectURL(retiring);
     setAnnounce(`${labelOf(slot)} photo removed.`);
   }
@@ -286,15 +282,8 @@ export default function CapturePage() {
     // The version this replaces re-wrote `{ slot, blob, takenAt }` and dropped
     // the pose, so reordering photos threw away the focal length, the tilt, and
     // the bearing.
-    const mapping: Partial<Record<CaptureSlot, CaptureSlot>> = {};
-    mapping[from] = to;
-    if (displaced) mapping[to] = from;
-    await roomStore.reslotCaptures(roomId, mapping);
-    setPhotos((p) => ({
-      ...p,
-      [from]: displaced ? { ...displaced, by: 'manual' } : null,
-      [to]: { ...moving, by: 'manual' },
-    }));
+    await roomStore.reslotCaptures(roomId, swapMapping(photosRef.current, from, to));
+    setPhotos((p) => swapSet(p, from, to));
     setAnnounce(
       displaced ? `Swapped ${labelOf(from)} and ${labelOf(to)}.` : `Moved photo to ${labelOf(to)}.`,
     );
@@ -306,24 +295,8 @@ export default function CapturePage() {
    *  without anything having to remember it. */
   async function rotateAll(steps: number) {
     if (!roomId) return;
-    const mapping: Partial<Record<CaptureSlot, CaptureSlot>> = {};
-    for (const s of SLOT_ORDER) mapping[s] = rotateSlot(s, steps);
-    await roomStore.reslotCaptures(roomId, mapping);
-    setPhotos((prev) => {
-      const next = emptyPhotos();
-      for (const s of SLOT_ORDER) {
-        const p = prev[s];
-        if (!p) continue;
-        next[rotateSlot(s, steps)] = {
-          ...p,
-          by: 'manual',
-          // The clash travels with the pair. Rotating the labels does not make two
-          // photos of one wall into two walls.
-          clashedWith: p.clashedWith ? rotateSlot(p.clashedWith, steps) : undefined,
-        };
-      }
-      return next;
-    });
+    await roomStore.reslotCaptures(roomId, rotationMapping(steps));
+    setPhotos((p) => rotateSet(p, steps));
     setAnnounce(`Walls turned ${steps > 0 ? 'forwards' : 'back'} one.`);
   }
 
@@ -551,11 +524,7 @@ export default function CapturePage() {
           <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: 'auto' }}>
             {method}
             {anyCaptured && (
-              <WallControls
-                filled={filled}
-                square={!!room && room.width === room.depth}
-                onRotate={rotateAll}
-              />
+              <WallControls square={!!room && room.width === room.depth} onRotate={rotateAll} />
             )}
             <div
               style={{
@@ -619,15 +588,7 @@ function photoChrome(): CSSProperties {
  *  reading needs too. A set can only ever be wrong by a whole number of
  *  quarter-turns — the photos are four consecutive walls whatever else is true —
  *  so one control fixes every case of it at once. */
-function WallControls({
-  filled,
-  square,
-  onRotate,
-}: {
-  filled: number;
-  square: boolean;
-  onRotate: (steps: number) => void;
-}) {
+function WallControls({ square, onRotate }: { square: boolean; onRotate: (steps: number) => void }) {
   return (
     <div
       style={{
@@ -647,7 +608,6 @@ function WallControls({
         <button
           className="ds-btn"
           style={{ height: 30, fontSize: 12 }}
-          disabled={filled === 0}
           onClick={() => onRotate(-1)}
           title="Every photo moves back one wall"
         >
@@ -657,7 +617,6 @@ function WallControls({
         <button
           className="ds-btn"
           style={{ height: 30, fontSize: 12 }}
-          disabled={filled === 0}
           onClick={() => onRotate(1)}
           title="Every photo moves on one wall"
         >
@@ -828,26 +787,56 @@ function PhotoCard({
         style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit', cursor: 'grab' }}
       />
 
-      <span style={{ ...photoChrome(), position: 'absolute', top: 8, left: 8, cursor: 'default' }}>
-        <Icon name="check" size={11} color="var(--on-ink)" />
-        {label}
-        {/* Derived from the room's own width and depth — never a number typed in
-            beside the thing it describes. It is what makes "turn the set round"
-            a decision the user can take rather than a guess. */}
-        {span && <span style={{ fontWeight: 600, opacity: 0.8 }}>· {span} wall</span>}
-      </span>
+      {/* ONE wrapping row, not a chip pinned left and a cluster pinned right.
+          Two absolutely-positioned children cannot reflow past each other, and
+          these are opaque: measured at 11px/700, the label runs 159px and the
+          three actions 189px, so on the narrowest gallery card (240px, 224px of
+          content) they overlapped by 132px and the buttons simply printed over
+          the wall name. That is the second failure mode CLAUDE.md rule 4 names,
+          and the fix is the one it prescribes — let it wrap. */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 8,
+          left: 8,
+          right: 8,
+          display: 'flex',
+          flexWrap: 'wrap',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          gap: 6,
+        }}
+      >
+        <span style={{ ...photoChrome(), cursor: 'default' }}>
+          <Icon name="check" size={11} color="var(--on-ink)" />
+          {label}
+          {/* Derived from the room's own width and depth — never a number typed in
+              beside the thing it describes. It is what makes "turn the set round"
+              a decision the user can take rather than a guess. Dropped in the
+              filmstrip, where 132px of content cannot hold it and a `nowrap` chip
+              does not shrink, it spills. */}
+          {span && !compact && <span style={{ fontWeight: 600, opacity: 0.8 }}>· {span} wall</span>}
+        </span>
 
-      <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-        <button type="button" style={photoChrome()} onClick={() => inputRef.current?.click()}>
-          Replace
-        </button>
-        {/* There was previously no way to take a photo back out — someone who
-            uploaded a shot with family in it was stuck with it. */}
-        <button type="button" style={photoChrome()} onClick={onRemove}>
-          Remove
-        </button>
-        {/* Reordering was drag-only, i.e. impossible without a mouse. */}
-        <MoveMenu slot={slot} filled={filled} onMoveTo={onMoveTo} />
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {/* Replace and Move belong to the gallery, where there is room for them
+              and where someone is actually working on the assignment. The
+              filmstrip under a live viewfinder keeps only Remove — it is a
+              reference strip, and the one thing you want from a bad shot there is
+              to get rid of it and take another. */}
+          {!compact && (
+            <button type="button" style={photoChrome()} onClick={() => inputRef.current?.click()}>
+              Replace
+            </button>
+          )}
+          {/* There was previously no way to take a photo back out — someone who
+              uploaded a shot with family in it was stuck with it. */}
+          <button type="button" style={photoChrome()} onClick={onRemove}>
+            Remove
+          </button>
+          {/* Reordering was drag-only, i.e. impossible without a mouse. */}
+          {!compact && <MoveMenu slot={slot} filled={filled} onMoveTo={onMoveTo} />}
+        </div>
       </div>
 
       <div style={{ position: 'absolute', bottom: 8, left: 8, right: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -860,38 +849,44 @@ function PhotoCard({
             Maybe {labelOf(photo.clashedWith)} again
           </span>
         )}
-        {photo.by && !photo.clashedWith && (
+        {/* Reason and quality are gallery-only for the same reason as Replace:
+            a 148px filmstrip card cannot hold a nowrap chip reading "from the
+            order you added it", and the top bar already carries the count of
+            photos that could be clearer. The clash chip stays in both, because it
+            is the only one that is asking for something. */}
+        {!compact && photo.by && !photo.clashedWith && (
           <span style={{ ...photoChrome(), cursor: 'default', background: 'var(--paper)', color: 'var(--ink-2)' }}>
             {REASON[photo.by]}
           </span>
         )}
-        {photo.quality ? (
-          photo.quality.flags.map((f) => {
-            const good = flagTone(f) === 'good';
-            return (
-              <span
-                key={f}
-                title={flagHelp(f)}
-                style={{
-                  ...photoChrome(),
-                  cursor: 'default',
-                  background: good ? 'var(--success-text)' : 'var(--warn)',
-                  color: 'var(--on-accent)',
-                }}
-              >
-                {/* Icon + words: the badge used to lean on colour and a bare
-                    ✓ / ⚠ glyph, which renders differently on every platform. */}
-                <Icon name={good ? 'check' : 'info'} size={11} color="var(--on-accent)" />
-                {flagLabel(f)}
-                <span className="sr-only"> — {flagHelp(f)}</span>
-              </span>
-            );
-          })
-        ) : (
-          <span role="status" aria-live="polite" style={{ ...photoChrome(), cursor: 'default' }}>
-            Checking this photo…
-          </span>
-        )}
+        {!compact &&
+          (photo.quality ? (
+            photo.quality.flags.map((f) => {
+              const good = flagTone(f) === 'good';
+              return (
+                <span
+                  key={f}
+                  title={flagHelp(f)}
+                  style={{
+                    ...photoChrome(),
+                    cursor: 'default',
+                    background: good ? 'var(--success-text)' : 'var(--warn)',
+                    color: 'var(--on-accent)',
+                  }}
+                >
+                  {/* Icon + words: the badge used to lean on colour and a bare
+                      ✓ / ⚠ glyph, which renders differently on every platform. */}
+                  <Icon name={good ? 'check' : 'info'} size={11} color="var(--on-accent)" />
+                  {flagLabel(f)}
+                  <span className="sr-only"> — {flagHelp(f)}</span>
+                </span>
+              );
+            })
+          ) : (
+            <span role="status" aria-live="polite" style={{ ...photoChrome(), cursor: 'default' }}>
+              Checking this photo…
+            </span>
+          ))}
       </div>
 
       <input

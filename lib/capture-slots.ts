@@ -221,3 +221,165 @@ export function placePhotos(
 
   return { placed, rejected };
 }
+
+// ─── Moving a placed set around ─────────────────────────────────────────────
+//
+// The screen holds one record per wall and lets the user permute them: turn the
+// whole set round, swap two, drop one. Those permutations lived in the component
+// as three hand-written spreads, and three separate bugs came out of a
+// read-through of them — a quality score landing on the photo that had replaced
+// the one it was scored for, a clash flag pointing at a wall whose photo had been
+// deleted, and a clash flag left pointing at the old wall after a move. All three
+// are the same shape of mistake: a fact about ONE photo written against a SLOT.
+//
+// So they live here, pure and generic over whatever payload the screen carries,
+// beside the ladder that creates `by` and `clashedWith` in the first place.
+//
+// THE LIFETIME OF A CLASH FLAG, because it is a cross-reference and those rot:
+// it survives a rotation (both photos move together, so "these two may be one
+// wall" is still true and the reference is just relabelled) and nothing else. A
+// swap, a delete or a replace means the user is working on the assignment
+// themselves, which is what the flag was asking for — and it is better to drop a
+// hint that has been acted on than to maintain a pointer to a photo that may no
+// longer exist.
+
+/** One record per wall, `null` where there is no photo. */
+export type SlotMap<T> = Record<CaptureSlot, T | null>;
+
+/** What these helpers need to know about a payload: the two fields this file's
+ *  decisions write onto it. Everything else rides along untouched. */
+export type Slotted = { by?: SlotSignal; clashedWith?: CaptureSlot };
+
+const emptyMap = <T>(): SlotMap<T> => ({ n: null, e: null, s: null, w: null });
+
+/** The `from → to` mapping a rotation implies, for `roomStore.reslotCaptures`.
+ *  Derived from the same `rotateSlot` the screen's own state uses, so the store
+ *  and the screen cannot disagree about where a photo went. */
+export function rotationMapping(steps: number): Record<CaptureSlot, CaptureSlot> {
+  const out = {} as Record<CaptureSlot, CaptureSlot>;
+  for (const s of SLOT_ORDER) out[s] = rotateSlot(s, steps);
+  return out;
+}
+
+/** …and the mapping for one move, which is a swap when the target is occupied
+ *  and a plain move when it is not. */
+export function swapMapping<T>(
+  map: SlotMap<T>,
+  from: CaptureSlot,
+  to: CaptureSlot,
+): Partial<Record<CaptureSlot, CaptureSlot>> {
+  const out: Partial<Record<CaptureSlot, CaptureSlot>> = { [from]: to };
+  if (map[to]) out[to] = from;
+  return out;
+}
+
+/** Turn the whole set `steps` walls round. Every photo keeps its payload; `by`
+ *  becomes `manual`, because after this the reason it is where it is *is* the
+ *  user; and a clash reference is relabelled along with the walls it names. */
+export function rotateSet<T extends Slotted>(map: SlotMap<T>, steps: number): SlotMap<T> {
+  const next = emptyMap<T>();
+  for (const s of SLOT_ORDER) {
+    const p = map[s];
+    if (!p) continue;
+    next[rotateSlot(s, steps)] = {
+      ...p,
+      by: 'manual',
+      clashedWith: p.clashedWith ? rotateSlot(p.clashedWith, steps) : undefined,
+    };
+  }
+  return next;
+}
+
+/** Move one photo, swapping with whatever is already there. Clash flags across
+ *  the whole set are dropped — see the note above. */
+export function swapSet<T extends Slotted>(
+  map: SlotMap<T>,
+  from: CaptureSlot,
+  to: CaptureSlot,
+): SlotMap<T> {
+  if (from === to || !map[from]) return map;
+  const next = withoutClashes(map);
+  const moving = next[from]!;
+  const displaced = next[to];
+  next[from] = displaced ? { ...displaced, by: 'manual' } : null;
+  next[to] = { ...moving, by: 'manual' };
+  return next;
+}
+
+/** Take one photo out. Every clash flag in the set goes with it — not only the
+ *  ones naming this wall, per the lifetime rule above. The narrow version would
+ *  be defensible too, but the wide one is the same rule as `swapSet`'s and has no
+ *  case where it can leave a chip reading "maybe Wall 1 again" beside an empty
+ *  Wall 1, which is worse than no chip. */
+export function clearSlot<T extends Slotted>(map: SlotMap<T>, slot: CaptureSlot): SlotMap<T> {
+  const next = withoutClashes(map);
+  next[slot] = null;
+  return next;
+}
+
+/** Every photo, with no clash flags. */
+export function withoutClashes<T extends Slotted>(map: SlotMap<T>): SlotMap<T> {
+  const next = emptyMap<T>();
+  for (const s of SLOT_ORDER) {
+    const p = map[s];
+    next[s] = p ? { ...p, clashedWith: undefined } : null;
+  }
+  return next;
+}
+
+/**
+ * Write `patch` onto the photo at `slot`, but only while it is still that photo.
+ *
+ * Quality scoring is async and keyed on nothing: it is started for one blob and
+ * resolves whenever it resolves. Written back by slot alone, it lands on whatever
+ * occupies that wall by then — so rotating a set while its photos were still
+ * being scored relabelled every score, and the chip then described a different
+ * image. The blob is the identity, and the identity is the check.
+ *
+ * Returns the same map object when the photo has moved on, so React can skip the
+ * render as well as the wrong write.
+ */
+export function patchIfSame<T extends { blob: unknown }>(
+  map: SlotMap<T>,
+  slot: CaptureSlot,
+  blob: unknown,
+  patch: Partial<T>,
+): SlotMap<T> {
+  const at = map[slot];
+  if (!at || at.blob !== blob) return map;
+  return { ...map, [slot]: { ...at, ...patch } };
+}
+
+/**
+ * What just happened, for the live region.
+ *
+ * Pure, and takes its own labeller, so it does not have to reach into
+ * `lib/capture.ts` (which is a client module, and would close a cycle). Built
+ * here rather than inline because it has four plural decisions and one edge case
+ * that was wrong: with every wall already full, nothing is placed, and the
+ * sentence read "0 photo added: ." before the rejection was mentioned at all.
+ */
+export function describePlacement(
+  result: PlaceResult,
+  labelOf: (slot: CaptureSlot) => string,
+): string {
+  const { placed, rejected } = result;
+  const tooMany = rejected.length
+    ? `${rejected.length} photo${rejected.length > 1 ? 's' : ''} could not be added — all four walls already have one.`
+    : '';
+  if (!placed.length) return tooMany || 'Nothing to add.';
+
+  const compass = placed.filter((p) => p.by === 'bearing').length;
+  const timed = placed.some((p) => p.by === 'time');
+  return [
+    `${placed.length} photo${placed.length > 1 ? 's' : ''} added: ${placed.map((p) => labelOf(p.slot)).join(', ')}.`,
+    compass > 0 ? `${compass} placed from the photo’s own compass.` : '',
+    timed ? 'Ordered by when they were taken.' : '',
+    ...placed
+      .filter((p) => p.clashedWith)
+      .map((p) => `${labelOf(p.slot)} may be a second photo of ${labelOf(p.clashedWith!)} — check it.`),
+    tooMany,
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
