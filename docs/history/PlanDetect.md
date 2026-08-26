@@ -30,14 +30,18 @@ correction is folded in with a note.
 | 3b — drop label equality | **deferred, and now measured** | Phase 8 priced it: the cost is a real piece of furniture per gallery pair, the gain is a duplicate that was one tap away anyway. Recommend NOT doing it |
 | 3c — tiered merge distance | **done** | `mergeDistanceFor(category)` in `lib/detect-refine.ts`. Fixes the live over-merge bug 3a uncovered, independently of 3b |
 | 4 — range-based label repair | **done** | `lib/label-repair.ts` + the review-screen surfacing. Decisions 1 and 2 answered: re-measure, and suggest-then-confirm |
-| 5 — bearing auto-slot | not started | **Decided: ingest AND retire the four-slot grid.** The larger of the two options, and a product change — see §10.5 |
+| 5 — bearing auto-slot | **done** | `lib/capture-slots.ts` — a LADDER, not a bearing: compass tag, then EXIF shutter time, then arrival order, then the user. The four-slot grid is gone. §5's vanishing-point fallback is refused on geometric grounds — see below |
 | 6 — confidence honesty | **done, two items declined** | `lib/detect-confidence.ts` + `source` in both codec directions. `distance` and image quality declined with reasons — see below |
 | 7 — measure ceiling items | **done** | `placeCeilingObject`, width only. Two corrections to §3 below — the row it intersects, and what happens past the wall |
 | 8 — pipeline harness | **done, except the detector metric** | `tests/detect-pipeline.test.ts`, analytic, in CI. The detector half needs photos that must not be committed — see below |
 | 9 — dead-field removal | **done** | `alsoSeenIn` cut from the type and all three prompt clauses. `position.y` turned out **not** to be dead — see the correction below |
 
-**Order from here: 5 only** — 6, 7, 8 and 9 are done. Phase 5 should wait for the
-UX branch's pull request to land, since it rebuilds the same capture screen.
+**Order from here: nothing.** Every phase is done or explicitly declined.
+
+Phase 5 waited for the UX branch to land, as prescribed, and went onto a `main`
+carrying it — and the collision never existed: `PlanUX` turned out never to touch
+the capture screen at all. Gates after Phase 5: **1149 tests, 63 files**,
+typecheck / lint / build clean.
 
 **Order as it was written: 9 → 7 → 8 → 5.** This departs from §6, deliberately. §6 put 5
 before 8 so the harness could measure a SigLIP decision, but Phase 5 has since become
@@ -102,6 +106,69 @@ evidence; it is one. Four mutations verified, including that one.
   detect screen has nothing to read. Either a persisted-schema change or a re-score
   in the browser — and the payoff is a threshold nudge, which is the part of this
   phase that just turned out to be worth the least.
+
+**Phase 5's vanishing-point fallback does not work, and the geometry says so.**
+§5 proposed that photos with no bearing be ordered by their vanishing-point
+"families", on the grounds that relative orientation is enough. Relative would
+indeed be enough — the slot ids are a cyclic order and nothing outside
+`capture-slots` cares where north is — but VP cannot supply even that here. Every
+shot frames one wall straight-on from the middle of a box, so in EVERY photo the
+wall-parallel direction has its vanishing point at infinity and the view axis has
+its own at the principal point. That pair is identical whichever wall is in front
+of the lens, and nothing in it is labelled with which world axis it is, so two
+photos cannot be told apart, let alone ordered. It is not a tuning problem;
+`lib/vanishing-point.ts` returns a field of view and a tilt and no bearing for
+exactly this reason.
+
+The one signal that does survive is weaker than it sounds: in a non-square room
+the long wall subtends a visibly wider angle than the short one, so the wall
+corners would separate {n,s} from {e,w} — an AXIS, never a direction, and only
+after finding two corners. `wallSpan` puts the same fact on screen as a number the
+user can check against their own photograph, which is cheaper, needs no corner
+detection, and is actionable: one "turn the set round" control fixes every case,
+because a set can only ever be wrong by a whole number of quarter-turns.
+
+**What replaced it is a ladder, and EXIF shutter time is the rung the plan
+missed.** `DateTimeOriginal` gives the true shooting order of an uploaded set,
+which is what the no-bearing case actually needs, and it is far more reliable
+indoors than a magnetometer. It is read and then dropped — never persisted, never
+sent — which is what keeps it a weaker exposure than the GPS tags next to it that
+`exif.ts` still refuses. It orders a batch only when EVERY photo in it has one: a
+partial sort interleaves the timed photos through the untimed ones' positions and
+is worse than the arrival order it replaced.
+
+**Two live bugs found while doing it, neither of them in the new code.**
+
+- **Reordering photos threw away their pose.** `moveSlot` re-wrote a capture as
+  `{ slot, blob, takenAt }`, dropping `pose` — the focal length, the tilt, and
+  the very bearing this phase decides the wall from. `Capture.pose` being
+  optional is what let it typecheck, and the same hand-written-read-vs-write
+  drift `CLAUDE.md` warns about is what let it ship. Now one store operation,
+  `reslotCaptures`, which carries the whole record, writes before it deletes (a
+  stale duplicate is recoverable; a photograph deleted before its write landed is
+  not), and refuses a mapping that would land two photos on one wall.
+- **The prompt claimed four photos whatever was attached.** `detection.ts:66`
+  opened "You will receive 4 photos of a single room, one per wall (NORTH, EAST,
+  SOUTH, WEST)" and then described all four cameras. Continuing with fewer has
+  always been allowed and one photo is a supported way to use the screen, so the
+  ordinary one-wall run described three photographs that did not exist — an
+  invitation to furnish them. The builder moved to `lib/detect-prompt.ts` (pure,
+  no SDK, so it can be tested at all) and now counts the photos, names the
+  missing walls as missing, lists only the cameras it has, and constrains the
+  `slot` it will accept back. The coordinate system deliberately still names all
+  four wall planes: `position` is reported against them.
+
+**One assertion could not be written, and that is recorded rather than faked.**
+`asciiStringOf`'s NUL terminator is unreachable from its only caller — a date
+field is 20 bytes for 19 characters and `max` is 19, so the terminator is always
+the byte after the last one read. Mutation testing is what surfaced it. The guard
+stays, with a comment saying so, because a bounded string reader that walks
+through its own terminator is a trap for whichever tag is read next; a test that
+had to invent a field width to reach the branch would be testing the fixture.
+The other 16 mutations were caught, including one that only failed after a new
+assertion was added: `y < 1970` in `exifDateToMs` survived, because
+`0000:00:00` is already caught by its month and day, and a lone pre-epoch date
+was the case that needed it.
 
 **Phase 8 found a live bug on its first run, which is the best argument for it.**
 `in=11 refined=9` for a room with ten things in it. The missing piece was one of two
@@ -647,7 +714,7 @@ Add:
   survive its own label. That sweep mirrors `tests/catalog.test.ts:11` and is the one
   that stops this feature from becoming a nuisance.
 
-### Phase 5 — bearing to auto-slot
+### Phase 5 — bearing to auto-slot  *(shipped; the VP bullets below are wrong — see §0)*
 
 **The plumbing is already complete; only the consumer is missing** — see §1's rejected
 row. `exif.ts` reads the direction tags, `capture.ts` stores `pose.bearingDeg` from the
@@ -666,8 +733,16 @@ wrote the tag; no call site needs adding.
   upstream): vanishing-point families give *relative* orientation, and relative is
   enough — assign the set to slots consistently, then offer **one rotation control**
   that relabels all of them at once.
+  · **The rotation control shipped and is right. The VP half is wrong** — not
+  under-specified, wrong: a straight-on wall shot from the middle of a box has its
+  wall-parallel VP at infinity and its view-axis VP at the principal point, in
+  every photo, so the pair carries no way to tell one wall from another. See §0.
+  The rung that actually fills this gap is EXIF **shutter time**, which the plan
+  did not consider and which gives the true shooting order directly.
 - VP cannot substitute for bearing outright: it yields an orientation *family*, and no
   pixel distinguishes north from south.
+  · Understated. It does not yield a usable family either: "relative orientation"
+  between two photos needs cross-photo correspondence, which VP does not provide.
 - This is what retires the 1-photo problem — arbitrary uploads become first-class
   instead of being force-fitted to a four-slot ritual. `capture/page.tsx:257` already
   allows continuing on `!anyCaptured`, so the gate is not the blocker; the prompt's
@@ -842,6 +917,9 @@ Flag these and stop; do not pick a default.
    onboarding, so it wants its own PR and a look at whatever `PlanUX` is doing to the
    same screens. Photos with no bearing still need the vanishing-point relative-slot
    path plus one rotation control that relabels the whole set at once.
+   **Shipped, with that last sentence half wrong:** the rotation control is there
+   and is the right shape, and the VP path is refused — the geometry cannot order
+   two straight-on wall shots (§0). EXIF shutter time took its place.
 
 7. ~~**Phase 7 measures width only.**~~ **Done.** The decision held; see §0 for the
    two things this section got wrong about how. Original reasoning kept below.

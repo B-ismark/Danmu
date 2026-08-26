@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readExifFromJpeg, hfovFromFocal35 } from '@/lib/exif';
+import { readExifFromJpeg, hfovFromFocal35, exifDateToMs } from '@/lib/exif';
 
 // ── Minimal EXIF writer, so the fixtures are readable rather than a blob of hex ─
 
@@ -34,11 +34,18 @@ function ifd(base: number, tags: Tag[], le: boolean, nextIfd = 0): number[] {
       overflow.push(...w32(num), ...w32(den));
     } else if (t.type === ASCII) {
       const s = t.value as string;
-      out.push(...w32(s.length + 1));
-      // 2 chars + NUL fits inline; anything longer would need the overflow area.
       const bytes = [...s].map((c) => c.charCodeAt(0));
-      while (bytes.length < 4) bytes.push(0);
-      out.push(...bytes.slice(0, 4));
+      out.push(...w32(bytes.length + 1));
+      if (bytes.length + 1 > 4) {
+        // A date stamp is 19 characters plus its NUL, so it lives in the overflow
+        // area like a rational does. The one-letter GPS refs still go inline, and
+        // both paths need to work — the parser reads them the same way.
+        out.push(...w32(base + entriesEnd + overflow.length));
+        overflow.push(...bytes, 0);
+      } else {
+        while (bytes.length < 4) bytes.push(0);
+        out.push(...bytes.slice(0, 4));
+      }
     } else if (t.type === SHORT) {
       out.push(...w32(1), ...w16(t.value as number), 0, 0);
     } else {
@@ -57,6 +64,7 @@ function jpegWithExif(opts: {
   focalMM?: [number, number];
   bearing?: [number, number];
   bearingRef?: string;
+  shotAt?: string;
 }): Uint8Array {
   const le = opts.le ?? true;
   const w32 = (n: number) =>
@@ -77,6 +85,7 @@ function jpegWithExif(opts: {
   const exifTags: Tag[] = [];
   if (opts.focal35 !== undefined) exifTags.push({ tag: 0xa405, type: SHORT, value: opts.focal35 });
   if (opts.focalMM !== undefined) exifTags.push({ tag: 0x920a, type: RATIONAL, value: opts.focalMM });
+  if (opts.shotAt !== undefined) exifTags.push({ tag: 0x9003, type: ASCII, value: opts.shotAt });
   const exifBlock = ifd(exifAt, exifTags, le);
   const gpsAt = exifAt + exifBlock.length;
 
@@ -131,6 +140,71 @@ describe('readExifFromJpeg', () => {
     expect(exif.bearingRef).toBe('true');
   });
 
+  it('reads the shutter time, from the overflow area a 19-character string needs', () => {
+    const exif = readExifFromJpeg(jpegWithExif({ shotAt: '2026:08:26 09:41:07', focal35: 26 }))!;
+    expect(exif.shotAt).toBe(Date.UTC(2026, 7, 26, 9, 41, 7));
+    // Reading a string out of the overflow area must not disturb the tag beside it.
+    expect(exif.focalLength35mm).toBe(26);
+  });
+
+  it('reads it in big-endian files too', () => {
+    const exif = readExifFromJpeg(jpegWithExif({ le: false, shotAt: '2026:08:26 09:41:07' }))!;
+    expect(exif.shotAt).toBe(Date.UTC(2026, 7, 26, 9, 41, 7));
+  });
+
+  it('orders two photos by their shutter times', () => {
+    // The whole reason the tag is read: which of these was taken first.
+    const a = readExifFromJpeg(jpegWithExif({ shotAt: '2026:08:26 09:41:07' }))!;
+    const b = readExifFromJpeg(jpegWithExif({ shotAt: '2026:08:26 09:41:22' }))!;
+    expect(b.shotAt! - a.shotAt!).toBe(15_000);
+  });
+
+  it('ignores it when the tag is absent', () => {
+    expect(readExifFromJpeg(jpegWithExif({ focal35: 26 }))!.shotAt).toBeUndefined();
+  });
+});
+
+describe('exifDateToMs', () => {
+  it('parses the EXIF form, as UTC', () => {
+    expect(exifDateToMs('2026:08:26 09:41:07')).toBe(Date.UTC(2026, 7, 26, 9, 41, 7));
+  });
+
+  it('refuses the forms a camera with no clock writes', () => {
+    // Both of these are real, and both must read as "no time" rather than as the
+    // start of the epoch — which would sort them to the front of the set.
+    expect(exifDateToMs('0000:00:00 00:00:00')).toBeNull();
+    expect(exifDateToMs('    :  :     :  :  ')).toBeNull();
+    expect(exifDateToMs('')).toBeNull();
+    expect(exifDateToMs(null)).toBeNull();
+    expect(exifDateToMs('yesterday afternoon')).toBeNull();
+  });
+
+  it('refuses a date that does not exist rather than rolling it forward', () => {
+    // `Date.UTC` turns the 31st of February into the 3rd of March without
+    // complaint. A parser that accepts it is a parser that invents an ordering.
+    expect(exifDateToMs('2026:02:31 10:00:00')).toBeNull();
+    expect(exifDateToMs('2025:02:29 10:00:00')).toBeNull();
+    expect(exifDateToMs('2024:02:29 10:00:00')).toBe(Date.UTC(2024, 1, 29, 10, 0, 0));
+  });
+
+  it('refuses a date from before the epoch', () => {
+    // Found by mutation: every other assertion here survives dropping the year
+    // check, because `0000:00:00` is caught by its month and day instead. A lone
+    // pre-epoch date is the case that needs it — `Date.UTC` returns a negative
+    // number for one, which sorts it in front of every photo actually taken that
+    // afternoon.
+    expect(exifDateToMs('1899:12:31 23:59:59')).toBeNull();
+    expect(exifDateToMs('1970:01:01 00:00:00')).toBe(0);
+  });
+
+  it('refuses an out-of-range field', () => {
+    expect(exifDateToMs('2026:13:01 10:00:00')).toBeNull();
+    expect(exifDateToMs('2026:08:26 24:00:00')).toBeNull();
+    expect(exifDateToMs('2026:08:26 10:60:00')).toBeNull();
+  });
+});
+
+describe('readExifFromJpeg, continued', () => {
   it('ignores a rational with a zero denominator', () => {
     // Some cameras write 0/0 for "unknown" rather than omitting the tag.
     const exif = readExifFromJpeg(jpegWithExif({ focalMM: [0, 0] }))!;

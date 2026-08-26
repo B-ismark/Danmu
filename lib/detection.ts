@@ -2,12 +2,13 @@
 
 import { GoogleGenAI } from '@google/genai';
 import { useQuota } from './quota';
-import { footprintForLayout, type LayoutId } from './footprint';
-import { CATALOG_SHAPES_ORDERED } from './scene-spec';
+import { buildDetectPrompt, type PromptRoom } from './detect-prompt';
 import type { DetectSource } from './detect-confidence';
 import type { CaptureSlot } from './storage';
 
-export type PromptRoom = { width: number; depth: number; height: number; layoutId?: LayoutId };
+// Re-exported because callers name the room, not the prompt. The builder itself
+// lives in lib/detect-prompt.ts, where it can be tested without the Gemini SDK.
+export type { PromptRoom };
 
 // Detect furniture / fixtures across ALL 4 wall photos in a single Gemini call.
 // Letting the model see all 4 simultaneously lets it reason about object continuity
@@ -50,76 +51,6 @@ export type Detection = {
   meshHash?: string;
 };
 
-function buildPrompt(room: PromptRoom): string {
-  const w = room.width;
-  const d = room.depth;
-  const h = room.height;
-  const hw = (w / 2).toFixed(2);
-  const hd = (d / 2).toFixed(2);
-  const layout = (room.layoutId ?? 'rect') as LayoutId;
-
-  // For non-rectangular rooms, hand the model the actual footprint polygon so it
-  // never places objects in the cut-out void of an L/T/U plan.
-  let footprintClause = '';
-  if (layout !== 'rect' && layout !== 'open' && layout !== 'custom') {
-    const poly = footprintForLayout(layout, w, d)
-      .map(([x, z]) => `(${x.toFixed(2)}, ${z.toFixed(2)})`)
-      .join(', ');
-    footprintClause = `\n\nROOM SHAPE: this is a ${layout.toUpperCase()}-shaped room, NOT a full rectangle. Its floor footprint is the polygon with (x, z) vertices in metres: ${poly}. Every object MUST lie INSIDE this polygon — the area outside it is not part of the room. Do not place anything in the missing corner/notch.`;
-  }
-
-  return `You will receive 4 photos of a single room, one per wall (NORTH, EAST, SOUTH, WEST). They are taken from the ROOM CENTER, camera at ~1.5 m height, rotating clockwise. Each shot frames one wall straight-on. Room is roughly ${w.toFixed(1)} m × ${d.toFixed(1)} m × ${h.toFixed(1)} m (W × D × H).
-
-COORDINATE SYSTEM (very important):
-- Origin = room center, on the floor.
-- +X = right (East), -X = left (West).
-- +Y = up.
-- +Z = toward South wall, -Z = toward North wall.
-- N wall lies at z = ${(-d / 2).toFixed(2)}, S wall at z = ${(+d / 2).toFixed(2)}, E wall at x = ${(+w / 2).toFixed(2)}, W wall at x = ${(-w / 2).toFixed(2)}, ceiling at y = ${h.toFixed(2)}.${footprintClause}
-
-CAMERA PER SLOT:
-- N slot photo: camera at (0, 1.5, 0) looking at -Z. Image LEFT = world -X. Image BOTTOM = floor closer to viewer (z near 0). Image TOP = ceiling. Image RIGHT = +X.
-- S slot: camera looks at +Z. Image LEFT = world +X (mirrored). Image BOTTOM = z near 0.
-- E slot: camera looks at +X. Image LEFT = world -Z (toward N). Image BOTTOM = x near 0.
-- W slot: camera looks at -X. Image LEFT = world +Z (toward S). Image BOTTOM = x near 0.
-
-DEPTH ESTIMATION:
-- Item bbox bottom near image bottom (y ≈ 0.7-1.0) → object foot is CLOSE to camera (small |distance from center|).
-- Item bbox bottom near vertical middle of image (y ≈ 0.4-0.6) → object foot is at FAR wall.
-- Items higher up (top half of image with low bottom-y) and small in bbox → near far wall.
-- Items LARGE in bbox + low in image → close to camera (mid-room).
-
-Identify ALL distinct furniture / fixtures / appliances / textiles. Reason about the WHOLE room — if part of an object is seen in two photos (e.g. one bed corner in N and the rest in S), classify by the BEST view (largest bbox). Do NOT split one object into two detections.
-
-For each unique object return JSON with these fields:
-- label: short noun phrase (e.g. "single bed", "65 inch tv", "patterned curtain")
-- conf: 0..1
-- category: ONE of [sofa, tv, chair, table, lamp, plant, shelf, rug, bed, desk, curtain, fan, monitor, fridge, wardrobe, mirror, painting, nightstand, ottoman, ac, door, other]
-- slot: the wall where the BEST view appears — one of "n", "e", "s", "w"
-- box: [x, y, w, h] as fractions of THAT slot's image (0..1). Encompass the WHOLE visible part — generous, not tight.
-- dimMM: estimated real-world dimensions in millimetres [W, D, H].
-- position: { x, y, z } in METRES, room-centered (see coordinate system + camera notes above).
-  - For the OBJECT CENTER in 3D, infer FROM:
-    1. bbox center horizontal → world axis perpendicular to camera direction.
-    2. bbox bottom-y → distance along camera direction (lower = closer to camera).
-    3. apparent size → confirm distance.
-  - y: send 0 and do not estimate it. Standing and mounting heights are computed from the room and the object's own size, so whatever you put here is discarded. Only x and z are read.
-  - Items in MIDDLE of room (rugs, coffee tables, dining table) MUST have small |x| and |z| — do NOT snap to walls.
-  - Items against walls have one of x/z near ±${hw}/±${hd} minus their depth/2.
-- yaw: rotation in radians around vertical axis. 0 = facing +Z (south). π = facing -Z (north). -π/2 = +X (east). +π/2 = -X (west). Most furniture faces room interior.
-- color: the object's DOMINANT colour as a #rrggbb hex (the main body/upholstery colour, ignoring small accents, highlights and shadows). Best-effort.
-- shape: pick ONE from our 3D catalog so we render a visually-faithful primitive. Never invent new ones. Catalog:
-  ${CATALOG_SHAPES_ORDERED.join(', ')},
-  box (LAST RESORT only — use a real shape whenever possible).
-
-CRITICAL RULES (REPEAT BEFORE OUTPUT):
-1. Each PHYSICAL object → exactly ONE entry. Bed half in N + rest in S = ONE bed (slot=s). Never duplicate.
-2. Skip near-duplicate items (don't list every cushion separately).
-3. If unsure between two shapes, pick the more specific one. Never invent shapes.
-4. Mid-room items (rugs, coffee table, dining table) MUST have small |x|,|z| — do NOT snap to walls.
-
-Output ONLY a JSON array. No prose. No markdown. Maximum 25 items, sorted by visual prominence (largest first).`;
-}
 
 export class DetectError extends Error {
   constructor(
@@ -176,7 +107,7 @@ export async function detectAcrossImages(
   if (images.length === 0) return [];
 
   const ai = new GoogleGenAI({ apiKey });
-  const prompt = buildPrompt(room);
+  const prompt = buildDetectPrompt(room, images.map((i) => i.slot));
 
   // Base64 inflates by 4/3, so check the encoded size — the raw byte total was
   // never the limit that mattered. Four untouched 12 MP phone photos are 12-20 MB

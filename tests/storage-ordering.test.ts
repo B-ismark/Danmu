@@ -190,3 +190,24 @@ describe('importScene write order', () => {
     expect(await roomStore.loadRoom('a')).toMatchObject({ name: 'Room a' });
   });
 });
+
+describe('reslotCaptures write order', () => {
+  it('writes every photo to its new wall before vacating any old one', async () => {
+    // The asymmetry that decides which way round this goes: a vacated key that
+    // outlives its write is a duplicate photo the next reload shows twice, and
+    // the user can delete it. A deleted key whose write never landed is a
+    // photograph that is gone. Interrupt this halfway and only one of those is
+    // recoverable, so every `set` precedes every `del`.
+    await roomStore.saveRoom(ROOM);
+    await roomStore.saveCapture('a', { slot: 'n', blob: new Blob(['one']), takenAt: 1 });
+    await roomStore.saveCapture('a', { slot: 'e', blob: new Blob(['two']), takenAt: 2 });
+    log = [];
+
+    await roomStore.reslotCaptures('a', { n: 's', e: 'w' });
+
+    const lastWrite = lastAt(/^set room:a:cap:/);
+    const firstDelete = firstAt(/^del room:a:cap:/);
+    expect(lastWrite).toBeGreaterThanOrEqual(0);
+    expect(firstDelete).toBeGreaterThan(lastWrite);
+  });
+});

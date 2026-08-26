@@ -212,6 +212,78 @@ describe('captures', () => {
   });
 });
 
+describe('reslotCaptures', () => {
+  /** Which photo is on which wall. Keyed by `takenAt`, not by blob content:
+   *  jsdom's Blob has no `text()`, and the identity being asserted is which
+   *  RECORD moved, which `takenAt` names just as well. */
+  const walls = async (id: string) =>
+    Object.fromEntries((await roomStore.loadCaptures(id)).map((c) => [c.slot, c.takenAt]));
+
+  it('rotates the whole set one wall round, leaving no photo behind', async () => {
+    await roomStore.saveRoom(room('a'));
+    await roomStore.saveCapture('a', { slot: 'n', blob: new Blob(['one']), takenAt: 1 });
+    await roomStore.saveCapture('a', { slot: 'e', blob: new Blob(['two']), takenAt: 2 });
+
+    await roomStore.reslotCaptures('a', { n: 'e', e: 's' });
+
+    const after = await roomStore.loadCaptures('a');
+    expect(after).toHaveLength(2);
+    // `n` is vacated, not left holding a stale copy of the photo that moved off it.
+    expect(await walls('a')).toEqual({ e: 1, s: 2 });
+  });
+
+  it('carries the pose with the photo', async () => {
+    // The bug this replaces: a pairwise swap re-wrote `{ slot, blob, takenAt }`
+    // and silently dropped `pose`, so reordering photos threw away the focal
+    // length, the tilt, and the bearing that now decides which wall this is.
+    await roomStore.saveRoom(room('a'));
+    await roomStore.saveCapture('a', {
+      slot: 'n',
+      blob: new Blob(['one']),
+      takenAt: 1,
+      pose: { focal35mm: 13, tiltDeg: 4, heightM: 1.6, bearingDeg: 215 },
+    });
+
+    await roomStore.reslotCaptures('a', { n: 's' });
+
+    const [moved] = await roomStore.loadCaptures('a');
+    expect(moved.slot).toBe('s');
+    expect(moved.pose).toEqual({ focal35mm: 13, tiltDeg: 4, heightM: 1.6, bearingDeg: 215 });
+    expect(moved.takenAt).toBe(1);
+  });
+
+  it('swaps two photos past each other', async () => {
+    await roomStore.saveRoom(room('a'));
+    await roomStore.saveCapture('a', { slot: 'n', blob: new Blob(['one']), takenAt: 1 });
+    await roomStore.saveCapture('a', { slot: 'w', blob: new Blob(['two']), takenAt: 2 });
+
+    await roomStore.reslotCaptures('a', { n: 'w', w: 'n' });
+
+    expect(await walls('a')).toEqual({ w: 1, n: 2 });
+  });
+
+  it('refuses to land two photos on one wall rather than losing one', async () => {
+    await roomStore.saveRoom(room('a'));
+    await roomStore.saveCapture('a', { slot: 'n', blob: new Blob(['one']), takenAt: 1 });
+    await roomStore.saveCapture('a', { slot: 'e', blob: new Blob(['two']), takenAt: 2 });
+
+    await expect(roomStore.reslotCaptures('a', { n: 's', e: 's' })).rejects.toThrow(/land on s/);
+    // And nothing moved: the refusal happens before the first write.
+    const after = await roomStore.loadCaptures('a');
+    expect(after.map((c) => c.slot).sort()).toEqual(['e', 'n']);
+  });
+
+  it('leaves slots the mapping does not mention alone', async () => {
+    await roomStore.saveRoom(room('a'));
+    await roomStore.saveCapture('a', { slot: 'n', blob: new Blob(['one']), takenAt: 1 });
+    await roomStore.saveCapture('a', { slot: 's', blob: new Blob(['two']), takenAt: 2 });
+
+    await roomStore.reslotCaptures('a', { n: 'e' });
+
+    expect(await walls('a')).toEqual({ e: 1, s: 2 });
+  });
+});
+
 describe('layouts', () => {
   it('lists saved variants oldest-first and deletes one', async () => {
     await roomStore.saveRoom(room('a'));

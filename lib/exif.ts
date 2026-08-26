@@ -39,6 +39,20 @@ export type ExifData = {
   bearingDeg?: number;
   /** True north vs magnetic, as recorded alongside the bearing. */
   bearingRef?: 'true' | 'magnetic';
+  /** Shutter time, ms since epoch, from DateTimeOriginal.
+   *
+   *  Read for ONE purpose: putting a dropped set of photos back into the order
+   *  they were shot in (`lib/capture-slots.ts`, the `time` rung). A file picker's
+   *  order is whatever the OS felt like; the shutter knows. Never persisted and
+   *  never sent — the same reason GPS is not read applies with less force to a
+   *  timestamp, and the way to keep it having less force is to use the value and
+   *  drop it.
+   *
+   *  EXIF stores local wall-clock time with no zone, so this is parsed AS IF UTC.
+   *  That is exact for the only question asked of it — which of these two photos
+   *  came first, both off the same phone in the same room — and wrong for any
+   *  question about when. Do not display it. */
+  shotAt?: number;
 };
 
 // TIFF tags we care about. IFD0 / ExifIFD / GPS IFD respectively.
@@ -47,6 +61,7 @@ const TAG_EXIF_IFD = 0x8769;
 const TAG_GPS_IFD = 0x8825;
 const TAG_FOCAL_LENGTH = 0x920a;
 const TAG_FOCAL_35MM = 0xa405;
+const TAG_DATE_TIME_ORIGINAL = 0x9003;
 const TAG_GPS_DIR_REF = 0x0010;
 const TAG_GPS_DIR = 0x0011;
 
@@ -143,6 +158,8 @@ function parseTiff(bytes: Uint8Array, base: number, end: number): ExifData | nul
       if (f35 !== null && f35 > 0 && f35 < 2000) out.focalLength35mm = f35;
       const f = scalarOf(t, exif.get(TAG_FOCAL_LENGTH));
       if (f !== null && f > 0 && f < 2000) out.focalLengthMM = f;
+      const shot = exifDateToMs(asciiStringOf(t, exif.get(TAG_DATE_TIME_ORIGINAL), 19));
+      if (shot !== null) out.shotAt = shot;
     }
   }
 
@@ -226,6 +243,59 @@ function asciiOf(t: Tiff, e: Entry | undefined): string | null {
   if (!e || e.at >= t.end) return null;
   const c = t.bytes[e.at];
   return c === 0 ? null : String.fromCharCode(c);
+}
+
+/** A whole ASCII entry, up to `max` characters and stopping at the terminator.
+ *  Bounded by `t.end` as well as by `count`, because the count is a number out of
+ *  the file and everything else in this parser treats those as hostile.
+ *
+ *  The NUL stop is **not reachable from the one caller today**, and mutation
+ *  testing is how that came to light: a date field is 20 bytes for 19 characters,
+ *  `max` is 19, so the terminator is always the byte after the last one read.
+ *  It stays because a bounded string reader that walks through its own terminator
+ *  is a trap for whichever tag gets read next, and it is cheaper to keep than to
+ *  rediscover. Deliberately not given a contrived fixture: a test that has to
+ *  invent a field width to reach a branch is testing the fixture. */
+function asciiStringOf(t: Tiff, e: Entry | undefined, max: number): string | null {
+  if (!e || e.type !== 2) return null;
+  const n = Math.min(e.count, max);
+  let s = '';
+  for (let i = 0; i < n; i++) {
+    const at = e.at + i;
+    if (at >= t.end) break;
+    const c = t.bytes[at];
+    if (c === 0) break;
+    s += String.fromCharCode(c);
+  }
+  return s.length ? s : null;
+}
+
+/**
+ * `YYYY:MM:DD HH:MM:SS` → ms since epoch, or null for anything else.
+ *
+ * Parsed by hand rather than handed to `Date` or a regex-and-`new Date()`: the
+ * EXIF form is not ISO 8601, and what `Date.parse` does with a non-ISO string is
+ * implementation-defined — the one thing a date parser must not be when its
+ * output orders the user's walls. Read AS UTC, deliberately: the tag carries no
+ * zone, and this value is only ever compared against another one from the same
+ * camera in the same room.
+ *
+ * The blank-and-zero forms are real. A camera with no clock set writes
+ * `0000:00:00 00:00:00`, and some write spaces; both must read as "no time"
+ * rather than as the start of the epoch, which would sort them first.
+ */
+export function exifDateToMs(s: string | null): number | null {
+  if (!s) return null;
+  const m = /^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/.exec(s.trim());
+  if (!m) return null;
+  const [, y, mo, d, h, mi, se] = m.map(Number);
+  if (y < 1970 || mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59 || se > 60) return null;
+  const ms = Date.UTC(y, mo - 1, d, h, mi, se);
+  // Date.UTC rolls a 31st of February forward into March rather than refusing it.
+  // Round-tripping catches that, and costs one comparison.
+  const back = new Date(ms);
+  if (back.getUTCMonth() !== mo - 1 || back.getUTCDate() !== d) return null;
+  return ms;
 }
 
 /** Half-diagonal of the 35 mm frame (36 × 24 mm), in mm. */
