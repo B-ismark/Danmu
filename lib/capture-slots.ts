@@ -210,7 +210,12 @@ export function placePhotos(
     }
 
     taken.add(slot);
-    placedSoFar.push({ slot, bearingDeg: facts.bearingDeg });
+    // A clashing photo contributes NO bearing to the anchor. Its slot is a
+    // fallback we chose, not a wall its compass earned, so pairing the two would
+    // feed the anchor a relationship that does not exist — and the anchor would
+    // then fail its own agreement gate on a contradiction of our own making,
+    // silently costing every later photo in the batch its bearing rung.
+    placedSoFar.push({ slot, bearingDeg: clashedWith ? undefined : facts.bearingDeg });
     placed.push({ index, slot, by, ...(clashedWith ? { clashedWith } : {}) });
   }
 

@@ -192,6 +192,21 @@ describe('placePhotos — the ladder', () => {
     expect(placed[1]).toEqual({ index: 1, slot: 'e', by: 'order', clashedWith: 'n' });
   });
 
+  it('does not let a clashing photo poison the anchor for the ones behind it', () => {
+    // Two photos of Wall 1 (10° and 15°), then a genuine Wall 3 at 190°.
+    //
+    // The second photo goes to `e` as a fallback. If its bearing were then paired
+    // with that slot, the set would imply anchors of 10° and 285° — 85° apart,
+    // failing the agreement gate — and the third photo would lose its bearing rung
+    // to a contradiction we manufactured ourselves.
+    const { placed } = placePhotos([], [{ bearingDeg: 10 }, { bearingDeg: 15 }, { bearingDeg: 190 }]);
+    expect(placed[1]).toEqual({ index: 1, slot: 'e', by: 'order', clashedWith: 'n' });
+    // `s` either way — it is the first free wall as well as the measured one — so
+    // `by` is the whole of the evidence here, which is why it is asserted and not
+    // the slot: a poisoned anchor gives up and says `order`.
+    expect(placed[2]).toEqual({ index: 2, slot: 's', by: 'bearing' });
+  });
+
   it('leaves the clash flag off a photo whose bearing was believed', () => {
     const { placed } = placePhotos([], [{ bearingDeg: 10 }, { bearingDeg: 100 }]);
     expect(placed[1].clashedWith).toBeUndefined();
