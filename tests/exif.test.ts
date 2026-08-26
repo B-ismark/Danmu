@@ -187,6 +187,16 @@ describe('exifDateToMs', () => {
     expect(exifDateToMs('2024:02:29 10:00:00')).toBe(Date.UTC(2024, 1, 29, 10, 0, 0));
   });
 
+  it('refuses a date from before the epoch', () => {
+    // Found by mutation: every other assertion here survives dropping the year
+    // check, because `0000:00:00` is caught by its month and day instead. A lone
+    // pre-epoch date is the case that needs it — `Date.UTC` returns a negative
+    // number for one, which sorts it in front of every photo actually taken that
+    // afternoon.
+    expect(exifDateToMs('1899:12:31 23:59:59')).toBeNull();
+    expect(exifDateToMs('1970:01:01 00:00:00')).toBe(0);
+  });
+
   it('refuses an out-of-range field', () => {
     expect(exifDateToMs('2026:13:01 10:00:00')).toBeNull();
     expect(exifDateToMs('2026:08:26 24:00:00')).toBeNull();

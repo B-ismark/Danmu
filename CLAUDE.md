@@ -29,6 +29,23 @@ backend, no account. The 3D studio *is* the product.
    hand-typed string next to the thing it describes; and when something does not
    fit, **say so — never silently resize it to fit**. A piece taller than the
    ceiling keeps its real height and `lib/clearance.ts` reports it.
+   **Which wall a photo is, is code's answer now too** (`lib/capture-slots.ts`),
+   and it belongs to this rule because a wrong slot is a wrong room:
+   `wallDistance` reads n/s at `depth/2` and e/w at `width/2`, so a photo of the
+   long wall filed under a short one is measured from the wrong distance and every
+   size taken off it is wrong. So it is a **ladder that names its rung** — EXIF
+   compass bearing, EXIF shutter time, arrival order, the user — rather than a
+   guess in an answer's clothes, and a bearing pointing at a wall that is already
+   taken is *reported*, not honoured. The ids are a cyclic order, not compass
+   directions, and that is what makes it safe: nothing outside that file cares
+   where north is (the room's own bearing lives in `Site.bearingDeg`), so any
+   error common to every bearing — declination, true-vs-magnetic — cancels out of
+   the differences. **Do not re-propose vanishing points for the no-bearing case.**
+   Every shot frames one wall straight-on from the middle of a box, so the
+   wall-parallel VP sits at infinity and the view-axis VP at the principal point in
+   *every* photo: an identical pair carrying no world-axis label. `wallSpan` is
+   the honest version of that idea — the length a wall ought to be, on screen, for
+   the user to check.
 3. **Single source of truth for furniture** is `lib/scene-spec.ts` (+
    `lib/parts-catalog.ts`). 3D scene, 2D plan, inspector, catalog and decor all
    read from it. Add a shape / behaviour flag there, not ad-hoc in a component.
@@ -177,7 +194,14 @@ backend, no account. The 3D studio *is* the product.
    `Capture` blobs, `detectedObjects` and `fromDetection` all stay behind. Don't
    add them "for fidelity" — the geometry is already in the parts. Photos
    are normalised on ingest (`normalizePhoto`, ≤1600 px) before they are stored
-   or sent — nothing full-resolution reaches IndexedDB or a request. Every
+   or sent — nothing full-resolution reaches IndexedDB or a request. What `exif.ts`
+   reads out of a photo before that strip is on a **budget, not a shopping list**:
+   GPS coordinates are refused outright, and the shutter time — added so a dropped
+   set can be put back into the order it was shot in — is read, used, and dropped.
+   `readCaptureFacts` returns the persisted `pose` and the transient facts
+   separately for exactly that reason; a field that is not needed after the
+   decision does not go into storage, where it reads as something the app keeps.
+   Every
    third-party host is allow-listed with a reason in `next.config.mjs`'s CSP;
    adding a fetch target means adding it there too. The same file's
    `Permissions-Policy` allows only the features the app actually uses —
@@ -255,7 +279,7 @@ they fail faster.
 Run `pnpm typecheck` after non-trivial edits. Add a Vitest test when you touch
 pure logic in `lib/` (geometry / physics / clearance / footprint / dimension-
 ranges / shape-search / item-snap / units / dates / scene-file / transforms /
-fit-check all have tests
+fit-check / capture-slots / detect-prompt all have tests
 in
 `tests/`).
 

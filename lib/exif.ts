@@ -247,7 +247,15 @@ function asciiOf(t: Tiff, e: Entry | undefined): string | null {
 
 /** A whole ASCII entry, up to `max` characters and stopping at the terminator.
  *  Bounded by `t.end` as well as by `count`, because the count is a number out of
- *  the file and everything else in this parser treats those as hostile. */
+ *  the file and everything else in this parser treats those as hostile.
+ *
+ *  The NUL stop is **not reachable from the one caller today**, and mutation
+ *  testing is how that came to light: a date field is 20 bytes for 19 characters,
+ *  `max` is 19, so the terminator is always the byte after the last one read.
+ *  It stays because a bounded string reader that walks through its own terminator
+ *  is a trap for whichever tag gets read next, and it is cheaper to keep than to
+ *  rediscover. Deliberately not given a contrived fixture: a test that has to
+ *  invent a field width to reach a branch is testing the fixture. */
 function asciiStringOf(t: Tiff, e: Entry | undefined, max: number): string | null {
   if (!e || e.type !== 2) return null;
   const n = Math.min(e.count, max);
