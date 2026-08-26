@@ -663,8 +663,14 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
 
 ### Multi-select & grouping — `SelectionHeader.tsx`
 - Shift-click adds to `selection: string[]`. "Merge N" assigns a shared
-  `groupId`; clicking any grouped part selects the whole group; group **move-as-
-  one** on translate (rotate/scale-as-one is roadmap). "Ungroup" clears it.
+  `groupId`; clicking any grouped part selects the whole group. **Both a selection
+  and a merged group move as one on translate** (rotate/scale-as-one is roadmap),
+  through `lib/drag-convoy.ts` — see §"Who travels" below. "Ungroup" clears it.
+- A **press keeps** a selection that already contains the piece, so the drag has
+  something to carry; a **click** (a press that never moved) collapses it to that
+  one piece. Both surfaces, both directions. The plan collapsed on the press and
+  the 3D tab collapsed on the DOM click that ends every drag, which is why a
+  multi-piece drag looked impossible in one tab and self-undoing in the other.
 
 ### Recolour & finish — `Inspector.tsx`, `Draggable.tsx` `FinishApplier`
 - One merged **Colour** section (24-swatch palette + hex). Separate **Finish**
@@ -1086,6 +1092,53 @@ is refused. **A new snap, clearance or gravity rule goes in the lib** — this i
 the same "two consumers, one rule, two copies" failure that `layout-rules.ts`
 exists to prevent, and `tests/drag-resolve.test.ts` pins the pipeline step by
 step so a change that suits one surface fails there first.
+
+### Who travels — `lib/drag-convoy.ts`
+`drag-resolve` answers *where the dragged piece lands*; this answers *what comes
+with it*. Three kinds of company, and they are not the same rule:
+
+- **rigid children** — what is physically resting on the piece. Carried by
+  `cascadeTransform` about the dragged piece's own pivot, so a lamp on a turning
+  desk turns too.
+- **merged-group siblings** and **the rest of the multi-selection** — one rule:
+  translate rigidly by the delta the dragged piece *accepted*, each from where it
+  stood at pointer-down.
+
+They were three implementations. The merged-group loop was written out twice, in
+`Draggable.commit()` and in `PlanView.moveTo`, and the multi-selection was
+implemented in neither — shift-clicking four chairs and dragging one moved that one
+chair, in both tabs. The report it produced was **"sometimes only one moves"**,
+because a merged set does move as one and looks identical on screen to a selected
+one. Two features that render the same must not be two code paths.
+
+`planConvoy` resolves membership once at pointer-down (re-resolving per frame lets
+a piece near a tolerance detach mid-gesture, the trap `wallAttachments` documents
+for walls) and closes over merged groups, so half a merged set can never be left
+behind. `resolveConvoy` then puts every member through `resolvePlacement`, which
+buys two things and costs one:
+
+- **Gravity is re-asked**, so a member translated off the table it stood on lands
+  on the floor rather than hanging at table height — and can equally ride *up* onto
+  something it arrives over, exactly as a single dragged piece does. Vertical
+  rigidity is not a promise a drag here makes.
+- **A member that cannot follow makes the whole step invalid**, and names itself.
+  The set refuses as a unit instead of deforming or pushing a piece through the
+  plaster (rule 2, for position), and the piece that refused is not the piece under
+  the hand — so the red outline and the spoken sentence both go to the member.
+- The cost is one resolve per member per frame, which is why the components hold
+  the convoy in a ref and both write their result through one `setTransformsFor`.
+
+Two traps in there, both silent. `collidesAt` looks the mover up in the list it is
+handed and returns **false** when it is absent, so a world with the mover filtered
+out reports every position as clear — collision detection off, nothing logged. That
+is why the subtraction is `worldFor(convoy, self, parts)` and never a `.filter` at
+the call site. And a member resolves with `snapMode: 'off'`: its own magnetism would
+pull it out of formation, and the grid would re-round a delta the dragged piece has
+already committed to. `convoyRestore` is the Escape path — it replays the pure
+cascade from the start transforms rather than snapshotting a second copy of them.
+`tests/drag-convoy.test.ts` holds all of it, including both traps as behaviour
+(a collision that must still be seen, a snap that must not fire) rather than as
+array shapes.
 
 ### Removing a piece — `removeParts` in `KeyboardShortcuts.tsx`
 One path for every surface: the row trash, the Inspector button, the Delete key

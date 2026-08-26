@@ -3,7 +3,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { type ThreeEvent } from '@react-three/fiber';
 import { Group } from 'three';
-import { gestureOwnedByOther, useStudio } from '@/lib/store';
+import { consumeDragClick, gestureOwnedByOther, useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { cycleThrough, type CycleState } from '@/lib/plan-hit';
 import { pickIdsFrom, PART_ID_KEY } from '@/lib/pick-through';
@@ -85,6 +85,12 @@ export function Pickable({
         // A Space + left-drag that happens to pass over furniture is a camera
         // pan; it must not re-select whatever it flew across.
         if (useStudio.getState().panKeyHeld) return;
+        // The tail of a drag that MOVED this piece. Selecting is what a click
+        // means, but a drag is not a click, and treating it as one collapsed the
+        // multi-selection the drag had just finished carrying — see
+        // `suppressClickAfterDrag` in lib/store.ts. Checked before Alt, because a
+        // drag is not a request to open the what-is-under-here list either.
+        if (consumeDragClick(partId)) return;
         // ── Alt: choose between pieces that overlap on screen ────────────────
         // The one question a plain click cannot answer, because only the frontmost
         // handler runs. `e.intersections` is the whole depth-sorted list from this

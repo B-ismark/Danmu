@@ -29,7 +29,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { TransformControls } from '@react-three/drei';
 import { useThree, type ThreeEvent } from '@react-three/fiber';
 import { Group, Mesh, MeshStandardMaterial, Plane, Vector3 } from 'three';
-import { gestureOwnedByOther, useStudio } from '@/lib/store';
+import { clearDragClick, gestureOwnedByOther, suppressClickAfterDrag, useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { currentRoomScene } from '@/lib/room-scene';
 import { useDragLive } from '@/lib/drag-live';
@@ -38,7 +38,8 @@ import { isFloorStanding } from '@/lib/physics';
 import { clampDims } from '@/lib/dimension-ranges';
 import { type SnapLine } from '@/lib/item-snap';
 import { resolvePlacement as resolveDrag, snapSteps } from '@/lib/drag-resolve';
-import { cascadeTransform, snapshotDescendants, wouldCreateCycle, type DescendantOffset } from '@/lib/rigid-parent';
+import { wouldCreateCycle } from '@/lib/rigid-parent';
+import { planConvoy, resolveConvoy, worldFor, type Convoy, type ConvoyResult } from '@/lib/drag-convoy';
 import { Pickable } from './Pickable';
 import { Highlight } from './Highlight';
 
@@ -164,6 +165,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
 
   const setPosition = useStudio((s) => s.setPosition);
   const setRotation = useStudio((s) => s.setRotation);
+  const setTransformsFor = useStudio((s) => s.setTransformsFor);
   const setDim = useStudio((s) => s.setDim);
   const setParent = useStudio((s) => s.setParent);
   const clearParent = useStudio((s) => s.clearParent);
@@ -226,27 +228,52 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     return effCache.current;
   }
 
-  // Rigid parenting: whatever is (physically, live) resting on this part,
-  // recursively. Computed once per gesture from the same frozen snapshot as
+  // Everything this gesture carries: whatever is (physically, live) resting on
+  // this part, the rest of the multi-selection, and any merged group either of
+  // those belongs to. Computed once per gesture from the same frozen snapshot as
   // `effParts()` — `parentIds` cannot change mid-gesture (`setParent`/
-  // `clearParent` are only ever called from `commit()`, after which both
-  // caches are cleared), so there's no staleness risk in caching this too.
-  const descCache = useRef<DescendantOffset[] | null>(null);
-  function descendants(): DescendantOffset[] {
-    if (!descCache.current) {
-      descCache.current = snapshotDescendants(partId, effParts(), useStudio.getState().parentIds);
+  // `clearParent` are only ever called from `commit()`, after which both caches
+  // are cleared), so there's no staleness risk in caching this either.
+  const convoyCache = useRef<Convoy | null>(null);
+  function convoy(): Convoy {
+    if (!convoyCache.current) {
+      convoyCache.current = planConvoy({
+        draggedId: partId,
+        parts: effParts(),
+        selection: useStudio.getState().selection,
+        parentIds: useStudio.getState().parentIds,
+      });
     }
-    return descCache.current;
+    return convoyCache.current;
   }
 
-  /** `effParts()` with this part's own descendants filtered out — otherwise a
-   *  part being dragged can transiently resolve its own gravity/collision
-   *  against a child this same commit is about to move out from under it. */
-  function selfEffParts(): ScenePart[] {
-    const desc = descendants();
-    if (desc.length === 0) return effParts();
-    const skip = new Set(desc.map((d) => d.id));
-    return effParts().filter((p) => !skip.has(p.id));
+  /** `effParts()` with everything travelling filtered out, this part excepted — a
+   *  piece must not resolve its gravity, its magnetism or its collisions against
+   *  company that is moving with it, but it does have to appear in its own world
+   *  (see `worldFor`). It used to filter only this part's own children, which is
+   *  why dragging two chairs selected side by side refused on the first pixel:
+   *  each was the other's obstacle, at the position it was about to leave. */
+  function travelWorld(): ScenePart[] {
+    const c = convoy();
+    if (c.travelling.size <= 1) return effParts();
+    const eff = effParts();
+    const self = eff.find((p) => p.id === partId);
+    return self ? worldFor(c, self, eff) : eff;
+  }
+
+  /** Where the company lands for a given transform of this part. */
+  function carry(pos: [number, number, number], rot: number): ConvoyResult {
+    return resolveConvoy({
+      convoy: convoy(),
+      draggedId: partId,
+      pos,
+      rot,
+      startPos: dragStartPos.current ?? pos,
+      // The whole world: `resolveConvoy` subtracts the convoy per member itself.
+      parts: effParts(),
+      footprint,
+      roomHeight,
+    });
   }
 
   /** The deterministic placement pipeline, which now lives in
@@ -305,13 +332,29 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   }
 
   /** Per-frame feedback shared by both drag paths. Moves the mesh to the
-   *  resolved spot, records the last collision-free position, publishes the
-   *  live channel, and tints the highlight when invalid. */
+   *  resolved spot, brings the company with it, records the last collision-free
+   *  position, publishes the live channel, and tints the highlight when invalid.
+   *
+   *  The company moves LIVE, through the store, rather than at the drop. This part
+   *  can afford to skip the store because the drag animates its own object3D; the
+   *  others cannot be reached that way, and a set that only catches up on release
+   *  is indistinguishable from a set that is not coming. */
   function liveUpdate(resolved: { pos: [number, number, number]; rot: number; valid: boolean; snapLines?: SnapLine[] }, dim: [number, number, number]) {
     if (!ref.current || !part) return;
     ref.current.position.set(resolved.pos[0], resolved.pos[1], resolved.pos[2]);
     ref.current.rotation.y = resolved.rot;
-    if (resolved.valid) lastFreePos.current = [resolved.pos[0], resolved.pos[1], resolved.pos[2]];
+    // The convoy has a veto: a spot this piece could take but its company cannot
+    // is not a spot the gesture may rest at, so it must not be remembered as the
+    // fallback `commit()` slides back to either.
+    const co = carry(resolved.pos, resolved.rot);
+    const valid = resolved.valid && co.valid;
+    if (valid) {
+      lastFreePos.current = [resolved.pos[0], resolved.pos[1], resolved.pos[2]];
+      // Only on a legal step. On an illegal one the set holds at the last legal
+      // delta while the piece under the hand goes red and keeps following the
+      // pointer — the separation IS the feedback, and the drop reunites them.
+      if (co.moves.length > 0) setTransformsFor(co.moves);
+    }
     setLive({
       partId,
       x: resolved.pos[0],
@@ -320,29 +363,36 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       rot: resolved.rot,
       dimMM: dim,
       floor: isFloorStanding(part.category, part.shape),
-      valid: resolved.valid,
+      valid,
       snapLines: resolved.snapLines,
     });
-    setDragInvalid((prev) => (prev === !resolved.valid ? prev : !resolved.valid));
+    setDragInvalid((prev) => (prev === !valid ? prev : !valid));
     invalidate(); // the object3D moved imperatively — request the repaint
   }
 
   function commit() {
     if (!ref.current || !part) return;
     const dim = currentDim();
-    const eff = selfEffParts();
+    const eff = travelWorld();
     const p = ref.current.position;
     let resolved = resolvePlacement(p.x, p.z, ref.current.rotation.y, dim, eff);
+    let co = carry(resolved.pos, resolved.rot);
 
-    // Invalid drop → rest at the last collision-free spot seen during this drag
-    // (slide-up-to-the-obstacle); fall back to the pre-drag position.
-    if (!resolved.valid) {
+    // Invalid drop → rest at the last spot of the drag where the WHOLE convoy was
+    // clear (slide-up-to-the-obstacle); fall back to the pre-drag position. The
+    // convoy is re-asked at that spot rather than assumed, and it comes back legal
+    // by construction from both branches — `lastFreePos` is only written on a frame
+    // where the company fitted, and `lastValidPos` is this piece's pre-drag
+    // position, which makes the delta zero and the company's answer "stay".
+    if (!resolved.valid || !co.valid) {
       const back = lastFreePos.current ?? lastValidPos.current;
       if (back) {
         const r = resolvePlacement(back[0], back[2], ref.current.rotation.y, dim, eff);
+        const rc = carry(r.valid ? r.pos : [back[0], back[1], back[2]], r.rot);
         resolved = r.valid
           ? r
           : { pos: [back[0], back[1], back[2]], rot: ref.current.rotation.y, valid: true, supportId: r.supportId };
+        co = rc;
       }
     }
 
@@ -357,44 +407,19 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // dropping onto the floor (or a refused cycle) breaks it. Established/
     // broken before the cascade below, using `parentIds` as it stood at
     // drag-start (this part's own link can't affect who its own descendants
-    // are, so the ordering here doesn't matter to `descendants()`).
+    // are, so the ordering here doesn't matter to the convoy).
     if (resolved.supportId && !wouldCreateCycle(partId, resolved.supportId, useStudio.getState().parentIds)) {
       setParent(partId, resolved.supportId);
     } else {
       clearParent(partId);
     }
 
-    // Carry along whatever is (physically, still) resting on this part —
-    // rotation-correct, computed before the groupId loop below so that loop
-    // can skip anything already placed here.
-    const desc = descendants();
-    const descendantIds = new Set(desc.map((d) => d.id));
-    if (desc.length > 0) {
-      for (const m of cascadeTransform(partId, resolved.pos, resolved.rot, desc)) {
-        setPosition(m.id, m.pos);
-        setRotation(m.id, m.rot);
-      }
-    }
-
-    // Merged group: shift every other group member by the same translation
-    // delta so the set moves as one. Only on a move (not scale/rotate). Skips
-    // anything the rigid cascade above already placed — that cascade is
-    // rotation-correct and must win over this translate-only one for a part
-    // that happens to be both a merge-group member and a resting-on-top child.
-    if (part.groupId && dragStartPos.current) {
-      const sx = dragStartPos.current;
-      const dx = x - sx[0];
-      const dz = z - sx[2];
-      if (dx !== 0 || dz !== 0) {
-        // The group moves as one, so each sibling shifts from where it EFFECTIVELY
-        // is — reading `o.pos` alone would snap every already-moved sibling back to
-        // where the scene was authored.
-        for (const o of currentRoomScene()) {
-          if (o.id === partId || o.groupId !== part.groupId || descendantIds.has(o.id)) continue;
-          setPosition(o.id, [o.pos[0] + dx, o.pos[1], o.pos[2] + dz]);
-        }
-      }
-    }
+    // Everything the gesture carried, landed in one store update: this part's
+    // rigid children about its resolved pivot, the rest of the multi-selection and
+    // any merged group either belongs to, each by the delta this part accepted.
+    // See lib/drag-convoy.ts — the three used to be two hand-written loops here
+    // and one nowhere at all.
+    if (co.moves.length > 0) setTransformsFor(co.moves);
 
     lastValidPos.current = [x, y, z];
     lastFreePos.current = null;
@@ -423,7 +448,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     const z = pp ? pp[1] : ref.current.position.z;
     const rot = pr ?? ref.current.rotation.y;
     const dim = currentDim();
-    liveUpdate(resolvePlacement(x, z, rot, dim, selfEffParts()), dim);
+    liveUpdate(resolvePlacement(x, z, rot, dim, travelWorld()), dim);
   }
 
   function schedule() {
@@ -484,7 +509,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       dragStartPos.current = [ref.current.position.x, ref.current.position.y, ref.current.position.z];
       lastFreePos.current = null;
       effCache.current = buildEffSnapshot();
-      descCache.current = null;
+      convoyCache.current = null;
     }
   }
 
@@ -578,6 +603,10 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // The gizmo's own handles run their interaction — only grab presses on the
     // part body itself.
     e.stopPropagation();
+    // A drag released off-mesh never produced the click its flag was waiting for.
+    // Dropped here rather than left standing, where it would eat this press's own
+    // click and look like a piece that cannot be selected.
+    clearDragClick();
 
     // The gizmo already owns this part's transform — a second finger pressing
     // its mesh body (not the handle) must not start a competing direct-drag
@@ -663,7 +692,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       dragStartPos.current = [ref.current.position.x, ref.current.position.y, ref.current.position.z];
       lastFreePos.current = null;
       effCache.current = buildEffSnapshot(); // one world snapshot for the gesture
-      descCache.current = null;
+      convoyCache.current = null;
       if (!inSelection) useStudio.getState().setSelected(partId);
       document.body.style.cursor = 'grabbing';
     }
@@ -693,9 +722,12 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     if (d.started) {
       flushNow(); // land the last sub-frame move before resolving the drop
       commit();
+      // The DOM click that ends this gesture means "select just this piece" to
+      // `Pickable`, which would collapse the very selection the drag just moved.
+      suppressClickAfterDrag(partId);
     }
     effCache.current = null;
-    descCache.current = null;
+    convoyCache.current = null;
     if (d.armed) setDragging(null);
     setLive(null);
     setDragInvalid(false);
@@ -772,13 +804,13 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
             dragStartPos.current = pp ? [pp.x, pp.y, pp.z] : null;
             lastFreePos.current = null;
             effCache.current = buildEffSnapshot();
-            descCache.current = null;
+            convoyCache.current = null;
           }}
           onMouseUp={() => {
             flushNow();
             commit();
             effCache.current = null;
-            descCache.current = null;
+            convoyCache.current = null;
             setDragging(null);
             gizmoActive.current = false;
           }}

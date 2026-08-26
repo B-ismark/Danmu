@@ -117,10 +117,17 @@ type StudioState = {
   setPanKeyHeld: (held: boolean) => void;
   setPosition: (id: string, pos: [number, number, number]) => void;
   /** Move several parts in ONE store update. A wall drag re-positions everything
-   *  standing on that wall on every animation frame; N separate `setPosition`
-   *  calls meant N notifications per frame, each re-running every selector
-   *  subscribed to this store. */
-  setPositionsFor: (moves: Array<{ id: string; pos: [number, number, number] }>) => void;
+   *  standing on that wall on every animation frame, and a multi-piece drag does
+   *  the same for the whole convoy; N separate `setPosition` calls meant N
+   *  notifications per frame, each re-running every selector subscribed to this
+   *  store.
+   *
+   *  `rot` is optional because half the callers have nothing to say about it — a
+   *  wall carries what is mounted on it without turning it. It is here rather than
+   *  in a second `setRotationsFor` because a rigid cascade produces a position AND
+   *  a rotation for the same piece in the same frame, and applying them as two
+   *  updates renders one frame with the piece moved but not yet turned. */
+  setTransformsFor: (moves: Array<{ id: string; pos: [number, number, number]; rot?: number }>) => void;
   setRotation: (id: string, rot: number) => void;
   setDim: (id: string, dim: [number, number, number]) => void;
   /** Establish (or overwrite) a rigid-parenting relationship. */
@@ -247,15 +254,23 @@ export const useStudio = create<StudioState>()(
   // the whole scene does not re-render for every one of them.
   setPanKeyHeld: (held) => set((s) => (s.panKeyHeld === held ? s : { panKeyHeld: held })),
   setPosition: (id, pos) => set((s) => ({ positions: { ...s.positions, [id]: pos } })),
-  setPositionsFor: (moves) =>
+  setTransformsFor: (moves) =>
     set((s) => {
       // No-op returns {} rather than a fresh `positions` object: an identical-but-
       // new reference would look like an edit to history's subscription and push a
-      // snapshot for a frame in which nothing moved.
+      // snapshot for a frame in which nothing moved. Same reason `rotations` is
+      // only cloned once some move actually carries one.
       if (moves.length === 0) return {};
       const positions = { ...s.positions };
-      for (const m of moves) positions[m.id] = m.pos;
-      return { positions };
+      let rotations: Record<string, number> | null = null;
+      for (const m of moves) {
+        positions[m.id] = m.pos;
+        if (m.rot !== undefined) {
+          if (!rotations) rotations = { ...s.rotations };
+          rotations[m.id] = m.rot;
+        }
+      }
+      return rotations ? { positions, rotations } : { positions };
     }),
   setRotation: (id, rot) => set((s) => ({ rotations: { ...s.rotations, [id]: rot } })),
   setDim: (id, dim) => set((s) => ({ dims: { ...s.dims, [id]: dim } })),
@@ -329,6 +344,39 @@ export const useStudio = create<StudioState>()(
 export function gestureOwnedByOther(id: string): boolean {
   const draggingId = useStudio.getState().draggingId;
   return draggingId !== null && draggingId !== id;
+}
+
+// ─── The click a drag ends with ─────────────────────────────────────────────
+// A 3D drag that moved finishes as a DOM click on the same mesh, and `Pickable`'s
+// click handler means "select just this piece". Together those two silently undid
+// every multi-piece drag in the 3D tab: the set moved, and then the click ending
+// the gesture collapsed the selection down to the piece under the cursor. Harmless
+// for a single selection (it was already selected) and hidden for a MERGED group,
+// whose plain click re-selects the whole group — which is why the symptom read as
+// "sometimes only one moves" rather than as a plain bug.
+//
+// Module state rather than a store field: it is written and consumed inside one
+// event-loop turn, nothing renders from it, and a store write here would re-run
+// every selector between the pointerup and the click.
+let _dragClick: string | null = null;
+
+/** Called on pointer-up by a drag that actually moved. */
+export function suppressClickAfterDrag(id: string) {
+  _dragClick = id;
+}
+
+/** True once, for the click that ends that drag. Cleared whether or not the click
+ *  ever arrives (a gesture released off-mesh produces none), because a flag left
+ *  standing would swallow the next real click on that piece instead. */
+export function consumeDragClick(id: string): boolean {
+  const mine = _dragClick === id;
+  _dragClick = null;
+  return mine;
+}
+
+/** Drop a flag no click came for — called when the next press begins. */
+export function clearDragClick() {
+  _dragClick = null;
 }
 
 // Settings. Persisted to localStorage. API key kept here only on this device.
