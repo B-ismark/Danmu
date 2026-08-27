@@ -3,12 +3,14 @@ import {
   footprintForLayout,
   pointInFootprint,
   clampIntoFootprint,
+  interiorPoint,
   polygonCentroid,
   polygonSignedArea,
   wallOutwardNormal,
   wallSegments,
   footprintBounds,
   offsetWall,
+  type LayoutId,
 } from '@/lib/footprint';
 
 const LAYOUTS = ['rect', 'l', 't', 'u', 'open'] as const;
@@ -67,6 +69,75 @@ describe('clampIntoFootprint', () => {
   it('pulls an exterior point back inside', () => {
     const [x, z] = clampIntoFootprint(100, 100, rect);
     expect(pointInFootprint(x, z, rect)).toBe(true);
+  });
+
+  // ── …on every room shape, not just the rectangle ──────────────────────────
+  //
+  // The test above is satisfied by a rectangle and a rectangle cannot show the bug:
+  // the two centroids coincide there. On a U at 7.5 x 5.6 the CORNER average — what
+  // this walked toward — is 0.70 m into the gap between the legs, outside the room.
+  // Every step of the walk was then outside too, and the function's last line handed
+  // that same outside point back. Callers read the result as "inside now"; there is
+  // no second return value telling them otherwise, which is what made it silent.
+  //
+  // The eight compass directions matter for the same reason the repo's asymmetry rule
+  // does: a U is only wrong from the side its notch faces, and one probe from the
+  // north-west would have found nothing.
+  const SHAPES: LayoutId[] = ['rect', 'l', 't', 'u', 'open'];
+  const FAR = [
+    [100, 100],
+    [-100, 100],
+    [100, -100],
+    [-100, -100],
+    [0, 100],
+    [0, -100],
+    [100, 0],
+    [-100, 0],
+  ];
+
+  it('lands inside the room from every direction, on every preset', () => {
+    const escaped: string[] = [];
+    for (const id of SHAPES) {
+      const poly = footprintForLayout(id, 7.5, 5.6);
+      for (const [fx, fz] of FAR) {
+        const [x, z] = clampIntoFootprint(fx, fz, poly);
+        if (!pointInFootprint(x, z, poly)) {
+          escaped.push(`${id} from (${fx}, ${fz}) -> (${x.toFixed(2)}, ${z.toFixed(2)})`);
+        }
+      }
+    }
+    expect(escaped, escaped.join('\n')).toEqual([]);
+  });
+});
+
+describe('interiorPoint', () => {
+  it('is inside the room on every preset', () => {
+    const outside: string[] = [];
+    for (const id of ['rect', 'l', 't', 'u', 'open'] as LayoutId[]) {
+      const poly = footprintForLayout(id, 7.5, 5.6);
+      const pt = interiorPoint(poly);
+      if (!pt || !pointInFootprint(pt[0], pt[1], poly)) {
+        outside.push(`${id} -> ${pt ? `(${pt[0].toFixed(2)}, ${pt[1].toFixed(2)})` : 'null'}`);
+      }
+    }
+    expect(outside, outside.join('\n')).toEqual([]);
+  });
+
+  it('and the corner average is not — which is why this function exists', () => {
+    // The measurement the fix is for, stated so that deleting `interiorPoint` and
+    // going back to `polygonCentroid` cannot look like a simplification.
+    const u = footprintForLayout('u', 7.5, 5.6);
+    const [cx, cz] = polygonCentroid(u);
+    expect(pointInFootprint(cx, cz, u), 'the U is the shape that shows this').toBe(false);
+  });
+
+  it('survives a room with no interior at all', () => {
+    // A polygon collapsed onto a line. The scan finds nothing, and the contract is to
+    // say so rather than return a plausible-looking point from the fallback.
+    expect(interiorPoint([[0, 0], [1, 0], [2, 0]])).toBeNull();
+    // …and the clamp then leaves its input alone rather than moving it somewhere it
+    // cannot justify.
+    expect(clampIntoFootprint(5, 5, [[0, 0], [1, 0], [2, 0]])).toEqual([5, 5]);
   });
 });
 

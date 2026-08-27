@@ -215,23 +215,23 @@ describe('placeNewPart keeps a drop inside the room', () => {
   });
 
   it('does NOT yet keep a drop out of the quadrant an L cuts away', () => {
-    // Written down rather than left as a surprise. `clampIntoFootprint` is the
-    // function for this and it cannot do it: it walks the point toward
-    // `polygonCentroid`, which averages the VERTICES rather than the area, and for
-    // this L that average is (3, 2) — the reflex corner itself. Every step of the
-    // walk stays inside the notch and the fallback returns the corner, which
-    // `pointInFootprint` calls outside.
+    // Written down rather than left as a surprise, and the reason has MOVED.
     //
-    // The blocker this used to name is RETIRED: it said fixing it means changing
-    // `polygonCentroid`, whose other caller derives every wall's inward normal from
-    // it. That caller was `wallOutwardNormal`, and it no longer reads the centroid
-    // at all — which side of a wall is outdoors comes off the polygon's winding now
-    // (`polygonSignedArea`), because the vertex average is not inside a T or a U and
-    // was reversing five of their sixteen walls. So `polygonCentroid` is free to
-    // become the area centroid, or `clampIntoFootprint` free to stop using it; what
-    // still costs something is this file's sibling fixture in
-    // `tests/suggest-tidiness.test.ts`, found by a search over 1512 layouts, which
-    // the change invalidates and which has to be searched for again.
+    // It used to be that `clampIntoFootprint` could not do this: it walked the point
+    // toward `polygonCentroid`, which averages the VERTICES rather than the area, and
+    // for this L that average is (3, 2) — the reflex corner itself. Every step of the
+    // walk stayed inside the notch and the fallback returned the corner, which
+    // `pointInFootprint` calls outside. That is fixed: the clamp aims at
+    // `interiorPoint`, which checks its answer, so the two assertions below are the
+    // fixture stating the trap and the clamp stepping round it.
+    //
+    // What is left is not that function's fault. `placeNewPart`'s `intoRoom` does the
+    // BOUNDS inset and only that, so a drop into an L's notch is inside the box and
+    // outside the room, and no amount of fixing the clamp changes a caller that does
+    // not call it. Wiring it in is a separate change with its own blast radius — it
+    // moves every drop into an L / T / U — and it wants the extent question answered
+    // too, since this clamps a CENTRE. When that lands, this test's title and its last
+    // assertion flip together; delete the assertion, not the test.
     const L: Footprint = [
       [0, 0],
       [6, 0],
@@ -242,14 +242,17 @@ describe('placeNewPart keeps a drop inside the room', () => {
     ];
     expect(polygonCentroid(L)).toEqual([3, 2]);
     expect(pointInFootprint(3, 2, L)).toBe(false);
-    expect(clampIntoFootprint(5, 3.5, L)).toEqual([3, 2]);
+    // The property is the promise in the name; the literal is pinned beside it so a
+    // walk that starts landing somewhere else shows up as a diff rather than a shrug.
+    const c = clampIntoFootprint(5, 3.5, L);
+    expect(pointInFootprint(c[0], c[1], L), `${c} must be inside the L`).toBe(true);
+    expect(c).toEqual([2.75, 1.85]);
 
     const r = placeNewPart('chair', 'chair-dining', [500, 500, 900], { width: 6, depth: 4, height: 2.5, footprint: L }, [], [5, 3.5]);
     // The bounds clamp does its half — the piece's extents are inside the box…
     expect(r.pos[0]).toBeCloseTo(5, 6);
     expect(r.pos[2]).toBeCloseTo(3.5, 6);
-    // …and the notch is still the notch. When this starts passing as `true`,
-    // delete the assertion, not the test.
+    // …and the notch is still the notch, because `intoRoom` never asks the clamp.
     expect(pointInFootprint(r.pos[0], r.pos[2], L)).toBe(false);
   });
 

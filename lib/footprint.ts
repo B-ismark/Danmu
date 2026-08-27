@@ -2,6 +2,8 @@
 // non-rectangular (L / T / U / open) instead of a single width×depth box.
 // +X = right (East), +Z = toward South — same axes as the scene.
 
+import { polyAreaCentroid, type Poly } from './geometry';
+
 export type LayoutId = 'rect' | 'l' | 't' | 'u' | 'open' | 'custom';
 export type Footprint = [number, number][];
 
@@ -199,12 +201,69 @@ export function pointInFootprint(x: number, z: number, poly: Footprint): boolean
   return inside;
 }
 
-/** Pull (x,z) inside the footprint by stepping toward the centroid. Returns the
+/** A point that is genuinely inside the room, to aim at.
+ *
+ *  `polygonCentroid` averages the CORNERS, and on a U at 7.5 x 5.6 that lands
+ *  **outside the room** — 0.70 m into the gap between the legs. Everything that used
+ *  it as a destination was therefore walking toward a point in the void, which is how
+ *  `clampIntoFootprint` came to return a position outside the footprint from a
+ *  function whose name is a promise that it did not.
+ *
+ *  `polyAreaCentroid` (the shoelace centroid, `lib/geometry.ts`) is inside on all five
+ *  presets and is the right first guess. It is not a guarantee: no centroid is inside
+ *  an arbitrary non-convex polygon, and a room the user has dragged into a horseshoe
+ *  can put it back in the void. So it is CHECKED, and the fallback is a scan — the
+ *  bounding box at `PROBE_STEP`, keeping the interior sample nearest the centroid.
+ *  Bounded (a few thousand point-in-polygon tests on a room-sized box), deterministic,
+ *  and only ever paid on a polygon the cheap answer failed.
+ *
+ *  Returns `null` only for a polygon with no interior at that resolution — degenerate,
+ *  or a slot narrower than `PROBE_STEP`. Callers must handle it rather than treating a
+ *  returned point as proof of anything, which was the original bug wearing new clothes. */
+const PROBE_STEP = 0.1;
+
+export function interiorPoint(poly: Footprint): [number, number] | null {
+  if (poly.length < 3) return null;
+  const [ax, az] = polyAreaCentroid(poly as Poly);
+  if (pointInFootprint(ax, az, poly)) return [ax, az];
+  const b = footprintBounds(poly);
+  let best: [number, number] | null = null;
+  let bestD = Infinity;
+  for (let x = b.minX + PROBE_STEP / 2; x < b.maxX; x += PROBE_STEP) {
+    for (let z = b.minZ + PROBE_STEP / 2; z < b.maxZ; z += PROBE_STEP) {
+      if (!pointInFootprint(x, z, poly)) continue;
+      const d = (x - ax) * (x - ax) + (z - az) * (z - az);
+      if (d < bestD) {
+        bestD = d;
+        best = [x, z];
+      }
+    }
+  }
+  return best;
+}
+
+/** Pull (x,z) inside the footprint by stepping toward an interior point. Returns the
  *  point unchanged if already inside. Used to keep detected items out of the
- *  void of an L/U/T room. */
+ *  void of an L/U/T room.
+ *
+ *  ── What this does NOT do ──────────────────────────────────────────────────
+ *
+ *  It clamps a CENTRE, and says nothing about the extent of whatever is centred
+ *  there: a point 5 cm inside the leg of a U satisfies it with a 2 m sofa mostly
+ *  through the wall. Containment of the piece is `contain` in `lib/layout-settle.ts`,
+ *  which pushes the footprint out of the wall by the deficit along the inward normal,
+ *  and every placement path ends there for exactly this reason. Do not reach for this
+ *  one to keep furniture in the room.
+ *
+ *  What it now does honestly is return a point inside the polygon or leave the input
+ *  alone. It used to walk toward `polygonCentroid` and, when every step of that walk
+ *  was also outside, `return [cx, cz]` — the corner average, which on a U is in the
+ *  void. Callers read the result as "inside now" with no way to tell. */
 export function clampIntoFootprint(x: number, z: number, poly: Footprint): [number, number] {
   if (pointInFootprint(x, z, poly)) return [x, z];
-  const [cx, cz] = polygonCentroid(poly);
+  const target = interiorPoint(poly);
+  if (!target) return [x, z];
+  const [cx, cz] = target;
   for (let t = 0.15; t < 1; t += 0.15) {
     const nx = x + (cx - x) * t;
     const nz = z + (cz - z) * t;
