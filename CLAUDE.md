@@ -193,9 +193,28 @@ backend, no account. The 3D studio *is* the product.
    **And restore what a gesture moved, not what it was aimed at:** `Esc` mid-drag
    put back the dragged piece and left the lamp riding on it in mid-air, plus every
    merged sibling scattered. `cascadeTransform` is pure, so replaying it from the
-   start transform is the whole fix — and a merged group's per-frame delta must come
-   off that same start transform, never off a render memo, or a drag faster than
-   React renders quietly pulls the group apart.
+   start transform is the whole fix — and every member's position must be derived
+   from that same start transform plus the gesture's TOTAL delta, never from the
+   member's current position plus this frame's step. **The reason first written here
+   was wrong, and a wrong scar is worse than none:** it blamed a drag outrunning
+   React, which cannot happen through a subscribed store read on this stack.
+   `useStudio` is read through `useSyncExternalStore`, whose store-change path forces
+   its re-render on React's **sync** lane, and react-dom flushes sync roots in a
+   microtask — so the memo is committed before the next `pointermove` task can be
+   dispatched. R3F was never in that path at all: it attaches raw `addEventListener`
+   handlers and neither batches nor flushes around them, and `frameloop="demand"` /
+   `invalidate()` schedule a WebGL draw, not a React render. The true reason is
+   narrower and owes nothing to scheduling — a member's own `resolvePlacement` is not
+   the identity, so a containment clamp, a gravity drop or a wall snap is a
+   *correction*, and stepping from the last frame folds every correction into the next
+   frame's base: the set deforms a little further each frame and can never come back.
+   Deriving from the start is idempotent, and a frame that clamped does not poison the
+   one after it. It is the same reason the world a convoy resolves against is a
+   snapshot taken at pointer-down rather than the live memo — and there the memo's
+   danger is that it is FRESH, not stale: it already carries the earlier frames'
+   writes, so a travelling piece is shifted twice and lands at `start + 2×delta`.
+   The identical wrong mechanism is still stated in `lib/drag-convoy.ts` and
+   `components/studio/PlanView.tsx`; those two are owned by the convoy work in flight.
    **The two lists beside the canvas are named for what they hold:** the rail's
    **Catalog** is what is in this room, the panel's **Library** is what you can
    add. They are not interchangeable words, and one screen may not hold two of
