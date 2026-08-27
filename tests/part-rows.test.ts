@@ -25,7 +25,7 @@ describe('the layer tree rows', () => {
   it('leaves an ungrouped room exactly as it was', () => {
     const parts = [p('a'), p('b'), p('c')];
     expect(shape(groupRows(parts))).toEqual(['a', 'b', 'c']);
-    expect(groupRows(parts).map((r) => r.key)).toEqual(['a', 'b', 'c']);
+    expect(groupRows(parts).map((r) => r.key)).toEqual(['part:a', 'part:b', 'part:c']);
   });
 
   it('pulls members up to their first member and moves nothing else', () => {
@@ -42,7 +42,7 @@ describe('the layer tree rows', () => {
 
   it('marks only the last visible member, so the spine knows where to stop', () => {
     const rows = groupRows([p('a', 'g'), p('b', 'g'), p('c', 'g')]);
-    expect(rows.filter((r) => r.kind === 'part' && r.lastOfGroup).map((r) => r.key)).toEqual(['c']);
+    expect(rows.filter((r) => r.kind === 'part' && r.lastOfGroup).map((r) => r.key)).toEqual(['part:c']);
   });
 
   it('does not draw a group around a single part', () => {
@@ -75,12 +75,16 @@ describe('the layer tree rows', () => {
     expect(shape(groupRows([p('a', 'g1')]))).toEqual(['a']);
   });
 
-  it('gives a group row a key no part can collide with', () => {
-    // The roving tabindex and `focusRow` both key off this, so a group whose key
-    // equalled a part id would move focus to the wrong row.
-    const rows = groupRows([p('g1'), p('m1', 'g1'), p('m2', 'g1')]);
+  it('keeps the two row kinds in separate key namespaces', () => {
+    // The roving tabindex and `focusRow` both key off this, so two rows sharing a
+    // key move focus to the wrong one. Both kinds are prefixed, which is what makes
+    // this safe by construction: with only the group prefixed, a part whose id was
+    // literally `group:g1` collided — unreachable under today's id scheme, which is
+    // a fact about the id scheme and not about this module.
+    const rows = groupRows([p('group:g1'), p('m1', 'g1'), p('m2', 'g1')]);
     const keys = rows.map((r) => r.key);
-    expect(new Set(keys).size).toBe(keys.length);
+    expect(new Set(keys).size, `duplicate key in ${keys.join(', ')}`).toBe(keys.length);
     expect(keys).toContain('group:g1');
+    expect(keys).toContain('part:group:g1');
   });
 });

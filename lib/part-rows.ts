@@ -39,8 +39,16 @@ export type Groupable = { id: string; groupId?: string };
 export type TreeRow<T extends Groupable> =
   | {
       kind: 'group';
-      /** DOM id / focus target. Distinct from any part id — a group is a row you
-       *  can land on, and it needs its own key in the roving tabindex. */
+      /** DOM id / focus target, prefixed so the two row kinds cannot collide — a
+       *  group is a row you can land on and needs its own key in the roving
+       *  tabindex.
+       *
+       *  BOTH kinds are prefixed, not just this one. Prefixing only the group left a
+       *  namespace that was safe by convention rather than by construction: a part
+       *  whose id was literally `group:g1` would produce a duplicate React key and
+       *  send `focusRow` to the wrong row. Unreachable today, because ids are
+       *  `${category}-${n}` or uuids — which is a fact about today's id scheme and
+       *  not a property of this module. */
       key: string;
       gid: string;
       /** what selecting this row selects: every VISIBLE member, in list order */
@@ -50,6 +58,8 @@ export type TreeRow<T extends Groupable> =
     }
   | {
       kind: 'part';
+      /** DOM id / focus target, prefixed `part:` for the same reason a group row is
+       *  prefixed `group:` — see the note on that field. */
       key: string;
       /** one id, but the same field name as a group row so navigation and range
        *  selection never have to ask which kind of row they are holding */
@@ -93,7 +103,7 @@ export function groupRows<T extends Groupable>(
   for (const p of visible) {
     const gid = p.groupId;
     if (!isGroup(gid)) {
-      rows.push({ kind: 'part', key: p.id, ids: [p.id], part: p });
+      rows.push({ kind: 'part', key: `part:${p.id}`, ids: [p.id], part: p });
       continue;
     }
     // Every member is emitted when the group's first visible member is reached,
@@ -111,7 +121,7 @@ export function groupRows<T extends Groupable>(
     members.forEach((m, i) =>
       rows.push({
         kind: 'part',
-        key: m.id,
+        key: `part:${m.id}`,
         ids: [m.id],
         part: m,
         gid,
