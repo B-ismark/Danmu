@@ -116,16 +116,46 @@ does cast — put a shadow on a floor the light never entered. Now gated.
   `solar.ts`'s construction rather than from its comments — so what is left is
   whether the *result* reads correctly.
 
-- **Check all seven moods, not just the four with a sun.** The gate first covered
-  only the sun moods, which left `Evening` and `Cool` — the two that use a fixed
-  studio key light — still showing the original bug on the south and east walls
-  (that light is derived from an offset of `[5, 8, 4]`, i.e. up / east / south, and
-  placed twelve metres or more outside the room, so a piece facing away from it had
-  it behind its own wall: dot products −0.390 and −0.488). `Cool` has the brightest
-  ambient of the seven, so it was the worst case for visibility. **Fixed** — every
-  mood now answers with a direction, the sun where there is one and the rig where
-  there is not. **A TV on the east wall under `Cool` is the case that was broken,
-  so it is the one worth a look.**
+- **Check all five moods, not just the three with a sun.** (`Day`, `Sunrise` and
+  `Sunset` have a sun; `Evening` and `Cool` use a fixed studio key light.) The gate
+  first covered only the sun moods, which left `Evening` and `Cool` still showing
+  the original bug on the south and east walls — that light is derived from an
+  offset of `[5, 8, 4]`, i.e. up / east / south, and placed twelve metres or more
+  outside the room, so a piece facing away from it had it behind its own wall (dot
+  products −0.390 and −0.488). `Cool` carries the brightest ambient of the five, so
+  it was the worst case for visibility. **Fixed** — every mood now answers with a
+  direction, the sun where there is one and the rig where there is not. **A TV on
+  the east wall under `Cool` is the case that was broken, so it is the one worth a
+  look.**
+
+## 7. Room panel → Check tab — from danmu-f4
+
+The findings list was rebuilt and **none of it has been seen in a browser.** It is a
+324 px popover, which is where the old layout broke: the severity pill, the title, a
+hover-revealed "Show me" and the "Try a fix" button all shared one line, leaving the
+title about 85 px for a 110 px phrase, so *"Doors can't open"* wrapped mid-phrase.
+
+- Each finding is now three stacked blocks — pill inline at the head of the title's
+  text, then the detail, then a right-aligned action row. **Check the pill sits on
+  the title's first line and does not float oddly when the title is one short
+  word.** It is `inline-flex` with `verticalAlign: -5px` inside a block, which is
+  the part most likely to be a pixel or two out.
+- **"Show me" is now permanently visible rather than hover-revealed.** Deliberate:
+  it was previously discoverable only by hovering, and it was a `<span>` inside a
+  `<button>`, which is invalid and unreachable by keyboard. But it adds visible
+  weight to every row, so with several findings the panel may read busier than
+  before — the opposite of what was asked for. **Needs a judgement call with real
+  findings on screen.**
+- The floor reading and the step-free checkbox now share one row (*"88% floor
+  clear"* … *"Step-free · 150 cm"*) instead of two full-bleed rows with a divider
+  each. It wraps rather than clipping. **Check it at the 400 px gate floor and at
+  browser zoom**, where the wrap should engage.
+- The "150 cm turning space" explanation moved into the label's `title` tooltip,
+  shortened inline to *"· 150 cm"*. Confirm the number is still discoverable.
+- Finding titles changed text — a sofa reads **"No room to get out of the sofa"**, a
+  wardrobe **"Wardrobe doors can't open"**, a bookcase **"Can't stand at the
+  shelves"**. All seven front-clearance rules previously said *"Doors can't open"*.
+  **Worth reading them aloud in the panel** to check none is clumsy.
 
 ---
 
