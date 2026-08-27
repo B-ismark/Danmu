@@ -160,3 +160,117 @@ describe('findSupportDetailed', () => {
     expect(findSupportDetailed([deskB, deskA], 'laptop', 0, 0, LAPTOP)?.id).toBe('desk-b');
   });
 });
+
+describe('snapToWall pinned to one edge', () => {
+  // The wall a piece is allowed to ride is a caller's decision when anything is
+  // following it: `nearestEdge` changes its mind discontinuously at the midline
+  // between two walls, and that flip becomes the delta a whole selection
+  // translates by. See `Convoy.leadEdge`.
+  it('keeps the named wall even when another is nearer', () => {
+    const free = snapToWall([2.8, 0, 1.5], TV, RECT);
+    const pinned = snapToWall([2.8, 0, 1.5], TV, RECT, 0, 0);
+    expect(free.rot).not.toBeCloseTo(0);
+    expect(pinned.rot).toBeCloseTo(0);
+    expect(pinned.z).toBeCloseTo(-2 + TV[1] / 2000 + 0.02);
+    // Along the wall it tracks the pointer as far as its own half-width allows —
+    // x = 2.8 on a wall ending at 3 would put 525 mm of a 1.45 m TV round the
+    // corner. See the describe below.
+    expect(pinned.x).toBeCloseTo(3 - TV[0] / 2000, 6);
+  });
+
+  it('tracks the pointer exactly while the whole piece still fits', () => {
+    // The other side of the same clamp: it must not be a general pull toward the
+    // middle. Half a TV is 725 mm, so x = 1.5 is well inside and must come back
+    // untouched.
+    expect(snapToWall([1.5, 0, 1.5], TV, RECT, 0, 0).x).toBeCloseTo(1.5, 9);
+  });
+
+  it('falls back to the nearest wall for an index the footprint no longer has', () => {
+    // A wall drag can shorten the outline under a held index. Falling back is the
+    // forgiving direction: the nearest wall is a less constrained answer, never a
+    // wrong one, where a refusal would strand the piece.
+    const stale = snapToWall([2.8, 0, 1.5], TV, RECT, 0, 99);
+    const free = snapToWall([2.8, 0, 1.5], TV, RECT);
+    expect(stale).toEqual(free);
+  });
+
+  it('is unchanged when no edge is named', () => {
+    expect(snapToWall([0, 0, -1.5], TV, RECT, 0, null)).toEqual(snapToWall([0, 0, -1.5], TV, RECT));
+    expect(snapToWall([0, 0, -1.5], TV, RECT, 0, undefined)).toEqual(snapToWall([0, 0, -1.5], TV, RECT));
+  });
+});
+
+// ─── A wall-mounted piece stays ON the wall it is mounted to ────────────────
+//
+// `edgeProjection` clamps its parameter to [0, 1], so it returns the nearest point
+// ON the segment — and `snapToWall` used to put the piece's CENTRE there. Aim past
+// the end of a wall and the centre landed exactly on the corner, with half the
+// piece through the return wall. The report was "sometimes the TV sticks to the
+// farthest edge of the wall it's on, sometimes there's a bit of a gap between the
+// TV and the other wall" — one behaviour, seen from two corners.
+//
+// Every case is checked on ALL FOUR walls and at BOTH ends of each, because this
+// is a handedness bug: the along-wall unit vector points a different way per edge
+// and its sign is invisible wherever the test is symmetric. A square room would
+// also hide a width/depth mix-up, so the fixture is 6 × 4.
+describe('snapToWall keeps the whole piece on its wall', () => {
+  /** The four walls of RECT, by edge index, with the axis they run along and the
+   *  coordinate that varies along them. Derived from the fixture rather than typed
+   *  out, so it cannot disagree with it. */
+  const WALLS = [
+    { index: 0, name: 'south (z = -2)', along: 'x' as const, from: -3, to: 3 },
+    { index: 1, name: 'east (x = 3)', along: 'z' as const, from: -2, to: 2 },
+    { index: 2, name: 'north (z = 2)', along: 'x' as const, from: 3, to: -3 },
+    { index: 3, name: 'west (x = -3)', along: 'z' as const, from: 2, to: -2 },
+  ];
+  const half = TV[0] / 2000; // 0.725 m along the wall
+
+  it('stops half its width short of both ends of every wall', () => {
+    for (const w of WALLS) {
+      for (const end of [w.from, w.to]) {
+        // Aim a metre PAST the corner, so the projection clamps to the end.
+        const past = end + Math.sign(end - (w.from + w.to) / 2) * 1;
+        const at: [number, number, number] = w.along === 'x' ? [past, 0, 0] : [0, 0, past];
+        const s = snapToWall(at, TV, RECT, 0, w.index);
+        const got = w.along === 'x' ? s.x : s.z;
+        const want = end - Math.sign(end - (w.from + w.to) / 2) * half;
+        expect(got, `${w.name}, end ${end}`).toBeCloseTo(want, 6);
+      }
+    }
+  });
+
+  it('leaves a piece alone wherever it genuinely fits', () => {
+    for (const w of WALLS) {
+      const at: [number, number, number] = w.along === 'x' ? [0.4, 0, 0] : [0, 0, 0.4];
+      const s = snapToWall(at, TV, RECT, 0, w.index);
+      expect(w.along === 'x' ? s.x : s.z, w.name).toBeCloseTo(0.4, 9);
+    }
+  });
+
+  it('centres a piece wider than the wall it is on rather than pinning it to one end', () => {
+    // A 5 m panel on the 4 m east wall. Clamping both ends against each other
+    // would let the min beat the max; the piece keeps its real size and the room
+    // report is what says it does not fit (rule 2).
+    const WIDE: [number, number, number] = [5000, 60, 800];
+    for (const aim of [-9, 0, 9]) {
+      const s = snapToWall([0, 0, aim], WIDE, RECT, 0, 1);
+      expect(s.z, `aimed at z = ${aim}`).toBeCloseTo(0, 6);
+    }
+  });
+
+  it('does the same on an inner wall of an L, whose ends are not room corners', () => {
+    // The L's inner edge x = 1 runs z 0 → 2, so it is 2 m long and a 1.45 m TV has
+    // only 550 mm of travel on it. Aimed at either end it must come back inside.
+    const inner = L.findIndex((p, i) => p[0] === 1 && L[(i + 1) % L.length][0] === 1);
+    expect(inner, 'the fixture must have an inner x = 1 wall').toBeGreaterThanOrEqual(0);
+    const low = snapToWall([0.7, 0, -5], TV, L, 0, inner);
+    const high = snapToWall([0.7, 0, 5], TV, L, 0, inner);
+    for (const s of [low, high]) {
+      expect(s.z).toBeGreaterThanOrEqual(0 + half - 1e-9);
+      expect(s.z).toBeLessThanOrEqual(2 - half + 1e-9);
+    }
+    // …and they are not the same point, or the clamp would be collapsing both
+    // ends onto the middle.
+    expect(Math.abs(high.z - low.z)).toBeGreaterThan(0.4);
+  });
+});

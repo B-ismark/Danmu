@@ -667,8 +667,9 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
 
 ### Multi-select & grouping — `SelectionHeader.tsx`, `PartTree.tsx`
 - Shift-click adds to `selection: string[]`. "Merge N" assigns a shared
-  `groupId`; clicking any grouped part selects the whole group; group **move-as-
-  one** on translate (rotate/scale-as-one is roadmap). "Ungroup" clears it.
+  `groupId`; clicking any grouped part selects the whole group. **Both a selection
+  and a merged group move as one on translate** (rotate/scale-as-one is roadmap),
+  through `lib/drag-convoy.ts` — see §"Who travels" below. "Ungroup" clears it.
 - **A merged set is drawn as one in the rail** (`lib/part-rows.ts` → `PartTree`).
   It was invisible there: three merged chairs looked exactly like three loose
   ones, and the only tell was watching them move together — which is what made
@@ -683,6 +684,10 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
 - **Selecting one member is what the rail adds**, and it is close to the reason
   the rail exists at all: the canvas expands a click to the whole group before a
   drag ever starts, so the list is the only surface that can reach inside one.
+  Note that `drag-convoy` still closes the convoy over `groupId` *after* the
+  selection, so acting on a single member still moves its siblings — the rail now
+  makes that state reachable, and fixing it is a change to the closure, not to
+  this panel.
 - **A group action means the group in the ROOM, not the members a search is
   showing.** `row.ids` is the visible members — right for drawing the header and
   for a range, wrong for anything that acts on the set — and every group-wide
@@ -706,6 +711,11 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
   against the room rather than the visible rows — otherwise a search showing one
   of three would leave the header reading unselected directly above a member
   reading selected.
+- A **press keeps** a selection that already contains the piece, so the drag has
+  something to carry; a **click** (a press that never moved) collapses it to that
+  one piece. Both surfaces, both directions. The plan collapsed on the press and
+  the 3D tab collapsed on the DOM click that ends every drag, which is why a
+  multi-piece drag looked impossible in one tab and self-undoing in the other.
 
 ### Recolour & finish — `Inspector.tsx`, `Draggable.tsx` `FinishApplier`
 - One merged **Colour** section (24-swatch palette + hex). Separate **Finish**
@@ -1217,6 +1227,94 @@ is refused. **A new snap, clearance or gravity rule goes in the lib** — this i
 the same "two consumers, one rule, two copies" failure that `layout-rules.ts`
 exists to prevent, and `tests/drag-resolve.test.ts` pins the pipeline step by
 step so a change that suits one surface fails there first.
+
+### Who travels — `lib/drag-convoy.ts`
+`drag-resolve` answers *where the dragged piece lands*; this answers *what comes
+with it*. Three kinds of company, and they are not the same rule:
+
+- **rigid children** — what is physically resting on the piece. Carried by
+  `cascadeTransform` about the dragged piece's own pivot, so a lamp on a turning
+  desk turns too.
+- **merged-group siblings** and **the rest of the multi-selection** — one rule:
+  translate rigidly by the delta the dragged piece *accepted*, each from where it
+  stood at pointer-down.
+
+They were three implementations. The merged-group loop was written out twice, in
+`Draggable.commit()` and in `PlanView.moveTo`, and the multi-selection was
+implemented in neither — shift-clicking four chairs and dragging one moved that one
+chair, in both tabs. The report it produced was **"sometimes only one moves"**,
+because a merged set does move as one and looks identical on screen to a selected
+one. Two features that render the same must not be two code paths.
+
+`planConvoy` resolves membership once at pointer-down (re-resolving per frame lets
+a piece near a tolerance detach mid-gesture, the trap `wallAttachments` documents
+for walls) and closes over merged groups, so half a merged set can never be left
+behind. `resolveConvoy` then puts every member through `resolvePlacement`, which
+buys two things and costs one:
+
+- **Gravity is re-asked**, so a member translated off the table it stood on lands
+  on the floor rather than hanging at table height — and can equally ride *up* onto
+  something it arrives over, exactly as a single dragged piece does. Vertical
+  rigidity is not a promise a drag here makes.
+- **A member that cannot follow makes the whole step invalid**, and names itself.
+  The set refuses as a unit instead of deforming or pushing a piece through the
+  plaster (rule 2, for position), and the piece that refused is not the piece under
+  the hand — so the red outline and the spoken sentence both go to the member.
+- The cost is one resolve per member per frame, which is why the components hold
+  the convoy in a ref and both write their result through one `setTransformsFor`.
+
+Two traps in there, both silent. `collidesAt` looks the mover up in the list it is
+handed and returns **false** when it is absent, so a world with the mover filtered
+out reports every position as clear — collision detection off, nothing logged. That
+is why the subtraction is `worldFor(convoy, self, parts)` and never a `.filter` at
+the call site. And a member resolves with `snapMode: 'off'`: its own magnetism would
+pull it out of formation, and the grid would re-round a delta the dragged piece has
+already committed to. `convoyRestore` is the Escape path — it replays the pure
+cascade from the start transforms rather than snapshotting a second copy of them.
+`tests/drag-convoy.test.ts` holds all of it, including both traps as behaviour
+(a collision that must still be seen, a snap that must not fire) rather than as
+array shapes.
+
+Two properties of a `ConvoyMove` that read as details and are not:
+
+- **`rot` is optional, and absent is different from equal.** `setTransformsFor`
+  writing a rotation *creates* an override in `useStudio.rotations`, and per
+  `lib/transforms.ts` an override pins that value against a re-detect and persists
+  into IndexedDB and the scene file. A member translates and does not turn, so the
+  field is omitted unless the resolve really changed it — which for a member means
+  a wall rider `snapToWall` re-aimed, since `snapMode: 'off'` leaves `outRot`
+  alone for everything else. `convoyRestore` carries the same asymmetry, or Escape
+  would leave behind exactly the override the resolve avoided.
+- **`blocked` only counts if the caller says it.** It was computed in both tabs
+  and spoken in one: the plan outlined the member and named it, while the 3D tab
+  stopped the set dead with a red tint and no explanation. The name travels on
+  `DragLiveInfo.blockedBy` now and appears in the size tag `MeasureGuides` already
+  draws — set only when the dragged piece itself fits, because if the thing under
+  the hand is the problem then `blocked` is the honest word and naming a member
+  points at the wrong piece.
+
+### The click a drag ends with — `lib/drag-click.ts`
+A 3D drag that moved finishes as a DOM `click`, and `Pickable`'s click handler
+means *select just this piece* — so the click ending a multi-piece drag collapsed
+the selection the drag had just carried. Invisible for a single selection (already
+selected) and for a merged group (whose plain click re-selects the whole group),
+which is the other half of why the bug reported as "sometimes only one moves".
+
+**The gate takes no part id, and that absence is the design.** Asking "is this
+flag mine?" and clearing it either way let a click that raycast onto a different
+piece consume the flag, get `false`, and select itself. It is reachable: the
+dragged piece follows the pointer, but a rug dragged under a table ends up behind
+it. `Pickable`'s `gestureOwnedByOther` guard cannot cover it either, because
+`Draggable` releases the pointer capture and clears `draggingId` before the click
+is dispatched. A drag is not a click on anything.
+
+Module state rather than a store field: written and consumed inside one event-loop
+turn, nothing renders from it, and a store write would re-run every selector
+between the pointerup and the click. Outside the store it is also testable in
+plain node — importing `lib/store.ts` pulls in zustand's `persist` and needs
+localStorage. `tests/drag-click.test.ts` reads the flag's initial value **at
+import**, because a `beforeEach` reset hides a module that started armed, and one
+that did would swallow the first click of the session.
 
 ### Removing a piece — `removeParts` in `KeyboardShortcuts.tsx`
 One path for every surface: the row trash, the Inspector button, the Delete key

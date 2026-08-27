@@ -5,7 +5,7 @@
 
 import type { Category, Shape } from './scene-spec';
 import type { Footprint } from './footprint';
-import { nearestEdge, footArea, footFromPart, footIntersectionArea } from './geometry';
+import { edgeProjection, nearestEdge, footArea, footFromPart, footIntersectionArea } from './geometry';
 import { WALL_GAP } from './layout-rules';
 
 export type Anchor = 'floor' | 'ceiling' | 'wall-high' | 'wall-mid' | 'wall-low' | 'wall-floor';
@@ -174,15 +174,62 @@ export function snapToWall(
   footprint: Footprint,
   /** Extra distance in front of the wall — see `wallStandoff`. */
   standoff = 0,
+  /** Keep THIS footprint edge instead of taking the nearest — see
+   *  `Convoy.leadEdge`. A piece free to choose its own wall flips to another the
+   *  moment the pointer is nearer one, which is right on its own and wrong the
+   *  instant anything is following it: the flip moves the piece a wall's width in
+   *  one frame, and that jump becomes the delta the whole set translates by. A
+   *  stale or degenerate index falls back to the nearest wall rather than
+   *  refusing, because a footprint can change under a held index (a wall drag) and
+   *  the nearest wall is never a wrong answer, only a less constrained one. */
+  edgeIndex?: number | null,
 ): { x: number; z: number; rot?: number } {
-  const edge = nearestEdge(footprint, pos[0], pos[2]);
+  const edge =
+    (edgeIndex == null ? null : edgeProjection(footprint, edgeIndex, pos[0], pos[2])) ??
+    nearestEdge(footprint, pos[0], pos[2]);
   if (!edge) return { x: pos[0], z: pos[2] };
   // Part depth/2, plus the shared wall gap — the same figure the seeded arrangements
   // and the settle pass use, so all three put a back against a wall in one place.
   const inset = dimMM[1] / 2000 + WALL_GAP + standoff;
+  // …and ALONG the wall, its own half-width, which nothing used to do.
+  //
+  // `edgeProjection` clamps its parameter to [0, 1], so the point it returns is the
+  // closest point ON THE SEGMENT — and this function then put the piece's CENTRE
+  // there. Aim past the end of a wall and the centre lands exactly on the corner
+  // with half the piece through the return wall; reported as "sometimes the TV
+  // sticks to the farthest edge of the wall it's on, sometimes there's a bit of a
+  // gap between the TV and the other wall", which is one behaviour seen from two
+  // corners. A 1.2 m TV aimed at the end of a 6 m wall came back with its centre on
+  // the corner and 600 mm of it in the next room.
+  //
+  // The piece's local X runs along the wall, because the `rot` returned below turns
+  // its front (+Z) to face the room — so `dimMM[0]` is the extent to keep inside
+  // the segment, and `dimMM[1]` is the one the inset above already spent.
+  //
+  // Wider than the wall it is on: centre it. Clamping both ends against each other
+  // would let the min beat the max and pin it to whichever end the arithmetic
+  // reached last, and shrinking it is the thing rule 2 forbids — it keeps its real
+  // size, and `lib/clearance.ts` is what says it does not fit.
+  const a = footprint[edge.index];
+  const b = footprint[(edge.index + 1) % footprint.length];
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  let px = edge.px;
+  let pz = edge.pz;
+  if (len > 1e-9) {
+    const ux = (b[0] - a[0]) / len;
+    const uz = (b[1] - a[1]) / len;
+    const halfW = dimMM[0] / 2000;
+    // Distance from `a` along the wall. Taken from the projected point rather than
+    // from `pos`, so a pointer out in the room is measured the same way as one
+    // beyond the corner.
+    const along = (edge.px - a[0]) * ux + (edge.pz - a[1]) * uz;
+    const s = 2 * halfW >= len ? len / 2 : Math.max(halfW, Math.min(len - halfW, along));
+    px = a[0] + ux * s;
+    pz = a[1] + uz * s;
+  }
   return {
-    x: edge.px + edge.nx * inset,
-    z: edge.pz + edge.nz * inset,
+    x: px + edge.nx * inset,
+    z: pz + edge.nz * inset,
     rot: edge.yaw,
   };
 }

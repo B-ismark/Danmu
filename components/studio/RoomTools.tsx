@@ -29,7 +29,16 @@
 // confirms, and applying one over an arrangement that was never saved offers to
 // save it first.
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useParams } from 'next/navigation';
 import { useScene, type RoomShape } from '@/lib/scene-store';
 import { resolveParts, useRoomScene } from '@/lib/room-scene';
@@ -57,6 +66,51 @@ import { isTypingOrDialog } from './KeyboardShortcuts';
 import type { LibraryItem, ScenePart } from '@/lib/scene-spec';
 
 type RoomTab = 'check' | 'fit' | 'list' | 'layouts';
+
+/** What the SOLVER last wrote for each piece it moved — not merely which ids.
+ *
+ *  `LayoutContext.placed` is meant to say "the user put this here", and the store
+ *  cannot tell on its own: a drag and a suggestion both land in `useStudio.positions`.
+ *  This is the missing half, and it holds the VALUE rather than the id so it needs no
+ *  subscription to stay honest: a piece counts as the app's only while its override
+ *  is still the one the app wrote. Drag it afterwards and the numbers no longer
+ *  match, so it is the user's again from that moment — which is exactly the rule, and
+ *  it costs one comparison instead of a listener that could miss a write.
+ *
+ *  Kept out of the store because it is not state about the room: it is this
+ *  session's memory of who moved what, it must not persist, and only the one
+ *  function that applies a solve may write it. A ref, because nothing renders from
+ *  it.
+ *
+ *  **Threaded as an argument, and it has to be.** This was a React context, and that
+ *  was a silent bug of exactly the kind this map exists to prevent: `useRefitOffer`
+ *  is called in `RoomTools`'s BODY, while the provider was created in `RoomTools`'s
+ *  returned JSX — and a component is not its own descendant, so `useContext` there
+ *  resolved against the tree ABOVE `RoomTools` and got the module-scope default.
+ *  `FixButton` and `SuggestButton` sat inside the provider and worked, which is why
+ *  it looked right. The re-fit path did not: press Suggest, change a width, accept
+ *  the re-fit, and it read an empty map, so every piece the solver had just moved
+ *  still counted as hand-placed at `PLACED_INERTIA` × `REFIT_INERTIA` = 56 — the
+ *  precise number this was written to stop. It then wrote its own results into that
+ *  module-global default, where they outlived the room and were read by nobody.
+ *  A prop cannot be wired to the wrong scope; a context can, and did. */
+type AppPlacement = { pos: [number, number, number]; rot: number };
+type AppPlacedRef = { current: Map<string, AppPlacement> };
+
+/** Is this override still the one the solver wrote? Exact equality is right here —
+ *  both sides are the same float that was stored, never recomputed. */
+function stillTheApps(
+  mine: Map<string, AppPlacement>,
+  id: string,
+  positions: Record<string, [number, number, number]>,
+  rotations: Record<string, number>,
+): boolean {
+  const was = mine.get(id);
+  if (!was) return false;
+  const p = positions[id];
+  if (!p || p[0] !== was.pos[0] || p[1] !== was.pos[1] || p[2] !== was.pos[2]) return false;
+  return rotations[id] === was.rot;
+}
 
 /** Widest the report panel gets. Four tab labels and a findings list want this
  *  much; a narrow window gets less, and `place()` below is what decides how much,
@@ -120,6 +174,11 @@ export function RoomTools() {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<RoomTab>('check');
   const anchorRef = useRef<HTMLDivElement>(null);
+  // Who moved what — see `AppPlaced`. It needs no reset when the room changes,
+  // because it is keyed on the id AND the exact transform: another room's piece
+  // would have to carry the same id and be standing at the same millimetre and
+  // radian to be mistaken for this one's.
+  const appPlaced = useRef<Map<string, AppPlacement>>(new Map());
   const [panelPos, setPanelPos] = useState({ left: 0, top: 0, width: PANEL_W });
 
   // Measured on open and kept true through resize and scroll. Placed to the RIGHT
@@ -170,7 +229,7 @@ export function RoomTools() {
   const setStepFree = useSettings((s) => s.setStepFree);
 
   // Offer a re-fit when a size change is what broke things. See `useRefitOffer`.
-  useRefitOffer(effParts, room.footprint, dims, problems);
+  useRefitOffer(effParts, room.footprint, dims, problems, appPlaced);
 
   // Close any open panel when a drag starts.
   useEffect(() => {
@@ -255,6 +314,7 @@ export function RoomTools() {
               onStepFree={setStepFree}
               effParts={effParts}
               footprint={room.footprint}
+              appPlaced={appPlaced}
             />
           )}
           {tab === 'fit' && <FitPanel effParts={effParts} room={room} />}
@@ -301,7 +361,7 @@ export function RoomTools() {
         <Icon name={open ? 'chevron-up' : 'chevron-right'} size={12} />
       </button>
 
-      <SuggestButton effParts={effParts} footprint={room.footprint} />
+      <SuggestButton effParts={effParts} footprint={room.footprint} appPlaced={appPlaced} />
     </div>
   );
 }
@@ -326,6 +386,11 @@ const FIXED_PHRASE: Array<[keyof CostBreakdown, string]> = [
   ['overlap', 'separated pieces that were in the same place'],
   ['outside', 'brought furniture back inside the room'],
   ['door', 'cleared the doorway'],
+  // Above `access` on purpose: floor you cannot walk to is not a tight fit, it is a
+  // part of the room that has stopped being part of the room. It had no sentence at
+  // all, so the one pass that exists to fix it could only ever be reported as
+  // something else — see `TERMS` in lib/layout-solve.
+  ['navigation', 'opened a way through to the rest of the room'],
   ['access', 'freed up the space each piece needs to be used'],
   ['walkway', 'widened the walkways'],
   ['window', 'uncovered the window'],
@@ -356,6 +421,7 @@ const MOVE_PHRASE: Partial<Record<keyof CostBreakdown, string>> = {
   overlap: 'out of what it was standing in',
   outside: 'back inside the room',
   door: 'clear of the doorway',
+  navigation: 'to open a way through to the rest of the room',
   access: 'out of the space another piece needs',
   walkway: 'to widen the way past',
   window: 'clear of the window',
@@ -389,7 +455,7 @@ function biggestMove(moves: MoveReason[], parts: ScenePart[]): string | null {
  *  clear it would be answering a question they did not ask. Locking is the whole
  *  mechanism — the solver already understands locked pieces, and still scores them,
  *  because a piece nobody may move is still in the way. */
-function useSuggest(effParts: ScenePart[], footprint: Footprint) {
+function useSuggest(effParts: ScenePart[], footprint: Footprint, appPlaced: AppPlacedRef) {
   const loadTransforms = useStudio((s) => s.loadTransforms);
   return useCallback(
     (mode: 'arrange' | 'refit', seed: number, only?: string[]) => {
@@ -400,7 +466,22 @@ function useSuggest(effParts: ScenePart[], footprint: Footprint) {
       // store already answering the question — and it is what stops a suggestion
       // treating "I dragged this here on purpose" and "the seeder guessed" as equal
       // claims on staying put.
-      const placed = new Set([...Object.keys(t.positions), ...Object.keys(t.rotations)]);
+      //
+      // …MINUS whatever the solver itself wrote there, which is the correction. The
+      // solve below stores its answer in the very maps this reads, so after one
+      // press every piece it moved was indistinguishable from one the user had
+      // dragged and got `PLACED_INERTIA`'s four-times claim on staying put. It
+      // compounded: the app kept promoting its own guesses to hand placements, and
+      // **Try a fix** — which runs at `REFIT_INERTIA` 14, so 56 effective against a
+      // contaminated piece — increasingly answered "moving those didn't clear it"
+      // about furniture nobody had ever touched. A hand drag goes through
+      // `setPosition`/`setRotation`, never through here, so a piece the user does
+      // claim later simply stops being listed (see `AppPlaced`).
+      const placed = new Set(
+        [...Object.keys(t.positions), ...Object.keys(t.rotations)].filter(
+          (id) => !stillTheApps(appPlaced.current, id, t.positions, t.rotations),
+        ),
+      );
       const result = solveLayout(
         effParts,
         footprint,
@@ -420,6 +501,7 @@ function useSuggest(effParts: ScenePart[], footprint: Footprint) {
         const p = effParts[i];
         positions[p.id] = [result.placements[i].x, p.pos[1], result.placements[i].z];
         rotations[p.id] = result.placements[i].yaw;
+        appPlaced.current.set(p.id, { pos: positions[p.id], rot: rotations[p.id] });
       }
       // dims carried through untouched: the solver moves and turns, and a
       // suggestion that resized the furniture would be the one thing this app
@@ -427,12 +509,20 @@ function useSuggest(effParts: ScenePart[], footprint: Footprint) {
       loadTransforms({ positions, rotations, dims: t.dims });
       return result;
     },
-    [effParts, footprint, loadTransforms],
+    [effParts, footprint, loadTransforms, appPlaced],
   );
 }
 
-function SuggestButton({ effParts, footprint }: { effParts: ScenePart[]; footprint: Footprint }) {
-  const suggest = useSuggest(effParts, footprint);
+function SuggestButton({
+  effParts,
+  footprint,
+  appPlaced,
+}: {
+  effParts: ScenePart[];
+  footprint: Footprint;
+  appPlaced: AppPlacedRef;
+}) {
+  const suggest = useSuggest(effParts, footprint, appPlaced);
   const [busy, setBusy] = useState(false);
   // Pressing again asks for a DIFFERENT arrangement rather than recomputing the
   // same one — the solver is deterministic per seed, which is what makes both
@@ -507,8 +597,9 @@ function useRefitOffer(
   footprint: Footprint,
   dims: Record<string, [number, number, number]>,
   problems: number,
+  appPlaced: AppPlacedRef,
 ) {
-  const suggest = useSuggest(effParts, footprint);
+  const suggest = useSuggest(effParts, footprint, appPlaced);
   // What the geometry looked like last time, and how many problems it had. Both
   // are needed: a problem count that went up on its own is the user dragging
   // something, and they can see that happening.
@@ -618,12 +709,14 @@ function FixButton({
   issue,
   effParts,
   footprint,
+  appPlaced,
 }: {
   issue: ClearanceIssue;
   effParts: ScenePart[];
   footprint: Footprint;
+  appPlaced: AppPlacedRef;
 }) {
-  const suggest = useSuggest(effParts, footprint);
+  const suggest = useSuggest(effParts, footprint, appPlaced);
   const [busy, setBusy] = useState(false);
   // Pressing again asks for a different attempt, the same way Suggest does.
   const attempt = useRef(0);
@@ -679,44 +772,50 @@ function FixButton({
   );
 }
 
-function CheckPanel({
-  issues,
+/** The room's own reading, and the one setting that changes what it reports.
+ *
+ *  One row rather than two. These were two full-bleed rows with a divider each,
+ *  stacked above the findings — so the first thing the tab showed was two lines of
+ *  chrome, and the thing it exists for started a third of the way down a 440 px
+ *  panel. They are both room-level context, they are both one short phrase, and
+ *  `flexWrap` is what lets them share a line honestly: at a squeezed width the
+ *  setting drops below the reading instead of printing over it (rule 4 — an element
+ *  with no overflow of its own does not clip, it collides). */
+function CheckSummary({
   freeShare,
   stepFree,
   onStepFree,
-  effParts,
-  footprint,
 }: {
-  issues: ClearanceIssue[];
   freeShare: number;
   stepFree: boolean;
   onStepFree: (on: boolean) => void;
-  effParts: ScenePart[];
-  footprint: Footprint;
 }) {
-  const setSelection = useStudio((s) => s.setSelection);
-  const frameSelected = useStudio((s) => s.frameSelected);
-
   return (
-    <div>
-      <div style={{ fontSize: 11.5, color: 'var(--ink-3)', padding: '8px 14px', borderBottom: '1px solid var(--hairline)' }}>
-        <span className="mono">{Math.round(freeShare * 100)}%</span> of the floor is still clear to walk on
-      </div>
-
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        flexWrap: 'wrap',
+        padding: '8px 14px',
+        borderBottom: '1px solid var(--hairline)',
+        fontSize: 11.5,
+        color: 'var(--ink-3)',
+      }}
+    >
+      <span>
+        <span className="mono" style={{ color: 'var(--ink-2)' }}>
+          {Math.round(freeShare * 100)}%
+        </span>{' '}
+        floor clear
+      </span>
+      <span style={{ flex: 1, minWidth: 0 }} />
       {/* A real checkbox rather than a styled div: this is a persisted preference
-          that changes what the panel reports, and it has to be reachable by Tab
-          and announce its own state. */}
+          that changes what the panel reports, and it has to be reachable by Tab and
+          announce its own state. */}
       <label
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '8px 14px',
-          borderBottom: '1px solid var(--hairline)',
-          fontSize: 11.5,
-          color: 'var(--ink-2)',
-          cursor: 'pointer',
-        }}
+        title="Report the 150 cm of turning space a wheelchair needs, and flag steps and thresholds"
+        style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', color: 'var(--ink-2)' }}
       >
         <input
           type="checkbox"
@@ -724,74 +823,163 @@ function CheckPanel({
           onChange={(e) => onStepFree(e.target.checked)}
           style={{ accentColor: 'var(--accent)', width: 14, height: 14, flexShrink: 0, cursor: 'pointer' }}
         />
-        Check step-free access
-        <span style={{ color: 'var(--ink-3)' }}>· 150 cm turning space</span>
+        Step-free <span style={{ color: 'var(--ink-3)' }}>· 150 cm</span>
       </label>
+    </div>
+  );
+}
 
+/** One finding.
+ *
+ *  ── Why this is three stacked lines and not one row ───────────────────────
+ *
+ *  It used to be `[pill] [title, flex:1] [Show me] [Try a fix]` on one line with the
+ *  detail beneath. In the 324 px panel that leaves the title about 85 px of the
+ *  110 px "Doors can't open" wants, so the headline wrapped mid-phrase while a
+ *  button sat beside it — four things competing for one line, which is the failure
+ *  rule 4 describes: nothing clips, nothing errors, it just prints badly and looks
+ *  like a font bug.
+ *
+ *  Now nothing competes. The severity pill is an INLINE element at the head of the
+ *  title's own text block, so the headline wraps around it the way a sentence wraps
+ *  — no flex child to squeeze, no `minWidth: 0` to get right, and it is correct at
+ *  every width including the 400 px gate's floor. The detail gets the full column.
+ *  The actions get their own row.
+ *
+ *  ── Why "Show me" is a real button now ────────────────────────────────────
+ *
+ *  The row was one big `<button>` with a hover-revealed "Show me" span inside it and
+ *  a second, real button beside it — a button inside a button, which the old comment
+ *  correctly called neither valid nor keyboard-reachable, worked around by making
+ *  the inner one a span. Two plain buttons on one action row is the version with no
+ *  workaround in it: both are reachable by Tab, both say what they do, and neither
+ *  is discovered by hovering. */
+function IssueRow({
+  issue,
+  effParts,
+  footprint,
+  appPlaced,
+  onShow,
+}: {
+  issue: ClearanceIssue;
+  effParts: ScenePart[];
+  footprint: Footprint;
+  appPlaced: AppPlacedRef;
+  onShow: (issue: ClearanceIssue) => void;
+}) {
+  const sev = SEVERITY[issue.severity];
+  const canSelect = issue.partIds.length > 0;
+  // Whether the solver could plausibly clear this by rearranging. Read from the one
+  // table that knows, rather than re-deciding it here.
+  const canFix = RULE_HANDLING[issue.rule].movable;
+  return (
+    <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--hairline)' }}>
+      {/* Pill and title are a flex row, not a pill inlined into the title's text flow.
+          Two things were wrong with the inline version, and the second is the one the
+          user reported as "aren't aligned as they should".
+
+          · `verticalAlign: '-5px'` is a magic number tuned against one pill height and
+            one line-height, so it was aligned by coincidence and drifted the moment
+            either moved. A baseline row is what "sit on the same line as the text"
+            actually means, and it needs no constant.
+          · A title long enough to wrap put its SECOND line underneath the pill, flush
+            with the pill's left edge instead of with the first line of the title —
+            because inline text wraps into the space the pill vacates. "Door can't open
+            fully" plus a "Worth fixing" pill is about 150 px, and the rail's content
+            box is 176 px at the tight width, so this wrapped as it shipped rather
+            than at some hypothetical narrow one.
+
+          `flexShrink: 0` keeps the pill whole (it is two words that must not break),
+          and `minWidth: 0` is what lets the title wrap inside its own column instead
+          of forcing the row wider than the rail — the ceiling-not-a-promise half of
+          rule 4. */}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
+        <Pill tone={sev.tone} style={{ flexShrink: 0 }}>
+          {sev.label}
+        </Pill>
+        <div style={{ minWidth: 0, fontSize: 12.5, fontWeight: 700, color: 'var(--ink)', lineHeight: 1.5 }}>
+          {issue.title}
+        </div>
+      </div>
+      <div style={{ fontSize: 11.5, fontWeight: 400, color: 'var(--ink-2)', lineHeight: 1.45, marginTop: 3 }}>
+        {issue.detail}
+      </div>
+      {/* Actions align with the text column above, not with the right edge. Right-aligned
+          and wrapping, they stacked into the same visual column the wrapped title had
+          just moved out of, which read as a second misalignment on the same row. */}
+      {(canSelect || canFix) && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-start', gap: 6, marginTop: 7 }}>
+          {canSelect && (
+            <button
+              onClick={() => onShow(issue)}
+              className="ds-btn"
+              title="Select the pieces involved and fly to them"
+              style={{
+                height: 24,
+                fontSize: 10,
+                padding: '0 8px',
+                background: 'none',
+                borderColor: 'transparent',
+                color: 'var(--accent-text)',
+              }}
+            >
+              Show me
+            </button>
+          )}
+          {canFix && (
+            <FixButton issue={issue} effParts={effParts} footprint={footprint} appPlaced={appPlaced} />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CheckPanel({
+  issues,
+  freeShare,
+  stepFree,
+  onStepFree,
+  effParts,
+  footprint,
+  appPlaced,
+}: {
+  issues: ClearanceIssue[];
+  freeShare: number;
+  stepFree: boolean;
+  onStepFree: (on: boolean) => void;
+  effParts: ScenePart[];
+  footprint: Footprint;
+  appPlaced: AppPlacedRef;
+}) {
+  const setSelection = useStudio((s) => s.setSelection);
+  const frameSelected = useStudio((s) => s.frameSelected);
+  const show = useCallback(
+    (issue: ClearanceIssue) => {
+      setSelection(issue.partIds, issue.partIds[0]);
+      frameSelected();
+    },
+    [setSelection, frameSelected],
+  );
+
+  return (
+    <div>
+      <CheckSummary freeShare={freeShare} stepFree={stepFree} onStepFree={onStepFree} />
       {issues.length === 0 ? (
         <div style={{ padding: '18px 14px', fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
           Everything fits — doors open, walkways are comfortable, and seating distances look right.
         </div>
       ) : (
-        issues.map((issue) => {
-          const sev = SEVERITY[issue.severity];
-          const canSelect = issue.partIds.length > 0;
-          // Whether the solver could plausibly clear this by rearranging. Read from
-          // the one table that knows, rather than re-deciding it here.
-          const canFix = RULE_HANDLING[issue.rule].movable;
-          return (
-            // A row, not a button: it holds two real buttons now — showing the
-            // pieces, and offering to move them — and a button inside a button is
-            // neither valid nor reachable by keyboard.
-            <div
-              key={issue.id}
-              style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: 8,
-                padding: '10px 14px',
-                borderBottom: '1px solid var(--hairline)',
-              }}
-            >
-              <button
-                onClick={() => {
-                  if (!canSelect) return;
-                  setSelection(issue.partIds, issue.partIds[0]);
-                  frameSelected();
-                }}
-                className="list-row"
-                title={canSelect ? 'Select the pieces involved and fly to them' : undefined}
-                style={{
-                  flex: 1,
-                  minWidth: 0,
-                  flexDirection: 'column',
-                  alignItems: 'stretch',
-                  gap: 4,
-                  padding: 0,
-                  borderRadius: 0,
-                  background: 'none',
-                  cursor: canSelect ? 'pointer' : 'default',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Pill tone={sev.tone}>{sev.label}</Pill>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink)', flex: 1, minWidth: 0 }}>
-                    {issue.title}
-                  </span>
-                  {canSelect && (
-                    <span className="row-action" style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-text)', whiteSpace: 'nowrap' }}>
-                      Show me
-                    </span>
-                  )}
-                </div>
-                <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.45, whiteSpace: 'normal' }}>
-                  {issue.detail}
-                </div>
-              </button>
-              {canFix && <FixButton issue={issue} effParts={effParts} footprint={footprint} />}
-            </div>
-          );
-        })
+        issues.map((issue) => (
+          <IssueRow
+            key={issue.id}
+            issue={issue}
+            effParts={effParts}
+            footprint={footprint}
+            appPlaced={appPlaced}
+            onShow={show}
+          />
+        ))
       )}
     </div>
   );

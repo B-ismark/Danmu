@@ -19,11 +19,11 @@
 // the object3D it is animating and the plan knows it off the stored transform, so
 // that one value is passed in rather than reached for.
 
-import { collidesAt, isWallMountedPart, type ScenePart } from './scene-spec';
+import { collidesAt, type ScenePart } from './scene-spec';
 import { pointInFootprint, footprintBounds } from './footprint';
 import { obbFromPart, obbInsidePoly, type Poly } from './geometry';
 import { snapToNeighbors, type SnapLine } from './item-snap';
-import { findSupportDetailed, groundY, isFloorStanding, snapToWall, wallStandoff } from './physics';
+import { findSupportDetailed, groundY, isFloorStanding, ridesWall, snapToWall, wallStandoff } from './physics';
 
 export type SnapMode = 'off' | 'fine' | 'coarse';
 
@@ -63,6 +63,13 @@ export type ResolveInput = {
    * shape, which is what a freshly added piece wants.
    */
   currentY?: number;
+  /**
+   * The footprint edge a wall-riding piece must KEEP, rather than sliding onto
+   * whichever wall is nearest. Set only while company is following it — see
+   * `Convoy.leadEdge`, which is where the decision is made and where the reason
+   * is written down.
+   */
+  wallEdge?: number | null;
 };
 
 export type Resolved = {
@@ -122,9 +129,19 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   // Wall-mounted items (TV, mirror, painting, AC, curtain) ride the NEAREST wall —
   // edge-exact against the footprint polygon, so they slide along an L/T/U's inner
   // walls too, always facing into the room.
-  const wallMounted = isWallMountedPart(part.category, part.shape);
-  if (wallMounted) {
-    const snapped = snapToWall([x, 0, z], dim, footprint, wallStandoff(part.shape));
+  //
+  // `ridesWall`, NOT `isWallMountedPart`. The two differ by exactly the ceiling
+  // family — a fan, a pendant — and `isWallMountedPart` is the wider question
+  // ("is this piece's geometry centred on its origin?"), which is the right one for
+  // deciding how to GROUND a piece and the wrong one for deciding to slide it onto
+  // the plaster. `physics.ts` has said so in `ridesWall`'s own doc comment since
+  // the day it was written, and this file asked the other question anyway: a ceiling
+  // fan dragged anywhere in the room was pushed to the nearest wall and — see the
+  // legality test below — excused the containment check on the way. Reported as
+  // "it only sticks to the edges" and "it spawned outside the room".
+  const ridesAWall = ridesWall(part.category, part.shape);
+  if (ridesAWall) {
+    const snapped = snapToWall([x, 0, z], dim, footprint, wallStandoff(part.shape), input.wallEdge);
     x = snapped.x;
     z = snapped.z;
     if (snapped.rot !== undefined) outRot = snapped.rot;
@@ -164,11 +181,15 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   }
 
   // Legality: inside the actual polygon (which catches the notch an L/T/U has and
-  // a bounding box does not) and clear of everything. Wall-mounted parts skip the
-  // polygon test — the snap just placed them exactly on an edge.
+  // a bounding box does not) and clear of everything.
+  //
+  // A wall rider skips the polygon test because the snap above just placed it
+  // exactly on an edge — the exemption is EARNED by that snap, which is why it has
+  // to be the same predicate. A ceiling fan gets no snap, so it gets no exemption:
+  // its blades have to be inside the room like anything else.
   const slightlyShrunk = obbFromPart([x, y, z], outRot, [dim[0] - 10, dim[1] - 10, dim[2]]);
   const inRoom =
-    wallMounted ||
+    ridesAWall ||
     part.category === 'rug' ||
     (obbInsidePoly(slightlyShrunk, footprint) && pointInFootprint(x, z, footprint));
   const collides = collidesAt(parts, part.id, [x, y, z], outRot, dim);

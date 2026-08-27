@@ -123,7 +123,46 @@ backend, no account. The 3D studio *is* the product.
    move that was supposed to end "snap works in one tab only" shipped with snap
    working in one tab only. **Extracting a pipeline means extracting all of it** —
    go looking for the steps that live in the caller, because those are exactly the
-   ones a diff of the extracted function cannot show you were missing. The companion
+   ones a diff of the extracted function cannot show you were missing.
+   **Who else moves is `lib/drag-convoy.ts`, and it is the same rule again.** A
+   drag carries three kinds of company — rigid children (`cascadeTransform`, about
+   the dragged piece's own pivot), merged-group siblings, and the rest of the
+   multi-selection — and the last two are one rule: translate by the delta the
+   dragged piece accepted. They were three implementations: the merged-group loop
+   written out in `Draggable.commit()` *and* in `PlanView.moveTo`, and the
+   multi-selection **nowhere**, so shift-clicking four chairs and dragging one moved
+   one chair in both tabs. It reported as "sometimes only one moves" because a
+   merged set does move as one and looks identical on screen to a selected one — the
+   lesson being that **two features that render the same must not be two code
+   paths**. Two traps live in there and both fail silently: the piece being resolved
+   has to stay in its own world (`collidesAt` looks the mover up in the list it is
+   handed and returns `false` when absent — filter it out and collision detection is
+   simply *off*, which is why the subtraction is `worldFor` and not a `.filter` at
+   the call site); and a member must resolve with `snapMode: 'off'`, or its own
+   magnetism pulls it out of formation and the set arrives bent. A member that
+   cannot follow makes the whole step invalid and **names itself** — the piece that
+   refused is not the piece under the hand. Separately: **a press must not collapse
+   the selection it is about to drag.** The plan's did, unconditionally, so the set
+   was gone before the first `pointermove`; the 3D tab's survived the press and then
+   lost it to the DOM *click* that ends every drag. Collapsing to one piece is what
+   a click means, so it belongs on the release, and only when the press never moved.
+   That gate is `lib/drag-click.ts`, and **it deliberately has no part id** — the
+   first version recorded which piece was dragged and asked the arriving click
+   whether it was that piece, clearing the flag either way, so a click landing on a
+   DIFFERENT piece ate the flag and selected itself: the same collapse one mesh
+   over. A rug dragged under a table ends up behind it and the ray hits the table,
+   and `gestureOwnedByOther` cannot help because the capture is released and
+   `draggingId` cleared before the click is dispatched. **A drag is not a click on
+   anything**, so there is nothing to compare; an id nothing branches on would be
+   dead plumbing wearing a decision's name. It lives outside `store.ts` for a
+   second reason too — a gate parked there could only be tested under jsdom,
+   because importing the store drags in zustand's `persist`.
+   **A finding the caller drops is a finding that does not exist:** `blocked` was
+   computed in both tabs and *said* in one, so 3D refused a set in silence for a
+   whole commit. It rides `blockedBy` on the live drag channel now and lands in the
+   size tag. And **a transform write is never free** — `ConvoyMove.rot` is optional
+   because writing back an unchanged rotation still CREATES an override, which
+   `lib/transforms.ts` then pins against a re-detect and persists. The companion
    for *what is under the pointer* is `lib/plan-hit.ts` (footprint geometry, so a
    round piece is tested against the ellipse it draws, not its box) and
    `lib/pick-through.ts` (a raycast's hits mapped back to pieces, everything that

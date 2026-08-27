@@ -165,11 +165,27 @@ export function MeasureGuides() {
             border: `1px solid ${color}`,
             padding: '2px 7px',
             borderRadius: 'var(--r-1)',
-            whiteSpace: 'nowrap',
+            // The measurements stay on one line; the reason a set refused is a
+            // SENTENCE carrying a name the user typed (up to 80 chars), so it wraps
+            // under them instead of running off both sides of a tag centred on the
+            // piece. `100vw` rather than `100%`: the parent is a drei `Html` wrapper
+            // sized to its own content, so a percentage would resolve against the
+            // very width being bounded.
+            maxWidth: 'min(240px, calc(100vw - 32px))',
+            textAlign: 'center',
           }}
         >
-          {formatDim(live.dimMM[0], dimUnit)} × {formatDim(live.dimMM[1], dimUnit)} {dimUnit}
-          {!live.valid && ' · blocked'}
+          <span style={{ whiteSpace: 'nowrap' }}>
+            {formatDim(live.dimMM[0], dimUnit)} × {formatDim(live.dimMM[1], dimUnit)} {dimUnit}
+          </span>
+          {!live.valid &&
+            (live.blockedBy ? (
+              <span style={{ display: 'block', overflowWrap: 'anywhere', fontWeight: 600 }}>
+                {live.blockedBy} will not fit
+              </span>
+            ) : (
+              <span style={{ whiteSpace: 'nowrap' }}> · blocked</span>
+            ))}
         </div>
       </Html>
     </group>

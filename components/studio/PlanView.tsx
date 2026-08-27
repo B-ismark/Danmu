@@ -19,7 +19,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRe
 import { useStudio, useSettings } from '@/lib/store';
 import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { useScene } from '@/lib/scene-store';
-import { DND_MIME, placeNewPart, type Category, type ScenePart, type Shape } from '@/lib/scene-spec';
+import { DND_MIME, placeNewPart, selectionForPick, type Category, type ScenePart, type Shape } from '@/lib/scene-spec';
 import { entranceComponents, floorBlockers } from '@/lib/clearance';
 import { buildClearanceField, fieldRuns, FREE_CELL, WALK_RADIUS } from '@/lib/clearance-field';
 import { accessZones } from '@/lib/layout-rules';
@@ -29,7 +29,7 @@ import { wallSegments, footprintBounds } from '@/lib/footprint';
 import { moveWallCarrying, wallAttachments } from '@/lib/wall-actions';
 import { resolvePlacement, snapSteps } from '@/lib/drag-resolve';
 import { snapGuideEnds, type SnapLine } from '@/lib/item-snap';
-import { cascadeTransform, snapshotDescendants, type DescendantOffset } from '@/lib/rigid-parent';
+import { convoyRestore, planConvoy, resolveConvoy, worldFor, type Convoy } from '@/lib/drag-convoy';
 import { formatDim } from '@/lib/units';
 import { clientDeltaToViewBox, clientToViewBox } from '@/lib/plan-view-transform';
 import { Icon } from '@/components/ui/Icon';
@@ -106,6 +106,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
   const toggleInSelection = useStudio((s) => s.toggleInSelection);
   const setPosition = useStudio((s) => s.setPosition);
   const setRotation = useStudio((s) => s.setRotation);
+  const setTransformsFor = useStudio((s) => s.setTransformsFor);
   const setDragging = useStudio((s) => s.setDragging);
   const panKey = useStudio((s) => s.panKeyHeld);
   const selectedWall = useStudio((s) => s.selectedWall);
@@ -189,24 +190,19 @@ export const PlanView = forwardRef<PlanViewHandle, {
     /** Where the piece was before the gesture, so Escape can put it back. */
     startPos: [number, number, number];
     /**
-     * What is resting on it, and what it is merged with — both resolved ONCE at
-     * pointer-down. Re-resolving per frame is what lets a piece near the tolerance
-     * detach mid-drag, which is the same trap `wallAttachments` documents for
-     * walls and the reason the 3D drag caches its own.
-     */
-    descendants: DescendantOffset[];
-    /**
-     * The merged-group siblings AND where each of them started. Both halves matter:
-     * `moveTo` translates them by the total delta from `startPos` rather than by a
-     * per-frame one, and Escape needs somewhere to put them back to.
+     * Everything travelling with this piece — what is resting on it, the rest of
+     * the multi-selection, whatever merged group any of them belongs to, and where
+     * each of them started. Resolved ONCE at pointer-down: re-resolving per frame
+     * is what lets a piece near a tolerance detach mid-drag, the same trap
+     * `wallAttachments` documents for walls.
      *
-     * The per-frame version read each sibling's current position out of `parts`,
-     * which is a RENDER MEMO — two pointermoves between two renders and the
-     * siblings silently dropped a delta while the dragged piece, tracking a ref,
-     * kept it. A fast drag pulled the group apart. Deriving every frame from the
-     * start transform cannot drift and cannot go stale.
+     * Both the membership and the start transforms live in `lib/drag-convoy.ts`
+     * now, which is also where the reason each start position matters is written
+     * down: the per-frame version read a sibling's current position out of `parts`,
+     * a RENDER MEMO, so two pointermoves between two renders silently dropped a
+     * delta and a fast drag pulled the set apart.
      */
-    groupStart: Array<{ id: string; pos: [number, number, number] }>;
+    convoy: Convoy;
     /**
      * The alignment guides the last accepted resolve produced, so the drawing can
      * show them. `resolvePlacement` has always returned these and the 3D tab has
@@ -280,9 +276,9 @@ export const PlanView = forwardRef<PlanViewHandle, {
   // It puts back EVERYTHING the drag moved, not just the piece under the pointer.
   // It used to restore only that one, which left a lamp that had ridden along on a
   // desk hanging in mid-air where the cancelled drag had abandoned it, and every
-  // member of a merged group scattered. `cascadeTransform` is pure, so replaying it
-  // from the start transform reproduces the descendants' original transforms
-  // exactly — there is nothing extra to snapshot for them.
+  // member of a merged group scattered. `convoyRestore` answers that in one place
+  // for both surfaces, and answers it by replaying the pure cascade from the start
+  // transform rather than by snapshotting a second copy of it.
   //
   // Only a piece-drag is undone, not a wall-drag: a wall moves incrementally and
   // carries what is mounted on it, so "where it started" is not one number to put
@@ -294,13 +290,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
       if (!d) return;
       e.preventDefault();
       e.stopPropagation();
-      setPosition(d.id, d.startPos);
-      setRotation(d.id, d.startRot);
-      for (const m of cascadeTransform(d.id, d.startPos, d.startRot, d.descendants)) {
-        setPosition(m.id, m.pos);
-        setRotation(m.id, m.rot);
-      }
-      for (const g of d.groupStart) setPosition(g.id, g.pos);
+      setTransformsFor(convoyRestore(d.convoy, d.id, d.startPos, d.startRot));
       dragRef.current = null;
       setDragging(null);
       if (blockedRef.current) clearBlocked();
@@ -309,7 +299,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
     }
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [setPosition, setRotation, setDragging]);
+  }, [setTransformsFor, setDragging]);
 
   const fit = useCallback(() => {
     setZoom(1);
@@ -399,9 +389,17 @@ export const PlanView = forwardRef<PlanViewHandle, {
    * un-draggable here and it offered click-to-drop-in-the-centre instead — a
    * reasonable answer to "there is nowhere to drop", and a strange one for the
    * view that is literally a map of the floor. Same contract as the 3D tab's
-   * `onDrop`: `placeNewPart` decides the piece's own rules (wall-mounted pieces go
-   * on a wall regardless of where you let go), and the pointer only supplies the
-   * spot for the ones that stand on the floor.
+   * `onDrop`, and it is now the whole contract: `placeNewPart` decides the piece's
+   * own rules — a piece that RIDES a wall takes the wall nearest where you let go,
+   * and everything else is placed at the drop point, kept inside the room by
+   * `placeNewPart` itself.
+   *
+   * This comment used to say the pointer supplied the spot "for the ones that
+   * stand on the floor", and both handlers clamped the drop only for those. That
+   * was the ceiling fan's bug: a fan is wall-MOUNTED by the centred-geometry test
+   * and rides no wall, so nothing put it on a wall and nothing pulled it into the
+   * room either, and it landed wherever you released the pointer — outside the
+   * walls included.
    */
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
@@ -424,13 +422,8 @@ export const PlanView = forwardRef<PlanViewHandle, {
       w.x,
       w.z,
     ]);
-    let [x, y, z] = pos;
-    if (!wallMounted) {
-      const insetX = item.dimMM[0] / 2000;
-      const insetZ = item.dimMM[1] / 2000;
-      x = clamp(w.x, bounds.minX + insetX, bounds.maxX - insetX);
-      z = clamp(w.z, bounds.minZ + insetZ, bounds.maxZ - insetZ);
-    }
+    // Keeping the drop inside the room is `placeNewPart`'s job now — see there.
+    const [x, y, z] = pos;
     const id = `${item.category}-${uuid().slice(0, 6)}`;
     addPart({
       id,
@@ -484,16 +477,14 @@ export const PlanView = forwardRef<PlanViewHandle, {
    *
    *  `parts` rather than `visible`: a hidden piece is still furniture in the way,
    *  and dragging through one because you cannot see it would be a trap. */
-  function resolveAt(part: ScenePart, rawX: number, rawZ: number) {
-    const desc = dragRef.current?.descendants ?? [];
-    const skip = new Set(desc.map((d) => d.id));
+  function resolveAt(part: ScenePart, rawX: number, rawZ: number, convoy: Convoy) {
     return resolvePlacement({
       part,
       rawX,
       rawZ,
       rot: part.rot,
       dim: part.dimMM,
-      parts: desc.length > 0 ? parts.filter((p) => !skip.has(p.id)) : parts,
+      parts: convoy.travelling.size > 1 ? worldFor(convoy, part, parts) : parts,
       footprint: ROOM_DYN.footprint,
       roomHeight: ROOM_DYN.height,
       snapMode,
@@ -501,6 +492,9 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // is the answer — which is also what keeps a picture at picture height when
       // it is slid along a wall from up here.
       currentY: part.pos[1],
+      // Null unless this piece rides a wall and has company: a wall flip mid-drag
+      // is a jump the whole set would translate by. See `Convoy.leadEdge`.
+      wallEdge: convoy.leadEdge,
     });
   }
 
@@ -516,55 +510,83 @@ export const PlanView = forwardRef<PlanViewHandle, {
    *  hit rather than freezing. Returns false if nothing was possible — and says
    *  so, out loud and in colour, instead of returning silently. */
   function moveTo(part: ScenePart, rawX: number, rawZ: number): boolean {
+    // A drag has its convoy already; an arrow-key nudge has no gesture to hang one
+    // off, so it asks for the same answer on the spot. Both routes therefore carry
+    // the same company, which they did not: the keys moved one piece out of a
+    // selection while the mouse moved one piece out of a selection differently.
+    const drag = dragRef.current;
+    const convoy =
+      drag?.convoy ??
+      planConvoy({
+        draggedId: part.id,
+        parts,
+        selection: useStudio.getState().selection,
+        parentIds: useStudio.getState().parentIds,
+        footprint: ROOM_DYN.footprint,
+      });
+    const startPos = drag?.startPos ?? part.pos;
     const candidates: Array<[number, number]> = [
       [rawX, rawZ],
       [rawX, part.pos[2]],
       [part.pos[0], rawZ],
     ];
+    let blocker: ScenePart | undefined;
     for (const [tx, tz] of candidates) {
-      const r = resolveAt(part, tx, tz);
+      const r = resolveAt(part, tx, tz, convoy);
       if (!r.valid) continue;
+      // Where the company lands, and its veto. A candidate this piece could take
+      // but its set cannot is not a candidate: the set refuses as a unit rather
+      // than deforming or shoving a member through the plaster.
+      const co = resolveConvoy({
+        convoy,
+        draggedId: part.id,
+        pos: r.pos,
+        rot: r.rot,
+        startPos,
+        parts,
+        footprint: ROOM_DYN.footprint,
+        roomHeight: ROOM_DYN.height,
+      });
+      if (!co.valid) {
+        // Remembered for the message, but the slide candidates are still tried: a
+        // set stopped from moving diagonally can usually still go along one axis.
+        blocker = blocker ?? co.blocked;
+        continue;
+      }
       // The guides belong to the candidate that was ACCEPTED — assigned here
       // rather than derived in the render, for the reason on `snapLines` above.
       // Empty when nothing snapped, which is the common case and draws nothing.
-      if (dragRef.current) dragRef.current.snapLines = r.snapLines ?? [];
+      if (drag) drag.snapLines = r.snapLines ?? [];
       const moved = r.pos[0] !== part.pos[0] || r.pos[1] !== part.pos[1] || r.pos[2] !== part.pos[2];
       if (moved) setPosition(part.id, r.pos);
       // A wall-mounted piece is turned by the wall it lands on, not by the drag.
       if (r.rot !== part.rot) setRotation(part.id, r.rot);
-      // Whatever is resting ON this piece comes too. The plan wrote `setPosition`
-      // straight out before this, so a lamp on a desk stayed behind while the desk
-      // moved — in the 3D tab it followed, from the same store.
-      const desc = dragRef.current?.descendants ?? [];
-      if (moved && desc.length > 0) {
-        for (const m of cascadeTransform(part.id, r.pos, r.rot, desc)) {
-          setPosition(m.id, m.pos);
-          setRotation(m.id, m.rot);
-        }
-      }
-      // A merged group moves as one — every member from where it STARTED, by the
-      // total delta, rather than each frame nudging the last frame's answer. See
-      // `groupStart` on the drag ref for what the per-frame version got wrong.
-      const drag = dragRef.current;
-      if (moved && drag && drag.groupStart.length > 0) {
-        const dx = r.pos[0] - drag.startPos[0];
-        const dz = r.pos[2] - drag.startPos[2];
-        for (const g of drag.groupStart) setPosition(g.id, [g.pos[0] + dx, g.pos[1], g.pos[2] + dz]);
-      }
+      // Everything travelling, in ONE store update: what is resting on this piece
+      // (the plan used to leave a lamp behind while its desk moved), the rest of
+      // the selection, and any merged group. See lib/drag-convoy.ts.
+      if (moved && co.moves.length > 0) setTransformsFor(co.moves);
       if (blockedRef.current) clearBlocked();
       return true;
     }
     // Nothing was possible, so no alignment holds either — a guide left over from
     // the last frame that DID move would keep claiming an edge is level while the
     // piece sits refusing to go there.
-    if (dragRef.current) dragRef.current.snapLines = [];
+    if (drag) drag.snapLines = [];
     // Cancel any pending fade — a second refusal must not be wiped by the
     // timer the first one left behind.
     if (blockTimer.current) clearTimeout(blockTimer.current);
-    setBlockedId(part.id);
+    // The piece that refused is not always the piece under the hand: with a set in
+    // motion it is whichever member ran out of room, so the red goes on that one
+    // and the sentence names it. Saying "the sofa will not fit" while the sofa has
+    // clear floor all round it is worse than saying nothing.
+    setBlockedId((blocker ?? part).id);
     if (!blockedRef.current) {
       blockedRef.current = true;
-      announce(`${part.name} will not fit there — something is in the way.`);
+      announce(
+        blocker
+          ? `${blocker.name} will not fit there — the rest of the selection cannot follow.`
+          : `${part.name} will not fit there — something is in the way.`,
+      );
     }
     return false;
   }
@@ -712,7 +734,18 @@ export const PlanView = forwardRef<PlanViewHandle, {
       toggleInSelection(id);
       return;
     }
-    setSelected(id);
+    // A press on a piece ALREADY in the selection keeps the set, so the drag that
+    // may follow has something to carry. Collapsing to one piece is what a CLICK
+    // means, and it happens on release (see onPointerUp) once the press has turned
+    // out not to be a drag. This line used to be an unconditional `setSelected`,
+    // which is why the plan could not move a multi-selection at all: the set was
+    // gone before the first pointermove, and the highlight visibly collapsed under
+    // the cursor.
+    // …and what a press on a piece OUTSIDE the selection selects is
+    // `selectionForPick` — a merged set comes whole. The plan had no group
+    // handling at all; `planConvoy` closed over `groupId` and covered for it, so
+    // dragging looked right while the selection was wrong the entire time.
+    if (!useStudio.getState().selection.includes(id)) setSelection(selectionForPick(parts, id), id);
     setDragging(id);
     (e.target as Element).setPointerCapture?.(e.pointerId);
 
@@ -720,19 +753,19 @@ export const PlanView = forwardRef<PlanViewHandle, {
     if (!part) return;
 
     const startPos: [number, number, number] = [part.pos[0], part.pos[1], part.pos[2]];
-    const descendants = snapshotDescendants(id, parts, useStudio.getState().parentIds);
-    const groupStart = part.groupId
-      ? parts
-          .filter((p) => p.groupId === part.groupId && p.id !== id)
-          .map((p) => ({ id: p.id, pos: [p.pos[0], p.pos[1], p.pos[2]] as [number, number, number] }))
-      : [];
+    const convoy = planConvoy({
+      draggedId: id,
+      parts,
+      selection: useStudio.getState().selection,
+      parentIds: useStudio.getState().parentIds,
+      footprint: ROOM_DYN.footprint,
+    });
     const common = {
       startX: e.clientX,
       startY: e.clientY,
       moved: false,
       startPos,
-      descendants,
-      groupStart,
+      convoy,
       snapLines: [] as SnapLine[],
     };
     if (mode === 'rotate') {
@@ -912,8 +945,14 @@ export const PlanView = forwardRef<PlanViewHandle, {
       (e.target as Element).releasePointerCapture?.(e.pointerId);
     }
     if (dragRef.current) {
-      // The per-gesture snapshots (descendants, group siblings) die with it — see
-      // the comment on the ref.
+      // A press that never moved is a click, and a click means "just this one" —
+      // the release is where a multi-selection collapses, because the press itself
+      // has to keep the set in case a drag follows it (see onPointerDown).
+      if (!dragRef.current.moved && dragRef.current.mode === 'translate') {
+        const clicked = dragRef.current.id;
+        setSelection(selectionForPick(parts, clicked), clicked);
+      }
+      // The per-gesture convoy snapshot dies with it — see the comment on the ref.
       dragRef.current = null;
       setDragging(null);
       (e.target as Element).releasePointerCapture?.(e.pointerId);
@@ -959,7 +998,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
   function onPartKeyDown(e: React.KeyboardEvent, part: ScenePart) {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      setSelected(part.id);
+      setSelection(selectionForPick(parts, part.id), part.id);
       return;
     }
     if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -970,7 +1009,11 @@ export const PlanView = forwardRef<PlanViewHandle, {
     if (!ARROWS.includes(e.key)) return;
     e.preventDefault();
     e.stopPropagation();
-    setSelected(part.id);
+    // Same rule as a press: a piece already in the selection keeps the set, so the
+    // nudge below moves the set. Unconditionally selecting here made the keys the
+    // one gesture that could not move more than one piece, which is not a
+    // distinction a keyboard user asked for.
+    if (!useStudio.getState().selection.includes(part.id)) setSelection(selectionForPick(parts, part.id), part.id);
     if (e.shiftKey) {
       const dir = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1;
       const next = part.rot + dir * spin;

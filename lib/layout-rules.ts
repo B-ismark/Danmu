@@ -414,8 +414,20 @@ export type ZoneSide = 'front' | 'back' | 'left' | 'right';
  *  wall it still seats people. A rule with `atLeast` below `sides.length` costs
  *  only its best sides — the cheapest ones are the ones it is allowed to lose. */
 export type AccessRule = {
-  /** Stable, so a finding can be keyed on it: 'front' | 'bedside' | 'seats' | … */
+  /** Stable, so a finding can be keyed on it: 'front' | 'bedside' | 'seats' | …
+   *
+   *  A REACT KEY, not a label — and the difference cost a wrong sentence on screen.
+   *  `'front'` is shared by seven roles that want their front clear for seven
+   *  different reasons, so `lib/clearance.ts` keying its headline off this id
+   *  titled a sofa's seat-access finding **"Doors can't open"**. The id is not
+   *  wrong; reading it as a name was. Every rule states its own `title` below. */
   id: string;
+  /** The finding's headline, in the room report's voice — "Doors can't open",
+   *  "No room to get out of the sofa". Authored here beside the depth and the
+   *  reason, because a rule that owns the number owns the words about it: the
+   *  headline used to live in a lookup table in the consumer, keyed on `id`, where
+   *  two rules sharing an id silently shared a sentence. */
+  title: string;
   sides: ZoneSide[];
   atLeast: number;
   /** Clear depth out from the face, metres. */
@@ -434,12 +446,14 @@ type RuleSpec = (part: Pick<ScenePart, 'shape' | 'dimMM' | 'pos'>) => AccessRule
 
 const zone = (
   id: string,
+  title: string,
   sides: ZoneSide[],
   depth: number,
   reason: string,
   opts: { atLeast?: number; span?: number; aboveY?: number } = {},
 ): AccessRule => ({
   id,
+  title,
   sides,
   atLeast: opts.atLeast ?? sides.length,
   depth,
@@ -451,16 +465,16 @@ const zone = (
 const ACCESS_BY_ROLE: Partial<Record<Role, RuleSpec>> = {
   // Hinged doors and deep drawers: 600 mm is the figure that lets the door past
   // you and your arm past the door.
-  wardrobe: () => [zone('front', ['front'], 0.6, 'to open the doors and reach inside', { span: 1 })],
-  fridge: () => [zone('front', ['front'], 0.6, 'to open the door and reach inside', { span: 1 })],
-  bookshelf: () => [zone('front', ['front'], 0.6, 'to stand and read the spines', { span: 1 })],
-  'shoe-rack': () => [zone('front', ['front'], 0.45, 'to stand there and put shoes on')],
-  appliance: () => [zone('front', ['front'], 0.5, 'to reach the front of it')],
+  wardrobe: () => [zone('front', 'Wardrobe doors can’t open', ['front'], 0.6, 'to open the doors and reach inside', { span: 1 })],
+  fridge: () => [zone('front', 'Fridge door can’t open', ['front'], 0.6, 'to open the door and reach inside', { span: 1 })],
+  bookshelf: () => [zone('front', 'Can’t stand at the shelves', ['front'], 0.6, 'to stand and read the spines', { span: 1 })],
+  'shoe-rack': () => [zone('front', 'No room at the shoe rack', ['front'], 0.45, 'to stand there and put shoes on')],
+  appliance: () => [zone('front', 'Can’t reach the front of it', ['front'], 0.5, 'to reach the front of it')],
 
   // A bed needs a strip you can walk down and make it from. Both sides for a
   // double, because two people get out of it in two directions.
   bed: (p) => [
-    zone('bedside', ['left', 'right'], 0.5, 'to get in and make the bed', {
+    zone('bedside', 'Bed hard to get into', ['left', 'right'], 0.5, 'to get in and make the bed', {
       atLeast: p.shape === 'bed-double' ? 2 : 1,
       span: 0.8,
     }),
@@ -469,7 +483,7 @@ const ACCESS_BY_ROLE: Partial<Record<Role, RuleSpec>> = {
   // Every side you might pull a chair out on. Three of four, so a table with one
   // end against a wall is not reported as a fault — that is a real arrangement.
   'dining-table': () => [
-    zone('seats', ['front', 'back', 'left', 'right'], WALK_COMFORT, 'to pull a chair out and sit down', {
+    zone('seats', 'No room to pull the chairs out', ['front', 'back', 'left', 'right'], WALK_COMFORT, 'to pull a chair out and sit down', {
       atLeast: 3,
       span: 0.85,
     }),
@@ -477,25 +491,25 @@ const ACCESS_BY_ROLE: Partial<Record<Role, RuleSpec>> = {
 
   // The desk's front is where the person is. 900 mm covers the chair pushed back
   // plus getting out of it.
-  desk: () => [zone('seat', ['front'], WALK_COMFORT, 'to pull the chair back and get up', { span: 1 })],
-  'office-chair': () => [zone('push-back', ['back'], 0.45, 'to push the chair back and stand up', { span: 0.8 })],
+  desk: () => [zone('seat', 'No room for the desk chair', ['front'], WALK_COMFORT, 'to pull the chair back and get up', { span: 1 })],
+  'office-chair': () => [zone('push-back', 'No room to push the chair back', ['back'], 0.45, 'to push the chair back and stand up', { span: 0.8 })],
 
   // Enough to stand up out of, and to walk to the far seat.
-  sofa: () => [zone('front', ['front'], 0.35, 'to get to the seat and stand up out of it', { span: 0.9 })],
-  armchair: () => [zone('front', ['front'], 0.3, 'to sit down and get up')],
+  sofa: () => [zone('front', 'No room to get out of the sofa', ['front'], 0.35, 'to get to the seat and stand up out of it', { span: 0.9 })],
+  armchair: () => [zone('front', 'No room to get out of the chair', ['front'], 0.3, 'to sit down and get up')],
 
   // A door's leaf sweeps its own width. Modelled as a box rather than the quarter
   // disc it really is: the box is the conservative reading (it contains the disc),
   // and both the checker and the solver can test it with the same overlap maths
   // they use for everything else.
   door: (p) => [
-    zone('swing', ['front'], p.dimMM[0] / 1000, 'for the door to open', { span: 1 }),
+    zone('swing', 'Door can’t open', ['front'], p.dimMM[0] / 1000, 'for the door to open', { span: 1 }),
   ],
 
   // Not a clearance so much as a sightline: a low chest under a window is fine, a
   // wardrobe in front of one is not, and the difference is entirely height.
   window: (p) => [
-    zone('light', ['front'], 0.4, 'so the window is not blocked', {
+    zone('light', 'Window is blocked', ['front'], 0.4, 'so the window is not blocked', {
       span: 1,
       // The sill is the window's own bottom edge — wall-mounted parts are centred
       // on their mesh, so that is `y − h/2`. A window with no usable Y (nothing
