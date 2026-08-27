@@ -50,8 +50,13 @@ Nothing below has been exercised in a browser. It is all code-read and tested.
   running off the screen: part names are user-typed up to 80 characters, and it is
   bounded at `min(240px, calc(100vw − 32px))` with the measurements on their own
   line. Try renaming a chair to something long first.
-- **Press Escape mid-drag.** Everything the gesture moved should go back — the
-  dragged piece, anything resting on it, and every other selected piece.
+- **Press Escape mid-drag — in the 2D plan only.** Everything the gesture moved
+  should go back: the dragged piece, anything resting on it, and every other
+  selected piece. **In the 3D tab this does not work and does something worse than
+  nothing** — there is no cancel there at all, and Escape is bound to "deselect", so
+  it clears the selection in the middle of the gesture while the drag keeps carrying
+  the set it was given at pointer-down, and the release commits it. Confirmed by
+  reading, not fixed. Do not judge the 3D tab on this.
 - **Touch.** *Completely untested.* Drag a piece on a touchscreen and check the
   selection is not collapsed to one piece when you let go.
 - **Alt-click where pieces overlap**, repeatedly, and from a pulled-back camera.
@@ -188,6 +193,52 @@ a question of which behaviour you want. It was left alone rather than guessed at
 because `tests/drag-convoy.test.ts` currently asserts the second reading in a
 comment that states it as settled, and changing a test that encodes a decision
 needs the person who made it.
+
+---
+
+## Open review findings on `fix/multi-select-drag` — NOT merged
+
+danmu-5e reviewed the branch and returned eleven findings. **Two are confirmed and
+one of those is fixed; the other nine are read-off-the-code hypotheses with
+arithmetic, not reproductions.** The branch is therefore **not merged**, even though
+the three-way merge of all three branches gates clean (typecheck 0, lint 0,
+1267/1267). A green gate says the suite passes, and the point of the review is that
+the suite could not see these.
+
+**Fixed.** A convoy member's support vanished from the world if the support was
+travelling too, so selecting a desk and the lamp on it and dragging the desk wrote
+the lamp to the floor — reported valid, and persisted. Ctrl+A and drag anything did
+it to every tabletop item at once. Measured, fixed, and five mutations now catch it.
+
+**Confirmed, not fixed.** No Escape-cancel in the 3D tab (see above).
+
+**Unverified, in the order I would attack them.** Each has a concrete failure
+scenario in 5e's review; none has been reproduced:
+
+1. A zero-delta commit writes no member moves while the drag has been writing them
+   every frame — so dragging a set out and back to exactly its start could leave the
+   companions displaced and persisted.
+2. `commit()` applies the convoy's moves without checking `valid`, though the type
+   documents "apply only when valid" and the other two call sites do check.
+3. Rotate and scale go through the same commit path, and the containment clamp can
+   move a piece when only its rotation changed — so rotating one piece may translate
+   the rest of the selection.
+4. The new drop clamp and the drag clamp disagree for a piece wider than the room:
+   one centres it, the other pins it to a wall, so touching it once moves it.
+5. A merged set can still be half left behind when the other half is a rigid child
+   of the dragged piece.
+6. A grandchild is dropped when the middle link is itself a selection member.
+7. A hidden piece can be named as the blocker while nothing on screen turns red.
+8. The blocked-readout width bounds against the viewport when the box that clips it
+   is the canvas column, so on a wide screen the bound never engages.
+9. A stale click-suppression flag can eat one following Alt-click.
+
+Plus a documentation defect worth more than it sounds: **a scar written into
+`CLAUDE.md` describes a mechanism the React-Three-Fiber version in use appears to
+prevent.** The design it justifies is still right, for a narrower reason. `CLAUDE.md`
+is the file everyone reads first, so a wrong scar there is worse than no scar — but
+correcting it means verifying a claim about a library's internals, which was not
+done tonight.
 
 ---
 
