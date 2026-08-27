@@ -161,9 +161,14 @@ clamped it to `50.0` — 0.5 m — after which the commit refused the room its o
 had just made. Metres was the one unit where nothing happened, and metres is the
 default.
 
-`boundToUnit` converts the bound into the field's unit and rounds **inward**, because
+`boundsToUnit` converts the bound into the field's unit and rounds **inward**, because
 converting alone is still wrong: 1.8 m is 5.90551 ft, which a foot field renders `5.9`
-— two millimetres under its own floor.
+— two millimetres under its own floor. It takes the **pair**: a second review pass
+found that rounding both ends of a narrow range in a coarse unit collapses it (a
+mirror's 15–60 mm depth is 0.1 ft at both ends) or inverts it (a door's 35–60 mm
+becomes min 0.2, max 0.1, and `NumberField` clamps max first — so every press landed
+on `min` and pressing DOWN raised a door's depth past its own maximum). Fourteen
+combinations, all in feet.
 
 - **Settings → change the dimension unit to centimetres, then Room → Room dimensions.**
   Hold the up chevron on Width. It must stop at `5000`, not snap to `50`.

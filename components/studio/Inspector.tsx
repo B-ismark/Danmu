@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
 import { useHasOverrides, useRoomPart, useRoomScene } from '@/lib/room-scene';
 import { useScene } from '@/lib/scene-store';
-import { boundToUnit, fromMM, toMM, stepFor, precisionFor, formatDim, UNIT_OPTIONS } from '@/lib/units';
+import { boundsToUnit, fromMM, toMM, stepFor, precisionFor, formatDim, UNIT_OPTIONS } from '@/lib/units';
 import { clampDims, dimRangeFor } from '@/lib/dimension-ranges';
 import { Icon } from '@/components/ui/Icon';
 import { ColorPicker } from '@/components/ui/ColorPicker';
@@ -714,13 +714,16 @@ function DimensionEditor({
                     have stopped them instead of walking out and snapping back.
                     `0.001` was a floor in no unit at all: a millimetre to someone
                     working in metres, a micrometre to someone in millimetres, and
-                    there was no ceiling whatsoever. `boundToUnit` rounds inward, so a
+                    there was no ceiling whatsoever. `boundsToUnit` rounds inward, so a
                     rounded bound can only ever be stricter than the clamp, never
                     looser — see `RoomDimsEditor`, where the same mismatch was
-                    destructive rather than merely slack. */}
+                    destructive rather than merely slack. The PAIR is what asks,
+                    because rounding both ends of a narrow range in a coarse unit
+                    collapses it (a mirror's 15-60 mm depth is 0.1 ft at both ends)
+                    or inverts it (a door's 35-60 mm becomes min 0.2, max 0.1). */}
                 <NumberField
-                  min={boundToUnit(range.min[i], dimUnit, 'min')}
-                  max={boundToUnit(range.max[i], dimUnit, 'max')}
+                  min={boundsToUnit(range.min[i], range.max[i], dimUnit).min}
+                  max={boundsToUnit(range.min[i], range.max[i], dimUnit).max}
                   step={step}
                   value={local[i]}
                   onChange={(v) => commitDebounced(i as 0 | 1 | 2, v)}

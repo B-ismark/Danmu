@@ -79,11 +79,40 @@ export function decimalsOf(step: number): number {
  *  180.00000000000003.
  *
  *  The sentence under the fields reads its range off the same call, which is what
- *  makes the number the user is told and the bound the arrows obey the same one. */
-export function boundToUnit(valueMM: number, unit: DimUnit, side: 'min' | 'max'): number {
+ *  makes the number the user is told and the bound the arrows obey the same one.
+ *
+ *  Deliberately NOT exported: one end of a range cannot tell whether rounding it
+ *  inward has left an interval. `boundsToUnit` is the only way in. */
+function boundToUnit(valueMM: number, unit: DimUnit, side: 'min' | 'max'): number {
   const p = Math.pow(10, decimalsOf(stepFor(unit)));
   const raw = fromMM(valueMM, unit) * p;
   return (side === 'min' ? Math.ceil(raw - 1e-9) : Math.floor(raw + 1e-9)) / p;
+}
+
+/** A range in mm as the pair of bounds a stepper in `unit` should carry.
+ *
+ *  Rounding each end inward is only safe while it leaves an interval, and for
+ *  narrow ranges in a coarse unit it does not. A mirror's depth is 15–60 mm, which
+ *  in feet is 0.049–0.197 and rounds to 0.1 at BOTH ends — a stepper whose two
+ *  chevrons produce the same number and looks broken. A door's 35–60 mm is worse:
+ *  it rounds to a min of 0.2 and a max of 0.1, and `NumberField.bump` applies
+ *  `max` first and `min` second, so an inverted pair pins every press to `min` —
+ *  pressing DOWN on a door's depth in feet raised it past its own maximum and
+ *  stuck there. Fourteen shape/axis/unit combinations did one or the other, all
+ *  of them in feet.
+ *
+ *  Below one step of the display unit the stepper cannot express the range at all,
+ *  so the exact conversion is the better answer there: it puts the clamp region in
+ *  the right place and leaves `clampDims` — which clamps rather than refuses — to
+ *  catch a value the field's own rounding lands just outside. The room editor never
+ *  reaches that branch, its ranges being metres wide, and could not afford it if it
+ *  did: an out-of-range room is REFUSED rather than clamped, which is the whole
+ *  reason the inward rounding exists. */
+export function boundsToUnit(minMM: number, maxMM: number, unit: DimUnit): { min: number; max: number } {
+  const min = boundToUnit(minMM, unit, 'min');
+  const max = boundToUnit(maxMM, unit, 'max');
+  if (min < max) return { min, max };
+  return { min: fromMM(minMM, unit), max: fromMM(maxMM, unit) };
 }
 
 export const UNIT_OPTIONS: { id: DimUnit; label: string }[] = [

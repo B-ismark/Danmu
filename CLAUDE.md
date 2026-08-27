@@ -39,11 +39,20 @@ backend, no account. The 3D studio *is* the product.
    the raw metre bound meant a 5 m room read `500.0` cm against a max of `50`, and
    one press of the up chevron clamped it to 50 cm before the commit refused the room
    the arrows had just made (four of the five units, and invisible to everyone left
-   on metres — which is also who wrote it). `boundToUnit` (`lib/units.ts`) converts
+   on metres — which is also who wrote it). `boundsToUnit` (`lib/units.ts`) converts
    and rounds **toward the interior**, because half of that fix is still wrong: 1.8 m
    is 5.90551 ft and a field at the foot step's one decimal renders it `5.9`, two
    millimetres below its own floor. The sentence naming the range reads the same
-   call, so the number the user is told and the number the arrows obey are one. And
+   call, so the number the user is told and the number the arrows obey are one.
+   **It takes the PAIR, and the one-ended version is deliberately not exported**,
+   because neither end can tell whether rounding has left an interval. A range
+   narrower than one step of a coarse unit collapses — a mirror's 15–60 mm depth is
+   0.1 ft at both ends, two chevrons producing one number — or *inverts*: a door's
+   35–60 mm rounds to min 0.2 / max 0.1, and `NumberField` clamps max first and min
+   second, so every press lands on `min` and pressing DOWN raised a door's depth past
+   its own maximum. Fourteen shape/axis/unit combinations did one or the other, every
+   one of them in feet, and the sweep across the whole catalog is the assertion
+   because choosing examples is exactly how the first version missed them. And
    when something does not fit, **say so — never silently resize it to fit**. A piece taller than the
    ceiling keeps its real height and `lib/clearance.ts` reports it.
    **Which wall a photo is, is code's answer now too** (`lib/capture-slots.ts`),

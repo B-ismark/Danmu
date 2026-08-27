@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useScene } from '@/lib/scene-store';
 import { useSettings, useStudio } from '@/lib/store';
-import { boundToUnit, fromMM, toMM, stepFor, precisionFor } from '@/lib/units';
+import { boundsToUnit, fromMM, toMM, stepFor, precisionFor } from '@/lib/units';
 import { roomAxisRange, roomAxisWithin, type RoomAxis } from '@/lib/dimension-ranges';
 import { regradeForNewCeiling } from '@/lib/transforms';
 import { roomStore } from '@/lib/storage';
@@ -95,8 +95,10 @@ export function RoomDimsEditor() {
 
   // One derivation for the arrows' limits and for the sentence that names them.
   // Written twice, they disagree the moment a unit is not metres.
-  const bound = (axis: RoomAxis, side: 'min' | 'max') =>
-    boundToUnit(roomAxisRange(axis)[side] * 1000, dimUnit, side);
+  const bounds = (axis: RoomAxis) => {
+    const r = roomAxisRange(axis);
+    return boundsToUnit(r.min * 1000, r.max * 1000, dimUnit);
+  };
 
   const labels: ['Width', 'Depth', 'Height'] = ['Width', 'Depth', 'Height'];
   // The same three, as the range rule names them. Paired by index with `labels`
@@ -131,12 +133,12 @@ export function RoomDimsEditor() {
                   IN THE FIELD'S OWN UNIT, which is the half that was still wrong:
                   the rule is in metres and `value` is in `dimUnit`, so a 5 m room
                   showed `500.0` cm against a max of `50` and one press of the up
-                  chevron clamped it to 50 cm. `boundToUnit` converts and rounds
+                  chevron clamped it to 50 cm. `boundsToUnit` converts and rounds
                   inward, so the arrows cannot reach a number the commit refuses —
                   in either direction, in any of the five units. */}
               <NumberField
-                min={bound(AXES[i], 'min')}
-                max={bound(AXES[i], 'max')}
+                min={bounds(AXES[i]).min}
+                max={bounds(AXES[i]).max}
                 step={step}
                 value={local[i]}
                 onChange={(v) => commit(i as 0 | 1 | 2, v)}
@@ -148,7 +150,7 @@ export function RoomDimsEditor() {
         </div>
         <div style={{ fontSize: 11, marginTop: 6, lineHeight: 1.4, color: rangeError ? 'var(--danger-text)' : 'var(--ink-3)' }}>
           {rangeError
-            ? `That ${rangeError} is outside ${bound(rangeError, 'min')}–${bound(rangeError, 'max')} ${dimUnit} — enter one in that range and the room will follow.`
+            ? `That ${rangeError} is outside ${bounds(rangeError).min}–${bounds(rangeError).max} ${dimUnit} — enter one in that range and the room will follow.`
             // Was "Sizes in {unit}. Anything from 1 to 50 m a side." Trimmed
             // because the range only matters once you are outside it, which is
             // what the error branch above is for.
@@ -157,11 +159,11 @@ export function RoomDimsEditor() {
             // defended on the grounds that `ROOM_SIDE_M` / `ROOM_HEIGHT_M` are
             // metres by name and by value — true, and beside the point: the field
             // above shows `500.0` to someone working in centimetres, so "1–50 m"
-            // told them a range in a unit they were not typing in. `boundToUnit`
+            // told them a range in a unit they were not typing in. `boundsToUnit`
             // is what makes both correct at once, and the numbers here are the
             // SAME call the arrows are bounded by, so the sentence cannot name a
             // range the stepper will not reach.
-            : `${bound('width', 'min')}–${bound('width', 'max')} ${dimUnit} a side, ${bound('height', 'min')}–${bound('height', 'max')} ${dimUnit} tall.`}
+            : `${bounds('width').min}–${bounds('width').max} ${dimUnit} a side, ${bounds('height').min}–${bounds('height').max} ${dimUnit} tall.`}
         </div>
     </div>
   );
