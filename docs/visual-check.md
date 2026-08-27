@@ -256,6 +256,40 @@ done tonight.
 
 ---
 
+## One finding on danmu-f4's branch — reviewed, NOT merged
+
+`fix/room-report-and-tidy` @ `351f5b8` gates clean on its own commit (typecheck 0,
+lint 0, 1222/1222 across 66 files) and it fixes five real things, including a sofa's
+clearance finding titled "Doors can't open". It also has one regression.
+
+**Suggest now straightens furniture you deliberately tilted, and reports it as a
+move.** The tidy pass was given a second run *after* the prune, so it overrides what
+the prune decided. `SNAP_TOL` is 12° and "unchanged" is 2.9°, and that gap is a
+person's own angle. Measured on the default 7.5 × 5.6 preset with every piece set 8°
+off square, 8 seeds:
+
+| | stock `351f5b8` | with the second tidy disabled |
+| --- | --- | --- |
+| pieces reported moved | 6–7 | 2–3 |
+| of those, pieces that never moved at all | 4–5 | 0 |
+
+Each of them reads `stayed put (0 mm), turned 8.0° → 0.00° off square`, and the panel
+hands it a sentence like *"freed up the space each piece needs"* about a piece that
+did not move. The zeros in the right-hand column are the proof of mechanism: the prune
+**does** put the user's 8° back, and the newly-added pass squares it again.
+
+Four of that branch's own fixes are also invisible to its suite — dropping
+`'navigation'` from the tidy's veto set, switching off its route guard, removing
+`openRoutes`' fine-grid re-check, and turning the tidy into a blanket quantiser each
+leave 227 tests green. The last is caught by nothing, even though a test is *named*
+for it.
+
+Sent to f4 with the numbers, and the fix is narrow. Nothing in this section is for
+you to look at on screen; it is here so the branch's state is not mistaken for
+reviewed-and-clean.
+
+---
+
 ## Known-and-left, with reasons
 
 Not "needs eyes" — decisions taken deliberately, recorded so they are not
@@ -264,12 +298,18 @@ rediscovered as bugs.
 - **A drop into an L / T / U's notch still lands in the notch.**
   `clampIntoFootprint` is the function for that and cannot do it: it walks the
   point toward `polygonCentroid`, which averages the **vertices** rather than the
-  area, and for an L that average is the reflex corner itself — every step of the
-  walk stays inside the notch and the fallback returns a point `pointInFootprint`
-  calls outside. Fixing it means changing `polygonCentroid`, whose other caller
-  derives every wall's inward normal from it. Pinned in
+  area, and for the square L in `tests/wall-parts.test.ts` that average is the
+  reflex corner itself — every step of the walk stays inside the notch and the
+  fallback returns a point `pointInFootprint` calls outside. Fixing it means
+  changing `polygonCentroid`, whose other caller derives every wall's inward normal
+  from it. Pinned in
   `tests/wall-parts.test.ts`, which says to delete the assertion, not the test,
-  when it changes.
+  when it changes. Measured since, on the five presets: the U's vertex centroid is
+  at `(0.00, −0.70)` and `pointInFootprint` calls it **outside the room**, so on
+  that preset the fallback hands back a point outside the footprint and every
+  caller treats it as inside. The area centroid is inside the room on all five,
+  which makes it strictly better and still not a fix — the clamp guarantees nothing
+  about the piece's extent either way.
 
 - **Inward normals are wrong for non-convex rooms, and the fix is written but not
   merged.** Deciding "which side of a wall is inside" by flipping the perpendicular
@@ -280,12 +320,27 @@ rediscovered as bugs.
   `(0.00, −0.59)`, **outside the room**, so the flip is decided from a point in the
   void. Found by danmu-f4, reproduced independently here.
 
-  The fix (derive it from the polygon's winding, which is exact) is a patch sitting
-  with danmu-f4. It is **not merged** because it makes one specific solver seed go
-  catastrophic — 23 of 24 seeds keep their existing cost, one jumps to 99.3 with
-  `access = 40.00`, a term that is 0.00 in all 47 other runs. So it is a real bug
-  with a seed number rather than a threshold to bump, and it lands in files f4 is
-  mid-rewrite in.
+  The fix (derive it from the polygon's winding, which is exact) is written and
+  gated, and it is **still not merged** — for a different reason than it was last
+  night. Re-measured on a scrambled U over 24 fixed seeds, on top of danmu-f4's
+  `fix/room-report-and-tidy`, which is where the old objection lived:
+
+  | | worst of 24 | seeds leaving furniture outside the room |
+  | --- | --- | --- |
+  | f4's branch merged with mine, no patch | 29.27 | 0 |
+  | + the winding fix | 153.92 | 1 (`outside = 111.11`) |
+  | + the winding fix, + an area-centroid clamp | 454.18 | 1 (`outside = 222.22`) |
+
+  The first row is f4's work clearing the objection: no seed of 24 now exceeds
+  29.3, where one used to reach 99.3 with `access = 40.00`. The patch then produces
+  a new failure instead. `outside` is weighted 1000 over `outsideShare`, so 111.11
+  is roughly 11% of one piece standing in the wall — in an arrangement Suggest
+  hands you. The blocker is the bullet above: `clampIntoFootprint` clamps a
+  **centre point** and says nothing about the piece's extent, so a centre 5 cm
+  inside a U's leg leaves a 2 m sofa mostly outside. Substituting a better centroid
+  fixes the bad seed outright (153.92 → 19.82) and breaks a different one worse, so
+  it moves the failure rather than removing it. What it needs is a containment push
+  on the piece's own footprint, which `layout-settle`'s `contain` already is.
 
 - **`FanGeo` ignores `dimMM[2]`.** The motor, the rod and its 0.13 m offset are
   literals; only the blade radius reads `dimMM[0]`. Group scaling papers over it,
