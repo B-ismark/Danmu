@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { groupRows, rowPartIds, type Groupable } from '@/lib/part-rows';
+import { groupRows, type Groupable } from '@/lib/part-rows';
 
 // The layer tree's grouping is DERIVED, not stored — see the header of
 // `lib/part-rows.ts`. That makes it pure logic worth testing here rather than a
@@ -25,7 +25,7 @@ describe('the layer tree rows', () => {
   it('leaves an ungrouped room exactly as it was', () => {
     const parts = [p('a'), p('b'), p('c')];
     expect(shape(groupRows(parts))).toEqual(['a', 'b', 'c']);
-    expect(rowPartIds(groupRows(parts))).toEqual(['a', 'b', 'c']);
+    expect(groupRows(parts).map((r) => r.key)).toEqual(['a', 'b', 'c']);
   });
 
   it('pulls members up to their first member and moves nothing else', () => {

@@ -171,12 +171,26 @@ export function PartTree() {
     listRef.current?.querySelector<HTMLElement>(`[data-row-key="${key}"]`)?.focus();
   }
 
-  /** Select what a row stands for: one piece, or every visible member of a group.
-   *  Both go through the same call so nothing downstream has to ask which kind of
-   *  row was pressed. */
+  /** Every member of a group that is in the ROOM, not only the ones on screen.
+   *
+   *  This is the distinction that made three separate bugs, so it is one function
+   *  now and every group-wide action goes through it. `row.ids` is the VISIBLE
+   *  members — right for drawing a header and for a range, wrong for anything that
+   *  acts on "the group", because a search hiding two of three chairs must not turn
+   *  a group action into a one-piece action. */
+  const groupMemberIds = (gid: string) => parts.filter((p) => p.groupId === gid).map((p) => p.id);
+
+  /** Select what a row stands for: one piece, or a whole group.
+   *
+   *  A group row takes every member in the room. It used to take `row.ids`, and
+   *  fall through `ids.length === 1` to `setSelected` when a filter left one member
+   *  visible — so pressing a header that read `Group · 1 of 3` selected a single
+   *  chair, and then rendered itself UNSELECTED, because `groupSelected` is
+   *  measured against the room. The header disagreed with the row under it. */
   function selectRow(row: TreeRow<ScenePart>) {
-    if (row.ids.length === 1) setSelected(row.ids[0]);
-    else setSelection(row.ids, row.ids[0]);
+    const ids = row.kind === 'group' ? groupMemberIds(row.gid) : row.ids;
+    if (ids.length === 1) setSelected(ids[0]);
+    else setSelection(ids, ids[0] ?? null);
     anchorRef.current = row.key;
   }
 
@@ -220,8 +234,33 @@ export function PartTree() {
       selectRow(rows[to]);
       return;
     }
-    const span = rows.slice(Math.min(from, to), Math.max(from, to) + 1);
-    setSelection([...new Set(span.flatMap((r) => r.ids))], rows[to].ids[0] ?? null);
+    // A group is atomic in a range: touch it at either end and the whole group
+    // comes. Unioning the span's own `ids` was asymmetric, and visibly so — with
+    // rows `sofa, [Group×3, c1, c2, c3, lamp`, sweeping sofa→c1 took four pieces
+    // (the header dragged in c2 and c3 past the end of the range) while sweeping
+    // lamp→c3 took two. Same gesture, same two rows swept, different arity, and
+    // neither matched the documented rule.
+    const lo = Math.min(from, to);
+    const hi = Math.max(from, to);
+    const gids = new Set<string>();
+    for (let i = lo; i <= hi; i++) {
+      if (rows[i].gid) gids.add(rows[i].gid!);
+    }
+    // Built by walking every row in order rather than by collecting into a Set, so
+    // the selection arrives in the order the list is drawn — which is what the
+    // Inspector's "first selected" and a follow-up Shift-range both read.
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      if (!(i >= lo && i <= hi) && !(r.gid && gids.has(r.gid))) continue;
+      for (const id of r.ids) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        ids.push(id);
+      }
+    }
+    setSelection(ids, rows[to].ids[0] ?? null);
   }
 
   /**
@@ -240,7 +279,9 @@ export function PartTree() {
    */
   function pickRow(e: React.MouseEvent, row: TreeRow<ScenePart>) {
     if (e.metaKey || e.ctrlKey) {
-      duplicateSelection(row.ids);
+      // Same room-not-filter rule: Ctrl-clicking a group header adds a copy of the
+      // whole set, not of whichever members a search happens to be showing.
+      duplicateSelection(row.kind === 'group' ? groupMemberIds(row.gid) : row.ids);
       return;
     }
     if (e.shiftKey) {
@@ -530,12 +571,19 @@ export function PartTree() {
                 frameSelected();
               }}
               onUngroup={() => {
-                // Every member, not only the visible ones — a search that hid two
-                // of three chairs must not leave those two merged to each other.
-                ungroupParts(parts.filter((p) => p.groupId === row.gid).map((p) => p.id));
-                setSelection(row.ids, row.ids[0] ?? null);
+                const ids = groupMemberIds(row.gid);
+                ungroupParts(ids);
+                setSelection(ids, ids[0] ?? null);
               }}
-              onDelete={() => removeRow(i, row.ids)}
+              // Every member, for the reason `groupMemberIds` exists. This was
+              // `row.ids` — the VISIBLE members — while the button beside it is
+              // labelled "Remove these 3 pieces" and titled "Remove the whole
+              // group". So a search that left one chair showing turned a labelled
+              // three-piece delete into a one-piece delete, and left the other two
+              // merged to each other. The reasoning was already written out one
+              // handler above, for ungroup, and then not applied to the
+              // destructive twin.
+              onDelete={() => removeRow(i, groupMemberIds(row.gid))}
             />
           ) : (
             <PartRow

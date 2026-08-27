@@ -165,7 +165,14 @@ export function buildSceneFile(
       height: room.height,
       ...(room.wallColors ? { wallColors: room.wallColors } : {}),
       ...(room.footprint ? { footprint: room.footprint } : {}),
-      ...(room.site ? { site: room.site } : {}),
+      // Projected field by field, never spread. `Site` declares one key, but a
+      // record written by the old sun mood also carries `lat` and `lon`, and those
+      // are coordinates for the inside of someone's home in a file whose whole
+      // purpose is to be sent to someone else. `loadRoom` strips them on read, so
+      // this is the second of two defences, and it is the one that matters: an
+      // explicit projection cannot leak a key it does not name, whereas a spread
+      // leaks every key a future record grows.
+      ...(room.site ? { site: { bearingDeg: room.site.bearingDeg } } : {}),
     },
     parts: resolveParts(parts, { positions, rotations, dims }).map((resolved) => {
       // fromDetection is dropped on the way out, not just refused on the way in: it

@@ -144,8 +144,11 @@
   --rail-left-tight: 208px;
   --rail-right-tight: 248px;
   /* The narrowest the rails go once their contents answer to their OWN width
-     rather than the viewport's — i.e. only under `rail--elastic`, whose container
-     queries are what make these honest. Both are derived, not chosen:
+     rather than the viewport's, which the `@container rail` block below is what
+     makes honest. (This said "only under `rail--elastic`" for one commit after
+     that modifier was deleted — the guard in `tests/reflow.test.ts` asserts the
+     modifier is gone but reads `codeOnly(CSS)`, which strips comments, so it was
+     structurally unable to see the sentence still naming it.) Both are derived, not chosen:
        left  = two 88px lighting segments + the section's 32px of padding;
        right = two dimension fields on a row + their gap + the same padding,
                which is what the 3-up row folds to below 268px.
@@ -465,16 +468,27 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
    reflowed state their columns inline, and an inline declaration outranks any
    author rule, container query or not.
 
-   The thing to check first if a rail's floating children misbehave:
-   `container-type` USED to force layout containment, which made the element a
-   containing block for `position: fixed` descendants. Two things inside these
-   rails are exactly that — `ui/Select.tsx`'s dropdown and RoomTools' room-report
-   panel, both fixed and both positioned from measured viewport coordinates — so
-   under the old behaviour they would have been anchored to the rail and landed
-   nowhere near their trigger. The CSSWG dropped that requirement (container-type
-   now forces only an independent formatting context, which a flex column already
-   was), and Chrome, Firefox and Safari all ship the new behaviour. It is still the
-   first thing to open a menu and verify on. */
+   **THE FIRST THING TO CHECK if a rail's floating children misbehave, and it is
+   not verified.** `container-type: inline-size` applies layout containment, and a
+   layout-contained element acts as the containing block for its `position: fixed`
+   descendants. Three things inside these rails are exactly that, all positioned
+   from measured viewport coordinates: `ui/Select.tsx`'s dropdown, RoomTools'
+   room-report panel, and `ui/Tooltip.tsx`. If containment applies as the spec
+   text reads, all three resolve their coordinates against the RAIL's origin and
+   land about the top bar's height too low.
+
+   This comment previously asserted that the CSSWG had dropped that requirement
+   and that all three engines ship the new behaviour. **That claim is removed
+   because nobody here verified it** — and it was load-bearing for three
+   components, which is the worst combination: a confident sentence standing in
+   for a measurement. It also mattered more than it looked, because
+   `container-type` was scoped to a `.rail--elastic` modifier that production
+   never applied, so nothing shipped on this assumption until the modifier went.
+
+   `ui/Tooltip.tsx` sidesteps it entirely by portalling its bubble to
+   `document.body`, which is outside every container — do the same for the other
+   two if this turns out to bite. Open a Select and the room report and look; it
+   is a ten-second check and it is in `docs/visual-check.md`. */
 
 @container rail (max-width: 268px) {
   /* Three 11px buttons with icons stop fitting first. Two rows of two reads

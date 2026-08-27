@@ -25,29 +25,50 @@
 // name twice, and `aria-describedby` would make it a description, which it is not
 // — it IS the name.
 
-import { useCallback, useId, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 /** Gap between the trigger and the bubble. */
 const OFFSET = 8;
 /** Keeps the bubble off the viewport edges. */
 const MARGIN = 8;
+/** Widest the bubble may be. Beyond this it wraps — see the clamp in `open`. */
+const CAP = 240;
 
 export function Tooltip({
   label,
   children,
   placement = 'top',
 }: {
-  /** The text. Should be the same string as the trigger's `aria-label`. */
+  /** The visible name. Usually a PREFIX of the trigger's `aria-label` rather than
+   *  the whole of it: `LightingPicker` shows "Sunrise" here while its accessible
+   *  name is "Sunrise — Low sun from the east", because the bubble is a name and
+   *  the extra clause is orientation a screen-reader user cannot get from the
+   *  glyph. Keep this the short one; it is read at a glance, next to four others. */
   label: string;
   /** One focusable, hoverable element. */
   children: ReactNode;
   placement?: 'top' | 'bottom';
 }) {
-  const id = useId();
   const wrapRef = useRef<HTMLSpanElement>(null);
-  const [box, setBox] = useState<{ left: number; top: number; place: 'top' | 'bottom' } | null>(null);
+  const [box, setBox] = useState<{
+    left: number;
+    top: number;
+    place: 'top' | 'bottom';
+    /** The cap actually applied, so the style and the clamp read one number. */
+    width: number;
+  } | null>(null);
+
+  // Set on pointer-down and cleared when the pointer leaves or focus goes. Without
+  // it, `onPointerDown={close}` was defeated one event later: pressing a button
+  // dispatches pointerdown → mousedown → **focus** as separate native events, so
+  // React committed the close and then `onFocus` reopened the bubble over the
+  // control that had just been pressed — the exact annoyance that handler exists to
+  // prevent, and visible on every click of a lighting chip.
+  const pressedRef = useRef(false);
 
   const open = useCallback(() => {
+    if (pressedRef.current) return;
     const el = wrapRef.current?.firstElementChild ?? wrapRef.current;
     const r = el?.getBoundingClientRect();
     if (!r) return;
@@ -55,30 +76,58 @@ export function Tooltip({
     // known before paint, so `place` is decided from the space available and the
     // transform does the rest — which also means one number, not a re-measure.
     const place = placement === 'top' && r.top < 44 ? 'bottom' : placement;
+    // Clamp the bubble's BOX inside the viewport, not its centre. Clamping the
+    // centre to `[MARGIN, innerWidth - MARGIN]` and then translating by -50% left
+    // half the bubble outside that range: at 360px wide, a trigger 20px from the
+    // left edge with a 200px label put the first third of the word off-screen — and
+    // with `nowrap` and `position: fixed` there is no wrap, no ellipsis and no
+    // scrollbar to say so, on the one control whose bubble IS its label.
+    //
+    // `half` is derived from the same cap the bubble is styled with, so the two
+    // cannot drift; on a viewport narrower than the cap the range collapses and the
+    // bubble centres itself, which is the right answer when it cannot fit beside
+    // its trigger anyway.
+    const width = Math.min(CAP, window.innerWidth - 2 * MARGIN);
+    const half = width / 2;
+    const centre = r.left + r.width / 2;
     setBox({
-      left: Math.min(Math.max(MARGIN, r.left + r.width / 2), window.innerWidth - MARGIN),
+      left: Math.min(Math.max(MARGIN + half, centre), window.innerWidth - MARGIN - half),
       top: place === 'top' ? r.top - OFFSET : r.bottom + OFFSET,
       place,
+      width,
     });
   }, [placement]);
 
   const close = useCallback(() => setBox(null), []);
+  /** A press: dismiss, and stay dismissed until the pointer or focus leaves. */
+  const press = useCallback(() => {
+    pressedRef.current = true;
+    setBox(null);
+  }, []);
+  /** Leaving re-arms it. Both handlers clear the flag, because a control can be
+   *  left by the pointer or by Tab and either one ends the press. */
+  const leave = useCallback(() => {
+    pressedRef.current = false;
+    setBox(null);
+  }, []);
 
   return (
     <span
       ref={wrapRef}
       style={{ display: 'inline-flex', minWidth: 0 }}
       onPointerEnter={open}
-      onPointerLeave={close}
+      onPointerLeave={leave}
       // Focus and blur CAPTURE, so the bubble opens for the real focus target
       // inside rather than needing the wrapper itself to be focusable. `focus`
       // does not bubble; `focusin` would, but React's synthetic `onFocus` already
       // captures, and using it keeps this a plain React tree.
       onFocus={open}
-      onBlur={close}
+      onBlur={leave}
       // A pointer-down means the control is being used, and a bubble left hanging
-      // over the thing you just pressed is the most common tooltip annoyance.
-      onPointerDown={close}
+      // over the thing you just pressed is the most common tooltip annoyance. It
+      // has to latch — see `pressedRef` — because the focus that follows would
+      // otherwise reopen it in the same tick.
+      onPointerDown={press}
       // Escape dismisses it without moving focus — the one thing a keyboard user
       // has no other way to do once it is open.
       onKeyDown={(e) => {
@@ -89,9 +138,19 @@ export function Tooltip({
       }}
     >
       {children}
-      {box && (
+      {/* Portalled to `document.body` rather than rendered here, and that is not
+          cosmetic. `.rail` carries `container-type: inline-size`, which applies
+          layout containment — and a layout-contained element acts as the containing
+          block for its `position: fixed` descendants. If that holds in the shipping
+          browsers, a bubble rendered inside the rail would resolve its viewport
+          coordinates against the RAIL's origin and land nowhere near its trigger.
+          Rather than depend on which way that resolves, the bubble leaves the
+          subtree entirely: `document.body` is outside every container, so the
+          measured `fixed` coordinates mean what they say. `ui/Select.tsx` and
+          `RoomTools.tsx` have the same exposure and have not been moved — see
+          `docs/visual-check.md`. */}
+      {box && createPortal(
         <span
-          id={id}
           role="tooltip"
           // Decoration: the trigger's own `aria-label` is the accessible name, so
           // announcing this too would repeat it.
@@ -111,12 +170,18 @@ export function Tooltip({
             fontWeight: 600,
             fontFamily: 'var(--font-sans)',
             lineHeight: 1.3,
-            whiteSpace: 'nowrap',
+            // Wraps inside the cap rather than running off the edge. `anywhere`
+            // because a part name is user-typed and need not contain a space.
+            maxWidth: box.width,
+            whiteSpace: 'normal',
+            overflowWrap: 'anywhere',
+            textAlign: 'center',
             boxShadow: 'var(--shadow-lift)',
           }}
         >
           {label}
-        </span>
+        </span>,
+        document.body,
       )}
     </span>
   );

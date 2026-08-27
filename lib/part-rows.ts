@@ -122,10 +122,3 @@ export function groupRows<T extends Groupable>(
 
   return rows;
 }
-
-/** Every part id the rows cover, in the order they are drawn. The order a range
- *  selection reads, and the order the list actually looks like — which is NOT
- *  the scene's part order once a group has pulled its members together. */
-export function rowPartIds<T extends Groupable>(rows: readonly TreeRow<T>[]): string[] {
-  return rows.flatMap((r) => (r.kind === 'part' ? [r.part.id] : []));
-}

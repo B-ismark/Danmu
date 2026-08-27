@@ -18,8 +18,13 @@ import type { ScenePart } from './scene-spec';
 import type { Footprint } from './footprint';
 import { nearestEdge } from './geometry';
 
-/** Shapes that are holes in a wall rather than objects hung on one. */
-const APERTURE_SHAPES = new Set(['window', 'door']);
+/** Shapes that are holes in a wall rather than objects hung on one.
+ *
+ *  Exported because `lib/sun-shadow.ts` asks the same question for a different
+ *  reason — an opening is where light legitimately crosses the wall plane, so a
+ *  piece standing in one must keep casting even when the sun is on the far side.
+ *  One list, two consumers; a second copy is how the two answers drift. */
+export const APERTURE_SHAPES: ReadonlySet<string> = new Set(['window', 'door']);
 
 /** Keep an opening at least this far inside the wall outline, in metres.
  *

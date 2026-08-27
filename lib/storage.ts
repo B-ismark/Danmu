@@ -83,8 +83,9 @@ export const ROOM_SCHEMA_VERSION = 1;
  *  unread: a persisted field nobody consumes reads as something the app keeps
  *  about you, and this one was a coordinate pair for the inside of someone's home.
  *
- *  Records written before this still have the two keys. Nothing reads them, they
- *  are dropped on the next save, and `lib/scene-file.ts` ignores them on import —
+ *  Records written before this still have the two keys. `loadRoom` strips them on
+ *  the way out, so they are gone from memory and from the next save, and
+ *  `lib/scene-file.ts` ignores them on import —
  *  no version bump, because narrowing an optional field is as additive as growing
  *  one for every reader that exists. */
 export type Site = {
@@ -239,7 +240,22 @@ export const roomStore = {
     return id;
   },
   async loadRoom(roomId: string): Promise<RoomData | undefined> {
-    return get<RoomData>(k(roomId, 'meta'));
+    const rec = await get<RoomData>(k(roomId, 'meta'));
+    if (!rec) return rec;
+    // Strip a legacy `site` down to the one field `Site` still declares.
+    //
+    // This is the line that makes the comment above true, and it was missing. The
+    // old sun mood stored a latitude and a longitude here; removing them from the
+    // TYPE stopped anything reading them but did nothing about the bytes, and
+    // because they are no longer declared, TypeScript could not see them ride
+    // along. `loadFromRoom` passed the object through by reference, `RoomSync`
+    // re-saved it, and `NorthDial` SPREAD it — so a dial nudge rewrote the
+    // coordinates rather than replacing them, and `buildSceneFile` wrote them into
+    // the file the user hands to someone else. An asymmetric round trip in the
+    // leaking direction: refused on import, exported on save.
+    //
+    // Rebuilt rather than deleted from, so an unknown key cannot survive either.
+    return rec.site ? { ...rec, site: { bearingDeg: rec.site.bearingDeg } } : rec;
   },
   async saveCapture(roomId: string, capture: Capture) {
     await set(k(roomId, `cap:${capture.slot}`), capture);

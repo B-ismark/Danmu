@@ -10,7 +10,9 @@ import { sunDirection } from '@/lib/solar';
 //   · `LIGHTINGS` in `lib/store.ts` — the vocabulary, and the persisted value.
 //   · `LIGHTING` in `lib/lighting-moods.ts` — what the mood looks like, and where
 //     a sun mood's light comes from.
-//   · `MOODS` in `components/studio/ViewOptions.tsx` — its label and its chip.
+//   · `MOODS` in `components/studio/LightingPicker.tsx` — its label, its hint and
+//     its icon. (It was `ViewOptions.tsx` until the moods moved into the Style
+//     section; this line said so for one commit after it stopped being true.)
 //
 // The first two are importable, so the assertions about them are real assertions
 // about real values. The mood table was inside `components/three/Room.tsx` when
@@ -21,8 +23,8 @@ import { sunDirection } from '@/lib/solar';
 // import R3F), and it made this suite honest as a side effect. **If a check here
 // ever needs a regex again, that is the signal the data is in the wrong place.**
 //
-// `ViewOptions` still gets read as text, because it is a client component holding
-// icon names; that one check is the exception and says so.
+// `LightingPicker` still gets read as text, because it is a client component
+// holding icon names; that one check is the exception and says so.
 //
 // All three are typed `Record<Lighting, …>`, so a missing OR extra mood is
 // already a compile error. What this file tests is what the compiler cannot see:
@@ -78,7 +80,16 @@ describe('the lighting moods', () => {
       /import \{ Tooltip \} from '@\/components\/ui\/Tooltip'/,
     );
     expect(TOOLTIP, 'Tooltip must open on focus').toMatch(/onFocus=\{open\}/);
-    expect(TOOLTIP, 'Tooltip must close on blur').toMatch(/onBlur=\{close\}/);
+    // `leave`, not `close`. The two differ: `close` only hides the bubble, while
+    // `leave` also clears the press latch that stops a click from immediately
+    // reopening it (pointerdown → mousedown → focus are separate native events, so
+    // `onPointerDown={close}` was undone one event later by `onFocus={open}`).
+    // Blur has to be the re-arming one, because a control can be left by the
+    // pointer or by Tab and either ends the press.
+    expect(TOOLTIP, 'Tooltip must dismiss on blur').toMatch(/onBlur=\{leave\}/);
+    expect(TOOLTIP, 'leaving must clear the press latch, not just the bubble').toMatch(
+      /const leave = useCallback\(\(\) => \{\s*pressedRef\.current = false;\s*setBox\(null\);/,
+    );
     // `position: fixed`, because every consumer sits in `.rail`, which is
     // `overflow: hidden` — an absolutely-positioned bubble is clipped at the
     // rail's edge, the failure `Select.tsx` and `RoomTools.tsx` both hit.

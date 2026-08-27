@@ -90,6 +90,7 @@ function FinishApplier({
   colorKey,
   dimKey,
   cast,
+  shapeKey,
 }: {
   groupRef: { current: Group | null };
   finish?: ScenePart['finish'];
@@ -99,6 +100,17 @@ function FinishApplier({
    *  a wall-rider with the sun on the far side of its wall — see
    *  `lib/sun-shadow.ts` for why that is the piece's problem and not the wall's. */
   cast: boolean;
+  /** The part's shape, which is NOT read in the body — it is a dependency.
+   *
+   *  `PartGeometry` dispatches on `part.shape`, so changing a piece's model remounts
+   *  this whole subtree, and the meshes declare `castShadow` in their own JSX
+   *  (`Box.tsx`, `DynamicPart.tsx`). While both said `true` the two could not
+   *  disagree; now they can, and the JSX wins on remount. The Inspector's model
+   *  picker writes `dimMM` on the PART rather than as a `dims` override, so none of
+   *  the other keys change, the effect would not re-run, and the impossible shadow
+   *  came back and stayed until the piece was recoloured or the mood switched. The
+   *  same dep gap was already losing the finish on a model change. */
+  shapeKey: string;
 }) {
   const invalidate = useThree((s) => s.invalidate);
   useLayoutEffect(() => {
@@ -137,7 +149,7 @@ function FinishApplier({
     });
     // Materials were mutated outside React — nothing else will ask for a repaint.
     invalidate();
-  }, [groupRef, finish, colorKey, dimKey, cast, invalidate]);
+  }, [groupRef, finish, colorKey, dimKey, cast, shapeKey, invalidate]);
   return null;
 }
 
@@ -196,6 +208,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         moodKeyDirection(lighting, bearingDeg),
         storedRot ?? part.rot,
         ridesWall(part.category, part.shape),
+        part.shape,
       )
     : true;
 
@@ -786,6 +799,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
           colorKey={part.color}
           dimKey={storedDim?.join()}
           cast={castsShadow}
+          shapeKey={part.shape}
         />
         <Pickable partId={partId}>{children}</Pickable>
         {(inSelection || isHovered || dragInvalid) && (

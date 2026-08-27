@@ -109,6 +109,25 @@ describe('scene file · round trip', () => {
     expect(file.room.site).toEqual({ bearingDeg: 90 });
   });
 
+  it('exports the bearing and nothing else, even from a record that carries more', () => {
+    // The leak this closes. The old sun mood stored a latitude and a longitude on
+    // `site`; removing them from the TYPE stopped anything reading them but left
+    // the bytes, and because they are no longer declared TypeScript cannot see
+    // them ride along a spread. `buildSceneFile` wrote `room.site` wholesale, so
+    // coordinates for the inside of someone's home went into the file whose entire
+    // purpose is to be handed to someone else — while `readSite` correctly refused
+    // them coming back. Asymmetric, in the leaking direction.
+    //
+    // The cast is the point of the test: this is what a real legacy record looks
+    // like, and the type system is exactly what could not catch it.
+    const legacy = { bearingDeg: 90, lat: 5.6039, lon: -0.187 } as unknown as typeof ROOM.site;
+    const { file } = roundTrip({ ...ROOM, site: legacy });
+    expect(file.room.site).toEqual({ bearingDeg: 90 });
+    // Asserted on the serialised bytes too, not only on the object: the object is
+    // what a projection produces, the bytes are what actually leaves the machine.
+    expect(JSON.stringify(file)).not.toMatch(/lat|lon/);
+  });
+
   it('bakes the studio overrides, so the file shows what the user is looking at', () => {
     // The live app keeps a part's transform in two places and lets the override win.
     // A file resolves that instead of reproducing it.
