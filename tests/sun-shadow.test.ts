@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { castsSunShadow } from '@/lib/sun-shadow';
-import { moodSunDirection } from '@/lib/lighting-moods';
+import { moodSunDirection, moodKeyDirection, KEY_DIR } from '@/lib/lighting-moods';
 import { LIGHTINGS } from '@/lib/store';
 
 // A wall-mounted piece must not cast a shadow the sun cannot have thrown.
@@ -69,15 +69,55 @@ describe('a wall-mounted piece and the sun', () => {
     }
   });
 
-  it('casts as before when the mood has no sun at all', () => {
-    // The studio moods still render a key light, at a fixed three-quarter
-    // position, but that is a lighting rig and not something standing outside the
-    // building — there is no wall between it and the furniture. `null` must mean
-    // "unchanged", not "never cast", or Evening and Cool would silently lose every
-    // shadow in the room.
+  it('casts when there is no key light at all', () => {
+    // `null` is the answer for a sun at or below the horizon, where `Room` renders
+    // no key light and casting cannot matter. It must mean "unchanged" rather than
+    // "never cast" — otherwise a mood with no sun would silently lose every shadow
+    // in the room instead of simply having no sun to cast one.
     for (const rot of Object.values(FACING)) {
       expect(castsSunShadow(null, rot, true)).toBe(true);
     }
+  });
+
+  it('gates the studio moods too, which the first version of this did not', () => {
+    // The regression this pins. `castsSunShadow` was originally fed
+    // `moodSunDirection`, so `evening` and `cool` came back `null` and were
+    // exempted — on the reasoning that their key light is a lighting rig rather
+    // than something standing outside the building.
+    //
+    // The arithmetic does not support that. The rig is realised at
+    // `max(12, extent * 1.6)` metres, so it stands well outside a six-metre room,
+    // and its horizontal component puts it behind the south and east walls exactly
+    // as a low sun does. The exemption therefore left the bug this file is about
+    // standing on half the walls, in the mood with the brightest ambient of the
+    // set — where a shadow that cannot exist is most visible.
+    for (const mood of ['evening', 'cool'] as const) {
+      const dir = moodKeyDirection(mood, 0);
+      expect(dir, `${mood} should have a key direction, not null`).not.toBeNull();
+      expect(dir).toEqual(KEY_DIR);
+      // Behind its wall on the south and east; in the room on the north and west.
+      expect(castsSunShadow(dir, FACING.south, true)).toBe(false);
+      expect(castsSunShadow(dir, FACING.east, true)).toBe(false);
+      expect(castsSunShadow(dir, FACING.north, true)).toBe(true);
+      expect(castsSunShadow(dir, FACING.west, true)).toBe(true);
+    }
+  });
+
+  it('answers for every mood, so no mood can be silently exempt again', () => {
+    // The shape of the original defect was a whole CLASS of mood falling through a
+    // null. Asserting the count is what stops that returning as "the two moods I
+    // happened to loop over".
+    const answered = LIGHTINGS.filter((id) => moodKeyDirection(id, 0) !== null);
+    expect(answered.length).toBe(LIGHTINGS.length);
+  });
+
+  it('does not swing the studio rig when the room turns', () => {
+    // The bearing belongs to the sun. The rig is fixed relative to the ROOM, so
+    // turning the north dial must move the sun moods' shadows and leave the studio
+    // moods' alone — otherwise the dial would appear to relight a room lit by
+    // nothing outdoors.
+    expect(moodKeyDirection('cool', 0)).toEqual(moodKeyDirection('cool', 137));
+    expect(moodKeyDirection('day', 0)).not.toEqual(moodKeyDirection('day', 137));
   });
 
   it('never leaves a sun mood with nothing to gate against', () => {

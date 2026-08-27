@@ -15,7 +15,7 @@ import { useRoomScene } from '@/lib/room-scene';
 import { placeNewPart, DND_MIME, type Category, type Shape } from '@/lib/scene-spec';
 import { footprintBounds } from '@/lib/footprint';
 import { daylightKelvin } from '@/lib/solar';
-import { LIGHTING, moodSunDirection, DEFAULT_BEARING_DEG } from '@/lib/lighting-moods';
+import { LIGHTING, moodSunDirection, KEY_DIR, DEFAULT_BEARING_DEG } from '@/lib/lighting-moods';
 import { hexFromKelvin } from '@/lib/light-units';
 import { useSnapshot, downloadBlob } from '@/lib/snapshot';
 import { pickIdsFrom } from '@/lib/pick-through';
@@ -352,14 +352,6 @@ export function Room() {
 // Where the key light sits relative to the room centre. Exported as a constant so
 // the shadow frustum can DERIVE how far a piece throws instead of guessing: at
 // this offset the horizontal run per unit of height is run/rise below.
-const KEY_OFFSET: [number, number, number] = [5, 8, 4];
-const KEY_LEN = Math.hypot(...KEY_OFFSET);
-const KEY_DIR: [number, number, number] = [
-  KEY_OFFSET[0] / KEY_LEN,
-  KEY_OFFSET[1] / KEY_LEN,
-  KEY_OFFSET[2] / KEY_LEN,
-];
-
 /** How far a piece throws per metre of its own height, at a given light
  *  direction. Capped because a sun a degree above the horizon throws a shadow
  *  hundreds of metres long, and fitting a frustum to that would spend the whole

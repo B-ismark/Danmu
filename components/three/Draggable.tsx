@@ -36,7 +36,7 @@ import { useDragLive } from '@/lib/drag-live';
 import { collidesAt, isParametric, type ScenePart } from '@/lib/scene-spec';
 import { isFloorStanding, ridesWall } from '@/lib/physics';
 import { clampDims } from '@/lib/dimension-ranges';
-import { moodSunDirection, DEFAULT_BEARING_DEG } from '@/lib/lighting-moods';
+import { moodKeyDirection, DEFAULT_BEARING_DEG } from '@/lib/lighting-moods';
 import { castsSunShadow } from '@/lib/sun-shadow';
 import { type SnapLine } from '@/lib/item-snap';
 import { resolvePlacement as resolveDrag, snapSteps } from '@/lib/drag-resolve';
@@ -176,6 +176,12 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   // plaster and a TV on the far wall was dropping an impossible shadow across the
   // floor. `lib/sun-shadow.ts` holds the reasoning and the sign.
   //
+  // `moodKeyDirection`, not `moodSunDirection`: the studio moods have a key light
+  // too, at a fixed three-quarter position that is realised twelve metres outside
+  // the room, so it stands behind the south and east walls exactly as a low sun
+  // does. Reading the sun function exempted them and left the original bug
+  // standing on half the walls, in the brightest mood of the set.
+  //
   // Two deliberate choices about WHICH rotation this reads. It is the resolved
   // one (`storedRot ?? part.rot`), because a piece the user has turned must be
   // gated on where it now faces and not on where it was authored. And it is the
@@ -187,7 +193,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   const bearingDeg = useScene((s) => s.room.site?.bearingDeg) ?? DEFAULT_BEARING_DEG;
   const castsShadow = part
     ? castsSunShadow(
-        moodSunDirection(lighting, bearingDeg),
+        moodKeyDirection(lighting, bearingDeg),
         storedRot ?? part.rot,
         ridesWall(part.category, part.shape),
       )

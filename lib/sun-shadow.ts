@@ -18,11 +18,20 @@
 //
 // Three things this deliberately does NOT do:
 //
-//   · **It does not gate the studio moods.** `Room` renders a `KeyLight` for
-//     those too, at a fixed three-quarter position, but that light is a lighting
-//     rig rather than a thing standing outside the building — there is no wall
-//     between it and the furniture to reason about. `sunDir` is `null` for a
-//     studio mood, and null means "cast, as before".
+//   · **`null` means "there is no key light at all", and nothing else.** It is
+//     the answer for a sun angle at or below the horizon, where `Room` renders no
+//     key light and `castShadow` cannot matter either way.
+//
+//     It used to also be the answer for the two studio moods, on the grounds that
+//     their key light is a lighting rig rather than something standing outside the
+//     building, so there was no wall between it and the furniture to reason about.
+//     **That was wrong, and wrong in a measurable way**: the rig is realised at
+//     `dist = max(12, extent * 1.6)`, twelve metres or more outside a six-metre
+//     room, and `KEY_DIR · frontVector` is −0.390 for a piece on the south wall
+//     and −0.488 on the east one. So the exemption did not model a rig; it left
+//     this exact bug standing on half the walls, in `cool`, which carries the
+//     brightest ambient of the set and is where a spurious shadow reads loudest.
+//     The caller passes `moodKeyDirection` now, which answers for every mood.
 //   · **It does not read the live object3D rotation.** Mid-drag the mesh's
 //     `rotation.y` runs ahead of the store, so a per-frame dot product against it
 //     would flip casting on and off across the sign change while the piece turns
@@ -38,8 +47,9 @@
 import { frontVector } from './geometry';
 
 /**
- * @param sunDir  unit vector from the room toward the light, or `null` for a
- *                studio mood / a sun below the horizon (`moodSunDirection`)
+ * @param sunDir  unit vector from the room toward the light — `moodKeyDirection`,
+ *                which answers for a studio mood as well as a sun. `null` only
+ *                when there is no key light at all (a sun below the horizon)
  * @param rot     the piece's RESOLVED y-rotation, in radians
  * @param ridesWall whether this piece is snapped flat against a wall
  */
@@ -50,7 +60,8 @@ export function castsSunShadow(
 ): boolean {
   // A piece standing on the floor is in the room with the light. Nothing to gate.
   if (!ridesWall) return true;
-  // No solar key light — see the note above about the studio moods.
+  // No key light at all — see the note above about what `null` does and does not
+  // mean. Not reachable from a studio mood any more.
   if (!sunDir) return true;
   const [fx, fz] = frontVector(rot);
   // Only the horizontal part matters: the question is which SIDE of a vertical
