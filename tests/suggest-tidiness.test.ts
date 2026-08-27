@@ -503,6 +503,19 @@ describe('the repair pass is re-checked on the grid the room report reads', () =
     expect(navigabilityCost(model, scattered(), NAV_CELL)).toBeGreaterThan(0);
   });
 
+  it('…and the pass is not simply declining to run', () => {
+    // The test two below reads `openRoutes` returning its input BY IDENTITY as proof
+    // that the fine-grid re-check refused the proxy. Three other paths return the input
+    // by identity — no doors, nothing stranded, an empty movable pool — and only the
+    // middle one is excluded by the gate above. Re-testing the pool condition here
+    // would be a second copy of `openRoutes`' own line and the drift this repo keeps
+    // finding, so the exclusion is by CONTRAST instead: on this same model one
+    // different repair seed comes back with a different array, and none of the three
+    // early returns can do that for any seed.
+    const at = scattered();
+    expect(openRoutes(model, at, DEFAULT_WEIGHTS, bounds, lcg(17 * 31 + 1))).not.toBe(at);
+  });
+
   it('and its answer is never worse on the fine grid than what it was given', () => {
     const at = scattered();
     const out = openRoutes(model, at, DEFAULT_WEIGHTS, bounds, lcg(REPAIR_SEED));
