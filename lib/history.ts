@@ -29,9 +29,9 @@ export type Snapshot = {
   lighting: Lighting;
   /** Which parts are hidden. This is an edit to the arrangement, not a view
    *  preference — it is saved per room alongside the transforms — so it belongs
-   *  in history. Without it, pressing V and then Ctrl+Z undid the edit BEFORE the
+   *  in history. Without it, pressing H and then Ctrl+Z undid the edit BEFORE the
    *  hide, and walking back past a hide left the part hidden in a state the stack
-   *  did not describe. The help card advertises Ctrl+Z two lines under V. */
+   *  did not describe. The help card advertises Ctrl+Z two lines under H. */
   hidden: Record<string, boolean>;
 };
 
@@ -112,6 +112,33 @@ export function seedHistory() {
 
 function scheduleSnapshot() {
   if (timer) clearTimeout(timer);
+  // NOTHING is recorded while a gesture is in flight, and the debounce below is
+  // not what makes that true — it is what made it false.
+  //
+  // During a 3D drag the store is deliberately HALF WRITTEN. `Draggable` animates
+  // the piece under the hand by writing its own object3D and only writes that
+  // piece's override at the drop, while the convoy's members go through the store
+  // on every legal frame (`liveUpdate` → `setTransformsFor`). So mid-gesture the
+  // store says: company moved, piece under the hand still at home. Any pause
+  // longer than the debounce turns that into a snapshot — and the debounce cannot
+  // help, because a pause longer than the debounce IS the window it opens. One
+  // Ctrl+Z afterwards then restored exactly that state: the dragged piece went
+  // back and its companions stayed where the drag had left them, which is what
+  // "select the lamp, then the side table, drag, undo, and only the side table
+  // comes back" was. A single-piece drag was immune, because with no company
+  // `co.moves` is empty, `setTransformsFor` returns `{}` and the subscription
+  // below never fires — so it read as a multi-select bug, and it was one.
+  //
+  // The gesture, not the timer, is the unit of an undo step. `draggingId` is set
+  // for the whole of one in both tabs, and `startHistoryRecording` takes the
+  // snapshot when it clears.
+  //
+  // The pending timer is cancelled rather than left to fire: an edit made less
+  // than 250ms before a drag began therefore lands in the SAME undo entry as the
+  // drag instead of its own. That is coalescing, not loss — the state before both
+  // is still the entry underneath — and it is the right trade against recording a
+  // room that never existed.
+  if (useStudio.getState().draggingId) return;
   // Debounce: drag emits dozens of mid-frame changes; commit a single snapshot
   // ~250ms after the user stops to avoid filling the stack with intermediate states.
   timer = setTimeout(() => {
@@ -125,6 +152,18 @@ function scheduleSnapshot() {
 /** Start recording transform + structure changes into history. Idempotent. */
 export function startHistoryRecording() {
   const unsubStudio = useStudio.subscribe((state, prev) => {
+    // A gesture ENDING is a reason to snapshot in its own right, even though
+    // `draggingId` is not part of a `Snapshot`. The two tabs order the release
+    // differently — one clears `draggingId` before `commit()` writes and one
+    // after — and this covers both: writes that land after the flag clears
+    // schedule normally through the fields below, and writes that landed while it
+    // was still set were refused by the gate in `scheduleSnapshot` and are picked
+    // up here. Escape-cancel comes through the same door, which is what makes a
+    // cancelled drag cost no undo step it can be told apart from.
+    if (prev.draggingId && !state.draggingId) {
+      scheduleSnapshot();
+      return;
+    }
     if (
       state.positions === prev.positions &&
       state.rotations === prev.rotations &&
