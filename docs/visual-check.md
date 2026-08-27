@@ -100,6 +100,73 @@ Nothing below has been exercised in a browser. It is all code-read and tested.
 - **`/onboarding/layout-pick`:** the back button moved from the chrome bar to the
   top of the content column. Needs an eye at narrow widths.
 
+## 6. Wall-mounted shadows — from danmu-5e, plus one finding
+
+A wall-mounted TV was casting a shadow across the floor when the sun was on the
+**far side** of the wall it hangs on: an impossible picture, because walls only
+ever receive shadows and never cast (the dollhouse view culls the near ones), so
+the light went through the plaster, hit the back of the TV, and the TV — which
+does cast — put a shadow on a floor the light never entered. Now gated.
+
+- **Check the four walls, not one.** The whole fix is a sign, and a sign error is
+  invisible on the north and south walls and inverted on the east and west ones.
+  Put a TV on each wall in turn under **Sunrise** (sun in the east, 7° up) and
+  **Sunset** (west, 8°) and check the shadow appears only when the sun is on the
+  room side. The maths is verified in both directions — independently, from
+  `solar.ts`'s construction rather than from its comments — so what is left is
+  whether the *result* reads correctly.
+
+- **Two of the four walls still show the old bug, in the brightest mood.** The gate
+  is skipped for `Evening` and `Cool`, which use a fixed studio key light rather
+  than a sun. That light is derived from an offset of `[5, 8, 4]` and placed twelve
+  metres or more outside the room, so:
+
+  | a piece on the… | key light is |
+  |---|---|
+  | north wall | in the room — shadow is real |
+  | **south wall** | **behind its wall — impossible shadow** |
+  | west wall | in the room — shadow is real |
+  | **east wall** | **behind its wall — impossible shadow** |
+
+  The argument for leaving it is that a studio key is a lighting rig, not a thing
+  standing outside the building, so there is no wall to reason about. The argument
+  against is that it is nonetheless placed outside the building, `Cool` has the
+  brightest ambient of the seven moods, and the resulting picture is the same one
+  that was reported as impossible. **A TV on the east wall under `Cool` is the
+  case to look at.**
+
+---
+
+## Decisions waiting on you
+
+Not bugs, and not for us to settle.
+
+**Should selecting ONE piece of a merged group, then dragging it, move just that
+piece — or the whole group?**
+
+Today it moves the whole group, and until tonight you could not get into this
+state: clicking a merged piece in the 3D scene selects the whole set, so a
+one-member selection was unreachable. The new layer tree makes it reachable — you
+can click a single member inside a `Group · 3` — and the drag then quietly
+re-expands it to all three. So the rail offers something the drag ignores.
+
+Both readings are defensible and they disagree about a second case:
+
+- **Honour the selection.** The canvas already expands a click to the group before
+  any drag starts, so a narrower selection can only have been built deliberately,
+  through the one surface that exists to reach inside things the canvas cannot.
+  Overriding it protects an accident that is already handled elsewhere.
+- **Keep the group whole.** "Merge" reads as *these move as one*, and the studio's
+  own help text says a merged set comes back as one piece. Under the first reading,
+  selecting *a chair plus one half of a merged pair* and dragging leaves the other
+  half behind — which is the thing merging exists to make impossible.
+
+The code change is small and the signal it needs already exists, so this is purely
+a question of which behaviour you want. It was left alone rather than guessed at,
+because `tests/drag-convoy.test.ts` currently asserts the second reading in a
+comment that states it as settled, and changing a test that encodes a decision
+needs the person who made it.
+
 ---
 
 ## Known-and-left, with reasons
