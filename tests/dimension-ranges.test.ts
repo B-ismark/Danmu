@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { clampDims, dimRangeFor, dimsWithinRange } from '@/lib/dimension-ranges';
+import { applyRoomEdits, clampDims, dimRangeFor, dimsWithinRange, ROOM_AXES, type RoomAxis } from '@/lib/dimension-ranges';
 
 describe('dimRangeFor', () => {
   it('keeps electronics on a tight leash (fixed tier)', () => {
@@ -55,5 +55,74 @@ describe('dimsWithinRange', () => {
     // H is open-lid height: 220 mm is the catalog's own laptop.
     expect(dimsWithinRange('monitor', 'laptop', [340, 240, 220])).toBe(true);
     expect(dimsWithinRange('monitor', 'laptop', [1200, 240, 220])).toBe(false);
+  });
+});
+
+describe('applyRoomEdits', () => {
+  const ROOM = { width: 4, depth: 3, height: 2.5 };
+
+  it('writes the axes in the batch and takes the rest off the room', () => {
+    const { room, rejected } = applyRoomEdits(ROOM, { width: 5 });
+    expect(rejected).toBeNull();
+    expect(room).toEqual({ width: 5, depth: 3, height: 2.5 });
+  });
+
+  it('cannot commit a value it never judged — the NaN a cleared field leaves behind', () => {
+    // The live sequence, in order: clear the Height box, that batch is refused
+    // and the empty string stays on screen, then type one character in Width.
+    // `RoomDimsEditor` judged the edited axis and wrote all three out of the
+    // FORM, so the width commit carried `parseFloat('') === NaN` into the store
+    // and into IndexedDB. The second call is the one that used to corrupt.
+    const refused = applyRoomEdits(ROOM, { height: NaN });
+    expect(refused.rejected).toBe('height');
+    expect(refused.room).toEqual(ROOM);
+
+    const after = applyRoomEdits(ROOM, { width: 5 });
+    expect(after.rejected).toBeNull();
+    expect(Number.isNaN(after.room.height)).toBe(false);
+    expect(after.room.height).toBe(2.5);
+  });
+
+  it('refuses the whole batch when one axis of it is out of range', () => {
+    // All-or-nothing on purpose: writing the good axis changes the room, the
+    // editor resyncs its fields from the room, and the refused number would be
+    // wiped off the screen while the message still named it.
+    const { room, rejected } = applyRoomEdits(ROOM, { width: 5, height: 99 });
+    expect(rejected).toBe('height');
+    expect(room).toEqual(ROOM);
+  });
+
+  it('names the axis that is out of range, not the first one in the batch', () => {
+    expect(applyRoomEdits(ROOM, { width: 5, depth: 0.2 }).rejected).toBe('depth');
+    expect(applyRoomEdits(ROOM, { width: 0.2, depth: 3.5 }).rejected).toBe('width');
+  });
+
+  it('holds a ceiling to the ceiling range and a side to the side range', () => {
+    // 1.5 m is a legal side and an illegal ceiling; 20 m is a legal side and an
+    // illegal ceiling too. Sharing one range for all three axes is the defect
+    // ROOM_HEIGHT_M exists to prevent, so the asymmetry IS the assertion — a
+    // fixture that only used values legal or illegal for both could not see it.
+    expect(applyRoomEdits(ROOM, { width: 1.5 }).rejected).toBeNull();
+    expect(applyRoomEdits(ROOM, { height: 1.5 }).rejected).toBe('height');
+    expect(applyRoomEdits(ROOM, { depth: 20 }).rejected).toBeNull();
+    expect(applyRoomEdits(ROOM, { height: 20 }).rejected).toBe('height');
+  });
+
+  it('leaves every other axis alone, swept over all three rather than sampled', () => {
+    for (const axis of ROOM_AXES) {
+      const edits: Partial<Record<RoomAxis, number>> = { [axis]: 2.4 };
+      const { room, rejected } = applyRoomEdits(ROOM, edits);
+      expect(rejected).toBeNull();
+      expect(room[axis]).toBe(2.4);
+      for (const other of ROOM_AXES) {
+        if (other !== axis) expect(room[other]).toBe(ROOM[other]);
+      }
+    }
+  });
+
+  it('does not mutate the room it was handed', () => {
+    const src = { ...ROOM };
+    applyRoomEdits(src, { width: 5 });
+    expect(src).toEqual(ROOM);
   });
 });

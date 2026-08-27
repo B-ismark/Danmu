@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useScene } from '@/lib/scene-store';
 import { useSettings, useStudio } from '@/lib/store';
 import { boundsToUnit, fromMM, toMM, stepFor, precisionFor } from '@/lib/units';
-import { roomAxisRange, roomAxisWithin, type RoomAxis } from '@/lib/dimension-ranges';
+import { applyRoomEdits, roomAxisRange, ROOM_AXES, type RoomAxis } from '@/lib/dimension-ranges';
 import { regradeForNewCeiling } from '@/lib/transforms';
 import { roomStore } from '@/lib/storage';
 import { useParams } from 'next/navigation';
@@ -42,25 +42,36 @@ export function RoomDimsEditor() {
   }, [room.width, room.depth, room.height, dimUnit, prec]);
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Which fields have been typed in since the last commit fired. The debounce
+  // coalesces a fast width-then-depth into one write, so the batch is a set and
+  // not merely the last index — but it is also the whole of what gets judged and
+  // the whole of what gets written. Judging one axis and writing three is what
+  // let a refused number reach the store on the NEXT edit to a different field;
+  // `applyRoomEdits` is where that now cannot happen, and why the untouched axes
+  // below come off the live room rather than out of `next`.
+  const edited = useRef(new Set<0 | 1 | 2>());
 
   function commit(idx: 0 | 1 | 2, raw: string) {
     const next = [...local] as [string, string, string];
     next[idx] = raw;
     setLocal(next);
+    edited.current.add(idx);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
-      const m = next.map((s) => toMM(parseFloat(s), dimUnit) / 1000);
-      // Only the axis being edited is judged. Judging all three refused a width
-      // edit on account of a ceiling typed before this rule existed — and named
-      // the side range in the message while doing it.
-      const axis = AXES[idx];
-      if (!roomAxisWithin(axis, m[idx])) {
-        setRangeError(axis);
+      const batch: Partial<Record<RoomAxis, number>> = {};
+      for (const i of edited.current) batch[ROOM_AXES[i]] = toMM(parseFloat(next[i]), dimUnit) / 1000;
+      edited.current.clear();
+      const base = useScene.getState().room;
+      const { room: r, rejected } = applyRoomEdits(
+        { width: base.width, depth: base.depth, height: base.height },
+        batch,
+      );
+      if (rejected) {
+        setRangeError(rejected);
         return;
       }
       setRangeError(null);
-      const r = { width: m[0], depth: m[1], height: m[2] };
-      const oldHeight = useScene.getState().room.height;
+      const oldHeight = base.height;
       setRoom(r);
       // The ceiling moved, so the pieces whose height is measured from it move
       // with it — a fan hung under a 1.75 m ceiling was left at 1.60 m when the
@@ -100,10 +111,11 @@ export function RoomDimsEditor() {
     return boundsToUnit(r.min * 1000, r.max * 1000, dimUnit);
   };
 
+  // Paired by index with `ROOM_AXES` — the rule's own order — and so with
+  // `local`, which is what `commit` indexes into. The axis names used to be a
+  // second copy of that tuple sitting here; the rule owns it now, because a
+  // component that keeps its own order can put it back in a different one.
   const labels: ['Width', 'Depth', 'Height'] = ['Width', 'Depth', 'Height'];
-  // The same three, as the range rule names them. Paired by index with `labels`
-  // and with `local`, which is what `commit` indexes into.
-  const AXES: readonly [RoomAxis, RoomAxis, RoomAxis] = ['width', 'depth', 'height'];
 
   // No disclosure of its own any more. This was a collapsible "Room shell" header
   // sitting INSIDE the rail's collapsible "Room" section — two locks on one door,
@@ -137,12 +149,12 @@ export function RoomDimsEditor() {
                   inward, so the arrows cannot reach a number the commit refuses —
                   in either direction, in any of the five units. */}
               <NumberField
-                min={bounds(AXES[i]).min}
-                max={bounds(AXES[i]).max}
+                min={bounds(ROOM_AXES[i]).min}
+                max={bounds(ROOM_AXES[i]).max}
                 step={step}
                 value={local[i]}
                 onChange={(v) => commit(i as 0 | 1 | 2, v)}
-                ariaInvalid={rangeError === AXES[i]}
+                ariaInvalid={rangeError === ROOM_AXES[i]}
                 height={32}
               />
             </label>
