@@ -116,24 +116,16 @@ does cast — put a shadow on a floor the light never entered. Now gated.
   `solar.ts`'s construction rather than from its comments — so what is left is
   whether the *result* reads correctly.
 
-- **Two of the four walls still show the old bug, in the brightest mood.** The gate
-  is skipped for `Evening` and `Cool`, which use a fixed studio key light rather
-  than a sun. That light is derived from an offset of `[5, 8, 4]` and placed twelve
-  metres or more outside the room, so:
-
-  | a piece on the… | key light is |
-  |---|---|
-  | north wall | in the room — shadow is real |
-  | **south wall** | **behind its wall — impossible shadow** |
-  | west wall | in the room — shadow is real |
-  | **east wall** | **behind its wall — impossible shadow** |
-
-  The argument for leaving it is that a studio key is a lighting rig, not a thing
-  standing outside the building, so there is no wall to reason about. The argument
-  against is that it is nonetheless placed outside the building, `Cool` has the
-  brightest ambient of the seven moods, and the resulting picture is the same one
-  that was reported as impossible. **A TV on the east wall under `Cool` is the
-  case to look at.**
+- **Check all seven moods, not just the four with a sun.** The gate first covered
+  only the sun moods, which left `Evening` and `Cool` — the two that use a fixed
+  studio key light — still showing the original bug on the south and east walls
+  (that light is derived from an offset of `[5, 8, 4]`, i.e. up / east / south, and
+  placed twelve metres or more outside the room, so a piece facing away from it had
+  it behind its own wall: dot products −0.390 and −0.488). `Cool` has the brightest
+  ambient of the seven, so it was the worst case for visibility. **Fixed** — every
+  mood now answers with a direction, the sun where there is one and the rig where
+  there is not. **A TV on the east wall under `Cool` is the case that was broken,
+  so it is the one worth a look.**
 
 ---
 
