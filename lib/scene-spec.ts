@@ -1923,6 +1923,30 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
   return settled;
 }
 
+/** What a plain click or press on `id` selects.
+ *
+ *  A merged set is selected WHOLE: clicking one sideboard of a merged pair selects
+ *  both, because that is what "merged" means to a pointer.
+ *
+ *  It does not mean a drag carries the group. `lib/drag-convoy.ts` used to close
+ *  the travelling set over `groupId` AFTER the selection, so dragging one piece
+ *  moved its whole group even when only that piece was selected — and rotation
+ *  never did, so the two gestures disagreed about what a one-member selection
+ *  meant. Unreachable until the layer tree made a single member selectable, and
+ *  reported the moment it did. The selection is the unit now: merge decides what a
+ *  CLICK selects, and a drag carries what is selected.
+ *
+ *  Both tabs read this, which is the other half of the same fix. `Pickable` had it
+ *  inline and the plan had NOTHING — a press there selected one piece of a merged
+ *  pair and the convoy's closure quietly put the rest back, so the plan looked
+ *  right for a reason that had nothing to do with selection. Removing the closure
+ *  without this would have left the two tabs dragging different sets. */
+export function selectionForPick(parts: ScenePart[], id: string): string[] {
+  const me = parts.find((p) => p.id === id);
+  if (!me?.groupId) return [id];
+  return parts.filter((p) => p.groupId === me.groupId).map((p) => p.id);
+}
+
 /** Whether a part renders as a wall/ceiling-mounted item (geometry centred on
  *  the group origin) rather than floor-anchored. SHAPE-aware: a mirror/tv/etc.
  *  is wall-mounted even if the AI labelled it with an off category — relying on
@@ -1993,6 +2017,25 @@ export function placeNewPart(
     const cz = halfD * 2 >= b.maxZ - b.minZ ? (b.minZ + b.maxZ) / 2 : Math.max(b.minZ + halfD, Math.min(b.maxZ - halfD, z));
     return [cx, cz];
   }
+
+  /** Where a ceiling piece hangs the moment it is added: the middle of the room.
+   *
+   *  Not under the pointer. A fan or a pendant belongs in the middle of a ceiling
+   *  far more often than it belongs wherever the cursor happened to be when the
+   *  button came up, and it is a DEFAULT rather than a rule — `ridesWall` is false
+   *  for this family, so nothing snaps it anywhere and a drag moves it freely.
+   *
+   *  The bounds midpoint, tested against the polygon instead of assumed: the middle
+   *  of an L's bounding box is the reflex corner it cuts away, and a fan hung there
+   *  hangs outside the room. When that happens the drop point is the better answer,
+   *  because at least the user aimed it. */
+  function ceilingSpot(): [number, number] {
+    if (!room.footprint) return [0, 0];
+    const b = footprintBounds(room.footprint);
+    const mx = (b.minX + b.maxX) / 2;
+    const mz = (b.minZ + b.maxZ) / 2;
+    return pointInFootprint(mx, mz, room.footprint) ? [mx, mz] : intoRoom(ax, az);
+  }
   if (wallMounted) {
     const h = dimMM[2] / 1000;
     // Centre-anchored: clamp so the bottom edge never dips below the floor and
@@ -2012,8 +2055,8 @@ export function placeNewPart(
       const snapped = snapToWall([ax, 0, az], dimMM, room.footprint, wallStandoff(shape));
       return { pos: [snapped.x, y, snapped.z], rot: snapped.rot ?? 0, wallMounted };
     }
-    // Ceiling family: hung at `y`, over a point that is actually in the room.
-    const [cx, cz] = intoRoom(ax, az);
+    // Ceiling family: hung at `y`, in the middle of the room — see `ceilingSpot`.
+    const [cx, cz] = ceilingSpot();
     return { pos: [cx, y, cz], rot: 0, wallMounted };
   }
   // Only small "goes on a table" items seek a surface; everything else floors.

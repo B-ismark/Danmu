@@ -40,7 +40,7 @@ import { clampDims } from '@/lib/dimension-ranges';
 import { type SnapLine } from '@/lib/item-snap';
 import { resolvePlacement as resolveDrag, snapSteps } from '@/lib/drag-resolve';
 import { wouldCreateCycle } from '@/lib/rigid-parent';
-import { planConvoy, resolveConvoy, worldFor, type Convoy, type ConvoyResult } from '@/lib/drag-convoy';
+import { convoyRestore, planConvoy, resolveConvoy, worldFor, type Convoy, type ConvoyResult } from '@/lib/drag-convoy';
 import { Pickable } from './Pickable';
 import { Highlight } from './Highlight';
 
@@ -184,6 +184,17 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   // Position captured at drag start — used to move merged-group siblings by the
   // same delta when the dragged part belongs to a group.
   const dragStartPos = useRef<[number, number, number] | null>(null);
+  /** Where it was pointing when the gesture began, for the same reason as
+   *  `dragStartPos`: `convoyRestore` replays the cascade from BOTH, and a restore
+   *  that put the position back but not the rotation would leave a turned desk's
+   *  lamp orbiting a pivot that no longer matches it. */
+  const dragStartRot = useRef<number | null>(null);
+  /** Set by Escape. The gesture is over as far as the scene is concerned, but the
+   *  pointer is still down and the browser still holds the capture — so rather
+   *  than tear down here and leave `onPointerUp` to return early past its own
+   *  `releasePointerCapture`, the release runs the normal teardown and skips only
+   *  the commit. Same for the gizmo's `onMouseUp`. */
+  const cancelled = useRef(false);
 
   // Apply transforms whenever stored values change.
   useEffect(() => {
@@ -448,6 +459,8 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   const raf = useRef(0);
 
   function flushGesture() {
+    // Escape ended this gesture; the pointer is just still down.
+    if (cancelled.current) return;
     raf.current = 0;
     if (!ref.current || !part) return;
     const pp = pendingPos.current;
@@ -518,6 +531,8 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     if (!d.started) {
       d.started = true;
       dragStartPos.current = [ref.current.position.x, ref.current.position.y, ref.current.position.z];
+      dragStartRot.current = ref.current.rotation.y;
+      cancelled.current = false;
       lastFreePos.current = null;
       effCache.current = buildEffSnapshot();
       convoyCache.current = null;
@@ -579,6 +594,56 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     touchPts.current.clear();
     twist.current = null;
   }
+
+  // Escape during a drag puts everything back — which the 3D tab could not do at
+  // all until now, while the 2D plan could. Not a missing branch: there was no
+  // handler here, so the key fell through to the studio's global Escape, which
+  // means "deselect", and the piece simply stayed wherever the pointer had got to.
+  //
+  // The restore is `convoyRestore`, the same function the plan calls, for the
+  // reason the plan's own comment gives: a cancelled drag has to put back the lamp
+  // that rode along on the desk and every member of a merged set, not just the
+  // piece under the hand. It replays the pure cascade from the start transform
+  // rather than keeping a second snapshot of it.
+  //
+  // One listener per part, attached for the component's life and gated on this
+  // part actually being mid-gesture. The alternative — subscribing to
+  // `draggingId` so the effect could attach and detach — would re-render every
+  // Draggable in the room twice per gesture, to save a string comparison that
+  // only happens when someone presses Escape. Capture phase, so it beats the
+  // global handler; and it declines the key whenever no drag is in flight, which
+  // is what leaves that global meaning intact the rest of the time.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      const live = (drag.current?.started ?? false) || gizmoActive.current;
+      const g = ref.current;
+      const start = dragStartPos.current;
+      const startRot = dragStartRot.current;
+      // A press that never became a drag has no start transform to go back to,
+      // and Escape then means what it means everywhere else.
+      if (!live || cancelled.current || !g || !start || startRot === null) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (raf.current) {
+        cancelAnimationFrame(raf.current);
+        raf.current = 0;
+      }
+      cancelled.current = true;
+      pendingPos.current = null;
+      pendingRot.current = null;
+      g.position.set(start[0], start[1], start[2]);
+      g.rotation.y = startRot;
+      setTransformsFor(convoyRestore(convoy(), partId, start, startRot));
+      setLive(null);
+      setDragInvalid(false);
+      document.body.style.cursor = '';
+      invalidate(); // the object3D moved imperatively — ask for the repaint
+    }
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partId, setTransformsFor, setLive, invalidate]);
 
   // Release everything if the part unmounts mid-gesture (deleted, undone, room
   // swapped). Without this, `draggingId` is left pointing at a part that no
@@ -712,6 +777,8 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       if (dist < 4) return;
       d.started = true;
       dragStartPos.current = [ref.current.position.x, ref.current.position.y, ref.current.position.z];
+      dragStartRot.current = ref.current.rotation.y;
+      cancelled.current = false;
       lastFreePos.current = null;
       effCache.current = buildEffSnapshot(); // one world snapshot for the gesture
       convoyCache.current = null;
@@ -742,10 +809,17 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     }
     document.body.style.cursor = '';
     if (d.started) {
-      flushNow(); // land the last sub-frame move before resolving the drop
-      commit();
+      // …unless Escape already put everything back, in which case committing
+      // would write the start transform back as if it were a drop.
+      if (!cancelled.current) {
+        flushNow(); // land the last sub-frame move before resolving the drop
+        commit();
+      }
       // The DOM click that ends this gesture means "select just this piece" to
       // `Pickable`, which would collapse the very selection the drag just moved.
+      // A cancelled drag needs this as much as a committed one: the release still
+      // produces a click, and the selection it would collapse is the one Escape
+      // just restored.
       suppressClickAfterDrag();
     }
     effCache.current = null;
@@ -824,13 +898,17 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
             setDragging(partId);
             const pp = ref.current?.position;
             dragStartPos.current = pp ? [pp.x, pp.y, pp.z] : null;
+            dragStartRot.current = ref.current?.rotation.y ?? null;
+            cancelled.current = false;
             lastFreePos.current = null;
             effCache.current = buildEffSnapshot();
             convoyCache.current = null;
           }}
           onMouseUp={() => {
-            flushNow();
-            commit();
+            if (!cancelled.current) {
+              flushNow();
+              commit();
+            }
             effCache.current = null;
             convoyCache.current = null;
             setDragging(null);

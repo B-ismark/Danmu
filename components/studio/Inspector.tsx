@@ -198,23 +198,29 @@ export function Inspector() {
 
       {/* Placement — surfaced as visible buttons (was buried in a ⋯ menu). */}
       <Section label="Where it sits">
-        {/* `rail-triple` is the hook the elastic rail's container query reflows —
+        {/* Three buttons for a piece that STANDS on something, and none for a piece
+            that is fixed to the building. A wall-mounted part has nowhere else to be
+            put — "Wall" moves it along the wall it is already on, which reads as an
+            action and is barely one — and for the ceiling family it is worse than
+            useless: `snapToWallPhys` would slide a ceiling fan sideways onto a wall,
+            which is not a place a fan goes. What those parts get instead is the one
+            number that does mean something about where they sit, below.
+
+            `rail-triple` is the hook the elastic rail's container query reflows —
             three icon+word buttons are the first thing in here to stop fitting. */}
-        <div className="rail-triple" style={{ display: 'grid', gridTemplateColumns: part.wallMounted ? '1fr' : 'repeat(3, 1fr)', gap: 6 }}>
-          <button onClick={snapToNearestWall} className="ds-btn" title="Move to the nearest wall and face the room" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
-            <Icon name="snap-wall" size={13} /> Wall
-          </button>
-          {!part.wallMounted && (
-            <>
-              <button onClick={snapToSurface} className="ds-btn" title="Drop onto the highest surface below — table, shelf, or floor" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
-                <Icon name="snap-surface" size={13} /> Surface
-              </button>
-              <button onClick={groundToFloor} className="ds-btn" title="Force this part to sit on the floor" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
-                <Icon name="snap-floor" size={13} /> Floor
-              </button>
-            </>
-          )}
-        </div>
+        {!part.wallMounted && (
+          <div className="rail-triple" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+            <button onClick={snapToNearestWall} className="ds-btn" title="Move to the nearest wall and face the room" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
+              <Icon name="snap-wall" size={13} /> Wall
+            </button>
+            <button onClick={snapToSurface} className="ds-btn" title="Drop onto the highest surface below — table, shelf, or floor" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
+              <Icon name="snap-surface" size={13} /> Surface
+            </button>
+            <button onClick={groundToFloor} className="ds-btn" title="Force this part to sit on the floor" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
+              <Icon name="snap-floor" size={13} /> Floor
+            </button>
+          </div>
+        )}
         {part.wallMounted && (
           <MountHeightRow
             key={`${id}-${currentXYZ()[1]}`}

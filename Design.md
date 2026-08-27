@@ -663,9 +663,14 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
 
 ### Multi-select & grouping — `SelectionHeader.tsx`
 - Shift-click adds to `selection: string[]`. "Merge N" assigns a shared
-  `groupId`; clicking any grouped part selects the whole group. **Both a selection
-  and a merged group move as one on translate** (rotate/scale-as-one is roadmap),
-  through `lib/drag-convoy.ts` — see §"Who travels" below. "Ungroup" clears it.
+  `groupId`. **A merged group decides what a CLICK selects, not what a drag
+  carries** — `selectionForPick` (lib/scene-spec.ts), read by both tabs, so
+  clicking any grouped part selects the whole group and dragging it then moves the
+  whole group because the whole group is selected. `planConvoy` used to close its
+  travelling set over `groupId` as well, which overrode the selection in one case:
+  select ONE member (the layer tree can) and a drag moved all of them while a
+  rotate moved just that one. The selection is the unit, on both gestures.
+  "Ungroup" clears it. Through `lib/drag-convoy.ts` — see §"Who travels" below.
 - A **press keeps** a selection that already contains the piece, so the drag has
   something to carry; a **click** (a press that never moved) collapses it to that
   one piece. Both surfaces, both directions. The plan collapsed on the press and
@@ -1103,6 +1108,12 @@ with it*. Three kinds of company, and they are not the same rule:
 - **merged-group siblings** and **the rest of the multi-selection** — one rule:
   translate rigidly by the delta the dragged piece *accepted*, each from where it
   stood at pointer-down.
+
+**Escape cancels, in both tabs** — `convoyRestore` replays the pure cascade from
+the start transform, so a cancelled drag puts back the lamp that rode along and
+every member of a merged set, not only the piece under the hand. The 3D tab had no
+handler at all: the key fell through to the studio's global Escape ("deselect") and
+the piece stayed where the pointer had left it.
 
 They were three implementations. The merged-group loop was written out twice, in
 `Draggable.commit()` and in `PlanView.moveTo`, and the multi-selection was

@@ -180,18 +180,20 @@ export function planConvoy(input: {
     for (const id of selection) if (byId.has(id)) wanted.add(id);
   }
 
-  // Group closure, after the selection: if anything travelling belongs to a merged
-  // set, all of that set comes. Selecting a chair plus ONE half of a merged
-  // sideboard pair and dragging must not leave the other half behind — leaving
-  // half behind is the thing "merged" exists to make impossible.
-  const groups = new Set<string>();
-  for (const id of wanted) {
-    const g = byId.get(id)?.groupId;
-    if (g) groups.add(g);
-  }
-  if (groups.size > 0) {
-    for (const p of parts) if (p.groupId && groups.has(p.groupId)) wanted.add(p.id);
-  }
+  // There is deliberately NO closure over `groupId` here. It used to sit at this
+  // point — anything travelling pulled in the rest of its merged set — and the
+  // reasoning was that leaving half a merged pair behind is the thing "merged"
+  // exists to prevent. What that missed is that a merged set is already selected
+  // whole by a click (`selectionForPick` in lib/scene-spec.ts), so the closure
+  // changed the answer in exactly one case: a selection holding SOME of a group.
+  // There it overrode the selection, and the user's verdict is that the selection
+  // wins — dragging one member of a group moves that member, which is what
+  // rotating one member has always done. Two gestures, one meaning.
+  //
+  // Where "merged" now lives is `selectionForPick`. That is a strictly better
+  // place for it: a click still takes the whole set, so the ordinary gesture is
+  // unchanged, and the only thing that lost power is a code path nobody could
+  // reach until the layer tree made a single member selectable.
 
   /** The wall a piece is against now, by footprint edge index.
    *

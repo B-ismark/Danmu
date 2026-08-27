@@ -162,6 +162,12 @@ describe('placeNewPart keeps a drop inside the room', () => {
   // rides no wall, so nothing above put it on one and that guard meant nothing
   // below pulled it in: a fan dragged out of the library landed exactly where the
   // pointer was released, outside the walls included. One clamp, in placeNewPart.
+  //
+  // The ceiling family no longer reaches that clamp on a normal drop — it hangs in
+  // the middle of the room instead (`ceilingSpot`) — so the clamp's own edges are
+  // exercised by floor pieces two describes down. What is tested here is that a fan
+  // ignores the drop point, and that it stops ignoring it when the middle of the
+  // room is a place there is no room at.
   const RECT6x4: Footprint = [
     [0, 0],
     [6, 0],
@@ -171,26 +177,41 @@ describe('placeNewPart keeps a drop inside the room', () => {
   const room6x4 = { width: 6, depth: 4, height: 2.5, footprint: RECT6x4 };
   const FAN: [number, number, number] = [1000, 1000, 200];
 
-  it('pulls a ceiling fan dropped past the wall back inside it', () => {
-    const r = placeNewPart('fan', 'fan', FAN, room6x4, [], [7.5, 2]);
-    // Its own half-width in from the wall, not 7.5.
+  // This room spans x 0…6 and z 0…4, so the middle of it is (3, 2) and NOT the
+  // origin — a centre written as [0, 0] would pass on the presets and fail here.
+  it('hangs a ceiling fan in the middle of the room, wherever it was dropped', () => {
+    for (const at of [[7.5, 2], [-1, -1], [0.2, 3.9], [3, 2]] as Array<[number, number]>) {
+      const r = placeNewPart('fan', 'fan', FAN, room6x4, [], at);
+      expect(r.pos[0], `dropped at ${at}`).toBeCloseTo(3, 6);
+      expect(r.pos[2], `dropped at ${at}`).toBeCloseTo(2, 6);
+      // …and hung at the ceiling, which is the half that was always right.
+      expect(r.pos[1]).toBeCloseTo(2.35, 6);
+      expect(r.rot).toBe(0);
+    }
+  });
+
+  it('falls back to the drop point when the middle of the room is not in it', () => {
+    // An L's bounding-box midpoint is the reflex corner it cuts away, so "the
+    // middle of the room" is outside the room. Then where the user aimed is the
+    // better answer, and it goes through the same bounds clamp as a floor piece.
+    const L: Footprint = [
+      [0, 0],
+      [6, 0],
+      [6, 2],
+      [3, 2],
+      [3, 4],
+      [0, 4],
+    ];
+    expect(pointInFootprint(3, 2, L), 'the fixture must actually have its middle cut away').toBe(false);
+    const room = { width: 6, depth: 4, height: 2.5, footprint: L };
+    const r = placeNewPart('fan', 'fan', FAN, room, [], [5.9, 3.9]);
+    // Half-width in from the bounding box, not 5.9 / 3.9 …
     expect(r.pos[0]).toBeCloseTo(5.5, 6);
-    expect(r.pos[2]).toBeCloseTo(2, 6);
-    // …and still hung at the ceiling, which is the half that was already right.
-    expect(r.pos[1]).toBeCloseTo(2.35, 6);
-    expect(r.rot).toBe(0);
-  });
-
-  it('pulls one dropped off the near corner back inside it', () => {
-    const r = placeNewPart('fan', 'fan', FAN, room6x4, [], [-1, -1]);
-    expect(r.pos[0]).toBeCloseTo(0.5, 6);
-    expect(r.pos[2]).toBeCloseTo(0.5, 6);
-  });
-
-  it('leaves a fan dropped in the room exactly where it was aimed', () => {
-    const r = placeNewPart('fan', 'fan', FAN, room6x4, [], [3, 2]);
-    expect(r.pos[0]).toBeCloseTo(3, 6);
-    expect(r.pos[2]).toBeCloseTo(2, 6);
+    expect(r.pos[2]).toBeCloseTo(3.5, 6);
+    // … and that is in the notch, exactly as it is for a floor piece. Same known
+    // limitation, same place: when this starts passing as `true`, delete the
+    // assertion, not the test.
+    expect(pointInFootprint(r.pos[0], r.pos[2], L)).toBe(false);
   });
 
   it('does NOT yet keep a drop out of the quadrant an L cuts away', () => {

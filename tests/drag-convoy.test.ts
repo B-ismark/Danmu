@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { planConvoy, resolveConvoy, convoyRestore, worldFor, type Convoy } from '@/lib/drag-convoy';
 import { resolvePlacement } from '@/lib/drag-resolve';
-import type { ScenePart } from '@/lib/scene-spec';
+import { selectionForPick, type ScenePart } from '@/lib/scene-spec';
 import type { Poly } from '@/lib/geometry';
 
 // The rule this pins is "what else moves when you move this", and it is here
@@ -100,10 +100,39 @@ describe('planConvoy — who travels', () => {
     expect(plan('a', world, []).members).toEqual([]);
   });
 
-  it('closes over merged groups, so half a merged set can never be left behind', () => {
-    // Selecting a chair plus ONE half of a merged pair and dragging: the other
-    // half is in no selection and is not resting on anything, and it still comes.
-    // That is what "merged" is for.
+  // ─── `groupId` is not a travel rule ────────────────────────────────────
+  //
+  // It used to be: `planConvoy` closed the travelling set over the merged group
+  // after taking the selection, so dragging one member moved all of them whatever
+  // was selected. Rotation never did that, and the user's verdict is that rotation
+  // is the correct one — the selection is the unit. What "merged" still decides is
+  // what a CLICK selects (`selectionForPick`), so the ordinary gesture of clicking
+  // a merged set and dragging it is unchanged; the tests below are about the case
+  // only the layer tree can reach.
+  it('drags ONE member of a merged set when that is all that is selected', () => {
+    const world = [
+      part({ id: 'l', pos: [2, 0, 1], dimMM: [800, 400, 700], groupId: 'g' }),
+      part({ id: 'r', pos: [2.9, 0, 1], dimMM: [800, 400, 700], groupId: 'g' }),
+    ];
+    expect(plan('l', world, ['l']).members.map((m) => m.part.id)).toEqual([]);
+    // …and with no selection at all, which is the same question asked the other way.
+    expect(plan('l', world, []).members.map((m) => m.part.id)).toEqual([]);
+  });
+
+  it('drags the whole merged set when the whole set is selected', () => {
+    // Which is what a click gives you — see `selectionForPick`. This is the path
+    // the ordinary gesture takes, and it must not have got worse.
+    const world = [
+      part({ id: 'l', pos: [2, 0, 1], dimMM: [800, 400, 700], groupId: 'g' }),
+      part({ id: 'r', pos: [2.9, 0, 1], dimMM: [800, 400, 700], groupId: 'g' }),
+    ];
+    expect(plan('l', world, ['l', 'r']).members.map((m) => m.part.id)).toEqual(['r']);
+  });
+
+  it('carries exactly what is selected out of a mixed selection', () => {
+    // A chair plus ONE half of a merged pair. The unselected half stays: the case
+    // nobody had ruled on, settled the same way as the rest — whatever is
+    // selected moves, and nothing else joins.
     const world = [
       part({ id: 'chair', pos: [1, 0, 1], dimMM: [500, 500, 900] }),
       part({ id: 'side-l', pos: [3, 0, 1], dimMM: [800, 400, 700], groupId: 'g1' }),
@@ -111,18 +140,9 @@ describe('planConvoy — who travels', () => {
       part({ id: 'bystander', pos: [5.5, 0, 3], dimMM: [400, 400, 400] }),
     ];
     const c = plan('chair', world, ['chair', 'side-l']);
-    expect(c.members.map((m) => m.part.id).sort()).toEqual(['side-l', 'side-r']);
+    expect(c.members.map((m) => m.part.id)).toEqual(['side-l']);
+    expect(c.travelling.has('side-r')).toBe(false);
     expect(c.travelling.has('bystander')).toBe(false);
-  });
-
-  it('carries the dragged piece’s merged group with no selection at all', () => {
-    // The behaviour that already worked, kept working. It is the reason the bug
-    // report said "sometimes".
-    const world = [
-      part({ id: 'l', pos: [2, 0, 1], dimMM: [800, 400, 700], groupId: 'g' }),
-      part({ id: 'r', pos: [2.9, 0, 1], dimMM: [800, 400, 700], groupId: 'g' }),
-    ];
-    expect(plan('l', world, []).members.map((m) => m.part.id)).toEqual(['r']);
   });
 
   it('leaves a piece resting on the dragged one to the cascade, even when it is also selected', () => {
@@ -135,6 +155,41 @@ describe('planConvoy — who travels', () => {
     expect(c.own.map((d) => d.id)).toEqual(['lamp']);
     expect(c.members).toEqual([]);
     expect(c.travelling.has('lamp')).toBe(true);
+  });
+
+  // ─── The other half: what a click selects ───────────────────────────────
+  //
+  // `selectionForPick` lives in lib/scene-spec.ts and is tested here rather than
+  // beside the placement tests, because it and the missing closure above are one
+  // change: merge stopped deciding what a drag CARRIES and now decides only what a
+  // click SELECTS. Split across two files, a reader finds one and not the other.
+  describe('what a plain click or press selects', () => {
+    const world = [
+      part({ id: 'chair', pos: [1, 0, 1], dimMM: [500, 500, 900] }),
+      part({ id: 'side-l', pos: [3, 0, 1], dimMM: [800, 400, 700], groupId: 'g1' }),
+      part({ id: 'side-r', pos: [3.9, 0, 1], dimMM: [800, 400, 700], groupId: 'g1' }),
+      part({ id: 'lone', pos: [5.5, 0, 3], dimMM: [400, 400, 400], groupId: 'gone' }),
+    ];
+
+    it('takes a merged set whole', () => {
+      expect(selectionForPick(world, 'side-l').sort()).toEqual(['side-l', 'side-r']);
+      expect(selectionForPick(world, 'side-r').sort()).toEqual(['side-l', 'side-r']);
+    });
+
+    it('takes just the piece when it is in no group', () => {
+      expect(selectionForPick(world, 'chair')).toEqual(['chair']);
+    });
+
+    it('takes just the piece when its group has no one else left in it', () => {
+      // `deletePart` does not scrub a surviving member's `groupId` (see
+      // lib/part-rows.ts), so a lone part carrying a dead group id is a real state
+      // and must not select something that is not there.
+      expect(selectionForPick(world, 'lone')).toEqual(['lone']);
+    });
+
+    it('never returns a piece that is not in the world', () => {
+      expect(selectionForPick(world, 'ghost')).toEqual(['ghost']);
+    });
   });
 
   it('carries what is resting on a MEMBER too, and counts nothing twice', () => {

@@ -6,6 +6,7 @@ import { Group } from 'three';
 import { gestureOwnedByOther, useStudio } from '@/lib/store';
 import { consumeDragClick } from '@/lib/drag-click';
 import { useScene } from '@/lib/scene-store';
+import { selectionForPick } from '@/lib/scene-spec';
 import { cycleThrough, type CycleState } from '@/lib/plan-hit';
 import { pickIdsFrom, PART_ID_KEY } from '@/lib/pick-through';
 import { openPickMenu } from '@/components/studio/SceneContextMenu';
@@ -131,15 +132,10 @@ export function Pickable({
           toggleInSelection(partId);
           return;
         }
-        // Plain click: if the part belongs to a merged group, select the whole
-        // group (they move as one); otherwise single-select.
-        const parts = useScene.getState().parts;
-        const me = parts.find((p) => p.id === partId);
-        if (me?.groupId) {
-          setSelection(parts.filter((p) => p.groupId === me.groupId).map((p) => p.id), partId);
-        } else {
-          setSelected(partId);
-        }
+        // Plain click: a merged set is selected whole. The rule is
+        // `selectionForPick` because the 2D plan needs the same answer — it had no
+        // group handling at all, and `planConvoy`'s closure was covering for that.
+        setSelection(selectionForPick(useScene.getState().parts, partId), partId);
         onClick?.(partId);
       }}
       // Double-click opens/closes drawers + doors on parts that support it

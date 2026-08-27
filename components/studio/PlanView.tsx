@@ -19,7 +19,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRe
 import { useStudio, useSettings } from '@/lib/store';
 import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { useScene } from '@/lib/scene-store';
-import { DND_MIME, placeNewPart, type Category, type ScenePart, type Shape } from '@/lib/scene-spec';
+import { DND_MIME, placeNewPart, selectionForPick, type Category, type ScenePart, type Shape } from '@/lib/scene-spec';
 import { entranceComponents, floorBlockers } from '@/lib/clearance';
 import { buildClearanceField, fieldRuns, FREE_CELL, WALK_RADIUS } from '@/lib/clearance-field';
 import { accessZones } from '@/lib/layout-rules';
@@ -741,7 +741,11 @@ export const PlanView = forwardRef<PlanViewHandle, {
     // which is why the plan could not move a multi-selection at all: the set was
     // gone before the first pointermove, and the highlight visibly collapsed under
     // the cursor.
-    if (!useStudio.getState().selection.includes(id)) setSelected(id);
+    // …and what a press on a piece OUTSIDE the selection selects is
+    // `selectionForPick` — a merged set comes whole. The plan had no group
+    // handling at all; `planConvoy` closed over `groupId` and covered for it, so
+    // dragging looked right while the selection was wrong the entire time.
+    if (!useStudio.getState().selection.includes(id)) setSelection(selectionForPick(parts, id), id);
     setDragging(id);
     (e.target as Element).setPointerCapture?.(e.pointerId);
 
@@ -945,7 +949,8 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // the release is where a multi-selection collapses, because the press itself
       // has to keep the set in case a drag follows it (see onPointerDown).
       if (!dragRef.current.moved && dragRef.current.mode === 'translate') {
-        setSelected(dragRef.current.id);
+        const clicked = dragRef.current.id;
+        setSelection(selectionForPick(parts, clicked), clicked);
       }
       // The per-gesture convoy snapshot dies with it — see the comment on the ref.
       dragRef.current = null;
@@ -993,7 +998,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
   function onPartKeyDown(e: React.KeyboardEvent, part: ScenePart) {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      setSelected(part.id);
+      setSelection(selectionForPick(parts, part.id), part.id);
       return;
     }
     if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -1008,7 +1013,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
     // nudge below moves the set. Unconditionally selecting here made the keys the
     // one gesture that could not move more than one piece, which is not a
     // distinction a keyboard user asked for.
-    if (!useStudio.getState().selection.includes(part.id)) setSelected(part.id);
+    if (!useStudio.getState().selection.includes(part.id)) setSelection(selectionForPick(parts, part.id), part.id);
     if (e.shiftKey) {
       const dir = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1;
       const next = part.rot + dir * spin;
