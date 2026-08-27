@@ -1164,6 +1164,11 @@ are what serve "communicate a plan", and they stay.
   the lighting overlap, which is the half of the report that was about overriding, and
   the test pins the thing that needs no threshold: no two themes may paint the same
   room. A tuned threshold is a record of today's palette wearing a gate's clothes.
+  The mood criterion is **not** fully satisfied by the surviving set: `Warm Minimal`
+  and `Afro-Modern` both set `day`, at 0.266 — closer than the merged pair — so the
+  Lighting row still offers one mood twice. Left as-is because four swatches is the
+  fit ceiling, and recorded because the rule the merge was made on would take that
+  pair next.
 - **2D plan** (`PlanView.tsx`) synced with the 3D scene; export via
   `lib/plan-export.ts`. It is a peer of the 3D view rather than a lesser copy of
   it: a drag resolves through the same pipeline (see **One resolve, two surfaces**

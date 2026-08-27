@@ -84,9 +84,12 @@ describe('the one-tap themes', () => {
     //     heritage vs afro-mod     0.078
     //     studio   vs afro-mod     0.138
     //     heritage vs studio       0.168
-    //     warm-min vs afro-mod     0.266
-    //     coastal  vs studio       0.304   <- the pair that was MERGED
+    //     warm-min vs afro-mod     0.266   <- same `day` mood, and STILL IN THE SET
+    //     warm-min vs heritage     0.277
+    //     warm-min vs studio       0.279
+    //     coastal  vs studio       0.304   <- same `cool` mood; the pair that was MERGED
     //     coastal  vs heritage     0.317
+    //     coastal  vs afro-mod     0.321
     //
     // So the pair that read as redundant was the third most DISTINCT pair in the set
     // by this metric, and the two closest pairs are one warm-pale against one

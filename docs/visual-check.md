@@ -198,9 +198,12 @@ the four tones each theme actually paints:
     heritage vs afro-mod     0.078
     studio   vs afro-mod     0.138
     heritage vs studio       0.168
-    warm-min vs afro-mod     0.266
-    coastal  vs studio       0.304   <- the pair that was merged
+    warm-min vs afro-mod     0.266   <- shares `day`, and BOTH ARE STILL IN THE SET
+    warm-min vs heritage     0.277
+    warm-min vs studio       0.279
+    coastal  vs studio       0.304   <- shares `cool`; the pair that was merged
     coastal  vs heritage     0.317
+    coastal  vs afro-mod     0.321
 
 So the merged pair was the third most *distinct* in the set, and the genuinely close
 pairs were elsewhere. The metric is the wrong instrument rather than the set being
@@ -211,6 +214,13 @@ distance. **The merge therefore stands on the shared lighting mood alone**, whic
 the half of your report that was actually about overriding. If you would rather
 a different pair had gone, it is a small change; the numbers are in
 `tests/themes.test.ts`.
+
+**And the criterion is not fully satisfied by what shipped, which is the datum you
+need for that choice.** `Warm Minimal` and `Afro-Modern` both still set `day`, so the
+Lighting row still shows one option twice — and that pair is at 0.266, *closer* than
+the 0.304 pair I merged. I left it because four swatches is the fit ceiling and rust
+against beige is the loudest contrast in the set, but on the stated rule it is the pair
+with the better case for merging. Three swatches is 102px if you want them merged.
 
 ## A theme no longer unticks itself when you move the light
 
