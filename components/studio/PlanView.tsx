@@ -389,9 +389,17 @@ export const PlanView = forwardRef<PlanViewHandle, {
    * un-draggable here and it offered click-to-drop-in-the-centre instead — a
    * reasonable answer to "there is nowhere to drop", and a strange one for the
    * view that is literally a map of the floor. Same contract as the 3D tab's
-   * `onDrop`: `placeNewPart` decides the piece's own rules (wall-mounted pieces go
-   * on a wall regardless of where you let go), and the pointer only supplies the
-   * spot for the ones that stand on the floor.
+   * `onDrop`, and it is now the whole contract: `placeNewPart` decides the piece's
+   * own rules — a piece that RIDES a wall takes the wall nearest where you let go,
+   * and everything else is placed at the drop point, kept inside the room by
+   * `placeNewPart` itself.
+   *
+   * This comment used to say the pointer supplied the spot "for the ones that
+   * stand on the floor", and both handlers clamped the drop only for those. That
+   * was the ceiling fan's bug: a fan is wall-MOUNTED by the centred-geometry test
+   * and rides no wall, so nothing put it on a wall and nothing pulled it into the
+   * room either, and it landed wherever you released the pointer — outside the
+   * walls included.
    */
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
