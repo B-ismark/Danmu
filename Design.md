@@ -1279,8 +1279,12 @@ buys two things and costs one:
 Two traps in there, both silent. `collidesAt` looks the mover up in the list it is
 handed and returns **false** when it is absent, so a world with the mover filtered
 out reports every position as clear — collision detection off, nothing logged. That
-is why the subtraction is `worldFor(convoy, self, parts)` and never a `.filter` at
-the call site. And a member resolves with `snapMode: 'off'`: its own magnetism would
+is why every mover's world comes from `travellingWorld(convoy, parts, dx, dz)` and
+never a `.filter` at the call site — one function for the dragged piece and the
+members both, since it SHIFTS the company to its destination instead of deleting it,
+and a deleted travelling support is a piece resolved onto the floor and persisted
+there. Pass the ATTEMPTED delta when resolving the dragged piece and the ACCEPTED
+one for members. And a member resolves with `snapMode: 'off'`: its own magnetism would
 pull it out of formation, and the grid would re-round a delta the dragged piece has
 already committed to. `convoyRestore` is the Escape path — it replays the pure
 cascade from the start transforms rather than snapshotting a second copy of them.

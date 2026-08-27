@@ -137,8 +137,14 @@ backend, no account. The 3D studio *is* the product.
    paths**. Two traps live in there and both fail silently: the piece being resolved
    has to stay in its own world (`collidesAt` looks the mover up in the list it is
    handed and returns `false` when absent — filter it out and collision detection is
-   simply *off*, which is why the subtraction is `worldFor` and not a `.filter` at
-   the call site); and a member must resolve with `snapMode: 'off'`, or its own
+   simply *off*, which is why every mover's world comes from `travellingWorld` and
+   never a `.filter` at the call site. That function SHIFTS the company to where it
+   is going rather than deleting it, and the difference is not cosmetic: deleting it
+   made a travelling support invisible to `findSupportDetailed`, so selecting a desk
+   and the lamp on it and dragging the LAMP resolved the lamp to y = 0, reported
+   valid because `collidesAt` could not see the desk either, cleared its rigid parent
+   and persisted that. One function for the mover and the members both, because the
+   asymmetry is invisible from either side of it); and a member must resolve with `snapMode: 'off'`, or its own
    magnetism pulls it out of formation and the set arrives bent. A member that
    cannot follow makes the whole step invalid and **names itself** — the piece that
    refused is not the piece under the hand. Separately: **a press must not collapse

@@ -92,8 +92,8 @@ export type Convoy = {
    *  refused instantly. Each chair was the other's obstacle, sitting at the very
    *  position it was about to leave.
    *
-   *  Subtract it with `worldFor`, never by hand: the piece being resolved has to
-   *  stay in its own world. */
+   *  Build the world with `travellingWorld`, never by hand: the piece being
+   *  resolved has to stay in its own world. */
   travelling: Set<string>;
 };
 
@@ -278,8 +278,8 @@ export function resolveConvoy(input: {
   /** Where the dragged piece was when the gesture began. */
   startPos: [number, number, number];
   /** The WHOLE world, at its effective transforms. Each member's own world is
-   *  built here rather than by the caller — `worldFor` has a trap in it (see
-   *  there) and one place is enough to get it right. */
+   *  built here rather than by the caller — `travellingWorld` has two traps in it
+   *  (see there) and one place is enough to get them right. */
   parts: ScenePart[];
   footprint: Poly;
   roomHeight: number;
@@ -292,7 +292,7 @@ export function resolveConvoy(input: {
   if (convoy.own.length > 0) moves.push(...cascadeTransform(draggedId, pos, rot, convoy.own));
 
   // Nothing is coming, so there is no delta to take and no world to build. Every
-  // ordinary single-piece drag lands here at input rate, and the `staying` copy
+  // ordinary single-piece drag lands here at input rate, and the shifted-world copy
   // below is O(parts) — it was being paid for a loop that runs zero times.
   if (convoy.members.length === 0) return { moves, valid: true };
 
@@ -328,12 +328,13 @@ export function resolveConvoy(input: {
   // was about to LEAVE. At its destination it is no longer in the way, and a genuine
   // overlap is still caught, so this is strictly better than removing it.
   //
-  // `worldFor`'s "plus itself" is satisfied by the piece's own shifted copy, since
+  // The "plus itself" that the subtract-and-re-add-the-mover version this replaced
+  // needed is satisfied by the piece's own shifted copy, since
   // `collidesAt` and `findSupportDetailed` both look the mover up by id and then
   // skip it — a same-id entry serves as the mover and is excluded as an obstacle.
   // Hence no trailing self slot any more; the whole list is built once per frame
   // rather than rewritten per member.
-  const staying = travellingWorld(convoy, parts, dx, dz);
+  const world = travellingWorld(convoy, parts, dx, dz);
 
   for (const m of convoy.members) {
     const tx = m.startPos[0] + dx;
@@ -344,7 +345,7 @@ export function resolveConvoy(input: {
       rawZ: tz,
       rot: m.part.rot,
       dim: m.part.dimMM,
-      parts: staying,
+      parts: world,
       footprint,
       roomHeight,
       // 'off' so the set keeps its shape: a member allowed its own magnetism would
