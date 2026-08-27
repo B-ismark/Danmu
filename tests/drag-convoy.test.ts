@@ -584,3 +584,92 @@ describe('a ceiling piece is not a wall rider', () => {
     expect(mv.rot).toBeUndefined();
   });
 });
+
+describe('the world a member resolves against', () => {
+  // Four assertions that were missing, and the first is why: the module subtracted
+  // every travelling piece from the world, and a member's GRAVITY reads that world.
+  // A support that travelled was therefore invisible.
+  const desk = () => part({ id: 'desk', category: 'desk', shape: 'desk-standard', dimMM: [1200, 800, 750], pos: [2, 0, 2] });
+  const lamp = () => part({ id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [200, 200, 400], pos: [2, 0.75, 2] });
+
+  it('keeps a member on a support that is travelling with it', () => {
+    // Select a desk and the lamp standing on it, drag the desk 10 mm. The lamp used
+    // to be written to y = 0 — the floor — and reported valid, because the desk was
+    // subtracted from the world and `collidesAt` could not see it either. Ctrl+A
+    // then dragging anything did this to every tabletop item in the room at once,
+    // and both surfaces persist what the convoy returns.
+    const world = [desk(), lamp()];
+    const c = plan('desk', world, ['desk', 'lamp']);
+    const co = carry(c, 'desk', world, [2, 0, 2], [2.01, 0, 2]);
+    const mv = co.moves.find((m) => m.id === 'lamp')!;
+    expect(mv.pos[1]).toBeCloseTo(0.75, 6);
+    expect(mv.pos[0]).toBeCloseTo(2.01, 6);
+    expect(co.valid).toBe(true);
+  });
+
+  it('still drops a member that leaves a support which is NOT travelling', () => {
+    // The other direction, and it must survive the fix: the whole reason a member's
+    // gravity is re-asked is that a piece translated off its table should land on
+    // the floor rather than hang at table height. Here the desk stays put.
+    const world = [desk(), lamp()];
+    const c = plan('lamp', world, ['lamp']);
+    // Nothing else travels, so the lamp is the dragged piece — resolve it directly,
+    // which is what either surface does for the piece under the hand.
+    const r = resolvePlacement({
+      part: world[1], rawX: 4.5, rawZ: 2, rot: 0, dim: world[1].dimMM,
+      parts: world, footprint: ROOM, roomHeight: H, snapMode: 'off', currentY: 0.75,
+    });
+    expect(r.pos[1]).toBe(0);
+    expect(c.members).toEqual([]);
+  });
+
+  it('reads each member from where it STARTED, not from the live world', () => {
+    // `ConvoyMember.startPos` exists because the per-frame version read each
+    // sibling's current position out of a render memo, so two pointermoves between
+    // two renders dropped a delta and a fast drag pulled the set apart. Mutating the
+    // world after planning is the only way to tell the two apart, and no other
+    // fixture does it — so `m.startPos[0] + dx` and `m.part.pos[0] + dx` were
+    // indistinguishable, which is exactly the substitution this module exists to
+    // prevent.
+    const world = [desk(), part({ id: 'chair', category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 900], pos: [1, 0, 1] })];
+    const c = plan('desk', world, ['desk', 'chair']);
+    // Something else moves the chair mid-gesture.
+    world[1].pos = [3, 0, 3];
+    const co = carry(c, 'desk', world, [2, 0, 2], [2.5, 0, 2]);
+    const mv = co.moves.find((m) => m.id === 'chair')!;
+    expect(mv.pos[0]).toBeCloseTo(1.5, 6);
+    expect(mv.pos[2]).toBeCloseTo(1, 6);
+  });
+
+  it('refuses a set clipped by tens of millimetres, not just by metres', () => {
+    // RIGID_EPS is a micron: anything larger is a containment clamp or a wall snap,
+    // and the set would arrive deformed. Every other fixture is either exact or out
+    // by 0.4 m, so the constant could have been 50 mm and nothing would have said
+    // so. This one is out by exactly 40 mm.
+    const chair = part({ id: 'chair', category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 900], pos: [5, 0, 1] });
+    const sofa = part({ id: 'sofa', category: 'sofa', shape: 'sofa', dimMM: [2000, 900, 800], pos: [2, 0, 3] });
+    const world = [sofa, chair];
+    const c = plan('sofa', world, ['sofa', 'chair']);
+    // maxX - halfWidth is 5.75 for the chair, so a target of 5.79 is clipped 40 mm.
+    const co = carry(c, 'sofa', world, [2, 0, 3], [2.79, 0, 3]);
+    expect(co.valid).toBe(false);
+    expect(co.blocked?.id).toBe('chair');
+  });
+
+  it('pins a wall-riding member hard enough for the pin to matter', () => {
+    // The earlier member-pin test asserted the edge was RECORDED; this one asserts
+    // it is USED. The delta has to be big enough that the target is nearer a
+    // different wall, or pinned and unpinned agree and `wallEdge: m.edge` could be
+    // `null` with the suite still green.
+    const tv = part({ id: 'tv', category: 'tv', shape: 'tv', dimMM: [1200, 100, 700], pos: [2, 1.4, 0.07] });
+    const chair = part({ id: 'chair', category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 900], pos: [2, 0, 0.5] });
+    const world = [tv, chair];
+    const c = plan('chair', world, ['chair', 'tv']);
+    expect(c.members[0].edge).toBe(0);
+    // 3.0 m south: the TV's target is z = 3.07, which is nearer the z = 4 wall.
+    const co = carry(c, 'chair', world, [2, 0, 0.5], [2, 0, 3.5]);
+    const mv = co.moves.find((m) => m.id === 'tv')!;
+    expect(mv.pos[2]).toBeCloseTo(0.07, 5);
+    expect(mv.rot).toBeUndefined();
+  });
+});

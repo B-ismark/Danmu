@@ -283,17 +283,41 @@ export function resolveConvoy(input: {
   let valid = true;
   let blocked: ScenePart | undefined;
 
-  // What is NOT travelling is the same world for every member, so it is built once
-  // and the member is written into one trailing slot (`worldFor`'s "plus itself",
-  // without re-copying the room per piece).
+  // The world a member resolves against: everything that is NOT travelling at the
+  // position it is standing in, plus everything that IS travelling **at the
+  // position it is going to**.
+  //
+  // That second half was missing, and it wrote furniture onto the floor. A member's
+  // gravity is `findSupportDetailed` over this list, so a support that is also
+  // travelling was simply invisible: select a desk and the lamp standing on it,
+  // drag the desk 10 mm, and the lamp resolved with nothing under it and was
+  // written to y = 0 — reported `valid`, because `collidesAt` could not see the
+  // desk either, and then persisted. Ctrl+A and drag anything did it to every
+  // tabletop item in the room at once. Found by danmu-5e in review; reproduced
+  // before fixing.
+  //
+  // Shifting rather than simply including them is the whole point, and it is right
+  // for BOTH consumers of this list. Gravity wants the support where it will be, so
+  // the lamp keeps the desk under it. Collision wants the sibling where it will be
+  // too — which is what the original subtraction was really reaching for: two chairs
+  // side by side refused instantly because each sat in the world at the position it
+  // was about to LEAVE. At its destination it is no longer in the way, and a genuine
+  // overlap is still caught, so this is strictly better than removing it.
+  //
+  // `worldFor`'s "plus itself" is satisfied by the piece's own shifted copy, since
+  // `collidesAt` and `findSupportDetailed` both look the mover up by id and then
+  // skip it — a same-id entry serves as the mover and is excluded as an obstacle.
+  // Hence no trailing self slot any more; the whole list is built once per frame
+  // rather than rewritten per member.
   const staying: ScenePart[] = [];
-  for (const p of parts) if (!convoy.travelling.has(p.id)) staying.push(p);
-  const selfSlot = staying.length;
+  for (const p of parts) {
+    if (!convoy.travelling.has(p.id)) staying.push(p);
+    else staying.push({ ...p, pos: [p.pos[0] + dx, p.pos[1], p.pos[2] + dz] });
+  }
 
   for (const m of convoy.members) {
     const tx = m.startPos[0] + dx;
     const tz = m.startPos[2] + dz;
-    staying[selfSlot] = m.part;
     const r = resolvePlacement({
       part: m.part,
       rawX: tx,
