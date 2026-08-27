@@ -22,6 +22,7 @@ import {
   pullToward,
   findSupportUnder,
   isTabletopProne,
+  MOUNT_PAD,
 } from './physics';
 import type { CaptureSlot, RoomData } from './storage';
 import { clampDims, dimRangeFor } from './dimension-ranges';
@@ -1893,8 +1894,12 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
   //   2. For any floor-standing part whose Y ended up > 0 with no support
   //      beneath, drop it to the floor — recovers from bad AI Y estimates.
   //   3. Ceiling clamp — no part top should poke through the ceiling.
-  const CEILING_PAD = 0.02;
-  const cap = rh - CEILING_PAD;
+  // `MOUNT_PAD`, not a local `CEILING_PAD = 0.02`. It was one, doing this exact
+  // job on this exact quantity, and it is the reason the constant it duplicated
+  // could claim to be "the single clearance" while a fan placed by detection and
+  // a fan placed by a drag would have drifted apart the first time anyone changed
+  // it. Nothing would have said so: both look right, 10 mm apart, in a picture.
+  const cap = rh - MOUNT_PAD;
   for (const p of settled) {
     if (p.category !== 'rug') {
       const support =

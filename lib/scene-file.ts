@@ -218,6 +218,14 @@ function num(v: unknown, lo: number, hi: number): number | null {
   return typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi ? v : null;
 }
 
+/** `num` without the range — is this a real number at all. The two questions are
+ *  separate wherever an out-of-range value is worth keeping in clamped form, and
+ *  keeping them separate is the point: `Number.isFinite` still refuses NaN and
+ *  the `1e400` that `JSON.parse` turns into `Infinity`. */
+function finite(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
 function str(v: unknown): string | null {
   return typeof v === 'string' && v.length > 0 ? v.slice(0, MAX_STR) : null;
 }
@@ -272,7 +280,16 @@ export function parseSceneFile(text: string): SceneFileParse {
 
   const dropped: string[] = [];
   const room = readRoom(raw.room, dropped);
-  if (!room) return { ok: false, error: "That room file is missing its room, so there's nothing to open." };
+  // Names the three numbers, because that is now the whole of what is fatal here:
+  // a ceiling out of range is clamped and reported (see `clampRoomHeight`), so
+  // reaching this line means the width or depth is missing, is not a number, or is
+  // outside `ROOM_SIDE_M` — none of which leave a floor to stand furniture on.
+  if (!room) {
+    return {
+      ok: false,
+      error: "That room file has no usable room — its width, depth or height is missing or unreadable.",
+    };
+  }
 
   const partsIn = Array.isArray(raw.parts) ? raw.parts : [];
   if (partsIn.length > MAX_PARTS) {
@@ -340,6 +357,20 @@ export function parseSceneFile(text: string): SceneFileParse {
   };
 }
 
+/** A ceiling held inside `ROOM_HEIGHT_M`, saying so when it had to move. Split
+ *  out so the sentence the user reads and the bound that produced it come from
+ *  one place. */
+function clampRoomHeight(m: number, dropped: string[]): number {
+  const r = roomAxisRange('height');
+  const out = Math.min(r.max, Math.max(r.min, m));
+  if (out !== m) {
+    dropped.push(
+      `the ceiling in the file was ${m} m and was read as ${out} m (rooms here are ${r.min}–${r.max} m tall)`,
+    );
+  }
+  return out;
+}
+
 function readRoom(v: unknown, dropped: string[]): SceneFileRoom | null {
   if (!isObj(v)) return null;
   const width = num(v.width, ROOM_SIDE_M.min, ROOM_SIDE_M.max);
@@ -349,9 +380,22 @@ function readRoom(v: unknown, dropped: string[]): SceneFileRoom | null {
   // of the side bound is the reason that range moved to `dimension-ranges.ts`; it
   // then read the side bound for the HEIGHT too, which is a copy of a different
   // kind and let a one-metre ceiling in through a file.
-  const height = num(v.height, roomAxisRange('height').min, roomAxisRange('height').max);
-  // No room means no floor to stand furniture on, so this one is fatal rather than
-  // droppable — everything else about a room has a working default.
+  //
+  // CLAMPED AND REPORTED, not refused — and the difference is a room. Refusing an
+  // out-of-range ceiling is fatal for the whole file, and this app WROTE rooms
+  // that a 1.8 m floor now rejects: the editor gated every axis with the side
+  // range until the commit that added `ROOM_HEIGHT_M`, and the fan bug that
+  // prompted it was reported from a 1.65 m room. Saving that room and opening it
+  // again answered "that room file is missing its room" — a message naming the
+  // wrong problem, about a file this app produced, with no way forward. Clamping
+  // is also what every imported PART size already gets from `clampDims`; a
+  // ceiling was the one dimension in the file treated as fatal instead of lossy.
+  // Lossy is fine here precisely because it is never silent: `dropped` is shown.
+  const rawHeight = finite(v.height);
+  const height = rawHeight === null ? null : clampRoomHeight(rawHeight, dropped);
+  // Width and depth stay fatal, and the asymmetry is deliberate rather than
+  // leftover: a width of 0 or a missing one is not a room with odd proportions,
+  // it is no floor to stand furniture on. A ceiling of 1.65 m is a real room.
   if (width === null || depth === null || height === null) return null;
 
   const room: SceneFileRoom = {

@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useScene } from '@/lib/scene-store';
 import { useSettings, useStudio } from '@/lib/store';
-import { fromMM, toMM, stepFor, precisionFor } from '@/lib/units';
+import { boundToUnit, fromMM, toMM, stepFor, precisionFor } from '@/lib/units';
 import { roomAxisRange, roomAxisWithin, type RoomAxis } from '@/lib/dimension-ranges';
 import { regradeForNewCeiling } from '@/lib/transforms';
 import { roomStore } from '@/lib/storage';
@@ -93,6 +93,11 @@ export function RoomDimsEditor() {
     }, 200);
   }
 
+  // One derivation for the arrows' limits and for the sentence that names them.
+  // Written twice, they disagree the moment a unit is not metres.
+  const bound = (axis: RoomAxis, side: 'min' | 'max') =>
+    boundToUnit(roomAxisRange(axis)[side] * 1000, dimUnit, side);
+
   const labels: ['Width', 'Depth', 'Height'] = ['Width', 'Depth', 'Height'];
   // The same three, as the range rule names them. Paired by index with `labels`
   // and with `local`, which is what `commit` indexes into.
@@ -122,10 +127,16 @@ export function RoomDimsEditor() {
                   stepper is ours; the native one is suppressed app-wide. */}
               {/* The stepper's own bounds come off the same rule as the commit
                   check and the sentence below it — a hand-typed 0.5 here let the
-                  arrows walk the room somewhere the commit would then refuse. */}
+                  arrows walk the room somewhere the commit would then refuse.
+                  IN THE FIELD'S OWN UNIT, which is the half that was still wrong:
+                  the rule is in metres and `value` is in `dimUnit`, so a 5 m room
+                  showed `500.0` cm against a max of `50` and one press of the up
+                  chevron clamped it to 50 cm. `boundToUnit` converts and rounds
+                  inward, so the arrows cannot reach a number the commit refuses —
+                  in either direction, in any of the five units. */}
               <NumberField
-                min={roomAxisRange(AXES[i]).min}
-                max={roomAxisRange(AXES[i]).max}
+                min={bound(AXES[i], 'min')}
+                max={bound(AXES[i], 'max')}
                 step={step}
                 value={local[i]}
                 onChange={(v) => commit(i as 0 | 1 | 2, v)}
@@ -137,17 +148,20 @@ export function RoomDimsEditor() {
         </div>
         <div style={{ fontSize: 11, marginTop: 6, lineHeight: 1.4, color: rangeError ? 'var(--danger-text)' : 'var(--ink-3)' }}>
           {rangeError
-            ? `That ${rangeError} is outside ${roomAxisRange(rangeError).min}–${roomAxisRange(rangeError).max} m — enter one in that range and the room will follow.`
+            ? `That ${rangeError} is outside ${bound(rangeError, 'min')}–${bound(rangeError, 'max')} ${dimUnit} — enter one in that range and the room will follow.`
             // Was "Sizes in {unit}. Anything from 1 to 50 m a side." Trimmed
             // because the range only matters once you are outside it, which is
             // what the error branch above is for.
             //
-            // The unit stays a literal `m`: `ROOM_SIDE_M` / `ROOM_HEIGHT_M` are
-            // metres by name and by value, so interpolating `dimUnit` here would
-            // label them as centimetres or feet for anyone who has changed the
-            // setting. Shorter copy is not worth a wrong number — rule 2, and it
-            // would have been invisible to everyone left on metres.
-            : `${roomAxisRange('width').min}–${roomAxisRange('width').max} m a side, ${roomAxisRange('height').min}–${roomAxisRange('height').max} m tall.`}
+            // IN THE USER'S UNIT, and it has to be. The literal `m` here was
+            // defended on the grounds that `ROOM_SIDE_M` / `ROOM_HEIGHT_M` are
+            // metres by name and by value — true, and beside the point: the field
+            // above shows `500.0` to someone working in centimetres, so "1–50 m"
+            // told them a range in a unit they were not typing in. `boundToUnit`
+            // is what makes both correct at once, and the numbers here are the
+            // SAME call the arrows are bounded by, so the sentence cannot name a
+            // range the stepper will not reach.
+            : `${bound('width', 'min')}–${bound('width', 'max')} ${dimUnit} a side, ${bound('height', 'min')}–${bound('height', 'max')} ${dimUnit} tall.`}
         </div>
     </div>
   );

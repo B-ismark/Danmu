@@ -8,6 +8,7 @@ import {
   type ScenePart,
 } from '../lib/scene-spec';
 import type { RoomData } from '../lib/storage';
+import { heightForNewCeiling, MOUNT_PAD } from '../lib/physics';
 import { footprintForLayout } from '../lib/footprint';
 import { footArea, footFromPart, footIntersectionArea, outsideShare } from '../lib/geometry';
 
@@ -38,6 +39,58 @@ function saved(i: number, over: Partial<Saved> = {}): Saved {
     ...over,
   };
 }
+
+describe('one ceiling clearance, not one per path', () => {
+  // `lib/scene-spec.ts` held its own `CEILING_PAD = 0.02` for this clamp while
+  // `MOUNT_PAD` was being introduced next door as "the single clearance" the
+  // drag path, the Inspector and `heightForNewCeiling` share. Two numbers, the
+  // same job, the same value — so nothing was visibly wrong and nothing would
+  // have been until someone changed one of them and a DETECTED fan started
+  // hanging a centimetre away from a DRAGGED one.
+  //
+  // Asserting the two paths against each other rather than against a literal is
+  // what makes this able to fail: if the settle pass gets its own constant back,
+  // the sides come apart the moment the constants differ, and a test written
+  // against `rh - MOUNT_PAD` on both sides could never say so.
+  const FAN_H_MM = 400;
+
+  function ceilingFan(height: number) {
+    const parts = buildSceneFromRoom(
+      room(
+        [
+          saved(0, {
+            label: 'fan__slot:n',
+            category: 'fan',
+            shape: 'fan',
+            dimMM: [1200, 1200, FAN_H_MM],
+          }),
+        ],
+        { height },
+      ),
+    );
+    const fan = parts.find((p) => p.shape === 'fan');
+    expect(fan, 'the fixture must actually produce a fan').toBeDefined();
+    return fan!;
+  }
+
+  it('clamps a ceiling fan to the same height the physics path would', () => {
+    const H = 2.8;
+    const fan = ceilingFan(H);
+    // `groundY` hangs a fan 0.15 below the slab, so a 0.4 m one reaches 2.85 in a
+    // 2.8 m room — over the cap, which is the whole point of the fixture.
+    const expected = heightForNewCeiling('fan', 'fan', [1200, 1200, FAN_H_MM], 99, 2.0, H);
+    expect(expected).toBeCloseTo(H - MOUNT_PAD - FAN_H_MM / 2000, 9);
+    expect(fan.pos[1]).toBeCloseTo(expected, 9);
+  });
+
+  it('agrees at a different ceiling too, so neither side can be a coincidence', () => {
+    const H = 2.4;
+    expect(ceilingFan(H).pos[1]).toBeCloseTo(
+      heightForNewCeiling('fan', 'fan', [1200, 1200, FAN_H_MM], 99, 2.0, H),
+      9,
+    );
+  });
+});
 
 // The detect → scene translation had no coverage at all, and it is where the
 // higher-severity findings of the audit lived.

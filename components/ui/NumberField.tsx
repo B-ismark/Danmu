@@ -21,18 +21,12 @@
 // feeling broken.
 
 import { useEffect, useRef, type CSSProperties } from 'react';
+import { decimalsOf } from '@/lib/units';
 import { Icon } from './Icon';
 
 const HOLD_DELAY = 380;
 const HOLD_EVERY = 60;
 const MAX_CATCH_UP = 3;
-
-/** Decimals implied by the step, so 0.01 steps don't produce 2.7300000000000004. */
-function decimalsOf(step: number): number {
-  const s = String(step);
-  const dot = s.indexOf('.');
-  return dot < 0 ? 0 : s.length - dot - 1;
-}
 
 export function NumberField({
   value,

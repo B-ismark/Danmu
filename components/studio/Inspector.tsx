@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
 import { useHasOverrides, useRoomPart, useRoomScene } from '@/lib/room-scene';
 import { useScene } from '@/lib/scene-store';
-import { fromMM, toMM, stepFor, precisionFor, formatDim, UNIT_OPTIONS } from '@/lib/units';
+import { boundToUnit, fromMM, toMM, stepFor, precisionFor, formatDim, UNIT_OPTIONS } from '@/lib/units';
 import { clampDims, dimRangeFor } from '@/lib/dimension-ranges';
 import { Icon } from '@/components/ui/Icon';
 import { ColorPicker } from '@/components/ui/ColorPicker';
@@ -708,8 +708,19 @@ function DimensionEditor({
                 {/* .field owns the border + focus ring; mono is here only because
                     these are measurements. The stepper is ours — the native one
                     is suppressed app-wide (see globals.css). */}
+                {/* Bounded by the piece's OWN range, in the field's own unit — the
+                    same numbers `clampDims` enforces on commit and the same ones the
+                    sentence below prints, so the arrows stop where the clamp would
+                    have stopped them instead of walking out and snapping back.
+                    `0.001` was a floor in no unit at all: a millimetre to someone
+                    working in metres, a micrometre to someone in millimetres, and
+                    there was no ceiling whatsoever. `boundToUnit` rounds inward, so a
+                    rounded bound can only ever be stricter than the clamp, never
+                    looser — see `RoomDimsEditor`, where the same mismatch was
+                    destructive rather than merely slack. */}
                 <NumberField
-                  min={0.001}
+                  min={boundToUnit(range.min[i], dimUnit, 'min')}
+                  max={boundToUnit(range.max[i], dimUnit, 'max')}
                   step={step}
                   value={local[i]}
                   onChange={(v) => commitDebounced(i as 0 | 1 | 2, v)}

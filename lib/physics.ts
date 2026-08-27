@@ -93,13 +93,22 @@ export function groundY(
   }
 }
 
-/** Clearance kept between a centre-anchored piece and the surfaces it hangs
- *  between, so a clamped piece never renders coplanar with the plaster or the
- *  ceiling. One number, because three places clamp the same way and a fourth was
- *  about to: `lib/drag-resolve.ts`'s vertical containment, the Inspector's typed
- *  mount height, and `heightForNewCeiling` below. `placeNewPart` deliberately does
- *  NOT use it — a door's canonical height IS h/2, and padding that stood every
- *  door 2 cm off its own threshold. */
+/** Clearance kept between a piece and the surfaces it is held between, so a
+ *  clamped piece never renders coplanar with the plaster or the ceiling.
+ *
+ *  One number, and the count matters because the first version of this comment got
+ *  it wrong. Four places clamp the same quantity the same way:
+ *  `lib/drag-resolve.ts`'s vertical containment, the Inspector's typed mount
+ *  height, `heightForNewCeiling` below, and `buildSceneFromRoom`'s settle pass in
+ *  `lib/scene-spec.ts` — which was already spelling it `CEILING_PAD = 0.02` while
+ *  this comment claimed a fourth copy "was about to" happen. A constant introduced
+ *  to end a duplication, asserting it had, next to the duplicate: that is the
+ *  shape of it, and the only reader who would ever have found out is whoever
+ *  changed the number and wondered why detected fans hung differently from dragged
+ *  ones.
+ *
+ *  `placeNewPart` deliberately does NOT use it — a door's canonical height IS h/2,
+ *  and padding stood every door 2 cm off its own threshold. */
 export const MOUNT_PAD = 0.02;
 
 /** Where a piece's Y goes when the room's ceiling moves.
