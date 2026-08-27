@@ -23,7 +23,7 @@ import { collidesAt, type ScenePart } from './scene-spec';
 import { pointInFootprint, footprintBounds } from './footprint';
 import { obbFromPart, obbInsidePoly, type Poly } from './geometry';
 import { snapToNeighbors, type SnapLine } from './item-snap';
-import { findSupportDetailed, groundY, isFloorStanding, ridesWall, snapToWall, wallStandoff } from './physics';
+import { findSupportDetailed, groundY, isFloorStanding, MOUNT_PAD, ridesWall, snapToWall, wallStandoff } from './physics';
 
 export type SnapMode = 'off' | 'fine' | 'coarse';
 
@@ -175,9 +175,9 @@ export function resolvePlacement(input: ResolveInput): Resolved {
 
   // Vertical containment — the whole piece between floor and ceiling.
   if (centered) {
-    y = Math.max(partH / 2 + 0.02, Math.min(roomHeight - partH / 2 - 0.02, y));
-  } else if (y + partH > roomHeight - 0.02) {
-    y = Math.max(0, roomHeight - 0.02 - partH);
+    y = Math.max(partH / 2 + MOUNT_PAD, Math.min(roomHeight - partH / 2 - MOUNT_PAD, y));
+  } else if (y + partH > roomHeight - MOUNT_PAD) {
+    y = Math.max(0, roomHeight - MOUNT_PAD - partH);
   }
 
   // Legality: inside the actual polygon (which catches the notch an L/T/U has and

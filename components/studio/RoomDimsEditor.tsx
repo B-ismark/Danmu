@@ -5,9 +5,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useScene } from '@/lib/scene-store';
-import { useSettings } from '@/lib/store';
+import { useSettings, useStudio } from '@/lib/store';
 import { fromMM, toMM, stepFor, precisionFor } from '@/lib/units';
-import { ROOM_SIDE_M } from '@/lib/dimension-ranges';
+import { roomAxisRange, roomAxisWithin, type RoomAxis } from '@/lib/dimension-ranges';
+import { regradeForNewCeiling } from '@/lib/transforms';
 import { roomStore } from '@/lib/storage';
 import { useParams } from 'next/navigation';
 import { Icon } from '@/components/ui/Icon';
@@ -28,7 +29,10 @@ export function RoomDimsEditor() {
   ]);
   // An out-of-range entry used to be a silent no-op — the number stayed on
   // screen and the room simply didn't change. Say what the limit is instead.
-  const [rangeError, setRangeError] = useState(false);
+  //
+  // It holds the AXIS rather than a boolean, because the three axes no longer
+  // share one range and a message naming the wrong one is worse than no message.
+  const [rangeError, setRangeError] = useState<RoomAxis | null>(null);
 
   useEffect(() => {
     setLocal([
@@ -47,13 +51,42 @@ export function RoomDimsEditor() {
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
       const m = next.map((s) => toMM(parseFloat(s), dimUnit) / 1000);
-      if (m.some((n) => Number.isNaN(n) || n < ROOM_SIDE_M.min || n > ROOM_SIDE_M.max)) {
-        setRangeError(true);
+      // Only the axis being edited is judged. Judging all three refused a width
+      // edit on account of a ceiling typed before this rule existed — and named
+      // the side range in the message while doing it.
+      const axis = AXES[idx];
+      if (!roomAxisWithin(axis, m[idx])) {
+        setRangeError(axis);
         return;
       }
-      setRangeError(false);
+      setRangeError(null);
       const r = { width: m[0], depth: m[1], height: m[2] };
+      const oldHeight = useScene.getState().room.height;
       setRoom(r);
+      // The ceiling moved, so the pieces whose height is measured from it move
+      // with it — a fan hung under a 1.75 m ceiling was left at 1.60 m when the
+      // room grew to 2.80 m, and read as a fan that will not stay up. Both
+      // layers, because both persist; the rule for which pieces follow is
+      // `heightForNewCeiling`'s. One `setParts` rather than a write per piece:
+      // `RoomSync` saves on every `parts` identity change.
+      if (r.height !== oldHeight) {
+        const { parts, setParts } = useScene.getState();
+        const studio = useStudio.getState();
+        const { authored, overridden } = regradeForNewCeiling(parts, studio, oldHeight, r.height);
+        if (authored.length > 0) {
+          const byId = new Map(authored.map((a) => [a.id, a.y]));
+          setParts(
+            parts.map((p) => {
+              const y = byId.get(p.id);
+              return y === undefined ? p : { ...p, pos: [p.pos[0], y, p.pos[2]] as [number, number, number] };
+            }),
+          );
+        }
+        for (const b of overridden) {
+          const ov = studio.positions[b.id];
+          if (ov) studio.setPosition(b.id, [ov[0], b.y, ov[2]]);
+        }
+      }
       if (roomId) {
         const existing = await roomStore.loadRoom(roomId);
         if (existing) await roomStore.saveRoom({ ...existing, ...r });
@@ -62,6 +95,9 @@ export function RoomDimsEditor() {
   }
 
   const labels: ['Width', 'Depth', 'Height'] = ['Width', 'Depth', 'Height'];
+  // The same three, as the range rule names them. Paired by index with `labels`
+  // and with `local`, which is what `commit` indexes into.
+  const AXES: readonly [RoomAxis, RoomAxis, RoomAxis] = ['width', 'depth', 'height'];
 
   // Collapsed by default — the shell is set once during onboarding and edited
   // rarely, while the left rail's real job is the furniture. The header doubles
@@ -108,12 +144,16 @@ export function RoomDimsEditor() {
               {/* .field owns the boundary and the focus ring — the old inline
                   outline:none + onFocus/onBlur border swap fought it. The
                   stepper is ours; the native one is suppressed app-wide. */}
+              {/* The stepper's own bounds come off the same rule as the commit
+                  check and the sentence below it — a hand-typed 0.5 here let the
+                  arrows walk the room somewhere the commit would then refuse. */}
               <NumberField
-                min={0.5}
+                min={roomAxisRange(AXES[i]).min}
+                max={roomAxisRange(AXES[i]).max}
                 step={step}
                 value={local[i]}
                 onChange={(v) => commit(i as 0 | 1 | 2, v)}
-                ariaInvalid={rangeError}
+                ariaInvalid={rangeError === AXES[i]}
                 height={32}
               />
             </label>
@@ -121,8 +161,8 @@ export function RoomDimsEditor() {
         </div>
         <div style={{ fontSize: 11, marginTop: 6, lineHeight: 1.4, color: rangeError ? 'var(--danger-text)' : 'var(--ink-3)' }}>
           {rangeError
-            ? `That is outside ${ROOM_SIDE_M.min}–${ROOM_SIDE_M.max} m — enter a size in that range and the room will follow.`
-            : `Sizes in ${dimUnit}. Anything from ${ROOM_SIDE_M.min} to ${ROOM_SIDE_M.max} m a side.`}
+            ? `That ${rangeError} is outside ${roomAxisRange(rangeError).min}–${roomAxisRange(rangeError).max} m — enter one in that range and the room will follow.`
+            : `Sizes in ${dimUnit}. ${roomAxisRange('width').min}–${roomAxisRange('width').max} m a side, ${roomAxisRange('height').min}–${roomAxisRange('height').max} m tall.`}
         </div>
       </>
       )}

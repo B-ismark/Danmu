@@ -133,6 +133,37 @@ export function clampDims(category: Category, shape: Shape, dim: Dim3): Dim3 {
  *  derived from the rule, never typed next to it. */
 export const ROOM_SIDE_M = { min: 1, max: 50 } as const;
 
+/** How tall a ceiling may be, in metres.
+ *
+ *  Separate from `ROOM_SIDE_M` because a ceiling is not a side, and sharing that
+ *  number let a room be one metre tall: `RoomDimsEditor` gated all three axes with
+ *  the side bound, and `lib/scene-file.ts` bounded an imported `height` with it
+ *  too. That is not a theoretical hole — a 1.65 m ceiling is what stranded a
+ *  ceiling fan at 1.50 m in a 2.80 m room. The fan hung correctly at the ceiling of
+ *  a room that short; the ceiling then left without it. `heightForNewCeiling`
+ *  (`lib/physics.ts`) is the other half of that fix, and it is the half that
+ *  matters — this range only makes the shortest rooms harder to reach by accident.
+ *
+ *  1.8 m is a low attic a person can still stand up in; 12 m is an atrium. Both
+ *  ends reject the absurd rather than second-guessing a real room. */
+export const ROOM_HEIGHT_M = { min: 1.8, max: 12 } as const;
+
+/** The three axes of the room shell, as the editor lays them out. */
+export type RoomAxis = 'width' | 'depth' | 'height';
+
+/** The bound for one axis. Two consumers ask — the editor and the scene-file
+ *  reader — so neither of them gets to decide for itself which range a ceiling
+ *  takes. That decision was made twice and came out wrong both times. */
+export function roomAxisRange(axis: RoomAxis): { min: number; max: number } {
+  return axis === 'height' ? ROOM_HEIGHT_M : ROOM_SIDE_M;
+}
+
+/** Whether this axis may be this many metres. */
+export function roomAxisWithin(axis: RoomAxis, metres: number): boolean {
+  const r = roomAxisRange(axis);
+  return Number.isFinite(metres) && metres >= r.min && metres <= r.max;
+}
+
 /** True if the given dims already sit inside the allowed range. */
 export function dimsWithinRange(category: Category, shape: Shape, dim: Dim3): boolean {
   const r = dimRangeFor(category, shape);

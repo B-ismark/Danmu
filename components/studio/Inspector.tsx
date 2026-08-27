@@ -16,7 +16,7 @@ import { removeParts } from './KeyboardShortcuts';
 import { RailSection } from './RailSection';
 import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { isWallMountedPart, supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, DECOR_KINDS, type LibraryItem, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
-import { findSupportDetailed, groundY, snapToWall as snapToWallPhys, wallStandoff } from '@/lib/physics';
+import { findSupportDetailed, groundY, MOUNT_PAD, snapToWall as snapToWallPhys, wallStandoff } from '@/lib/physics';
 import { wallSegments } from '@/lib/footprint';
 import { moveWallCarrying } from '@/lib/wall-actions';
 
@@ -107,7 +107,7 @@ export function Inspector() {
     let ny = y;
     let support: { id: string; y: number } | null = null;
     if (wallMounted) {
-      ny = Math.max(h / 2 + 0.02, Math.min(room.height - h / 2 - 0.02, groundY(item.category, item.shape, dimMM, room.height)));
+      ny = Math.max(h / 2 + MOUNT_PAD, Math.min(room.height - h / 2 - MOUNT_PAD, groundY(item.category, item.shape, dimMM, room.height)));
     } else {
       support = findSupportDetailed(partSnapshot(), id!, x, z, dimMM, baseRot);
       ny = support !== null && support.y > 0.3 ? support.y : 0;
@@ -229,7 +229,7 @@ export function Inspector() {
             onCommit={(bottomMM) => {
               const [x, , z] = currentXYZ();
               const h = part!.dimMM[2] / 1000;
-              const y = Math.max(h / 2 + 0.02, Math.min(room.height - h / 2 - 0.02, bottomMM / 1000 + h / 2));
+              const y = Math.max(h / 2 + MOUNT_PAD, Math.min(room.height - h / 2 - MOUNT_PAD, bottomMM / 1000 + h / 2));
               setPosition(id!, [x, y, z]);
             }}
           />
