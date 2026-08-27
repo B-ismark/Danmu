@@ -182,6 +182,43 @@ export function roomAxisWithin(axis: RoomAxis, metres: number): boolean {
   return Number.isFinite(metres) && metres >= r.min && metres <= r.max;
 }
 
+/** The room shell, in metres. */
+export type RoomDims = { width: number; depth: number; height: number };
+
+/** The three axes in the order the editor lays them out. */
+export const ROOM_AXES: readonly [RoomAxis, RoomAxis, RoomAxis] = ['width', 'depth', 'height'];
+
+/** Fold a batch of pending per-axis edits into the room, in metres.
+ *
+ *  `RoomDimsEditor` judged the ONE axis being edited and then wrote all THREE,
+ *  taking the other two out of the form rather than out of the room — so a value
+ *  the editor had already refused was committed by the next edit to a different
+ *  field. Clearing the height box gives `parseFloat('') === NaN`, that batch is
+ *  correctly refused, and then one keystroke in Width writes `height: NaN` to the
+ *  store and to IndexedDB. An axis nobody edited is not the form's to answer:
+ *  everything outside `edits` comes off `current` here, which is why the fix
+ *  cannot be "validate all three" (that refuses a width edit on account of a
+ *  ceiling the user never touched — and this editor has shipped that too).
+ *
+ *  All-or-nothing per batch, deliberately: committing the good axes of a mixed
+ *  batch changes the room, and the editor resyncs its fields from the room, so
+ *  the refused number would be wiped off the screen while the message still
+ *  named it. Refusing the batch leaves the bad number where the user can see
+ *  what the message is about. */
+export function applyRoomEdits(
+  current: RoomDims,
+  edits: Partial<Record<RoomAxis, number>>,
+): { room: RoomDims; rejected: RoomAxis | null } {
+  const room = { ...current };
+  for (const axis of ROOM_AXES) {
+    const v = edits[axis];
+    if (v === undefined) continue;
+    if (!roomAxisWithin(axis, v)) return { room: current, rejected: axis };
+    room[axis] = v;
+  }
+  return { room, rejected: null };
+}
+
 /** True if the given dims already sit inside the allowed range. */
 export function dimsWithinRange(category: Category, shape: Shape, dim: Dim3): boolean {
   const r = dimRangeFor(category, shape);
