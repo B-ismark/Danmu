@@ -281,6 +281,94 @@ describe('startHistoryRecording', () => {
     }
   });
 
+  describe('a drag is one undo step, and never a half-written one', () => {
+    // The bug this covers, in the user's words: "select the lamp, then the side
+    // table, drag them, undo — only the side table comes back."
+    //
+    // The mechanism is asymmetric and that is the whole difficulty. Mid-drag the
+    // 3D tab has written the CONVOY's members into the store (`liveUpdate` →
+    // `setTransformsFor`) while the piece under the hand is still moving as an
+    // object3D, its override unwritten until the drop. So the store, mid-gesture,
+    // describes a room that never existed. The debounce cannot save it: any pause
+    // longer than 250 ms IS the window.
+    //
+    // Beware the symmetric case here — with both pieces written the test passes
+    // either way. `member` must move while `dragged` does not.
+    it('records nothing while draggingId is set, however long the pause', async () => {
+      vi.useFakeTimers();
+      const stop = startHistoryRecording();
+      try {
+        seedHistory();
+        useStudio.getState().setDragging('dragged');
+        // The convoy's half of a live frame, and only that half.
+        useStudio.getState().setTransformsFor([{ id: 'member', pos: [1, 0, 0] }]);
+        // Four debounce windows. Before the gate, the first one pushed.
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(useHistory.getState().past).toHaveLength(1);
+      } finally {
+        useStudio.getState().setDragging(null);
+        stop();
+        vi.useRealTimers();
+      }
+    });
+
+    it('records the whole gesture, both pieces, once it ends', async () => {
+      vi.useFakeTimers();
+      const stop = startHistoryRecording();
+      try {
+        seedHistory();
+        useStudio.getState().setDragging('dragged');
+        useStudio.getState().setTransformsFor([{ id: 'member', pos: [1, 0, 0] }]);
+        await vi.advanceTimersByTimeAsync(1000);
+        // The drop: this tab writes the dragged piece and then clears the flag.
+        useStudio.getState().setPosition('dragged', [2, 0, 0]);
+        useStudio.getState().setDragging(null);
+        await vi.advanceTimersByTimeAsync(300);
+
+        const { past } = useHistory.getState();
+        expect(past).toHaveLength(2);
+        // One entry, holding BOTH — which is what makes one Ctrl+Z put both back.
+        expect(past[1].positions.dragged).toEqual([2, 0, 0]);
+        expect(past[1].positions.member).toEqual([1, 0, 0]);
+        // And the entry underneath holds NEITHER. This is the assertion that
+        // fails when a mid-drag snapshot slips in: `past[0]` would then carry the
+        // member at [1,0,0] with `dragged` absent, and undoing to it is exactly
+        // the reported symptom.
+        expect(past[0].positions.dragged).toBeUndefined();
+        expect(past[0].positions.member).toBeUndefined();
+      } finally {
+        stop();
+        vi.useRealTimers();
+      }
+    });
+
+    it('takes the snapshot even when the release writes before the flag clears', async () => {
+      // The other tab's ordering. `commit()` writes while `draggingId` is still
+      // set, so the gate refuses those writes and the ONLY thing that can record
+      // them is the flag's own transition to null.
+      vi.useFakeTimers();
+      const stop = startHistoryRecording();
+      try {
+        seedHistory();
+        useStudio.getState().setDragging('dragged');
+        useStudio.getState().setTransformsFor([
+          { id: 'member', pos: [1, 0, 0] },
+          { id: 'dragged', pos: [2, 0, 0] },
+        ]);
+        useStudio.getState().setDragging(null);
+        await vi.advanceTimersByTimeAsync(300);
+
+        const { past } = useHistory.getState();
+        expect(past).toHaveLength(2);
+        expect(past[1].positions.dragged).toEqual([2, 0, 0]);
+        expect(past[1].positions.member).toEqual([1, 0, 0]);
+      } finally {
+        stop();
+        vi.useRealTimers();
+      }
+    });
+  });
+
   it('stops recording once unsubscribed', async () => {
     vi.useFakeTimers();
     const stop = startHistoryRecording();

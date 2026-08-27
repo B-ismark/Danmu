@@ -220,9 +220,18 @@ describe('placeNewPart keeps a drop inside the room', () => {
     // `polygonCentroid`, which averages the VERTICES rather than the area, and for
     // this L that average is (3, 2) — the reflex corner itself. Every step of the
     // walk stays inside the notch and the fallback returns the corner, which
-    // `pointInFootprint` calls outside. Fixing it means changing
-    // `polygonCentroid`, whose other caller derives every wall's inward normal
-    // from it, so it is a separate change with its own risk.
+    // `pointInFootprint` calls outside.
+    //
+    // The blocker this used to name is RETIRED: it said fixing it means changing
+    // `polygonCentroid`, whose other caller derives every wall's inward normal from
+    // it. That caller was `wallOutwardNormal`, and it no longer reads the centroid
+    // at all — which side of a wall is outdoors comes off the polygon's winding now
+    // (`polygonSignedArea`), because the vertex average is not inside a T or a U and
+    // was reversing five of their sixteen walls. So `polygonCentroid` is free to
+    // become the area centroid, or `clampIntoFootprint` free to stop using it; what
+    // still costs something is this file's sibling fixture in
+    // `tests/suggest-tidiness.test.ts`, found by a search over 1512 layouts, which
+    // the change invalidates and which has to be searched for again.
     const L: Footprint = [
       [0, 0],
       [6, 0],

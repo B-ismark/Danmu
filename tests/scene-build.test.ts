@@ -8,6 +8,7 @@ import {
   type ScenePart,
 } from '../lib/scene-spec';
 import type { RoomData } from '../lib/storage';
+import { heightForNewCeiling, MOUNT_PAD } from '../lib/physics';
 import { footprintForLayout } from '../lib/footprint';
 import { footArea, footFromPart, footIntersectionArea, outsideShare } from '../lib/geometry';
 
@@ -38,6 +39,58 @@ function saved(i: number, over: Partial<Saved> = {}): Saved {
     ...over,
   };
 }
+
+describe('one ceiling clearance, not one per path', () => {
+  // `lib/scene-spec.ts` held its own `CEILING_PAD = 0.02` for this clamp while
+  // `MOUNT_PAD` was being introduced next door as "the single clearance" the
+  // drag path, the Inspector and `heightForNewCeiling` share. Two numbers, the
+  // same job, the same value — so nothing was visibly wrong and nothing would
+  // have been until someone changed one of them and a DETECTED fan started
+  // hanging a centimetre away from a DRAGGED one.
+  //
+  // Asserting the two paths against each other rather than against a literal is
+  // what makes this able to fail: if the settle pass gets its own constant back,
+  // the sides come apart the moment the constants differ, and a test written
+  // against `rh - MOUNT_PAD` on both sides could never say so.
+  const FAN_H_MM = 400;
+
+  function ceilingFan(height: number) {
+    const parts = buildSceneFromRoom(
+      room(
+        [
+          saved(0, {
+            label: 'fan__slot:n',
+            category: 'fan',
+            shape: 'fan',
+            dimMM: [1200, 1200, FAN_H_MM],
+          }),
+        ],
+        { height },
+      ),
+    );
+    const fan = parts.find((p) => p.shape === 'fan');
+    expect(fan, 'the fixture must actually produce a fan').toBeDefined();
+    return fan!;
+  }
+
+  it('clamps a ceiling fan to the same height the physics path would', () => {
+    const H = 2.8;
+    const fan = ceilingFan(H);
+    // `groundY` hangs a fan 0.15 below the slab, so a 0.4 m one reaches 2.85 in a
+    // 2.8 m room — over the cap, which is the whole point of the fixture.
+    const expected = heightForNewCeiling('fan', 'fan', [1200, 1200, FAN_H_MM], 99, 2.0, H);
+    expect(expected).toBeCloseTo(H - MOUNT_PAD - FAN_H_MM / 2000, 9);
+    expect(fan.pos[1]).toBeCloseTo(expected, 9);
+  });
+
+  it('agrees at a different ceiling too, so neither side can be a coincidence', () => {
+    const H = 2.4;
+    expect(ceilingFan(H).pos[1]).toBeCloseTo(
+      heightForNewCeiling('fan', 'fan', [1200, 1200, FAN_H_MM], 99, 2.0, H),
+      9,
+    );
+  });
+});
 
 // The detect → scene translation had no coverage at all, and it is where the
 // higher-severity findings of the audit lived.
@@ -333,5 +386,61 @@ describe('collidesAt with a round footprint', () => {
     const at: [number, number, number] = [0, 0, 0];
     expect(collidesAt(build(false), 'table', at, 0, [1200, 1200, 750])).toBe(true);
     expect(collidesAt(build(true), 'table', at, 0, [1200, 1200, 750])).toBe(false);
+  });
+});
+
+describe('a wall snap is measured across the yaw the piece will actually keep', () => {
+  // The WIRING, which is the half that had no coverage. `snapToWall`'s own tests
+  // prove the projection; this proves `buildSceneFromRoom` hands it the rotation
+  // that will really apply. Dropping `alongRot` from the two call sites leaves
+  // every unit test in `physics-snap` green, because the argument still works - it
+  // is simply never passed.
+  //
+  // The earlier attempt at this used a WARDROBE and measured 21 mm, which it read
+  // as "too small to assert on". A wardrobe is floor-standing, so the settle pass
+  // re-grounds and shifts it afterwards and most of the difference is smeared away.
+  // A TV is wall-mounted and the settle pass leaves it alone, so what the clamp did
+  // is what you can still see: 500 mm.
+  const TV: [number, number, number] = [1200, 120, 700];
+
+  function tvAt(yaw: number) {
+    const parts = buildSceneFromRoom(
+      room([
+        saved(0, {
+          label: 'tv',
+          category: 'tv',
+          shape: 'tv',
+          dimMM: TV,
+          // Aimed past where a 1.2 m TV lying flat could sit: the room is 5 m wide,
+          // so the North wall runs x = -2.5 .. 2.5 and a flat TV stops at 1.9.
+          position: { x: 2.4, y: 1.4, z: -1.9 },
+          yaw,
+        }),
+      ]),
+    );
+    const tv = parts.find((p) => p.shape === 'tv');
+    expect(tv, 'the fixture must produce a wall-mounted TV').toBeDefined();
+    return tv!;
+  }
+
+  it('lets a TV the detector reported edge-on sit where an edge-on TV fits', () => {
+    const edgeOn = tvAt(Math.PI / 2);
+    // The model's yaw survives the snap, which is the precondition for the clamp
+    // being measured across it. Without this the rest of the test proves nothing.
+    expect(edgeOn.rot).toBeCloseTo(Math.PI / 2, 9);
+    expect(edgeOn.pos[0]).toBeCloseTo(2.4, 6);
+  });
+
+  it('and still holds a flat one half its width off the corner', () => {
+    const flat = tvAt(0);
+    // |yaw| < 0.05, so the wall's own rot wins and the width is the right extent.
+    expect(flat.pos[0]).toBeCloseTo(1.9, 6);
+  });
+
+  it('the two differ by 500 mm, which is the size of the defect', () => {
+    // Named as a number so the next person can tell a real regression from noise.
+    // Half the TV's width minus half its depth: (1200 - 120) / 2 = 540 mm of
+    // clamp, of which 500 is reachable before the aim point itself binds.
+    expect(tvAt(Math.PI / 2).pos[0] - tvAt(0).pos[0]).toBeCloseTo(0.5, 6);
   });
 });

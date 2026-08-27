@@ -29,6 +29,7 @@
 // `tests/room-scene.test.ts` fails if a thirteenth hand-written copy appears.
 
 import type { ScenePart } from './scene-spec';
+import { heightForNewCeiling } from './physics';
 
 /** The user's edits, as the studio store holds them. */
 export type TransformOverrides = {
@@ -62,4 +63,42 @@ export function resolveParts(parts: ScenePart[], o: Partial<TransformOverrides>)
  *  override is still there to be dropped. */
 export function hasOverride(id: string, o: Partial<TransformOverrides>): boolean {
   return !!o.positions?.[id] || o.rotations?.[id] !== undefined || !!o.dims?.[id];
+}
+/** Every Y a ceiling move changes, in BOTH transform layers.
+ *
+ *  A part's height lives in two places on purpose — the authored `ScenePart` and
+ *  the user's override — and a ceiling move has to reach both. Writing only the
+ *  override leaves a stale authored height that "Back to where it started" hands
+ *  straight back; writing only the authored one is invisible while an override
+ *  exists. So this returns two lists, not one resolved answer, and the caller
+ *  writes each to the layer it came from.
+ *
+ *  A part whose Y does not change is OMITTED rather than written back unchanged: a
+ *  no-op write to the override layer still CREATES an override, which then pins the
+ *  piece against a re-detect and gets persisted. The rule for which pieces move at
+ *  all is `heightForNewCeiling`'s, not this function's — this one only knows about
+ *  the two layers.
+ *
+ *  The clamp reads the EFFECTIVE dim, so a piece the user resized is held inside
+ *  the room by the size it is now rather than the size it shipped as. */
+export function regradeForNewCeiling(
+  parts: ScenePart[],
+  o: Partial<TransformOverrides>,
+  oldHeight: number,
+  newHeight: number,
+): { authored: Array<{ id: string; y: number }>; overridden: Array<{ id: string; y: number }> } {
+  const authored: Array<{ id: string; y: number }> = [];
+  const overridden: Array<{ id: string; y: number }> = [];
+  if (!(newHeight > 0) || newHeight === oldHeight) return { authored, overridden };
+  for (const p of parts) {
+    const dim = resolvePart(p, o).dimMM;
+    const a = heightForNewCeiling(p.category, p.shape, dim, p.pos[1], oldHeight, newHeight);
+    if (a !== p.pos[1]) authored.push({ id: p.id, y: a });
+    const ov = o.positions?.[p.id];
+    if (ov) {
+      const b = heightForNewCeiling(p.category, p.shape, dim, ov[1], oldHeight, newHeight);
+      if (b !== ov[1]) overridden.push({ id: p.id, y: b });
+    }
+  }
+  return { authored, overridden };
 }

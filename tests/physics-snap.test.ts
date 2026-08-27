@@ -283,3 +283,69 @@ describe('snapToWall keeps the whole piece on its wall', () => {
     expect(Math.abs(high.z - low.z)).toBeGreaterThan(0.4);
   });
 });
+
+describe('snapToWall measures the clamp across the yaw the caller will KEEP', () => {
+  // `snapToWall` holds a piece far enough from the corner for the whole piece to
+  // stay on its wall, and that distance is `dimMM[0] / 2` only because the `rot` it
+  // returns turns the piece's local X to run along the wall. Two callers in
+  // `buildSceneFromRoom` take the snapped x/z and keep the MODEL's yaw instead, so
+  // for them the premise is false and the piece was held (width - depth) / 2 too far
+  // from the corner. Never outside the room, so a wrong number rather than a wrong
+  // room - which is why nothing caught it for as long as it stood.
+  //
+  // All four walls, because a projection with its convention inverted is still right
+  // on two of them. Same handedness trap `lib/geometry.ts` warns about.
+  const R = RECT;
+
+  /** How far along its wall the piece ended up, measured back from the corner it was
+   *  aimed past. Wall-agnostic, so one expectation covers all four. */
+  function distFromFarCorner(index: number, out: { x: number; z: number }) {
+    const a = R[index];
+    const b = R[(index + 1) % R.length];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const ux = (b[0] - a[0]) / len;
+    const uz = (b[1] - a[1]) / len;
+    return len - ((out.x - a[0]) * ux + (out.z - a[1]) * uz);
+  }
+
+  /** A point well past the far end of wall `i`, so the clamp is what decides. */
+  function pastFarCorner(i: number): [number, number, number] {
+    const a = R[i];
+    const b = R[(i + 1) % R.length];
+    return [b[0] + (b[0] - a[0]), 0, b[1] + (b[1] - a[1])];
+  }
+
+  it.each([0, 1, 2, 3])('holds a piece half its WIDTH off the corner of wall %i by default', (i) => {
+    expect(distFromFarCorner(i, snapToWall(pastFarCorner(i), TV, R, 0, i))).toBeCloseTo(TV[0] / 2000, 9);
+  });
+
+  it.each([0, 1, 2, 3])('holds it half its DEPTH off when it will lie edge-on to wall %i', (i) => {
+    const flat = snapToWall(pastFarCorner(i), TV, R, 0, i);
+    const edgeOn = snapToWall(pastFarCorner(i), TV, R, 0, i, { alongRot: (flat.rot ?? 0) + Math.PI / 2 });
+    expect(distFromFarCorner(i, edgeOn)).toBeCloseTo(TV[1] / 2000, 9);
+    // And it therefore gets CLOSER to the corner, not further - the direction is the
+    // half that a magnitude-only assertion lets through.
+    expect(distFromFarCorner(i, edgeOn)).toBeLessThan(distFromFarCorner(i, flat));
+  });
+
+  it('reduces to the old answer at the heading its own rot would turn the piece to', () => {
+    // The property that makes the default safe: handing it the yaw the function
+    // itself returns must change nothing. A convention error in the projection
+    // breaks this even though both branches would still look clamped.
+    for (let i = 0; i < 4; i++) {
+      const implicit = snapToWall(pastFarCorner(i), TV, R, 0, i);
+      expect(snapToWall(pastFarCorner(i), TV, R, 0, i, { alongRot: implicit.rot })).toEqual(implicit);
+    }
+  });
+
+  it('is symmetric in the yaw, since a piece turned 180 degrees is the same box', () => {
+    const at = (rot: number) => snapToWall([9, 0, -2], TV, R, 0, 0, { alongRot: rot }).x;
+    expect(at(Math.PI / 2)).toBeCloseTo(at(-Math.PI / 2), 9);
+    expect(at(0.6)).toBeCloseTo(at(0.6 + Math.PI), 9);
+    // A 45-degree piece sits strictly between the two extremes, which no
+    // axis-aligned fixture can tell apart from either of them.
+    const mid = at(Math.PI / 4);
+    expect(mid).toBeGreaterThan(at(0));
+    expect(mid).toBeLessThan(at(Math.PI / 2));
+  });
+});

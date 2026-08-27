@@ -239,7 +239,7 @@ function ModelHelp() {
           <Kb>W</Kb> move · <Kb>S</Kb> resize · <Kb>R</Kb> spin
         </HelpLine>
         <HelpLine>
-          <Kb>F</Kb> fly to the selection · <Kb>V</Kb> hide it · <Kb>Esc</Kb> put a drag back, or deselect
+          <Kb>F</Kb> fly to the selection · <Kb>H</Kb> hide it · <Kb>Esc</Kb> put a drag back, or deselect
         </HelpLine>
         <HelpLine>
           <Kb>Del</Kb> remove the selection · <Kb>Ctrl</Kb>
