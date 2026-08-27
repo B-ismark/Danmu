@@ -77,12 +77,25 @@ type RoomTab = 'check' | 'fit' | 'list' | 'layouts';
  *  match, so it is the user's again from that moment — which is exactly the rule, and
  *  it costs one comparison instead of a listener that could miss a write.
  *
- *  Kept in context rather than in the store because it is not state about the room:
- *  it is this session's memory of who moved what, it must not persist, and only the
- *  one function that applies a solve may write it. A ref, because nothing renders
- *  from it. */
+ *  Kept out of the store because it is not state about the room: it is this
+ *  session's memory of who moved what, it must not persist, and only the one
+ *  function that applies a solve may write it. A ref, because nothing renders from
+ *  it.
+ *
+ *  **Threaded as an argument, and it has to be.** This was a React context, and that
+ *  was a silent bug of exactly the kind this map exists to prevent: `useRefitOffer`
+ *  is called in `RoomTools`'s BODY, while the provider was created in `RoomTools`'s
+ *  returned JSX — and a component is not its own descendant, so `useContext` there
+ *  resolved against the tree ABOVE `RoomTools` and got the module-scope default.
+ *  `FixButton` and `SuggestButton` sat inside the provider and worked, which is why
+ *  it looked right. The re-fit path did not: press Suggest, change a width, accept
+ *  the re-fit, and it read an empty map, so every piece the solver had just moved
+ *  still counted as hand-placed at `PLACED_INERTIA` × `REFIT_INERTIA` = 56 — the
+ *  precise number this was written to stop. It then wrote its own results into that
+ *  module-global default, where they outlived the room and were read by nobody.
+ *  A prop cannot be wired to the wrong scope; a context can, and did. */
 type AppPlacement = { pos: [number, number, number]; rot: number };
-const AppPlaced = createContext<{ current: Map<string, AppPlacement> }>({ current: new Map() });
+type AppPlacedRef = { current: Map<string, AppPlacement> };
 
 /** Is this override still the one the solver wrote? Exact equality is right here —
  *  both sides are the same float that was stored, never recomputed. */
@@ -216,7 +229,7 @@ export function RoomTools() {
   const setStepFree = useSettings((s) => s.setStepFree);
 
   // Offer a re-fit when a size change is what broke things. See `useRefitOffer`.
-  useRefitOffer(effParts, room.footprint, dims, problems);
+  useRefitOffer(effParts, room.footprint, dims, problems, appPlaced);
 
   // Close any open panel when a drag starts.
   useEffect(() => {
@@ -241,8 +254,7 @@ export function RoomTools() {
   }, [open]);
 
   return (
-    <AppPlaced.Provider value={appPlaced}>
-      <div ref={anchorRef} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div ref={anchorRef} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {/* Fixed and measured, not absolute: this panel lives in a 260px rail with
           its own scroll box, where an absolutely-positioned card gets clipped.
           Same reason and same fix as ui/Select.tsx's portalled listbox. */}
@@ -302,6 +314,7 @@ export function RoomTools() {
               onStepFree={setStepFree}
               effParts={effParts}
               footprint={room.footprint}
+              appPlaced={appPlaced}
             />
           )}
           {tab === 'fit' && <FitPanel effParts={effParts} room={room} />}
@@ -348,9 +361,8 @@ export function RoomTools() {
         <Icon name={open ? 'chevron-up' : 'chevron-right'} size={12} />
       </button>
 
-      <SuggestButton effParts={effParts} footprint={room.footprint} />
-      </div>
-    </AppPlaced.Provider>
+      <SuggestButton effParts={effParts} footprint={room.footprint} appPlaced={appPlaced} />
+    </div>
   );
 }
 
@@ -443,9 +455,8 @@ function biggestMove(moves: MoveReason[], parts: ScenePart[]): string | null {
  *  clear it would be answering a question they did not ask. Locking is the whole
  *  mechanism — the solver already understands locked pieces, and still scores them,
  *  because a piece nobody may move is still in the way. */
-function useSuggest(effParts: ScenePart[], footprint: Footprint) {
+function useSuggest(effParts: ScenePart[], footprint: Footprint, appPlaced: AppPlacedRef) {
   const loadTransforms = useStudio((s) => s.loadTransforms);
-  const appPlaced = useContext(AppPlaced);
   return useCallback(
     (mode: 'arrange' | 'refit', seed: number, only?: string[]) => {
       const t = useStudio.getState();
@@ -502,8 +513,16 @@ function useSuggest(effParts: ScenePart[], footprint: Footprint) {
   );
 }
 
-function SuggestButton({ effParts, footprint }: { effParts: ScenePart[]; footprint: Footprint }) {
-  const suggest = useSuggest(effParts, footprint);
+function SuggestButton({
+  effParts,
+  footprint,
+  appPlaced,
+}: {
+  effParts: ScenePart[];
+  footprint: Footprint;
+  appPlaced: AppPlacedRef;
+}) {
+  const suggest = useSuggest(effParts, footprint, appPlaced);
   const [busy, setBusy] = useState(false);
   // Pressing again asks for a DIFFERENT arrangement rather than recomputing the
   // same one — the solver is deterministic per seed, which is what makes both
@@ -578,8 +597,9 @@ function useRefitOffer(
   footprint: Footprint,
   dims: Record<string, [number, number, number]>,
   problems: number,
+  appPlaced: AppPlacedRef,
 ) {
-  const suggest = useSuggest(effParts, footprint);
+  const suggest = useSuggest(effParts, footprint, appPlaced);
   // What the geometry looked like last time, and how many problems it had. Both
   // are needed: a problem count that went up on its own is the user dragging
   // something, and they can see that happening.
@@ -689,12 +709,14 @@ function FixButton({
   issue,
   effParts,
   footprint,
+  appPlaced,
 }: {
   issue: ClearanceIssue;
   effParts: ScenePart[];
   footprint: Footprint;
+  appPlaced: AppPlacedRef;
 }) {
-  const suggest = useSuggest(effParts, footprint);
+  const suggest = useSuggest(effParts, footprint, appPlaced);
   const [busy, setBusy] = useState(false);
   // Pressing again asks for a different attempt, the same way Suggest does.
   const attempt = useRef(0);
@@ -836,11 +858,13 @@ function IssueRow({
   issue,
   effParts,
   footprint,
+  appPlaced,
   onShow,
 }: {
   issue: ClearanceIssue;
   effParts: ScenePart[];
   footprint: Footprint;
+  appPlaced: AppPlacedRef;
   onShow: (issue: ClearanceIssue) => void;
 }) {
   const sev = SEVERITY[issue.severity];
@@ -850,17 +874,41 @@ function IssueRow({
   const canFix = RULE_HANDLING[issue.rule].movable;
   return (
     <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--hairline)' }}>
-      <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink)', lineHeight: 1.5 }}>
-        <Pill tone={sev.tone} style={{ marginRight: 7, verticalAlign: '-5px' }}>
+      {/* Pill and title are a flex row, not a pill inlined into the title's text flow.
+          Two things were wrong with the inline version, and the second is the one the
+          user reported as "aren't aligned as they should".
+
+          · `verticalAlign: '-5px'` is a magic number tuned against one pill height and
+            one line-height, so it was aligned by coincidence and drifted the moment
+            either moved. A baseline row is what "sit on the same line as the text"
+            actually means, and it needs no constant.
+          · A title long enough to wrap put its SECOND line underneath the pill, flush
+            with the pill's left edge instead of with the first line of the title —
+            because inline text wraps into the space the pill vacates. "Door can't open
+            fully" plus a "Worth fixing" pill is about 150 px, and the rail's content
+            box is 176 px at the tight width, so this wrapped as it shipped rather
+            than at some hypothetical narrow one.
+
+          `flexShrink: 0` keeps the pill whole (it is two words that must not break),
+          and `minWidth: 0` is what lets the title wrap inside its own column instead
+          of forcing the row wider than the rail — the ceiling-not-a-promise half of
+          rule 4. */}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
+        <Pill tone={sev.tone} style={{ flexShrink: 0 }}>
           {sev.label}
         </Pill>
-        {issue.title}
+        <div style={{ minWidth: 0, fontSize: 12.5, fontWeight: 700, color: 'var(--ink)', lineHeight: 1.5 }}>
+          {issue.title}
+        </div>
       </div>
       <div style={{ fontSize: 11.5, fontWeight: 400, color: 'var(--ink-2)', lineHeight: 1.45, marginTop: 3 }}>
         {issue.detail}
       </div>
+      {/* Actions align with the text column above, not with the right edge. Right-aligned
+          and wrapping, they stacked into the same visual column the wrapped title had
+          just moved out of, which read as a second misalignment on the same row. */}
       {(canSelect || canFix) && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6, marginTop: 7 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-start', gap: 6, marginTop: 7 }}>
           {canSelect && (
             <button
               onClick={() => onShow(issue)}
@@ -878,7 +926,9 @@ function IssueRow({
               Show me
             </button>
           )}
-          {canFix && <FixButton issue={issue} effParts={effParts} footprint={footprint} />}
+          {canFix && (
+            <FixButton issue={issue} effParts={effParts} footprint={footprint} appPlaced={appPlaced} />
+          )}
         </div>
       )}
     </div>
@@ -892,6 +942,7 @@ function CheckPanel({
   onStepFree,
   effParts,
   footprint,
+  appPlaced,
 }: {
   issues: ClearanceIssue[];
   freeShare: number;
@@ -899,6 +950,7 @@ function CheckPanel({
   onStepFree: (on: boolean) => void;
   effParts: ScenePart[];
   footprint: Footprint;
+  appPlaced: AppPlacedRef;
 }) {
   const setSelection = useStudio((s) => s.setSelection);
   const frameSelected = useStudio((s) => s.frameSelected);
@@ -919,7 +971,14 @@ function CheckPanel({
         </div>
       ) : (
         issues.map((issue) => (
-          <IssueRow key={issue.id} issue={issue} effParts={effParts} footprint={footprint} onShow={show} />
+          <IssueRow
+            key={issue.id}
+            issue={issue}
+            effParts={effParts}
+            footprint={footprint}
+            appPlaced={appPlaced}
+            onShow={show}
+          />
         ))
       )}
     </div>
