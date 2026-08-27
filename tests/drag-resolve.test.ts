@@ -342,3 +342,99 @@ describe('a ceiling piece is not a wall rider', () => {
     expect(r.valid).toBe(true);
   });
 });
+
+describe('a rug may run to the walls; it may not be bigger than the room', () => {
+  // The containment clamp pins an over-wide piece to `minX + extX` — a silent shove
+  // of however much it overhangs. For everything else that shove is caught, because
+  // the piece then fails the polygon test and the caller refuses the drop. A rug
+  // skipped that test outright, so an over-wide one jumped and COMMITTED: rule 2's
+  // "say so, never silently resize it to fit", broken for position, in the one
+  // category that had opted out of the check that would have noticed. Found by
+  // danmu-39 in review; this room is 4 x 3 m.
+  const rug = (w: number) => part({ id: 'rug', category: 'rug', shape: 'rug', dimMM: [w, 1400, 10], pos: [2, 0, 1.5] });
+
+  it('refuses a rug wider than the room instead of shoving it', () => {
+    const r = resolve(rug(5000), 2, 1.5);
+    expect(r.valid).toBe(false);
+  });
+
+  it("still lets a rug that FITS cross an L-shape's missing corner", () => {
+    // The exemption is real and has to survive, and THIS is the case it exists for.
+    // In a rectangle the bounds clamp already guarantees the OBB is inside, so a
+    // rectangular-room test would pass with the exemption deleted — it would be
+    // asserting nothing. An L is where the clamp is not enough: the rug lies flat
+    // across the missing quadrant, which is exactly what a rug in an L-shaped room
+    // does, and the polygon test refuses it.
+    const L: Poly = [
+      [0, 0],
+      [4, 0],
+      [4, 1.5],
+      [2, 1.5],
+      [2, 3],
+      [0, 3],
+    ];
+    const wide = (cat: 'rug' | 'table') =>
+      resolvePlacement({
+        part: part({ id: 'x', category: cat, shape: cat === 'rug' ? 'rug' : 'coffee-table', dimMM: [3600, 2600, 10], pos: [1.9, 0, 1.4] }),
+        rawX: 1.9, rawZ: 1.4, rot: 0, dim: [3600, 2600, 10],
+        parts: [], footprint: L, roomHeight: H, snapMode: 'off',
+      });
+    expect(wide('rug').valid).toBe(true);
+    // …and the same footprint under anything else is still refused, so this is the
+    // rug exemption doing the work and not the polygon test having gone soft.
+    expect(wide('table').valid).toBe(false);
+  });
+});
+
+describe('a rug may overhang; it may not be silently moved', () => {
+  // The first version of this gate asked whether the room's BOUNDING BOX was big
+  // enough — a bounding-box answer to a polygon question, which CLAUDE.md names as
+  // a trap by itself. In an L whose box is 6 m across but whose arm is 1.6 m wide,
+  // a 3 m rug dropped in the arm passed that check, was shoved 700 mm by the
+  // containment clamp, and committed `valid` with 1.4 m of it through the plaster:
+  // the same "silently resize it to fit" the gate was added to stop, one shape
+  // class over. What the gate asks now is whether the clamp MOVED it.
+  const NARROW_L: Poly = [
+    [0, 0],
+    [6, 0],
+    [6, 1.6],
+    [1.6, 1.6],
+    [1.6, 6],
+    [0, 6],
+  ];
+  const RUG: [number, number, number] = [1400, 3000, 10];
+
+  function drop(cat: 'rug' | 'table', rawX: number) {
+    return resolvePlacement({
+      part: part({ id: 'x', category: cat, shape: cat === 'rug' ? 'rug' : 'coffee-table', dimMM: RUG, pos: [rawX, 0, 4] }),
+      rawX,
+      rawZ: 4,
+      rot: Math.PI / 2,
+      dim: RUG,
+      parts: [],
+      footprint: NARROW_L,
+      roomHeight: H,
+      snapMode: 'off',
+    });
+  }
+
+  it('refuses a rug the clamp had to shove into the arm', () => {
+    // extX is 1.5 m once the rug is turned, so the clamp cannot leave it at 0.8.
+    const r = drop('rug', 0.8);
+    expect(r.pos[0]).not.toBeCloseTo(0.8, 6); // the shove is real, not hypothetical
+    expect(r.valid).toBe(false);
+  });
+
+  it('still accepts one the pointer put where it already fits', () => {
+    // Same rug, same room, dropped where the clamp has nothing to do. It overhangs
+    // the notch — which is exactly what the rug exemption is for, and what the
+    // L-shape test above pins — so this must stay legal.
+    const r = drop('rug', 1.5);
+    expect(r.pos[0]).toBeCloseTo(1.5, 6);
+    expect(r.valid).toBe(true);
+  });
+
+  it('and the exemption is still only a rug exemption', () => {
+    expect(drop('table', 1.5).valid).toBe(false);
+  });
+});

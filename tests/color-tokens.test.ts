@@ -270,3 +270,70 @@ describe('OKLCH round trips', () => {
     expect(contrastRatio(parseHex('#777777')!, { r: 255, g: 255, b: 255 })).toBeCloseTo(4.48, 1);
   });
 });
+
+describe('the live-measure tags carry legible text', () => {
+  // components/three/MeasureGuides.tsx draws two DOM overlays over the canvas while
+  // a piece is being dragged: a gap label on each guide line and the piece's own
+  // size tag. Both are 10–11px bold — normal-size text under WCAG, so 4.5:1, not
+  // the 3:1 that large text gets.
+  //
+  // The gap label used to paint `--on-accent` (#FFFFFF) on `SCENE.accentHover`, the
+  // sage `--accent-2`. That is 3.89:1. It passed every gate here because nothing in
+  // this file knew the pair existed: the harvester reads ratio claims out of
+  // globals.css, and this pairing is made in a component, between a CSS token and a
+  // `lib/scene-palette.ts` constant.
+  const onAccent = surface('on-accent')!;
+  const ink = surface('ink')!;
+  const paper0 = surface('paper-0')!;
+
+  it('has both halves of each pair to check', () => {
+    for (const [name, c] of [['on-accent', onAccent], ['ink', ink], ['paper-0', paper0]] as const) {
+      expect(c, name).toBeTruthy();
+    }
+  });
+
+  it('reads as --ink on --paper-0 while the placement is legal', () => {
+    expect(contrastRatio(ink, paper0)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('reads as --on-accent on the refusal fill', () => {
+    expect(contrastRatio(onAccent, parseHex(SCENE.invalid)!)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('could not have read as --on-accent on the sage fill, which is why it does not', () => {
+    // The tripwire, and it is pointed the other way on purpose. If someone darkens
+    // `--accent-2` far enough for white to clear 4.5:1 on it, this goes red and
+    // sends them here — at which point painting the tag on the accent again is a
+    // choice made in the open rather than a regression nothing can see.
+    expect(contrastRatio(onAccent, parseHex(SCENE.accentHover)!)).toBeLessThan(4.5);
+  });
+});
+
+describe('the live-measure tags are checked in the COMPONENT, not only in the tokens', () => {
+  // Everything above compares tokens to tokens. All of it passes with
+  // MeasureGuides.tsx reverted to the exact pairing it was written to retire —
+  // `color: 'var(--on-accent)'` over `background: color`, white on the sage accent
+  // at 3.89:1 — because none of it reads the component. Worse, the sage tripwire up
+  // there asserts that pairing is under 4.5:1, which was TRUE while the bug shipped:
+  // its green state was the buggy state.
+  //
+  // A regex over source, deliberately and named as such: the assertion is about how
+  // two values are PAIRED inside one style object, which no import can expose.
+  const SRC = readFileSync(join(process.cwd(), 'components', 'three', 'MeasureGuides.tsx'), 'utf8');
+
+  it('never paints --on-accent unconditionally', () => {
+    // The fixed form is `color: live.valid ? 'var(--ink)' : 'var(--on-accent)'`, so
+    // white is reachable only on the refusal fill. An unconditional one is the bug.
+    expect(SRC).not.toMatch(/color:\s*'var\(--on-accent\)'/);
+  });
+
+  it('never uses the guide colour as a text background', () => {
+    // `color` here is the accent/sage the guide line is drawn in. `background: color`
+    // put 10px bold white on it.
+    expect(SRC).not.toMatch(/background:\s*color,/);
+  });
+
+  it('and still paints white somewhere, so the assertions above are not vacuous', () => {
+    expect(SRC).toContain('var(--on-accent)');
+  });
+});

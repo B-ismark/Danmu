@@ -17,7 +17,7 @@
 // `eslint .` covers `tests/`, `scripts/` and the root config files too, which is a
 // deliberate widening — 171 files, and they were already clean.
 //
-// Two things about this file are load-bearing and easy to undo by accident:
+// Three things about this file are load-bearing and easy to undo by accident:
 //
 //   · **ESLint must be >= 9.** `next build` runs its own lint pass, and it only strips
 //     the eslintrc-era options (`useEslintrc`, `extensions`, …) when the installed

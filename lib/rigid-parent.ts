@@ -33,6 +33,12 @@ export type DescendantOffset = {
   /** World-space Y offset from the immediate parent — rotation-invariant. */
   offsetY: number;
   relRot: number;
+  /** The child's own world rotation at the moment of the snapshot.
+   *
+   *  Kept so `cascadeTransform` can tell a cascade that TURNED a child from one
+   *  that merely carried it sideways. `relRot` alone cannot: it is a difference, so
+   *  it is unchanged either way. */
+  rot: number;
 };
 
 function isPhysicallySupported(child: ScenePart, parent: ScenePart): boolean {
@@ -89,6 +95,7 @@ export function snapshotDescendants(
         localOffset: [lx, lz],
         offsetY: child.pos[1] - parent.pos[1],
         relRot: child.rot - parent.rot,
+        rot: child.rot,
       });
       queue.push(childId);
     }
@@ -101,16 +108,43 @@ export function snapshotDescendants(
  *  Y from its own immediate parent's just-computed Y, so a middle part whose
  *  own height changed (it gravitated onto something taller/shorter) still
  *  gets every descendant's height right, recursively — not a single delta
- *  carried flat from the root. */
+ *  carried flat from the root.
+ *
+ *  `rot` comes back only on a child the cascade actually TURNED. It used to be
+ *  unconditional, which made every pure translate write a rotation override for
+ *  every rigid child — `setTransformsFor` creates the key whether or not the value
+ *  changed, and per lib/transforms.ts an override pins that angle against a
+ *  re-detect and persists it. That is the exact needless pin `ConvoyMove.rot` and
+ *  `convoyRestore` were written to avoid, one layer down and firing on every drag
+ *  of anything with a lamp on it. Compared exactly, not against a tolerance: a
+ *  round-trip through `relRot` that lands a float short of the start angle really
+ *  did move, and writing it is the old behaviour, so the comparison can only ever
+ *  omit a write that was provably a no-op. */
 export function cascadeTransform(
   rootId: string,
   newPos: [number, number, number],
   newRot: number,
   descendants: DescendantOffset[],
-): Array<{ id: string; pos: [number, number, number]; rot: number }> {
+  /** Write `rot` for these children even when the recomputed angle equals the one
+   *  in the snapshot.
+   *
+   *  Omitting an unchanged rotation is right on a live frame and silently wrong on
+   *  a RESTORE, because on a restore the two are equal BY CONSTRUCTION:
+   *  `relRot` is the child's angle minus the parent's at snapshot time, and the
+   *  restore replays from that same parent angle, so the sum is always exactly the
+   *  snapshot angle and the write was always omitted. Turn a desk with a lamp on it
+   *  and press Escape: the desk went back, the lamp's position went back, and the
+   *  rotation override the drag had written to the lamp stayed — persisted, 90 deg out
+   *  of formation. Floats do not save it; verified at zero and non-zero start angles.
+   *
+   *  A predicate rather than a boolean so `convoyRestore` can put back exactly the
+   *  angles the gesture actually overrode, and not stamp a rotation pin on a child
+   *  that never had one. */
+  forceRotFor?: (id: string) => boolean,
+): Array<{ id: string; pos: [number, number, number]; rot?: number }> {
   const transforms = new Map<string, { pos: [number, number, number]; rot: number }>();
   transforms.set(rootId, { pos: newPos, rot: newRot });
-  const out: Array<{ id: string; pos: [number, number, number]; rot: number }> = [];
+  const out: Array<{ id: string; pos: [number, number, number]; rot?: number }> = [];
   for (const d of descendants) {
     const parent = transforms.get(d.parentId);
     if (!parent) continue; // BFS order guarantees this shouldn't happen; never trust it blindly
@@ -118,7 +152,7 @@ export function cascadeTransform(
     const pos: [number, number, number] = [parent.pos[0] + wx, parent.pos[1] + d.offsetY, parent.pos[2] + wz];
     const rot = parent.rot + d.relRot;
     transforms.set(d.id, { pos, rot });
-    out.push({ id: d.id, pos, rot });
+    out.push(rot === d.rot && !forceRotFor?.(d.id) ? { id: d.id, pos } : { id: d.id, pos, rot });
   }
   return out;
 }

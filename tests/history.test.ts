@@ -330,12 +330,23 @@ describe('startHistoryRecording', () => {
         // One entry, holding BOTH — which is what makes one Ctrl+Z put both back.
         expect(past[1].positions.dragged).toEqual([2, 0, 0]);
         expect(past[1].positions.member).toEqual([1, 0, 0]);
-        // And the entry underneath holds NEITHER. This is the assertion that
-        // fails when a mid-drag snapshot slips in: `past[0]` would then carry the
-        // member at [1,0,0] with `dragged` absent, and undoing to it is exactly
-        // the reported symptom.
+        // And the entry underneath holds NEITHER.
         expect(past[0].positions.dragged).toBeUndefined();
         expect(past[0].positions.member).toBeUndefined();
+        // The claim the comment above used to make for those two lines, stated
+        // where it can actually fail. `past[0]` is the SEED, taken right after the
+        // beforeEach cleared every override, so it is empty under every mutation —
+        // delete the mid-drag guard in lib/history.ts and only the length assertion
+        // goes red, while the two lines advertised as load-bearing sit there being
+        // true. What a slipped mid-gesture snapshot actually looks like is an entry
+        // holding the member's live position with the dragged piece still absent,
+        // and that is a statement about the whole stack.
+        for (const snap of past) {
+          expect(
+            snap.positions.member !== undefined && snap.positions.dragged === undefined,
+            'a snapshot was taken mid-gesture',
+          ).toBe(false);
+        }
       } finally {
         stop();
         vi.useRealTimers();

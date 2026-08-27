@@ -21,7 +21,7 @@
 // feeling broken.
 
 import { useEffect, useRef, type CSSProperties } from 'react';
-import { decimalsOf } from '@/lib/units';
+import { steppedValue } from '@/lib/units';
 import { Icon } from './Icon';
 
 const HOLD_DELAY = 380;
@@ -69,12 +69,9 @@ export function NumberField({
 
   function bump(steps: number) {
     if (steps === 0) return;
-    const n = Number(latest.current);
-    const base = Number.isFinite(n) ? n : min;
-    let next = base + steps * step;
-    if (max !== undefined) next = Math.min(max, next);
-    next = Math.max(min, next);
-    const out = next.toFixed(decimalsOf(step));
+    // `lib/units.ts`, not here: this is arithmetic over bounds that module
+    // produces, and while it lived in the component nothing could test it.
+    const out = steppedValue(latest.current, steps, min, max, step);
     // Keep the ref in step with the value we just asked for: the next tick can
     // arrive before the parent has re-rendered with it.
     latest.current = out;

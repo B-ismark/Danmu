@@ -56,9 +56,18 @@ export function formatDim(valueMM: number, unit: DimUnit): string {
 }
 
 /** Decimals implied by a step, so 0.01 steps don't produce 2.7300000000000004.
- *  Lives here rather than in `NumberField` because `boundToUnit` below has to
- *  round to the SAME precision the field will render at — two copies of this and
- *  a bound rounds to a number the stepper then renders just outside itself. */
+ *  Lives here rather than in `NumberField` because `boundToUnit` below rounds to
+ *  the step's precision and the stepper's own output uses this same call — two
+ *  copies of it and the bound and the value it clamps disagree.
+ *
+ *  It is NOT the precision the field DISPLAYS at. That is `precisionFor`, which
+ *  is finer for ft (2 vs 1) and cm (1 vs 0), so a legal value stored exactly on a
+ *  bound can render just outside it. An earlier version of this comment claimed
+ *  the two were the same; they are not, and the gap is real enough to have moved
+ *  a ceiling the wrong way. `NumberField.bump` refuses a clamp that would push a
+ *  value against the arrow, which is where that gap is now answered — it cannot
+ *  be answered here, because rounding a bound OUTWARD would let the arrows reach
+ *  a room the commit then refuses. */
 export function decimalsOf(step: number): number {
   const s = String(step);
   const dot = s.indexOf('.');
@@ -113,6 +122,60 @@ export function boundsToUnit(minMM: number, maxMM: number, unit: DimUnit): { min
   const max = boundToUnit(maxMM, unit, 'max');
   if (min < max) return { min, max };
   return { min: fromMM(minMM, unit), max: fromMM(maxMM, unit) };
+}
+
+/** One press of a stepper chevron: the text a field holds, plus `steps`, giving
+ *  the text it should hold next.
+ *
+ *  Lives here rather than in `NumberField` because it is arithmetic over bounds
+ *  this module produces, and because the component could not be tested — the
+ *  door-depth and ceiling-height failures below were both found by reading, after
+ *  shipping, in a control with no test of its own.
+ *
+ *  The clamps are the point of the thing: they keep the arrows inside the range
+ *  the commit will accept, which is what `boundsToUnit` exists to express. What
+ *  they must never do is move the value the OPPOSITE way to the press. The bounds
+ *  arrive rounded to the step grid while a field renders at `precisionFor` — finer
+ *  for ft (2 vs 1) and cm (1 vs 0) — so a perfectly legal stored value can sit
+ *  just outside its own rounded bound, and an unguarded clamp then throws it
+ *  across: a 1.8 m ceiling shows `5.91` ft against a min of `6`, and DOWN
+ *  committed 1828.8 mm, raising the ceiling and regrading every piece hung from
+ *  it. `clampDims` parks part sizes exactly on a bound as a matter of routine, so
+ *  this is the ordinary case and not a corner of it.
+ *
+ *  At a bound, then, a press simply does nothing — which is what "you are already
+ *  at the minimum" ought to feel like. `max` is applied before `min` and that
+ *  order is deliberate: an inverted pair can only come from a range narrower than
+ *  one step, and `boundsToUnit` refuses to produce one. */
+export function steppedValue(
+  current: string,
+  steps: number,
+  min: number,
+  max: number | undefined,
+  step: number,
+): string {
+  const n = Number(current);
+  const base = Number.isFinite(n) ? n : min;
+  let next = base + steps * step;
+  if (max !== undefined) next = Math.min(max, next);
+  next = Math.max(min, next);
+  const out = next.toFixed(decimalsOf(step));
+  // Judged on the ROUNDED result, because rounding is the second way a press can
+  // reverse itself and it is not the same way as the clamp. When a range is
+  // narrower than one step, `boundsToUnit` hands back the exact conversion rather
+  // than a grid-aligned pair — so a rug's 3-40 mm height in feet displays `0.13`,
+  // UP clamps it to the exact maximum 0.1312, and `toFixed(1)` renders that `0.1`.
+  // The stored value is fine (`clampDims` sees to that); the user still watches
+  // the number fall when they press the up arrow.
+  //
+  // And `current` back rather than `base.toFixed(...)`, because re-rendering at the
+  // step's precision is itself lossy in exactly these cases: 5.91 ft would come
+  // back as "5.9" — 1798.3 mm, below the 1800 mm floor the guard exists to defend.
+  // Doing nothing has to mean leaving the text alone.
+  const landed = Number(out);
+  if (steps < 0 && landed > base) return current;
+  if (steps > 0 && landed < base) return current;
+  return out;
 }
 
 export const UNIT_OPTIONS: { id: DimUnit; label: string }[] = [

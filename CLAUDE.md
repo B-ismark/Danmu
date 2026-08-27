@@ -186,8 +186,13 @@ backend, no account. The 3D studio *is* the product.
    has to stay in its own world (`collidesAt` looks the mover up in the list it is
    handed and returns `false` when absent — filter it out and collision detection is
    simply *off*, which is why every mover's world comes from `travellingWorld` and
-   never a `.filter` at the call site. That function SHIFTS the company to where it
-   is going rather than deleting it, and the difference is not cosmetic: deleting it
+   never a `.filter` at the call site. That function does two opposite things and
+   the difference between them is the whole point: it SHIFTS the travelling company
+   to where it is going rather than deleting it, and it REMOVES the mover's own
+   carried children, which ride the mover and must not be able to obstruct or
+   support it. Hence the fifth argument — the mover's `descendants`, which the two
+   call sites pass and `resolveConvoy` passes as `[]` for the shared world. Shifting
+   is the half that is not cosmetic: deleting it
    made a travelling support invisible to `findSupportDetailed`, so selecting a desk
    and the lamp on it and dragging the LAMP resolved the lamp to y = 0, reported
    valid because `collidesAt` could not see the desk either, cleared its rigid parent
@@ -269,8 +274,6 @@ backend, no account. The 3D studio *is* the product.
    snapshot taken at pointer-down rather than the live memo — and there the memo's
    danger is that it is FRESH, not stale: it already carries the earlier frames'
    writes, so a travelling piece is shifted twice and lands at `start + 2×delta`.
-   The identical wrong mechanism is still stated in `lib/drag-convoy.ts` and
-   `components/studio/PlanView.tsx`; those two are owned by the convoy work in flight.
    **The two lists beside the canvas are named for what they hold:** the rail's
    **Catalog** is what is in this room, the panel's **Library** is what you can
    add. They are not interchangeable words, and one screen may not hold two of
@@ -587,14 +590,21 @@ tests import does not belong in `lib/`, where it reads as shipped code.
   raise the ceiling. And **do not add a stale directive:** ESLint 9 reports an
   `eslint-disable` that suppressed nothing, so at `--max-warnings 0` a comment left
   behind after the code stopped violating the rule is itself a red build.
-  Two properties of `eslint.config.mjs` are load-bearing for `next build`, which runs
-  its **own** lint pass over the same config, and both fail in the direction that looks
-  like success:
+  Three properties of `eslint.config.mjs` are load-bearing for `next build`, which runs
+  its **own** lint pass over the same config, and all three fail in the direction that
+  looks like success:
   - **ESLint must stay `>= 9`.** Next only strips the eslintrc-era options
     (`useEslintrc`, `extensions`, …) when the installed ESLint is 9+. On 8.57 it finds
     the flat config, loads `FlatESLint`, hands it eslintrc options, prints
     `⨯ ESLint: Invalid Options` — and **exits 0 having linted nothing.** Verified by
     planting a `react/jsx-key` error: the build passed on 8.57 and fails on 9.
+  - **`next/typescript` is extended, not just `next/core-web-vitals`.** Without it
+    `@typescript-eslint/no-unused-vars` is never enabled, `eslint:recommended` is not
+    in the chain, and `tsconfig.json` sets no `noUnusedLocals` — so `pnpm lint`,
+    `pnpm typecheck` and the build's own pass were all structurally incapable of
+    seeing a dead import. Adding it found thirteen across nine files, one a stale
+    `collidesAt` that had outlived its call site. A gate reporting zero because it
+    cannot see the defect is the failure this repo keeps finding.
   - **The config must not ignore itself.** Next detects its plugin by calling
     `calculateConfigForFile('eslint.config.mjs')` and looking for `@next/next` in the
     result, so a `*.config.mjs` ignore entry (what `.eslintignore` used to carry) makes
@@ -602,7 +612,7 @@ tests import does not belong in `lib/`, where it reads as shipped code.
     root config files are linted instead, which is why `postcss.config.mjs` and
     `eslint.config.mjs` name their default export.
 
-  Both are pinned by `tests/toolchain.test.ts` — which asserts the *declared* range
+  All three are pinned by `tests/toolchain.test.ts` — which asserts the *declared* range
   admits nothing below 9, not just the installed version, and makes Next's own
   `calculateConfigForFile('eslint.config.mjs')` call itself — and backstopped in CI by
   grepping the build's output. Neither guard is decoration: each of the five

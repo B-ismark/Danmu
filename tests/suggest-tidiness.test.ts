@@ -175,8 +175,29 @@ describe('a route-opening move can say that is what it did', () => {
     // proposal, and its own doc comment claimed the answer was re-checked against the
     // real grid before being kept. It was not: it returned whatever the proxy found,
     // so it could spend the search and hand back something the fine grid scores worse.
-    const ctx: LayoutContext = { parts, movable: parts.map((p) => !p.wallMounted), footprint: ALCOVE };
-    expect(costBreakdown(prepare(ctx), r.placements, undefined, NAV_CELL).total).toBeLessThanOrEqual(r.before);
+    //
+    // Asserted as an EQUALITY against the reported `after`, not as `<= before`. The
+    // inequality could not fail: lib/layout-solve.ts reverts outright when
+    // `breakdownAfter.total >= before`, so re-deriving the same number the same way
+    // and finding it no larger is a restatement of that guard, not a test of it. The
+    // number the panel SHOWS having to match the layout it hands back is a real
+    // claim, and it is exactly what a revert that put back `winner` while keeping
+    // the improved breakdown would break.
+    //
+    // `origin` matters and was missing. `solveLayout` puts one on its own context
+    // (lib/layout-solve.ts:220) and the inertia term is measured against it, so a
+    // model built without one prices every layout differently from the model that
+    // produced the answer — the two totals were not comparable at all, which is the
+    // other half of why the old `<= before` could not fail. Measured: 1.44 against
+    // a reported 3.26 on this very fixture.
+    const ctx: LayoutContext = {
+      parts,
+      movable: parts.map((p) => !p.wallMounted),
+      footprint: ALCOVE,
+      origin: at(parts),
+    };
+    expect(costBreakdown(prepare(ctx), r.placements, undefined, NAV_CELL).total).toBeCloseTo(r.after, 9);
+    expect(r.after).toBeLessThanOrEqual(r.before);
   });
 });
 

@@ -105,6 +105,26 @@ type RoomTab = 'check' | 'fit' | 'list' | 'layouts';
 type AppPlacement = { pos: [number, number, number]; rot: number };
 type AppPlacedRef = { current: Map<string, AppPlacement> };
 
+/** THE map. One, at module scope, still threaded as an argument.
+ *
+ *  It was `useRef(new Map())` in `RoomTools`, which meant it lived exactly as long
+ *  as the component — and `RoomTools` unmounts on a tab switch, because 3D Model and
+ *  2D Plan are different ROUTES. So: press Suggest in 3D, switch to the plan, change
+ *  a width, accept the re-fit, and the map the re-fit reads is empty. That is the
+ *  inertia-56 bug in the comment above, restored by a lifetime nobody had thought
+ *  about, through a completely different door.
+ *
+ *  Module scope is safe HERE for the reason the map was designed around: it holds
+ *  the VALUE, so a piece counts as the app's only while its override is still the
+ *  one the app wrote. Another room's piece would have to carry the same id AND be
+ *  standing at the same millimetre and radian to be mistaken for this one's.
+ *
+ *  What is deliberately NOT undone is the threading. The bug the comment above
+ *  describes was never "module scope" — it was TWO maps, a context default written
+ *  by one caller and a ref read by another. One map, passed explicitly, cannot
+ *  split like that: a prop cannot be wired to the wrong scope. */
+const APP_PLACED: AppPlacedRef = { current: new Map() };
+
 /** Is this override still the one the solver wrote? Exact equality is right here —
  *  both sides are the same float that was stored, never recomputed. */
 function stillTheApps(
@@ -182,11 +202,8 @@ export function RoomTools() {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<RoomTab>('check');
   const anchorRef = useRef<HTMLDivElement>(null);
-  // Who moved what — see `AppPlaced`. It needs no reset when the room changes,
-  // because it is keyed on the id AND the exact transform: another room's piece
-  // would have to carry the same id and be standing at the same millimetre and
-  // radian to be mistaken for this one's.
-  const appPlaced = useRef<Map<string, AppPlacement>>(new Map());
+  // Who moved what — see `APP_PLACED`, which is where it lives and why.
+  const appPlaced = APP_PLACED;
   const [panelPos, setPanelPos] = useState({ left: 0, top: 0, width: PANEL_W });
 
   // Measured on open and kept true through resize and scroll. Placed to the RIGHT
@@ -795,7 +812,7 @@ function FixButton({
           ? 'Move just the pieces named here, leaving the rest of the room alone'
           : 'Rearrange the unlocked furniture to open the floor up'
       }
-      style={{ height: 24, fontSize: 10, padding: '0 8px', flexShrink: 0, alignSelf: 'flex-start' }}
+      style={{ height: 28, fontSize: 10, padding: '0 10px', flexShrink: 0, alignSelf: 'flex-start' }}
     >
       {busy ? 'Trying…' : 'Try a fix'}
     </button>
@@ -860,10 +877,16 @@ function CheckSummary({
           style={{ accentColor: 'var(--accent)', width: 14, height: 14, flexShrink: 0, cursor: 'pointer' }}
         />
         Step-free <span style={{ color: 'var(--ink-3)' }}>· {TURN_CM} cm</span>
-        <span id={STEP_FREE_DESC_ID} className="sr-only">
-          {STEP_FREE_DESC}
-        </span>
       </label>
+      {/* OUTSIDE the label, and that is the whole point. A `<label>`'s text content
+          is the checkbox's accessible NAME, so a description nested inside it became
+          part of the name — and then `aria-describedby` pointed at the same node, so
+          a screen reader read the sentence twice: once as what the control is called
+          and again as what it does. The name is "Step-free · 90 cm"; the sentence is
+          the description, and the two must not be the same string. */}
+      <span id={STEP_FREE_DESC_ID} className="sr-only">
+        {STEP_FREE_DESC}
+      </span>
     </div>
   );
 }
@@ -945,9 +968,14 @@ function IssueRow({
       </div>
       {/* Actions align with the text column above, not with the right edge. Right-aligned
           and wrapping, they stacked into the same visual column the wrapped title had
-          just moved out of, which read as a second misalignment on the same row. */}
+          just moved out of, which read as a second misalignment on the same row.
+
+          The gap is 8px, not 6: these two sit side by side and one of them
+          REARRANGES THE ROOM. 28 × 62 clears WCAG 2.5.8's 24 × 24 minimum with
+          room to spare, but spacing is the other half of that criterion and the
+          cost of a mis-tap here is asymmetric — "Show me" only moves the camera. */}
       {(canSelect || canFix) && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-start', gap: 6, marginTop: 7 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-start', gap: 8, marginTop: 7 }}>
           {canSelect && (
             <button
               onClick={() => onShow(issue)}
@@ -957,7 +985,7 @@ function IssueRow({
               // shadow and rose when pointed at.
               className="ds-btn ds-btn--ghost"
               title="Select the pieces involved and fly to them"
-              style={{ height: 24, fontSize: 10, padding: '0 8px', color: 'var(--accent-text)' }}
+              style={{ height: 28, fontSize: 10, padding: '0 10px', color: 'var(--accent-text)' }}
             >
               Show me
             </button>

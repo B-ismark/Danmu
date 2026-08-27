@@ -91,6 +91,11 @@ describe('every access rule states its own headline', () => {
         byTitle.set(r.title, seen);
       }
     }
+    // Delete every rule and this loop runs zero times and reports success, which is
+    // the failure shape the whole suite exists to catch. The floor is well under the
+    // real count — it is a tripwire for an empty table, not a second copy of the
+    // catalogue that has to be edited whenever a rule is added.
+    expect(byTitle.size, 'no access rules were collected at all').toBeGreaterThan(5);
     for (const [title, wants] of byTitle) {
       expect([...wants], `"${title}" is the headline for more than one requirement`).toHaveLength(1);
     }
