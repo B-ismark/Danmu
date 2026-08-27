@@ -283,8 +283,6 @@ export function polyCentroid(poly: Poly): Vec2 {
   return [x / poly.length, z / poly.length];
 }
 
-/** Distance from (x,z) along unit direction (dx,dz) to the polygon boundary.
- *  Infinity when the ray never crosses an edge (point outside, aiming away). */
 /** The centroid of the polygon's AREA — the shoelace centroid — which is what "the
  *  middle of the floor" means.
  *
