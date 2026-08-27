@@ -205,7 +205,7 @@ export function planHelp() {
           <Kb>→</Kb> nudge whatever is focused · hold <Kb>Shift</Kb> to turn it
         </HelpLine>
         <HelpLine>
-          <Kb>F</Kb> brings the selected piece to the middle · <Kb>V</Kb> hides it
+          <Kb>F</Kb> brings the selected piece to the middle · <Kb>H</Kb> hides it
         </HelpLine>
         <HelpLine>
           <Kb>Tab</Kb> steps through the pieces and the walls · <Kb>Esc</Kb> deselects

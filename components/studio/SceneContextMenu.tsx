@@ -353,7 +353,7 @@ function partEntries(partId: string, req: MenuRequest): MenuEntry[] {
       id: 'hide',
       label: isHidden ? 'Show it' : 'Hide it',
       icon: isHidden ? 'eye' : 'eye-off',
-      hint: 'V',
+      hint: 'H',
       run: () => s.toggleHidden(partId),
     },
   ];

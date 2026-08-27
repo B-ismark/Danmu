@@ -115,7 +115,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
   const setHovered = useStudio((s) => s.setHovered);
   const hidden = useStudio((s) => s.hidden);
 
-  // What the drawing shows, and what a pointer can therefore reach. `V` hides a
+  // What the drawing shows, and what a pointer can therefore reach. `H` hides a
   // piece from the plan exactly as it hides one from the 3D tree
   // (`Room.tsx` filters the same way) — a piece that is invisible in one tab and
   // draggable in the other is not a state the UI can name.

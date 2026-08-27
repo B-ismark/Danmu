@@ -16,7 +16,7 @@ import { removeParts } from './KeyboardShortcuts';
 import { RailSection } from './RailSection';
 import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { isWallMountedPart, supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, DECOR_KINDS, type LibraryItem, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
-import { findSupportDetailed, groundY, snapToWall as snapToWallPhys, wallStandoff } from '@/lib/physics';
+import { findSupportDetailed, groundY, MOUNT_PAD, snapToWall as snapToWallPhys, wallStandoff } from '@/lib/physics';
 import { wallSegments } from '@/lib/footprint';
 import { moveWallCarrying } from '@/lib/wall-actions';
 
@@ -107,7 +107,7 @@ export function Inspector() {
     let ny = y;
     let support: { id: string; y: number } | null = null;
     if (wallMounted) {
-      ny = Math.max(h / 2 + 0.02, Math.min(room.height - h / 2 - 0.02, groundY(item.category, item.shape, dimMM, room.height)));
+      ny = Math.max(h / 2 + MOUNT_PAD, Math.min(room.height - h / 2 - MOUNT_PAD, groundY(item.category, item.shape, dimMM, room.height)));
     } else {
       support = findSupportDetailed(partSnapshot(), id!, x, z, dimMM, baseRot);
       ny = support !== null && support.y > 0.3 ? support.y : 0;
@@ -229,7 +229,7 @@ export function Inspector() {
             onCommit={(bottomMM) => {
               const [x, , z] = currentXYZ();
               const h = part!.dimMM[2] / 1000;
-              const y = Math.max(h / 2 + 0.02, Math.min(room.height - h / 2 - 0.02, bottomMM / 1000 + h / 2));
+              const y = Math.max(h / 2 + MOUNT_PAD, Math.min(room.height - h / 2 - MOUNT_PAD, bottomMM / 1000 + h / 2));
               setPosition(id!, [x, y, z]);
             }}
           />
@@ -617,9 +617,19 @@ function DimensionEditor({
   const prec = precisionFor(dimUnit);
   const step = stepFor(dimUnit);
   const range = dimRangeFor(category, shape);
-  // Collapsed by default — same disclosure the room shell uses. Typing exact
-  // millimetres is the rare path; dragging and recolouring are the common ones.
-  const [open, setOpen] = useState(false);
+  // Open by default. It was collapsed on the reasoning that typing millimetres is
+  // the rare path — true of typing, and beside the point for READING: the three
+  // numbers are what tells you whether the piece you just dropped is the size you
+  // meant, and rule 2 of CLAUDE.md makes them the derived answer the app owes the
+  // user rather than a detail to go looking for. The collapsed summary already
+  // printed the same numbers, so the fold was hiding a text field and the tier
+  // sentence, not the measurement — which makes "collapsed" cost a click and save
+  // one line. The disclosure stays, because a rail with several sections open at
+  // once still needs a way to get its height back.
+  //
+  // Not the same call as the room shell's, deliberately: a room's dimensions are
+  // set once during onboarding, while a part's change every time you scale one.
+  const [open, setOpen] = useState(true);
 
   // Destructured so the resync effect can depend on the three numbers rather
   // than the tuple identity — the parent rebuilds `value` every render.
