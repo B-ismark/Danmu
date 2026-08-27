@@ -93,6 +93,55 @@ export function groundY(
   }
 }
 
+/** Clearance kept between a centre-anchored piece and the surfaces it hangs
+ *  between, so a clamped piece never renders coplanar with the plaster or the
+ *  ceiling. One number, because three places clamp the same way and a fourth was
+ *  about to: `lib/drag-resolve.ts`'s vertical containment, the Inspector's typed
+ *  mount height, and `heightForNewCeiling` below. `placeNewPart` deliberately does
+ *  NOT use it — a door's canonical height IS h/2, and padding that stood every
+ *  door 2 cm off its own threshold. */
+export const MOUNT_PAD = 0.02;
+
+/** Where a piece's Y goes when the room's ceiling moves.
+ *
+ *  A ceiling height is not just a number on the room — `groundY` above derives
+ *  half the scene's heights from it — and `setRoom` wrote a new one while
+ *  re-grounding nothing. So a ceiling fan hung at the ceiling of a 1.75 m room
+ *  stayed at 1.60 m when the room grew to 2.80 m, and was reported as "the fan is
+ *  not attached to the ceiling". It is the same fan at the same height; the ceiling
+ *  is what moved.
+ *
+ *  Which pieces follow is read off the anchor's own name rather than a list:
+ *    • `ceiling` and `wall-high` are measured DOWN from the ceiling — a fan, a
+ *      pendant, a curtain rod, an AC unit — so they travel with it and keep
+ *      whatever offset below it they had.
+ *    • `wall-mid` and `wall-low` are eye level and skirting level, measured UP from
+ *      the floor, so raising a ceiling leaves a picture exactly where it hangs.
+ *    • `floor` and `wall-floor` stand ON the floor and do not move at all. A piece
+ *      that no longer fits under the new ceiling keeps its real size and its real
+ *      place and `lib/clearance.ts` reports it — never silently shuffled or shrunk
+ *      to suit the room.
+ *  Everything centred is then clamped inside the new room, because following a
+ *  ceiling downwards must not push a piece through the floor. A piece TALLER than
+ *  the room lands at `h / 2 + MOUNT_PAD` and pokes through, which is the same
+ *  answer the drag path gives and the same one the room report is written to
+ *  explain. */
+export function heightForNewCeiling(
+  category: Category,
+  shape: Shape,
+  dimMM: [number, number, number],
+  y: number,
+  oldHeight: number,
+  newHeight: number,
+): number {
+  const anchor = anchorFor(category, shape);
+  if (anchor === 'floor' || anchor === 'wall-floor') return y;
+  const h = dimMM[2] / 1000;
+  const followsCeiling = anchor === 'ceiling' || anchor === 'wall-high';
+  const next = followsCeiling ? y + (newHeight - oldHeight) : y;
+  return Math.max(h / 2 + MOUNT_PAD, Math.min(newHeight - h / 2 - MOUNT_PAD, next));
+}
+
 /** True when a part can rest on the floor. False for wall-mounted / ceiling-mounted items. */
 export function isFloorStanding(category: Category, shape: Shape): boolean {
   return anchorFor(category, shape) === 'floor';

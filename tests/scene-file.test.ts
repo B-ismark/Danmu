@@ -268,6 +268,11 @@ describe('scene file · a file is untrusted input', () => {
     // furniture on, and unlike a colour there is no sensible default.
     expect(parseSceneFile(rawFile({ room: { width: 0, depth: 4, height: 2.6 } })).ok).toBe(false);
     expect(parseSceneFile(rawFile({ room: { width: 5, depth: 4, height: 1e6 } })).ok).toBe(false);
+    // A CEILING takes the ceiling's range, and this file used to bound it with the
+    // side range: a 1.2 m room came in as a room. 1 m is a legal SIDE, which is
+    // what made the copy invisible — the number was in range, for the wrong axis.
+    expect(parseSceneFile(rawFile({ room: { width: 5, depth: 4, height: 1.2 } })).ok).toBe(false);
+    expect(parseSceneFile(rawFile({ room: { width: 1.2, depth: 4, height: 2.6 } })).ok).toBe(true);
   });
 
   it('rejects Infinity, which JSON smuggles in as 1e400', () => {

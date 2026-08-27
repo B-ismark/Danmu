@@ -53,7 +53,7 @@ import {
   type ScenePart,
   type Shape,
 } from './scene-spec';
-import { clampDims, ROOM_SIDE_M } from './dimension-ranges';
+import { clampDims, roomAxisRange, ROOM_SIDE_M } from './dimension-ranges';
 import { resolveParts } from './transforms';
 import { fileSlug } from './exports';
 import { wouldCreateCycle } from './rigid-parent';
@@ -344,7 +344,12 @@ function readRoom(v: unknown, dropped: string[]): SceneFileRoom | null {
   if (!isObj(v)) return null;
   const width = num(v.width, ROOM_SIDE_M.min, ROOM_SIDE_M.max);
   const depth = num(v.depth, ROOM_SIDE_M.min, ROOM_SIDE_M.max);
-  const height = num(v.height, ROOM_SIDE_M.min, ROOM_SIDE_M.max);
+  // A ceiling takes the ceiling's range, not the side's — `ROOM_HEIGHT_M`, via the
+  // one function that decides which range an axis gets. This file needing a copy
+  // of the side bound is the reason that range moved to `dimension-ranges.ts`; it
+  // then read the side bound for the HEIGHT too, which is a copy of a different
+  // kind and let a one-metre ceiling in through a file.
+  const height = num(v.height, roomAxisRange('height').min, roomAxisRange('height').max);
   // No room means no floor to stand furniture on, so this one is fatal rather than
   // droppable — everything else about a room has a working default.
   if (width === null || depth === null || height === null) return null;
