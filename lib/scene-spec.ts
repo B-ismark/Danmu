@@ -147,6 +147,35 @@ export function lightFor(part: Pick<ScenePart, 'shape' | 'light'>): PartLight | 
 
 /** True for shapes that are fixtures — the Inspector shows lighting controls for
  *  these and nothing else. */
+/** Radius of a ceiling fan's motor housing, in metres. The blades start here and
+ *  `FanGeo` draws the same cylinder, so it is one number rather than two. */
+export const FAN_HUB_R = 0.1;
+
+/** Where one blade of a ceiling fan sits, given the fan's declared width.
+ *
+ *  Pulled out of `FanGeo` because it was WRONG and nothing could say so. The blade
+ *  was `size: [r * 1.6]` at `position: [r * 0.6]`, and a box of length 1.6r centred
+ *  at 0.6r runs from −0.2r to **1.4r** — so the catalog's 1000 mm fan swept 1.40 m,
+ *  and every blade also crossed 100 mm through the far side of its own motor.
+ *
+ *  Rule 2's corollary, exactly: a shape's geometry must be authored at
+ *  `part.dimMM`, because `Draggable` scales by `storedDim / part.dimMM` and a
+ *  renderer with its own idea of the size renders the wrong size at scale 1. It was
+ *  visible without opening the 3D tab, too — the plan draws a fan as a circle
+ *  straight off `dimMM` (`circle: true`), so the two tabs disagreed by 40% on the
+ *  same piece.
+ *
+ *  Returns metres. `tip` is the invariant worth testing: it is the fan's own
+ *  radius, so the swept circle is the declared width and nothing else. */
+export function fanBlade(widthMM: number): { hub: number; length: number; centre: number; tip: number } {
+  const r = widthMM / 2000;
+  // A fan narrower than its own hub is not reachable through `clampDims` (the
+  // range starts at 900 mm) but the floor keeps this total rather than returning a
+  // negative box, which three.js renders inside-out rather than refusing.
+  const length = Math.max(0.05, r - FAN_HUB_R);
+  return { hub: FAN_HUB_R, length, centre: FAN_HUB_R + length / 2, tip: FAN_HUB_R + length };
+}
+
 export function isLightFixture(shape: Shape): boolean {
   return shape in LIGHT_BY_SHAPE;
 }
@@ -1783,6 +1812,19 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
     // not a fan in the wrong corner. Y is owned by the anchor, and only there.
     const aiPos = (d as { position?: { x: number; y: number; z: number } }).position;
     const aiYaw = (d as { yaw?: number }).yaw;
+    /** Does the model's own yaw survive a wall snap?
+     *
+     *  Hoisted because it is read three times and used to be written out twice —
+     *  and the third reader is the one that made it matter. `snapToWall` clamps a
+     *  piece by its extent ALONG the wall, which is `dimMM[0]` only when the piece
+     *  is turned to the wall's heading. Where the model's yaw wins it is not, so
+     *  the clamp has to be told the rotation that will really apply. A third copy
+     *  of the predicate is how the two would have drifted apart. */
+    const keepsAiYaw = typeof aiYaw === 'number' && Math.abs(aiYaw) >= 0.05;
+    /** …and therefore the yaw the clamp must measure across. `undefined` lets
+     *  `snapToWall` use the wall's own heading, which is what will really apply
+     *  whenever the snapped `rot` wins. */
+    const clampRot = keepsAiYaw ? aiYaw : undefined;
     let placement: { pos: [number, number, number]; rot: number };
     const w = rw / 2;
     const dHalf = rd / 2;
@@ -1812,10 +1854,10 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
     // parameter for the rest of the block.
     const bounds = { width: rw, depth: rd };
     if (aff === 'must-wall') {
-      const snapped = snapToWall(placement.pos, dim, footprint, wallStandoff(refined));
+      const snapped = snapToWall(placement.pos, dim, footprint, wallStandoff(refined), null, { alongRot: clampRot });
       placement.pos[0] = snapped.x;
       placement.pos[2] = snapped.z;
-      if (snapped.rot !== undefined && (typeof aiYaw !== 'number' || Math.abs(aiYaw) < 0.05)) {
+      if (snapped.rot !== undefined && !keepsAiYaw) {
         placement.rot = snapped.rot;
       }
     } else if (aff === 'prefers-wall') {
@@ -1829,10 +1871,10 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
       );
       // Always snap via footprint-aware snapToWall — works for L/T/U inner edges too.
       if (distFromWall > 0.2) {
-        const snapped = snapToWall(placement.pos, dim, footprint, wallStandoff(refined));
+        const snapped = snapToWall(placement.pos, dim, footprint, wallStandoff(refined), null, { alongRot: clampRot });
         placement.pos[0] = snapped.x;
         placement.pos[2] = snapped.z;
-        if (snapped.rot !== undefined && (typeof aiYaw !== 'number' || Math.abs(aiYaw) < 0.05)) {
+        if (snapped.rot !== undefined && !keepsAiYaw) {
           placement.rot = snapped.rot;
         }
       }

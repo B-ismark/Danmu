@@ -8,7 +8,7 @@ import { Box, BoxInstances, PlaneInstances, type InstanceItem } from './Box';
 import { PartLight } from './PartLight';
 import { SURFACE } from './materials';
 import { Spin, Sway } from './Motion';
-import { isParametric, type ScenePart } from '@/lib/scene-spec';
+import { fanBlade, isParametric, type ScenePart } from '@/lib/scene-spec';
 import { useStudio } from '@/lib/store';
 import { DECOR, DETAIL, SCENE, defaultBodyColor } from '@/lib/scene-palette';
 
@@ -692,14 +692,17 @@ function MonitorGeo({ part }: { part: ScenePart }) {
 }
 
 function FanGeo({ part }: { part: ScenePart }) {
-  const r = part.dimMM[0] / 2 / 1000;
+  // The blade's span is `fanBlade`'s, not this file's. It was `size: [r * 1.6]` at
+  // `position: [r * 0.6]` here — a tip at 1.4r, so a 1000 mm fan swept 1.40 m while
+  // the plan drew the 1.00 m circle its `dimMM` asks for. See `fanBlade`.
+  const { hub, length, centre } = fanBlade(part.dimMM[0]);
   // Blades follow the part's colour; the motor housing stays metal. The blades
   // were a literal, so recolouring a ceiling fan did nothing.
   const blade = tint(part);
   return (
     <>
       <mesh position={[0, 0, 0]}>
-        <cylinderGeometry args={[0.1, 0.1, 0.08, 16]} />
+        <cylinderGeometry args={[hub, hub, 0.08, 16]} />
         <meshStandardMaterial color="#888" />
       </mesh>
       <Box size={[0.025, 0.18, 0.025]} position={[0, 0.13, 0]} color="#666" />
@@ -709,8 +712,8 @@ function FanGeo({ part }: { part: ScenePart }) {
           return (
             <group key={i} rotation={[0, angle, 0]}>
               <Box
-                size={[r * 1.6, 0.012, 0.16]}
-                position={[r * 0.6, 0, 0]}
+                size={[length, 0.012, 0.16]}
+                position={[centre, 0, 0]}
                 color={blade}
                 edgeOpacity={0.4}
               />

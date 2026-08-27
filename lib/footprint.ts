@@ -108,21 +108,52 @@ export function wallOutwardNormal(poly: Footprint, index: number): [number, numb
   if (n < 3 || index < 0 || index >= n) return [0, 0];
   const a = poly[index];
   const b = poly[(index + 1) % n];
-  // Edge perpendicular.
-  let nx = -(b[1] - a[1]);
-  let nz = b[0] - a[0];
-  const nl = Math.hypot(nx, nz) || 1;
-  nx /= nl;
-  nz /= nl;
-  // Flip to point OUTWARD (away from the centroid).
-  const [cx, cz] = polygonCentroid(poly);
-  const mx = (a[0] + b[0]) / 2;
-  const mz = (a[1] + b[1]) / 2;
-  if ((cx - mx) * nx + (cz - mz) * nz > 0) {
-    nx = -nx;
-    nz = -nz;
+  const dx = b[0] - a[0];
+  const dz = b[1] - a[1];
+  const l = Math.hypot(dx, dz) || 1;
+  // Which side is "out" is a property of the polygon's WINDING, not of where its
+  // middle happens to be. For positive signed area the outward normal of a→b is
+  // (dz, −dx): take the unit square (0,0)→(1,0)→(1,1)→(0,1), area +1, and edge 0's
+  // outward normal is (0, −1), which is what that expression gives.
+  //
+  // It used to flip the perpendicular by testing it against `polygonCentroid` —
+  // and that is exact for a convex room and wrong for the ones this app ships. The
+  // centroid there averages the VERTICES rather than the area, so on a T it lands
+  // in the stem's notch and on a U between the arms, outside the floor entirely;
+  // any edge whose midpoint sits on the far side of it from the interior gets its
+  // normal reversed. Measured, not feared: 2 of the T's 8 walls and 3 of the U's 8.
+  //
+  // What that cost is a wall that moves the wrong way. `offsetWall` translates the
+  // edge along this vector, so `delta > 0` — documented as "push out / bigger room"
+  // — shrank the room on those five walls, and `lib/wall-move.ts` carried the
+  // furniture inward with it. On a rectangle it is invisible, which is exactly
+  // where every test for it was written.
+  //
+  // `polygonCentroid` is untouched: six other callers read it, one test pins its
+  // value, and it is not this function's business any more. That also retires the
+  // blocker `lib/scene-spec.ts` records against fixing it — "changing it means
+  // changing the thing every wall's normal is derived from" is no longer true.
+  //
+  // `+ 0` normalises negative zero. An axis-aligned wall divides an exact 0 by the
+  // length and the sign of `s` carries through, so East came back as `[1, -0]` —
+  // arithmetically identical to `[1, 0]` and not identical to it under `Object.is`
+  // or `toEqual`. Two rooms whose East walls face the same way should not differ by
+  // the sign of a zero.
+  const s = polygonSignedArea(poly) >= 0 ? 1 : -1;
+  return [(s * dz) / l + 0, (-s * dx) / l + 0];
+}
+
+/** Twice-the-area-over-two of a simple polygon, signed by its winding. Positive
+ *  means the vertices run in the direction `wallOutwardNormal` treats as
+ *  counter-clockwise; only the SIGN is read, so the magnitude is incidental. */
+export function polygonSignedArea(poly: Footprint): number {
+  let a = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const p = poly[i];
+    const q = poly[(i + 1) % poly.length];
+    a += p[0] * q[1] - q[0] * p[1];
   }
-  return [nx, nz];
+  return a / 2;
 }
 
 /** Move ONLY the selected wall: translate edge `index`'s two vertices along the

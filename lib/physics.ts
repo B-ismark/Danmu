@@ -5,7 +5,7 @@
 
 import type { Category, Shape } from './scene-spec';
 import type { Footprint } from './footprint';
-import { edgeProjection, nearestEdge, footArea, footFromPart, footIntersectionArea } from './geometry';
+import { edgeProjection, nearestEdge, footArea, footFromPart, footIntersectionArea, obbExtentAlong } from './geometry';
 import { WALL_GAP } from './layout-rules';
 
 export type Anchor = 'floor' | 'ceiling' | 'wall-high' | 'wall-mid' | 'wall-low' | 'wall-floor';
@@ -241,6 +241,27 @@ export function snapToWall(
    *  refusing, because a footprint can change under a held index (a wall drag) and
    *  the nearest wall is never a wrong answer, only a less constrained one. */
   edgeIndex?: number | null,
+  /** The rotation the caller is going to APPLY, when that is not the `rot`
+   *  returned below.
+   *
+   *  The clamp needs the piece's extent ALONG the wall, and `dimMM[0] / 2` is that
+   *  only because the returned `rot` turns the piece's local X to run along it. Two
+   *  callers in `lib/scene-spec.ts` take the snapped x/z and keep the MODEL's yaw
+   *  instead, so for them the premise is false: the piece was clamped by its width
+   *  while lying at an arbitrary angle, held (width − depth) / 2 too far from the
+   *  corner. Never outside the room — a wrong number rather than a wrong room, and
+   *  therefore silent. A TV the detector reported edge-on to its wall was kept
+   *  540 mm off the corner it belonged in.
+   *
+   *  An options object rather than a sixth positional: the tail is already
+   *  `(standoff, edgeIndex)` and a place-counted sixth argument is the one that gets
+   *  miscounted by whoever adds a seventh.
+   *
+   *  Given the yaw that will really apply, the extent is the piece's own OBB
+   *  projected onto the wall direction — exact at any angle, and equal to
+   *  `dimMM[0] / 2` at the wall's own heading, which the four-wall tests check
+   *  rather than assume so that a convention error in the projection is a red. */
+  opts: { alongRot?: number } = {},
 ): { x: number; z: number; rot?: number } {
   const edge =
     (edgeIndex == null ? null : edgeProjection(footprint, edgeIndex, pos[0], pos[2])) ??
@@ -276,7 +297,11 @@ export function snapToWall(
   if (len > 1e-9) {
     const ux = (b[0] - a[0]) / len;
     const uz = (b[1] - a[1]) / len;
-    const halfW = dimMM[0] / 2000;
+    const halfW = obbExtentAlong(
+      { cx: 0, cz: 0, hw: dimMM[0] / 2000, hd: dimMM[1] / 2000, rot: opts.alongRot ?? edge.yaw },
+      ux,
+      uz,
+    );
     // Distance from `a` along the wall. Taken from the projected point rather than
     // from `pos`, so a pointer out in the room is measured the same way as one
     // beyond the corner.
