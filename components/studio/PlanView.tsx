@@ -21,7 +21,7 @@ import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { useScene } from '@/lib/scene-store';
 import { DND_MIME, placeNewPart, selectionForPick, type Category, type ScenePart, type Shape } from '@/lib/scene-spec';
 import { entranceComponents, floorBlockers } from '@/lib/clearance';
-import { buildClearanceField, fieldRuns, FREE_CELL, WALK_RADIUS } from '@/lib/clearance-field';
+import { buildClearanceField, fieldRuns, FREE_CELL } from '@/lib/clearance-field';
 import { accessZones } from '@/lib/layout-rules';
 import { footFromPart, obbExtentAlong, obbFromPart, rayToBoundary } from '@/lib/geometry';
 import { hitsAt, hitsInRect, nextInCycle, planPaintOrder, type CycleState } from '@/lib/plan-hit';
@@ -29,10 +29,9 @@ import { wallSegments, footprintBounds } from '@/lib/footprint';
 import { moveWallCarrying, wallAttachments } from '@/lib/wall-actions';
 import { resolvePlacement, snapSteps } from '@/lib/drag-resolve';
 import { snapGuideEnds, type SnapLine } from '@/lib/item-snap';
-import { convoyRestore, planConvoy, resolveConvoy, worldFor, type Convoy } from '@/lib/drag-convoy';
+import { convoyRestore, planConvoy, resolveConvoy, travellingWorld, type Convoy } from '@/lib/drag-convoy';
 import { formatDim } from '@/lib/units';
 import { clientDeltaToViewBox, clientToViewBox } from '@/lib/plan-view-transform';
-import { Icon } from '@/components/ui/Icon';
 import { v4 as uuid } from 'uuid';
 import { announce, removeParts, studioSurfaceFocused } from './KeyboardShortcuts';
 import { openPickMenu, openSceneMenu } from './SceneContextMenu';
@@ -190,6 +189,19 @@ export const PlanView = forwardRef<PlanViewHandle, {
     /** Where the piece was before the gesture, so Escape can put it back. */
     startPos: [number, number, number];
     /**
+     * The scene as it stood at pointer-down, and it must be a snapshot.
+     *
+     * `travellingWorld` and `resolveConvoy` both place the company at
+     * `startPos + delta`, where the delta is measured from pointer-down — so a
+     * list whose travelling pieces have ALREADY been written forward by the
+     * previous frames shifts them a second time and puts every phantom at
+     * `start + 2×delta`. This passed the live `useRoomScene()` memo, so the plan
+     * alone lost a lamp off its desk on a multi-select drag and refused sets with
+     * a collision against a phantom that was never there. The 3D tab was right
+     * only because `Draggable` happens to cache `effParts()` for the gesture.
+     */
+    world: ScenePart[];
+    /**
      * Everything travelling with this piece — what is resting on it, the rest of
      * the multi-selection, whatever merged group any of them belongs to, and where
      * each of them started. Resolved ONCE at pointer-down: re-resolving per frame
@@ -221,7 +233,16 @@ export const PlanView = forwardRef<PlanViewHandle, {
 
   // Which piece is currently refusing to move, and which element has keyboard
   // focus (SVG shapes get no :focus-visible ring of their own).
-  const [blockedId, setBlockedId] = useState<string | null>(null);
+  /** Everything to outline on a refusal: ALWAYS the piece under the hand, plus the
+   *  member that actually ran out of room when that is someone else.
+   *
+   *  It was the blocker alone, which is invisible in the two cases that matter — a
+   *  member hidden by a filter, or one simply outside the current pan — leaving a
+   *  drag that silently stops with nothing on screen to say why (the naming
+   *  sentence goes to an `.sr-only` live region). The 3D tab always reddens the
+   *  dragged piece and names the member in its size tag; this is the same promise,
+   *  and the two tabs must not answer "which piece is wrong" differently. */
+  const [blockedIds, setBlockedIds] = useState<string[]>([]);
   const blockedRef = useRef(false);
   const blockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [focusKey, setFocusKey] = useState<string | null>(null);
@@ -290,7 +311,16 @@ export const PlanView = forwardRef<PlanViewHandle, {
       if (!d) return;
       e.preventDefault();
       e.stopPropagation();
-      setTransformsFor(convoyRestore(d.convoy, d.id, d.startPos, d.startRot));
+      setTransformsFor(
+        convoyRestore(
+          d.convoy,
+          d.id,
+          d.startPos,
+          d.startRot,
+          d.mode === 'rotate',
+          (id) => useStudio.getState().rotations[id] !== undefined,
+        ),
+      );
       dragRef.current = null;
       setDragging(null);
       if (blockedRef.current) clearBlocked();
@@ -477,14 +507,26 @@ export const PlanView = forwardRef<PlanViewHandle, {
    *
    *  `parts` rather than `visible`: a hidden piece is still furniture in the way,
    *  and dragging through one because you cannot see it would be a trap. */
-  function resolveAt(part: ScenePart, rawX: number, rawZ: number, convoy: Convoy) {
+  function resolveAt(
+    part: ScenePart,
+    rawX: number,
+    rawZ: number,
+    convoy: Convoy,
+    /** The pointer-down snapshot — see `world` on `dragRef`. */
+    world: ScenePart[],
+    /** Where the dragged piece began, so the company can be shifted by the delta. */
+    startPos: [number, number, number],
+  ) {
     return resolvePlacement({
       part,
       rawX,
       rawZ,
       rot: part.rot,
       dim: part.dimMM,
-      parts: convoy.travelling.size > 1 ? worldFor(convoy, part, parts) : parts,
+      parts:
+        convoy.travelling.size > 1
+          ? travellingWorld(convoy, world, rawX - startPos[0], rawZ - startPos[2])
+          : world,
       footprint: ROOM_DYN.footprint,
       roomHeight: ROOM_DYN.height,
       snapMode,
@@ -503,7 +545,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
     if (blockTimer.current) clearTimeout(blockTimer.current);
     // Let the red linger a moment so a refusal is still visible if the user lets
     // go the instant it happens.
-    blockTimer.current = setTimeout(() => setBlockedId(null), 500);
+    blockTimer.current = setTimeout(() => setBlockedIds([]), 500);
   }
 
   /** Try the full move, then each axis alone, so a piece slides along whatever it
@@ -525,6 +567,9 @@ export const PlanView = forwardRef<PlanViewHandle, {
         footprint: ROOM_DYN.footprint,
       });
     const startPos = drag?.startPos ?? part.pos;
+    // A nudge has no gesture, so the live scene IS its pointer-down state and the
+    // delta is measured from where the piece is standing now.
+    const world = drag?.world ?? parts;
     const candidates: Array<[number, number]> = [
       [rawX, rawZ],
       [rawX, part.pos[2]],
@@ -532,7 +577,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
     ];
     let blocker: ScenePart | undefined;
     for (const [tx, tz] of candidates) {
-      const r = resolveAt(part, tx, tz, convoy);
+      const r = resolveAt(part, tx, tz, convoy, world, startPos);
       if (!r.valid) continue;
       // Where the company lands, and its veto. A candidate this piece could take
       // but its set cannot is not a candidate: the set refuses as a unit rather
@@ -543,7 +588,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
         pos: r.pos,
         rot: r.rot,
         startPos,
-        parts,
+        parts: world,
         footprint: ROOM_DYN.footprint,
         roomHeight: ROOM_DYN.height,
       });
@@ -576,10 +621,12 @@ export const PlanView = forwardRef<PlanViewHandle, {
     // timer the first one left behind.
     if (blockTimer.current) clearTimeout(blockTimer.current);
     // The piece that refused is not always the piece under the hand: with a set in
-    // motion it is whichever member ran out of room, so the red goes on that one
-    // and the sentence names it. Saying "the sofa will not fit" while the sofa has
-    // clear floor all round it is worse than saying nothing.
-    setBlockedId((blocker ?? part).id);
+    // motion it is whichever member ran out of room, so the sentence names that one
+    // — saying "the sofa will not fit" while the sofa has clear floor all round it
+    // is worse than saying nothing. Both are outlined, though: the member because
+    // it is the answer, and the dragged piece because it is the only one guaranteed
+    // to be on screen and unfiltered.
+    setBlockedIds(blocker && blocker.id !== part.id ? [part.id, blocker.id] : [part.id]);
     if (!blockedRef.current) {
       blockedRef.current = true;
       announce(
@@ -766,6 +813,8 @@ export const PlanView = forwardRef<PlanViewHandle, {
       moved: false,
       startPos,
       convoy,
+      // Frozen here for the whole gesture — see `world` on the ref.
+      world: parts,
       snapLines: [] as SnapLine[],
     };
     if (mode === 'rotate') {
@@ -1343,7 +1392,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
             const center = toLocal(pos[0], pos[2]);
             const wpx = fpW * SCALE;
             const hpx = fpD * SCALE;
-            const blocked = blockedId === part.id;
+            const blocked = blockedIds.includes(part.id);
             // Stroke tokens are boundaries (≥3:1); the label uses the *-text pair
             // because 9px type has to clear 4.5:1.
             const color = blocked ? 'var(--danger)' : part.locked ? 'var(--locked)' : 'var(--accent)';

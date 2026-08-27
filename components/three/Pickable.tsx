@@ -90,7 +90,9 @@ export function Pickable({
         // The tail of a drag that MOVED this piece. Selecting is what a click
         // means, but a drag is not a click, and treating it as one collapsed the
         // multi-selection the drag had just finished carrying — see
-        // `suppressClickAfterDrag` in lib/store.ts. Checked before Alt, because a
+        // `suppressClickAfterDrag` in lib/drag-click.ts — which is deliberately NOT
+        // in the store, so its test can run without zustand's `persist` and a
+        // localStorage shim. Checked before Alt, because a
         // drag is not a request to open the what-is-under-here list either.
         // Not `consumeDragClick(partId)`: the click ending a drag does not always
         // land on the piece that was dragged. See lib/drag-click.ts — asking whose

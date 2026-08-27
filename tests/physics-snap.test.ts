@@ -169,6 +169,12 @@ describe('snapToWall pinned to one edge', () => {
   it('keeps the named wall even when another is nearer', () => {
     const free = snapToWall([2.8, 0, 1.5], TV, RECT);
     const pinned = snapToWall([2.8, 0, 1.5], TV, RECT, 0, 0);
+    // `.not.toBeCloseTo(0)` is satisfied by `undefined` — verified: with
+    // `snapToWall` returning no `rot` at all this line passed and the failure
+    // surfaced one line down, on the pinned side. `rot` is genuinely optional on
+    // the return type (`if (!edge) return { x, z }`), so "it chose a different
+    // wall" has to assert that it chose a wall at all.
+    expect(free.rot).toBeDefined();
     expect(free.rot).not.toBeCloseTo(0);
     expect(pinned.rot).toBeCloseTo(0);
     expect(pinned.z).toBeCloseTo(-2 + TV[1] / 2000 + 0.02);
@@ -215,14 +221,17 @@ describe('snapToWall pinned to one edge', () => {
 // also hide a width/depth mix-up, so the fixture is 6 × 4.
 describe('snapToWall keeps the whole piece on its wall', () => {
   /** The four walls of RECT, by edge index, with the axis they run along and the
-   *  coordinate that varies along them. Derived from the fixture rather than typed
-   *  out, so it cannot disagree with it. */
-  const WALLS = [
-    { index: 0, name: 'south (z = -2)', along: 'x' as const, from: -3, to: 3 },
-    { index: 1, name: 'east (x = 3)', along: 'z' as const, from: -2, to: 2 },
-    { index: 2, name: 'north (z = 2)', along: 'x' as const, from: 3, to: -3 },
-    { index: 3, name: 'west (x = -3)', along: 'z' as const, from: 2, to: -2 },
-  ];
+   *  coordinate that varies along them — **derived from `RECT` itself**, so the two
+   *  cannot disagree. This was transcribed by hand under a comment claiming it was
+   *  derived, which was harmless only by luck: `want` is computed from these
+   *  numbers, so a changed `RECT` did go red. It is one edit away from not being. */
+  const WALLS = RECT.map((a, i) => {
+    const b = RECT[(i + 1) % RECT.length];
+    const along = a[0] === b[0] ? ('z' as const) : ('x' as const);
+    const axis = along === 'x' ? 0 : 1;
+    const fixed = along === 'x' ? `z = ${a[1]}` : `x = ${a[0]}`;
+    return { index: i, name: `edge ${i} (${fixed})`, along, from: a[axis], to: b[axis] };
+  });
   const half = TV[0] / 2000; // 0.725 m along the wall
 
   it('stops half its width short of both ends of every wall', () => {

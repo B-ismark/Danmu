@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planConvoy, resolveConvoy, convoyRestore, worldFor, type Convoy } from '@/lib/drag-convoy';
+import { planConvoy, resolveConvoy, convoyRestore, travellingWorld, type Convoy } from '@/lib/drag-convoy';
 import { resolvePlacement } from '@/lib/drag-resolve';
 import { selectionForPick, type ScenePart } from '@/lib/scene-spec';
 import type { Poly } from '@/lib/geometry';
@@ -51,8 +51,8 @@ function carry(
     // helper, and it hid a live bug in the module for one test run: `collidesAt`
     // returns false when the mover is not in the list it is given, so a member
     // resolved against a world with itself filtered out reported every position as
-    // clear. `worldFor` is the fix and `resolveConvoy` calls it, so a caller must
-    // hand over everything.
+    // clear. `travellingWorld` is the fix and `resolveConvoy` calls it, so a
+    // caller must hand over everything.
     parts: world,
     startPos: from,
     footprint: ROOM,
@@ -203,12 +203,17 @@ describe('planConvoy — who travels', () => {
   });
 });
 
-describe('worldFor — the world a travelling piece resolves against', () => {
-  // What both surfaces call for the DRAGGED piece's own resolve. Asserted through
-  // `resolvePlacement`, not by looking at the array: the trap here is that
-  // `collidesAt` looks the mover up in the list it is handed and returns *false*
-  // when it is absent, so getting this wrong does not throw or warn — it turns
-  // collision detection off and every position reads as clear.
+describe('travellingWorld — the world any travelling piece resolves against', () => {
+  // What both surfaces call for the DRAGGED piece's own resolve, and what
+  // `resolveConvoy` calls for each member's. It was two functions with two
+  // different answers: members got their company SHIFTED to where it is going,
+  // while the dragged piece got its company DELETED — so the gravity fix below was
+  // live for a member and absent for the piece under the hand.
+  //
+  // Asserted through `resolvePlacement`, not by looking at the array: the trap is
+  // that `collidesAt` looks the mover up in the list it is handed and returns
+  // *false* when it is absent, so getting this wrong does not throw or warn — it
+  // turns collision detection off and every position reads as clear.
   const world = () => [
     part({ id: 'a', pos: [1, 0, 1], dimMM: [800, 800, 400] }),
     part({ id: 'mate', pos: [2, 0, 1], dimMM: [800, 800, 400] }),
@@ -218,9 +223,9 @@ describe('worldFor — the world a travelling piece resolves against', () => {
   it('keeps the piece itself, so its own collisions are still seen', () => {
     const w = world();
     const c = plan('a', w, ['a', 'mate']);
-    const mine = worldFor(c, w[0], w);
+    const mine = travellingWorld(c, w, 3, 0);
     expect(mine.some((p) => p.id === 'a')).toBe(true);
-    // Straight into the column, which is not travelling.
+    // Straight into the column, which is not travelling and so did not move.
     const r = resolvePlacement({
       part: w[0], rawX: 4, rawZ: 1, rot: 0, dim: w[0].dimMM,
       parts: mine, footprint: ROOM, roomHeight: H, snapMode: 'off',
@@ -228,18 +233,41 @@ describe('worldFor — the world a travelling piece resolves against', () => {
     expect(r.valid).toBe(false);
   });
 
-  it('drops the company, so a selection mate is not an obstacle', () => {
+  it('moves the company out of the way rather than deleting it', () => {
     const w = world();
     const c = plan('a', w, ['a', 'mate']);
-    const mine = worldFor(c, w[0], w);
-    expect(mine.some((p) => p.id === 'mate')).toBe(false);
-    // Onto where `mate` currently stands, which is legal because `mate` is coming
-    // along and is about to vacate it.
-    const r = resolvePlacement({
+    // Sliding 1 m east: `mate` travels too, so it is no longer at x = 2 — it is at
+    // x = 3, and that is where it must be seen, not nowhere.
+    const mine = travellingWorld(c, w, 1, 0);
+    expect(mine.find((p) => p.id === 'mate')!.pos[0]).toBeCloseTo(3, 6);
+    const ok = resolvePlacement({
       part: w[0], rawX: 2, rawZ: 1, rot: 0, dim: w[0].dimMM,
       parts: mine, footprint: ROOM, roomHeight: H, snapMode: 'off',
     });
+    expect(ok.valid).toBe(true);
+  });
+
+  it('keeps the DRAGGED piece on a support that is travelling with it', () => {
+    // The regression this function exists to close, and the direction that was
+    // still broken after the members were fixed. Select a desk and the lamp on it
+    // and drag THE LAMP: the desk travels, so a world with the desk deleted has
+    // nothing under the lamp — it resolved to y = 0, reported valid (the desk was
+    // invisible to `collidesAt` too), had its rigid parent cleared by `commit()`,
+    // and was persisted. Ctrl+A then dragging any tabletop item did it.
+    const desk = part({ id: 'desk', category: 'desk', shape: 'desk-standard', dimMM: [1200, 800, 750], pos: [2, 0, 2] });
+    const lamp = part({ id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [200, 200, 400], pos: [2, 0.75, 2] });
+    const w = [desk, lamp];
+    const c = plan('lamp', w, ['lamp', 'desk']);
+    // A full metre, not a nudge: at 10 mm an UNSHIFTED desk is still under the
+    // lamp, so a short drag cannot tell shifting from doing nothing.
+    const mine = travellingWorld(c, w, 1, 0);
+    const r = resolvePlacement({
+      part: lamp, rawX: 3, rawZ: 2, rot: 0, dim: lamp.dimMM,
+      parts: mine, footprint: ROOM, roomHeight: H, snapMode: 'off',
+    });
     expect(r.valid).toBe(true);
+    expect(r.pos[1]).toBeCloseTo(0.75, 6);
+    expect(r.supportId).toBe('desk');
   });
 });
 
@@ -416,9 +444,37 @@ describe('convoyRestore — what Escape puts back', () => {
     expect('rot' in m('stool')).toBe(false);
     expect('rot' in m('art')).toBe(true);
     expect(m('art').rot).toBe(2);
-    // The dragged piece always carries its own rotation back: it is the one thing
-    // the gesture was free to turn on purpose.
-    expect(m('sofa').rot).toBe(0);
+    // And the piece under the hand obeys the same rule. It used to be exempt —
+    // `{ id, pos, rot }` unconditionally — so cancelling an ordinary TRANSLATE
+    // wrote a rotation override for a piece that had never turned, pinning its
+    // angle against a re-detect and persisting it. A gesture the user cancelled
+    // must leave nothing behind.
+    expect('rot' in m('sofa')).toBe(false);
+  });
+
+  it('does put the dragged rotation back when the gesture really turned it', () => {
+    // The other side of the same flag: a rotate gesture DID change the angle, so
+    // the override exists and Escape has to write the start value into it.
+    const sofa = part({ id: 'sofa', pos: [3, 0, 2], dimMM: [2000, 900, 800], category: 'sofa', shape: 'sofa', rot: 1.1 });
+    const c = plan('sofa', [sofa], ['sofa']);
+    const back = convoyRestore(c, 'sofa', [3, 0, 2], 1.1, true);
+    expect(back.find((x) => x.id === 'sofa')!.rot).toBe(1.1);
+  });
+
+  it('leaves a wall rider alone when it has no rotation override to put back', () => {
+    // A wall rider CAN be re-aimed by `snapToWall`, but only one that actually was
+    // has an override — the resolve writes `rot` for nothing else. Restoring the
+    // start angle to a piece with no override creates the pin one piece over from
+    // the dragged one, which is the bug above wearing a different hat.
+    const sofa = part({ id: 'sofa', pos: [3, 0, 2], dimMM: [2000, 900, 800], category: 'sofa', shape: 'sofa' });
+    const art = part({ id: 'art', pos: [2, 1.4, 0.05], dimMM: [900, 40, 600], category: 'painting', shape: 'painting', rot: 2 });
+    const c = plan('sofa', [sofa, art], ['sofa', 'art']);
+
+    const none = convoyRestore(c, 'sofa', [3, 0, 2], 0, false, () => false);
+    expect('rot' in none.find((x) => x.id === 'art')!).toBe(false);
+
+    const some = convoyRestore(c, 'sofa', [3, 0, 2], 0, false, (id) => id === 'art');
+    expect(some.find((x) => x.id === 'art')!.rot).toBe(2);
   });
 });
 
@@ -648,17 +704,22 @@ describe('the world a member resolves against', () => {
   const lamp = () => part({ id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [200, 200, 400], pos: [2, 0.75, 2] });
 
   it('keeps a member on a support that is travelling with it', () => {
-    // Select a desk and the lamp standing on it, drag the desk 10 mm. The lamp used
-    // to be written to y = 0 — the floor — and reported valid, because the desk was
+    // Select a desk and the lamp standing on it, drag the desk. The lamp used to be
+    // written to y = 0 — the floor — and reported valid, because the desk was
     // subtracted from the world and `collidesAt` could not see it either. Ctrl+A
     // then dragging anything did this to every tabletop item in the room at once,
     // and both surfaces persist what the convoy returns.
+    //
+    // A full metre, deliberately. This drag was 10 mm, which is two orders of
+    // magnitude smaller than the 1.2 m desk — so an UNSHIFTED desk was still under
+    // the lamp and the test passed with the shift weakened to plain inclusion. It
+    // proved the desk was PRESENT, never that it had MOVED.
     const world = [desk(), lamp()];
     const c = plan('desk', world, ['desk', 'lamp']);
-    const co = carry(c, 'desk', world, [2, 0, 2], [2.01, 0, 2]);
+    const co = carry(c, 'desk', world, [2, 0, 2], [3, 0, 2]);
     const mv = co.moves.find((m) => m.id === 'lamp')!;
     expect(mv.pos[1]).toBeCloseTo(0.75, 6);
-    expect(mv.pos[0]).toBeCloseTo(2.01, 6);
+    expect(mv.pos[0]).toBeCloseTo(3, 6);
     expect(co.valid).toBe(true);
   });
 

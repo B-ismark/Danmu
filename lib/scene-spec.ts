@@ -59,7 +59,6 @@ import { settleParts } from './layout-settle';
 // it as a TYPE, so the edge back is erased at compile.
 import {
   costBreakdown,
-  navigabilityCost,
   prepare,
   DEFAULT_WEIGHTS,
   NAV_CELL,

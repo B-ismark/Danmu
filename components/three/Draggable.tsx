@@ -34,13 +34,13 @@ import { clearDragClick, suppressClickAfterDrag } from '@/lib/drag-click';
 import { useScene } from '@/lib/scene-store';
 import { currentRoomScene } from '@/lib/room-scene';
 import { useDragLive } from '@/lib/drag-live';
-import { collidesAt, isParametric, type ScenePart } from '@/lib/scene-spec';
+import { isParametric, selectionForPick, type ScenePart } from '@/lib/scene-spec';
 import { isFloorStanding } from '@/lib/physics';
 import { clampDims } from '@/lib/dimension-ranges';
 import { type SnapLine } from '@/lib/item-snap';
 import { resolvePlacement as resolveDrag, snapSteps } from '@/lib/drag-resolve';
 import { wouldCreateCycle } from '@/lib/rigid-parent';
-import { convoyRestore, planConvoy, resolveConvoy, worldFor, type Convoy, type ConvoyResult } from '@/lib/drag-convoy';
+import { convoyRestore, planConvoy, resolveConvoy, travellingWorld, type Convoy, type ConvoyResult } from '@/lib/drag-convoy';
 import { Pickable } from './Pickable';
 import { Highlight } from './Highlight';
 
@@ -277,18 +277,23 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     return convoyCache.current;
   }
 
-  /** `effParts()` with everything travelling filtered out, this part excepted — a
-   *  piece must not resolve its gravity, its magnetism or its collisions against
-   *  company that is moving with it, but it does have to appear in its own world
-   *  (see `worldFor`). It used to filter only this part's own children, which is
-   *  why dragging two chairs selected side by side refused on the first pixel:
-   *  each was the other's obstacle, at the position it was about to leave. */
-  function travelWorld(): ScenePart[] {
+  /** `effParts()` with the travelling company moved to where the gesture is taking
+   *  it — see `travellingWorld`, which is the same list the members resolve
+   *  against. It filtered them out instead, which is why dragging two chairs
+   *  selected side by side refused on the first pixel (each was the other's
+   *  obstacle, at the position it was about to leave) and, once that was fixed by
+   *  deletion rather than by shifting, why dragging a lamp that was selected along
+   *  with the desk under it dropped the lamp on the floor.
+   *
+   *  Takes the RAW pointer position, not the resolved one: the accepted delta is
+   *  what this call is on the way to working out. */
+  function travelWorld(rawX: number, rawZ: number): ScenePart[] {
     const c = convoy();
     if (c.travelling.size <= 1) return effParts();
-    const eff = effParts();
-    const self = eff.find((p) => p.id === partId);
-    return self ? worldFor(c, self, eff) : eff;
+    const start = dragStartPos.current;
+    const dx = start ? rawX - start[0] : 0;
+    const dz = start ? rawZ - start[2] : 0;
+    return travellingWorld(c, effParts(), dx, dz);
   }
 
   /** Where the company lands for a given transform of this part. */
@@ -412,9 +417,8 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   function commit() {
     if (!ref.current || !part) return;
     const dim = currentDim();
-    const eff = travelWorld();
     const p = ref.current.position;
-    let resolved = resolvePlacement(p.x, p.z, ref.current.rotation.y, dim, eff);
+    let resolved = resolvePlacement(p.x, p.z, ref.current.rotation.y, dim, travelWorld(p.x, p.z));
     let co = carry(resolved.pos, resolved.rot);
 
     // Invalid drop → rest at the last spot of the drag where the WHOLE convoy was
@@ -426,7 +430,10 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     if (!resolved.valid || !co.valid) {
       const back = lastFreePos.current ?? lastValidPos.current;
       if (back) {
-        const r = resolvePlacement(back[0], back[2], ref.current.rotation.y, dim, eff);
+        // Rebuilt at `back`, not reused from the drop point: the world the convoy
+        // occupies is a function of the delta, so a world built for a spot the
+        // gesture is no longer resting at puts the company in the wrong place.
+        const r = resolvePlacement(back[0], back[2], ref.current.rotation.y, dim, travelWorld(back[0], back[2]));
         const rc = carry(r.valid ? r.pos : [back[0], back[1], back[2]], r.rot);
         resolved = r.valid
           ? r
@@ -458,7 +465,14 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // any merged group either belongs to, each by the delta this part accepted.
     // See lib/drag-convoy.ts — the three used to be two hand-written loops here
     // and one nowhere at all.
-    if (co.moves.length > 0) setTransformsFor(co.moves);
+    // `co.valid` gates this, as `ConvoyResult.moves` says it must. `liveUpdate`
+    // and the plan's `moveTo` both gated it and this did not, so a drop with no
+    // legal frame behind it (`lastFreePos` and `lastValidPos` both null, i.e. the
+    // very first gesture on a freshly loaded room) wrote the refused arrangement.
+    // Members are only ever written on a legal frame, so skipping them here leaves
+    // them at the last delta the whole set could take — which is the fallback the
+    // block above describes.
+    if (co.valid && co.moves.length > 0) setTransformsFor(co.moves);
 
     lastValidPos.current = [x, y, z];
     lastFreePos.current = null;
@@ -476,9 +490,15 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   const raf = useRef(0);
 
   function flushGesture() {
+    // Cleared FIRST, before any early return. It sat after the `cancelled` check,
+    // so pressing Escape mid-drag and then moving the pointer once more left the
+    // id set forever: `schedule()` is gated on `!raf.current`, so the NEXT drag of
+    // this piece scheduled nothing, published no live update, and the mesh sat
+    // frozen under the cursor until the drop teleported it. The third drag was
+    // fine again, which is what made it read as flaky rather than broken.
+    raf.current = 0;
     // Escape ended this gesture; the pointer is just still down.
     if (cancelled.current) return;
-    raf.current = 0;
     if (!ref.current || !part) return;
     const pp = pendingPos.current;
     const pr = pendingRot.current;
@@ -489,7 +509,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     const z = pp ? pp[1] : ref.current.position.z;
     const rot = pr ?? ref.current.rotation.y;
     const dim = currentDim();
-    liveUpdate(resolvePlacement(x, z, rot, dim, travelWorld()), dim);
+    liveUpdate(resolvePlacement(x, z, rot, dim, travelWorld(x, z)), dim);
   }
 
   function schedule() {
@@ -651,7 +671,16 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       pendingRot.current = null;
       g.position.set(start[0], start[1], start[2]);
       g.rotation.y = startRot;
-      setTransformsFor(convoyRestore(convoy(), partId, start, startRot));
+      setTransformsFor(
+        convoyRestore(
+          convoy(),
+          partId,
+          start,
+          startRot,
+          ref.current?.rotation.y !== startRot,
+          (id) => useStudio.getState().rotations[id] !== undefined,
+        ),
+      );
       setLive(null);
       setDragInvalid(false);
       document.body.style.cursor = '';
@@ -687,6 +716,12 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // under it. Checked before stopPropagation so nothing here claims the
     // gesture; OrbitControls listens on the canvas element directly and gets the
     // event either way, but setDragging below would have switched it off.
+    // A drag released off-mesh never produced the click its flag was waiting for.
+    // Cleared before any of the guards below, because `drag-click.ts` states the
+    // invariant "every click on a piece is preceded by a press on it, and the press
+    // calls `clearDragClick`" — and the Alt guard used to return first, so the
+    // Alt-click after such a drag was swallowed and did nothing at all.
+    clearDragClick();
     if (useStudio.getState().panKeyHeld) return;
     // Alt held = the press is asking WHICH piece, not moving one. `Pickable`
     // answers it on the click; starting a drag here first would nudge the very
@@ -696,10 +731,6 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // The gizmo's own handles run their interaction — only grab presses on the
     // part body itself.
     e.stopPropagation();
-    // A drag released off-mesh never produced the click its flag was waiting for.
-    // Dropped here rather than left standing, where it would eat this press's own
-    // click and look like a piece that cannot be selected.
-    clearDragClick();
 
     // The gizmo already owns this part's transform — a second finger pressing
     // its mesh body (not the handle) must not start a competing direct-drag
@@ -751,8 +782,13 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         if (!d) return;
         d.armed = true;
         setDragging(partId);
-        // Selecting on pick-up is the feedback that the part is now in hand.
-        if (!useStudio.getState().selection.includes(partId)) useStudio.getState().setSelected(partId);
+        // Selecting on pick-up is the feedback that the part is now in hand, and it
+        // must take the same set a CLICK would — `selectionForPick`, which is where
+        // "merged" lives now. `setSelected` left a merged sibling behind whenever the
+        // gesture was a press-drag with no click before it.
+        if (!useStudio.getState().selection.includes(partId)) {
+          useStudio.getState().setSelection(selectionForPick(useScene.getState().parts, partId), partId);
+        }
       }, HOLD_MS);
     } else {
       // Park the camera immediately so the press never orbits.
@@ -799,7 +835,11 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       lastFreePos.current = null;
       effCache.current = buildEffSnapshot(); // one world snapshot for the gesture
       convoyCache.current = null;
-      if (!inSelection) useStudio.getState().setSelected(partId);
+      // Same rule as the touch pick-up above: a press that starts a drag selects
+      // what a click would have selected.
+      if (!inSelection) {
+        useStudio.getState().setSelection(selectionForPick(useScene.getState().parts, partId), partId);
+      }
       document.body.style.cursor = 'grabbing';
     }
     e.stopPropagation();

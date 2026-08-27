@@ -511,6 +511,11 @@ tests import does not belong in `lib/`, where it reads as shipped code.
   architecture, routes, stores, or the AI/geometry boundary).
 - `README.md` — quickstart + stack.
 - `PRODUCT.md` — who this is for, what counts as success, the durable constraints.
+- `docs/visual-check.md` — **the live list of what still needs a human eye.** Not a
+  study and not history: it is the working hand-off for this branch, naming the
+  places to click and what "wrong" would look like there, because everything in it
+  already typechecks, lints and passes tests. It goes stale the moment a branch
+  merges, so it names branches and gate counts and must be refreshed with them.
 - `docs/history/` — **point-in-time studies, not live docs.** The 2026-07 platform
   audit (`AUDIT.md` + `audit/`), the engine research (`Research.md`) and the
   remediation plan (`Plan.md`). Every phase in them is shipped or explicitly

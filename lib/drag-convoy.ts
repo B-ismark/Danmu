@@ -98,23 +98,45 @@ export type Convoy = {
 };
 
 /**
- * The world one travelling piece resolves against: everything that is NOT
- * travelling, plus that piece itself.
+ * The world ANY travelling piece resolves against: everything that is not
+ * travelling where it stands, and everything that IS travelling **at the position
+ * it is going to**, i.e. shifted by the delta the gesture has taken so far.
  *
- * The "plus itself" is not a nicety. `collidesAt` looks the mover up in the list
- * it is handed and returns **false** when it is not there, so a world with the
- * mover filtered out reports every position as clear — collision detection off,
- * for the dragged piece and every member, with nothing to see and no error. The
- * other consumers (`snapToNeighbors`, `findSupportDetailed`) skip the mover by id
- * themselves, so its presence costs nothing.
+ * Shifting rather than deleting is the whole point, and it took two goes to get
+ * right. The first version deleted the convoy and re-added only the mover, which
+ * wrote furniture onto the floor: gravity is `findSupportDetailed` over this list,
+ * so a support that was also travelling was simply invisible — select a desk and
+ * the lamp standing on it, drag either one, and the lamp resolved with nothing
+ * under it, landed at y = 0, reported `valid` (because `collidesAt` could not see
+ * the desk either), had its rigid parent link cleared, and was persisted. The fix
+ * was applied to the members' world and NOT to the dragged piece's, so dragging
+ * the desk was correct and dragging the lamp still grounded it. One function now,
+ * called from all three places, because that asymmetry is not visible from either
+ * side of it.
  *
- * `self` supplies only identity — category, shape, circle. Its position and
- * rotation are passed to the resolve separately and this copy's are ignored.
+ * Two properties this must keep. **The mover has to be in its own world**:
+ * `collidesAt` looks it up in the list it is handed and returns `false` when it is
+ * absent, so filtering it out turns collision detection off silently. Its own
+ * shifted copy serves — `collidesAt` and `findSupportDetailed` both find it by id
+ * and then skip it as an obstacle. And **a piece cannot collide with its own
+ * travelling children**, because `collidesAt` separates vertically (stacking is
+ * allowed) and `findSupportDetailed` only considers pieces below.
+ *
+ * `dx` / `dz` are the delta of the gesture, in metres. Pass the ATTEMPTED delta
+ * when resolving the dragged piece (the accepted one is not known until it
+ * resolves) and the ACCEPTED one when resolving members.
  */
-export function worldFor(convoy: Convoy, self: ScenePart, parts: ScenePart[]): ScenePart[] {
+export function travellingWorld(
+  convoy: Convoy,
+  parts: ScenePart[],
+  dx: number,
+  dz: number,
+): ScenePart[] {
   const out: ScenePart[] = [];
-  for (const p of parts) if (!convoy.travelling.has(p.id)) out.push(p);
-  out.push(self);
+  for (const p of parts) {
+    if (!convoy.travelling.has(p.id)) out.push(p);
+    else out.push({ ...p, pos: [p.pos[0] + dx, p.pos[1], p.pos[2] + dz] });
+  }
   return out;
 }
 
@@ -311,11 +333,7 @@ export function resolveConvoy(input: {
   // skip it — a same-id entry serves as the mover and is excluded as an obstacle.
   // Hence no trailing self slot any more; the whole list is built once per frame
   // rather than rewritten per member.
-  const staying: ScenePart[] = [];
-  for (const p of parts) {
-    if (!convoy.travelling.has(p.id)) staying.push(p);
-    else staying.push({ ...p, pos: [p.pos[0] + dx, p.pos[1], p.pos[2] + dz] });
-  }
+  const staying = travellingWorld(convoy, parts, dx, dz);
 
   for (const m of convoy.members) {
     const tx = m.startPos[0] + dx;
@@ -392,18 +410,35 @@ export function convoyRestore(
   draggedId: string,
   startPos: [number, number, number],
   startRot: number,
+  /** Did the gesture actually turn the piece under the hand? A translate did not,
+   *  and writing the rotation back anyway CREATES the override `ConvoyMove.rot`
+   *  exists to avoid — so cancelling a plain drag pinned the piece's angle against
+   *  a re-detect and persisted it. */
+  draggedRotChanged = false,
+  /** Whether a member already carries a rotation override. Restoring one that
+   *  exists is free — it is a write of the same value to a key that is already
+   *  there — while restoring one that does not exist creates it, which is the
+   *  same needless pin one piece over. Default `true` keeps the old behaviour for
+   *  a caller that has not been taught to ask. */
+  memberHasRotOverride: (id: string) => boolean = () => true,
 ): ConvoyMove[] {
-  const moves: ConvoyMove[] = [{ id: draggedId, pos: startPos, rot: startRot }];
+  const moves: ConvoyMove[] = [
+    draggedRotChanged ? { id: draggedId, pos: startPos, rot: startRot } : { id: draggedId, pos: startPos },
+  ];
   moves.push(...cascadeTransform(draggedId, startPos, startRot, convoy.own));
   for (const m of convoy.members) {
     // Same asymmetry as `resolveConvoy`, for the same reason: restoring a rotation
     // that never moved would leave behind exactly the override the resolve was
     // careful not to create. Only a wall rider can have been turned by the
     // gesture, so only a wall rider needs one put back.
+    // A wall rider is the only member the gesture can have turned — and only one
+    // that already has an override can have been turned by it, because the resolve
+    // writes `rot` for nothing else. `m.part.rot` is the START rotation, so writing
+    // it back to a piece with no override stamps the same needless pin one piece
+    // over from the dragged one.
+    const turned = ridesWall(m.part.category, m.part.shape) && memberHasRotOverride(m.part.id);
     moves.push(
-      ridesWall(m.part.category, m.part.shape)
-        ? { id: m.part.id, pos: m.startPos, rot: m.part.rot }
-        : { id: m.part.id, pos: m.startPos },
+      turned ? { id: m.part.id, pos: m.startPos, rot: m.part.rot } : { id: m.part.id, pos: m.startPos },
     );
     moves.push(...cascadeTransform(m.part.id, m.startPos, m.part.rot, m.descendants));
   }

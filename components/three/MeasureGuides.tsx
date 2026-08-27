@@ -134,7 +134,7 @@ export function MeasureGuides() {
                 fontSize: 10,
                 fontWeight: 700,
                 letterSpacing: '0.04em',
-                color: '#fff',
+                color: 'var(--on-accent)',
                 background: color,
                 padding: '1px 5px',
                 borderRadius: 'var(--r-1)',
@@ -160,8 +160,13 @@ export function MeasureGuides() {
             fontSize: 11,
             fontWeight: 700,
             letterSpacing: '0.04em',
-            color: live.valid ? '#1c1c1a' : '#fff',
-            background: live.valid ? 'rgba(255,255,255,0.92)' : SCENE.invalid,
+            // Tokens, not literals. This is a drei `Html` overlay — real DOM, which
+            // CAN read custom properties (the same style object already does, two
+            // lines up), so rule 4's "no hard-coded design values" applies in full
+            // and the `lib/scene-palette.ts` exemption for the WebGL layer does not.
+            // A hex here simply did not follow the theme, and no test can see it.
+            color: live.valid ? 'var(--ink)' : 'var(--on-accent)',
+            background: live.valid ? 'var(--paper-0)' : SCENE.invalid,
             border: `1px solid ${color}`,
             padding: '2px 7px',
             borderRadius: 'var(--r-1)',

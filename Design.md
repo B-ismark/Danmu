@@ -684,10 +684,12 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
 - **Selecting one member is what the rail adds**, and it is close to the reason
   the rail exists at all: the canvas expands a click to the whole group before a
   drag ever starts, so the list is the only surface that can reach inside one.
-  Note that `drag-convoy` still closes the convoy over `groupId` *after* the
-  selection, so acting on a single member still moves its siblings — the rail now
-  makes that state reachable, and fixing it is a change to the closure, not to
-  this panel.
+  And the selection is what a drag then carries: `planConvoy` has **no** closure
+  over `groupId`, so acting on a single member acts on that member. It used to
+  close over the group here, which meant the rail could select one chair and the
+  drag would quietly take all three — two gestures, two meanings. Where "merged"
+  lives now is `selectionForPick`, so a *click* still takes the whole set and only
+  the case the layer tree made reachable behaves differently.
 - **A group action means the group in the ROOM, not the members a search is
   showing.** `row.ids` is the visible members — right for drawing the header and
   for a range, wrong for anything that acts on the set — and every group-wide
@@ -1251,10 +1253,12 @@ chair, in both tabs. The report it produced was **"sometimes only one moves"**,
 because a merged set does move as one and looks identical on screen to a selected
 one. Two features that render the same must not be two code paths.
 
-`planConvoy` resolves membership once at pointer-down (re-resolving per frame lets
+`planConvoy` resolves membership once at pointer-down — re-resolving per frame lets
 a piece near a tolerance detach mid-gesture, the trap `wallAttachments` documents
-for walls) and closes over merged groups, so half a merged set can never be left
-behind. `resolveConvoy` then puts every member through `resolvePlacement`, which
+for walls. It does **not** close over merged groups: that closure was removed, and
+`selectionForPick` holds the rule instead, so a click takes the whole merged set
+while a drag carries exactly what is selected. Half a merged set is reachable, on
+purpose, and only from the layer tree. `resolveConvoy` then puts every member through `resolvePlacement`, which
 buys two things and costs one:
 
 - **Gravity is re-asked**, so a member translated off the table it stood on lands
@@ -1264,7 +1268,11 @@ buys two things and costs one:
 - **A member that cannot follow makes the whole step invalid**, and names itself.
   The set refuses as a unit instead of deforming or pushing a piece through the
   plaster (rule 2, for position), and the piece that refused is not the piece under
-  the hand — so the red outline and the spoken sentence both go to the member.
+  the hand — so the spoken sentence names the member, and the red outline goes to
+  the member AND to the piece being dragged. Only the member is the true answer,
+  but it can be hidden by a filter or off the side of the pan, and a refusal with
+  nothing visible reads as the drag being broken; the piece under the pointer is
+  the one outline that is always on screen. Both tabs do this.
 - The cost is one resolve per member per frame, which is why the components hold
   the convoy in a ref and both write their result through one `setTransformsFor`.
 

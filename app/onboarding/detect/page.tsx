@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { v4 as uuid } from 'uuid';
 import { useRoom, useSettings } from '@/lib/store';
-import { roomStore, blobToObjectUrl, type Capture, type CaptureSlot, type RoomData } from '@/lib/storage';
+import { roomStore, blobToObjectUrl, type Capture, type CaptureSlot } from '@/lib/storage';
 import { detectAcrossImages, DetectError, type Detection } from '@/lib/detection';
 import { CAPTURE_SLOTS } from '@/lib/capture';
 import { Icon } from '@/components/ui/Icon';
@@ -29,7 +29,7 @@ import { hfovFromFocal35 } from '@/lib/exif';
 import { geoRefine, refineDetections, type CalMap, type RoomDims } from '@/lib/detect-refine';
 import { judgeLabels, type LabelCandidate, type LabelVerdict } from '@/lib/label-repair';
 import { shouldAutoConfirm, sourceLabel, sourceOf } from '@/lib/detect-confidence';
-import { cleanLabelOf, fromRecord, toRecord, type SavedDetection } from '@/lib/detection-record';
+import { cleanLabelOf, fromRecord, toRecord } from '@/lib/detection-record';
 import { formatDim } from '@/lib/units';
 import type { DimUnit } from '@/lib/store';
 
@@ -308,7 +308,7 @@ export default function DetectPage() {
 
   useEffect(() => {
     if (!roomId) return;
-    let urls: string[] = [];
+    const urls: string[] = [];
     let cancelled = false;
     stopped.current = false;
     (async () => {

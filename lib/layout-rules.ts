@@ -503,7 +503,7 @@ const ACCESS_BY_ROLE: Partial<Record<Role, RuleSpec>> = {
   // and both the checker and the solver can test it with the same overlap maths
   // they use for everything else.
   door: (p) => [
-    zone('swing', 'Door can’t open', ['front'], p.dimMM[0] / 1000, 'for the door to open', { span: 1 }),
+    zone('swing', 'Door can’t open fully', ['front'], p.dimMM[0] / 1000, 'for the door to open', { span: 1 }),
   ],
 
   // Not a clearance so much as a sightline: a low chest under a window is fine, a

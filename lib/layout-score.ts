@@ -51,7 +51,6 @@ import {
   formsRoute,
   isObstacle,
   placeAffinity,
-  relationFor,
   relationOptions,
   roleOf,
   roomProfile,
@@ -333,6 +332,13 @@ export type LayoutModel = {
    *  it were its full depth away — and puts `edge.yaw` 180° out, which is the
    *  `FACING_GAIN` term turning a wardrobe to face the plaster and `snapYaws` then
    *  squaring it to that.
+   *
+   *  ⚠ As of the change that added `openRoutes`, `costBreakdown` no longer passes
+   *  this into `nearestEdge` — see the call site, which explains why. So the wall
+   *  normals above are still computed from `polyCentroid`, the vertex average, and
+   *  the counts in this paragraph are **unfixed**, not history. `balance` is now
+   *  this field's only reader. Do not "restore" the missing argument on the
+   *  strength of the next sentence without re-measuring what the call site records.
    *
    *  The area centroid fixes the T outright and halves the U. It does not finish the
    *  job, and the remainder is not this field's to finish: on a non-convex polygon
@@ -695,7 +701,7 @@ export function costBreakdown(
     const f = feet[i];
     // NOT `m.centre`. That is the middle of the FLOOR and this is asking which way
     // is INWARD, which is a different question and not a centroid question at all —
-    // see `LayoutContext.centre`. Handing it the area centroid measurably made the
+    // see `LayoutModel.centre`. Handing it the area centroid measurably made the
     // scrambled-U solve worse (worst of 24 seeds 18 -> 148): it gets a different 18 %
     // of that room’s normals wrong rather than fewer, and the ones it misses are
     // costlier. Leave `nearestEdge` to its own answer until it derives the normal
