@@ -1,58 +1,89 @@
 # Needs eyes
 
-Things three agents changed overnight (2026-08-26 → 27) that **code cannot verify**.
-Everything here typechecks, lints and passes tests; what is left is whether it
-*looks* and *feels* right, which is a judgement none of us can make.
+Things code cannot verify — whether they *look* and *feel* right. Everything here
+typechecks, lints and passes tests; what is left is a judgement none of us can make.
 
-Not a changelog — the commit messages are that. This is only the list of places to
-click, and what "wrong" would look like when you get there.
+Not a changelog; the commit messages are that. This is the list of places to click,
+and what "wrong" would look like when you get there.
 
-Ordered by how likely a problem is to be real and annoying, not by area.
+**Where each thing lives.** `main` is `ebccd01` now, so danmu-5e's work is merged and
+needs no checkout:
 
-**Nothing here is on `main` yet.** Three branches, all pushed, none merged — so
-check out the right one before hunting for a control:
-
-| section | branch |
+| section | where |
 |---|---|
-| 1, 2, 3 (fan, multi-piece drag, wall riders) | `fix/multi-select-drag` |
-| 4, 5 (lighting row, tooltips, layer tree, north dial) | `fix/wall-shadow` |
-| 6 (wall-mounted shadows) | `fix/wall-shadow` |
-| 7 (Room panel → Check tab) | `fix/room-report-and-tidy` |
+| Lighting row, Room and layer-tree panels, shadows in a closed room | `main` |
+| The fan, room height, multi-piece drag, wall riders, Escape mid-drag | `fix/multi-select-drag` @ `a578cd6` |
+| Room panel → Check tab, issue row alignment | danmu-f4's PR #16 |
 
-The three merge together with one small conflict in `Design.md`, resolved and
-gated — typecheck 0, lint 0, 1267/1267. **They are still unmerged on purpose**; see
-"Open review findings" below.
+Two branches are still unmerged and that is deliberate — see "Open review findings".
 
 ---
 
-## 1. The fan symptom I could not reproduce
+## Checked and closed — nothing to do here
 
-**Reported:** a ceiling fan dragged in from the Library "moved very low to the
-ground, even though a fan should just be stuck to the ceiling."
+Kept only so they are not re-checked by accident. 2026-08-27.
 
-Three of the four fan symptoms had certain causes and are fixed (see
-`fix(3d): a ceiling fan is not a wall…`). **This one I could not reproduce from
-code, and I want to be plain about that rather than claim four out of four.**
-Measured, in a 2.5 m room, for the Library's `Ceiling fan` (1000 × 1000 × 200 mm):
+- **A fan sticks to the walls and cannot be moved to the middle of the room.** You
+  confirmed it: it drops in the centre of the ceiling and drags freely.
+- **A ceiling fan offers a "Where it sits" row it has no use for.** Gone for every
+  wall- and ceiling-mounted piece; the numeric height field stays. Visible in your
+  own screenshot.
+- **Dragging one piece of a group drags the whole group, while rotating one rotates
+  only that one.** You reported the inconsistency and chose "honour the selection".
+  A merged group now decides what a *click* selects, not what a drag carries. This
+  also settles the open question that used to be in this file.
+- **Dragging a TV dragged a chair with it.** Same fix.
+- **A TV slid along a wall stuck to the far edge, with a gap to the adjoining wall
+  that varied.** Fixed and *measured*, so this is closed rather than waiting on your
+  eye: aiming a 1.2 m TV 2.6 m along a 6 m wall used to leave 0.20 m of it through
+  the adjoining wall, with the centre pinned at the wall's end. Drift is now 0.000 m
+  on all four walls and the facing is right on each. Worth a glance in passing, not a
+  hunt.
 
-- `placeNewPart` returns `y = 2.35` — correct, just under the slab.
-- `resolvePlacement` returns `y = 2.35` when handed a live height of 2.35, **and
-  when handed 0, and when handed nothing at all.** There is no path in the resolve
-  that lowers it.
+---
 
-The one mechanism I found that could *look* like it: the drag plane. A piece that
-is not floor-standing was being dragged against a horizontal plane at the **floor**,
-so a fan at 2.35 m had the pointer ray meeting that plane two metres below it, and
-every pixel of pointer movement became a far larger move of the floor point it was
-following. In a camera looking down at an angle, a fan racing toward the near wall
-at a constant 2.35 m reads on screen as dropping toward the floor. That is fixed
-(the plane is the piece's own height now).
+## The fan, one re-check — and one number to type
 
-**To check:** drag a fan in, then drag it around. If it still ends up visibly low,
-the cause is something none of the measurements above touch and it is worth saying
-so — a screenshot with the Inspector's Y value visible would settle it in one look.
+**Found, and it was never the drop.** `placeNewPart` hangs the Library fan 0.15 m
+below the slab — 2.65 m in a 2.80 m room — which is what it does, printed from the
+real function. Your room used to be **1.75 m** tall, where 1.60 m *is* the ceiling,
+and the room was then corrected to 2.80 while `setRoom` wrote the new height and
+re-grounded nothing. 1.75 reproduces your 1.50 exactly; the earlier screenshot's 1.40
+is a 1.65 m room. So the fan was never lowered — the ceiling left without it.
 
-## 2. Multi-piece drag — the whole surface, never once used
+- **Your existing fan needs `2.55` typed into "Height off the floor", once.** The fix
+  is not retroactive by choice: you had dragged that fan, which leaves an override
+  indistinguishable from a height you meant, and silently re-deriving it would undo a
+  deliberate one.
+- **Then drag a fresh fan in and check it arrives at the ceiling** — Inspector should
+  read `2.55` in a 2.80 m room, and it should sit in the middle of the ceiling and
+  still drag anywhere you want it.
+
+## A room that changes height carries the right pieces with it
+
+New, and the whole point of the fan fix. Set a room's **Height** in the Room panel
+and watch what moves. Nothing here has been in a browser.
+
+- **Raise the ceiling.** A fan, a pendant, a curtain rod and an AC unit should rise
+  with it and keep the same gap below the slab. A picture, a mirror and a TV should
+  **not** move — those are eye level, measured up from the floor.
+- **Lower it.** Same pieces come down; nothing ends up below the floor; anything that
+  no longer fits keeps its real size and pokes through, and Room check is what says
+  so. A wardrobe never moves at all.
+- **Lower it, then raise it back.** Everything should return to where it was. The
+  round trip is the asymmetric case — a sign error here is invisible if you only try
+  one direction.
+- **Type a ceiling of `1.5`.** It should be refused, and the message should name the
+  *ceiling* range, not the side range. A `1.5` **width** must still be accepted — it
+  is a legal side. This is the defect that made the fan possible: a ceiling was
+  bounded by the room-side range, so one metre was a legal ceiling both here and in
+  an imported scene file.
+- **Edit the width of a room whose ceiling is already out of range** (a saved room
+  from before this fix). It must go through: only the axis you are editing is judged.
+- **The steppers.** Height's arrows should stop at the ceiling range's ends, and W/D
+  at the side range's.
+
+## Multi-piece drag — the whole surface, never once used
 
 Nothing below has been exercised in a browser. It is all code-read and tested.
 
@@ -64,13 +95,8 @@ Nothing below has been exercised in a browser. It is all code-read and tested.
   running off the screen: part names are user-typed up to 80 characters, and it is
   bounded at `min(240px, calc(100vw − 32px))` with the measurements on their own
   line. Try renaming a chair to something long first.
-- **Press Escape mid-drag — in the 2D plan only.** Everything the gesture moved
-  should go back: the dragged piece, anything resting on it, and every other
-  selected piece. **In the 3D tab this does not work and does something worse than
-  nothing** — there is no cancel there at all, and Escape is bound to "deselect", so
-  it clears the selection in the middle of the gesture while the drag keeps carrying
-  the set it was given at pointer-down, and the release commits it. Confirmed by
-  reading, not fixed. Do not judge the 3D tab on this.
+- **Press Escape mid-drag, in both tabs.** It cancels in the 3D scene now as well as
+  the plan — see "Escape mid-drag" below, which is where the detail lives.
 - **Touch.** *Completely untested.* Drag a piece on a touchscreen and check the
   selection is not collapsed to one piece when you let go.
 - **Alt-click where pieces overlap**, repeatedly, and from a pulled-back camera.
@@ -79,7 +105,7 @@ Nothing below has been exercised in a browser. It is all code-read and tested.
 - **Drag a rug under a table, then drag the rug again and release.** The click that
   ends a 3D drag used to select whatever mesh the ray hit — often the table.
 
-## 3. A wall-mounted piece leading a selection
+## A wall-mounted piece leading a selection
 
 - **Select a TV plus a chair and drag the TV.** The TV should slide *along the wall
   it started on* and stop at that wall's end; the chair should track it exactly.
@@ -89,7 +115,70 @@ Nothing below has been exercised in a browser. It is all code-read and tested.
   *should* still hop to the nearest other wall. That is how you move a picture, and
   it was deliberately kept.
 
-## 4. Lighting row and tooltips — from danmu-5e
+## Escape mid-drag, and the one place it meets the sun
+
+Escape now cancels a drag in the **3D** tab (it already did in the plan). There was
+no handler at all before, so the key fell through to the studio's global Escape —
+"deselect" — and the piece stayed wherever the pointer had left it.
+
+- **Cancel a drag and check the POSITION, not the shadow.** With the closed room a
+  piece can be legitimately shadowless because the sun cannot reach it, so the floor
+  is no longer evidence about whether the transform went back. 5e's point, and a
+  good one.
+- **Cancel a drag that carried company.** Select a desk with a lamp on it, drag,
+  press Escape: the lamp must go back too, not hang in the air where the cancelled
+  drag left it. Same for a merged set — every member, not just the piece under the
+  hand.
+- **Cancel a drag of a WINDOW.** The one place this gesture and 5e's shell touch.
+  `RoomShell` rebuilds its wall shapes from the store, so putting a window back
+  moves its hole, and moving the hole moves where the sun lands. Nothing in the tree
+  sets `shadowMap.autoUpdate = false`, so three.js re-bakes shadow maps on every
+  rendered frame, and the handler calls `invalidate()` — which is why this should
+  work. "Should" is doing real work in that sentence; check the sun patch goes back
+  with the window.
+- **Press Escape when NOT dragging.** It must still mean "deselect". The handler
+  declines the key unless a gesture is in flight, and that is the whole reason the
+  global meaning survives.
+
+## Wall-mounted shadows, closed room — from danmu-5e
+
+Their branch made the room a closed shell for the sun (walls cast, plus a
+shadow-only ceiling), which deleted the per-piece shadow gate. None of this has
+been in a browser.
+
+- **A wall that both casts and receives may shadow itself.** The one to look at
+  first. Where sun comes through a window, the caster and the receiver are the same
+  zero-thickness plane, so the depth comparison is a tie and `shadow-normalBias`
+  (~2.3 cm at every map size the fit produces) is all that separates them. Put a
+  window in one wall, choose Sunrise or Sunset, set quality to High, and look at the
+  wall **opposite** the window. Right: a clean patch of sun. Wrong: the patch is
+  missing, or stippled, or striped. If it is wrong the fix is a larger bias or a
+  shadow shell offset outward from the plaster — 5e wants to know before anyone
+  merges.
+- **How dark `day` reads in a windowless room.** The starter arrangements ship
+  neither a window nor a door, so this is the default room, and the key light is now
+  blocked by the ceiling — leaving hemisphere, fill and environment. It should read
+  as overcast rather than sunlit, which is physically right. The question is whether
+  that is too dim to be the default mood, and it is yours: 5e deliberately retuned
+  no ambient value, because doing that by feel against a picture they cannot see is
+  how a mood ends up wrong in a way no test finds.
+- **Whether `cool` still reads as bright overcast.** Its key is 0.95 and is blocked
+  too, and it is the brightest mood in the set, so it loses the most. Its own
+  description is "flat overcast, no direction", so blocking the key arguably makes
+  the label true. `evening`'s key is 0.12 against a design that wants the lamps to
+  do the work, so expect no visible change there.
+- **Sweep four walls and all five moods, not one wall and one mood.** This check
+  outlived the per-piece shadow gate it was written for, because it is the *result*
+  that matters and the whole thing is still a sign: a sign error is invisible on the
+  north and south walls and inverted on the east and west. Put a TV on each wall in
+  turn under **Sunrise** (sun in the east, 7° up) and **Sunset** (west, 8°). Then do
+  it under `Evening` and `Cool`, which have no sun at all and use a fixed key light
+  placed up / east / south — an earlier version of this gate covered only the sun
+  moods and left those two showing the original bug on the south and east walls.
+  `Cool` carries the brightest ambient of the five, so **a TV on the east wall under
+  `Cool` is the case that was broken and the one worth a look.**
+
+## Lighting row and tooltips — from danmu-5e
 
 - **Style section, lighting row, at a window 1024–1279 px wide.** Five icon-only
   buttons (sun / moon / cloud / sunrise / sunset) must sit on **one** row. The left
@@ -101,7 +190,7 @@ Nothing below has been exercised in a browser. It is all code-read and tested.
 - **The same tooltip in dark mode, and at the viewer's system theme with no
   explicit choice made.** It is a new surface and has been seen in neither.
 
-## 5. Room and layer-tree panels — from danmu-5e
+## Room and layer-tree panels — from danmu-5e
 
 - **Expand "Room".** The three dimension fields should appear directly, with no
   nested "Room shell" disclosure in between. The collapsed summary beside the
@@ -119,35 +208,7 @@ Nothing below has been exercised in a browser. It is all code-read and tested.
 - **`/onboarding/layout-pick`:** the back button moved from the chrome bar to the
   top of the content column. Needs an eye at narrow widths.
 
-## 6. Wall-mounted shadows — from danmu-5e, plus one finding
-
-A wall-mounted TV was casting a shadow across the floor when the sun was on the
-**far side** of the wall it hangs on: an impossible picture, because walls only
-ever receive shadows and never cast (the dollhouse view culls the near ones), so
-the light went through the plaster, hit the back of the TV, and the TV — which
-does cast — put a shadow on a floor the light never entered. Now gated.
-
-- **Check the four walls, not one.** The whole fix is a sign, and a sign error is
-  invisible on the north and south walls and inverted on the east and west ones.
-  Put a TV on each wall in turn under **Sunrise** (sun in the east, 7° up) and
-  **Sunset** (west, 8°) and check the shadow appears only when the sun is on the
-  room side. The maths is verified in both directions — independently, from
-  `solar.ts`'s construction rather than from its comments — so what is left is
-  whether the *result* reads correctly.
-
-- **Check all five moods, not just the three with a sun.** (`Day`, `Sunrise` and
-  `Sunset` have a sun; `Evening` and `Cool` use a fixed studio key light.) The gate
-  first covered only the sun moods, which left `Evening` and `Cool` still showing
-  the original bug on the south and east walls — that light is derived from an
-  offset of `[5, 8, 4]`, i.e. up / east / south, and placed twelve metres or more
-  outside the room, so a piece facing away from it had it behind its own wall (dot
-  products −0.390 and −0.488). `Cool` carries the brightest ambient of the five, so
-  it was the worst case for visibility. **Fixed** — every mood now answers with a
-  direction, the sun where there is one and the rig where there is not. **A TV on
-  the east wall under `Cool` is the case that was broken, so it is the one worth a
-  look.**
-
-## 7. Room panel → Check tab — from danmu-f4
+## Room panel → Check tab — from danmu-f4
 
 The findings list was rebuilt and **none of it has been seen in a browser.** It is a
 324 px popover, which is where the old layout broke: the severity pill, the title, a
@@ -176,37 +237,36 @@ title about 85 px for a 110 px phrase, so *"Doors can't open"* wrapped mid-phras
   shelves"**. All seven front-clearance rules previously said *"Doors can't open"*.
   **Worth reading them aloud in the panel** to check none is clumsy.
 
----
+## Room check — issue row alignment (your report, 2026-08-27)
 
-## Decisions waiting on you
+> "'Model can't fully open' and the worth fixing tag aren't aligned as they should
+> in the issue modal"
 
-Not bugs, and not for us to settle.
+**Was:** the severity pill was an inline-block dropped into the title's text flow,
+nudged onto the baseline by a hand-picked `verticalAlign: '-5px'`. Two problems, and
+the second is the visible one — a title long enough to wrap put its **second line
+underneath the pill**, flush with the pill's left edge instead of with the first line
+of the title. "Door can't open fully" plus a "Worth fixing" pill is about 150 px, and
+the rail's content box is 176 px at the tight width, so it wrapped as it shipped
+rather than at some hypothetical narrow one.
 
-**Should selecting ONE piece of a merged group, then dragging it, move just that
-piece — or the whole group?**
+**Now:** a flex row with `alignItems: 'baseline'`, the pill `flexShrink: 0` so it
+never breaks across lines, and the title in a `minWidth: 0` column so it wraps inside
+its own box instead of forcing the row wider than the rail. The magic constant is
+gone.
 
-Today it moves the whole group, and until tonight you could not get into this
-state: clicking a merged piece in the 3D scene selects the whole set, so a
-one-member selection was unreachable. The new layer tree makes it reachable — you
-can click a single member inside a `Group · 3` — and the drag then quietly
-re-expands it to all three. So the rail offers something the drag ignores.
+**Also changed on the same row:** the action buttons were `justifyContent: 'flex-end'`
+with `flexWrap: 'wrap'`, so on a narrow rail "Show me" and "Try a fix" stacked
+right-aligned — into the same visual column the wrapped title had just moved out of.
+They align with the text column now.
 
-Both readings are defensible and they disagree about a second case:
+**What to check:** open Room check on a room with a door finding, at both rail
+widths. The pill should sit on the title's first line; a wrapped title's second line
+should start under the first line of the title, not under the pill; the buttons
+should line up with the text above them.
 
-- **Honour the selection.** The canvas already expands a click to the group before
-  any drag starts, so a narrower selection can only have been built deliberately,
-  through the one surface that exists to reach inside things the canvas cannot.
-  Overriding it protects an accident that is already handled elsewhere.
-- **Keep the group whole.** "Merge" reads as *these move as one*, and the studio's
-  own help text says a merged set comes back as one piece. Under the first reading,
-  selecting *a chair plus one half of a merged pair* and dragging leaves the other
-  half behind — which is the thing merging exists to make impossible.
-
-The code change is small and the signal it needs already exists, so this is purely
-a question of which behaviour you want. It was left alone rather than guessed at,
-because `tests/drag-convoy.test.ts` currently asserts the second reading in a
-comment that states it as settled, and changing a test that encodes a decision
-needs the person who made it.
+**Alternative if you'd rather:** the pill on its own line above the title. That is a
+look rather than a correctness question, so it is yours to pick — say the word.
 
 ---
 
@@ -215,8 +275,10 @@ needs the person who made it.
 danmu-5e reviewed the branch and returned eleven findings. **Two are confirmed and
 one of those is fixed; the other nine are read-off-the-code hypotheses with
 arithmetic, not reproductions.** The branch is therefore **not merged**, even though
-the three-way merge of all three branches gates clean (typecheck 0, lint 0,
-1267/1267). A green gate says the suite passes, and the point of the review is that
+a three-way merge of all three branches gated clean when it was last tried
+(typecheck 0, lint 0, 1320/1320 across 71 files, by danmu-5e — one of the three has
+since landed as `main`). A green gate says the suite passes, and the point of the
+review is that
 the suite could not see these.
 
 **Fixed.** A convoy member's support vanished from the world if the support was
@@ -224,7 +286,9 @@ travelling too, so selecting a desk and the lamp on it and dragging the desk wro
 the lamp to the floor — reported valid, and persisted. Ctrl+A and drag anything did
 it to every tabletop item at once. Measured, fixed, and five mutations now catch it.
 
-**Confirmed, not fixed.** No Escape-cancel in the 3D tab (see above).
+**Confirmed, and since fixed.** No Escape-cancel in the 3D tab — see "Escape
+mid-drag" above, which is now a thing to look at rather than a thing to avoid
+judging.
 
 **Unverified, in the order I would attack them.** Each has a concrete failure
 scenario in 5e's review; none has been reproduced:
@@ -288,91 +352,17 @@ Sent to f4 with the numbers, and the fix is narrow. Nothing in this section is f
 you to look at on screen; it is here so the branch's state is not mistaken for
 reviewed-and-clean.
 
+**Status, 2026-08-27.** That branch is now **PR #16, mergeable**, brought up to date
+with the new `main` and re-gated by f4 at `3b5935c` — typecheck 0, lint 0, 1246/1246
+across 69 files, with CI running `pnpm build`. f4 also found and fixed a **2.1×
+performance regression** of their own inside it (a 20-piece solve calls `nearestEdge`
+49,089 times, and their change had made each call recompute a polygon centroid;
+453 → 961 ms median against a 2000 ms ceiling that could not see it). **Whether the
+Suggest-straightens-your-tilt regression above is fixed, I do not know** — it was
+reported to them and I have not re-measured it, so treat it as open until someone
+does. The merge itself is denied to f4 by the classifier, so PR #16 is your click.
+
 ---
-
-## 8. Room check — issue row alignment (your report, 2026-08-27)
-
-> "'Model can't fully open' and the worth fixing tag aren't aligned as they should
-> in the issue modal"
-
-**Was:** the severity pill was an inline-block dropped into the title's text flow,
-nudged onto the baseline by a hand-picked `verticalAlign: '-5px'`. Two problems, and
-the second is the visible one — a title long enough to wrap put its **second line
-underneath the pill**, flush with the pill's left edge instead of with the first line
-of the title. "Door can't open fully" plus a "Worth fixing" pill is about 150 px, and
-the rail's content box is 176 px at the tight width, so it wrapped as it shipped
-rather than at some hypothetical narrow one.
-
-**Now:** a flex row with `alignItems: 'baseline'`, the pill `flexShrink: 0` so it
-never breaks across lines, and the title in a `minWidth: 0` column so it wraps inside
-its own box instead of forcing the row wider than the rail. The magic constant is
-gone.
-
-**Also changed on the same row:** the action buttons were `justifyContent: 'flex-end'`
-with `flexWrap: 'wrap'`, so on a narrow rail "Show me" and "Try a fix" stacked
-right-aligned — into the same visual column the wrapped title had just moved out of.
-They align with the text column now.
-
-**What to check:** open Room check on a room with a door finding, at both rail
-widths. The pill should sit on the title's first line; a wrapped title's second line
-should start under the first line of the title, not under the pill; the buttons
-should line up with the text above them.
-
-**Alternative if you'd rather:** the pill on its own line above the title. That is a
-look rather than a correctness question, so it is yours to pick — say the word.
-
-## 9. Wall-mounted shadows, closed room — from danmu-5e
-
-Their branch made the room a closed shell for the sun (walls cast, plus a
-shadow-only ceiling), which deleted the per-piece shadow gate. None of this has
-been in a browser.
-
-- **A wall that both casts and receives may shadow itself.** The one to look at
-  first. Where sun comes through a window, the caster and the receiver are the same
-  zero-thickness plane, so the depth comparison is a tie and `shadow-normalBias`
-  (~2.3 cm at every map size the fit produces) is all that separates them. Put a
-  window in one wall, choose Sunrise or Sunset, set quality to High, and look at the
-  wall **opposite** the window. Right: a clean patch of sun. Wrong: the patch is
-  missing, or stippled, or striped. If it is wrong the fix is a larger bias or a
-  shadow shell offset outward from the plaster — 5e wants to know before anyone
-  merges.
-- **How dark `day` reads in a windowless room.** The starter arrangements ship
-  neither a window nor a door, so this is the default room, and the key light is now
-  blocked by the ceiling — leaving hemisphere, fill and environment. It should read
-  as overcast rather than sunlit, which is physically right. The question is whether
-  that is too dim to be the default mood, and it is yours: 5e deliberately retuned
-  no ambient value, because doing that by feel against a picture they cannot see is
-  how a mood ends up wrong in a way no test finds.
-- **Whether `cool` still reads as bright overcast.** Its key is 0.95 and is blocked
-  too, and it is the brightest mood in the set, so it loses the most. Its own
-  description is "flat overcast, no direction", so blocking the key arguably makes
-  the label true. `evening`'s key is 0.12 against a design that wants the lamps to
-  do the work, so expect no visible change there.
-
-## 10. Escape mid-drag, and the one place it meets the sun
-
-Escape now cancels a drag in the **3D** tab (it already did in the plan). There was
-no handler at all before, so the key fell through to the studio's global Escape —
-"deselect" — and the piece stayed wherever the pointer had left it.
-
-- **Cancel a drag and check the POSITION, not the shadow.** With the closed room a
-  piece can be legitimately shadowless because the sun cannot reach it, so the floor
-  is no longer evidence about whether the transform went back. 5e's point, and a
-  good one.
-- **Cancel a drag that carried company.** Select a desk with a lamp on it, drag,
-  press Escape: the lamp must go back too, not hang in the air where the cancelled
-  drag left it. Same for a merged set — every member, not just the piece under the
-  hand.
-- **Cancel a drag of a WINDOW.** The one place this gesture and 5e's shell touch.
-  `RoomShell` rebuilds its wall shapes from the store, so putting a window back
-  moves its hole, and moving the hole moves where the sun lands. Nothing in the tree
-  sets `shadowMap.autoUpdate = false`, so three.js re-bakes shadow maps on every
-  rendered frame, and the handler calls `invalidate()` — which is why this should
-  work. "Should" is doing real work in that sentence; check the sun patch goes back
-  with the window.
-- **Press Escape when NOT dragging.** It must still mean "deselect". The handler
-  declines the key unless a gesture is in flight, and that is the whole reason the
-  global meaning survives.
 
 ## Known coverage gaps, stated rather than implied
 
@@ -442,6 +432,15 @@ rediscovered as bugs.
   fixes the bad seed outright (153.92 → 19.82) and breaks a different one worse, so
   it moves the failure rather than removing it. What it needs is a containment push
   on the piece's own footprint, which `layout-settle`'s `contain` already is.
+
+  **Owner, 2026-08-27: danmu-f4, on a branch based after `fix/multi-select-drag`
+  lands** — three sessions held `lib/geometry.ts` at once, and the winding fix
+  deletes the centroid cache f4 had just added, so doing both in one hand is the
+  cheap ordering. danmu-5e reproduced the wrong edges a third time (T `edge2` and
+  `edge6`, the U's whole inner notch) and the acceptance criterion is those plus
+  `tests/physics-snap.test.ts`'s four-wall **yaw** sweep, which is the assertion that
+  speaks when an inward normal flips. **It is not the wall-snap symptom you
+  reported:** rect rooms have 0 wrong edges and your room is 6.00 × 4.00 rect.
 
 - **`FanGeo` ignores `dimMM[2]`.** The motor, the rod and its 0.13 m offset are
   literals; only the blade radius reads `dimMM[0]`. Group scaling papers over it,
