@@ -9,6 +9,20 @@ click, and what "wrong" would look like when you get there.
 
 Ordered by how likely a problem is to be real and annoying, not by area.
 
+**Nothing here is on `main` yet.** Three branches, all pushed, none merged — so
+check out the right one before hunting for a control:
+
+| section | branch |
+|---|---|
+| 1, 2, 3 (fan, multi-piece drag, wall riders) | `fix/multi-select-drag` |
+| 4, 5 (lighting row, tooltips, layer tree, north dial) | `fix/wall-shadow` |
+| 6 (wall-mounted shadows) | `fix/wall-shadow` |
+| 7 (Room panel → Check tab) | `fix/room-report-and-tidy` |
+
+The three merge together with one small conflict in `Design.md`, resolved and
+gated — typecheck 0, lint 0, 1267/1267. **They are still unmerged on purpose**; see
+"Open review findings" below.
+
 ---
 
 ## 1. The fan symptom I could not reproduce
