@@ -263,3 +263,82 @@ describe('legality', () => {
     expect(r.pos[1]).toBeLessThanOrEqual(H - 2.4 - 0.02 + 1e-9);
   });
 });
+
+describe('a ceiling piece is not a wall rider', () => {
+  // The wall branch used to be gated on `isWallMountedPart`, which asks "is this
+  // piece's geometry centred on its origin" and answers yes for a ceiling fan.
+  // `lib/physics.ts` has said so in `ridesWall`'s own doc since the day it was
+  // written; this file asked the other question anyway. Two symptoms out of one
+  // predicate: the fan was slid onto the nearest wall wherever you dragged it
+  // ("it only sticks to the edges"), and the same flag then excused it from the
+  // containment test on the way past ("it spawned outside the room").
+  const fan = () => part({ id: 'fan', category: 'fan', shape: 'fan', dimMM: [1000, 1000, 200], pos: [2, 2.35, 1.5] });
+
+  it('stays where it is dragged instead of sliding to the nearest wall', () => {
+    // (2, 1.5) is the middle of this 4 x 3 m room. Before: z came back at 0.52,
+    // flush against the north wall, from a pointer in the dead centre.
+    const r = resolve(fan(), 2, 1.5);
+    expect(r.pos[0]).toBeCloseTo(2, 6);
+    expect(r.pos[2]).toBeCloseTo(1.5, 6);
+    expect(r.valid).toBe(true);
+  });
+
+  it('keeps its mount height, wherever it is dragged', () => {
+    // The fan is centre-anchored (`isFloorStanding` is false), so gravity must not
+    // reach for it — this is the half `isWallMountedPart` was right about, and it
+    // must not regress with the half it was wrong about.
+    const r = resolve(fan(), 1, 1);
+    expect(r.pos[1]).toBeCloseTo(2.35, 6);
+    expect(r.supportId).toBeUndefined();
+  });
+
+  it('is refused over the quadrant an L cuts away', () => {
+    // The exemption from the polygon test is EARNED by the wall snap placing a
+    // piece exactly on an edge. A fan gets no snap, so it gets no exemption.
+    //
+    // It takes an L to show it, and that is the point: the containment clamp above
+    // is a BOUNDING BOX, so inside a rectangle nothing can ever fail the polygon
+    // test and the exemption looks harmless. The notch is the only place the two
+    // disagree — which is why "wall-mounted parts skip the polygon test" hid a
+    // ceiling fan hanging over next door for as long as it did.
+    const L: Poly = [
+      [0, 0],
+      [4, 0],
+      [4, 1.5],
+      [2, 1.5],
+      [2, 3],
+      [0, 3],
+    ];
+    const overNotch = resolvePlacement({
+      part: fan(), rawX: 3, rawZ: 2.5, rot: 0, dim: [1000, 1000, 200],
+      parts: [fan()], footprint: L, roomHeight: H, snapMode: 'off', currentY: 2.35,
+    });
+    expect(overNotch.valid).toBe(false);
+    // …and legal over floor that exists, so the test is about the notch and not
+    // about the fan being refused everywhere.
+    const overFloor = resolvePlacement({
+      part: fan(), rawX: 1, rawZ: 2, rot: 0, dim: [1000, 1000, 200],
+      parts: [fan()], footprint: L, roomHeight: H, snapMode: 'off', currentY: 2.35,
+    });
+    expect(overFloor.valid).toBe(true);
+  });
+
+  it('does not turn, because nothing aimed it', () => {
+    // A wall rider comes back re-aimed at its wall. A fan has no wall to face, and
+    // a rotation written back where none was asked for creates an override that
+    // pins the value against a re-detect (lib/transforms.ts).
+    const f = fan();
+    f.rot = 0.4;
+    const r = resolve(f, 2, 1.5);
+    expect(r.rot).toBe(0.4);
+  });
+
+  it('still snaps a real wall rider — the TV must not regress', () => {
+    const tv = part({ id: 'tv', category: 'tv', shape: 'tv', dimMM: [1200, 100, 700], pos: [2, 1.4, 0.07] });
+    const r = resolve(tv, 2, 1.2);
+    // Pulled back onto the nearest wall, facing into the room, and legal there.
+    expect(r.pos[2]).toBeCloseTo(0.07, 5);
+    expect(Math.cos(r.rot)).toBeCloseTo(1);
+    expect(r.valid).toBe(true);
+  });
+});

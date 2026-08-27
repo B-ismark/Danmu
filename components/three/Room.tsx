@@ -248,16 +248,11 @@ export function Room() {
       _hit.x,
       _hit.z,
     ]);
-    let [x, y, z] = pos;
-    if (!wallMounted) {
-      // Drop where the pointer hit the floor, kept inside the (possibly
-      // off-centre) footprint bounds.
-      const b = footprintBounds(r.footprint);
-      const insetX = item.dimMM[0] / 2000;
-      const insetZ = item.dimMM[1] / 2000;
-      x = Math.max(b.minX + insetX, Math.min(b.maxX - insetX, _hit.x));
-      z = Math.max(b.minZ + insetZ, Math.min(b.maxZ - insetZ, _hit.z));
-    }
+    // Keeping the drop inside the room is `placeNewPart`'s job now, not this
+    // handler's and not the plan's. Both did it, both did it only for a piece that
+    // was not "wall-mounted", and a ceiling fan is wall-mounted by that test while
+    // riding no wall — so it was the one piece nothing kept in the room.
+    const [x, y, z] = pos;
     const id = `${item.category}-${uuid().slice(0, 6)}`;
     useScene.getState().addPart({
       id, category: item.category, name: item.label, shape: item.shape,

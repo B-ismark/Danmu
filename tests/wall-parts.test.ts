@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { wallApertures } from '@/lib/apertures';
-import { footprintForLayout, wallSegments, type Footprint } from '@/lib/footprint';
+import { clampIntoFootprint, footprintForLayout, pointInFootprint, polygonCentroid, wallSegments, type Footprint } from '@/lib/footprint';
 import type { LayoutId } from '@/lib/storage';
 import { openingsForRoom } from '@/lib/room-openings';
 import { anchorFor, groundY, ridesWall, snapToWall, wallStandoff, CURTAIN_STANDOFF } from '@/lib/physics';
@@ -153,5 +153,116 @@ describe('a curtain hangs in front of the window, not inside it', () => {
     const y = groundY('curtain', 'curtain', dim, H);
     expect(y + dim[2] / 2000).toBeLessThanOrEqual(H + 1e-9);
     expect(y - dim[2] / 2000).toBeGreaterThanOrEqual(-1e-9);
+  });
+});
+
+describe('placeNewPart keeps a drop inside the room', () => {
+  // Both drop handlers used to clamp the drop point themselves, and both did it
+  // only `if (!wallMounted)` — `isWallMountedPart`, true for a ceiling fan. A fan
+  // rides no wall, so nothing above put it on one and that guard meant nothing
+  // below pulled it in: a fan dragged out of the library landed exactly where the
+  // pointer was released, outside the walls included. One clamp, in placeNewPart.
+  const RECT6x4: Footprint = [
+    [0, 0],
+    [6, 0],
+    [6, 4],
+    [0, 4],
+  ];
+  const room6x4 = { width: 6, depth: 4, height: 2.5, footprint: RECT6x4 };
+  const FAN: [number, number, number] = [1000, 1000, 200];
+
+  it('pulls a ceiling fan dropped past the wall back inside it', () => {
+    const r = placeNewPart('fan', 'fan', FAN, room6x4, [], [7.5, 2]);
+    // Its own half-width in from the wall, not 7.5.
+    expect(r.pos[0]).toBeCloseTo(5.5, 6);
+    expect(r.pos[2]).toBeCloseTo(2, 6);
+    // …and still hung at the ceiling, which is the half that was already right.
+    expect(r.pos[1]).toBeCloseTo(2.35, 6);
+    expect(r.rot).toBe(0);
+  });
+
+  it('pulls one dropped off the near corner back inside it', () => {
+    const r = placeNewPart('fan', 'fan', FAN, room6x4, [], [-1, -1]);
+    expect(r.pos[0]).toBeCloseTo(0.5, 6);
+    expect(r.pos[2]).toBeCloseTo(0.5, 6);
+  });
+
+  it('leaves a fan dropped in the room exactly where it was aimed', () => {
+    const r = placeNewPart('fan', 'fan', FAN, room6x4, [], [3, 2]);
+    expect(r.pos[0]).toBeCloseTo(3, 6);
+    expect(r.pos[2]).toBeCloseTo(2, 6);
+  });
+
+  it('does NOT yet keep a drop out of the quadrant an L cuts away', () => {
+    // Written down rather than left as a surprise. `clampIntoFootprint` is the
+    // function for this and it cannot do it: it walks the point toward
+    // `polygonCentroid`, which averages the VERTICES rather than the area, and for
+    // this L that average is (3, 2) — the reflex corner itself. Every step of the
+    // walk stays inside the notch and the fallback returns the corner, which
+    // `pointInFootprint` calls outside. Fixing it means changing
+    // `polygonCentroid`, whose other caller derives every wall's inward normal
+    // from it, so it is a separate change with its own risk.
+    const L: Footprint = [
+      [0, 0],
+      [6, 0],
+      [6, 2],
+      [3, 2],
+      [3, 4],
+      [0, 4],
+    ];
+    expect(polygonCentroid(L)).toEqual([3, 2]);
+    expect(pointInFootprint(3, 2, L)).toBe(false);
+    expect(clampIntoFootprint(5, 3.5, L)).toEqual([3, 2]);
+
+    const r = placeNewPart('chair', 'chair-dining', [500, 500, 900], { width: 6, depth: 4, height: 2.5, footprint: L }, [], [5, 3.5]);
+    // The bounds clamp does its half — the piece's extents are inside the box…
+    expect(r.pos[0]).toBeCloseTo(5, 6);
+    expect(r.pos[2]).toBeCloseTo(3.5, 6);
+    // …and the notch is still the notch. When this starts passing as `true`,
+    // delete the assertion, not the test.
+    expect(pointInFootprint(r.pos[0], r.pos[2], L)).toBe(false);
+  });
+
+  it('still puts a wall rider on the wall nearest where it was aimed', () => {
+    // placeNewPart's own wall path is unchanged and must stay so: the drop point
+    // decides WHICH wall, and the clamp must not run first and move it.
+    const r = placeNewPart('tv', 'tv', [1200, 100, 700], room6x4, [], [5.9, 2]);
+    expect(r.pos[0]).toBeGreaterThan(5.8);
+    expect(Math.cos(r.rot)).toBeCloseTo(0);
+  });
+});
+
+describe('placeNewPart: the two edges of that clamp', () => {
+  const RECT6x4: Footprint = [
+    [0, 0],
+    [6, 0],
+    [6, 4],
+    [0, 4],
+  ];
+  const room6x4 = { width: 6, depth: 4, height: 2.5, footprint: RECT6x4 };
+
+  it('asks what is under the CLAMPED point, not under where the pointer let go', () => {
+    // A tabletop-prone piece dropped outside the room was asking what it could
+    // stand on out there — and the honest answer, nothing, put it on the floor
+    // while the clamp then moved it on top of a table.
+    const table = {
+      id: 'table', name: 'table', category: 'table', shape: 'coffee-table',
+      dimMM: [1200, 800, 750], pos: [5.5, 0, 2], rot: 0, locked: false,
+    } as unknown as ScenePart;
+    const r = placeNewPart('lamp', 'lamp-table', [300, 300, 400], room6x4, [table], [7.5, 2]);
+    expect(r.pos[0]).toBeCloseTo(5.85, 6); // pulled in by its own half-width
+    expect(r.pos[1]).toBeCloseTo(0.75, 6); // and it landed on the table it arrived over
+  });
+
+  it('centres a piece too big to be inset from both sides', () => {
+    // Deliberately wider than the room. A piece that does not fit KEEPS its size
+    // (rule 2 — say so, never silently resize it) and `lib/clearance.ts` is what
+    // reports it, so this branch only decides where the oversized thing sits.
+    // Without it the min beats the max and the piece is pinned against one wall,
+    // which reads as a placement decision rather than as "it does not fit".
+    const r = placeNewPart('sofa', 'sofa', [7000, 900, 800], room6x4, [], [1, 2]);
+    expect(r.pos[0]).toBeCloseTo(3, 6);
+    const deep = placeNewPart('sofa', 'sofa', [900, 5000, 800], room6x4, [], [3, 0.2]);
+    expect(deep.pos[2]).toBeCloseTo(2, 6);
   });
 });

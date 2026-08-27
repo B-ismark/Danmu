@@ -541,3 +541,46 @@ describe('a wall pin is only ever put on a piece that rides a wall', () => {
     expect(c.members[0].edge).toBeNull();
   });
 });
+
+describe('a ceiling piece is not a wall rider', () => {
+  // `isWallMountedPart` means "is this piece's geometry centred on its origin",
+  // and it is true for a ceiling fan. `ridesWall` means "does it belong flat
+  // against a wall", and it is not. The convoy asked the first question in three
+  // places where it meant the second, and the rigidity exemption is the one that
+  // mattered: a fan CAN take a delta in any horizontal direction, so "did it
+  // arrive where the set sent it" has a real answer for it, and under the wider
+  // predicate it was never asked.
+  const FAN: [number, number, number] = [1000, 1000, 200];
+
+  it("holds a fan member to real rigidity, not to a wall rider excuse", () => {
+    const fan = part({ id: 'fan', category: 'fan', shape: 'fan', dimMM: FAN, pos: [1, 2.35, 1] });
+    const chair = part({ id: 'chair', category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 900], pos: [1, 0, 2] });
+    const world = [fan, chair];
+    const c = plan('chair', world, ['chair', 'fan']);
+    expect(c.members.map((m) => m.part.id)).toEqual(['fan']);
+    // A fan rides no wall, so it must not be pinned to one either.
+    expect(c.members[0].edge).toBeNull();
+
+    // Push the set hard enough that the fan would have to leave the room. Under
+    // the old predicate the fan was excused from arriving short AND excused from
+    // the containment test, so this step was legal and the fan ended up outside.
+    const co = carry(c, 'chair', world, [1, 0, 2], [5.9, 0, 2]);
+    expect(co.valid).toBe(false);
+    expect(co.blocked?.id).toBe('fan');
+  });
+
+  it('carries a fan member rigidly on a delta it can actually take', () => {
+    const fan = part({ id: 'fan', category: 'fan', shape: 'fan', dimMM: FAN, pos: [1, 2.35, 1] });
+    const chair = part({ id: 'chair', category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 900], pos: [1, 0, 2] });
+    const world = [fan, chair];
+    const c = plan('chair', world, ['chair', 'fan']);
+    const co = carry(c, 'chair', world, [1, 0, 2], [2, 0, 2]);
+    expect(co.valid).toBe(true);
+    const mv = co.moves.find((m) => m.id === 'fan')!;
+    expect(mv.pos[0]).toBeCloseTo(2, 6);
+    expect(mv.pos[2]).toBeCloseTo(1, 6);
+    // Its ceiling height is preserved, and no rotation override is created.
+    expect(mv.pos[1]).toBeCloseTo(2.35, 6);
+    expect(mv.rot).toBeUndefined();
+  });
+});

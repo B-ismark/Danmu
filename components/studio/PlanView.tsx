@@ -414,13 +414,8 @@ export const PlanView = forwardRef<PlanViewHandle, {
       w.x,
       w.z,
     ]);
-    let [x, y, z] = pos;
-    if (!wallMounted) {
-      const insetX = item.dimMM[0] / 2000;
-      const insetZ = item.dimMM[1] / 2000;
-      x = clamp(w.x, bounds.minX + insetX, bounds.maxX - insetX);
-      z = clamp(w.z, bounds.minZ + insetZ, bounds.maxZ - insetZ);
-    }
+    // Keeping the drop inside the room is `placeNewPart`'s job now — see there.
+    const [x, y, z] = pos;
     const id = `${item.category}-${uuid().slice(0, 6)}`;
     addPart({
       id,

@@ -632,7 +632,18 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // second one here.
     if (gestureOwnedByOther(partId)) return;
 
-    const planeY = isFloorStanding(part.category, part.shape) ? ref.current.position.y : 0;
+    // The horizontal plane the pointer ray is intersected with, and it is the
+    // plane the PIECE is in. It used to be the floor for anything not
+    // floor-standing, which is where a drag stops tracking the thing you grabbed:
+    // a ceiling fan sits at ~2.35 m, so the ray was intersected two metres below
+    // it and every pixel of pointer movement became a much larger move of the
+    // floor point it was following. Reported as being unable to steer a fan to the
+    // middle of the ceiling. A TV at 1.4 m had a milder version of the same.
+    //
+    // `offX`/`offZ` are measured in this same plane just below, so the grab offset
+    // stays exact whatever the height — which is why the branch was never needed:
+    // a floor piece resting on a table already reads its own y here.
+    const planeY = ref.current.position.y;
     _plane.set(_plane.normal.set(0, 1, 0), -planeY);
     if (!e.ray.intersectPlane(_plane, _hit)) return;
     const isTouch = e.pointerType === 'touch';

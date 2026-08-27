@@ -26,7 +26,8 @@
 // Deliberately pure — no store, no camera, no tab. It takes a snapshot of the
 // world and returns transforms.
 
-import { isWallMountedPart, type ScenePart } from './scene-spec';
+import type { ScenePart } from './scene-spec';
+import { ridesWall } from './physics';
 import { resolvePlacement } from './drag-resolve';
 import { cascadeTransform, snapshotDescendants, type DescendantOffset } from './rigid-parent';
 import { nearestEdge, type Poly } from './geometry';
@@ -194,11 +195,12 @@ export function planConvoy(input: {
 
   /** The wall a piece is against now, by footprint edge index.
    *
-   *  Gated on the SAME predicate as the wall branch in `resolvePlacement`, not on
-   *  the narrower `ridesWall`: a pin that is absent where the snap is present
-   *  leaves the flip in place for exactly the pieces nobody remembered to check. */
+   *  Gated on the SAME predicate as the wall branch in `resolvePlacement`: a pin
+   *  that is absent where the snap is present leaves the flip in place for exactly
+   *  the pieces nobody remembered to check, and a pin present where the snap is not
+   *  is a claim about a piece that nothing reads and nobody can trust. */
   const wallEdgeOf = (p: ScenePart): number | null =>
-    isWallMountedPart(p.category, p.shape)
+    ridesWall(p.category, p.shape)
       ? (nearestEdge(footprint, p.pos[0], p.pos[2])?.index ?? null)
       : null;
 
@@ -322,7 +324,12 @@ export function resolveConvoy(input: {
     // discards it — so it legitimately arrives short and must not count as
     // deformed. What bounds that exemption is `ConvoyMember.edge`: the correction
     // can only be along one known wall now, not a jump to some other one.
-    const wallRider = isWallMountedPart(m.part.category, m.part.shape);
+    //
+    // `ridesWall`, so a CEILING piece does not get the exemption. A fan translates
+    // freely across its ceiling, which means "it arrived where the set sent it" is a
+    // question with a real answer for it — and under the wider predicate it was
+    // excused from being asked.
+    const wallRider = ridesWall(m.part.category, m.part.shape);
     const rigid =
       wallRider || (Math.abs(r.pos[0] - tx) < RIGID_EPS && Math.abs(r.pos[2] - tz) < RIGID_EPS);
     if (!r.valid || !rigid) {
@@ -368,7 +375,7 @@ export function convoyRestore(
     // careful not to create. Only a wall rider can have been turned by the
     // gesture, so only a wall rider needs one put back.
     moves.push(
-      isWallMountedPart(m.part.category, m.part.shape)
+      ridesWall(m.part.category, m.part.shape)
         ? { id: m.part.id, pos: m.startPos, rot: m.part.rot }
         : { id: m.part.id, pos: m.startPos },
     );
