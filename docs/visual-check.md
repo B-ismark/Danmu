@@ -1,44 +1,31 @@
 # Needs eyes
 
-Things code cannot verify — whether they *look* and *feel* right. Everything here
-typechecks, lints and passes tests; what is left is a judgement none of us can make.
+Places to click, and what "wrong" would look like when you get there. Everything here
+typechecks, lints and passes tests — what is left is judgement no gate can make.
 
-Not a changelog; the commit messages are that. This is the list of places to click,
-and what "wrong" would look like when you get there.
+**Rebuilt 2026-08-27, after your report.** Every symptom you reported has been found
+and fixed, and **not one of the fixes has been seen on screen by anybody.** So this is
+no longer "hunt for bugs"; it is "confirm the fixes", which is a shorter and different
+job. What you have already answered moved to *Answered* below — kept visible rather
+than deleted, so you can see what left the list and why.
 
-**Where each thing lives.** `main` is `ebccd01` now, so danmu-5e's work is merged and
-needs no checkout:
-
-| section | where |
+| branch | state |
 |---|---|
-| Lighting row, Room and layer-tree panels, shadows in a closed room | `main` |
-| The fan, room height, multi-piece drag, wall riders, Escape mid-drag | `fix/multi-select-drag` @ `a578cd6` |
-| Room panel → Check tab, issue row alignment | danmu-f4's PR #16 |
+| `main` — `ebccd01` | danmu-5e's work, merged. Gated 1216/1216. |
+| `fix/multi-select-drag` — `bbab86a` | this session's. **Not merged.** Gated 1294/1294 across 67 files at `a578cd6`, the last commit that changed code. |
+| PR #16 — `3b5935c`, danmu-f4 | **Not merged**, mergeable. Gated by f4 at 1246/1246 across 69. |
 
-Two branches are still unmerged and that is deliberate — see "Open review findings".
+All three merge together green: one small `Design.md` conflict, resolved, gated at
+**1320/1320 across 71 files**.
 
----
+`pnpm build` is the one gate nobody has run successfully. Every local attempt failed
+on a `node_modules` font asset that will not resolve through a directory junction —
+and `main` failed identically, which is what proves it is the setup and not the code.
+**CI runs build on the push to `main`; that is where it gets answered.**
 
-## Checked and closed — nothing to do here
-
-Kept only so they are not re-checked by accident. 2026-08-27.
-
-- **A fan sticks to the walls and cannot be moved to the middle of the room.** You
-  confirmed it: it drops in the centre of the ceiling and drags freely.
-- **A ceiling fan offers a "Where it sits" row it has no use for.** Gone for every
-  wall- and ceiling-mounted piece; the numeric height field stays. Visible in your
-  own screenshot.
-- **Dragging one piece of a group drags the whole group, while rotating one rotates
-  only that one.** You reported the inconsistency and chose "honour the selection".
-  A merged group now decides what a *click* selects, not what a drag carries. This
-  also settles the open question that used to be in this file.
-- **Dragging a TV dragged a chair with it.** Same fix.
-- **A TV slid along a wall stuck to the far edge, with a gap to the adjoining wall
-  that varied.** Fixed and *measured*, so this is closed rather than waiting on your
-  eye: aiming a 1.2 m TV 2.6 m along a 6 m wall used to leave 0.20 m of it through
-  the adjoining wall, with the centre pinned at the wall's end. Drift is now 0.000 m
-  on all four walls and the facing is right on each. Worth a glance in passing, not a
-  hunt.
+Two sections at the end are **not for you**: the review findings against this branch,
+and "Known-and-left". They are here so the branches' state is not mistaken for
+reviewed-and-clean.
 
 ---
 
@@ -140,43 +127,119 @@ no handler at all before, so the key fell through to the studio's global Escape 
   declines the key unless a gesture is in flight, and that is the whole reason the
   global meaning survives.
 
-## Wall-mounted shadows, closed room — from danmu-5e
+## The room is closed to the sun
 
-Their branch made the room a closed shell for the sun (walls cast, plus a
-shadow-only ceiling), which deleted the per-piece shadow gate. None of this has
-been in a browser.
+`main`. Your report: *"it's acting as if the room has no ceiling… the tv
+shouldn't even be casting any shadow regardless."* Walls cast shadow as well as receive
+it now, and there is a ceiling — invisible, because it exists for the light rather than
+the eye. Sun reaches the inside only through a window or a door.
 
-- **A wall that both casts and receives may shadow itself.** The one to look at
-  first. Where sun comes through a window, the caster and the receiver are the same
-  zero-thickness plane, so the depth comparison is a tie and `shadow-normalBias`
-  (~2.3 cm at every map size the fit produces) is all that separates them. Put a
-  window in one wall, choose Sunrise or Sunset, set quality to High, and look at the
-  wall **opposite** the window. Right: a clean patch of sun. Wrong: the patch is
-  missing, or stippled, or striped. If it is wrong the fix is a larger bias or a
-  shadow shell offset outward from the plaster — 5e wants to know before anyone
-  merges.
-- **How dark `day` reads in a windowless room.** The starter arrangements ship
-  neither a window nor a door, so this is the default room, and the key light is now
-  blocked by the ceiling — leaving hemisphere, fill and environment. It should read
-  as overcast rather than sunlit, which is physically right. The question is whether
-  that is too dim to be the default mood, and it is yours: 5e deliberately retuned
-  no ambient value, because doing that by feel against a picture they cannot see is
-  how a mood ends up wrong in a way no test finds.
-- **Whether `cool` still reads as bright overcast.** Its key is 0.95 and is blocked
-  too, and it is the brightest mood in the set, so it loses the most. Its own
-  description is "flat overcast, no direction", so blocking the key arguably makes
-  the label true. `evening`'s key is 0.12 against a design that wants the lamps to
-  do the work, so expect no visible change there.
-- **Sweep four walls and all five moods, not one wall and one mood.** This check
+**Set quality to High.** None of this exists on Fast, which has no cast shadows at all.
+
+- Starter room, mood **Day**. Right: no sun on the floor except where it comes through
+  the window or the doorway. Wrong: sun across the whole floor, as before.
+- Hang a TV on a wall and put the sun on the far side of that wall (**Day** plus the
+  north dial, or **Sunrise** / **Sunset**). Right: the TV casts nothing.
+- **The one I am least confident about, and the first thing I would look at in this
+  whole document.** Put a window in one wall, set **Sunrise** or **Sunset**, and look at
+  the wall *opposite* the window. Right: a clean patch of sun on it. Wrong: the patch is
+  missing, or stippled, or striped. Caster and receiver are the same zero-thickness
+  plane there, so the depth comparison is a tie and `shadow-normalBias` (~2.3 cm) is the
+  only thing breaking it. If it is wrong, the fix is a larger bias or a shadow shell
+  offset outward from the plaster — worth knowing before anything else merges.
+- **Is it too dark now?** A sealed room is lit by sky, environment and lamps, so losing
+  the direct key makes it flatter. Starter rooms do have a door and a window, so the sun
+  does get in. But if **Day** reads too dim to be the default mood, say so: **no ambient
+  value was retuned.** Tuning by feel against a picture I could not see is how a mood
+  ends up wrong in a way no test finds.
+- **`Cool` loses the most** — its key light was the brightest in the set (0.95) and is
+  blocked too. Its own description is "flat overcast, no direction", so blocking it
+  makes the label true. Does it still read as bright overcast? `Evening`'s key was 0.12
+  against a design that wants the lamps to do the work, so I expect no visible change
+  there.
+- **Sweep four walls and all five moods**, not one wall and one mood. This check
   outlived the per-piece shadow gate it was written for, because it is the *result*
-  that matters and the whole thing is still a sign: a sign error is invisible on the
-  north and south walls and inverted on the east and west. Put a TV on each wall in
-  turn under **Sunrise** (sun in the east, 7° up) and **Sunset** (west, 8°). Then do
-  it under `Evening` and `Cool`, which have no sun at all and use a fixed key light
-  placed up / east / south — an earlier version of this gate covered only the sun
-  moods and left those two showing the original bug on the south and east walls.
-  `Cool` carries the brightest ambient of the five, so **a TV on the east wall under
-  `Cool` is the case that was broken and the one worth a look.**
+  that matters and the whole thing is a sign: a sign error is invisible on the north
+  and south walls and inverted on the east and west. A TV on each wall in turn, under
+  `Day`, `Sunrise`, `Sunset`, `Evening` and `Cool`. **`Cool` on the east wall is the
+  case that was actually broken, so it is the one worth a look** — the two sunless
+  moods use a fixed key light placed up / east / south, and an earlier version of this
+  gate covered only the moods with a sun.
+
+## The Style row is four swatches now, and this palette has never been rendered
+
+`main` (`ebccd01`). You asked to merge what was mergeable. `Coastal` and
+`Studio Loft` both set the same `cool` mood, so they are one swatch: **Cool Neutral**,
+carrying Coastal's sage accent (`#7C9C8E`) and Studio Loft's charcoal case goods
+(`#5B554E`).
+
+- **Nobody has seen this palette on a room.** It is a pairing of two halves taken from
+  two different sets, so of everything in this document it is the most likely to simply
+  look wrong. Press it and look at the whole room, not the swatch.
+- Four 30px swatches on **one row** in the Style section, no wrapping, at every width —
+  including the 1024–1279px rail, which affords 176px of content against the row's
+  138px. Wrong: a second row of one swatch.
+- The section's collapsed summary should read `Cool Neutral` after pressing it. Wrong:
+  it still says `Coastal`, or goes blank.
+
+**A correction you should have in front of you when judging the choice.** I told
+you those two were near-duplicates on colour. They are not. Mean OKLab distance over
+the four tones each theme actually paints:
+
+    warm-min vs coastal      0.073   <- closest pair in the old five
+    heritage vs afro-mod     0.078
+    studio   vs afro-mod     0.138
+    heritage vs studio       0.168
+    warm-min vs afro-mod     0.266
+    coastal  vs studio       0.304   <- the pair that was merged
+    coastal  vs heritage     0.317
+
+So the merged pair was the third most *distinct* in the set, and the genuinely close
+pairs were elsewhere. The metric is the wrong instrument rather than the set being
+wrong — mean distance over tones is dominated by lightness, so it scores two pale
+palettes as similar even when one is beige and the other sage, which is a difference
+anyone sees instantly because a whole-room hue shift is loud at a small per-colour
+distance. **The merge therefore stands on the shared lighting mood alone**, which is
+the half of your report that was actually about overriding. If you would rather
+a different pair had gone, it is a small change; the numbers are in
+`tests/themes.test.ts`.
+
+## A theme no longer unticks itself when you move the light
+
+`main`. Your report was *"some of the lighting and the style override each
+other"*, and two things were happening — only one of them a bug.
+
+Pressing a theme swatch moves the lighting. That is the feature (one tap, whole look)
+and it is legible now that both controls sit in the same Style section. The reverse was
+wrong: changing the light **unticked the theme**, so the room stayed every colour
+Coastal had painted it while the panel stopped naming Coastal.
+
+- Press a theme swatch, then press a different lighting glyph. Right: the swatch keeps
+  its tick and the section header keeps naming the theme. Wrong: the tick vanishes and
+  the header's name goes.
+- Then press the swatch again. Right: nothing jumps — the colours are already applied,
+  and only the light changes back.
+
+## A sun mood with no way in says so
+
+`main`. New, small, and unseen by anyone. Choose a sun mood in a room with no window
+and no door, and one line appears under the Lighting row: *"Sunlight only reaches a
+room through its openings. Add a window or a door from the Library to let this one
+in."*
+
+- Delete the window **and** the door from a starter room, pick **Day**. Right: the line
+  appears. Put either back: it goes.
+- It should NOT appear for `Evening` or `Cool` — those have no sun to block.
+- Worth knowing why it is worded about the room rather than the light: on **Fast**
+  quality there are no cast shadows at all, so a sentence claiming the room is unlit
+  would be wrong half the time, while this one stays true either way.
+
+**A correction to something you were told earlier.** You were told starter layouts ship
+no window or door, which made a sealed room the default case. False —
+`lib/room-openings.ts` has been on `main` for a while and gives every preset both,
+placed before any furniture. I had grepped for `shape: 'window'` and the openings are
+*computed*, not typed. So this hint is for a room someone has emptied, or one rebuilt
+from photographs where detection found no opening — not the common case.
 
 ## Lighting row and tooltips — from danmu-5e
 
@@ -267,6 +330,64 @@ should line up with the text above them.
 
 **Alternative if you'd rather:** the pill on its own line above the title. That is a
 look rather than a correctness question, so it is yours to pick — say the word.
+
+---
+
+---
+
+## Still open, and still yours
+
+
+- **Delete `origin/wall-carry-hover-fix`?** Verified superseded: one commit `main` lacks,
+  and its `lib/wall-actions.ts` carries a `positions[p.id] ?? p.pos` that
+  `tests/room-scene.test.ts` now forbids. Not deleted — deleting a branch is not ours to
+  do.
+- **`edgeProjection`'s inward normal is wrong on concave rooms.** Five edges across the
+  shipped `t` and `u` presets have an "inward" normal pointing out of the room, so a TV
+  near a T or U room's notch faces the wall and `wallDistance` measures it from the wrong
+  side. f4 has it, deliberately on a branch *after* the merge: the fix moves every seeded
+  fixture in the repo, and landing it underneath a merge would make the next bisect stop
+  on the wrong commit. **It is not the rectangular-room symptom you reported** —
+  that was your segment clamp and it is fixed.
+
+---
+
+## Answered — nothing to do
+
+Kept visible rather than deleted, so nothing gets re-checked by accident.
+
+- **A fan sticks to the walls and cannot be moved to the middle of the room.** You
+  confirmed it: it drops in the centre of the ceiling and drags freely.
+- **A ceiling fan offers a "Where it sits" row it has no use for.** Gone for every
+  wall- and ceiling-mounted piece; the numeric height field stays. Visible in your
+  own screenshot.
+- **Dragging one piece of a group drags the whole group, while rotating one rotates
+  only that one.** You reported the inconsistency and chose "honour the selection".
+  A merged group now decides what a *click* selects, not what a drag carries. This
+  also settles the open question that used to be in this file.
+- **Dragging a TV dragged a chair with it.** Same fix.
+- **A TV slid along a wall stuck to the far edge, with a gap to the adjoining wall
+  that varied.** Fixed and *measured*, so this is closed rather than waiting on your
+  eye: aiming a 1.2 m TV 2.6 m along a 6 m wall used to leave 0.20 m of it through
+  the adjoining wall, with the centre pinned at the wall's end. Drift is now 0.000 m
+  on all four walls and the facing is right on each. Worth a glance in passing, not a
+  hunt.
+
+The point of the section is that the removals stay **visible**. A deleted line reads as
+an oversight; a line saying "you answered this, here is what happened" reads as
+progress.
+
+- **Should selecting one member of a merged group and dragging it move just that
+  member?** You settled it: the selection is the unit, and merge decides only what a
+  *click* selects.
+- **Should starter layouts get a door and a window?** You said yes — and it was already
+  true, see the hint item above. Nothing was built, and the claim that prompted the
+  question was mine and wrong.
+- **Which themes should merge?** You chose the two cold neutrals. Done, with the
+  correction to my reasoning above.
+- **The old per-piece shadow gate section.** The gate is deleted — it was a workaround at
+  the wrong layer, patching one symptom of a missing ceiling one shape at a time. Keep
+  your sweep, drop the mechanism.
 
 ---
 
