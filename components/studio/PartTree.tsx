@@ -423,8 +423,10 @@ export function PartTree() {
             "Coastal" does.
             It also fits. Labelled, these wrapped to four rows (~162px) in the
             1024–1279px rail, which is 208px wide with 176px of content: "Warm
-            Minimal" alone is ~116px. Five 30px swatches and four gaps are 174px —
-            one row, in the narrowest rail there is.
+            Minimal" alone is ~116px. Four 30px swatches and three gaps are 138px —
+            one row, in the narrowest rail there is, with room to spare. It was five
+            until `Coastal` and `Studio Loft` merged into one cold neutral; the count
+            is derived from `THEMES`, so nothing here needs to know that.
             The name is not lost: it is the accessible name, the tooltip, and the
             section's collapsed `meta` above, which is where a *chosen* theme should
             be reported anyway. */}
@@ -504,7 +506,13 @@ export function PartTree() {
               raises the question, and worded about the ROOM rather than about the
               renderer — on Fast quality there are no cast shadows at all, so a
               sentence claiming the room is unlit would be wrong half the time
-              while this one stays true. */}
+              while this one stays true.
+              It is NOT the common case, and I had that backwards for a while:
+              `lib/room-openings.ts` gives every preset room a door and a window
+              before any furniture is placed, so a starter room has two ways in for
+              the light. What is left is a room someone has emptied, and a room
+              rebuilt from photographs where detection found no opening — which is
+              exactly where a silent flat sun mood would be most confusing. */}
           {sunHasNoWayIn && (
             <p style={{ fontSize: 10.5, color: 'var(--ink-3)', lineHeight: 1.4, margin: '6px 0 0' }}>
               Sunlight only reaches a room through its openings. Add a window or a door

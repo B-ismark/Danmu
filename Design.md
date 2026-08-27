@@ -1132,7 +1132,28 @@ are what serve "communicate a plan", and they stay.
   back to the caller, because re-grounding the piece for its new dimensions and
   mount type is physics the Inspector owns.
 - **One-tap themes** (`lib/themes.ts`) — recolour all unlocked parts + set a
-  matching lighting mood.
+  matching lighting mood. **Four, not five**, and the chip reports the colours
+  rather than the mood. Both halves answer one report: "some of the lighting and the
+  style override each other". The override was real and mutual — `activeTheme`
+  tested `t.lighting === lighting` alongside the colours, so moving the light
+  UNTICKED the theme while the room stayed every colour that theme had painted it,
+  and the section header stopped naming it. Pressing a swatch moving the light is the
+  feature (one tap, whole look) and is legible now that both controls sit in the same
+  section; the reverse never was. The merge took `Coastal` and `Studio Loft` — two
+  of the five offering the same `cool` mood — into `Cool Neutral`, keeping Coastal's
+  sage accent and Studio Loft's charcoal case goods.
+  **One claim about that merge was wrong and the measurement is in
+  `tests/themes.test.ts`.** The reason given was that the two were near-duplicates
+  on colour as well as on mood; mean `deltaEOk` over the tones each theme applies
+  puts them at 0.304, the third most DISTINCT pair in the original five, while the
+  closest pairs are `warm-min`/`coastal` at 0.073 and `heritage`/`afro-mod` at
+  0.078. The metric is the wrong instrument rather than the set being wrong — it is
+  dominated by lightness, so two pale palettes score as similar even when one is
+  beige and the other sage, which is a difference anyone sees instantly because a
+  whole-room hue shift is loud at a small per-colour distance. So the merge stands on
+  the lighting overlap, which is the half of the report that was about overriding, and
+  the test pins the thing that needs no threshold: no two themes may paint the same
+  room. A tuned threshold is a record of today's palette wearing a gate's clothes.
 - **2D plan** (`PlanView.tsx`) synced with the 3D scene; export via
   `lib/plan-export.ts`. It is a peer of the 3D view rather than a lesser copy of
   it: a drag resolves through the same pipeline (see **One resolve, two surfaces**
@@ -1286,7 +1307,7 @@ undo — see `lib/storage.ts`).
 | `lib/room-scene.ts` | The React half of the above: `useRoomScene` (whole scene, memoised), `useRoomPart`, `usePartTransform` (one part, narrow subscription, for `Draggable` and `Dressing`), `useHasOverrides`, and `currentRoomScene()` for pointer handlers. The row here used to say "build a scene from a room / detections", which is `scene-spec`'s job, not this module's. |
 | `lib/textures.ts` | Procedural normal/roughness maps (offline, zero assets). |
 | `lib/light-units.ts` | Lumens → candela (isotropic and in-cone), and kelvin → sRGB via the Planckian locus. Pure and tested — the interface between how a lamp is described and how three renders it. |
-| `lib/themes.ts` | One-tap restyle palettes. |
+| `lib/themes.ts` | One-tap restyle palettes — four, each a different room. |
 | `lib/capture.ts` / `lib/image-quality.ts` / `lib/color-sample.ts` | Photo capture + quality + colour sampling. `capture.ts` also owns **photo normalisation**: every photo entering the app is re-encoded to ≤1600 px on its long edge (`normalizePhoto`) and screened against a raster allowlist (`isAcceptedPhoto` — `image/*` also matches SVG, which has no pixels to measure). Nothing downstream wants more resolution, and four untouched 12 MP uploads exceeded the detection endpoint's inline-request ceiling. It also **strips metadata** on the passthrough path via `lib/jpeg-strip.ts` — see §3. `readCaptureFacts` is the one EXIF read, returning two things with two lifetimes: the `pose` persisted onto the `Capture` for as long as the room exists, and the transient facts that decide which wall this is and are then dropped. It MUST run on the original file — the strip destroys exactly what it reads, which is the point of the strip. |
 | `lib/jpeg-strip.ts` | Removes EXIF (APP1), IPTC (APP13) and comment segments from a JPEG by byte surgery, so the image data is copied verbatim and the passthrough optimisation survives. Keeps JFIF density and the **ICC colour profile** — neither identifies anyone, and dropping the profile would shift the colours this app exists to get right. Returns the input untouched for anything it cannot parse: a photo that kept its metadata is a smaller problem than a photo we corrupted. **Read anything you need out of EXIF before calling it** — the focal length a future calibration pass wants lives in the segment this deletes. |
 | `lib/color.ts` | Colour arithmetic: WCAG contrast, and OKLab as a space where "same colour" means something. `globals.css` states a ratio next to almost every token and `CLAUDE.md` turns those into a rule, but nothing checked any of it — a comment claiming a ratio is a comment. It also lets `scene-palette.ts`' hand-copied duplicates be compared perceptually rather than by string equality, which is brittle one way and blind the other. |
