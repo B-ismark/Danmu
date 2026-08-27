@@ -425,11 +425,18 @@ export function solveLayout(
   // handful of evaluations against the anneal's sixteen hundred. Order matters:
   // snapping first means the prune is deciding about the yaw the user would actually
   // see, not about one three degrees off it.
-  winner = snapYaws(model, winner, weights);
+  winner = snapYaws(model, winner, weights, false);
   winner = pruneMoves(model, origin, winner, weights);
-  // …and last, because it is the only pass whose objective the prune cannot see: a
-  // move that opens a route would be reverted by a prune scoring without navigation.
+  // …then the repair, because it is the only pass whose objective the prune cannot
+  // see: a move that opens a route would be reverted by a prune scoring without
+  // navigation.
   winner = openRoutes(model, winner, weights, b, rng);
+  // …and the tidy again, because the repair is a search like any other and hands
+  // back the same few-degree residue the first tidy exists to remove. It used to be
+  // the last word, so on any room that WAS cut — the only rooms it runs on — the
+  // yaws the user saw were the untidied ones. A second pass costs a handful of
+  // breakdowns and is a no-op when `openRoutes` changed nothing.
+  winner = snapYaws(model, winner, weights, true);
 
   let breakdownAfter = costBreakdown(model, winner, weights, NAV_CELL);
   // …and never hand back something worse than what we were given. The prune spends a
@@ -452,7 +459,10 @@ export function solveLayout(
     breakdownBefore,
     breakdownAfter,
     moved,
-    moves: explain(model, origin, winner, weights, moved),
+    // A cell only when the layout we were handed actually had floor cut off from the
+    // door. If it did not, no move can be credited to opening a route, and the
+    // distance transforms would be paid for an answer that is known in advance.
+    moves: explain(model, origin, winner, weights, moved, breakdownBefore.navigation > 0 ? NAV_CELL : null),
   };
 }
 
@@ -524,11 +534,20 @@ function openRoutes(
     }
   }
   for (const p of best) p.yaw = normaliseYaw(p.yaw);
-  return best;
+  // The fine-grid re-check this function's own doc comment promised — and did not
+  // do. The loop above optimises a COARSE proxy (`REPAIR_CELL`, 0.1 m against
+  // `NAV_CELL`'s 0.05) precisely because it is paid per proposal, and a proxy that
+  // quantises toward "impassable" can hand back an arrangement the real grid scores
+  // worse than the one it started from. Nothing downstream would have noticed: the
+  // only guard after this is `after >= before`, which compares against the layout
+  // the USER had, not against the good answer this pass was given. So a repair could
+  // quietly spend the search's work and return something worse, and the doc said it
+  // couldn't.
+  const fine = (p: Placement[]) => costBreakdown(m, p, weights, NAV_CELL).total;
+  return fine(best) < fine(placements) ? best : placements;
 }
 
-/** Square up anything that is nearly square, and keep the change only if the room
- *  agrees.
+/** Square up anything that is nearly square.
  *
  *  The annealer's free-turn proposal exists so a chair can angle toward a sofa, and
  *  it also leaves pieces a few degrees off true that nobody meant to angle — the
@@ -538,14 +557,65 @@ function openRoutes(
  *  which now has a facing term that says so.
  *
  *  Snapped to the nearest wall's own heading rather than to the world axes, so it is
- *  right in a room whose walls the user has dragged off square. */
-function snapYaws(m: LayoutModel, placements: Placement[], weights: ScoreWeights): Placement[] {
+ *  right in a room whose walls the user has dragged off square.
+ *
+ *  ── Why the score does not get a vote ──────────────────────────────────────
+ *
+ *  This used to keep the snap only `if (trial <= cost)`, and that gate undid the
+ *  pass it was guarding. `SNAP_TOL` has already made the judgement — *inside this
+ *  band the angle is not a choice* — so re-asking a cost function that prices taste
+ *  is asking the wrong question, and it loses on a coin flip: measured per degree,
+ *  wall-facing costs `alignment × FACING_GAIN / 180` = **0.089**, while the relation
+ *  term's own facing gradient on the same piece is **0.10**. Within 12 % of each
+ *  other, so whichever way a sofa's partner happened to land decided whether the
+ *  sofa came back square. Over twelve seeds of an eighteen-piece room, **6 of 51
+ *  moved pieces** were handed back at 1°, 3°, 4°, 7° and 8° off — angles no one
+ *  chose, that no one can see the reason for, and that read as the solver being
+ *  arbitrary. It is exactly the complaint "things get rotated at odd angles".
+ *
+ *  Geometry still gets a veto, and only geometry: turning a 2.2 m sofa 4° sweeps its
+ *  corners through ~80 mm, which can genuinely push it into a neighbour or through a
+ *  wall. So the snap is refused when it makes one of THESE worse, and taste is not
+ *  consulted at all. A tidy may be vetoed by a fact; it may not be outbid by a
+ *  preference.
+ *
+ *  The list is the terms that answer a yes/no question about the room rather than a
+ *  question of degree — is it inside something, is it outside the room, is it in a
+ *  doorway, is part of the floor now unreachable. `access`, `walkway` and `window`
+ *  were in it to begin with and measurably should not be: they are continuous
+ *  ergonomic gradients, so a 4° tilt that buys two centimetres of walkway vetoes its
+ *  own tidy. Over twelve seeds that cost two extra crooked pieces (9 of 95 against
+ *  7) and bought nothing — total cost moved by 0.3 and 0.6 on two seeds and was
+ *  identical on the other ten. A wardrobe standing at 86° to save 2 cm is the room
+ *  telling you it is too full, and the room report is what says so.
+ *
+ *  `navigation` IS in it, and leaving it out was a real hole rather than a judgement
+ *  call: traced through the finish passes on a scrambled U, the tidy took navigation
+ *  from 342.0 to 343.8 — squaring a piece closed the gap its tilt had been leaving
+ *  open, and cut a part of the room off from the door. `DEFAULT_WEIGHTS`' own
+ *  comment puts a square metre of unreachable floor in the same tier as a blocked
+ *  door, "because it is the same failure: part of the room is not part of the
+ *  room". It is the one term here that needs a grid, so `hardCost` pays for a
+ *  distance transform per candidate — a few dozen per solve, against the annealer's
+ *  sixteen hundred evaluations, and only for pieces already inside `SNAP_TOL`. */
+const HARD_TERMS: Array<keyof ScoreWeights> = ['overlap', 'outside', 'door', 'navigation'];
+
+function hardCost(m: LayoutModel, p: Placement[], weights: ScoreWeights, navCell: number | null): number {
+  const b: CostBreakdown = costBreakdown(m, p, weights, navCell);
+  let sum = 0;
+  for (const k of HARD_TERMS) sum += b[k];
+  return sum;
+}
+
+function snapYaws(m: LayoutModel, placements: Placement[], weights: ScoreWeights, guardRoutes: boolean): Placement[] {
+  const navCell = guardRoutes ? NAV_CELL : null;
   const out = placements.map((p) => ({ ...p }));
-  let cost = scoreLayout(m, out, weights);
+  let hard = hardCost(m, out, weights, navCell);
   const q = Math.PI / 2;
   for (let i = 0; i < out.length; i++) {
     if (!m.ctx.movable[i]) continue;
-    const edge = nearestEdge(m.poly, out[i].x, out[i].z, m.centre);
+    // Its own centroid, not `m.centre` — see the same call in `layout-score`.
+    const edge = nearestEdge(m.poly, out[i].x, out[i].z);
     if (!edge) continue;
     const base = edge.yaw;
     const snapped = normaliseYaw(base + Math.round(angleDelta(out[i].yaw, base) / q) * q);
@@ -553,8 +623,11 @@ function snapYaws(m: LayoutModel, placements: Placement[], weights: ScoreWeights
     if (off < 1e-4 || off > SNAP_TOL) continue;
     const keep = out[i];
     out[i] = { ...keep, yaw: snapped };
-    const trial = scoreLayout(m, out, weights);
-    if (trial <= cost) cost = trial;
+    const trial = hardCost(m, out, weights, navCell);
+    // `+ 1e-6`, not `<=`: the hard terms are sums of areas and distances, so an
+    // unchanged arrangement can differ in the last bit and a bare `<=` would drop
+    // the tidy for a rounding error.
+    if (trial <= hard + 1e-6) hard = trial;
     else out[i] = keep;
   }
   return out;
@@ -616,15 +689,26 @@ function explain(
   placements: Placement[],
   weights: ScoreWeights,
   moved: number[],
+  /** The grid the navigation term is scored on here, or null to leave it at zero.
+   *
+   *  It was always null, because `costBreakdown` defaults it off for the annealer's
+   *  sake — so `c.navigation` was zero in both readings, its gain was zero for every
+   *  move, and `'navigation'` could never be the term credited even after it was
+   *  added to `TERMS`. The one pass that exists solely to open a route could not say
+   *  that is what it did; its moves were credited to whichever taste term happened
+   *  to shift. The caller passes a cell only when the layout it started from was
+   *  actually cut — in a room with a route to everywhere, no move can be a
+   *  route-opening one, so nobody pays for the distance transforms. */
+  navCell: number | null,
 ): MoveReason[] {
   if (moved.length === 0) return [];
   const scratch = placements.map((p) => ({ ...p }));
-  const here = costBreakdown(m, scratch, weights);
+  const here = costBreakdown(m, scratch, weights, navCell);
   const out: MoveReason[] = [];
   for (const i of moved) {
     const keep = scratch[i];
     scratch[i] = { ...origin[i] };
-    const back = costBreakdown(m, scratch, weights);
+    const back = costBreakdown(m, scratch, weights, navCell);
     scratch[i] = keep;
     let term: keyof ScoreWeights = 'inertia';
     let best = -Infinity;
@@ -653,6 +737,11 @@ const TERMS: Array<keyof ScoreWeights> = [
   'overlap',
   'outside',
   'door',
+  // The term `openRoutes` exists to buy, and it was missing from this list — so the
+  // single most valuable thing a suggestion can do (reconnect a stranded half of the
+  // room) was always attributed to something else, and the sentence the user reads
+  // named the wrong reason.
+  'navigation',
   'access',
   'walkway',
   'window',
