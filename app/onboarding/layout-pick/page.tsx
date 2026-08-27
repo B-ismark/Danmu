@@ -122,134 +122,137 @@ export default function LayoutPickPage() {
       // destination alongside it.
       back={<BackButton onBack={() => router.back()} />}
     >
-      <div className="page-pad" style={{ display: 'grid', placeItems: 'center' }}>
-        {/* .auto-grid--wide collapses to one column on a phone; the old
-            minmax(380px, 1fr) forced a track wider than the viewport. */}
-        <div className="auto-grid auto-grid--wide" style={{ width: '100%', gap: 32, alignItems: 'start' }}>
-          {/* INTRO + PICKER */}
-          <div>
-            <StepHeader
-              kicker="Pick a shape"
-              title="Which footprint is closest to your room?"
-              subtitle="It becomes the 1:1 floor your 3D room is built on. Start decorating right away, or photograph your real room first — either way you can move the walls later."
-            />
-            <div role="radiogroup" aria-label="Room footprint" style={{ marginTop: 24, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              {LAYOUTS.map((l, i) => {
-                const active = sel === l.id;
-                return (
-                  <button
-                    key={l.id}
-                    ref={(el) => {
-                      optionRefs.current[i] = el;
-                    }}
-                    role="radio"
-                    aria-checked={active}
-                    aria-label={`${l.name}, ${l.area} of floor, starts as a ${l.starter.toLowerCase()}`}
-                    // Roving tabindex: one stop for the whole group, arrows move
-                    // within it — the standard radiogroup keyboard contract.
-                    tabIndex={active ? 0 : -1}
-                    onKeyDown={(e) => onOptionKeyDown(e, i)}
-                    onClick={() => setSel(l.id)}
-                    style={{
-                      border: `2px solid ${active ? 'var(--accent)' : 'var(--edge)'}`,
-                      background: active ? 'var(--accent-tint)' : 'var(--paper)',
-                      borderRadius: 'var(--r-3)',
-                      padding: '14px 14px 12px',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      minHeight: 122,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 8,
-                      transition: 'border-color .12s, background .12s',
-                    }}
-                  >
-                    <svg viewBox="0 0 240 180" style={{ width: '100%', height: 60 }} aria-hidden="true">
-                      <path
-                        d={l.path}
-                        fill={active ? 'var(--accent)' : 'var(--ink-4)'}
-                        fillOpacity={active ? 0.25 : 0.4}
-                        stroke={active ? 'var(--accent)' : 'var(--ink-2)'}
-                        strokeWidth="2"
-                      />
-                    </svg>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                      <span style={{ fontSize: 13.5, fontWeight: 700, color: active ? 'var(--accent-text)' : 'var(--ink)' }}>{l.name}</span>
-                      <span className="mono" style={{ fontSize: 10, color: 'var(--ink-2)' }}>{l.area}</span>
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--ink-2)' }}>Starts as a {l.starter.toLowerCase()}</div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {error && (
-              <p
-                role="status"
-                aria-live="polite"
-                style={{
-                  margin: '16px 0 0',
-                  padding: '10px 12px',
-                  borderRadius: 'var(--r-2)',
-                  background: 'var(--danger-tint)',
-                  color: 'var(--danger-text)',
-                  fontSize: 12.5,
-                  lineHeight: 1.45,
-                }}
-              >
-                {error}
-              </p>
-            )}
-
-            <button
-              onClick={() => createRoom('model')}
-              disabled={saving !== null}
-              className="ds-btn ds-btn--accent"
-              style={{ marginTop: 24, height: 48, fontSize: 14, justifyContent: 'center', width: '100%' }}
-            >
-              {saving === 'model' ? 'Creating your room…' : (<>Start decorating · {layout.starter.toLowerCase()}<Icon name="arrow-right" size={14} color="var(--on-accent)" /></>)}
-            </button>
-            <button
-              onClick={() => createRoom('capture')}
-              disabled={saving !== null}
-              className="ds-btn ds-btn--ghost"
-              style={{ marginTop: 8, height: 44, fontSize: 12.5, justifyContent: 'center', width: '100%', color: 'var(--ink-2)' }}
-            >
-              <Icon name="camera" size={13} />
-              {saving === 'capture' ? 'Creating your room…' : 'Photograph my real room first (optional)'}
-            </button>
+      {/* No `page-pad` here: DocShell's hero variant already applies it AND
+          already centres its measured column, so a second one made this the one
+          page in the app with 80px/48px of gutter instead of 40/24 — and left the
+          back link, which sits at the column edge, inset from everything it
+          belongs to. */}
+      {/* .auto-grid--wide collapses to one column on a phone; the old
+          minmax(380px, 1fr) forced a track wider than the viewport. */}
+      <div className="auto-grid auto-grid--wide" style={{ width: '100%', gap: 32, alignItems: 'start' }}>
+        {/* INTRO + PICKER */}
+        <div>
+          <StepHeader
+            kicker="Pick a shape"
+            title="Which footprint is closest to your room?"
+            subtitle="It becomes the 1:1 floor your 3D room is built on. Start decorating right away, or photograph your real room first — either way you can move the walls later."
+          />
+          <div role="radiogroup" aria-label="Room footprint" style={{ marginTop: 24, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {LAYOUTS.map((l, i) => {
+              const active = sel === l.id;
+              return (
+                <button
+                  key={l.id}
+                  ref={(el) => {
+                    optionRefs.current[i] = el;
+                  }}
+                  role="radio"
+                  aria-checked={active}
+                  aria-label={`${l.name}, ${l.area} of floor, starts as a ${l.starter.toLowerCase()}`}
+                  // Roving tabindex: one stop for the whole group, arrows move
+                  // within it — the standard radiogroup keyboard contract.
+                  tabIndex={active ? 0 : -1}
+                  onKeyDown={(e) => onOptionKeyDown(e, i)}
+                  onClick={() => setSel(l.id)}
+                  style={{
+                    border: `2px solid ${active ? 'var(--accent)' : 'var(--edge)'}`,
+                    background: active ? 'var(--accent-tint)' : 'var(--paper)',
+                    borderRadius: 'var(--r-3)',
+                    padding: '14px 14px 12px',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    minHeight: 122,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 8,
+                    transition: 'border-color .12s, background .12s',
+                  }}
+                >
+                  <svg viewBox="0 0 240 180" style={{ width: '100%', height: 60 }} aria-hidden="true">
+                    <path
+                      d={l.path}
+                      fill={active ? 'var(--accent)' : 'var(--ink-4)'}
+                      fillOpacity={active ? 0.25 : 0.4}
+                      stroke={active ? 'var(--accent)' : 'var(--ink-2)'}
+                      strokeWidth="2"
+                    />
+                  </svg>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                    <span style={{ fontSize: 13.5, fontWeight: 700, color: active ? 'var(--accent-text)' : 'var(--ink)' }}>{l.name}</span>
+                    <span className="mono" style={{ fontSize: 10, color: 'var(--ink-2)' }}>{l.area}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--ink-2)' }}>Starts as a {l.starter.toLowerCase()}</div>
+                </button>
+              );
+            })}
           </div>
 
-          {/* PREVIEW */}
-          <div
-            style={{
-              border: '1px solid var(--hairline)',
-              background: 'var(--paper)',
-              borderRadius: 'var(--r-card)',
-              padding: 24,
-              minHeight: 360,
-              position: 'relative',
-              boxShadow: 'var(--shadow-soft)',
-            }}
+          {error && (
+            <p
+              role="status"
+              aria-live="polite"
+              style={{
+                margin: '16px 0 0',
+                padding: '10px 12px',
+                borderRadius: 'var(--r-2)',
+                background: 'var(--danger-tint)',
+                color: 'var(--danger-text)',
+                fontSize: 12.5,
+                lineHeight: 1.45,
+              }}
+            >
+              {error}
+            </p>
+          )}
+
+          <button
+            onClick={() => createRoom('model')}
+            disabled={saving !== null}
+            className="ds-btn ds-btn--accent"
+            style={{ marginTop: 24, height: 48, fontSize: 14, justifyContent: 'center', width: '100%' }}
           >
-            <div className="ds-label" style={{ color: 'var(--ink-2)', marginBottom: 18 }}>
-              Footprint preview · <span className="mono" style={{ color: 'var(--ink)' }}>{layout.width.toFixed(1)} × {layout.depth.toFixed(1)} m</span> · <span className="mono" style={{ color: 'var(--ink)' }}>{layout.area}</span> · {layout.starter}
-            </div>
-            <div className="ds-crosshair-bg" style={{ aspectRatio: '4/3', position: 'relative', borderRadius: 'var(--r-2)', overflow: 'hidden' }}>
-              <svg viewBox="0 0 240 180" style={{ width: '100%', height: '100%', display: 'block' }} role="img" aria-label={`${layout.name} footprint, ${layout.width.toFixed(1)} by ${layout.depth.toFixed(1)} metres, ${layout.area} of floor`}>
-                <path
-                  d={layout.path}
-                  fill="var(--accent-tint)"
-                  stroke="var(--accent)"
-                  strokeWidth="1.5"
-                />
-                <g fontFamily="var(--font-mono)" fontSize="8" fill="var(--accent-text)">
-                  <line x1="20" y1="10" x2="220" y2="10" stroke="var(--accent)" strokeWidth="0.8" />
-                  <rect x="102" y="4" width="40" height="12" fill="var(--paper)" />
-                  <text x="122" y="12" textAnchor="middle">{(layout.width * 1000).toFixed(0)} mm</text>
-                </g>
-              </svg>
-            </div>
+            {saving === 'model' ? 'Creating your room…' : (<>Start decorating · {layout.starter.toLowerCase()}<Icon name="arrow-right" size={14} color="var(--on-accent)" /></>)}
+          </button>
+          <button
+            onClick={() => createRoom('capture')}
+            disabled={saving !== null}
+            className="ds-btn ds-btn--ghost"
+            style={{ marginTop: 8, height: 44, fontSize: 12.5, justifyContent: 'center', width: '100%', color: 'var(--ink-2)' }}
+          >
+            <Icon name="camera" size={13} />
+            {saving === 'capture' ? 'Creating your room…' : 'Photograph my real room first (optional)'}
+          </button>
+        </div>
+
+        {/* PREVIEW */}
+        <div
+          style={{
+            border: '1px solid var(--hairline)',
+            background: 'var(--paper)',
+            borderRadius: 'var(--r-card)',
+            padding: 24,
+            minHeight: 360,
+            position: 'relative',
+            boxShadow: 'var(--shadow-soft)',
+          }}
+        >
+          <div className="ds-label" style={{ color: 'var(--ink-2)', marginBottom: 18 }}>
+            Footprint preview · <span className="mono" style={{ color: 'var(--ink)' }}>{layout.width.toFixed(1)} × {layout.depth.toFixed(1)} m</span> · <span className="mono" style={{ color: 'var(--ink)' }}>{layout.area}</span> · {layout.starter}
+          </div>
+          <div className="ds-crosshair-bg" style={{ aspectRatio: '4/3', position: 'relative', borderRadius: 'var(--r-2)', overflow: 'hidden' }}>
+            <svg viewBox="0 0 240 180" style={{ width: '100%', height: '100%', display: 'block' }} role="img" aria-label={`${layout.name} footprint, ${layout.width.toFixed(1)} by ${layout.depth.toFixed(1)} metres, ${layout.area} of floor`}>
+              <path
+                d={layout.path}
+                fill="var(--accent-tint)"
+                stroke="var(--accent)"
+                strokeWidth="1.5"
+              />
+              <g fontFamily="var(--font-mono)" fontSize="8" fill="var(--accent-text)">
+                <line x1="20" y1="10" x2="220" y2="10" stroke="var(--accent)" strokeWidth="0.8" />
+                <rect x="102" y="4" width="40" height="12" fill="var(--paper)" />
+                <text x="122" y="12" textAnchor="middle">{(layout.width * 1000).toFixed(0)} mm</text>
+              </g>
+            </svg>
           </div>
         </div>
       </div>
@@ -257,12 +260,26 @@ export default function LayoutPickPage() {
   );
 }
 
-// Just the button. The bar around it, the mark and the divider are DocShell's.
+// Just the button. Where it sits is DocShell's — the top of the content column,
+// not the chrome bar (see the `back` prop's note there).
+//
 // No step counter: the primary CTA on this screen goes straight to the studio,
 // so "02 / 04" was promising a sequence most people never walk.
+//
+// `marginLeft: -10` cancels the ghost button's own horizontal padding so the
+// word "Back" starts on the same vertical as the kicker and the heading below
+// it. The offset lives here rather than in DocShell because the number IS this
+// button's padding, and a shell that guessed at its slot's inner padding would
+// be wrong for the next control put in it. A back link that sits 10px right of
+// everything it belongs to reads as a stray, which is half of why the old
+// placement failed.
 function BackButton({ onBack }: { onBack: () => void }) {
   return (
-    <button onClick={onBack} className="ds-btn ds-btn--ghost" style={{ height: 40, padding: '0 10px' }}>
+    <button
+      onClick={onBack}
+      className="ds-btn ds-btn--ghost"
+      style={{ height: 32, padding: '0 10px', marginLeft: -10 }}
+    >
       <Icon name="chevron-left" size={14} />
       <span style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>Back</span>
     </button>

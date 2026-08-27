@@ -304,6 +304,7 @@ export function IconButton({
   label,
   onClick,
   active,
+  expanded,
   disabled,
   /** visual box; the hit area is lifted to 44px by .icon-btn::after. Floored at
    *  24px so no control falls under the WCAG 2.5.8 minimum target size. */
@@ -320,6 +321,11 @@ export function IconButton({
   /** receives the event, so buttons nested in a clickable row can stopPropagation */
   onClick?: (e: MouseEvent<HTMLButtonElement>) => void;
   active?: boolean;
+  /** disclosure state, for a button that folds something away. Kept OFF the row
+   *  it sits in: `aria-expanded` is not a supported state of `role="option"`
+   *  (ARIA 1.2 dropped it), so the control that does the folding is the one that
+   *  reports it. */
+  expanded?: boolean;
   disabled?: boolean;
   size?: number;
   iconSize?: number;
@@ -338,6 +344,7 @@ export function IconButton({
       disabled={disabled}
       aria-label={label}
       aria-pressed={active === undefined ? undefined : active}
+      aria-expanded={expanded === undefined ? undefined : expanded}
       title={title ?? label}
       className={`icon-btn${variant === 'outline' ? ' icon-btn--outline' : ''}${tone === 'danger' ? ' icon-btn--danger' : ''}${active ? ' is-active' : ''}${className ? ` ${className}` : ''}`}
       style={{ width: Math.max(size, 24), height: Math.max(size, 24), ...style }}

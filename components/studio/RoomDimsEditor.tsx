@@ -10,7 +10,6 @@ import { fromMM, toMM, stepFor, precisionFor } from '@/lib/units';
 import { ROOM_SIDE_M } from '@/lib/dimension-ranges';
 import { roomStore } from '@/lib/storage';
 import { useParams } from 'next/navigation';
-import { Icon } from '@/components/ui/Icon';
 import { NumberField } from '@/components/ui/NumberField';
 
 export function RoomDimsEditor() {
@@ -63,44 +62,21 @@ export function RoomDimsEditor() {
 
   const labels: ['Width', 'Depth', 'Height'] = ['Width', 'Depth', 'Height'];
 
-  // Collapsed by default — the shell is set once during onboarding and edited
-  // rarely, while the left rail's real job is the furniture. The header doubles
-  // as the toggle and carries a live summary, so the size stays glanceable
-  // without opening anything (nothing else in the studio shows it).
-  const [open, setOpen] = useState(false);
-  const summary = local.join(' × ');
-
+  // No disclosure of its own any more. This was a collapsible "Room shell" header
+  // sitting INSIDE the rail's collapsible "Room" section — two locks on one door,
+  // which is the objection `ViewOptions` already records against a popover inside
+  // a `RailSection`, and it cost a click to reach the fields plus a chevron and a
+  // title that repeated what the section above already said.
+  //
+  // Its collapsed summary went with it. That existed only because this was
+  // collapsed, and the Room section's own `meta` is where a collapsed state
+  // belongs — one summary, in the header that does the collapsing. (That meta was
+  // also the one printing `0.0×0.0m`: it divided metres by 1000.)
   return (
-    <div style={{ padding: open ? '14px 16px' : '12px 16px', borderBottom: '1px solid var(--hairline)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: open ? 10 : 0, gap: 8 }}>
-        <button
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            background: 'transparent',
-            border: 'none',
-            padding: 0,
-            cursor: 'pointer',
-            flex: 1,
-            textAlign: 'left',
-          }}
-        >
-          <span style={{ display: 'flex', color: 'var(--ink-3)', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>
-            <Icon name="chevron-right" size={14} />
-          </span>
-          <span className="section-title" style={{ color: 'var(--ink)' }}>Room shell</span>
-          {!open && (
-            <span className="mono" style={{ fontSize: 11, color: 'var(--ink-3)', letterSpacing: '0.04em' }}>
-              {summary} {dimUnit}
-            </span>
-          )}
-        </button>
-      </div>
-      {open && (
-      <>
+    // `--hairline`, not `--edge`: a decorative divider between two groups in the
+    // rail, not the boundary of anything interactive.
+    <div style={{ paddingBottom: 14, marginBottom: 4, borderBottom: '1px solid var(--hairline)' }}>
+      <span className="ds-label" style={{ display: 'block', marginBottom: 8 }}>Room dimensions</span>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
           {labels.map((axis, i) => (
             <label key={axis} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -122,10 +98,17 @@ export function RoomDimsEditor() {
         <div style={{ fontSize: 11, marginTop: 6, lineHeight: 1.4, color: rangeError ? 'var(--danger-text)' : 'var(--ink-3)' }}>
           {rangeError
             ? `That is outside ${ROOM_SIDE_M.min}–${ROOM_SIDE_M.max} m — enter a size in that range and the room will follow.`
-            : `Sizes in ${dimUnit}. Anything from ${ROOM_SIDE_M.min} to ${ROOM_SIDE_M.max} m a side.`}
+            // Was "Sizes in {unit}. Anything from 1 to 50 m a side." Trimmed
+            // because the range only matters once you are outside it, which is
+            // what the error branch above is for.
+            //
+            // The unit stays a literal `m`: `ROOM_SIDE_M` is metres by name and
+            // by value, so interpolating `dimUnit` here would label 1–50 as
+            // centimetres or feet for anyone who has changed the setting. Shorter
+            // copy is not worth a wrong number — rule 2, and it would have been
+            // invisible to everyone left on metres.
+            : `${ROOM_SIDE_M.min}–${ROOM_SIDE_M.max} m a side.`}
         </div>
-      </>
-      )}
     </div>
   );
 }

@@ -1,8 +1,13 @@
 'use client';
 
 // The shell for every page that is READ and NAVIGATED, as opposed to operated:
-// the workspace, settings, and the layout picker. It owns the top bar, the path
-// back, and how wide the content is allowed to get.
+// the workspace, settings, and the layout picker. It owns the top bar, the two
+// ways back, and how wide the content is allowed to get.
+//
+// The two ways back are deliberately different and deliberately not adjacent:
+// the breadcrumb is a FIXED destination and lives in the bar with the mark,
+// while `back` is HISTORY and lives at the top of the content column. See the
+// note on the `back` prop for why that is not where it started.
 //
 // Three routes had built that bar three times. They agreed on the class
 // (`.chrome-bar`) and on nothing else — the mark was a plain graphic on the
@@ -38,10 +43,20 @@ export function DocShell({
   /** Right end of the bar. Keep it to one committing action where possible. */
   actions?: ReactNode;
   /**
-   * Left of the mark, for a step in a flow that should go back the way it came.
-   * Supplied by the route rather than built here, because `router.back()` is
-   * history — a different destination from the breadcrumb's fixed one, and only
-   * the route knows which of the two it means.
+   * For a step in a flow that should go back the way it came. Supplied by the
+   * route rather than built here, because `router.back()` is history — a
+   * different destination from the breadcrumb's fixed one, and only the route
+   * knows which of the two it means.
+   *
+   * **Rendered at the top of the CONTENT column, not in the chrome bar.** It was
+   * in the bar, left of the mark, and it read as missing: on a `hero` page the
+   * content is centred in the viewport, so the bar's left edge was ~115px above
+   * the heading and a whole content-column's width to its left. The first
+   * question anyone asked of that screen was "why is there no back button".
+   * A control belongs beside the thing it acts on, and what Back undoes is the
+   * choice being made in the column — not anything in the bar. The bar keeps the
+   * breadcrumb, which is a different promise: a fixed destination rather than
+   * a step backwards.
    */
   back?: ReactNode;
   /** `page` for card grids, `prose` for a page that is mostly reading and forms. */
@@ -51,6 +66,13 @@ export function DocShell({
   children: ReactNode;
 }) {
   const maxWidth = measure === 'prose' ? 'var(--measure-page-prose)' : 'var(--measure-page)';
+
+  const body = (
+    <>
+      {back && <div style={{ marginBottom: 10 }}>{back}</div>}
+      {children}
+    </>
+  );
 
   return (
     <div
@@ -67,8 +89,6 @@ export function DocShell({
       }}
     >
       <div className="chrome-bar">
-        {back}
-        {back && <div aria-hidden="true" style={{ width: 1, height: 18, background: 'var(--hairline)' }} />}
         {/* Always a link, always to the same place. This was the inconsistency:
             the workspace rendered a bare <DanmuMark/>, so the one affordance
             every other page trained you to click did nothing there. */}
@@ -89,10 +109,14 @@ export function DocShell({
             : { flex: 1, width: '100%', maxWidth, marginInline: 'auto' }
         }
       >
+        {/* Both branches render the same body, so the back slot cannot end up
+            inside the measured column on one variant and outside it on the
+            other — which is the whole point of putting it here. On `hero` the
+            measured column is the inner div; on `plain` it is the box above. */}
         {variant === 'hero' ? (
-          <div style={{ width: '100%', maxWidth }}>{children}</div>
+          <div style={{ width: '100%', maxWidth }}>{body}</div>
         ) : (
-          children
+          body
         )}
       </div>
     </div>

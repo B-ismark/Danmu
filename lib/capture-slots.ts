@@ -49,7 +49,7 @@
 // against their own photo, which is cheaper and honest.
 
 import type { CaptureSlot } from './storage';
-import { circularMeanDeg, circularSpreadDeg } from './compass';
+import { circularMeanDeg, circularSpreadDeg } from './bearings';
 
 /** Clockwise, and the index into it IS the quarter-turn count. `photo-geometry`'s
  *  `slotToWorld` puts n at −Z, e at +X, s at +Z, w at −X, which is clockwise in a
@@ -110,7 +110,7 @@ export const MAX_ANCHOR_SPREAD_DEG = 30;
  * Derived, never stored. Each placed photo carrying a bearing implies one:
  * `bearing − 90° × its quarter-turn count`. They are averaged as directions
  * rather than as numbers, because 359° and 1° average to 180° otherwise — the
- * same trap `lib/compass.ts` documents, and the reason this borrows its mean.
+ * same trap `lib/bearings.ts` documents, and the reason this borrows its mean.
  *
  * Returns null when nothing placed carries a bearing, and — deliberately — also
  * when the implied anchors disagree past `MAX_ANCHOR_SPREAD_DEG`. A set whose own

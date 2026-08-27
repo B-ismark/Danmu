@@ -62,6 +62,24 @@ describe('saveRoom / loadRoom', () => {
 });
 
 describe('listRooms', () => {
+  it('strips a legacy site down to the bearing on the way out', async () => {
+    // `Site` used to carry `lat`/`lon` for the sun mood. They are gone from the
+    // type, which stops anything reading them, but records written before that
+    // still hold the bytes — and nothing was removing them, so every save rewrote
+    // them and `buildSceneFile` exported them into a file meant to be handed to
+    // someone else. Rebuilt rather than deleted from, so an unknown key cannot
+    // survive either. The cast is the point: the type system is exactly what could
+    // not catch this.
+    const r = room('legacy');
+    await roomStore.saveRoom({
+      ...r,
+      site: { bearingDeg: 42, lat: 5.6039, lon: -0.187 } as unknown as NonNullable<typeof r.site>,
+    });
+    const back = await roomStore.loadRoom('legacy');
+    expect(back?.site).toEqual({ bearingDeg: 42 });
+    expect(Object.keys(back?.site ?? {})).toEqual(['bearingDeg']);
+  });
+
   it('derives the summary the workspace grid renders', async () => {
     await roomStore.saveRoom(room('a', { detectedObjects: [] }));
     await roomStore.saveCapture('a', { slot: 'n', blob: new Blob(['x']), takenAt: 1 });

@@ -1,57 +1,39 @@
 'use client';
 
-// Rails beside the room — the arrangement that ships today, and the one two of
-// the three prototypes are variations on.
+// Rails beside the room — the one shell both studio tabs stand in.
 //
-// Parametrised rather than copied. "Current" and "Sash" differ by whether the
-// dividers can be dragged; "Elastic" differs by which widths the rails start
-// from and whether their contents query their own box. Three files repeating this
-// grid would be three places for it to drift, which is the reason `StudioShell`
-// exists at all.
+// Docked, not floating. That was an open question for one round: three shells
+// were built and compared here, in the real studio over a real room, because the
+// only honest comparison is the same WebGL context and the same Inspector
+// contents differing solely in how width is handed out. The outcome, and why the
+// other two files are gone:
 //
-// Docked, not floating: Figma shipped floating panels in the UI3 beta and
-// reverted to fixed-but-resizable for the full rollout. `OverlayShell` is the
-// prototype that tests whether that verdict holds for a room you are arranging
-// furniture inside.
+// · `OverlayShell` (full-bleed canvas, rails floating over it) lost on occlusion,
+//   which is the same verdict Figma reached: they shipped floating panels in the
+//   UI3 beta and reverted to fixed-but-resizable for the full rollout. A room you
+//   are arranging furniture inside makes occlusion worse than an infinite plane
+//   does, not better — the piece being placed is the thing that hides under the
+//   Inspector.
+// · `ElasticShell` won and was folded into this file. Its two behaviours are now
+//   unconditional: the `compact` step below, and `container-type` on `.rail` so a
+//   rail's contents answer to the rail.
+//
+// The sash survives alongside it, because the two answer different widths.
+// Elastic only acts between 1024 and 1279px — above that the rails are already at
+// their token widths and nothing inside them is cramped — and at 1440px the rails
+// still cost ~40% of the window. A drag is the only thing that reaches that, and
+// the container queries are what make a dragged-narrow rail safe rather than
+// silently clipped.
 
-import dynamic from 'next/dynamic';
 import { type CSSProperties, type ReactNode, useRef } from 'react';
 import { useStudio } from '@/lib/store';
+import type { StudioLayout } from '../NarrowViewportBanner';
+import { RailSash } from './RailSash';
 import { LeftRailBody, RailToggle, RightRailBody, useRails } from './shell-parts';
-
-// Dynamic for the same reason the two prototype shells are in `StudioShell`: this
-// file ships, `sash` never becomes true in a production build, and no bundler can
-// see that from here — so a static import put the whole splitter widget in the
-// bundle every visitor downloads to look at a room they cannot resize.
-const RailSash = dynamic(() => import('./RailSash').then((m) => m.RailSash), { ssr: false });
 
 export const RAIL_ID = { left: 'studio-rail-left', right: 'studio-rail-right' } as const;
 
-/** Where a rail's width comes from.
- *  · `token`  — the stylesheet's `clamp()`. What ships today.
- *  · `stored` — what the user last dragged to, still inside that clamp.
- *  · `tight`  — `--rail-*-tight`, for a viewport with three columns but not three
- *               comfortable ones. Only honest if the rail's contents reflow at
- *               that width, which is what the container queries behind
- *               `rail--elastic` are for — so nothing but Elastic may ask for it. */
-export type RailWidths = 'token' | 'stored' | 'tight';
-
-export function DockedShell({
-  surface,
-  stacked,
-  /** Draggable dividers. */
-  sash = false,
-  widths = 'token',
-  /** An extra class on both rails — how `ElasticShell` turns them into query
-   *  containers without a second copy of this grid. */
-  railModifier,
-}: {
-  surface: ReactNode;
-  stacked: boolean;
-  sash?: boolean;
-  widths?: RailWidths;
-  railModifier?: string;
-}) {
+export function DockedShell({ surface, layout }: { surface: ReactNode; layout: StudioLayout }) {
   const { leftOpen, rightOpen, toggleRail } = useRails();
   const storedLeft = useStudio((s) => s.railLeftW);
   const storedRight = useStudio((s) => s.railRightW);
@@ -60,16 +42,27 @@ export function DockedShell({
   const leftRef = useRef<HTMLElement>(null);
   const rightRef = useRef<HTMLElement>(null);
 
-  // A remembered width is rendered INSIDE the token's bounds, never instead of
-  // them: a 520px rail dragged on a monitor is still a ceiling and not a promise
-  // when the same browser profile opens a laptop. `--rail-max` is a share of the
-  // window, so the room keeps most of it whatever was dragged.
+  const stacked = layout === 'stacked';
+
+  // Three sources, in priority order, and the order is the whole design:
+  //
+  // 1. What the user dragged. A preference always outranks a default — the same
+  //    reason this shell never auto-collapses a rail. But rendered INSIDE the
+  //    token's bounds, never instead of them: a 520px rail dragged on a monitor is
+  //    still a ceiling and not a promise when the same browser profile opens a
+  //    laptop, and `--rail-max` is a share of the window, so the room keeps most
+  //    of it whatever was dragged.
+  // 2. `--rail-*-tight`, between 1024 and 1279px. Three columns fit there but not
+  //    three comfortable ones, and this frees ~94px for the room. Only honest
+  //    because the rail's contents reflow at that width — that is what the
+  //    `@container rail` block in globals.css is for, and lowering these tokens
+  //    without checking that block is how a rail starts clipping in silence.
+  // 3. The token's own `clamp()`. What a wide window gets.
   const railWidth = (stored: number | null, side: 'left' | 'right') => {
-    if (widths === 'tight') return `var(--rail-${side}-tight)`;
-    if (widths === 'stored' && stored != null) {
+    if (stored != null) {
       return `clamp(var(--rail-${side}-min), ${stored}px, var(--rail-max))`;
     }
-    return `var(--rail-${side})`;
+    return layout === 'compact' ? `var(--rail-${side}-tight)` : `var(--rail-${side})`;
   };
 
   const shell = (
@@ -110,13 +103,12 @@ export function DockedShell({
   // collapses, because there the rails are content rather than chrome.
   const showLeft = stacked || leftOpen;
   const showRight = stacked || rightOpen;
-  const sashable = sash && !stacked;
 
   const tree = (
-    <aside key="tree" id={RAIL_ID.left} ref={leftRef} className={`rail rail--left${railModifier ? ` ${railModifier}` : ''}`} style={railStyle}>
+    <aside key="tree" id={RAIL_ID.left} ref={leftRef} className="rail rail--left" style={railStyle}>
       {!stacked && <RailToggle side="left" open={leftOpen} onToggle={() => toggleRail('left')} />}
       <LeftRailBody open={showLeft} />
-      {sashable && (
+      {!stacked && (
         <RailSash
           side="left"
           shellRef={shellRef}
@@ -130,16 +122,10 @@ export function DockedShell({
   );
 
   const inspector = (
-    <aside
-      key="inspector"
-      id={RAIL_ID.right}
-      ref={rightRef}
-      className={`rail rail--right${railModifier ? ` ${railModifier}` : ''}`}
-      style={railStyle}
-    >
+    <aside key="inspector" id={RAIL_ID.right} ref={rightRef} className="rail rail--right" style={railStyle}>
       {!stacked && <RailToggle side="right" open={rightOpen} onToggle={() => toggleRail('right')} />}
       <RightRailBody open={showRight} />
-      {sashable && (
+      {!stacked && (
         <RailSash
           side="right"
           shellRef={shellRef}
@@ -155,7 +141,7 @@ export function DockedShell({
   return (
     // `.split` only — NOT `.split--stack`, which capture and detect use to reflow
     // in pure CSS. Carrying it here meant two thresholds for one decision (720px
-    // in the stylesheet, 1023px in `useStackedStudio`) and two row templates, and
+    // in the stylesheet, 1023px in `useStudioLayout`) and two row templates, and
     // the CSS one describes two children while this shell has three.
     <div className="split" ref={shellRef} style={shell}>
       {stacked ? [surface, tree, inspector] : [tree, surface, inspector]}

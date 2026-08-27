@@ -144,8 +144,11 @@
   --rail-left-tight: 208px;
   --rail-right-tight: 248px;
   /* The narrowest the rails go once their contents answer to their OWN width
-     rather than the viewport's — i.e. only under `rail--elastic`, whose container
-     queries are what make these honest. Both are derived, not chosen:
+     rather than the viewport's, which the `@container rail` block below is what
+     makes honest. (This said "only under `rail--elastic`" for one commit after
+     that modifier was deleted — the guard in `tests/reflow.test.ts` asserts the
+     modifier is gone but reads `codeOnly(CSS)`, which strips comments, so it was
+     structurally unable to see the sentence still naming it.) Both are derived, not chosen:
        left  = two 88px lighting segments + the section's 32px of padding;
        right = two dimension fields on a row + their gap + the same padding,
                which is what the 3-up row folds to below 268px.
@@ -401,7 +404,10 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
    to these means future restyles happen here once instead of across every
    component. Dynamic state uses modifier classes (.is-selected) or CSS :hover. */
 
-.rail { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--paper); }
+/* `container-type` here rather than on a modifier: the rails ARE query
+   containers now. See the container-query section below for why, and for the one
+   thing to verify when a `position: fixed` child of a rail lands oddly. */
+.rail { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--paper); container-type: inline-size; container-name: rail; }
 
 /* The rail/room divider (RailSash). 10px of hit area straddling the rail's own
    border — VS Code ships 4px and has a standing complaint that it cannot be
@@ -442,33 +448,47 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
 .rail--left { border-right: 1px solid var(--hairline); }
 .rail--right { border-left: 1px solid var(--hairline); }
 
-/* ─── The elastic rail (prototype 2) ───────────────────────────────────────
-   A rail that is a query container, so the controls inside it answer to the
-   rail's width instead of the window's. That distinction is the whole point: a
-   rail is ~260px whether the window is 1024px or 3440px, so every viewport media
-   query aimed at a control in here has been answering about the wrong box. Both
-   silent overflow modes this codebase has already shipped — a 300px card clipped
-   inside a 260px rail, four 82px words sharing 272px — are questions about the
-   container, and this is the first thing in the app able to ask one.
+/* ─── The rail as a query container ────────────────────────────────────────
+   The controls inside a rail answer to the rail's width instead of the window's.
+   That distinction is the whole point: a rail is ~260px whether the window is
+   1024px or 3440px, so every viewport media query aimed at a control in here has
+   been answering about the wrong box. Both silent overflow modes this codebase
+   has already shipped — a 300px card clipped inside a 260px rail, four 82px words
+   sharing 272px — are questions about the container, and this is the first thing
+   in the app able to ask one.
+
+   `container-type` is declared on `.rail` itself (see the rule above). It spent
+   one round scoped to a `.rail--elastic` modifier while three shells were being
+   compared, because an A/B whose control drifts measures nothing; the comparison
+   is over, this behaviour won, and the modifier is gone. Nothing should ever put
+   it back — a rail whose contents cannot ask about the rail is what
+   `--rail-*-tight` would be lying about.
 
    `!important` for the same reason `.row-grid` needs it below: the rows being
    reflowed state their columns inline, and an inline declaration outranks any
    author rule, container query or not.
 
-   Scoped to `.rail--elastic` rather than `.rail` on purpose — it is a candidate,
-   and the control shell has to stay the control.
+   **THE FIRST THING TO CHECK if a rail's floating children misbehave, and it is
+   not verified.** `container-type: inline-size` applies layout containment, and a
+   layout-contained element acts as the containing block for its `position: fixed`
+   descendants. Three things inside these rails are exactly that, all positioned
+   from measured viewport coordinates: `ui/Select.tsx`'s dropdown, RoomTools'
+   room-report panel, and `ui/Tooltip.tsx`. If containment applies as the spec
+   text reads, all three resolve their coordinates against the RAIL's origin and
+   land about the top bar's height too low.
 
-   The thing to check first if this variant misbehaves: `container-type` USED to
-   force layout containment, which made the element a containing block for
-   `position: fixed` descendants. Two things inside these rails are exactly that —
-   `ui/Select.tsx`'s dropdown and RoomTools' room-report panel, both fixed and both
-   positioned from measured viewport coordinates — so under the old behaviour they
-   would have been anchored to the rail and landed nowhere near their trigger. The
-   CSSWG dropped that requirement (container-type now forces only an independent
-   formatting context, which a flex column already was), and Chrome, Firefox and
-   Safari all ship the new behaviour. It is still the first thing to open a menu and
-   verify on. */
-.rail--elastic { container-type: inline-size; container-name: rail; }
+   This comment previously asserted that the CSSWG had dropped that requirement
+   and that all three engines ship the new behaviour. **That claim is removed
+   because nobody here verified it** — and it was load-bearing for three
+   components, which is the worst combination: a confident sentence standing in
+   for a measurement. It also mattered more than it looked, because
+   `container-type` was scoped to a `.rail--elastic` modifier that production
+   never applied, so nothing shipped on this assumption until the modifier went.
+
+   `ui/Tooltip.tsx` sidesteps it entirely by portalling its bubble to
+   `document.body`, which is outside every container — do the same for the other
+   two if this turns out to bite. Open a Select and the room report and look; it
+   is a ten-second check and it is in `docs/visual-check.md`. */
 
 @container rail (max-width: 268px) {
   /* Three 11px buttons with icons stop fitting first. Two rows of two reads
@@ -540,32 +560,6 @@ input[type='number']::-webkit-inner-spin-button { -webkit-appearance: none; marg
    let the corner read as ours. */
 textarea.field { border-radius: var(--r-2); }
 
-/* The sun scrubber — a range input laid over the drawn sun path (SunControls).
-   Only the thumb is painted: the track IS the graph underneath, and the native
-   input is kept because it is the entire keyboard + screen-reader story for
-   scrubbing a value. The thumb carries a paper ring so it stays visible over both
-   the daylight tint and the night band. */
-.sun-scrub {
-  appearance: none; -webkit-appearance: none;
-  height: 20px; margin: 0; background: transparent;
-  cursor: ew-resize;
-}
-.sun-scrub::-webkit-slider-runnable-track { height: 20px; background: transparent; }
-.sun-scrub::-moz-range-track { height: 20px; background: transparent; }
-.sun-scrub::-webkit-slider-thumb {
-  -webkit-appearance: none; margin-top: 3px;
-  width: 14px; height: 14px; border-radius: var(--r-full);
-  background: var(--accent); border: 2px solid var(--paper);
-  box-shadow: var(--shadow-soft); cursor: ew-resize;
-}
-.sun-scrub::-moz-range-thumb {
-  width: 14px; height: 14px; border-radius: var(--r-full);
-  background: var(--accent); border: 2px solid var(--paper);
-  box-shadow: var(--shadow-soft); cursor: ew-resize;
-}
-.sun-scrub:focus-visible { outline: none; }
-.sun-scrub:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--accent-tint); }
-.sun-scrub:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px var(--accent-tint); }
 
 /* Scrollbars. The default is an OS widget — grey, square, and (on Windows) 17px
    of chrome inside every panel. Thin + tokenised keeps long lists, the part rail

@@ -87,11 +87,27 @@ function FinishApplier({
   finish,
   colorKey,
   dimKey,
+  shapeKey,
 }: {
   groupRef: { current: Group | null };
   finish?: ScenePart['finish'];
   colorKey?: string;
   dimKey?: string;
+  /** The part's shape, which is NOT read in the body — it is a dependency, and it
+   *  is load-bearing.
+   *
+   *  `PartGeometry` dispatches on `part.shape`, so changing a piece's model remounts
+   *  this whole subtree and its materials come back fresh. The Inspector's model
+   *  picker writes `dimMM` on the PART rather than as a `dims` override, so no other
+   *  key in the dep array below changes — the effect did not re-run, and the FINISH
+   *  was silently lost: pick a new model for a polished piece and it came back matte
+   *  until something else made you recolour it.
+   *
+   *  It arrived alongside a per-piece sun-shadow gate that has since been deleted
+   *  (the room is a closed shell now — see `components/three/RoomShell.tsx`), and it
+   *  is easy to read as the other half of that removal. It is not. The finish bug
+   *  predates the gate and is still here. */
+  shapeKey: string;
 }) {
   const invalidate = useThree((s) => s.invalidate);
   useLayoutEffect(() => {
@@ -100,8 +116,9 @@ function FinishApplier({
     g.traverse((o) => {
       const mesh = o as Mesh;
       if (!(mesh as { isMesh?: boolean }).isMesh) return;
-      // Part meshes cast + receive soft shadows (gated at the light/Canvas by
-      // the quality setting). Idempotent — safe to re-set on every pass.
+      // Part meshes cast and receive. Whether the sun can actually reach a piece is
+      // the room's question, not the piece's: the walls and ceiling cast, so a piece
+      // on a wall the sun is behind is simply in shadow (`RoomShell.tsx`).
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -129,7 +146,7 @@ function FinishApplier({
     });
     // Materials were mutated outside React — nothing else will ask for a repaint.
     invalidate();
-  }, [groupRef, finish, colorKey, dimKey, invalidate]);
+  }, [groupRef, finish, colorKey, dimKey, shapeKey, invalidate]);
   return null;
 }
 
@@ -743,7 +760,13 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         onPointerUp={onPointerUp}
         onWheel={onWheel}
       >
-        <FinishApplier groupRef={ref} finish={part.finish} colorKey={part.color} dimKey={storedDim?.join()} />
+        <FinishApplier
+          groupRef={ref}
+          finish={part.finish}
+          colorKey={part.color}
+          dimKey={storedDim?.join()}
+          shapeKey={part.shape}
+        />
         <Pickable partId={partId}>{children}</Pickable>
         {(inSelection || isHovered || dragInvalid) && (
           <Highlight

@@ -63,31 +63,36 @@ const securityHeaders = [
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'no-referrer' },
-  // The app asks for exactly two powerful features and refuses the rest. Note
+  // The app asks for exactly ONE powerful feature and refuses the rest. Note
   // that `=(self)` is NOT the same as denying it — it is what lets the feature
   // work on this origin while still blocking it in anything this page embeds.
-  //   · camera — the capture screen.
-  //   · geolocation — the "Use my location" button in the sun mood, which fills
-  //     in the room's latitude and longitude (see lib/geolocate.ts, which
-  //     coarsens the fix to ~11 km before storing it). This was `()` until that
-  //     button existed, and `()` here overrides the user's own permission grant,
-  //     so the two have to move together.
-  //   · accelerometer / gyroscope / magnetometer — the "Compass" button in the
-  //     same panel reads the room's bearing off the phone's own compass
-  //     (lib/compass.ts). Chrome gates the DeviceOrientation events on these
-  //     three, so all three are needed for one reading. Listed explicitly rather
-  //     than left to the `self` default, because a feature this app depends on
-  //     should be visible in the policy rather than inferred from its absence.
-  // None of these send anything anywhere; all write to local storage only.
+  //   · camera — the capture screen. That is the whole list.
+  // It does not send anything anywhere; it writes to local storage only.
+  //
+  // Four entries were `(self)` here until the sun mood was collapsed to fixed
+  // presets, and all four are back to denied:
+  //   · geolocation, for a "Use my location" button that filled in the room's
+  //     latitude and longitude;
+  //   · accelerometer / gyroscope / magnetometer, for a "Compass" button that
+  //     read the room's bearing off the phone's own magnetometer (Chrome gates
+  //     the DeviceOrientation events on all three, so one reading needed the set).
+  //
+  // A feature and its header entry move together in BOTH directions, and this is
+  // the direction that gets forgotten: `()` overrides the user's own permission
+  // grant, so leaving these at `(self)` would not have broken anything or failed
+  // a test — it would just have left the app permanently asking for two sensors
+  // and a location it can no longer use. `tests/toolchain.test.ts` has no opinion
+  // on a policy that is merely too generous, which is why this comment is the
+  // guard.
   {
     key: 'Permissions-Policy',
     value: [
       'camera=(self)',
       'microphone=()',
-      'geolocation=(self)',
-      'accelerometer=(self)',
-      'gyroscope=(self)',
-      'magnetometer=(self)',
+      'geolocation=()',
+      'accelerometer=()',
+      'gyroscope=()',
+      'magnetometer=()',
       'payment=()',
       'usb=()',
       'midi=()',

@@ -36,11 +36,15 @@ const BASE = {
   gap: 8,
 };
 
-// How much of each edge something else is covering. Zero unless a shell says
-// otherwise, so the docked layouts — where a rail takes its own column and
-// covers nothing — are unaffected. `OverlayShell` sets them to its panel widths,
-// which is what keeps the tool cluster centred on the room you can SEE rather
-// than on an element two panels are sitting on top of.
+// How much of each edge something else is covering, so a cluster centres on the
+// room you can SEE rather than on an element something is sitting on top of.
+//
+// Nothing writes these today: the docked shell gives each rail its own grid
+// column, so no rail covers any part of the canvas, and both resolve to their
+// `0px` fallback. They were written for the overlay shell that was compared here
+// and rejected. Kept because they are the correct shape for the next thing that
+// covers a canvas edge (an immersive mode, a floating panel) and because the
+// fallback makes them free — but do not read them as live plumbing.
 const INSET_L = 'var(--canvas-inset-left, 0px)';
 const INSET_R = 'var(--canvas-inset-right, 0px)';
 /** The gap between a cluster and its edge. */
@@ -141,8 +145,8 @@ export function CanvasTools({ children }: { children: ReactNode }) {
         //
         // Two offsets instead of an offset plus a transform. The width is then the
         // span itself, `justifyContent: center` does the centring, and the insets
-        // still measure from what is actually VISIBLE — which is the whole point
-        // of the pair, since `OverlayShell` floats panels over the canvas edges.
+        // still measure from what is actually VISIBLE if anything ever covers an
+        // edge (see the note on the pair above — nothing does today).
         // `maxWidth` is gone because the span is already the bound.
         //
         left: `calc(${EDGE}px + ${INSET_L})`,

@@ -49,15 +49,19 @@ export function useStackedStudio(): { stacked: boolean; ready: boolean } {
   return { stacked: layout === 'stacked', ready };
 }
 
+/** The three steps, as a name, so `DockedShell` can take one as a prop rather
+ *  than restate the union and drift from it. */
+export type StudioLayout = 'wide' | 'compact' | 'stacked';
+
 /** How much room the studio has, as three steps rather than one boolean.
  *
  *  `wide`    — rails at their token widths, which is what they were sized for.
- *  `compact` — three columns, rails at their floors. The room gets the difference.
+ *  `compact` — rails at `--rail-*-tight`. The room gets the difference (~94px).
  *  `stacked` — rails below the room; see `useStackedStudio`.
  *
  *  Derived here, beside the thresholds, so a consumer can never introduce a
  *  fourth number for the same decision. */
-export function useStudioLayout(): { layout: 'wide' | 'compact' | 'stacked'; ready: boolean } {
+export function useStudioLayout(): { layout: StudioLayout; ready: boolean } {
   const stack = useMediaQueryState(`(max-width: ${STACK_WIDTH}px)`);
   const compact = useMediaQueryState(`(max-width: ${COMPACT_WIDTH}px)`);
   return {
