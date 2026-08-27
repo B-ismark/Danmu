@@ -10,8 +10,8 @@ handful of things that turned out to be live defects rather than doubts.
 
 | branch | state |
 |---|---|
-| `main` — `4326b44` | PR #17 merged. |
-| `fix/visual-check-round-3` | this round, on top of `4326b44`. Four commits of your list, then a fifth carrying the five findings a `/review` pass turned up **on those four**. Gate counts on the tip are at the foot of the review section below. |
+| `main` — `2f4d8d1` | PR #18 merged, which took `fix/visual-check-round-3` with it. |
+| `fix/convoy-self-support` | this round, on top of `2f4d8d1`, **uncommitted** in a session worktree. The convoy work, plus the fixes for a `/review` pass over `4326b44..391399d` **and** that work together. Gates on the tree: typecheck 0, lint 0, 1400+/71, build 0 — the exact counts are at the foot of the review section below, taken from the run they describe. |
 | PR #16 — `3b5935c` | **Open, and it needs a rebase** — see below. Its headline regression is closed. |
 | `fix/multi-select-drag` | **Not merged, and it still holds one live fix `main` lacks.** Kept for that reason. |
 | `fix/clamp-into-footprint` | Local only. Holds a written, tested fix for a known-and-left item. Kept. |
@@ -111,7 +111,7 @@ only ever advertised the arrows and Q/E.
 
 - **Press H** with a piece selected. It hides; press again to show.
 - **Press V.** Nothing should happen.
-- The letter is changed in all five places that name it: the handler, the right-click
+- The letter is changed in all four places that name it: the handler, the right-click
   menu's hint, and both tabs' help cards. **Check the menu hint reads `H`** — that one
   is a string a grep could have missed.
 
@@ -378,9 +378,11 @@ centred near the column edge could overhang a rail. That one needs eyes.
    `travellingWorld` has already shifted its phantom to a position it never reaches.
    Order-dependent on the `parts` array, which is why no test sees it.
 
-**These are not on this branch.** They belong to the session that owns the convoy code,
-which is fixing (1) plus a related self-descendant bug on `fix/convoy-self-support`, and
-has been handed the measurements for the other four. Nothing here has been in a browser.
+**All five are now fixed on `fix/convoy-self-support`**, along with the self-descendant
+bug that branch was opened for, and each has a test that was watched failing against the
+unfixed code. This line previously said they were *not* on this branch, which was true
+when it was written and false within the hour — the hazard of a hand-off note naming
+work in flight. Nothing here has been in a browser.
 
 ### The scar in `CLAUDE.md` — settled, and it was wrong
 
@@ -404,10 +406,10 @@ The same argument covers the snapshot world, where the live memo's danger is tha
 **fresh**, not stale — it already carries the earlier frames' writes, so a travelling
 piece lands at `start + 2×delta`.
 
-`CLAUDE.md` is corrected. The identical wrong mechanism is still stated in
-`lib/drag-convoy.ts` and `components/studio/PlanView.tsx`; both are owned by the convoy
-work in flight and have been handed the replacement text. `Design.md` never asserted the
-mechanism and needs no change.
+`CLAUDE.md` is corrected, and so are `lib/drag-convoy.ts` and
+`components/studio/PlanView.tsx` — both now argue from the narrower reason above and
+assert nothing about scheduling, so there is no outstanding copy of the wrong mechanism
+anywhere. `Design.md` never asserted it and needed no change.
 
 One thing that could **not** be closed: R3F's own reconciler root has no microtask
 flush, so a memo living only inside an R3F-root component subscribed to a store could

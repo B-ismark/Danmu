@@ -338,6 +338,16 @@ export function KeyboardShortcuts() {
       if (meta) {
         if (key === 'z') {
           e.preventDefault();
+          // Not while a gesture is in flight. `lib/history.ts` makes the drag the
+          // unit of an undo step by refusing to SNAPSHOT during one, but nothing
+          // refused the undo itself: taken mid-drag, `applySnapshot` replaces the
+          // whole `positions` map, and the drop then writes the dragged piece from
+          // its live object3D and the convoy from the pre-undo `startPos` — putting
+          // both back where the drag had them. The gesture-end push that follows
+          // clears `future`, so the undo is undone AND its redo is gone. Swallowed
+          // rather than queued: the gesture is what the user is doing, and it ends
+          // on release a moment later.
+          if (useStudio.getState().draggingId) return;
           const snap = e.shiftKey ? useHistory.getState().redo() : useHistory.getState().undo();
           if (snap) applySnapshot(snap);
           return;

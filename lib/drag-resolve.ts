@@ -51,6 +51,13 @@ export type ResolveInput = {
    * Every other piece, at its EFFECTIVE transform, with this piece's own rigid
    * descendants filtered out — a part must not resolve its gravity against a
    * child this same move is about to carry out from under it.
+   *
+   * `travellingWorld` (lib/drag-convoy.ts) is the only thing that builds this list,
+   * and it is named here because the sentence above is not self-enforcing: both
+   * surfaces once stopped honouring it and neither the compiler nor a test could
+   * tell, since `findSupportDetailed` has no below-test and `collidesAt` returns
+   * `false` for a mover it cannot find. A nightstand resolved onto the plant it was
+   * carrying and became undraggable.
    */
   parts: ScenePart[];
   footprint: Poly;
@@ -123,6 +130,10 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   const bnd = footprintBounds(footprint);
   let x = Math.max(bnd.minX + extX, Math.min(bnd.maxX - extX, gx));
   let z = Math.max(bnd.minZ + extZ, Math.min(bnd.maxZ - extZ, gz));
+  // Did the clamp MOVE it, rather than merely agree with it? That is the whole
+  // question for a rug — see the legality test below. Taken here, before the wall
+  // and neighbour snaps overwrite x/z with answers of their own.
+  const shovedIntoRoom = x !== gx || z !== gz;
   let outRot = rot;
   let snapLines: SnapLine[] | undefined;
 
@@ -188,9 +199,34 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   // to be the same predicate. A ceiling fan gets no snap, so it gets no exemption:
   // its blades have to be inside the room like anything else.
   const slightlyShrunk = obbFromPart([x, y, z], outRot, [dim[0] - 10, dim[1] - 10, dim[2]]);
+  // Does the room have room for it AT ALL, at this angle? The containment clamp
+  // above pins an over-wide piece to `minX + extX` — a silent shove of however much
+  // it overhangs — and for everything else that shove is caught, because the piece
+  // then fails the polygon test and the caller refuses the drop. A rug was exempt
+  // from that test outright, so a 2 m rug in a 1.5 m room jumped 250 mm on first
+  // touch and COMMITTED: rule 2's "say so, never silently resize it to fit", broken
+  // for position, in the one category that had opted out of the check that noticed.
+  //
+  // The exemption is real and stays — a rug belongs under the furniture and up to
+  // the skirting, and holding it to an OBB test would refuse the placements it
+  // exists for. A rug lying across the missing corner of an L is the case it was
+  // written for, and a test pins it. So OVERHANG is allowed on purpose.
+  //
+  // What a rug may never be is silently MOVED, and that is what this now asks. The
+  // first answer to it was `fits` — is the room's bounding box at least as big as
+  // the piece — which is a bounding-box answer to a polygon question, and CLAUDE.md
+  // names that trap by name. In an L whose box is 6 m across but whose arm is 1.6 m,
+  // a 3 m rug dropped in the arm passed `fits`, was shoved 700 mm by the clamp, and
+  // committed valid with 1.4 m of it through the plaster. The bbox check stays as a
+  // necessary condition — a piece wider than the room can only ever be clamped — but
+  // the load is carried by `shovedIntoRoom`, which is rule 2 stated directly: the
+  // pointer chose this spot, and a spot the pointer did not choose is not a drop,
+  // it is a resize-to-fit with the size left alone.
+  const roomIsWideEnough =
+    bnd.maxX - bnd.minX >= 2 * extX - 1e-9 && bnd.maxZ - bnd.minZ >= 2 * extZ - 1e-9;
   const inRoom =
     ridesAWall ||
-    part.category === 'rug' ||
+    (part.category === 'rug' && roomIsWideEnough && !shovedIntoRoom) ||
     (obbInsidePoly(slightlyShrunk, footprint) && pointInFootprint(x, z, footprint));
   const collides = collidesAt(parts, part.id, [x, y, z], outRot, dim);
 

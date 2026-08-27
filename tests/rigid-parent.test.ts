@@ -81,7 +81,7 @@ describe('snapshotDescendants', () => {
 describe('cascadeTransform', () => {
   it('rotates a single child around the parent pivot (worked example)', () => {
     // Desk at origin, laptop at local offset (0.3, 0). Desk turns a quarter turn.
-    const desc = [{ id: 'laptop', parentId: 'desk', localOffset: [0.3, 0] as [number, number], offsetY: 0.75, relRot: 0.2 }];
+    const desc = [{ id: 'laptop', parentId: 'desk', localOffset: [0.3, 0] as [number, number], offsetY: 0.75, relRot: 0.2, rot: 0.2 }];
     const moves = cascadeTransform('desk', [0, 0, 0], Math.PI / 2, desc);
     expect(moves).toHaveLength(1);
     expect(moves[0].pos[0]).toBeCloseTo(0, 6);
@@ -108,11 +108,30 @@ describe('cascadeTransform', () => {
     const laptop = moves.find((m) => m.id === 'laptop')!;
     expect(tray.pos).toEqual([1.2, 1.25, 2.1]); // desk's new Y (0.5) + tray's offsetY (0.75)
     expect(laptop.pos).toEqual([1.2, 1.3, 2.1]); // tray's new Y (1.25) + laptop's offsetY (0.05)
-    expect(laptop.rot).toBeCloseTo(0.1, 6);
+    // The desk did not TURN, so no child's angle changed and no child's angle may
+    // be written. `rot` used to come back unconditionally, which meant every drag
+    // of a desk with a laptop on it stamped a rotation override on the laptop —
+    // `setTransformsFor` creates the key regardless of the value, and per
+    // lib/transforms.ts that pins the angle against a re-detect and persists it.
+    // Absent, not merely equal: an equal value written is still a pin.
+    expect('rot' in laptop).toBe(false);
+    expect('rot' in tray).toBe(false);
+  });
+
+  it('does write the angle for a child the cascade really turned', () => {
+    // The other side of the same test. A quarter turn moves every child's angle by
+    // a quarter turn, so the override is earned.
+    const desc = snapshotDescendants(
+      'desk',
+      [DESK, part({ id: 'tray', pos: [0.2, 0.75, 0.1], rot: 0.1, dimMM: [300, 300, 50] })],
+      { tray: 'desk' },
+    );
+    const moves = cascadeTransform('desk', [0, 0, 0], Math.PI / 2, desc);
+    expect(moves[0].rot).toBeCloseTo(Math.PI / 2 + 0.1, 6);
   });
 
   it('skips a descendant whose immediate parent transform is missing (defensive, should not happen given BFS order)', () => {
-    const desc = [{ id: 'orphan', parentId: 'nobody', localOffset: [0, 0] as [number, number], offsetY: 0, relRot: 0 }];
+    const desc = [{ id: 'orphan', parentId: 'nobody', localOffset: [0, 0] as [number, number], offsetY: 0, relRot: 0, rot: 0 }];
     expect(cascadeTransform('desk', [0, 0, 0], 0, desc)).toEqual([]);
   });
 });
@@ -161,5 +180,32 @@ describe('livingParents', () => {
     const original = { laptop: 'desk', tray: 'ghost' };
     livingParents(original, [DESK]);
     expect(original).toEqual({ laptop: 'desk', tray: 'ghost' });
+  });
+});
+
+describe('cascadeTransform: forceRotFor', () => {
+  const lamp = part({ id: 'lamp', pos: [0.3, 0.75, 0], rot: 0, dimMM: [200, 200, 400] });
+  const own = snapshotDescendants('desk', [DESK, lamp], { lamp: 'desk' });
+
+  it('omits an unchanged rotation on an ordinary frame', () => {
+    const moves = cascadeTransform('desk', [0, 0, 0], DESK.rot, own);
+    expect('rot' in moves[0]).toBe(false);
+  });
+
+  it('writes it anyway when the id is named — which is what a RESTORE needs', () => {
+    // On a restore the recomputed angle equals the snapshot angle BY CONSTRUCTION:
+    // `relRot` is the child's angle minus the parent's at snapshot time, and the
+    // restore replays from that same parent angle. So the omission fired every
+    // time and Escape could never put a child's rotation back — turn a desk with a
+    // lamp on it in the plan, press Escape, and the desk returned while the lamp
+    // kept the angle the drag gave it, persisted.
+    const moves = cascadeTransform('desk', [0, 0, 0], DESK.rot, own, (id) => id === 'lamp');
+    expect('rot' in moves[0]).toBe(true);
+    expect(moves[0].rot).toBeCloseTo(lamp.rot, 9);
+  });
+
+  it('and only for the ids named, so nothing else is pinned', () => {
+    const moves = cascadeTransform('desk', [0, 0, 0], DESK.rot, own, () => false);
+    expect('rot' in moves[0]).toBe(false);
   });
 });

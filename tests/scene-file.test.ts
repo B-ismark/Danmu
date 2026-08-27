@@ -11,6 +11,7 @@ import {
   type SceneFile,
 } from '../lib/scene-file';
 import { dimRangeFor, ROOM_HEIGHT_M } from '../lib/dimension-ranges';
+import { MOUNT_PAD } from '../lib/physics';
 import type { RoomData, Transforms } from '../lib/storage';
 import type { ScenePart } from '../lib/scene-spec';
 
@@ -613,5 +614,82 @@ describe('scene file · the shape of the format itself', () => {
     const out = roundTrip(ROOM, []);
     expect(out.file.parts).toEqual([]);
     expect(sceneFileToRoom(out.file).parts).toEqual([]);
+  });
+});
+
+describe('a clamped ceiling takes its pieces with it', () => {
+  // Clamping the ceiling and leaving the pieces where they were is half a repair.
+  // The clamp exists because this app WROTE rooms below the current 1.8 m floor —
+  // the fan bug was reported from a 1.65 m room — so the file that most needs
+  // clamping is exactly the file with a fan hung from the ceiling it is clamping.
+  // Saving that room and opening it again raised the ceiling and left the fan at
+  // its old height: the original complaint, reproduced by the fix for it, with the
+  // toast naming the ceiling and never the pieces it had just invalidated.
+  const LOW = 1.65;
+  const FLOOR = ROOM_HEIGHT_M.min;
+
+  function importedFan() {
+    const fan = rawPart({
+      id: 'fan',
+      category: 'fan',
+      name: 'Fan',
+      shape: 'fan',
+      dimMM: [1000, 1000, 300],
+      // Hung just under the 1.65 m ceiling the file was written with.
+      pos: [0, LOW - 0.15, 0],
+    });
+    const parsed = parseSceneFile(
+      rawFile({ room: { name: 'R', layoutId: 'rect', width: 5, depth: 4, height: LOW }, parts: [fan] }),
+    );
+    if (!parsed.ok) throw new Error('fixture did not parse');
+    return parsed;
+  }
+
+  it('the fixture really is the clamped case', () => {
+    // Without this the assertions below would pass on a file that was never clamped.
+    expect(LOW).toBeLessThan(FLOOR);
+    const parsed = importedFan();
+    expect(parsed.file.room.height).toBeCloseTo(FLOOR, 9);
+  });
+
+  it('re-hangs the fan under the ceiling it was actually given', () => {
+    const parsed = importedFan();
+    const fan = parsed.file.parts[0];
+    expect(fan).toBeDefined();
+    // Two properties rather than one number, because the number is not the naive
+    // one: following the ceiling would put the hub at 1.65, and the mount clamp
+    // then caps it at `ceiling - h/2 - MOUNT_PAD`. Asserting 1.65 would be
+    // asserting the bug's absence against a rule the code does not follow.
+    //
+    // It went UP…
+    expect(fan!.pos[1]).toBeGreaterThan(LOW - 0.15);
+    // …and it hangs under the ceiling it was actually given, pad included. Left
+    // where the file put it, the hub sits at 1.50 in a 1.80 m room — a fan that
+    // came off its own ceiling, which is the complaint the clamp exists to answer.
+    expect(fan!.pos[1] + 0.15).toBeLessThanOrEqual(FLOOR - MOUNT_PAD + 1e-9);
+    expect(fan!.pos[1] + 0.15).toBeGreaterThan(FLOOR - MOUNT_PAD - 0.05);
+  });
+
+  it('and says so, because nothing here is allowed to be lossy in silence', () => {
+    const parsed = importedFan();
+    expect(parsed.dropped.some((d) => /re-hung/.test(d))).toBe(true);
+  });
+
+  it('leaves a floor-standing piece exactly where it was', () => {
+    // `heightForNewCeiling` decides who follows a ceiling, so a sofa must not.
+    const sofa = rawPart({ id: 'sofa', pos: [0, 0.44, -1.5] });
+    const parsed = parseSceneFile(
+      rawFile({ room: { name: 'R', layoutId: 'rect', width: 5, depth: 4, height: LOW }, parts: [sofa] }),
+    );
+    if (!parsed.ok) throw new Error('fixture did not parse');
+    expect(parsed.file.parts[0].pos[1]).toBeCloseTo(0.44, 9);
+  });
+
+  it('does nothing at all when the ceiling was in range', () => {
+    const fan = rawPart({ id: 'fan', category: 'fan', name: 'Fan', shape: 'fan', dimMM: [1000, 1000, 300], pos: [0, 2.4, 0] });
+    const parsed = parseSceneFile(rawFile({ parts: [fan] })); // the default 2.6 m room
+    if (!parsed.ok) throw new Error('fixture did not parse');
+    expect(parsed.file.parts[0].pos[1]).toBeCloseTo(2.4, 9);
+    expect(parsed.dropped.some((d) => /re-hung/.test(d))).toBe(false);
   });
 });

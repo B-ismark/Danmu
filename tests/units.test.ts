@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { boundsToUnit, decimalsOf, fromMM, stepFor, toMM, formatDim, precisionFor } from '@/lib/units';
+import { boundsToUnit, decimalsOf, fromMM, stepFor, steppedValue, toMM, formatDim, precisionFor } from '@/lib/units';
 import { dimRangeFor, roomAxisRange, roomAxisWithin, type RoomAxis } from '@/lib/dimension-ranges';
 import { CATEGORIES, SHAPES } from '@/lib/scene-spec';
 
@@ -63,17 +63,24 @@ describe('a stepper cannot reach a room the editor would refuse', () => {
     // The sweep is the assertion, because picking examples is how the first
     // version of this missed fourteen combinations.
     const bad: string[] = [];
+    let checked = 0;
     for (const c of CATEGORIES) {
       for (const s of SHAPES) {
         const r = dimRangeFor(c, s);
         for (const unit of UNITS) {
           for (let i = 0; i < 3; i++) {
             const b = boundsToUnit(r.min[i], r.max[i], unit);
+            checked++;
             if (!(b.min < b.max)) bad.push(`${c}/${s} axis ${i} ${unit}: ${b.min}..${b.max}`);
           }
         }
       }
     }
+    // The sweep's own tripwire. `toEqual([])` is satisfied by an empty subject, so
+    // if `CATEGORIES` or `SHAPES` ever resolved to nothing — a refactor, a bad
+    // import — this would report all clear over zero combinations. Its sibling in
+    // `zone-findings.test.ts` has carried one of these since the day it was written.
+    expect(checked).toBeGreaterThan(1000);
     expect(bad, `unusable stepper bounds — ${bad.slice(0, 8).join(' | ')}`).toEqual([]);
   });
 
@@ -129,5 +136,116 @@ describe('unit conversion', () => {
     expect(formatDim(1000, 'mm')).toBe('1000');
     expect(precisionFor('m')).toBe(2);
     expect(precisionFor('mm')).toBe(0);
+  });
+});
+
+describe('a chevron never moves a value against its own arrow', () => {
+  // `steppedValue` IS what the field runs — not a copy of it. This file used to
+  // model `NumberField.bump` in a local helper and nothing under tests/ imported
+  // the component, so the one control here with a destructive, documented history
+  // had no test at all: swapping its clamp order, or its rounding, left every
+  // assertion green.
+  //
+  // The defect it now pins: `boundsToUnit` rounds a bound to the STEP grid, while
+  // a field renders its value at `precisionFor` — finer for ft (2 vs 1) and cm
+  // (1 vs 0). A legal value stored exactly on a bound therefore displays just
+  // outside it, and an unguarded clamp throws it across, so the press moves the
+  // value the opposite way to the arrow.
+
+  const H = roomAxisRange('height');
+  const ftBounds = boundsToUnit(H.min * 1000, H.max * 1000, 'ft');
+  const shownAtFloor = fromMM(H.min * 1000, 'ft').toFixed(precisionFor('ft'));
+
+  it('the setup is real: the minimum ceiling displays BELOW its own bound in feet', () => {
+    // Without this the two tests under it would be asserting nothing.
+    expect(Number(shownAtFloor)).toBeLessThan(ftBounds.min);
+  });
+
+  it('pressing DOWN at the floor does not raise the ceiling', () => {
+    // Against the number on screen, not against `H.min`: 1.8 m is 5.90551 ft and
+    // the field's two decimals render that `5.91`, which is already a hair ABOVE
+    // the floor. What must never happen is the press making it larger still — the
+    // bug committed `6.0` ft, 1828.8 mm, from a chevron marked "decrease".
+    const after = steppedValue(shownAtFloor, -1, ftBounds.min, ftBounds.max, stepFor('ft'));
+    expect(Number(after)).toBeLessThanOrEqual(Number(shownAtFloor));
+  });
+
+  it('…while UP from the same spot still moves', () => {
+    const after = steppedValue(shownAtFloor, 1, ftBounds.min, ftBounds.max, stepFor('ft'));
+    expect(Number(after)).toBeGreaterThan(Number(shownAtFloor));
+  });
+
+  it('a room saved below the current floor is not raised by a DOWN press', () => {
+    // The 1.65 m room CLAUDE.md names — legal when it was written, under the floor
+    // now. Both chevrons used to emit 1.80: a press meaning "shorter" raised the
+    // ceiling 15 cm and regraded every piece hung from it.
+    const b = boundsToUnit(H.min * 1000, H.max * 1000, 'm');
+    expect(steppedValue('1.65', -1, b.min, b.max, stepFor('m'))).toBe('1.65');
+    expect(Number(steppedValue('1.65', 1, b.min, b.max, stepFor('m')))).toBeGreaterThan(1.65);
+  });
+
+  it('an ordinary press in the middle of a range still steps', () => {
+    // The guard must not have turned the stepper off.
+    expect(steppedValue('3', -1, 1, 10, 0.5)).toBe('2.5');
+    expect(steppedValue('3', 1, 1, 10, 0.5)).toBe('3.5');
+  });
+
+  it('holds at both ends of every ROOM axis too, in every unit', () => {
+    // The room's own ranges are not in the catalog sweep below, and they are the
+    // ones that cost the most when an arrow reverses: a ceiling press regrades
+    // every piece hung from it. Two distinct causes reach here — the precision gap
+    // (ft, cm) and `boundsToUnit`'s exact-conversion fallback for a range narrower
+    // than one step (m, in) — which is why the guard is judged on the ROUNDED
+    // result rather than on the clamp alone. A fix aimed at only the first leaves
+    // the second standing.
+    const bad: string[] = [];
+    let checked = 0;
+    for (const axis of AXES) {
+      const r = roomAxisRange(axis);
+      for (const unit of UNITS) {
+        const step = stepFor(unit);
+        const b = boundsToUnit(r.min * 1000, r.max * 1000, unit);
+        const atMin = fromMM(r.min * 1000, unit).toFixed(precisionFor(unit));
+        const atMax = fromMM(r.max * 1000, unit).toFixed(precisionFor(unit));
+        checked += 2;
+        if (Number(steppedValue(atMin, -1, b.min, b.max, step)) > Number(atMin)) {
+          bad.push(`room ${axis} ${unit}: DOWN at min ${atMin} grew`);
+        }
+        if (Number(steppedValue(atMax, 1, b.min, b.max, step)) < Number(atMax)) {
+          bad.push(`room ${axis} ${unit}: UP at max ${atMax} shrank`);
+        }
+      }
+    }
+    expect(checked).toBe(AXES.length * UNITS.length * 2);
+    expect(bad, `room arrows moving the wrong way — ${bad.join(' | ')}`).toEqual([]);
+  });
+
+  it('holds at both ends of every catalog range, in every unit', () => {
+    // The sweep is the assertion, for the reason the one above it gives: picking
+    // examples is how the first version of the bound fix missed fourteen.
+    const bad: string[] = [];
+    let checked = 0;
+    for (const c of CATEGORIES) {
+      for (const s of SHAPES) {
+        const r = dimRangeFor(c, s);
+        for (const unit of UNITS) {
+          const step = stepFor(unit);
+          for (let i = 0; i < 3; i++) {
+            const b = boundsToUnit(r.min[i], r.max[i], unit);
+            const atMin = fromMM(r.min[i], unit).toFixed(precisionFor(unit));
+            const atMax = fromMM(r.max[i], unit).toFixed(precisionFor(unit));
+            checked += 2;
+            if (Number(steppedValue(atMin, -1, b.min, b.max, step)) > Number(atMin)) {
+              bad.push(`${c}/${s} axis ${i} ${unit}: DOWN at min ${atMin} grew`);
+            }
+            if (Number(steppedValue(atMax, 1, b.min, b.max, step)) < Number(atMax)) {
+              bad.push(`${c}/${s} axis ${i} ${unit}: UP at max ${atMax} shrank`);
+            }
+          }
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(1000);
+    expect(bad, `arrows moving the wrong way — ${bad.slice(0, 8).join(' | ')}`).toEqual([]);
   });
 });

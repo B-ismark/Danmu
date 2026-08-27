@@ -16,7 +16,7 @@ import { removeParts } from './KeyboardShortcuts';
 import { RailSection } from './RailSection';
 import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { isWallMountedPart, supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, DECOR_KINDS, type LibraryItem, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
-import { findSupportDetailed, groundY, MOUNT_PAD, snapToWall as snapToWallPhys, wallStandoff } from '@/lib/physics';
+import { findSupportDetailed, groundY, heightForNewCeiling, MOUNT_PAD, snapToWall as snapToWallPhys, wallStandoff } from '@/lib/physics';
 import { wallSegments } from '@/lib/footprint';
 import { moveWallCarrying } from '@/lib/wall-actions';
 
@@ -103,11 +103,28 @@ export function Inspector() {
     const dimMM = dimOverride ?? ([...item.dimMM] as [number, number, number]);
     const [x, y, z] = currentXYZ();
     const wallMounted = isWallMountedPart(item.category, item.shape);
-    const h = dimMM[2] / 1000;
     let ny = y;
     let support: { id: string; y: number } | null = null;
     if (wallMounted) {
-      ny = Math.max(h / 2 + MOUNT_PAD, Math.min(room.height - h / 2 - MOUNT_PAD, groundY(item.category, item.shape, dimMM, room.height)));
+      // `heightForNewCeiling` with the ceiling held still, NOT a hand-written
+      // clamp. This was a fifth copy of the one in `physics.ts` — character for
+      // character its return expression — while the constant's own docblock named
+      // four and listed the other one in this file. It also broke the exemption
+      // stated three lines below that count: a door is `wall-floor`, so
+      // `isWallMountedPart` is true and it came through here, `groundY` returned
+      // its canonical h/2, and the pad then stood it 20 mm off its own threshold —
+      // with `apertures.ts` cutting the hole from the same raised centre, which is
+      // the doorway-with-a-step the anchor exists to prevent. The shared function
+      // returns `y` untouched for `floor` and `wall-floor` and clamps everything
+      // else, so routing through it fixes the door and makes the count true.
+      ny = heightForNewCeiling(
+        item.category,
+        item.shape,
+        dimMM,
+        groundY(item.category, item.shape, dimMM, room.height),
+        room.height,
+        room.height,
+      );
     } else {
       support = findSupportDetailed(partSnapshot(), id!, x, z, dimMM, baseRot);
       ny = support !== null && support.y > 0.3 ? support.y : 0;
@@ -225,7 +242,9 @@ export function Inspector() {
           <MountHeightRow
             key={`${id}-${currentXYZ()[1]}`}
             bottomMM={(currentXYZ()[1] - part.dimMM[2] / 2000) * 1000}
-            maxBottomMM={(room.height - part.dimMM[2] / 1000) * 1000}
+            // …minus the pad the commit below keeps, or the field advertises a
+            // maximum it will not accept: typing it silently committed 20 mm less.
+            maxBottomMM={(room.height - part.dimMM[2] / 1000 - MOUNT_PAD) * 1000}
             onCommit={(bottomMM) => {
               const [x, , z] = currentXYZ();
               const h = part!.dimMM[2] / 1000;
@@ -617,6 +636,15 @@ function DimensionEditor({
   const prec = precisionFor(dimUnit);
   const step = stepFor(dimUnit);
   const range = dimRangeFor(category, shape);
+  /** The bounds for one axis, in the field's own unit. ONE call, read by the
+   *  stepper and by the sentence under it — they were two derivations, the arrows
+   *  on `boundsToUnit` and the sentence on `formatDim`, so the sentence printed
+   *  numbers the arrows could not reach: in feet a dining chair advertised
+   *  1.25-1.97 wide while the stepper stopped at 1.3 and 1.9, in ~270 combinations
+   *  across the catalog, with no tell that the arrow had stopped early.
+   *  `RoomDimsEditor` has read one call for both since the metre/centimetre bug;
+   *  this is the copy that was not converted. */
+  const bound = (i: 0 | 1 | 2) => boundsToUnit(range.min[i], range.max[i], dimUnit);
   // Open by default. It was collapsed on the reasoning that typing millimetres is
   // the rare path — true of typing, and beside the point for READING: the three
   // numbers are what tells you whether the piece you just dropped is the size you
@@ -722,8 +750,8 @@ function DimensionEditor({
                     collapses it (a mirror's 15-60 mm depth is 0.1 ft at both ends)
                     or inverts it (a door's 35-60 mm becomes min 0.2, max 0.1). */}
                 <NumberField
-                  min={boundsToUnit(range.min[i], range.max[i], dimUnit).min}
-                  max={boundsToUnit(range.min[i], range.max[i], dimUnit).max}
+                  min={bound(i as 0 | 1 | 2).min}
+                  max={bound(i as 0 | 1 | 2).max}
                   step={step}
                   value={local[i]}
                   onChange={(v) => commitDebounced(i as 0 | 1 | 2, v)}
@@ -737,9 +765,9 @@ function DimensionEditor({
           <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 8, lineHeight: 1.6 }}>
             Anything you type lands inside{' '}
             <span className="mono">
-              {formatDim(range.min[0], dimUnit)}–{formatDim(range.max[0], dimUnit)} wide ·{' '}
-              {formatDim(range.min[1], dimUnit)}–{formatDim(range.max[1], dimUnit)} deep ·{' '}
-              {formatDim(range.min[2], dimUnit)}–{formatDim(range.max[2], dimUnit)} tall
+              {bound(0).min}–{bound(0).max} wide ·{' '}
+              {bound(1).min}–{bound(1).max} deep ·{' '}
+              {bound(2).min}–{bound(2).max} tall
             </span>{' '}
             ({dimUnit}).
           </div>
