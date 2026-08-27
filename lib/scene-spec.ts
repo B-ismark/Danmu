@@ -1783,6 +1783,15 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
     // not a fan in the wrong corner. Y is owned by the anchor, and only there.
     const aiPos = (d as { position?: { x: number; y: number; z: number } }).position;
     const aiYaw = (d as { yaw?: number }).yaw;
+    /** Does the model's own yaw survive a wall snap?
+     *
+     *  Hoisted because it is read three times and used to be written out twice —
+     *  and the third reader is the one that made it matter: `snapToWall` clamps a
+     *  piece by its extent ALONG the wall, which is `dimMM[0]` only when the piece
+     *  is turned to the wall's heading. Where the model's yaw wins, it is not, so
+     *  the clamp has to be told the rotation that will really apply. A third copy
+     *  of the predicate is how the two would have drifted. */
+    const keepsAiYaw = typeof aiYaw === 'number' && Math.abs(aiYaw) >= 0.05;
     let placement: { pos: [number, number, number]; rot: number };
     const w = rw / 2;
     const dHalf = rd / 2;
@@ -1812,10 +1821,14 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
     // parameter for the rest of the block.
     const bounds = { width: rw, depth: rd };
     if (aff === 'must-wall') {
-      const snapped = snapToWall(placement.pos, dim, footprint, wallStandoff(refined));
+      const snapped = snapToWall(placement.pos, dim, footprint, wallStandoff(refined), null, {
+        // The clamp measures the piece across the wall's heading unless told
+        // otherwise, and here the model's yaw may be what survives — see `keepsAiYaw`.
+        alongRot: keepsAiYaw ? placement.rot : undefined,
+      });
       placement.pos[0] = snapped.x;
       placement.pos[2] = snapped.z;
-      if (snapped.rot !== undefined && (typeof aiYaw !== 'number' || Math.abs(aiYaw) < 0.05)) {
+      if (snapped.rot !== undefined && !keepsAiYaw) {
         placement.rot = snapped.rot;
       }
     } else if (aff === 'prefers-wall') {
@@ -1829,10 +1842,12 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
       );
       // Always snap via footprint-aware snapToWall — works for L/T/U inner edges too.
       if (distFromWall > 0.2) {
-        const snapped = snapToWall(placement.pos, dim, footprint, wallStandoff(refined));
+        const snapped = snapToWall(placement.pos, dim, footprint, wallStandoff(refined), null, {
+          alongRot: keepsAiYaw ? placement.rot : undefined,
+        });
         placement.pos[0] = snapped.x;
         placement.pos[2] = snapped.z;
-        if (snapped.rot !== undefined && (typeof aiYaw !== 'number' || Math.abs(aiYaw) < 0.05)) {
+        if (snapped.rot !== undefined && !keepsAiYaw) {
           placement.rot = snapped.rot;
         }
       }

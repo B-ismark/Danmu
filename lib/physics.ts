@@ -5,7 +5,7 @@
 
 import type { Category, Shape } from './scene-spec';
 import type { Footprint } from './footprint';
-import { edgeProjection, nearestEdge, footArea, footFromPart, footIntersectionArea } from './geometry';
+import { edgeProjection, nearestEdge, footArea, footFromPart, footIntersectionArea, obbExtentAlong } from './geometry';
 import { WALL_GAP } from './layout-rules';
 
 export type Anchor = 'floor' | 'ceiling' | 'wall-high' | 'wall-mid' | 'wall-low' | 'wall-floor';
@@ -183,21 +183,49 @@ export function snapToWall(
    *  refusing, because a footprint can change under a held index (a wall drag) and
    *  the nearest wall is never a wrong answer, only a less constrained one. */
   edgeIndex?: number | null,
-  /** Keep the whole piece on the wall segment, not just its centre. True for every
-   *  path that PLACES something; false for the arrangement solver, which only
-   *  PROPOSES.
+  /** The two questions that are about the clamp rather than about the wall.
    *
-   *  The difference is real and it is measured. `propose` in lib/layout-solve.ts
-   *  spends 12% of its proposals on "back to the wall", and a proposal is a
-   *  candidate to be scored, not an answer — `outside` is weighted 1000 and already
-   *  prices a piece hanging off a corner, so legality there is the cost function's
-   *  job. Clamping it too costs the search its reach: on the U preset the walls are
-   *  short, a 1.6 m bed is wider than several of them, and "centre it" then collapses
-   *  every wall proposal for that piece onto one point. The scrambled-U bedroom's
-   *  worst of twelve seeds went 6.9 → 69.4 — which is the anchor never finding its
-   *  wall, the exact disaster `tests/layout-solve.test.ts` keeps that seed for. */
-  wholePiece = true,
+   *  An object rather than two more positionals: the tail was already
+   *  `(standoff, edgeIndex)`, and a sixth and seventh place-counted argument — with
+   *  two placeholders threaded past to reach them — is the shape that gets
+   *  miscounted by whoever adds an eighth. Flagged by danmu-f4 at the call site
+   *  before it had a chance to. */
+  opts: {
+    /** Keep the whole piece on the wall segment, not just its centre. True for
+     *  every path that PLACES something; false for the arrangement solver, which
+     *  only PROPOSES.
+     *
+     *  The difference is real and it is measured. `propose` in lib/layout-solve.ts
+     *  spends 12% of its proposals on "back to the wall", and a proposal is a
+     *  candidate to be scored rather than an answer — `outside` is weighted 1000 and
+     *  already prices a piece hanging off a corner, so legality there is the cost
+     *  function's job. Clamping it as well costs the search its reach: on the U
+     *  preset the walls are short, a 1.6 m bed is wider than several of them, and
+     *  "centre it when it does not fit" then collapses every wall proposal for that
+     *  piece onto one point. The scrambled-U bedroom's worst of twelve seeds went
+     *  6.9 → 69.4 — the anchor never finding its wall, which is the exact disaster
+     *  `tests/layout-solve.test.ts` keeps those seeds for. */
+    wholePiece?: boolean;
+    /** The rotation the caller is going to APPLY, when that is not the `rot`
+     *  returned below.
+     *
+     *  The clamp needs the piece's extent ALONG the wall, and that is `dimMM[0]`
+     *  only because the returned `rot` turns the piece's local X to run along it.
+     *  Two callers in `lib/scene-spec.ts` take the snapped x/z and keep the MODEL's
+     *  yaw instead (`keepsAiYaw`), so for them the premise is false and the piece
+     *  was clamped by its width while lying at an arbitrary angle — bounded at
+     *  (width − depth) / 2 too far along the wall, and never outside the room, so a
+     *  wrong number rather than a wrong room. Found by danmu-f4 reading the callers
+     *  rather than the function.
+     *
+     *  Given the yaw that will really apply, the extent is the piece's own OBB
+     *  projected onto the wall direction: exact at any angle, and equal to
+     *  `dimMM[0] / 2` at the wall's own heading — which the four-wall tests check
+     *  rather than assume, so a convention error in the projection is a red. */
+    alongRot?: number;
+  } = {},
 ): { x: number; z: number; rot?: number } {
+  const { wholePiece = true, alongRot } = opts;
   const edge =
     (edgeIndex == null ? null : edgeProjection(footprint, edgeIndex, pos[0], pos[2])) ??
     nearestEdge(footprint, pos[0], pos[2]);
@@ -232,7 +260,11 @@ export function snapToWall(
   if (wholePiece && len > 1e-9) {
     const ux = (b[0] - a[0]) / len;
     const uz = (b[1] - a[1]) / len;
-    const halfW = dimMM[0] / 2000;
+    const halfW = obbExtentAlong(
+      { cx: 0, cz: 0, hw: dimMM[0] / 2000, hd: dimMM[1] / 2000, rot: alongRot ?? edge.yaw },
+      ux,
+      uz,
+    );
     // Distance from `a` along the wall. Taken from the projected point rather than
     // from `pos`, so a pointer out in the room is measured the same way as one
     // beyond the corner.

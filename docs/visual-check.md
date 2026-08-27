@@ -290,6 +290,107 @@ reviewed-and-clean.
 
 ---
 
+## 8. Room check — issue row alignment (your report, 2026-08-27)
+
+> "'Model can't fully open' and the worth fixing tag aren't aligned as they should
+> in the issue modal"
+
+**Was:** the severity pill was an inline-block dropped into the title's text flow,
+nudged onto the baseline by a hand-picked `verticalAlign: '-5px'`. Two problems, and
+the second is the visible one — a title long enough to wrap put its **second line
+underneath the pill**, flush with the pill's left edge instead of with the first line
+of the title. "Door can't open fully" plus a "Worth fixing" pill is about 150 px, and
+the rail's content box is 176 px at the tight width, so it wrapped as it shipped
+rather than at some hypothetical narrow one.
+
+**Now:** a flex row with `alignItems: 'baseline'`, the pill `flexShrink: 0` so it
+never breaks across lines, and the title in a `minWidth: 0` column so it wraps inside
+its own box instead of forcing the row wider than the rail. The magic constant is
+gone.
+
+**Also changed on the same row:** the action buttons were `justifyContent: 'flex-end'`
+with `flexWrap: 'wrap'`, so on a narrow rail "Show me" and "Try a fix" stacked
+right-aligned — into the same visual column the wrapped title had just moved out of.
+They align with the text column now.
+
+**What to check:** open Room check on a room with a door finding, at both rail
+widths. The pill should sit on the title's first line; a wrapped title's second line
+should start under the first line of the title, not under the pill; the buttons
+should line up with the text above them.
+
+**Alternative if you'd rather:** the pill on its own line above the title. That is a
+look rather than a correctness question, so it is yours to pick — say the word.
+
+## 9. Wall-mounted shadows, closed room — from danmu-5e
+
+Their branch made the room a closed shell for the sun (walls cast, plus a
+shadow-only ceiling), which deleted the per-piece shadow gate. None of this has
+been in a browser.
+
+- **A wall that both casts and receives may shadow itself.** The one to look at
+  first. Where sun comes through a window, the caster and the receiver are the same
+  zero-thickness plane, so the depth comparison is a tie and `shadow-normalBias`
+  (~2.3 cm at every map size the fit produces) is all that separates them. Put a
+  window in one wall, choose Sunrise or Sunset, set quality to High, and look at the
+  wall **opposite** the window. Right: a clean patch of sun. Wrong: the patch is
+  missing, or stippled, or striped. If it is wrong the fix is a larger bias or a
+  shadow shell offset outward from the plaster — 5e wants to know before anyone
+  merges.
+- **How dark `day` reads in a windowless room.** The starter arrangements ship
+  neither a window nor a door, so this is the default room, and the key light is now
+  blocked by the ceiling — leaving hemisphere, fill and environment. It should read
+  as overcast rather than sunlit, which is physically right. The question is whether
+  that is too dim to be the default mood, and it is yours: 5e deliberately retuned
+  no ambient value, because doing that by feel against a picture they cannot see is
+  how a mood ends up wrong in a way no test finds.
+- **Whether `cool` still reads as bright overcast.** Its key is 0.95 and is blocked
+  too, and it is the brightest mood in the set, so it loses the most. Its own
+  description is "flat overcast, no direction", so blocking the key arguably makes
+  the label true. `evening`'s key is 0.12 against a design that wants the lamps to
+  do the work, so expect no visible change there.
+
+## 10. Escape mid-drag, and the one place it meets the sun
+
+Escape now cancels a drag in the **3D** tab (it already did in the plan). There was
+no handler at all before, so the key fell through to the studio's global Escape —
+"deselect" — and the piece stayed wherever the pointer had left it.
+
+- **Cancel a drag and check the POSITION, not the shadow.** With the closed room a
+  piece can be legitimately shadowless because the sun cannot reach it, so the floor
+  is no longer evidence about whether the transform went back. 5e's point, and a
+  good one.
+- **Cancel a drag that carried company.** Select a desk with a lamp on it, drag,
+  press Escape: the lamp must go back too, not hang in the air where the cancelled
+  drag left it. Same for a merged set — every member, not just the piece under the
+  hand.
+- **Cancel a drag of a WINDOW.** The one place this gesture and 5e's shell touch.
+  `RoomShell` rebuilds its wall shapes from the store, so putting a window back
+  moves its hole, and moving the hole moves where the sun lands. Nothing in the tree
+  sets `shadowMap.autoUpdate = false`, so three.js re-bakes shadow maps on every
+  rendered frame, and the handler calls `invalidate()` — which is why this should
+  work. "Should" is doing real work in that sentence; check the sun patch goes back
+  with the window.
+- **Press Escape when NOT dragging.** It must still mean "deselect". The handler
+  declines the key unless a gesture is in flight, and that is the whole reason the
+  global meaning survives.
+
+## Known coverage gaps, stated rather than implied
+
+- **A detected wall piece keeping the model's yaw.** `snapToWall` clamps a piece by
+  its extent along the wall, and two callers in `lib/scene-spec.ts` keep the model's
+  own yaw rather than the wall's — so the clamp has to be told which rotation will
+  really apply. Found by danmu-f4, fixed, and the fix's *mechanism* is pinned by
+  three mutations. **The wiring is not**: removing the argument from both call sites
+  leaves the suite green, because the difference it makes on the only fixture that
+  reaches that branch is 21 mm and the settle pass moves a rotated wardrobe further
+  than that. Written into `tests/scene-build.test.ts` beside the assertions so the
+  next reader does not mistake green for covered.
+- **The 3D Escape handler itself.** `convoyRestore` is pure and tested; the wiring —
+  the cancel flag, the skipped commit, the suppressed click — needs a real pointer
+  and is not under test.
+- **Every UI change in this round.** The Inspector's "Where it sits" row and the
+  Check tab's layout have no test that can see them.
+
 ## Known-and-left, with reasons
 
 Not "needs eyes" — decisions taken deliberately, recorded so they are not

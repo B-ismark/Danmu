@@ -258,6 +258,34 @@ describe('snapToWall keeps the whole piece on its wall', () => {
     }
   });
 
+
+  it('measures the piece across the yaw the caller will really apply', () => {
+    // `snapToWall` clamps by the piece's extent ALONG the wall, and that is half its
+    // width only because the `rot` it returns turns the piece to the wall's heading.
+    // Two callers in `lib/scene-spec.ts` keep the model's yaw instead, so they pass
+    // it and the clamp projects the piece's own box onto the wall. A 1.45 × 0.06 m
+    // TV lying at 45° reaches (1.45 + 0.06) / 2 / √2 ≈ 0.534 m along the wall, not
+    // 0.725 — so it may stand CLOSER to the corner, not further.
+    const turned = snapToWall([9, 0, 0], TV, RECT, 0, 0, { alongRot: Math.PI / 4 });
+    const square = snapToWall([9, 0, 0], TV, RECT, 0, 0);
+    const diag = (TV[0] / 1000 + TV[1] / 1000) / 2 / Math.SQRT2;
+    expect(turned.x).toBeCloseTo(3 - diag, 6);
+    expect(square.x).toBeCloseTo(3 - TV[0] / 2000, 6);
+    // The direction of the difference is the whole point: a piece lying at an angle
+    // takes LESS of the wall across its width, so clamping it by `dimMM[0]` pushed
+    // it further from the corner than it had to be.
+    expect(turned.x).toBeGreaterThan(square.x);
+  });
+
+  it('is unchanged when the caller is going to accept the wall heading', () => {
+    // Passing the yaw the function itself returns must be a no-op, or the projection
+    // and the `dimMM[0]` it replaced disagree about the same case.
+    const plain = snapToWall([9, 0, 0], TV, RECT, 0, 0);
+    const explicit = snapToWall([9, 0, 0], TV, RECT, 0, 0, { alongRot: plain.rot });
+    expect(explicit.x).toBeCloseTo(plain.x, 12);
+    expect(explicit.z).toBeCloseTo(plain.z, 12);
+  });
+
   it('does the same on an inner wall of an L, whose ends are not room corners', () => {
     // The L's inner edge x = 1 runs z 0 → 2, so it is 2 m long and a 1.45 m TV has
     // only 550 mm of travel on it. Aimed at either end it must come back inside.

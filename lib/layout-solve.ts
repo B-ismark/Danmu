@@ -870,7 +870,9 @@ function propose(
     // function is what refuses one that hangs off the end of a wall; clamping here
     // instead costs the search the corners, which on the U preset is the difference
     // between a worst-of-twelve of 6.9 and one of 69.4.
-    const snap = snapToWall([target[0], part.pos[1], target[1]], part.dimMM, m.ctx.footprint, 0, null, false);
+    const snap = snapToWall([target[0], part.pos[1], target[1]], part.dimMM, m.ctx.footprint, 0, null, {
+      wholePiece: false,
+    });
     return { x: snap.x, z: snap.z, yaw: normaliseYaw(snap.rot ?? p.yaw) };
   }
 

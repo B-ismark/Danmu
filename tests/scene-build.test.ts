@@ -9,7 +9,7 @@ import {
 } from '../lib/scene-spec';
 import type { RoomData } from '../lib/storage';
 import { footprintForLayout } from '../lib/footprint';
-import { footArea, footFromPart, footIntersectionArea, outsideShare } from '../lib/geometry';
+import { footArea, footFromPart, footIntersectionArea, obbExtentAlong, outsideShare } from '../lib/geometry';
 
 type Saved = NonNullable<RoomData['detectedObjects']>[number];
 
@@ -333,5 +333,76 @@ describe('collidesAt with a round footprint', () => {
     const at: [number, number, number] = [0, 0, 0];
     expect(collidesAt(build(false), 'table', at, 0, [1200, 1200, 750])).toBe(true);
     expect(collidesAt(build(true), 'table', at, 0, [1200, 1200, 750])).toBe(false);
+  });
+});
+
+// ─── A wall snap measures the piece across the yaw that will apply ─────────
+//
+// `snapToWall` clamps a wall-mounted piece by its extent ALONG the wall, and that is
+// `dimMM[0] / 2` only because the `rot` it returns turns the piece to the wall's
+// heading. This call site takes the snapped x/z and keeps the MODEL's yaw whenever
+// it is 0.05 rad or more — so for it the premise is false, and the piece was clamped
+// by its width while lying at an angle. Bounded, and never outside the room: a wrong
+// number rather than a wrong room. Found by danmu-f4 reading the callers rather than
+// the function, and it survived two mutations until this test existed.
+//
+// Getting here needs three things at once, which is why the fixture looks fussy:
+// `wardrobe` is `prefers-wall`, so the snap runs only more than 0.2 m off a wall;
+// the piece then has to project NEAR the end of the wall it chooses, or the clamp
+// does not bite; and the yaw has to clear 0.05.
+describe('a detected wall piece is clamped by the yaw it keeps', () => {
+  const wardrobeAt = (yaw?: number) => {
+    const parts = buildSceneFromRoom(
+      room([
+        saved(1, {
+          label: 'wardrobe__slot:n',
+          category: 'wardrobe',
+          box: [0.4, 0.3, 0.2, 0.5],
+          // 0.4 m off the north wall — outside the `prefers-wall` gate — and 1.9 m
+          // along it, which is inside the half-width of the 2 m wardrobe the engine
+          // produces, so the clamp is what decides where it stops.
+          position: { x: 1.9, y: 0, z: 1.6 },
+          ...(yaw === undefined ? {} : { yaw }),
+        } as Partial<Saved>),
+      ]),
+    );
+    const w = parts.find((p) => p.category === 'wardrobe');
+    expect(w, 'the fixture must produce a wardrobe').toBeDefined();
+    return w!;
+  };
+
+  it('keeps a yaw the model was sure about, and takes the wall heading otherwise', () => {
+    // `keepsAiYaw`, stated where it is observable. Both directions, because the
+    // predicate reads the same either way round and only one of them is right.
+    expect(wardrobeAt(0.5).rot).toBeCloseTo(0.5, 6);
+    expect(wardrobeAt(0.01).rot).not.toBeCloseTo(0.01, 6);
+  });
+
+  it('clamps it by its own box at that yaw, not by its width', () => {
+    const angled = wardrobeAt(0.5);
+    const squared = wardrobeAt(0.01);
+    // Same wall — the NORTH one — though not the same distance from it: a 2 m
+    // wardrobe turned half a radian needs more room off the plaster, and the settle
+    // pass gives it. That is why the comparison below is along the wall only.
+    for (const w of [angled, squared]) expect(w.pos[2]).toBeGreaterThan(1);
+    // WHAT THIS DOES NOT CATCH, measured rather than assumed: dropping the
+    // `alongRot` argument at both call sites leaves this green. The clamp then uses
+    // the width, 1.000 m against the projection’s 1.021 — and 21 mm is less than the
+    // settle pass moves a rotated 2 m wardrobe off its wall, so the room-level
+    // answer is the same to three decimals. A bigger delta needs a piece whose
+    // width and depth differ a lot at 45°, and the near-square catalog pieces that
+    // are wall-seeking (a 550 mm fridge) have almost none. So R1–R3 are pinned here
+    // and the wiring is pinned only by review; if you are touching this, keep the
+    // `alongRot` argument.
+    // Not asserted against a figure: the dims come out of the geometry engine and
+    // vary with the yaw, so a hard number here would be a test of the fixture. What
+    // must hold is that the two runs land in DIFFERENT places along the wall — which
+    // is only true if the caller hands the clamp the yaw it is going to keep. That
+    // the projection itself is right is checked on all four walls in
+    // physics-snap.test.ts; this checks the wiring, which is what was broken.
+    expect(Math.abs(angled.pos[0] - squared.pos[0])).toBeGreaterThan(0.005);
+    // …and both are still inside the room, which is the bound this never crossed —
+    // the reason the finding was low severity rather than nil.
+    for (const w of [angled, squared]) expect(Math.abs(w.pos[0])).toBeLessThan(2.5);
   });
 });
