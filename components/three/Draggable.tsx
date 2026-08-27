@@ -34,8 +34,10 @@ import { useScene } from '@/lib/scene-store';
 import { currentRoomScene } from '@/lib/room-scene';
 import { useDragLive } from '@/lib/drag-live';
 import { collidesAt, isParametric, type ScenePart } from '@/lib/scene-spec';
-import { isFloorStanding } from '@/lib/physics';
+import { isFloorStanding, ridesWall } from '@/lib/physics';
 import { clampDims } from '@/lib/dimension-ranges';
+import { moodSunDirection, DEFAULT_BEARING_DEG } from '@/lib/lighting-moods';
+import { castsSunShadow } from '@/lib/sun-shadow';
 import { type SnapLine } from '@/lib/item-snap';
 import { resolvePlacement as resolveDrag, snapSteps } from '@/lib/drag-resolve';
 import { cascadeTransform, snapshotDescendants, wouldCreateCycle, type DescendantOffset } from '@/lib/rigid-parent';
@@ -87,11 +89,16 @@ function FinishApplier({
   finish,
   colorKey,
   dimKey,
+  cast,
 }: {
   groupRef: { current: Group | null };
   finish?: ScenePart['finish'];
   colorKey?: string;
   dimKey?: string;
+  /** Whether this piece may write into the key light's shadow map. False only for
+   *  a wall-rider with the sun on the far side of its wall — see
+   *  `lib/sun-shadow.ts` for why that is the piece's problem and not the wall's. */
+  cast: boolean;
 }) {
   const invalidate = useThree((s) => s.invalidate);
   useLayoutEffect(() => {
@@ -100,9 +107,10 @@ function FinishApplier({
     g.traverse((o) => {
       const mesh = o as Mesh;
       if (!(mesh as { isMesh?: boolean }).isMesh) return;
-      // Part meshes cast + receive soft shadows (gated at the light/Canvas by
-      // the quality setting). Idempotent — safe to re-set on every pass.
-      mesh.castShadow = true;
+      // Part meshes receive soft shadows always, and cast unless the sun is
+      // behind the wall this one is bolted to (`cast`). Idempotent — safe to
+      // re-set on every pass, which is what lets the gate follow the north dial.
+      mesh.castShadow = cast;
       mesh.receiveShadow = true;
       const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       for (const m of mats) {
@@ -129,7 +137,7 @@ function FinishApplier({
     });
     // Materials were mutated outside React — nothing else will ask for a repaint.
     invalidate();
-  }, [groupRef, finish, colorKey, dimKey, invalidate]);
+  }, [groupRef, finish, colorKey, dimKey, cast, invalidate]);
   return null;
 }
 
@@ -161,6 +169,29 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   // Snap increments, from the same module that applies them during a resolve, so
   // the gizmo's steps and the drag's magnetism can never drift apart.
   const { translate: translationSnap, rotate: rotationSnap } = snapSteps(snapMode);
+
+  // The shadow gate. A wall-mounted piece may only cast into the sun's shadow map
+  // when the sun is on the room side of the wall it is bolted to — walls never
+  // cast (the dollhouse view culls the near ones), so the light goes through the
+  // plaster and a TV on the far wall was dropping an impossible shadow across the
+  // floor. `lib/sun-shadow.ts` holds the reasoning and the sign.
+  //
+  // Two deliberate choices about WHICH rotation this reads. It is the resolved
+  // one (`storedRot ?? part.rot`), because a piece the user has turned must be
+  // gated on where it now faces and not on where it was authored. And it is the
+  // STORE's value rather than `ref.current.rotation.y`, which runs ahead of the
+  // store mid-drag: a dot product against the live mesh would flip casting on and
+  // off across the sign change while the piece turns, and a flickering shadow is
+  // worse than a wrong one.
+  const lighting = useStudio((s) => s.lighting);
+  const bearingDeg = useScene((s) => s.room.site?.bearingDeg) ?? DEFAULT_BEARING_DEG;
+  const castsShadow = part
+    ? castsSunShadow(
+        moodSunDirection(lighting, bearingDeg),
+        storedRot ?? part.rot,
+        ridesWall(part.category, part.shape),
+      )
+    : true;
 
   const setPosition = useStudio((s) => s.setPosition);
   const setRotation = useStudio((s) => s.setRotation);
@@ -743,7 +774,13 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         onPointerUp={onPointerUp}
         onWheel={onWheel}
       >
-        <FinishApplier groupRef={ref} finish={part.finish} colorKey={part.color} dimKey={storedDim?.join()} />
+        <FinishApplier
+          groupRef={ref}
+          finish={part.finish}
+          colorKey={part.color}
+          dimKey={storedDim?.join()}
+          cast={castsShadow}
+        />
         <Pickable partId={partId}>{children}</Pickable>
         {(inSelection || isHovered || dragInvalid) && (
           <Highlight

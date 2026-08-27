@@ -14,8 +14,8 @@ import { useScene } from '@/lib/scene-store';
 import { useRoomScene } from '@/lib/room-scene';
 import { placeNewPart, DND_MIME, type Category, type Shape } from '@/lib/scene-spec';
 import { footprintBounds } from '@/lib/footprint';
-import { sunDirection, daylightKelvin } from '@/lib/solar';
-import { LIGHTING } from '@/lib/lighting-moods';
+import { daylightKelvin } from '@/lib/solar';
+import { LIGHTING, moodSunDirection, DEFAULT_BEARING_DEG } from '@/lib/lighting-moods';
 import { hexFromKelvin } from '@/lib/light-units';
 import { useSnapshot, downloadBlob } from '@/lib/snapshot';
 import { pickIdsFrom } from '@/lib/pick-through';
@@ -79,14 +79,6 @@ const _ndc = new Vector2();
 const _floor = new Plane(new Vector3(0, 1, 0), 0);
 const _hit = new Vector3();
 
-/** The bearing used when a room has no site yet: square to the compass.
- *
- *  Zero is the honest default here in a way a latitude never was — "nobody has
- *  told us which way this room faces" and "the plan's top edge really is north"
- *  produce the same picture, and the dial in the Room section shows the number
- *  it is using either way. */
-const DEFAULT_BEARING_DEG = 0;
-
 export function Room() {
   const hidden = useStudio((s) => s.hidden);
   const lighting = useStudio((s) => s.lighting);
@@ -100,7 +92,7 @@ export function Room() {
   // The sun, in the moods that have one. Null in a studio mood, and null when the
   // angle is below the horizon — which is a real answer, not a missing one, and
   // the key light has to go out rather than shine up through the floor. No
-  // shipped preset is below it, but the branch stays because `sunDirection` is
+  // shipped preset is below it, but the branch stays because `moodSunDirection` is
   // the thing that decides, not this call site.
   //
   // The only per-room input is the bearing: it rotates all four angles together,
@@ -111,8 +103,15 @@ export function Room() {
   const bearingDeg = useScene((s) => s.room.site?.bearingDeg) ?? DEFAULT_BEARING_DEG;
   const sun = useMemo(() => {
     if (!L.sun) return null;
-    const { azimuthDeg, elevationDeg } = L.sun;
-    const dir = sunDirection(elevationDeg, azimuthDeg, bearingDeg);
+    const { elevationDeg } = L.sun;
+    // Through `moodSunDirection` rather than `sunDirection` directly, because
+    // `Draggable` now asks the same question — a wall-mounted piece may only cast
+    // into the sun's shadow map when the sun is on the room side of its wall (see
+    // `lib/sun-shadow.ts`). Two callers deriving one direction from the same table
+    // is the rule 3 case, and the failure mode is specific: a bearing sign that
+    // disagreed between them would put the light in the right place and the
+    // shadows in the wrong one.
+    const dir = moodSunDirection(lighting, bearingDeg);
     if (!dir) return null;
     return {
       dir,
@@ -120,10 +119,10 @@ export function Room() {
       // Air mass, roughly: the sun is dimmer near the horizon because its light
       // takes a longer path through the atmosphere. sin(altitude) is the standard
       // first approximation and it is what makes Sunrise read as sunrise rather
-      // than as Noon pointed sideways.
+      // than as Day pointed sideways.
       intensity: 0.25 + 1.35 * Math.sin((elevationDeg * Math.PI) / 180),
     };
-  }, [L.sun, bearingDeg]);
+  }, [L.sun, lighting, bearingDeg]);
   // Drop the upper DPR bound when FPS regresses (large scenes / weak GPUs);
   // AdaptiveDpr cuts further while interacting. Keeps AO affordable.
   const [dprMax, setDprMax] = useState(2);

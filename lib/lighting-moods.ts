@@ -1,4 +1,5 @@
 import type { Lighting } from './store';
+import { sunDirection } from './solar';
 
 // What each lighting mood looks like. Read by the 3D scene (`Room`), by the
 // north dial that explains where a sun mood comes from (`NorthDial`), and by
@@ -144,3 +145,36 @@ export const LIGHTING: Record<Lighting, Mood> = {
     exposure: 1.08,
   },
 };
+
+/** The bearing a room is assumed to have when nobody has told us which way it
+ *  faces: square to the compass.
+ *
+ *  It lives here rather than in `Room` because `Room` is no longer the only thing
+ *  that turns a mood into a direction — `Draggable` does too, for the shadow gate
+ *  — and a default duplicated across two callers is a default that eventually
+ *  disagrees. Zero is honest in a way a latitude never was: "nobody has said" and
+ *  "the plan's top edge really is north" produce the same picture, and the dial in
+ *  the Room section shows the number it is using either way. */
+export const DEFAULT_BEARING_DEG = 0;
+
+/**
+ * Which way the sun lies for a mood, as a unit vector pointing FROM the room
+ * TOWARD the light — or `null` when the mood is a studio look, or when its angle
+ * is at or below the horizon and there is honestly no key light to place.
+ *
+ * This exists because a second consumer appeared. `Room` needs it to position the
+ * key light; `Draggable` needs it to decide whether a wall-mounted piece may write
+ * into that light's shadow map at all (see `lib/sun-shadow.ts`). Both derived it
+ * from `LIGHTING[...].sun` plus a bearing, and rule 3's whole point is that the
+ * second copy of a derivation is where the two silently drift — a sign flip in one
+ * caller's bearing would put the sun in the right place and the shadows in the
+ * wrong one, which is not a bug anyone would think to look for.
+ */
+export function moodSunDirection(
+  lighting: Lighting,
+  northBearingDeg: number,
+): [number, number, number] | null {
+  const sun = LIGHTING[lighting].sun;
+  if (!sun) return null;
+  return sunDirection(sun.elevationDeg, sun.azimuthDeg, northBearingDeg);
+}
