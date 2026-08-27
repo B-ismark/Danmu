@@ -243,6 +243,59 @@ against these fixes — each one killed by the assertion that owns it, each reve
 
 ---
 
+## The three live defects on `main`, now fixed
+
+These were found while re-evaluating the coverage gaps and had been offered rather
+than taken. All three were on `main`, not introduced by this branch, and all three
+were silent — no error, no failing test, nothing in the console.
+
+### A T or a U room shrank when you pushed its wall out
+
+`wallOutwardNormal` decided which way is outdoors by testing the edge perpendicular
+against `polygonCentroid` — the average of the **vertices**. On a T that average sits
+in the notch beside the stem; on a U it sits between the arms. Both are outside the
+floor, so every wall whose midpoint lies on the far side of it got its normal
+reversed: **2 of the T's 8 walls and 3 of the U's 8.** `offsetWall` moves the wall
+along that vector, so dragging one of those five outward made the room smaller and
+`wall-move.ts` carried the furniture inward with it.
+
+- **Make a U-shaped room. Drag each of its eight walls outward in turn.** Every one
+  must make the room bigger. Same for a T.
+- **Put a sofa against one of the reversed walls first** (the U's edges 1, 2 and 3)
+  and drag that wall out — the sofa must travel outward with it, not into the room.
+- **A rectangle was always correct** and must stay so; that is where every test for
+  this lived, which is why it went unseen.
+
+### A ceiling fan swept 40% wider than it said
+
+`FanGeo` drew each blade `1.6r` long centred at `0.6r`, which reaches `1.4r`. The
+catalog fan is 1000 mm, so it swept **1.40 m** — and each blade also crossed 100 mm
+out through the far side of its own motor housing. The plan view draws a fan as a
+circle straight off `dimMM`, so the two tabs were 40% apart about the same object.
+
+- **Add a ceiling fan, then compare the 3D tab against the 2D plan.** The blade
+  circle and the plan circle should now be the same size.
+- **Watch it spin.** The blades should start at the edge of the motor housing, not
+  pass through it. Three blades crossing the centre is the old look.
+- **Resize the fan** and check both tabs still agree.
+
+### A TV the detector reported edge-on was parked 500 mm from its corner
+
+`snapToWall` keeps a piece far enough along its wall for all of it to stay on the
+wall, and that distance is half its **width** only because the rotation the function
+returns turns the piece to the wall's heading. Two callers in `buildSceneFromRoom`
+keep the *detector's* yaw instead, so for them the premise was false: a TV lying
+edge-on was still clamped by its width. It never left the room, so it was a wrong
+number rather than a wrong room — which is exactly why nothing caught it.
+
+- **Only reachable through a photo detection that reports a yaw**, so it needs a real
+  capture with an angled TV, mirror or painting. In the shipped presets and the
+  catalog nothing sets a yaw, so this is unreachable from the UI alone.
+- **What to look for:** a detected wall piece sitting oddly far from the corner of
+  its wall, while looking rotated relative to that wall.
+
+---
+
 ## Still open, and still yours
 
 - **PR #16 is your click, and it needs a rebase first.** See its section below.

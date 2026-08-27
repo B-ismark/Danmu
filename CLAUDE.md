@@ -32,7 +32,11 @@ backend, no account. The 3D studio *is* the product.
    **Corollaries, each of which has been violated at least once:** a shape's
    geometry must be authored at `part.dimMM` (`Draggable` scales by
    `storedDim / part.dimMM`, so a renderer with a hard-coded size renders the
-   wrong size at scale 1); a displayed measurement must be *derived*, never a
+   wrong size at scale 1 — `FanGeo` drew its blade `1.6r` long centred at `0.6r`,
+   which reaches **1.4r**, so a 1000 mm ceiling fan swept 1.40 m while the plan drew
+   the 1.00 m circle the same `dimMM` asks for: **two tabs, one piece, 40% apart, and
+   no test could reach either because the arithmetic lived in a TSX renderer**. It is
+   `fanBlade` in `scene-spec.ts` now); a displayed measurement must be *derived*, never a
    hand-typed string next to the thing it describes; **a bound must cross into a
    control in the control's own unit** — `roomAxisRange` is metres and
    `RoomDimsEditor`'s fields are in the user's `dimUnit`, so handing `NumberField`
@@ -106,6 +110,22 @@ backend, no account. The 3D studio *is* the product.
    written reason a cost cannot express it (`tall` is a size, `crowding` is the whole
    room, `turning` nothing costs at all). Adding
    a check with no cost is allowed; adding one silently is not.
+   **Which side of a wall is outdoors is the polygon's WINDING, not a point it is
+   measured against.** `wallOutwardNormal` flipped the edge perpendicular by testing
+   it against `polygonCentroid` — which averages the VERTICES, so on a T it lands in
+   the notch beside the stem and on a U between the arms, outside the floor entirely,
+   and every wall whose midpoint sits on the far side of it comes back reversed. Five
+   of those two presets' sixteen walls did. `offsetWall` translates the edge along
+   this vector, so `delta > 0` — "push out / bigger room" — SHRANK the room on those
+   five and `wall-move.ts` carried the furniture inward with it. `polygonSignedArea`
+   answers it exactly for any simple polygon and needs no interior point at all.
+   Two things worth keeping from it: every test for that function used a
+   **rectangle**, where the vertex average IS the true centroid and all four normals
+   are right — the assertions were real and the fixture could not express the defect,
+   which is the same shape as "a check that cannot fail"; and fixing it retired a
+   blocker recorded elsewhere, since `clampIntoFootprint`'s stated reason for being
+   unfixable was that changing `polygonCentroid` would change every wall's normal,
+   and it no longer would.
    **Arrange against the room, never against its bounding box.** A footprint is a
    polygon; `±width/2` describes a box the room may not be. Every starter
    arrangement was written that way and so furnished the quadrant an L / T / U cuts
