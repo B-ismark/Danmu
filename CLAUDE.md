@@ -33,8 +33,18 @@ backend, no account. The 3D studio *is* the product.
    geometry must be authored at `part.dimMM` (`Draggable` scales by
    `storedDim / part.dimMM`, so a renderer with a hard-coded size renders the
    wrong size at scale 1); a displayed measurement must be *derived*, never a
-   hand-typed string next to the thing it describes; and when something does not
-   fit, **say so — never silently resize it to fit**. A piece taller than the
+   hand-typed string next to the thing it describes; **a bound must cross into a
+   control in the control's own unit** — `roomAxisRange` is metres and
+   `RoomDimsEditor`'s fields are in the user's `dimUnit`, so handing `NumberField`
+   the raw metre bound meant a 5 m room read `500.0` cm against a max of `50`, and
+   one press of the up chevron clamped it to 50 cm before the commit refused the room
+   the arrows had just made (four of the five units, and invisible to everyone left
+   on metres — which is also who wrote it). `boundToUnit` (`lib/units.ts`) converts
+   and rounds **toward the interior**, because half of that fix is still wrong: 1.8 m
+   is 5.90551 ft and a field at the foot step's one decimal renders it `5.9`, two
+   millimetres below its own floor. The sentence naming the range reads the same
+   call, so the number the user is told and the number the arrows obey are one. And
+   when something does not fit, **say so — never silently resize it to fit**. A piece taller than the
    ceiling keeps its real height and `lib/clearance.ts` reports it.
    **Which wall a photo is, is code's answer now too** (`lib/capture-slots.ts`),
    and it belongs to this rule because a wrong slot is a wrong room:
@@ -99,7 +109,16 @@ backend, no account. The 3D studio *is* the product.
    **A scene file is an AI hint with a filename.** `lib/scene-file.ts` is the only
    thing here that parses bytes someone else produced, so the same boundary holds:
    imported sizes go through `clampDims`, and shape / category / decor / finish /
-   layout are checked against the runtime vocabularies rather than trusted. Those
+   layout are checked against the runtime vocabularies rather than trusted. **An
+   out-of-range ceiling is clamped and reported, not fatal**, and that exception is
+   the rule working rather than a hole in it: a ceiling was the one *dimension* in a
+   file refused outright while every part size beside it was already being clamped,
+   and this app had written rooms the 1.8 m floor rejects — so saving a 1.65 m room
+   and opening it again answered "that room file is missing its room", about a file
+   this app produced, with no way forward. Width and depth stay fatal because a width
+   of 0 is no floor to stand furniture on, and `Infinity` stays fatal because
+   clamping `1e400` into a legal 12 m ceiling is the one place lossy would be
+   dishonest. Those
    vocabularies are `as const` arrays with the unions **derived** from them
    (`SHAPES`, `CATEGORIES`, `DECOR_KINDS`, `FINISHES`, `LAYOUT_IDS`) — never a union
    beside a hand-kept `Set`, which drifts in the one direction nobody notices: a
@@ -197,17 +216,25 @@ backend, no account. The 3D studio *is* the product.
    from that same start transform plus the gesture's TOTAL delta, never from the
    member's current position plus this frame's step. **The reason first written here
    was wrong, and a wrong scar is worse than none:** it blamed a drag outrunning
-   React, which cannot happen through a subscribed store read on this stack.
-   `useStudio` is read through `useSyncExternalStore`, whose store-change path forces
-   its re-render on React's **sync** lane, and react-dom flushes sync roots in a
-   microtask — so the memo is committed before the next `pointermove` task can be
-   dispatched. R3F was never in that path at all: it attaches raw `addEventListener`
-   handlers and neither batches nor flushes around them, and `frameloop="demand"` /
-   `invalidate()` schedule a WebGL draw, not a React render. The true reason is
-   narrower and owes nothing to scheduling — a member's own `resolvePlacement` is not
-   the identity, so a containment clamp, a gravity drop or a wall snap is a
-   *correction*, and stepping from the last frame folds every correction into the next
-   frame's base: the set deforms a little further each frame and can never come back.
+   React's renders. **Prefer the reason that is checkable in this repo to any claim
+   about a library's scheduling**, because the first kind cannot rot and the second
+   invites a reader to go and disprove it. The reason is narrower and owes nothing to
+   scheduling: a member's own `resolvePlacement` is not the identity, and two of its
+   corrections are *accepted* rather than refused — a wall rider is exempt from the
+   rigidity test by design, and the vertical/gravity answer always wins. So a
+   containment clamp, a gravity drop or a wall snap is a **correction**, and stepping
+   from the last frame folds every correction into the next frame's base: the set
+   deforms a little further each frame and can never come back.
+   (The scheduling story does not hold either, and that is a parenthesis rather than
+   the argument on purpose. `useStudio` is read through `useSyncExternalStore`, so a
+   store change re-renders on React's sync lane; R3F's pointer handlers are plain
+   `addEventListener` callbacks that neither batch nor flush around themselves; and
+   `frameloop="demand"` / `invalidate()` schedule a WebGL draw, not a React render.
+   **Do not try to settle that by grepping `flushSync` in `@react-three/fiber` — it
+   hits**, because the events chunk bundles a reconciler build that defines and
+   re-exports the name, and not one of those hits is a call R3F makes on a pointer
+   event. A passage a careless grep appears to refute gets the whole passage
+   discarded, which is the outcome this one exists to prevent.)
    Deriving from the start is idempotent, and a frame that clamped does not poison the
    one after it. It is the same reason the world a convoy resolves against is a
    snapshot taken at pointer-down rather than the live memo — and there the memo's

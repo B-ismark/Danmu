@@ -11,7 +11,7 @@ handful of things that turned out to be live defects rather than doubts.
 | branch | state |
 |---|---|
 | `main` — `4326b44` | PR #17 merged. |
-| `fix/visual-check-round-3` | this round, three commits on top of `4326b44`. **Gated on that tip: 1333/1333 across 71 files, typecheck 0, lint 0 at `--max-warnings 0`.** |
+| `fix/visual-check-round-3` | this round, on top of `4326b44`. Four commits of your list, then a fifth carrying the five findings a `/review` pass turned up **on those four**. Gate counts on the tip are at the foot of the review section below. |
 | PR #16 — `3b5935c` | **Open, and it needs a rebase** — see below. Its headline regression is closed. |
 | `fix/multi-select-drag` | **Not merged, and it still holds one live fix `main` lacks.** Kept for that reason. |
 | `fix/clamp-into-footprint` | Local only. Holds a written, tested fix for a known-and-left item. Kept. |
@@ -142,6 +142,99 @@ the marker is drawn.
 - **Check how it wraps.** The sentence is six characters longer in a column about 88 px
   wide. If it now runs to five lines, say so — the fix for that is stacking the dial
   above the text at narrow widths, not shortening the sentence back into being wrong.
+
+---
+
+## What the review pass found in this round's own work
+
+`/review` was run over the four commits above, not over `main`. It found five things.
+All five are fixed here, so what needs eyes is the **fixes**, and two of them changed
+behaviour you can see.
+
+### A stepper that destroyed the room, in four units out of five
+
+The worst of them, and this round put it there. Making the room fields honour
+`ROOM_SIDE_M` / `ROOM_HEIGHT_M` gave `NumberField` a `max` it never had before — in
+**metres**, while the field's value is in the user's `dimUnit`. So a 5 m room in
+centimetres reads `500.0` against a max of `50`, and one press of the up chevron
+clamped it to `50.0` — 0.5 m — after which the commit refused the room its own arrows
+had just made. Metres was the one unit where nothing happened, and metres is the
+default.
+
+`boundToUnit` converts the bound into the field's unit and rounds **inward**, because
+converting alone is still wrong: 1.8 m is 5.90551 ft, which a foot field renders `5.9`
+— two millimetres under its own floor.
+
+- **Settings → change the dimension unit to centimetres, then Room → Room dimensions.**
+  Hold the up chevron on Width. It must stop at `5000`, not snap to `50`.
+- **Repeat in feet.** Hold the DOWN chevron on Height: it must stop at `6.0` ft and the
+  room must still be legal — 5.9 would be refused.
+- **Read the sentence under the fields in each unit.** It is derived from the same call
+  the arrows are bounded by, so it should now say `100–5000 cm` and `180–1200 cm`, not
+  `1–50 m`. If a number there disagrees with where the arrows stop, that is the bug
+  back.
+- **In metres nothing should have changed at all** — worth confirming, since that is
+  the case the original code was written and reviewed in.
+
+The Inspector's own **Exact size** fields had the weaker half of the same bug and were
+fixed with it: `min={0.001}` — a floor in no unit at all, a millimetre to someone in
+metres and a micrometre to someone in millimetres — and **no ceiling whatsoever**, so
+the arrows walked a sofa out past its range and `clampDims` snapped it back on commit.
+They are bounded by the piece's own range now, in the field's own unit, which is the
+same pair of numbers the sentence under them already printed.
+
+- **Select a sofa, open Exact size, hold the up chevron on Width.** It must stop where
+  the sentence below says it will, and the piece must not jump back when you let go.
+
+### A room file this app wrote, that this app would not open
+
+Also from this round. Giving the ceiling its own range made an out-of-range ceiling
+**fatal for the whole file** — and the app had written such rooms: the editor gated
+every axis with the side range until that commit, and the ceiling-fan bug that started
+all of this was reported from a **1.65 m room**. Save that room, open it again, and you
+got *"That room file is missing its room, so there's nothing to open."* The room is not
+missing; the message named the wrong problem and offered no way forward.
+
+An out-of-range ceiling is now clamped into range and **named in the import toast**,
+which is the same contract every imported part size already had from `clampDims`. Width
+and depth stay fatal — a width of 0 is no floor — and `Infinity` stays fatal.
+
+- **Make a short room** (type `1.8` for Height, the new floor), save a file, open it.
+  It should open, with the room intact.
+- **Hand-edit a saved `.danmu.json` to `"height": 1.2` and open it.** It must open, the
+  ceiling must be 1.8, and the toast must say so and stay up. A silent clamp here is the
+  failure — the whole justification is that it is reported.
+- **Check the toast is readable and does not clip.** It is a longer sentence than the
+  drop messages beside it.
+
+### Three that are prose, not behaviour
+
+- `Design.md` still said **`V` hides a piece** — one screen from a paragraph this branch
+  edited, and `Design.md` is the file that wins when the docs disagree.
+- `lib/scene-spec.ts` had its own `CEILING_PAD = 0.02` doing the identical ceiling clamp,
+  while `MOUNT_PAD` was being introduced next door as "the single clearance" and its
+  comment claimed a fourth copy "was about to" happen. It already had. Consolidated, and
+  `tests/scene-build.test.ts` now holds the settle pass and the physics path against
+  **each other** rather than against a literal — the only version of that assertion that
+  can fail.
+- `CLAUDE.md`'s corrected R3F passage was right but greppable-away: `grep flushSync
+  node_modules/@react-three/fiber/dist/events-*.esm.js` returns eight hits, all of them a
+  bundled reconciler defining and re-exporting the name rather than R3F calling it on a
+  pointer event. The passage now leads with the reason that is checkable **in this repo**
+  and says outright not to settle it by that grep. (Peer session danmu-f6 hit this
+  independently, which is the evidence that it needed saying.)
+
+### What was checked and held
+
+Worth recording so it is not re-checked: the anchor spaces in `heightForNewCeiling`
+(every anchor it clamps is centre-anchored, the two it leaves alone are the
+bottom-anchored ones); no `transforms` → `physics` import cycle; no `RoomSync` race on
+the regrade, because room meta and scene parts are separate IDB keys; no second `H`
+handler; no live `WASD` reference anywhere; and a cancelled single-piece drag still
+costs no undo entry.
+
+Eighteen mutations were run in all — eleven against the original four commits, seven
+against these fixes — each one killed by the assertion that owns it, each reverted.
 
 ---
 
