@@ -162,13 +162,11 @@ export const DEFAULT_BEARING_DEG = 0;
  * TOWARD the light — or `null` when the mood is a studio look, or when its angle
  * is at or below the horizon and there is honestly no key light to place.
  *
- * This exists because a second consumer appeared. `Room` needs it to position the
- * key light; `Draggable` needs it to decide whether a wall-mounted piece may write
- * into that light's shadow map at all (see `lib/sun-shadow.ts`). Both derived it
- * from `LIGHTING[...].sun` plus a bearing, and rule 3's whole point is that the
- * second copy of a derivation is where the two silently drift — a sign flip in one
- * caller's bearing would put the sun in the right place and the shadows in the
- * wrong one, which is not a bug anyone would think to look for.
+ * Two consumers: `Room` positions the key light with it, and `NorthDial` draws the
+ * same angle on its rim. Rule 3's whole point is that the second copy of a
+ * derivation is where the two silently drift — a sign flip in one caller's bearing
+ * would put the sun in the right place and the marker on the dial in the wrong one,
+ * which is not a bug anyone would think to look for.
  */
 export function moodSunDirection(
   lighting: Lighting,
@@ -182,11 +180,10 @@ export function moodSunDirection(
 /** The studio key light's direction — a fixed three-quarter position, as a unit
  *  vector from the room toward the light.
  *
- *  It moved here from `Room` for the same reason the sun derivation did: it is no
- *  longer only the light rig's business where the key light is. The shadow gate
- *  needs it too, and a light direction known in one file and unavailable in the
- *  other is what let a wall-mounted piece keep casting an impossible shadow in the
- *  two studio moods (see `moodKeyDirection`). */
+ *  It sits beside the sun derivation rather than inside `Room` so that the two
+ *  kinds of key light are described in one place: a mood is a studio look or a sun
+ *  angle, and where its light comes from should not be answerable from this file for
+ *  one kind and only from the renderer for the other. */
 const KEY_OFFSET: [number, number, number] = [5, 8, 4];
 const KEY_LEN = Math.hypot(...KEY_OFFSET);
 export const KEY_DIR: [number, number, number] = [
@@ -195,32 +192,3 @@ export const KEY_DIR: [number, number, number] = [
   KEY_OFFSET[2] / KEY_LEN,
 ];
 
-/**
- * Where the key light is for a mood, whichever kind of mood it is — a unit vector
- * from the room toward the light, and `null` only when there is genuinely no key
- * light at all (a sun angle at or below the horizon).
- *
- * This is what the shadow gate reads, and the distinction from `moodSunDirection`
- * is the whole point. The first version of the gate used the sun function, so the
- * studio moods came back `null` and were exempted — on the stated grounds that
- * their key light is "a lighting rig rather than a thing standing outside the
- * building, so there is no wall between it and the furniture". That framing does
- * not survive the arithmetic: `KEY_DIR` is realised at `dist = max(12, extent *
- * 1.6)`, so the rig stands twelve metres or more outside a six-metre room, and its
- * horizontal component puts it **behind** the south and east walls exactly as a
- * low sun does. `KEY_DIR · frontVector` is −0.390 for a piece on the south wall
- * and −0.488 on the east one.
- *
- * So the exemption did not model a rig; it left the original bug standing on half
- * the walls, in `cool` — which carries the brightest ambient of the set and is
- * therefore where a spurious shadow reads loudest. One rule for every mood.
- *
- * The bearing is applied only to the sun. The rig is fixed relative to the ROOM,
- * not to the compass, so turning the north dial must not swing it.
- */
-export function moodKeyDirection(
-  lighting: Lighting,
-  northBearingDeg: number,
-): [number, number, number] | null {
-  return LIGHTING[lighting].sun ? moodSunDirection(lighting, northBearingDeg) : KEY_DIR;
-}

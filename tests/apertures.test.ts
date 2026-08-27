@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { wallApertures, skirtingRuns } from '@/lib/apertures';
+import { wallApertures, skirtingRuns, isAperture } from '@/lib/apertures';
 import { wallSegments, type Footprint } from '@/lib/footprint';
 import type { ScenePart } from '@/lib/scene-spec';
 
@@ -142,5 +142,39 @@ describe('skirtingRuns', () => {
   it('returns nothing when a cut genuinely covers the whole wall', () => {
     const full = { partId: 'a', x0: -2, x1: 2, y0: -1.38, y1: 0.72, floorY: 0.02 };
     expect(skirtingRuns(4, [full], 0.1)).toEqual([]);
+  });
+});
+
+// `isAperture` is small and it carries a load it did not used to. Since the walls
+// became shadow casters (`components/three/RoomShell.tsx`) an opening is the only
+// way the sun gets into the room, so this predicate decides both where the wall is
+// cut and — through the Style panel's hint — whether the app tells someone their
+// sun mood has nothing to shine through. Those two must not be able to disagree,
+// which is why it is a function and not an exported Set for each caller to test.
+describe('what counts as an opening', () => {
+  const p = (shape: string, wallMounted?: boolean) => ({ shape, wallMounted });
+
+  it('accepts a window or a door that is actually on a wall', () => {
+    expect(isAperture(p('window', true))).toBe(true);
+    expect(isAperture(p('door', true))).toBe(true);
+  });
+
+  it('refuses a window or a door that is not', () => {
+    // The half a copied Set would lose. A door dragged off its wall and left lying
+    // on the floor cuts no hole — `wallApertures` would place it against whichever
+    // wall it is nearest and open a doorway in the wrong plaster — and it is not
+    // sunlight coming in either.
+    expect(isAperture(p('door', false))).toBe(false);
+    expect(isAperture(p('door'))).toBe(false);
+    expect(isAperture(p('window'))).toBe(false);
+  });
+
+  it('refuses the things that hang on a wall rather than open it', () => {
+    // A curtain is the interesting one: it belongs to an opening and is not one.
+    // It cuts nothing, so a room whose only "window" is a curtain still has no way
+    // in for the sun — which is the honest answer and the one the hint gives.
+    for (const shape of ['curtain', 'tv', 'painting', 'mirror', 'shelf', 'ac']) {
+      expect(isAperture(p(shape, true)), shape).toBe(false);
+    }
   });
 });

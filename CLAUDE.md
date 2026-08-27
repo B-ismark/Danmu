@@ -156,6 +156,25 @@ backend, no account. The 3D studio *is* the product.
    add. They are not interchangeable words, and one screen may not hold two of
    either.
 
+   **A per-object workaround for a missing piece of the ROOM is the wrong layer,
+   and it announces itself by needing a new exception every time.** The sun used to
+   pour through the ceiling and through the plaster, because walls only received
+   shadow and there was no ceiling at all; the fix was a per-piece gate asking
+   whether the sun was on the room side of the wall a piece rode. It worked, and it
+   had already grown an exemption for doors and windows and another for the studio
+   moods, and it could not touch the second half of the same bug — the sun's patch
+   landing on the whole floor. The room is a closed shell now
+   (`components/three/RoomShell.tsx`): walls cast, there is a shadow-only ceiling,
+   and light gets in through `lib/apertures.ts`'s holes, so the gate is deleted and
+   a TV casts nothing because *its wall is in shadow*, which is not a rule about
+   TVs. The tell to look for is a predicate that keeps needing another shape added
+   to it. Two facts worth keeping: **casting is camera-independent**, so the
+   dollhouse trick is untouched by a wall that casts (culling is the colour pass;
+   the shadow pass renders from the light) — the claim that it would black out the
+   room was wrong and went unchecked for months; and a shadow-only mesh must stay
+   `visible`, because three skips an invisible object in the shadow pass too, so it
+   is the material that opts out of drawing.
+
 4. **No hard-coded design values.** Colours / spacing / type / radii go through
    CSS tokens in `app/globals.css` (`--paper`, `--ink`, `--accent` terracotta,
    `--accent-2` sage, `--r-*`, `--font-sans` Nunito / `--font-display`

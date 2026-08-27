@@ -18,13 +18,25 @@ import type { ScenePart } from './scene-spec';
 import type { Footprint } from './footprint';
 import { nearestEdge } from './geometry';
 
-/** Shapes that are holes in a wall rather than objects hung on one.
+/** Shapes that are holes in a wall rather than objects hung on one. Private — the
+ *  question callers actually ask is `isAperture`, below. */
+const APERTURE_SHAPES: ReadonlySet<string> = new Set(['window', 'door']);
+
+/** Is this part a hole in a wall rather than something hung on one?
  *
- *  Exported because `lib/sun-shadow.ts` asks the same question for a different
- *  reason — an opening is where light legitimately crosses the wall plane, so a
- *  piece standing in one must keep casting even when the sun is on the far side.
- *  One list, two consumers; a second copy is how the two answers drift. */
-export const APERTURE_SHAPES: ReadonlySet<string> = new Set(['window', 'door']);
+ *  A predicate rather than an exported list, because it has two consumers now and
+ *  they must not be able to disagree. `wallApertures` uses it to cut the wall — and
+ *  since the walls became shadow casters (`components/three/RoomShell.tsx`) that
+ *  hole is the ONLY way the sun gets into the room. So the Style panel warns when a
+ *  sun mood has nothing to shine through, and it has to be asking exactly the
+ *  question the geometry answers: a warning derived from its own copy of the rule
+ *  would eventually tell someone there is no window in a room that has one.
+ *
+ *  `wallMounted` is part of the test, not decoration. A door lying on the floor
+ *  after a drag is not an opening, and the wall it is nearest has no hole in it. */
+export function isAperture(p: { wallMounted?: boolean; shape: string }): boolean {
+  return p.wallMounted === true && APERTURE_SHAPES.has(p.shape);
+}
 
 /** Keep an opening at least this far inside the wall outline, in metres.
  *
@@ -61,7 +73,7 @@ export function wallApertures(
 ): Map<number, Aperture[]> {
   const out = new Map<number, Aperture[]>();
   for (const p of parts) {
-    if (!p.wallMounted || !APERTURE_SHAPES.has(p.shape)) continue;
+    if (!isAperture(p)) continue;
     const near = nearestEdge(footprint, p.pos[0], p.pos[2]);
     if (!near) continue;
     const wl = walls[near.index];

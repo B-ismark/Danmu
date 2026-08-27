@@ -18,6 +18,8 @@ import { ViewOptions } from './ViewOptions';
 import { AddPiecesButton } from './CatalogPanel';
 import { duplicateSelection, removeParts } from './KeyboardShortcuts';
 import { THEMES, themeColorFor, type Theme } from '@/lib/themes';
+import { LIGHTING } from '@/lib/lighting-moods';
+import { isAperture } from '@/lib/apertures';
 import { groupRows, type TreeRow } from '@/lib/part-rows';
 import type { ScenePart } from '@/lib/scene-spec';
 
@@ -105,16 +107,35 @@ export function PartTree() {
   // theme is one undoable gesture (colours *and* lighting are both in the
   // history snapshot), so a local "last applied" flag kept insisting a theme was
   // active after Ctrl+Z had already reverted it — the panel lying about the room.
+  //
+  // It tests the COLOURS and not the lighting, and that distinction is the second
+  // half of the same lie. A theme sets a mood on the way past — one tap, whole look
+  // — but the mood is a starting point the Lighting row below is there to change,
+  // and while `t.lighting === lighting` was part of this test, changing it
+  // UNCHECKED the theme: the room was still every colour Coastal had painted it,
+  // the section header stopped naming Coastal, and the swatch stopped showing its
+  // tick. So the two controls in this section each quietly cancelled the other's
+  // report — press a swatch and the light moves under you, move the light and the
+  // swatch forgets. The first of those is the feature (and it is legible now that
+  // both controls are in one section, which is why they were brought together);
+  // the second was never anything but wrong.
   const activeTheme = useMemo(() => {
     const restyled = parts.filter((p) => !p.locked);
     if (restyled.length === 0) return null;
     return (
-      THEMES.find(
-        (t) =>
-          t.lighting === lighting && restyled.every((p) => p.color === themeColorFor(p.category, t)),
-      )?.id ?? null
+      THEMES.find((t) => restyled.every((p) => p.color === themeColorFor(p.category, t)))?.id ?? null
     );
-  }, [parts, lighting]);
+  }, [parts]);
+
+  // Whether a sun mood has anything to shine through. Since the walls became
+  // shadow casters the sun reaches the inside of the room ONLY through a window or
+  // a door (`components/three/RoomShell.tsx`), which is the physically right answer
+  // and also means a sealed room is lit by sky and lamps alone. That is worth
+  // saying rather than leaving someone to wonder why moving the sun does nothing —
+  // rule 2's "say so, never silently" — and the predicate comes from
+  // `lib/apertures.ts` so the sentence cannot disagree with the geometry that cuts
+  // the holes.
+  const sunHasNoWayIn = !!LIGHTING[lighting].sun && !parts.some(isAperture);
 
   function applyTheme(theme: Theme) {
     // One store write for one gesture. The old per-part `updatePart` loop fired
@@ -477,6 +498,19 @@ export function PartTree() {
         <div style={{ marginTop: 12 }}>
           <span id="lighting-label" className="ds-label" style={{ display: 'block', marginBottom: 8 }}>Lighting</span>
           <LightingPicker />
+          {/* The room is closed to the sun now, so a sun mood in a room with no
+              opening has nothing to come through. Said in the same 10.5px --ink-3
+              hint voice the View section uses, directly under the control that
+              raises the question, and worded about the ROOM rather than about the
+              renderer — on Fast quality there are no cast shadows at all, so a
+              sentence claiming the room is unlit would be wrong half the time
+              while this one stays true. */}
+          {sunHasNoWayIn && (
+            <p style={{ fontSize: 10.5, color: 'var(--ink-3)', lineHeight: 1.4, margin: '6px 0 0' }}>
+              Sunlight only reaches a room through its openings. Add a window or a door
+              from the Library to let this one in.
+            </p>
+          )}
         </div>
 
         {generics.length > 0 && (

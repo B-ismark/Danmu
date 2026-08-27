@@ -34,10 +34,8 @@ import { useScene } from '@/lib/scene-store';
 import { currentRoomScene } from '@/lib/room-scene';
 import { useDragLive } from '@/lib/drag-live';
 import { collidesAt, isParametric, type ScenePart } from '@/lib/scene-spec';
-import { isFloorStanding, ridesWall } from '@/lib/physics';
+import { isFloorStanding } from '@/lib/physics';
 import { clampDims } from '@/lib/dimension-ranges';
-import { moodKeyDirection, DEFAULT_BEARING_DEG } from '@/lib/lighting-moods';
-import { castsSunShadow } from '@/lib/sun-shadow';
 import { type SnapLine } from '@/lib/item-snap';
 import { resolvePlacement as resolveDrag, snapSteps } from '@/lib/drag-resolve';
 import { cascadeTransform, snapshotDescendants, wouldCreateCycle, type DescendantOffset } from '@/lib/rigid-parent';
@@ -89,27 +87,26 @@ function FinishApplier({
   finish,
   colorKey,
   dimKey,
-  cast,
   shapeKey,
 }: {
   groupRef: { current: Group | null };
   finish?: ScenePart['finish'];
   colorKey?: string;
   dimKey?: string;
-  /** Whether this piece may write into the key light's shadow map. False only for
-   *  a wall-rider with the sun on the far side of its wall — see
-   *  `lib/sun-shadow.ts` for why that is the piece's problem and not the wall's. */
-  cast: boolean;
-  /** The part's shape, which is NOT read in the body — it is a dependency.
+  /** The part's shape, which is NOT read in the body — it is a dependency, and it
+   *  is load-bearing.
    *
    *  `PartGeometry` dispatches on `part.shape`, so changing a piece's model remounts
-   *  this whole subtree, and the meshes declare `castShadow` in their own JSX
-   *  (`Box.tsx`, `DynamicPart.tsx`). While both said `true` the two could not
-   *  disagree; now they can, and the JSX wins on remount. The Inspector's model
-   *  picker writes `dimMM` on the PART rather than as a `dims` override, so none of
-   *  the other keys change, the effect would not re-run, and the impossible shadow
-   *  came back and stayed until the piece was recoloured or the mood switched. The
-   *  same dep gap was already losing the finish on a model change. */
+   *  this whole subtree and its materials come back fresh. The Inspector's model
+   *  picker writes `dimMM` on the PART rather than as a `dims` override, so no other
+   *  key in the dep array below changes — the effect did not re-run, and the FINISH
+   *  was silently lost: pick a new model for a polished piece and it came back matte
+   *  until something else made you recolour it.
+   *
+   *  It arrived alongside a per-piece sun-shadow gate that has since been deleted
+   *  (the room is a closed shell now — see `components/three/RoomShell.tsx`), and it
+   *  is easy to read as the other half of that removal. It is not. The finish bug
+   *  predates the gate and is still here. */
   shapeKey: string;
 }) {
   const invalidate = useThree((s) => s.invalidate);
@@ -119,10 +116,10 @@ function FinishApplier({
     g.traverse((o) => {
       const mesh = o as Mesh;
       if (!(mesh as { isMesh?: boolean }).isMesh) return;
-      // Part meshes receive soft shadows always, and cast unless the sun is
-      // behind the wall this one is bolted to (`cast`). Idempotent — safe to
-      // re-set on every pass, which is what lets the gate follow the north dial.
-      mesh.castShadow = cast;
+      // Part meshes cast and receive. Whether the sun can actually reach a piece is
+      // the room's question, not the piece's: the walls and ceiling cast, so a piece
+      // on a wall the sun is behind is simply in shadow (`RoomShell.tsx`).
+      mesh.castShadow = true;
       mesh.receiveShadow = true;
       const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       for (const m of mats) {
@@ -149,7 +146,7 @@ function FinishApplier({
     });
     // Materials were mutated outside React — nothing else will ask for a repaint.
     invalidate();
-  }, [groupRef, finish, colorKey, dimKey, cast, shapeKey, invalidate]);
+  }, [groupRef, finish, colorKey, dimKey, shapeKey, invalidate]);
   return null;
 }
 
@@ -181,36 +178,6 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   // Snap increments, from the same module that applies them during a resolve, so
   // the gizmo's steps and the drag's magnetism can never drift apart.
   const { translate: translationSnap, rotate: rotationSnap } = snapSteps(snapMode);
-
-  // The shadow gate. A wall-mounted piece may only cast into the sun's shadow map
-  // when the sun is on the room side of the wall it is bolted to — walls never
-  // cast (the dollhouse view culls the near ones), so the light goes through the
-  // plaster and a TV on the far wall was dropping an impossible shadow across the
-  // floor. `lib/sun-shadow.ts` holds the reasoning and the sign.
-  //
-  // `moodKeyDirection`, not `moodSunDirection`: the studio moods have a key light
-  // too, at a fixed three-quarter position that is realised twelve metres outside
-  // the room, so it stands behind the south and east walls exactly as a low sun
-  // does. Reading the sun function exempted them and left the original bug
-  // standing on half the walls, in the brightest mood of the set.
-  //
-  // Two deliberate choices about WHICH rotation this reads. It is the resolved
-  // one (`storedRot ?? part.rot`), because a piece the user has turned must be
-  // gated on where it now faces and not on where it was authored. And it is the
-  // STORE's value rather than `ref.current.rotation.y`, which runs ahead of the
-  // store mid-drag: a dot product against the live mesh would flip casting on and
-  // off across the sign change while the piece turns, and a flickering shadow is
-  // worse than a wrong one.
-  const lighting = useStudio((s) => s.lighting);
-  const bearingDeg = useScene((s) => s.room.site?.bearingDeg) ?? DEFAULT_BEARING_DEG;
-  const castsShadow = part
-    ? castsSunShadow(
-        moodKeyDirection(lighting, bearingDeg),
-        storedRot ?? part.rot,
-        ridesWall(part.category, part.shape),
-        part.shape,
-      )
-    : true;
 
   const setPosition = useStudio((s) => s.setPosition);
   const setRotation = useStudio((s) => s.setRotation);
@@ -798,7 +765,6 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
           finish={part.finish}
           colorKey={part.color}
           dimKey={storedDim?.join()}
-          cast={castsShadow}
           shapeKey={part.shape}
         />
         <Pickable partId={partId}>{children}</Pickable>

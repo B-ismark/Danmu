@@ -16,6 +16,7 @@ import { placeNewPart, DND_MIME, type Category, type Shape } from '@/lib/scene-s
 import { footprintBounds } from '@/lib/footprint';
 import { daylightKelvin } from '@/lib/solar';
 import { LIGHTING, moodSunDirection, KEY_DIR, DEFAULT_BEARING_DEG } from '@/lib/lighting-moods';
+import { shadowFit } from '@/lib/shadow-fit';
 import { hexFromKelvin } from '@/lib/light-units';
 import { useSnapshot, downloadBlob } from '@/lib/snapshot';
 import { pickIdsFrom } from '@/lib/pick-through';
@@ -104,13 +105,11 @@ export function Room() {
   const sun = useMemo(() => {
     if (!L.sun) return null;
     const { elevationDeg } = L.sun;
-    // Through `moodSunDirection` rather than `sunDirection` directly, because
-    // `Draggable` now asks the same question — a wall-mounted piece may only cast
-    // into the sun's shadow map when the sun is on the room side of its wall (see
-    // `lib/sun-shadow.ts`). Two callers deriving one direction from the same table
-    // is the rule 3 case, and the failure mode is specific: a bearing sign that
-    // disagreed between them would put the light in the right place and the
-    // shadows in the wrong one.
+    // Through `moodSunDirection` rather than `sunDirection` directly: `NorthDial`
+    // draws the same angle on its rim, and rule 3's point is that the second copy
+    // of a derivation is where the two silently drift — a bearing sign that
+    // disagreed between them would put the light in the right place and the marker
+    // on the dial in the wrong one.
     const dir = moodSunDirection(lighting, bearingDeg);
     if (!dir) return null;
     return {
@@ -349,17 +348,6 @@ export function Room() {
   );
 }
 
-// Where the key light sits relative to the room centre. Exported as a constant so
-// the shadow frustum can DERIVE how far a piece throws instead of guessing: at
-// this offset the horizontal run per unit of height is run/rise below.
-/** How far a piece throws per metre of its own height, at a given light
- *  direction. Capped because a sun a degree above the horizon throws a shadow
- *  hundreds of metres long, and fitting a frustum to that would spend the whole
- *  shadow map on empty floor. */
-function throwPerMetre(dir: [number, number, number]): number {
-  return Math.min(6, Math.hypot(dir[0], dir[2]) / Math.max(0.05, dir[1]));
-}
-
 // The key light, with its shadow frustum fitted to the room.
 //
 // The frustum used to be hard-coded to ±6m — a 12×12m box — and two separate
@@ -376,15 +364,17 @@ function throwPerMetre(dir: [number, number, number]): number {
 //     the parameter three exposes for exactly this (it walks the sample along the
 //     surface normal in proportion to texel size) and it was never set.
 //
-// Fitting the frustum is not by itself a density win — a small room gains a
-// little, a large room legitimately needs a bigger box and gains nothing. That is
-// why normalBias is derived from the texel size that this room's fit actually
-// produces, and why the map steps up once a room outgrows what 1024² can carry.
-// A constant would be right at one room size and wrong at every other.
-//
 // (The comment at the light used to claim this scene had "no shadow maps" at all.
 // It has had one since `shadows={hi}` went on the Canvas. Nobody reconciled the
 // comment, so nobody tuned the map.)
+//
+// The fit itself is `lib/shadow-fit.ts` and not four expressions in here, because
+// it is geometry with a handedness and a wrong answer is silent — an ortho shadow
+// camera does not complain about what falls outside it, it just stops recording it.
+// That module is also where the fit changed shape when the room became a closed
+// shell: the walls cast now, so every caster and every receiver is inside the
+// room's own box, and the frustum no longer has to cover the metres of empty floor
+// outside the house that the tallest piece of furniture could theoretically reach.
 function KeyLight({
   intensity,
   color,
@@ -396,31 +386,31 @@ function KeyLight({
   cast: boolean;
   /** Unit vector from the room toward the light. Defaults to the studio key's
    *  fixed three-quarter position; the sun mood passes a real solar direction, and
-   *  the frustum has to re-fit for it because a low sun throws far longer shadows
-   *  than a studio light ever does. */
+   *  the frustum re-fits for it — a low sun sees the room in elevation rather than
+   *  in plan, so a wall's top corner lands further across the map than its base. */
   dir?: [number, number, number];
 }) {
   const ref = useRef<DirectionalLight>(null);
   const footprint = useScene((s) => s.room.footprint);
-  // Resolved, so a piece the user has stretched is measured at the size it is.
+  const height = useScene((s) => s.room.height);
   const parts = useRoomScene();
   const invalidate = useThree((s) => s.invalidate);
 
   const d = dir ?? KEY_DIR;
   const b = footprintBounds(footprint);
-  // Tallest thing that actually casts — the ceiling does not, and the walls only
-  // receive. Read off the resolved parts, or a stretched wardrobe would throw past
-  // the box fitted for its original height.
+  // Read off the RESOLVED parts, or a stretched wardrobe would be measured at its
+  // original height. It only matters when something is taller than the room, though:
+  // `lib/clearance.ts` reports a piece that does not fit and deliberately does not
+  // resize it, so a 3m wardrobe in a 2.4m room really does stand through the ceiling
+  // and really does have to be in the map. Every other caster is inside the shell.
   const tallest = parts.reduce((m, p) => Math.max(m, p.dimMM[2] / 1000), 0);
-  // Half the footprint diagonal covers the room from any light azimuth; the throw
-  // term covers how far the tallest piece reaches at this light's elevation.
-  // Quantised to 0.5m so dragging a wall re-fits in steps, not every tick.
-  const extent = Math.ceil((Math.hypot(b.width, b.depth) / 2 + tallest * throwPerMetre(d)) * 2) / 2;
-  // One step, not a continuum: each size change reallocates the depth target.
-  const mapSize = extent > 8 ? 2048 : 1024;
-  // Far enough out that the shadow camera's near plane clears the room from any
-  // direction: dist - extent >= 0.6 x extent, so nothing can cross it.
-  const dist = Math.max(12, extent * 1.6);
+  const { extent, mapSize, dist, near, far, normalBias } = shadowFit(
+    b.width,
+    b.depth,
+    height,
+    tallest,
+    d,
+  );
 
   useEffect(() => {
     const l = ref.current;
@@ -465,9 +455,9 @@ function KeyLight({
       // faces square to the light and can stay small — a large negative bias is
       // what detaches a shadow from its object ("peter-panning").
       shadow-bias={-0.0001}
-      shadow-normalBias={((2 * extent) / mapSize) * 2}
-      shadow-camera-near={0.5}
-      shadow-camera-far={dist + extent + 2}
+      shadow-normalBias={normalBias}
+      shadow-camera-near={near}
+      shadow-camera-far={far}
     />
   );
 }

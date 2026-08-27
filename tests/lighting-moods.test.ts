@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { LIGHTINGS, type Lighting } from '@/lib/store';
-import { LIGHTING } from '@/lib/lighting-moods';
+import { LIGHTING, moodSunDirection } from '@/lib/lighting-moods';
 import { sunDirection } from '@/lib/solar';
 
 // One lighting mood is described in three places:
@@ -149,5 +149,44 @@ describe('the lighting moods', () => {
     // geolocation permission and a device-orientation read, none of which this app
     // has any more.
     expect(LIGHTINGS as readonly string[]).not.toContain('sun');
+  });
+
+  // ── The bearing belongs to the sun ─────────────────────────────────────────
+  //
+  // These two moved here from `tests/sun-shadow.test.ts`, which went when the room
+  // became a closed shell and the per-piece shadow gate it tested became
+  // unnecessary. They are not about that gate: they are about the north dial, and
+  // they were the only assertions in that file that outlived it.
+
+  it('turns the sun with the room and leaves the studio rig alone', () => {
+    // The rig is fixed relative to the ROOM, so turning the north dial must move a
+    // sun mood's light and not a studio mood's — otherwise the dial appears to
+    // relight a room lit by nothing outdoors. A studio mood answering `null` here
+    // is the mechanism, and asserting it that way rather than comparing two vectors
+    // is what keeps this true if the rig's own angle is ever retuned.
+    for (const id of LIGHTINGS) {
+      const isSun = !!LIGHTING[id].sun;
+      const at0 = moodSunDirection(id, 0);
+      const at137 = moodSunDirection(id, 137);
+      if (!isSun) {
+        expect(at0, `${id} is a studio look and must not answer for the sun`).toBeNull();
+        expect(at137, `${id} at a bearing`).toBeNull();
+      } else {
+        expect(at0, `${id} is a sun angle and must answer`).not.toBeNull();
+        expect(at137, `${id} must follow the dial`).not.toEqual(at0);
+      }
+    }
+  });
+
+  it('makes half a turn of the dial reverse the sun', () => {
+    // The dial's own sanity check, and it is the asymmetric case: a bearing term
+    // that was dropped rather than sign-flipped would leave both of these equal,
+    // and a bearing applied twice would leave them equal too.
+    const at0 = moodSunDirection('day', 0)!;
+    const at180 = moodSunDirection('day', 180)!;
+    expect(at0[0]).toBeCloseTo(-at180[0], 12);
+    expect(at0[2]).toBeCloseTo(-at180[2], 12);
+    // Height is a property of the angle, not of which way the room faces.
+    expect(at0[1]).toBeCloseTo(at180[1], 12);
   });
 });
