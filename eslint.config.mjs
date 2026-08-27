@@ -24,6 +24,14 @@
 //     ESLint is 9+. On 8.57 it sees this flat config, loads `FlatESLint`, then hands it
 //     eslintrc options — and the build prints `Invalid Options` and lints nothing while
 //     still exiting 0. A silently skipped lint pass that looks like a passing build.
+//   · **`next/typescript` is extended, not just `next/core-web-vitals`.** Without it
+//     `@typescript-eslint/no-unused-vars` is never enabled, `eslint:recommended` is
+//     not in the chain either, and `tsconfig.json` sets no `noUnusedLocals` — so
+//     `pnpm lint --max-warnings 0`, `pnpm typecheck` and `next build`'s own lint pass
+//     were all structurally incapable of seeing a dead import. Adding it found
+//     thirteen across nine files on the first run, one of them a stale `collidesAt`
+//     that had outlived its call site. A gate reporting zero because it cannot see
+//     the defect is the failure mode this repo keeps finding.
 //   · **This file must not be self-ignored.** That same build pass detects the Next
 //     plugin by calling `calculateConfigForFile('eslint.config.mjs')` and looking for
 //     `@next/next` in the result. A `*.config.mjs` ignore entry (which is what
@@ -57,7 +65,27 @@ const config = [
       'next-env.d.ts',
     ],
   },
-  ...compat.extends('next/core-web-vitals'),
+  ...compat.extends('next/core-web-vitals', 'next/typescript'),
+  {
+    // Raised from `warn` to `error` — `--max-warnings 0` already fails on a warning,
+    // so this only makes the output say what it means. The ignore patterns are the
+    // conventional ones: a leading underscore is how this codebase writes "read and
+    // deliberately discarded", and `ignoreRestSiblings` is what allows the
+    // `const { fromDetection: _drop, ...part }` idiom that strips a field on the way
+    // into a scene file.
+    rules: {
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+          destructuredArrayIgnorePattern: '^_',
+          ignoreRestSiblings: true,
+        },
+      ],
+    },
+  },
   {
     // Next's generated-image routes. `next/og` renders their JSX with satori, in
     // Node, at build time — there is no browser, no layout, and no `next/image`

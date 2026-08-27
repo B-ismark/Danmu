@@ -194,7 +194,8 @@ function ModelHelp() {
         <HelpLine>Drag a piece to slide it around the floor. It stops against whatever is in the way.</HelpLine>
         <HelpLine>Scroll while you are dragging to spin the piece.</HelpLine>
         <HelpLine>
-          Shift-click a second piece, then <b>Merge</b>, and they move as one.
+          Shift-click a second piece and drag either one — the whole selection moves together. <b>Merge</b> makes
+          that stick: a merged set comes back as one piece the next time you click it.
         </HelpLine>
         <HelpLine>Double-click a wardrobe or a nightstand to open its doors and drawers.</HelpLine>
         <HelpLine>
@@ -238,7 +239,7 @@ function ModelHelp() {
           <Kb>W</Kb> move · <Kb>S</Kb> resize · <Kb>R</Kb> spin
         </HelpLine>
         <HelpLine>
-          <Kb>F</Kb> fly to the selection · <Kb>V</Kb> hide it · <Kb>Esc</Kb> deselect
+          <Kb>F</Kb> fly to the selection · <Kb>V</Kb> hide it · <Kb>Esc</Kb> put a drag back, or deselect
         </HelpLine>
         <HelpLine>
           <Kb>Del</Kb> remove the selection · <Kb>Ctrl</Kb>

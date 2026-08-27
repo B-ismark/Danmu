@@ -58,6 +58,6 @@ export function moveWallCarrying(index: number, delta: number, ids?: string[]): 
   if (attached.length === 0) return applied;
   const after = useScene.getState().room.footprint;
   const moves = carryAttached(attached, currentRoomScene(), before, after, outward, applied);
-  useStudio.getState().setPositionsFor(moves);
+  useStudio.getState().setTransformsFor(moves);
   return applied;
 }

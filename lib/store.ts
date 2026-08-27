@@ -122,10 +122,17 @@ type StudioState = {
   setPanKeyHeld: (held: boolean) => void;
   setPosition: (id: string, pos: [number, number, number]) => void;
   /** Move several parts in ONE store update. A wall drag re-positions everything
-   *  standing on that wall on every animation frame; N separate `setPosition`
-   *  calls meant N notifications per frame, each re-running every selector
-   *  subscribed to this store. */
-  setPositionsFor: (moves: Array<{ id: string; pos: [number, number, number] }>) => void;
+   *  standing on that wall on every animation frame, and a multi-piece drag does
+   *  the same for the whole convoy; N separate `setPosition` calls meant N
+   *  notifications per frame, each re-running every selector subscribed to this
+   *  store.
+   *
+   *  `rot` is optional because half the callers have nothing to say about it — a
+   *  wall carries what is mounted on it without turning it. It is here rather than
+   *  in a second `setRotationsFor` because a rigid cascade produces a position AND
+   *  a rotation for the same piece in the same frame, and applying them as two
+   *  updates renders one frame with the piece moved but not yet turned. */
+  setTransformsFor: (moves: Array<{ id: string; pos: [number, number, number]; rot?: number }>) => void;
   setRotation: (id: string, rot: number) => void;
   setDim: (id: string, dim: [number, number, number]) => void;
   /** Establish (or overwrite) a rigid-parenting relationship. */
@@ -221,15 +228,23 @@ export const useStudio = create<StudioState>()(
   // the whole scene does not re-render for every one of them.
   setPanKeyHeld: (held) => set((s) => (s.panKeyHeld === held ? s : { panKeyHeld: held })),
   setPosition: (id, pos) => set((s) => ({ positions: { ...s.positions, [id]: pos } })),
-  setPositionsFor: (moves) =>
+  setTransformsFor: (moves) =>
     set((s) => {
       // No-op returns {} rather than a fresh `positions` object: an identical-but-
       // new reference would look like an edit to history's subscription and push a
-      // snapshot for a frame in which nothing moved.
+      // snapshot for a frame in which nothing moved. Same reason `rotations` is
+      // only cloned once some move actually carries one.
       if (moves.length === 0) return {};
       const positions = { ...s.positions };
-      for (const m of moves) positions[m.id] = m.pos;
-      return { positions };
+      let rotations: Record<string, number> | null = null;
+      for (const m of moves) {
+        positions[m.id] = m.pos;
+        if (m.rot !== undefined) {
+          if (!rotations) rotations = { ...s.rotations };
+          rotations[m.id] = m.rot;
+        }
+      }
+      return rotations ? { positions, rotations } : { positions };
     }),
   setRotation: (id, rot) => set((s) => ({ rotations: { ...s.rotations, [id]: rot } })),
   setDim: (id, dim) => set((s) => ({ dims: { ...s.dims, [id]: dim } })),

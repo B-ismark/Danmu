@@ -16,7 +16,7 @@
 // a dimension lie). Both used to produce no finding at all, so the panel said
 // "Everything fits" over an arrangement that plainly did not.
 
-import type { ScenePart, Category } from './scene-spec';
+import type { ScenePart } from './scene-spec';
 import type { Footprint } from './footprint';
 import {
   faceClearance,
@@ -133,13 +133,15 @@ const TUCKED_CLASH_SHARE = 0.85;
  *  already know it by. Anything not listed keys off the rule's own id. */
 const ZONE_ISSUE_ID: Record<string, string> = { front: 'front', bedside: 'bed' };
 
-const ZONE_TITLE: Record<string, string> = {
-  front: 'Doors can’t open',
-  bedside: 'Bed hard to get into',
-  seats: 'No room to pull the chairs out',
-  seat: 'No room for the chair',
-  'push-back': 'No room to push the chair back',
-};
+// There was a `ZONE_TITLE` table here, keyed on `AccessRule.id`, and it was wrong
+// in a way nothing could catch: `'front'` is the id of SEVEN rules — a wardrobe's
+// doors, a fridge's door, a bookshelf's spines, a shoe rack, an appliance, a sofa's
+// seat and an armchair's — and this table gave all of them the wardrobe's headline.
+// A sofa 4 cm off the wall was reported as **"Doors can't open"** over a sentence
+// about standing up out of a sofa, which reads as the arithmetic being broken when
+// in fact only the caption was. The id is a React key (see `AccessRule.id`); the
+// headline is `AccessRule.title`, authored beside the depth and the reason it is
+// about, where a second rule cannot silently inherit it.
 
 const FACE_OF: Record<string, '+x' | '-x' | '+z' | '-z'> = {
   front: '+z',
@@ -154,20 +156,23 @@ const FACE_OF: Record<string, '+x' | '-x' | '+z' | '-z'> = {
  *  person wants — "has 30 cm in front" beats "68% of the space in front is taken".
  *  A rule spread over several faces cannot: three sides at three distances is not a
  *  number, so it reports how many of them are clear instead. Both read the depth
- *  and the wording off the rule rather than restating them. */
+ *  and the wording off the rule rather than restating them.
+ *
+ *  `narrowest` is the number the caller ALREADY measured to decide this was a
+ *  finding at all, handed in rather than measured again. The second reading used
+ *  the same arguments and so could not disagree — but only by luck, and a sentence
+ *  that re-derives the fact it is reporting is one edit away from contradicting the
+ *  test that raised it. */
 function zoneDetail(
   part: ScenePart,
   rule: AccessRule,
   blocked: number,
   clear: number,
-  self: Foot,
-  others: Foot[],
-  poly: Poly,
+  narrowest: number,
 ): string {
   const cm = Math.round(rule.depth * 100);
   if (rule.sides.length === 1) {
-    const got = faceClearance(self, FACE_OF[rule.sides[0]], others, poly, rule.depth * 2);
-    return `“${part.name}” has ${Math.round(got * 100)} cm ${rule.sides[0] === 'front' ? 'in front' : `on its ${rule.sides[0]}`} — needs ${cm} cm ${rule.reason}.`;
+    return `“${part.name}” has ${Math.round(narrowest * 100)} cm ${rule.sides[0] === 'front' ? 'in front' : `on its ${rule.sides[0]}`} — needs ${cm} cm ${rule.reason}.`;
   }
   const need = rule.atLeast === rule.sides.length ? `all ${rule.sides.length}` : `${rule.atLeast} of its ${rule.sides.length}`;
   return `“${part.name}” wants ${cm} cm clear on ${need} sides ${rule.reason} — ${clear === 0 ? 'none of them is' : `only ${clear} ${clear === 1 ? 'is' : 'are'}`} (${blocked} blocked).`;
@@ -249,7 +254,11 @@ export function analyzeRoom(
           id: `door-${door.id}`,
           rule: 'door',
           severity: 'error',
-          title: 'Door can’t open fully',
+          // The rule's own title, not a copy of it. A door is `wallMounted`, so it
+          // never reaches the generic zone loop that reads `AccessRule.title` — which
+          // left the rule's title unreachable and this string free to drift from it.
+          // That is the failure `ZONE_TITLE` was deleted for, one consumer along.
+          title: swing.rule.title,
           detail: `${blockers.map((b) => b.name).join(', ')} ${blockers.length === 1 ? 'sits' : 'sit'} inside the ${Math.round(swing.rule.depth * 100)} cm swing of “${door.name}”.`,
           partIds: [door.id, ...blockers.map((b) => b.id)],
         });
@@ -376,9 +385,9 @@ export function analyzeRoom(
       .filter((o) => o.id !== p.id && !zoneExempt(roleOf(p), roleOf(o)))
       .map((o) => obbs.get(o.id)!);
     const me = obbs.get(p.id)!;
-    const byRule = new Map<string, { rule: AccessRule; blocked: string[]; clear: string[] }>();
+    const byRule = new Map<string, { rule: AccessRule; blocked: string[]; clear: string[]; narrowest: number }>();
     for (const zn of zones) {
-      const entry = byRule.get(zn.rule.id) ?? { rule: zn.rule, blocked: [], clear: [] };
+      const entry = byRule.get(zn.rule.id) ?? { rule: zn.rule, blocked: [], clear: [], narrowest: Infinity };
       // The narrowest point across the face, not the average of it. A chair against
       // the left third of a 2 m wardrobe takes under a fifth of the zone's AREA and
       // stops the door dead, so a share-of-area test reports nothing — which is the
@@ -386,22 +395,31 @@ export function analyzeRoom(
       // worst probe while the solver's cost reads the total. Same zone, same depth;
       // the solver wants a gradient and the report wants the truth about the
       // tightest point.
-      const got = faceClearance(me, FACE_OF[zn.side], others, poly, zn.rule.depth * 2);
+      //
+      // …and the same SPAN. This did not pass one, so it probed the full width of
+      // the face while the rule claimed `span` of it and `lib/layout-score.ts`
+      // costed `span` of it. A neighbour standing off the end of a sofa — inside
+      // the outer tenth, outside the zone — made this say "4 cm in front" while the
+      // solver's access term read zero, and the finding then carried a **Try a
+      // fix** button that could not move anything, because nothing it was allowed
+      // to move was costing anything. Three files, one rectangle.
+      const got = faceClearance(me, FACE_OF[zn.side], others, poly, zn.rule.depth * 2, zn.rule.span);
       if (got < zn.rule.depth) entry.blocked.push(zn.side);
       else entry.clear.push(zn.side);
+      entry.narrowest = Math.min(entry.narrowest, got);
       byRule.set(zn.rule.id, entry);
     }
     // `access`, not `rule`: the issue itself now carries a `rule` field, and having
     // an AccessRule of that name a line above `rule: 'zone'` reads like a bug even
     // when it is not one.
-    for (const { rule: access, blocked, clear } of byRule.values()) {
+    for (const { rule: access, blocked, clear, narrowest } of byRule.values()) {
       if (clear.length >= access.atLeast) continue;
       issues.push({
         id: `${ZONE_ISSUE_ID[access.id] ?? access.id}-${p.id}`,
         rule: 'zone',
         severity: 'warn',
-        title: ZONE_TITLE[access.id] ?? 'Not enough room to use it',
-        detail: zoneDetail(p, access, blocked.length, clear.length, me, others, poly),
+        title: access.title,
+        detail: zoneDetail(p, access, blocked.length, clear.length, narrowest),
         partIds: [p.id],
       });
     }
@@ -426,7 +444,8 @@ export function analyzeRoom(
         id: `window-${win.id}`,
         rule: 'window',
         severity: 'warn',
-        title: 'Window is blocked',
+        // See the door above: read the rule, never restate it.
+        title: zn.rule.title,
         detail: `${blockers.map((b) => b.name).join(', ')} ${blockers.length === 1 ? 'stands' : 'stand'} in front of “${win.name}” and ${blockers.length === 1 ? 'rises' : 'rise'} above its ${Math.round(zn.rule.aboveY * 100)} cm sill.`,
         partIds: [win.id, ...blockers.map((b) => b.id)],
       });

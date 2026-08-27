@@ -23,7 +23,10 @@ export type OBB = { cx: number; cz: number; hw: number; hd: number; rot: number 
 // atan2(nx, nz) so that a part placed there faces into the room, and
 // `faceClearance(wardrobe, '+z')` then marched the opposite way — straight into
 // the plaster. A wardrobe correctly snapped to the east or west wall measured
-// 1.9 cm in front of its doors and the room report said "Doors can't open".
+// 1.9 cm in front of its doors and the room report said "Wardrobe doors can't
+// open". (That headline belongs to the wardrobe rule alone now — see
+// `AccessRule.title`. It used to be every front-clearance rule's, sofas included,
+// which is how a sofa's seat clearance came to be reported as a door.)
 //
 // So: one pair of helpers, used everywhere the maths is not in a per-cell loop,
 // and `tests/geometry.test.ts` pins them against three.js's own matrix.
@@ -217,9 +220,73 @@ function distPointToSegment(p: Vec2, a: Vec2, b: Vec2): number {
 
 export type Poly = [number, number][];
 
-/** Nearest polygon edge to a point: edge index, closest point on the edge,
- *  distance, the inward unit normal and the yaw that makes a part's front
- *  (+Z local) face into the room when placed against that edge. */
+/** One edge's answer about a point: which edge, where on it the point lands, how
+ *  far that is, the inward unit normal, and the yaw that makes a part's front
+ *  (+Z local) face into the room when placed against it. */
+export type EdgeHit = {
+  index: number;
+  px: number;
+  pz: number;
+  dist: number;
+  nx: number;
+  nz: number;
+  yaw: number;
+};
+
+/**
+ * Where (x, z) lands on ONE named edge of `poly`.
+ *
+ * The segment parameter is clamped to [0, 1], so a query past the end of a wall
+ * lands on that wall's corner rather than off it. That clamp is what lets a piece
+ * PINNED to one wall (see `Convoy.leadEdge`) slide along it and stop at its end,
+ * instead of sailing off into the next room.
+ *
+ * Returns null for an index out of range or a degenerate edge, so a caller
+ * holding a stale index falls back to the nearest wall rather than placing at
+ * NaN.
+ */
+export function edgeProjection(
+  poly: Poly,
+  index: number,
+  x: number,
+  z: number,
+  /** The polygon's centroid, if the caller already has it — see `nearestEdge`. */
+  centroid?: Vec2,
+): EdgeHit | null {
+  if (poly.length < 3 || index < 0 || index >= poly.length) return null;
+  const a = poly[index];
+  const b = poly[(index + 1) % poly.length];
+  const abx = b[0] - a[0];
+  const abz = b[1] - a[1];
+  const len2 = abx * abx + abz * abz;
+  if (len2 < 1e-8) return null;
+  const t = Math.max(0, Math.min(1, ((x - a[0]) * abx + (z - a[1]) * abz) / len2));
+  const px = a[0] + abx * t;
+  const pz = a[1] + abz * t;
+  const [cx, cz] = centroid ?? polyCentroid(poly);
+  // Inward normal: perpendicular flipped toward the centroid.
+  let nx = -abz;
+  let nz = abx;
+  const nl = Math.hypot(nx, nz) || 1;
+  nx /= nl;
+  nz /= nl;
+  if ((cx - px) * nx + (cz - pz) * nz < 0) {
+    nx = -nx;
+    nz = -nz;
+  }
+  return { index, px, pz, dist: Math.hypot(x - px, z - pz), nx, nz, yaw: Math.atan2(nx, nz) };
+}
+
+/** Nearest polygon edge to a point.
+ *
+ *  The per-edge maths is `edgeProjection`'s, not a second copy of it: pinning a
+ *  piece to a chosen wall and finding it the closest one are the same projection
+ *  asked two ways, and this file has no business answering it twice. The old loop
+ *  skipped the normal maths for an edge that had already lost on distance — worth
+ *  a line here because it was deliberate, and because the trade was taken
+ *  knowingly: the solver calls this per piece per proposal, so it now allocates
+ *  one `EdgeHit` per edge instead of one per improvement. A 4-gon pays three
+ *  short-lived objects for having one implementation of the projection. */
 export function nearestEdge(
   poly: Poly,
   x: number,
@@ -228,33 +295,16 @@ export function nearestEdge(
    *  which way is inward, and recomputing it per call is a measurable cost in the
    *  layout solver, which asks this for every piece on every proposal. */
   centroid?: Vec2,
-): { index: number; px: number; pz: number; dist: number; nx: number; nz: number; yaw: number } | null {
+): EdgeHit | null {
   if (poly.length < 3) return null;
-  const [cx, cz] = centroid ?? polyCentroid(poly);
-  let best: { index: number; px: number; pz: number; dist: number; nx: number; nz: number; yaw: number } | null = null;
+  const c = centroid ?? polyCentroid(poly);
+  let best: EdgeHit | null = null;
   for (let i = 0; i < poly.length; i++) {
-    const a = poly[i];
-    const b = poly[(i + 1) % poly.length];
-    const abx = b[0] - a[0];
-    const abz = b[1] - a[1];
-    const len2 = abx * abx + abz * abz;
-    if (len2 < 1e-8) continue;
-    const t = Math.max(0, Math.min(1, ((x - a[0]) * abx + (z - a[1]) * abz) / len2));
-    const px = a[0] + abx * t;
-    const pz = a[1] + abz * t;
-    const dist = Math.hypot(x - px, z - pz);
-    if (best && dist >= best.dist) continue;
-    // Inward normal: perpendicular flipped toward the centroid.
-    let nx = -abz;
-    let nz = abx;
-    const nl = Math.hypot(nx, nz) || 1;
-    nx /= nl;
-    nz /= nl;
-    if ((cx - px) * nx + (cz - pz) * nz < 0) {
-      nx = -nx;
-      nz = -nz;
-    }
-    best = { index: i, px, pz, dist, nx, nz, yaw: Math.atan2(nx, nz) };
+    const hit = edgeProjection(poly, i, x, z, c);
+    if (!hit) continue;
+    // >= so the FIRST edge wins a tie, which is the order the outline is wound in.
+    if (best && hit.dist >= best.dist) continue;
+    best = hit;
   }
   return best;
 }
@@ -278,6 +328,42 @@ export function polyCentroid(poly: Poly): Vec2 {
     z += p[1];
   }
   return [x / poly.length, z / poly.length];
+}
+
+/** The centroid of the polygon's AREA — the shoelace centroid — which is what "the
+ *  middle of the floor" means.
+ *
+ *  `polyCentroid` above averages the CORNERS, and for anything but a rectangle that
+ *  is a different point: measured on this app's own presets at 7.5 × 5.6 m, it lands
+ *  0.83 m off on the L, 0.42 m off on the T, and 1.09 m off on the U — where it is
+ *  **outside the room altogether**. Anything that means "the middle" — a balance
+ *  term, a wall's inward direction — is asking about the floor, and the average of
+ *  the corners is not an answer to that question. It is kept because callers that
+ *  only want a cheap interior-ish point are entitled to one, and because changing it
+ *  would move `wallSegments`.
+ *
+ *  Falls back to the vertex average on a degenerate (zero-area) polygon rather than
+ *  dividing by zero and returning NaN, which every downstream comparison would then
+ *  silently answer `false` to.
+ *
+ *  Note for anyone reaching for this to decide which way is INTO the room: it is
+ *  better than the vertex average and it is still not right. On a non-convex polygon
+ *  no centroid is — the U still gets 18 % of its wall normals wrong from here. The
+ *  exact answer is the polygon's winding, not a point. */
+export function polyAreaCentroid(poly: Poly): Vec2 {
+  let a = 0;
+  let cx = 0;
+  let cz = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const [x0, z0] = poly[i];
+    const [x1, z1] = poly[(i + 1) % poly.length];
+    const cross = x0 * z1 - x1 * z0;
+    a += cross;
+    cx += (x0 + x1) * cross;
+    cz += (z0 + z1) * cross;
+  }
+  if (Math.abs(a) < 1e-12) return polyCentroid(poly);
+  return [cx / (3 * a), cz / (3 * a)];
 }
 
 /** Distance from (x,z) along unit direction (dx,dz) to the polygon boundary.
@@ -361,10 +447,33 @@ function rayToObb(x: number, z: number, dx: number, dz: number, b: OBB): number 
   return Math.max(0, tMin);
 }
 
-/** How many probes are cast across the width of a face. Must be odd and ≥ 3, so
- *  one lands on the centre and the outermost pair sit just inside the corners. */
-const FACE_PROBES = 5;
-const PROBE_SPAN = FACE_PROBES - 1;
+/** Fewest probes cast across the width of a face. Must be odd and ≥ 3, so one lands
+ *  on the centre and the outermost pair sit just inside the corners. */
+const MIN_FACE_PROBES = 5;
+
+/** …and the widest gap allowed between two of them, metres.
+ *
+ *  A fixed count is a sampling rate that gets worse the wider the furniture is, and
+ *  that is a silent false negative — the one failure this whole function exists to
+ *  remove. Five probes across a 2.2 m sofa stand **0.49 m apart**, so a 300 mm box
+ *  squarely in front of it fell between two rays and the report said the front was
+ *  clear. The wardrobe case in the doc above was already marginal at 2 m: a 500 mm
+ *  chair against a 0.49 m spacing is caught only by where it happens to sit.
+ *
+ *  0.1 m is comfortably under the narrowest thing that can actually block a face —
+ *  a floor-lamp pole, a plant pot — and it is the clearance field's own coarse cell,
+ *  so the two are not two different opinions about how finely this room is read. It
+ *  costs probes linearly: 23 on a 2.2 m sofa against 5, in a function the room report
+ *  calls a few dozen times per pass and the annealer never calls at all. */
+const PROBE_SPACING = 0.1;
+
+/** Probes across a face of half-width `spread`: enough that no two are more than
+ *  `PROBE_SPACING` apart, kept odd so one always lands on the centre. */
+function probeCount(spread: number): number {
+  const needed = Math.ceil((2 * spread) / PROBE_SPACING) + 1;
+  const n = Math.max(MIN_FACE_PROBES, needed);
+  return n % 2 === 1 ? n : n + 1;
+}
 
 /** Clearance from one face of an OBB to the nearest obstacle or wall, measured
  *  along the face's outward normal. `face` is in LOCAL space: '+z' is the
@@ -378,13 +487,28 @@ const PROBE_SPAN = FACE_PROBES - 1;
  *  negative here is the worst kind of wrong.
  *
  *  Each probe is an exact ray/OBB intersection rather than a sampled march, so
- *  the answer no longer depends on a step size either. */
+ *  the answer no longer depends on a step size either — and there are as many of
+ *  them as the face is wide (`PROBE_SPACING`), because a fixed count is a sampling
+ *  rate in disguise and a 300 mm box fell straight through five of them on a 2.2 m
+ *  sofa. */
 export function faceClearance(
   self: OBB,
   face: '+x' | '-x' | '+z' | '-z',
   obstacles: OBB[],
   room: Poly,
   maxRange = 4,
+  /** Share of the face the probes are spread over, centred — the same `span` an
+   *  `AccessRule` declares for the zone it wants clear.
+   *
+   *  It defaults to the whole face, and defaulting was the bug: `lib/clearance.ts`
+   *  measured the FULL width of a sofa's front while the rule claimed 90% of it and
+   *  `lib/layout-score.ts` costed 90% of it. A neighbour standing off the end of the
+   *  sofa — inside the outer 10%, outside the zone — made the report say "4 cm in
+   *  front" while the solver's access term read zero, so the finding came with a
+   *  **Try a fix** button that could not move anything, because nothing it could
+   *  move was costing anything. Three files, one zone: they have to measure the
+   *  same rectangle. */
+  span = 1,
 ): number {
   const c = Math.cos(self.rot);
   const s = Math.sin(self.rot);
@@ -400,10 +524,13 @@ export function faceClearance(
 
   let best = maxRange;
   // Inset the outermost probes slightly so a neighbour flush against the SIDE of
-  // this part isn't counted as blocking its front.
-  const spread = Math.max(0, halfAcross - 0.02);
-  for (let i = 0; i < FACE_PROBES; i++) {
-    const u = (i / PROBE_SPAN) * 2 - 1; // -1 … +1 across the face
+  // this part isn't counted as blocking its front — and narrow them to the span the
+  // caller's rule actually claims, so the report and the solver's cost read the
+  // same rectangle rather than two that differ by a tenth of a sofa.
+  const spread = Math.max(0, halfAcross * span - 0.02);
+  const probes = probeCount(spread);
+  for (let i = 0; i < probes; i++) {
+    const u = (i / (probes - 1)) * 2 - 1; // -1 … +1 across the face
     const ax = self.cx + dx * (half + 0.001) + tx * u * spread;
     const az = self.cz + dz * (half + 0.001) + tz * u * spread;
     let hit = Math.min(best, rayToBoundary(ax, az, dx, dz, room));

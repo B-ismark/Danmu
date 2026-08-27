@@ -425,11 +425,39 @@ export function solveLayout(
   // handful of evaluations against the anneal's sixteen hundred. Order matters:
   // snapping first means the prune is deciding about the yaw the user would actually
   // see, not about one three degrees off it.
-  winner = snapYaws(model, winner, weights);
+  // Scoped to what the search touched — a piece it never proposed a move for has no
+  // residue to tidy, and its angle is the user's own. See `untouched`.
+  winner = snapYaws(model, winner, weights, true, origin);
   winner = pruneMoves(model, origin, winner, weights);
-  // …and last, because it is the only pass whose objective the prune cannot see: a
-  // move that opens a route would be reverted by a prune scoring without navigation.
+  // …then the repair, because it is the only pass whose objective the prune cannot
+  // see: a move that opens a route would be reverted by a prune scoring without
+  // navigation.
   winner = openRoutes(model, winner, weights, b, rng);
+  // …and the tidy again, because the repair is a search like any other and hands
+  // back the same few-degree residue the first tidy exists to remove. It used to be
+  // the last word, so on any room that WAS cut — the only rooms it runs on — the
+  // yaws the user saw were the untidied ones. A second pass costs a handful of
+  // breakdowns and is a no-op when `openRoutes` changed nothing.
+  //
+  // ── …but only over what this solve moved ──────────────────────────────────
+  //
+  // Scoped, because running a tidy after the prune inverts which pass has the last
+  // word on a piece the user angled themselves. `SNAP_TOL` is 12° and
+  // `TURN_EPSILON` is 2.9°, and that gap is a real band of user intent: a piece
+  // tilted 8° by a rotate drag is inside the tidy's reach and outside "unchanged".
+  // The prune's whole job is to hand such a piece back untouched — with zero
+  // displacement it sorts first in `candidates` and is the cheapest revert it can
+  // buy — and an unscoped tidy then squared it again. Measured on the 7.5 × 5.6
+  // rect preset with every seeded piece at 8°: `moved` reported 7 pieces where 2
+  // had moved, and 5 were standing exactly where the user left them with their
+  // angle normalised, each handed a sentence by `explain` about a piece that did
+  // not move. That is the complaint this commit set out to kill, pointing the
+  // other way.
+  //
+  // The scope costs the pass nothing it was for: `openRoutes` only moves pieces in
+  // its own pool, so every piece carrying its residue is displaced from `origin`
+  // by construction. A piece the prune restored is the user's again.
+  winner = snapYaws(model, winner, weights, true, origin);
 
   let breakdownAfter = costBreakdown(model, winner, weights, NAV_CELL);
   // …and never hand back something worse than what we were given. The prune spends a
@@ -452,7 +480,10 @@ export function solveLayout(
     breakdownBefore,
     breakdownAfter,
     moved,
-    moves: explain(model, origin, winner, weights, moved),
+    // A cell only when the layout we were handed actually had floor cut off from the
+    // door. If it did not, no move can be credited to opening a route, and the
+    // distance transforms would be paid for an answer that is known in advance.
+    moves: explain(model, origin, winner, weights, moved, breakdownBefore.navigation > 0 ? NAV_CELL : null),
   };
 }
 
@@ -475,8 +506,16 @@ function displaced(from: Placement, to: Placement): boolean {
  *  Restricted to the pieces that are part of the problem: an obstacle whose own
  *  footprint touches the stranded region, or borders it. Moving a wardrobe on the
  *  other side of the room cannot open a route past a chair, and letting the search
- *  try is how a repair turns back into a shuffle. */
-function openRoutes(
+ *  try is how a repair turns back into a shuffle.
+ *
+ *  Exported for the same reason `isWorthOffering` is: it carries a contract of its
+ *  own — *the answer is never worse on the fine grid than the layout it was given* —
+ *  and that contract is invisible from `solveLayout`'s result. The pass runs between
+ *  a prune and a tidy, so its input is internal state; a test that can only see the
+ *  finished layout cannot tell a repair that regressed from one that did nothing,
+ *  and the version of this test that tried was green against a build with the
+ *  re-check deleted. */
+export function openRoutes(
   m: LayoutModel,
   placements: Placement[],
   weights: ScoreWeights,
@@ -524,11 +563,20 @@ function openRoutes(
     }
   }
   for (const p of best) p.yaw = normaliseYaw(p.yaw);
-  return best;
+  // The fine-grid re-check this function's own doc comment promised — and did not
+  // do. The loop above optimises a COARSE proxy (`REPAIR_CELL`, 0.1 m against
+  // `NAV_CELL`'s 0.05) precisely because it is paid per proposal, and a proxy that
+  // quantises toward "impassable" can hand back an arrangement the real grid scores
+  // worse than the one it started from. Nothing downstream would have noticed: the
+  // only guard after this is `after >= before`, which compares against the layout
+  // the USER had, not against the good answer this pass was given. So a repair could
+  // quietly spend the search's work and return something worse, and the doc said it
+  // couldn't.
+  const fine = (p: Placement[]) => costBreakdown(m, p, weights, NAV_CELL).total;
+  return fine(best) < fine(placements) ? best : placements;
 }
 
-/** Square up anything that is nearly square, and keep the change only if the room
- *  agrees.
+/** Square up anything that is nearly square.
  *
  *  The annealer's free-turn proposal exists so a chair can angle toward a sofa, and
  *  it also leaves pieces a few degrees off true that nobody meant to angle — the
@@ -538,14 +586,121 @@ function openRoutes(
  *  which now has a facing term that says so.
  *
  *  Snapped to the nearest wall's own heading rather than to the world axes, so it is
- *  right in a room whose walls the user has dragged off square. */
-function snapYaws(m: LayoutModel, placements: Placement[], weights: ScoreWeights): Placement[] {
+ *  right in a room whose walls the user has dragged off square.
+ *
+ *  ── Why the score does not get a vote ──────────────────────────────────────
+ *
+ *  This used to keep the snap only `if (trial <= cost)`, and that gate undid the
+ *  pass it was guarding. `SNAP_TOL` has already made the judgement — *inside this
+ *  band the angle is not a choice* — so re-asking a cost function that prices taste
+ *  is asking the wrong question, and it loses on a coin flip: measured per degree,
+ *  wall-facing costs `alignment × FACING_GAIN / 180` = **0.089**, while the relation
+ *  term's own facing gradient on the same piece is **0.10**. Within 12 % of each
+ *  other, so whichever way a sofa's partner happened to land decided whether the
+ *  sofa came back square. Over twelve seeds of an eighteen-piece room, **6 of 51
+ *  moved pieces** were handed back at 1°, 3°, 4°, 7° and 8° off — angles no one
+ *  chose, that no one can see the reason for, and that read as the solver being
+ *  arbitrary. It is exactly the complaint "things get rotated at odd angles".
+ *
+ *  Geometry still gets a veto, and only geometry: turning a 2.2 m sofa 4° sweeps its
+ *  corners through ~80 mm, which can genuinely push it into a neighbour or through a
+ *  wall. So the snap is refused when it makes one of THESE worse, and taste is not
+ *  consulted at all. A tidy may be vetoed by a fact; it may not be outbid by a
+ *  preference.
+ *
+ *  The list is every term that implements a rule the ROOM REPORT can raise a finding
+ *  about — and that is the principle, not a measurement. It was picked by
+ *  measurement first, which produced `['overlap', 'outside', 'door']`, and that set
+ *  splits one family down the middle: `door` IS an access rule. It comes out of
+ *  `lib/layout-rules.ts` like every other clearance number, it has a `RULE_HANDLING`
+ *  row, and it raises a finding with a **Try a fix** button. There is no principle
+ *  that admits "you may not close a doorway" while permitting "you may leave no room
+ *  to open the wardrobe": both are facts about whether the room works, not
+ *  preferences about how it looks.
+ *
+ *  The sharper reason is the invariant `tests/layout-conformance.test.ts` exists to
+ *  hold. If the tidy can create an `access` violation, the solver manufactures a
+ *  complaint about its own output — Suggest squares a piece, and Room check then
+ *  reports the clearance it just broke, with a fix button pointing back at the
+ *  solver. That is the scar CLAUDE.md records as "Suggest came to park a bed across
+ *  a doorway and have Room check report it", and it is why the two consumers are
+ *  held to each other at all. A veto set chosen by measurement drifts away from the
+ *  checker; one chosen to match it cannot.
+ *
+ *  `walkway` and `window` stay out, and that is the same rule rather than an
+ *  exception to it: neither is a fact about a single piece being usable. A walkway
+ *  is a gap between two pieces that the tidy is not choosing, and a window rule is a
+ *  sightline scored by height. Measured, including them cost two extra crooked
+ *  pieces over twelve seeds (9 of 95 against 7) and bought nothing.
+ *
+ *  `navigation` IS in it, and leaving it out was a real hole rather than a judgement
+ *  call: traced through the finish passes on a scrambled U, the tidy took navigation
+ *  from 342.0 to 343.8 — squaring a piece closed the gap its tilt had been leaving
+ *  open, and cut a part of the room off from the door. `DEFAULT_WEIGHTS`' own
+ *  comment puts a square metre of unreachable floor in the same tier as a blocked
+ *  door, "because it is the same failure: part of the room is not part of the
+ *  room". It is the one term here that needs a grid, so `hardCost` pays for a
+ *  distance transform per candidate — a few dozen per solve, against the annealer's
+ *  sixteen hundred evaluations, and only for pieces already inside `SNAP_TOL`. */
+const HARD_TERMS: Array<keyof ScoreWeights> = ['overlap', 'outside', 'door', 'access', 'navigation'];
+
+/** The hard terms, kept APART rather than added up.
+ *
+ *  A sum was the first version and it quietly gave away the thing the veto is for:
+ *  four terms in one number means any of them buys any other. With DEFAULT_WEIGHTS,
+ *  reclaiming 0.05 m² of stranded floor is worth 6 units, which pays for 60 cm² of a
+ *  piece pushed through a wall — so a tidy could re-seal a route `openRoutes` had
+ *  just opened and still show a net gain. The comment above promised "refused when
+ *  it makes one of THESE worse"; a sum cannot express "one of". */
+function hardCosts(m: LayoutModel, p: Placement[], weights: ScoreWeights, navCell: number | null): number[] {
+  const b: CostBreakdown = costBreakdown(m, p, weights, navCell);
+  return HARD_TERMS.map((k) => b[k]);
+}
+
+/** Did any single hard term get worse? The tolerance is per term, because each is a
+ *  sum of areas or distances and an unchanged arrangement can differ in the last
+ *  bit — a bare `>` would drop a tidy for a rounding error. */
+function anyWorse(before: number[], after: number[]): boolean {
+  for (let i = 0; i < before.length; i++) if (after[i] > before[i] + 1e-6) return true;
+  return false;
+}
+
+/** Is this piece exactly where it started — position and angle both?
+ *
+ *  Deliberately not `displaced`, whose thresholds are about what a person would
+ *  call a change. This asks the narrower question the tidy needs: *did the solver
+ *  touch this at all*. A piece the search never proposed a move for, or one the
+ *  prune restored (it assigns `{ ...origin[i] }`, so the numbers are identical),
+ *  carries no residue for the tidy to remove — its angle is the user's. Using
+ *  `displaced` here instead would leave a hole exactly the width of the gap
+ *  between the two thresholds: a piece the annealer nudged 1° and 5 mm reads as
+ *  "not displaced" and would keep the residue this pass exists to remove. */
+function untouched(from: Placement, to: Placement): boolean {
+  return Math.hypot(to.x - from.x, to.z - from.z) < 1e-9 && Math.abs(angleDelta(to.yaw, from.yaw)) < 1e-9;
+}
+
+/** Exported for the same reason `openRoutes` is: the contract that matters here —
+ *  *no hard term is ever worse coming out than going in* — is invisible from
+ *  `solveLayout`, which reports one total for a layout three passes downstream. A
+ *  mutation battery on the commit that added the veto found `HARD_TERMS` minus
+ *  `navigation`, and `guardRoutes: false`, both fully green across 227 tests. */
+export function snapYaws(
+  m: LayoutModel,
+  placements: Placement[],
+  weights: ScoreWeights,
+  guardRoutes: boolean,
+  onlyMovedFrom: Placement[] | null,
+): Placement[] {
+  const navCell = guardRoutes ? NAV_CELL : null;
   const out = placements.map((p) => ({ ...p }));
-  let cost = scoreLayout(m, out, weights);
+  let hard = hardCosts(m, out, weights, navCell);
   const q = Math.PI / 2;
   for (let i = 0; i < out.length; i++) {
     if (!m.ctx.movable[i]) continue;
-    const edge = nearestEdge(m.poly, out[i].x, out[i].z, m.centre);
+    // …and only pieces this solve has actually touched. See `untouched`.
+    if (onlyMovedFrom && untouched(onlyMovedFrom[i], out[i])) continue;
+    // Its own centroid, not `m.centre` — see the same call in `layout-score`.
+    const edge = nearestEdge(m.poly, out[i].x, out[i].z);
     if (!edge) continue;
     const base = edge.yaw;
     const snapped = normaliseYaw(base + Math.round(angleDelta(out[i].yaw, base) / q) * q);
@@ -553,9 +708,9 @@ function snapYaws(m: LayoutModel, placements: Placement[], weights: ScoreWeights
     if (off < 1e-4 || off > SNAP_TOL) continue;
     const keep = out[i];
     out[i] = { ...keep, yaw: snapped };
-    const trial = scoreLayout(m, out, weights);
-    if (trial <= cost) cost = trial;
-    else out[i] = keep;
+    const trial = hardCosts(m, out, weights, navCell);
+    if (anyWorse(hard, trial)) out[i] = keep;
+    else hard = trial;
   }
   return out;
 }
@@ -616,15 +771,26 @@ function explain(
   placements: Placement[],
   weights: ScoreWeights,
   moved: number[],
+  /** The grid the navigation term is scored on here, or null to leave it at zero.
+   *
+   *  It was always null, because `costBreakdown` defaults it off for the annealer's
+   *  sake — so `c.navigation` was zero in both readings, its gain was zero for every
+   *  move, and `'navigation'` could never be the term credited even after it was
+   *  added to `TERMS`. The one pass that exists solely to open a route could not say
+   *  that is what it did; its moves were credited to whichever taste term happened
+   *  to shift. The caller passes a cell only when the layout it started from was
+   *  actually cut — in a room with a route to everywhere, no move can be a
+   *  route-opening one, so nobody pays for the distance transforms. */
+  navCell: number | null,
 ): MoveReason[] {
   if (moved.length === 0) return [];
   const scratch = placements.map((p) => ({ ...p }));
-  const here = costBreakdown(m, scratch, weights);
+  const here = costBreakdown(m, scratch, weights, navCell);
   const out: MoveReason[] = [];
   for (const i of moved) {
     const keep = scratch[i];
     scratch[i] = { ...origin[i] };
-    const back = costBreakdown(m, scratch, weights);
+    const back = costBreakdown(m, scratch, weights, navCell);
     scratch[i] = keep;
     let term: keyof ScoreWeights = 'inertia';
     let best = -Infinity;
@@ -653,6 +819,11 @@ const TERMS: Array<keyof ScoreWeights> = [
   'overlap',
   'outside',
   'door',
+  // The term `openRoutes` exists to buy, and it was missing from this list — so the
+  // single most valuable thing a suggestion can do (reconnect a stranded half of the
+  // room) was always attributed to something else, and the sentence the user reads
+  // named the wrong reason.
+  'navigation',
   'access',
   'walkway',
   'window',

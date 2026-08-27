@@ -8,7 +8,7 @@
 // room rather than replacing the one you are standing in.
 
 import { useRef, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/ui/Icon';
 import { toast } from '@/components/ui/StorageToast';
 import { useScene } from '@/lib/scene-store';

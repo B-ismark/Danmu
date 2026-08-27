@@ -134,7 +134,7 @@ export function MeasureGuides() {
                 fontSize: 10,
                 fontWeight: 700,
                 letterSpacing: '0.04em',
-                color: '#fff',
+                color: 'var(--on-accent)',
                 background: color,
                 padding: '1px 5px',
                 borderRadius: 'var(--r-1)',
@@ -160,16 +160,37 @@ export function MeasureGuides() {
             fontSize: 11,
             fontWeight: 700,
             letterSpacing: '0.04em',
-            color: live.valid ? '#1c1c1a' : '#fff',
-            background: live.valid ? 'rgba(255,255,255,0.92)' : SCENE.invalid,
+            // Tokens, not literals. This is a drei `Html` overlay — real DOM, which
+            // CAN read custom properties (the same style object already does, two
+            // lines up), so rule 4's "no hard-coded design values" applies in full
+            // and the `lib/scene-palette.ts` exemption for the WebGL layer does not.
+            // A hex here simply did not follow the theme, and no test can see it.
+            color: live.valid ? 'var(--ink)' : 'var(--on-accent)',
+            background: live.valid ? 'var(--paper-0)' : SCENE.invalid,
             border: `1px solid ${color}`,
             padding: '2px 7px',
             borderRadius: 'var(--r-1)',
-            whiteSpace: 'nowrap',
+            // The measurements stay on one line; the reason a set refused is a
+            // SENTENCE carrying a name the user typed (up to 80 chars), so it wraps
+            // under them instead of running off both sides of a tag centred on the
+            // piece. `100vw` rather than `100%`: the parent is a drei `Html` wrapper
+            // sized to its own content, so a percentage would resolve against the
+            // very width being bounded.
+            maxWidth: 'min(240px, calc(100vw - 32px))',
+            textAlign: 'center',
           }}
         >
-          {formatDim(live.dimMM[0], dimUnit)} × {formatDim(live.dimMM[1], dimUnit)} {dimUnit}
-          {!live.valid && ' · blocked'}
+          <span style={{ whiteSpace: 'nowrap' }}>
+            {formatDim(live.dimMM[0], dimUnit)} × {formatDim(live.dimMM[1], dimUnit)} {dimUnit}
+          </span>
+          {!live.valid &&
+            (live.blockedBy ? (
+              <span style={{ display: 'block', overflowWrap: 'anywhere', fontWeight: 600 }}>
+                {live.blockedBy} will not fit
+              </span>
+            ) : (
+              <span style={{ whiteSpace: 'nowrap' }}> · blocked</span>
+            ))}
         </div>
       </Html>
     </group>
