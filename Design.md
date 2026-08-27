@@ -368,7 +368,8 @@ This is what makes Danmu trustworthy. All pure math, all covered by tests.
 | `lib/layout-score.ts` / `lib/layout-solve.ts` | `layout-rules` restated as **costs** rather than checks — collisions, doors and their approach, functional zones, windows, walkways, wall affinity, relations, alignment, balance — plus **inertia**, which charges for movement so a piece only moves if moving it buys something, and **navigability** over the clearance field for the handful of finalists. Then seeded simulated annealing over `(x, z, yaw)` of the unlocked pieces, with proposals that know the room's structure (snap to a wall, park beside the thing you belong to, face the screen, swap two pieces). Deterministic per seed; `mode: 'refit'` turns the inertia up to repair a layout after a resize rather than reinvent it. **Never writes `dimMM`** — it moves and turns, and the type it works in has no field a size could travel in. Restating a table is safe only while the restatements agree, so `tests/layout-conformance.test.ts` pins them to each other — see below. Three properties are worth naming because each one was a bug: a relation is discharged by its **best** anchor and not by all of them (a rug's `['sofa','bed','dining-table']` means *a rug goes under a group*, and read pairwise it charged the rug for every group it was not under — 38.3 of a seeded T's total, and the reason the rug ended up parked between the two); wall affinity is keyed on **role**, since `Category` cannot tell a coffee table from a dining table and gave both `prefers-middle`; the wall gap is measured **along that wall’s normal**, because `nearestEdge` clamps to the segment and hands back a DIAGONAL distance to an endpoint whenever a piece stands off the end of a wall, while `halfDepthToward` returns an AXIAL half-extent — the difference of the two is not a gap, and no `RuleKind` maps to `wall`, so this term has one consumer and no second opinion to contradict it (on the L, whose notch runs x 0.48→3.00 at z 0.38, a sofa centred at x = 0 with its back 24 mm off that plane was charged 0.215, 91% of the preset’s whole wall term, and the solver collected it by sliding the sofa 200 mm PAST a wall that does not reach that far); and facing the wrong way costs `FACING_GAIN ×` what being a few degrees off square does, because `angleCost` tops out at 1 and a completely backwards sofa was therefore cheaper than moving it 2.7 m.The best anchor is also an **argmin**, so it needs a tie-break that is not array order: a relation band costs zero everywhere inside it, so a lamp between two armchairs both within reach is a dead heat, and `parts` order changes whenever a piece is added or deleted. `beatsAnchor` settles it on cost, then the physically nearer anchor, then the anchor id — and `relationParents` exposes those `child → parent` edges, so anything that wants to know what a piece belongs to reads one answer rather than recomputing its own.The solver's **first pass** settles one piece alone — `RoomProfile.anchor`, the bed in a bedroom or the sofa in a living room — before the big-furniture and all-pieces passes run. It buys the tail rather than the median: twelve seeds on a scrambled room, worst run, without → with, `l` 1081 → 136 and `u` 155 → 6.9, because a catastrophic run is one where the biggest piece never found its wall and everything else spent the budget arranging itself around a bed in the middle of the floor. The anchor is picked by ROLE PRIORITY first (bed, then sofa, then dining table, then desk) and footprint area only within a rank, so a large sofa cannot outrank a single bed. Those edges are what the solver’s **group pass** moves: before the piece-level passes, a short anneal of its own proposes whole groups — swap two groups by their centroids, slide one bodily, turn one about its own centre — every one rigid, so a group that was arranged stays arranged. It exists for the one case single-piece moves provably cannot reach: two intact groups standing where the other belongs is a local minimum, because taking any one piece out of a coherent group makes the room worse, and the flat search duly moved 0–1 pieces of eleven at every seed. Groups are read from the ARRANGEMENT — only relation edges currently satisfied, movable members only — so a room nobody has arranged has none and the pass is skipped, which is measurably the right answer there. |
 | `lib/layout-solve.ts`, after the anneal | Three passes that turn a search result into a **suggestion**. *Snap* squares any yaw within 12° of its wall's own heading, keeping the change only if the room agrees — the free-turn proposal exists so a chair can angle toward a sofa, and it also leaves pieces at 8° that nobody meant to angle. *Prune* offers every moved piece its old place back, cheapest first, spending a bounded slack budget: measured over the five presets at three seeds this reverted **40–63 %** of the moves and left the total cost equal or lower in eight of twelve runs, because the annealer accepts uphill moves and never revisits them. *Explain* names, per piece, the cost term that paid for its move, which is what lets the toast say *"the floor lamp moved beside what it belongs with"* instead of *"moved 8 pieces"*. `isWorthOffering` is then the bar for showing a suggestion at all — a material gain, not merely a smaller number. |
 | `lib/solar.ts` | Sunlight as the two things a room can show you: `sunDirection` (a compass azimuth and an elevation → a unit vector in scene axes, null below the horizon) and `daylightKelvin` (warm at the horizon, neutral overhead, on the same Planckian locus as the lamps). It was a full NOAA / Meeus solar-position calculator accurate to ~0.01°, driven by a latitude, a longitude, a date and a clock; that went, and the file states why in its own header. **Correct is not the same as useful:** nobody arranging furniture can verify a hundredth of a degree, and the four fixed presets in `Room`'s `LIGHTING` table are the four pictures it existed to produce. |
-| `lib/lighting-moods.ts` | `LIGHTING` — what each of the seven moods looks like, and for the four sun angles where the light comes from. Read by the 3D scene, by the north dial that draws the sun on its rim, and by its own test. It was inside `Room.tsx` first, which was wrong the moment a second consumer appeared: a table in one renderer becomes a table each consumer copies (rule 3, the `layout-rules.ts` argument). The dial had drawn the sun for as long as the sun existed, and putting the angles behind an R3F import is what silently dropped the marker. Hex rather than tokens because none of it is reachable from CSS — the `lib/scene-palette.ts` reason, and the reason it belongs in `lib/` beside it. |
+| `lib/lighting-moods.ts` | `LIGHTING` — what each of the five moods looks like, and for the three sun angles where the light comes from. Read by the 3D scene, by the north dial that draws the sun on its rim, and by its own test. It was inside `Room.tsx` first, which was wrong the moment a second consumer appeared: a table in one renderer becomes a table each consumer copies (rule 3, the `layout-rules.ts` argument). The dial had drawn the sun for as long as the sun existed, and putting the angles behind an R3F import is what silently dropped the marker. Hex rather than tokens because none of it is reachable from CSS — the `lib/scene-palette.ts` reason, and the reason it belongs in `lib/` beside it. |
+| `lib/part-rows.ts` | `groupRows` — the flat part list as the rows the layer tree draws. A group is nothing but a shared `groupId` (there is no node, no name, no ordering), so the nesting is **derived at read time** rather than stored, and three rules keep it honest: members cluster under their FIRST member so merging never reshuffles the rest of the list; a group of one is not a group, because deleting members leaves a lone part still carrying a `groupId` and a `Group · 1` header would describe something with no behaviour; and a search hides members but never the fact of the group, so a row still reports `3` against one visible member — “this piece is merged with two you cannot see” is exactly what you need before dragging it. Pure and generic over `{ id, groupId }`, so `tests/part-rows.test.ts` runs it without a scene, a store or React. |
 | `lib/bearings.ts` | Averaging bearings, which is not averaging numbers — `circularMeanDeg` (359° and 1° average to 0°, not 180°) and `circularSpreadDeg`. Was `lib/compass.ts`, most of which was a device-magnetometer read for the sun mood; the read went with the mood and the maths stayed, because `lib/capture-slots.ts` averages the EXIF bearings of a set of room photos to work out which wall each one is. Renamed with its contents: a module named for the deleted half is the scar rule 1 of CLAUDE.md describes. |
 | `lib/clearance-field.ts` | Circulation as a **field** rather than a list of pairs — see below. One 5 cm raster of the floor plus an exact Euclidean distance transform answers walkway width, reachability, turning space and crowding at once, and it also carries WHICH obstacle is nearest so a finding can name the pieces to select. |
 | `lib/dimension-ranges.ts` | `clampDims` — per-item sizing tiers (fixed / standard / flexible). **All sizes pass through this**, including every size read out of a scene file (§6a). Also `ROOM_SIDE_M`, the one bound on a room's own side: the dims editor wrote `1` and `50` in a predicate and twice more into the sentences it shows, while `scene-store`'s wall-drag clamp independently held 40 — so a size you could type was a size a drag refused to reach. |
@@ -663,10 +664,32 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
   would end up outside the room is left where it is and reported by
   `clearance.ts` — never resized, never shoved.
 
-### Multi-select & grouping — `SelectionHeader.tsx`
+### Multi-select & grouping — `SelectionHeader.tsx`, `PartTree.tsx`
 - Shift-click adds to `selection: string[]`. "Merge N" assigns a shared
   `groupId`; clicking any grouped part selects the whole group; group **move-as-
   one** on translate (rotate/scale-as-one is roadmap). "Ungroup" clears it.
+- **A merged set is drawn as one in the rail** (`lib/part-rows.ts` → `PartTree`).
+  It was invisible there: three merged chairs looked exactly like three loose
+  ones, and the only tell was watching them move together — which is what made
+  the behaviour so hard to report in the first place. The members now sit under a
+  `Group · N` header row that folds (Left/Right, or the chevron), with an indent
+  and a ├/└ connector. The header is an `option` like every other row, because a
+  listbox may own nothing else, and it is genuinely selectable: pressing it takes
+  the whole group — the gesture the 3D canvas performs on any click, and the one
+  the rail previously had no way to reach. `aria-expanded` rides the **chevron**
+  and not the row, since ARIA 1.2 dropped it from `role="option"`; that is what
+  `IconButton`'s `expanded` prop exists for.
+- **Selecting one member is what the rail adds**, and it is close to the reason
+  the rail exists at all: the canvas expands a click to the whole group before a
+  drag ever starts, so the list is the only surface that can reach inside one.
+- Navigation, range selection and the roving tabindex all read **rows** rather
+  than parts. A range unions each row's `ids`, which is what makes a folded group
+  behave like the one row it looks like (its members are not rows, so nothing
+  else would pick them up) while an unfolded one contributes nothing extra. The
+  tab stop prefers a fully-selected group's header over any one member, measured
+  against the room rather than the visible rows — otherwise a search showing one
+  of three would leave the header reading unselected directly above a member
+  reading selected.
 
 ### Recolour & finish — `Inspector.tsx`, `Draggable.tsx` `FinishApplier`
 - One merged **Colour** section (24-swatch palette + hex). Separate **Finish**
@@ -714,9 +737,25 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
   map) may cast, only on `high`, and only the two brightest in the room.
   `LIGHT_SCALE` re-bases candela into the scene's artistic exposure; the ratios
   between fixtures survive it, which is the part that matters.
-- **Lighting moods** — seven, in one `Segmented` (`ViewOptions.tsx` →
-  `LIGHTING` in `lib/lighting-moods.ts`). Three are studio looks: Day / Evening / Cool. Four are sun angles:
-  Sunrise / Noon / Golden / Sunset (see the next two entries). Every mood's
+- **Lighting moods** — five, as one row of icon-only buttons
+  (`LightingPicker.tsx`, in the rail's **Style** section →
+  `LIGHTING` in `lib/lighting-moods.ts`). Two are studio looks: Evening / Cool.
+  Three are sun angles: Sunrise / Day / Sunset (see the next two entries).
+  It was seven in a `Segmented` of icon+word pairs inside **View**, which was
+  wrong twice over. Seven needed two rows of a 260px rail, and `sun`,
+  `sun-medium` and `sun-dim` differ only in the length of their rays — three
+  labels over one picture. And a *theme* sets a mood (`applyTheme` calls
+  `setLighting`), so the two controls answered one question from two drawers and
+  picking a theme silently moved a control the user could not see. Day absorbed
+  Noon (two names for bright overhead light; the survivor is the sun, because a
+  direction is the point of daylight) and Sunset absorbed Golden at 8°/272°,
+  which is neither original — Golden's 14° read as afternoon, Sunset's 2° gave
+  2657 K and room-length shadows. The two surviving ids are the two that were
+  already persisted, so no stored preference was orphaned. Dropping the words
+  does not drop the labels: each button keeps its `aria-label` (with the
+  direction, which no glyph can carry) and its name returns on hover **and on
+  focus** through `ui/Tooltip` — a native `title` never appears on keyboard
+  focus, and for an icon-only control the tooltip *is* the label. Every mood's
   `hemi` / `fill` / `env` / `envMul` / `exposure` terms
   set the **ambient** conditions only. Evening is deliberately low now — its job
   is to leave room for the fixtures rather than to be an orange filter over a
@@ -726,8 +765,8 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
   is not enough: every material has `envMapIntensity: 0.5`, so the environment
   supplies most of the light in the scene, and a nominally dark Evening still
   rendered as a fully-lit amber room. Both halves move together or neither does.
-- **The sun is four of those moods, and they are angles rather than a
-  measurement.** `Sunrise` / `Noon` / `Golden` / `Sunset` each carry one azimuth
+- **The sun is three of those moods, and they are angles rather than a
+  measurement.** `Sunrise` / `Day` / `Sunset` each carry one azimuth
   and one elevation in the same `LIGHTING` table (`lib/lighting-moods.ts` — a
   `lib/` module and not a renderer, because the north dial reads the same rows to
   draw the sun on its rim), and everything else about the
@@ -736,7 +775,7 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
   south, so scene north is −Z), its colour through `daylightKelvin` on the same
   Planckian locus the lamps use, and its strength through `sin(elevation)`, the
   first-order air-mass term that makes Sunrise read as sunrise rather than as
-  Noon pointed sideways. **When an angle is below the horizon there is no key
+  Day pointed sideways. **When an angle is below the horizon there is no key
   light at all** — `sunDirection` returns null rather than a downward vector,
   because a light shining up through the floor is worse than no light. No shipped
   preset is below it; the branch stays because the function decides, not the call

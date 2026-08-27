@@ -38,9 +38,29 @@ import { Icon } from '@/components/ui/Icon';
  *  not have. */
 const COMPASS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
 
-/** "south-west" for 213°. */
+/** "south-west" for 213°. Takes a TRUE bearing, clockwise from north. */
 function compassName(deg: number): string {
   return COMPASS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+}
+
+/** The same eight steps in the plan's own words, clockwise from its top edge.
+ *
+ *  Deliberately NOT `compassName`. A sun's position on this dial is
+ *  `azimuth − bearing`: an angle relative to the top of the floor plan, not a
+ *  bearing from true north. Feeding it to `compassName` would name a plan-relative
+ *  angle with a compass word — "the light comes from the north-west" about a room
+ *  whose north edge faces east — which is the same class of error rule 2 of
+ *  CLAUDE.md describes for capture slots, and it is invisible whenever the bearing
+ *  happens to be 0.
+ *
+ *  Plan words are also the more useful ones here: the user's furniture is laid out
+ *  in the plan, so "which side does the light come in from" is a question about the
+ *  drawing in front of them. The true bearing is still spoken, by the slider's own
+ *  `aria-valuetext`, which is where a compass word belongs. */
+const PLAN_SIDES = ['top', 'top-right', 'right', 'bottom-right', 'bottom', 'bottom-left', 'left', 'top-left'];
+
+function planSide(degFromTop: number): string {
+  return PLAN_SIDES[Math.round((((degFromTop % 360) + 360) % 360) / 45) % 8];
 }
 
 /** The bearing a room with no site yet is drawn at: square to the compass.
@@ -78,13 +98,21 @@ export function NorthDial() {
       <Dial bearingDeg={bearingDeg} sunAzimuthDeg={sunAzimuthDeg} onChange={onChange} />
       {/* `minWidth: 0` on the text and `flexShrink: 0` on the dial: the dial is a
           fixed 76px of SVG and the sentence is the part that should reflow, which
-          is the opposite of what a flex row does by default. */}
+          is the opposite of what a flex row does by default.
+          Two short sentences, not four clauses. The long version explained the
+          mechanism ("the room stays put and the compass turns around it") to
+          someone who can see the mechanism turning under their cursor — a rail is
+          not the place to narrate a control that demonstrates itself. What the
+          picture cannot say is which way the light then comes from, so that is
+          the half that stayed. */}
       <div style={{ flex: 1, minWidth: 0, fontSize: 10.5, color: 'var(--ink-3)', lineHeight: 1.4 }}>
-        Drag to point at north — the room stays put and the compass turns around
-        it.
-        {/* Only claimed while there IS a sun on the rim. In a studio mood the
-            sentence would be pointing at nothing. */}
-        {sunAzimuthDeg !== null && ' The dot is where this mood’s light comes from.'}
+        Drag to set north.
+        {/* NAMES the direction rather than saying "the dot": the dot is invisible
+            to a screen reader, and the dial's `aria-valuetext` is about the
+            bearing, which is the slider's own value and not the place to bolt
+            this on. Derived from the same azimuth the marker is drawn at, so the
+            two cannot disagree. */}
+        {sunAzimuthDeg !== null && ` Light comes from the ${planSide(sunAzimuthDeg - bearingDeg)}.`}
       </div>
     </div>
   );
@@ -166,6 +194,20 @@ function Dial({
         onPointerMove={(e) => {
           if (e.buttons === 1) point(e.clientX, e.clientY);
         }}
+        // Arrows nudge, Shift coarsens, Page steps a whole compass point, Home and
+        // End go to the declared ends. The last two were missing, which is a real
+        // gap rather than a nicety: this element announces itself as a slider with
+        // an `aria-valuemin` and an `aria-valuemax`, and the ARIA slider contract
+        // is what a keyboard user is being promised by that role. `RailSash` in
+        // this same app already honours it, so the dial was also the odd one out.
+        //
+        // `End` goes to 359 and not to 180, even though on a cyclic scale 359° is
+        // one degree short of `Home` and looks identical on the rim. Reinterpreting
+        // "maximum" as "the opposite direction" would be more useful and would also
+        // make the control lie about the value it publishes — and a screen-reader
+        // user pressing End is asking for `aria-valuemax`, not for our idea of a
+        // helpful extreme. The readout says 359°, and one more press of ArrowRight
+        // wraps to 0.
         onKeyDown={(e) => {
           const step = e.shiftKey ? 15 : 5;
           if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
@@ -174,6 +216,18 @@ function Dial({
           } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
             e.preventDefault();
             onChange((bearingDeg + step) % 360);
+          } else if (e.key === 'PageDown') {
+            e.preventDefault();
+            onChange((bearingDeg - 45 + 360) % 360);
+          } else if (e.key === 'PageUp') {
+            e.preventDefault();
+            onChange((bearingDeg + 45) % 360);
+          } else if (e.key === 'Home') {
+            e.preventDefault();
+            onChange(0);
+          } else if (e.key === 'End') {
+            e.preventDefault();
+            onChange(359);
           }
         }}
         style={{ cursor: 'grab', touchAction: 'none', borderRadius: '50%', outlineOffset: 2 }}

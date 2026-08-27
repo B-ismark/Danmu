@@ -36,7 +36,9 @@ import { sunDirection } from '@/lib/solar';
 //      four names for one picture.
 //   3. A mood that is neither a studio look nor a sun angle, or somehow both.
 
-const VIEW = readFileSync(join(__dirname, '..', 'components', 'studio', 'ViewOptions.tsx'), 'utf8');
+const src = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8');
+const PICKER = src('components', 'studio', 'LightingPicker.tsx');
+const TOOLTIP = src('components', 'ui', 'Tooltip.tsx');
 
 /** The moods that name a sun angle, as `[name, angle]`. */
 const suns = (Object.entries(LIGHTING) as Array<[Lighting, (typeof LIGHTING)[Lighting]]>)
@@ -50,14 +52,37 @@ describe('the lighting moods', () => {
     expect(Object.keys(LIGHTING).sort()).toEqual([...LIGHTINGS].sort());
   });
 
-  it('gives every mood a label and a chip', () => {
-    // The one source-level check, because `ViewOptions` is a client component and
-    // its `MOODS` holds icon names rather than data worth importing here.
-    const start = VIEW.indexOf('const MOODS: Record<Lighting, { label: string; icon: IconName }> = {');
+  it('gives every mood a label, a hint and an icon', () => {
+    // The one source-level check, because `LightingPicker` is a client component
+    // and its `MOODS` holds icon names rather than data worth importing here.
+    //
+    // The `hint` matters as much as the label and is asserted with it: the control
+    // is icon-only, so the label is all a sighted user gets from the tooltip, and
+    // "Sunrise" versus "Sunset" is a difference of DIRECTION that no glyph and no
+    // one-word label conveys. The hint is the half of the accessible name that
+    // says "from the east".
+    const start = PICKER.indexOf('const MOODS: Record<Lighting, { label: string; hint: string; icon: IconName }> = {');
     expect(start, 'MOODS should be a Record keyed by Lighting — that is the exhaustiveness check').toBeGreaterThan(-1);
-    const inner = VIEW.slice(start, VIEW.indexOf('\n};', start));
-    const named = [...inner.matchAll(/^ {2}(\w+): \{ label:/gm)].map((m) => m[1]);
+    const inner = PICKER.slice(start, PICKER.indexOf('\n};', start));
+    const named = [...inner.matchAll(/^ {2}(\w+): \{ label: '[^']+', hint: '[^']+',/gm)].map((m) => m[1]);
     expect(named.sort()).toEqual([...LIGHTINGS].sort());
+  });
+
+  it('reads its own name out on focus, not only on hover', () => {
+    // An icon-only control whose name lives in a native `title` is unreadable to
+    // anyone tabbing through — `title` never appears on keyboard focus. So the
+    // tooltip has to be ours, and it has to open on focus as well as on hover.
+    // Both are single properties that read as harmless to delete, which is why
+    // they are pinned here rather than trusted.
+    expect(PICKER, 'the picker should use ui/Tooltip, not a native title').toMatch(
+      /import \{ Tooltip \} from '@\/components\/ui\/Tooltip'/,
+    );
+    expect(TOOLTIP, 'Tooltip must open on focus').toMatch(/onFocus=\{open\}/);
+    expect(TOOLTIP, 'Tooltip must close on blur').toMatch(/onBlur=\{close\}/);
+    // `position: fixed`, because every consumer sits in `.rail`, which is
+    // `overflow: hidden` — an absolutely-positioned bubble is clipped at the
+    // rail's edge, the failure `Select.tsx` and `RoomTools.tsx` both hit.
+    expect(TOOLTIP).toMatch(/position: 'fixed'/);
   });
 
   it('makes every mood exactly one of a studio look or a sun angle', () => {
@@ -72,10 +97,15 @@ describe('the lighting moods', () => {
     // authored at, say, `elevationDeg: 0` for "just on the horizon" would ship a
     // mood with no key light: selectable, plausible-looking, and doing nothing.
     //
-    // Three studio looks, four sun angles. The count is asserted so that deleting
-    // the sun moods entirely cannot make this pass by leaving nothing to check —
-    // the failure mode of every "for each of the things I found" test.
-    expect(suns).toHaveLength(4);
+    // Two studio looks (Evening, Cool), three sun angles (Day, Sunrise, Sunset).
+    // The count is asserted so that deleting the sun moods entirely cannot make
+    // this pass by leaving nothing to check — the failure mode of every "for each
+    // of the things I found" test.
+    //
+    // It was four. `Day` and `Noon` were merged (two names for bright overhead
+    // light, and the survivor is the sun because a direction is the point), as
+    // were `Golden` and `Sunset`. So `day` is a sun angle now, not a studio look.
+    expect(suns).toHaveLength(3);
 
     for (const [name, { azimuthDeg, elevationDeg }] of suns) {
       expect(

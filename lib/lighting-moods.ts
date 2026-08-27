@@ -66,13 +66,21 @@ export type Mood = {
 );
 
 export const LIGHTING: Record<Lighting, Mood> = {
+  // Day IS the overhead sun. It was a studio look with a fixed three-quarter key
+  // beside a separate `Noon` sun angle, which is two names for bright daylight —
+  // so they are one mood, and the surviving one is the sun, because a direction
+  // is the whole reason to look at a room in daylight. Warm `bg` and `env` kept
+  // from the studio version (this is the default mood, and it should agree with
+  // `--paper`); the ambient LEVELS come down to the sun rows' range, because the
+  // key light is a real sun here and an ambient generous enough to be flattering
+  // fills the shadow you were trying to look at.
   day: {
     bg: '#FBF8F2',
-    hemi: ['#ffffff', '#cfc7b6', 0.85] as [string, string, number],
-    key: { color: '#fff4e2', intensity: 1.1 },
-    fill: { color: '#dfe7ff', intensity: 0.25 },
+    hemi: ['#ffffff', '#cfc7b6', 0.4] as [string, string, number],
+    sun: { azimuthDeg: 180, elevationDeg: 58 },
+    fill: { color: '#dfe7ff', intensity: 0.15 },
     env: ['#fffaf0', '#eef3ff', '#fff3e0'] as [string, string, string],
-    envMul: 1,
+    envMul: 0.7,
     exposure: 1.0,
   },
   evening: {
@@ -97,19 +105,18 @@ export const LIGHTING: Record<Lighting, Mood> = {
     envMul: 1,
     exposure: 0.95,
   },
-  // ── The four sun angles ────────────────────────────────────────────────────
+  // ── The low sun, either end of the day ─────────────────────────────────────
   //
   // Their ambient terms are the SKY, not the sun: anything they contribute is
-  // light the sun is not responsible for, which is why they all sit lower than
-  // 'day'. The point of these moods is to see exactly where the sun does and
-  // does not reach, and an ambient term generous enough to be flattering is an
-  // ambient term that fills the shadow you were trying to look at.
+  // light the sun is not responsible for, which is why they sit lower still than
+  // `day`. The point of these moods is to see exactly where the sun does and
+  // does not reach.
   //
   // The angles are a temperate mid-latitude, which is a stated choice rather
   // than a guess dressed as a fact: they are not offered as this room's real
-  // sun, and nothing in the UI claims a date or a place. What they are is four
-  // usefully different directions with four usefully different heights — which
-  // is the entire question someone arranging furniture asks of the sun.
+  // sun, and nothing in the UI claims a date or a place. What they are is three
+  // usefully different directions at two usefully different heights — which is
+  // the entire question someone arranging furniture asks of the sun.
   sunrise: {
     bg: '#F3E9E2',
     hemi: ['#ffd9be', '#8f7f70', 0.3] as [string, string, number],
@@ -119,31 +126,21 @@ export const LIGHTING: Record<Lighting, Mood> = {
     envMul: 0.55,
     exposure: 1.05,
   },
-  noon: {
-    bg: '#EDF1F5',
-    hemi: ['#cfe0f5', '#b8ad98', 0.35] as [string, string, number],
-    sun: { azimuthDeg: 180, elevationDeg: 58 },
-    fill: { color: '#cfe0f5', intensity: 0.12 },
-    env: ['#eef5ff', '#e6eefb', '#f6f1e6'] as [string, string, string],
-    envMul: 0.7,
-    exposure: 1.0,
-  },
-  golden: {
-    bg: '#F5E7D5',
-    hemi: ['#ffdfae', '#94826b', 0.28] as [string, string, number],
-    sun: { azimuthDeg: 252, elevationDeg: 14 },
-    fill: { color: '#c2c9e2', intensity: 0.1 },
-    env: ['#ffeacc', '#f6dcc0', '#ece2d6'] as [string, string, string],
-    envMul: 0.6,
-    exposure: 1.05,
-  },
+  // `Golden` and `Sunset` were two names for low western light, so they are one
+  // mood. The angle is neither of the originals and is not a midpoint dressed as
+  // one: Golden's 14° was high enough to read as late afternoon rather than
+  // sunset, and Sunset's 2° put the sun so close to the horizon that
+  // `daylightKelvin` gave 2657 K and the shadows ran the length of the room. 8°
+  // at 272° is a low western sun that still lights the far wall — the picture the
+  // pair was reaching for from either side. Ambient kept from Golden, whose
+  // warmth was the better half of the two.
   sunset: {
-    bg: '#E9DAD2',
-    hemi: ['#ffc79b', '#7d6c60', 0.24] as [string, string, number],
-    sun: { azimuthDeg: 285, elevationDeg: 2 },
-    fill: { color: '#a9b3cc', intensity: 0.09 },
-    env: ['#ffdcbb', '#efcbb4', '#ded4cf'] as [string, string, string],
-    envMul: 0.5,
-    exposure: 1.1,
+    bg: '#F0DFCE',
+    hemi: ['#ffd6a4', '#8a7867', 0.26] as [string, string, number],
+    sun: { azimuthDeg: 272, elevationDeg: 8 },
+    fill: { color: '#b6bfd7', intensity: 0.1 },
+    env: ['#ffe6c4', '#f3d4ba', '#e5dbd3'] as [string, string, string],
+    envMul: 0.55,
+    exposure: 1.08,
   },
 };

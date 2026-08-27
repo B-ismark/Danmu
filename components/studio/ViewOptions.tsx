@@ -8,8 +8,17 @@
 // from the other display toggle), and a "Re-scan room" link that duplicated a
 // control belonging elsewhere, because it is about what is IN the room rather
 // than how it is lit. (That control now lives in the rail's Room section; this
-// panel is not it.) Three groups, in the order someone reaches for them:
-// Lighting, Display, Quality.
+// panel is not it.) Two groups, in the order someone reaches for them: Display,
+// Quality.
+//
+// **Lighting has left.** It is in the Style section now, as `LightingPicker`.
+// Style already held the one-tap theme chips, and a theme SETS a lighting mood
+// (`lib/themes.ts`) — so the two controls were one question ("how should this
+// room look?") asked in two different drawers, and the answer to one silently
+// moved the other. What is left here is genuinely about the VIEW rather than the
+// room: whether the grid and the props are drawn, and how hard the renderer
+// works. Nothing in this file changes what a screenshot of the room would show
+// to someone else.
 //
 // It is now the body of the rail's "View" section, and NOT a popover. That was
 // half-finished for a while: the header claimed it "no longer positions
@@ -31,48 +40,17 @@
 // avoiding. Even at 300px the Lighting set was broken: `stretch` split 272px of
 // content four ways, so "Evening" got 68px for 82px of word, and a segment with
 // no `overflow` of its own does not clip — it prints over the segments either
-// side. In a ~200px rail one row is hopeless, so it passes `wrap` instead, which
-// is as many across as fit and however many rows that takes.
-//
-// The set is seven now, not four — three studio looks plus four sun angles,
-// which is what replaced the old "Sun" mood and the panel of latitude,
-// longitude, date and clock fields that hung below it. Nothing about the
-// reflow changed: `wrap` was already the answer to "the labels want more room
-// than the rail has", and it does not care how many labels there are.
+// side. That control has moved, but the lesson belongs to whatever goes in a rail
+// next: `stretch` divides one row evenly and only helps while the row is wide
+// enough for every label, so a set of words in a rail wants `wrap`. The Quality
+// pair below is still `stretch`, and correctly — two five-letter words fit any
+// width this app runs at.
 
 import { type ReactNode } from 'react';
-import { useStudio, LIGHTINGS, type Lighting } from '@/lib/store';
-import { type IconName } from '@/components/ui/Icon';
+import { useStudio } from '@/lib/store';
 import { Segmented, Toggle } from '@/components/ui/primitives';
 
-// Lucide, not emoji. The emoji versions rendered in the system's colour font —
-// a red sun and a yellow moon in a panel that is otherwise warm neutrals — at
-// sizes and baselines nothing here controls. They also lived inside the label
-// string, so the space between glyph and word was a line-break opportunity and
-// every segment wrapped onto two lines inside a 30px-tall control.
-// A `Record` keyed by the union, not a hand-kept array: it is what makes a mood
-// added to `LIGHTINGS` a compile error here rather than a mood with no way to
-// reach it. The order comes from `LIGHTINGS` itself for the same reason — three
-// studio looks, then the four sun angles, low to high and round the room.
-const MOODS: Record<Lighting, { label: string; icon: IconName }> = {
-  day: { label: 'Day', icon: 'sun' },
-  evening: { label: 'Evening', icon: 'moon' },
-  cool: { label: 'Cool', icon: 'cloud' },
-  // The four below are sun angles rather than looks — each a fixed azimuth and
-  // elevation in `Room`'s mood table. They replaced a single "Sun" mood that
-  // wanted a latitude, a longitude, a date and a clock first, and then answered
-  // with a solar position nobody in the room could check. These are the four
-  // moments that apparatus was for: which wall the light comes through is still
-  // the room's own bearing, on the dial in the Room section.
-  sunrise: { label: 'Sunrise', icon: 'sunrise' },
-  noon: { label: 'Noon', icon: 'sun-medium' },
-  golden: { label: 'Golden', icon: 'sun-dim' },
-  sunset: { label: 'Sunset', icon: 'sunset' },
-};
-
 export function ViewOptions() {
-  const lighting = useStudio((s) => s.lighting);
-  const setLighting = useStudio((s) => s.setLighting);
   const dressed = useStudio((s) => s.dressed);
   const toggleDressed = useStudio((s) => s.toggleDressed);
   const showGrid = useStudio((s) => s.showGrid);
@@ -86,23 +64,6 @@ export function ViewOptions() {
     // No width and no min-width: the section it sits in is the one that decides
     // how much room there is, and every control below is happy to be told.
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
-      <Group label="Lighting">
-        <Segmented
-          ariaLabel="Lighting"
-          // Order from `LIGHTINGS`, labels from `MOODS`. Mapping over the
-          // vocabulary rather than over a list of its own is what keeps this
-          // control from silently offering six of seven moods.
-          options={LIGHTINGS.map((id) => ({ value: id, label: MOODS[id].label, icon: MOODS[id].icon }))}
-          value={lighting}
-          onChange={setLighting}
-          wrap
-          // "Evening" and "Sunrise" tie as the widest label; below this the grid
-          // drops a column rather than clipping one.
-          minItem={88}
-        />
-      </Group>
-
-      <div style={{ height: 1, background: 'var(--hairline)' }} />
 
       <Group label="Display">
         <SwitchRow

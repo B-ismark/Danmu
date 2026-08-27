@@ -13,10 +13,13 @@ import { RoomDimsEditor } from './RoomDimsEditor';
 import { RailSection } from './RailSection';
 import { RoomTools } from './RoomTools';
 import { NorthDial } from './NorthDial';
+import { LightingPicker } from './LightingPicker';
 import { ViewOptions } from './ViewOptions';
 import { AddPiecesButton } from './CatalogPanel';
 import { duplicateSelection, removeParts } from './KeyboardShortcuts';
 import { THEMES, themeColorFor, type Theme } from '@/lib/themes';
+import { groupRows, type TreeRow } from '@/lib/part-rows';
+import type { ScenePart } from '@/lib/scene-spec';
 
 // This rail is the accessible twin of the 3D canvas. A WebGL canvas exposes
 // nothing to assistive tech — no children, no roles, no focus — so a piece that
@@ -38,6 +41,7 @@ import { THEMES, themeColorFor, type Theme } from '@/lib/themes';
 export function PartTree() {
   const parts = useScene((s) => s.parts);
   const room = useScene((s) => s.room);
+  const ungroupParts = useScene((s) => s.ungroupParts);
   const selectedId = useStudio((s) => s.selectedPartId);
   const selection = useStudio((s) => s.selection);
   const setSelected = useStudio((s) => s.setSelected);
@@ -72,6 +76,30 @@ export function PartTree() {
     ? parts.filter((p) => p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q))
     : parts;
   const generics = parts.filter((p) => p.shape === 'box');
+
+  // Merged sets, drawn as such. A group is only a shared `groupId` on each
+  // member — there is no node in the scene and no ordering — so until now the
+  // rail showed three merged chairs exactly as it showed three loose ones, and
+  // the only tell that they moved together was watching them do it. `groupRows`
+  // derives the nesting at read time; see `lib/part-rows.ts` for the three rules
+  // it keeps.
+  //
+  // Collapse is local and unpersisted, for the same reason the open sections are
+  // (above): which drawer you left shut is not a property of the room. Keyed by
+  // `groupId`, so a group that loses its last member simply stops being asked
+  // about.
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+  const rows = useMemo(() => {
+    const all = groupRows(visibleParts, parts);
+    if (collapsed.size === 0) return all;
+    return all.filter((r) => !(r.kind === 'part' && r.gid && collapsed.has(r.gid)));
+  }, [visibleParts, parts, collapsed]);
+  const toggleGroup = (gid: string) =>
+    setCollapsed((s) => {
+      const next = new Set(s);
+      if (!next.delete(gid)) next.add(gid);
+      return next;
+    });
 
   // Which chip reads as "on" is DERIVED from the scene, never remembered. A
   // theme is one undoable gesture (colours *and* lighting are both in the
@@ -134,50 +162,66 @@ export function PartTree() {
   }
 
   /** Move DOM focus to a row. The target row is already in the DOM, so focus can
-   *  move before React re-renders the roving tabindex. */
-  function focusRow(id: string) {
-    listRef.current?.querySelector<HTMLElement>(`[data-part-id="${id}"]`)?.focus();
+   *  move before React re-renders the roving tabindex.
+   *
+   *  Keyed by the ROW key, not a part id: a group header is a row you can land
+   *  on and it has no part of its own. `lib/part-rows.ts` prefixes those keys so
+   *  the two namespaces cannot collide. */
+  function focusRow(key: string) {
+    listRef.current?.querySelector<HTMLElement>(`[data-row-key="${key}"]`)?.focus();
+  }
+
+  /** Select what a row stands for: one piece, or every visible member of a group.
+   *  Both go through the same call so nothing downstream has to ask which kind of
+   *  row was pressed. */
+  function selectRow(row: TreeRow<ScenePart>) {
+    if (row.ids.length === 1) setSelected(row.ids[0]);
+    else setSelection(row.ids, row.ids[0]);
+    anchorRef.current = row.key;
   }
 
   function navigate(from: number, to: 'prev' | 'next' | 'first' | 'last', extend = false) {
-    const last = visibleParts.length - 1;
+    const last = rows.length - 1;
     if (last < 0) return;
     const i =
       to === 'first' ? 0
       : to === 'last' ? last
       : Math.min(last, Math.max(0, from + (to === 'next' ? 1 : -1)));
-    const part = visibleParts[i];
-    if (!part) return;
+    const row = rows[i];
+    if (!row) return;
     // Shift+Arrow grows the range rather than moving a single selection — the
     // keyboard half of Shift-click, which the ARIA listbox pattern expects. This
     // rail exists BECAUSE the canvas is opaque to assistive tech, so a
     // mouse-only multi-select here would defeat the point of it.
-    if (extend) selectRange(part.id);
-    else {
-      // Selection follows focus, so arrowing down the list also walks the
-      // highlight through the 3D scene — the point of the whole rail.
-      setSelected(part.id);
-      anchorRef.current = part.id;
-    }
-    focusRow(part.id);
+    if (extend) selectRange(row.key);
+    // Selection follows focus, so arrowing down the list also walks the
+    // highlight through the 3D scene — the point of the whole rail.
+    else selectRow(row);
+    focusRow(row.key);
   }
 
-  /** Everything between the anchor and `id`, inclusive. Measured over the rows the
-   *  user can SEE: this list is searchable, and a range computed over every part in
-   *  the room would quietly take in pieces the filter is hiding. */
-  function selectRange(id: string) {
-    const from = visibleParts.findIndex((p) => p.id === anchorRef.current);
-    const to = visibleParts.findIndex((p) => p.id === id);
+  /** Everything between the anchor and `key`, inclusive. Measured over the rows the
+   *  user can SEE: this list is searchable and its groups fold, and a range
+   *  computed over every part in the room would quietly take in pieces neither
+   *  the filter nor the fold is showing.
+   *
+   *  Unioning each row's `ids` is what makes a folded group behave like the one
+   *  row it looks like — its members are not rows, so nothing else would pick
+   *  them up — while an unfolded one contributes nothing extra, because its
+   *  member rows are already in the slice. The Set is what makes those two cases
+   *  one line instead of a branch. */
+  function selectRange(key: string) {
+    const from = rows.findIndex((r) => r.key === anchorRef.current);
+    const to = rows.findIndex((r) => r.key === key);
     if (to < 0) return;
     // No anchor, or one the filter has hidden: there is no range to take, so this
     // press behaves as a plain click and becomes the new anchor.
     if (from < 0) {
-      setSelected(id);
-      anchorRef.current = id;
+      selectRow(rows[to]);
       return;
     }
-    const ids = visibleParts.slice(Math.min(from, to), Math.max(from, to) + 1).map((p) => p.id);
-    setSelection(ids, id);
+    const span = rows.slice(Math.min(from, to), Math.max(from, to) + 1);
+    setSelection([...new Set(span.flatMap((r) => r.ids))], rows[to].ids[0] ?? null);
   }
 
   /**
@@ -194,33 +238,71 @@ export function PartTree() {
    * every file manager, so per-row toggling moves to Ctrl+Space — which the
    * listbox pattern requires regardless.
    */
-  function pickRow(e: React.MouseEvent, id: string) {
+  function pickRow(e: React.MouseEvent, row: TreeRow<ScenePart>) {
     if (e.metaKey || e.ctrlKey) {
-      duplicateSelection([id]);
+      duplicateSelection(row.ids);
       return;
     }
     if (e.shiftKey) {
-      selectRange(id);
+      selectRange(row.key);
       return;
     }
-    setSelected(id);
-    anchorRef.current = id;
+    selectRow(row);
   }
 
   // No confirm: `removeParts` is the single delete path and it offers Undo in a
   // toast instead of asking first (see KeyboardShortcuts).
-  function removePart(index: number, id: string) {
-    const neighbour = visibleParts[index + 1] ?? visibleParts[index - 1] ?? null;
-    removeParts([id], selectedId === id ? { selectAfter: neighbour?.id ?? null } : undefined);
+  function removeRow(index: number, ids: string[]) {
+    // The neighbour has to be a row that SURVIVES. Taking `rows[index + 1]`
+    // outright was fine while every row was one piece; a group header's next row
+    // is its own first member, so deleting a merged set would have parked focus
+    // on a row that left the DOM with it.
+    const gone = new Set(ids);
+    const alive = (r: TreeRow<ScenePart>) => r.ids.some((id) => !gone.has(id));
+    const neighbour =
+      rows.slice(index + 1).find(alive) ??
+      rows.slice(0, index).reverse().find(alive) ??
+      null;
+    removeParts(
+      ids,
+      selectedId && gone.has(selectedId)
+        ? { selectAfter: neighbour?.ids.find((id) => !gone.has(id)) ?? null }
+        : undefined,
+    );
     // Keep the keyboard's place: the row that had focus just left the DOM. Wait
     // a frame so this lands after React drops it.
-    if (neighbour) requestAnimationFrame(() => focusRow(neighbour.id));
+    if (neighbour) requestAnimationFrame(() => focusRow(neighbour.key));
   }
 
   // The tab stop sits on the selected row (first row when nothing is selected):
   // one stop for the whole list, arrows to move inside it.
-  const selIndex = visibleParts.findIndex((p) => p.id === selectedId);
-  const tabStop = selIndex >= 0 ? selIndex : 0;
+  //
+  // A group whose members are ALL selected claims the stop ahead of any one of
+  // them, because that is the row whose `aria-selected` is true — clicking a
+  // merged piece in the 3D scene selects the whole set (see `Pickable`), and the
+  // tab stop should land where the highlight is, not one row inside it.
+  //
+  // "All selected" is measured against the ROOM, not against the rows on screen.
+  // `Pickable` selects every member; a search showing one of three would make an
+  // exact match against the visible ids fail, and the header would read
+  // unselected directly above a member that reads selected.
+  const groupSelected = (gid: string) =>
+    selection.length > 0 && parts.every((p) => p.groupId !== gid || selection.includes(p.id));
+  const tabStop = useMemo(() => {
+    const primaryGroup = parts.find((p) => p.id === selectedId)?.groupId;
+    // Inlined rather than reusing `groupSelected` above: that closure is rebuilt
+    // every render, so depending on it would make this memo never hit — and
+    // silencing the lint rule instead of fixing the dependency is how a memo
+    // quietly stops being one.
+    const whole =
+      !!primaryGroup &&
+      selection.length > 0 &&
+      parts.every((p) => p.groupId !== primaryGroup || selection.includes(p.id));
+    const g = whole ? rows.findIndex((r) => r.kind === 'group' && r.gid === primaryGroup) : -1;
+    if (g >= 0) return g;
+    const p = rows.findIndex((r) => r.kind === 'part' && r.part.id === selectedId);
+    return p >= 0 ? p : 0;
+  }, [rows, parts, selection, selectedId]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', height: '100%' }}>
@@ -233,7 +315,13 @@ export function PartTree() {
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
         <RailSection
           title="Room"
-          meta={<span className="mono">{(room.width / 1000).toFixed(1)}×{(room.depth / 1000).toFixed(1)}m</span>}
+          // NOT `/ 1000`. `RoomShape.width` is METRES (see `lib/scene-store.ts`),
+          // so the divide rendered every room as `0.0×0.0m` — a 7.5 m room reported
+          // as 0.0. It read as plausible chrome rather than as a bug, which is what
+          // rule 2 means by a displayed measurement having to be derived: the number
+          // beside the fields disagreed with the fields and neither was labelled
+          // with its unit.
+          meta={<span className="mono">{room.width.toFixed(1)}×{room.depth.toFixed(1)}m</span>}
           open={sec.room}
           onToggle={() => toggle('room')}
         >
@@ -340,6 +428,16 @@ export function PartTree() {
           </div>
         </div>
 
+        {/* Lighting joins the themes rather than sitting in View, because a theme
+            SETS a mood (`applyTheme` calls `setLighting`) — so the two were one
+            question in two drawers, and picking a theme silently moved a control
+            the user could not see. Same construction as the swatch row above: one
+            line of 32px targets, no words, name on hover and on focus. */}
+        <div style={{ marginTop: 12 }}>
+          <span id="lighting-label" className="ds-label" style={{ display: 'block', marginBottom: 8 }}>Lighting</span>
+          <LightingPicker />
+        </div>
+
         {generics.length > 0 && (
           <div style={{ marginTop: 10, padding: '10px 12px', border: '1px solid var(--accent-text)', background: 'var(--accent-tint)', borderRadius: 'var(--r-2)' }}>
             {/* --accent-text, not --accent: accent as 11px type on its own tint
@@ -414,27 +512,56 @@ export function PartTree() {
             )}
           </div>
         )}
-        {visibleParts.map((part, i) => (
-          <PartRow
-            key={part.id}
-            partId={part.id}
-            name={part.name}
-            category={part.category}
-            locked={part.locked}
-            selected={selection.includes(part.id)}
-            tabbable={i === tabStop}
-            onSelect={(e) => pickRow(e, part.id)}
-            onToggleSelect={() => toggleInSelection(part.id)}
-            onFrame={() => {
-              setSelected(part.id);
-              anchorRef.current = part.id;
-              frameSelected();
-            }}
-            onNavigate={(to, extend) => navigate(i, to, extend)}
-            onToggleHidden={() => useStudio.getState().toggleHidden(part.id)}
-            onDelete={() => removePart(i, part.id)}
-          />
-        ))}
+        {rows.map((row, i) =>
+          row.kind === 'group' ? (
+            <GroupRow
+              key={row.key}
+              rowKey={row.key}
+              shown={row.ids.length}
+              total={row.total}
+              collapsed={collapsed.has(row.gid)}
+              selected={groupSelected(row.gid)}
+              tabbable={i === tabStop}
+              onSelect={(e) => pickRow(e, row)}
+              onToggleCollapsed={() => toggleGroup(row.gid)}
+              onNavigate={(to, extend) => navigate(i, to, extend)}
+              onFrame={() => {
+                selectRow(row);
+                frameSelected();
+              }}
+              onUngroup={() => {
+                // Every member, not only the visible ones — a search that hid two
+                // of three chairs must not leave those two merged to each other.
+                ungroupParts(parts.filter((p) => p.groupId === row.gid).map((p) => p.id));
+                setSelection(row.ids, row.ids[0] ?? null);
+              }}
+              onDelete={() => removeRow(i, row.ids)}
+            />
+          ) : (
+            <PartRow
+              key={row.key}
+              rowKey={row.key}
+              partId={row.part.id}
+              name={row.part.name}
+              category={row.part.category}
+              locked={row.part.locked}
+              inGroup={!!row.gid}
+              lastOfGroup={!!row.lastOfGroup}
+              selected={selection.includes(row.part.id)}
+              tabbable={i === tabStop}
+              onSelect={(e) => pickRow(e, row)}
+              onToggleSelect={() => toggleInSelection(row.part.id)}
+              onFrame={() => {
+                setSelected(row.part.id);
+                anchorRef.current = row.key;
+                frameSelected();
+              }}
+              onNavigate={(to, extend) => navigate(i, to, extend)}
+              onToggleHidden={() => useStudio.getState().toggleHidden(row.part.id)}
+              onDelete={() => removeRow(i, row.ids)}
+            />
+          ),
+        )}
         </div>
         </RailSection>
       </div>
@@ -469,11 +596,55 @@ export function PartTree() {
   );
 }
 
+/** The ├ / └ before a group member. Two absolutely-positioned rules rather than a
+ *  border on the row, because `.list-row.is-selected` already spends the row's
+ *  `box-shadow` and its `border` on the selected ring — a third boundary there
+ *  would either fight it or disappear under it. `--hairline-strong`, since this
+ *  is a decorative connector and not the edge of anything interactive. */
+function Connector({ last }: { last: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{ position: 'relative', width: 11, alignSelf: 'stretch', flexShrink: 0 }}
+    >
+      <span
+        style={{
+          position: 'absolute',
+          left: 4,
+          // `.list` puts a 2px gap between rows, so a stem drawn inside the row
+          // box would break every 37px and read as a dotted line. The row has no
+          // `overflow`, so the stem simply reaches across the gap instead — no
+          // negative margins, no change to how the list stacks.
+          top: -2,
+          // A last member's stem stops at the elbow; every other member's runs
+          // past the bottom so the spine is continuous down the group.
+          bottom: last ? '50%' : -2,
+          width: 1,
+          background: 'var(--hairline-strong)',
+        }}
+      />
+      <span
+        style={{
+          position: 'absolute',
+          left: 4,
+          top: '50%',
+          width: 6,
+          height: 1,
+          background: 'var(--hairline-strong)',
+        }}
+      />
+    </span>
+  );
+}
+
 function PartRow({
+  rowKey,
   partId,
   name,
   category,
   locked,
+  inGroup,
+  lastOfGroup,
   selected,
   tabbable,
   onSelect,
@@ -483,10 +654,14 @@ function PartRow({
   onToggleHidden,
   onDelete,
 }: {
+  rowKey: string;
   partId: string;
   name: string;
   category: string;
   locked: boolean;
+  /** a member of a merged set — indented under its group header */
+  inGroup: boolean;
+  lastOfGroup: boolean;
   selected: boolean;
   /** roving tabindex: exactly one row in the list is a tab stop */
   tabbable: boolean;
@@ -550,18 +725,24 @@ function PartRow({
   return (
     <div
       ref={ref}
+      data-row-key={rowKey}
       data-part-id={partId}
       role="option"
       aria-selected={selected}
       // Explicit name: without it the row's name is computed from its contents,
       // which would swallow the nested buttons' labels ("Sofa Hide Remove").
-      aria-label={`${name}${locked ? ', from your photo' : ''}${isHidden ? ', hidden' : ''}`}
+      //
+      // Membership is spoken, not just drawn. The indent and the connector say
+      // "merged" to a sighted user; nothing in a flat listbox says it otherwise,
+      // and this is the one fact that changes what dragging the piece will do.
+      aria-label={`${name}${inGroup ? ', merged' : ''}${locked ? ', from your photo' : ''}${isHidden ? ', hidden' : ''}`}
       tabIndex={tabbable ? 0 : -1}
       className={`list-row${selected ? ' is-selected' : ''}`}
-      title={`${name} · ${category}${isHidden ? ' · hidden' : ''}${locked ? ' · from your photo' : ''}`}
+      title={`${name} · ${category}${inGroup ? ' · merged' : ''}${isHidden ? ' · hidden' : ''}${locked ? ' · from your photo' : ''}`}
       onClick={onSelect}
       onKeyDown={onKeyDown}
     >
+      {inGroup && <Connector last={lastOfGroup} />}
       {/* Status glyph. Shape, not just hue: a camera reads as "came out of your
           photo" even where the aubergine and the clay look the same. A padlock sat
           here and said the wrong thing — see ScenePart.locked. */}
@@ -604,6 +785,148 @@ function PartRow({
         icon="trash"
         label={`Remove ${name}`}
         title="Remove (Del)"
+        tone="danger"
+        className="row-action"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete();
+        }}
+        size={24}
+        iconSize={12}
+      />
+    </div>
+  );
+}
+
+/**
+ * The header of a merged set.
+ *
+ * It is an `option` like every other row, not a heading with a button in it:
+ * a listbox may only own options, and this row is genuinely selectable —
+ * pressing it takes the whole group, which is the gesture the 3D canvas already
+ * performs on a click (see `Pickable`) and which the rail otherwise had no way
+ * to reach. Selecting one MEMBER is the thing the rail adds, and it is the row
+ * below.
+ *
+ * `aria-expanded` carries the fold, and Left/Right work it — the tree keys, which
+ * a listbox leaves free. There is no `treeitem` here on purpose: making this a
+ * real tree would mean re-roling every row, and the nesting is exactly one level
+ * deep and cannot become two (a `groupId` is a flat string).
+ */
+function GroupRow({
+  rowKey,
+  shown,
+  total,
+  collapsed,
+  selected,
+  tabbable,
+  onSelect,
+  onToggleCollapsed,
+  onNavigate,
+  onFrame,
+  onUngroup,
+  onDelete,
+}: {
+  rowKey: string;
+  /** members the filter is showing */
+  shown: number;
+  /** members in the room */
+  total: number;
+  collapsed: boolean;
+  selected: boolean;
+  tabbable: boolean;
+  onSelect: (e: React.MouseEvent) => void;
+  onToggleCollapsed: () => void;
+  onNavigate: (to: 'prev' | 'next' | 'first' | 'last', extend?: boolean) => void;
+  onFrame: () => void;
+  onUngroup: () => void;
+  onDelete: () => void;
+}) {
+  // Say what is hidden rather than just showing a smaller number. A search that
+  // matches one of three merged chairs must not make the set look like a pair —
+  // the two it is hiding still move when this one is dragged.
+  const count = shown < total ? `${shown} of ${total}` : `${total}`;
+  const name = `Merged group, ${total} piece${total === 1 ? '' : 's'}${shown < total ? `, ${shown} shown` : ''}`;
+
+  function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    const mine = () => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    const onRow = e.target === e.currentTarget;
+    switch (e.key) {
+      case 'ArrowDown': mine(); onNavigate('next', e.shiftKey); break;
+      case 'ArrowUp': mine(); onNavigate('prev', e.shiftKey); break;
+      case 'Home': mine(); onNavigate('first'); break;
+      case 'End': mine(); onNavigate('last'); break;
+      // Right opens, Left closes — and Left on an already-closed group does
+      // nothing rather than jumping somewhere, because there is no parent to
+      // jump to at one level of nesting.
+      case 'ArrowRight': if (onRow && collapsed) { mine(); onToggleCollapsed(); } break;
+      case 'ArrowLeft': if (onRow && !collapsed) { mine(); onToggleCollapsed(); } break;
+      case 'Enter':
+      case ' ': if (onRow) { mine(); onFrame(); } break;
+      case 'Delete':
+      case 'Backspace': if (onRow) { mine(); onDelete(); } break;
+    }
+  }
+
+  return (
+    <div
+      data-row-key={rowKey}
+      role="option"
+      aria-selected={selected}
+      aria-label={name}
+      tabIndex={tabbable ? 0 : -1}
+      className={`list-row${selected ? ' is-selected' : ''}`}
+      title={`${name} — one press takes the whole set`}
+      onClick={onSelect}
+      onKeyDown={onKeyDown}
+    >
+      {/* The chevron is a real button so a pointer user can fold without
+          selecting; the keyboard reaches the same thing through Left/Right on
+          the row, which is why this one is not a tab stop of its own. */}
+      <IconButton
+        icon={collapsed ? 'chevron-right' : 'chevron-down'}
+        label={collapsed ? `Show the ${total} pieces in this group` : 'Fold this group away'}
+        // On the chevron and not on the row: ARIA 1.2 dropped `aria-expanded`
+        // from `role="option"`, and the button is what performs the disclosure
+        // anyway. Left/Right on the row work the same toggle.
+        expanded={!collapsed}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleCollapsed();
+        }}
+        size={20}
+        iconSize={12}
+      />
+      {/* `.ds-label`, not the row's own 12px/500: this is a heading for the rows
+          beneath it and should not read as another piece of furniture. The chevron
+          and the connectors below carry the rest of the identity — a `layers`
+          glyph as well would have cost 20px of a label budget that is only ~46px
+          in the 1024–1279px rail, and pushed the word itself to "Grou…". */}
+      <span
+        className="ds-label"
+        style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+      >
+        Group · {count}
+      </span>
+      <IconButton
+        icon="swap"
+        label={`Ungroup these ${total} pieces`}
+        title="Ungroup — they stay where they are"
+        className="row-action"
+        onClick={(e) => {
+          e.stopPropagation();
+          onUngroup();
+        }}
+        size={24}
+        iconSize={12}
+      />
+      <IconButton
+        icon="trash"
+        label={`Remove these ${total} pieces`}
+        title="Remove the whole group (Del)"
         tone="danger"
         className="row-action"
         onClick={(e) => {

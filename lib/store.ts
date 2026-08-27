@@ -15,15 +15,21 @@ type ViewPreset = 'free' | 'front' | 'top' | 'iso';
  *  vocabulary at runtime (see `merge` at the bottom of this store), and a union
  *  beside a hand-kept list drifts in the direction nobody notices.
  *
- *  The last four are sun angles rather than studio looks: `LIGHTING` in
- *  `lib/lighting-moods.ts` gives each an azimuth and an elevation, and the key
- *  light's direction, colour and strength are derived from those two numbers.
- *  (That table is a `lib/` module rather than part of the 3D scene because the
- *  north dial reads the same rows to draw the sun on its rim.) There used to be a
- *  single 'sun' mood driven by a latitude, a longitude, a date and a clock —
- *  four facts the user could not verify from inside a room they were arranging
- *  furniture in. These are the four moments that apparatus existed to reach. */
-export const LIGHTINGS = ['day', 'evening', 'cool', 'sunrise', 'noon', 'golden', 'sunset'] as const;
+ *  Three of the five are sun angles: `LIGHTING` in `lib/lighting-moods.ts` gives
+ *  each an azimuth and an elevation, and the key light's direction, colour and
+ *  strength are derived from those two numbers. (That table is a `lib/` module
+ *  rather than part of the 3D scene because the north dial reads the same rows to
+ *  draw the sun on its rim.) There used to be a single 'sun' mood driven by a
+ *  latitude, a longitude, a date and a clock — four facts the user could not
+ *  verify from inside a room they were arranging furniture in.
+ *
+ *  It replaced that with seven, which was too many in the other direction: `Day`
+ *  and `Noon` were two names for bright overhead light, and `Golden` and `Sunset`
+ *  two for low western light. Each pair is now one mood. `day` and `sunset` kept
+ *  their ids so the merge costs nobody their stored preference; `noon` and
+ *  `golden` are gone, and the `merge` below is what stops a browser holding
+ *  either of them from indexing a row that no longer exists. */
+export const LIGHTINGS = ['day', 'evening', 'cool', 'sunrise', 'sunset'] as const;
 export type Lighting = (typeof LIGHTINGS)[number];
 /** Render quality — 'high' enables soft cast shadows, ambient occlusion and
  *  per-part procedural material maps. */

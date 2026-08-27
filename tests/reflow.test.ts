@@ -15,10 +15,31 @@
 // each is a single property that reads as harmless to delete.
 
 import { describe, expect, it } from 'vitest';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { LIGHTINGS } from '@/lib/store';
 
 const root = (...p: string[]) => join(process.cwd(), ...p);
+
+/** A source file with its line endings normalised to `\n`.
+ *
+ *  `core.autocrlf` is on here, so a file that came out of a checkout has CRLF
+ *  endings while one just written by hand has LF — and a regex anchored across a
+ *  line break (`,\n\s+height:`) matches the second and not the first. **The
+ *  dangerous half is that it is invisible on CI**, which checks out on Linux and
+ *  gets LF: the gate stays green while every Windows clone fails, and the two
+ *  assertions this bit were passing only because the file they read had never
+ *  been through git. Anything below that spans a line break reads through here. */
+const readSrc = (...p: string[]) => readFileSync(root(...p), 'utf8').replace(/\r\n/g, '\n');
+
+/** Every file under `dir`, recursively. Needed because one assertion below is
+ *  about the ABSENCE of a call site, and "nothing passes this prop" cannot be
+ *  checked by reading the files you already thought of. */
+function walk(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)],
+  );
+}
 const CSS = readFileSync(root('app', 'globals.css'), 'utf8');
 
 /** A source file with its comments removed — CSS, TS and JSX alike.
@@ -148,37 +169,47 @@ describe('Segmented can lay its options out on more than one row', () => {
     );
   });
 
-  it('is what the four-option set in a narrow container actually uses', () => {
-    // Lighting broke for real: 272px shared four ways, with "Evening" overrunning
-    // its 68px segment and printing over "Day".
+  it('has no call site left, which is a decision and not an oversight', () => {
+    // `wrap` and `minItem` are currently used by NOTHING. The lighting set was
+    // their last consumer, and it is icon-only now — five glyphs on a plain
+    // `flex-wrap` row, with the name on hover and on focus instead of beside the
+    // icon (`components/studio/LightingPicker.tsx`). Every remaining `Segmented`
+    // in the app passes `stretch` or nothing.
     //
-    // This used to cover a second file. The capture screen had a four-option "Wall
-    // to shoot" picker in a 360px rail — headroom rather than a fix, fitting a
-    // 320px phone by about 22px on a webfont that may not have loaded — and it is
-    // gone, along with the four-bay grid it drove: the wall is now worked out from
-    // the photo (`lib/capture-slots.ts`) instead of asked for. The Segmented left
-    // on that screen picks Upload or Camera, two options inside `.chrome-bar`,
-    // which wraps at every width. So the guard is dropped there because the
-    // control it guarded no longer exists, not because it started failing.
-    for (const f of [join('components', 'studio', 'ViewOptions.tsx')]) {
-      expect(readFileSync(root(f), 'utf8'), `${f} should pass wrap to Segmented`).toMatch(/^\s+wrap$/m);
-    }
+    // They are kept anyway, and this test is the record of why so the next
+    // dead-code sweep does not have to guess: `wrap` is the answer to a bug class
+    // this file exists for — a row of WORDS in a rail whose width no media query
+    // can name — and the argument for it is worth more than the ~15 lines it
+    // costs. The moment a set of labelled segments goes back into a rail, this is
+    // what it should use rather than being re-invented.
+    //
+    // Asserted as zero rather than left implicit, so that a new call site makes
+    // this test fail and the reader is sent to the two rail-floor assertions
+    // below, which would then need to account for it.
+    const callers = ['components', 'app']
+      .flatMap((dir) => walk(root(dir)))
+      .filter((f) => /\.tsx$/.test(f) && !f.endsWith('primitives.tsx'))
+      .filter((f) => /^\s+(wrap|minItem=)/m.test(codeOnly(readFileSync(f, 'utf8'))));
+    expect(callers, 'a Segmented now passes wrap/minItem — re-derive the rail floors below').toEqual([]);
   });
 
-  it('keeps the lighting set inside the narrowest rail, whatever it holds', () => {
-    const minItem = Number(/minItem=\{(\d+)\}/.exec(readFileSync(root('components', 'studio', 'ViewOptions.tsx'), 'utf8'))![1]);
-    const floor = railFloor('rail-left');
-    // Two columns is the layout this set is meant to fall back to. One column
-    // would be a stack of full-width rows, which is a list, not a segmented
-    // control.
+  it('keeps the lighting set inside the narrowest rail', () => {
+    // Re-derived from the control that replaced the segmented one. It is five
+    // 32px targets with 4px gaps — 5×32 + 4×4 = 176px — and the tight rail is
+    // 208px with `.section`'s 16px of padding each side, so 176px of content.
+    // Exactly fits, which is the point: the icon row was sized to the rail rather
+    // than the rail widened for it.
     //
-    // Deliberately NOT a function of how many moods there are. The set was four
-    // when this was written and is seven now — three studio looks plus four sun
-    // angles — and `wrap` does not care: it fits as many columns as the width
-    // allows and takes however many rows that needs. What must hold is that the
-    // narrowest rail affords at least two columns of the widest label, and that
-    // is a claim about the rail and the label, not about the count.
-    expect(floor - 32).toBeGreaterThanOrEqual(minItem * 2);
+    // Read out of the source rather than restated, because a hand-typed 176 here
+    // would be the "displayed measurement that is not derived" this repo keeps
+    // finding. If someone bumps the buttons to 34px this fails, which is correct
+    // — that is the change that would start clipping.
+    const picker = readSrc('components', 'studio', 'LightingPicker.tsx');
+    const size = Number(/\n\s+width: (\d+),\n\s+height: \1,/.exec(picker)![1]);
+    const gap = Number(/flexWrap: 'wrap', gap: (\d+)/.exec(picker)![1]);
+    const count = LIGHTINGS.length;
+    const needed = count * size + (count - 1) * gap;
+    expect(railFloor('rail-left') - 32).toBeGreaterThanOrEqual(needed);
   });
 });
 
@@ -463,15 +494,20 @@ describe('the rail asks about itself', () => {
       const floor = railFloor(`rail-${side}`);
       expect(tight).toBeLessThan(floor);
     }
-    // And the left one still has to hold the lighting set two columns wide, which
-    // is the same derivation the token floor answers to. Two columns of the widest
-    // label — not two columns of four moods: the set grew to seven when the sun
-    // became four fixed presets, and `wrap` absorbed that without moving a token.
-    const minItem = Number(
-      /minItem=\{(\d+)\}/.exec(readFileSync(root('components', 'studio', 'ViewOptions.tsx'), 'utf8'))![1],
-    );
+    // And the TIGHT left one still has to hold the lighting row on one line —
+    // the same derivation the ordinary floor answers to above, against the
+    // narrower token. This is the assertion `--rail-left-tight` exists for: it is
+    // applied to nothing at runtime, and its only consumer is this file holding
+    // it below the width its contents need.
+    //
+    // 208px − 32px of `.section` padding = 176px, and the row needs exactly 176.
+    // Zero slack is deliberate and is why this is measured rather than eyeballed.
+    const picker = readSrc('components', 'studio', 'LightingPicker.tsx');
+    const size = Number(/\n\s+width: (\d+),\n\s+height: \1,/.exec(picker)![1]);
+    const gap = Number(/flexWrap: 'wrap', gap: (\d+)/.exec(picker)![1]);
+    const needed = LIGHTINGS.length * size + (LIGHTINGS.length - 1) * gap;
     const tightLeft = Number(/^(\d+)px$/.exec(token('rail-left-tight'))![1]);
-    expect(tightLeft - 32).toBeGreaterThanOrEqual(minItem * 2);
+    expect(tightLeft - 32).toBeGreaterThanOrEqual(needed);
   });
 });
 
