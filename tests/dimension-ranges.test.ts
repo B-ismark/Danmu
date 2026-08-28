@@ -198,3 +198,17 @@ describe('applyRoomEdits pending', () => {
     expect(retry.room).toEqual({ width: 5, depth: 3, height: 2.6 });
   });
 });
+
+describe('applyRoomEdits does not hand back its own argument', () => {
+  it('returns a copy of the batch, not the object it was given', () => {
+    // Aliasing is invisible to every other assertion here, because they all build
+    // a fresh `edits` per call. A caller that kept `pending` and added the next
+    // keystroke's axis to it would be writing into the rule's argument.
+    const edits = { width: 5, height: 99 };
+    const { pending } = applyRoomEdits({ width: 4, depth: 3, height: 2.5 }, edits);
+    expect(pending).toEqual(edits);
+    expect(pending).not.toBe(edits);
+    (pending as Record<string, number>).depth = 7;
+    expect(edits).toEqual({ width: 5, height: 99 });
+  });
+});
