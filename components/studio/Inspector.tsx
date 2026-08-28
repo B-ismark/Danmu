@@ -12,7 +12,6 @@ import { Select } from '@/components/ui/Select';
 import { NumberField } from '@/components/ui/NumberField';
 import { EditableText, IconButton, Pill } from '@/components/ui/primitives';
 import { SwapModelModal } from './RegenerateModal';
-import { removeParts } from './KeyboardShortcuts';
 import { RailSection } from './RailSection';
 import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { isWallMountedPart, supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, DECOR_KINDS, type LibraryItem, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
@@ -26,8 +25,10 @@ import { moveWallCarrying } from '@/lib/wall-actions';
 // surface ("Suggested · 3"), Exact size (the millimetres). The fold is
 // RailSection, the left rail's own component, and its meta slot carries the
 // derived state — so the row tells you where you stand without spending a
-// screen of options on it. Where it sits, the model swap and Delete stay
-// permanently out because they are verbs, not options. The old panel opened a
+// screen of options on it. Where it sits, the model swap stays permanently out
+// because it is a verb, not an option. Delete is a verb too and is not in this
+// panel at all any more: it is the rail's pinned footer (`RailFooter`), beside
+// Add, which is what stopped it scrolling away inside this scroll box. The old panel opened a
 // sofa onto 24 swatches, 5 finish chips and 5 prop chips at once — every
 // option, no decision. Nothing was removed, only re-ranked and folded.
 export function Inspector() {
@@ -97,8 +98,12 @@ export function Inspector() {
   // Hybrid swap — replace this part's model with a library one, keeping its
   // position + colour. Re-grounds Y for the new dims / mount type and clears
   // stale transform overrides (old scale would distort the new base dims).
-  // `dimOverride` carries sizes the user named in the "Describe it" tab; both
-  // entry points land here so re-grounding only ever happens in one place.
+  // `dimOverride` carries sizes the user named in the picker's search box —
+  // `sizeFromQuery` has already clamped them, and the item handed over carries the
+  // result, so the argument and `item.dimMM` are the same number by the time they
+  // arrive. It stays a separate parameter because re-grounding must be the only
+  // place that decides Y, and a caller with a size in hand should be able to say so
+  // rather than mutate the item on the way in.
   function swapModel(item: LibraryItem, dimOverride?: [number, number, number]) {
     const dimMM = dimOverride ?? ([...item.dimMM] as [number, number, number]);
     const [x, y, z] = currentXYZ();
@@ -157,16 +162,10 @@ export function Inspector() {
     else clearParent(id!);
   }
 
-  // No confirm — the shared delete path answers with an Undo toast instead of a
-  // dialog (see `removeParts` in KeyboardShortcuts).
-  function onDelete() {
-    removeParts([id!]);
-  }
-
   const isGeneric = part.shape === 'box';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', height: '100%', minWidth: 0 }}>
       <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--hairline)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <EditableText
@@ -261,7 +260,7 @@ export function Inspector() {
         <button
           onClick={() => setSwapOpen(true)}
           className={isGeneric ? 'ds-btn' : 'ds-btn ds-btn--primary'}
-          title="Browse the library, or describe the piece in words"
+          title="Pick a different model from the library"
           style={{
             width: '100%',
             height: 34,
@@ -292,26 +291,6 @@ export function Inspector() {
           stays on screen either way, because that clamp is the app's promise that
           nothing can end up a fantasy size. */}
       <DimensionEditor partId={id} category={part.category} shape={part.shape} value={currentDim} defaultDim={defaultDim} onChange={(d) => setDim(id, d)} />
-
-      <div style={{ flex: 1 }} />
-
-      <div style={{ borderTop: '1px solid var(--hairline)', padding: '12px 16px', background: 'var(--paper-2)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <button
-          onClick={onDelete}
-          className="ds-btn"
-          style={{
-            width: '100%',
-            height: 32,
-            fontSize: 12,
-            justifyContent: 'center',
-            color: 'var(--danger)',
-            borderColor: 'var(--danger)',
-          }}
-        >
-          <Icon name="trash" size={12} />
-          Delete from scene
-        </button>
-      </div>
 
       {swapOpen && (
         <SwapModelModal part={part} onClose={() => setSwapOpen(false)} onSwap={swapModel} />
@@ -394,8 +373,23 @@ function LightControls({
   const set = (patch: Partial<PartLight>) => onChange({ ...spec, ...patch });
   return (
     <Section label="Light">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <label htmlFor={`lm-${part.id}`} style={{ fontSize: 12, color: 'var(--ink-2)', minWidth: 66 }}>
+      {/* Wraps, and the field shrinks — defensively, not because this row was
+          measured overflowing. Flat it is 66 + 8 + 104 + 8 + 'lm' ≈ 201px of
+          FIXED content, against ~228px of usable width at the narrowest rail that
+          ships (`--rail-right-min` 276px, less its border, the section's 16px
+          either side and a vertical scrollbar). 27px of margin, and no margin at
+          all if the label's font or the unit ever grows.
+
+          Do not read `--rail-right-tight` (248px) as the number to check against:
+          it is applied to nothing and exists only for `tests/reflow.test.ts` to
+          hold as a floor a future tightening may reach. This comment said 248 in
+          its first version and concluded the row overflowed by a pixel, which was
+          wrong in a way that would have sent the next reader hunting the wrong
+          row. The panel's stray horizontal scrollbar is real and its cause is NOT
+          identified here — it needs `scrollWidth > clientWidth` read off the live
+          box, which no test in this repo can do. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+        <label htmlFor={`lm-${part.id}`} style={{ fontSize: 12, color: 'var(--ink-2)', minWidth: 66, flex: '0 1 auto' }}>
           Brightness
         </label>
         <NumberField
@@ -409,7 +403,7 @@ function LightControls({
           max={5000}
           height={30}
           ariaLabel="Brightness in lumens"
-          style={{ width: 104 }}
+          style={{ width: 104, maxWidth: '100%', minWidth: 0 }}
         />
         <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>lm</span>
       </div>
@@ -538,7 +532,6 @@ function WallInspector({ index }: { index: number }) {
   const setWallColor = useScene((s) => s.setWallColor);
   const setAllWallColors = useScene((s) => s.setAllWallColors);
   const resetWallColor = useScene((s) => s.resetWallColor);
-  const setSelectedWall = useStudio((s) => s.setSelectedWall);
 
   const segs = wallSegments(room.footprint);
   const seg = segs[index];
@@ -547,7 +540,7 @@ function WallInspector({ index }: { index: number }) {
   const current = room.wallColors?.[index] ?? SCENE.wall;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', height: '100%', minWidth: 0 }}>
       <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--hairline)' }}>
         <div style={{ fontSize: 16, fontWeight: 500, letterSpacing: '-0.01em' }}>{name}</div>
         <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>
@@ -596,13 +589,6 @@ function WallInspector({ index }: { index: number }) {
         </div>
       </Section>
 
-      <div style={{ flex: 1 }} />
-
-      <div style={{ borderTop: '1px solid var(--hairline)', padding: '12px 16px', background: 'var(--paper-2)' }}>
-        <button onClick={() => setSelectedWall(null)} className="ds-btn" style={{ width: '100%', height: 32, fontSize: 12, justifyContent: 'center', gap: 6 }}>
-          <Icon name="x" size={12} /> Done
-        </button>
-      </div>
     </div>
   );
 }

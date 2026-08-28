@@ -137,6 +137,64 @@ export function categoriesFittingSize(widthMM: number, heightMM: number, exclude
   );
 }
 
+/** Build a repair candidate for each of `categories`: re-categorised AND
+ *  re-measured, with a margin, best fit first.
+ *
+ *  Extracted from `judgeLabel` when a second consumer appeared. `judgeLabel` asks
+ *  which words the SIZE could be; `lib/label-suggest.ts` asks which words the user
+ *  just TYPED could be. Both need the same three steps — seed, re-measure, score —
+ *  and two copies of those is the drift `lib/layout-rules.ts` exists to prevent.
+ *
+ *  `requireFit` is the whole difference between the two callers, and it is a
+ *  judgement rather than a detail. A size-driven candidate that does not fit its own
+ *  band after re-measurement is not a repair, so `judgeLabel` drops it. A word the
+ *  user typed is different: they said "fridge", and answering with silence is what
+ *  leaves a bed on screen called Fridge. So the word-driven caller keeps it and lets
+ *  the negative margin say so — `axisMargin` is already signed, which is why this
+ *  needs no second field and no second sort.
+ *
+ *  What is NEVER optional is the re-measurement. The category picks the anchor and
+ *  the anchor picked the projection, so a candidate that kept the old measurement
+ *  would be measuring a curtain as though it stood on the floor. A word that cannot
+ *  be measured under its own anchor is still dropped for both callers, because
+ *  offering it would mean offering a repair with no evidence behind it either way. */
+export function candidatesFor(
+  d: Detection,
+  categories: Category[],
+  cals: CalMap,
+  room: RoomDims,
+  { requireFit = true }: { requireFit?: boolean } = {},
+): LabelCandidate[] {
+  const out: LabelCandidate[] = [];
+  for (const c of categories) {
+    // The shape goes with the word that is being replaced, so the candidate has
+    // none and scene-spec's own refineShape picks one at build time. The depth hint
+    // goes too: if the old word is wrong, its guess at that word's depth is not
+    // evidence about a different word.
+    const seed: Detection = { ...d, category: c, shape: undefined, dimMM: undefined };
+    const trial = geoRefine(seed, cals, room);
+    // This word cannot be measured at all under its own anchor — a ceiling
+    // category, today. Offering it would mean offering an unmeasured repair.
+    if (trial === seed || !trial.dimMM) continue;
+    // Re-measured, so check again: changing the word can change the projection, and
+    // a candidate that only fitted the old measurement is not a repair. The axis
+    // restriction matters — a ceiling candidate is checked on width, because width
+    // is what measuring it as a ceiling item produced.
+    const cAxes = measuredAxes(c, 'box');
+    const misfit = failedAxes(c, 'box', trial.dimMM[0], trial.dimMM[2]).some((a) => cAxes.includes(a));
+    if (misfit && requireFit) continue;
+    out.push({
+      category: c,
+      detection: trial,
+      margin: sizeMargin(c, 'box', trial.dimMM[0], trial.dimMM[2], cAxes),
+    });
+  }
+  // Signed margin, so a candidate that does not fit its own band sorts below every
+  // one that does, without needing to be flagged.
+  out.sort((a, b) => b.margin - a.margin);
+  return out;
+}
+
 /** Judge the word a detector used against the size the camera measured.
  *
  *  Safe to call on a detection that has already been through `geoRefine`: the
@@ -167,33 +225,7 @@ export function judgeLabel(d: Detection, cals: CalMap, room: RoomDims): LabelVer
   if (failed.length === 0) return { status: 'ok' };
 
   const r = dimRangeFor(category, shape);
-  const candidates: LabelCandidate[] = [];
-  for (const c of categoriesFittingSize(widthMM, heightMM, category)) {
-    // The shape goes with the word that is being replaced, so the candidate has
-    // none and scene-spec's own refineShape picks one at build time. The depth
-    // hint goes too: if the AI's word is wrong, its guess at that word's depth is
-    // not evidence about a different word.
-    const seed: Detection = { ...d, category: c, shape: undefined, dimMM: undefined };
-    const trial = geoRefine(seed, cals, room);
-    // This word cannot be measured at all under its own anchor — a ceiling
-    // category, today. Offering it would mean offering an unmeasured repair for a
-    // measured finding.
-    if (trial === seed || !trial.dimMM) continue;
-    // Re-measured, so check again: changing the word can change the projection,
-    // and a candidate that only fitted the old measurement is not a repair. Same
-    // axis restriction as above — a ceiling candidate is checked on width, because
-    // width is what measuring it as a ceiling item produced. The pre-filter above
-    // has already tested BOTH axes against the original measurement, so a fan is
-    // only ever shortlisted for something whose real height was fan-plausible.
-    const cAxes = measuredAxes(c, 'box');
-    if (failedAxes(c, 'box', trial.dimMM[0], trial.dimMM[2]).some((a) => cAxes.includes(a))) continue;
-    candidates.push({
-      category: c,
-      detection: trial,
-      margin: sizeMargin(c, 'box', trial.dimMM[0], trial.dimMM[2], cAxes),
-    });
-  }
-  candidates.sort((a, b) => b.margin - a.margin);
+  const candidates = candidatesFor(d, categoriesFittingSize(widthMM, heightMM, category), cals, room);
 
   return {
     status: 'suspect',

@@ -15,8 +15,15 @@ describe('dimRangeFor', () => {
   });
 
   it('falls back to the category, then a wide default', () => {
-    // box shape with a known category → category range.
-    expect(dimRangeFor('bed', 'box').min[0]).toBeGreaterThan(1000);
+    // box shape with a known category → category range. Asserted through `flex`,
+    // which is the actual discriminator: the permissive fallback is 'flexible', so
+    // only a real category hit can be 'standard'. This used to read
+    // `min[0] > 1000`, which passed only because the bed rows were transposed and
+    // dimMM[0] held a length; un-transposing them dropped it to 800 and the
+    // assertion went red for a reason that had nothing to do with what it tests.
+    expect(dimRangeFor('bed', 'box').flex).toBe('standard');
+    // …and it is the bed row rather than some other standard one.
+    expect(dimRangeFor('bed', 'box').min[1]).toBeGreaterThan(1000);
     // unknown both ways → permissive fallback.
     expect(dimRangeFor('other', 'cylinder').flex).toBe('flexible');
   });

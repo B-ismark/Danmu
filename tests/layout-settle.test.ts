@@ -87,7 +87,7 @@ describe('settleParts · out of each other', () => {
   it('separates two pieces in the same place', () => {
     // Two detections of one sofa, or a bed and a wardrobe the AI both put on the
     // north wall. The detect → scene path resolved nothing between parts.
-    const bed = part({ category: 'bed', shape: 'bed-double', dimMM: [2000, 1600, 600], pos: [0, 0, -1.1] });
+    const bed = part({ category: 'bed', shape: 'bed-double', dimMM: [1600, 2000, 600], pos: [0, 0, -1.1] });
     const wardrobe = part({ category: 'wardrobe', shape: 'wardrobe', dimMM: [2000, 600, 2100], pos: [0.3, 0, -1.3] });
     expect(shared(bed, wardrobe)).toBeGreaterThan(0.5);
     const [a, b] = settleParts([bed, wardrobe], RECT);

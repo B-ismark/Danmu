@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { searchLibrary, parseDims, bestMatch } from '@/lib/shape-search';
+import {
+  searchLibrary,
+  parseDims,
+  bestMatch,
+  rankLibrary,
+  sizeFromQuery,
+  queryNamesSize,
+} from '@/lib/shape-search';
+import { PART_LIBRARY } from '@/lib/scene-spec';
 
 describe('searchLibrary', () => {
   it('finds the sofa via the synonym "couch"', () => {
@@ -57,5 +65,206 @@ describe('bestMatch', () => {
 
   it('null on no match', () => {
     expect(bestMatch('xyzzy')).toBeNull();
+  });
+});
+
+// ── The search box's own three, added when the "Describe it" tab was removed ──
+//
+// The tab promised models the library does not have, which rule 1 forbids and a
+// procedural catalog cannot do. What was real underneath it — synonym scoring and
+// a dimension parser — moved onto the ordinary search box, and these are the
+// assertions that say the move lost nothing.
+
+describe('rankLibrary', () => {
+  it('returns the whole catalog for an empty query', () => {
+    // A search box showing nothing before you type would be a worse list than the
+    // one it replaced.
+    expect(rankLibrary('').length).toBe(PART_LIBRARY.length);
+    expect(rankLibrary('   ').length).toBe(PART_LIBRARY.length);
+  });
+
+  it('folds a synonym the old substring filter could not', () => {
+    // This is the whole reason the picker stopped using `label.includes(q)`: no
+    // catalog row contains the word "couch", so the old filter returned nothing.
+    const rows = rankLibrary('couch');
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows[0].category).toBe('sofa');
+    expect(PART_LIBRARY.some((i) => i.label.toLowerCase().includes('couch'))).toBe(false);
+  });
+
+  it('falls back to a substring for a half-typed word', () => {
+    // "ward" is not a token the scorer recognises — `scoreItem` needs a whole
+    // token or a prefix relationship, and it does get this one — but "obe" does
+    // not, and it is still a fine substring of Wardrobe. Without the fallback the
+    // list empties out mid-word and then refills, which reads as a broken search.
+    const rows = rankLibrary('obe');
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((i) => `${i.label} ${i.group}`.toLowerCase().includes('obe'))).toBe(true);
+  });
+
+  it('is not capped at the suggestion limit', () => {
+    // `searchLibrary` defaults to 5, which is right for a short suggestion list and
+    // wrong for a box that is showing you the catalog: a list that stops at 5 reads
+    // as "that is all there is".
+    //
+    // "table" because it SCORES more than five rows. A single letter will not do,
+    // and that was the first version of this assertion: `tokens()` drops anything of
+    // length 1, so 'a' scores nothing at all and falls through to the substring
+    // branch, which was never capped — the test passed under a deliberate cap of 5
+    // and was therefore checking the fallback while claiming to check the cap.
+    //
+    // The first expectation is a guard on the FIXTURE, not on the code: if the
+    // catalog ever stops giving this word more than five hits, the cap becomes
+    // unobservable here and this should say so rather than go quietly green.
+    const scored = searchLibrary('table', PART_LIBRARY.length);
+    expect(scored.length, 'fixture no longer exercises the cap — pick a broader word').toBeGreaterThan(5);
+    expect(rankLibrary('table').length).toBe(scored.length);
+  });
+
+  it('returns nothing for words the catalog has never heard of', () => {
+    expect(rankLibrary('zzqqxx')).toEqual([]);
+  });
+
+  // A bare size used to empty the grid. No token in `160x200cm` is a word, so
+  // nothing scores; and no label contains that string, so the substring fallback
+  // finds nothing either. The result was a blank catalogue with the resolved-size
+  // badge armed and nothing to show it on — reachable by typing the size before the
+  // noun, which is exactly what "160x200cm bed" invites. Found in review.
+  it('shows the whole catalog for a query that is nothing but a size', () => {
+    // Not `.length > 0`: that would pass on a single lucky substring hit. The claim
+    // is that the catalogue is UNNARROWED, so it is the full count or nothing.
+    expect(rankLibrary('160x200cm').length).toBe(PART_LIBRARY.length);
+    expect(rankLibrary('200cm').length).toBe(PART_LIBRARY.length);
+    expect(rankLibrary('2.2 × 0.9 m').length).toBe(PART_LIBRARY.length);
+    expect(rankLibrary('180cm wide').length).toBe(PART_LIBRARY.length);
+  });
+
+  it('but a real word that matched nothing still means nothing', () => {
+    // The other half, and the half that makes the branch above narrow rather than a
+    // blanket "never show an empty list". A word that matched nothing alongside a
+    // size is still a failed search, and answering it with the entire library would
+    // be worse than an empty state.
+    //
+    // Both examples are genuine non-words rather than typos, and that is not
+    // fastidiousness: `sofaa` was the first fixture here and it FAILED, because
+    // `searchLibrary` fuzzy-matches it to Sofa and returns early. That is the matcher
+    // working. A typo is not the case this branch is about — the case is a word the
+    // catalogue genuinely does not have, in either order around the size.
+    expect(rankLibrary('160x200cm zzqqxx')).toEqual([]);
+    expect(rankLibrary('zzqqxx 40cm')).toEqual([]);
+  });
+
+  it('a unit with no number is not a size', () => {
+    // Both guards on that branch are load-bearing, and this assertion is the only
+    // thing that proves the second one. `cm` passes `namesOnlySize` — every word in
+    // it IS a size word — but names no size, so without `queryNamesSize` it would
+    // show the entire library. Added because dropping that guard killed nothing:
+    // the branch had no input that could tell the two conditions apart.
+    expect(rankLibrary('cm')).toEqual([]);
+    expect(rankLibrary('tall')).toEqual([]);
+  });
+
+  it('and a size beside a real word narrows on the word', () => {
+    const rows = rankLibrary('wardrobe 40cm');
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.length, 'the size branch swallowed a real search').toBeLessThan(PART_LIBRARY.length);
+    expect(rows.some((r) => /wardrobe/i.test(r.label))).toBe(true);
+  });
+});
+
+describe('sizeFromQuery', () => {
+  const item = (label: string) => {
+    const found = PART_LIBRARY.find((i) => i.label === label);
+    if (!found) throw new Error('no library item called ' + label);
+    return found;
+  };
+
+  it('applies a size the words named', () => {
+    // A rug, not a bed. `dimMM[0]` is the across-the-front width for most of the
+    // catalog, which is what `parseDims` maps its FIRST number to — but not for a
+    // bed, where dimMM[0] is the length. See the bed case below; it is a real
+    // defect and this is deliberately not the fixture that hides it.
+    const rug = PART_LIBRARY.find((i) => i.category === 'rug')!;
+    const dim = sizeFromQuery(rug, 'rug 160x200cm');
+    expect(dim[0]).toBe(1600);
+    expect(dim[1]).toBe(2000);
+  });
+
+  it('reads a mattress size as width x length, on the axes the app labels', () => {
+    // This assertion used to pin the DEFECT: `expect(dim).toEqual([1800, 2000, 600])`,
+    // with a comment blaming `parseDims` for sending the first number to dimMM[0].
+    // That was the wrong culprit. `parseDims` is right — five consumers agree dimMM[0]
+    // is a bed's WIDTH: `Inspector`'s ['Width','Depth','Height'] labels, `BedGeo`'s
+    // headboard spanning dimMM[0] with a double's two pillows side by side across it,
+    // the bedroom seed pushing the bed off the wall by half of dimMM[1], and
+    // `dimension-ranges.ts`'s own '[W, D, H]' header. The catalog and the range table
+    // were the two that disagreed, and the 1800 was a correct 1600 width being clamped
+    // up by a transposed floor. Both tables are un-transposed now.
+    const q = PART_LIBRARY.find((i) => i.label === 'Queen bed')!;
+    expect(q.dimMM).toEqual([1600, 2000, 600]);
+    expect(sizeFromQuery(q, 'queen bed 160x200cm')).toEqual([1600, 2000, 600]);
+  });
+
+  it('and does it on a single, where a transposition cannot hide', () => {
+    // The asymmetric case, and the reason the defect above survived being looked at:
+    // 1600x2000 and 2000x1600 are both plausible bed numbers, so a reader checking
+    // the queen sees nothing wrong either way. A single is 900 x 2000 — transposed it
+    // is 2000 wide and 900 long, which is not a bed at any glance. Same rule as
+    // 'verify in the asymmetric case': pick the fixture where the two readings differ
+    // by more than plausibility.
+    const single = PART_LIBRARY.find((i) => i.label === 'Single bed')!;
+    expect(single.dimMM).toEqual([900, 2000, 600]);
+    expect(sizeFromQuery(single, 'single bed 90x200cm')).toEqual([900, 2000, 600]);
+    // …and the width is the SHORT side, which is the whole claim in one assertion.
+    expect(single.dimMM[0]).toBeLessThan(single.dimMM[1]);
+  });
+  it('keeps the preset on every axis the words did not name', () => {
+    // A sofa, whose one legal 1600 is inside its range, so the assertion is about
+    // the untouched axes rather than about a clamp.
+    const sofa = PART_LIBRARY.find((i) => i.shape === 'sofa')!;
+    const dim = sizeFromQuery(sofa, 'sofa 1600mm wide');
+    expect(dim[0]).toBe(1600);
+    // Depth and height were never mentioned, so they are still the catalog's.
+    expect(dim[1]).toBe(sofa.dimMM[1]);
+    expect(dim[2]).toBe(sofa.dimMM[2]);
+  });
+
+  it('clamps, because a typed number is a request and not a fact', () => {
+    // Rule 2's trust boundary does not move because the number came from a text
+    // box rather than from a model.
+    const tv = PART_LIBRARY.find((i) => i.category === 'tv')!;
+    const dim = sizeFromQuery(tv, 'tv 9m');
+    expect(dim[0]).toBeLessThan(9000);
+  });
+
+  it('gives two rows different answers for one query, and that is the point', () => {
+    // The number shown on a row is that row's own clamp, not the text echoed back.
+    // A 4 m sofa is legal; a 4 m mirror is not.
+    const sofa = PART_LIBRARY.find((i) => i.shape === 'sofa')!;
+    const mirror = PART_LIBRARY.find((i) => i.category === 'mirror')!;
+    const q = 'something 4000mm wide';
+    expect(sizeFromQuery(sofa, q)[0]).not.toBe(sizeFromQuery(mirror, q)[0]);
+  });
+
+  it('is the identity when the words name no size', () => {
+    const any = item(PART_LIBRARY[0].label);
+    expect(sizeFromQuery(any, 'just a nice one')).toEqual(any.dimMM);
+  });
+});
+
+describe('queryNamesSize', () => {
+  it('is true for each axis the parser can reach on its own', () => {
+    expect(queryNamesSize('rug 120x60cm')).toBe(true);
+    expect(queryNamesSize('mirror 1700mm tall')).toBe(true);
+    expect(queryNamesSize('desk 140cm')).toBe(true);
+  });
+
+  it('is false for words with no measurement in them', () => {
+    // The one thing a caller needs before deciding whether to SHOW a size it did
+    // not have to show. A bare number is not a measurement: `parseDims` wants a
+    // unit, so "sofa 3" must not turn the size column on.
+    expect(queryNamesSize('a nice armchair')).toBe(false);
+    expect(queryNamesSize('')).toBe(false);
+    expect(queryNamesSize('sofa 3')).toBe(false);
   });
 });

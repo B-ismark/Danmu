@@ -17,7 +17,7 @@
   --paper-3: #E9E2D4;
   --ink: #2A2520;           /* warm soft-black, not pure ink */
   --ink-2: #5A5147;
-  --ink-3: #675E55;         /* 5.99:1 on --paper, 4.92:1 on --paper-3 — safe for 10-12px hint text */    /* decorative only (2.99-3.41:1). Never text. */
+  --ink-3: #675E55;         /* 5.99:1 on --paper, 4.92:1 on --paper-3 — safe for 10-12px hint text */
   --ink-4: #BBB1A3;         /* decorative fills only (1.99:1) */
   --ink-hover: #3A342C;     /* --ink one step darker, for primary-button hover */
 
@@ -64,6 +64,42 @@
      change can't silently produce white-on-light in 30 places. */
   --on-accent: #FFFFFF;
   --on-ink: var(--paper);
+  /* Quieter type on a chip over a photo. An ALIAS rather than a second literal:
+     it is the same colour as --ink-4, and two names holding one hex drift in the
+     direction nobody notices — darken --ink-4 for decoration and this silently
+     stays behind, with every contrast assertion still green because it reads this
+     one. Aliased, a bad edit to either moves both and the 4.5:1 assertion in
+     tests/color-tokens.test.ts goes red. It keeps its own NAME because --ink-4 is
+     a decorative fill (1.99:1 on --paper, never text) and this is type: rule 4
+     says a fill token and a text token are not interchangeable, and the name is
+     what records which ground makes it legal. */
+  --on-ink-2: var(--ink-4);  /* 7.18:1 on --ink */
+
+  /* Signal colours for type on a chip over a photo. --warn and --success-text
+     cannot serve here — they are built for --paper and land at 3.01:1 and 2.24:1
+     on --ink, under the 4.5:1 that 11px type owes. These are those two colours at
+     OKLCH lightness 0.70 with hue and chroma untouched, which is why they still
+     read as the same warning and the same success; the shared lightness is what
+     makes them a pair rather than two guesses.
+
+     They exist because the chips they belong to used to recolour their GROUND
+     instead, which escaped the silhouette guarantee below and failed it: a --warn
+     ground is 1.92:1 against its worst photo tone and a --success-text ground
+     2.02:1, against --ink's 3.11:1. That is not fixable by a heavier boundary —
+     even a solid --paper edge on a --warn ground tops out at 2.18:1, because a
+     mid-dark ground and a light boundary sit too close together in luminance. So
+     the ground is never overridden and the signal moved to the type. */
+  --on-ink-warn: #CB9060;    /* 5.54:1 on --ink */
+  --on-ink-success: #7EAA92; /* 5.83:1 on --ink */
+  --edge-on-ink: rgba(251, 248, 242, 0.80);
+  /* Silhouette of a dark chip standing on a user's photograph. --edge is --ink at
+     50%, so on an --ink chip it is invisible; and the chip's own dark ground only
+     carries its outline against a LIGHT photo — against a dark one the chip
+     disappears entirely (measured: 1.00:1 at grey 38, i.e. no edge at all). The
+     two protections are complementary, not redundant, and this alpha is where
+     max(chip, boundary) clears WCAG 1.4.11 against every possible photo tone.
+     The ratio itself lives in tests/color-tokens.test.ts, which sweeps for it,
+     rather than being typed in beside the token where it could drift. */
   --scrim: rgba(19, 19, 17, 0.55);       /* modal backdrop — one source, was inline ×4 */
   --scrim-photo: rgba(0, 0, 0, 0.62);    /* chrome over a photo or the 3D canvas */
 
@@ -511,7 +547,14 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
      stated inline in the component, this rule reached the Inspector and nothing
      else, so the relief the comment above describes applied to one rail of two. */
   .section, .section--flush,
-  .rail-section-head, .rail-section-body { padding-left: 12px; padding-right: 12px; }
+  .rail-section-body,
+  .rail-footer { padding-left: 12px; padding-right: 12px; }
+  /* The header row is split across two elements so the leading strip stays
+     INSIDE the disclosure button, so its relief is too. Narrowed in the two
+     places the padding actually lives rather than on the row, where a
+     `padding-left` would land in front of the button and add to it. */
+  .rail-section-head { padding-right: 12px; }
+  .rail-section-toggle { padding-left: 12px; }
 }
 
 .section { padding: 14px 16px; border-bottom: 1px solid var(--hairline); }
@@ -521,13 +564,48 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
    only because the container query above has to be able to reach it; everything
    conditional (which section grows, which is open) stays in the component, where
    the state is. */
-.rail-section-head {
+/* The header ROW. `.rail-section-head` stays this class and keeps the padding,
+   because the 240px container query below and tests/reflow.test.ts both name it;
+   what moved out is everything that belonged to it being a <button>.
+   The row owns only the RIGHT edge; the toggle owns the rest. */
+.rail-section-head { display: flex; align-items: center; gap: 8px; width: 100%; padding-right: 16px; }
+/* The disclosure. It carries the row's vertical padding AND the leading 16px,
+   which is not cosmetic bookkeeping: the header used to BE the button, so that
+   strip was pressable, and moving the padding onto the wrapping row quietly
+   turned ~16px at the start of every section header into dead space. Nothing
+   errors, no gate sees it, and it reads as the header being fussy to hit.
+   The row keeps `padding-right` because the trailing strip belongs to the
+   action button beside it, not to the toggle. */
+.rail-section-toggle {
+  flex: 1; min-width: 0;
   display: flex; align-items: center; gap: 8px;
-  width: 100%; padding: 11px 16px;
-  background: transparent; border: 0; cursor: pointer;
+  padding: 11px 0 11px 16px; background: transparent; border: 0; cursor: pointer;
   text-align: left; font: inherit;
 }
 .rail-section-body { padding: 0 16px 14px; min-height: 0; }
+
+/* A rail's pinned footer — the room-level actions at the foot of the right rail.
+   `flex-shrink: 0` so it is never squeezed out by a tall panel above it, and the
+   box model is HERE rather than inline for the same reason `.rail-section-head`'s
+   is: an inline padding is one the container query below cannot narrow.
+
+   NO `border-top`, and that is the fix rather than an omission. This row is
+   pinned while the Inspector above it scrolls (`overflow: auto`), so it does
+   need to read as a separate zone — but the surface tone already says that
+   continuously: `--paper-2` is 0.858 L against the rail's `--paper` at 0.941,
+   the same step that separates every other surface tier here. A 1px
+   `--hairline` on top of that was a SECOND tell for one job, and it landed
+   directly under the Inspector's last control — an outlined "Delete from
+   scene" button — with a 32px round button beside it. Three separate reports
+   read that arrangement as a stray horizontal SCROLLBAR in the right rail, and
+   two sessions went looking for an overflow that was never there. A divider
+   that is mistaken for a defect is not decoration, it is the defect. If this
+   ever needs a harder edge, give the footer more tone, not a rule. */
+.rail-footer {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px; flex-shrink: 0;
+  background: var(--paper-2);
+}
 .section-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
 .section-title {
   font-family: var(--font-sans); font-size: 11px; font-weight: 700;

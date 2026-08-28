@@ -89,12 +89,20 @@ const RESERVE = 'var(--canvas-reserve-right, 0px)';
  *  it is a stack, and the wrap handles that better than a sliver would. */
 const MIN_TOOLS = 240;
 
-/** Publishes its own width so `CanvasTools` can stay out from under it.
+/** Publishes its own width AND height so its siblings can stay out from under it.
  *
  *  On the element's parent, not on itself: a custom property set on an element is
- *  read by that element and its descendants, and `CanvasTools` is a SIBLING. The
- *  parent is the canvas `<main>`, which both clusters are children of. */
-function usePublishedWidth(prop: string) {
+ *  read by that element and its descendants, and the readers are SIBLINGS. The
+ *  parent is the canvas `<main>`, which every cluster is a child of.
+ *
+ *  The height is the half added later, and it is needed for the same reason the
+ *  width was. This cluster WRAPS (see the note on its `maxWidth`), so it is not one
+ *  height: on the 2D tab it is undo/redo plus the whole zoom / rotate / fit
+ *  toolbar, which folds into two rows on a cramped canvas. Anything that has to
+ *  begin below it — `CatalogPanel`, which docks against this same edge — cannot ask
+ *  the width about that, and a hand-picked constant would be the "displayed
+ *  measurement that is not derived" this repo keeps finding. */
+function usePublishedBox(widthProp: string, heightProp: string) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -105,7 +113,9 @@ function usePublishedWidth(prop: string) {
     const publish = () => {
       // `Math.ceil`, because a fractional reserve can leave a sub-pixel of the
       // two clusters touching — which is exactly the state this exists to end.
-      parent.style.setProperty(prop, `${Math.ceil(el.getBoundingClientRect().width)}px`);
+      const box = el.getBoundingClientRect();
+      parent.style.setProperty(widthProp, `${Math.ceil(box.width)}px`);
+      parent.style.setProperty(heightProp, `${Math.ceil(box.height)}px`);
     };
     publish();
 
@@ -116,9 +126,10 @@ function usePublishedWidth(prop: string) {
       ro.disconnect();
       // Removed rather than zeroed: a stale reserve would keep a gutter open for a
       // cluster that is no longer on the page (the tabs render different ones).
-      parent.style.removeProperty(prop);
+      parent.style.removeProperty(widthProp);
+      parent.style.removeProperty(heightProp);
     };
-  }, [prop]);
+  }, [widthProp, heightProp]);
 
   return ref;
 }
@@ -172,7 +183,7 @@ export function CanvasTools({ children }: { children: ReactNode }) {
 /** Top-right: how you look at it. Undo/redo lives here, the way Drafted groups it. */
 export function CanvasView({ children }: { children: ReactNode }) {
   // Reports its width so the centred tool cluster can keep out from under it.
-  const ref = usePublishedWidth('--canvas-reserve-right');
+  const ref = usePublishedBox('--canvas-reserve-right', '--canvas-view-height');
   return (
     <div
       ref={ref}

@@ -8,9 +8,35 @@ import { Box, BoxInstances, PlaneInstances, type InstanceItem } from './Box';
 import { PartLight } from './PartLight';
 import { SURFACE } from './materials';
 import { Spin, Sway } from './Motion';
-import { fanBlade, isParametric, type ScenePart } from '@/lib/scene-spec';
+import {
+  fanBlade,
+  isParametric,
+  moduleCount,
+  moduleRangeFor,
+  type ModuleRange,
+  type ScenePart,
+} from '@/lib/scene-spec';
 import { useStudio } from '@/lib/store';
 import { DECOR, DETAIL, SCENE, defaultBodyColor } from '@/lib/scene-palette';
+
+/** The module ranges the five parametric shapes tile by, resolved once at module
+ *  scope so a renderer reads a value rather than doing a table lookup per frame.
+ *
+ *  `lib/` owns the numbers and the arithmetic (`moduleCount`, `MODULE_RANGE`); this
+ *  file owns colour and geometry. That is the split `fanBlade` established, and the
+ *  reason for it is that a blade drawn `1.6r` long from inside a renderer swept 40%
+ *  wider than the piece said for months, because no test could reach the expression.
+ *
+ *  `ONE` never fires for these five — each is a `PARAMETRIC_SHAPES` member with a
+ *  `MODULE_RANGE` row. It exists so that adding a shape to that set without a range
+ *  draws it as a single module rather than spreading `undefined` into NaN and
+ *  rendering nothing at all. */
+const ONE: ModuleRange = { min: 1e-6, nominal: Infinity, max: Infinity };
+const BAY = moduleRangeFor('wardrobe') ?? ONE;
+const SEAT = moduleRangeFor('sofa') ?? ONE;
+const SHELF = moduleRangeFor('bookshelf') ?? ONE;
+const TIER = moduleRangeFor('shoe-rack') ?? ONE;
+const PLEAT = moduleRangeFor('curtain') ?? ONE;
 
 // Body albedo for a part's main surfaces. An explicit colour (photo-sampled on
 // detection, or chosen in the Inspector) ALWAYS wins — otherwise recolouring a
@@ -166,7 +192,7 @@ function SofaGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const legH = 0.1;
   const seatTop = Math.min(0.46, Math.max(0.34, h * 0.5));
   const innerW = Math.max(0.4, w - arm * 2);
-  const seats = Math.max(1, Math.round(innerW / 0.9));
+  const seats = moduleCount(innerW, SEAT);
   const seatW = innerW / seats;
   const backTh = Math.min(0.2, d * 0.2);
   const legs = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => [sx * (w / 2 - 0.08), sz * (d / 2 - 0.08)] as [number, number]));
@@ -473,7 +499,7 @@ function WardrobeGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const wood = body(part, locked);
   const side = shade(wood, -8);
   const top = shade(wood, -15);
-  const bays = Math.max(1, Math.round(w / 0.6));
+  const bays = moduleCount(w, BAY);
   const bayW = w / bays;
   // Double-click swings the doors open (hinged on each bay's outer edge).
   const open = useStudio((s) => s.openState[part.id] ?? 0);
@@ -521,7 +547,7 @@ function BookshelfGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const h = part.dimMM[2] / 1000;
   const wood = body(part, locked);
   const back = shade(wood, -18);
-  const bays = Math.max(2, Math.round(h / 0.35)); // vertical compartments
+  const bays = moduleCount(h, SHELF); // vertical compartments
   const gap = h / bays;
   const booksPerRow = Math.max(4, Math.floor((w - 0.08) / 0.055));
   const usableW = w - 0.08;
@@ -566,7 +592,7 @@ function ShoeRackGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
   const wood = body(part, locked);
-  const tiers = Math.max(2, Math.round(h / 0.2));
+  const tiers = moduleCount(h, TIER);
   const gap = h / tiers;
   const posts = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => [sx * (w / 2 - 0.02), sz * (d / 2 - 0.02)] as [number, number]));
   return (
@@ -752,7 +778,7 @@ function CurtainGeo({ part }: { part: ScenePart }) {
   const cloth = tint(part);
   // Accordion pleats: vertical strips with alternating Y-rotation read as folds
   // and catch light per-face — far less flat than two billboard planes.
-  const pleats = Math.max(8, Math.round(w / 0.11));
+  const pleats = moduleCount(w, PLEAT);
   const stripW = w / pleats;
   // 45 planes on a 5m curtain — one instanced set instead of 45 meshes.
   const folds: InstanceItem[] = Array.from({ length: pleats }, (_, i) => ({

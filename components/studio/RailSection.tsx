@@ -11,6 +11,16 @@
 //
 // The header is a real <button> controlling a region, so this is operable and
 // announced rather than being a div that happens to toggle.
+//
+// **The header is a ROW containing that button, not the button itself**, and the
+// difference is the `action` slot. A control belonging to the section rather than
+// to the disclosure — Room's Re-scan — cannot be a child of the toggle: nesting
+// interactive content inside a <button> is invalid HTML and a `jsx-a11y` failure,
+// which at `--max-warnings 0` is a red build rather than a warning nobody reads.
+// So `.rail-section-head` is the padded flex row (and stays that class, because
+// the 240px container query and `tests/reflow.test.ts` both name it), the
+// disclosure is `.rail-section-toggle` inside it with no padding of its own, and
+// the action sits beside the toggle as a sibling.
 
 import { useId, type ReactNode } from 'react';
 import { Icon } from '@/components/ui/Icon';
@@ -23,6 +33,7 @@ export function RailSection({
   children,
   /** Let the body take the leftover rail height and scroll inside itself. */
   grow = false,
+  action,
 }: {
   title: string;
   /** The count or state this section is responsible for. Derived, never typed. */
@@ -31,6 +42,11 @@ export function RailSection({
   onToggle: () => void;
   children: ReactNode;
   grow?: boolean;
+  /** ONE control for the section as a whole, trailing in the header and outside
+   *  the disclosure button — see the note above. It stays on screen while the
+   *  section is closed, which is the point: it is about the section, not about
+   *  what the section is currently showing. */
+  action?: ReactNode;
 }) {
   const id = useId();
   return (
@@ -48,26 +64,29 @@ export function RailSection({
       {/* Box model in `.rail-section-head`, not inline: an inline padding is one
           the rail's container queries cannot narrow, and this header is the left
           rail's whole vocabulary. */}
-      <button type="button" onClick={onToggle} aria-expanded={open} aria-controls={id} className="rail-section-head">
-        <Icon name={open ? 'chevron-down' : 'chevron-right'} size={12} />
-        {/* `flex: 1` sizes the BOX; without `minWidth: 0` this span refuses to go
-            below its text and pushes the meta out through the rail's
-            `overflow: hidden` instead — no scrollbar, no ellipsis, no clue. The
-            title is the designated shrinker because the meta is the derived half
-            (a count, a theme name) and clipping a number is worse than clipping a
-            word you can still recognise from its first letters. */}
-        <span
-          className="section-title"
-          style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-        >
-          {title}
-        </span>
-        {meta != null && (
-          <span className="section-meta" style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
-            {meta}
+      <div className="rail-section-head">
+        <button type="button" onClick={onToggle} aria-expanded={open} aria-controls={id} className="rail-section-toggle">
+          <Icon name={open ? 'chevron-down' : 'chevron-right'} size={12} />
+          {/* `flex: 1` sizes the BOX; without `minWidth: 0` this span refuses to go
+              below its text and pushes the meta out through the rail's
+              `overflow: hidden` instead — no scrollbar, no ellipsis, no clue. The
+              title is the designated shrinker because the meta is the derived half
+              (a count, a theme name) and clipping a number is worse than clipping a
+              word you can still recognise from its first letters. */}
+          <span
+            className="section-title"
+            style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+          >
+            {title}
           </span>
-        )}
-      </button>
+          {meta != null && (
+            <span className="section-meta" style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
+              {meta}
+            </span>
+          )}
+        </button>
+        {action}
+      </div>
 
       {open && (
         <div

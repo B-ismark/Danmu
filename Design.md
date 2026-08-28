@@ -666,10 +666,20 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
   `clearance.ts` — never resized, never shoved.
 
 ### Multi-select & grouping — `SelectionHeader.tsx`, `PartTree.tsx`
-- Shift-click adds to `selection: string[]`. "Merge N" assigns a shared
+- Shift-click adds to `selection: string[]`. "Group N" assigns a shared
   `groupId`; clicking any grouped part selects the whole group. **Both a selection
   and a merged group move as one on translate** (rotate/scale-as-one is roadmap),
   through `lib/drag-convoy.ts` — see §"Who travels" below. "Ungroup" clears it.
+
+  **The user-facing verb is "Group", the internal concept is still `merged`.** That
+  is deliberate, not a half-finished rename. The screen already called the RESULT a
+  `Group · N` and its undo `Ungroup`, while the button that made one said "Merge" —
+  so the app taught three words for one thing and a user reported it. The strings
+  changed (`SelectionHeader`, `SceneContextMenu`, the two `PartTree` row labels and
+  its group-header name, `StudioHelp`); `groupId`, `groupParts` and the "merged set"
+  vocabulary in `lib/drag-convoy.ts` did not, because those name a relationship the
+  convoy code reasons about rather than a word shown to anyone. Renaming them would
+  be a large diff through the one module this repo has the most scars in.
 - **A merged set is drawn as one in the rail** (`lib/part-rows.ts` → `PartTree`).
   It was invisible there: three merged chairs looked exactly like three loose
   ones, and the only tell was watching them move together — which is what made
@@ -743,6 +753,35 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
   modules from width, bookshelf derives shelves from height, wardrobe derives
   door bays from width, etc. The scale gizmo live-stretches; commit converts
   scale → dimension and the geometry redraws cleanly.
+  **How MANY modules is `moduleCount` in `scene-spec.ts`, and it used to be five
+  copies of `Math.round(span / nominal)` inline in the renderers.** That expression
+  minimises the error in the *count* and says nothing about the *module*, which is
+  the thing with a real-world size — so a wardrobe at 890 mm drew ONE 890 mm door
+  while 900 mm drew two of 450, and dragging the width handle through that band made
+  the doors grow to an impossible width and then snap to a different count. Reported
+  as "the models aren't modular enough… wardrobe shouldn't be autoscaling", and it
+  is the same defect as `FanGeo` above: arithmetic in a TSX renderer that no test can
+  reach.
+  The count comes off the module's own range now (`MODULE_RANGE`) — a door is
+  400–800 mm, a seat cushion 470–950 — and it takes the **pair**, the same argument
+  `boundsToUnit` is built on: one end cannot tell you whether an interval survived.
+  Two properties are asserted rather than argued. `max >= 2 * min` for every row, or
+  spans exist that no integer count can tile inside the range at all — with a
+  450–750 door an 890 mm wardrobe has no legal answer. And the count is **monotonic**
+  in the span: `Math.round` is not, and non-monotonic is exactly what "autoscaling"
+  looks like from outside — drag wider and a bay disappears.
+  The nominals are chosen so **every shipped preset keeps the count it already
+  draws**. That is deliberate: the defect lives in the bands between the presets, and
+  a change that also redrew the presets the catalog ships would make it
+  impossible to tell a fix from a restyle. `tests/module-tiling.test.ts` pins both —
+  the presets by name, and every legal size by a 1 mm sweep, because choosing
+  examples is how the 700–890 mm band was missed and every nominal looks fine against
+  the one preset its shape ships with.
+  Worth knowing, because it looks like the obvious next thing and is not: the
+  *other* numbers in these renderers are already right. A wardrobe's panels, dividers
+  and handle inset are absolute metres (0.018, 0.014, 0.05), and the sofa's
+  `Math.min(0.18, w * 0.12)` arm is a **cap** rather than an unclamped fraction, so a
+  4 m sofa still gets a 180 mm arm. There is no de-fractioning left to do in these two.
 - **Model picking is local text search** — `LibraryPicker.tsx` +
   `lib/shape-search.ts` (token + synonym + text-size parser). Every piece is
   procedural: it resolves to a `Shape` this app draws, never to a downloaded mesh.
@@ -1131,24 +1170,69 @@ are what serve "communicate a plan", and they stay.
   taller than the room is a *size* and the solver cannot resize, a crowded room needs
   a piece removed rather than moved, and nothing costs turning space at all.
 - **Adding pieces is ONE surface** (`CatalogPanel.tsx`) — a docked, non-blocking
-  strip with the two ways in as tabs: **Catalog** (searchable, grouped, drag onto
-  the 3D floor or click to drop at centre) and **Describe it** (local token search
-  through `lib/shape-search.ts`; explicit sizes in the words are parsed and passed
-  through `clampDims`). Two triggers open it and both live in `useStudio`
-  (`catalogOpen`): `AddPiecesButton` in the rail's Pieces section and
-  `CatalogToggle` in the canvas toolbar.
+  strip holding the searchable, grouped library: drag a row onto the 3D floor, or
+  click to drop it at centre. Two triggers open it and both live in `useStudio`
+  (`catalogOpen`): `AddPiecesButton` in the right rail's footer and `CatalogToggle`
+  in the canvas toolbar. The panel docks on the **right**, the same side as both of
+  them — pressing a control on one side to have a list appear on the other is a trip
+  across the product.
+  **There is no "Describe it" tab, and its worth was kept rather than deleted.**
+  A tab beside the library read as a way to reach models the library does not have,
+  which non-negotiable 1 forbids and no procedural catalog can do — every piece is a
+  `Shape` this app draws and there is no mesh download path. What was real under it
+  was `lib/shape-search.ts`, and it is on the ordinary search box now: `rankLibrary`
+  scores tokens and folds synonyms, so "couch" finds the sofas and "carpet" the
+  rugs, with the old substring match kept underneath as a fallback because a
+  half-typed "ward" scores nothing and is still a fine substring of Wardrobe; and
+  `sizeFromQuery` reads sizes out of the same words, so "rug 160x200cm" arrives at
+  that size, through `clampDims` as always. Each row shows the size IT
+  would arrive at, which is not one number for the whole query — a 4 m sofa is legal
+  and a 4 m mirror is not. `LibraryPicker` resolves that BEFORE handing the item to
+  a host, so the click path, the drag payload, the Shift-marked set and the swap
+  modal cannot disagree about what a query meant.
+  **A bed was the one shape where a mattress size arrived wrong, and the parser was
+  not the culprit.** `parseDims` reads "160x200" as first × second and
+  `sizeFromQuery` sends them to `dimMM[0]` and `dimMM[1]`, which is width × depth and
+  correct for every shape here — beds included. Five consumers say so: `Inspector`
+  labels the three fields `['Width','Depth','Height']`, `BedGeo`'s headboard spans
+  `dimMM[0]` with a double's two pillows side by side across it, the bedroom seed
+  pushes the bed off the wall by half of `dimMM[1]`, and `dimension-ranges.ts`'s own
+  header reads `[W, D, H]`.
+  What disagreed were the two DATA tables. The catalog held Single `[1900,1000,600]`
+  and Double `[2000,1600,600]` — read under the convention above, a double 2.0 m wide
+  and 1.6 m long — and `dimension-ranges.ts` matched them, with `bed-double`'s floor
+  at `[1800, 1350, 300]` where the 1350 is a UK double's WIDTH sitting in the depth
+  slot. So "queen bed 160x200cm" produced a correct 1600 width that a transposed
+  1800 floor then clamped up, and the reported `[1800, 2000, 600]` was a clamp doing
+  its job on a table that was wrong.
+  Both tables are un-transposed, the ladder is EU standard and every rung 2000 long —
+  Single 900, Double 1400, **Queen 1600** (new; it is the size the bug report named),
+  King 1800 — and `scene-spec.ts`'s detection default went with them.
+  **The comment is the part worth keeping.** It read "a king is WIDER than a double,
+  which is `dimMM[1]`'s job", and that sentence is why the transposition survived
+  being looked at: the wrong belief was written down beside the numbers it produced,
+  so every reader who checked the numbers against the comment found them consistent.
+  A 2000×1600 "double" also renders as a plausible but OVERSIZED bed rather than a
+  broken one, which is the other half of it — 1600×2000 and 2000×1600 are both
+  plausible bed numbers. `tests/shape-search.test.ts` asserts the fixed behaviour on
+  a **single** as well, because 900×2000 transposed is 2.0 m wide and 0.9 m long and
+  that is not a bed at any glance: the asymmetric fixture is the one that cannot hide
+  the defect.
   It was two surfaces until they were merged: a 520px modal from the rail over
   `PART_LIBRARY` + product presets, and a canvas strip over `PART_LIBRARY` alone.
   Same feature, two component trees, **two different item lists** — and only the
   strip could drag onto the floor while only the modal could take a described
   piece. The strip won because a modal covers the room you are placing furniture
-  into, which is also the drop target. `LibraryPicker.tsx` now owns the one list
-  (plus `PickerTabs` / `DescribeField`, shared with the Inspector's swap flow) and
-  takes `columns` / `draggable`, so the dock and the swap modal cannot drift apart
+  into, which is also the drop target. `LibraryPicker.tsx` now owns the one list and
+  takes `columns` / `draggable` / `initialQuery`, so the dock and the swap modal
+  cannot drift apart
   again. `draggable` is **off on the 2D plan**, which has no drop handler — a drag
   that cannot land is worse than no drag.
 - **Changing which model a piece uses is ONE surface** (`RegenerateModal.tsx`),
-  reusing the same `PickerTabs` / `DescribeField` pair as the Add flow. It was two
+  reusing the same `LibraryPicker` as the Add flow and seeding its search with the
+  piece's own name through `initialQuery`, so opening it on something called "office
+  chair" is already showing office chairs — which is what the deleted Describe-it
+  tab did with the same string. It was two
   buttons — "Swap model" and "AI refine" — which were the same feature twice, and
   the second advertised an AI that does not exist here: matching is local token
   search (`lib/shape-search.ts`), instant and offline. The modal hands the swap
@@ -1473,7 +1557,7 @@ undo — see `lib/storage.ts`).
 ### Key library files (beyond §4)
 | File | Role |
 |---|---|
-| `lib/scene-spec.ts` | **Single source of truth** — `Shape` union, `ScenePart`, `PART_LIBRARY` (the one catalog — the old "Real sizes" preset sheet was dissolved into it: duplicates deleted, beds and fridges kept as proper entries in their own groups), `defaultScene` starters, parametric/decor/support flags, DnD MIME. `defaultScene` is authored against `lib/room-bays.ts`, in each wall's own frame (`u` along it, `v` out from it) rather than in room coordinates: a rectangle reads as it always did, an L furnishes its leg and its wing, and a footprint whose walls the user has dragged is furnished as it now is. Every seeded piece is **gated on fitting** — whole footprint inside the room, clear of what is already there — so a room too small for a sofa gets fewer pieces, never a smaller sofa. What a shallow room gets instead is **different furniture**: `SCREENS` picks the largest real panel (65″ / 55″ / 43″, all three in the catalog) whose own 1.2 × diagonal minimum fits the distance the wall can offer, a bed falls back from double to single, and a dining table with no room for 900 mm of pull-back on both sides goes against the wall and seats three — a real arrangement, not a fault (`layout-rules`’ `seats` rule is `atLeast: 3` of four sides), and one the plan search below now avoids needing wherever the room has a wall that seats four. The living group also takes the bay with the **viewing depth** rather than the most floor, and leaves a route behind the sofa where the bay opens onto another group — circulation over screen size, the same order `layout-score`'s weights give it. Gaps come from `layout-rules`' bands, sizes through `clampDims`, heights through `groundY`; all five presets seed with an empty room report. **The openings go in first** (`lib/room-openings.ts`) and everything else is arranged against them: the screen takes neither the door's wall nor a window's, the wardrobe takes a cross wall without a window, a door's swing and the route in from it are floor nothing may be seeded onto, and the living group is placed by searching **along** its wall rather than centring on it — because a seat centred across a 2.42 m alcove seals it, and a door on the *next* wall reaches round the corner far enough to refuse a sofa the app then simply did without. Then it is **dressed** — a picture over the sofa or bed, curtains at every window, a pendant over the dining table, a lamp on each nightstand — all wall- or ceiling-mounted, so `isObstacle` is false for every one and the dressing costs nothing in floor, routes or access zones. Finally the whole arrangement is **searched, not merely built**: the choices the seeder cannot make well in isolation (which wall a group backs onto, which bay the living group gets) become a `SeedPlan`, `enumeratePlans` returns at most thirty-two of them — one, and no search, for a room with a single usable viewing wall — each is built in full, and `costBreakdown` with the navigation term on picks the winner. A piece that could not be placed is charged what a piece nobody can reach is charged, so a tidy empty room cannot win. Plan zero is always the greedy plan, so the search can only return that room or a better one. A seeded seat is also **turned toward the group it belongs to**, not merely put at the right distance from it: `relationCost` charges a `faces` relation twice — once for the gap, once for the heading — and the seeder answered only the first, which was the entire relation cost of the L. Its armchair sat 2.355 m from the sofa inside a 1.2–2.6 m band, dead centre, and was charged 0.479 for sitting square to its own wall with the sofa 43° off its nose; `Suggest` could then only answer by shoving a chair that was already in the right place, up to 735 mm, at every seed. The turn is derived per candidate spot rather than chosen, so `seats` tests the footprint the chair will actually have, and `place` wraps the composed rotation to (−π, π] — a frame on the −π wall plus a turn away from the room had been producing −188°, the right rotation written wrong. The L's starter cost fell 10.8 → 4.4 and the other four presets did not move. |
+| `lib/scene-spec.ts` | **Single source of truth** — `Shape` union, `ScenePart`, `PART_LIBRARY` (the one catalog — the old "Real sizes" preset sheet was dissolved into it: duplicates deleted, beds and fridges kept as proper entries in their own groups), `defaultScene` starters, parametric/decor/support flags, DnD MIME. `defaultScene` is authored against `lib/room-bays.ts`, in each wall's own frame (`u` along it, `v` out from it) rather than in room coordinates: a rectangle reads as it always did, an L furnishes its leg and its wing, and a footprint whose walls the user has dragged is furnished as it now is. Every seeded piece is **gated on fitting** — whole footprint inside the room, clear of what is already there — so a room too small for a sofa gets fewer pieces, never a smaller sofa. What a shallow room gets instead is **different furniture**: `SCREENS` picks the largest real panel (65″ / 55″ / 43″, all three in the catalog) whose own 1.2 × diagonal minimum fits the distance the wall can offer, a bed comes off `BED_LADDER` — Queen 1600 / Double 1400 / Single 900, EU standards and every rung 2000 long, so **width is the only axis that separates them and a bed that will not work in a bay cannot be fixed by shortening it** — and a dining table with no room for 900 mm of pull-back on both sides goes against the wall and seats three — a real arrangement, not a fault (`layout-rules`’ `seats` rule is `atLeast: 3` of four sides), and one the plan search below now avoids needing wherever the room has a wall that seats four. The living group also takes the bay with the **viewing depth** rather than the most floor, and leaves a route behind the sofa where the bay opens onto another group — circulation over screen size, the same order `layout-score`'s weights give it. Gaps come from `layout-rules`' bands, sizes through `clampDims`, heights through `groundY`; all five presets seed with an empty room report. **The openings go in first** (`lib/room-openings.ts`) and everything else is arranged against them: the screen takes neither the door's wall nor a window's, the wardrobe takes a cross wall without a window, a door's swing and the route in from it are floor nothing may be seeded onto, and the living group is placed by searching **along** its wall rather than centring on it — because a seat centred across a 2.42 m alcove seals it, and a door on the *next* wall reaches round the corner far enough to refuse a sofa the app then simply did without. Then it is **dressed** — a picture over the sofa or bed, curtains at every window, a pendant over the dining table, a lamp on each nightstand — all wall- or ceiling-mounted, so `isObstacle` is false for every one and the dressing costs nothing in floor, routes or access zones. Finally the whole arrangement is **searched, not merely built**: the choices the seeder cannot make well in isolation (which wall a group backs onto, which bay the living group gets) become a `SeedPlan`, `enumeratePlans` returns at most thirty-two of them — one, and no search, for a room with a single usable viewing wall — each is built in full, and `costBreakdown` with the navigation term on picks the winner. A piece that could not be placed is charged what a piece nobody can reach is charged, so a tidy empty room cannot win. Plan zero is always the greedy plan, so the search can only return that room or a better one. A seeded seat is also **turned toward the group it belongs to**, not merely put at the right distance from it: `relationCost` charges a `faces` relation twice — once for the gap, once for the heading — and the seeder answered only the first, which was the entire relation cost of the L. Its armchair sat 2.355 m from the sofa inside a 1.2–2.6 m band, dead centre, and was charged 0.479 for sitting square to its own wall with the sofa 43° off its nose; `Suggest` could then only answer by shoving a chair that was already in the right place, up to 735 mm, at every seed. The turn is derived per candidate spot rather than chosen, so `seats` tests the footprint the chair will actually have, and `place` wraps the composed rotation to (−π, π] — a frame on the −π wall plus a turn away from the room had been producing −188°, the right rotation written wrong. The L's starter cost fell 10.8 → 4.4 and the other four presets did not move.  **Which rung is chosen before which wall, and not on cost.** The plan search scores whole candidate rooms, and `DEFAULT_WEIGHTS` has no opinion about bed size — measured at the U's 8 x 7.5, all three rungs place thirteen pieces with navigation 0.0 and totals of 4.31 / 4.29 / 4.28, so the bed was being decided by 0.7% of a total that says nothing about beds, and 8 x 6.5 gave a Queen where 8 x 7.5 gave a Single off the same ladder. So `SeedPlan.bedRung` is resolved in two stages: **the widest rung whose best plan places the bed and strands nothing** (`navigation === 0` is the definition of stranding nothing, not a tuned threshold), and failing that **the widest rung that places a bed at all**, with `clearance.ts` left to report the route. The second stage is rule 2 of `CLAUDE.md` where nobody had applied it: dropping the piece is the limit case of silently resizing it to fit, and the one form of it the user cannot see — a stranded route is a warning they can act on, a missing bed is absence. Before it, five U sizes seeded no bed at all, because `missing` charges an absent bed the same `STRANDED_PIECE` as an absent nightstand and a bedless 484.06 beat the best bed-bearing 496.95. It is **not** monotonic in room size and that is measured, not hoped: thirteen of eighty-one steps still give a bigger room a narrower bed, because whether a rung strands floor depends on all the other furniture and a deeper bay fits more of it. `tests/bed-ladder.test.ts` ratchets that count and prints the list.|
 | `lib/parts-catalog.ts` | Room defaults + catalog data. |
 | `lib/scene-store.ts` | Scene parts CRUD + grouping. |
 | `lib/storage.ts` | IndexedDB room persistence (`RoomData`, `wallColors`, `footprint`, per-room `hidden`, `version`). Deleting a room is a **soft delete** — keys move under `trash:{ts}:` and `restoreRoom` undoes it; `purgeTrash` expires them after 30 days and `destroyRoom` is the irreversible path. A `room:{id}:touched` key carries the real `updatedAt`. **`meta` is retired first on delete and written last on restore**: there is no transaction across keys, and `listRooms` decides visibility from `meta`, so ordering it this way makes the visible state flip exactly once instead of leaving a room that appears in the workspace and opens empty. `restoreRoom` refuses when a live room already holds the id. Each detection carries a `uid`, which becomes its ScenePart id so a user's transforms survive a re-detect; records written before that fall back to the positional `${category}-${n}`. `reslotCaptures` moves the whole set of wall photos in one operation, for three reasons that each cost something: the WHOLE record travels (the pairwise swap it replaces re-wrote `{ slot, blob, takenAt }` and silently dropped `pose`, so reordering photos threw away the focal length, the tilt and the bearing — `pose` being optional is what let it typecheck); writes precede deletes (a vacated key that outlives its write is a duplicate the user can delete, a deleted key whose write never landed is a photograph that is gone); and a mapping that would land two photos on one wall is refused rather than absorbed. |

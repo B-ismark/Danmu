@@ -546,6 +546,8 @@ type SeedPlan = {
   livingWall: number;
   /** Rank into `seedFrames` for whatever the second bay gets. */
   secondWall: number;
+  /** Which rung of `BED_LADDER` the bedroom starts at. */
+  bedRung: number;
 };
 
 /** How many runners-up each choice keeps — **four, because a bay has four sides.**
@@ -558,8 +560,34 @@ type SeedPlan = {
  *
  *  The product is what it bounds: 2 × 4 × 4 = **32 plans at most**, one build-and-score
  *  being 264–461 µs plus the clearance field, so the worst preset seeds in ~53 ms and a
- *  plain rectangle in 0.5 ms. §3.10.3 part VI has the arithmetic for why it is not 200. */
+ *  plain rectangle in 0.5 ms. §3.10.3 part VI has the arithmetic for why it is not 200.
+ *
+ *  `bedRung` does not raise that 32. It is only ever > 1 for the `u`, which has no
+ *  swap and no second wall, so its product is 1 × 4 × 1 × 3 = 12; the `t`/`open`
+ *  pair that sets the ceiling seeds no bedroom and stays at 2 × 4 × 4. */
 const PLAN_RANKS = 4;
+
+/** The bed sizes a starter bedroom may be built from, widest first.
+ *
+ *  EU mattress standards, and the same four rungs the catalog ships, so the seeded
+ *  room and the Library agree about what a Queen is. Every one of them is 2000 long
+ *  — width is the only axis that separates them, which is why a bed that does not
+ *  work in a bay cannot be fixed by shortening it.
+ *
+ *  It is a LADDER rather than one size because a single is a different piece of
+ *  furniture, not a resized double. The seeder walks down it when a rung will not
+ *  fit, and `SeedPlan.bedRung` lets the plan search start further down — which is
+ *  what it needs when a rung fits geometrically and still strands the floor behind
+ *  it. Correcting the bed's transposed dims made that case real: at 6 × 5 the U's
+ *  bay holds a 1600 × 2000 queen with bed, wardrobe and nightstands, and leaves no
+ *  route to the door wider than 600 mm, so `navigabilityCost` charged the winning
+ *  plan 750.6 where the mis-shaped bed had scored 0. The search was never blind; it
+ *  had no better room to choose. This gives it one. */
+export const BED_LADDER: ReadonlyArray<{ label: string; shape: Shape; dim: [number, number, number] }> = [
+  { label: 'Queen bed', shape: 'bed-double', dim: [1600, 2000, 600] },
+  { label: 'Double bed', shape: 'bed-double', dim: [1400, 2000, 600] },
+  { label: 'Single bed', shape: 'bed-single', dim: [900, 2000, 600] },
+];
 
 
 export function defaultScene(
@@ -862,19 +890,23 @@ export function defaultScene(
     };
 
     // ── Bedroom: head of the bed to the wall, a side to get in on ─────────────
-    const bedroom = (bay: Bay, opt: { wall?: number } = {}) => {
+    const bedroom = (bay: Bay, opt: { wall?: number; rung?: number } = {}) => {
       const frames = seedFrames(bay, poly);
       const f = frames[opt.wall ?? 0] ?? frames[0];
-      const bed: [number, number, number] = [2000, 1600, 600];
-      const bedHalfW = bed[0] / 2000;
-      const vBed = bed[1] / 2000 + SEED_WALL_GAP;
-      let sleeper = place('bed', 'Double bed', 'bed-double', bed, f, 0, vBed);
-      if (!sleeper) {
-        // No room for a double. A single is a different piece of furniture, not a
-        // resized one — the catalog size stands.
-        sleeper = place('bed', 'Single bed', 'bed-single', [1900, 1000, 600], f, 0, 1000 / 2000 + SEED_WALL_GAP);
+      // Down the ladder from wherever the plan starts. `bed` is whatever actually
+      // landed, so `bedHalfW` below is the placed bed's width and not the wished-for
+      // one — the nightstands follow the bed that exists.
+      const start = Math.min(opt.rung ?? 0, BED_LADDER.length - 1);
+      let sleeper: ScenePart | null = null;
+      let bed: [number, number, number] = BED_LADDER[start].dim;
+      for (let i = start; i < BED_LADDER.length && !sleeper; i++) {
+        const rung = BED_LADDER[i];
+        // Derived from the rung, never typed beside it: half the LENGTH is how far the
+        // bed stands off the wall its head is against.
+        sleeper = place('bed', rung.label, rung.shape, rung.dim, f, 0, rung.dim[1] / 2000 + SEED_WALL_GAP);
+        if (sleeper) bed = rung.dim;
       }
-
+      const bedHalfW = bed[0] / 2000;
       // Touching the head end on both sides — layout-rules wants a nightstand within
       // 150 mm of the bed, and both sides of a double are somebody's side.
       const stand: [number, number, number] = [450, 400, 550];
@@ -1011,7 +1043,7 @@ export function defaultScene(
 
     switch (layoutId) {
       case 'u': {
-        bedroom(bays[0], { wall: plan.livingWall });
+        bedroom(bays[0], { wall: plan.livingWall, rung: plan.bedRung });
         const spare = second(1.2);
         if (spare) alcove(spare);
         break;
@@ -1115,24 +1147,82 @@ export function defaultScene(
   // not be placed is charged at exactly what a piece nobody can reach is charged —
   // `STRANDED_PIECE` at the navigation weight — which is the same failure stated
   // twice: part of the room is not part of the room.
+  //
+  // That charge is FLAT, and the sentence above is true of a nightstand and false of
+  // the piece the room is named after. A missing nightstand and a missing bed are both
+  // 240 units, which is why a bedless plan could win a bedroom: measured at the U's
+  // 6 × 4, the bedless room scored 484.06 against the best bed-bearing room's 496.95
+  // and took the room by 2.7%. Rule (B) below is what answers that, rather than a
+  // heavier charge — a weight tuned until the bed wins is a weight tuned against the
+  // one size someone happened to print.
   const most = Math.max(...built.map((p) => p.length));
 
-  let best = built[0];
-  let bestCost = Infinity;
-  for (const parts of built) {
+  const scored = built.map((parts, i) => {
     const ctx: LayoutContext = { parts, movable: parts.map(() => true), footprint: poly };
     const model = prepare(ctx);
     const places = parts.map((p) => ({ x: p.pos[0], z: p.pos[2], yaw: p.rot }));
     const missing = (most - parts.length) * STRANDED_PIECE * DEFAULT_WEIGHTS.navigation;
-    // Strictly less than, so an exact tie keeps the earlier plan — and plan zero is
-    // the greedy one, so a room the search cannot improve on comes out unchanged.
-    const total = costBreakdown(model, places, DEFAULT_WEIGHTS, NAV_CELL).total + missing;
-    if (total < bestCost) {
-      bestCost = total;
-      best = parts;
+    const bd = costBreakdown(model, places, DEFAULT_WEIGHTS, NAV_CELL);
+    return {
+      parts,
+      rung: plans[i].bedRung,
+      hasBed: parts.some((q) => q.category === 'bed'),
+      navigation: bd.navigation,
+      total: bd.total + missing,
+    };
+  });
+
+  // Strictly less than, so an exact tie keeps the earlier plan — and plan zero is
+  // the greedy one, so a room the search cannot improve on comes out unchanged.
+  const cheapest = (of: typeof scored): ScenePart[] => {
+    let best = of[0].parts;
+    let bestCost = Infinity;
+    for (const c of of) {
+      if (c.total < bestCost) {
+        bestCost = c.total;
+        best = c.parts;
+      }
+    }
+    return best;
+  };
+
+  // ── Which BED, before which wall ─────────────────────────────────────────────
+  //
+  // The rung is not a cost dimension, and letting it be one was measured doing real
+  // damage: at the U's 8 × 7.5 all three rungs place thirteen pieces with navigation
+  // 0.0 and nothing missing, and their totals are 4.31 / 4.29 / 4.28 — so the bed in
+  // a user's starter bedroom was decided by 0.03 on 4.3, under 1%, in terms that say
+  // nothing about beds. 8 × 6.5 gave the queen and 8 × 7.5 the single off the same
+  // ladder, which is a BIGGER room getting a SMALLER bed; the U's bays are strictly
+  // monotonic in depth (measured), so that was never the footprint's doing.
+  //
+  // `DEFAULT_WEIGHTS` has no opinion about bed size, and the honest answer to that is
+  // to take the choice away from it rather than to add a term that gives it one. A
+  // lexicographic "cheapest, then widest" does not work either: 4.28 and 4.29 are not
+  // a tie, so the widest-bed criterion never runs unless it is "within ε", and ε is
+  // the tuned constant in a different coat.
+  //
+  // So the rung is chosen first, by a predicate, and the wall search runs inside it:
+  //
+  //   (A) the widest rung whose best plan places the bed AND strands nothing.
+  //       `navigation === 0` is not a threshold — it is the definition of "this room
+  //       strands no floor", and it is already computed. Monotonic by construction: a
+  //       deeper bay cannot make a narrow rung qualify where a wide one did not.
+  //   (B) failing that, the widest rung that places a bed AT ALL, and `clearance.ts`
+  //       reports the route. This is rule 2 of CLAUDE.md where nobody had applied it —
+  //       dropping the piece is the limit case of silently resizing it to fit, and the
+  //       one form of it the user cannot see. A stranded route is a warning they can
+  //       act on; a missing bed is absence.
+  //   (C) no plan places a bed — every preset but the `u`, which seeds no bedroom at
+  //       all — and the global cheapest stands, exactly as before.
+  const rungsPresent = [...new Set(scored.map((c) => c.rung))].sort((a, b) => a - b);
+  for (const stage of [(c: (typeof scored)[number]) => c.hasBed && c.navigation === 0, (c: (typeof scored)[number]) => c.hasBed]) {
+    for (const rung of rungsPresent) {
+      const ok = scored.filter((c) => c.rung === rung && stage(c));
+      if (ok.length) return cheapest(ok);
     }
   }
-  return best;
+  return cheapest(scored);
 }
 
 /** Which bay a second group would get, and how a lone bay is cut in half for two. */
@@ -1176,11 +1266,14 @@ function enumeratePlans(layoutId: LayoutId, bays: Bay[], poly: Footprint): SeedP
   let first = 1;
   let second = 1;
   let swaps = [false];
+  // Only a preset that seeds a bedroom has a rung to choose.
+  let rungs = 1;
   switch (layoutId) {
     case 'u':
       // The bed's wall is the whole room's axis, and the alcove is a plant: nothing
       // to swap and no second wall to choose.
       first = ranks(bays[0], false);
+      rungs = BED_LADDER.length;
       break;
     case 't':
     case 'open': {
@@ -1208,7 +1301,9 @@ function enumeratePlans(layoutId: LayoutId, bays: Bay[], poly: Footprint): SeedP
   for (const swap of swaps) {
     for (let livingWall = 0; livingWall < first; livingWall++) {
       for (let secondWall = 0; secondWall < second; secondWall++) {
-        plans.push({ swap, livingWall, secondWall });
+        for (let bedRung = 0; bedRung < rungs; bedRung++) {
+          plans.push({ swap, livingWall, secondWall, bedRung });
+        }
       }
     }
   }
@@ -1471,6 +1566,90 @@ export function groupScaleForDim(
   return [dim[0] / base[0], dim[2] / base[2], dim[1] / base[1]];
 }
 
+/** How wide (or tall) one module of a parametric shape wants to be, in METRES.
+ *
+ *  A parametric shape tiles: a wider wardrobe gains a bay, a longer sofa gains a
+ *  cushion. Every one of them used to derive its count the same way, inline in its
+ *  renderer — `Math.round(span / nominal)` — and that expression minimises the error
+ *  in the COUNT while saying nothing about the module, which is the thing with a
+ *  real-world size. The wardrobe showed it worst: at 890 mm, `round(0.89 / 0.6)` is
+ *  1, so it drew a single 890 mm door; at 900 mm it drew two of 450. Dragging the
+ *  width handle through that band made the doors grow to an impossible width and
+ *  then snap to a different count, which is what "the models are not modular
+ *  enough" describes.
+ *
+ *  So the count comes off the MODULE's range instead. Three numbers rather than
+ *  one, and the pair of bounds is what does the work — the same argument
+ *  `boundsToUnit` is built on in `lib/units.ts`: one end cannot tell you whether an
+ *  interval survived.
+ *
+ *  `max >= 2 * min` for every row below, and that is a constraint rather than a
+ *  coincidence. Where it fails there are spans no integer count can tile inside the
+ *  range at all — with min 450 and max 750, an 890 mm wardrobe has no legal answer,
+ *  since one bay is over the max and two are under the min. `moduleCount` still
+ *  returns something there (see below), but the range would be quietly unsatisfiable
+ *  in a band nobody had noticed, which is the shape of defect this replaces.
+ *
+ *  The nominals are chosen so that **every shipped catalog preset keeps the count it
+ *  has today**. That is deliberate and it is not a "keep the look" dodge: the defect
+ *  is in the bands between the presets, and a change that also redrew the four
+ *  pieces the presets describe would make it impossible to tell a fix from a
+ *  restyle. `tests/module-tiling.test.ts` pins both halves — the presets by name and
+ *  the whole legal range by sweep. */
+export type ModuleRange = { min: number; nominal: number; max: number };
+
+export const MODULE_RANGE: Partial<Record<Shape, ModuleRange>> = {
+  // A wardrobe bay is a door. 400–800 mm covers a narrow single through a wide
+  // slider; 600 is the classic single-door width and keeps the 2400 mm preset at the
+  // four bays it draws today.
+  wardrobe: { min: 0.4, nominal: 0.6, max: 0.8 },
+  closet: { min: 0.4, nominal: 0.6, max: 0.8 },
+  // A seat cushion. The nominal is high in its own range on purpose: 900 mm is a
+  // two-seater's cushion and it is what keeps the 2200 mm preset at two rather than
+  // silently promoting it to a three-seater.
+  sofa: { min: 0.47, nominal: 0.9, max: 0.95 },
+  // A shelf gap.
+  bookshelf: { min: 0.22, nominal: 0.35, max: 0.45 },
+  // A shoe tier.
+  'shoe-rack': { min: 0.13, nominal: 0.2, max: 0.26 },
+  // A curtain pleat. The old floor of 8 pleats produced 50 mm pleats on a 400 mm
+  // curtain — below any plausible minimum — so the floor goes and the range answers.
+  curtain: { min: 0.07, nominal: 0.11, max: 0.14 },
+};
+
+/** How many modules tile `span` metres, preferring a module near `nominal` and
+ *  keeping it inside `[min, max]` whenever an integer count can.
+ *
+ *  Monotonic in `span` — a piece that gets wider never loses a module. `Math.round`
+ *  on its own is not: it flips at each half-step, which is the jump the wardrobe
+ *  showed. All three quantities here are non-decreasing in `span`, and
+ *  `tests/module-tiling.test.ts` sweeps for it rather than trusting the argument.
+ *
+ *  When no count keeps the module in range — possible only if a row breaks the
+ *  `max >= 2 * min` rule above — it falls back to the count nearest `nominal`, which
+ *  is exactly the old behaviour. So a bad range degrades to what shipped rather than
+ *  to nonsense, and the sweep is what says whether any row is in that state. */
+export function moduleCount(span: number, r: ModuleRange): number {
+  if (!Number.isFinite(span) || span <= 0) return 1;
+  const target = Math.max(1, Math.round(span / r.nominal));
+  const lo = Math.max(1, Math.ceil(span / r.max));
+  const hi = Math.floor(span / r.min);
+  // Not a two-sided clamp: `hi < lo` means the interval is empty, and clamping
+  // through an inverted interval lands on whichever bound is applied second — the
+  // `NumberField` scar in CLAUDE.md, where a door's inverted range made every press
+  // land on `min` and DOWN raise its maximum.
+  if (hi < lo) return target;
+  return Math.min(hi, Math.max(lo, target));
+}
+
+/** The module range a parametric shape tiles by, or `null` for a shape that does not
+ *  tile. Separate from `MODULE_RANGE` so a caller reads one shape rather than the
+ *  table, and so a shape added to `PARAMETRIC_SHAPES` without a range is a `null`
+ *  a renderer must handle rather than an `undefined` it will spread into NaN. */
+export function moduleRangeFor(shape: Shape): ModuleRange | null {
+  return MODULE_RANGE[shape] ?? null;
+}
+
 // Categories whose flat top surface can hold a decor collection (vase, books…).
 const DECOR_CATEGORIES = new Set<Category>(['table', 'desk', 'nightstand', 'shelf', 'wardrobe', 'ottoman']);
 export function supportsDecor(category: Category, shape: Shape): boolean {
@@ -1535,13 +1714,27 @@ export const PART_LIBRARY: LibraryItem[] = [
   // the ladder is a deliberate three, authored INSIDE clampDims' bed bands (the
   // old preset sheet's dims sat outside them and were silently clamped on add).
   // Everything between the rungs is reachable by resizing.
-  { label: 'Single bed', group: 'Bedroom', category: 'bed', shape: 'bed-single', dimMM: [1900, 1000, 600] },
-  { label: 'Double bed', group: 'Bedroom', category: 'bed', shape: 'bed-double', dimMM: [2000, 1600, 600] },
-  // 600 mm, the same as the other two: `BedGeo` scales the frame, mattress,
-  // duvet, pillows AND a `h * 1.4` headboard off dimMM[2], so a taller number
-  // here does not make a king-size bed — it makes a 67%-larger bed with a 1.4 m
-  // headboard. A king is WIDER than a double, which is dimMM[1]'s job.
-  { label: 'King bed', group: 'Bedroom', category: 'bed', shape: 'bed-double', dimMM: [2000, 1800, 600] },
+  // Mattress sizes are EU standards and every one of them is 2000 long; what
+  // separates the rungs is WIDTH. dimMM is [W, L, H] here as everywhere -- see the
+  // note above the ladder for why that had to be said twice.
+  { label: 'Single bed', group: 'Bedroom', category: 'bed', shape: 'bed-single', dimMM: [900, 2000, 600] },
+  { label: 'Double bed', group: 'Bedroom', category: 'bed', shape: 'bed-double', dimMM: [1400, 2000, 600] },
+  { label: 'Queen bed', group: 'Bedroom', category: 'bed', shape: 'bed-double', dimMM: [1600, 2000, 600] },
+  // 600 mm, the same as the others: `BedGeo` scales the frame, mattress, duvet,
+  // pillows AND a `h * 1.4` headboard off dimMM[2], so a taller number here does
+  // not make a king-size bed — it makes a 67%-larger bed with a 1.4 m headboard.
+  // A king is WIDER than a double, and width is dimMM[0].
+  //
+  // That last sentence used to end "which is dimMM[1]'s job", and it is the whole
+  // reason this ladder was transposed for as long as it was: the belief was
+  // written down beside the numbers it produced, so every reader who checked the
+  // numbers against the comment found them consistent. `BedGeo` disagrees and
+  // always did — its headboard spans dimMM[0] and a double's two pillows sit side
+  // by side across it — as do `Inspector`'s ['Width','Depth','Height'] labels, the
+  // seed's `vBed`, and this file's own `[W, D, H]` header. Five readers against one
+  // comment. A 2000-wide, 1600-long "double" renders as a plausible but oversized
+  // bed rather than a broken one, which is why it survived being looked at.
+  { label: 'King bed', group: 'Bedroom', category: 'bed', shape: 'bed-double', dimMM: [1800, 2000, 600] },
   // Lighting
   { label: 'Floor lamp', group: 'Lighting', category: 'lamp', shape: 'lamp-floor', dimMM: [300, 300, 1700] },
   { label: 'Table lamp', group: 'Lighting', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500] },
@@ -1593,7 +1786,7 @@ const CATEGORY_DEFAULTS: Record<
   shelf: { shape: 'bookshelf', dim: [900, 350, 1800] },
   wardrobe: { shape: 'wardrobe', dim: [2000, 600, 2100] },
   rug: { shape: 'rug', dim: [2400, 1600, 5] },
-  bed: { shape: 'bed-single', dim: [1900, 1000, 600] },
+  bed: { shape: 'bed-single', dim: [900, 2000, 600] },
   monitor: { shape: 'monitor', dim: [600, 200, 400] },
   fan: { shape: 'fan', dim: [1000, 1000, 200], circle: true, wallMounted: true },
   fridge: { shape: 'fridge', dim: [550, 550, 850] },

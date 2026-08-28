@@ -13,6 +13,7 @@ import { EditableText, FlowBarLead, IconButton, StepHeader } from '@/components/
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { Select } from '@/components/ui/Select';
 import { PhotoEditor } from '@/components/studio/PhotoEditor';
+import { isTypingOrDialog } from '@/components/studio/KeyboardShortcuts';
 import { sampleBoxColor } from '@/lib/color-sample';
 import { localDetectorAvailable, detectLocalAcrossImages } from '@/lib/local-detect';
 import {
@@ -28,6 +29,17 @@ import {
 import { hfovFromFocal35 } from '@/lib/exif';
 import { geoRefine, refineDetections, type CalMap, type RoomDims } from '@/lib/detect-refine';
 import { judgeLabels, type LabelCandidate, type LabelVerdict } from '@/lib/label-repair';
+import { suggestFromLabel } from '@/lib/label-suggest';
+import {
+  canRedo,
+  canUndo,
+  emptyHistory,
+  record as recordStep,
+  redo as redoStep,
+  restoreConfirmed,
+  snapshotConfirmed,
+  undo as undoStep,
+} from '@/lib/review-history';
 import { shouldAutoConfirm, sourceLabel, sourceOf } from '@/lib/detect-confidence';
 import { cleanLabelOf, fromRecord, toRecord } from '@/lib/detection-record';
 import { formatDim } from '@/lib/units';
@@ -35,6 +47,9 @@ import type { DimUnit } from '@/lib/store';
 
 type SlotEntry = { slot: CaptureSlot; url: string; cap: Capture };
 type Box = [number, number, number, number];
+/** One shared empty list, so a row with no offer is handed the same reference every
+ *  render rather than a fresh `[]`. */
+const EMPTY_OFFER: LabelCandidate[] = [];
 
 /** How many colour samples decode at once. See the sampling effect below. */
 const COLOR_BATCH = 4;
@@ -480,6 +495,7 @@ export default function DetectPage() {
   }, [detections, slots]);
 
   function toggleConfirm(i: number) {
+    remember();
     setConfirmed((prev) => {
       const next = new Set(prev);
       if (next.has(i)) next.delete(i);
@@ -494,7 +510,81 @@ export default function DetectPage() {
   // accusation outlive the row it was about.
   const verdicts = useMemo(() => judgeLabels(detections, cals, roomDims), [detections, cals, roomDims]);
 
+  /** A model offered because of what the user just TYPED, rather than because the
+   *  measurement disagreed. Held on the page and not per row because only one rename
+   *  can be in flight, and because a stale offer pointing at a row that has since been
+   *  deleted or repaired would name the wrong piece — `deleteDetection` re-indexes
+   *  `confirmed` for exactly that reason, and this is the same hazard. */
+  const [offer, setOffer] = useState<{ index: number; candidates: LabelCandidate[] } | null>(null);
+
+  /** Undo / redo for the review. In memory and gone on navigation, exactly like the
+   *  review itself — nothing here is persisted until `finish()` writes it.
+   *
+   *  `lib/history.ts` cannot serve this: it snapshots `useStudio` on a debounce and
+   *  is gated on `draggingId`, none of which exists on this screen. */
+  const [history, setHistory] = useState(() => emptyHistory<Detection>());
+
+  /** The state as it stands right now, for recording BEFORE a change is applied.
+   *  Read from the render’s own values rather than through a setter callback: every
+   *  caller is an event handler, so these are the values the user was looking at when
+   *  they acted, which is what an undo should return to. */
+  function remember() {
+    setHistory((h) => recordStep(h, { detections, confirmed: snapshotConfirmed(confirmed) }));
+  }
+
+  /** Apply a snapshot. Both halves together and never one of them: `confirmed` is a
+   *  set of INDICES into `detections`, so restoring one without the other points
+   *  every confirmation at a different piece of furniture. */
+  function applySnapshot(snap: { detections: readonly Detection[]; confirmed: readonly number[] }) {
+    setDetections([...snap.detections]);
+    setConfirmed(restoreConfirmed(snap.confirmed));
+    // Both are about a row by index, and an undo can change what is at that index.
+    setOffer(null);
+    setLinked(null);
+  }
+
+  function doUndo() {
+    const r = undoStep(history, { detections, confirmed: snapshotConfirmed(confirmed) });
+    if (!r) return;
+    setHistory(r.history);
+    applySnapshot(r.state);
+  }
+
+  function doRedo() {
+    const r = redoStep(history, { detections, confirmed: snapshotConfirmed(confirmed) });
+    if (!r) return;
+    setHistory(r.history);
+    applySnapshot(r.state);
+  }
+
+  // Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z, the same pair the studio uses.
+  //
+  // `isTypingOrDialog` rather than a fresh predicate: this screen is mostly text
+  // fields, and Ctrl+Z inside a half-typed rename must undo the TEXT, not the
+  // review. Five studio components already share that guard and a sixth copy of it
+  // is the drift this repo keeps finding. It also covers the confirm dialog.
+  //
+  // Not `capture`, and not `preventDefault` when it declines: an undo this screen
+  // refuses has to fall through to the browser, or a field would lose its own undo.
+  useEffect(() => {
+    function onKey(e: globalThis.KeyboardEvent) {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z') return;
+      if (isTypingOrDialog(e.target)) return;
+      e.preventDefault();
+      if (e.shiftKey) doRedo();
+      else doUndo();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // `doUndo` / `doRedo` close over `history`, `detections` and `confirmed`, so the
+    // listener has to be re-attached when those change. Listing them rather than the
+    // functions, which are new on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [history, detections, confirmed]);
+
   function applyRepair(i: number, cand: LabelCandidate) {
+    remember();
+    setOffer(null);
     // In place, never a filter or a re-sort: `confirmed` is a Set of array
     // INDICES, so reordering here would silently move every confirmation onto a
     // different piece of furniture.
@@ -504,6 +594,12 @@ export default function DetectPage() {
   }
 
   function deleteDetection(i: number) {
+    remember();
+    // The offer is keyed on an INDEX, and this function re-indexes everything after
+    // `i`. Rather than shift it too, drop it: an offer is a response to a keystroke
+    // seconds ago, and one that survives a delete would point at whichever piece
+    // slid into that slot.
+    setOffer(null);
     setDetections((d) => d.filter((_, idx) => idx !== i));
     setLinked(null);
     setConfirmed((prev) => {
@@ -517,10 +613,25 @@ export default function DetectPage() {
   }
 
   function renameDetection(i: number, label: string) {
+    // `EditableText` commits on blur or Enter, not per keystroke, so one commit is
+    // one entry and the stack does not fill with single letters.
+    remember();
     setDetections((d) => d.map((x, idx) => (idx === i ? { ...x, label } : x)));
+    // A rename changes the WORD and nothing else, and the model comes off
+    // `category` — `buildSceneFromRoom` picks it and only refines the shape within
+    // that category — so renaming a bed to "Fridge" gave a bed called Fridge. The
+    // existing repair chips could not catch it: they fire on a MEASUREMENT
+    // disagreement, and typing a word is not one.
+    //
+    // Offered, never applied. The rule is two comments down in this same file — "a
+    // silent re-label is the same mistake as a silent resize" — and accepting this
+    // re-measures the piece, which is a size the user has not asked for yet.
+    const cands = suggestFromLabel(detections[i], label, cals, roomDims);
+    setOffer(cands.length > 0 ? { index: i, candidates: cands } : null);
   }
 
   function addManual(box: Box) {
+    remember();
     let det: Detection = {
       uid: uuid(),
       label: categoryLabel(manualCat),
@@ -650,6 +761,24 @@ export default function DetectPage() {
             writes it, so a stray click on a logo would discard it. Back is an
             explicit, high-intent control; a logo is not. */}
         <FlowBarLead onBack={() => router.back()} />
+        {/* Undo / redo for the review. Here rather than beside each row because they
+            act on the whole review, and because the studio puts its pair in chrome
+            too. NOT the studio’s `UndoRedo` component — that one reads `useStudio`,
+            which has nothing to do with this screen. */}
+        <div style={{ display: 'flex', gap: 2 }}>
+          <IconButton
+            icon="rotate-ccw"
+            label="Undo the last change to this list"
+            onClick={doUndo}
+            disabled={!canUndo(history)}
+          />
+          <IconButton
+            icon="rotate-cw"
+            label="Redo"
+            onClick={doRedo}
+            disabled={!canRedo(history)}
+          />
+        </div>
         <div className="chrome-bar__spacer" />
         <span role="status" aria-live="polite" style={{ fontSize: 13, color: 'var(--ink-2)' }}>
           {statusText}
@@ -775,6 +904,10 @@ export default function DetectPage() {
               <div style={{ position: 'relative' }}>
                 <PhotoEditor
                   imageUrl={active.url}
+                  // Without this every photo on this screen shares one generic alt
+                  // string, which is the whole review queue reading identically to a
+                  // screen reader. The prop existed; nothing passed it.
+                  slotLabel={slotLabel(active.slot)}
                   items={activeDetections.map(({ d, i }) => ({ index: i, d, locked: confirmed.has(i) }))}
                   mode={adding ? 'add' : 'select'}
                   onToggleLock={toggleConfirm}
@@ -937,6 +1070,8 @@ export default function DetectPage() {
                 verdict={verdicts[i] ?? { status: 'unmeasured' }}
                 dimUnit={dimUnit}
                 onRepair={(cand) => applyRepair(i, cand)}
+                offer={offer?.index === i ? offer.candidates : EMPTY_OFFER}
+                onDismissOffer={() => setOffer(null)}
                 highlighted={linked === i}
                 onThisPhoto={d.slot === activeSlot}
                 onToggle={() => toggleConfirm(i)}
@@ -1028,6 +1163,8 @@ function DetectionRow({
   onToggle,
   onRename,
   onRepair,
+  onDismissOffer,
+  offer,
   onDelete,
   onLink,
   onShow,
@@ -1041,6 +1178,10 @@ function DetectionRow({
   onToggle: () => void;
   onRename: (label: string) => void;
   onRepair: (cand: LabelCandidate) => void;
+  /** Models the piece’s current NAME suggests, best first — see suggestFromLabel.
+   *  Empty for every row but the one just renamed. */
+  offer: LabelCandidate[];
+  onDismissOffer: () => void;
   onDelete: () => void;
   onLink: (on: boolean) => void;
   onShow: () => void;
@@ -1156,6 +1297,67 @@ function DetectionRow({
                 {categoryLabel(cand.category)}?
               </button>
             ))}
+          </div>
+        )}
+        {/* A model offered because of the WORD, not because of the measurement.
+            Same chip vocabulary as the row above deliberately — to the user these
+            are one affordance ("this might be the wrong kind of thing"), and two
+            visual languages for that would read as two features.
+
+            What differs is the sentence, because the evidence differs: above, the
+            camera disagrees with the detector; here, the user has typed something
+            the model does not match. And it is an OFFER — accepting re-measures the
+            piece, which is a size nobody asked for yet. */}
+        {offer.length > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              gap: 6,
+              marginTop: 5,
+              fontSize: 11,
+              lineHeight: 1.45,
+              color: 'var(--ink-3)',
+            }}
+          >
+            <span style={{ flex: '1 1 auto', minWidth: 0 }}>
+              Still the {categoryLabel(d.category).toLowerCase()} model
+            </span>
+            {offer.slice(0, 2).map((cand) => (
+              <button
+                key={cand.category}
+                onClick={() => onRepair(cand)}
+                className="ds-chip"
+                // A negative margin means the re-measurement does not fit this word's
+                // own size band. Said in the tooltip rather than hidden: the user
+                // typed it, so it is offered either way, but they should know the
+                // camera does not agree. `label-suggest` sorts these below the ones
+                // that do fit, so a caveated chip is never the first thing offered.
+                title={
+                  cand.margin < 0
+                    ? `Use the ${categoryLabel(cand.category)} model — though what the camera measured is not ${categoryLabel(cand.category).toLowerCase()}-sized`
+                    : `Use the ${categoryLabel(cand.category)} model and measure it again`
+                }
+                style={{
+                  height: 22,
+                  fontSize: 11,
+                  padding: '0 8px',
+                  flex: '0 0 auto',
+                  ...(cand.margin < 0 ? { color: 'var(--warn-text)' } : null),
+                }}
+              >
+                Use {categoryLabel(cand.category)}
+                {cand.margin < 0 ? '?' : ''}
+              </button>
+            ))}
+            <IconButton
+              icon="x"
+              label="Keep this model"
+              onClick={onDismissOffer}
+              size={22}
+              iconSize={11}
+            />
           </div>
         )}
       </div>
