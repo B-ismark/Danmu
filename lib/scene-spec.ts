@@ -2178,7 +2178,39 @@ export function placeNewPart(
   const [fx, fz] = intoRoom(ax, az);
   const support = isTabletopProne(cat) ? findSupportUnder(existing, '__new__', fx, fz, dimMM) : null;
   const y = support !== null && support > 0.3 ? support : 0;
-  return { pos: [fx, y, fz], rot: 0, wallMounted };
+  // …facing the wall it belongs against, which used to be a flat `rot: 0` for every
+  // floor-standing piece there is. Add three beds to three different walls and all
+  // three point the same way — headboards north, two of them into open floor — which
+  // is what the user saw and reported as "all beds face that side".
+  //
+  // The app already owns this answer twice over and neither reader was the add path.
+  // `lib/layout-score.ts` charges every `prefers-wall` piece
+  // `FACING_GAIN * angleCost(yaw, edge.yaw)` — being turned the wrong way against
+  // your own wall is priced, and priced highly, because "which way a sofa faces is
+  // not a matter of taste". So Shuffle fixes this on the first press: measured over
+  // three seeds on a 6×5 rect with a bed dropped at each of three walls, every seed
+  // returns 0 / 90 / −90 degrees, each headboard against its own wall. The defect
+  // was never that the room could not be arranged; it was that adding a piece
+  // produced a heading the solver would immediately overrule, and the user had to
+  // press a button to get an orientation the app already knew.
+  //
+  // A DEFAULT, not a rule, in the same sense `ceilingSpot` above means it. Only the
+  // YAW is taken from the wall; `fx` / `fz` stay exactly where the drop landed,
+  // because being placed where you aimed is a promise and facing north is not. That
+  // is also why this does not make a floor piece ride its wall: `lib/drag-resolve.ts`
+  // snaps `ridesWall` pieces only, a bed is not one, and a bed that snapped on add
+  // but not on the next drag would be two behaviours for one piece.
+  //
+  // Nearest wall unconditionally rather than within some threshold. A piece with a
+  // wall affinity dropped in the middle of the floor is going to a wall sooner or
+  // later, so the nearest one is a better guess than a fixed heading, and a distance
+  // cutoff here would be a number with nothing to derive it from.
+  const affinity = wallAffinity(cat);
+  const rot =
+    room.footprint && (affinity === 'must-wall' || affinity === 'prefers-wall')
+      ? (snapToWall([fx, 0, fz], dimMM, room.footprint).rot ?? 0)
+      : 0;
+  return { pos: [fx, y, fz], rot, wallMounted };
 }
 
 /** Y-aware collision. Used for placement clamping. Rugs/mats exempt.
