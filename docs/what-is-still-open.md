@@ -17,9 +17,14 @@ point of writing this down.
 
 ## `main` is red on purpose. Here is the whole list.
 
-**5 failed, 1595 passed, 81 files**, measured on the merge result gated before #26 landed,
-with typecheck 0 and lint 0. Every one is attributed to a cause below. **A sixth failure is
-new, and is somebody's regression.**
+**5 failed, 1612 passed, 82 files** on `fa12f1a`, with typecheck 0 and lint 0 — measured on
+the merge result before it landed, not on a branch. Every failure is attributed to a cause
+below. **A sixth is new, and is somebody's regression.**
+
+The count moved and the failures did not: it was 5 / 1595 / 81 at #26, and #29 added 17
+assertions. **Reconciling the arithmetic is part of the check** — 1600 + 17 = 1617 = 1612 + 5.
+A red list is only a baseline if the passing count is accounted for too, or a test that
+silently stopped being collected hides inside an unchanged failure count.
 
 | test | item |
 |---|---|
@@ -186,6 +191,19 @@ fixture that cannot express the defect.*
 Squaring plus a shove of `off × radius` over four axes then four diagonals takes 197 → 30.
 Axes alone give 48, so **the diagonals carry a third of it**. The residual 30 are real and
 need a search that can move the piece *and* its neighbour, which a finish pass cannot do.
+
+**Shipped in `fa12f1a`, and one thing about it was checked rather than assumed.** The three
+diagonal-shove witnesses are coordinates into a space both the cost function and the seeder
+define, and item 1 moves starter placements — so they could have gone red for a reason with
+nothing to do with the shove. They did not. **That is also what makes 197 → 30 a result
+rather than an artifact of the pre-#26 seeder**, and it is the kind of thing that is only
+knowable by someone who noticed the witnesses were the fragile part.
+
+### The Shuffle rename is NOT started
+
+Recorded because a half-done rename reads as a bug, and this document twice implied it was in
+hand. The new Lock strings deliberately say **"Suggest"**, so the vocabulary stays internally
+consistent. If it lands it lands as **one sweep across all 36 files**, never a file at a time.
 
 ---
 
