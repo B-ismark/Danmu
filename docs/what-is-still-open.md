@@ -15,6 +15,32 @@ point of writing this down.
 
 ---
 
+## `main` is red on purpose. Here is the whole list.
+
+**5 failed, 1595 passed, 81 files**, measured on the merge result gated before #26 landed,
+with typecheck 0 and lint 0. Every one is attributed to a cause below. **A sixth failure is
+new, and is somebody's regression.**
+
+| test | item |
+|---|---|
+| `bed-rung-safety` › *refuses, at U 6×5, every rung above the one that ships* | 1 |
+| `bed-rung-safety` › *still keeps the worst case bounded once the ladder has chosen* | 1 |
+| `layout-solve` › *stops a scrambled bedroom from ending in the occasional disaster* | 6 |
+| `suggest-tidiness` › *runs the repair pass on every seed* | 3 |
+| `suggest-tidiness` › *…on a fixture where the proxy really does hand back something worse* | 3 |
+
+**Why red was the right trade.** Two of these are a **new test naming a defect that was
+already on `main`**; one is a guard correctly reporting that its own fixture has gone
+vacuous; one is a bar that must stay red until it can fail. Holding a correct fix out of
+`main` to keep the suite green would be a green bought by not looking — the same defect this
+repo already calls *a check that cannot fail*, one level up. **A red that names a real
+defect beats a green that hides one.**
+
+What it costs is the ability to read `main` as a signal, which is exactly why the list is
+here and not in a commit message.
+
+---
+
 ## A · Research — nobody has measured these
 
 ### 1. `clampIntoFootprint` aims every rescue at one point in a non-convex room
@@ -138,6 +164,29 @@ measured on the transposed bed and now dead.
 Bumping its median bar 10 → 20 turns it green while leaving an assertion that **survives
 mutating `anchorIdx` to empty** — a green that cannot fail. Measured, then reverted.
 
+**A constraint on this that only came out of the bandCost work:** any re-price of the cost
+function **reshuffles which seed disasters**, so a twelve-seed tail bar cannot survive one.
+That is not an argument for a looser bar — it is the reason a tail bar over a fixed seed set
+is the wrong instrument for guarding a solver whose weights are still moving. Worth settling
+before the move to the T, not after. **Owner: `sizes`** — `layout` was offered it and
+declined, so this is the one item in this document with a named owner rather than a
+question.
+
+### 7. `snapYaws` gives up and leaves the piece crooked — 197 in 240 solves
+
+Found by `layout` while chasing something else, and it is the third instance this round of
+the same shape. `snapYaws` squares a piece and asks the hard terms; when refused it **gave
+up and handed back a piece a few degrees off**. Over six presets × 40 seeds = **240 solves,
+197 crooked pieces, every gate green.**
+
+Green because the twelve-seed sweep that guards this runs on a plain 7.5 × 5.6 rect — **the
+one room where it does not happen.** Same shape as item 1 and as the bed transposition: *a
+fixture that cannot express the defect.*
+
+Squaring plus a shove of `off × radius` over four axes then four diagonals takes 197 → 30.
+Axes alone give 48, so **the diagonals carry a third of it**. The residual 30 are real and
+need a search that can move the piece *and* its neighbour, which a finish pass cannot do.
+
 ---
 
 ## B · Decisions only the user can make
@@ -234,12 +283,30 @@ the user went and looked.
     longer has, under a heading that reads "The lists on the left" for a panel that now
     lives in the **right** rail.
 
-    `CLAUDE.md` rule 4 is the third voice, still asserting the panel is called Library. So
-    three sources disagree and the only one a user can see is the one that is wrong.
-    **The help line and rule 4 follow the screen, not the other way round** — the principle
-    (two lists, named for what they hold, never interchangeable words) is untouched; the
-    specific word is not. Prose describing deleted behaviour is the next reader's source of
-    truth and no gate sees it, which is why this needed someone to look.
+    **FIXED in `aaf2888`, and not the way this document first proposed.** The count was
+    wrong as well: not one stale string but **three**, all already using the word — the help
+    card, the sun note in the left rail's Look section (*"Add a window or a door from the
+    Library"*), and the right-click menu on empty floor (*"Add from library…"*). **Three
+    signposts and no sign.**
+
+    So the fix was **one heading, not three strings**: the panel is headed **Library** again.
+    This document had argued the opposite — that the help line and `CLAUDE.md` rule 4 should
+    follow the screen. `shell`'s reasoning is better and the reason it wins is worth keeping:
+    rule 4 names the two lists for **what they hold**, and "Add pieces" names what you *do*
+    with the list. Restoring the heading makes all three strings true **and** makes rule 4's
+    own sentence true again **with no edit to the rule** — and *that* is the tell that it is
+    the coherent direction rather than merely a reachable one. `CLAUDE.md` was not touched
+    and needs no touching.
+
+    The button stays **"Add"**, which is not the same decision reversed: a button is named
+    for its action and a list for its contents, so the pair reads "press Add, the Library
+    opens" — which is what all three strings already assumed.
+
+    One more stale *direction*, the second this round after the empty state's "above":
+    `StudioHelp`'s group heading read **"The lists on the left"**, true of both until the
+    Library moved to the right of the canvas. It names the two lists and says which is where
+    now. **Not** the sun note — that names the list rather than a side, so it was true before
+    and after, and the distinction was written down rather than a third thing "fixed".
 
 11. **One session's tool classifier blocks `gh pr list` while allowing `gh pr create` and
     `gh api`.** That session opened a PR unable to first check whether one already existed
@@ -263,23 +330,73 @@ the user went and looked.
   violated twice.
 - **Re-baselining any currently failing assertion.** Every red in this document is
   attributed to a cause instead.
+- **`bandCost` as `e + e²`.** Measured, correct diagnosis, wrong remedy, **reverted** — and
+  the defect it was aimed at is real and now pinned as a characterisation test that prints
+  on every run. Swept over all ten relation specs the library can form, a piece **300 mm out
+  of band costs less than `MIN_GAIN_ABS` in every one of the ten**: a nightstand 450 mm off a
+  bed scores 0.90, so the solver finds the fix, the gate prices it as noise, and Shuffle
+  declines to offer it. That is most of both user reports.
+
+  `e + e²` fixes the price (10/10 → 0/10) and wrecks the tail. Scrambled 6 × 5 U, 48 seeds:
+
+  | `bandCost` | worst | median | seeds w/ hard term | largest hard |
+  |---|---|---|---|---|
+  | `e²` | 13.96 | 3.70 | 4 / 48 | 5.40 |
+  | `e + e²` | **337.53** | 3.05 | 7 / 48 | **322.62** |
+
+  Four disasters at 60 / 131 / 253 / 322 that `e²` never produces. `scoreLayout` sums every
+  term and only `anyWorse` keeps the hard ones apart, so a stronger `relation` **buys**
+  `access`. Capping the linear term at half a walkway was *worse* — 391.76, disaster on a
+  different seed — so it is not tunable.
+
+  **The untried direction, recorded in the code: the fault is in what gets OFFERED, not what
+  gets searched.** A relation-aware floor in `isWorthOffering` — offer it if any relation
+  went from out-of-band to in-band — changes the offer only and cannot destabilise the
+  annealer. Unblocked, needs no measurement to start.
 
 ---
 
 ## D · Would be lost silently
 
-- **`2f4d8d1`** (`feat/pin-from-randomise`) is a commit with **no ref pointing at it**. An
-  unreferenced commit is indistinguishable from lost work. Confirm it is superseded by the
-  Shuffle lock work, or restore a branch to it.
+- ~~**`2f4d8d1`** is an unreferenced commit.~~ **Wrong, and the error is worth keeping.**
+  `git log --oneline -1` says *"Merge pull request #18"* and `merge-base --is-ancestor` says
+  it is an ancestor of `main`. It was read out of a `git branch -vv` line —
+  `feat/pin-from-randomise 2f4d8d1` — and mistaken for the branch's own work when it was the
+  branch's **base**. Nothing was ever orphaned; `feat/pin-from-randomise` was **renamed**,
+  not deleted, and its content is in #29. **A ref listing tells you where a branch points,
+  never what it contains** — the second time in this round that a listing was read as a claim
+  about content.
 - **Eight stale gate worktrees** in temp directories belonging to sessions that have ended,
   plus two live worktrees on branches that have merged.
-- **`tests/layout-rules.test.ts:238`.** The fixture there is harmless — it asserts an anchor
-  by *rank*, and 1900 × 1000 and 1000 × 1900 are the same 1.90 m², so flipping it proves
-  nothing either way. **Its comment is not harmless:** it reads "a 2200 × 950 sofa (2.09 m²)
-  beat a 1900 × 1000 single bed (1.90 m²)", which after the bed fix describes a bed wider
-  than it is long, in the same suite as a new test declaring that impossible. Two files
-  disagreeing about which way a bed points, one of them the next reader's source of truth.
-  Fixture and comment move together or neither does.
+- ~~**`tests/layout-rules.test.ts:238`.**~~ **Fixed in `aaf2888`**, and the sweep that
+  replaced it is the lesson. The fixture was harmless — an anchor picked by *rank*, and
+  1900 × 1000 and 1000 × 1900 are the same 1.90 m² — so the **comment** was the defect.
+  Two careful greps, one per session, found **one stale bed fixture between them.** A third
+  found **seven**, and *all 115 tests in those three files passed either way*: not one was
+  load-bearing, which is exactly why the runner could never see them. So the check is now a
+  **sweep in the suite** rather than a list — `catalog-clamp.test.ts` scans `tests/` for a
+  bed fixture wider than it is long and asserts zero, **with a match count so it cannot pass
+  by matching nothing.** A list would have been that grep, frozen.
+
+  It found an eighth on its first run **that is not stale**: `label-repair.test.ts:222` hands
+  `judgeLabel` a bed of `[1900, 1234, 600]`, where `1234` is a sentinel that exists to be
+  shown recomputed. A detection's `dimMM` is the AI's raw hint and is *allowed* to be
+  nonsense — being nonsense is what `clampDims` and `judgeLabel` are for. Excluded with the
+  reason written beside it. **Reading it as stale would have deleted a real assertion to make
+  a new one look right.**
+
+### Two tooling hazards, both silent, both failing in the direction that looks like success
+
+- **A backslash can be eaten between a shell heredoc and the file.** A line intended as
+  `/\bdet\(/` arrived as a literal **0x08 backspace** — `/<BS>det\(/`, a regex that can never
+  match — **inside a test whose entire job is to match.** Typecheck and lint both passed. It
+  is a plain `code.includes('det({')` now, with no escape for anything to eat. Same family as
+  `CLAUDE.md`'s PowerShell UTF-8 warning: the damage happens in transit and the result still
+  compiles.
+- **Do not restore a mutation with `git checkout HEAD -- <file>` in a dirty tree.** It
+  silently wipes *uncommitted* work in the files it touches, and the sweep then reads as
+  still-failing-after-restore. **Back up bytes, not refs**, whenever the tree is dirty — which
+  in a shared checkout is always.
 
 ---
 
