@@ -10,6 +10,7 @@ import {
   wallSegments,
   footprintBounds,
   offsetWall,
+  type Footprint,
   type LayoutId,
 } from '@/lib/footprint';
 
@@ -132,12 +133,68 @@ describe('interiorPoint', () => {
   });
 
   it('survives a room with no interior at all', () => {
-    // A polygon collapsed onto a line. The scan finds nothing, and the contract is to
-    // say so rather than return a plausible-looking point from the fallback.
+    // A polygon collapsed onto a line. Neither the scan nor the edge probe finds
+    // anything — every probe off a zero-area edge lands off the line — and the
+    // contract is to say so rather than return a plausible-looking point.
     expect(interiorPoint([[0, 0], [1, 0], [2, 0]])).toBeNull();
     // …and the clamp then leaves its input alone rather than moving it somewhere it
     // cannot justify.
     expect(clampIntoFootprint(5, 5, [[0, 0], [1, 0], [2, 0]])).toEqual([5, 5]);
+  });
+
+  it('finds the floor of a room whose legs are thinner than the grid', () => {
+    // A U 8 x 6 whose legs and base are 40 mm. This is a room the app CALLS LEGAL:
+    // `moveWall` accepts any wall drag whose bounding box stays inside `ROOM_SIDE_M`,
+    // and nothing anywhere floors the width of a leg — so a user who drags the notch
+    // walls out gets exactly this.
+    //
+    // Every one of the three answers matters here and the fixture is built so that the
+    // first two fail. The area centroid is at roughly (0, 1.19), which is in the notch
+    // and outside. The grid samples at `minX + 0.05 + 0.1k`, so its nearest columns to
+    // the legs are ±3.95 and the legs start at ±3.96; its nearest row to the base is
+    // 2.95 and the base starts at 2.96. Every sample misses, by 10 mm, on purpose —
+    // which is what the clamp used to do about it: nothing at all, silently, on all
+    // four of its call sites.
+    const thinU: Footprint = [
+      [-4, -3],
+      [-3.96, -3],
+      [-3.96, 2.96],
+      [3.96, 2.96],
+      [3.96, -3],
+      [4, -3],
+      [4, 3],
+      [-4, 3],
+    ];
+    const b = footprintBounds(thinU);
+    expect(b.width, 'the fixture has to be a room the app would accept').toBeCloseTo(8, 6);
+    expect(b.depth).toBeCloseTo(6, 6);
+    const pt = interiorPoint(thinU);
+    expect(pt, 'a room with floor in it must not come back null').not.toBeNull();
+    expect(pointInFootprint(pt![0], pt![1], thinU), `${pt} must be inside the thin U`).toBe(true);
+    expect(Object.isFrozen(pt), 'the edge-probe answer is shared too, so it is frozen too').toBe(true);
+    // And the clamp built on it now moves a point rather than shrugging.
+    const [cx, cz] = clampIntoFootprint(0, 0, thinU);
+    expect(pointInFootprint(cx, cz, thinU), `(${cx}, ${cz}) must be inside`).toBe(true);
+  });
+
+  it('answers a given polygon once and hands back the same object', () => {
+    // The memo, asserted by IDENTITY because that is the only thing about it a test
+    // can see — there is no counter to read and a timing assertion is worthless on a
+    // loaded machine. Two of the four `clampIntoFootprint` call sites are inside the
+    // annealer's proposal generator, so without this the grid scan above is paid per
+    // proposal: measured at 15.1 ms for a 50 x 50 room, against `DEFAULT_STEPS` of
+    // 1600. The answer is frozen, which is what makes handing out one instance safe.
+    const u = footprintForLayout('u', 7.5, 5.6);
+    const first = interiorPoint(u);
+    expect(interiorPoint(u)).toBe(first);
+    expect(Object.isFrozen(first)).toBe(true);
+    // Keyed on the polygon's identity, not its contents: an equal-but-distinct array
+    // gets its own answer. Stated because it is the surprising half, and because it is
+    // what makes the memo safe — a footprint is a value here, and nothing mutates one.
+    const twin = footprintForLayout('u', 7.5, 5.6);
+    expect(twin).toEqual(u);
+    expect(interiorPoint(twin)).not.toBe(first);
+    expect(interiorPoint(twin)).toEqual(first);
   });
 });
 

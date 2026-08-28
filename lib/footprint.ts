@@ -209,20 +209,80 @@ export function pointInFootprint(x: number, z: number, poly: Footprint): boolean
  *  `clampIntoFootprint` came to return a position outside the footprint from a
  *  function whose name is a promise that it did not.
  *
- *  `polyAreaCentroid` (the shoelace centroid, `lib/geometry.ts`) is inside on all five
- *  presets and is the right first guess. It is not a guarantee: no centroid is inside
- *  an arbitrary non-convex polygon, and a room the user has dragged into a horseshoe
- *  can put it back in the void. So it is CHECKED, and the fallback is a scan — the
- *  bounding box at `PROBE_STEP`, keeping the interior sample nearest the centroid.
- *  Bounded (a few thousand point-in-polygon tests on a room-sized box), deterministic,
- *  and only ever paid on a polygon the cheap answer failed.
+ *  Three answers, cheapest first, and only a polygon that defeats one ever pays for
+ *  the next.
  *
- *  Returns `null` only for a polygon with no interior at that resolution — degenerate,
- *  or a slot narrower than `PROBE_STEP`. Callers must handle it rather than treating a
- *  returned point as proof of anything, which was the original bug wearing new clothes. */
+ *  1. `polyAreaCentroid` (the shoelace centroid, `lib/geometry.ts`) is inside on all
+ *     five presets and is the right first guess. It is not a guarantee — no centroid
+ *     is inside an arbitrary non-convex polygon, and a room the user has dragged into
+ *     a horseshoe puts it back in the void — so it is CHECKED.
+ *  2. A grid over the bounding box at `PROBE_STEP`, keeping the interior sample
+ *     nearest the centroid.
+ *  3. `edgeProbe`, below: step in from each edge's midpoint along its inward normal.
+ *
+ *  ── What the grid costs, stated rather than waved at ────────────────────────
+ *
+ *  It is O(area / PROBE_STEP²), which is quadratic in the room's side, and the
+ *  sentence that used to sit here — "a few thousand point-in-polygon tests on a
+ *  room-sized box" — was true of a 6 x 4 room and wrong by two orders of magnitude at
+ *  the top of the legal range. Measured (danmu-62): 2,400 cells / 0.47 ms at 6 x 4,
+ *  30,000 / 1.70 ms at 20 x 15, and **250,000 cells / 15.1 ms at 50 x 50**, which
+ *  `ROOM_SIDE_M` permits. Two of the four `clampIntoFootprint` call sites are inside
+ *  the annealer's proposal generator (`jiggle` and `pickPartner` in
+ *  `lib/layout-solve.ts`), so an uncached scan is paid PER PROPOSAL against
+ *  `DEFAULT_STEPS` of 1600 — seconds of pure scan on one solve. Hence the memo below.
+ *  `tests/layout-solve.test.ts`'s 2000 ms ceiling cannot see any of it, because every
+ *  preset has its area centroid inside and never reaches step 2 at all: the fixture
+ *  cannot express the defect, which is the same shape as the bug this function fixes.
+ *
+ *  ── When it gives up ───────────────────────────────────────────────────────
+ *
+ *  Step 3 exists because step 2's resolution is a real hole and the app can reach it.
+ *  `moveWall` accepts any wall drag whose BOUNDING BOX stays inside `ROOM_SIDE_M`;
+ *  nothing anywhere floors the width of a leg. So a U whose legs the user has narrowed
+ *  to 50 mm is a room this app calls legal and whose entire interior can fall between
+ *  a 0.1 m grid's samples — and `clampIntoFootprint` would then silently do nothing on
+ *  all four of its call sites. `edgeProbe` is O(vertices) and independent of the room's
+ *  size, so it closes that without paying for it on the rooms that do not need it.
+ *
+ *  `null` now means a polygon with no interior at all — degenerate or self-crossing —
+ *  rather than "no interior at this resolution". Callers must still handle it rather
+ *  than treating a returned point as proof of anything, which was the original bug
+ *  wearing new clothes. */
 const PROBE_STEP = 0.1;
 
-export function interiorPoint(poly: Footprint): [number, number] | null {
+/** Answers keyed on the polygon's IDENTITY, which is what makes the memo safe.
+ *
+ *  A footprint is a value here: `footprintForLayout` and `offsetWall` both return a
+ *  new array and nothing in `lib/`, `components/` or `app/` assigns into one or
+ *  pushes onto one (grepped). So a given array's answer cannot go stale — and if that
+ *  ever stops being true, the fix is to stop mutating footprints, not to drop the
+ *  memo, because half this file already assumes it.
+ *
+ *  `LayoutModel` stores `ctx.footprint` once and reads it by reference for the whole
+ *  solve, so this collapses the per-proposal scan above to one scan per solve. A
+ *  `WeakMap` rather than a field on the model, because three of the four call sites
+ *  are not the solver and would otherwise each need their own cache — the same
+ *  argument `nearestEdge`'s optional centroid parameter loses.
+ *
+ *  The answer is frozen and handed out by reference, so the identity IS the test:
+ *  `tests/footprint.test.ts` asserts two calls return the same object, which goes red
+ *  the moment the memo is removed. Freezing is what makes sharing it safe. */
+const INTERIOR_MEMO = new WeakMap<Footprint, readonly [number, number] | null>();
+
+export function interiorPoint(poly: Footprint): readonly [number, number] | null {
+  const memo = INTERIOR_MEMO.get(poly);
+  if (memo !== undefined) return memo;
+  const found = findInteriorPoint(poly);
+  // ONE freeze site, deliberately. It sat on each of the three answers below until a
+  // mutation showed two of them were unreachable from any fixture — a frozen value
+  // nothing can observe is the same dead decoration as an assertion never seen red.
+  const answer = found && Object.freeze(found);
+  INTERIOR_MEMO.set(poly, answer);
+  return answer;
+}
+
+function findInteriorPoint(poly: Footprint): [number, number] | null {
   if (poly.length < 3) return null;
   const [ax, az] = polyAreaCentroid(poly as Poly);
   if (pointInFootprint(ax, az, poly)) return [ax, az];
@@ -239,7 +299,39 @@ export function interiorPoint(poly: Footprint): [number, number] | null {
       }
     }
   }
-  return best;
+  if (best) return best;
+  return edgeProbe(poly);
+}
+
+/** How far in from a wall to look, once the grid has found nothing. Three tries
+ *  rather than one: the first that lands inside wins, and a leg thinner than the last
+ *  of them is thinner than this app's own millimetre resolution. */
+const EDGE_INSETS = [0.01, 0.001, 0.0001];
+
+/** Step in from each edge's midpoint along its inward normal.
+ *
+ *  O(vertices) and independent of the room's size, which is the point: the grid above
+ *  cannot see a leg narrower than its own step no matter how large the room, and this
+ *  cannot miss one no matter how narrow, because it looks where the floor provably is
+ *  — immediately inside a wall — rather than where a lattice happens to sample.
+ *
+ *  Inward is `-wallOutwardNormal`, so it reads the polygon's WINDING and not any
+ *  interior point, which is what keeps it honest on a T or a U. On a degenerate
+ *  polygon — collinear vertices, zero signed area — every probe lands off the line and
+ *  outside, and `null` comes back, which is the answer that case deserves. */
+function edgeProbe(poly: Footprint): [number, number] | null {
+  const n = poly.length;
+  for (const inset of EDGE_INSETS) {
+    for (let i = 0; i < n; i++) {
+      const a = poly[i];
+      const b = poly[(i + 1) % n];
+      const [ox, oz] = wallOutwardNormal(poly, i);
+      const px = (a[0] + b[0]) / 2 - ox * inset;
+      const pz = (a[1] + b[1]) / 2 - oz * inset;
+      if (pointInFootprint(px, pz, poly)) return [px, pz];
+    }
+  }
+  return null;
 }
 
 /** Pull (x,z) inside the footprint by stepping toward an interior point. Returns the

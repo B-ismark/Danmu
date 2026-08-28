@@ -140,6 +140,12 @@ describe('offsetWall moves the selected edge and nothing else', () => {
   // second copy of that sweep and the beginning of the next drift. What is left for
   // this file is the half `offsetWall` owns and nothing else knows: pushing a wall is
   // a TRANSLATION of that wall's own two corners, and every other corner stays put.
+  // Four rather than five: `footprintForLayout` returns the same rectangle for
+  // `open` as for `rect` (one switch branch, three labels), so an `open` case here
+  // would be a second copy of the `rect` one under a different name. Checked, not
+  // assumed. (The direction sweep in `tests/footprint.test.ts` does name all five, so
+  // it carries that duplicate; raised by danmu-62 as a coverage asymmetry between the
+  // two files, and this is the answer rather than a matching duplicate here.)
   const LAYOUTS = ['rect', 'l', 't', 'u'] as const;
 
   it.each(LAYOUTS)('translates both corners of the edge and no others, on a %s', (layout) => {
