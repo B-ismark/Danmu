@@ -597,6 +597,36 @@ describe('the rail footer holds the selection, add and revert in ONE row', () =>
     const trash = Number(/name="trash" size=\{(\d+)\}/.exec(CODE)![1]);
     const plus = Number(/name=\{open \? 'x' : 'plus'\} size=\{(\d+)\}/.exec(CATCODE)![1]);
 
+    // `fixed` below ENUMERATES the row — two labelled buttons, one square, two gaps
+    // — so it is wrong rather than red if the row grows a control, and that is the
+    // worse of the two failures. A fourth control simply would not be counted, and
+    // the check would silently over-report the room left for labels: it would go on
+    // passing while the row it describes no longer exists. Same family as the M2
+    // false green this file's `codeOnly` note is about, and `layout` named the
+    // general form of it — a threshold whose unit is another function's return
+    // value goes quietly false when that function is re-priced.
+    //
+    // So the shape is pinned first. Deriving `fixed` from a live count is not
+    // available: the three wrappers render at most TWO at a time, because the
+    // selection slot is Delete for a piece and Done for a wall and the store makes
+    // those mutually exclusive. That is a fact about `lib/store.ts`, not something
+    // readable out of the JSX. Pinning the counts is the honest version — it cannot
+    // compute the new arithmetic for you, but it stops the old one being applied to
+    // a row it no longer describes, and it names what to do.
+    const labelled = (CODE.match(/<button/g) ?? []).length;
+    const squares = (CODE.match(/<IconButton/g) ?? []).length;
+    expect(
+      labelled,
+      'the selection slot gained or lost a branch — `fixed` below counts exactly two labelled buttons',
+    ).toBe(2);
+    expect(
+      squares,
+      'a second icon square in this row — `fixed` below needs another term for it, in this commit',
+    ).toBe(1);
+    // And the trigger the row borrows from CatalogPanel, which is the other
+    // labelled button `fixed` accounts for.
+    expect((CODE.match(/<AddPiecesButton/g) ?? []).length).toBe(1);
+
     // Two labelled buttons, one 32px square, two gaps between the three, and the
     // footer's own padding at both ends.
     const fixed =
