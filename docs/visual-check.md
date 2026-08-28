@@ -299,8 +299,15 @@ number rather than a wrong room — which is exactly why nothing caught it.
 ## Still open, and still yours
 
 - **PR #16 is your click, and it needs a rebase first.** See its section below.
-- **`fix/multi-select-drag` cannot be deleted yet.** It still holds `snapToWall`'s
-  `alongRot` argument, which is a live 191 mm defect on `main` — see *Coverage gaps*.
+- **`fix/multi-select-drag` can be closed now.** Both reasons this file gave for
+  keeping it are retired: `alongRot` is on `main`, and its `wholePiece: false` measures
+  three times worse in the tail than what `main` already does. Numbers in *Coverage
+  gaps* below. Worth putting in the closing note rather than the word "superseded": it
+  is an **independent second answer** to the convoy rule, not an old copy of main's —
+  `lib/drag-convoy.ts` does not exist in the merge base (`946126a`), so both sides
+  authored the module whole. A merge conflicts add/add and reverts nothing silently;
+  the hazard is a human resolving file 19 of 23, seeing a plausible complete file on
+  the branch side, and taking it.
 
 ---
 
@@ -454,36 +461,44 @@ on eight of eight. Nobody traced why.
 
 ## Coverage gaps — re-evaluated, and one of them was not a gap
 
-### A detected wall piece keeping the model's yaw — **this is a live defect, not a gap**
+### A detected wall piece keeping the model’s yaw — **closed. Both halves measured.**
 
-The last version of this file recorded this as "found by danmu-f4, fixed, and the fix's
-mechanism is pinned by three mutations; the wiring is not." **The fix is not in `main`.**
-`grep` for `alongRot` over the whole tree returns nothing, at every commit of PR #17. It
-exists only on `fix/multi-select-drag` — the same branch, and the same class of loss, as
-the ceiling-carry commit above: the doc landed and the code did not.
+This entry said, for hours after it stopped being true, that `alongRot` was **not in**
+`main` and existed only on `fix/multi-select-drag`. Derived 2026-08-28, independently by
+two sessions:
 
-And the reason the wiring "could not be pinned" was the fixture, not the problem. Measured
-against the real `buildSceneFromRoom`, a 1450 × 60 TV at `x = 2.4` on the north wall of a
-5 × 4 room:
+    origin/main lib/physics.ts:264      opts: { alongRot?: number } = {},
+    origin/main lib/physics.ts:301      rot: opts.alongRot ?? edge.yaw
+    origin/main lib/scene-spec.ts:1857  { alongRot: clampRot }
+    origin/main lib/scene-spec.ts:1874  { alongRot: clampRot }
 
-| detection yaw | resulting `pos[0]` | correct |
-| --- | --- | --- |
-| absent / 0 | 1.7750 | 1.7750 |
-| π/4 | **1.7750** | **1.9661** |
+The fix is on `main`. The branch's grep count is 3 to main's 2 only because it
+destructures (`const { wholePiece = true, alongRot } = opts`) where main reads
+`opts.alongRot` — same fix, different style. The 191 mm table above stands as the record
+of why it mattered; it is history now, not a live defect.
 
-**191 mm, not 21 mm.** The old attempt used a wardrobe, which is floor-standing, so
-`settleParts` smeared the difference; a TV is `wallMounted`, which `settleParts` skips,
-and it is the most elongated wall-seeker in the catalog. Three named mutations are
-available and each is *already* the live behaviour, which is the strongest form of
-"observed failing" there is.
+**And the second half is measured, which is what this entry asked for.** It said the
+branch also passes `wholePiece: false` to the solver's `snapToWall` call, with a recorded
+claim that clamping there costs the search the corners — "on the U preset the difference
+between a worst-of-twelve of 6.9 and one of 69.4" — and that if the number still held,
+`main` was carrying a solver regression. **It does not hold.** Re-measured against the
+rewritten `layout-solve.ts`, on the same scrambled-U fixture and the same twelve seeds
+`tests/layout-solve.test.ts` uses:
 
-**Not ported here**, and the reason matters: the same branch also passes
-`wholePiece: false` to the solver's `snapToWall` call, with a measured claim that
-clamping there "costs the search the corners — on the U preset the difference between a
-worst-of-twelve of 6.9 and one of 69.4". `main` clamps unconditionally. If that number
-still holds, `main` is carrying a solver regression right now. Both changes live in the
-same function, so the honest order is: re-measure the `wholePiece` number against the
-rewritten `layout-solve.ts`, then port both together.
+| solver's `snapToWall` | worst of 12 | median | best |
+| --- | --- | --- | --- |
+| clamped — what `main` does | **6.0** | 4.8 | 0.7 |
+| `wholePiece: false` — ported only to measure | **18.1** | 4.3 | 1.2 |
+
+Porting it makes the **tail three times worse** — the one thing the claim was about — to
+move a median from 4.8 to 4.3. The disaster mode 69.4 described was real when it was
+written, and the solver rewrite closed it; the clamp is the better answer now and `main`
+already has it. The port was applied to take these numbers and reverted; none of it
+remains in the tree.
+
+**So `fix/multi-select-drag` holds nothing `main` lacks.** Both reasons this file gave
+for keeping it are retired.
+
 
 ### The 3D Escape handler's wiring — **genuinely blocked**
 
