@@ -262,7 +262,6 @@ export function planConvoy(input: {
   }
 
   const own = snapshotDescendants(draggedId, parts, parentIds);
-  const travelling = new Set<string>([draggedId, ...own.map((d) => d.id)]);
 
   // The selection travels only when the piece under the pointer is IN it. Dragging
   // something outside the selection is not a request to move the selection, and
@@ -295,11 +294,31 @@ export function planConvoy(input: {
   // group over rigidly-carried pieces does not override anybody's selection — a
   // rigid child is not a selection — so it restores "merged means merged" without
   // taking back the verdict above.
-  for (const d of own) {
-    const child = byId.get(d.id);
-    if (!child?.groupId) continue;
-    for (const p of parts) if (p.groupId === child.groupId) wanted.add(p.id);
-  }
+  // …and that closure covered the DRAGGED piece's rigid children only, which left
+  // the identical defect one layer out. Found by danmu-62 reviewing this commit's
+  // parent. A member's rigid children are carried too, and they were never offered
+  // to the group closure: merged P and Q resting on different supports, P on desk D
+  // and Q on the floor beside it, multi-select chair C and desk D, drag C. D is a
+  // member, `snapshotDescendants(D)` returns `[P]` alone because Q fails
+  // `isPhysicallySupported` against D, and Q was never reached. The pair came apart
+  // from a gesture that touched neither half of it. Dragging D directly worked,
+  // because then P is in `own` — so the same feature behaved differently depending
+  // on which piece of the selection was under the hand, which is exactly what this
+  // file's header says must never be two code paths.
+  //
+  // Closing over a member's rigid children as well makes this a FIXED POINT rather
+  // than a pass: a group sibling pulled in becomes a member, that member has rigid
+  // children of its own, and those children can belong to a third group. One pass
+  // would close the first hop and leave the second, which is the same bug with a
+  // longer fixture. So membership and descendants are rebuilt from scratch on each
+  // round and the round repeats while `wanted` is still growing.
+  //
+  // It terminates because `wanted` only ever grows and is bounded by `parts`, and
+  // the loop exits the first round that adds nothing. Rebuilding rather than
+  // patching in place is deliberate: `travelling` gates which descendants each
+  // member keeps, so a member added late changes what an earlier member is entitled
+  // to carry, and incrementally amending the previous round's answer is how the
+  // ORDER-DEPENDENT bug below came about the first time.
 
   /** The wall a piece is against now, by footprint edge index.
    *
@@ -312,50 +331,86 @@ export function planConvoy(input: {
       ? (nearestEdge(footprint, p.pos[0], p.pos[2])?.index ?? null)
       : null;
 
-  const members: ConvoyMember[] = [];
-  for (const p of parts) {
-    // `travelling` already holds the dragged piece and its rigid children. A child
-    // is carried by the rotation-correct cascade, which must win over this
-    // translate-only path for a piece that is both a selection member and
-    // something resting on the piece being dragged.
-    if (!wanted.has(p.id) || travelling.has(p.id)) continue;
-    travelling.add(p.id);
-    members.push({
-      part: p,
-      startPos: [p.pos[0], p.pos[1], p.pos[2]],
-      descendants: [],
-      edge: wallEdgeOf(p),
-    });
-  }
-
-  // Members' own children, after membership is closed so that a child which is
-  // itself a member is carried once (as a member) rather than twice.
-  //
-  // Dropping a descendant means dropping the SUBTREE under it, and that is the
-  // whole subtlety. The filter used to test `travelling.has(d.id)` alone, which
-  // strips a middle link while keeping the grandchild hanging off it —
-  // `cascadeTransform` then cannot find the grandchild's parent among the
-  // transforms it is computing and drops it with `if (!parent) continue`, silently,
-  // having already put the grandchild in `travelling` so `travellingWorld` shifts a
-  // phantom of it to a position it never reaches. Worse, it was ORDER-DEPENDENT:
-  // with a table before its shelf in `parts` the book on the shelf moved, with the
-  // shelf first it did not, which is precisely why no fixture caught it. Found by
-  // danmu-39 in review.
-  //
-  // `kept` is seeded with the member itself and grows in BFS order (guaranteed by
-  // `snapshotDescendants`), so "is my own parent coming with me" is always already
-  // answered. Either processing order now carries the grandchild exactly once, by
-  // whichever member actually holds its parent.
-  for (const m of members) {
-    const kept = new Set<string>([m.part.id]);
-    const desc: DescendantOffset[] = [];
-    for (const d of snapshotDescendants(m.part.id, parts, parentIds)) {
-      if (travelling.has(d.id) || !kept.has(d.parentId)) continue;
-      kept.add(d.id);
-      desc.push(d);
+  /** Pull the rest of every merged set that `ids` touches into `wanted`. Returns
+   *  whether anything was added, which is the loop's termination test.
+   *
+   *  Skipping anything already in `travelling` is not an optimisation, it is the
+   *  rule three lines down in this file: a piece that is both rigidly carried and
+   *  nominally a member must be carried ONCE, by the rotation-correct cascade. A
+   *  set is closed over its own members too, so without this guard the very piece
+   *  that pulled its group in — the desk's own P — is promoted to a member on the
+   *  next round, and `travelling.has(p.id)` then strips it from the desk's
+   *  descendants. The pair stayed together and P stopped turning with the desk:
+   *  a fixture written for the first defect caught it only because it asserted the
+   *  descendants and not just the travelling set. */
+  const closeGroupsOver = (ids: readonly string[]): boolean => {
+    let grew = false;
+    for (const id of ids) {
+      const g = byId.get(id)?.groupId;
+      if (!g) continue;
+      for (const p of parts) {
+        if (p.groupId === g && !wanted.has(p.id) && !travelling.has(p.id)) {
+          wanted.add(p.id);
+          grew = true;
+        }
+      }
     }
-    m.descendants = desc;
-    for (const d of desc) travelling.add(d.id);
+    return grew;
+  };
+
+  let members: ConvoyMember[] = [];
+  let travelling = new Set<string>();
+  for (;;) {
+    travelling = new Set<string>([draggedId, ...own.map((d) => d.id)]);
+    members = [];
+    for (const p of parts) {
+      // `travelling` already holds the dragged piece and its rigid children. A child
+      // is carried by the rotation-correct cascade, which must win over this
+      // translate-only path for a piece that is both a selection member and
+      // something resting on the piece being dragged.
+      if (!wanted.has(p.id) || travelling.has(p.id)) continue;
+      travelling.add(p.id);
+      members.push({
+        part: p,
+        startPos: [p.pos[0], p.pos[1], p.pos[2]],
+        descendants: [],
+        edge: wallEdgeOf(p),
+      });
+    }
+
+    // Members' own children, after membership is closed so that a child which is
+    // itself a member is carried once (as a member) rather than twice.
+    //
+    // Dropping a descendant means dropping the SUBTREE under it, and that is the
+    // whole subtlety. The filter used to test `travelling.has(d.id)` alone, which
+    // strips a middle link while keeping the grandchild hanging off it —
+    // `cascadeTransform` then cannot find the grandchild's parent among the
+    // transforms it is computing and drops it with `if (!parent) continue`, silently,
+    // having already put the grandchild in `travelling` so `travellingWorld` shifts a
+    // phantom of it to a position it never reaches. Worse, it was ORDER-DEPENDENT:
+    // with a table before its shelf in `parts` the book on the shelf moved, with the
+    // shelf first it did not, which is precisely why no fixture caught it. Found by
+    // danmu-39 in review.
+    //
+    // `kept` is seeded with the member itself and grows in BFS order (guaranteed by
+    // `snapshotDescendants`), so "is my own parent coming with me" is always already
+    // answered. Either processing order now carries the grandchild exactly once, by
+    // whichever member actually holds its parent.
+    for (const m of members) {
+      const kept = new Set<string>([m.part.id]);
+      const desc: DescendantOffset[] = [];
+      for (const d of snapshotDescendants(m.part.id, parts, parentIds)) {
+        if (travelling.has(d.id) || !kept.has(d.parentId)) continue;
+        kept.add(d.id);
+        desc.push(d);
+      }
+      m.descendants = desc;
+      for (const d of desc) travelling.add(d.id);
+    }
+
+    const carried = [...own.map((d) => d.id)];
+    for (const m of members) for (const d of m.descendants) carried.push(d.id);
+    if (!closeGroupsOver(carried)) break;
   }
 
   // Only worth pinning if something is actually following: a lone wall rider

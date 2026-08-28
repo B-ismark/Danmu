@@ -166,6 +166,49 @@ describe('planConvoy — who travels', () => {
     expect(c.travelling.has('lamp')).toBe(true);
   });
 
+  it('keeps a merged pair together when only a MEMBER is carrying half of it', () => {
+    // danmu-62, reviewing the commit before this one. The group closure covered the
+    // dragged piece's rigid children and not a member's, so the danmu-39 defect
+    // reproduced one layer out. P and Q are merged but rest on different supports —
+    // P on the desk, Q on the floor beside it — so `snapshotDescendants(desk)`
+    // returns P alone and Q was never offered to the closure.
+    //
+    // The asymmetry is the tell: dragging the DESK worked, because then P is in
+    // `own`. Same feature, two answers, depending on which piece of the selection
+    // was under the hand.
+    const world = [
+      part({ id: 'chair', pos: [0.5, 0, 0.5], dimMM: [500, 500, 900] }),
+      part({ id: 'desk', pos: [2, 0, 2], dimMM: [1400, 700, 750] }),
+      part({ id: 'p', pos: [2, 0.75, 2], dimMM: [300, 300, 300], groupId: 'g' }),
+      part({ id: 'q', pos: [3.2, 0, 2], dimMM: [300, 300, 300], groupId: 'g' }),
+    ];
+    const c = plan('chair', world, ['chair', 'desk'], { p: 'desk' });
+    // The fixture only means something if P really is carried and Q really is not a
+    // rigid child of the desk — otherwise this passes for the wrong reason.
+    expect(c.members.map((m) => m.part.id)).toContain('desk');
+    expect(c.members.find((m) => m.part.id === 'desk')!.descendants.map((d) => d.id)).toEqual(['p']);
+    expect(c.travelling.has('q')).toBe(true);
+  });
+
+  it('closes merged groups to a FIXED POINT, not one hop', () => {
+    // The wrinkle in the fix above: a sibling pulled in becomes a member, that member
+    // has rigid children of its own, and those can belong to a third group. Here P
+    // (on the desk) pulls in Q, Q carries R, and R pulls in S. A single pass reaches
+    // Q and stops, leaving S behind — the same bug with a longer fixture.
+    const world = [
+      part({ id: 'chair', pos: [0.5, 0, 0.5], dimMM: [500, 500, 900] }),
+      part({ id: 'desk', pos: [2, 0, 2], dimMM: [1400, 700, 750] }),
+      part({ id: 'p', pos: [2, 0.75, 2], dimMM: [300, 300, 300], groupId: 'g1' }),
+      part({ id: 'q', pos: [3.2, 0, 2], dimMM: [300, 300, 300], groupId: 'g1' }),
+      part({ id: 'r', pos: [3.2, 0.3, 2], dimMM: [200, 200, 200], groupId: 'g2' }),
+      part({ id: 's', pos: [4.2, 0, 2], dimMM: [200, 200, 200], groupId: 'g2' }),
+    ];
+    const c = plan('chair', world, ['chair', 'desk'], { p: 'desk', r: 'q' });
+    expect(c.travelling.has('q')).toBe(true); // first hop
+    expect(c.members.find((m) => m.part.id === 'q')!.descendants.map((d) => d.id)).toEqual(['r']);
+    expect(c.travelling.has('s')).toBe(true); // second hop — the fixed point
+  });
+
   // ─── The other half: what a click selects ───────────────────────────────
   //
   // `selectionForPick` lives in lib/scene-spec.ts and is tested here rather than
