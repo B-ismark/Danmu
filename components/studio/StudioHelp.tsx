@@ -205,9 +205,18 @@ function ModelHelp() {
         </HelpLine>
       </HelpGroup>
 
-      <HelpGroup title="The lists on the left">
+      {/* "The lists on the left" was true of both until the Library moved to the
+          right edge of the canvas with its trigger. A help card that says where to
+          look is the one place a stale direction costs the most, and it is the
+          second of these this round — the piece list's empty state said "Add a piece
+          above" of a button that had moved to the other rail. So the heading names
+          the lists instead of a side, and the line itself now says which is where.
+          (The sun note's "from the Library" is not one of these: it names the list,
+          not a direction, so it was true before this and is true after.) */}
+      <HelpGroup title="The two lists">
         <HelpLine>
-          <b>Catalog</b> is what is in this room; <b>Library</b> is what you can add.
+          <b>Catalog</b>, in the left rail, is what is in this room; <b>Library</b>, on the right of
+          the canvas, is what you can add.
         </HelpLine>
         <HelpLine>
           In either list, <Kb>Shift</Kb>-click picks a run of rows at once, and <Kb>Ctrl</Kb>-click adds that

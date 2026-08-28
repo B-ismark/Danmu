@@ -76,14 +76,15 @@ export function AddPiecesButton() {
           the collection it opens — the search field inside still searches the
           library, and `StudioHelp` still teaches Catalog-vs-Library — so rule 4's
           distinction is intact and the screen gains no second Catalog. The panel
-          this opens is headed "Add pieces", which the old label disagreed with.
+          this opens is headed "Library"; see the note on that heading for why the
+          button and the heading are named on different principles.
 
           One word rather than "Add a piece", and the reason is the row it sits in
           rather than brevity for its own sake: `RailFooter` puts it beside a
           labelled Delete and a 32px square inside a rail that floors at
           `--rail-right-min`, and the two longer labels together ask for more width
           than that leaves. The object is not lost — the `title` says "Add a piece
-          to the room", the panel it opens is headed "Add pieces", and the canvas
+          to the room", the panel it opens is headed "Library", and the canvas
           trigger has read a bare "Add" all along, so the two triggers now agree.
 
           The label gets its own element so it can ellipsise: `.ds-btn` is
@@ -235,11 +236,30 @@ export function CatalogPanel({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 12px 8px' }}>
-        <span className="ds-label" style={{ flex: 1 }}>Add pieces</span>
-        {/* Names the panel it closes — its heading is "Add pieces" — because an
-            accessible name of bare "Close" tells a screen-reader user nothing
-            about what is closing. */}
-        <IconButton icon="x" label="Close Add pieces" onClick={() => setOpen(false)} size={24} iconSize={12} />
+        {/* "Library", and the word came BACK rather than never having left.
+            The heading read "Add pieces" — named for what you do with the list
+            rather than for what the list holds — and the user's report was simply
+            that "Library isn't on there". They were right, and the interesting part
+            is how many places already said it was: THREE separate user-visible
+            strings name this panel the Library — the help card's
+            "Catalog is what is in this room; Library is what you can add", the sun
+            note in the left rail's Look section ("Add a window or a door from the
+            Library"), and the right-click menu's "Add from library…". Every one of
+            them pointed at a panel whose own heading used a different word.
+
+            So the fix is one heading rather than three strings, and the direction
+            follows CLAUDE.md rule 4 instead of fighting it: the two lists are named
+            for WHAT THEY HOLD, and "Add pieces" names what you do. It also makes
+            rule 4's own sentence true again without editing the rule.
+
+            The BUTTON stays "Add" and that is not the same decision: a button is
+            named for its action and a list for its contents, so the pair is
+            "press Add, the Library opens" — which is what every one of those three
+            strings already assumed. */}
+        <span className="ds-label" style={{ flex: 1 }}>Library</span>
+        {/* Names the panel it closes, because an accessible name of bare "Close"
+            tells a screen-reader user nothing about what is closing. */}
+        <IconButton icon="x" label="Close the Library" onClick={() => setOpen(false)} size={24} iconSize={12} />
       </div>
 
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '0 12px 12px' }}>
