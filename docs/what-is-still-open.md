@@ -409,7 +409,7 @@ the user went and looked.
   reason written beside it. **Reading it as stale would have deleted a real assertion to make
   a new one look right.**
 
-### Two tooling hazards, both silent, both failing in the direction that looks like success
+### Three tooling hazards, all silent, all failing in the direction that looks like success
 
 - **A backslash can be eaten between a shell heredoc and the file.** A line intended as
   `/\bdet\(/` arrived as a literal **0x08 backspace** — `/<BS>det\(/`, a regex that can never
@@ -421,6 +421,25 @@ the user went and looked.
   silently wipes *uncommitted* work in the files it touches, and the sweep then reads as
   still-failing-after-restore. **Back up bytes, not refs**, whenever the tree is dirty — which
   in a shared checkout is always.
+- **A search for a term cannot find a claim about that term's ABSENCE**, and it will
+  confidently return hits that refute nothing. Asked whether a seventeen-line note explaining
+  why `Draggable` deliberately has **no** `onPointerCancel` prop was already on `main`,
+  `git grep onPointerCancel` returned three files — all of them live
+  `onPointerCancel={…}` props on DOM elements, none of them the note. Three hits, zero
+  bearing on the question. Same family as `CLAUDE.md`'s `flushSync` warning, where a grep
+  hits a re-export nobody calls and a whole passage gets discarded on the strength of it.
+
+  **`git cherry` is no better as a substitute.** On the branch in question it marked four
+  commits `+` when only one carried unique content, because the branch had been rebased with
+  a squash and the patch-ids had drifted. **Patch-id absence is not content absence** —
+  `applyRoomEdits`, `ROOM_AXES`, `steppedValue` and eight distinctive test titles from those
+  "missing" commits were all on `main`.
+
+  What settled it was **per-line**: all 1909 substantive added lines across 33 files, each
+  checked against `main`'s copy of its own file. 50 absent, resolving four ways — 21 written
+  against a doc that has since been rewritten, 11 superseded by a later form that also
+  clamps, 1 reflowed with an extra conjunct, and **17 genuinely missing**, which is the note.
+  It is on `main` now as PR #34.
 
 ---
 
