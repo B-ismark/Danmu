@@ -471,6 +471,38 @@ shape this repo keeps finding: not a broken check, an invisible one.
 `tests/toolchain.test.ts` pins the flag and pins the harness's own call to
 `console.log`, because losing either is silent.
 
+**A check whose answer nobody reads is not a check.** The paragraph above is one
+instance of a class, and the class is worth naming: the dangerous failure is not a
+broken gate, it is a gate that ran, produced the right answer, and reported it to
+nobody — or into output that got skimmed. Four here, none of which failed anything.
+vitest 4 discarding the `detect-pipeline` measurement table from a passing run.
+`next build` printing `ESLint: Invalid Options` on ESLint 8.57 and **exiting 0**
+having linted nothing. A `git merge-tree` simulation printing conflict stages 2 and
+3 with **no stage 1** — which is what add/add means — read as a silent revert,
+because the absent line was the part nobody looked at, and the branch was nearly
+closed on that reading. And `docs/visual-check.md` asserting for hours that
+`snapToWall`'s `alongRot` argument was missing from `main` after it had landed —
+then a peer checking exactly the one thing that note named, finding it false, and
+stopping there, so the fact the note never mentioned (`wholePiece`, which really is
+absent) went unlooked-for. **A stale claim does not merely mislead, it scopes the
+search.** So: name the artifact a number came from, read the part where a tool says
+*how* it reached its answer, and treat a hand-off note as a claim to re-derive
+rather than a fact to act on. The absent line is usually the one carrying the
+meaning.
+
+**Mutate what you just wrote, including the guards; you will not catch what you
+merely reasoned.** The defects caught in a session's own new code are the ones whose
+assertions could be mutated; the ones that get past a first review are the pieces
+reasoned correct and never tested. A guard written in the same hour as the code it
+guards is the *most* likely thing to be decoration, because the reasoning that
+produced both is the same reasoning, and it is not independent evidence about
+itself. The sharpest form is an assertion that measures its own subject:
+`tests/module-tiling.test.ts` pinned three of six module ranges as explicit
+decisions and left the other three checked against their own declared bounds, so
+widening a bookshelf's max from 450 mm to 1.2 m drew a 1.2 m shelf gap with the file
+still green — the sweep only ever asks whether each module sits inside the range it
+was just handed. **Half a table pinned is the same defect as none.**
+
 The suite runs in the **node** environment by default (+ jsdom files, see below). Files that need a browser
 opt in individually with `// @vitest-environment jsdom` — `storage*.test.ts`
 (IndexedDB via `fake-indexeddb`) and `history.test.ts` (zustand `persist` wants
