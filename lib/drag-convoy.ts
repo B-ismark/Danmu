@@ -292,8 +292,20 @@ export function planConvoy(input: {
   // on it and only the half physically resting there is a descendant: the pair came
   // apart, from a gesture that never touched the selection at all. Closing the
   // group over rigidly-carried pieces does not override anybody's selection — a
-  // rigid child is not a selection — so it restores "merged means merged" without
-  // taking back the verdict above.
+  // rigid child is not a selection — so it restores "merged means merged" for a
+  // MOVE without taking back the verdict above.
+  //
+  // For a move, and it cannot be more than that. **A split pair does not survive a
+  // TURN**, and the unqualified version of that sentence is the hazard: it sends the
+  // next reader hunting for a bug when they watch a pair separate under the wheel,
+  // or worse, sends them to make members rotate. P rests on the piece under the hand
+  // and Q does not, so P is in `own` and cascades about that pivot while Q is a
+  // member — and `resolveConvoy` returns early on `gesture === 'turn'` without moving
+  // members at all. The pair therefore deforms on a rotation and holds on a
+  // translation. That is the least-bad answer and not an oversight: rotating Q about
+  // a pivot it is not resting on is the 575 mm defect by another route, and no answer
+  // keeps a physically split pair rigid through a turn. Found by danmu-62; the
+  // behaviour predates this closure, the sentence is what changed.
   // …and that closure covered the DRAGGED piece's rigid children only, which left
   // the identical defect one layer out. Found by danmu-62 reviewing this commit's
   // parent. A member's rigid children are carried too, and they were never offered
