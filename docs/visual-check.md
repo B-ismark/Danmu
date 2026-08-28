@@ -16,12 +16,21 @@ Each one names **where to click**, **what wrong looks like**, and **which branch
 it rides. An item that cannot say all three is not ready to be checked and does not
 belong here yet.
 
+**An empty section is the rule working, not a gap.** It means that owner's fixes are
+still uncommitted, so there is nothing anyone else can click on. Filling it anyway would
+put items in a live list that only their author can reach, which is the exact failure the
+rewrite exists to end. Leave it empty until there is a commit and a PR number.
+
 ## How to read a number
 
-Every gate count carries the artifact it was measured on — a commit, not "the tree". A
-number off a working copy with uncommitted work in it is a number about a program nobody
-can ship. When a branch merges its numbers stop meaning anything, and they go with the
-item.
+Every gate count carries the artifact it was measured on **and its failures**. The
+artifact is a commit, never "the tree": a number off a working copy with uncommitted work
+in it is a number about a program nobody can ship. The failures matter for a separate
+reason — `1484/1487` reads as green to anyone skimming, and three reds beside a commit
+hash are still three reds. A count with its artifact but not its failures is the same
+defect one level up: a check whose answer nobody reads.
+
+When a branch merges its numbers stop meaning anything, and they go with the item.
 
 ## Owners
 
