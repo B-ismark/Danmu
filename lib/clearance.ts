@@ -494,8 +494,25 @@ export function analyzeRoom(
   // wardrobe genuinely does not go under a 2.4 m ceiling. So it keeps its real
   // height, sits on the floor, and passes through the ceiling in the 3D view with
   // nothing said about it. Say it here, where the room's problems are reported.
+  //
+  // This used to open `if (p.wallMounted) continue;`, and that skip deleted the
+  // one case the promise above was written for. `heightForNewCeiling`'s own
+  // comment says a piece too tall "keeps its real size and its real place and
+  // `lib/clearance.ts` reports it" — and the piece that reaches that state first
+  // is a wall-mounted one, because the ceiling is what moved. Lower a room to the
+  // 1.8 m floor and the catalog's 2.2 m curtain is clamped into
+  // `[h/2 + PAD, H - h/2 - PAD]` = `[1.12, 0.68]` — an interval whose ends have
+  // crossed, so `Math.max` wins, the centre pins at 1.12 m and 42 cm of curtain
+  // stands through the slab. Silently: this pass skipped it, and the Inspector's
+  // own mount-height field pinned to 0 without a word (see `MountHeightRow`). A
+  // 2.1 m door does the same. That was the whole of "the curtain doesn't reduce
+  // when the room height is reduced, and it doesn't state anything as the reason"
+  // — not reducing is correct, saying nothing is not.
+  //
+  // The skip was solving a WORDING problem, not a logic one: "it will not stand up
+  // in here" is wrong about something that hangs. So branch the sentence and keep
+  // the check.
   for (const p of parts) {
-    if (p.wallMounted) continue;
     const h = p.dimMM[2] / 1000;
     if (h <= room.height) continue;
     issues.push({
@@ -503,7 +520,9 @@ export function analyzeRoom(
       rule: 'tall',
       severity: 'error',
       title: 'Taller than the room',
-      detail: `“${p.name}” is ${Math.round(h * 100)} cm tall and the ceiling is ${Math.round(room.height * 100)} cm — it will not stand up in here. Danmu keeps the real size rather than shrinking it for you.`,
+      detail: p.wallMounted
+        ? `“${p.name}” is ${Math.round(h * 100)} cm tall and the ceiling is ${Math.round(room.height * 100)} cm — there is no height it can hang at without crossing the floor or the ceiling. Danmu keeps the real size rather than shrinking it for you.`
+        : `“${p.name}” is ${Math.round(h * 100)} cm tall and the ceiling is ${Math.round(room.height * 100)} cm — it will not stand up in here. Danmu keeps the real size rather than shrinking it for you.`,
       partIds: [p.id],
     });
   }

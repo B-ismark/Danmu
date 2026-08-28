@@ -294,3 +294,35 @@ describe('freeFloorFraction', () => {
     expect(both).toBeLessThan(freeFloorFraction([a], RECT));
   });
 });
+
+describe('analyzeRoom · taller than the room', () => {
+  // The lowest legal ceiling. `ROOM` above is 2.8 m, where nothing in the catalog
+  // is too tall — which is exactly why this pass could skip a whole class of part
+  // for as long as it did.
+  const LOW = { footprint: RECT, height: 1.8 };
+
+  it('reports a wall-mounted piece that cannot hang clear of floor and ceiling', () => {
+    // The catalog curtain is 2200 mm tall. `heightForNewCeiling` clamps its centre
+    // into [h/2 + PAD, H - h/2 - PAD] = [1.12, 0.68] — ends crossed, so Math.max
+    // wins, it pins at 1.12 m and 42 cm stands through the slab. This loop used to
+    // open with `if (p.wallMounted) continue`, so the one case `physics.ts` names
+    // when it promises "clearance.ts reports it" was the case it skipped.
+    const curtain = part({ category: 'curtain', shape: 'curtain', dimMM: [1600, 80, 2200], pos: [0, 1.12, -1.9], wallMounted: true });
+    const hit = analyzeRoom([curtain], LOW).issues.find((i) => i.rule === 'tall');
+    expect(hit).toBeDefined();
+    expect(hit!.partIds).toEqual([curtain.id]);
+    expect(hit!.detail).toContain('hang');
+  });
+
+  it('still reports a floor-standing piece, and words it for something that stands', () => {
+    const wardrobe = part({ category: 'wardrobe', shape: 'wardrobe', dimMM: [1000, 600, 2200], pos: [0, 1.1, -1.7] });
+    const hit = analyzeRoom([wardrobe], LOW).issues.find((i) => i.rule === 'tall');
+    expect(hit).toBeDefined();
+    expect(hit!.detail).toContain('stand up');
+  });
+
+  it('says nothing about a wall-mounted piece that fits', () => {
+    const tv = part({ category: 'tv', shape: 'tv', dimMM: [1450, 60, 820], pos: [0, 1.2, -1.95], wallMounted: true });
+    expect(analyzeRoom([tv], LOW).issues.find((i) => i.rule === 'tall')).toBeUndefined();
+  });
+});

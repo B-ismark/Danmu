@@ -57,3 +57,22 @@ describe('dimsWithinRange', () => {
     expect(dimsWithinRange('monitor', 'laptop', [1200, 240, 220])).toBe(false);
   });
 });
+
+describe('a sofa is always wider than it is deep', () => {
+  it('cannot be clamped into a bed', () => {
+    // A library size search for 160x200cm asks every shape for 1600 wide and 2000
+    // deep. The sofa depth max was 1800, so the clamp let 1800 through and the
+    // catalog badged — and added — a 1.6 x 1.8 m sofa.
+    const d = clampDims('sofa', 'sofa', [1600, 2000, 880]);
+    expect(d[1]).toBeLessThan(d[0]);
+  });
+
+  it('holds for every legal size, not only that one', () => {
+    // clampDims is per-axis and cannot express a ratio, so the guarantee has to be
+    // carried by the constants: the deepest legal depth below the narrowest legal
+    // width. Assert the PAIR — widening either end on its own is how the absurd
+    // size gets back in, and neither end can see that from where it sits.
+    const r = dimRangeFor('sofa', 'sofa');
+    expect(r.max[1]).toBeLessThan(r.min[0]);
+  });
+});
