@@ -1105,11 +1105,52 @@ export function relationParents(
 /** Merrell's `t`: zero inside `[min, max]`, growing quadratically outside. In
  *  metres rather than the paper's normalised ratio, because a nightstand 300 mm
  *  from a bed and a sofa 300 mm from a wall are the same error to a person and the
- *  ratio form would call the first one four times worse. */
-function bandCost(d: number, min: number, max: number): number {
-  if (d < min) return (min - d) * (min - d);
-  if (d > max) return (d - max) * (d - max);
-  return 0;
+ *  ratio form would call the first one four times worse.
+ *
+ *  ── A known defect, measured, with the obvious fix ruled out ────────────────
+ *
+ *  **A purely quadratic miss is nearly free in the near field, and the near field is
+ *  where every visible mistake lives.** Swept over all ten relation specs the library
+ *  can form (`tests/layout-score.test.ts` prints the table on every run), against
+ *  `isWorthOffering`'s own `MIN_GAIN_ABS` of one cost unit: at 300 mm outside its
+ *  band, **every one of the ten costs less than the floor**. A nightstand 450 mm off a
+ *  bed scores 0.90 — the solver finds the fix, the gate prices it as noise, and
+ *  Shuffle declines to offer it. At 400 mm six of the ten are still under. That is
+ *  most of "Shuffle does nothing" and "the bedside table is never where it should be":
+ *  not a search that failed, a price that is wrong.
+ *
+ *  `e + e²` is the obvious repair and it was written, measured and **reverted**. It
+ *  does fix the pricing — 10/10 under the floor at 300 mm becomes 0/10 — and it makes
+ *  the solver's tail catastrophically worse. On the scrambled 6 × 5 U over 48 seeds:
+ *
+ *      bandCost   worst   median   seeds with a hard term   largest hard
+ *      e²         13.96     3.70              4 / 48                5.40
+ *      e + e²    337.53     3.05              7 / 48              322.62
+ *
+ *  The median improves, which is the tail-versus-median signature — but a tail run
+ *  here is a room with a piece overlapping or outside, four of them at 60, 131, 253
+ *  and 322 where `e²` never exceeds 5.40. `scoreLayout` SUMS every term and only
+ *  `anyWorse` keeps the hard ones apart, so a stronger `relation` can be bought with
+ *  `access` inside the annealer, and on a scrambled room it is.
+ *
+ *  Capping the linear term at half a walkway was tried next, to confine the change to
+ *  the near field, and it was **worse** — 391.76, with the disaster on a different
+ *  seed. So this is not a monotone trade that can be tuned out: re-pricing at all
+ *  moves which local minimum the search falls into.
+ *
+ *  A fixed entry cost on crossing the edge is a third option and is ruled out on its
+ *  own merits: it prices a 1 mm miss the same as a 200 mm one, destroying the ordering
+ *  in the exact band this exists to fix, and hands the annealer a cliff where it needs
+ *  a slope. The shape tests next door forbid it.
+ *
+ *  **The promising direction is not here at all.** The thing that is wrong is what
+ *  gets OFFERED, not what gets searched — `isWorthOffering` under-values a real fix.
+ *  A relation-aware floor there ("offer it if any relation went from out of band to
+ *  in") changes the offer and not the search, so it cannot destabilise the annealer.
+ *  Untried. */
+export function bandCost(d: number, min: number, max: number): number {
+  const e = d < min ? min - d : d > max ? d - max : 0;
+  return e * e;
 }
 
 /** How far `other` sits off the axis running out of `self`'s front, as a share of

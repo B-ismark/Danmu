@@ -21,6 +21,7 @@ export function RoomSync() {
   const setParts = useScene((s) => s.setParts);
   const loadTransforms = useStudio((s) => s.loadTransforms);
   const setHiddenMap = useStudio((s) => s.setHiddenMap);
+  const setPinnedMap = useStudio((s) => s.setPinnedMap);
   const setParentIds = useStudio((s) => s.setParentIds);
   const transformTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sceneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -48,6 +49,16 @@ export function RoomSync() {
         loadTransforms(t);
         if (t.hidden) setHiddenMap(t.hidden);
       }
+      // Unconditional, for the reason `parentIds` below is and `hidden` above is
+      // not: the store outlives the navigation, so a room with no saved `pinned`
+      // of its own — every room saved before this shipped, and every room where
+      // nothing has been locked — would otherwise inherit the PREVIOUS room's
+      // locks. Ids are `${category}-${counter}` and collide across rooms by
+      // construction, so the inherited entry does not even miss: it silently
+      // exempts a different sofa from Suggest, in a room the user never locked
+      // anything in. Outside the `if (t)` as well as inside it, because `t` is
+      // undefined for a room that has never been edited at all.
+      setPinnedMap(t?.pinned ?? {});
       // Unconditional, unlike `hidden` above: part ids are deterministic
       // (`${category}-${counter}`), so a room with no saved transforms of its
       // own would otherwise inherit whatever `parentIds` the PREVIOUS room
@@ -72,7 +83,7 @@ export function RoomSync() {
       // default starter scene and the first undo would wipe the real room.
       seedHistory();
     })();
-  }, [roomId, loadFromRoom, setParts, loadTransforms, setHiddenMap, setParentIds]);
+  }, [roomId, loadFromRoom, setParts, loadTransforms, setHiddenMap, setPinnedMap, setParentIds]);
 
   // Persist transform changes
   useEffect(() => {
@@ -84,7 +95,8 @@ export function RoomSync() {
         state.rotations === prev.rotations &&
         state.dims === prev.dims &&
         state.parentIds === prev.parentIds &&
-        state.hidden === prev.hidden
+        state.hidden === prev.hidden &&
+        state.pinned === prev.pinned
       )
         return;
       if (transformTimer.current) clearTimeout(transformTimer.current);
@@ -95,6 +107,7 @@ export function RoomSync() {
           dims: state.dims,
           parentIds: state.parentIds,
           hidden: state.hidden,
+          pinned: state.pinned,
         });
       }, DEBOUNCE_MS);
     });
@@ -111,6 +124,7 @@ export function RoomSync() {
           dims: s.dims,
           parentIds: s.parentIds,
           hidden: s.hidden,
+          pinned: s.pinned,
         });
       }
     };

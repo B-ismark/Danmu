@@ -117,6 +117,21 @@ type StudioState = {
   frameSelectedToken: number;
   /** hidden parts (visibility toggle) — keyed by partId */
   hidden: Record<string, boolean>;
+  /** Parts the user locked against **Suggest** — keyed by partId.
+   *
+   *  What it blocks is *being moved by the solver*, and only that: a locked piece
+   *  still drags, turns, resizes, recolours and deletes by hand. That is the
+   *  narrow thing the user asked for — "lock down the models they don't want
+   *  randomise to touch their position" — and it is why the field is not a
+   *  general edit lock. `Draggable` and `PlanView` deliberately do not read it.
+   *
+   *  Named `pinned` rather than `locked` because `ScenePart.locked` already owns
+   *  that identifier for "came out of your photo". The *label* is still "Lock",
+   *  because the user-facing name for that flag is "From photo" — so the word is
+   *  free on screen even though the identifier is not. A padlock used to sit in
+   *  `PartTree` meaning the photo flag and was removed for saying the wrong
+   *  thing; this is the same glyph returning with the meaning it always implied. */
+  pinned: Record<string, boolean>;
 
   setDragging: (id: string | null) => void;
   setPanKeyHeld: (held: boolean) => void;
@@ -154,6 +169,9 @@ type StudioState = {
   toggleHidden: (id: string) => void;
   /** restore the whole hidden map from persistence (per-room, via RoomSync) */
   setHiddenMap: (h: Record<string, boolean>) => void;
+  togglePinned: (id: string) => void;
+  /** restore the whole pinned map from persistence (per-room, via RoomSync) */
+  setPinnedMap: (p: Record<string, boolean>) => void;
   loadTransforms: (data: {
     positions?: Record<string, [number, number, number]>;
     rotations?: Record<string, number>;
@@ -207,6 +225,7 @@ export const useStudio = create<StudioState>()(
   dressed: true,
   catalogOpen: false,
   frameSelectedToken: 0,
+  pinned: {},
   hidden: {},
 
   setSelected: (id) => set({ selectedPartId: id, selection: id ? [id] : [], selectedWall: null }),
@@ -292,6 +311,8 @@ export const useStudio = create<StudioState>()(
   frameSelected: () => set((s) => ({ frameSelectedToken: s.frameSelectedToken + 1 })),
   toggleHidden: (id) => set((s) => ({ hidden: { ...s.hidden, [id]: !s.hidden[id] } })),
   setHiddenMap: (hidden) => set({ hidden }),
+  togglePinned: (id) => set((s) => ({ pinned: { ...s.pinned, [id]: !s.pinned[id] } })),
+  setPinnedMap: (pinned) => set({ pinned }),
     }),
     {
       name: 'danmu-studio-prefs',

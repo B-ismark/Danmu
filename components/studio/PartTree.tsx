@@ -657,6 +657,7 @@ export function PartTree() {
               }}
               onNavigate={(to, extend) => navigate(i, to, extend)}
               onToggleHidden={() => useStudio.getState().toggleHidden(row.part.id)}
+              onTogglePinned={() => useStudio.getState().togglePinned(row.part.id)}
               onDelete={() => removeRow(i, row.ids)}
             />
           ),
@@ -730,6 +731,7 @@ function PartRow({
   onFrame,
   onNavigate,
   onToggleHidden,
+  onTogglePinned,
   onDelete,
 }: {
   rowKey: string;
@@ -750,10 +752,12 @@ function PartRow({
   onFrame: () => void;
   onNavigate: (to: 'prev' | 'next' | 'first' | 'last', extend?: boolean) => void;
   onToggleHidden: () => void;
+  onTogglePinned: () => void;
   onDelete: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const isHidden = useStudio((s) => !!s.hidden[partId]);
+  const isPinned = useStudio((s) => !!s.pinned[partId]);
 
   // Scroll into view when selection happens elsewhere (3D click, arrow keys).
   useEffect(() => {
@@ -813,10 +817,10 @@ function PartRow({
       // Membership is spoken, not just drawn. The indent and the connector say
       // "grouped" to a sighted user; nothing in a flat listbox says it otherwise,
       // and this is the one fact that changes what dragging the piece will do.
-      aria-label={`${name}${inGroup ? ', grouped' : ''}${locked ? ', from your photo' : ''}${isHidden ? ', hidden' : ''}`}
+      aria-label={`${name}${inGroup ? ', grouped' : ''}${locked ? ', from your photo' : ''}${isHidden ? ', hidden' : ''}${isPinned ? ', locked in place' : ''}`}
       tabIndex={tabbable ? 0 : -1}
       className={`list-row${selected ? ' is-selected' : ''}`}
-      title={`${name} · ${category}${inGroup ? ' · grouped' : ''}${isHidden ? ' · hidden' : ''}${locked ? ' · from your photo' : ''}`}
+      title={`${name} · ${category}${inGroup ? ' · grouped' : ''}${isHidden ? ' · hidden' : ''}${isPinned ? ' · locked in place' : ''}${locked ? ' · from your photo' : ''}`}
       onClick={onSelect}
       onKeyDown={onKeyDown}
     >
@@ -846,6 +850,27 @@ function PartRow({
           previous `{hover && <IconButton/>}` delete existed for the mouse only.
           `is-on` pins the eye open while a piece is hidden, so the state is
           visible without hovering. */}
+      {/* Lock, beside Hide and pinned open by `is-on` for the same reason: a piece
+          Suggest may not move is a state you need to see without hovering every
+          row to find it.
+
+          The label says what it does rather than what it is. "Lock" alone invites
+          the reading the padlock that used to sit in the status glyph got wrong —
+          that the piece is frozen against everything — and this one blocks the
+          solver only: it still drags, turns, resizes and deletes by hand. */}
+      <IconButton
+        icon={isPinned ? 'lock' : 'unlock'}
+        label={isPinned ? `Let Suggest move ${name}` : `Keep ${name} where it is`}
+        title={isPinned ? 'Suggest may not move this — click to release' : 'Keep where it is when Suggest rearranges'}
+        active={isPinned}
+        className={`row-action${isPinned ? ' is-on' : ''}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onTogglePinned();
+        }}
+        size={24}
+        iconSize={12}
+      />
       <IconButton
         icon={isHidden ? 'eye-off' : 'eye'}
         label={isHidden ? `Show ${name}` : `Hide ${name}`}

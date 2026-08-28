@@ -847,3 +847,49 @@ describe('a capture card holds its own chrome', () => {
     }
   });
 });
+
+describe('a piece row keeps enough width to read the piece name', () => {
+  it('leaves the name a legible share of the narrowest shipping rail', () => {
+    // The silent cost of a row action. `.row-action` is `opacity: 0`, NOT
+    // `display: none`, so every button in a row holds its width whether it is
+    // visible or not — and each new one costs its own 24px *plus* a 8px flex gap.
+    // The name is the flex child with `minWidth: 0`, so it absorbs the whole cost
+    // by ellipsising: no overflow, no error, no failing test. Just shorter names.
+    //
+    // Adding the Lock button took the name from 90px to 58px at `--rail-left-min`.
+    // That is recorded here as arithmetic rather than as a comment, because the
+    // next button is the one that makes a name unreadable and nothing else in the
+    // suite would notice.
+    const row = rule('.list-row');
+    const gap = Number(/gap:\s*(\d+)px/.exec(row)![1]);
+    const padX = Number(/padding:\s*\d+px (\d+)px/.exec(row)![1]);
+
+    // `codeOnly`, for the reason its own comment gives — and this assertion is the
+    // third to need it. The row's JSX comment quotes the `<IconButton/>` shape it
+    // replaced, so counting buttons in the raw source found four where there are
+    // three, and the count read as a real measurement.
+    const tree = codeOnly(readSrc('components', 'studio', 'PartTree.tsx'));
+    // The row renderer ONLY. `PartTree.tsx` holds several components and seven
+    // `IconButton`s between them; slicing to end-of-file counted all seven and
+    // reported a name width of −70px, which is how this bound came to be measured
+    // rather than assumed.
+    const from = tree.indexOf('function PartRow(');
+    expect(from, 'PartRow is not declared in PartTree.tsx').toBeGreaterThan(-1);
+    const next = tree.indexOf('\nfunction ', from + 1);
+    const partRow = tree.slice(from, next === -1 ? undefined : next);
+    const buttons = [...partRow.matchAll(/<IconButton\b/g)].length;
+    const glyph = Number(/justifyContent: 'center', width: (\d+), flexShrink: 0/.exec(partRow)![1]);
+
+    // 32px of `.section` padding, the same figure the rail assertions above use.
+    const content = railFloor('rail-left') - 32;
+    const children = buttons + 2; // status glyph + name + the actions
+    const nameWidth = content - padX * 2 - gap * (children - 1) - glyph - buttons * 24;
+
+    // ~8 characters of 13px Nunito. Chosen, not derived — a derived floor would
+    // move with the thing it is supposed to constrain and could never go red.
+    expect(
+      nameWidth,
+      `a piece name gets ${nameWidth}px at --rail-left-min with ${buttons} row actions`,
+    ).toBeGreaterThanOrEqual(56);
+  });
+});
