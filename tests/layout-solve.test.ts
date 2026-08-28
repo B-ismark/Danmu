@@ -10,7 +10,7 @@ import {
   type LayoutContext,
   type Placement,
 } from '@/lib/layout-score';
-import { isWorthOffering, solveLayout } from '@/lib/layout-solve';
+import { HARD_TERMS, isWorthOffering, solveLayout } from '@/lib/layout-solve';
 import { analyzeRoom } from '@/lib/clearance';
 import { footprintBounds } from '@/lib/footprint';
 import { footprintForLayout } from '@/lib/footprint';
@@ -886,20 +886,71 @@ describe('the room’s anchor is settled first', () => {
       footprint: poly,
     } as LayoutContext);
 
-    const costs = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((seed) =>
+    const rows = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((seed) =>
       costBreakdown(
         model,
         solveLayout(messy, poly, messy.map(() => false), { seed }).placements,
         DEFAULT_WEIGHTS,
         NAV_CELL,
-      ).total,
+      ),
     );
+    const costs = rows.map((r) => r.total);
 
     // The bar is the WORST run, which is the one this pass exists for. Without it the
     // twelve seeds spread 3.3 … 154.7; with it, 3.3 … 6.9.
     expect(Math.max(...costs)).toBeLessThan(40);
-    // …and the median must not have paid for it.
-    expect([...costs].sort((a, b) => a - b)[6]).toBeLessThan(10);
+
+    // …and the median must not have paid for it — measured over the terms that make
+    // a room UNUSABLE, not over its total.
+    //
+    // This line read `sorted(costs)[6] < 10` and it was measuring the wrong quantity.
+    // Probed at `origin/main`, twelve seeds: `overlap`, `outside`, `door`,
+    // `navigation`, `access`, `walkway` and `window` are **0.00 on every seed**. The
+    // whole of the total is `alignment` / `relation` / `balance`. So a bar on the
+    // total could only ever fail on TIDINESS, while the sentence above it says
+    // "disaster" and the worst-case bar beneath it is the one that means it.
+    //
+    // Worse than merely imprecise: danmu-62 swept the bed ladder at this exact room
+    // and the trade runs the wrong way for a median bar. A Double bed here scores a
+    // median of 7.01 with Σnavigation 453.60; a Queen 8.71 with Σdoor 176.84; the
+    // Single the chooser actually picks scores 14.43 with Σdanger 3.90. **The safe
+    // rung is the untidy one**, so a median tidiness bar tightened against this room
+    // selects for the rung that parks a bed across the doorway. That is not a
+    // threshold anyone should tune, in either direction.
+    //
+    // `HARD_TERMS` is the solver's own list, exported rather than copied — and it is
+    // read here the way `hardCosts` reads it, term by term. Summing them is what its
+    // comment forbids, because four terms in one number means any of them buys any
+    // other. "The median run is safe" is therefore a COUNT of seeds with nothing on
+    // any hard term, never a sum that happens to be small.
+    //
+    // The negative control, and it is not decoration. `HARD_TERMS.every(...)` over
+    // an EMPTY list is vacuously true, so emptying that array would take `clean` to
+    // 12 and leave the assertion below green having checked nothing. Scoring the
+    // same scrambled room WITHOUT solving is what closes that: it carries
+    // `outside 3000.00` and `access 180.00`, so the predicate must be able to say
+    // no. Confirmed — replacing `HARD_TERMS` with `[]` fails this line.
+    const unsolved = costBreakdown(model, at(messy), DEFAULT_WEIGHTS, NAV_CELL);
+    expect(HARD_TERMS.some((k) => unsolved[k] > 0)).toBe(true);
+
+    const clean = rows.filter((r) => HARD_TERMS.every((k) => r[k] === 0)).length;
+    expect(clean).toBeGreaterThanOrEqual(7);
+    // WHAT THIS LINE ACTUALLY GUARDS, because two mutations survived it and a
+    // comment claiming more than was demonstrated is the thing this file keeps
+    // catching in other people's work:
+    //
+    //  · `DEFAULT_WEIGHTS.outside = 0` SURVIVED. A weight of zero removes the term
+    //    from the READING, not only from the solver's incentive, so `r.outside`
+    //    is 0 whether or not a piece is through the wall and the predicate goes
+    //    blind to exactly what it is named for. It went red on a different test,
+    //    which is where that class is covered; it is not covered here.
+    //  · `steps = 1` SURVIVED — a barely-annealed layout still has every hard term
+    //    at zero. Containment is not the annealer's work: `clampIntoFootprint` runs
+    //    regardless of step count.
+    //
+    // So this guards the SETTLE stage, not the anneal, and it guards it against
+    // regression rather than against a zeroed weight. That is a smaller claim than
+    // the line it replaced made, and unlike that one it is true.
   }, 120_000);
 
   it('is the piece the room is named after', () => {

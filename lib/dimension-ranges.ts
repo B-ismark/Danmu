@@ -55,7 +55,25 @@ const BY_SHAPE: Partial<Record<Shape, DimRange>> = {
   window: R('standard', [400, 40, 400], [3200, 200, 2400]),
 
   // ── flexible — made to measure, wide creative range ─────────────────────
-  sofa: R('flexible', [1200, 700, 600], [4000, 1800, 1100]),
+  // Depth max was 1800, which is a bed. `clampDims` is per-axis, so a size search
+  // for `160x200cm` handed the sofa 1600 wide and 2000 deep and the clamp brought
+  // the depth only as far down as 1800 — the library then badged a 1.6 × 1.8 m
+  // sofa as a legal one, and adding it built one. 1150 is the deepest real
+  // single-row sofa (a deep-seat lounge); anything past that is a different piece
+  // of furniture, not a wide range.
+  //
+  // The number is chosen so `max D < min W`, and that is the property worth
+  // keeping rather than the constant: per-axis clamping cannot express a ratio, so
+  // the only way to guarantee every legal sofa is wider than it is deep is for the
+  // deepest legal depth to be under the narrowest legal width. `tests/dimension-
+  // ranges.test.ts` asserts that pair, not the literals, because a later widening
+  // of either end is exactly how the absurd size gets back in.
+  //
+  // Deliberately NOT retiered to 'standard'. The tier drives one label in the
+  // Inspector ("Made to measure" vs "Typical size range") and is asserted by name
+  // in that test; a sofa genuinely is ordered in custom sizes, and the complaint
+  // here was the number, not the word.
+  sofa: R('flexible', [1200, 700, 600], [4000, 1150, 1100]),
   'coffee-table': R('flexible', [500, 400, 250], [1800, 1200, 600]),
   'side-table': R('flexible', [250, 250, 350], [800, 800, 800]),
   'desk-standard': R('flexible', [800, 450, 600], [2400, 1200, 900]),

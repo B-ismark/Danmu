@@ -982,28 +982,93 @@ function MountHeightRow({
     setDraft(formatDim(Math.max(0, bottomMM), dimUnit));
   }, [bottomMM, dimUnit]);
 
+  // A piece TALLER than the room has no legal mount height at all, and the caller
+  // hands that over as a negative `maxBottomMM` (`room.height - dimMM[2]/1000`).
+  // The commit line used to read
+  //     Math.max(0, Math.min(maxBottomMM, toMM(v, dimUnit)))
+  // — min against a negative max, then max against 0 — so every number typed came
+  // back 0 and the field snapped to 0 with nothing said. That is the crossed-
+  // interval failure `boundsToUnit` was written for, one control along: two bounds
+  // that have inverted, the wrong one applied last, and every entry landing on the
+  // same end. Lower a room to the 1.8 m floor with the default 2.2 m curtain in it
+  // and this field is simply dead for that piece — which was the second half of
+  // "the curtain doesn't reduce when the room height is reduced, and it doesn't
+  // state anything as the reason". `lib/clearance.ts` §7 says WHY in the room
+  // report; this says it where the number is being typed.
+  const fits = maxBottomMM > 0;
+  // NOT `boundsToUnit`, and the first version of this used it. That function
+  // exists to bound a STEPPER: it rounds each end toward the interior so the
+  // arrows cannot reach a number the commit would refuse. This control has no
+  // stepper. What it needs is an exact comparison and a formatted display, and
+  // using the rounded pair for both is what put a raw float on screen — the
+  // collapse guard falls back to unrounded `fromMM` when rounding has inverted
+  // the interval, so a 1790 mm piece under an 1800 mm ceiling rendered
+  // "0–0.03280839895013123 ft under this ceiling."  Found by danmu-62 in review,
+  // and it is the same class as the defect this whole row was written to fix: a
+  // bound crossing into a control in the wrong shape. The window is under
+  // 15.24 mm of headroom and it is in FEET, which is where all fourteen of the
+  // earlier bound defects lived.
+  //
+  // So compare in MILLIMETRES, where the arithmetic is exact and nothing rounds,
+  // and display through `formatDim` — which is what the size range two hundred
+  // lines above this already does.
+  const typedMM = toMM(parseFloat(draft), dimUnit);
+  // DERIVED, not stored. A `useState` flag here would be cleared by the resync
+  // effect above the moment the commit moved the piece — the message would
+  // announce the clamp and erase itself in the same tick — and would then outlive
+  // its subject on a unit change, which is the pair of faults `RoomDimsEditor`
+  // already carries a comment about. Reading the draft answers both for free, and
+  // says it while the number is still being typed rather than after the snap.
+  const outOfRange = fits && Number.isFinite(typedMM) && (typedMM < 0 || typedMM > maxBottomMM);
+  // A range narrower than one step of the display unit is not a range. Quoting it
+  // as one is true and useless — "0–0.03 ft" for a centimetre of headroom — so say
+  // the thing the number was standing in for.
+  const noRoom = fits && fromMM(maxBottomMM, dimUnit) < stepFor(dimUnit);
+
   function commit() {
     const v = parseFloat(draft);
     if (!Number.isFinite(v)) return setDraft(formatDim(Math.max(0, bottomMM), dimUnit));
-    const mm = Math.max(0, Math.min(maxBottomMM, toMM(v, dimUnit)));
-    onCommit(mm);
+    if (!fits) return;
+    onCommit(Math.max(0, Math.min(maxBottomMM, toMM(v, dimUnit))));
   }
 
   return (
-    <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-      <span style={{ fontSize: 11, color: 'var(--ink-2)', flex: 1 }}>Height off the floor</span>
-      <input
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-        }}
-        inputMode="decimal"
-        className="field"
-        style={{ width: 72, height: 28, fontFamily: 'var(--font-mono)', fontSize: 11, textAlign: 'right' }}
-      />
-      <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>{dimUnit}</span>
-    </label>
+    <div style={{ marginTop: 8 }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* `minWidth: 0` because this is the flex item that should ellipsise —
+            rule 4 names it, and a `flex: 1` box with no min-width sizes to its
+            content rather than to the space there is. Its min-content here is
+            only "Height" at 11px, so it was never this row's overflow source,
+            but it is the property the rule is about and this is the branch that
+            lands. Asked for by danmu-62, who reverted their own copy of the line
+            so the two of us are not both editing it. */}
+        <span style={{ fontSize: 11, color: 'var(--ink-2)', flex: 1, minWidth: 0 }}>Height off the floor</span>
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          }}
+          inputMode="decimal"
+          className="field"
+          disabled={!fits}
+          aria-invalid={!fits || outOfRange}
+          style={{ width: 72, height: 28, fontFamily: 'var(--font-mono)', fontSize: 11, textAlign: 'right' }}
+        />
+        <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>{dimUnit}</span>
+      </label>
+      {(!fits || outOfRange || noRoom) && (
+        // `noRoom` is not a fault — the piece fits and simply has nowhere to go —
+        // so it reads as information rather than as an error.
+        <div style={{ fontSize: 10.5, lineHeight: 1.4, marginTop: 4, color: !fits || outOfRange ? 'var(--danger-text)' : 'var(--ink-3)' }}>
+          {!fits
+            ? 'Taller than the room — there is no height it can hang at. Room check says by how much.'
+            : outOfRange
+              ? `0–${formatDim(maxBottomMM, dimUnit)} ${dimUnit} under this ceiling.`
+              : 'It only just fits — there is no room to move it under this ceiling.'}
+        </div>
+      )}
+    </div>
   );
 }
