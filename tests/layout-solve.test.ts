@@ -10,7 +10,7 @@ import {
   type LayoutContext,
   type Placement,
 } from '@/lib/layout-score';
-import { HARD_TERMS, isWorthOffering, solveLayout } from '@/lib/layout-solve';
+import { HARD_TERMS, isWorthOffering, lockedForSolve, solveLayout } from '@/lib/layout-solve';
 import { analyzeRoom } from '@/lib/clearance';
 import { footprintBounds } from '@/lib/footprint';
 import { footprintForLayout } from '@/lib/footprint';
@@ -1006,5 +1006,76 @@ describe('the wall term measures along the wall, not to its corner', () => {
     const flush = costBreakdown(prepare(ctx), [{ x: 0, z: -0.119, yaw: Math.PI }], DEFAULT_WEIGHTS).wall;
     const adrift = costBreakdown(prepare(ctx), [{ x: 0, z: -0.45, yaw: Math.PI }], DEFAULT_WEIGHTS).wall;
     expect(adrift).toBeGreaterThan(flush + DEFAULT_WEIGHTS.wall * 0.2);
+  });
+});
+
+// The Lock button in `PartTree` — "don't let Suggest move this one". The button
+// writes `useStudio.pinned`; this is the arithmetic between that map and the
+// solver's `locked` parameter, and it lives in `lib/` rather than in the `.map()`
+// it came from precisely so these cases can exist at all.
+describe('lockedForSolve', () => {
+  const room = () => [
+    part({ category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880], pos: [-1.8, 0, -1.3], rot: 0.4 }),
+    part({ category: 'wardrobe', shape: 'wardrobe', dimMM: [2000, 600, 2100], pos: [-1.4, 0, -1.0], rot: 1.1 }),
+    part({ category: 'table', shape: 'coffee-table', dimMM: [1100, 600, 420], pos: [-1.6, 0, -1.5], rot: 0.2 }),
+  ];
+
+  it('locks the piece the user locked, and only that one', () => {
+    const parts = room();
+    expect(lockedForSolve(parts, { [parts[1].id]: true }, null)).toEqual([false, true, false]);
+  });
+
+  it('treats a released lock as absent', () => {
+    // `togglePinned` writes `false` rather than deleting the key, so a piece the
+    // user locked and then released is still IN the map. Reading it truthily is
+    // the difference between releasing a lock working and a lock that cannot be
+    // undone without a reload.
+    const parts = room();
+    expect(lockedForSolve(parts, { [parts[1].id]: false }, null)).toEqual([false, false, false]);
+  });
+
+  it('locks everything a confined fix was not asked about', () => {
+    const parts = room();
+    const only = new Set([parts[2].id]);
+    expect(lockedForSolve(parts, {}, only)).toEqual([true, true, false]);
+  });
+
+  it('keeps the user lock when a confined fix names that very piece', () => {
+    // The composition that fails silently. **Try a fix** unlocks the pieces it
+    // wants to move; if that overrode the user's lock, pressing it on a finding
+    // about a locked sofa would move the sofa the user had locked — and the only
+    // symptom is a piece moving, which is what the button does anyway.
+    const parts = room();
+    const only = new Set([parts[0].id, parts[2].id]);
+    expect(lockedForSolve(parts, { [parts[0].id]: true }, only)).toEqual([true, true, false]);
+  });
+
+  it('still reports a from-photo piece as locked', () => {
+    // Documents rather than endorses. `ScenePart.locked` means "came out of your
+    // photo" — its own comment says the name is wrong — and it has always been fed
+    // to the solver as a lock, so Suggest does not move detected furniture and the
+    // Lock button cannot release it. Changing that alters every detected room and
+    // is a product decision; this is here so the next reader finds it stated
+    // rather than deducing it from a bug report.
+    const parts = room();
+    parts[1] = { ...parts[1], locked: true };
+    expect(lockedForSolve(parts, {}, null)).toEqual([false, true, false]);
+  });
+
+  it('stops the solver moving a locked piece, where it would otherwise move it', () => {
+    // Both halves, because the second assertion alone would also pass if
+    // `lockedForSolve` returned all-true — and a lock that locks everything is not
+    // a working lock, it is a broken Suggest.
+    const free = room();
+    const loose = solveLayout(free, RECT, lockedForSolve(free, {}, null), { seed: 5, steps: 1200 });
+    expect(loose.moved).toContain(1);
+
+    const held = room();
+    const pinned = solveLayout(held, RECT, lockedForSolve(held, { [held[1].id]: true }, null), {
+      seed: 5,
+      steps: 1200,
+    });
+    expect(pinned.moved).not.toContain(1);
+    expect(pinned.placements[1]).toEqual({ x: held[1].pos[0], z: held[1].pos[2], yaw: held[1].rot });
   });
 });

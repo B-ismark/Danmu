@@ -38,6 +38,7 @@ import { defaultScene } from '@/lib/scene-spec';
 import { footprintForLayout, footprintBounds } from '@/lib/footprint';
 import type { ScenePart } from '@/lib/scene-spec';
 import type { Footprint } from '@/lib/footprint';
+import type { LayoutId } from '@/lib/storage';
 
 /** `SNAP_TOL` in lib/layout-solve — the band inside which an angle is not a choice.
  *  Restated rather than exported: the constant is that module's business, and a test
@@ -56,21 +57,35 @@ function part(p: Partial<ScenePart> & Pick<ScenePart, 'category' | 'shape' | 'di
   return { id: `p${++n}`, name: p.category, rot: 0, locked: false, ...p } as ScenePart;
 }
 
+/** The pieces added on top of whatever the seeder produced. Named apart from
+ *  `busyRoom` because the shove sweep below drops the same set into five other
+ *  presets, and two copies of this list would drift.
+ *
+ *  **The ids are explicit, and that is not tidiness.** `part` numbers from a
+ *  module-wide counter, so a piece's id depends on how many other fixtures were built
+ *  before it — and `beatsAnchor` breaks a tie in the relation term on the anchor's
+ *  `id`. So the same room, same seed and same furniture solved differently depending
+ *  on which describe block ran first, which is how the first three witnesses below
+ *  were picked from a sweep and then failed on arrival. `part` still advances the
+ *  counter, so nothing else in this file shifts. */
+function extras(): ScenePart[] {
+  return [
+    part({ id: 'x-armchair', category: 'chair', shape: 'chair-armchair', dimMM: [800, 850, 900], pos: [-2.4, 0, 1.0], rot: Math.PI / 2, name: 'Armchair' }),
+    part({ id: 'x-bookcase', category: 'shelf', shape: 'bookshelf', dimMM: [900, 320, 1800], pos: [-3.4, 0, -1.0], rot: Math.PI / 2, name: 'Bookcase' }),
+    part({ id: 'x-sidetable', category: 'table', shape: 'side-table', dimMM: [450, 450, 550], pos: [-1.6, 0, 1.4], name: 'Side table' }),
+    part({ id: 'x-diningtable', category: 'table', shape: 'desk-standard', dimMM: [1500, 900, 750], pos: [2.3, 0, -1.2], name: 'Dining table' }),
+    part({ id: 'x-chair-a', category: 'chair', shape: 'chair-dining', dimMM: [450, 480, 900], pos: [2.3, 0, -0.4], rot: Math.PI, name: 'Chair A' }),
+    part({ id: 'x-chair-b', category: 'chair', shape: 'chair-dining', dimMM: [450, 480, 900], pos: [2.3, 0, -2.0], name: 'Chair B' }),
+    part({ id: 'x-wardrobe', category: 'wardrobe', shape: 'wardrobe', dimMM: [1600, 600, 2100], pos: [-3.5, 0, 0.6], rot: Math.PI / 2, name: 'Wardrobe' }),
+  ];
+}
+
 /** A room with enough in it that the solver has real work to do — the seeded presets
  *  are already at a local minimum and move nothing, which would make this vacuous. */
 function busyRoom(): { poly: Footprint; parts: ScenePart[] } {
   const poly = footprintForLayout('rect', 7.5, 5.6);
   const seeded = defaultScene('rect', 7.5, 5.6, { footprint: poly });
-  const added: ScenePart[] = [
-    part({ category: 'chair', shape: 'chair-armchair', dimMM: [800, 850, 900], pos: [-2.4, 0, 1.0], rot: Math.PI / 2, name: 'Armchair' }),
-    part({ category: 'shelf', shape: 'bookshelf', dimMM: [900, 320, 1800], pos: [-3.4, 0, -1.0], rot: Math.PI / 2, name: 'Bookcase' }),
-    part({ category: 'table', shape: 'side-table', dimMM: [450, 450, 550], pos: [-1.6, 0, 1.4], name: 'Side table' }),
-    part({ category: 'table', shape: 'desk-standard', dimMM: [1500, 900, 750], pos: [2.3, 0, -1.2], name: 'Dining table' }),
-    part({ category: 'chair', shape: 'chair-dining', dimMM: [450, 480, 900], pos: [2.3, 0, -0.4], rot: Math.PI, name: 'Chair A' }),
-    part({ category: 'chair', shape: 'chair-dining', dimMM: [450, 480, 900], pos: [2.3, 0, -2.0], name: 'Chair B' }),
-    part({ category: 'wardrobe', shape: 'wardrobe', dimMM: [1600, 600, 2100], pos: [-3.5, 0, 0.6], rot: Math.PI / 2, name: 'Wardrobe' }),
-  ];
-  return { poly, parts: [...seeded, ...added] };
+  return { poly, parts: [...seeded, ...extras()] };
 }
 
 describe('a suggestion never hands back a piece a few degrees off square', () => {
@@ -111,6 +126,52 @@ describe('a suggestion never hands back a piece a few degrees off square', () =>
       const off = offSquare(r.placements[i].yaw);
       expect(off === 0 || off <= 1e-3 || off >= SNAP_TOL, `${parts[i].name}`).toBe(true);
     }
+  });
+
+  // ── …and in rooms where turning it straight is not enough ──────────────────
+  //
+  // When squaring a piece would cost a hard term, the tidy squares it and shoves it by
+  // up to `off × radius` — the distance the tilt itself moves its own corner — trying
+  // the four axes and then the four diagonals.
+  //
+  // **The sweep above is the one room where none of that is needed.** Measured over six
+  // presets × 40 seeds, 240 solves, counting every moved piece handed back between
+  // 0.06° and `SNAP_TOL` of square:
+  //
+  //     no shove          197   ← what shipped, and the suite was green
+  //     axes only          48
+  //     axes + diagonals   30   ← now
+  //
+  // A hundred and ninety-seven crooked pieces, and every gate was green, because the
+  // plain 7.5 × 5.6 rect above is the room where it does not happen. The shove clears
+  // about six in seven. **It is a partial fix and the remaining 30 are real** — mostly
+  // the U and the T, where the square yaw is illegal and nothing within the piece's own
+  // reach is legal either.
+  //
+  // The three below are the narrow thing this can assert cheaply: coordinates where the
+  // piece comes free ONLY on a diagonal, found by deleting all four diagonals and
+  // re-running the sweep. Not one of them is in the room above, which is why deleting
+  // the diagonals left the suite green — and the pairs are NOT stable across a change to
+  // the cost function, so a re-price means re-running the search rather than nudging
+  // these numbers.
+  const DIAGONAL_ONLY: Array<[LayoutId, number, number, number]> = [
+    ['rect', 5, 4, 24],
+    ['l', 6, 5, 1],
+    ['u', 5, 4.5, 7],
+  ];
+
+  it.each(DIAGONAL_ONLY)('squares a piece only a diagonal shove can reach: %s %sx%s seed %i', (id, w, d, seed) => {
+    const roomPoly = footprintForLayout(id, w, d);
+    const roomParts = [...defaultScene(id, w, d, { footprint: roomPoly }), ...extras()];
+    const r = solveLayout(roomParts, roomPoly, roomParts.map(() => false), { seed });
+    expect(r.moved.length, 'the fixture must give the solver something to do').toBeGreaterThan(0);
+    const crooked = r.moved
+      .filter((i) => {
+        const off = offSquare(r.placements[i].yaw);
+        return off > 1e-3 && off < SNAP_TOL;
+      })
+      .map((i) => `${roomParts[i].name} at ${((offSquare(r.placements[i].yaw) * 180) / Math.PI).toFixed(2)}°`);
+    expect(crooked, crooked.join(', ')).toEqual([]);
   });
 });
 

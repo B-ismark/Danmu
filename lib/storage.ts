@@ -174,6 +174,15 @@ export type Transforms = {
    *  refresh silently brought hidden parts back while the top bar had been
    *  showing a "saved" state the whole time. */
   hidden?: Record<string, boolean>;
+  /** which parts the user locked against **Suggest** — same optional per-room
+   *  shape as `hidden`, and optional for the same reason.
+   *
+   *  Not called `locked`, because that word is already spent: `ScenePart.locked`
+   *  means "this came out of your photo" and its own comment says at length that
+   *  the name is wrong. This field is the thing the word actually describes, so
+   *  the *user-facing* label is "Lock" and the field is `pinned`. See
+   *  `useStudio.pinned`. */
+  pinned?: Record<string, boolean>;
   /** rigid-parenting relationships (childId -> parentId), same optional/
    *  per-room shape as `hidden` — rooms saved before this shipped have none. */
   parentIds?: Record<string, string>;

@@ -52,7 +52,7 @@ import { useScene, type RoomShape } from '@/lib/scene-store';
 import { resolveParts, useRoomScene } from '@/lib/room-scene';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
 import { analyzeRoom, type ClearanceIssue, type ClearanceSeverity } from '@/lib/clearance';
-import { isWorthOffering, solveLayout, type MoveReason } from '@/lib/layout-solve';
+import { isWorthOffering, lockedForSolve, solveLayout, type MoveReason } from '@/lib/layout-solve';
 import { RULE_HANDLING, type CostBreakdown } from '@/lib/layout-score';
 import { roomStore, type LayoutVariant, type Transforms } from '@/lib/storage';
 import { footprintBounds, type Footprint } from '@/lib/footprint';
@@ -529,12 +529,13 @@ function useSuggest(effParts: ScenePart[], footprint: Footprint, appPlaced: AppP
           (id) => !stillTheApps(appPlaced.current, id, t.positions, t.rotations),
         ),
       );
-      const result = solveLayout(
-        effParts,
-        footprint,
-        effParts.map((p) => p.locked || (confined ? !confined.has(p.id) : false)),
-        { seed, mode, placed },
-      );
+      // Three reasons a piece may not move, composed in one place a test can
+      // reach — see `lockedForSolve`. The user's Lock button is the first of them.
+      const result = solveLayout(effParts, footprint, lockedForSolve(effParts, t.pinned, confined), {
+        seed,
+        mode,
+        placed,
+      });
       // A material gain, not merely a smaller number. `isWorthOffering` is the bar:
       // a solve that trims 3.1 to 2.4 by sliding a sofa 10 cm and a rug 10 cm has
       // found a real improvement and is still not an answer to "give me an idea".

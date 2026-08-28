@@ -44,6 +44,7 @@ import { clampIntoFootprint } from './footprint';
 import { localToWorld, nearestEdge } from './geometry';
 import {
   angleDelta,
+  bandCost,
   costBreakdown,
   navigabilityCost,
   NAV_CELL,
@@ -192,6 +193,33 @@ function makeRng(seed: number): () => number {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+/** The `locked` array for a solve, built from the three separate reasons a piece
+ *  may not move. Exported and pure because it used to be one expression inside a
+ *  `.map()` in `RoomTools`, where no test could reach it — and it is the whole of
+ *  whether the user's Lock button works. A lock that composes wrongly with a
+ *  confined fix fails silently: the piece just moves, and the button reads as
+ *  decorative.
+ *
+ *  The three are genuinely different questions:
+ *
+ *  · `pinned` — the user pressed **Lock** on that row. Their answer, and it wins.
+ *  · `part.locked` — **"came out of your photo"**, not a lock, whatever the field
+ *    is called; see `ScenePart.locked`, whose own comment says the name is wrong.
+ *    Honoured here because it always has been, and changing it changes what
+ *    Suggest does to every detected room — a product decision, not a tidy-up. Left
+ *    as it stands on purpose, and named here because a reader who trusts the
+ *    identifier will misread the line.
+ *  · `confined` — a **Try a fix** solve names the few pieces it may touch, so
+ *    everything else is locked for the duration. Null for a whole-room Suggest.
+ */
+export function lockedForSolve(
+  parts: ScenePart[],
+  pinned: Record<string, boolean>,
+  confined: Set<string> | null,
+): boolean[] {
+  return parts.map((p) => !!pinned[p.id] || p.locked || (confined ? !confined.has(p.id) : false));
 }
 
 /**
@@ -709,11 +737,74 @@ export function snapYaws(
     const keep = out[i];
     out[i] = { ...keep, yaw: snapped };
     const trial = hardCosts(m, out, weights, navCell);
-    if (anyWorse(hard, trial)) out[i] = keep;
-    else hard = trial;
+    if (!anyWorse(hard, trial)) {
+      hard = trial;
+      continue;
+    }
+    // Squaring it where it stands costs a hard term, so turning alone cannot tidy it —
+    // and leaving it is the one outcome this pass exists to prevent. So square it and
+    // shove it a little, which is what a person does: turn it straight, then push it
+    // back until it fits.
+    //
+    // Measured over six presets x 40 seeds = 240 solves, counting every moved piece
+    // handed back between 0.06 deg and `SNAP_TOL` of square:
+    //
+    //     no shove          197
+    //     axes only          48
+    //     axes + diagonals   30
+    //
+    // So the crooked piece was never rare — 197 of them, and the suite was green,
+    // because the one room the twelve-seed sweep above uses is a plain 7.5 x 5.6 rect
+    // where it does not happen. The shove clears about six in seven. **The remaining 30
+    // are real**, mostly the U and the T, where neither the square yaw nor anything
+    // within the piece's own reach is legal.
+    //
+    // Putting the piece back where it came from instead was tried first and does NOT
+    // work: by the time the tidy runs, something else has moved into the space it came
+    // from, so the revert is refused for `overlap` in its turn. It cleared neither of
+    // the two cases it was written for, so there is no fallback layer here — an
+    // untested branch that never fires would be worse than the crooked sofa.
+    out[i] = keep;
+
+    // How far it may be shoved: the distance squaring it would move its own furthest
+    // corner, `off × radius`. Derived rather than chosen, and self-limiting in the
+    // direction that matters — a barely-crooked piece earns a barely-nudge, and the
+    // shift is never more visible than the tilt it buys out. For the 2.2 m sofa at
+    // 2.69° that is 56 mm, against the 103 mm the tilt itself moves its corner.
+    const reach = off * m.radius[i];
+    let fixed = false;
+    for (const scale of [1 / 3, 2 / 3, 1]) {
+      for (const [ux, uz] of NUDGE_DIRS) {
+        out[i] = { ...keep, yaw: snapped, x: keep.x + ux * reach * scale, z: keep.z + uz * reach * scale };
+        const shoved = hardCosts(m, out, weights, navCell);
+        if (!anyWorse(hard, shoved)) {
+          hard = shoved;
+          fixed = true;
+          break;
+        }
+      }
+      if (fixed) break;
+    }
+    // Nothing legal within its own reach. Better crooked than through a wall: every
+    // candidate here was refused by the same hard veto the plain snap was.
+    if (!fixed) out[i] = keep;
   }
   return out;
 }
+
+/** The eight directions a stuck piece is offered, axes before diagonals so a shove
+ *  along one wall is preferred to one that leaves it out of line with two. Unit
+ *  length, scaled by the caller. */
+const NUDGE_DIRS: ReadonlyArray<readonly [number, number]> = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+  [Math.SQRT1_2, Math.SQRT1_2],
+  [-Math.SQRT1_2, Math.SQRT1_2],
+  [Math.SQRT1_2, -Math.SQRT1_2],
+  [-Math.SQRT1_2, -Math.SQRT1_2],
+];
 
 /** Offer every moved piece its old place back, and let the room decide.
  *
@@ -911,12 +1002,22 @@ const GROUP_STEPS = 300;
 
 /** How near a relation has to be to its band before the pair count as one group.
  *
- *  Squared metres of miss (`bandCost`), so this is roughly half a metre out of band.
  *  A threshold and not merely "the relation exists" is the whole point: in a room
  *  someone has scrambled, nothing is grouped and the flat search does the work — which
  *  is measurably the right answer there, 363.7 → 6.8 across six seeds. Group moves are
- *  for carrying what is ALREADY right to where it belongs. */
-const GROUP_INTACT = 0.25;
+ *  for carrying what is ALREADY right to where it belongs.
+ *
+ *  Authored in **metres out of band** and converted by the one function that owns that
+ *  conversion, because the threshold is compared against `bandCost` output and so its
+ *  meaning is a function of `bandCost`'s shape. It was the literal `0.25` with a comment
+ *  reading *"squared metres of miss, so this is roughly half a metre out of band"* — true
+ *  while the miss was `e²`, and silently false the moment it became `e + e²`, where 0.25
+ *  is 207 mm. Nothing would have failed: half a metre of grouping tolerance would just
+ *  have become a fifth, group moves would have stopped firing on rooms that are nearly
+ *  right, and the only symptom is a search that got quietly worse. A constant whose unit
+ *  is another function's return value has to be derived from that function. */
+const GROUP_INTACT_M = 0.5;
+const GROUP_INTACT = bandCost(GROUP_INTACT_M, 0, 0);
 
 /** The groups this room actually contains: connected components of the satisfied
  *  relation edges, movable members only.
