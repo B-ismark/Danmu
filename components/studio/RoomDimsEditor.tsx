@@ -33,58 +33,68 @@ export function RoomDimsEditor() {
   // share one range and a message naming the wrong one is worse than no message.
   const [rangeError, setRangeError] = useState<RoomAxis | null>(null);
 
-  useEffect(() => {
-    setLocal([
-      fromMM(room.width * 1000, dimUnit).toFixed(prec),
-      fromMM(room.depth * 1000, dimUnit).toFixed(prec),
-      fromMM(room.height * 1000, dimUnit).toFixed(prec),
-    ]);
-  }, [room.width, room.depth, room.height, dimUnit, prec]);
-
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Which fields have been typed in since the last commit fired. The debounce
   // coalesces a fast width-then-depth into one write, so the batch is a set and
   // not merely the last index — but it is also the whole of what gets judged and
   // the whole of what gets written. Judging one axis and writing three is what
   // let a refused number reach the store on the NEXT edit to a different field;
   // `applyRoomEdits` is where that now cannot happen, and why the untouched axes
-  // below come off the live room rather than out of `next`.
-  const edited = useRef(new Set<0 | 1 | 2>());
+  // in `commit` come off the live room rather than out of `next`.
+  //
+  // Declared above the resync effect because that effect clears it.
+  const edited = useRef(new Set<RoomAxis>());
+
+  useEffect(() => {
+    setLocal([
+      fromMM(room.width * 1000, dimUnit).toFixed(prec),
+      fromMM(room.depth * 1000, dimUnit).toFixed(prec),
+      fromMM(room.height * 1000, dimUnit).toFixed(prec),
+    ]);
+    // This resync has just overwritten whatever the user had typed, so it owns
+    // retiring what that typing left behind. It did not, and the message outlived
+    // its subject: clear the Height box, the batch is refused and `rangeError`
+    // says so — then change the unit in Settings (or drag a wall, or undo) and
+    // this effect rewrites Height to the room's real value while the sentence
+    // underneath still reads "That height is outside 1.8-12 m" and `aria-invalid`
+    // sits on a field showing a legal number. It cleared only on the next
+    // keystroke anywhere. `dimUnit` and `prec` are in these deps, so a unit change
+    // is the cheapest way to see it, and changing units while a field is refused
+    // is not an exotic thing to do. Found by danmu-cd in review.
+    edited.current.clear();
+    setRangeError(null);
+  }, [room.width, room.depth, room.height, dimUnit, prec]);
+
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function commit(idx: 0 | 1 | 2, raw: string) {
     const next = [...local] as [string, string, string];
     next[idx] = raw;
     setLocal(next);
-    edited.current.add(idx);
+    edited.current.add(ROOM_AXES[idx]);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
       const batch: Partial<Record<RoomAxis, number>> = {};
-      for (const i of edited.current) batch[ROOM_AXES[i]] = toMM(parseFloat(next[i]), dimUnit) / 1000;
+      for (const axis of edited.current) {
+        batch[axis] = toMM(parseFloat(next[ROOM_AXES.indexOf(axis)]), dimUnit) / 1000;
+      }
       const base = useScene.getState().room;
-      const { room: r, rejected } = applyRoomEdits(
+      const { room: r, rejected, pending } = applyRoomEdits(
         { width: base.width, depth: base.depth, height: base.height },
         batch,
       );
+      // What to keep holding is the rule's answer, not this component's — see
+      // `applyRoomEdits`. A refusal hands the whole batch back so the form
+      // retries atomically as well as committing atomically; the first version
+      // cleared the set before the check and silently dropped the good edits
+      // beside the bad one. The consequence is deliberate: while a field holds an
+      // illegal value every later commit re-includes it and is refused again, so
+      // no other field lands until it is fixed — which is what the message on
+      // screen is already telling the user to do.
+      edited.current = new Set(Object.keys(pending) as RoomAxis[]);
       if (rejected) {
         setRangeError(rejected);
-        // The batch stays PENDING. Clearing it here — which is what the first
-        // version did, before the check — threw away the good edits sitting
-        // beside the bad one: type a legal width, then an illegal height, and
-        // the batch is refused and the width is gone from everywhere but the
-        // form. Fixing the height then commits height alone, `room.height`
-        // changes, the resync effect rebuilds `local` from the room, and the
-        // width field snaps back to its old value with nothing said. A lost
-        // edit rather than a corrupt write, and silent, which is the half this
-        // repo keeps paying for. Found by danmu-f4 in review.
-        //
-        // So the form retries atomically as well as committing atomically. The
-        // consequence is deliberate: while a field holds an illegal value every
-        // later commit re-includes it and is refused again, so no other field
-        // lands until it is fixed — which is what the message on screen is
-        // already telling the user to do.
         return;
       }
-      edited.current.clear();
       setRangeError(null);
       const oldHeight = base.height;
       setRoom(r);

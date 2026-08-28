@@ -148,3 +148,34 @@ describe('ROOM_AXES', () => {
     }
   });
 });
+
+describe('applyRoomEdits pending', () => {
+  const ROOM = { width: 4, depth: 3, height: 2.5 };
+
+  it('hands the whole batch back when it refuses one axis of it', () => {
+    // The behaviour the editor's retry rests on, and the reason it is HERE: it
+    // lived in the component, where the repo's own precedent (lib/drag-click.ts)
+    // says a decision has no gate. Clearing the caller's pending set on this path
+    // is the defect — the good width goes with the bad height.
+    const { pending, rejected } = applyRoomEdits(ROOM, { width: 5, height: 99 });
+    expect(rejected).toBe('height');
+    expect(pending).toEqual({ width: 5, height: 99 });
+  });
+
+  it('keeps nothing pending once the batch is taken', () => {
+    const { pending, rejected } = applyRoomEdits(ROOM, { width: 5, depth: 3.5 });
+    expect(rejected).toBeNull();
+    expect(pending).toEqual({});
+  });
+
+  it('a retry of the returned batch commits it whole once the bad axis is fixed', () => {
+    // The full sequence, which is what the user actually does: legal width and
+    // illegal height in one debounce window, refused; the height corrected; and
+    // the width must still be in the commit rather than snapped back.
+    const first = applyRoomEdits(ROOM, { width: 5, height: 99 });
+    expect(first.room).toEqual(ROOM);
+    const retry = applyRoomEdits(ROOM, { ...first.pending, height: 2.6 });
+    expect(retry.rejected).toBeNull();
+    expect(retry.room).toEqual({ width: 5, depth: 3, height: 2.6 });
+  });
+});

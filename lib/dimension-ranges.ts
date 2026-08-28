@@ -193,19 +193,38 @@ export type RoomDims = Record<RoomAxis, number>;
  *  batch changes the room, and the editor resyncs its fields from the room, so
  *  the refused number would be wiped off the screen while the message still
  *  named it. Refusing the batch leaves the bad number where the user can see
- *  what the message is about. */
+ *  what the message is about.
+ *
+ *  `pending` is what the caller should still be holding afterwards, and it is
+ *  here rather than in the component because that is the half nothing could
+ *  test. The first version cleared the caller's pending set BEFORE this call, so
+ *  a refused batch discarded the good edits beside the bad one: a legal width
+ *  typed alongside an illegal height vanished, and fixing the height then
+ *  committed height alone and snapped the width field back with nothing said —
+ *  a lost edit, silent. So a refusal hands the whole batch back and the form
+ *  retries atomically as well as committing atomically. `lib/drag-click.ts` is
+ *  the precedent: a decision parked in a component is a decision with no gate.
+ *
+ *  `rejected` is the FIRST bad axis in `ROOM_AXES` order — not the axis the user
+ *  most recently touched. With two illegal fields the message therefore names
+ *  the earlier one, and since the editor's `aria-invalid` is single-valued the
+ *  other bad field loses its marker until the next commit. That is a deliberate
+ *  simplification, not an oversight: it is deterministic, and the alternative
+ *  needs the caller to say which field it was, which is a second source of truth
+ *  for something the batch already contains. Do not read it as "the axis being
+ *  edited". */
 export function applyRoomEdits(
   current: RoomDims,
   edits: Partial<Record<RoomAxis, number>>,
-): { room: RoomDims; rejected: RoomAxis | null } {
+): { room: RoomDims; rejected: RoomAxis | null; pending: Partial<Record<RoomAxis, number>> } {
   const room = { ...current };
   for (const axis of ROOM_AXES) {
     const v = edits[axis];
     if (v === undefined) continue;
-    if (!roomAxisWithin(axis, v)) return { room: current, rejected: axis };
+    if (!roomAxisWithin(axis, v)) return { room: current, rejected: axis, pending: edits };
     room[axis] = v;
   }
-  return { room, rejected: null };
+  return { room, rejected: null, pending: {} };
 }
 
 /** True if the given dims already sit inside the allowed range. */
