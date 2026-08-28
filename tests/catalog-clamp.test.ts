@@ -1,5 +1,7 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { PART_LIBRARY, BED_LADDER } from '@/lib/scene-spec';
+import { PART_LIBRARY, BED_LADDER, SHAPES } from '@/lib/scene-spec';
 import { clampDims, dimRangeFor } from '@/lib/dimension-ranges';
 
 /** Every shipped preset must survive its own clamp.
@@ -151,5 +153,100 @@ describe('every shipped preset survives its own clamp', () => {
       expect(BED_LADDER[i].dim[0]).toBeLessThan(BED_LADDER[i - 1].dim[0]);
       expect(BED_LADDER[i].dim[1]).toBe(BED_LADDER[0].dim[1]);
     }
+  });
+
+  /** The BANDS on the same axis as the catalog, which the sweep at the top of this
+   *  file cannot see.
+   *
+   *  That sweep asks whether the catalog agrees with the bands, and both were
+   *  transposed together, so it was green on `origin/main` — the self-referential
+   *  check this file's own docblock is about. The catalog half is grounded on the
+   *  renderer above. This is the other half, and it is the assertion that makes the
+   *  fix un-revertable: three fixtures elsewhere in this suite hand-write a correct
+   *  bed and pass in BOTH worlds, so without this there is nothing anywhere that
+   *  tells the two worlds apart.
+   *
+   *  BOTH ENDS, and that is the `boundsToUnit` argument rather than thoroughness for
+   *  its own sake: a range is an interval and neither end alone can tell you whether
+   *  the interval means what it says. A transposition flips both, but a half-applied
+   *  fix flips one — and a band whose min is `[800, 1700]` against a max of
+   *  `[2100, 1200]` is inverted on both axes at once, which `clampDims` would
+   *  resolve by applying whichever bound it applies second.
+   *
+   *  Swept over `SHAPES` rather than naming `bed-single` and `bed-double`, because
+   *  the transposition was in three rows — those two and the `bed` category
+   *  fallback — and naming examples is how the first version of this arithmetic
+   *  missed 890 mm. */
+  it('states every bed band on the same axis as the catalog, at both ends', () => {
+    // `'bed'` is a CATEGORY and not a shape, so the third transposed row is not
+    // reachable by filtering `SHAPES` — it is `BY_CATEGORY.bed`, which
+    // `dimRangeFor` returns for any GENERIC shape. `'box'` is one, and it is also
+    // what a detection that never got refined actually carries, so the fallback row
+    // is a live path rather than a table entry nothing reads. Writing this as
+    // `SHAPES.filter(s => s === 'bed' || ...)` is how I first wrote it, and it
+    // asserted over two rows of three while looking like it swept all of them.
+    const bedShapes = SHAPES.filter((sh) => sh.startsWith('bed-'));
+    expect(bedShapes.length, 'no bed shapes in SHAPES any more').toBeGreaterThanOrEqual(2);
+    for (const shape of [...bedShapes, 'box' as const]) {
+      const r = dimRangeFor('bed', shape);
+      for (const [end, v] of [['min', r.min], ['max', r.max]] as const) {
+        expect(
+          v[1],
+          `the ${shape} band's ${end} is ${v[0]} mm wide by ${v[1]} mm long — a bed cannot be ` +
+            `wider than it is long at either end of its own range`,
+        ).toBeGreaterThan(v[0]);
+      }
+    }
+  });
+
+  /** The grep half of CLAUDE.md rule 5, as an assertion.
+   *
+   *  Six fixtures across three files carried `[2000, 1600, 600]` — a double bed 2.0 m
+   *  wide and 1.6 m long — and a seventh carried `[1900, 1000, 600]`. **Every one of
+   *  them passed both before and after the axes were swapped**, because none was
+   *  load-bearing for its own assertion. That is exactly why no runner could ever
+   *  find them: a stale fixture that still passes is invisible to the only tool
+   *  anybody runs.
+   *
+   *  It is a scan over source and not an import, deliberately, because the subject
+   *  is what OTHER test files hand-write — there is nothing to import. The reason it
+   *  sweeps rather than lists is measured: two independent greps were run for these
+   *  literals during one exchange and the more careful one found ONE of the seven.
+   *  A list of known sites would have been that grep, frozen. */
+  it('lets no test in this suite hand-write a bed wider than it is long', () => {
+    const dir = join(process.cwd(), 'tests');
+    const files = readdirSync(dir).filter((f) => f.endsWith('.test.ts'));
+    expect(files.length, 'the suite directory came back nearly empty').toBeGreaterThan(20);
+
+    const bad: string[] = [];
+    let seen = 0;
+    for (const f of files) {
+      const lines = readFileSync(join(dir, f), 'utf8').split('\n');
+      lines.forEach((line, i) => {
+        // Comments are skipped so that the prose in this very file — which quotes
+        // `[1900, 1000, 600]` as the defect — is not read as a fixture. A negative
+        // assertion that reads its own explanation fails on the explanation.
+        const code = line.trim();
+        if (code.startsWith('//') || code.startsWith('*')) return;
+        // A DETECTION's `dimMM` is excluded, and that is rule 2 rather than an
+        // exception to this test: a detection carries the AI's raw hint, which is
+        // allowed to be nonsense — being nonsense is what `clampDims` and
+        // `judgeLabel` exist to answer. `label-repair.test.ts` hands `judgeLabel` a
+        // bed of `[1900, 1234, 600]` precisely so that `1234` can be shown to have
+        // been recomputed; it is a sentinel, not a bed. This sweep found it on its
+        // first run, which is the sweep working — and reading it as a stale fixture
+        // would have deleted a real assertion to make a new one look right.
+        if (code.includes('det({')) return;
+        if (!/category: 'bed'|shape: 'bed/.test(code)) return;
+        const m = /dimMM: \[(\d+), *(\d+), *\d+\]/.exec(code);
+        if (!m) return;
+        seen += 1;
+        if (Number(m[2]) <= Number(m[1])) bad.push(`  ${f}:${i + 1}  ${code}`);
+      });
+    }
+    // The count, so this cannot pass by matching nothing — the regex is three
+    // alternations away from silently finding no bed fixtures at all.
+    expect(seen, 'no bed fixtures matched — has `dimMM: [` been reformatted?').toBeGreaterThan(8);
+    expect(bad, `bed fixtures still on the pre-fix axis:\n${bad.join('\n')}`).toEqual([]);
   });
 });

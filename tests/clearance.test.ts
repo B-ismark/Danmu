@@ -60,14 +60,14 @@ describe('analyzeRoom', () => {
   it('warns when storage has no room to open', () => {
     const wardrobe = part({ category: 'wardrobe', shape: 'wardrobe', dimMM: [2000, 600, 2100], pos: [0, 0, -1.65], rot: 0 });
     // Bed right in front of the wardrobe doors.
-    const bed = part({ category: 'bed', shape: 'bed-double', dimMM: [2000, 1600, 600], pos: [0, 0, -0.4] });
+    const bed = part({ category: 'bed', shape: 'bed-double', dimMM: [1600, 2000, 600], pos: [0, 0, -0.4] });
     const { issues } = analyzeRoom([wardrobe, bed], ROOM);
     expect(issues.find((i) => i.id.startsWith('front-'))).toBeDefined();
   });
 
   it('warns when a double bed loses both side strips', () => {
     // Bed pushed into a corner: one side is the wall, other side blocked.
-    const bed = part({ category: 'bed', shape: 'bed-double', dimMM: [2000, 1600, 600], pos: [-1.9, 0, 0], rot: 0 });
+    const bed = part({ category: 'bed', shape: 'bed-double', dimMM: [1600, 2000, 600], pos: [-1.9, 0, 0], rot: 0 });
     const shelf = part({ category: 'shelf', shape: 'bookshelf', dimMM: [900, 350, 1800], pos: [-0.55, 0, 0], rot: 0 });
     const { issues } = analyzeRoom([bed, shelf], ROOM);
     expect(issues.find((i) => i.id.startsWith('bed-'))).toBeDefined();
@@ -87,7 +87,7 @@ describe('analyzeRoom', () => {
     // the panel said "Everything fits". buildSceneFromRoom does no part-vs-part
     // resolution, so a detected scene can genuinely arrive like this.
     const sofa = part({ category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880], pos: [0, 0, 0] });
-    const bed = part({ category: 'bed', shape: 'bed-double', dimMM: [2000, 1600, 600], pos: [0.3, 0, 0.2] });
+    const bed = part({ category: 'bed', shape: 'bed-double', dimMM: [1600, 2000, 600], pos: [0.3, 0, 0.2] });
     const hit = analyzeRoom([sofa, bed], ROOM).issues.find((i) => i.id.startsWith('clash-'));
     expect(hit).toBeDefined();
     expect(hit!.severity).toBe('error');
@@ -133,7 +133,7 @@ describe('analyzeRoom', () => {
     // them has to move".
     // a spans x -2…0, b spans -0.03…1.97 — a 3 cm bite out of a 1.44 m² bed.
     const a = part({ category: 'sofa', shape: 'sofa', dimMM: [2000, 900, 880], pos: [-1, 0, 0] });
-    const b = part({ category: 'bed', shape: 'bed-double', dimMM: [2000, 1600, 600], pos: [0.97, 0, 0] });
+    const b = part({ category: 'bed', shape: 'bed-double', dimMM: [1600, 2000, 600], pos: [0.97, 0, 0] });
     expect(analyzeRoom([a, b], ROOM).issues.find((i) => i.id.startsWith('clash-'))).toBeUndefined();
   });
 
