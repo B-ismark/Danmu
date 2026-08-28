@@ -16,7 +16,7 @@
 // a dimension lie). Both used to produce no finding at all, so the panel said
 // "Everything fits" over an arrangement that plainly did not.
 
-import type { ScenePart, Category } from './scene-spec';
+import type { ScenePart } from './scene-spec';
 import type { Footprint } from './footprint';
 import {
   faceClearance,
@@ -254,7 +254,11 @@ export function analyzeRoom(
           id: `door-${door.id}`,
           rule: 'door',
           severity: 'error',
-          title: 'Door can’t open fully',
+          // The rule's own title, not a copy of it. A door is `wallMounted`, so it
+          // never reaches the generic zone loop that reads `AccessRule.title` — which
+          // left the rule's title unreachable and this string free to drift from it.
+          // That is the failure `ZONE_TITLE` was deleted for, one consumer along.
+          title: swing.rule.title,
           detail: `${blockers.map((b) => b.name).join(', ')} ${blockers.length === 1 ? 'sits' : 'sit'} inside the ${Math.round(swing.rule.depth * 100)} cm swing of “${door.name}”.`,
           partIds: [door.id, ...blockers.map((b) => b.id)],
         });
@@ -440,7 +444,8 @@ export function analyzeRoom(
         id: `window-${win.id}`,
         rule: 'window',
         severity: 'warn',
-        title: 'Window is blocked',
+        // See the door above: read the rule, never restate it.
+        title: zn.rule.title,
         detail: `${blockers.map((b) => b.name).join(', ')} ${blockers.length === 1 ? 'stands' : 'stand'} in front of “${win.name}” and ${blockers.length === 1 ? 'rises' : 'rise'} above its ${Math.round(zn.rule.aboveY * 100)} cm sill.`,
         partIds: [win.id, ...blockers.map((b) => b.id)],
       });

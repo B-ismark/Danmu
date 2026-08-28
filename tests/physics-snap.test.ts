@@ -160,3 +160,192 @@ describe('findSupportDetailed', () => {
     expect(findSupportDetailed([deskB, deskA], 'laptop', 0, 0, LAPTOP)?.id).toBe('desk-b');
   });
 });
+
+describe('snapToWall pinned to one edge', () => {
+  // The wall a piece is allowed to ride is a caller's decision when anything is
+  // following it: `nearestEdge` changes its mind discontinuously at the midline
+  // between two walls, and that flip becomes the delta a whole selection
+  // translates by. See `Convoy.leadEdge`.
+  it('keeps the named wall even when another is nearer', () => {
+    const free = snapToWall([2.8, 0, 1.5], TV, RECT);
+    const pinned = snapToWall([2.8, 0, 1.5], TV, RECT, 0, 0);
+    // `.not.toBeCloseTo(0)` is satisfied by `undefined` — verified: with
+    // `snapToWall` returning no `rot` at all this line passed and the failure
+    // surfaced one line down, on the pinned side. `rot` is genuinely optional on
+    // the return type (`if (!edge) return { x, z }`), so "it chose a different
+    // wall" has to assert that it chose a wall at all.
+    expect(free.rot).toBeDefined();
+    expect(free.rot).not.toBeCloseTo(0);
+    expect(pinned.rot).toBeCloseTo(0);
+    expect(pinned.z).toBeCloseTo(-2 + TV[1] / 2000 + 0.02);
+    // Along the wall it tracks the pointer as far as its own half-width allows —
+    // x = 2.8 on a wall ending at 3 would put 525 mm of a 1.45 m TV round the
+    // corner. See the describe below.
+    expect(pinned.x).toBeCloseTo(3 - TV[0] / 2000, 6);
+  });
+
+  it('tracks the pointer exactly while the whole piece still fits', () => {
+    // The other side of the same clamp: it must not be a general pull toward the
+    // middle. Half a TV is 725 mm, so x = 1.5 is well inside and must come back
+    // untouched.
+    expect(snapToWall([1.5, 0, 1.5], TV, RECT, 0, 0).x).toBeCloseTo(1.5, 9);
+  });
+
+  it('falls back to the nearest wall for an index the footprint no longer has', () => {
+    // A wall drag can shorten the outline under a held index. Falling back is the
+    // forgiving direction: the nearest wall is a less constrained answer, never a
+    // wrong one, where a refusal would strand the piece.
+    const stale = snapToWall([2.8, 0, 1.5], TV, RECT, 0, 99);
+    const free = snapToWall([2.8, 0, 1.5], TV, RECT);
+    expect(stale).toEqual(free);
+  });
+
+  it('is unchanged when no edge is named', () => {
+    expect(snapToWall([0, 0, -1.5], TV, RECT, 0, null)).toEqual(snapToWall([0, 0, -1.5], TV, RECT));
+    expect(snapToWall([0, 0, -1.5], TV, RECT, 0, undefined)).toEqual(snapToWall([0, 0, -1.5], TV, RECT));
+  });
+});
+
+// ─── A wall-mounted piece stays ON the wall it is mounted to ────────────────
+//
+// `edgeProjection` clamps its parameter to [0, 1], so it returns the nearest point
+// ON the segment — and `snapToWall` used to put the piece's CENTRE there. Aim past
+// the end of a wall and the centre landed exactly on the corner, with half the
+// piece through the return wall. The report was "sometimes the TV sticks to the
+// farthest edge of the wall it's on, sometimes there's a bit of a gap between the
+// TV and the other wall" — one behaviour, seen from two corners.
+//
+// Every case is checked on ALL FOUR walls and at BOTH ends of each, because this
+// is a handedness bug: the along-wall unit vector points a different way per edge
+// and its sign is invisible wherever the test is symmetric. A square room would
+// also hide a width/depth mix-up, so the fixture is 6 × 4.
+describe('snapToWall keeps the whole piece on its wall', () => {
+  /** The four walls of RECT, by edge index, with the axis they run along and the
+   *  coordinate that varies along them — **derived from `RECT` itself**, so the two
+   *  cannot disagree. This was transcribed by hand under a comment claiming it was
+   *  derived, which was harmless only by luck: `want` is computed from these
+   *  numbers, so a changed `RECT` did go red. It is one edit away from not being. */
+  const WALLS = RECT.map((a, i) => {
+    const b = RECT[(i + 1) % RECT.length];
+    const along = a[0] === b[0] ? ('z' as const) : ('x' as const);
+    const axis = along === 'x' ? 0 : 1;
+    const fixed = along === 'x' ? `z = ${a[1]}` : `x = ${a[0]}`;
+    return { index: i, name: `edge ${i} (${fixed})`, along, from: a[axis], to: b[axis] };
+  });
+  const half = TV[0] / 2000; // 0.725 m along the wall
+
+  it('stops half its width short of both ends of every wall', () => {
+    for (const w of WALLS) {
+      for (const end of [w.from, w.to]) {
+        // Aim a metre PAST the corner, so the projection clamps to the end.
+        const past = end + Math.sign(end - (w.from + w.to) / 2) * 1;
+        const at: [number, number, number] = w.along === 'x' ? [past, 0, 0] : [0, 0, past];
+        const s = snapToWall(at, TV, RECT, 0, w.index);
+        const got = w.along === 'x' ? s.x : s.z;
+        const want = end - Math.sign(end - (w.from + w.to) / 2) * half;
+        expect(got, `${w.name}, end ${end}`).toBeCloseTo(want, 6);
+      }
+    }
+  });
+
+  it('leaves a piece alone wherever it genuinely fits', () => {
+    for (const w of WALLS) {
+      const at: [number, number, number] = w.along === 'x' ? [0.4, 0, 0] : [0, 0, 0.4];
+      const s = snapToWall(at, TV, RECT, 0, w.index);
+      expect(w.along === 'x' ? s.x : s.z, w.name).toBeCloseTo(0.4, 9);
+    }
+  });
+
+  it('centres a piece wider than the wall it is on rather than pinning it to one end', () => {
+    // A 5 m panel on the 4 m east wall. Clamping both ends against each other
+    // would let the min beat the max; the piece keeps its real size and the room
+    // report is what says it does not fit (rule 2).
+    const WIDE: [number, number, number] = [5000, 60, 800];
+    for (const aim of [-9, 0, 9]) {
+      const s = snapToWall([0, 0, aim], WIDE, RECT, 0, 1);
+      expect(s.z, `aimed at z = ${aim}`).toBeCloseTo(0, 6);
+    }
+  });
+
+  it('does the same on an inner wall of an L, whose ends are not room corners', () => {
+    // The L's inner edge x = 1 runs z 0 → 2, so it is 2 m long and a 1.45 m TV has
+    // only 550 mm of travel on it. Aimed at either end it must come back inside.
+    const inner = L.findIndex((p, i) => p[0] === 1 && L[(i + 1) % L.length][0] === 1);
+    expect(inner, 'the fixture must have an inner x = 1 wall').toBeGreaterThanOrEqual(0);
+    const low = snapToWall([0.7, 0, -5], TV, L, 0, inner);
+    const high = snapToWall([0.7, 0, 5], TV, L, 0, inner);
+    for (const s of [low, high]) {
+      expect(s.z).toBeGreaterThanOrEqual(0 + half - 1e-9);
+      expect(s.z).toBeLessThanOrEqual(2 - half + 1e-9);
+    }
+    // …and they are not the same point, or the clamp would be collapsing both
+    // ends onto the middle.
+    expect(Math.abs(high.z - low.z)).toBeGreaterThan(0.4);
+  });
+});
+
+describe('snapToWall measures the clamp across the yaw the caller will KEEP', () => {
+  // `snapToWall` holds a piece far enough from the corner for the whole piece to
+  // stay on its wall, and that distance is `dimMM[0] / 2` only because the `rot` it
+  // returns turns the piece's local X to run along the wall. Two callers in
+  // `buildSceneFromRoom` take the snapped x/z and keep the MODEL's yaw instead, so
+  // for them the premise is false and the piece was held (width - depth) / 2 too far
+  // from the corner. Never outside the room, so a wrong number rather than a wrong
+  // room - which is why nothing caught it for as long as it stood.
+  //
+  // All four walls, because a projection with its convention inverted is still right
+  // on two of them. Same handedness trap `lib/geometry.ts` warns about.
+  const R = RECT;
+
+  /** How far along its wall the piece ended up, measured back from the corner it was
+   *  aimed past. Wall-agnostic, so one expectation covers all four. */
+  function distFromFarCorner(index: number, out: { x: number; z: number }) {
+    const a = R[index];
+    const b = R[(index + 1) % R.length];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const ux = (b[0] - a[0]) / len;
+    const uz = (b[1] - a[1]) / len;
+    return len - ((out.x - a[0]) * ux + (out.z - a[1]) * uz);
+  }
+
+  /** A point well past the far end of wall `i`, so the clamp is what decides. */
+  function pastFarCorner(i: number): [number, number, number] {
+    const a = R[i];
+    const b = R[(i + 1) % R.length];
+    return [b[0] + (b[0] - a[0]), 0, b[1] + (b[1] - a[1])];
+  }
+
+  it.each([0, 1, 2, 3])('holds a piece half its WIDTH off the corner of wall %i by default', (i) => {
+    expect(distFromFarCorner(i, snapToWall(pastFarCorner(i), TV, R, 0, i))).toBeCloseTo(TV[0] / 2000, 9);
+  });
+
+  it.each([0, 1, 2, 3])('holds it half its DEPTH off when it will lie edge-on to wall %i', (i) => {
+    const flat = snapToWall(pastFarCorner(i), TV, R, 0, i);
+    const edgeOn = snapToWall(pastFarCorner(i), TV, R, 0, i, { alongRot: (flat.rot ?? 0) + Math.PI / 2 });
+    expect(distFromFarCorner(i, edgeOn)).toBeCloseTo(TV[1] / 2000, 9);
+    // And it therefore gets CLOSER to the corner, not further - the direction is the
+    // half that a magnitude-only assertion lets through.
+    expect(distFromFarCorner(i, edgeOn)).toBeLessThan(distFromFarCorner(i, flat));
+  });
+
+  it('reduces to the old answer at the heading its own rot would turn the piece to', () => {
+    // The property that makes the default safe: handing it the yaw the function
+    // itself returns must change nothing. A convention error in the projection
+    // breaks this even though both branches would still look clamped.
+    for (let i = 0; i < 4; i++) {
+      const implicit = snapToWall(pastFarCorner(i), TV, R, 0, i);
+      expect(snapToWall(pastFarCorner(i), TV, R, 0, i, { alongRot: implicit.rot })).toEqual(implicit);
+    }
+  });
+
+  it('is symmetric in the yaw, since a piece turned 180 degrees is the same box', () => {
+    const at = (rot: number) => snapToWall([9, 0, -2], TV, R, 0, 0, { alongRot: rot }).x;
+    expect(at(Math.PI / 2)).toBeCloseTo(at(-Math.PI / 2), 9);
+    expect(at(0.6)).toBeCloseTo(at(0.6 + Math.PI), 9);
+    // A 45-degree piece sits strictly between the two extremes, which no
+    // axis-aligned fixture can tell apart from either of them.
+    const mid = at(Math.PI / 4);
+    expect(mid).toBeGreaterThan(at(0));
+    expect(mid).toBeLessThan(at(Math.PI / 2));
+  });
+});

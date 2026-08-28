@@ -52,7 +52,6 @@ import {
   formsRoute,
   isObstacle,
   placeAffinity,
-  relationFor,
   relationOptions,
   roleOf,
   roomProfile,
@@ -322,28 +321,35 @@ export type LayoutModel = {
   route: number;
   /** The middle of the FLOOR — `polyAreaCentroid`, not the average of the corners.
    *
-   *  Read by the `balance` term below, which measures the room's visual weight
-   *  against this point. The average of the corners is 0.83 m from the floor's middle
-   *  on the L preset and 1.09 m on the U — where it is **outside the room
-   *  altogether**, so the term was pulling the furniture toward a spot in the void.
+   *  Read by two things that mean different questions by "the middle", and it was
+   *  wrong for both in every room that is not a rectangle. The `balance` term below
+   *  measures the room's visual weight against this point, and the average of the
+   *  corners is 0.83 m from the floor's middle on the L preset, 1.09 m on the U —
+   *  where it is **outside the room altogether**, so the term was pulling the
+   *  furniture toward a spot in the void. And `nearestEdge` uses it to decide which
+   *  way is INTO the room: probing every 0.2 m of floor, the corner average got
+   *  **136 of 736 wall normals wrong on the T and 291 of 798 on the U**. A flipped
+   *  normal negates `back` — so a piece standing flush against a wall scores as if
+   *  it were its full depth away — and puts `edge.yaw` 180° out, which is the
+   *  `FACING_GAIN` term turning a wardrobe to face the plaster and `snapYaws` then
+   *  squaring it to that.
    *
-   *  It is **not** what decides which way is INTO the room, and the attempt to make
-   *  it so is recorded here because the numbers look like it should have worked.
-   *  `nearestEdge` picks an inward normal by aiming at a centroid, and the corner
-   *  average it defaults to gets **136 of 736 wall normals wrong on the T and 291 of
-   *  798 on the U** (probing every 0.2 m of floor). A flipped normal negates `back`
-   *  — a piece standing flush against a wall scores as if it were its full depth
-   *  away — and puts `edge.yaw` 180° out, which is the `FACING_GAIN` term turning a
-   *  wardrobe to face the plaster and `snapYaws` then squaring it to that. The area
-   *  centroid fixes the T outright and halves the U — and handing it to `nearestEdge`
-   *  made the solve measurably WORSE all the same (scrambled-U, worst of 24 seeds:
-   *  18 → 148). Fewer wrong normals, but a *different* 18 % of that room's, and the
-   *  ones it misses cost more. The decision lives at the `wall` term's `nearestEdge`
-   *  call; do not re-derive it from the counts above.
+   *  The argument IS passed again, by the commit that made this field. The warning
+   *  that stood here — do not restore it without re-measuring — was guarding a
+   *  change that is not this one. `nearestEdge`'s default is `polyCentroid(poly)`
+   *  and this field is `polyCentroid(ctx.footprint)`: the **identical value**,
+   *  computed once in `prepare` instead of swept per part per proposal. What
+   *  measurably made the solve worse (scrambled-U, worst of 24 seeds: 18 → 148) was
+   *  handing it the AREA centroid, which is a different point answering a different
+   *  question. So the counts above are still **unfixed**, not history: passing this
+   *  changes what the answer COSTS, never what it is. Do not read the paragraph
+   *  below as licence to pass `centre` here.
    *
-   *  On a non-convex polygon NO point decides an inward normal correctly, because the
-   *  centroid has to be able to see the edge. The exact answer is the polygon's
-   *  winding, and it belongs inside `nearestEdge` rather than here. */
+   *  The area centroid fixes the T outright and halves the U. It does not finish the
+   *  job, and the remainder is not this field's to finish: on a non-convex polygon
+   *  NO point decides an inward normal correctly, because the centroid has to be
+   *  able to see the edge. The exact answer is the polygon's winding, and it belongs
+   *  in `edgeProjection` rather than here. */
   centre: [number, number];
   /** The average of the polygon's CORNERS, cached — the point `nearestEdge` aims at
    *  to decide which way is inward.

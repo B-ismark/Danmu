@@ -10,7 +10,7 @@ import {
   sceneFileToRoom,
   type SceneFile,
 } from '../lib/scene-file';
-import { dimRangeFor } from '../lib/dimension-ranges';
+import { dimRangeFor, ROOM_HEIGHT_M } from '../lib/dimension-ranges';
 import type { RoomData, Transforms } from '../lib/storage';
 import type { ScenePart } from '../lib/scene-spec';
 
@@ -264,10 +264,55 @@ describe('scene file · a file is untrusted input', () => {
   it('refuses a file with no usable room', () => {
     expect(parseSceneFile(rawFile({ room: undefined })).ok).toBe(false);
     expect(parseSceneFile(rawFile({ room: { name: 'R' } })).ok).toBe(false);
-    // Out-of-range sides are fatal for the room itself: there is no floor to stand
+    // Out-of-range SIDES are fatal for the room itself: there is no floor to stand
     // furniture on, and unlike a colour there is no sensible default.
     expect(parseSceneFile(rawFile({ room: { width: 0, depth: 4, height: 2.6 } })).ok).toBe(false);
-    expect(parseSceneFile(rawFile({ room: { width: 5, depth: 4, height: 1e6 } })).ok).toBe(false);
+    // A height that is not a number is fatal for the same reason a width is.
+    expect(parseSceneFile(rawFile({ room: { width: 5, depth: 4, height: 'tall' } })).ok).toBe(false);
+    expect(parseSceneFile(rawFile({ room: { width: 5, depth: 4 } })).ok).toBe(false);
+    // 1 m is a legal SIDE, which is what made the old copy of the bound invisible:
+    // the number was in range, for the wrong axis.
+    expect(parseSceneFile(rawFile({ room: { width: 1.2, depth: 4, height: 2.6 } })).ok).toBe(true);
+  });
+
+  it('clamps an out-of-range ceiling and says so, rather than losing the room', () => {
+    // A ceiling is the one room dimension that is lossy rather than fatal, and the
+    // reason is that this app WROTE rooms a 1.8 m floor now rejects — the editor
+    // gated every axis with the side range until `ROOM_HEIGHT_M` existed, and the
+    // fan bug that prompted it came from a 1.65 m room. Refusing the file meant
+    // saving that room and getting "missing its room" back, about a file this app
+    // produced. It is the same contract `clampDims` gives every imported PART size,
+    // and it is not silent: `dropped` is shown.
+    const low = parseSceneFile(rawFile({ room: { width: 5, depth: 4, height: 1.65 } }));
+    expect(low.ok).toBe(true);
+    if (low.ok) {
+      expect(low.file.room.height).toBe(ROOM_HEIGHT_M.min);
+      expect(low.dropped.join(' ')).toMatch(/ceiling/i);
+      expect(low.dropped.join(' ')).toContain('1.65');
+    }
+    // Both ends, because a clamp with a sign error is invisible at one of them.
+    const high = parseSceneFile(rawFile({ room: { width: 5, depth: 4, height: 1e6 } }));
+    expect(high.ok).toBe(true);
+    if (high.ok) {
+      expect(high.file.room.height).toBe(ROOM_HEIGHT_M.max);
+      expect(high.dropped.join(' ')).toMatch(/ceiling/i);
+    }
+    // A ceiling already in range is passed through and reported as nothing.
+    const fine = parseSceneFile(rawFile({ room: { width: 5, depth: 4, height: 2.6 } }));
+    expect(fine.ok).toBe(true);
+    if (fine.ok) {
+      expect(fine.file.room.height).toBe(2.6);
+      expect(fine.dropped.join(' ')).not.toMatch(/ceiling/i);
+    }
+    // Infinity is still refused outright — clamping it would turn `1e400` into a
+    // legal 12 m ceiling, which is the one case where lossy would be dishonest.
+    // Spliced into the JSON TEXT: `1e400` is already `Infinity` by the time a JS
+    // object literal reaches `JSON.stringify`, which writes it out as `null` — so
+    // building this through `rawFile`'s object would have tested the null path and
+    // called it the infinity one.
+    const inf = rawFile({ room: { width: 5, depth: 4, height: 2.6 } }).replace('"height":2.6', '"height":1e400');
+    expect(JSON.parse(inf).room.height).toBe(Infinity);
+    expect(parseSceneFile(inf).ok).toBe(false);
   });
 
   it('rejects Infinity, which JSON smuggles in as 1e400', () => {

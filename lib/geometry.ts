@@ -220,9 +220,73 @@ function distPointToSegment(p: Vec2, a: Vec2, b: Vec2): number {
 
 export type Poly = [number, number][];
 
-/** Nearest polygon edge to a point: edge index, closest point on the edge,
- *  distance, the inward unit normal and the yaw that makes a part's front
- *  (+Z local) face into the room when placed against that edge. */
+/** One edge's answer about a point: which edge, where on it the point lands, how
+ *  far that is, the inward unit normal, and the yaw that makes a part's front
+ *  (+Z local) face into the room when placed against it. */
+export type EdgeHit = {
+  index: number;
+  px: number;
+  pz: number;
+  dist: number;
+  nx: number;
+  nz: number;
+  yaw: number;
+};
+
+/**
+ * Where (x, z) lands on ONE named edge of `poly`.
+ *
+ * The segment parameter is clamped to [0, 1], so a query past the end of a wall
+ * lands on that wall's corner rather than off it. That clamp is what lets a piece
+ * PINNED to one wall (see `Convoy.leadEdge`) slide along it and stop at its end,
+ * instead of sailing off into the next room.
+ *
+ * Returns null for an index out of range or a degenerate edge, so a caller
+ * holding a stale index falls back to the nearest wall rather than placing at
+ * NaN.
+ */
+export function edgeProjection(
+  poly: Poly,
+  index: number,
+  x: number,
+  z: number,
+  /** The polygon's centroid, if the caller already has it — see `nearestEdge`. */
+  centroid?: Vec2,
+): EdgeHit | null {
+  if (poly.length < 3 || index < 0 || index >= poly.length) return null;
+  const a = poly[index];
+  const b = poly[(index + 1) % poly.length];
+  const abx = b[0] - a[0];
+  const abz = b[1] - a[1];
+  const len2 = abx * abx + abz * abz;
+  if (len2 < 1e-8) return null;
+  const t = Math.max(0, Math.min(1, ((x - a[0]) * abx + (z - a[1]) * abz) / len2));
+  const px = a[0] + abx * t;
+  const pz = a[1] + abz * t;
+  const [cx, cz] = centroid ?? polyCentroid(poly);
+  // Inward normal: perpendicular flipped toward the centroid.
+  let nx = -abz;
+  let nz = abx;
+  const nl = Math.hypot(nx, nz) || 1;
+  nx /= nl;
+  nz /= nl;
+  if ((cx - px) * nx + (cz - pz) * nz < 0) {
+    nx = -nx;
+    nz = -nz;
+  }
+  return { index, px, pz, dist: Math.hypot(x - px, z - pz), nx, nz, yaw: Math.atan2(nx, nz) };
+}
+
+/** Nearest polygon edge to a point.
+ *
+ *  The per-edge maths is `edgeProjection`'s, not a second copy of it: pinning a
+ *  piece to a chosen wall and finding it the closest one are the same projection
+ *  asked two ways, and this file has no business answering it twice. The old loop
+ *  skipped the normal maths for an edge that had already lost on distance — worth
+ *  a line here because it was deliberate, and because the trade was taken
+ *  knowingly: the solver calls this per piece per proposal, so it now allocates
+ *  one `EdgeHit` per edge instead of one per improvement. A 4-gon pays three
+ *  short-lived objects for having one implementation of the projection. */
 export function nearestEdge(
   poly: Poly,
   x: number,
@@ -231,33 +295,16 @@ export function nearestEdge(
    *  which way is inward, and recomputing it per call is a measurable cost in the
    *  layout solver, which asks this for every piece on every proposal. */
   centroid?: Vec2,
-): { index: number; px: number; pz: number; dist: number; nx: number; nz: number; yaw: number } | null {
+): EdgeHit | null {
   if (poly.length < 3) return null;
-  const [cx, cz] = centroid ?? polyCentroid(poly);
-  let best: { index: number; px: number; pz: number; dist: number; nx: number; nz: number; yaw: number } | null = null;
+  const c = centroid ?? polyCentroid(poly);
+  let best: EdgeHit | null = null;
   for (let i = 0; i < poly.length; i++) {
-    const a = poly[i];
-    const b = poly[(i + 1) % poly.length];
-    const abx = b[0] - a[0];
-    const abz = b[1] - a[1];
-    const len2 = abx * abx + abz * abz;
-    if (len2 < 1e-8) continue;
-    const t = Math.max(0, Math.min(1, ((x - a[0]) * abx + (z - a[1]) * abz) / len2));
-    const px = a[0] + abx * t;
-    const pz = a[1] + abz * t;
-    const dist = Math.hypot(x - px, z - pz);
-    if (best && dist >= best.dist) continue;
-    // Inward normal: perpendicular flipped toward the centroid.
-    let nx = -abz;
-    let nz = abx;
-    const nl = Math.hypot(nx, nz) || 1;
-    nx /= nl;
-    nz /= nl;
-    if ((cx - px) * nx + (cz - pz) * nz < 0) {
-      nx = -nx;
-      nz = -nz;
-    }
-    best = { index: i, px, pz, dist, nx, nz, yaw: Math.atan2(nx, nz) };
+    const hit = edgeProjection(poly, i, x, z, c);
+    if (!hit) continue;
+    // >= so the FIRST edge wins a tie, which is the order the outline is wound in.
+    if (best && hit.dist >= best.dist) continue;
+    best = hit;
   }
   return best;
 }

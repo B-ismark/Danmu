@@ -60,7 +60,9 @@ type SceneState = {
   updatePart: (id: string, patch: Partial<ScenePart>) => void;
   deletePart: (id: string) => void;
   addPart: (p: ScenePart) => void;
-  /** merge: assign a shared groupId to the given parts (move together). */
+  /** merge: assign a shared groupId to the given parts. A plain selection already
+   *  moves as one (lib/drag-convoy.ts); what a groupId adds is PERSISTENCE — the set
+   *  survives deselecting and comes back on a single click. */
   groupParts: (ids: string[]) => void;
   /** unmerge: clear groupId on the given parts. */
   ungroupParts: (ids: string[]) => void;

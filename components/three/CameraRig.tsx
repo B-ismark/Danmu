@@ -124,13 +124,18 @@ function CameraTween({
 }
 
 // Build-mode keyboard navigation (Paralives-style). Arrow keys pan across the
-// floor plane, Q/E orbit. WASD is intentionally NOT used — W/S/R are the gizmo
-// mode shortcuts (see KeyboardShortcuts.tsx). Respects frameloop="demand" by
-// invalidating while keys are held.
-// Arrows + Q/E always navigate. WASD also pans, but only when NO part is
-// selected — while a part is selected W/S/R stay the gizmo-mode shortcuts.
+// floor plane, Q/E orbit. Respects frameloop="demand" by invalidating while keys
+// are held.
+//
+// WASD is NOT a pan. It was, conditionally — only while nothing was selected,
+// because W/S/R are the gizmo modes (see KeyboardShortcuts.tsx) and a selected
+// part had to keep them. A binding that means one thing with a selection and
+// another without it is a binding nobody can learn: the same key moved the room
+// or changed the tool depending on state the keyboard gives no feedback about,
+// and pressing W to switch to Move with nothing selected slid the camera
+// instead. It was also undocumented — the help card only ever advertised the
+// arrows and Q/E — so removing it takes nothing anyone was told they had.
 const NAV_KEYS = new Set(['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'q', 'e']);
-const WASD = new Set(['w', 'a', 's', 'd']);
 const UP = new Vector3(0, 1, 0);
 
 function KeyboardNav({
@@ -151,10 +156,8 @@ function KeyboardNav({
     function down(e: KeyboardEvent) {
       if (isTyping(e.target)) return;
       const k = e.key.toLowerCase();
-      // WASD pans only when nothing is selected (otherwise W/S/R = gizmo modes).
-      const wasdPan = WASD.has(k) && !useStudio.getState().selectedPartId;
-      if (!NAV_KEYS.has(k) && !wasdPan) return;
-      if (NAV_KEYS.has(k)) e.preventDefault(); // stop arrow-key page scroll
+      if (!NAV_KEYS.has(k)) return;
+      e.preventDefault(); // stop arrow-key page scroll
       keys.current.add(k);
       invalidate();
     }
@@ -185,10 +188,10 @@ function KeyboardNav({
     const right = new Vector3().crossVectors(fwd, UP).normalize();
 
     const move = new Vector3();
-    if (ks.has('arrowup') || ks.has('w')) move.add(fwd);
-    if (ks.has('arrowdown') || ks.has('s')) move.sub(fwd);
-    if (ks.has('arrowright') || ks.has('d')) move.add(right);
-    if (ks.has('arrowleft') || ks.has('a')) move.sub(right);
+    if (ks.has('arrowup')) move.add(fwd);
+    if (ks.has('arrowdown')) move.sub(fwd);
+    if (ks.has('arrowright')) move.add(right);
+    if (ks.has('arrowleft')) move.sub(right);
     if (move.lengthSq() > 0) {
       move.normalize().multiplyScalar(panSpeed);
       camera.position.add(move);

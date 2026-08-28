@@ -167,16 +167,13 @@ export function Room() {
       _hit.x,
       _hit.z,
     ]);
-    let [x, y, z] = pos;
-    if (!wallMounted) {
-      // Drop where the pointer hit the floor, kept inside the (possibly
-      // off-centre) footprint bounds.
-      const b = footprintBounds(r.footprint);
-      const insetX = item.dimMM[0] / 2000;
-      const insetZ = item.dimMM[1] / 2000;
-      x = Math.max(b.minX + insetX, Math.min(b.maxX - insetX, _hit.x));
-      z = Math.max(b.minZ + insetZ, Math.min(b.maxZ - insetZ, _hit.z));
-    }
+    // `placeNewPart` was handed the drop point and has already clamped it into the
+    // footprint. This used to re-derive x/z from `_hit` with a second, unguarded
+    // clamp, and the plan deleted its copy of exactly that this same change — so
+    // the two tabs disagreed about where an oversized piece lands: for a 2 m bed
+    // dropped into a 1.5 m-deep room, `intoRoom` centres it while `max(minZ + 1.0,
+    // min(maxZ - 1.0, hit))` lets the min beat the max and pins it at +0.25.
+    const [x, y, z] = pos;
     const id = `${item.category}-${uuid().slice(0, 6)}`;
     useScene.getState().addPart({
       id, category: item.category, name: item.label, shape: item.shape,

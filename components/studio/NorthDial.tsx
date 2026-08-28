@@ -111,8 +111,20 @@ export function NorthDial() {
             to a screen reader, and the dial's `aria-valuetext` is about the
             bearing, which is the slider's own value and not the place to bolt
             this on. Derived from the same azimuth the marker is drawn at, so the
-            two cannot disagree. */}
-        {sunAzimuthDeg !== null && ` Light comes from the ${planSide(sunAzimuthDeg - bearingDeg)}.`}
+            two cannot disagree.
+
+            THE FRAME IS NAMED, and it has to be. This read "Light comes from the
+            bottom-right" — a bare screen direction, with nothing saying what it
+            was a direction *in*. In the 2D plan it is true of the drawing; in the
+            3D tab the camera orbits, so the same sentence is false at every
+            heading but one and there is no way to tell from the words which. The
+            dial is the one frame that survives both: it is 12 px away, it never
+            rotates, and `planSide` is computed from `sunAzimuthDeg - bearingDeg`,
+            which IS the screen angle the marker is drawn at (`sunAt` in `Dial`).
+            So the sentence now describes the picture beside it rather than the
+            room behind it, and the room's own answer stays where it belongs —
+            the marker for the eye, `aria-valuetext` for a screen reader. */}
+        {sunAzimuthDeg !== null && ` Light comes from the dial's ${planSide(sunAzimuthDeg - bearingDeg)}.`}
       </div>
     </div>
   );

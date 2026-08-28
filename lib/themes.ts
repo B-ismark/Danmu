@@ -2,15 +2,27 @@
 // palette + sets a lighting mood. Colours drive part.color (the recolour path
 // the 3D scene already honours), so a theme reads as a full redecoration.
 //
-// **Four, not five.** `Coastal` and `Studio Loft` were the only pair in the set that
-// genuinely overlapped: both cold neutrals, both setting `cool`, so pressing one
-// after the other changed the mid-tone and nothing else — two thirds of one idea
-// taking two of the four swatch slots a 208px rail affords. They are `Cool Neutral`,
-// which keeps the useful half of each: Coastal's pale cool upholstery and its sage
-// accent, which is the hue that distinguished it, and Studio Loft's charcoal case
-// goods and mid grey, which is what gave that one its weight. The other three are
-// each the only one of their kind — Warm Minimal and Afro-Modern share a lighting
-// mood but not a palette, and rust is the only saturated set here.
+// **Four, not five.** `Coastal` and `Studio Loft` both set `cool`, so from the
+// Lighting row's point of view — the row sitting in the same section — they were one
+// option taking two of the four swatch slots a 208px rail affords. They are
+// `Cool Neutral`, which keeps the useful half of each: Coastal's pale cool upholstery
+// and its sage accent, which is the hue that distinguished it, and Studio Loft's
+// charcoal case goods and mid grey, which is what gave that one its weight.
+//
+// **The merge stands on that mood overlap alone.** An earlier version of this comment
+// also called the two near-duplicates on COLOUR — "pressing one after the other
+// changed the mid-tone and nothing else". That was never measured and it is false:
+// mean `deltaEOk` across the four painted roles puts the merged pair at 0.304, the
+// third most DISTINCT of the original ten pairs, while the closest were
+// `warm-min`/`coastal` at 0.073 and `heritage`/`afro-mod` at 0.078. The metric is the
+// wrong instrument rather than the set being wrong — it is dominated by lightness, so
+// it scores beige against sage as similar. Full matrix in `tests/themes.test.ts`.
+//
+// **The mood criterion is not fully satisfied by what shipped:** `Warm Minimal` and
+// `Afro-Modern` both still set `day`, at 0.266 — CLOSER than the pair that went. Left
+// alone deliberately: four swatches is the fit ceiling, and rust against beige is the
+// loudest contrast in the set. It is the open end of this argument rather than a set
+// with one option per mood.
 //
 // A theme still sets a mood on the way past: one tap, whole look. What changed with
 // it is that the chip no longer UNTICKS itself when you then move the light —

@@ -102,6 +102,11 @@ describe('a suggestion never hands back a piece a few degrees off square', () =>
     // as wrong in the other direction. A chair angled 45° toward a sofa is a thing a
     // person does, and nothing here may undo it.
     const r = solveLayout(parts, poly, locked, { seed: 4 });
+    // Every other sweep in this file counts what it examined; this one did not, so
+    // an empty `moved` would have run the loop zero times and passed having
+    // asserted nothing at all. The sibling guard above covers seeds 1–12
+    // collectively, which says nothing about seed 4 on its own.
+    expect(r.moved.length, 'seed 4 must actually move something').toBeGreaterThan(0);
     for (const i of r.moved) {
       const off = offSquare(r.placements[i].yaw);
       expect(off === 0 || off <= 1e-3 || off >= SNAP_TOL, `${parts[i].name}`).toBe(true);
@@ -343,11 +348,20 @@ describe('the finish passes on a room that was cut', () => {
   });
 
   it('and does not square up the pieces it was right to leave angled', () => {
-    // The other direction, and the one the earlier "still allows an angle big enough
-    // to be a decision" test could not see: it asserts *square or ≥ SNAP_TOL*, which
-    // a pass that squared everything satisfies. So deleting `|| off > SNAP_TOL` — a
-    // blanket quantiser, the exact over-reach `SNAP_TOL` exists to prevent — was
-    // green across the whole suite. This counts the other side of the band.
+    // The other direction: "still allows an angle big enough to be a decision"
+    // asserts *square or ≥ SNAP_TOL*, which a pass that squared everything also
+    // satisfies, so it cannot see a blanket quantiser. This counts the other side of
+    // the band — that some real angle SURVIVED a solve.
+    //
+    // Be honest about its reach, because the comment here used to overclaim: this
+    // did NOT go red when `|| off > SNAP_TOL` was deleted from `snapYaws`. Over
+    // eight seeds the solver still hands back some piece at a deliberate angle it
+    // never had the chance to square, so the count stays above zero. What actually
+    // kills that mutation is `a piece turned 45° off square comes back at 45°` in
+    // the last describe, which calls `snapYaws` directly on a piece it MUST leave
+    // alone. Both are worth having — this one covers the end-to-end path — but the
+    // mutation guarantee belongs to the direct test, and saying otherwise here is
+    // how a decoration assertion gets believed.
     const angled = results.flatMap((r, k) =>
       r.moved.filter((i) => offSquare(r.placements[i].yaw) >= SNAP_TOL).map((i) => `seed ${k + 1}: ${parts[i].name}`),
     );

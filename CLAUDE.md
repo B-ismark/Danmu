@@ -32,9 +32,32 @@ backend, no account. The 3D studio *is* the product.
    **Corollaries, each of which has been violated at least once:** a shape's
    geometry must be authored at `part.dimMM` (`Draggable` scales by
    `storedDim / part.dimMM`, so a renderer with a hard-coded size renders the
-   wrong size at scale 1); a displayed measurement must be *derived*, never a
-   hand-typed string next to the thing it describes; and when something does not
-   fit, **say so — never silently resize it to fit**. A piece taller than the
+   wrong size at scale 1 — `FanGeo` drew its blade `1.6r` long centred at `0.6r`,
+   which reaches **1.4r**, so a 1000 mm ceiling fan swept 1.40 m while the plan drew
+   the 1.00 m circle the same `dimMM` asks for: **two tabs, one piece, 40% apart, and
+   no test could reach either because the arithmetic lived in a TSX renderer**. It is
+   `fanBlade` in `scene-spec.ts` now); a displayed measurement must be *derived*, never a
+   hand-typed string next to the thing it describes; **a bound must cross into a
+   control in the control's own unit** — `roomAxisRange` is metres and
+   `RoomDimsEditor`'s fields are in the user's `dimUnit`, so handing `NumberField`
+   the raw metre bound meant a 5 m room read `500.0` cm against a max of `50`, and
+   one press of the up chevron clamped it to 50 cm before the commit refused the room
+   the arrows had just made (four of the five units, and invisible to everyone left
+   on metres — which is also who wrote it). `boundsToUnit` (`lib/units.ts`) converts
+   and rounds **toward the interior**, because half of that fix is still wrong: 1.8 m
+   is 5.90551 ft and a field at the foot step's one decimal renders it `5.9`, two
+   millimetres below its own floor. The sentence naming the range reads the same
+   call, so the number the user is told and the number the arrows obey are one.
+   **It takes the PAIR, and the one-ended version is deliberately not exported**,
+   because neither end can tell whether rounding has left an interval. A range
+   narrower than one step of a coarse unit collapses — a mirror's 15–60 mm depth is
+   0.1 ft at both ends, two chevrons producing one number — or *inverts*: a door's
+   35–60 mm rounds to min 0.2 / max 0.1, and `NumberField` clamps max first and min
+   second, so every press lands on `min` and pressing DOWN raised a door's depth past
+   its own maximum. Fourteen shape/axis/unit combinations did one or the other, every
+   one of them in feet, and the sweep across the whole catalog is the assertion
+   because choosing examples is exactly how the first version missed them. And
+   when something does not fit, **say so — never silently resize it to fit**. A piece taller than the
    ceiling keeps its real height and `lib/clearance.ts` reports it.
    **Which wall a photo is, is code's answer now too** (`lib/capture-slots.ts`),
    and it belongs to this rule because a wrong slot is a wrong room:
@@ -87,6 +110,22 @@ backend, no account. The 3D studio *is* the product.
    written reason a cost cannot express it (`tall` is a size, `crowding` is the whole
    room, `turning` nothing costs at all). Adding
    a check with no cost is allowed; adding one silently is not.
+   **Which side of a wall is outdoors is the polygon's WINDING, not a point it is
+   measured against.** `wallOutwardNormal` flipped the edge perpendicular by testing
+   it against `polygonCentroid` — which averages the VERTICES, so on a T it lands in
+   the notch beside the stem and on a U between the arms, outside the floor entirely,
+   and every wall whose midpoint sits on the far side of it comes back reversed. Five
+   of those two presets' sixteen walls did. `offsetWall` translates the edge along
+   this vector, so `delta > 0` — "push out / bigger room" — SHRANK the room on those
+   five and `wall-move.ts` carried the furniture inward with it. `polygonSignedArea`
+   answers it exactly for any simple polygon and needs no interior point at all.
+   Two things worth keeping from it: every test for that function used a
+   **rectangle**, where the vertex average IS the true centroid and all four normals
+   are right — the assertions were real and the fixture could not express the defect,
+   which is the same shape as "a check that cannot fail"; and fixing it retired a
+   blocker recorded elsewhere, since `clampIntoFootprint`'s stated reason for being
+   unfixable was that changing `polygonCentroid` would change every wall's normal,
+   and it no longer would.
    **Arrange against the room, never against its bounding box.** A footprint is a
    polygon; `±width/2` describes a box the room may not be. Every starter
    arrangement was written that way and so furnished the quadrant an L / T / U cuts
@@ -99,7 +138,16 @@ backend, no account. The 3D studio *is* the product.
    **A scene file is an AI hint with a filename.** `lib/scene-file.ts` is the only
    thing here that parses bytes someone else produced, so the same boundary holds:
    imported sizes go through `clampDims`, and shape / category / decor / finish /
-   layout are checked against the runtime vocabularies rather than trusted. Those
+   layout are checked against the runtime vocabularies rather than trusted. **An
+   out-of-range ceiling is clamped and reported, not fatal**, and that exception is
+   the rule working rather than a hole in it: a ceiling was the one *dimension* in a
+   file refused outright while every part size beside it was already being clamped,
+   and this app had written rooms the 1.8 m floor rejects — so saving a 1.65 m room
+   and opening it again answered "that room file is missing its room", about a file
+   this app produced, with no way forward. Width and depth stay fatal because a width
+   of 0 is no floor to stand furniture on, and `Infinity` stays fatal because
+   clamping `1e400` into a legal 12 m ceiling is the one place lossy would be
+   dishonest. Those
    vocabularies are `as const` arrays with the unions **derived** from them
    (`SHAPES`, `CATEGORIES`, `DECOR_KINDS`, `FINISHES`, `LAYOUT_IDS`) — never a union
    beside a hand-kept `Set`, which drifts in the one direction nobody notices: a
@@ -123,7 +171,52 @@ backend, no account. The 3D studio *is* the product.
    move that was supposed to end "snap works in one tab only" shipped with snap
    working in one tab only. **Extracting a pipeline means extracting all of it** —
    go looking for the steps that live in the caller, because those are exactly the
-   ones a diff of the extracted function cannot show you were missing. The companion
+   ones a diff of the extracted function cannot show you were missing.
+   **Who else moves is `lib/drag-convoy.ts`, and it is the same rule again.** A
+   drag carries three kinds of company — rigid children (`cascadeTransform`, about
+   the dragged piece's own pivot), merged-group siblings, and the rest of the
+   multi-selection — and the last two are one rule: translate by the delta the
+   dragged piece accepted. They were three implementations: the merged-group loop
+   written out in `Draggable.commit()` *and* in `PlanView.moveTo`, and the
+   multi-selection **nowhere**, so shift-clicking four chairs and dragging one moved
+   one chair in both tabs. It reported as "sometimes only one moves" because a
+   merged set does move as one and looks identical on screen to a selected one — the
+   lesson being that **two features that render the same must not be two code
+   paths**. Two traps live in there and both fail silently: the piece being resolved
+   has to stay in its own world (`collidesAt` looks the mover up in the list it is
+   handed and returns `false` when absent — filter it out and collision detection is
+   simply *off*, which is why every mover's world comes from `travellingWorld` and
+   never a `.filter` at the call site. That function SHIFTS the company to where it
+   is going rather than deleting it, and the difference is not cosmetic: deleting it
+   made a travelling support invisible to `findSupportDetailed`, so selecting a desk
+   and the lamp on it and dragging the LAMP resolved the lamp to y = 0, reported
+   valid because `collidesAt` could not see the desk either, cleared its rigid parent
+   and persisted that. One function for the mover and the members both, because the
+   asymmetry is invisible from either side of it); and a member must resolve with `snapMode: 'off'`, or its own
+   magnetism pulls it out of formation and the set arrives bent. A member that
+   cannot follow makes the whole step invalid and **names itself** — the piece that
+   refused is not the piece under the hand. Separately: **a press must not collapse
+   the selection it is about to drag.** The plan's did, unconditionally, so the set
+   was gone before the first `pointermove`; the 3D tab's survived the press and then
+   lost it to the DOM *click* that ends every drag. Collapsing to one piece is what
+   a click means, so it belongs on the release, and only when the press never moved.
+   That gate is `lib/drag-click.ts`, and **it deliberately has no part id** — the
+   first version recorded which piece was dragged and asked the arriving click
+   whether it was that piece, clearing the flag either way, so a click landing on a
+   DIFFERENT piece ate the flag and selected itself: the same collapse one mesh
+   over. A rug dragged under a table ends up behind it and the ray hits the table,
+   and `gestureOwnedByOther` cannot help because the capture is released and
+   `draggingId` cleared before the click is dispatched. **A drag is not a click on
+   anything**, so there is nothing to compare; an id nothing branches on would be
+   dead plumbing wearing a decision's name. It lives outside `store.ts` for a
+   second reason too — a gate parked there could only be tested under jsdom,
+   because importing the store drags in zustand's `persist`.
+   **A finding the caller drops is a finding that does not exist:** `blocked` was
+   computed in both tabs and *said* in one, so 3D refused a set in silence for a
+   whole commit. It rides `blockedBy` on the live drag channel now and lands in the
+   size tag. And **a transform write is never free** — `ConvoyMove.rot` is optional
+   because writing back an unchanged rotation still CREATES an override, which
+   `lib/transforms.ts` then pins against a re-detect and persists. The companion
    for *what is under the pointer* is `lib/plan-hit.ts` (footprint geometry, so a
    round piece is tested against the ellipse it draws, not its box) and
    `lib/pick-through.ts` (a raycast's hits mapped back to pieces, everything that
@@ -148,9 +241,36 @@ backend, no account. The 3D studio *is* the product.
    **And restore what a gesture moved, not what it was aimed at:** `Esc` mid-drag
    put back the dragged piece and left the lamp riding on it in mid-air, plus every
    merged sibling scattered. `cascadeTransform` is pure, so replaying it from the
-   start transform is the whole fix — and a merged group's per-frame delta must come
-   off that same start transform, never off a render memo, or a drag faster than
-   React renders quietly pulls the group apart.
+   start transform is the whole fix — and every member's position must be derived
+   from that same start transform plus the gesture's TOTAL delta, never from the
+   member's current position plus this frame's step. **The reason first written here
+   was wrong, and a wrong scar is worse than none:** it blamed a drag outrunning
+   React's renders. **Prefer the reason that is checkable in this repo to any claim
+   about a library's scheduling**, because the first kind cannot rot and the second
+   invites a reader to go and disprove it. The reason is narrower and owes nothing to
+   scheduling: a member's own `resolvePlacement` is not the identity, and two of its
+   corrections are *accepted* rather than refused — a wall rider is exempt from the
+   rigidity test by design, and the vertical/gravity answer always wins. So a
+   containment clamp, a gravity drop or a wall snap is a **correction**, and stepping
+   from the last frame folds every correction into the next frame's base: the set
+   deforms a little further each frame and can never come back.
+   (The scheduling story does not hold either, and that is a parenthesis rather than
+   the argument on purpose. `useStudio` is read through `useSyncExternalStore`, so a
+   store change re-renders on React's sync lane; R3F's pointer handlers are plain
+   `addEventListener` callbacks that neither batch nor flush around themselves; and
+   `frameloop="demand"` / `invalidate()` schedule a WebGL draw, not a React render.
+   **Do not try to settle that by grepping `flushSync` in `@react-three/fiber` — it
+   hits**, because the events chunk bundles a reconciler build that defines and
+   re-exports the name, and not one of those hits is a call R3F makes on a pointer
+   event. A passage a careless grep appears to refute gets the whole passage
+   discarded, which is the outcome this one exists to prevent.)
+   Deriving from the start is idempotent, and a frame that clamped does not poison the
+   one after it. It is the same reason the world a convoy resolves against is a
+   snapshot taken at pointer-down rather than the live memo — and there the memo's
+   danger is that it is FRESH, not stale: it already carries the earlier frames'
+   writes, so a travelling piece is shifted twice and lands at `start + 2×delta`.
+   The identical wrong mechanism is still stated in `lib/drag-convoy.ts` and
+   `components/studio/PlanView.tsx`; those two are owned by the convoy work in flight.
    **The two lists beside the canvas are named for what they hold:** the rail's
    **Catalog** is what is in this room, the panel's **Library** is what you can
    add. They are not interchangeable words, and one screen may not hold two of
@@ -472,6 +592,11 @@ tests import does not belong in `lib/`, where it reads as shipped code.
   architecture, routes, stores, or the AI/geometry boundary).
 - `README.md` — quickstart + stack.
 - `PRODUCT.md` — who this is for, what counts as success, the durable constraints.
+- `docs/visual-check.md` — **the live list of what still needs a human eye.** Not a
+  study and not history: it is the working hand-off for this branch, naming the
+  places to click and what "wrong" would look like there, because everything in it
+  already typechecks, lints and passes tests. It goes stale the moment a branch
+  merges, so it names branches and gate counts and must be refreshed with them.
 - `docs/history/` — **point-in-time studies, not live docs.** The 2026-07 platform
   audit (`AUDIT.md` + `audit/`), the engine research (`Research.md`) and the
   remediation plan (`Plan.md`). Every phase in them is shipped or explicitly

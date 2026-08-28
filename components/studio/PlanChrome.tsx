@@ -169,7 +169,7 @@ export function planHelp() {
   return (
     <>
       <HelpGroup title="Moving furniture">
-        <HelpLine>Drag a piece to move it. It stops against whatever is in the way, tints red if it cannot go there, and measures its way to the nearest walls as it goes.</HelpLine>
+        <HelpLine>Drag a piece to move it. It stops against whatever is in the way, tints red if it cannot go there — along with whichever piece of a selection ran out of room — and measures its way to the nearest walls as it goes.</HelpLine>
         <HelpLine>
           <Kb>Esc</Kb> part-way through a drag puts the piece back where it was.
         </HelpLine>
@@ -205,7 +205,7 @@ export function planHelp() {
           <Kb>→</Kb> nudge whatever is focused · hold <Kb>Shift</Kb> to turn it
         </HelpLine>
         <HelpLine>
-          <Kb>F</Kb> brings the selected piece to the middle · <Kb>V</Kb> hides it
+          <Kb>F</Kb> brings the selected piece to the middle · <Kb>H</Kb> hides it
         </HelpLine>
         <HelpLine>
           <Kb>Tab</Kb> steps through the pieces and the walls · <Kb>Esc</Kb> deselects

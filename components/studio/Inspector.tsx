@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
 import { useHasOverrides, useRoomPart, useRoomScene } from '@/lib/room-scene';
 import { useScene } from '@/lib/scene-store';
-import { fromMM, toMM, stepFor, precisionFor, formatDim, UNIT_OPTIONS } from '@/lib/units';
+import { boundsToUnit, fromMM, toMM, stepFor, precisionFor, formatDim, UNIT_OPTIONS } from '@/lib/units';
 import { clampDims, dimRangeFor } from '@/lib/dimension-ranges';
 import { Icon } from '@/components/ui/Icon';
 import { ColorPicker } from '@/components/ui/ColorPicker';
@@ -16,7 +16,7 @@ import { removeParts } from './KeyboardShortcuts';
 import { RailSection } from './RailSection';
 import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { isWallMountedPart, supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, DECOR_KINDS, type LibraryItem, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
-import { findSupportDetailed, groundY, snapToWall as snapToWallPhys, wallStandoff } from '@/lib/physics';
+import { findSupportDetailed, groundY, MOUNT_PAD, snapToWall as snapToWallPhys, wallStandoff } from '@/lib/physics';
 import { wallSegments } from '@/lib/footprint';
 import { moveWallCarrying } from '@/lib/wall-actions';
 
@@ -107,7 +107,7 @@ export function Inspector() {
     let ny = y;
     let support: { id: string; y: number } | null = null;
     if (wallMounted) {
-      ny = Math.max(h / 2 + 0.02, Math.min(room.height - h / 2 - 0.02, groundY(item.category, item.shape, dimMM, room.height)));
+      ny = Math.max(h / 2 + MOUNT_PAD, Math.min(room.height - h / 2 - MOUNT_PAD, groundY(item.category, item.shape, dimMM, room.height)));
     } else {
       support = findSupportDetailed(partSnapshot(), id!, x, z, dimMM, baseRot);
       ny = support !== null && support.y > 0.3 ? support.y : 0;
@@ -198,23 +198,29 @@ export function Inspector() {
 
       {/* Placement — surfaced as visible buttons (was buried in a ⋯ menu). */}
       <Section label="Where it sits">
-        {/* `rail-triple` is the hook the elastic rail's container query reflows —
+        {/* Three buttons for a piece that STANDS on something, and none for a piece
+            that is fixed to the building. A wall-mounted part has nowhere else to be
+            put — "Wall" moves it along the wall it is already on, which reads as an
+            action and is barely one — and for the ceiling family it is worse than
+            useless: `snapToWallPhys` would slide a ceiling fan sideways onto a wall,
+            which is not a place a fan goes. What those parts get instead is the one
+            number that does mean something about where they sit, below.
+
+            `rail-triple` is the hook the elastic rail's container query reflows —
             three icon+word buttons are the first thing in here to stop fitting. */}
-        <div className="rail-triple" style={{ display: 'grid', gridTemplateColumns: part.wallMounted ? '1fr' : 'repeat(3, 1fr)', gap: 6 }}>
-          <button onClick={snapToNearestWall} className="ds-btn" title="Move to the nearest wall and face the room" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
-            <Icon name="snap-wall" size={13} /> Wall
-          </button>
-          {!part.wallMounted && (
-            <>
-              <button onClick={snapToSurface} className="ds-btn" title="Drop onto the highest surface below — table, shelf, or floor" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
-                <Icon name="snap-surface" size={13} /> Surface
-              </button>
-              <button onClick={groundToFloor} className="ds-btn" title="Force this part to sit on the floor" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
-                <Icon name="snap-floor" size={13} /> Floor
-              </button>
-            </>
-          )}
-        </div>
+        {!part.wallMounted && (
+          <div className="rail-triple" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+            <button onClick={snapToNearestWall} className="ds-btn" title="Move to the nearest wall and face the room" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
+              <Icon name="snap-wall" size={13} /> Wall
+            </button>
+            <button onClick={snapToSurface} className="ds-btn" title="Drop onto the highest surface below — table, shelf, or floor" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
+              <Icon name="snap-surface" size={13} /> Surface
+            </button>
+            <button onClick={groundToFloor} className="ds-btn" title="Force this part to sit on the floor" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
+              <Icon name="snap-floor" size={13} /> Floor
+            </button>
+          </div>
+        )}
         {part.wallMounted && (
           <MountHeightRow
             key={`${id}-${currentXYZ()[1]}`}
@@ -223,7 +229,7 @@ export function Inspector() {
             onCommit={(bottomMM) => {
               const [x, , z] = currentXYZ();
               const h = part!.dimMM[2] / 1000;
-              const y = Math.max(h / 2 + 0.02, Math.min(room.height - h / 2 - 0.02, bottomMM / 1000 + h / 2));
+              const y = Math.max(h / 2 + MOUNT_PAD, Math.min(room.height - h / 2 - MOUNT_PAD, bottomMM / 1000 + h / 2));
               setPosition(id!, [x, y, z]);
             }}
           />
@@ -611,9 +617,19 @@ function DimensionEditor({
   const prec = precisionFor(dimUnit);
   const step = stepFor(dimUnit);
   const range = dimRangeFor(category, shape);
-  // Collapsed by default — same disclosure the room shell uses. Typing exact
-  // millimetres is the rare path; dragging and recolouring are the common ones.
-  const [open, setOpen] = useState(false);
+  // Open by default. It was collapsed on the reasoning that typing millimetres is
+  // the rare path — true of typing, and beside the point for READING: the three
+  // numbers are what tells you whether the piece you just dropped is the size you
+  // meant, and rule 2 of CLAUDE.md makes them the derived answer the app owes the
+  // user rather than a detail to go looking for. The collapsed summary already
+  // printed the same numbers, so the fold was hiding a text field and the tier
+  // sentence, not the measurement — which makes "collapsed" cost a click and save
+  // one line. The disclosure stays, because a rail with several sections open at
+  // once still needs a way to get its height back.
+  //
+  // Not the same call as the room shell's, deliberately: a room's dimensions are
+  // set once during onboarding, while a part's change every time you scale one.
+  const [open, setOpen] = useState(true);
 
   // Destructured so the resync effect can depend on the three numbers rather
   // than the tuple identity — the parent rebuilds `value` every render.
@@ -692,8 +708,22 @@ function DimensionEditor({
                 {/* .field owns the border + focus ring; mono is here only because
                     these are measurements. The stepper is ours — the native one
                     is suppressed app-wide (see globals.css). */}
+                {/* Bounded by the piece's OWN range, in the field's own unit — the
+                    same numbers `clampDims` enforces on commit and the same ones the
+                    sentence below prints, so the arrows stop where the clamp would
+                    have stopped them instead of walking out and snapping back.
+                    `0.001` was a floor in no unit at all: a millimetre to someone
+                    working in metres, a micrometre to someone in millimetres, and
+                    there was no ceiling whatsoever. `boundsToUnit` rounds inward, so a
+                    rounded bound can only ever be stricter than the clamp, never
+                    looser — see `RoomDimsEditor`, where the same mismatch was
+                    destructive rather than merely slack. The PAIR is what asks,
+                    because rounding both ends of a narrow range in a coarse unit
+                    collapses it (a mirror's 15-60 mm depth is 0.1 ft at both ends)
+                    or inverts it (a door's 35-60 mm becomes min 0.2, max 0.1). */}
                 <NumberField
-                  min={0.001}
+                  min={boundsToUnit(range.min[i], range.max[i], dimUnit).min}
+                  max={boundsToUnit(range.min[i], range.max[i], dimUnit).max}
                   step={step}
                   value={local[i]}
                   onChange={(v) => commitDebounced(i as 0 | 1 | 2, v)}

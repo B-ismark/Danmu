@@ -4,6 +4,7 @@
 import { ROOM } from './parts-catalog';
 import {
   footprintForLayout,
+  footprintBounds,
   clampIntoFootprint,
   pointInFootprint,
   type Footprint,
@@ -21,6 +22,7 @@ import {
   pullToward,
   findSupportUnder,
   isTabletopProne,
+  MOUNT_PAD,
 } from './physics';
 import type { CaptureSlot, RoomData } from './storage';
 import { clampDims, dimRangeFor } from './dimension-ranges';
@@ -58,7 +60,6 @@ import { settleParts } from './layout-settle';
 // it as a TYPE, so the edge back is erased at compile.
 import {
   costBreakdown,
-  navigabilityCost,
   prepare,
   DEFAULT_WEIGHTS,
   NAV_CELL,
@@ -146,6 +147,35 @@ export function lightFor(part: Pick<ScenePart, 'shape' | 'light'>): PartLight | 
 
 /** True for shapes that are fixtures — the Inspector shows lighting controls for
  *  these and nothing else. */
+/** Radius of a ceiling fan's motor housing, in metres. The blades start here and
+ *  `FanGeo` draws the same cylinder, so it is one number rather than two. */
+export const FAN_HUB_R = 0.1;
+
+/** Where one blade of a ceiling fan sits, given the fan's declared width.
+ *
+ *  Pulled out of `FanGeo` because it was WRONG and nothing could say so. The blade
+ *  was `size: [r * 1.6]` at `position: [r * 0.6]`, and a box of length 1.6r centred
+ *  at 0.6r runs from −0.2r to **1.4r** — so the catalog's 1000 mm fan swept 1.40 m,
+ *  and every blade also crossed 100 mm through the far side of its own motor.
+ *
+ *  Rule 2's corollary, exactly: a shape's geometry must be authored at
+ *  `part.dimMM`, because `Draggable` scales by `storedDim / part.dimMM` and a
+ *  renderer with its own idea of the size renders the wrong size at scale 1. It was
+ *  visible without opening the 3D tab, too — the plan draws a fan as a circle
+ *  straight off `dimMM` (`circle: true`), so the two tabs disagreed by 40% on the
+ *  same piece.
+ *
+ *  Returns metres. `tip` is the invariant worth testing: it is the fan's own
+ *  radius, so the swept circle is the declared width and nothing else. */
+export function fanBlade(widthMM: number): { hub: number; length: number; centre: number; tip: number } {
+  const r = widthMM / 2000;
+  // A fan narrower than its own hub is not reachable through `clampDims` (the
+  // range starts at 900 mm) but the floor keeps this total rather than returning a
+  // negative box, which three.js renders inside-out rather than refusing.
+  const length = Math.max(0.05, r - FAN_HUB_R);
+  return { hub: FAN_HUB_R, length, centre: FAN_HUB_R + length / 2, tip: FAN_HUB_R + length };
+}
+
 export function isLightFixture(shape: Shape): boolean {
   return shape in LIGHT_BY_SHAPE;
 }
@@ -1782,6 +1812,19 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
     // not a fan in the wrong corner. Y is owned by the anchor, and only there.
     const aiPos = (d as { position?: { x: number; y: number; z: number } }).position;
     const aiYaw = (d as { yaw?: number }).yaw;
+    /** Does the model's own yaw survive a wall snap?
+     *
+     *  Hoisted because it is read three times and used to be written out twice —
+     *  and the third reader is the one that made it matter. `snapToWall` clamps a
+     *  piece by its extent ALONG the wall, which is `dimMM[0]` only when the piece
+     *  is turned to the wall's heading. Where the model's yaw wins it is not, so
+     *  the clamp has to be told the rotation that will really apply. A third copy
+     *  of the predicate is how the two would have drifted apart. */
+    const keepsAiYaw = typeof aiYaw === 'number' && Math.abs(aiYaw) >= 0.05;
+    /** …and therefore the yaw the clamp must measure across. `undefined` lets
+     *  `snapToWall` use the wall's own heading, which is what will really apply
+     *  whenever the snapped `rot` wins. */
+    const clampRot = keepsAiYaw ? aiYaw : undefined;
     let placement: { pos: [number, number, number]; rot: number };
     const w = rw / 2;
     const dHalf = rd / 2;
@@ -1811,10 +1854,10 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
     // parameter for the rest of the block.
     const bounds = { width: rw, depth: rd };
     if (aff === 'must-wall') {
-      const snapped = snapToWall(placement.pos, dim, footprint, wallStandoff(refined));
+      const snapped = snapToWall(placement.pos, dim, footprint, wallStandoff(refined), null, { alongRot: clampRot });
       placement.pos[0] = snapped.x;
       placement.pos[2] = snapped.z;
-      if (snapped.rot !== undefined && (typeof aiYaw !== 'number' || Math.abs(aiYaw) < 0.05)) {
+      if (snapped.rot !== undefined && !keepsAiYaw) {
         placement.rot = snapped.rot;
       }
     } else if (aff === 'prefers-wall') {
@@ -1828,10 +1871,10 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
       );
       // Always snap via footprint-aware snapToWall — works for L/T/U inner edges too.
       if (distFromWall > 0.2) {
-        const snapped = snapToWall(placement.pos, dim, footprint, wallStandoff(refined));
+        const snapped = snapToWall(placement.pos, dim, footprint, wallStandoff(refined), null, { alongRot: clampRot });
         placement.pos[0] = snapped.x;
         placement.pos[2] = snapped.z;
-        if (snapped.rot !== undefined && (typeof aiYaw !== 'number' || Math.abs(aiYaw) < 0.05)) {
+        if (snapped.rot !== undefined && !keepsAiYaw) {
           placement.rot = snapped.rot;
         }
       }
@@ -1893,8 +1936,12 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
   //   2. For any floor-standing part whose Y ended up > 0 with no support
   //      beneath, drop it to the floor — recovers from bad AI Y estimates.
   //   3. Ceiling clamp — no part top should poke through the ceiling.
-  const CEILING_PAD = 0.02;
-  const cap = rh - CEILING_PAD;
+  // `MOUNT_PAD`, not a local `CEILING_PAD = 0.02`. It was one, doing this exact
+  // job on this exact quantity, and it is the reason the constant it duplicated
+  // could claim to be "the single clearance" while a fan placed by detection and
+  // a fan placed by a drag would have drifted apart the first time anyone changed
+  // it. Nothing would have said so: both look right, 10 mm apart, in a picture.
+  const cap = rh - MOUNT_PAD;
   for (const p of settled) {
     if (p.category !== 'rug') {
       const support =
@@ -1920,6 +1967,30 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
   }
 
   return settled;
+}
+
+/** What a plain click or press on `id` selects.
+ *
+ *  A merged set is selected WHOLE: clicking one sideboard of a merged pair selects
+ *  both, because that is what "merged" means to a pointer.
+ *
+ *  It does not mean a drag carries the group. `lib/drag-convoy.ts` used to close
+ *  the travelling set over `groupId` AFTER the selection, so dragging one piece
+ *  moved its whole group even when only that piece was selected — and rotation
+ *  never did, so the two gestures disagreed about what a one-member selection
+ *  meant. Unreachable until the layer tree made a single member selectable, and
+ *  reported the moment it did. The selection is the unit now: merge decides what a
+ *  CLICK selects, and a drag carries what is selected.
+ *
+ *  Both tabs read this, which is the other half of the same fix. `Pickable` had it
+ *  inline and the plan had NOTHING — a press there selected one piece of a merged
+ *  pair and the convoy's closure quietly put the rest back, so the plan looked
+ *  right for a reason that had nothing to do with selection. Removing the closure
+ *  without this would have left the two tabs dragging different sets. */
+export function selectionForPick(parts: ScenePart[], id: string): string[] {
+  const me = parts.find((p) => p.id === id);
+  if (!me?.groupId) return [id];
+  return parts.filter((p) => p.groupId === me.groupId).map((p) => p.id);
 }
 
 /** Whether a part renders as a wall/ceiling-mounted item (geometry centred on
@@ -1948,13 +2019,69 @@ export function placeNewPart(
   room: { width: number; depth: number; height: number; footprint?: Footprint },
   existing: ScenePart[],
   /** Where the user aimed, if they aimed — the drop point on the floor. A wall
-   *  part takes the wall nearest it; a floor part ignores it, because the caller
-   *  clamps the drop into the footprint itself. */
+   *  part takes the wall nearest it; everything else is placed there, kept inside
+   *  the room by `intoRoom` below. */
   at?: [number, number],
 ): { pos: [number, number, number]; rot: number; wallMounted: boolean } {
   const wallMounted = isWallMountedPart(cat, shape);
   const ax = at?.[0] ?? 0;
   const az = at?.[1] ?? 0;
+
+  /** The drop point, kept inside the room it is being dropped into.
+   *
+   *  Both drop handlers used to do this themselves, and both did it only
+   *  `if (!wallMounted)` — which is `isWallMountedPart`, true for a ceiling fan.
+   *  A fan rides no wall, so nothing above put it on one, and that guard meant
+   *  nothing below pulled it in either: a fan dragged from the library landed
+   *  exactly where the pointer was released, outside the walls included. One
+   *  clamp, here, for everything that is not placed BY a wall.
+   *
+   *  The bounds inset, and deliberately ONLY that. The notch an L / T / U cuts
+   *  away is invisible to a bounding box, and `clampIntoFootprint` exists to answer
+   *  exactly that — but it walks the point toward `polygonCentroid`, which is the
+   *  average of the VERTICES rather than the centroid of the area, and for an L that
+   *  average is the reflex corner itself: every step of the walk stays in the notch
+   *  and the fallback returns a point on the boundary. Verified with the L used in
+   *  `tests/wall-parts.test.ts`. Fixing that means changing `polygonCentroid`, whose
+   *  other caller (`wallSegments`) derives every wall's INWARD NORMAL from it — not
+   *  something to bundle into this. So a drop into an L's notch is still a drop into
+   *  the notch, exactly as it is for every floor piece today, and it is written down
+   *  here rather than left as a surprise.
+   *
+   *  The support probe below reads the CLAMPED point either way: a piece let go
+   *  outside the room was asking what it could stand on out there. */
+  function intoRoom(x: number, z: number): [number, number] {
+    if (!room.footprint) return [x, z];
+    const b = footprintBounds(room.footprint);
+    const halfW = dimMM[0] / 2000;
+    const halfD = dimMM[1] / 2000;
+    // A piece wider than the room cannot be inset from both sides — centre it,
+    // rather than letting the min beat the max and pin it against one wall. It
+    // keeps its real size and `lib/clearance.ts` reports that it does not fit;
+    // silently shrinking it to suit is what rule 2 forbids.
+    const cx = halfW * 2 >= b.maxX - b.minX ? (b.minX + b.maxX) / 2 : Math.max(b.minX + halfW, Math.min(b.maxX - halfW, x));
+    const cz = halfD * 2 >= b.maxZ - b.minZ ? (b.minZ + b.maxZ) / 2 : Math.max(b.minZ + halfD, Math.min(b.maxZ - halfD, z));
+    return [cx, cz];
+  }
+
+  /** Where a ceiling piece hangs the moment it is added: the middle of the room.
+   *
+   *  Not under the pointer. A fan or a pendant belongs in the middle of a ceiling
+   *  far more often than it belongs wherever the cursor happened to be when the
+   *  button came up, and it is a DEFAULT rather than a rule — `ridesWall` is false
+   *  for this family, so nothing snaps it anywhere and a drag moves it freely.
+   *
+   *  The bounds midpoint, tested against the polygon instead of assumed: the middle
+   *  of an L's bounding box is the reflex corner it cuts away, and a fan hung there
+   *  hangs outside the room. When that happens the drop point is the better answer,
+   *  because at least the user aimed it. */
+  function ceilingSpot(): [number, number] {
+    if (!room.footprint) return [0, 0];
+    const b = footprintBounds(room.footprint);
+    const mx = (b.minX + b.maxX) / 2;
+    const mz = (b.minZ + b.maxZ) / 2;
+    return pointInFootprint(mx, mz, room.footprint) ? [mx, mz] : intoRoom(ax, az);
+  }
   if (wallMounted) {
     const h = dimMM[2] / 1000;
     // Centre-anchored: clamp so the bottom edge never dips below the floor and
@@ -1974,12 +2101,15 @@ export function placeNewPart(
       const snapped = snapToWall([ax, 0, az], dimMM, room.footprint, wallStandoff(shape));
       return { pos: [snapped.x, y, snapped.z], rot: snapped.rot ?? 0, wallMounted };
     }
-    return { pos: [ax, y, az], rot: 0, wallMounted };
+    // Ceiling family: hung at `y`, in the middle of the room — see `ceilingSpot`.
+    const [cx, cz] = ceilingSpot();
+    return { pos: [cx, y, cz], rot: 0, wallMounted };
   }
   // Only small "goes on a table" items seek a surface; everything else floors.
-  const support = isTabletopProne(cat) ? findSupportUnder(existing, '__new__', ax, az, dimMM) : null;
+  const [fx, fz] = intoRoom(ax, az);
+  const support = isTabletopProne(cat) ? findSupportUnder(existing, '__new__', fx, fz, dimMM) : null;
   const y = support !== null && support > 0.3 ? support : 0;
-  return { pos: [ax, y, az], rot: 0, wallMounted };
+  return { pos: [fx, y, fz], rot: 0, wallMounted };
 }
 
 /** Y-aware collision. Used for placement clamping. Rugs/mats exempt.

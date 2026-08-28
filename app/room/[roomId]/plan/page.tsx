@@ -18,7 +18,9 @@ import { UNIT_OPTIONS } from '@/lib/units';
 export default function PlanPage() {
   const dimUnit = useSettings((s) => s.dimUnit);
   const { roomId } = useParams<{ roomId: string }>();
-  const [roomName, setRoomName] = useState('Floor plan');
+  // Only the setter is read — the name is written into the export filename from
+  // the ref below, not rendered, so the value binding was dead.
+  const [, setRoomName] = useState('Floor plan');
   // Live from PlanView, which owns the zoom. The old chip hard-coded "1:50 · cm"
   // while the drawing labelled millimetres, rendered at 100 px/m, and zoomed
   // 0.4×–4× — three false claims on the one screen someone might measure from.

@@ -399,7 +399,12 @@ export function KeyboardShortcuts() {
         case 'f':
           if (s.selectedPartId) s.frameSelected();
           break;
-        case 'v':
+        // H, not V. V was the modelling-tool convention (Blender, Maya) and it is
+        // the one binding here nobody could guess from the app itself — the word
+        // on the menu item, in the layer tree's tooltip and in the help card is
+        // "Hide". A mnemonic that matches the label is worth more than a
+        // convention borrowed from software this app is not.
+        case 'h':
           if (s.selectedPartId) s.toggleHidden(s.selectedPartId);
           break;
       }

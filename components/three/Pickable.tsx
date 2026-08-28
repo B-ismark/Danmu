@@ -4,7 +4,9 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { type ThreeEvent } from '@react-three/fiber';
 import { Group } from 'three';
 import { gestureOwnedByOther, useStudio } from '@/lib/store';
+import { consumeDragClick } from '@/lib/drag-click';
 import { useScene } from '@/lib/scene-store';
+import { selectionForPick } from '@/lib/scene-spec';
 import { cycleThrough, type CycleState } from '@/lib/plan-hit';
 import { pickIdsFrom, PART_ID_KEY } from '@/lib/pick-through';
 import { openPickMenu } from '@/components/studio/SceneContextMenu';
@@ -85,6 +87,18 @@ export function Pickable({
         // A Space + left-drag that happens to pass over furniture is a camera
         // pan; it must not re-select whatever it flew across.
         if (useStudio.getState().panKeyHeld) return;
+        // The tail of a drag that MOVED this piece. Selecting is what a click
+        // means, but a drag is not a click, and treating it as one collapsed the
+        // multi-selection the drag had just finished carrying — see
+        // `suppressClickAfterDrag` in lib/drag-click.ts — which is deliberately NOT
+        // in the store, so its test can run without zustand's `persist` and a
+        // localStorage shim. Checked before Alt, because a
+        // drag is not a request to open the what-is-under-here list either.
+        // Not `consumeDragClick(partId)`: the click ending a drag does not always
+        // land on the piece that was dragged. See lib/drag-click.ts — asking whose
+        // flag it was let a click that raycast onto a DIFFERENT piece eat the flag
+        // and select itself, which is the collapse this guard exists to stop.
+        if (consumeDragClick()) return;
         // ── Alt: choose between pieces that overlap on screen ────────────────
         // The one question a plain click cannot answer, because only the frontmost
         // handler runs. `e.intersections` is the whole depth-sorted list from this
@@ -120,15 +134,10 @@ export function Pickable({
           toggleInSelection(partId);
           return;
         }
-        // Plain click: if the part belongs to a merged group, select the whole
-        // group (they move as one); otherwise single-select.
-        const parts = useScene.getState().parts;
-        const me = parts.find((p) => p.id === partId);
-        if (me?.groupId) {
-          setSelection(parts.filter((p) => p.groupId === me.groupId).map((p) => p.id), partId);
-        } else {
-          setSelected(partId);
-        }
+        // Plain click: a merged set is selected whole. The rule is
+        // `selectionForPick` because the 2D plan needs the same answer — it had no
+        // group handling at all, and `planConvoy`'s closure was covering for that.
+        setSelection(selectionForPick(useScene.getState().parts, partId), partId);
         onClick?.(partId);
       }}
       // Double-click opens/closes drawers + doors on parts that support it

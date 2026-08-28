@@ -9,6 +9,7 @@ import {
   obbIntersectionArea,
   obbGap,
   nearestEdge,
+  edgeProjection,
   rayToBoundary,
   obbExtentAlong,
   obbInsidePoly,
@@ -373,6 +374,83 @@ describe('rotation convention', () => {
       const w = box(e.px + e.nx * inset, e.pz + e.nz * inset, 2, 0.6, e.yaw);
       expect(faceClearance(w, '+z', [], RECT, 4)).toBeGreaterThan(1);
       expect(faceClearance(w, '-z', [], RECT, 4)).toBeLessThan(0.05);
+    }
+  });
+});
+
+describe('edgeProjection', () => {
+  // Exists so that "which wall is nearest" and "stay on THIS wall" are one
+  // projection asked two ways rather than two copies of the maths — the split
+  // this repo has paid for in layout-rules and in the drag pipeline.
+  it('answers for a named edge, agreeing with nearestEdge when that edge wins', () => {
+    const near = nearestEdge(RECT, 0, -1.5)!;
+    const same = edgeProjection(RECT, near.index, 0, -1.5)!;
+    expect(same).toEqual(near);
+  });
+
+  it('holds a point to the edge it was asked about, not the nearest one', () => {
+    // Deep in the room, far past the midline. The z = -2 wall is edge 0 of RECT.
+    const near = nearestEdge(RECT, 2.8, 1.5)!;
+    const pinned = edgeProjection(RECT, 0, 2.8, 1.5)!;
+    expect(near.index).not.toBe(0);
+    expect(pinned.pz).toBeCloseTo(-2);
+    expect(pinned.yaw).toBeCloseTo(0);
+    // It is genuinely further away, and says so — the caller can tell.
+    expect(pinned.dist).toBeGreaterThan(near.dist);
+  });
+
+  it('clamps to the segment, so a query past the end lands on the corner', () => {
+    // This clamp is what stops a piece pinned to one wall from being walked off
+    // the end of it and out of the room.
+    const p = edgeProjection(RECT, 0, 99, -1.9)!;
+    expect(p.px).toBeCloseTo(3);
+    expect(p.pz).toBeCloseTo(-2);
+  });
+
+  it('returns null rather than NaN for an index no edge has', () => {
+    // A footprint can change under a held index — a wall drag mid-gesture — and a
+    // caller must be able to fall back instead of placing a piece at NaN.
+    expect(edgeProjection(RECT, RECT.length, 0, 0)).toBeNull();
+    expect(edgeProjection(RECT, -1, 0, 0)).toBeNull();
+    expect(edgeProjection([[0, 0], [1, 0]] as Poly, 0, 0, 0)).toBeNull();
+  });
+
+  it('returns null for a degenerate edge', () => {
+    const dup: Poly = [
+      [0, 0],
+      [0, 0],
+      [4, 0],
+      [4, 3],
+    ];
+    expect(edgeProjection(dup, 0, 1, 1)).toBeNull();
+    expect(edgeProjection(dup, 1, 1, 1)).not.toBeNull();
+  });
+});
+
+describe('edge normals do not depend on winding', () => {
+  // The centroid flip in `edgeProjection` never fires for RECT or L as they are
+  // wound here — the raw perpendicular already points inward for every edge — so
+  // every other test in this file passes with the flip deleted. Which makes this
+  // the only test of it, and it matters: a footprint wound the other way would
+  // face every wall-mounted piece out of the room.
+  const REV: Poly = [...RECT].reverse() as Poly;
+
+  it('gives the same inward normal for a reversed outline', () => {
+    for (let i = 0; i < RECT.length; i++) {
+      const f = edgeProjection(RECT, i, 0, 0)!;
+      // The same wall, found by where it sits rather than by index.
+      const r = nearestEdge(REV, f.px + f.nx * 0.01, f.pz + f.nz * 0.01)!;
+      expect(r.nx).toBeCloseTo(f.nx);
+      expect(r.nz).toBeCloseTo(f.nz);
+      // The yaw is compared as a DIRECTION, not as a number. `atan2` splits the
+      // south wall between -PI and +PI on the sign of a zero: its inward normal is
+      // (-0, -1) wound one way and (+0, -1) the other, and atan2(-0, -1) is -PI
+      // while atan2(+0, -1) is +PI. Same angle, 2*PI apart as numbers. Harmless in
+      // practice — a footprint has one winding, so every piece on a given wall gets
+      // the same value, and three.js does not care — but it is a real edge to know
+      // about before comparing two rotations arithmetically anywhere.
+      expect(Math.cos(r.yaw)).toBeCloseTo(Math.cos(f.yaw));
+      expect(Math.sin(r.yaw)).toBeCloseTo(Math.sin(f.yaw));
     }
   });
 });

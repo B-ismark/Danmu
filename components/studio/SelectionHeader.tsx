@@ -65,7 +65,7 @@ export function SelectionHeader() {
         <button
           onClick={() => groupParts(selection)}
           className="ds-btn"
-          title="These pieces will move as one"
+          title="Keep these pieces together — one click selects the whole set"
           style={{ height: 26, fontSize: 11.5 }}
         >
           <Icon name="layers" size={11} /> Merge {selection.length}

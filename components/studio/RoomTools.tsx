@@ -30,9 +30,7 @@
 // save it first.
 
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -40,6 +38,16 @@ import {
   type ReactNode,
 } from 'react';
 import { useParams } from 'next/navigation';
+import { TURNING_DIAMETER } from '@/lib/clearance-field';
+
+/** The turning circle, in centimetres, for the two places the Step-free control
+ *  names it. Derived — `lib/clearance.ts` writes the same number into the finding
+ *  it produces, so a hand-typed "150 cm" here could disagree with the sentence
+ *  underneath it and nothing would fail. */
+const TURN_CM = Math.round(TURNING_DIAMETER * 100);
+
+const STEP_FREE_DESC_ID = 'step-free-desc';
+const STEP_FREE_DESC = `Report the ${TURN_CM} cm of turning space a wheelchair needs, and flag steps and thresholds`;
 import { useScene, type RoomShape } from '@/lib/scene-store';
 import { resolveParts, useRoomScene } from '@/lib/room-scene';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
@@ -382,7 +390,7 @@ export function RoomTools() {
 // after, so the answer is available rather than guessed at.
 
 /** Which improvement is worth naming, in the order a person would care. */
-const FIXED_PHRASE: Array<[keyof CostBreakdown, string]> = [
+const FIXED_PHRASE = [
   ['overlap', 'separated pieces that were in the same place'],
   ['outside', 'brought furniture back inside the room'],
   ['door', 'cleared the doorway'],
@@ -399,7 +407,7 @@ const FIXED_PHRASE: Array<[keyof CostBreakdown, string]> = [
   ['middle', 'brought the middle of the room together'],
   ['alignment', 'squared things up'],
   ['balance', 'evened out the weight in the room'],
-];
+] as const satisfies ReadonlyArray<readonly [keyof CostBreakdown, string]>;
 
 /** The two biggest genuine improvements, as a sentence. Below a whole cost unit a
  *  term has not really changed, and naming it would be flattery. */
@@ -417,7 +425,7 @@ function whatChanged(before: CostBreakdown, after: CostBreakdown): string {
  *  watches happen. A room-level summary is true and abstract; "the floor lamp moved
  *  beside the sofa it lights" is the sentence that makes a suggestion legible instead
  *  of surprising. `SolveResult.moves` names the term each move bought. */
-const MOVE_PHRASE: Partial<Record<keyof CostBreakdown, string>> = {
+const MOVE_PHRASE = {
   overlap: 'out of what it was standing in',
   outside: 'back inside the room',
   door: 'clear of the doorway',
@@ -430,14 +438,36 @@ const MOVE_PHRASE: Partial<Record<keyof CostBreakdown, string>> = {
   alignment: 'square to the room',
   relation: 'beside what it belongs with',
   balance: 'to even out the room',
-};
+} satisfies Partial<Record<keyof CostBreakdown, string>>;
+
+/**
+ * Compile-time proof that both phrase tables cover every cost term.
+ *
+ * `navigation` had been missing from both since the weight was added, so the one
+ * pass that exists to reconnect a stranded half of the room could never be
+ * credited — `whatChanged` filtered it out of the gains list and named the
+ * second-best improvement instead, or fell through to the bare "Undo puts the
+ * previous arrangement back." on a suggestion that had visibly rearranged the
+ * room. Nothing caught it: these are hand-maintained lists keyed on
+ * `keyof CostBreakdown`, and a missing key typechecks quite happily. Adding a
+ * weight now fails the build here instead, which is the only place that can
+ * notice.
+ *
+ * Two deliberate exceptions. `inertia` is the cost of moving at all, not an
+ * improvement anyone can see, so naming it would be nonsense. `total` is the sum of
+ * the others, so it is every phrase at once and none of them.
+ */
+type Nameable = Exclude<keyof CostBreakdown, 'inertia' | 'total'>;
+type AssertNever<T extends never> = T;
+type _FixedCoversEveryTerm = AssertNever<Exclude<Nameable, (typeof FIXED_PHRASE)[number][0]>>;
+type _MoveCoversEveryTerm = AssertNever<Exclude<Nameable, keyof typeof MOVE_PHRASE>>;
 
 /** The single biggest move, named. Null when the answer is better told room-wide —
  *  a piece that only turned, or a term with no sentence for it. */
 function biggestMove(moves: MoveReason[], parts: ScenePart[]): string | null {
   const top = [...moves].sort((a, b) => b.gain - a.gain)[0];
   if (!top) return null;
-  const phrase = MOVE_PHRASE[top.term];
+  const phrase = (MOVE_PHRASE as Partial<Record<keyof CostBreakdown, string>>)[top.term];
   const name = parts[top.index]?.name;
   if (!phrase || !name) return null;
   return top.distance < 0.05
@@ -814,16 +844,25 @@ function CheckSummary({
           that changes what the panel reports, and it has to be reachable by Tab and
           announce its own state. */}
       <label
-        title="Report the 150 cm of turning space a wheelchair needs, and flag steps and thresholds"
+        title={STEP_FREE_DESC}
         style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', color: 'var(--ink-2)' }}
       >
         <input
           type="checkbox"
           checked={stepFree}
           onChange={(e) => onStepFree(e.target.checked)}
+          // The `title` above is a hover affordance and nothing else — it never
+          // appears on keyboard focus, which is the whole reason `ui/Tooltip.tsx`
+          // exists. A Tooltip is wrong here (this control's name is already visible
+          // text, not a glyph); what was missing is the EXPLANATION, so it is given
+          // to assistive tech directly and the same string feeds both.
+          aria-describedby={STEP_FREE_DESC_ID}
           style={{ accentColor: 'var(--accent)', width: 14, height: 14, flexShrink: 0, cursor: 'pointer' }}
         />
-        Step-free <span style={{ color: 'var(--ink-3)' }}>· 150 cm</span>
+        Step-free <span style={{ color: 'var(--ink-3)' }}>· {TURN_CM} cm</span>
+        <span id={STEP_FREE_DESC_ID} className="sr-only">
+          {STEP_FREE_DESC}
+        </span>
       </label>
     </div>
   );
@@ -912,16 +951,13 @@ function IssueRow({
           {canSelect && (
             <button
               onClick={() => onShow(issue)}
-              className="ds-btn"
+              // `--ghost`, not an inline copy of it: `background:'none'` and a
+              // transparent border leave `.ds-btn`'s `box-shadow: var(--shadow-soft)`
+              // and its hover lift in place, so a borderless label sat on a drop
+              // shadow and rose when pointed at.
+              className="ds-btn ds-btn--ghost"
               title="Select the pieces involved and fly to them"
-              style={{
-                height: 24,
-                fontSize: 10,
-                padding: '0 8px',
-                background: 'none',
-                borderColor: 'transparent',
-                color: 'var(--accent-text)',
-              }}
+              style={{ height: 24, fontSize: 10, padding: '0 8px', color: 'var(--accent-text)' }}
             >
               Show me
             </button>
