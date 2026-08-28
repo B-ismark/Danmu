@@ -134,8 +134,16 @@ export function MeasureGuides() {
                 fontSize: 10,
                 fontWeight: 700,
                 letterSpacing: '0.04em',
-                color: 'var(--on-accent)',
-                background: color,
+                // The same treatment as the size tag below, and for the reason
+                // CLAUDE.md rule 4 gives: `--on-accent` (#FFFFFF) is contract-bound
+                // to `--accent`, and this used to paint it on `SCENE.accentHover` —
+                // the sage `--accent-2` — for 3.89:1 on 10px bold type, under the
+                // 4.5:1 that normal-size text needs. `SCENE.invalid` is a dark
+                // enough fill to carry it (4.78:1); the sage is not, so the valid
+                // state reads as ink on paper and keeps its colour in the border.
+                color: live.valid ? 'var(--ink)' : 'var(--on-accent)',
+                background: live.valid ? 'var(--paper-0)' : color,
+                border: `1px solid ${color}`,
                 padding: '1px 5px',
                 borderRadius: 'var(--r-1)',
                 whiteSpace: 'nowrap',

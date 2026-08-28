@@ -26,6 +26,15 @@ export type DragLiveInfo = {
    *  the dragged piece is itself the problem — `blocked` is the honest word then.
    *  The 2D plan says the same sentence through `announce` + a red outline. */
   blockedBy?: string;
+  /** Every piece to outline red this frame — the dragged one and whichever members
+   *  ran out of room.
+   *
+   *  Separate from `blockedBy` because they answer different questions: one is the
+   *  sentence (one name, or nobody finishes it), this is the drawing (all of them,
+   *  or the user fixes one piece at a time and the refusal appears to wander). Read
+   *  with a per-part selector so only the pieces whose state actually CHANGES
+   *  re-render — the whole point of this channel living outside `useStudio`. */
+  blockedIds?: string[];
   /** item-to-item alignment lines that magnetised this frame */
   snapLines?: SnapLine[];
 } | null;

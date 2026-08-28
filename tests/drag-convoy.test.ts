@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planConvoy, resolveConvoy, convoyRestore, travellingWorld, type Convoy } from '@/lib/drag-convoy';
+import { planConvoy, resolveConvoy, convoyRestore, gestureFor, travellingWorld, type Convoy } from '@/lib/drag-convoy';
 import { resolvePlacement } from '@/lib/drag-resolve';
 import { selectionForPick, type ScenePart } from '@/lib/scene-spec';
 import type { Poly } from '@/lib/geometry';
@@ -41,8 +41,16 @@ function carry(
   from: [number, number, number],
   to: [number, number, number],
   rot = 0,
+  /** Which members already carry a position override. Defaults to NONE, which is
+   *  what a fresh fixture room actually looks like — nothing has been dragged, so
+   *  `useStudio.positions` is empty. Only the zero-delta path reads it. */
+  memberHasPosOverride: (id: string) => boolean = () => false,
+  /** What the user is doing. `'move'` for almost every test here; the ones that
+   *  care pass `'turn'` and assert the company stays put. */
+  gesture: 'move' | 'turn' = 'move',
 ) {
   return resolveConvoy({
+    gesture,
     convoy,
     draggedId,
     pos: to,
@@ -57,11 +65,12 @@ function carry(
     startPos: from,
     footprint: ROOM,
     roomHeight: H,
+    memberHasPosOverride,
   });
 }
 
 function plan(draggedId: string, world: ScenePart[], selection: string[] = [], parentIds: Record<string, string> = {}) {
-  return planConvoy({ draggedId, parts: world, selection, parentIds, footprint: ROOM });
+  return planConvoy({ draggedId, parts: world, selection, parentIds, footprint: ROOM, roomHeight: H });
 }
 
 const posOf = (moves: Array<{ id: string; pos: [number, number, number] }>, id: string) =>
@@ -157,6 +166,49 @@ describe('planConvoy — who travels', () => {
     expect(c.travelling.has('lamp')).toBe(true);
   });
 
+  it('keeps a merged pair together when only a MEMBER is carrying half of it', () => {
+    // danmu-62, reviewing the commit before this one. The group closure covered the
+    // dragged piece's rigid children and not a member's, so the danmu-39 defect
+    // reproduced one layer out. P and Q are merged but rest on different supports —
+    // P on the desk, Q on the floor beside it — so `snapshotDescendants(desk)`
+    // returns P alone and Q was never offered to the closure.
+    //
+    // The asymmetry is the tell: dragging the DESK worked, because then P is in
+    // `own`. Same feature, two answers, depending on which piece of the selection
+    // was under the hand.
+    const world = [
+      part({ id: 'chair', pos: [0.5, 0, 0.5], dimMM: [500, 500, 900] }),
+      part({ id: 'desk', pos: [2, 0, 2], dimMM: [1400, 700, 750] }),
+      part({ id: 'p', pos: [2, 0.75, 2], dimMM: [300, 300, 300], groupId: 'g' }),
+      part({ id: 'q', pos: [3.2, 0, 2], dimMM: [300, 300, 300], groupId: 'g' }),
+    ];
+    const c = plan('chair', world, ['chair', 'desk'], { p: 'desk' });
+    // The fixture only means something if P really is carried and Q really is not a
+    // rigid child of the desk — otherwise this passes for the wrong reason.
+    expect(c.members.map((m) => m.part.id)).toContain('desk');
+    expect(c.members.find((m) => m.part.id === 'desk')!.descendants.map((d) => d.id)).toEqual(['p']);
+    expect(c.travelling.has('q')).toBe(true);
+  });
+
+  it('closes merged groups to a FIXED POINT, not one hop', () => {
+    // The wrinkle in the fix above: a sibling pulled in becomes a member, that member
+    // has rigid children of its own, and those can belong to a third group. Here P
+    // (on the desk) pulls in Q, Q carries R, and R pulls in S. A single pass reaches
+    // Q and stops, leaving S behind — the same bug with a longer fixture.
+    const world = [
+      part({ id: 'chair', pos: [0.5, 0, 0.5], dimMM: [500, 500, 900] }),
+      part({ id: 'desk', pos: [2, 0, 2], dimMM: [1400, 700, 750] }),
+      part({ id: 'p', pos: [2, 0.75, 2], dimMM: [300, 300, 300], groupId: 'g1' }),
+      part({ id: 'q', pos: [3.2, 0, 2], dimMM: [300, 300, 300], groupId: 'g1' }),
+      part({ id: 'r', pos: [3.2, 0.3, 2], dimMM: [200, 200, 200], groupId: 'g2' }),
+      part({ id: 's', pos: [4.2, 0, 2], dimMM: [200, 200, 200], groupId: 'g2' }),
+    ];
+    const c = plan('chair', world, ['chair', 'desk'], { p: 'desk', r: 'q' });
+    expect(c.travelling.has('q')).toBe(true); // first hop
+    expect(c.members.find((m) => m.part.id === 'q')!.descendants.map((d) => d.id)).toEqual(['r']);
+    expect(c.travelling.has('s')).toBe(true); // second hop — the fixed point
+  });
+
   // ─── The other half: what a click selects ───────────────────────────────
   //
   // `selectionForPick` lives in lib/scene-spec.ts and is tested here rather than
@@ -172,23 +224,65 @@ describe('planConvoy — who travels', () => {
     ];
 
     it('takes a merged set whole', () => {
-      expect(selectionForPick(world, 'side-l').sort()).toEqual(['side-l', 'side-r']);
-      expect(selectionForPick(world, 'side-r').sort()).toEqual(['side-l', 'side-r']);
+      expect(selectionForPick(world, 'side-l', []).sort()).toEqual(['side-l', 'side-r']);
+      expect(selectionForPick(world, 'side-r', []).sort()).toEqual(['side-l', 'side-r']);
     });
 
     it('takes just the piece when it is in no group', () => {
-      expect(selectionForPick(world, 'chair')).toEqual(['chair']);
+      expect(selectionForPick(world, 'chair', [])).toEqual(['chair']);
     });
 
     it('takes just the piece when its group has no one else left in it', () => {
       // `deletePart` does not scrub a surviving member's `groupId` (see
       // lib/part-rows.ts), so a lone part carrying a dead group id is a real state
       // and must not select something that is not there.
-      expect(selectionForPick(world, 'lone')).toEqual(['lone']);
+      expect(selectionForPick(world, 'lone', [])).toEqual(['lone']);
     });
 
     it('never returns a piece that is not in the world', () => {
-      expect(selectionForPick(world, 'ghost')).toEqual(['ghost']);
+      expect(selectionForPick(world, 'ghost', [])).toEqual(['ghost']);
+    });
+
+    // ── Drill-in ──
+    //
+    // Click a merged set, get the set; click again inside it, get the piece. The
+    // rule is a question about the SELECTION — "is it entirely inside this group" —
+    // rather than a count of clicks, which is what makes the sibling case below come
+    // out right instead of bouncing back to the whole set.
+    it('drills in to the one piece on a pick made from inside the set', () => {
+      const whole = ['side-l', 'side-r'];
+      expect(selectionForPick(world, 'side-r', whole)).toEqual(['side-r']);
+      expect(selectionForPick(world, 'side-l', whole)).toEqual(['side-l']);
+    });
+
+    it('stays at the member level when the next pick is a SIBLING', () => {
+      // The case a click counter gets wrong: drilled in to one sideboard, pointing
+      // at the other must give you that other one, not throw you back out to the
+      // pair. Reads as the drill-in forgetting itself otherwise.
+      expect(selectionForPick(world, 'side-l', ['side-r'])).toEqual(['side-l']);
+    });
+
+    it('takes the set whole again once the selection has left the group', () => {
+      // How you climb out: Escape or a click on empty floor clears the selection,
+      // and an empty selection is outside every group. No new gesture needed — which
+      // is only true because `every` over an empty list is deliberately not treated
+      // as "inside".
+      expect(selectionForPick(world, 'side-l', []).sort()).toEqual(['side-l', 'side-r']);
+      expect(selectionForPick(world, 'side-l', ['chair']).sort()).toEqual(['side-l', 'side-r']);
+    });
+
+    it('takes the set whole when the selection reaches outside the group', () => {
+      // A multi-selection spanning the group and something else is not "inside" it,
+      // so clicking the set collapses to the set rather than to one piece.
+      expect(selectionForPick(world, 'side-l', ['side-l', 'side-r', 'chair']).sort()).toEqual([
+        'side-l',
+        'side-r',
+      ]);
+    });
+
+    it('is unmoved by drill-in for a piece in no group', () => {
+      expect(selectionForPick(world, 'chair', ['chair'])).toEqual(['chair']);
+      expect(selectionForPick(world, 'lone', ['lone'])).toEqual(['lone']);
     });
   });
 
@@ -223,7 +317,7 @@ describe('travellingWorld — the world any travelling piece resolves against', 
   it('keeps the piece itself, so its own collisions are still seen', () => {
     const w = world();
     const c = plan('a', w, ['a', 'mate']);
-    const mine = travellingWorld(c, w, 3, 0);
+    const mine = travellingWorld(c, w, 3, 0, c.own);
     expect(mine.some((p) => p.id === 'a')).toBe(true);
     // Straight into the column, which is not travelling and so did not move.
     const r = resolvePlacement({
@@ -238,7 +332,7 @@ describe('travellingWorld — the world any travelling piece resolves against', 
     const c = plan('a', w, ['a', 'mate']);
     // Sliding 1 m east: `mate` travels too, so it is no longer at x = 2 — it is at
     // x = 3, and that is where it must be seen, not nowhere.
-    const mine = travellingWorld(c, w, 1, 0);
+    const mine = travellingWorld(c, w, 1, 0, c.own);
     expect(mine.find((p) => p.id === 'mate')!.pos[0]).toBeCloseTo(3, 6);
     const ok = resolvePlacement({
       part: w[0], rawX: 2, rawZ: 1, rot: 0, dim: w[0].dimMM,
@@ -260,7 +354,7 @@ describe('travellingWorld — the world any travelling piece resolves against', 
     const c = plan('lamp', w, ['lamp', 'desk']);
     // A full metre, not a nudge: at 10 mm an UNSHIFTED desk is still under the
     // lamp, so a short drag cannot tell shifting from doing nothing.
-    const mine = travellingWorld(c, w, 1, 0);
+    const mine = travellingWorld(c, w, 1, 0, c.own);
     const r = resolvePlacement({
       part: lamp, rawX: 3, rawZ: 2, rot: 0, dim: lamp.dimMM,
       parts: mine, footprint: ROOM, roomHeight: H, snapMode: 'off',
@@ -401,10 +495,14 @@ describe('resolveConvoy — where the company lands', () => {
     expect(r.moves.some((m) => m.id === 'mate')).toBe(false);
   });
 
-  it('moves nobody when the gesture moved nothing', () => {
+  it('writes nothing back for a gesture that never wrote anything', () => {
+    // Zero delta with no member overrides in the store: the gesture has not moved
+    // the company, so there is nothing to put back and a move here would be a pin
+    // on every selected piece. The other half — zero delta AFTER a frame that DID
+    // move — is asserted below, and it is the half that was missing.
     const world = three();
     const c = plan('a', world, ['a', 'b', 'c']);
-    const r = carry(c, 'a', world, [1, 0, 1], [1, 0, 1]);
+    const r = carry(c, 'a', world, [1, 0, 1], [1, 0, 1], 0, () => false);
     expect(r.moves).toEqual([]);
     expect(r.valid).toBe(true);
   });
@@ -439,7 +537,9 @@ describe('convoyRestore — what Escape puts back', () => {
     const world = [sofa, stool, art];
     const c = plan('sofa', world, ['sofa', 'stool', 'art']);
 
-    const back = convoyRestore(c, 'sofa', [3, 0, 2], 0);
+    // Only the painting has been turned, so only the painting has a rotation
+    // override; everything has a position override, because the gesture moved.
+    const back = convoyRestore(c, 'sofa', [3, 0, 2], 0, () => true, (id) => id === 'art');
     const m = (id: string) => back.find((x) => x.id === id)!;
     expect('rot' in m('stool')).toBe(false);
     expect('rot' in m('art')).toBe(true);
@@ -457,8 +557,26 @@ describe('convoyRestore — what Escape puts back', () => {
     // the override exists and Escape has to write the start value into it.
     const sofa = part({ id: 'sofa', pos: [3, 0, 2], dimMM: [2000, 900, 800], category: 'sofa', shape: 'sofa', rot: 1.1 });
     const c = plan('sofa', [sofa], ['sofa']);
-    const back = convoyRestore(c, 'sofa', [3, 0, 2], 1.1, true);
+    const back = convoyRestore(c, 'sofa', [3, 0, 2], 1.1, () => true, () => true);
     expect(back.find((x) => x.id === 'sofa')!.rot).toBe(1.1);
+  });
+
+  it('leaves the DRAGGED piece alone when the gesture wrote nothing about it', () => {
+    // In 3D nothing writes the dragged piece's own transform until `commit()`, so
+    // an Escape mid-drag has nothing of its to undo — the object3D has already been
+    // put back imperatively. This used to emit `{ id, pos, rot }` unconditionally,
+    // which made cancelling a drag the one path in the app that could INVENT a
+    // position override out of a gesture the user explicitly abandoned.
+    const sofa = part({ id: 'sofa', pos: [3, 0, 2], dimMM: [2000, 900, 800], category: 'sofa', shape: 'sofa' });
+    const stool = part({ id: 'stool', pos: [1, 0, 1], dimMM: [400, 400, 450], category: 'ottoman', shape: 'ottoman' });
+    const c = plan('sofa', [sofa, stool], ['sofa', 'stool']);
+    const none = convoyRestore(c, 'sofa', [3, 0, 2], 0, () => false, () => false);
+    expect(none.some((x) => x.id === 'sofa')).toBe(false);
+    expect(none.some((x) => x.id === 'stool')).toBe(false);
+    // …and a single overridden axis is enough to bring the piece back.
+    const some = convoyRestore(c, 'sofa', [3, 0, 2], 0, (id) => id === 'sofa', () => false);
+    expect(some.find((x) => x.id === 'sofa')!.pos).toEqual([3, 0, 2]);
+    expect(some.some((x) => x.id === 'stool')).toBe(false);
   });
 
   it('leaves a wall rider alone when it has no rotation override to put back', () => {
@@ -470,10 +588,10 @@ describe('convoyRestore — what Escape puts back', () => {
     const art = part({ id: 'art', pos: [2, 1.4, 0.05], dimMM: [900, 40, 600], category: 'painting', shape: 'painting', rot: 2 });
     const c = plan('sofa', [sofa, art], ['sofa', 'art']);
 
-    const none = convoyRestore(c, 'sofa', [3, 0, 2], 0, false, () => false);
+    const none = convoyRestore(c, 'sofa', [3, 0, 2], 0, () => true, () => false);
     expect('rot' in none.find((x) => x.id === 'art')!).toBe(false);
 
-    const some = convoyRestore(c, 'sofa', [3, 0, 2], 0, false, (id) => id === 'art');
+    const some = convoyRestore(c, 'sofa', [3, 0, 2], 0, () => true, (id) => id === 'art');
     expect(some.find((x) => x.id === 'art')!.rot).toBe(2);
   });
 });
@@ -549,8 +667,8 @@ describe('a wall rider leading a set', () => {
   // divergent rotation, and a message about the wrong piece.
   const tv = () =>
     part({ id: 'tv', category: 'tv', shape: 'tv', dimMM: [1200, 100, 700], pos: [2, 1.4, 0.07] });
-  const chair = () =>
-    part({ id: 'chair', category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 900], pos: [2, 0, 2] });
+  const chair = (z = 2) =>
+    part({ id: 'chair', category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 900], pos: [2, 0, z] });
 
   /** The dragged piece's own resolve, exactly as either surface performs it. */
   function lead(p: ScenePart, world: ScenePart[], rawX: number, rawZ: number, wallEdge: number | null) {
@@ -609,17 +727,31 @@ describe('a wall rider leading a set', () => {
     // own. Unpinned it rounded the corner and arrived facing a different way from
     // the set it left with — and the rigidity exemption for wall riders hid it,
     // because a flip is a "correction" of any size.
-    const world = [tv(), chair()];
+    // Far enough south that the TV's TARGET is nearer some other wall than its own,
+    // which is the only condition under which the pin does anything. In this 6 x 4 m
+    // room the TV sits at z = 0.07, so its target is 0.07 + DZ; the north wall is
+    // that far away and the south wall 4 minus it, and the two cross at DZ = 1.93.
+    // The previous version dragged 1.7 m — under a comment that said 2 m, which is
+    // how it went unnoticed — so the north wall stayed nearest, no flip was on
+    // offer, and the test passed just as well with the pin deleted.
+    const DZ = 2.1;
+    const from: [number, number, number] = [2, 0, 1.2];
+    const world = [tv(), chair(from[2])];
     const c = plan('chair', world, ['chair', 'tv']);
     expect(c.members.map((m) => [m.part.id, m.edge])).toEqual([['tv', 0]]);
 
-    // Drag the chair 2 m south — a delta that is almost entirely wall-normal for
-    // the TV, and enough to make the south wall the nearer one.
-    const co = carry(c, 'chair', world, [2, 0, 2], [2, 0, 3.7]);
+    const co = carry(c, 'chair', world, from, [from[0], 0, from[2] + DZ]);
     const mv = co.moves.find((m) => m.id === 'tv');
     expect(mv).toBeDefined();
     expect(mv!.rot).toBeUndefined(); // no rotation written, so no override created
     expect(mv!.pos[2]).toBeCloseTo(0.07, 5);
+
+    // The control, and without it the assertion above claims nothing: handed the
+    // SAME target with no pin, the TV crosses the room to the far wall and turns to
+    // face back the other way. That is the jump the member is being spared.
+    const loose = lead(world[0], world, from[0], tv().pos[2] + DZ, null);
+    expect(loose.pos[2]).toBeGreaterThan(3.5);
+    expect(Math.abs(loose.rot)).toBeCloseTo(Math.PI, 5);
   });
 
   it('holds a pinned lead at the end of its wall rather than past it', () => {
@@ -787,5 +919,403 @@ describe('the world a member resolves against', () => {
     const mv = co.moves.find((m) => m.id === 'tv')!;
     expect(mv.pos[2]).toBeCloseTo(0.07, 5);
     expect(mv.rot).toBeUndefined();
+  });
+});
+
+describe('a piece is hidden from its own resolve — its children ride, they do not obstruct', () => {
+  // `lib/drag-resolve.ts` documents the contract in as many words: `parts` arrives
+  // "with this piece's own rigid descendants filtered out — a part must not resolve
+  // its gravity against a child this same move is about to carry out from under
+  // it." Both drag paths stopped honouring it when the world moved in here, and
+  // nothing said so, because the two functions that read the list fail QUIETLY:
+  // `findSupportDetailed` has no below-test at all (it takes the highest top
+  // covering half the mover's footprint, above or below), and `collidesAt` returns
+  // false for a mover it cannot find.
+  const stand = () => part({ id: 'stand', category: 'nightstand', shape: 'nightstand', dimMM: [450, 400, 550], pos: [2, 0, 2] });
+  const plant = () => part({ id: 'plant', category: 'plant', shape: 'plant', dimMM: [400, 400, 1600], pos: [2, 0.55, 2] });
+
+  it('does not stand the DRAGGED piece on the plant it is carrying', () => {
+    // Shifting the plant to where it is GOING puts it straight back on top of the
+    // nightstand — at every delta, so no drag was long enough to escape it. The
+    // stand resolved onto its own plant at y = 2.15, and 2.15 + 0.55 is through a
+    // 2.5 m ceiling: the piece was simply undraggable, in both tabs, and the only
+    // thing on screen was a red highlight that never went green.
+    const [s0, p0] = [stand(), plant()];
+    const w = [s0, p0];
+    const c = plan('stand', w, ['stand'], { plant: 'stand' });
+    expect(c.own.map((d) => d.id)).toEqual(['plant']);
+    const mine = travellingWorld(c, w, 1, 0, c.own);
+    expect(mine.some((p) => p.id === 'plant')).toBe(false);
+    const r = resolvePlacement({
+      part: s0, rawX: 3, rawZ: 2, rot: 0, dim: s0.dimMM,
+      parts: mine, footprint: ROOM, roomHeight: H, snapMode: 'off',
+    });
+    expect(r.valid).toBe(true);
+    expect(r.pos[1]).toBeCloseTo(0, 6);
+    expect(r.supportId).toBeUndefined();
+  });
+
+  it('does not stand a MEMBER on the plant it is carrying either', () => {
+    // Same defect one piece over, and the one that is invisible from the dragged
+    // piece's side: `resolveConvoy` builds every member's world itself, so a member
+    // with something on it was climbing its own child while the piece under the
+    // hand behaved perfectly.
+    const [s0, p0] = [stand(), plant()];
+    const lead = part({ id: 'lead', pos: [0.6, 0, 2], dimMM: [800, 800, 400] });
+    const w = [lead, s0, p0];
+    const c = plan('lead', w, ['lead', 'stand'], { plant: 'stand' });
+    expect(c.members.map((m) => m.part.id)).toEqual(['stand']);
+    expect(c.members[0].descendants.map((d) => d.id)).toEqual(['plant']);
+    const co = carry(c, 'lead', w, [0.6, 0, 2], [1.6, 0, 2]);
+    expect(co.valid).toBe(true);
+    expect(posOf(co.moves, 'stand')).toEqual([3, 0, 2]);
+  });
+});
+
+describe('a member drops its whole subtree, not just the link', () => {
+  // `lead` is dragged; a table M and the tray C standing on it are both in the
+  // selection, and a book G stands on the tray. C is carried as a MEMBER, so it is
+  // removed from M's descendant list — and the old filter removed only C, leaving G
+  // behind with `parentId: 'C'` in a cascade that is not computing C.
+  // `cascadeTransform` then dropped G with `if (!parent) continue`, silently, having
+  // already put it in `travelling` so the world was shifting a phantom of it.
+  //
+  // Asserted in BOTH `parts` orders because the old behaviour depended on which
+  // member `planConvoy` reached first — with the tray listed before the table it
+  // worked. That is exactly why a single-order fixture would have shipped green.
+  const scene = () => ({
+    lead: part({ id: 'lead', pos: [1, 0, 1], dimMM: [800, 800, 400] }),
+    M: part({ id: 'M', pos: [3, 0, 1], dimMM: [1000, 1000, 700] }),
+    C: part({ id: 'C', pos: [3, 0.7, 1], dimMM: [400, 400, 100] }),
+    G: part({ id: 'G', pos: [3, 0.8, 1], dimMM: [200, 200, 50] }),
+  });
+
+  for (const order of ['table first', 'tray first'] as const) {
+    it(`carries the grandchild — ${order}`, () => {
+      const s = scene();
+      const w = order === 'table first' ? [s.lead, s.M, s.C, s.G] : [s.lead, s.C, s.M, s.G];
+      const c = plan('lead', w, ['lead', 'M', 'C'], { C: 'M', G: 'C' });
+      // G travels either way; the question is whether anything actually moves it.
+      expect(c.travelling.has('G')).toBe(true);
+      const co = carry(c, 'lead', w, [1, 0, 1], [1.5, 0, 1]);
+      expect(co.valid).toBe(true);
+      expect(posOf(co.moves, 'C')).toEqual([3.5, 0.7, 1]);
+      expect(posOf(co.moves, 'G')).toEqual([3.5, 0.8, 1]);
+    });
+  }
+});
+
+describe('a delta that comes back to zero still says where the company is', () => {
+  it('returns every member at its start position when dx and dz are both 0', () => {
+    // The company is written LIVE, frame by frame, by both surfaces. So a drag out
+    // and back to the exact start — reachable, and likelier with the grid snap on —
+    // left the members at the last non-zero delta and emitted nothing to put them
+    // back: `commit()` then persisted the set 1 m out of formation, and the next
+    // drag started from there.
+    //
+    // `Draggable.commit()` leans on this in writing: its invalid-drop fallback
+    // slides to the pre-drag position "which makes the delta zero and the company's
+    // answer 'stay'". That answer has to exist for the sentence to be true.
+    const w = [
+      part({ id: 'a', pos: [1, 0, 1], dimMM: [800, 800, 400] }),
+      part({ id: 'b', pos: [3, 0, 1], dimMM: [800, 800, 400] }),
+    ];
+    const c = plan('a', w, ['a', 'b']);
+    const out = carry(c, 'a', w, [1, 0, 1], [2, 0, 1]);
+    expect(posOf(out.moves, 'b')).toEqual([4, 0, 1]);
+    // That frame wrote `positions.b`, which is exactly what the predicate reports
+    // on the frame that comes home.
+    const home = carry(c, 'a', w, [1, 0, 1], [1, 0, 1], 0, () => true);
+    expect(home.valid).toBe(true);
+    expect(posOf(home.moves, 'b')).toEqual([3, 0, 1]);
+  });
+});
+
+describe('a turn is not a translation, whatever the clamp did', () => {
+  // A 2.0 x 0.9 m sofa flat against the z = 0 wall, and a chair elsewhere in the
+  // selection. Turning the sofa to 45° grows its z half-extent from 0.45 m to about
+  // 1.025 m, and `resolvePlacement`'s containment clamp is a function of exactly
+  // that — so the sofa MUST move, correctly, to stay inside the room.
+  //
+  // `resolveConvoy` used to infer "did the gesture translate" from
+  // `pos - startPos`, so it read that clamp as a drag and translated the chair by
+  // it: 575 mm across the room, reported valid, persisted. Found by danmu-39.
+  const sofa = () => part({ id: 'sofa', category: 'sofa', shape: 'sofa', dimMM: [2000, 900, 800], pos: [3, 0, 0.45] });
+  const chair = () => part({ id: 'chair', category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 900], pos: [3, 0, 3] });
+  const turned = (w: ScenePart[]) =>
+    resolvePlacement({
+      part: w[0], rawX: 3, rawZ: 0.45, rot: Math.PI / 4, dim: w[0].dimMM,
+      parts: w, footprint: ROOM, roomHeight: H, snapMode: 'off',
+    });
+
+  it('the clamp really does move a piece that only turned', () => {
+    // Without this the two tests below would pass on a sofa that never moved, and
+    // would be asserting nothing at all.
+    const w = [sofa(), chair()];
+    const r = turned(w);
+    expect(r.pos[2]).toBeGreaterThan(1);
+  });
+
+  it('leaves the company where it is', () => {
+    const w = [sofa(), chair()];
+    const c = plan('sofa', w, ['sofa', 'chair']);
+    const r = turned(w);
+    const co = carry(c, 'sofa', w, [3, 0, 0.45], r.pos, Math.PI / 4, () => false, 'turn');
+    expect(co.valid).toBe(true);
+    expect(co.moves.some((m) => m.id === 'chair')).toBe(false);
+  });
+
+  it('…and carries it for the very same numbers when the gesture was a drag', () => {
+    // The control. Identical delta, identical world — only the gesture differs, so
+    // this pair fails if `gesture` is ignored in either direction.
+    const w = [sofa(), chair()];
+    const c = plan('sofa', w, ['sofa', 'chair']);
+    const r = turned(w);
+    const co = carry(c, 'sofa', w, [3, 0, 0.45], r.pos, Math.PI / 4, () => false, 'move');
+    const moved = posOf(co.moves, 'chair');
+    expect(moved).toBeDefined();
+    expect(moved![2]).toBeGreaterThan(3.4);
+  });
+});
+
+describe('every member that refused is reported, not just the first', () => {
+  it('names one piece and outlines all of them', () => {
+    // Two chairs at the east end of the 6 m room, dragged 2 m further east. Both are
+    // pinned by the containment clamp, so neither arrives where the set sent it and
+    // both refuse. `blocked` is deliberately still ONE piece — a sentence naming
+    // four is a sentence nobody finishes — but the drawing has no such limit, and it
+    // used to inherit one: a set stopped by several pieces outlined one, the user
+    // moved it, tried again, and was stopped by the next.
+    const w = [
+      part({ id: 'lead', pos: [1, 0, 1], dimMM: [800, 800, 400] }),
+      part({ id: 'east1', pos: [5, 0, 1], dimMM: [800, 800, 400] }),
+      part({ id: 'east2', pos: [5, 0, 3], dimMM: [800, 800, 400] }),
+    ];
+    const c = plan('lead', w, ['lead', 'east1', 'east2']);
+    const co = carry(c, 'lead', w, [1, 0, 1], [3, 0, 1]);
+    expect(co.valid).toBe(false);
+    expect(co.blocked?.id).toBe('east1');
+    expect([...co.blockedIds].sort()).toEqual(['east1', 'east2']);
+  });
+
+  it('is empty when the set can go', () => {
+    const w = [
+      part({ id: 'lead', pos: [1, 0, 1], dimMM: [800, 800, 400] }),
+      part({ id: 'mate', pos: [3, 0, 1], dimMM: [800, 800, 400] }),
+    ];
+    const c = plan('lead', w, ['lead', 'mate']);
+    expect(carry(c, 'lead', w, [1, 0, 1], [1.5, 0, 1]).blockedIds).toEqual([]);
+  });
+});
+
+describe('a merged pair is not split by the rigid path', () => {
+  it('carries the other half of a group the drag picked up as a child', () => {
+    // Desk D with A standing on it; A and B are merged. Selection is just [D], so
+    // the SELECTION path pulls in nobody — A comes along because it is physically
+    // resting on the desk. The group closure was removed on the grounds that "a
+    // merged set is already selected whole by a click", which is true of the
+    // selection path and says nothing about this one: B stayed behind and the pair
+    // came apart, from a gesture that never touched the selection. Found by
+    // danmu-39.
+    const desk = part({ id: 'D', category: 'desk', shape: 'desk-standard', dimMM: [1400, 700, 750], pos: [2, 0, 2] });
+    const a = part({ id: 'A', category: 'lamp', shape: 'lamp-table', dimMM: [200, 200, 400], pos: [2, 0.75, 2], groupId: 'g' });
+    const b = part({ id: 'B', category: 'lamp', shape: 'lamp-table', dimMM: [200, 200, 400], pos: [4.5, 0, 1], groupId: 'g' });
+    const w = [desk, a, b];
+    const c = plan('D', w, ['D'], { A: 'D' });
+    expect(c.own.map((d) => d.id)).toEqual(['A']);
+    expect(c.members.map((m) => m.part.id)).toEqual(['B']);
+    const co = carry(c, 'D', w, [2, 0, 2], [2.5, 0, 2]);
+    expect(co.valid).toBe(true);
+    expect(posOf(co.moves, 'A')).toEqual([2.5, 0.75, 2]);
+    expect(posOf(co.moves, 'B')).toEqual([5, 0, 1]);
+  });
+
+  it('still lets a selection hold half a group on purpose', () => {
+    // The verdict the closure removal was made for, unchanged: dragging one member
+    // of a group that the SELECTION holds only half of moves that half. Only the
+    // rigid path closes the group, and a rigid child is not a selection.
+    const a = part({ id: 'A', pos: [1, 0, 1], dimMM: [800, 800, 400], groupId: 'g' });
+    const b = part({ id: 'B', pos: [4, 0, 1], dimMM: [800, 800, 400], groupId: 'g' });
+    const w = [a, b];
+    expect(plan('A', w, ['A']).members).toEqual([]);
+  });
+});
+
+describe('a turn leaves the company where it is standing', () => {
+  const world = () => [
+    part({ id: 'a', pos: [1, 0, 1], dimMM: [800, 800, 400] }),
+    part({ id: 'b', pos: [3, 0, 1], dimMM: [800, 800, 400] }),
+  ];
+
+  it('does not haul members back to their start when the set has already travelled', () => {
+    // A wheel notch is a turn, and it lands on whatever the drag has already done —
+    // here a set that is 1 m out. Folding the turn into the zero-delta path made it
+    // borrow that path's RESTORE, which is the right answer for a drag that came
+    // home and the wrong one here: the piece under the hand turned, and its company
+    // jumped back to where the gesture began.
+    const w = world();
+    const c = plan('a', w, ['a', 'b']);
+    const turned = carry(c, 'a', w, [1, 0, 1], [2, 0, 1], 0.4, () => true, 'turn');
+    expect(turned.valid).toBe(true);
+    expect(turned.moves.some((m) => m.id === 'b')).toBe(false);
+  });
+
+  it('…while a MOVE that genuinely came home still puts them back', () => {
+    // The control, and it is the whole reason the zero-delta restore exists: both
+    // surfaces write members live, frame by frame, so a drag out and back leaves
+    // them at the last non-zero delta unless something says "stay".
+    const w = world();
+    const c = plan('a', w, ['a', 'b']);
+    const home = carry(c, 'a', w, [1, 0, 1], [1, 0, 1], 0, () => true, 'move');
+    expect(posOf(home.moves, 'b')).toEqual([3, 0, 1]);
+  });
+});
+
+describe('the zero-delta restore does not pin what it did not move', () => {
+  it('leaves a rigid child alone when only its parent carries an override', () => {
+    // A member's override is not its child's. A side table dragged at some point
+    // carries one; the lamp standing on it may never have been touched. Writing the
+    // lamp's unchanged position stamps it with a pin — against a re-detect, and
+    // persisted — for the crime of standing on something that was selected.
+    const lead = part({ id: 'lead', pos: [1, 0, 1], dimMM: [800, 800, 400] });
+    const desk = part({ id: 'D', category: 'desk', shape: 'desk-standard', dimMM: [1400, 700, 750], pos: [3, 0, 3] });
+    const lamp = part({ id: 'L', category: 'lamp', shape: 'lamp-table', dimMM: [200, 200, 400], pos: [3, 0.75, 3] });
+    const w = [lead, desk, lamp];
+    const c = plan('lead', w, ['lead', 'D'], { L: 'D' });
+    expect(c.members.map((m) => m.part.id)).toEqual(['D']);
+    expect(c.members[0].descendants.map((d) => d.id)).toEqual(['L']);
+    const out = carry(c, 'lead', w, [1, 0, 1], [1, 0, 1], 0, (id) => id === 'D', 'move');
+    expect(out.moves.some((m) => m.id === 'D')).toBe(true);
+    expect(out.moves.some((m) => m.id === 'L')).toBe(false);
+  });
+});
+
+describe('gestureFor: while the gizmo is active it owns the whole answer', () => {
+  // This decision lived inside `Draggable` where nothing could test it, and it
+  // shipped a hole in exactly the place the component made invisible. The wheel and
+  // the two-finger twist set a ref, because both turn a piece while the pointer
+  // stands still; `Draggable`'s pointer-move handler clears that ref — and returns
+  // early for the whole gizmo gesture, so for the gizmo's duration the one line
+  // that clears it is unreachable. Found by danmu-cb in review.
+
+  it('a gizmo TRANSLATE is a move even when the wheel has just been used', () => {
+    // The defect, exactly: wheel-rotate mid-drag, release, then pull the translate
+    // arrow. This returned 'turn', so the rest of the selection stayed behind —
+    // silent, and indistinguishable from "sometimes only one moves".
+    expect(gestureFor(true, 'translate', true)).toBe('move');
+  });
+
+  it('a gizmo ROTATE or SCALE is a turn, ref or no ref', () => {
+    expect(gestureFor(true, 'rotate', false)).toBe('turn');
+    expect(gestureFor(true, 'scale', false)).toBe('turn');
+    expect(gestureFor(true, 'rotate', true)).toBe('turn');
+  });
+
+  it('with no gizmo, the ref is the answer', () => {
+    // A plain pointer drag is a translation whatever `transformMode` says, which is
+    // why the mode is not consulted on this path.
+    expect(gestureFor(false, 'rotate', false)).toBe('move');
+    expect(gestureFor(false, 'translate', true)).toBe('turn');
+  });
+});
+
+describe("a member's veto is for what this gesture broke", () => {
+  // The veto used to be absolute, so a member that was ALREADY illegal refused
+  // every delta the set was ever offered and the whole thing was inert — in every
+  // direction, forever, including the ones that would have fixed it. Reported from
+  // a T-shaped room as "I merged the dining table and its chairs and now nothing
+  // moves at all", which does not read as a refusal; it reads as the drag being
+  // broken. Both fixtures below are ordinary rooms in ordinary use.
+
+  /** A T: a 6 x 2 bar across the north, a 2 x 2 stem hanging south from the
+   *  middle of it. The two south corners are inside the bounding box and are not
+   *  floor, which is the only place this can be seen — in a rectangle the two
+   *  coincide and every one of these assertions would pass with the fix deleted. */
+  const TEE: Poly = [
+    [0, 0],
+    [6, 0],
+    [6, 2],
+    [4, 2],
+    [4, 4],
+    [2, 4],
+    [2, 2],
+    [0, 2],
+  ];
+  const chair = (id: string, x: number, z: number, gid = 'g1') =>
+    part({ id, category: 'seating', shape: 'dining-chair', dimMM: [450, 500, 900], pos: [x, 0, z], groupId: gid } as never);
+  const diner = (id: string, x: number, z: number, gid = 'g1') =>
+    part({ id, category: 'table', shape: 'dining-table', dimMM: [1600, 900, 750], pos: [x, 0, z], groupId: gid } as never);
+
+  function tee(draggedId: string, world: ScenePart[], selection: string[]) {
+    return planConvoy({ draggedId, parts: world, selection, parentIds: {}, footprint: TEE, roomHeight: H });
+  }
+  function shove(convoy: Convoy, world: ScenePart[], from: [number, number, number], dx: number, dz: number) {
+    return resolveConvoy({
+      gesture: 'move',
+      convoy,
+      draggedId: 'table',
+      pos: [from[0] + dx, from[1], from[2] + dz],
+      rot: 0,
+      startPos: from,
+      parts: world,
+      footprint: TEE,
+      roomHeight: H,
+      memberHasPosOverride: () => false,
+    });
+  }
+
+  it('a chair standing in the notch is recorded as illegal at pointer-down', () => {
+    const world = [diner('table', 3, 1), chair('stray', 5, 3)];
+    expect(tee('table', world, ['table', 'stray']).members.map((m) => m.startValid)).toEqual([false]);
+  });
+
+  it('and the set still moves, in every direction', () => {
+    const world = [diner('table', 3, 1), chair('stray', 5, 3)];
+    const convoy = tee('table', world, ['table', 'stray']);
+    for (const [dx, dz] of [
+      [0.3, 0],
+      [-0.3, 0],
+      [0, 0.3],
+      [0, -0.3],
+    ] as const) {
+      // All four, because a veto that only fires on one axis is a veto that a
+      // single-direction fixture cannot tell from no veto at all.
+      expect(shove(convoy, world, [3, 0, 1], dx, dz).valid, `delta ${dx},${dz}`).toBe(true);
+    }
+  });
+
+  it('but a member THIS gesture pushes out still stops the set, and names itself', () => {
+    // Both legal to begin with; the chair sits in the stem and the delta carries it
+    // off the side of it. Without this the fix would read "members never veto".
+    const world = [diner('table', 3, 1), chair('legal', 3, 2.5)];
+    const convoy = tee('table', world, ['table', 'legal']);
+    expect(convoy.members.map((m) => m.startValid)).toEqual([true]);
+    const r = shove(convoy, world, [3, 0, 1], 2, 0);
+    expect(r.valid).toBe(false);
+    expect(r.blockedIds).toEqual(['legal']);
+    expect(r.blocked?.id).toBe('legal');
+  });
+
+  it('a chair half-tucked under its own table does not freeze it either', () => {
+    // No notch needed for this one. The chair overlaps the table but covers too
+    // little of it to be SUPPORTED by it, so gravity leaves it on the floor and it
+    // collides with the table it is standing under — where it already stood, before
+    // anybody touched anything. A plain rectangular dining room does this.
+    const world = [diner('t', 3, 2, 'g2'), chair('c', 3, 1.45, 'g2')];
+    const convoy = planConvoy({ draggedId: 't', parts: world, selection: ['t', 'c'], parentIds: {}, footprint: ROOM, roomHeight: H });
+    expect(convoy.members.map((m) => m.startValid)).toEqual([false]);
+    const r = resolveConvoy({
+      gesture: 'move',
+      convoy,
+      draggedId: 't',
+      pos: [3.3, 0, 2],
+      rot: 0,
+      startPos: [3, 0, 2],
+      parts: world,
+      footprint: ROOM,
+      roomHeight: H,
+      memberHasPosOverride: () => false,
+    });
+    expect(r.valid).toBe(true);
   });
 });

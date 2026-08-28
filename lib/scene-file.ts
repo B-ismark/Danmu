@@ -54,6 +54,7 @@ import {
   type Shape,
 } from './scene-spec';
 import { clampDims, roomAxisRange, ROOM_SIDE_M } from './dimension-ranges';
+import { heightForNewCeiling } from './physics';
 import { resolveParts } from './transforms';
 import { fileSlug } from './exports';
 import { wouldCreateCycle } from './rigid-parent';
@@ -279,7 +280,8 @@ export function parseSceneFile(text: string): SceneFileParse {
   }
 
   const dropped: string[] = [];
-  const room = readRoom(raw.room, dropped);
+  const ceiling: { raw: number | null } = { raw: null };
+  const room = readRoom(raw.room, dropped, ceiling);
   // Names the three numbers, because that is now the whole of what is fatal here:
   // a ceiling out of range is clamped and reported (see `clampRoomHeight`), so
   // reaching this line means the width or depth is missing, is not a number, or is
@@ -317,6 +319,34 @@ export function parseSceneFile(text: string): SceneFileParse {
   }
   if (unreadable > 0) {
     dropped.push(`${unreadable} ${unreadable === 1 ? 'piece' : 'pieces'} could not be read and were left out`);
+  }
+
+  // A clamped ceiling invalidates every piece whose height is measured from it, and
+  // clamping it while leaving them where they were is half a repair. `readRoom`
+  // reports that the ceiling moved; nothing re-hung the parts, so a fan saved under
+  // a 1.65 m ceiling arrived in a 1.80 m room still at 1.50 m — the fan bug that
+  // prompted the clamp in the first place, reproduced by the fix for it, in a file
+  // this app wrote. The toast named the ceiling and never the pieces it had just
+  // invalidated.
+  //
+  // `heightForNewCeiling` is the same function the room editor reaches through
+  // `regradeForNewCeiling`, so which pieces follow a ceiling — and which stay at eye
+  // level or on the floor — is decided in one place for both paths rather than
+  // twice. Reported like every other lossy read here: never silent.
+  if (ceiling.raw !== null && ceiling.raw !== room.height) {
+    let rehung = 0;
+    for (const p of parts) {
+      const y = heightForNewCeiling(p.category, p.shape, p.dimMM, p.pos[1], ceiling.raw, room.height);
+      if (y !== p.pos[1]) {
+        p.pos = [p.pos[0], y, p.pos[2]];
+        rehung++;
+      }
+    }
+    if (rehung > 0) {
+      dropped.push(
+        `${rehung} ${rehung === 1 ? 'piece was' : 'pieces were'} re-hung to match that ceiling`,
+      );
+    }
   }
 
   // Resolve `parentId` now that every part's (possibly reminted) final id is
@@ -371,7 +401,13 @@ function clampRoomHeight(m: number, dropped: string[]): number {
   return out;
 }
 
-function readRoom(v: unknown, dropped: string[]): SceneFileRoom | null {
+function readRoom(
+  v: unknown,
+  dropped: string[],
+  /** Out-param: the ceiling as the FILE stated it, before `clampRoomHeight` moved
+   *  it. The caller needs both ends to re-hang the pieces measured from it. */
+  ceiling?: { raw: number | null },
+): SceneFileRoom | null {
   if (!isObj(v)) return null;
   const width = num(v.width, ROOM_SIDE_M.min, ROOM_SIDE_M.max);
   const depth = num(v.depth, ROOM_SIDE_M.min, ROOM_SIDE_M.max);
@@ -392,6 +428,7 @@ function readRoom(v: unknown, dropped: string[]): SceneFileRoom | null {
   // ceiling was the one dimension in the file treated as fatal instead of lossy.
   // Lossy is fine here precisely because it is never silent: `dropped` is shown.
   const rawHeight = finite(v.height);
+  if (ceiling) ceiling.raw = rawHeight;
   const height = rawHeight === null ? null : clampRoomHeight(rawHeight, dropped);
   // Width and depth stay fatal, and the asymmetry is deliberate rather than
   // leftover: a width of 0 or a missing one is not a room with odd proportions,

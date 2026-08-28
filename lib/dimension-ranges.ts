@@ -166,8 +166,18 @@ export const ROOM_SIDE_M = { min: 1, max: 50 } as const;
  *  ends reject the absurd rather than second-guessing a real room. */
 export const ROOM_HEIGHT_M = { min: 1.8, max: 12 } as const;
 
-/** The three axes of the room shell, as the editor lays them out. */
-export type RoomAxis = 'width' | 'depth' | 'height';
+/** The three axes of the room shell, in the order the editor lays them out.
+ *
+ *  The union is DERIVED from this array rather than written beside it, which is
+ *  the discipline `SHAPES` / `CATEGORIES` / `DECOR_KINDS` already keep in
+ *  `scene-spec.ts`. A hand-written union next to a hand-kept tuple accepts a
+ *  duplicated or missing axis without complaint — `['width', 'width', 'height']`
+ *  typechecks against `readonly [RoomAxis, RoomAxis, RoomAxis]` — and the drift
+ *  goes the one direction nobody notices. */
+export const ROOM_AXES = ['width', 'depth', 'height'] as const;
+
+/** One axis of the room shell. */
+export type RoomAxis = (typeof ROOM_AXES)[number];
 
 /** The bound for one axis. Two consumers ask — the editor and the scene-file
  *  reader — so neither of them gets to decide for itself which range a ceiling
@@ -180,6 +190,65 @@ export function roomAxisRange(axis: RoomAxis): { min: number; max: number } {
 export function roomAxisWithin(axis: RoomAxis, metres: number): boolean {
   const r = roomAxisRange(axis);
   return Number.isFinite(metres) && metres >= r.min && metres <= r.max;
+}
+
+/** The room shell, in metres. */
+export type RoomDims = Record<RoomAxis, number>;
+
+/** Fold a batch of pending per-axis edits into the room, in metres.
+ *
+ *  `RoomDimsEditor` judged the ONE axis being edited and then wrote all THREE,
+ *  taking the other two out of the form rather than out of the room — so a value
+ *  the editor had already refused was committed by the next edit to a different
+ *  field. Clearing the height box gives `parseFloat('') === NaN`, that batch is
+ *  correctly refused, and then one keystroke in Width writes `height: NaN` to the
+ *  store and to IndexedDB. An axis nobody edited is not the form's to answer:
+ *  everything outside `edits` comes off `current` here, which is why the fix
+ *  cannot be "validate all three" (that refuses a width edit on account of a
+ *  ceiling the user never touched — and this editor has shipped that too).
+ *
+ *  All-or-nothing per batch, deliberately: committing the good axes of a mixed
+ *  batch changes the room, and the editor resyncs its fields from the room, so
+ *  the refused number would be wiped off the screen while the message still
+ *  named it. Refusing the batch leaves the bad number where the user can see
+ *  what the message is about.
+ *
+ *  `pending` is what the caller should still be holding afterwards, and it is
+ *  here rather than in the component because that is the half nothing could
+ *  test. The first version cleared the caller's pending set BEFORE this call, so
+ *  a refused batch discarded the good edits beside the bad one: a legal width
+ *  typed alongside an illegal height vanished, and fixing the height then
+ *  committed height alone and snapped the width field back with nothing said —
+ *  a lost edit, silent. So a refusal hands the whole batch back and the form
+ *  retries atomically as well as committing atomically. `lib/drag-click.ts` is
+ *  the precedent: a decision parked in a component is a decision with no gate.
+ *
+ *  `rejected` is the FIRST bad axis in `ROOM_AXES` order — not the axis the user
+ *  most recently touched. With two illegal fields the message therefore names
+ *  the earlier one, and since the editor's `aria-invalid` is single-valued the
+ *  other bad field loses its marker until the next commit. That is a deliberate
+ *  simplification, not an oversight: it is deterministic, and the alternative
+ *  needs the caller to say which field it was, which is a second source of truth
+ *  for something the batch already contains. Do not read it as "the axis being
+ *  edited". */
+export function applyRoomEdits(
+  current: RoomDims,
+  edits: Partial<Record<RoomAxis, number>>,
+): { room: RoomDims; rejected: RoomAxis | null; pending: Partial<Record<RoomAxis, number>> } {
+  const room = { ...current };
+  for (const axis of ROOM_AXES) {
+    const v = edits[axis];
+    if (v === undefined) continue;
+    // A COPY, not `edits` itself. The present caller reads the keys and builds a
+    // fresh Set, so returning the argument by reference is harmless today — and a
+    // test that builds a fresh `edits` on every call could never tell the day it
+    // stopped being harmless, which is the whole shape of a check that cannot
+    // fail. A caller that held this and added the next keystroke's axis to it
+    // would be mutating the batch the rule handed back. Raised by danmu-cd.
+    if (!roomAxisWithin(axis, v)) return { room: current, rejected: axis, pending: { ...edits } };
+    room[axis] = v;
+  }
+  return { room, rejected: null, pending: {} };
 }
 
 /** True if the given dims already sit inside the allowed range. */

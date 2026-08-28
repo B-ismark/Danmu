@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolvePlacement, snapSteps } from '@/lib/drag-resolve';
+import { resolvePlacement, snapSteps, turnInPlace } from '@/lib/drag-resolve';
 import type { ScenePart } from '@/lib/scene-spec';
 import type { Poly } from '@/lib/geometry';
 
@@ -340,5 +340,236 @@ describe('a ceiling piece is not a wall rider', () => {
     expect(r.pos[2]).toBeCloseTo(0.07, 5);
     expect(Math.cos(r.rot)).toBeCloseTo(1);
     expect(r.valid).toBe(true);
+  });
+});
+
+describe('a rug may run to the walls; it may not be bigger than the room', () => {
+  // The containment clamp pins an over-wide piece to `minX + extX` — a silent shove
+  // of however much it overhangs. For everything else that shove is caught, because
+  // the piece then fails the polygon test and the caller refuses the drop. A rug
+  // skipped that test outright, so an over-wide one jumped and COMMITTED: rule 2's
+  // "say so, never silently resize it to fit", broken for position, in the one
+  // category that had opted out of the check that would have noticed. Found by
+  // danmu-39 in review; this room is 4 x 3 m.
+  const rug = (w: number) => part({ id: 'rug', category: 'rug', shape: 'rug', dimMM: [w, 1400, 10], pos: [2, 0, 1.5] });
+
+  it('refuses a rug wider than the room instead of shoving it', () => {
+    const r = resolve(rug(5000), 2, 1.5);
+    expect(r.valid).toBe(false);
+  });
+
+  it("still lets a rug that FITS cross an L-shape's missing corner", () => {
+    // The exemption is real and has to survive, and THIS is the case it exists for.
+    // In a rectangle the bounds clamp already guarantees the OBB is inside, so a
+    // rectangular-room test would pass with the exemption deleted — it would be
+    // asserting nothing. An L is where the clamp is not enough: the rug lies flat
+    // across the missing quadrant, which is exactly what a rug in an L-shaped room
+    // does, and the polygon test refuses it.
+    const L: Poly = [
+      [0, 0],
+      [4, 0],
+      [4, 1.5],
+      [2, 1.5],
+      [2, 3],
+      [0, 3],
+    ];
+    const wide = (cat: 'rug' | 'table') =>
+      resolvePlacement({
+        part: part({ id: 'x', category: cat, shape: cat === 'rug' ? 'rug' : 'coffee-table', dimMM: [3600, 2600, 10], pos: [1.9, 0, 1.4] }),
+        rawX: 1.9, rawZ: 1.4, rot: 0, dim: [3600, 2600, 10],
+        parts: [], footprint: L, roomHeight: H, snapMode: 'off',
+      });
+    expect(wide('rug').valid).toBe(true);
+    // …and the same footprint under anything else is still refused, so this is the
+    // rug exemption doing the work and not the polygon test having gone soft.
+    expect(wide('table').valid).toBe(false);
+  });
+});
+
+describe('a rug may overhang; it may not be silently moved', () => {
+  // The first version of this gate asked whether the room's BOUNDING BOX was big
+  // enough — a bounding-box answer to a polygon question, which CLAUDE.md names as
+  // a trap by itself. In an L whose box is 6 m across but whose arm is 1.6 m wide,
+  // a 3 m rug dropped in the arm passed that check, was shoved 700 mm by the
+  // containment clamp, and committed `valid` with 1.4 m of it through the plaster:
+  // the same "silently resize it to fit" the gate was added to stop, one shape
+  // class over. What the gate asks now is whether the clamp MOVED it.
+  const NARROW_L: Poly = [
+    [0, 0],
+    [6, 0],
+    [6, 1.6],
+    [1.6, 1.6],
+    [1.6, 6],
+    [0, 6],
+  ];
+  const RUG: [number, number, number] = [1400, 3000, 10];
+
+  function drop(cat: 'rug' | 'table', rawX: number) {
+    return resolvePlacement({
+      part: part({ id: 'x', category: cat, shape: cat === 'rug' ? 'rug' : 'coffee-table', dimMM: RUG, pos: [rawX, 0, 4] }),
+      rawX,
+      rawZ: 4,
+      rot: Math.PI / 2,
+      dim: RUG,
+      parts: [],
+      footprint: NARROW_L,
+      roomHeight: H,
+      snapMode: 'off',
+    });
+  }
+
+  it('refuses a rug the clamp had to shove into the arm', () => {
+    // extX is 1.5 m once the rug is turned, so the clamp cannot leave it at 0.8.
+    const r = drop('rug', 0.8);
+    expect(r.pos[0]).not.toBeCloseTo(0.8, 6); // the shove is real, not hypothetical
+    expect(r.valid).toBe(false);
+  });
+
+  it('still accepts one the pointer put where it already fits', () => {
+    // Same rug, same room, dropped where the clamp has nothing to do. It overhangs
+    // the notch — which is exactly what the rug exemption is for, and what the
+    // L-shape test above pins — so this must stay legal.
+    const r = drop('rug', 1.5);
+    expect(r.pos[0]).toBeCloseTo(1.5, 6);
+    expect(r.valid).toBe(true);
+  });
+
+  it('and the exemption is still only a rug exemption', () => {
+    expect(drop('table', 1.5).valid).toBe(false);
+  });
+});
+
+describe('a rug may overhang the floor; it may not leave it', () => {
+  // Both gates above are about the CLAMP, and the clamp is a bounding-box
+  // instrument. In anything but a rectangle there is floorless bounding box to walk
+  // into, and out there the clamp never fires — nothing to clamp against — so
+  // nothing was shoved, the room was wide enough, and a rug dragged into the
+  // missing quadrant of a T committed `valid` standing entirely off the floor.
+  // Reported as "you can literally move it outside the room in 2D".
+  //
+  // The overhang exemption is about the rug's EDGES. It had been reading as an
+  // exemption from being in the room at all, so its centre is now held to the same
+  // `pointInFootprint` every other piece's is — and both fixtures above put the
+  // rug's centre over real floor, which is what makes this the narrow fix rather
+  // than a retraction.
+  const TEE: Poly = [
+    [0, 0],
+    [6, 0],
+    [6, 2],
+    [4, 2],
+    [4, 4],
+    [2, 4],
+    [2, 2],
+    [0, 2],
+  ];
+  const rug = part({ id: 'rug', category: 'rug', shape: 'rug', dimMM: [1600, 1200, 10], pos: [3, 0, 1] });
+  const at = (rawX: number, rawZ: number) =>
+    resolvePlacement({
+      part: rug, rawX, rawZ, rot: 0, dim: rug.dimMM,
+      parts: [rug], footprint: TEE, roomHeight: H, snapMode: 'off',
+    });
+
+  it('refuses one whose centre is off the floor entirely', () => {
+    const r = at(5.2, 3.2);
+    // Untouched by the clamp — which is the point: nothing else could have caught it.
+    expect(r.pos[0]).toBeCloseTo(5.2, 6);
+    expect(r.pos[2]).toBeCloseTo(3.2, 6);
+    expect(r.valid).toBe(false);
+  });
+
+  it('still accepts one whose centre is on the floor and whose edges are not', () => {
+    const r = at(3, 3.5);
+    expect(r.pos[0]).toBeCloseTo(3, 6);
+    expect(r.valid).toBe(true);
+  });
+});
+
+describe('turnInPlace — a turn is a placement too', () => {
+  // Nothing moves sideways and the clamp still has work to do: `extX`/`extZ` are
+  // functions of ROTATION as well as size, so a long piece standing against a wall
+  // grows into it the moment it turns. Four gestures turn a piece — the plan's
+  // handle, its two keyboard paths and the 3D gizmo — and each of the four had
+  // written its own version of this.
+  const sofa = () => part({ id: 'sofa', pos: [2, 0, 0.4], dimMM: [2000, 800, 400] });
+
+  const turn = (target: ScenePart, rot: number, others: ScenePart[] = []) =>
+    turnInPlace({
+      part: target,
+      at: target.pos,
+      rot,
+      dim: target.dimMM,
+      parts: [...others, target],
+      footprint: ROOM,
+      roomHeight: H,
+    });
+
+  it('pushes a piece off the wall it just grew into', () => {
+    const r = turn(sofa(), Math.PI / 2);
+    // 2 m long, so a quarter turn needs a metre of depth where it had 400 mm.
+    expect(r.pos[2]).toBeCloseTo(1, 6);
+    expect(r.pos[0]).toBeCloseTo(2, 6);
+    expect(r.rot).toBeCloseTo(Math.PI / 2, 6);
+    expect(r.valid).toBe(true);
+  });
+
+  it('leaves a piece where it stands when the new angle fits there', () => {
+    const stool = part({ id: 'stool', pos: [1.237, 0, 1.568], dimMM: [400, 400, 400] });
+    const r = turn(stool, Math.PI / 4);
+    expect(r.pos[0]).toBeCloseTo(1.237, 6);
+    expect(r.pos[2]).toBeCloseTo(1.568, 6);
+
+    // The `snapMode: 'off'` inside `turnInPlace` is load-bearing, not tidiness: the
+    // identical call with the coarse grid on drags the piece 13 mm sideways. A turn
+    // asks to be kept in the room, not to be re-gridded where it stands — and the
+    // angle is quantised by the caller, which is the only part of the snap it wants.
+    const gridded = resolvePlacement({
+      part: stool,
+      rawX: stool.pos[0],
+      rawZ: stool.pos[2],
+      rot: Math.PI / 4,
+      dim: stool.dimMM,
+      parts: [stool],
+      footprint: ROOM,
+      roomHeight: H,
+      snapMode: 'coarse',
+    });
+    expect(gridded.pos[0]).toBeCloseTo(1.25, 6);
+    expect(gridded.pos[2]).toBeCloseTo(1.55, 6);
+  });
+
+  it('clamps a turn it cannot make legal, instead of handing back the old spot', () => {
+    // The property `Draggable.commit()`'s refusal fallback stands on. An invalid
+    // resolve still carries the containment clamp, so a caller that takes `pos` gets
+    // a piece that is at least inside the room even when the answer is "does not
+    // fit". That fallback used to read the PRE-GESTURE position instead and write
+    // the new angle beside it — a combination nothing had run through containment,
+    // and the state that committed a merged set's bed with its corner through the
+    // plaster. Turning the lead of a set INTO its own siblings is exactly how the
+    // resolve comes back invalid, which is why the report named grouped models.
+    const pouffe = part({ id: 'pouffe', pos: [2, 0, 1], dimMM: [300, 300, 400] });
+    const r = turn(sofa(), Math.PI / 2, [pouffe]);
+    expect(r.valid).toBe(false);
+    // Clamped in, not left at the 0.4 it was standing at.
+    expect(r.pos[2]).toBeCloseTo(1, 6);
+  });
+
+  it('pins, and says so, when the room cannot hold the piece at that angle at all', () => {
+    // The crossed-interval edge, stated rather than left to be discovered. The
+    // containment clamp is `max(min + ext, min(max - ext, target))`, and once the
+    // piece is longer than the room those two ends cross, so `max` wins
+    // unconditionally: the position stops depending on the input and pins to
+    // `min + ext`. Turning a 4 m piece in a 3 m room is exactly that.
+    //
+    // This is not new and it is not the turn's own arithmetic — it is the same
+    // clamp every drag has always run through, in both tabs — but the turn now
+    // reaches it, so it belongs in writing. What makes it liveable is the second
+    // assertion: the answer comes back INVALID, so the piece is reported rather
+    // than silently parked. A caller that wanted "hold where it stands instead of
+    // pinning" would be changing behaviour both tabs share, deliberately, and this
+    // assertion is what would fail first.
+    const bench = part({ id: 'bench', pos: [2, 0, 1.5], dimMM: [4000, 400, 450] });
+    const r = turn(bench, Math.PI / 2);
+    expect(r.pos[2]).toBeCloseTo(2, 6); // minZ + extZ = 0 + 2, not the 1.5 it stood at
+    expect(r.valid).toBe(false);
   });
 });

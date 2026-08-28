@@ -40,7 +40,11 @@ const CONFIG = 'eslint.config.mjs';
  *  how fast the toolchain is. */
 const RESOLVE_TIMEOUT = 60_000;
 
-let eslintP: Promise<{ calculateConfigForFile: (f: string) => Promise<unknown> }> | null = null;
+type LintMessage = { ruleId: string | null };
+let eslintP: Promise<{
+  calculateConfigForFile: (f: string) => Promise<unknown>;
+  lintText: (text: string, opts: { filePath: string }) => Promise<Array<{ messages: LintMessage[] }>>;
+}> | null = null;
 
 /** The flat config, resolved the way Next resolves it. */
 async function resolveFor(file: string) {
@@ -49,6 +53,15 @@ async function resolveFor(file: string) {
   return (await eslint.calculateConfigForFile(join(ROOT, file))) as
     | { plugins?: unknown; rules?: Record<string, unknown> }
     | undefined;
+}
+
+/** Lint a snippet through the real config, as a file that is not on disk. Asking
+ *  what the gate REPORTS, rather than what its config says it should. */
+async function lintProbe(file: string, text: string) {
+  eslintP ??= loadESLint({ useFlatConfig: true }).then((ESLint) => new ESLint({ cwd: ROOT }));
+  const eslint = await eslintP;
+  const [res] = await eslint.lintText(text, { filePath: join(ROOT, file) });
+  return res.messages.map((m: LintMessage) => m.ruleId);
 }
 
 describe('ESLint major version', () => {
@@ -92,6 +105,38 @@ describe('the flat config, as `next build` reads it', () => {
     const resolved = await resolveFor('components/studio/TopBar.tsx');
     expect(resolved?.rules).toHaveProperty('@next/next/no-img-element');
     expect(resolved?.rules).toHaveProperty('react-hooks/exhaustive-deps');
+  }, RESOLVE_TIMEOUT);
+
+  it('extends next/typescript, so the lint gate can see a dead import', async () => {
+    // The third load-bearing property of eslint.config.mjs, and the one nothing was
+    // holding. `next/typescript` is what puts `@typescript-eslint/no-unused-vars`
+    // in the chain; without it that rule is simply absent, `tsconfig.json` sets no
+    // `noUnusedLocals`, and `pnpm lint --max-warnings 0`, `pnpm typecheck` and
+    // `next build`'s own lint pass are ALL structurally unable to see an unused
+    // import. Deleting the extends line leaves every gate green — which is how the
+    // repo shipped thirteen dead imports across nine files, one of them a
+    // `collidesAt` that had outlived its call site.
+    //
+    // Asserted on the RESOLVED config for a real source file, not by grepping this
+    // config for the string 'next/typescript'. The string is not the rule: a rename
+    // upstream, or a later block turning the rule off, would leave the grep green.
+    // Asserted END TO END, by linting a dead import and demanding the error, not by
+    // reading the resolved severity. The severity cannot fail: this config pins the
+    // rule explicitly further down, so a later 'off' is unreachable and an earlier
+    // one is overridden — an assertion on it would be exactly the decoration this
+    // test exists to remove. What CAN fail is whether the gate sees the defect.
+    // A real dead import, written as a template literal so the source of the probe
+    // is legible as source rather than as an escaped one-liner.
+    const rules = await lintProbe(
+      'lib/__unused-import-probe.ts',
+      `import { useRef } from 'react';
+export const x = 1;
+`,
+    );
+    expect(
+      rules,
+      'linting a dead import produced no no-unused-vars error — is next/typescript still extended?',
+    ).toContain('@typescript-eslint/no-unused-vars');
   }, RESOLVE_TIMEOUT);
 
   it('turns no-img-element off for the generated-image routes, and only those', async () => {
@@ -144,6 +189,10 @@ describe('the test script keeps its console output', () => {
     // The other half: the flag is pointless if the harness stops reporting, and a
     // reporting call is easy to lose in a refactor. Cheap, and it fails loudly.
     const src = readFileSync(join(ROOT, 'tests', 'detect-pipeline.test.ts'), 'utf8');
-    expect(src).toContain('console.log');
+    // A CALL, at the start of a line — not the string anywhere in the file. That
+    // file's own header discusses `console.log` in prose, so `toContain` was
+    // satisfied by the commentary about the reporting rather than by the reporting:
+    // delete the call, leave the paragraph, and the gate stayed green.
+    expect(src).toMatch(/^\s*console\.log\(/m);
   });
 });

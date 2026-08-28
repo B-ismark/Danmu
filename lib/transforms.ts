@@ -28,7 +28,7 @@
 // the same code the renderer does. `lib/room-scene.ts` wraps it in memoised hooks.
 // `tests/room-scene.test.ts` fails if a thirteenth hand-written copy appears.
 
-import type { ScenePart } from './scene-spec';
+import { isParametric, type ScenePart } from './scene-spec';
 import { heightForNewCeiling } from './physics';
 
 /** The user's edits, as the studio store holds them. */
@@ -53,6 +53,28 @@ export function resolvePart(p: ScenePart, o: Partial<TransformOverrides>): Scene
 /** Every part, as the room currently stands. */
 export function resolveParts(parts: ScenePart[], o: Partial<TransformOverrides>): ScenePart[] {
   return parts.map((p) => resolvePart(p, o));
+}
+
+/**
+ * The size a part's group is DRAWN at when its scale is 1 — which is not always the
+ * authored `dimMM`, and the difference cost a user their resize.
+ *
+ * A parametric shape (`isParametric`: sofa, curtain, WARDROBE, closet, bookshelf,
+ * shoe-rack) rebuilds its geometry from the effective dim, so `Draggable` leaves its
+ * group at scale 1 and the mesh carries the resize. Every other shape keeps authored
+ * geometry and wears the resize as a group scale. So "authored dim x live scale" is
+ * the current size for the second kind and returns the AUTHORED size for the first,
+ * whatever the user did to it — and `commit()` wrote that back through `setDim` on
+ * every drop. Resize a wardrobe, then merely MOVE it, and the width went home; in
+ * those six shapes and nowhere else, which is why it reported as "sometimes".
+ *
+ * It takes the part and the overrides rather than two dims, and that is the fix
+ * being made unrepeatable rather than a convenience: the two-dim version's whole
+ * failure mode was a caller handing it the authored dim twice, which is exactly what
+ * the broken code did and what no unit test of the function itself can see.
+ */
+export function renderBaseDim(p: ScenePart, o: Partial<TransformOverrides>): [number, number, number] {
+  return isParametric(p.shape) ? resolvePart(p, o).dimMM : p.dimMM;
 }
 
 /** Has the user moved, turned or resized this piece at all?

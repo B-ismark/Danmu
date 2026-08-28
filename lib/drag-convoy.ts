@@ -42,11 +42,21 @@ export type ConvoyMember = {
   part: ScenePart;
   /** Its transform when the gesture began.
    *
-   *  Every frame's answer is derived from THIS, never from the last frame's. The
-   *  per-frame version read each sibling's current position out of a render memo,
-   *  so two pointermoves between two renders silently dropped a delta while the
-   *  dragged piece — tracking a ref — kept it, and a fast drag pulled the set
-   *  apart. Deriving from the start cannot drift and cannot go stale. */
+   *  Every frame's answer is derived from THIS, never from the last frame's, and
+   *  the reason owes nothing to how React schedules a render — an earlier version
+   *  of this comment blamed "two pointermoves between two renders", which is a
+   *  claim about the renderer that nothing here can check and that turned out to be
+   *  the wrong layer entirely.
+   *
+   *  The real reason is in this file. A member's own `resolvePlacement` is not the
+   *  identity: it clamps to the footprint, re-asks gravity, and re-aims a wall
+   *  rider along its edge — and two of those corrections are ACCEPTED rather than
+   *  refused (a wall rider is exempt from the rigidity test by design, and the
+   *  vertical answer always wins). Step from the last frame and each accepted
+   *  correction becomes the next frame's base, so the set walks away from the delta
+   *  the pointer is asking for and cannot walk back. Deriving from the start is
+   *  idempotent: the same pointer position gives the same answer whatever happened
+   *  in between. */
   startPos: [number, number, number];
   /** What is resting on IT, snapshotted at the same moment, with anything already
    *  travelling under its own name removed. */
@@ -57,6 +67,31 @@ export type ConvoyMember = {
    *  slides round the corner and arrives facing a different direction from the set
    *  it left with. */
   edge: number | null;
+  /**
+   * Could this member legally stand where it already stands?
+   *
+   * A member's veto below is absolute, so one that is ALREADY illegal refuses
+   * every delta the set is ever offered and the whole thing is inert — in every
+   * direction, forever, including the ones that would fix it. Merge a dining table
+   * with a chair that stands in the notch of a T, and dragging the set does
+   * nothing at all; the reported symptom is not "only one moved" but "it will not
+   * move", which reads as the drag being broken rather than as a refusal. A chair
+   * merely tucked far enough under its table to overlap it and not far enough to
+   * be SUPPORTED by it does the same thing in a plain rectangle.
+   *
+   * A gesture is answerable for what it breaks, not for what it inherits. So this
+   * is asked once, at pointer-down — a per-frame answer is one that can change
+   * mid-gesture — and a member that answers `false` keeps travelling with the set
+   * and simply does not get a vote on where it goes.
+   *
+   * It gates the LEGALITY half of the veto only. The rigidity half is not gated,
+   * because a set arriving deformed is made deformed by this gesture by
+   * definition. One residue of that: a member whose start position is outside the
+   * room's bounding box is clamped every frame, never rigid, and still vetoes.
+   * Nothing in the app is known to place a piece there — the containment clamp is
+   * in every write path — so it is recorded rather than coded around.
+   */
+  startValid: boolean;
 };
 
 export type Convoy = {
@@ -114,26 +149,76 @@ export type Convoy = {
  * called from all three places, because that asymmetry is not visible from either
  * side of it.
  *
- * Two properties this must keep. **The mover has to be in its own world**:
- * `collidesAt` looks it up in the list it is handed and returns `false` when it is
- * absent, so filtering it out turns collision detection off silently. Its own
- * shifted copy serves — `collidesAt` and `findSupportDetailed` both find it by id
- * and then skip it as an obstacle. And **a piece cannot collide with its own
- * travelling children**, because `collidesAt` separates vertically (stacking is
- * allowed) and `findSupportDetailed` only considers pieces below.
+ * Two properties this must keep, and they pull in opposite directions.
+ *
+ * **The mover has to be in its own world**: `collidesAt` looks it up in the list it
+ * is handed and returns `false` when it is absent, so filtering it out turns
+ * collision detection off silently. Its own shifted copy serves — `collidesAt` and
+ * `findSupportDetailed` both find it by id and then skip it as an obstacle.
+ *
+ * **But the mover's own rigid children must be OMITTED**, which is what `carried`
+ * is for and why it has no default. This restores in one place the contract
+ * `ResolveInput.parts` has always stated — "with this piece's own rigid
+ * descendants filtered out, a part must not resolve its gravity against a child
+ * this same move is about to carry out from under it" — and which both surfaces
+ * quietly stopped honouring when the world moved in here. It was believed to be
+ * free: the earlier version of this comment claimed a piece cannot collide with
+ * its own children "because `findSupportDetailed` only considers pieces below".
+ * It does not. It has no below-test at all — it takes the highest `top` whose
+ * footprint covers `MIN_SUPPORT_SHARE` of the mover, above or below. So a
+ * nightstand with a tall plant on it, shifted to where it is going and therefore
+ * still directly overhead, resolved onto its own plant at y = 2.15, which is
+ * through the ceiling: the piece became undraggable in both tabs, and the only
+ * symptom was a red highlight that never went green.
+ *
+ * Pass `Convoy.own` for the dragged piece, `ConvoyMember.descendants` for a
+ * member, and `[]` for a shared list nobody is about to resolve from.
  *
  * `dx` / `dz` are the delta of the gesture, in metres. Pass the ATTEMPTED delta
  * when resolving the dragged piece (the accepted one is not known until it
  * resolves) and the ACCEPTED one when resolving members.
  */
+/** Which gesture is in flight, for `resolveConvoy`'s `gesture`.
+ *
+ *  Pure and exported because it lived in `Draggable` where nothing could test it,
+ *  and it shipped a hole in exactly the place the component made invisible.
+ *
+ *  `rotatedWithoutPointer` is a ref the wheel and the two-finger twist set: both
+ *  change a piece's angle while the pointer stands still, and the containment
+ *  clamp is a function of that angle, so the resolved position moves although no
+ *  translation was asked for. Read as a translation, that correction is copied to
+ *  the whole selection.
+ *
+ *  But **while the gizmo is active it owns the entire answer**, and the ref must
+ *  not be consulted at all. The gizmo is the one thing here that can be dragged
+ *  without `Draggable`'s own pointer-move handler running — that handler returns
+ *  early for the whole gizmo gesture — so the single line that clears the ref is
+ *  unreachable for its duration. Asking the ref anyway meant a wheel-rotate
+ *  followed by a gizmo TRANSLATE reported `'turn'` and carried nobody: select two
+ *  chairs, drag one, wheel-notch it, release, then pull the translate arrow, and
+ *  the second chair stays behind. Silent, and indistinguishable from the
+ *  "sometimes only one moves" report the convoy work exists to end. Found by
+ *  danmu-cb in review. */
+export function gestureFor(
+  gizmoActive: boolean,
+  gizmoMode: 'translate' | 'rotate' | 'scale',
+  rotatedWithoutPointer: boolean,
+): 'move' | 'turn' {
+  if (gizmoActive) return gizmoMode === 'translate' ? 'move' : 'turn';
+  return rotatedWithoutPointer ? 'turn' : 'move';
+}
+
 export function travellingWorld(
   convoy: Convoy,
   parts: ScenePart[],
   dx: number,
   dz: number,
+  carried: readonly DescendantOffset[],
 ): ScenePart[] {
+  const riding = carried.length > 0 ? new Set(carried.map((d) => d.id)) : null;
   const out: ScenePart[] = [];
   for (const p of parts) {
+    if (riding?.has(p.id)) continue;
     if (!convoy.travelling.has(p.id)) out.push(p);
     else out.push({ ...p, pos: [p.pos[0] + dx, p.pos[1], p.pos[2] + dz] });
   }
@@ -163,8 +248,18 @@ export type ConvoyResult = {
   valid: boolean;
   /** The first member that could not go, for the message the caller says out loud.
    *  Naming the piece matters here in a way it does not for a single drag: the
-   *  thing that refused is not the thing under the hand. */
+   *  thing that refused is not the thing under the hand.
+   *
+   *  ONE piece, because a sentence naming four is a sentence nobody finishes. What
+   *  gets OUTLINED is `blockedIds`. */
   blocked?: ScenePart;
+  /** Every member that could not go, in the order they were asked.
+   *
+   *  `blocked` used to be the whole answer, so a set stopped by three pieces
+   *  outlined one and the user moved it, tried again, and was stopped by the next
+   *  — the refusal looked like it was moving around the room. Empty when the step
+   *  is legal. */
+  blockedIds: string[];
 };
 
 /**
@@ -184,15 +279,17 @@ export function planConvoy(input: {
    *  `Convoy.leadEdge`. Resolved here, at pointer-down, because a wall read per
    *  frame is a wall that can change mid-gesture, which is the thing being fixed. */
   footprint: Poly;
+  /** Needed only to answer `ConvoyMember.startValid` — `resolvePlacement` cannot
+   *  judge a piece without knowing what it has to fit under. */
+  roomHeight: number;
 }): Convoy {
-  const { draggedId, parts, selection, parentIds, footprint } = input;
+  const { draggedId, parts, selection, parentIds, footprint, roomHeight } = input;
   const byId = new Map(parts.map((p) => [p.id, p]));
   if (!byId.has(draggedId)) {
     return { own: [], members: [], travelling: new Set([draggedId]), leadEdge: null };
   }
 
   const own = snapshotDescendants(draggedId, parts, parentIds);
-  const travelling = new Set<string>([draggedId, ...own.map((d) => d.id)]);
 
   // The selection travels only when the piece under the pointer is IN it. Dragging
   // something outside the selection is not a request to move the selection, and
@@ -216,6 +313,52 @@ export function planConvoy(input: {
   // place for it: a click still takes the whole set, so the ordinary gesture is
   // unchanged, and the only thing that lost power is a code path nobody could
   // reach until the layer tree made a single member selectable.
+  //
+  // …with one hole in that reasoning, found by danmu-39 and closed just below. "A
+  // merged set is already selected whole by a click" is true of the SELECTION path
+  // and says nothing about the RIGID one. Drag a desk with a merged pair standing
+  // on it and only the half physically resting there is a descendant: the pair came
+  // apart, from a gesture that never touched the selection at all. Closing the
+  // group over rigidly-carried pieces does not override anybody's selection — a
+  // rigid child is not a selection — so it restores "merged means merged" for a
+  // MOVE without taking back the verdict above.
+  //
+  // For a move, and it cannot be more than that. **A split pair does not survive a
+  // TURN**, and the unqualified version of that sentence is the hazard: it sends the
+  // next reader hunting for a bug when they watch a pair separate under the wheel,
+  // or worse, sends them to make members rotate. P rests on the piece under the hand
+  // and Q does not, so P is in `own` and cascades about that pivot while Q is a
+  // member — and `resolveConvoy` returns early on `gesture === 'turn'` without moving
+  // members at all. The pair therefore deforms on a rotation and holds on a
+  // translation. That is the least-bad answer and not an oversight: rotating Q about
+  // a pivot it is not resting on is the 575 mm defect by another route, and no answer
+  // keeps a physically split pair rigid through a turn. Found by danmu-62; the
+  // behaviour predates this closure, the sentence is what changed.
+  // …and that closure covered the DRAGGED piece's rigid children only, which left
+  // the identical defect one layer out. Found by danmu-62 reviewing this commit's
+  // parent. A member's rigid children are carried too, and they were never offered
+  // to the group closure: merged P and Q resting on different supports, P on desk D
+  // and Q on the floor beside it, multi-select chair C and desk D, drag C. D is a
+  // member, `snapshotDescendants(D)` returns `[P]` alone because Q fails
+  // `isPhysicallySupported` against D, and Q was never reached. The pair came apart
+  // from a gesture that touched neither half of it. Dragging D directly worked,
+  // because then P is in `own` — so the same feature behaved differently depending
+  // on which piece of the selection was under the hand, which is exactly what this
+  // file's header says must never be two code paths.
+  //
+  // Closing over a member's rigid children as well makes this a FIXED POINT rather
+  // than a pass: a group sibling pulled in becomes a member, that member has rigid
+  // children of its own, and those children can belong to a third group. One pass
+  // would close the first hop and leave the second, which is the same bug with a
+  // longer fixture. So membership and descendants are rebuilt from scratch on each
+  // round and the round repeats while `wanted` is still growing.
+  //
+  // It terminates because `wanted` only ever grows and is bounded by `parts`, and
+  // the loop exits the first round that adds nothing. Rebuilding rather than
+  // patching in place is deliberate: `travelling` gates which descendants each
+  // member keeps, so a member added late changes what an earlier member is entitled
+  // to carry, and incrementally amending the previous round's answer is how the
+  // ORDER-DEPENDENT bug below came about the first time.
 
   /** The wall a piece is against now, by footprint edge index.
    *
@@ -228,28 +371,117 @@ export function planConvoy(input: {
       ? (nearestEdge(footprint, p.pos[0], p.pos[2])?.index ?? null)
       : null;
 
-  const members: ConvoyMember[] = [];
-  for (const p of parts) {
-    // `travelling` already holds the dragged piece and its rigid children. A child
-    // is carried by the rotation-correct cascade, which must win over this
-    // translate-only path for a piece that is both a selection member and
-    // something resting on the piece being dragged.
-    if (!wanted.has(p.id) || travelling.has(p.id)) continue;
-    travelling.add(p.id);
-    members.push({
-      part: p,
-      startPos: [p.pos[0], p.pos[1], p.pos[2]],
-      descendants: [],
-      edge: wallEdgeOf(p),
-    });
+  /** Pull the rest of every merged set that `ids` touches into `wanted`. Returns
+   *  whether anything was added, which is the loop's termination test.
+   *
+   *  Skipping anything already in `travelling` is not an optimisation, it is the
+   *  rule three lines down in this file: a piece that is both rigidly carried and
+   *  nominally a member must be carried ONCE, by the rotation-correct cascade. A
+   *  set is closed over its own members too, so without this guard the very piece
+   *  that pulled its group in — the desk's own P — is promoted to a member on the
+   *  next round, and `travelling.has(p.id)` then strips it from the desk's
+   *  descendants. The pair stayed together and P stopped turning with the desk:
+   *  a fixture written for the first defect caught it only because it asserted the
+   *  descendants and not just the travelling set. */
+  const closeGroupsOver = (ids: readonly string[]): boolean => {
+    let grew = false;
+    for (const id of ids) {
+      const g = byId.get(id)?.groupId;
+      if (!g) continue;
+      for (const p of parts) {
+        if (p.groupId === g && !wanted.has(p.id) && !travelling.has(p.id)) {
+          wanted.add(p.id);
+          grew = true;
+        }
+      }
+    }
+    return grew;
+  };
+
+  let members: ConvoyMember[] = [];
+  let travelling = new Set<string>();
+  for (;;) {
+    travelling = new Set<string>([draggedId, ...own.map((d) => d.id)]);
+    members = [];
+    for (const p of parts) {
+      // `travelling` already holds the dragged piece and its rigid children. A child
+      // is carried by the rotation-correct cascade, which must win over this
+      // translate-only path for a piece that is both a selection member and
+      // something resting on the piece being dragged.
+      if (!wanted.has(p.id) || travelling.has(p.id)) continue;
+      travelling.add(p.id);
+      members.push({
+        part: p,
+        startPos: [p.pos[0], p.pos[1], p.pos[2]],
+        descendants: [],
+        edge: wallEdgeOf(p),
+        // Answered below, once membership and descendants have settled — a
+        // member's own children are what has to come out of the world it is
+        // judged against, and that set is not known until the closure converges.
+        startValid: true,
+      });
+    }
+
+    // Members' own children, after membership is closed so that a child which is
+    // itself a member is carried once (as a member) rather than twice.
+    //
+    // Dropping a descendant means dropping the SUBTREE under it, and that is the
+    // whole subtlety. The filter used to test `travelling.has(d.id)` alone, which
+    // strips a middle link while keeping the grandchild hanging off it —
+    // `cascadeTransform` then cannot find the grandchild's parent among the
+    // transforms it is computing and drops it with `if (!parent) continue`, silently,
+    // having already put the grandchild in `travelling` so `travellingWorld` shifts a
+    // phantom of it to a position it never reaches. Worse, it was ORDER-DEPENDENT:
+    // with a table before its shelf in `parts` the book on the shelf moved, with the
+    // shelf first it did not, which is precisely why no fixture caught it. Found by
+    // danmu-39 in review.
+    //
+    // `kept` is seeded with the member itself and grows in BFS order (guaranteed by
+    // `snapshotDescendants`), so "is my own parent coming with me" is always already
+    // answered. Either processing order now carries the grandchild exactly once, by
+    // whichever member actually holds its parent.
+    for (const m of members) {
+      const kept = new Set<string>([m.part.id]);
+      const desc: DescendantOffset[] = [];
+      for (const d of snapshotDescendants(m.part.id, parts, parentIds)) {
+        if (travelling.has(d.id) || !kept.has(d.parentId)) continue;
+        kept.add(d.id);
+        desc.push(d);
+      }
+      m.descendants = desc;
+      for (const d of desc) travelling.add(d.id);
+    }
+
+    const carried = [...own.map((d) => d.id)];
+    for (const m of members) for (const d of m.descendants) carried.push(d.id);
+    if (!closeGroupsOver(carried)) break;
   }
 
-  // Members' own children, after membership is closed so that a child which is
-  // itself a member is carried once (as a member) rather than twice.
+  // Was each member legal before anyone touched anything? See
+  // `ConvoyMember.startValid` for what rides on the answer.
+  //
+  // The world each is judged against is the one `ResolveInput.parts` has always
+  // asked for: its own rigid descendants out, ITSELF left in. Not
+  // `travellingWorld`, and that is not an oversight — nothing has moved yet, so
+  // there is no delta to shift the company by, and every other travelling piece
+  // standing where it really stands is precisely the question being asked.
   for (const m of members) {
-    const desc = snapshotDescendants(m.part.id, parts, parentIds).filter((d) => !travelling.has(d.id));
-    m.descendants = desc;
-    for (const d of desc) travelling.add(d.id);
+    const carrying = m.descendants.length > 0 ? new Set(m.descendants.map((d) => d.id)) : null;
+    m.startValid = resolvePlacement({
+      part: m.part,
+      rawX: m.startPos[0],
+      rawZ: m.startPos[2],
+      rot: m.part.rot,
+      dim: m.part.dimMM,
+      parts: carrying ? parts.filter((p) => !carrying.has(p.id)) : parts,
+      footprint,
+      roomHeight,
+      // The piece is not being asked to go anywhere, so nothing may round, snap or
+      // magnetise it on the way to the answer.
+      snapMode: 'off',
+      currentY: m.startPos[1],
+      wallEdge: m.edge,
+    }).valid;
   }
 
   // Only worth pinning if something is actually following: a lone wall rider
@@ -283,9 +515,36 @@ export function resolveConvoy(input: {
   parts: ScenePart[];
   footprint: Poly;
   roomHeight: number;
+  /**
+   * What the user is actually doing — because the delta cannot be trusted to say.
+   *
+   * The company copies the translation the gesture asked for. Inferring that from
+   * `pos - startPos` looked equivalent and is not: the containment clamp in
+   * `resolvePlacement` bounds a piece by `extX`/`extZ`, which are functions of
+   * ROTATION as well as size, so turning a 2 m sofa that stands against a wall
+   * pushes it off that wall — a real, correct positional delta produced by a
+   * gesture that translated nothing. The set then copied it: a chair selected
+   * alongside a sofa turned to 45° was measured travelling 575 mm across the room,
+   * reported valid, and persisted. Found by danmu-39 in review.
+   *
+   * So the caller says which gesture this is and the inference is gone. `'turn'`
+   * covers rotate and scale alike — neither is a request to move anything sideways.
+   */
+  gesture: 'move' | 'turn';
+  /**
+   * Does this id already carry a position override in `useStudio.positions`?
+   *
+   * Read only on the zero-delta path, where the answer decides between "put the
+   * company back" and "write nothing" — see there. No default: both surfaces write
+   * their members LIVE, frame by frame, so both have to answer, and a caller that
+   * has not thought about it should be told by the compiler rather than by a room
+   * full of pinned furniture.
+   */
+  memberHasPosOverride: (id: string) => boolean;
 }): ConvoyResult {
-  const { convoy, draggedId, pos, rot, startPos, parts, footprint, roomHeight } = input;
+  const { convoy, draggedId, pos, rot, startPos, parts, footprint, roomHeight, gesture, memberHasPosOverride } = input;
   const moves: ConvoyMove[] = [];
+  const blockedIds: string[] = [];
 
   // The dragged piece's own children first, about its resolved pivot — the only
   // company that rotates with it.
@@ -294,7 +553,17 @@ export function resolveConvoy(input: {
   // Nothing is coming, so there is no delta to take and no world to build. Every
   // ordinary single-piece drag lands here at input rate, and the shifted-world copy
   // below is O(parts) — it was being paid for a loop that runs zero times.
-  if (convoy.members.length === 0) return { moves, valid: true };
+  if (convoy.members.length === 0) return { moves, valid: true, blockedIds };
+
+  // A turn moves nobody sideways, and it is deliberately NOT folded into the
+  // zero-delta path below. That path RESTORES every member to its start position,
+  // which is the right answer for a drag that travelled and came home and the wrong
+  // one for a rotation applied to a set that is still out: the wheel turns the piece
+  // under the hand, and the company would jump back to where the gesture began. A
+  // turn leaves every member exactly where the last move frame put it — the dragged
+  // piece's own rigid children have already pivoted with it, above, which is the
+  // only company a rotation has.
+  if (gesture === 'turn') return { moves, valid: true, blockedIds };
 
   const dx = pos[0] - startPos[0];
   const dz = pos[2] - startPos[2];
@@ -302,7 +571,48 @@ export function resolveConvoy(input: {
   // — which is what the merged-group code meant by "only on a move". Checked
   // exactly (not against a tolerance): a drag the grid snapped back to zero
   // genuinely did not move.
-  if (dx === 0 && dz === 0) return { moves, valid: true };
+  //
+  // "Nothing to do" is still an ANSWER, though, and it has to be said. Returning
+  // early with an empty company was a silent hole: both surfaces write the members
+  // live, frame by frame, so a drag out and back to the exact start — reachable,
+  // and likelier with the grid snap on — left them at the last non-zero delta with
+  // nothing emitted to bring them home, and `commit()` persisted the set out of
+  // formation for the next drag to start from. `Draggable.commit()` leans on this
+  // in writing, too: its invalid-drop fallback slides to the pre-drag position
+  // "which makes the delta zero and the company's answer 'stay'". That answer has
+  // to exist for the sentence to be true.
+  //
+  // No world is built for it — a member that has not moved cannot have collided
+  // with anything, so this stays the cheap path it was meant to be.
+  //
+  // Gated on `memberHasPosOverride`, and that gate is not caution: a move is a
+  // WRITE, and per `ConvoyMove` writing a value a piece already has still CREATES
+  // an override in `useStudio.positions`, which pins it against a re-detect and
+  // persists. A gesture that never left zero — a wheel-rotate, a scale, a press
+  // that did not travel — has written nothing, so there is nothing to put back, and
+  // an unconditional stay would stamp a pin on every selected piece for the crime
+  // of being selected while something turned. A gesture that DID move has already
+  // written every member, so the override is there and putting it back is free.
+  // Same question `convoyRestore` asks, for the same reason.
+  if (dx === 0 && dz === 0) {
+    for (const m of convoy.members) {
+      if (!memberHasPosOverride(m.part.id)) continue;
+      moves.push({ id: m.part.id, pos: m.startPos });
+      if (m.descendants.length > 0) {
+        // Same gate as the member itself, one layer down. The member's override is
+        // not its children's: a side table that has been dragged before carries one,
+        // the lamp standing on it may never have been touched, and writing the lamp's
+        // unchanged position here would stamp it with a pin — against a re-detect,
+        // and persisted — for the crime of standing on something that was selected.
+        moves.push(
+          ...cascadeTransform(m.part.id, m.startPos, m.part.rot, m.descendants).filter((mv) =>
+            memberHasPosOverride(mv.id),
+          ),
+        );
+      }
+    }
+    return { moves, valid: true, blockedIds };
+  }
 
   let valid = true;
   let blocked: ScenePart | undefined;
@@ -334,9 +644,15 @@ export function resolveConvoy(input: {
   // skip it — a same-id entry serves as the mover and is excluded as an obstacle.
   // Hence no trailing self slot any more; the whole list is built once per frame
   // rather than rewritten per member.
-  const world = travellingWorld(convoy, parts, dx, dz);
+  // Built once for the members that carry nothing, which is nearly all of them.
+  // A member with children of its own needs its own copy, because what has to come
+  // out of the list is ITS descendants and no one else's — see `travellingWorld`.
+  // Rebuilding unconditionally would be O(parts x members) on a Ctrl+A drag.
+  const shared = travellingWorld(convoy, parts, dx, dz, []);
 
   for (const m of convoy.members) {
+    const world =
+      m.descendants.length === 0 ? shared : travellingWorld(convoy, parts, dx, dz, m.descendants);
     const tx = m.startPos[0] + dx;
     const tz = m.startPos[2] + dz;
     const r = resolvePlacement({
@@ -377,9 +693,14 @@ export function resolveConvoy(input: {
     const wallRider = ridesWall(m.part.category, m.part.shape);
     const rigid =
       wallRider || (Math.abs(r.pos[0] - tx) < RIGID_EPS && Math.abs(r.pos[2] - tz) < RIGID_EPS);
-    if (!r.valid || !rigid) {
+    // Only a member this gesture BROKE may veto it. One that could not stand where
+    // it started refuses every delta forever and takes the whole set with it — see
+    // `ConvoyMember.startValid`, which is also where the rigidity half is explained
+    // for not being gated the same way.
+    if ((!r.valid && m.startValid) || !rigid) {
       valid = false;
       if (!blocked) blocked = m.part;
+      blockedIds.push(m.part.id);
     }
     // Only a wall-mounted member can come back turned (`snapMode: 'off'` leaves
     // `outRot` alone for everything else), so for the rest this omits the field
@@ -394,7 +715,7 @@ export function resolveConvoy(input: {
     }
   }
 
-  return { moves, valid, blocked };
+  return { moves, valid, blocked, blockedIds };
 }
 
 /**
@@ -411,22 +732,53 @@ export function convoyRestore(
   draggedId: string,
   startPos: [number, number, number],
   startRot: number,
-  /** Did the gesture actually turn the piece under the hand? A translate did not,
-   *  and writing the rotation back anyway CREATES the override `ConvoyMove.rot`
-   *  exists to avoid — so cancelling a plain drag pinned the piece's angle against
-   *  a re-detect and persisted it. */
-  draggedRotChanged = false,
-  /** Whether a member already carries a rotation override. Restoring one that
-   *  exists is free — it is a write of the same value to a key that is already
-   *  there — while restoring one that does not exist creates it, which is the
-   *  same needless pin one piece over. Default `true` keeps the old behaviour for
-   *  a caller that has not been taught to ask. */
-  memberHasRotOverride: (id: string) => boolean = () => true,
+  /**
+   * Does this id already carry a position override in `useStudio.positions`?
+   *
+   * Restoring one that exists is free — a write of the same value to a key that is
+   * already there. Creating one is not: per `ConvoyMove` it pins the piece against
+   * a re-detect and persists. So it is asked of EVERY piece the gesture carried,
+   * the one under the hand included, and asked as one question rather than two
+   * because the dragged piece is not a special case here — it is the member whose
+   * pivot the others turn about, nothing more.
+   *
+   * The dragged piece used to be exempt and wrote `pos` unconditionally. In 3D
+   * nothing writes the dragged piece's position until `commit()`, so Escape
+   * mid-drag was the one path in the app that invented a position override out of a
+   * CANCELLED gesture.
+   *
+   * Default `true` restores everything, the safe direction for a caller that has
+   * not been taught to ask: a needless pin, not a piece left behind.
+   */
+  hasPosOverride: (id: string) => boolean = () => true,
+  /** The same question for `useStudio.rotations`.
+   *
+   *  This replaced a boolean the 3D tab could not compute. It passed
+   *  `ref.current?.rotation.y !== startRot` from four lines BELOW
+   *  `g.rotation.y = startRot`, where `g` IS `ref.current` — so it compared the
+   *  value with itself, and was false on every gesture including a real rotate. The
+   *  plan passed `mode === 'rotate'`, honest but incomplete: `moveTo` re-aims a
+   *  wall rider on a TRANSLATE. Asking the store is a question both surfaces can
+   *  answer correctly, and it is a safe superset — an override that predates the
+   *  gesture holds the start value, so putting it back is a no-op write rather than
+   *  a wrong one. */
+  hasRotOverride: (id: string) => boolean = () => true,
 ): ConvoyMove[] {
-  const moves: ConvoyMove[] = [
-    draggedRotChanged ? { id: draggedId, pos: startPos, rot: startRot } : { id: draggedId, pos: startPos },
-  ];
-  moves.push(...cascadeTransform(draggedId, startPos, startRot, convoy.own));
+  const moves: ConvoyMove[] = [];
+  // Skipped outright when neither axis is overridden: the gesture wrote nothing
+  // about this piece, so there is nothing to undo and any move at all is a pin.
+  // (`pos` is required on `ConvoyMove`, so a piece with only a ROTATION override
+  // still gets its position written back — the store's codec takes the two
+  // together. One needless pin in one narrow case, against one on every cancelled
+  // drag before this.)
+  if (hasPosOverride(draggedId) || hasRotOverride(draggedId)) {
+    moves.push(
+      hasRotOverride(draggedId)
+        ? { id: draggedId, pos: startPos, rot: startRot }
+        : { id: draggedId, pos: startPos },
+    );
+  }
+  moves.push(...cascadeTransform(draggedId, startPos, startRot, convoy.own, hasRotOverride));
   for (const m of convoy.members) {
     // Same asymmetry as `resolveConvoy`, for the same reason: restoring a rotation
     // that never moved would leave behind exactly the override the resolve was
@@ -437,11 +789,13 @@ export function convoyRestore(
     // writes `rot` for nothing else. `m.part.rot` is the START rotation, so writing
     // it back to a piece with no override stamps the same needless pin one piece
     // over from the dragged one.
-    const turned = ridesWall(m.part.category, m.part.shape) && memberHasRotOverride(m.part.id);
-    moves.push(
-      turned ? { id: m.part.id, pos: m.startPos, rot: m.part.rot } : { id: m.part.id, pos: m.startPos },
-    );
-    moves.push(...cascadeTransform(m.part.id, m.startPos, m.part.rot, m.descendants));
+    const turned = ridesWall(m.part.category, m.part.shape) && hasRotOverride(m.part.id);
+    if (turned || hasPosOverride(m.part.id)) {
+      moves.push(
+        turned ? { id: m.part.id, pos: m.startPos, rot: m.part.rot } : { id: m.part.id, pos: m.startPos },
+      );
+    }
+    moves.push(...cascadeTransform(m.part.id, m.startPos, m.part.rot, m.descendants, hasRotOverride));
   }
   return moves;
 }

@@ -35,6 +35,20 @@ export function Pickable({
   const toggleInSelection = useStudio((s) => s.toggleInSelection);
   const toggleOpen = useStudio((s) => s.toggleOpen);
   const ref = useRef<Group>(null);
+  /**
+   * What was selected when the press landed.
+   *
+   * Drill-in (`selectionForPick`) asks whether a pick came from INSIDE the group,
+   * and this gesture may have answered that already: the touch hold-to-pick-up in
+   * `Draggable` selects an unselected set WHOLE before any click arrives, so reading
+   * the live selection down in `onClick` would drill into the press's own answer and
+   * a single tap on a merged set could never select the set at all. Both of
+   * `Draggable`'s selection writes — the hold timer and the drag-start — happen
+   * strictly after `pointerdown`, so this is the pre-gesture value no matter which
+   * order R3F dispatches the two components' handlers in. The plan does the same
+   * thing with `selDown` on its drag ref.
+   */
+  const selDown = useRef<readonly string[]>([]);
 
   // A part that disappears from under the cursor never fires `pointerout`, so the
   // store went on pointing at it — and `Highlight` kept drawing the hover box on
@@ -57,6 +71,11 @@ export function Pickable({
       // wall hit planes, gizmo arcs, guides, light helpers) and this is what tells
       // them apart.
       userData={{ [PART_ID_KEY]: partId }}
+      // Records only — the press itself belongs to `Draggable`, so this must not
+      // stop propagation or consume anything.
+      onPointerDown={() => {
+        selDown.current = useStudio.getState().selection;
+      }}
       onPointerOver={(e: ThreeEvent<PointerEvent>) => {
         e.stopPropagation();
         // A part mid-drag/gizmo-transform owns the gesture; the cursor sweeping
@@ -137,7 +156,9 @@ export function Pickable({
         // Plain click: a merged set is selected whole. The rule is
         // `selectionForPick` because the 2D plan needs the same answer — it had no
         // group handling at all, and `planConvoy`'s closure was covering for that.
-        setSelection(selectionForPick(useScene.getState().parts, partId), partId);
+        // …and a second click, from inside that set, drills in to the one piece.
+        // The selection as the PRESS landed, not as it stands — see `selDown`.
+        setSelection(selectionForPick(useScene.getState().parts, partId, selDown.current), partId);
         onClick?.(partId);
       }}
       // Double-click opens/closes drawers + doors on parts that support it

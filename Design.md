@@ -1281,10 +1281,17 @@ one. Two features that render the same must not be two code paths.
 
 `planConvoy` resolves membership once at pointer-down — re-resolving per frame lets
 a piece near a tolerance detach mid-gesture, the trap `wallAttachments` documents
-for walls. It does **not** close over merged groups: that closure was removed, and
-`selectionForPick` holds the rule instead, so a click takes the whole merged set
+for walls. The merged-group closure over the SELECTION was removed, and
+`selectionForPick` holds that rule instead, so a click takes the whole merged set
 while a drag carries exactly what is selected. Half a merged set is reachable, on
-purpose, and only from the layer tree. `resolveConvoy` then puts every member through `resolvePlacement`, which
+purpose, and only from the layer tree. It does still close the group over pieces the
+**rigid** path picks up, and that is not the same rule wearing a hat: "a merged set
+is already selected whole by a click" is a statement about the selection and says
+nothing about a piece that came along because it was physically resting on the thing
+being dragged. Without that closure, dragging a desk with one half of a merged pair
+standing on it split the pair — from a gesture that never touched the selection at
+all. A rigid child is not a selection, so closing the group over it overrides
+nobody's. `resolveConvoy` then puts every member through `resolvePlacement`, which
 buys two things and costs one:
 
 - **Gravity is re-asked**, so a member translated off the table it stood on lands
@@ -1298,18 +1305,46 @@ buys two things and costs one:
   the member AND to the piece being dragged. Only the member is the true answer,
   but it can be hidden by a filter or off the side of the pan, and a refusal with
   nothing visible reads as the drag being broken; the piece under the pointer is
-  the one outline that is always on screen. Both tabs do this.
+  the one outline that is always on screen. **Both tabs do this**, and until
+  recently that sentence was simply false: 3D named the member in the size tag over
+  the dragged piece and stopped there — no spoken sentence (there was no
+  `announce()` anywhere under `components/three/`) and no outline on the member, so
+  the piece actually in trouble could be off-screen with nothing pointing at it.
+  Both now ride the live channel: `blockedBy` is the one name for the sentence and
+  the tag, `blockedIds` is every refuser for the drawing. They are separate fields
+  because they answer different questions — a sentence naming four pieces is a
+  sentence nobody finishes, while an outline that names one sends the user to fix
+  them one at a time and makes the refusal look like it is wandering round the room.
+  Each `Draggable` reads `blockedIds` through a per-part selector, so a frame that
+  changes nothing re-renders nothing, which is the promise that keeps this channel
+  out of `useStudio`.
 - The cost is one resolve per member per frame, which is why the components hold
   the convoy in a ref and both write their result through one `setTransformsFor`.
+
+**The caller declares the gesture; the delta is not asked.** `resolveConvoy` takes
+`gesture: 'move' | 'turn'`, and a `'turn'` translates the company by exactly zero
+however far the dragged piece ended up from where it started. It used to infer this
+from `pos - startPos`, which looks equivalent and is not: the containment clamp
+bounds a piece by `extX`/`extZ`, and those are functions of ROTATION as well as
+size, so turning a 2 m sofa that stands against a wall pushes it off that wall — a
+real, correct positional delta produced by a gesture that translated nothing. The
+set copied it, and a chair selected alongside a sofa turned to 45° travelled 575 mm
+across the room and was persisted. 3D reads the gesture off the gizmo (a raw pointer
+drag is always a move); the plan's rotate never enters `resolveConvoy` at all — it
+writes the angle and cascades the dragged piece's own rigid children, which it had
+not been doing either, so turning a desk up here left the lamp on it behind.
 
 Two traps in there, both silent. `collidesAt` looks the mover up in the list it is
 handed and returns **false** when it is absent, so a world with the mover filtered
 out reports every position as clear — collision detection off, nothing logged. That
-is why every mover's world comes from `travellingWorld(convoy, parts, dx, dz)` and
-never a `.filter` at the call site — one function for the dragged piece and the
-members both, since it SHIFTS the company to its destination instead of deleting it,
-and a deleted travelling support is a piece resolved onto the floor and persisted
-there. Pass the ATTEMPTED delta when resolving the dragged piece and the ACCEPTED
+is why every mover's world comes from `travellingWorld(convoy, parts, dx, dz, carried)`
+and never a `.filter` at the call site — one function for the dragged piece and the
+members both. It SHIFTS the travelling company to its destination instead of deleting
+it, and a deleted travelling support is a piece resolved onto the floor and persisted
+there. The fifth argument is the opposite operation and is not a contradiction of the
+first: `carried` is the mover's OWN rigid children, which ride it, so they must not be
+able to obstruct it or — the half that bit — be its floor. Callers pass `convoy.own`;
+`resolveConvoy` passes `[]` for the world every member shares. Pass the ATTEMPTED delta when resolving the dragged piece and the ACCEPTED
 one for members. And a member resolves with `snapMode: 'off'`: its own magnetism would
 pull it out of formation, and the grid would re-round a delta the dragged piece has
 already committed to. `convoyRestore` is the Escape path — it replays the pure

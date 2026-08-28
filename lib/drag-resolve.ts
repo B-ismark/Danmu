@@ -51,6 +51,13 @@ export type ResolveInput = {
    * Every other piece, at its EFFECTIVE transform, with this piece's own rigid
    * descendants filtered out — a part must not resolve its gravity against a
    * child this same move is about to carry out from under it.
+   *
+   * `travellingWorld` (lib/drag-convoy.ts) is the only thing that builds this list,
+   * and it is named here because the sentence above is not self-enforcing: both
+   * surfaces once stopped honouring it and neither the compiler nor a test could
+   * tell, since `findSupportDetailed` has no below-test and `collidesAt` returns
+   * `false` for a mover it cannot find. A nightstand resolved onto the plant it was
+   * carrying and became undraggable.
    */
   parts: ScenePart[];
   footprint: Poly;
@@ -123,6 +130,10 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   const bnd = footprintBounds(footprint);
   let x = Math.max(bnd.minX + extX, Math.min(bnd.maxX - extX, gx));
   let z = Math.max(bnd.minZ + extZ, Math.min(bnd.maxZ - extZ, gz));
+  // Did the clamp MOVE it, rather than merely agree with it? That is the whole
+  // question for a rug — see the legality test below. Taken here, before the wall
+  // and neighbour snaps overwrite x/z with answers of their own.
+  const shovedIntoRoom = x !== gx || z !== gz;
   let outRot = rot;
   let snapLines: SnapLine[] | undefined;
 
@@ -188,11 +199,105 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   // to be the same predicate. A ceiling fan gets no snap, so it gets no exemption:
   // its blades have to be inside the room like anything else.
   const slightlyShrunk = obbFromPart([x, y, z], outRot, [dim[0] - 10, dim[1] - 10, dim[2]]);
+  // Does the room have room for it AT ALL, at this angle? The containment clamp
+  // above pins an over-wide piece to `minX + extX` — a silent shove of however much
+  // it overhangs — and for everything else that shove is caught, because the piece
+  // then fails the polygon test and the caller refuses the drop. A rug was exempt
+  // from that test outright, so a 2 m rug in a 1.5 m room jumped 250 mm on first
+  // touch and COMMITTED: rule 2's "say so, never silently resize it to fit", broken
+  // for position, in the one category that had opted out of the check that noticed.
+  //
+  // The exemption is real and stays — a rug belongs under the furniture and up to
+  // the skirting, and holding it to an OBB test would refuse the placements it
+  // exists for. A rug lying across the missing corner of an L is the case it was
+  // written for, and a test pins it. So OVERHANG is allowed on purpose.
+  //
+  // What a rug may never be is silently MOVED, and that is what this now asks. The
+  // first answer to it was `fits` — is the room's bounding box at least as big as
+  // the piece — which is a bounding-box answer to a polygon question, and CLAUDE.md
+  // names that trap by name. In an L whose box is 6 m across but whose arm is 1.6 m,
+  // a 3 m rug dropped in the arm passed `fits`, was shoved 700 mm by the clamp, and
+  // committed valid with 1.4 m of it through the plaster. The bbox check stays as a
+  // necessary condition — a piece wider than the room can only ever be clamped — but
+  // the load is carried by `shovedIntoRoom`, which is rule 2 stated directly: the
+  // pointer chose this spot, and a spot the pointer did not choose is not a drop,
+  // it is a resize-to-fit with the size left alone.
+  const roomIsWideEnough =
+    bnd.maxX - bnd.minX >= 2 * extX - 1e-9 && bnd.maxZ - bnd.minZ >= 2 * extZ - 1e-9;
+  //
+  // …and `pointInFootprint` is the third condition, because the two above are both
+  // about the CLAMP and the clamp is a bounding-box instrument. In anything but a
+  // rectangle there is floorless bounding box to walk into: in a T, a rug dragged
+  // into the missing south-east quadrant is never clamped (nothing there to clamp
+  // against), so nothing was shoved, the room is wide enough, and it committed
+  // `valid` standing entirely off the floor. The overhang exemption is about the
+  // rug's EDGES — under the furniture, up to the skirting, across an L's missing
+  // corner — and it was reading as an exemption from being in the room at all.
+  // Its centre is held to the same test every other piece's is; both pinned tests
+  // for the exemption place the rug's centre over real floor, which is what makes
+  // this the narrow version of the fix rather than a retraction of the exemption.
   const inRoom =
     ridesAWall ||
-    part.category === 'rug' ||
+    (part.category === 'rug' &&
+      roomIsWideEnough &&
+      !shovedIntoRoom &&
+      pointInFootprint(x, z, footprint)) ||
     (obbInsidePoly(slightlyShrunk, footprint) && pointInFootprint(x, z, footprint));
   const collides = collidesAt(parts, part.id, [x, y, z], outRot, dim);
 
   return { pos: [x, y, z], rot: outRot, valid: inRoom && !collides, snapLines, supportId };
+}
+
+/**
+ * A turn, resolved: the piece stays where it stands and only its angle changes —
+ * but its FOOTPRINT does not stand still, because `extX`/`extZ` above are
+ * functions of rotation as well as size. Turning a long piece that sits against a
+ * wall drives its corners through the plaster, so a turn needs the containment
+ * clamp exactly as much as a drag does.
+ *
+ * Three decisions live here rather than in each caller, because four gestures turn
+ * a piece — the plan's rotate handle, its two keyboard paths, and the 3D gizmo —
+ * and hand-rolling them is how they drifted apart in the first place:
+ *
+ * · `snapMode: 'off'`. A turn asks to be kept in the room, not to be re-gridded or
+ *   re-magnetised where it stands. The ANGLE is quantised by the caller, which is
+ *   the only part of the snap a turn wants.
+ * · `wallEdge: null`. A wall rider is re-aimed by the wall it lands on, in both
+ *   tabs or in neither.
+ * · The caller takes the CLAMP and not the legality. Refusing an invalid frame
+ *   would make a piece in a tight spot unturnable, which no report has asked for;
+ *   `valid` comes back so the caller can say so out loud instead.
+ *
+ * That last one is why this returns a whole `Resolved` and not a position. The
+ * clamped position is produced whether or not the frame is legal, and the one
+ * caller that hand-rolled its own refusal path threw it away: 3D `commit()` fell
+ * back to the PRE-GESTURE position raw and wrote the new angle beside it — a
+ * combination nothing had ever run through containment. Turning the lead of a
+ * merged set into its own siblings made the resolve invalid, so that was the path
+ * every such turn took, and the bed was committed with its corner through the wall.
+ */
+export function turnInPlace(input: {
+  part: ScenePart;
+  /** Where it stands now. Its `y` is the mount height to preserve. */
+  at: [number, number, number];
+  /** The new angle, already quantised to the caller's step. */
+  rot: number;
+  dim: [number, number, number];
+  parts: ScenePart[];
+  footprint: Poly;
+  roomHeight: number;
+}): Resolved {
+  return resolvePlacement({
+    part: input.part,
+    rawX: input.at[0],
+    rawZ: input.at[2],
+    rot: input.rot,
+    dim: input.dim,
+    parts: input.parts,
+    footprint: input.footprint,
+    roomHeight: input.roomHeight,
+    snapMode: 'off',
+    currentY: input.at[1],
+    wallEdge: null,
+  });
 }

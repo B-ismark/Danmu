@@ -814,8 +814,16 @@ function explain(
 
 /** The cost terms a move can be credited to. `inertia` is excluded on purpose: it
  *  measures the move itself, so it is always the term that got WORSE, and letting it
- *  win would have every explanation read "because it moved". */
-const TERMS: Array<keyof ScoreWeights> = [
+ *  win would have every explanation read "because it moved".
+ *
+ *  The ORDER is meaningful (it breaks ties in `explain`), so this stays a written
+ *  list rather than `Object.keys` — but a written list beside a type is the pair
+ *  CLAUDE.md warns about, and it has already drifted once in the direction nobody
+ *  notices: `navigation` was missing, so the single most valuable thing a
+ *  suggestion can do was always attributed to some other term and the sentence the
+ *  user read named the wrong reason. `_NoUncreditedTerm` below closes that at
+ *  COMPILE time — add a weight and `pnpm typecheck` names it. */
+const TERMS = [
   'overlap',
   'outside',
   'door',
@@ -832,7 +840,17 @@ const TERMS: Array<keyof ScoreWeights> = [
   'alignment',
   'relation',
   'balance',
-];
+] as const satisfies readonly (keyof ScoreWeights)[];
+
+/** Every weight except `inertia` has to appear in `TERMS`.
+ *
+ *  `Exclude` leaves `never` when the list is complete, and `never` is the only
+ *  thing that satisfies the constraint — so a new weight makes this line the error,
+ *  by name, rather than making one sentence in the panel quietly wrong. */
+type AssertNever<T extends never> = T;
+type _NoUncreditedTerm = AssertNever<
+  Exclude<Exclude<keyof ScoreWeights, 'inertia'>, (typeof TERMS)[number]>
+>;
 
 /** Keep the best few genuinely different candidates. "Different" is by the set of
  *  pieces that moved rather than by cost, so the finalists are alternative

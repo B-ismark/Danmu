@@ -27,9 +27,10 @@ import { footFromPart, obbExtentAlong, obbFromPart, rayToBoundary } from '@/lib/
 import { hitsAt, hitsInRect, nextInCycle, planPaintOrder, type CycleState } from '@/lib/plan-hit';
 import { wallSegments, footprintBounds } from '@/lib/footprint';
 import { moveWallCarrying, wallAttachments } from '@/lib/wall-actions';
-import { resolvePlacement, snapSteps } from '@/lib/drag-resolve';
+import { resolvePlacement, snapSteps, turnInPlace } from '@/lib/drag-resolve';
 import { snapGuideEnds, type SnapLine } from '@/lib/item-snap';
 import { convoyRestore, planConvoy, resolveConvoy, travellingWorld, type Convoy } from '@/lib/drag-convoy';
+import { cascadeTransform } from '@/lib/rigid-parent';
 import { formatDim } from '@/lib/units';
 import { clientDeltaToViewBox, clientToViewBox } from '@/lib/plan-view-transform';
 import { v4 as uuid } from 'uuid';
@@ -189,6 +190,32 @@ export const PlanView = forwardRef<PlanViewHandle, {
     /** Where the piece was before the gesture, so Escape can put it back. */
     startPos: [number, number, number];
     /**
+     * What was selected when the press landed — before this gesture's own
+     * press-time write, which is the whole point of recording it.
+     *
+     * Drill-in asks "did this pick come from inside the group" (see
+     * `selectionForPick`), and the press answers that question once already by
+     * selecting an unselected set WHOLE. Asking the live selection again on release
+     * therefore reads the answer the press just wrote and drills straight into it,
+     * so a single click on a merged set would land on one piece and the set could
+     * never be selected by clicking it at all.
+     */
+    selDown: readonly string[];
+    /**
+     * Where inside the piece the press landed, in world metres — subtracted from
+     * every later pointer position so the piece travels WITH the cursor instead of
+     * jumping its own centre under it.
+     *
+     * The 3D tab has always done this (`Draggable`'s `offX`/`offZ`); the plan
+     * passed `svgToWorld(e)` straight to `moveTo`, so the two tabs disagreed about
+     * what a drag even means. On one piece it read as a shrug — the piece jumps
+     * once and then tracks. With a SET it was a bug with a bad message: the convoy
+     * delta is measured from `startPos`, so grabbing a 2 m sofa near its end made
+     * the delta ~1 m before the pointer had moved at all, and every companion was
+     * flung a metre and the set refused, naming whichever member ran out of room.
+     */
+    grab: { x: number; z: number };
+    /**
      * The scene as it stood at pointer-down, and it must be a snapshot.
      *
      * `travellingWorld` and `resolveConvoy` both place the company at
@@ -210,9 +237,10 @@ export const PlanView = forwardRef<PlanViewHandle, {
      *
      * Both the membership and the start transforms live in `lib/drag-convoy.ts`
      * now, which is also where the reason each start position matters is written
-     * down: the per-frame version read a sibling's current position out of `parts`,
-     * a RENDER MEMO, so two pointermoves between two renders silently dropped a
-     * delta and a fast drag pulled the set apart.
+     * down — and it is not the scheduling story this comment used to tell. It is
+     * that a member's own resolve applies corrections the set then accepts, so
+     * stepping from the last frame compounds them while stepping from the start is
+     * idempotent. See `ConvoyMember.startPos`.
      */
     convoy: Convoy;
     /**
@@ -244,6 +272,14 @@ export const PlanView = forwardRef<PlanViewHandle, {
    *  and the two tabs must not answer "which piece is wrong" differently. */
   const [blockedIds, setBlockedIds] = useState<string[]>([]);
   const blockedRef = useRef(false);
+  /** What the last refusal SAID, so a streak that changes its mind says so.
+   *
+   *  `blockedRef` alone gated the announcement, and it is a boolean: once a drag was
+   *  refusing, dragging on until a DIFFERENT member became the blocker announced
+   *  nothing, so the spoken sentence went on naming a piece that was no longer the
+   *  answer. Keyed on the blocker rather than incremented, so holding against one
+   *  obstacle still says it once. */
+  const announcedRef = useRef<string | null>(null);
   const blockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [focusKey, setFocusKey] = useState<string | null>(null);
 
@@ -283,7 +319,16 @@ export const PlanView = forwardRef<PlanViewHandle, {
     // id written here outlives the view that wrote it, which is the same trap
     // `Pickable`'s unmount effect exists for.
     if (useStudio.getState().hoveredPartId) useStudio.getState().setHovered(null);
-  }, []);
+    // …and the same is true of `draggingId`, which now costs more than a stuck
+    // hover. Press a piece or a wall handle here and hit Ctrl+, — the router
+    // leaves for /settings with no drag guard, this view unmounts mid-gesture,
+    // and the flag survives in the studio store. `lib/history.ts` returns early
+    // from `scheduleSnapshot` while it is set, so from that moment nothing in any
+    // room is recorded again: undo does not look broken, it looks fine, until one
+    // Ctrl+Z rolls back an arbitrary amount of unrecorded work. `Draggable` has
+    // had this cleanup since before the history gate existed.
+    if (useStudio.getState().draggingId) setDragging(null);
+  }, [setDragging]);
 
   useEffect(() => {
     onViewChange?.({ zoom, rot, hasCutOff });
@@ -317,7 +362,11 @@ export const PlanView = forwardRef<PlanViewHandle, {
           d.id,
           d.startPos,
           d.startRot,
-          d.mode === 'rotate',
+          // `d.mode === 'rotate'` used to stand where the second of these does. It
+          // is honest and it is incomplete: `moveTo` re-aims a wall rider on a
+          // TRANSLATE (`if (r.rot !== part.rot) setRotation(...)`), so cancelling a
+          // picture slid along a wall left it facing the wall it never reached.
+          (id) => useStudio.getState().positions[id] !== undefined,
           (id) => useStudio.getState().rotations[id] !== undefined,
         ),
       );
@@ -525,7 +574,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
       dim: part.dimMM,
       parts:
         convoy.travelling.size > 1
-          ? travellingWorld(convoy, world, rawX - startPos[0], rawZ - startPos[2])
+          ? travellingWorld(convoy, world, rawX - startPos[0], rawZ - startPos[2], convoy.own)
           : world,
       footprint: ROOM_DYN.footprint,
       roomHeight: ROOM_DYN.height,
@@ -542,6 +591,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
 
   function clearBlocked() {
     blockedRef.current = false;
+    announcedRef.current = null;
     if (blockTimer.current) clearTimeout(blockTimer.current);
     // Let the red linger a moment so a refusal is still visible if the user lets
     // go the instant it happens.
@@ -565,6 +615,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
         selection: useStudio.getState().selection,
         parentIds: useStudio.getState().parentIds,
         footprint: ROOM_DYN.footprint,
+        roomHeight: ROOM_DYN.height,
       });
     const startPos = drag?.startPos ?? part.pos;
     // A nudge has no gesture, so the live scene IS its pointer-down state and the
@@ -576,6 +627,12 @@ export const PlanView = forwardRef<PlanViewHandle, {
       [part.pos[0], rawZ],
     ];
     let blocker: ScenePart | undefined;
+    /** Every member of the FIRST refused candidate, so the drawing can outline them
+     *  all. `blocked` names one piece because a sentence naming four is a sentence
+     *  nobody finishes; the outline has no such limit and used to inherit it anyway,
+     *  so a set stopped by three pieces sent the user to fix one at a time while the
+     *  refusal appeared to wander round the room. */
+    let refusers: string[] = [];
     for (const [tx, tz] of candidates) {
       const r = resolveAt(part, tx, tz, convoy, world, startPos);
       if (!r.valid) continue;
@@ -584,6 +641,9 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // than deforming or shoving a member through the plaster.
       const co = resolveConvoy({
         convoy,
+        // Always: the plan's rotate never comes through here — it writes the angle
+        // directly, and its rigid children ride the cascade below.
+        gesture: 'move',
         draggedId: part.id,
         pos: r.pos,
         rot: r.rot,
@@ -591,11 +651,16 @@ export const PlanView = forwardRef<PlanViewHandle, {
         parts: world,
         footprint: ROOM_DYN.footprint,
         roomHeight: ROOM_DYN.height,
+        // `setTransformsFor` below is what creates these, so the question has to be
+        // asked of the store as it stands this frame, not of the pointer-down
+        // snapshot in `dragRef`.
+        memberHasPosOverride: (id) => useStudio.getState().positions[id] !== undefined,
       });
       if (!co.valid) {
         // Remembered for the message, but the slide candidates are still tried: a
         // set stopped from moving diagonally can usually still go along one axis.
         blocker = blocker ?? co.blocked;
+        refusers = refusers.length > 0 ? refusers : co.blockedIds;
         continue;
       }
       // The guides belong to the candidate that was ACCEPTED — assigned here
@@ -626,9 +691,11 @@ export const PlanView = forwardRef<PlanViewHandle, {
     // is worse than saying nothing. Both are outlined, though: the member because
     // it is the answer, and the dragged piece because it is the only one guaranteed
     // to be on screen and unfiltered.
-    setBlockedIds(blocker && blocker.id !== part.id ? [part.id, blocker.id] : [part.id]);
-    if (!blockedRef.current) {
-      blockedRef.current = true;
+    setBlockedIds([part.id, ...refusers.filter((id) => id !== part.id)]);
+    blockedRef.current = true;
+    const saying = blocker ? `blocker:${blocker.id}` : `self:${part.id}`;
+    if (announcedRef.current !== saying) {
+      announcedRef.current = saying;
       announce(
         blocker
           ? `${blocker.name} will not fit there — the rest of the selection cannot follow.`
@@ -636,6 +703,67 @@ export const PlanView = forwardRef<PlanViewHandle, {
       );
     }
     return false;
+  }
+
+  /**
+   * Turn a piece, keeping it in the room and taking whatever stands on it along.
+   *
+   * Every turn in this tab ends here: the handle drag, the handle's own arrow keys
+   * and Shift+arrow on the piece itself. The two keyboard paths wrote the raw angle
+   * and nothing else — so a sofa could be turned through the wall a chevron at a
+   * time, and the lamp standing on a desk stayed behind, facing the way it always
+   * had, while the desk turned under it. That is the same pair of defects the handle
+   * drag had, surviving in the path nobody clicks; three call sites is exactly how
+   * it survived.
+   */
+  function turnTo(part: ScenePart, next: number) {
+    // Same rule as `moveTo`: a drag has its convoy already, a key press has no
+    // gesture to hang one off and asks for the same answer on the spot.
+    const drag = dragRef.current;
+    const convoy =
+      drag?.convoy ??
+      planConvoy({
+        draggedId: part.id,
+        parts,
+        selection: useStudio.getState().selection,
+        parentIds: useStudio.getState().parentIds,
+        footprint: ROOM_DYN.footprint,
+        roomHeight: ROOM_DYN.height,
+      });
+    const world = drag?.world ?? parts;
+    const turned = turnInPlace({
+      part,
+      at: part.pos,
+      rot: next,
+      dim: part.dimMM,
+      // Delta zero — a turn moves nobody sideways — so this is `world` with the
+      // piece's own rigid children taken out, which is what the pipeline asks for.
+      parts: convoy.travelling.size > 1 ? travellingWorld(convoy, world, 0, 0, convoy.own) : world,
+      footprint: ROOM_DYN.footprint,
+      roomHeight: ROOM_DYN.height,
+    });
+    const pos = turned.pos;
+    if (pos[0] !== part.pos[0] || pos[1] !== part.pos[1] || pos[2] !== part.pos[2]) setPosition(part.id, pos);
+    setRotation(part.id, turned.rot);
+    // …and everything standing on it turns with it, about the pivot it ACTUALLY
+    // ended on: cascading from `part.pos` while the clamp had moved the piece
+    // elsewhere would leave the lamp orbiting where the desk used to be. The
+    // convoy's own MEMBERS are deliberately not moved — a set does not pivot about
+    // the piece being turned, which is the rule `resolveConvoy` states for 'turn'.
+    if (convoy.own.length > 0) setTransformsFor(cascadeTransform(part.id, pos, turned.rot, convoy.own));
+    // The turn is TAKEN either way — refusing an invalid frame would make a piece in
+    // a tight spot unturnable, which no report has asked for. But "taken" is not
+    // "fine": the clamp keeps it in the room and something can still be in the way,
+    // and that is a finding, which per this repo's own scar is not a finding until a
+    // caller says it. A drag says it in colour; a turn said it nowhere.
+    if (turned.valid) {
+      if (blockedRef.current) clearBlocked();
+    } else if (!blockedRef.current) {
+      if (blockTimer.current) clearTimeout(blockTimer.current);
+      setBlockedIds([part.id]);
+      blockedRef.current = true;
+    }
+    return turned;
   }
 
   // ── Pointer handling ──────────────────────────────────────────────────────
@@ -792,7 +920,10 @@ export const PlanView = forwardRef<PlanViewHandle, {
     // `selectionForPick` — a merged set comes whole. The plan had no group
     // handling at all; `planConvoy` closed over `groupId` and covered for it, so
     // dragging looked right while the selection was wrong the entire time.
-    if (!useStudio.getState().selection.includes(id)) setSelection(selectionForPick(parts, id), id);
+    // Captured before that write, not after — `setSelection` is synchronous, so a
+    // read one line lower is a read of this gesture's own answer. See `selDown`.
+    const selDown = useStudio.getState().selection;
+    if (!selDown.includes(id)) setSelection(selectionForPick(parts, id, selDown), id);
     setDragging(id);
     (e.target as Element).setPointerCapture?.(e.pointerId);
 
@@ -800,25 +931,29 @@ export const PlanView = forwardRef<PlanViewHandle, {
     if (!part) return;
 
     const startPos: [number, number, number] = [part.pos[0], part.pos[1], part.pos[2]];
+    const down = svgToWorld(e);
     const convoy = planConvoy({
       draggedId: id,
       parts,
       selection: useStudio.getState().selection,
       parentIds: useStudio.getState().parentIds,
       footprint: ROOM_DYN.footprint,
+      roomHeight: ROOM_DYN.height,
     });
     const common = {
       startX: e.clientX,
       startY: e.clientY,
       moved: false,
       startPos,
+      selDown,
       convoy,
       // Frozen here for the whole gesture — see `world` on the ref.
       world: parts,
       snapLines: [] as SnapLine[],
+      grab: { x: down.x - part.pos[0], z: down.z - part.pos[2] },
     };
     if (mode === 'rotate') {
-      const w = svgToWorld(e);
+      const w = down;
       const startAngle = Math.atan2(w.z - part.pos[2], w.x - part.pos[0]);
       dragRef.current = { id, mode, startAngle, startRot: part.rot, ...common };
     } else {
@@ -917,7 +1052,10 @@ export const PlanView = forwardRef<PlanViewHandle, {
     const w = svgToWorld(e);
 
     if (mode === 'translate') {
-      moveTo(part, w.x, w.z);
+      // Minus the grab offset — see `grab` on the ref. Handed to `moveTo`
+      // UNROUNDED: `resolvePlacement` quantises to the snap grid as its first step,
+      // and rounding here as well is how two surfaces drift over where the grid is.
+      moveTo(part, w.x - dragRef.current.grab.x, w.z - dragRef.current.grab.z);
     } else {
       const a = Math.atan2(w.z - part.pos[2], w.x - part.pos[0]);
       const delta = -(a - dragRef.current.startAngle);
@@ -926,7 +1064,11 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // angle, so the same snap setting gave you 45° steps in one tab and 0.7° in
       // the other.
       const step = snapSteps(snapMode).rotate;
-      setRotation(id, step ? Math.round(raw / step) * step : raw);
+      const next = step ? Math.round(raw / step) * step : raw;
+      // Containment and the cascade both live in `turnTo` — this gesture had
+      // neither until recently, and the two keyboard turns still had neither after
+      // that, which is what one more copy of this block would have preserved.
+      turnTo(part, next);
     }
     force((v) => v + 1);
   }
@@ -999,7 +1141,13 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // has to keep the set in case a drag follows it (see onPointerDown).
       if (!dragRef.current.moved && dragRef.current.mode === 'translate') {
         const clicked = dragRef.current.id;
-        setSelection(selectionForPick(parts, clicked), clicked);
+        // …and what says whether that click came from inside the group is the
+        // selection as the GESTURE began, not as it stands now: the press has
+        // already answered once by selecting an unselected set whole, and reading it
+        // back here would drill into the press's own answer, so one click on a
+        // merged set would land on one piece and the set could never be clicked at
+        // all. See `selDown` and `selectionForPick`.
+        setSelection(selectionForPick(parts, clicked, dragRef.current.selDown), clicked);
       }
       // The per-gesture convoy snapshot dies with it — see the comment on the ref.
       dragRef.current = null;
@@ -1047,7 +1195,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
   function onPartKeyDown(e: React.KeyboardEvent, part: ScenePart) {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      setSelection(selectionForPick(parts, part.id), part.id);
+      setSelection(selectionForPick(parts, part.id, useStudio.getState().selection), part.id);
       return;
     }
     if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -1062,12 +1210,11 @@ export const PlanView = forwardRef<PlanViewHandle, {
     // nudge below moves the set. Unconditionally selecting here made the keys the
     // one gesture that could not move more than one piece, which is not a
     // distinction a keyboard user asked for.
-    if (!useStudio.getState().selection.includes(part.id)) setSelection(selectionForPick(parts, part.id), part.id);
+    if (!useStudio.getState().selection.includes(part.id)) {
+      setSelection(selectionForPick(parts, part.id, useStudio.getState().selection), part.id);
+    }
     if (e.shiftKey) {
-      const dir = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1;
-      const next = part.rot + dir * spin;
-      setRotation(part.id, next);
-      announce(`${part.name} turned to ${Math.round((next * 180) / Math.PI)} degrees.`);
+      turnByKey(e, part);
       return;
     }
     const dx = e.key === 'ArrowLeft' ? -nudge : e.key === 'ArrowRight' ? nudge : 0;
@@ -1076,14 +1223,30 @@ export const PlanView = forwardRef<PlanViewHandle, {
     force((v) => v + 1);
   }
 
+  /**
+   * Shift+arrow on a piece and the arrow keys on its turn handle are one gesture
+   * reached two ways, so they are one function — see `turnTo` for what both of them
+   * were missing while they were two.
+   *
+   * The angle announced is the one the room ACCEPTED, not the one asked for: a wall
+   * rider is re-aimed by the wall it lands on, and a sentence that reports the
+   * request rather than the result is the hand-typed measurement this repo keeps
+   * finding. The refusal is said out loud here and only drawn in colour on the
+   * pointer path, which is not a divergence — someone driving this from the keyboard
+   * cannot see the outline that colour is.
+   */
+  function turnByKey(e: React.KeyboardEvent, part: ScenePart) {
+    const dir = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1;
+    const turned = turnTo(part, part.rot + dir * spin);
+    const said = `${part.name} turned to ${Math.round((turned.rot * 180) / Math.PI)} degrees.`;
+    announce(turned.valid ? said : `${said} It does not fit at that angle — something is in the way.`);
+  }
+
   function onRotateKeyDown(e: React.KeyboardEvent, part: ScenePart) {
     if (!ARROWS.includes(e.key)) return;
     e.preventDefault();
     e.stopPropagation();
-    const dir = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1;
-    const next = part.rot + dir * spin;
-    setRotation(part.id, next);
-    announce(`${part.name} turned to ${Math.round((next * 180) / Math.PI)} degrees.`);
+    turnByKey(e, part);
   }
 
   function onWallKeyDown(e: React.KeyboardEvent, index: number, label: string) {
@@ -1403,6 +1566,14 @@ export const PlanView = forwardRef<PlanViewHandle, {
             // handle, or a five-piece selection would sprout five of them.
             const isSel = selection.includes(part.id);
             const isPrimary = selected === part.id;
+            // Weight, not only colour. `--accent-tint` and `--danger-tint` are 0.077
+            // apart in OKLab — the distance `lib/themes.ts` itself calls
+            // indistinguishable — so the refusal was being signalled by a hue shift
+            // nobody with a red-green deficiency can read, on the one surface that
+            // has no text tag to fall back on (3D says "… will not fit" out loud in
+            // `MeasureGuides`; the plan only recolours). A blocked piece is always
+            // selected, so 2.5 is the weight it is stepping up FROM.
+            const strokeW = (blocked ? 4 : isSel ? 2.5 : 1.4) * k;
             const isHovered = hovered === part.id && !isSel;
             const focused = focusKey === `part:${part.id}`;
             const rotDeg = -(rotY * 180) / Math.PI;
@@ -1463,7 +1634,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
                     ry={hpx / 2}
                     fill={fill}
                     stroke={color}
-                    strokeWidth={(isSel ? 2.5 : 1.4) * k}
+                    strokeWidth={strokeW}
                     strokeDasharray={part.locked ? undefined : `${4 * k} ${3 * k}`}
                   />
                 ) : (
@@ -1475,7 +1646,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
                       height={hpx}
                       fill={fill}
                       stroke={color}
-                      strokeWidth={(isSel ? 2.5 : 1.4) * k}
+                      strokeWidth={strokeW}
                       strokeDasharray={part.locked ? undefined : `${4 * k} ${3 * k}`}
                     />
                     {part.locked && <rect x={-wpx / 2} y={-hpx / 2} width={wpx} height={hpx} fill="url(#lockHatch)" />}

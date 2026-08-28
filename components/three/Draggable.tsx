@@ -33,14 +33,22 @@ import { gestureOwnedByOther, useStudio } from '@/lib/store';
 import { clearDragClick, suppressClickAfterDrag } from '@/lib/drag-click';
 import { useScene } from '@/lib/scene-store';
 import { currentRoomScene } from '@/lib/room-scene';
+import { renderBaseDim, resolvePart } from '@/lib/transforms';
 import { useDragLive } from '@/lib/drag-live';
-import { isParametric, selectionForPick, type ScenePart } from '@/lib/scene-spec';
+import { announce } from '@/components/studio/KeyboardShortcuts';
+import {
+  dimFromGroupScale,
+  groupScaleForDim,
+  isParametric,
+  selectionForPick,
+  type ScenePart,
+} from '@/lib/scene-spec';
 import { isFloorStanding } from '@/lib/physics';
 import { clampDims } from '@/lib/dimension-ranges';
 import { type SnapLine } from '@/lib/item-snap';
 import { resolvePlacement as resolveDrag, snapSteps } from '@/lib/drag-resolve';
 import { wouldCreateCycle } from '@/lib/rigid-parent';
-import { convoyRestore, planConvoy, resolveConvoy, travellingWorld, type Convoy, type ConvoyResult } from '@/lib/drag-convoy';
+import { convoyRestore, gestureFor, planConvoy, resolveConvoy, travellingWorld, type Convoy, type ConvoyResult } from '@/lib/drag-convoy';
 import { Pickable } from './Pickable';
 import { Highlight } from './Highlight';
 
@@ -189,11 +197,22 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   const clearParent = useStudio((s) => s.clearParent);
   const setDragging = useStudio((s) => s.setDragging);
   const setLive = useDragLive((s) => s.setLive);
+  /** Is THIS piece one of the ones the current gesture cannot place?
+   *
+   *  A per-part selector rather than a subscription to the whole live channel: the
+   *  selector runs on every frame of every drag in the room, but it returns a
+   *  boolean, so React re-renders this part only when its own answer flips. That is
+   *  what keeps the channel's promise — per-frame updates re-render the few light
+   *  consumers, never the whole part tree. */
+  const blockedHere = useDragLive((s) => !!s.live?.blockedIds?.includes(partId));
 
   // Red tint while the live drag spot is invalid. Only flips at boundary
   // crossings, so it never causes per-frame React churn.
   const [dragInvalid, setDragInvalid] = useState(false);
 
+  /** What the last refusal SAID, so a streak that changes its mind says so and one
+   *  that does not stays quiet. See `liveUpdate`. */
+  const saidRef = useRef<string | null>(null);
   const lastValidPos = useRef<[number, number, number] | null>(null);
   // Last collision-free spot DURING the current drag — an invalid drop falls
   // back here (slide up to the obstacle) instead of reverting the whole drag.
@@ -225,9 +244,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // live during a drag; commit() converts that to a dim and this effect resets
     // the scale to 1, leaving the geometry to redraw at the new size.
     if (storedDim && !isParametric(part.shape)) {
-      const sx = storedDim[0] / part.dimMM[0];
-      const sy = storedDim[2] / part.dimMM[2];
-      const sz = storedDim[1] / part.dimMM[1];
+      const [sx, sy, sz] = groupScaleForDim(part.dimMM, storedDim);
       ref.current.scale.set(sx, sy, sz);
     } else {
       ref.current.scale.set(1, 1, 1);
@@ -272,6 +289,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         selection: useStudio.getState().selection,
         parentIds: useStudio.getState().parentIds,
         footprint,
+        roomHeight,
       });
     }
     return convoyCache.current;
@@ -293,12 +311,24 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     const start = dragStartPos.current;
     const dx = start ? rawX - start[0] : 0;
     const dz = start ? rawZ - start[2] : 0;
-    return travellingWorld(c, effParts(), dx, dz);
+    // `c.own`: this piece's own rigid children ride along, so they are not in its
+    // way and — the half that bit — cannot be its floor. See `travellingWorld`.
+    return travellingWorld(c, effParts(), dx, dz, c.own);
+  }
+
+  /** Which gesture is in flight — `lib/drag-convoy.ts` owns the rule, and the
+   *  reasoning, because in here it could not be tested. Both refs are read at call
+   *  time rather than remembered at pointer-down: `gizmoActive` is set in the
+   *  gizmo's own `onMouseDown` and cleared after `commit()` in its `onMouseUp`,
+   *  which is exactly the span the answer has to cover. */
+  function currentGesture(): 'move' | 'turn' {
+    return gestureFor(gizmoActive.current, mode, rotOnly.current);
   }
 
   /** Where the company lands for a given transform of this part. */
   function carry(pos: [number, number, number], rot: number): ConvoyResult {
     return resolveConvoy({
+      gesture: currentGesture(),
       convoy: convoy(),
       draggedId: partId,
       pos,
@@ -308,6 +338,10 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       parts: effParts(),
       footprint,
       roomHeight,
+      // Read live, not captured at pointer-down: the first legal frame of THIS
+      // gesture is what creates a member's override, and the zero-delta frame that
+      // has to put it back may well be the second one.
+      memberHasPosOverride: (id) => useStudio.getState().positions[id] !== undefined,
     });
   }
 
@@ -344,12 +378,23 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
    *  commit converts to mm), clamped into the shape's real-world range. */
   function currentDim(): [number, number, number] {
     if (!ref.current || !part) return part?.dimMM ?? [100, 100, 100];
-    const s = ref.current.scale;
-    let dim: [number, number, number] = [
-      part.dimMM[0] * s.x,
-      part.dimMM[1] * s.z,
-      part.dimMM[2] * s.y,
-    ];
+    // What this group renders at scale 1 — which is NOT always the authored size.
+    //
+    // A parametric shape (sofa, curtain, WARDROBE, bookshelf, shoe-rack) rebuilds
+    // its geometry from the effective dim, so the effect above deliberately leaves
+    // its group at scale 1 and the mesh carries the resize. Everything else keeps
+    // authored geometry and wears the resize as a group scale. Multiplying the
+    // AUTHORED dim by the live scale is only right for the second kind: for the
+    // first it returns the authored size no matter how the piece was resized, and
+    // `commit()` writes that straight back through `setDim` — so resizing a
+    // wardrobe and then merely MOVING it threw the resize away, in exactly the five
+    // shapes `isParametric` names and nowhere else, which is why it reported as
+    // "sometimes".
+    //
+    // Read from the store rather than the subscribed `storedDim`: `commit` runs from
+    // handlers that can outlive the render that captured it.
+    const base = renderBaseDim(part, useStudio.getState());
+    let dim = dimFromGroupScale(base, ref.current.scale);
     if (mode === 'scale') {
       // Snap the resulting dims to the increment (TransformControls has no
       // native scaleSnap)…
@@ -364,7 +409,8 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       // …then clamp into the trustable range for this shape (a laptop can't
       // stretch to a metre; a dining table legitimately can).
       dim = clampDims(part.category, part.shape, dim);
-      ref.current.scale.set(dim[0] / part.dimMM[0], dim[2] / part.dimMM[2], dim[1] / part.dimMM[1]);
+      const [sx, sy, sz] = groupScaleForDim(base, dim);
+      ref.current.scale.set(sx, sy, sz);
     }
     return dim;
   }
@@ -386,6 +432,34 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // fallback `commit()` slides back to either.
     const co = carry(resolved.pos, resolved.rot);
     const valid = resolved.valid && co.valid;
+    // Say it, not just draw it. Design.md claimed both tabs spoke this sentence;
+    // only the plan did, and there was no `announce(` anywhere under
+    // components/three/ — so in 3D a refusal was a colour change and a tag, and to
+    // a screen reader it was nothing at all. Keyed on what is being said so a drag
+    // held against one obstacle says it once, and a drag whose blocker CHANGES says
+    // the new one. Cleared on every legal frame, so the next refusal speaks again.
+    if (valid) {
+      saidRef.current = null;
+    } else {
+      // The same gate the size tag applies to `blockedBy` below, and it has to be
+      // the same one: when the piece under the hand is ITSELF stuck, "blocked" is
+      // already the right word and naming a member points at the wrong piece. The
+      // two had drifted — the tag on `resolved.valid && co.blocked`, this sentence
+      // on `co.blocked` alone — so on a frame where the dragged piece and a member
+      // were both stuck, the tag read "blocked" with no name while the live region
+      // spoke a different piece's name. A sighted screen-reader user got two
+      // answers; anyone relying on the sentence got the wrong piece.
+      const namesMember = resolved.valid ? co.blocked : undefined;
+      const saying = namesMember ? `blocker:${namesMember.id}` : `self:${partId}`;
+      if (saidRef.current !== saying) {
+        saidRef.current = saying;
+        announce(
+          namesMember
+            ? `${namesMember.name} will not fit there — the rest of the selection cannot follow.`
+            : `${part.name} will not fit there — something is in the way.`,
+        );
+      }
+    }
     if (valid) {
       lastFreePos.current = [resolved.pos[0], resolved.pos[1], resolved.pos[2]];
       // Only on a legal step. On an illegal one the set holds at the last legal
@@ -402,6 +476,13 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       dimMM: dim,
       floor: isFloorStanding(part.category, part.shape),
       valid,
+      // Every piece to draw red — the whole set, exactly as the plan draws it. The
+      // dragged piece is always in it, because it is the one outline guaranteed to be
+      // on screen and a refusal with nothing visible reads as the drag being broken;
+      // the members are in it because 3D named one in the size tag and outlined
+      // nobody, so the piece actually in trouble could be off the side of the view
+      // with nothing pointing at it. Empty on a legal frame rather than stale.
+      blockedIds: valid ? [] : [partId, ...co.blockedIds],
       // Only when this piece itself fits: if the thing under the hand is the
       // problem, `blocked` is already the right word and naming a member would
       // point at the wrong piece. `co.blocked` was computed here from the start
@@ -434,11 +515,24 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         // occupies is a function of the delta, so a world built for a spot the
         // gesture is no longer resting at puts the company in the wrong place.
         const r = resolvePlacement(back[0], back[2], ref.current.rotation.y, dim, travelWorld(back[0], back[2]));
-        const rc = carry(r.valid ? r.pos : [back[0], back[1], back[2]], r.rot);
-        resolved = r.valid
-          ? r
-          : { pos: [back[0], back[1], back[2]], rot: ref.current.rotation.y, valid: true, supportId: r.supportId };
-        co = rc;
+        // `r`, whole — never `back` raw with the live angle written beside it, which
+        // is what this did. `resolvePlacement` returns a CONTAINMENT-CLAMPED position
+        // whether or not the frame came out legal, so throwing it away on the invalid
+        // branch discarded the one correction that always applies, and replaced it
+        // with a combination nothing had ever run through containment: the pre-gesture
+        // position, which was legal for the OLD angle and the OLD size.
+        //
+        // Harmless for a translate — `back` is a spot this piece already stood in at
+        // this angle and size — and the whole defect for the other two gestures, since
+        // a rotate and a scale never move the piece, so `back` IS where it is standing
+        // and the only thing that changed is the extent being tested against the
+        // walls. Turning the lead of a merged set into its own siblings makes the
+        // resolve invalid by collision, so that was the branch every such turn took:
+        // the bed kept the angle, kept the position, and was committed with its corner
+        // through the plaster. It also claimed `valid: true` on the way out, which is
+        // why nothing went red.
+        resolved = r;
+        co = carry(r.pos, r.rot);
       }
     }
 
@@ -447,7 +541,13 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     ref.current.rotation.y = resolved.rot;
     setPosition(partId, [x, y, z]);
     setRotation(partId, resolved.rot);
-    setDim(partId, dim);
+    // A write is not free. Per lib/transforms.ts an override PINS its value against
+    // a re-detect and persists into IndexedDB and the scene file, and this stamped
+    // one on every drop — so every piece the user had ever merely moved was pinned
+    // at its size, by a gesture that never touched a size. Same reason
+    // `ConvoyMove.rot` is optional, one field over.
+    const heldDim = resolvePart(part, useStudio.getState()).dimMM;
+    if (dim[0] !== heldDim[0] || dim[1] !== heldDim[1] || dim[2] !== heldDim[2]) setDim(partId, dim);
 
     // Rigid parenting: dropping ON something IS what creates the relationship;
     // dropping onto the floor (or a refused cycle) breaks it. Established/
@@ -477,6 +577,10 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     lastValidPos.current = [x, y, z];
     lastFreePos.current = null;
     setDragInvalid(false);
+    // The gesture is over, so the next refusal is news again even if it names the
+    // same piece. Without this a drag that ended while refusing left the key set and
+    // the following drag hit the same obstacle in silence.
+    saidRef.current = null;
     setLive(null);
     invalidate();
   }
@@ -546,6 +650,21 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   // mesh while the gizmo is already writing its transform.
   const gizmoActive = useRef(false);
 
+  /** True while the last thing the user did to this piece was TURN it rather than
+   *  slide it — a wheel notch or a two-finger twist.
+   *
+   *  `currentGesture` needs it because the gizmo is not the only way to rotate.
+   *  `resolveConvoy` is told which gesture is in flight precisely because the
+   *  containment clamp is a function of ROTATION: turn a 2 m sofa against a wall
+   *  and its z half-extent grows, so the piece is legitimately pushed away from the
+   *  plaster and the resolved position moves although the pointer never did. Read
+   *  as a translation, that push is copied to the whole selection. The gizmo path
+   *  was covered from the start; the wheel and the twist set `pendingRot` without
+   *  ever touching `gizmoActive`, so both still reported "move" and still carried
+   *  the set across the room. Cleared by the first pointer move that actually
+   *  slides the piece, so a drag-then-turn-then-drag reports each honestly. */
+  const rotOnly = useRef(false);
+
   // Two-finger twist. Tracked at window level so the second finger does not have
   // to land on the part itself — on a nightstand there is barely room for one.
   const touchPts = useRef(new Map<number, [number, number]>());
@@ -591,6 +710,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     let rot = t.baseRot - (angle - t.baseAngle);
     if (rotationSnap) rot = Math.round(rot / rotationSnap) * rotationSnap;
     pendingRot.current = rot;
+    rotOnly.current = true;
     schedule();
   }
 
@@ -677,12 +797,17 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
           partId,
           start,
           startRot,
-          ref.current?.rotation.y !== startRot,
+          // Put back only what this gesture could have written. Nothing here writes
+          // the dragged piece's own transform until `commit()`, so on the ordinary
+          // Escape both answers are false and the piece under the hand is left
+          // alone — it has already been moved back on the object3D four lines up.
+          (id) => useStudio.getState().positions[id] !== undefined,
           (id) => useStudio.getState().rotations[id] !== undefined,
         ),
       );
       setLive(null);
       setDragInvalid(false);
+      saidRef.current = null;
       document.body.style.cursor = '';
       invalidate(); // the object3D moved imperatively — ask for the repaint
     }
@@ -760,6 +885,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     _plane.set(_plane.normal.set(0, 1, 0), -planeY);
     if (!e.ray.intersectPlane(_plane, _hit)) return;
     const isTouch = e.pointerType === 'touch';
+    rotOnly.current = false;
     drag.current = {
       pointerId: e.pointerId,
       started: false,
@@ -787,7 +913,8 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         // "merged" lives now. `setSelected` left a merged sibling behind whenever the
         // gesture was a press-drag with no click before it.
         if (!useStudio.getState().selection.includes(partId)) {
-          useStudio.getState().setSelection(selectionForPick(useScene.getState().parts, partId), partId);
+          const sel = useStudio.getState().selection;
+          useStudio.getState().setSelection(selectionForPick(useScene.getState().parts, partId, sel), partId);
         }
       }, HOLD_MS);
     } else {
@@ -825,6 +952,9 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       e.stopPropagation();
       return;
     }
+    // Past that guard the pointer really is sliding the piece, so whatever the last
+    // wheel notch or twist said, this frame is a move. See `rotOnly`.
+    rotOnly.current = false;
     if (!d.started) {
       const dist = Math.hypot(e.clientX - d.startClient[0], e.clientY - d.startClient[1]);
       if (dist < 4) return;
@@ -838,7 +968,8 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       // Same rule as the touch pick-up above: a press that starts a drag selects
       // what a click would have selected.
       if (!inSelection) {
-        useStudio.getState().setSelection(selectionForPick(useScene.getState().parts, partId), partId);
+        const sel = useStudio.getState().selection;
+        useStudio.getState().setSelection(selectionForPick(useScene.getState().parts, partId, sel), partId);
       }
       document.body.style.cursor = 'grabbing';
     }
@@ -884,6 +1015,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     if (d.armed) setDragging(null);
     setLive(null);
     setDragInvalid(false);
+    saidRef.current = null;
   }
 
   function onWheel(e: ThreeEvent<WheelEvent>) {
@@ -895,6 +1027,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     const step = rotationSnap ?? Math.PI / 36; // 5° when snapping is off
     const dir = e.deltaY > 0 ? 1 : -1;
     pendingRot.current = (pendingRot.current ?? ref.current.rotation.y) + dir * step;
+    rotOnly.current = true;
     schedule();
   }
 
@@ -914,7 +1047,11 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
 
   if (!part) return null;
 
-  const highlightState = dragInvalid ? 'invalid' : inSelection ? 'selected' : 'hovered';
+  // `blockedHere` as well as `dragInvalid`: the first is "some gesture cannot place
+  // me", which is how a member that is not under the hand finds out, and the second
+  // is this part's own resolve while IT is the one being dragged.
+  const refused = dragInvalid || blockedHere;
+  const highlightState = refused ? 'invalid' : inSelection ? 'selected' : 'hovered';
 
   return (
     <>
@@ -936,7 +1073,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
           shapeKey={part.shape}
         />
         <Pickable partId={partId}>{children}</Pickable>
-        {(inSelection || isHovered || dragInvalid) && (
+        {(inSelection || isHovered || refused) && (
           <Highlight
             dimMM={isParametric(part.shape) ? (storedDim ?? part.dimMM) : part.dimMM}
             floorStanding={isFloorStanding(part.category, part.shape)}

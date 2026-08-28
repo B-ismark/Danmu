@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   buildSceneFromRoom,
   CATALOG_SHAPES_ORDERED,
@@ -442,5 +444,21 @@ describe('a wall snap is measured across the yaw the piece will actually keep', 
     // Half the TV's width minus half its depth: (1200 - 120) / 2 = 540 mm of
     // clamp, of which 500 is reachable before the aim point itself binds.
     expect(tvAt(Math.PI / 2).pos[0] - tvAt(0).pos[0]).toBeCloseTo(0.5, 6);
+  });
+});
+
+describe('one ceiling clearance: the duplication itself, not just its drift', () => {
+  it('scene-spec.ts declares no pad constant of its own', () => {
+    // The assertions in the describe above compare the two paths' RESULTS, which
+    // can only catch a duplicate that has DRIFTED. Restore
+    // `const CEILING_PAD = 0.02` next to the `MOUNT_PAD` import and every one of
+    // them stays green while the exact duplication the describe is named for is
+    // back in the file. Reading the source is the only way to see a second
+    // declaration; a regex over code, and named as such.
+    const src = readFileSync(join(process.cwd(), 'lib', 'scene-spec.ts'), 'utf8');
+    expect(src).not.toMatch(/^\s*const\s+\w*(?:CEILING|MOUNT)_PAD\s*=/m);
+    // …and it does still use the shared one, so the check above is not passing
+    // because the clamp went away.
+    expect(src).toContain('MOUNT_PAD');
   });
 });
