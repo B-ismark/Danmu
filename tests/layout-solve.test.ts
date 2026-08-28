@@ -898,6 +898,20 @@ describe('the room’s anchor is settled first', () => {
 
     // The bar is the WORST run, which is the one this pass exists for. Without it the
     // twelve seeds spread 3.3 … 154.7; with it, 3.3 … 6.9.
+    //
+    // ⚠ THIS LINE IS CURRENTLY RED, and deliberately left so rather than retuned.
+    // Un-transposing the bed's dims (`2e3367d`) took the seeded bed from 1900 × 1000
+    // to 900 × 2000 — twice as deep, so it reaches twice as far off its wall. At U
+    // 6 × 5 seed 5 the solver now returns `navigation` **80.70 having been handed
+    // 26.40**: it makes the room three times worse than it found it, piling all six
+    // movable pieces into the U's east arm. The other eleven seeds are 0.00 on every
+    // danger term, and the UNSCRAMBLED starter room this same `defaultScene` produces
+    // is nav 0.00 / total 3.57 — so neither the seeding nor the bed is at fault. It is
+    // one seed in twelve, in this pass. `PR #26` touched no solver file at all.
+    //
+    // Raising the 40 would be writing off a room that seals its own route, which is a
+    // finding `lib/clearance.ts` reports to the user by name. See section F of
+    // `docs/what-is-still-open.md`.
     expect(Math.max(...costs)).toBeLessThan(40);
 
     // …and the median must not have paid for it — measured over the terms that make
@@ -910,13 +924,28 @@ describe('the room’s anchor is settled first', () => {
     // total could only ever fail on TIDINESS, while the sentence above it says
     // "disaster" and the worst-case bar beneath it is the one that means it.
     //
-    // Worse than merely imprecise: danmu-62 swept the bed ladder at this exact room
-    // and the trade runs the wrong way for a median bar. A Double bed here scores a
-    // median of 7.01 with Σnavigation 453.60; a Queen 8.71 with Σdoor 176.84; the
-    // Single the chooser actually picks scores 14.43 with Σdanger 3.90. **The safe
-    // rung is the untidy one**, so a median tidiness bar tightened against this room
-    // selects for the rung that parks a bed across the doorway. That is not a
-    // threshold anyone should tune, in either direction.
+    // Worse than merely imprecise: danmu-62 swept the bed ladder at this exact room,
+    // and a median tidiness bar cannot be read off it in either direction. **Every
+    // number that paragraph used to quote here has been re-derived and none of them
+    // survived**, so they are replaced rather than kept — a stale measurement scopes
+    // the next reader's search, which is the whole lesson of `docs/visual-check.md`.
+    //
+    //   rung          width     worst    median    Σdanger      Σdoor    Σalign
+    //   Queen bed      1600    282.96     47.73     700.20       0.00      32.7
+    //   Double bed     1400    254.85     16.26     430.20       0.00      62.1
+    //   Single bed      900     86.43     13.73      80.70       0.00      68.0
+    //
+    // It said: Double median 7.01 / Σnavigation 453.60, Queen 8.71 / Σdoor 176.84,
+    // Single 14.43 / Σdanger 3.90, and concluded **the safe rung is the untidy one**.
+    // Measured: the medians run 47.73 / 16.26 / 13.73, so the Single is the TIDIEST
+    // as well as the safest and the trade it described does not exist. `Σdoor` is
+    // **0.00 on all three rungs** — no rung parks a bed across the doorway at this
+    // room, and that claim was never true of any committed state (it is 0.00 at
+    // `2e3367d`, the commit that introduced the sweep). What IS true is the part the
+    // old numbers were reaching for: the danger is monotone in bed width, 700.20 →
+    // 430.20 → 80.70, so coming DOWN the ladder is right. It is a bar on the worst
+    // case that means anything here, not one on the median — which is what the line
+    // above already is.
     //
     // `HARD_TERMS` is the solver's own list, exported rather than copied — and it is
     // read here the way `hardCosts` reads it, term by term. Summing them is what its

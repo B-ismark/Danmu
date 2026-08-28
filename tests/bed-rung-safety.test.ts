@@ -76,7 +76,24 @@ const solveAll = (
  *  trade `roomProfile.anchor` exists to make and the reason
  *  `layout-solve`'s median bar cannot be read as a quality target on its own. */
 describe('the bed ladder comes down a rung when the room cannot take a wider one', () => {
-  it('refuses, at U 6x5, every rung above the one that ships', () => {
+  // The sweep is one measurement read by all three tests below, so it is taken once
+  // and memoised. It has to live out here for a second reason: the first test is RED
+  // on its danger assertion, and an `expect` parked after a failing one in the same
+  // `it` never runs — it cannot even be mutation-checked. The original single test
+  // had the door facts and the alignment fact sitting behind that failure, so three
+  // assertions were unreachable. One fact per test instead.
+  type Row = {
+    label: string;
+    width: number;
+    worst: number;
+    median: number;
+    danger: number;
+    door: number;
+    align: number;
+  };
+  let ROWS: Row[] | null = null;
+  const sweep = (): Row[] => {
+    if (ROWS) return ROWS;
     const rows = BED_LADDER.map((rung) => {
       const runs = solveAll(rung.dim, 6, 5);
       const totals = runs.map((r) => r.total).sort((a, b) => a - b);
@@ -102,6 +119,12 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
           .padStart(9)}`,
       );
     }
+    ROWS = rows;
+    return rows;
+  };
+
+  it('refuses, at U 6x5, every rung above the one that ships', () => {
+    const rows = sweep();
 
     // The ladder is authored widest-first, so the LAST entry is the narrowest and
     // is the one that ships here. Derived from the table, not named.
@@ -118,6 +141,26 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
     expect(narrowest.width).toBe(Math.min(...rows.map((r) => r.width)));
     expect(rows[0].width).toBe(Math.max(...rows.map((r) => r.width)));
 
+    // ⚠ THE NEXT TWO ASSERTIONS ARE CURRENTLY RED, and left so on purpose.
+    //
+    // They are not mis-set thresholds. `narrowest.danger` is 80.70 and every unit of
+    // it is `navigation`, on ONE seed of the twelve — seed 5. The other eleven are
+    // 0.00 on all five danger terms, and the unscrambled starter room is nav 0.00 /
+    // total 3.57. At seed 5 `solveLayout` is handed navigation 26.40 and hands back
+    // 80.70: it makes the room three times worse than it found it, piling all six
+    // movable pieces into the U's east arm. That is a solver defect, in a pass whose
+    // own test is named "stops a scrambled bedroom from ending in the occasional
+    // disaster", and `PR #26` — which introduced this file — touched no solver file.
+    //
+    // The x10 line below is red for the same one seed: 80.70 x 10 = 807 clears both
+    // wider rungs' 700.20 and 430.20. Relaxing either number writes off a room that
+    // seals its own route, which `lib/clearance.ts` reports to the user by name.
+    // Fixing seed 5 restores both without a threshold moving. Section F of
+    // `docs/what-is-still-open.md` carries the measurement.
+    //
+    // This file has NEVER been green — it failed at `2e3367d`, the commit that added
+    // it, with Σdanger 86.10 for the same reason. Read no assertion here as having
+    // once held.
     // The narrowest rung is safe…
     expect(narrowest.danger).toBeLessThan(10);
     // …and every wider rung is not, by an order of magnitude. This is the
@@ -127,20 +170,69 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
       expect(r.danger, `${r.label} at U 6x5 should be unsafe`).toBeGreaterThan(narrowest.danger * 10);
     }
 
-    // The door specifically, because `Σdanger` alone does not pin it: the Double's
-    // 453.6 is navigation, so a `dangerOf` that quietly stopped counting `door`
-    // still passed every assertion above. The WIDEST rung is the one that parks
-    // across the doorway, and that is the concrete thing a reader needs to believe
-    // — a bed you cannot walk past is the failure `lib/clearance.ts` reports by
-    // name, not a score.
-    expect(rows[0].door, 'the widest rung blocks the door at U 6x5').toBeGreaterThan(50);
-    expect(narrowest.door, 'the shipped rung does not').toBe(0);
+  }, 180_000);
 
-    // And the direction of the trade, which is the part that makes
-    // `layout-solve`'s median bar unreadable in isolation: the SAFE choice is the
-    // UNTIDY one. Median total is lower for a wider bed even as its tail explodes,
-    // so a median bar tightened against this room would select for the dangerous
-    // rung.
+  it('the door term is live, and no rung blocks the door at U 6x5', () => {
+    const rows = sweep();
+    // The door, and this is where the round that wrote this file got it wrong. The
+    // claim was "the WIDEST rung parks across the doorway", pinned as
+    // `rows[0].door > 50`. **`Σdoor` is 0.00 on all three rungs**, and was 0.00 at
+    // `2e3367d`, the commit that introduced this sweep — so that assertion has never
+    // passed and no committed state ever made it true. What separates the rungs at this
+    // room is `navigation` alone (700.20 / 430.20 / 80.70).
+    //
+    // `door` stays inside `dangerOf` regardless, for the reason its own comment gives:
+    // it guards a ladder change that put the shipped bed across a doorway. But a term
+    // that reads 0 everywhere is indistinguishable from a term that is not wired up,
+    // so the fact is pinned in BOTH directions — 0 on every rung here, and a bed
+    // actually parked on the door scoring far above the gate. Without the second line
+    // the first is the blind-term failure this repo keeps finding.
+    //
+    // **The zeros loop is a mutation SURVIVOR and that is written down rather than
+    // hidden.** Adding a 2600 mm rung to `BED_LADDER` — 1000 mm wider than the Queen
+    // — still gives Σdoor 0.00, so this loop cannot tell a solver that protects the
+    // door from one that is blind to it at this room. The negative control below is
+    // the assertion carrying the weight: it goes red on `DEFAULT_WEIGHTS.door = 0`,
+    // which is what makes the zeros a fact about U 6 × 5 rather than about nothing.
+    // Keep the pair; deleting the control leaves a check that cannot fail.
+    for (const r of rows) {
+      expect(r.door, `${r.label} does not block the door at U 6x5`).toBe(0);
+    }
+    {
+      const poly = footprintForLayout('u', 6, 5);
+      const base = defaultScene('u', 6, 5, { footprint: poly, height: 2.8 });
+      const door = base.findIndex((q) => q.category === 'door');
+      const bed = base.findIndex((q) => q.category === 'bed');
+      expect(door, 'this room seeds a door at all').toBeGreaterThanOrEqual(0);
+      expect(bed, 'and a bed').toBeGreaterThanOrEqual(0);
+      const m = prepare({
+        parts: base,
+        movable: base.map((q) => !q.wallMounted),
+        footprint: poly,
+      } as LayoutContext);
+      const at = base.map((q) => ({ x: q.pos[0], z: q.pos[2], yaw: q.rot }));
+      const onDoor = at.map((q, i) =>
+        i === bed ? { x: base[door].pos[0], z: base[door].pos[2], yaw: 0 } : q,
+      );
+      const hit = costBreakdown(m, onDoor, DEFAULT_WEIGHTS, NAV_CELL) as unknown as Record<string, number>;
+      expect(hit.door, 'the door term is live, so the zeros above are a fact about the room').toBeGreaterThan(50);
+    }
+
+  }, 180_000);
+
+  it('the safe rung pays for it in alignment, and that is a preference not a finding', () => {
+    const rows = sweep();
+    const narrowest = rows[rows.length - 1];
+    const wider = rows.slice(0, -1);
+    // And the direction of the trade. The round that wrote this file had it BACKWARDS:
+    // it said the safe choice is the untidy one, that "median total is lower for a
+    // wider bed even as its tail explodes", and warned a median bar would select the
+    // dangerous rung. Measured, the medians run 47.73 / 16.26 / 13.73 — the narrowest
+    // rung is the TIDIEST as well as the safest, and no such trade exists at this room.
+    // What survives is narrower and is what the assertion below actually says: the safe
+    // rung pays in `alignment` specifically (32.7 / 62.1 / 68.0), because a single bed
+    // leaves slack its neighbours settle into off-axis. That is a preference term, not
+    // a finding, which is the whole reason it may lose to `navigation`.
     expect(narrowest.align, 'the safe rung pays for it in alignment').toBeGreaterThan(
       Math.max(...wider.map((r) => r.align)),
     );

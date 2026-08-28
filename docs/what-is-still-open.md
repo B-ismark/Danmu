@@ -544,13 +544,23 @@ layout. The remaining 8 need a real browser and stay where they are.
 
 ### What can actually be mounted
 
-These seven carry **zero** `@react-three`, `useFrame` or `useThree` references, so jsdom
-can mount them (line counts as of `e9e32d2`):
+These carry **zero** `@react-three`, `useFrame` or `useThree` references, so jsdom can
+mount them (line counts as of `e9e32d2`):
 
 `Inspector` (1088) · `PartTree` (1044) · `LibraryPicker` (326) · `CatalogPanel` (275) ·
 `StudioHelp` (265) · `RoomDimsEditor` (207) · `RailFooter` (162)
 
-The R3F components — `Draggable`, `DynamicPart`, `Room`, `RoomShell` and the rest — are
+**Corrected: that list is a starting point, not the boundary.** Re-swept against
+`62553d2`, **50 of the 60 `.tsx` under `components/` are r3f-free** — including the two
+largest panels in the app, `PlanView` (1888) and `RoomTools` (1747). Neither is in the
+seven, and `RoomTools` is the one the first spike actually needs (below).
+
+**And the grep is not a mountability test in the other direction either.** `DynamicPart`
+(1264), `Dressing` (169) and `PartLight` (137) contain no `@react-three` string and are
+still not mountable: they render `<mesh>` / `<group>` JSX, which only means anything
+inside R3F's reconciler. Use the grep to shortlist, then read what the component renders.
+
+The R3F components — `Draggable`, `Room`, `RoomShell`, `DynamicPart` and the rest — are
 **not** mountable under jsdom; they want a WebGL context. Those map almost exactly onto
 the 8 browser-only items, which is a useful coincidence rather than a plan: it means the
 split between "a test can settle this" and "a person must look at this" is a property of
@@ -564,7 +574,11 @@ the code, not a judgement call.
    pinning `include`, `environment` and `esbuild` in `tests/toolchain.test.ts`.
 3. **Spike on the smallest real item first: the door that cannot shrink.** `analyzeRoom`
    already asserts the sentence in `tests/clearance.test.ts`; the open question is entirely
-   whether the Inspector **renders** it. Watch the new assertion fail — mutate the
+   whether the component **renders** it. **That component is `RoomTools`, not the
+   Inspector** — this said Inspector and was wrong. Room check lives in
+   `components/studio/RoomTools.tsx`, which is what imports `analyzeRoom` (:161) and reads
+   `RULE_HANDLING` to decide the **Try a fix** button (:937). Nothing in `Inspector.tsx`
+   touches `analyzeRoom` at all. Watch the new assertion fail — mutate the
    component, not the test's own threshold — before trusting a word of it. The whole point
    of this task is that a green from a gate that cannot fail is worth less than no gate.
 4. Then the rest of that bucket. Two of them need no mounting at all, only a source-text
@@ -581,6 +595,93 @@ and every one of them still needs a person. Mounting a component under jsdom pro
 wiring, never the pixels — no layout, no overflow, no contrast, no focus ring. **Do not
 let a full green here be read as the browser item being closed**, which is the failure
 this whole document is about.
+
+---
+
+## F · `main` is red, and one solver seed is why
+
+**This one IS in a commit, and the commit is `main`.** Unlike everything above it, this
+is not a plan — it is a live failure that `origin/main` has carried since `aaf2888a`.
+
+### What is red
+
+Three tests, in two files. `pnpm typecheck`, `pnpm lint` and `pnpm build` are all green;
+only `Test` fails, in CI and locally, **on the same three by name** — so it is
+deterministic and not the idle-CPU artifact that `tests/layout-solve.test.ts`'s timing
+assertions are known for.
+
+| test | assertion | actual |
+| --- | --- | --- |
+| `layout-solve` · stops a scrambled bedroom from ending in the occasional disaster | `max(total) < 40` | 86.43 |
+| `bed-rung-safety` · refuses, at U 6x5, every rung above the one that ships | `narrowest.danger < 10` | 80.70 |
+| `bed-rung-safety` · still keeps the worst case bounded once the ladder has chosen | `max(total) < 40` | 86.43 |
+
+### It is one defect on one seed
+
+All three numbers are the same seed. At **U 6x5, solve seed 5**, `solveLayout` is handed
+`navigation` **26.40 and returns 80.70** — it makes the room three times worse than it
+found it. Measured alongside:
+
+- The other **eleven of twelve** seeds are `0.00` on all five danger terms — `overlap`,
+  `outside`, `door`, `navigation`, `walkway`.
+- The **unscrambled** starter room `defaultScene` builds for U 6x5 is `navigation` 0.00,
+  total 3.57. So the seeding is not at fault.
+- Seed 5 piles all six movable pieces into the U's east arm: the bed crosses from
+  x = -1.98 to x = +1.98, both nightstands and both lamps land at x 2.5 … 2.85, wardrobe
+  at 1.73. The route seals. `Σdoor` is 0.00 — nothing is parked on the doorway.
+
+### Why it appeared, and why the cause is not the culprit
+
+`PR #26` (`2e3367d`) un-transposed the bed's dimension ranges — `bed-single`
+`[1700, 800, 300] → [800, 1700, 300]`, `bed-double` likewise — so the seeded bed went
+from 1900 x **1000** deep to 900 x **2000**. Twice as deep, so it reaches twice as far
+off its wall, and the U's notch leaves less room to do that in.
+
+**That fix is correct** and answers a defect the user reported by screenshot. `PR #26`
+**touched no solver file at all** — `layout-solve.ts`, `layout-score.ts`,
+`clearance.ts`, `footprint.ts`, `room-bays.ts` and `layout-settle.ts` are all
+untouched by it. The corrected bed exposed a latent weakness in the repair pass; it did
+not create one.
+
+### What must not be done about it
+
+**Do not raise the bars.** 86.43 against a bar of 40 is a room that seals its own
+route, which is a finding `lib/clearance.ts` reports to the user by name, and
+`bed-rung-safety`'s second test says in as many words that *no seed may produce a
+finding*. Retuning the thresholds converts a reproducible defect into shipped
+behaviour and leaves nothing to find it again. Both files now carry a `⚠ CURRENTLY
+RED` banner at the assertion saying so.
+
+**Do not revert the bed.** That re-opens the 90-degree defect.
+
+The fix is in the pass, and it belongs in its own pull request: seed 5's answer is
+worse than its own input, so the pass has somewhere it accepts a regression it should
+refuse. Fixing it restores all three assertions with no threshold moving.
+
+### Two things this round found on the way, both already fixed
+
+Neither was the solver, and both were tests that had stopped being able to fail:
+
+- `suggest-tidiness`' 7.5 x 5.6 fixture stopped cutting the room when the bed narrowed
+  — `navigation` 0.00 on all 24 seeds — so `openRoutes` never ran and **three
+  assertions in that block were passing by never reaching the code they name.** The
+  block's first `it` exists precisely to catch that, and it did. Re-derived by sweeping
+  all 400 scramble seeds: 186 cut the room, and 164 cuts it hardest.
+- The proxy-refusal fixture at 8.5 x 6.4 was scramble 17 / repair seed 2, one of four
+  refusals in 1512. Re-running the identical 54 x 28 sweep: **two** refusals remain,
+  both on scramble 35. Now pinned at seed 26, chosen for margin and measured by
+  actually deleting the re-check — the proxy's answer is 1687.90 worse there.
+
+### And a class of rot worth naming
+
+Every quantity `bed-rung-safety` and `layout-solve`'s bedroom comment quoted about this
+sweep has been re-derived, and **none of them survived**: `Σdoor 176.84` is 0.00 on all
+three rungs, `Σdanger 3.90` is 80.70, `453.6` is 430.20, and "the safe rung is the
+untidy one" is backwards — the medians run 47.73 / 16.26 / 13.73, so the narrowest rung
+is the tidiest as well as the safest. Those numbers were never true of any committed
+state: `bed-rung-safety.test.ts` **failed at `2e3367d`, the commit that added it**, and
+has never been green on any commit. A test's prose rots exactly like a hand-off note,
+and it rots while the file still looks authoritative.
 
 ---
 

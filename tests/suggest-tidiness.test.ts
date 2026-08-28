@@ -347,12 +347,32 @@ describe('a suggestion leaves alone what it did not move', () => {
 // The fixture below is a U with every movable piece thrown into the bounding box at
 // a random angle by a fixed LCG. It is deliberately not a solve seed: the scramble
 // has to be identical on every branch for a number measured here to mean anything,
-// and `solveLayout`'s own rng is an implementation detail. On it, `openRoutes` runs
-// on all 24 seeds.
+// and `solveLayout`'s own rng is an implementation detail.
+//
+// `SCRAMBLE_SEED` is **re-derived, not chosen**. It was 99, and 99 stopped cutting
+// this room the moment the bed's dims were un-transposed (`2e3367d`): the seeded bed
+// went from 2000 mm wide and 1000 deep to 1600 x 2000, and a narrower piece thrown at
+// a random angle seals fewer routes. Measured at that commit and since, scramble 99
+// gives `navigation` **0.00 on all 24 seeds** — so `openRoutes` never ran and the
+// three assertions below were passing by never reaching the code they name. That is
+// the failure the first `it` in this block exists to catch, and it caught it.
+//
+// Swept all 400 seeds: 186 cut the room at all. 164 is the largest cut of those
+// (`navigabilityCost` 23.773 against 0.000 for 99), picked for margin so a further
+// shift in the bed does not quietly un-cut it again. On it `openRoutes` runs on all
+// 24 seeds and 143 pieces move.
+//
+// One caveat worth writing down, because the obvious check for it is vacuous: the
+// scrambled layout is the SAME input for every solve seed, so `breakdownBefore` is
+// one fact asserted 24 times, not 24 facts. And `breakdownBefore.navigation` is
+// `navigabilityCost` x 120, not the raw cost — comparing the two at seed 99 looked
+// like agreement only because both ends were 0.
+const SCRAMBLE_SEED = 164;
+
 function scrambledU(): { poly: Footprint; parts: ScenePart[] } {
   const poly = footprintForLayout('u', 7.5, 5.6);
   const b = footprintBounds(poly);
-  const r = lcg(99);
+  const r = lcg(SCRAMBLE_SEED);
   const parts = defaultScene('u', 7.5, 5.6, { footprint: poly }).map((p) =>
     p.wallMounted
       ? p
@@ -548,23 +568,37 @@ describe('the repair pass is re-checked on the grid the room report reads', () =
   const bounds = { minX: b.minX, maxX: b.maxX, minZ: b.minZ, maxZ: b.maxZ };
   const fine = (p: Placement[]) => costBreakdown(model, p, DEFAULT_WEIGHTS, NAV_CELL).total;
 
-  /** One of the four layouts in 1512 where the coarse proxy and the fine grid
-   *  disagree: scramble 17 of the U at 8.5 × 6.4, repair seed 2.
+  /** One of the TWO layouts in 1512 where the coarse proxy and the fine grid
+   *  disagree: scramble 35 of the U at 8.5 x 6.4, repair seed 26.
    *
    *  Both constants are that search's coordinates and neither means anything on its
    *  own. The encoding is the search's own — `i * 2654435761` for the scramble,
    *  `i * 31 + j` for the repair seed — and it is kept in that form so a re-run can
    *  name the same point rather than a magic number that has to be trusted.
    *
-   *  Chosen from the four for MARGIN rather than for looks, both numbers measured:
-   *  this room is cut by 12.9 on the fine grid, so the gate below is nowhere near
-   *  vacuous, and with the re-check deleted the proxy's answer scores 450 units worse
-   *  than the layout it was handed. The other three sat at 0.3, 0.01 and 7.1 cut with
-   *  margins of 768, 315 and 608; the one with the largest margin is also the one
-   *  barely cut at all, and a fixture that stops being cut is a test that stops
-   *  meaning anything. */
-  const LAYOUT_SEED = 17 * 2654435761;
-  const REPAIR_SEED = 17 * 31 + 2;
+   *  **Re-derived, and the count moved.** This was scramble 17 / repair seed 2, one of
+   *  FOUR refusals. Un-transposing the bed's dims (`2e3367d`) changed every scrambled
+   *  room in the space, and 17/2 stopped being a refusal — `openRoutes` now returns a
+   *  different array there, which is what went red. Re-running the identical 54 x 28
+   *  sweep: 19 of 54 scrambles are cut at all, and the space holds exactly **two**
+   *  refusals, both on scramble 35 — repair seeds 8 and 26. This room is cut by 7.055
+   *  on the fine grid, which is comparable to the 7.1 the previous round REJECTED in
+   *  favour of a 12.9 — so treat it as the floor rather than a comfortable margin. If a
+   *  later change un-cuts scramble 35 the sweep has to be RE-RUN, not the gate relaxed,
+   *  because a fixture that stops being cut is a test that stops meaning anything.
+   *
+   *  Seed 26 rather than 8, by the same criterion the previous round used — margin, and
+   *  measured rather than asserted. With the fine-grid re-check deleted, the proxy's
+   *  answer here scores **1687.90 units worse** than the layout it was handed (1921.50
+   *  to 3609.40); at seed 8 it is 849.18 worse. Both refuse, both sit on the same
+   *  scramble and the same 7.055 cut, so the larger margin is free.
+   *
+   *  The previous round's "450 units worse" is NOT carried over. That figure cannot be
+   *  read off a passing run — it needs the re-check removed — and the number above was
+   *  taken by actually removing it: `return best` in place of the final line of
+   *  `openRoutes`, which turns this assertion and the one above it red together. */
+  const LAYOUT_SEED = 35 * 2654435761;
+  const REPAIR_SEED = 35 * 31 + 26;
 
   function scattered(): Placement[] {
     const r = lcg(LAYOUT_SEED);
@@ -593,9 +627,10 @@ describe('the repair pass is re-checked on the grid the room report reads', () =
     // would be a second copy of `openRoutes`' own line and the drift this repo keeps
     // finding, so the exclusion is by CONTRAST instead: on this same model one
     // different repair seed comes back with a different array, and none of the three
-    // early returns can do that for any seed.
+    // early returns can do that for any seed. Measured on scramble 35: 26 of the 28
+    // repair seeds come back with a different array, and only 8 and 26 refuse.
     const at = scattered();
-    expect(openRoutes(model, at, DEFAULT_WEIGHTS, bounds, lcg(17 * 31 + 1))).not.toBe(at);
+    expect(openRoutes(model, at, DEFAULT_WEIGHTS, bounds, lcg(35 * 31 + 1))).not.toBe(at);
   });
 
   it('and its answer is never worse on the fine grid than what it was given', () => {
