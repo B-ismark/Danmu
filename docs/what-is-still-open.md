@@ -487,6 +487,103 @@ the user went and looked.
 
 ---
 
+## E · The next task, scoped but NOT started: component tests under jsdom
+
+This section exists because the scoping is worth more than it looks and lived nowhere
+durable. It was derived in a session that is about to be cleared, and a scratchpad note
+dies with its session id. **Nothing below is in a commit** — no dependency added, no
+config touched, no test written.
+
+### Why this is the next thing
+
+`docs/visual-check.md` says nothing in this app has been in a browser. The reason that
+list keeps growing is structural: **no test in this repo has ever mounted a component.**
+Derived, not remembered — `grep -rln "from '@/components" tests/` returns nothing. Every
+function in `lib/` is asserted; **nothing checks that a component calls it**, so a correct
+`lib/` answer computed and then dropped on the floor by its caller is invisible to all
+82 test files. That is exactly the shape of the `blockedBy` scar in `CLAUDE.md` — "a
+finding the caller drops is a finding that does not exist" — and it went a whole commit
+unseen because only a human eye could have caught it.
+
+Of the 21 items in `visual-check.md`, roughly **10 need no browser at all**, only wiring:
+does the component render the sentence `lib/` already computes. 3 more are computed
+layout. The remaining 8 need a real browser and stay where they are.
+
+### The toolchain facts, already derived — do not re-derive
+
+- react / react-dom **19.2.8**, vitest **4.1.10**, jsdom **30.0.1**, vite 7.
+- `vitest.config.ts`: `environment: 'node'`, `include: ['tests/**/*.test.ts']`,
+  alias `@` to repo root, `esbuild: { jsx: 'automatic' }`.
+- **That `include` does not match `.test.tsx`**, and JSX will not parse inside a
+  `.test.ts`. So either widen it to `tests/**/*.test.{ts,tsx}` or write every component
+  test through `React.createElement`. Widening is the right call; the second is a
+  transcript of JSX rather than JSX.
+- `tests/toolchain.test.ts` does **not** pin `include`, `environment` or `esbuild` —
+  checked, not assumed. Worth pinning the way the ESLint >= 9 floor is pinned, since all
+  three fail in the direction that looks like success: a `.tsx` test that is simply never
+  collected reports as a green suite.
+- jsdom is opted into **per file** with a `// @vitest-environment jsdom` pragma. Keep it
+  that way. Do not switch the suite over — `CLAUDE.md` says so and the reason is that the
+  pure-logic files have no business paying for a DOM.
+
+### Two findings from the scoping, both of which should be fixed as part of the work
+
+1. **`vitest.config.ts`'s comment is stale, and it justifies a live setting.** It says a
+   test that renders a component — naming `tests/sun-controls.test.ts` — imports a `.tsx`.
+   **That file does not exist**; it went with the sun-mood collapse. So `esbuild: { jsx:
+   'automatic' }` is currently explained by a file that is gone, and in fact **no test
+   imports a `.tsx` at all.** Do **not** delete the setting on that reading: it becomes
+   load-bearing the moment the first component test lands. Correct the comment to name the
+   real reason. This is the `CLAUDE.md` grep-refutation trap pointing the other way — prose
+   that survived its subject, and would have talked the next reader into deleting something
+   real.
+2. **`tests/vanishing-point.test.ts` contains a `render(` that has nothing to do with
+   React** — it is a local image-drawing helper. It is why a naive `grep "render("` over
+   `tests/` looks like component coverage already exists. It fooled one pass of this
+   scoping already.
+
+### What can actually be mounted
+
+These seven carry **zero** `@react-three`, `useFrame` or `useThree` references, so jsdom
+can mount them (line counts as of `e9e32d2`):
+
+`Inspector` (1088) · `PartTree` (1044) · `LibraryPicker` (326) · `CatalogPanel` (275) ·
+`StudioHelp` (265) · `RoomDimsEditor` (207) · `RailFooter` (162)
+
+The R3F components — `Draggable`, `DynamicPart`, `Room`, `RoomShell` and the rest — are
+**not** mountable under jsdom; they want a WebGL context. Those map almost exactly onto
+the 8 browser-only items, which is a useful coincidence rather than a plan: it means the
+split between "a test can settle this" and "a person must look at this" is a property of
+the code, not a judgement call.
+
+### The plan
+
+1. Add `@testing-library/react` (plus its `@testing-library/dom` peer if npm asks for it).
+   One dependency. Run `pnpm audit` after.
+2. Widen `include` to `tests/**/*.test.{ts,tsx}` and fix the stale comment. Consider
+   pinning `include`, `environment` and `esbuild` in `tests/toolchain.test.ts`.
+3. **Spike on the smallest real item first: the door that cannot shrink.** `analyzeRoom`
+   already asserts the sentence in `tests/clearance.test.ts`; the open question is entirely
+   whether the Inspector **renders** it. Watch the new assertion fail — mutate the
+   component, not the test's own threshold — before trusting a word of it. The whole point
+   of this task is that a green from a gate that cannot fail is worth less than no gate.
+4. Then the rest of that bucket. Two of them need no mounting at all, only a source-text
+   sweep: the Library signposts, and copy still naming a deleted feature.
+5. **Delete each item from `visual-check.md` in the same pull request that lands its
+   gate.** That file's rule is that an item goes when it has been looked at; a test that
+   settles it permanently is stronger than one look, and leaving the item behind would
+   claim work that is done.
+
+### What this does not do
+
+It does not put anything in a browser. Eight items stay in `visual-check.md` afterwards
+and every one of them still needs a person. Mounting a component under jsdom proves the
+wiring, never the pixels — no layout, no overflow, no contrast, no focus ring. **Do not
+let a full green here be read as the browser item being closed**, which is the failure
+this whole document is about.
+
+---
+
 ## Nothing in this document has been in a browser
 
 Neither has anything in `visual-check.md`. The desktop half of both is reachable with
