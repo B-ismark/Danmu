@@ -161,12 +161,36 @@ the user went and looked.
    The same refusal is loud in one tab and silent in the other.
 
    It was recorded as taste on the grounds that telling 3D means inventing a second visual
-   channel in the scene. **That is only true of an outline.** 3D already has a channel for
-   exactly this: `blockedBy` rides the live drag channel and lands in the **size tag**,
-   which is how a refused *move* names the piece that ran out of room. A refused *turn* does
-   not use it. So the cheap fix is to route the turn's refusal through the tag that already
-   exists, which is not a new channel and not a preference — it is the same finding being
-   dropped by one of two callers, which this codebase already names as a defect class.
+   channel in the scene. **That is only true of an outline**, so the conclusion stands — the
+   silence is a defect, and an outline in 3D remains taste and remains declined.
+
+   **The mechanism first written here was wrong, and the correct one makes this a bigger
+   job.** It said `blockedBy` was being computed and dropped, so routing the turn's refusal
+   into the size tag would be a one-liner. It would not. In
+   `components/three/Draggable.tsx`, `onGizmoChange` opens with
+
+       if (mode !== 'translate') return; // rotate/scale resolve on commit
+
+   and `liveUpdate` has exactly one call site — `:616`, the pointer-drag flush. `announce(`
+   appears only inside `liveUpdate` (`:456`), as do `blockedBy` (`:491`) and the only
+   `setDragInvalid(true)` (`:494`; the other three sites set `false`). **So during a rotate
+   or a scale in 3D the live channel never publishes at all.** Nothing is computed and
+   dropped — there is no per-frame feedback for that gesture class by design, and the comment
+   says why. That is a *different* defect from the one that had 3D refusing a set in silence,
+   which had the value in hand.
+
+   Two ways in, both real work and neither a routing change:
+   - **Publish a one-shot live update from `commit()` on refusal.** The gesture is over by
+     then, and the live channel is a *drag* channel — `MeasureGuides` reads `live`, and
+     `setDragging(null)` happens in the same handler. Needs a decision about whether a
+     channel keyed to "a drag is in flight" may carry a message about one that has ended.
+   - **Let `onGizmoChange` run `liveUpdate` for rotate and scale.** That deletes the early
+     return the file explains rather than adding to it, and means resolving on every gizmo
+     frame for two gestures that deliberately do not.
+
+   Found by `drag`, reading the file after this document had already claimed the easy
+   version. **A write-up that understates a fix is worse than one that overstates it:**
+   somebody opens the file expecting a one-liner and finds a design question.
    An outline in 3D remains taste and remains declined.
 
 9. **A piece too big to turn — DECIDED: it depends on whether any angle fits, and the
@@ -194,6 +218,13 @@ the user went and looked.
    this angle does not fit but another does — refuse the angle, keep the last good one, and
    name the blocker, exactly as a refused move behaves. The rule to carry: **a crossed bound
    is a message, never a clamp.**
+
+   **9 depends on 8, and neither of us saw it until `drag` did.** Both halves of that
+   decision end in *report*, and in the model tab, for rotate and scale, **there is currently
+   nothing to report through** — see item 8. So implementing 9 in `lib/drag-resolve.ts`
+   alone buys correct behaviour in the plan and correct *silence* in 3D, which would read as
+   the fix half-working. **8 is a prerequisite for 9 being observable in the model tab.** Do
+   them in that order or do them together; do not ship 9 first.
 
 10. **"Library" — ANSWERED, and the user's answer is a defect report.** They said *"Library
     isn't on there"*, and the tree agrees: the panel's heading is **"Add pieces"**, its
