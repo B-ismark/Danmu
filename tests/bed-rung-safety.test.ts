@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultScene, BED_LADDER } from '@/lib/scene-spec';
+import { defaultScene, BED_LADDER, type ScenePart } from '@/lib/scene-spec';
 import { footprintForLayout } from '@/lib/footprint';
 import { prepare, costBreakdown, DEFAULT_WEIGHTS, NAV_CELL } from '@/lib/layout-score';
 import { solveLayout } from '@/lib/layout-solve';
@@ -123,133 +123,18 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
     return rows;
   };
 
-  it('refuses, at U 6x5, every rung above the one that ships', () => {
-    const rows = sweep();
 
-    // The ladder is authored widest-first, so the LAST entry is the narrowest and
-    // is the one that ships here. Derived from the table, not named.
-    const narrowest = rows[rows.length - 1];
-    const wider = rows.slice(0, -1);
-    // A LITERAL, not `BED_LADDER.length`. Deriving the expected count from the
-    // array being counted is the self-referential assertion that cannot fail:
-    // deleting the Queen rung left `wider.length > 0` green, because Double is
-    // still wider than Single. Three rungs is a decision — change it here on
-    // purpose.
-    expect(BED_LADDER.length, 'the ladder is Queen / Double / Single').toBe(3);
-    expect(wider.length).toBe(2);
-    // Widest first, so the sweep's last row really is the narrowest.
-    expect(narrowest.width).toBe(Math.min(...rows.map((r) => r.width)));
-    expect(rows[0].width).toBe(Math.max(...rows.map((r) => r.width)));
-
-    // ⚠ THE NEXT TWO ASSERTIONS ARE CURRENTLY RED, and left so on purpose.
-    //
-    // They are not mis-set thresholds. `narrowest.danger` is 80.70 and every unit of
-    // it is `navigation`, on ONE seed of the twelve — seed 5. The other eleven are
-    // 0.00 on all five danger terms, and the unscrambled starter room is nav 0.00 /
-    // total 3.57. At seed 5 `solveLayout` is handed navigation 26.40 and hands back
-    // 80.70: it makes the room three times worse than it found it, piling all six
-    // movable pieces into the U's east arm. That is a solver defect, in a pass whose
-    // own test is named "stops a scrambled bedroom from ending in the occasional
-    // disaster", and `PR #26` — which introduced this file — touched no solver file.
-    //
-    // The x10 line below is red for the same one seed: 80.70 x 10 = 807 clears both
-    // wider rungs' 700.20 and 430.20. Relaxing either number writes off a room that
-    // seals its own route, which `lib/clearance.ts` reports to the user by name.
-    // Fixing seed 5 restores both without a threshold moving. Section F of
-    // `docs/what-is-still-open.md` carries the measurement.
-    //
-    // This file has NEVER been green — it failed at `2e3367d`, the commit that added
-    // it, with Σdanger 86.10 for the same reason. Read no assertion here as having
-    // once held.
-    // The narrowest rung is safe…
-    expect(narrowest.danger).toBeLessThan(10);
-    // …and every wider rung is not, by an order of magnitude. This is the
-    // assertion: not "the wider bed scores worse" but "the wider bed produces the
-    // kind of failure the user would be shown as a finding".
-    for (const r of wider) {
-      expect(r.danger, `${r.label} at U 6x5 should be unsafe`).toBeGreaterThan(narrowest.danger * 10);
-    }
-
-  }, 180_000);
-
-  it('the door term is live, and no rung blocks the door at U 6x5', () => {
-    const rows = sweep();
-    // The door, and this is where the round that wrote this file got it wrong. The
-    // claim was "the WIDEST rung parks across the doorway", pinned as
-    // `rows[0].door > 50`. **`Σdoor` is 0.00 on all three rungs**, and was 0.00 at
-    // `2e3367d`, the commit that introduced this sweep — so that assertion has never
-    // passed and no committed state ever made it true. What separates the rungs at this
-    // room is `navigation` alone (700.20 / 430.20 / 80.70).
-    //
-    // `door` stays inside `dangerOf` regardless, for the reason its own comment gives:
-    // it guards a ladder change that put the shipped bed across a doorway. But a term
-    // that reads 0 everywhere is indistinguishable from a term that is not wired up,
-    // so the fact is pinned in BOTH directions — 0 on every rung here, and a bed
-    // actually parked on the door scoring far above the gate. Without the second line
-    // the first is the blind-term failure this repo keeps finding.
-    //
-    // **The zeros loop is a mutation SURVIVOR and that is written down rather than
-    // hidden.** Adding a 2600 mm rung to `BED_LADDER` — 1000 mm wider than the Queen
-    // — still gives Σdoor 0.00, so this loop cannot tell a solver that protects the
-    // door from one that is blind to it at this room. The negative control below is
-    // the assertion carrying the weight: it goes red on `DEFAULT_WEIGHTS.door = 0`,
-    // which is what makes the zeros a fact about U 6 × 5 rather than about nothing.
-    // Keep the pair; deleting the control leaves a check that cannot fail.
-    for (const r of rows) {
-      expect(r.door, `${r.label} does not block the door at U 6x5`).toBe(0);
-    }
-    {
-      const poly = footprintForLayout('u', 6, 5);
-      const base = defaultScene('u', 6, 5, { footprint: poly, height: 2.8 });
-      const door = base.findIndex((q) => q.category === 'door');
-      const bed = base.findIndex((q) => q.category === 'bed');
-      expect(door, 'this room seeds a door at all').toBeGreaterThanOrEqual(0);
-      expect(bed, 'and a bed').toBeGreaterThanOrEqual(0);
-      const m = prepare({
-        parts: base,
-        movable: base.map((q) => !q.wallMounted),
-        footprint: poly,
-      } as LayoutContext);
-      const at = base.map((q) => ({ x: q.pos[0], z: q.pos[2], yaw: q.rot }));
-      const onDoor = at.map((q, i) =>
-        i === bed ? { x: base[door].pos[0], z: base[door].pos[2], yaw: 0 } : q,
-      );
-      const hit = costBreakdown(m, onDoor, DEFAULT_WEIGHTS, NAV_CELL) as unknown as Record<string, number>;
-      expect(hit.door, 'the door term is live, so the zeros above are a fact about the room').toBeGreaterThan(50);
-    }
-
-  }, 180_000);
-
-  it('the safe rung pays for it in alignment, and that is a preference not a finding', () => {
-    const rows = sweep();
-    const narrowest = rows[rows.length - 1];
-    const wider = rows.slice(0, -1);
-    // And the direction of the trade. The round that wrote this file had it BACKWARDS:
-    // it said the safe choice is the untidy one, that "median total is lower for a
-    // wider bed even as its tail explodes", and warned a median bar would select the
-    // dangerous rung. Measured, the medians run 47.73 / 16.26 / 13.73 — the narrowest
-    // rung is the TIDIEST as well as the safest, and no such trade exists at this room.
-    // What survives is narrower and is what the assertion below actually says: the safe
-    // rung pays in `alignment` specifically (32.7 / 62.1 / 68.0), because a single bed
-    // leaves slack its neighbours settle into off-axis. That is a preference term, not
-    // a finding, which is the whole reason it may lose to `navigation`.
-    expect(narrowest.align, 'the safe rung pays for it in alignment').toBeGreaterThan(
-      Math.max(...wider.map((r) => r.align)),
-    );
-  }, 180_000);
-
-  it('still keeps the worst case bounded once the ladder has chosen', () => {
-    // The guarantee `roomProfile.anchor` is actually for, on the room as it SHIPS
-    // (no forced rung). `layout-solve`'s own bar is 40; this asserts the same
-    // property from the ladder's side so a ladder change that wrecked the tail
-    // cannot be green here and red only over there.
+  // The room as it SHIPS - no forced rung - memoised for the same reason `sweep` is:
+  // it costs twelve solves, and it is now read by three tests rather than one. Those
+  // three used to be one `it`, and two of its assertions could never execute because
+  // the one between them fails by design. A red assertion nobody can observe is the
+  // same defect as a green one that cannot fail.
+  let SHIPPED: { bed: ScenePart | undefined; runs: Record<string, number>[] } | null = null;
+  const shipped = () => {
+    if (SHIPPED) return SHIPPED;
     const poly = footprintForLayout('u', 6, 5);
     const base = defaultScene('u', 6, 5, { footprint: poly, height: 2.8 });
     const bed = base.find((q) => q.category === 'bed');
-    expect(bed, 'a U 6x5 must seed a bed at all').toBeTruthy();
-    // The narrowest rung, which the sweep above proves is the only safe one.
-    expect(bed!.dimMM[0]).toBe(BED_LADDER[BED_LADDER.length - 1].dim[0]);
-
     const messy = scramble(base);
     const model = prepare({
       parts: messy,
@@ -265,10 +150,172 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
           NAV_CELL,
         ) as unknown as Record<string, number>,
     );
+    SHIPPED = { bed, runs };
+    return SHIPPED;
+  };
+
+  // -- The ladder's SHAPE, in its own test and deliberately so -----------------
+  //
+  // These were the premises of every assertion below, and they sat inside the `it`
+  // that is red by design - so they could not signal. Two mutations proved the
+  // silence: truncating `BED_LADDER` to one rung, and adding a 2600 mm rung, BOTH
+  // reported the identical failures as an unmutated run. A guard that cannot be heard
+  // is not a guard, however correct it is.
+  it('the ladder is Queen / Double / Single, widest first', () => {
+    const rows = sweep();
+    // A LITERAL, not `BED_LADDER.length`. Deriving the expected count from the array
+    // being counted is the self-referential assertion that cannot fail: deleting the
+    // Queen rung left `wider.length > 0` green, because Double is still wider than
+    // Single. Three rungs is a decision - change it here on purpose.
+    expect(BED_LADDER.length, 'the ladder is Queen / Double / Single').toBe(3);
+    expect(rows.length, 'and the sweep covers every rung').toBe(3);
+    expect(rows.slice(0, -1).length).toBe(2);
+    // Widest first, so the sweep's last row really is the narrowest.
+    expect(rows[rows.length - 1].width).toBe(Math.min(...rows.map((r) => r.width)));
+    expect(rows[0].width).toBe(Math.max(...rows.map((r) => r.width)));
+  }, 180_000);
+
+  // RED BY DESIGN - see section F of `docs/what-is-still-open.md`.
+  //
+  // Not a mis-set threshold. `narrowest.danger` is 80.70 and every unit of it is
+  // `navigation`, on ONE seed of the twelve - seed 5. The other eleven are 0.00 on
+  // all five danger terms, and the unscrambled starter room is nav 0.00 / total 3.57.
+  // At seed 5 `solveLayout` is handed navigation 26.40 and returns 80.70.
+  //
+  // What that 80.70 actually IS, measured rather than inferred: `navigabilityCost`
+  // returns square metres of floor a person coming through the door cannot reach,
+  // plus `STRANDED_PIECE = 2` for each piece nobody can get to, and the weight is
+  // 120. So 80.70 / 120 = 0.6725 raw, which is below 2 - therefore NO piece is
+  // stranded, and the whole of it is ~0.67 m2 of cut-off floor, about an 0.8 m
+  // square. It is a stranded pocket, not a sealed room. The first version of this
+  // note said "the route seals", which was read off the placement coordinates rather
+  // than off the term that produces the number.
+  //
+  // Still a finding: `lib/clearance.ts` reports unreachable floor by name, and the
+  // per-seed test below says in as many words that no seed may produce one. Raising
+  // the bar would ship it with nothing left to find it again.
+  //
+  // This file has NEVER been green - it failed at `2e3367d`, the commit that added
+  // it, with total danger 86.10 for the same reason. Read no assertion here as having
+  // once held.
+  it('refuses, at U 6x5, the rung that ships being unsafe at all', () => {
+    const rows = sweep();
+    expect(rows.length).toBe(3);
+    expect(rows[rows.length - 1].danger).toBeLessThan(10);
+  }, 180_000);
+
+  // RED BY DESIGN, and red for the same single seed. 80.70 x 10 = 807 clears both
+  // wider rungs' 700.20 and 430.20, so this cannot pass while seed 5 stands. Split
+  // out of the test above because behind that failure it could not run at all.
+  //
+  // The assertion is not "the wider bed scores worse" but "the wider bed produces the
+  // kind of failure the user would be shown as a finding".
+  it('...and every rung above it unsafe by an order of magnitude', () => {
+    const rows = sweep();
+    expect(rows.length).toBe(3);
+    const narrowest = rows[rows.length - 1];
+    for (const r of rows.slice(0, -1)) {
+      expect(r.danger, `${r.label} at U 6x5 should be unsafe`).toBeGreaterThan(narrowest.danger * 10);
+    }
+  }, 180_000);
+
+  // The door, and this is where the round that wrote this file got it wrong. The
+  // claim was "the WIDEST rung parks across the doorway", pinned as
+  // `rows[0].door > 50`. Total door cost is 0.00 on all three rungs, and was 0.00 at
+  // `2e3367d`, the commit that introduced this sweep - so that assertion never passed
+  // and no committed state ever made it true. What separates the rungs at this room
+  // is `navigation` alone (700.20 / 430.20 / 80.70).
+  //
+  // `door` stays inside `dangerOf` regardless, for the reason its own comment gives:
+  // it guards a ladder change that put the shipped bed across a doorway. But a term
+  // that reads 0 everywhere is indistinguishable from a term that is not wired up, so
+  // the fact is pinned in BOTH directions - 0 on every rung here, and a bed actually
+  // parked on the door scoring far above the gate.
+  //
+  // The zeros loop is a mutation SURVIVOR and that is written down rather than
+  // hidden. Adding a 2600 mm rung - 1000 mm wider than the Queen - still gives total
+  // door cost 0.00, so this loop cannot tell a solver that protects the door from one
+  // blind to it at this room. The negative control is the assertion carrying the
+  // weight: it goes red on `DEFAULT_WEIGHTS.door = 0`. Keep the pair.
+  //
+  // The `rows.length` line is not ceremony: without it, truncating `BED_LADDER` to a
+  // single rung leaves this loop asserting over one row and still green.
+  it('the door term is live, and no rung blocks the door at U 6x5', () => {
+    const rows = sweep();
+    expect(rows.length, 'over every rung, not whatever the sweep happened to return').toBe(3);
+    for (const r of rows) {
+      expect(r.door, `${r.label} does not block the door at U 6x5`).toBe(0);
+    }
+    const poly = footprintForLayout('u', 6, 5);
+    const base = defaultScene('u', 6, 5, { footprint: poly, height: 2.8 });
+    const door = base.findIndex((q) => q.category === 'door');
+    const bed = base.findIndex((q) => q.category === 'bed');
+    expect(door, 'this room seeds a door at all').toBeGreaterThanOrEqual(0);
+    expect(bed, 'and a bed').toBeGreaterThanOrEqual(0);
+    const m = prepare({
+      parts: base,
+      movable: base.map((q) => !q.wallMounted),
+      footprint: poly,
+    } as LayoutContext);
+    const at = base.map((q) => ({ x: q.pos[0], z: q.pos[2], yaw: q.rot }));
+    const onDoor = at.map((q, i) =>
+      i === bed ? { x: base[door].pos[0], z: base[door].pos[2], yaw: 0 } : q,
+    );
+    const hit = costBreakdown(m, onDoor, DEFAULT_WEIGHTS, NAV_CELL) as unknown as Record<string, number>;
+    // Worth naming what this does and does not prove: a bed centred ON the doorway is
+    // also half through the wall, so that layout scores `outside` 333.33 as well. It
+    // demonstrates the door term is WIRED, not that a bed standing inside the room
+    // across a doorway would clear 50.
+    expect(hit.door, 'the door term is live, so the zeros above are a fact about the room').toBeGreaterThan(50);
+  }, 180_000);
+
+  // And the direction of the trade. The round that wrote this file had it BACKWARDS:
+  // it said the safe choice is the untidy one, that "median total is lower for a wider
+  // bed even as its tail explodes", and warned a median bar would select the dangerous
+  // rung. Measured, the medians run 47.73 / 16.26 / 13.73 - the narrowest rung is the
+  // TIDIEST as well as the safest, and no such trade exists at this room.
+  //
+  // What survives is narrower: the safe rung pays in `alignment` specifically
+  // (32.7 / 62.1 / 68.0), because a single bed leaves slack its neighbours settle into
+  // off-axis. That is a preference term, not a finding, which is the whole reason it
+  // may lose to `navigation`.
+  //
+  // `Math.max(...[])` is `-Infinity`, so without the length guard this passes
+  // vacuously the moment the ladder has one rung - any finite number beats -Infinity.
+  it('the safe rung pays for it in alignment, and that is a preference not a finding', () => {
+    const rows = sweep();
+    expect(rows.length).toBe(3);
+    const wider = rows.slice(0, -1);
+    expect(wider.length, 'or Math.max over an empty list passes on -Infinity').toBe(2);
+    expect(rows[rows.length - 1].align, 'the safe rung pays for it in alignment').toBeGreaterThan(
+      Math.max(...wider.map((r) => r.align)),
+    );
+  }, 180_000);
+
+  it('the room as it ships comes down to the narrowest rung', () => {
+    const { bed } = shipped();
+    expect(bed, 'a U 6x5 must seed a bed at all').toBeTruthy();
+    expect(bed!.dimMM[0]).toBe(BED_LADDER[BED_LADDER.length - 1].dim[0]);
+  }, 180_000);
+
+  // RED BY DESIGN - the same seed 5, from the ladder's side. `layout-solve`'s own bar
+  // is 40 and this asserts the same property here, so a ladder change that wrecked
+  // the tail cannot be green in one file and red only in the other.
+  it('still keeps the worst case bounded once the ladder has chosen', () => {
+    const { runs } = shipped();
     expect(SEEDS.length).toBe(12);
+    expect(runs.length).toBe(12);
     expect(Math.max(...runs.map((r) => r.total))).toBeLessThan(40);
-    // No seed may produce a finding — this is what "no disaster" means, and it is
-    // a stronger statement than any bound on the total.
+  }, 180_000);
+
+  // RED BY DESIGN, and this is the one that says what "no disaster" means - a
+  // stronger statement than any bound on a total, and it names the seed. It was
+  // unreachable behind the bound above until this split: `seed 5 must strand nothing:
+  // expected 80.70 to be less than 5`. FOUR assertions in this file are red, not two,
+  // and that only became visible once each got its own test.
+  it('and no seed produces a finding at all', () => {
+    const { runs } = shipped();
+    expect(runs.length).toBe(12);
     for (const [i, r] of runs.entries()) {
       expect(dangerOf(r), `seed ${SEEDS[i]} must strand nothing`).toBeLessThan(5);
     }

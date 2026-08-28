@@ -367,7 +367,7 @@ describe('a suggestion leaves alone what it did not move', () => {
 // one fact asserted 24 times, not 24 facts. And `breakdownBefore.navigation` is
 // `navigabilityCost` x 120, not the raw cost — comparing the two at seed 99 looked
 // like agreement only because both ends were 0.
-const SCRAMBLE_SEED = 164;
+const SCRAMBLE_SEED = 43;
 
 function scrambledU(): { poly: Footprint; parts: ScenePart[] } {
   const poly = footprintForLayout('u', 7.5, 5.6);
