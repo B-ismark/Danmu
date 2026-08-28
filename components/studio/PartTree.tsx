@@ -6,8 +6,8 @@ import { useScene } from '@/lib/scene-store';
 import { bestMatch, type LocalMatch } from '@/lib/shape-search';
 import { Icon } from '@/components/ui/Icon';
 import { Dot, IconButton } from '@/components/ui/primitives';
-import { useConfirm } from '@/components/ui/Confirm';
 import { toast } from '@/components/ui/StorageToast';
+import { Tooltip } from '@/components/ui/Tooltip';
 import Link from 'next/link';
 import { RoomDimsEditor } from './RoomDimsEditor';
 import { RailSection } from './RailSection';
@@ -15,7 +15,6 @@ import { RoomTools } from './RoomTools';
 import { NorthDial } from './NorthDial';
 import { LightingPicker } from './LightingPicker';
 import { ViewOptions } from './ViewOptions';
-import { AddPiecesButton } from './CatalogPanel';
 import { duplicateSelection, removeParts } from './KeyboardShortcuts';
 import { THEMES, themeColorFor, type Theme } from '@/lib/themes';
 import { LIGHTING } from '@/lib/lighting-moods';
@@ -50,7 +49,6 @@ export function PartTree() {
   const setSelection = useStudio((s) => s.setSelection);
   const toggleInSelection = useStudio((s) => s.toggleInSelection);
   const frameSelected = useStudio((s) => s.frameSelected);
-  const resetTransforms = useStudio((s) => s.resetTransforms);
   const lighting = useStudio((s) => s.lighting);
   const setLighting = useStudio((s) => s.setLighting);
   const [query, setQuery] = useState('');
@@ -60,13 +58,6 @@ export function PartTree() {
   // are what the rail is for; Style and View are occasional.
   const [sec, setSec] = useState({ room: true, style: false, view: false, pieces: true });
   const toggle = (k: keyof typeof sec) => setSec((v) => ({ ...v, [k]: !v[k] }));
-  const hasAnyOverride = useStudio(
-    (s) =>
-      Object.keys(s.positions).length > 0 ||
-      Object.keys(s.rotations).length > 0 ||
-      Object.keys(s.dims).length > 0,
-  );
-  const confirm = useConfirm();
   const listRef = useRef<HTMLDivElement>(null);
   // Where a Shift-range starts. Every plain click moves it; a range never does, so
   // Shift-clicking twice re-measures from the same place instead of crawling down
@@ -386,6 +377,34 @@ export function PartTree() {
           meta={<span className="mono">{room.width.toFixed(1)}×{room.depth.toFixed(1)}m</span>}
           open={sec.room}
           onToggle={() => toggle('room')}
+          // Re-scan changes what is IN the room, which is this section's subject — it
+          // was in the top bar, next to controls about how the app is framed. It is
+          // the header's trailing action rather than a full-width button in the body
+          // for two reasons: the body is dimensions, a compass dial and nothing else
+          // that is a NAVIGATION, and a control about the section should survive the
+          // section being closed.
+          //
+          // A <Link> wearing `.icon-btn` rather than the IconButton primitive, because
+          // IconButton renders a <button> and this is a real navigation — middle-click
+          // and prefetch are worth keeping. `.icon-btn::after` supplies the 44px hit
+          // area, so the 28px box is visual only.
+          //
+          // Tooltip, not `title`: the glyph is the whole label now, `.rail` is
+          // `overflow: hidden` so an absolute bubble is clipped, and the native one
+          // never appears on keyboard focus. The bubble is the short name and the
+          // sentence is the accessible one, which is the split Tooltip documents.
+          action={
+            <Tooltip label="Re-scan">
+              <Link
+                href="/onboarding/detect"
+                className="icon-btn"
+                aria-label="Re-scan the room from your photos"
+                style={{ width: 32, height: 32, flexShrink: 0 }}
+              >
+                <Icon name="refresh" size={14} />
+              </Link>
+            </Tooltip>
+          }
         >
           <RoomDimsEditor />
           {/* Which way the room faces. It used to live inside the Lighting mood
@@ -396,16 +415,6 @@ export function PartTree() {
             <span className="ds-label" style={{ display: 'block', marginBottom: 6 }}>Facing</span>
             <NorthDial />
           </div>
-          {/* Rescan changes what is IN the room, which is this section's subject.
-              It was in the top bar, next to controls about how the app is framed. */}
-          <Link
-            href="/onboarding/detect"
-            className="ds-btn"
-            style={{ width: '100%', height: 30, fontSize: 11.5, justifyContent: 'center', marginTop: 10 }}
-          >
-            <Icon name="refresh" size={12} />
-            Re-scan the room
-          </Link>
         </RailSection>
 
         <RailSection
@@ -591,7 +600,7 @@ export function PartTree() {
             {q ? (
               <>Nothing here matches “{q}”. Try another word — a sofa, a lamp, a rug.</>
             ) : (
-              <>The room is bare. Add a piece above and start arranging it.</>
+              <>The room is bare. Press Add to put the first piece in.</>
             )}
           </div>
         )}
@@ -657,32 +666,11 @@ export function PartTree() {
         </RailSection>
       </div>
 
-      {/* Pinned footer, the way Drafted pins Cancel / Create: the rail's own
-          action never scrolls away, and "Add" was previously buried mid-column
-          inside the Furniture section. The bulk revert joins it, and still only
-          appears when there is something to revert. */}
-      <div style={{ borderTop: '1px solid var(--hairline)', padding: '12px 16px', background: 'var(--paper-2)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <AddPiecesButton />
-        {hasAnyOverride && (
-          <button
-            onClick={async () => {
-              const ok = await confirm({
-                title: 'Put every piece back?',
-                body: 'Every move, turn and resize returns to where the room started. Colours, styles and pieces you added stay.',
-                confirmLabel: 'Put them back',
-                danger: true,
-              });
-              if (!ok) return;
-              resetTransforms();
-              toast({ title: 'Everything is back where it started', ttl: 4000 });
-            }}
-            className="ds-btn"
-            style={{ width: '100%', height: 30, fontSize: 11, gap: 6, justifyContent: 'center' }}
-          >
-            <Icon name="refresh" size={11} /> Put everything back
-          </button>
-        )}
-      </div>
+      {/* The room-level actions that used to be pinned here are the RIGHT rail's
+          footer now (`RailFooter`). They sat in the bottom-left corner of the
+          window, diagonally opposite the Inspector that answers every other
+          question about what is selected. This rail ends with the piece list,
+          which already takes the leftover height. */}
     </div>
   );
 }
@@ -827,12 +815,12 @@ function PartRow({
       // which would swallow the nested buttons' labels ("Sofa Hide Remove").
       //
       // Membership is spoken, not just drawn. The indent and the connector say
-      // "merged" to a sighted user; nothing in a flat listbox says it otherwise,
+      // "grouped" to a sighted user; nothing in a flat listbox says it otherwise,
       // and this is the one fact that changes what dragging the piece will do.
-      aria-label={`${name}${inGroup ? ', merged' : ''}${locked ? ', from your photo' : ''}${isHidden ? ', hidden' : ''}${isPinned ? ', locked in place' : ''}`}
+      aria-label={`${name}${inGroup ? ', grouped' : ''}${locked ? ', from your photo' : ''}${isHidden ? ', hidden' : ''}${isPinned ? ', locked in place' : ''}`}
       tabIndex={tabbable ? 0 : -1}
       className={`list-row${selected ? ' is-selected' : ''}`}
-      title={`${name} · ${category}${inGroup ? ' · merged' : ''}${isHidden ? ' · hidden' : ''}${isPinned ? ' · locked in place' : ''}${locked ? ' · from your photo' : ''}`}
+      title={`${name} · ${category}${inGroup ? ' · grouped' : ''}${isHidden ? ' · hidden' : ''}${isPinned ? ' · locked in place' : ''}${locked ? ' · from your photo' : ''}`}
       onClick={onSelect}
       onKeyDown={onKeyDown}
     >
@@ -961,7 +949,7 @@ function GroupRow({
   // matches one of three merged chairs must not make the set look like a pair —
   // the two it is hiding still move when this one is dragged.
   const count = shown < total ? `${shown} of ${total}` : `${total}`;
-  const name = `Merged group, ${total} piece${total === 1 ? '' : 's'}${shown < total ? `, ${shown} shown` : ''}`;
+  const name = `Group, ${total} piece${total === 1 ? '' : 's'}${shown < total ? `, ${shown} shown` : ''}`;
 
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     const mine = () => {

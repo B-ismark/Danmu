@@ -130,3 +130,163 @@ export function bestMatch(query: string): LocalMatch | null {
   ]);
   return { label: item.label, category: item.category, shape: item.shape, dimMM: dim };
 }
+
+/** Every catalog row a search box should show for `query`, best first.
+ *
+ *  Two passes, and the second is a fallback rather than a replacement.
+ *
+ *  `searchLibrary` is the one that folds synonyms — "couch" finds the sofas,
+ *  "carpet" finds the rugs, "armoire" finds the wardrobes — and a substring match
+ *  can never do that, which is why the picker's own `label.includes(q)` filter was
+ *  the weaker half of a feature the app already had twice. But scoring needs a
+ *  whole token the catalog vocabulary recognises: mid-word, "ward" scores nothing
+ *  while still being a perfectly good substring of "Wardrobe". Ranking alone would
+ *  empty the list halfway through typing a word it is about to find, so the
+ *  substring pass stays underneath it.
+ *
+ *  Unlimited on purpose. `searchLibrary`'s default of 5 is right for a short
+ *  suggestion list; a search box is showing you the catalog, and truncating it
+ *  silently is the "no silent caps" problem — a list that stops at 5 reads as
+ *  "that is all there is". */
+/** The vocabulary a size is spelled WITH, as opposed to the numbers in it.
+ *
+ *  Deliberately not a copy of `parseDims`' patterns. The question here is only
+ *  whether the user typed any word that is about a PIECE, and answering it by
+ *  re-listing the numeric forms would be a second source of truth for the harder
+ *  half - the half that grows. This list is the units and the axis words, which is
+ *  the smaller and far more stable surface; `parseDims` stays the only thing that
+ *  reads a number. `by` is here although `parseDims` cannot read it, because
+ *  "160 by 200cm" still names a size through the single-value branch. */
+const SIZE_WORDS = /^(mm|cm|m|x|by|tall|high|height|deep|depth|wide|width)$/;
+
+/** True when every WORD in the query is part of spelling a size - so the user has
+ *  named a size and nothing else. */
+function namesOnlySize(query: string): boolean {
+  const words = query.toLowerCase().split(/[^a-z]+/).filter(Boolean);
+  return words.length > 0 && words.every((w) => SIZE_WORDS.test(w));
+}
+
+export function rankLibrary(query: string): LibraryItem[] {
+  const q = query.trim();
+  if (!q) return ALL;
+  const scored = searchLibrary(q, ALL.length);
+  if (scored.length > 0) return scored;
+  const lower = q.toLowerCase();
+  const subs = ALL.filter(
+    (i) => i.label.toLowerCase().includes(lower) || i.group.toLowerCase().includes(lower),
+  );
+  if (subs.length > 0) return subs;
+  // Nothing matched - and there are two very different reasons for that.
+  //
+  // `160x200cm` scores nothing (no token is a word) and matches no substring, so the
+  // grid went blank while the badge that shows the resolved size was armed: the one
+  // state where the feature is on and there is nothing to use it on. Typing the size
+  // first is invited by the very phrasing the feature is for. A bare size does not
+  // NARROW the catalogue, it sizes it, so the whole catalogue is the honest answer
+  // and every row shows what it would arrive at.
+  //
+  // A query carrying a real word that matched nothing - `zzqqxx`, or `160x200cm
+  // sofaa` - is a failed search and stays empty. Showing the whole library there
+  // would answer a typo with 60 rows.
+  if (namesOnlySize(q) && queryNamesSize(q)) return ALL;
+  return subs;
+}
+
+/** The size a picked catalog item should arrive at, given the words that found it.
+ *
+ *  This is what the deleted "Describe it" tab was actually worth. The tab promised
+ *  to find models the library does not have, which this app cannot do — every
+ *  piece is procedural and there is no mesh download path — but the dimension
+ *  parser underneath it was real: type "queen bed 160x200cm" and the piece arrives
+ *  at that size instead of the preset's. That belongs on the ordinary search box,
+ *  where it is one field instead of a second tab claiming a second feature.
+ *
+ *  `clampDims` gates the result exactly as it does everywhere else. Rule 2's trust
+ *  boundary does not move because the number came from a text box rather than from
+ *  a model: an axis the words did not name keeps the preset, and one they did name
+ *  is still only a request. */
+export function sizeFromQuery(item: LibraryItem, query: string): Dim3 {
+  return resolveQuerySize(item, query).dim;
+}
+
+/** One axis the words named, and what became of it. */
+export type AxisRequest = {
+  /** What the words asked for, in mm. */
+  asked: number;
+  /** What the range allows, in mm — `asked` when nothing was changed. */
+  got: number;
+};
+
+/** `sizeFromQuery`, plus WHICH axes the range had to overrule.
+ *
+ *  Rule 2's second half is the reason this exists. `clampDims` correctly refuses a
+ *  400 mm wardrobe — its narrowest single bay is 600 — but the search box used to
+ *  render the clamped number as though it were the answer, so typing
+ *  `wardrobe 40cm` showed `600×600×2200` and said nothing about the 400. The user
+ *  reads that as the badge disagreeing with what they asked for, and they are
+ *  right: a size was silently resized to fit, which is the one thing this repo
+ *  says never to do.
+ *
+ *  It returns the pairs rather than a sentence because the sentence is the UI's to
+ *  write and the numbers are not: a caller that hand-typed "600" beside a clamp it
+ *  did not call is the hand-typed-measurement defect again. `overruled` is keyed by
+ *  axis so a caller can mark the field rather than the whole badge.
+ *
+ *  Only axes the words NAMED can appear. An axis that kept its preset was never a
+ *  request, so reporting it would be inventing a complaint on the user's behalf. */
+export function resolveQuerySize(
+  item: LibraryItem,
+  query: string,
+): { dim: Dim3; overruled: { w?: AxisRequest; d?: AxisRequest; h?: AxisRequest } } {
+  const o = parseDims(query);
+  const asked: Dim3 = [o.w ?? item.dimMM[0], o.d ?? item.dimMM[1], o.h ?? item.dimMM[2]];
+  const dim = clampDims(item.category, item.shape, asked);
+  const overruled: { w?: AxisRequest; d?: AxisRequest; h?: AxisRequest } = {};
+  const named = [o.w, o.d, o.h] as const;
+  const keys = ['w', 'd', 'h'] as const;
+  for (let i = 0; i < 3; i++) {
+    // `named[i] !== undefined` is the gate, not `asked[i] !== dim[i]`: an axis
+    // that fell back to the preset can still be clamped (a catalog entry may sit
+    // outside a range the shape narrowed later), and that is not the user being
+    // overruled.
+    if (named[i] !== undefined && asked[i] !== dim[i]) {
+      overruled[keys[i]] = { asked: asked[i], got: dim[i] };
+    }
+  }
+  return { dim, overruled };
+}
+
+/** The overruled axes as a sentence, or `null` when nothing was overruled.
+ *
+ *  Here rather than in the picker because it states NUMBERS, and a number stated
+ *  beside a clamp the speaker did not call is the hand-typed-measurement defect
+ *  this repo keeps finding. Every figure in it comes off the `AxisRequest` pairs.
+ *
+ *  Axis order is fixed w→d→h so two rows overruled on different axes read the same
+ *  way round, and the axes are named in the words the Inspector uses to the user
+ *  ('Width', 'Depth', 'Height') rather than as `w`/`d`/`h`. */
+export function describeOverruled(o: {
+  w?: AxisRequest;
+  d?: AxisRequest;
+  h?: AxisRequest;
+}): string | null {
+  const named: Array<[string, AxisRequest | undefined]> = [
+    ['Width', o.w],
+    ['Depth', o.d],
+    ['Height', o.h],
+  ];
+  const parts = named
+    .filter((e): e is [string, AxisRequest] => e[1] !== undefined)
+    .map(([axis, r]) => `${axis.toLowerCase()} ${r.asked} mm is outside this shape's range, so it will be added at ${r.got} mm`);
+  if (parts.length === 0) return null;
+  return `The size you typed does not fit: ${parts.join('; ')}.`;
+}
+/** True when `query` named any size at all — the one thing a caller needs to know
+ *  before deciding whether to SHOW a size it did not have to show. Kept beside
+ *  `sizeFromQuery` rather than left to each caller to re-derive from `parseDims`,
+ *  because "did the text name a size" and "what size does this item become" are
+ *  two questions and only the second one is per-item. */
+export function queryNamesSize(query: string): boolean {
+  const o = parseDims(query);
+  return o.w !== undefined || o.d !== undefined || o.h !== undefined;
+}

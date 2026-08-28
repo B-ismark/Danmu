@@ -59,7 +59,18 @@ function rule(selector: string): string {
   // Escaped for the regex, and `[^{]*` before `{` so `.chrome-bar` does not match
   // `.chrome-bar--tight`.
   const esc = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const m = new RegExp(`${esc}\\s*\\{([^}]*)\\}`).exec(CSS);
+  // Anchored at column 0 first, and that is not tidiness -- it is the difference
+  // between reading a rule and reading an override of it. A selector appears twice
+  // whenever a container query narrows it, and every container query in this file
+  // sits ABOVE the base rules, so an unanchored match returns the query's copy and
+  // its two or three relief declarations. An assertion about `.rail-section-toggle`
+  // asked for its padding and got ' padding-left: 12px; ' out of the 240px block.
+  // Silent, and it fails in the direction that looks like the CSS being wrong.
+  //
+  // `.rail-footer` hit this first and grew its own column-0 scan inline; this is
+  // that fix moved into the helper, so the next caller does not have to know.
+  const anchored = new RegExp(`(?:^|\\n)${esc}\\s*\\{([^}]*)\\}`).exec(CSS);
+  const m = anchored ?? new RegExp(`${esc}\\s*\\{([^}]*)\\}`).exec(CSS);
   expect(m, `no rule for \`${selector}\` in globals.css`).toBeTruthy();
   return m![1];
 }
@@ -380,6 +391,52 @@ describe('a rail section reflows instead of clipping', () => {
     expect(meta![0]).toContain('flexShrink: 0');
   });
 
+  it('keeps the header action OUTSIDE the disclosure button', () => {
+    // The header used to BE the <button>. A section-level control — Room's Re-scan
+    // link — cannot live inside it: interactive content nested in a <button> is
+    // invalid HTML and a `jsx-a11y` failure, and at `--max-warnings 0` that is a red
+    // build rather than a warning. So the row is a <div className="rail-section-head">
+    // holding a `.rail-section-toggle` button and the action as its SIBLING.
+    //
+    // Read as source shape rather than rendered DOM because this file is a node
+    // suite with no jsdom, and because the mistake it guards against is a diff that
+    // looks harmless: moving `{action}` up two lines.
+    const HEAD_OPEN = '<div className="rail-section-head">';
+    const from = SRC.indexOf(HEAD_OPEN);
+    expect(from, 'no rail-section-head row in RailSection').toBeGreaterThan(-1);
+    const row = SRC.slice(from + HEAD_OPEN.length);
+    expect(row, 'the disclosure must be the .rail-section-toggle button').toMatch(
+      /<button[^>]*className="rail-section-toggle"/,
+    );
+    const btnStart = row.indexOf('<button');
+    const btnEnd = row.indexOf('</button>');
+    expect(btnStart, 'no disclosure button inside the header row').toBeGreaterThan(-1);
+    expect(btnEnd, 'the disclosure button is not closed').toBeGreaterThan(btnStart);
+    const toggle = row.slice(btnStart, btnEnd);
+    expect(toggle, '{action} must not be nested inside the disclosure button').not.toContain('{action}');
+    expect(row.slice(btnEnd), '{action} must render after the disclosure button').toContain('{action}');
+  });
+
+  it("keeps the header's leading strip inside the disclosure button", () => {
+    // The header used to BE the button, so its 16px leading padding was pressable.
+    // Splitting the row put that padding on the wrapping <div> and the button at
+    // `padding: 0`, which silently turned the strip at the start of every section
+    // header into dead space — a hit-target regression no gate can see and that
+    // reads as the header being fussy to click. Found in review.
+    //
+    // So the toggle carries the vertical padding and the LEADING inline padding,
+    // and the row carries only `padding-right`, which is the action button's side.
+    const toggle = rule('.rail-section-toggle');
+    expect(toggle, 'no .rail-section-toggle rule in globals.css').toBeTruthy();
+    expect(toggle, 'the leading strip must be inside the button').toContain('padding: 11px 0 11px 16px');
+    const head = rule('.rail-section-head');
+    expect(head, 'no .rail-section-head rule in globals.css').toBeTruthy();
+    expect(head, 'the row must not re-add a leading pad in front of the button').toContain(
+      'padding-right: 16px',
+    );
+    expect(head, 'a shorthand here would put dead space back').not.toMatch(/padding:\s/);
+  });
+
   it('states its padding in CSS, where a container query can reach it', () => {
     // Inline padding is padding the rail's own container queries cannot narrow.
     // RailSection is what the LEFT rail is built from, so while its padding was
@@ -387,10 +444,224 @@ describe('a rail section reflows instead of clipping', () => {
     expect(SRC).toMatch(/className="rail-section-head"/);
     expect(SRC).toMatch(/className="rail-section-body"/);
     expect(SRC, 'padding belongs in globals.css now').not.toMatch(/padding: '[^']*16px/);
-    const tight = /@container rail \(max-width: 240px\) \{([^}]*)\}/.exec(CSS);
-    expect(tight, 'no 240px container query in globals.css').toBeTruthy();
-    expect(tight![1]).toContain('.rail-section-head');
-    expect(tight![1]).toContain('.rail-section-body');
+    // Sliced with indexOf rather than matched with a regex. The first version used
+    // /\{([^}]*)\}/, which stops at the end of the query's FIRST rule — so a second
+    // rule inside the same query was invisible to every assertion below. That went
+    // unnoticed while the block held exactly one rule, and the hit-target fix above
+    // adds two more. A newline-anchored regex is the obvious repair and it is a trap
+    // in this repo: the checkout is CRLF, so the pattern has to carry an optional CR
+    // and the escaping does not survive being written by a script. String arithmetic
+    // cannot get that wrong.
+    const QUERY = '@container rail (max-width: 240px) {';
+    const qAt = CSS.indexOf(QUERY);
+    expect(qAt, 'no 240px container query in globals.css').toBeGreaterThan(-1);
+    const bodyFrom = qAt + QUERY.length;
+    // The closing brace of the query itself is the only one at column 0 after it.
+    const closeAt = CSS.indexOf('\n}', bodyFrom);
+    expect(closeAt, 'the 240px container query is never closed').toBeGreaterThan(bodyFrom);
+    const tight = CSS.slice(bodyFrom, closeAt);
+    expect(tight).toContain('.rail-section-body');
+    // The header's padding lives on two elements now, so BOTH need the relief.
+    expect(tight, 'the header row keeps its own padding at 240px').toContain('.rail-section-head');
+    expect(tight, 'the disclosure keeps its leading pad at 240px').toContain('.rail-section-toggle');
+  });
+});
+
+describe('the rail footer holds the selection, add and revert in ONE row', () => {
+  const SRC = readSrc('components', 'studio', 'RailFooter.tsx');
+  const CAT = readSrc('components', 'studio', 'CatalogPanel.tsx');
+
+  // There was a local `baseRule` here with a docblock explaining that the shared
+  // `rule()` takes the first match and so returns the 240px container query's
+  // relief block instead of the base rule. That was true when it was written and
+  // stopped being true in the same commit: the column-0 scan moved INTO `rule()`,
+  // and this copy plus its explanation stayed behind claiming the helper still had
+  // the bug. Prose describing behaviour that changed is the defect no gate sees,
+  // so the copy is deleted rather than re-worded — `rule()` is the one scan.
+
+  it('states its box model in CSS, where the container query can reach it', () => {
+    // Same argument as `.rail-section-head`: while the old footer stated
+    // `padding: 12px 16px` inline in PartTree, the 240px relief below could not
+    // narrow it, so the one row in the rail holding two controls side by side was
+    // the one row that never gave any padding back.
+    expect(SRC).toContain('className="rail-footer"');
+    expect(SRC, "padding belongs in globals.css now").not.toContain("padding: '12px 16px'");
+    const footer = rule('.rail-footer');
+    expect(footer).toContain('padding: 12px 16px');
+    // Never squeezed out by a tall Inspector above it. A footer that can shrink to
+    // nothing is a footer that silently is not there.
+    expect(footer).toContain('flex-shrink: 0');
+  });
+
+  /** The line three separate reports called a horizontal scrollbar.
+   *
+   *  `.rail-footer` had `border-top: 1px solid var(--hairline)`. It rendered
+   *  immediately under the Inspector's last control — an OUTLINED "Delete from
+   *  scene" button — spanning the rail's full width, with a 32px round revert
+   *  button beside it. That reads as a scrollbar, and it was reported as one three
+   *  times while two sessions looked for an overflow that did not exist.
+   *
+   *  It is deleted, not restyled, and the tone does its job alone: the footer is
+   *  `--paper-2` against the rail's `--paper`, a real surface step rather than a
+   *  1px rule. So this asserts BOTH halves — no border, and the tone still there —
+   *  because deleting the border and the background together would leave the
+   *  pinned row visually continuous with the scrolling panel above it, which is a
+   *  different defect reached by "fixing" this one. */
+  it('separates itself from the scrolling panel by tone, not by a rule that reads as a scrollbar', () => {
+    const footer = rule('.rail-footer');
+    expect(footer, 'a 1px hairline here is read as a horizontal scrollbar').not.toContain('border');
+    // The tone is what carries the pinning now, so it is load-bearing rather than
+    // decorative. `--paper-2` is 0.858 L against `--paper` at 0.941.
+    expect(footer).toContain('background: var(--paper-2)');
+  });
+
+  it('is in the 240px padding relief with the rest of the rail', () => {
+    const OPEN = '@container rail (max-width: 240px) {';
+    const at = CSS.indexOf(OPEN);
+    expect(at, 'no 240px container query in globals.css').toBeGreaterThan(-1);
+    const body = CSS.slice(at + OPEN.length, CSS.indexOf('}', at));
+    expect(body).toContain('.rail-footer');
+  });
+
+  it('lets every label ellipsise rather than widening the rail', () => {
+    // `.ds-btn` is `white-space: nowrap`, so at the narrowest right rail two labels
+    // plus a 32px square push the row past the rail, and `.rail` is
+    // `overflow: hidden` — no scrollbar, no ellipsis, no clue. `flex: 1` sizes the
+    // BOX and `minWidth: 0` is what lets it go below its own text; the pair is one
+    // mechanism and either half alone does nothing.
+    //
+    // Three wrappers, not two: the selection slot is Delete for a piece and Done
+    // for a wall, written as two branches of one slot because the store makes those
+    // two selections mutually exclusive.
+    const wrappers = SRC.match(/style=\{\{ flex: 1, minWidth: 0 \}\}/g) ?? [];
+    expect(wrappers, 'every labelled button in the row needs the flex/minWidth pair').toHaveLength(3);
+
+    // And the label needs its OWN element or the ellipsis has nowhere to happen: a
+    // bare text node beside an icon is an anonymous flex item, which is what
+    // `.ds-btn`'s comment in globals.css says no per-site rule can reach.
+    expect(rule('.ds-btn')).toContain('white-space: nowrap');
+    expect(SRC).toContain('<span style={LABEL}>Delete</span>');
+    expect(SRC).toContain('<span style={LABEL}>Done</span>');
+    expect(CAT).toMatch(/<span style=\{\{ overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 \}\}>/);
+  });
+
+  /** The row's fixed demand against the narrowest rail it can be given.
+   *
+   *  This is the assertion the labels were shortened FOR, and the reason they read
+   *  "Delete" and "Add" rather than "Delete from scene" and "Add a piece": every
+   *  term except the text itself is read out of the file that states it, and
+   *  whatever is left over is all the two labels get. Put either long label back
+   *  and this goes red — which is the only honest form of "they did not fit", since
+   *  the version of that claim I could type by hand is a number in a comment.
+   *
+   *  The per-character figure IS an estimate — 12px `--font-sans` at 700, and
+   *  nothing in node can measure a font — so it is named rather than buried, and a
+   *  browser is still the real check. What is DERIVED is the half that drifts: the
+   *  paddings, the gaps, the icon sizes, the square, and the labels themselves. */
+  it('fits its fixed geometry inside the narrowest rail, with room for the labels', () => {
+    const footer = rule('.rail-footer');
+    const padX = Number(/padding: \d+px (\d+)px/.exec(footer)![1]);
+    const gap = Number(/gap: (\d+)px/.exec(footer)![1]);
+    // Anchored on the icon name: the trash glyph's own `size={12}` comes first in
+    // the file, so a bare /size=\{(\d+)\}/ reads 12 and silently under-counts the
+    // widest fixed item in the row by 20px.
+    const square = Number(/icon="rotate-ccw"[\s\S]*?size=\{(\d+)\}/.exec(SRC)![1]);
+
+    const btn = rule('.ds-btn');
+    const btnPadX = Number(/padding: 0 (\d+)px/.exec(btn)![1]);
+    const btnGap = Number(/gap: (\d+)px/.exec(btn)![1]);
+    const trash = Number(/name="trash" size=\{(\d+)\}/.exec(SRC)![1]);
+    const plus = Number(/name=\{open \? 'x' : 'plus'\} size=\{(\d+)\}/.exec(CAT)![1]);
+
+    // Two labelled buttons, one 32px square, two gaps between the three, and the
+    // footer's own padding at both ends.
+    const fixed =
+      2 * padX + 2 * gap + square +
+      (2 * btnPadX + btnGap + trash) +
+      (2 * btnPadX + btnGap + plus);
+    const floor = railFloor('rail-right');
+    const room = floor - fixed;
+
+    // The longest each label ever renders. Delete is the wider of the two selection
+    // branches; Add swaps to "Close" while the panel is open, which is the state
+    // you are NOT looking at while the row is at its widest.
+    const slot = [...SRC.matchAll(/<span style=\{LABEL\}>([^<]+)<\/span>/g)].map((m) => m[1]);
+    expect(slot.length, 'the selection slot lost a branch').toBe(2);
+    const add = /textOverflow: 'ellipsis'[^>]*>\s*\{open \? '([^']+)' : '([^']+)'\}/.exec(CAT)!;
+    const chars =
+      Math.max(...slot.map((l) => l.length)) + Math.max(add[1].length, add[2].length);
+
+    const PX_PER_CHAR = 7; // estimate: 12px --font-sans at 700
+    expect(
+      room,
+      `the row's fixed parts take ${fixed}px of the ${floor}px rail, leaving ${room}px for ${chars} characters`,
+    ).toBeGreaterThanOrEqual(chars * PX_PER_CHAR);
+  });
+
+  it('is the ONLY --paper-2 band at the foot of the right rail', () => {
+    // Two bands — a panel's own footer and this one — same tone, same `12px 16px`,
+    // one under the other: that reads as one footer that had wrapped. The upper one
+    // also carried the same 1px `--hairline` three separate reports called a
+    // horizontal scrollbar, so deleting it from `.rail-footer` alone moved the
+    // defect one element up rather than fixing it. Both the piece panel and the
+    // WALL panel had one, and only the piece one was ever reported.
+    const insp = codeOnly(readSrc('components', 'studio', 'Inspector.tsx'));
+    expect(
+      insp,
+      'a panel inside the rail must not end with a --paper-2 band of its own',
+    ).not.toMatch(/borderTop: '1px solid var\(--hairline\)',\s*padding: '12px 16px'/);
+    // The half-finished-move catcher, the same shape as the PartTree one below: the
+    // band deleted but the delete path left behind in the panel it moved out of.
+    expect(insp, 'Delete belongs to the rail footer now').not.toContain('removeParts');
+  });
+
+  it('gives the revert a real target and does not reuse the Re-scan glyph', () => {
+    // Once a control loses its words the glyph IS the name, so two different verbs
+    // may not share one. `refresh` is Re-scan’s, in the left rail’s Room header,
+    // and it is also CATEGORY_ICON.fan.
+    expect(SRC).toContain('icon="rotate-ccw"');
+    expect(SRC, 'refresh is the Re-scan glyph now').not.toContain('icon="refresh"');
+    // IconButton floors at 24px so nothing falls under WCAG 2.5.8. 32 is the app’s
+    // icon-target size, and the size LightingPicker’s own rail budget is derived
+    // from two describes above.
+    expect(SRC).toContain('size={32}');
+  });
+
+  it('no longer leaves the Add button in the left rail', () => {
+    // The assertion that catches a half-finished move: the footer deleted from
+    // PartTree but the trigger still rendered there, so the studio grows a third
+    // way into the same panel.
+    const tree = readSrc('components', 'studio', 'PartTree.tsx');
+    expect(tree, 'PartTree must not reference AddPiecesButton any more').not.toContain(
+      'AddPiecesButton',
+    );
+    const right = readSrc('components', 'studio', 'shells', 'shell-parts.tsx');
+    expect(right).toContain('<RailFooter />');
+  });
+});
+
+describe('the catalog panel clears the cluster it docks beside', () => {
+  const SRC = readSrc('components', 'studio', 'CatalogPanel.tsx');
+  const CHROME = readSrc('components', 'studio', 'CanvasChrome.tsx');
+
+  it('measures the top-right cluster rather than assuming one height', () => {
+    // `CanvasView` wraps — on the 2D tab it is undo/redo AND the whole zoom /
+    // rotate / fit toolbar, which folds into two rows on a cramped canvas. The
+    // panel used to begin at a flat `top: 54` (12 + a 30px control + 12), which
+    // slides it under a folded cluster. Derived now, with a fallback that
+    // reproduces the old number for the frame before the ResizeObserver reports.
+    expect(SRC).toContain('var(--canvas-view-height');
+    expect(SRC, 'a flat top: 54 is the bug this replaced').not.toContain('top: 54,');
+    // And the other half: something has to publish it.
+    expect(CHROME).toContain("'--canvas-view-height'");
+    expect(CHROME).toContain('setProperty(heightProp');
+  });
+
+  it('docks on the same side as its triggers', () => {
+    // Both triggers are on the right now. Pressing a control on one side to have a
+    // list appear on the other is a trip across the whole product.
+    expect(SRC).toContain('right: 12,');
+    expect(SRC, 'the panel follows its trigger to the right edge').not.toContain('left: 12,');
   });
 });
 
