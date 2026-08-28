@@ -216,7 +216,89 @@ now reaches for the first time — listed to be looked at, not because it change
 
 ## Layout and Shuffle
 
-*Owner: `layout`. Yours to fill — nobody else edits below this line until the next heading.*
+*Owner: `layout`. The first three ride **`fa12f1a` / PR #29**, now on `main`. The fourth
+fixes nothing and is here anyway — it is the user's own report with a measured cause and a
+reverted remedy, so what it needs is a look rather than a check.*
+
+### A Lock button on every piece row — on `main`, `fa12f1a`
+
+The user asked for it and then went looking for it and could not find it, because it sat
+unpushed on one machine. It exists now, so this is the first time anyone can press it.
+
+Open a room, look at the **left rail**. Every piece row has a **padlock** before the eye.
+Press it on one piece, then press **Shuffle**. That piece must not move; the others should.
+Press the padlock again and Shuffle again — now it should move like anything else.
+
+It is deliberately **solver-only**. A locked piece still drags, turns, resizes, recolours
+and deletes by hand, and that is the intended behaviour rather than a gap: a padlock that
+stops a deliberate hand is one people learn to leave off.
+
+**Wrong looks like:** the locked piece moving anyway — which would mean the lock composes
+wrongly with something and the button is decoration. Or the padlock refusing a drag, which
+is the other feature and not this one. Or the lock surviving into a **different room**:
+open a second room and check nothing is locked there, because part ids are
+`category`-plus-counter and collide across rooms, so an inherited entry would silently
+exempt a *different* sofa.
+
+Two states share this row and must not read as one: the padlock is **"locked in place"**
+(yours), and the **camera glyph** is **"from your photo"** (the detector's). Hover both.
+
+### 58px of piece name at the narrowest rail — on `main`, `fa12f1a`
+
+The lock is a **third** button on a row that had two, and the piece name pays for it. The
+name's remaining width goes from **90px to 58px** at the left rail's own clamp floor —
+derived in `tests/reflow.test.ts` from the `.list-row` gap and padding, the rail's clamp,
+the count of `IconButton`s inside `PartRow` and the 12px status glyph, and held above a
+floor. So it is guarded, and it has never been seen.
+
+Narrow the window until the left rail is at its tightest, then look at a piece with a long
+name — a **"Dining / desk table"**, or rename something to twenty characters.
+
+**Wrong looks like:** a name clipped with no ellipsis, or one printing over the padlock.
+Those are two different failures with two different causes — `.rail` is `overflow: hidden`,
+so anything outgrowing the row is eaten at the edge with no scrollbar and no console line;
+an element with no `overflow` of its own paints over its neighbours instead. Neither errors
+and neither fails a test. **A 58px name reads as a font bug in a screenshot**, which is why
+it is written down as a number rather than left to be noticed.
+
+Same shape as `shell`'s **"Delete from scene" → "Delete"**: in both cases the row was out
+of **room**, not out of taste, and in both cases the arithmetic was only checkable because
+every term came out of the file that states it rather than out of a comment.
+
+### Shuffle and a piece a few degrees off square — on `main`, `fa12f1a`
+
+Not on the user's list. Found while measuring something else, and it is the largest thing
+in this section: over six presets × 40 seeds, **197 of the moved pieces came back between
+0.06° and 12° off square** — and every gate was green, because the twelve-seed sweep that
+guards this runs on a plain 7.5 × 5.6 rect, the one room shape where it does not happen.
+The tidy now squares such a piece *and shoves it* up to `off × radius`. That takes 197 to
+**30**.
+
+Press **Shuffle** several times on an **L**, **U** or **T** room. Look along the walls for a
+piece that is *almost* straight.
+
+**Wrong looks like:** a sofa or table sitting two or three degrees off, reading as sloppy
+rather than as angled on purpose. **The remaining 30 are real and expected** — mostly the U
+and the T, where neither the square yaw nor anything within the piece's own reach is legal
+— so finding one is not a regression. Finding a *lot* of them is.
+
+### Does Shuffle keep the bedside table by the bed? — a known defect, `main`
+
+**Nothing was fixed here, so this is a look rather than a check**, and it is the user's own
+report: *"the bedside table is never where it should be."* The cause is measured and pinned
+by a test that prints its table on every run — at **300 mm** out of place, *all ten* of the
+library's furniture relations cost less than the threshold Shuffle needs before it will
+offer a rearrangement. It finds the fix and stays quiet.
+
+Put a **nightstand** about **300–400 mm** from a **bed** — close, but visibly not touching —
+and press **Shuffle**.
+
+**Wrong looks like:** exactly what the user reported. Shuffle declining to close the gap,
+or saying it has nothing to suggest. That is the defect and seeing it confirms the
+diagnosis rather than contradicting it. The obvious repair was written, measured and
+**reverted**: it fixed the price and gave the solver four runs in 48 with a piece through a
+wall, where the shipping code never exceeds a fifth of one such violation. The untried
+direction is in `isWorthOffering` — what gets *offered* rather than what gets *searched*.
 
 ---
 
