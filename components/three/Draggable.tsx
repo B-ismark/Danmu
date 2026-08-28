@@ -41,7 +41,7 @@ import { clampDims } from '@/lib/dimension-ranges';
 import { type SnapLine } from '@/lib/item-snap';
 import { resolvePlacement as resolveDrag, snapSteps } from '@/lib/drag-resolve';
 import { wouldCreateCycle } from '@/lib/rigid-parent';
-import { convoyRestore, planConvoy, resolveConvoy, travellingWorld, type Convoy, type ConvoyResult } from '@/lib/drag-convoy';
+import { convoyRestore, gestureFor, planConvoy, resolveConvoy, travellingWorld, type Convoy, type ConvoyResult } from '@/lib/drag-convoy';
 import { Pickable } from './Pickable';
 import { Highlight } from './Highlight';
 
@@ -310,16 +310,13 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     return travellingWorld(c, effParts(), dx, dz, c.own);
   }
 
-  /** Which gesture is in flight, for `resolveConvoy`'s `gesture`.
-   *
-   *  The gizmo is the only thing here that can turn or scale a piece; a raw pointer
-   *  drag is a translation whatever `transformMode` happens to say. Read off the
-   *  ref rather than remembered at pointer-down because the gizmo sets it in its own
-   *  `onMouseDown` and clears it in `onMouseUp`, which is exactly the span the
-   *  answer has to cover. */
+  /** Which gesture is in flight — `lib/drag-convoy.ts` owns the rule, and the
+   *  reasoning, because in here it could not be tested. Both refs are read at call
+   *  time rather than remembered at pointer-down: `gizmoActive` is set in the
+   *  gizmo's own `onMouseDown` and cleared after `commit()` in its `onMouseUp`,
+   *  which is exactly the span the answer has to cover. */
   function currentGesture(): 'move' | 'turn' {
-    if (gizmoActive.current && mode !== 'translate') return 'turn';
-    return rotOnly.current ? 'turn' : 'move';
+    return gestureFor(gizmoActive.current, mode, rotOnly.current);
   }
 
   /** Where the company lands for a given transform of this part. */

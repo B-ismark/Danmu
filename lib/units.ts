@@ -146,7 +146,15 @@ export function boundsToUnit(minMM: number, maxMM: number, unit: DimUnit): { min
  *  At a bound, then, a press simply does nothing — which is what "you are already
  *  at the minimum" ought to feel like. `max` is applied before `min` and that
  *  order is deliberate: an inverted pair can only come from a range narrower than
- *  one step, and `boundsToUnit` refuses to produce one. */
+ *  one step, and `boundsToUnit` refuses to produce one.
+ *
+ *  Two properties, and they are separate questions asked in the same place: a press
+ *  never moves the value AGAINST its own arrow, and a press never lands OUTSIDE
+ *  [min, max]. The second is not implied by the first — the clamps run before
+ *  `toFixed` and the rounding can carry a clamped value back out — and it is the
+ *  one that used to put a mirror's depth on 0 mm. Both are swept over the whole
+ *  catalog and every room axis in `tests/units.test.ts`, at both ends, in all five
+ *  units. */
 export function steppedValue(
   current: string,
   steps: number,
@@ -175,6 +183,23 @@ export function steppedValue(
   const landed = Number(out);
   if (steps < 0 && landed > base) return current;
   if (steps > 0 && landed < base) return current;
+  // …and it must not land OUTSIDE the range either. The clamps above are applied
+  // before `toFixed`, and the rounding can carry the clamped value straight back
+  // out: a mirror's 15-60 mm depth in feet displays `0.05`, DOWN clamps to the
+  // exact minimum 0.049 and renders `"0.0"` — 0 mm, a depth the mirror does not
+  // have. `Inspector.commitDebounced` then refuses it for being <= 0, so nothing
+  // commits, nothing re-renders, and the field sits showing 0.0 with no message
+  // anywhere on the path. UP from the same spot renders `0.2`, which is 60.96 mm,
+  // over the 60 mm maximum — the whole range crossed by one chevron.
+  //
+  // 366 combinations did this, all in feet, 122 of them landing on exactly zero;
+  // measured by danmu-cb over 55,500 presses, and unchanged by the direction guard
+  // above, which answers a different question. Where a range is narrower than one
+  // step of the display unit the stepper simply cannot express it, so the honest
+  // answer is that the arrows do nothing and the typed value governs — the same
+  // conclusion `boundsToUnit` reaches when it falls back to the exact conversion.
+  if (landed < min - 1e-9) return current;
+  if (max !== undefined && landed > max + 1e-9) return current;
   return out;
 }
 

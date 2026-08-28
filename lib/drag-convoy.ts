@@ -153,6 +153,36 @@ export type Convoy = {
  * when resolving the dragged piece (the accepted one is not known until it
  * resolves) and the ACCEPTED one when resolving members.
  */
+/** Which gesture is in flight, for `resolveConvoy`'s `gesture`.
+ *
+ *  Pure and exported because it lived in `Draggable` where nothing could test it,
+ *  and it shipped a hole in exactly the place the component made invisible.
+ *
+ *  `rotatedWithoutPointer` is a ref the wheel and the two-finger twist set: both
+ *  change a piece's angle while the pointer stands still, and the containment
+ *  clamp is a function of that angle, so the resolved position moves although no
+ *  translation was asked for. Read as a translation, that correction is copied to
+ *  the whole selection.
+ *
+ *  But **while the gizmo is active it owns the entire answer**, and the ref must
+ *  not be consulted at all. The gizmo is the one thing here that can be dragged
+ *  without `Draggable`'s own pointer-move handler running — that handler returns
+ *  early for the whole gizmo gesture — so the single line that clears the ref is
+ *  unreachable for its duration. Asking the ref anyway meant a wheel-rotate
+ *  followed by a gizmo TRANSLATE reported `'turn'` and carried nobody: select two
+ *  chairs, drag one, wheel-notch it, release, then pull the translate arrow, and
+ *  the second chair stays behind. Silent, and indistinguishable from the
+ *  "sometimes only one moves" report the convoy work exists to end. Found by
+ *  danmu-cb in review. */
+export function gestureFor(
+  gizmoActive: boolean,
+  gizmoMode: 'translate' | 'rotate' | 'scale',
+  rotatedWithoutPointer: boolean,
+): 'move' | 'turn' {
+  if (gizmoActive) return gizmoMode === 'translate' ? 'move' : 'turn';
+  return rotatedWithoutPointer ? 'turn' : 'move';
+}
+
 export function travellingWorld(
   convoy: Convoy,
   parts: ScenePart[],
