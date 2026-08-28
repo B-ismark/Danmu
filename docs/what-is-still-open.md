@@ -15,6 +15,50 @@ point of writing this down.
 
 ---
 
+## Picking this up cold
+
+**Derive the state; do not trust this file for it.** Everything below the next heading was
+true when written and rots on the next commit — that is not a flaw in the file, it is what a
+hand-off document is. Four commands settle the whole board and take a few seconds:
+
+```bash
+git fetch origin && git log --oneline -1 origin/main
+gh pr list --state open
+git worktree list                       # anything dirty is somebody's unfinished work
+for b in $(git for-each-ref --format='%(refname:short)' refs/remotes/origin | grep -v HEAD); do
+  git merge-base --is-ancestor $b origin/main || echo "UNMERGED: $b"
+done
+```
+
+**`main` is deliberately red.** The failing list is the next section. Run the suite before
+changing anything and compare against it: a **sixth** failure is a regression, and matching
+counts alone are not evidence — see the note there on why the file count travels with the
+assertion count.
+
+**Loose ends that live nowhere else:**
+
+- **Five branches are fully contained in `main` and await the user's word to delete** —
+  `fix/pointer-cancel-note` (its one unique commit landed as #34, then verified per-line as
+  fully present), `fix/convoy-self-support`, `fix/a-bed-that-was-rotated`,
+  `fix/visual-check-round-3`, `feat/shuffle-lock-and-band-price`. Deleting a remote ref is
+  outward-facing and is **not** covered by a grant to commit, push and open PRs. Verify
+  containment yourself before asking; do not delete on the strength of this paragraph.
+- **`C:/Users/bisma/danmu-rescue/`** holds two patches lifted out of dead sessions'
+  `%TEMP%` worktrees. **Both turned out to be superseded drafts of work already on `main`** —
+  kept only because checking cost nothing. Safe to delete; check first.
+- **Stale gate worktrees under `%TEMP%`** from sessions that ended. `git worktree prune`
+  removes only those whose directories are already gone.
+
+**To look at it:** `pnpm dev` for everything except offline and install; `pnpm build &&
+pnpm start` for those, because `next dev` never registers the service worker and
+`http://localhost` is a secure context while `http://192.168.x.x` is not.
+
+**If several sessions share this checkout again:** stage explicit paths, never `git add -A`,
+and never move `HEAD` while another session is live in the same tree. Name each session for
+the surface it owns rather than its id.
+
+---
+
 ## `main` is red on purpose. Here is the whole list.
 
 **5 failed, 1612 passed, 82 files** on `fa12f1a`, with typecheck 0 and lint 0 — measured on
