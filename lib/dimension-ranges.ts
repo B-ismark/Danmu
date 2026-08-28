@@ -221,7 +221,13 @@ export function applyRoomEdits(
   for (const axis of ROOM_AXES) {
     const v = edits[axis];
     if (v === undefined) continue;
-    if (!roomAxisWithin(axis, v)) return { room: current, rejected: axis, pending: edits };
+    // A COPY, not `edits` itself. The present caller reads the keys and builds a
+    // fresh Set, so returning the argument by reference is harmless today — and a
+    // test that builds a fresh `edits` on every call could never tell the day it
+    // stopped being harmless, which is the whole shape of a check that cannot
+    // fail. A caller that held this and added the next keystroke's axis to it
+    // would be mutating the batch the rule handed back. Raised by danmu-cd.
+    if (!roomAxisWithin(axis, v)) return { room: current, rejected: axis, pending: { ...edits } };
     room[axis] = v;
   }
   return { room, rejected: null, pending: {} };
