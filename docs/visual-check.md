@@ -120,12 +120,13 @@ the edit and say why, rather than accepting a number and pinning it to 0.
 
 *Owner: `drag`.*
 
-Everything below rides **PR #23** (`fix/convoy-self-support`), rebased onto `main`. Measured on
-`47c946a`: typecheck 0, lint 0, **1477/1477**, 73/73, build 0. Six of those assertions are
-new and each was watched failing first — three mutations on the turn (re-grid it, hand back
-the raw spot on an invalid resolve, make the containment extent rotation-blind) and three
-on drill-in (never fire, count an empty selection as inside, accept overlap where it asks
-for containment).
+Everything below is **merged** — `main` at `b73e149`, formerly PR #23. The gate counts went
+with the artifact they were measured on. What has not gone is the reason each item is here:
+six of these assertions were watched failing first — three mutations on the turn (re-grid
+it, hand back the raw spot on an invalid resolve, make the containment extent
+rotation-blind) and three on drill-in (never fire, count an empty selection as inside,
+accept overlap where it asks for containment) — and not one of them can see any of what
+follows.
 
 ### A merged set that would not move at all
 
