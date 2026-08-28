@@ -90,10 +90,12 @@ the edit and say why, rather than accepting a number and pinning it to 0.
 
 *Owner: `drag`.*
 
-Everything below rides `fix/convoy-self-support` (tip `19a6596`) **plus work that is not
-committed yet**, so it carries no gate numbers. A count off a working copy is a count about
-a program nobody can ship; the numbers go in when this is committed and rebased onto
-`ccc8552`.
+Everything below rides `fix/convoy-self-support`, rebased onto `main`. Measured on
+`47c946a`: typecheck 0, lint 0, **1477/1477**, 73/73, build 0. Six of those assertions are
+new and each was watched failing first — three mutations on the turn (re-grid it, hand back
+the raw spot on an invalid resolve, make the containment extent rotation-blind) and three
+on drill-in (never fire, count an empty selection as inside, accept overlap where it asks
+for containment).
 
 ### A merged set that would not move at all
 
