@@ -60,7 +60,6 @@ export function RoomDimsEditor() {
     timer.current = setTimeout(async () => {
       const batch: Partial<Record<RoomAxis, number>> = {};
       for (const i of edited.current) batch[ROOM_AXES[i]] = toMM(parseFloat(next[i]), dimUnit) / 1000;
-      edited.current.clear();
       const base = useScene.getState().room;
       const { room: r, rejected } = applyRoomEdits(
         { width: base.width, depth: base.depth, height: base.height },
@@ -68,8 +67,24 @@ export function RoomDimsEditor() {
       );
       if (rejected) {
         setRangeError(rejected);
+        // The batch stays PENDING. Clearing it here — which is what the first
+        // version did, before the check — threw away the good edits sitting
+        // beside the bad one: type a legal width, then an illegal height, and
+        // the batch is refused and the width is gone from everywhere but the
+        // form. Fixing the height then commits height alone, `room.height`
+        // changes, the resync effect rebuilds `local` from the room, and the
+        // width field snaps back to its old value with nothing said. A lost
+        // edit rather than a corrupt write, and silent, which is the half this
+        // repo keeps paying for. Found by danmu-f4 in review.
+        //
+        // So the form retries atomically as well as committing atomically. The
+        // consequence is deliberate: while a field holds an illegal value every
+        // later commit re-includes it and is refused again, so no other field
+        // lands until it is fixed — which is what the message on screen is
+        // already telling the user to do.
         return;
       }
+      edited.current.clear();
       setRangeError(null);
       const oldHeight = base.height;
       setRoom(r);

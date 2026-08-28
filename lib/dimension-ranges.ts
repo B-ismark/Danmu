@@ -148,8 +148,18 @@ export const ROOM_SIDE_M = { min: 1, max: 50 } as const;
  *  ends reject the absurd rather than second-guessing a real room. */
 export const ROOM_HEIGHT_M = { min: 1.8, max: 12 } as const;
 
-/** The three axes of the room shell, as the editor lays them out. */
-export type RoomAxis = 'width' | 'depth' | 'height';
+/** The three axes of the room shell, in the order the editor lays them out.
+ *
+ *  The union is DERIVED from this array rather than written beside it, which is
+ *  the discipline `SHAPES` / `CATEGORIES` / `DECOR_KINDS` already keep in
+ *  `scene-spec.ts`. A hand-written union next to a hand-kept tuple accepts a
+ *  duplicated or missing axis without complaint — `['width', 'width', 'height']`
+ *  typechecks against `readonly [RoomAxis, RoomAxis, RoomAxis]` — and the drift
+ *  goes the one direction nobody notices. */
+export const ROOM_AXES = ['width', 'depth', 'height'] as const;
+
+/** One axis of the room shell. */
+export type RoomAxis = (typeof ROOM_AXES)[number];
 
 /** The bound for one axis. Two consumers ask — the editor and the scene-file
  *  reader — so neither of them gets to decide for itself which range a ceiling
@@ -165,10 +175,7 @@ export function roomAxisWithin(axis: RoomAxis, metres: number): boolean {
 }
 
 /** The room shell, in metres. */
-export type RoomDims = { width: number; depth: number; height: number };
-
-/** The three axes in the order the editor lays them out. */
-export const ROOM_AXES: readonly [RoomAxis, RoomAxis, RoomAxis] = ['width', 'depth', 'height'];
+export type RoomDims = Record<RoomAxis, number>;
 
 /** Fold a batch of pending per-axis edits into the room, in metres.
  *

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyRoomEdits, clampDims, dimRangeFor, dimsWithinRange, ROOM_AXES, type RoomAxis } from '@/lib/dimension-ranges';
+import { applyRoomEdits, clampDims, dimRangeFor, dimsWithinRange, ROOM_AXES, roomAxisRange, type RoomAxis } from '@/lib/dimension-ranges';
 
 describe('dimRangeFor', () => {
   it('keeps electronics on a tight leash (fixed tier)', () => {
@@ -124,5 +124,27 @@ describe('applyRoomEdits', () => {
     const src = { ...ROOM };
     applyRoomEdits(src, { width: 5 });
     expect(src).toEqual(ROOM);
+  });
+});
+
+describe('ROOM_AXES', () => {
+  it('names each axis exactly once', () => {
+    // `RoomAxis` is derived from this array now, so the array is the thing that
+    // can be wrong. A hand-written union beside a hand-kept tuple accepted
+    // `['width', 'width', 'height']` — three entries, correct type, one axis
+    // unreachable and another judged twice.
+    expect([...new Set(ROOM_AXES)]).toEqual([...ROOM_AXES]);
+    expect(ROOM_AXES.length).toBe(3);
+  });
+
+  it('covers every axis roomAxisRange can answer for', () => {
+    // The derived union means this loop is exhaustive by construction: adding a
+    // fourth axis to ROOM_AXES widens RoomAxis, and anything switching on it
+    // stops compiling. The assertion is that each one has a usable range.
+    for (const axis of ROOM_AXES) {
+      const r = roomAxisRange(axis);
+      expect(r.min).toBeGreaterThan(0);
+      expect(r.max).toBeGreaterThan(r.min);
+    }
   });
 });
