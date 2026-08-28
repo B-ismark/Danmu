@@ -90,7 +90,7 @@ the edit and say why, rather than accepting a number and pinning it to 0.
 
 *Owner: `drag`.*
 
-Everything below rides `fix/convoy-self-support`, rebased onto `main`. Measured on
+Everything below rides **PR #23** (`fix/convoy-self-support`), rebased onto `main`. Measured on
 `47c946a`: typecheck 0, lint 0, **1477/1477**, 73/73, build 0. Six of those assertions are
 new and each was watched failing first — three mutations on the turn (re-grid it, hand back
 the raw spot on an invalid resolve, make the containment extent rotation-blind) and three
