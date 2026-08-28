@@ -243,5 +243,20 @@ instruction that works for one person. If there is a public production alias, th
 URL this note should carry instead — nobody has found it yet, and it stays unwritten until
 someone has.
 
-Running it locally is the other route and it is not equivalent: `next dev` never registers
-the service worker, so every offline and install item on this page is unreachable that way.
+**For the desktop check you do not need any of that.** `next dev` never registers the
+service worker, but `pnpm build && pnpm start` does: `ServiceWorkerRegistrar` gates on
+`process.env.NODE_ENV !== 'production'` and on nothing else — not a host, not a deployment.
+Verified on `8504929`: `next start` boots in 3.9 s, `/sw.js` serves 200 with
+`no-cache, no-store, must-revalidate`, and `serviceWorker` is in the production layout
+chunk. No auth wall anywhere in that route.
+
+The real limit is narrower than "you need a deployment", and it is worth knowing which
+half of the check it costs you. **A service worker needs a secure context.**
+`http://localhost` qualifies by spec; the `http://192.168.x.x` address the same server
+prints does not. So a local production build covers the whole desktop check, and the
+deployment is needed only for the **phone** — which is exactly where the SSO wall lands, so
+the person who can check the phone is the account holder and nobody else.
+
+One caution that comes with the local route, and it is the same one in `sw.js`'s own
+comment: a worker registered on a port **outlives the server on it**. Iterating on a
+production build at `:3000` leaves one intercepting whatever you run there next.
