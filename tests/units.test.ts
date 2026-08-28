@@ -288,3 +288,76 @@ describe('a chevron never moves a value against its own arrow', () => {
     expect(bad, `arrows moving the wrong way — ${bad.slice(0, 8).join(' | ')}`).toEqual([]);
   });
 });
+
+describe('a chevron never lands outside the range either', () => {
+  // A second property, and NOT implied by the direction guard: the clamps run
+  // before `toFixed`, so the rounding can carry a clamped value straight back out.
+  // A mirror's 15-60 mm depth in feet shows `0.05`; DOWN clamped to the exact
+  // minimum 0.049 and rendered "0.0" — 0 mm, a depth the mirror does not have.
+  // `Inspector.commitDebounced` then refuses it for being <= 0, so nothing commits,
+  // nothing re-renders, and the field sits on 0.0 with no message on the path. UP
+  // rendered 0.2 ft = 60.96 mm, over the 60 mm maximum: the whole range crossed by
+  // one chevron. 366 combinations did this, all in feet, 122 landing on zero —
+  // measured by danmu-cb over 55,500 presses and untouched by the direction fix.
+
+  it('the mirror-depth-in-feet case, named because it is the one that reached zero', () => {
+    const r = dimRangeFor('mirror', 'mirror');
+    const b = boundsToUnit(r.min[1], r.max[1], 'ft');
+    const shown = fromMM(r.min[1], 'ft').toFixed(precisionFor('ft'));
+    const down = steppedValue(shown, -1, b.min, b.max, stepFor('ft'));
+    expect(Number(down)).toBeGreaterThan(0);
+    expect(toMM(Number(down), 'ft')).toBeGreaterThanOrEqual(r.min[1] - 1e-6);
+  });
+
+  it('holds across the whole catalog and every room axis, both ends, every unit', () => {
+    const bad: string[] = [];
+    let checked = 0;
+    const check = (label: string, atMin: string, atMax: string, min: number, max: number, step: number) => {
+      for (const [from, dir] of [[atMin, -1], [atMax, 1]] as const) {
+        const landed = Number(steppedValue(from, dir, min, max, step));
+        checked++;
+        // A press must not MOVE a value out of range. It may legitimately leave one
+        // there: the bounds are rounded to the step grid while the field renders at
+        // `precisionFor`, which is finer for ft and cm, so a perfectly legal stored
+        // value can already sit a hair outside its own rounded bound. Refusing to
+        // move it is the whole point of the guard, and an assertion that simply
+        // demanded "landed in range" flagged 8585 of those no-ops as defects — it
+        // was asserting the wrong property, not finding a bug.
+        const moved = landed !== Number(from);
+        if (moved && (landed < min - 1e-9 || landed > max + 1e-9)) {
+          bad.push(`${label} ${dir < 0 ? 'DOWN' : 'UP'} from ${from} moved to ${landed}, outside ${min}..${max}`);
+        }
+      }
+    };
+    for (const c of CATEGORIES) {
+      for (const s of SHAPES) {
+        const r = dimRangeFor(c, s);
+        for (const unit of UNITS) {
+          for (let i = 0; i < 3; i++) {
+            const b = boundsToUnit(r.min[i], r.max[i], unit);
+            check(
+              `${c}/${s} axis ${i} ${unit}`,
+              fromMM(r.min[i], unit).toFixed(precisionFor(unit)),
+              fromMM(r.max[i], unit).toFixed(precisionFor(unit)),
+              b.min, b.max, stepFor(unit),
+            );
+          }
+        }
+      }
+    }
+    for (const axis of AXES) {
+      const r = roomAxisRange(axis);
+      for (const unit of UNITS) {
+        const b = boundsToUnit(r.min * 1000, r.max * 1000, unit);
+        check(
+          `room ${axis} ${unit}`,
+          fromMM(r.min * 1000, unit).toFixed(precisionFor(unit)),
+          fromMM(r.max * 1000, unit).toFixed(precisionFor(unit)),
+          b.min, b.max, stepFor(unit),
+        );
+      }
+    }
+    expect(checked).toBeGreaterThan(1000);
+    expect(bad, `presses landing out of range — ${bad.slice(0, 6).join(' | ')}`).toEqual([]);
+  });
+});

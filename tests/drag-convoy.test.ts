@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planConvoy, resolveConvoy, convoyRestore, travellingWorld, type Convoy } from '@/lib/drag-convoy';
+import { planConvoy, resolveConvoy, convoyRestore, gestureFor, travellingWorld, type Convoy } from '@/lib/drag-convoy';
 import { resolvePlacement } from '@/lib/drag-resolve';
 import { selectionForPick, type ScenePart } from '@/lib/scene-spec';
 import type { Poly } from '@/lib/geometry';
@@ -1102,5 +1102,34 @@ describe('the zero-delta restore does not pin what it did not move', () => {
     const out = carry(c, 'lead', w, [1, 0, 1], [1, 0, 1], 0, (id) => id === 'D', 'move');
     expect(out.moves.some((m) => m.id === 'D')).toBe(true);
     expect(out.moves.some((m) => m.id === 'L')).toBe(false);
+  });
+});
+
+describe('gestureFor: while the gizmo is active it owns the whole answer', () => {
+  // This decision lived inside `Draggable` where nothing could test it, and it
+  // shipped a hole in exactly the place the component made invisible. The wheel and
+  // the two-finger twist set a ref, because both turn a piece while the pointer
+  // stands still; `Draggable`'s pointer-move handler clears that ref — and returns
+  // early for the whole gizmo gesture, so for the gizmo's duration the one line
+  // that clears it is unreachable. Found by danmu-cb in review.
+
+  it('a gizmo TRANSLATE is a move even when the wheel has just been used', () => {
+    // The defect, exactly: wheel-rotate mid-drag, release, then pull the translate
+    // arrow. This returned 'turn', so the rest of the selection stayed behind —
+    // silent, and indistinguishable from "sometimes only one moves".
+    expect(gestureFor(true, 'translate', true)).toBe('move');
+  });
+
+  it('a gizmo ROTATE or SCALE is a turn, ref or no ref', () => {
+    expect(gestureFor(true, 'rotate', false)).toBe('turn');
+    expect(gestureFor(true, 'scale', false)).toBe('turn');
+    expect(gestureFor(true, 'rotate', true)).toBe('turn');
+  });
+
+  it('with no gizmo, the ref is the answer', () => {
+    // A plain pointer drag is a translation whatever `transformMode` says, which is
+    // why the mode is not consulted on this path.
+    expect(gestureFor(false, 'rotate', false)).toBe('move');
+    expect(gestureFor(false, 'translate', true)).toBe('turn');
   });
 });
