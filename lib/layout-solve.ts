@@ -40,7 +40,7 @@ import type { ScenePart } from './scene-spec';
 import type { Footprint } from './footprint';
 import { footprintBounds } from './footprint';
 import { snapToWall } from './physics';
-import { clampIntoFootprint } from './footprint';
+import { distanceToFootprintEdge, ON_WALL_M, pointInFootprint } from './footprint';
 import { localToWorld, nearestEdge } from './geometry';
 import {
   angleDelta,
@@ -1199,12 +1199,65 @@ function propose(
         : { ...p, z: current[j].z, yaw: normaliseYaw(current[j].yaw) };
     }
   }
-  const [x, z] = clampIntoFootprint(
-    clamp(p.x + (rng() - 0.5) * 2 * reach, b.minX, b.maxX),
-    clamp(p.z + (rng() - 0.5) * 2 * reach, b.minZ, b.maxZ),
-    m.ctx.footprint,
-  );
-  return { ...p, x, z };
+  // The last resort: nudge it. The bounding-box clamp is what keeps the nudge on the
+  // floor, and a nudge that ends up in an L, T or U's NOTCH is DECLINED rather than
+  // relocated. One that ends up pinned to a wall is kept exactly where it is. Those are
+  // different outcomes and `pointInFootprint` alone cannot separate them — it is a ray
+  // test, so a point exactly ON an edge reads as outside, and clamping to the bounding
+  // box puts a point exactly there on every overshoot. `distanceToFootprintEdge` is what
+  // tells the two apart.
+  //
+  // This used to call `clampIntoFootprint`, whose one destination is `interiorPoint`. On
+  // a U the interior scan puts that in the base, so every nudge that fell in the notch —
+  // a different offset each time, from a different piece — came back as the SAME spot,
+  // and an annealer handed one location over and over takes it. Measured at U 6 × 5: six
+  // movable pieces converging on one bay, and one solve seed in twelve leaving ~0.67 m²
+  // of floor unreachable from the door. Declining costs nothing — a returned `p` is a
+  // no-op the annealer evaluates and keeps, so the step is simply spent elsewhere.
+  //
+  // Why this surfaced only recently, which is the opposite of intuition. Before
+  // `c4eee4d`, `clampIntoFootprint` walked toward `polygonCentroid` — the VERTEX
+  // average, which on a U is in the void between the arms — and returned that point when
+  // the walk never got inside. So the proposal came back OUTSIDE the room, `outside`
+  // priced it at 1000 a unit, and the annealer discarded it. **The broken clamp was
+  // acting as a filter**, and fixing it — correctly; the function now honours its name —
+  // turned every discarded proposal into an attractive one. That is why a
+  // clamp-correctness fix made arrangements worse, and why reverting `lib/footprint.ts`
+  // alone took `tests/bed-rung-safety.test.ts` from 2 failed to 2 passed.
+  //
+  // Keeping the wall-pinned point is the second half of this and it is not cosmetic. The
+  // old code walked such a point 15% of the way toward `interiorPoint` — on a 5 × 4 rect
+  // that is 375 mm in from the east wall — so a nudge that overshot could not propose a
+  // piece flush against the wall at all, which is exactly where a wardrobe wants to be.
+  // It also means this change is NOT confined to the non-convex rooms it was written
+  // for: a rectangle's footprint IS its bounding box, so every overshoot in every room
+  // shape went through that walk. Anything that perturbs an RNG-driven layout perturbs
+  // seed-specific fixtures with it, and re-deriving those is part of the change rather
+  // than a surprise from it — see `DIAGONAL_ONLY` in `tests/suggest-tidiness.test.ts`,
+  // which says so in its own prose and was re-searched here.
+  //
+  // Three alternatives, each refuted by measurement over the whole suite. The baseline
+  // they were measured against was `5fd2dd2`, 3 failures.
+  //
+  //  1. Nearest-interior projection inside `clampIntoFootprint` — the minimum move that
+  //     puts the point inside, so a piece stays in its own arm. Local, but not diverse:
+  //     the shipped rung went from 80.70 total danger to 102.60 and the bed ladder lost
+  //     monotonicity (Double 79.80 below Single 102.60).
+  //  2. Declining on `!pointInFootprint` with the bounding box inset 1 mm. 2 failures —
+  //     an inset perturbs every wall-pinned proposal without answering the question that
+  //     matters, which is which side of the wall the point is on.
+  //  3. Accepting the clamp unless it travelled further than `reach`. 6 failures:
+  //     `reach` is largest while the anneal is hot, so the teleport is accepted exactly
+  //     when it does the most damage.
+  const jx = clamp(p.x + (rng() - 0.5) * 2 * reach, b.minX, b.maxX);
+  const jz = clamp(p.z + (rng() - 0.5) * 2 * reach, b.minZ, b.maxZ);
+  if (
+    !pointInFootprint(jx, jz, m.ctx.footprint) &&
+    distanceToFootprintEdge(jx, jz, m.ctx.footprint) > ON_WALL_M
+  ) {
+    return p;
+  }
+  return { ...p, x: jx, z: jz };
 }
 
 /** A point on some wall to snap toward — usually the nearest one, sometimes
@@ -1271,8 +1324,17 @@ function pickPartner(m: LayoutModel, current: Placement[], i: number, rng: () =>
   const a = rng() * Math.PI * 2;
   const x = anchor.x + Math.sin(a) * d;
   const z = anchor.z + Math.cos(a) * d;
-  const [cx, cz] = clampIntoFootprint(x, z, m.ctx.footprint);
-  return { x: cx, z: cz, yaw: normaliseYaw(Math.atan2(anchor.x - cx, anchor.z - cz)) };
+  // Same rule as `propose`'s nudge, and for the same reason. No bounding-box clamp feeds
+  // this one — the point comes off a ring around the anchor — so the wall tolerance
+  // should never be what decides anything here; it is applied anyway so the two proposal
+  // paths cannot drift apart on what "outside the room" means.
+  if (
+    !pointInFootprint(x, z, m.ctx.footprint) &&
+    distanceToFootprintEdge(x, z, m.ctx.footprint) > ON_WALL_M
+  ) {
+    return current[i];
+  }
+  return { x, z, yaw: normaliseYaw(Math.atan2(anchor.x - x, anchor.z - z)) };
 }
 
 /** The nearest movable neighbour, for an alignment move. */

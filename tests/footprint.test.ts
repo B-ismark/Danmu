@@ -3,6 +3,8 @@ import {
   footprintForLayout,
   pointInFootprint,
   clampIntoFootprint,
+  distanceToFootprintEdge,
+  ON_WALL_M,
   interiorPoint,
   polygonCentroid,
   polygonSignedArea,
@@ -195,6 +197,119 @@ describe('interiorPoint', () => {
     expect(twin).toEqual(u);
     expect(interiorPoint(twin)).not.toBe(first);
     expect(interiorPoint(twin)).toEqual(first);
+  });
+});
+
+// ─── On a wall, or in the void behind one ───────────────────────────────────
+//
+// `pointInFootprint` cannot answer this. It is a ray test, so a point exactly on an
+// edge reads as OUTSIDE — indistinguishable from a point in an L, T or U's notch. The
+// annealer's nudge in `lib/layout-solve.ts` needs to treat those two oppositely: keep
+// the first, decline the second. `distanceToFootprintEdge` is what separates them, and
+// `ON_WALL_M` is the band.
+describe('distanceToFootprintEdge', () => {
+  const RECT = footprintForLayout('rect', 6, 4);
+
+  it('is zero on all four walls and on every corner', () => {
+    // The case that matters: a bounding-box clamp puts a coordinate exactly here, and
+    // it does it on whichever wall the nudge overshot.
+    expect(distanceToFootprintEdge(3, 0, RECT)).toBeCloseTo(0, 12);
+    expect(distanceToFootprintEdge(-3, 0, RECT)).toBeCloseTo(0, 12);
+    expect(distanceToFootprintEdge(0, 2, RECT)).toBeCloseTo(0, 12);
+    expect(distanceToFootprintEdge(0, -2, RECT)).toBeCloseTo(0, 12);
+    for (const [x, z] of [
+      [3, 2],
+      [3, -2],
+      [-3, 2],
+      [-3, -2],
+    ] as Array<[number, number]>) {
+      expect(distanceToFootprintEdge(x, z, RECT), `corner ${x},${z}`).toBeCloseTo(0, 12);
+    }
+  });
+
+  // ── And this is the asymmetry the solver was riding on ──────────────────────
+  //
+  // `pointInFootprint` is a ray-crossing test with a half-open convention, so a point
+  // exactly on the boundary reads INSIDE on two of a rectangle's four walls and OUTSIDE
+  // on the other two. Not a rounding artefact — these are exact coordinates.
+  //
+  // It is pinned here because a caller reading `!pointInFootprint` as "outside the room"
+  // does not merely get it wrong, it gets it wrong on two walls out of four. The
+  // annealer's nudge did exactly that through `clampIntoFootprint`, which walks an
+  // "outside" point 15% toward `interiorPoint`: a piece could be proposed flush against
+  // the west and south walls of every room in the app and never against the east or the
+  // north. Invisible in every aggregate, because the rooms are symmetric and the tests
+  // summed over seeds — the failure mode `CLAUDE.md` calls verifying in the asymmetric
+  // case.
+  //
+  // Two mutations to keep in mind here rather than changing the convention: making the
+  // test closed (`>=` on both ends) is a change to a function eleven modules read, and
+  // making it open on all four sides breaks `interiorPoint`'s own edge probes. What the
+  // solver needed was not a different convention but a different QUESTION, which is
+  // what `distanceToFootprintEdge` is.
+  it('pins the half-open convention `pointInFootprint` actually has', () => {
+    expect(pointInFootprint(-3, 0, RECT), 'west wall reads inside').toBe(true);
+    expect(pointInFootprint(0, -2, RECT), 'south wall reads inside').toBe(true);
+    expect(pointInFootprint(3, 0, RECT), 'east wall reads outside').toBe(false);
+    expect(pointInFootprint(0, 2, RECT), 'north wall reads outside').toBe(false);
+    // One corner in four, and it is the one where both inside-reading walls meet.
+    expect(pointInFootprint(-3, -2, RECT), 'south-west corner').toBe(true);
+    for (const [x, z] of [
+      [3, 2],
+      [3, -2],
+      [-3, 2],
+    ] as Array<[number, number]>) {
+      expect(pointInFootprint(x, z, RECT), `corner ${x},${z}`).toBe(false);
+    }
+  });
+
+  it('measures the same distance either side of an edge', () => {
+    // Unsigned, deliberately: the caller already knows which side it is on from
+    // `pointInFootprint`, and what it needs from here is only "how far".
+    expect(distanceToFootprintEdge(2.7, 0, RECT)).toBeCloseTo(0.3, 12);
+    expect(distanceToFootprintEdge(3.3, 0, RECT)).toBeCloseTo(0.3, 12);
+  });
+
+  it('takes the nearest of the four walls, not the first', () => {
+    // The poly's first edge is the SOUTH wall, and this point's nearest is the EAST
+    // one — 0.2 against 3.0. A loop that returned on its first finite answer reports
+    // 3.0 here, which is the mutation this fixture exists for. The first version used
+    // (2.5, −1.8), whose nearest wall IS the first edge, so it agreed with the mutant
+    // and could not fail: a check that cannot fail, in the assertion written to
+    // prevent exactly that.
+    expect(RECT[0]).toEqual([-3, -2]);
+    expect(RECT[1]).toEqual([3, -2]);
+    expect(distanceToFootprintEdge(2.8, 1.0, RECT)).toBeCloseTo(0.2, 12);
+  });
+
+  it('measures to a vertex, not to an edge’s infinite line', () => {
+    // Off the end of the south wall AND off the end of the east wall: the answer is
+    // the diagonal to the corner they share. Dropping the `t` clamp in the
+    // implementation returns 1.0 — the perpendicular distance to a wall that does not
+    // reach this far — which is the defect `nearestEdge` in `lib/geometry.ts` has its
+    // own comment about.
+    expect(distanceToFootprintEdge(4, -3, RECT)).toBeCloseTo(Math.SQRT2, 12);
+  });
+
+  it('reads a U’s notch as far from any wall while its base reads as near', () => {
+    // The two cases the solver has to tell apart, in one assertion each. The notch of
+    // a U 6 × 5 spans x ±0.66 from z = −2.5 to z = 0; a point in the middle of it is
+    // outside the room and nowhere near a wall.
+    const u = footprintForLayout('u', 6, 5);
+    expect(pointInFootprint(0, -1.2, u)).toBe(false);
+    expect(distanceToFootprintEdge(0, -1.2, u)).toBeGreaterThan(ON_WALL_M);
+    // …while a point the bounding-box clamp pinned to the U's own south-east wall is
+    // also `pointInFootprint` false, and inside the band.
+    expect(pointInFootprint(3, -2, u)).toBe(false);
+    expect(distanceToFootprintEdge(3, -2, u)).toBeLessThan(ON_WALL_M);
+  });
+
+  it('is a band no user can see', () => {
+    // Not a free-floating epsilon: it has to stay below the app's own resolution, or
+    // it becomes a tolerance on something a person can measure. Dimensions are whole
+    // millimetres and `NAV_CELL` is 50 mm.
+    expect(ON_WALL_M).toBeGreaterThan(0);
+    expect(ON_WALL_M).toBeLessThan(0.001 * 10);
   });
 });
 

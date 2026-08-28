@@ -346,6 +346,52 @@ function edgeProbe(poly: Footprint): [number, number] | null {
   return null;
 }
 
+/** Distance from a point to the nearest edge of the polygon, in metres — zero when the
+ *  point lies on the boundary, whichever side of it the point is on.
+ *
+ *  It exists because "is this point in the room" and "is this point ON a wall" are
+ *  different questions and `pointInFootprint` only answers the first. That one is a ray
+ *  test, so a point exactly on an edge comes back OUTSIDE — and clamping a coordinate to
+ *  the room's bounding box lands it exactly there on every overshoot. For a RECTANGLE,
+ *  where the footprint and its bounding box are the same shape, that is most overshoots
+ *  in the room. So a caller that reads `!pointInFootprint` as "outside the room" is
+ *  wrong about the commonest room there is, and measurably so: see `ON_WALL_M`.
+ *
+ *  Clamped to each segment rather than to its infinite line, so a point beyond an edge's
+ *  end measures to the vertex. Without that a point off the end of a short wall reads as
+ *  being on it, which is the same defect `nearestEdge` in `lib/geometry.ts` carries a
+ *  comment about. */
+export function distanceToFootprintEdge(x: number, z: number, poly: Footprint): number {
+  let best = Infinity;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    const ex = b[0] - a[0];
+    const ez = b[1] - a[1];
+    const len2 = ex * ex + ez * ez;
+    let t = len2 < 1e-12 ? 0 : ((x - a[0]) * ex + (z - a[1]) * ez) / len2;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const dx = x - (a[0] + ex * t);
+    const dz = z - (a[1] + ez * t);
+    const d2 = dx * dx + dz * dz;
+    if (d2 < best) best = d2;
+  }
+  return Math.sqrt(best);
+}
+
+/** How far off a wall still counts as being on it, in metres.
+ *
+ *  Below any resolution this app works at — dimensions are whole millimetres and the
+ *  navigation grid is 50 mm — so it is not a tolerance on anything a user can see. What
+ *  it separates is "pinned to a wall by a bounding-box clamp" from "sitting in an L, T or
+ *  U's notch", which `pointInFootprint` reports identically.
+ *
+ *  Load-bearing, and mutation-checked rather than assumed: taking it to 0 — declining on
+ *  `pointInFootprint` alone — turns `tests/suggest-tidiness.test.ts` red, because the
+ *  annealer's nudge in `lib/layout-solve.ts` then refuses every proposal a rectangle's
+ *  own wall clamp produced. */
+export const ON_WALL_M = 0.005;
+
 /** Pull (x,z) inside the footprint by stepping toward an interior point. Returns the
  *  point unchanged if already inside. Used to keep detected items out of the
  *  void of an L/U/T room.
@@ -363,6 +409,8 @@ function edgeProbe(poly: Footprint): [number, number] | null {
  *  alone. It used to walk toward `polygonCentroid` and, when every step of that walk
  *  was also outside, `return [cx, cz]` — the corner average, which on a U is in the
  *  void. Callers read the result as "inside now" with no way to tell. */
+
+
 export function clampIntoFootprint(x: number, z: number, poly: Footprint): [number, number] {
   if (pointInFootprint(x, z, poly)) return [x, z];
   const target = interiorPoint(poly);
