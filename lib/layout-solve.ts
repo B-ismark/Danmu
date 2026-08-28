@@ -700,7 +700,7 @@ export function snapYaws(
     // …and only pieces this solve has actually touched. See `untouched`.
     if (onlyMovedFrom && untouched(onlyMovedFrom[i], out[i])) continue;
     // Its own centroid, not `m.centre` — see the same call in `layout-score`.
-    const edge = nearestEdge(m.poly, out[i].x, out[i].z);
+    const edge = nearestEdge(m.poly, out[i].x, out[i].z, m.edgeCentre);
     if (!edge) continue;
     const base = edge.yaw;
     const snapped = normaliseYaw(base + Math.round(angleDelta(out[i].yaw, base) / q) * q);
@@ -1098,7 +1098,9 @@ function pickWall(m: LayoutModel, current: Placement[], i: number, rng: () => nu
   const c = poly[(e + 1) % poly.length];
   const t = 0.15 + rng() * 0.7;
   const mid: [number, number] = [a[0] + (c[0] - a[0]) * t, a[1] + (c[1] - a[1]) * t];
-  const near = nearestEdge(poly, mid[0], mid[1]);
+  // `m.edgeCentre` is what this computes when the argument is omitted, and this runs
+  // on every wall proposal — see the field's own note.
+  const near = nearestEdge(poly, mid[0], mid[1], m.edgeCentre);
   // Step in off the wall so `snapToWall` picks THAT edge rather than one the point
   // happens to sit on the outside of.
   return near ? [mid[0] + near.nx * 0.05, mid[1] + near.nz * 0.05] : mid;

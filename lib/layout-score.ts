@@ -40,6 +40,7 @@ import {
   obbGap,
   outsideShare,
   polyAreaCentroid,
+  polyCentroid,
   type Foot,
   type Poly,
 } from './geometry';
@@ -333,12 +334,16 @@ export type LayoutModel = {
    *  `FACING_GAIN` term turning a wardrobe to face the plaster and `snapYaws` then
    *  squaring it to that.
    *
-   *  ⚠ As of the change that added `openRoutes`, `costBreakdown` no longer passes
-   *  this into `nearestEdge` — see the call site, which explains why. So the wall
-   *  normals above are still computed from `polyCentroid`, the vertex average, and
-   *  the counts in this paragraph are **unfixed**, not history. `balance` is now
-   *  this field's only reader. Do not "restore" the missing argument on the
-   *  strength of the next sentence without re-measuring what the call site records.
+   *  The argument IS passed again, by the commit that made this field. The warning
+   *  that stood here — do not restore it without re-measuring — was guarding a
+   *  change that is not this one. `nearestEdge`'s default is `polyCentroid(poly)`
+   *  and this field is `polyCentroid(ctx.footprint)`: the **identical value**,
+   *  computed once in `prepare` instead of swept per part per proposal. What
+   *  measurably made the solve worse (scrambled-U, worst of 24 seeds: 18 → 148) was
+   *  handing it the AREA centroid, which is a different point answering a different
+   *  question. So the counts above are still **unfixed**, not history: passing this
+   *  changes what the answer COSTS, never what it is. Do not read the paragraph
+   *  below as licence to pass `centre` here.
    *
    *  The area centroid fixes the T outright and halves the U. It does not finish the
    *  job, and the remainder is not this field's to finish: on a non-convex polygon
@@ -346,6 +351,23 @@ export type LayoutModel = {
    *  able to see the edge. The exact answer is the polygon's winding, and it belongs
    *  in `edgeProjection` rather than here. */
   centre: [number, number];
+  /** The average of the polygon's CORNERS, cached — the point `nearestEdge` aims at
+   *  to decide which way is inward.
+   *
+   *  It is deliberately a second field rather than a reuse of `centre`, because the
+   *  two are different points on every room that is not a rectangle and the reasons
+   *  they exist are opposed: `centre` is the middle of the floor and this is the
+   *  input `nearestEdge` was measured to want. Handing it `centre` is the change that
+   *  took the scrambled-U's worst seed from 18 to 148.
+   *
+   *  Cached because dropping the argument is NOT free, which is how this got here.
+   *  `nearestEdge` computes exactly this when the caller omits it, so passing it is
+   *  bit-identical — and omitting it sweeps the polygon once per part per proposal.
+   *  On the seeded 20-piece room that measured **2.1× on the whole solve** (median
+   *  453 → 961 ms), against a shipped assertion with a 2000 ms ceiling. A recompute
+   *  of a constant is the cheapest kind of regression to write and the hardest to
+   *  see, because nothing about the result changes. */
+  edgeCentre: [number, number];
   /** Scratch, reused by every evaluation. One `Foot` per part with its constant
    *  half-extents already filled in, plus that footprint's axis-aligned extents at
    *  the current heading. Both are rewritten in place per proposal.
@@ -438,6 +460,7 @@ export function prepare(ctx: LayoutContext): LayoutModel {
     related,
     route,
     centre: polyAreaCentroid(ctx.footprint as Poly),
+    edgeCentre: polyCentroid(ctx.footprint as Poly),
     feet: parts.map((p) => ({
       cx: 0,
       cz: 0,
@@ -699,14 +722,19 @@ export function costBreakdown(
     const p = parts[i];
     if (p.wallMounted) continue;
     const f = feet[i];
-    // NOT `m.centre`. That is the middle of the FLOOR and this is asking which way
-    // is INWARD, which is a different question and not a centroid question at all —
-    // see `LayoutModel.centre`. Handing it the area centroid measurably made the
-    // scrambled-U solve worse (worst of 24 seeds 18 -> 148): it gets a different 18 %
-    // of that room’s normals wrong rather than fewer, and the ones it misses are
-    // costlier. Leave `nearestEdge` to its own answer until it derives the normal
-    // from the polygon’s winding, which is the only reading that is exact.
-    const edge = nearestEdge(poly, f.cx, f.cz);
+    // `m.edgeCentre`, and NOT `m.centre`. The latter is the middle of the FLOOR and
+    // this is asking which way is INWARD, which is a different question and not a
+    // centroid question at all — see `LayoutContext.centre`. Handing it the area
+    // centroid measurably made the scrambled-U solve worse (worst of 24 seeds
+    // 18 -> 148): it gets a different 18 % of that room’s normals wrong rather than
+    // fewer, and the ones it misses are costlier. Leave `nearestEdge` to its own
+    // answer until it derives the normal from the polygon’s winding, which is the
+    // only reading that is exact.
+    //
+    // Passing NOTHING is that same answer and is not the same cost: this line runs
+    // once per part per proposal, and the default sweeps the polygon each time. That
+    // is what `edgeCentre` is — the identical value, computed once in `prepare`.
+    const edge = nearestEdge(poly, f.cx, f.cz, m.edgeCentre);
     // By ROLE, not by category — a coffee table, a side table and a dining table are
     // all `table` and want three different things. And `'by-relation'` pieces get
     // neither term: their place is the relation's answer, and a wall or middle term
