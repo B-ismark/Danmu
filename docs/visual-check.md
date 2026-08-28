@@ -11,10 +11,11 @@ handful of things that turned out to be live defects rather than doubts.
 | branch | state |
 |---|---|
 | `main` — `2f4d8d1` | PR #18 merged: this round’s four commits plus the review pass. |
-| `fix/visual-check-round-3` | **Merged as PR #18.** Four commits of your list, then a fifth carrying the five findings a `/review` pass turned up **on those four**. Gate counts on the tip are at the foot of the review section below — they are `main`’s numbers now. |
+| `fix/visual-check-round-3` | **Reused after the merge, and it is four commits ahead of `main` again** — `ba6324d`, `0bd90e3`, `fbf5082`, `6e71425`: the `RoomDimsEditor` NaN write, and three findings a cross-review turned up on it. **Green at `6e71425`** — typecheck 0, lint 0, 71 files / 1380 tests, `next build` 0 with its ESLint pass present; I re-gated those myself rather than quote them. **Nothing on it has been in a browser.** (This row said "merged, `main`'s numbers now" for several hours, which reads as "nothing to look at" — the reason a row names a commit and not a branch.) |
+| `fix/convoy-self-support` — `156185b` | The drag-convoy work, **stacked on the row above**: its six commits include that branch's four, so do not count them twice. Its own two are `0e100ca` (the convoy, the chevron, six gates that could not fail) and `156185b` (the gizmo owning its gesture). **Green at `156185b`** — typecheck 0, lint 0, 71 files / 1431 tests, `next build` 0 with its ESLint pass present; re-gated here too. Nothing on it has been in a browser either. |
 | PR #16 — `3b5935c` | **Open, and it needs a rebase** — see below. Its headline regression is closed. |
 | `fix/multi-select-drag` | **Not merged, and it still holds one live fix `main` lacks.** Kept for that reason. |
-| `fix/clamp-into-footprint` | **Green at `66c420a`** — typecheck 0, lint 0, **71 files / 1377 tests**, `next build` 0 with its ESLint pass confirmed present. Three commits: the clamp, two gates that could not fail, and danmu-62's review findings. Reviewed by danmu-62; the fixture search it was blocked on has been re-run and re-verified in a clean install. |
+| `fix/clamp-into-footprint` | **Green at `4eeedeb`** — typecheck 0, lint 0, **71 files / 1377 tests**, `next build` 0 with its ESLint pass confirmed present. Six commits, four of substance — the clamp, two gates that could not fail, danmu-62's review findings, and their review of those — plus two that are prose. Reviewed by danmu-62; the fixture search it was blocked on has been re-run and re-verified in a clean install. |
 
 The last full-suite run before this one showed five red in `tests/layout-solve.test.ts`.
 All five were timing assertions and all five were **load artifacts** — other sessions
