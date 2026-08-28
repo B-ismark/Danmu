@@ -131,3 +131,39 @@ describe('unit conversion', () => {
     expect(precisionFor('mm')).toBe(0);
   });
 });
+
+describe('formatDim is the only safe way to put a converted length in a sentence', () => {
+  it('never renders more decimals than its unit has precision for', () => {
+    // A range sentence in the Inspector's mount-height row interpolated the raw
+    // output of `boundsToUnit` and printed
+    //     "0-0.03280839895013123 ft under this ceiling."
+    // for a 1790 mm piece under an 1800 mm ceiling. That is not a bug in
+    // `boundsToUnit`: its collapse guard deliberately falls back to unrounded
+    // values, because preserving a real interval matters more to the ARITHMETIC
+    // than rendering does. It is a bug in reading a bound as if it were display
+    // text. `formatDim` is what makes a caller safe, and this is the property it
+    // owes them — a ceiling on the decimals for every input, including the ones
+    // that convert to a repeating fraction.
+    const units = ['mm', 'cm', 'm', 'ft', 'in'] as const;
+    const samples = [0, 1, 10, 10.5, 15.24, 40, 333, 1790, 12345];
+    let checked = 0;
+    for (const unit of units) {
+      for (const mm of samples) {
+        const decimals = (formatDim(mm, unit).split('.')[1] ?? '').length;
+        expect(decimals).toBeLessThanOrEqual(precisionFor(unit));
+        checked++;
+      }
+    }
+    // Assert the sweep actually swept. A loop over "whatever it found" passes
+    // just as green over nothing at all.
+    expect(checked).toBe(units.length * samples.length);
+  });
+
+  it('is not what a raw conversion gives you, in the case that caught us', () => {
+    // The exact input from the defect, kept as the reason the rule above exists.
+    // Not an assertion about `boundsToUnit` — about the gap between converting
+    // and displaying, which is what a caller has to remember to close.
+    expect(String(fromMM(10, 'ft'))).toContain('0.032808');
+    expect(formatDim(10, 'ft')).toBe('0.03');
+  });
+});
