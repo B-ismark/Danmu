@@ -47,9 +47,12 @@ export function RoomActions() {
   return (
     <div className="rail-footer">
       {/* `minWidth: 0` on the flex child, not on the button: `.ds-btn` is
-          `white-space: nowrap`, so without this the "Close library" label plus a
+          `white-space: nowrap`, so without this the button's longest label plus a
           32px square pushes the row wider than the rail and the rail's
-          `overflow: hidden` eats the difference with no scrollbar and no clue. */}
+          `overflow: hidden` eats the difference with no scrollbar and no clue.
+          The longest is the SHUT state, "Add a piece" — the open state is just
+          "Close" — which is worth naming because it is the state you are not
+          looking at while the panel is open and the row is at its widest. */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <AddPiecesButton />
       </div>

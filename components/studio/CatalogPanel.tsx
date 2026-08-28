@@ -54,7 +54,7 @@ export function AddPiecesButton() {
           ?.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
       }}
       aria-expanded={open}
-      title="Browse the library, or describe the piece you want"
+      title="Add a piece to the room"
       className="ds-btn"
       style={{
         width: '100%',
@@ -69,9 +69,15 @@ export function AddPiecesButton() {
       }}
     >
       {/* The label says the action, not the state: a button that reads "Library is
-          open" is a status line you can press. */}
+          open" is a status line you can press.
+          It says "Add", not "Browse the library", because the user asked for a CTA
+          that names what pressing it achieves. "Library" survives as the name of
+          the collection it opens — the search field inside still searches the
+          library, and `StudioHelp` still teaches Catalog-vs-Library — so rule 4's
+          distinction is intact and the screen gains no second Catalog. The panel
+          this opens is headed "Add pieces", which the old label disagreed with. */}
       <Icon name={open ? 'x' : 'plus'} size={12} />
-      {open ? 'Close library' : 'Browse library'}
+      {open ? 'Close' : 'Add a piece'}
     </button>
   );
 }
@@ -86,7 +92,7 @@ export function CatalogToggle() {
       onClick={() => setOpen(!open)}
       aria-expanded={open}
       className="ds-btn"
-      title="Browse the library — drag a piece into the room, click to drop it in the centre, or Shift-click to mark several"
+      title="Add a piece — drag it into the room, click to drop it in the centre, or Shift-click to mark several"
       style={{
         height: 30,
         fontSize: 12,
@@ -102,7 +108,7 @@ export function CatalogToggle() {
         boxShadow: 'var(--shadow-soft)',
       }}
     >
-      <Icon name="plus" size={12} /> Library
+      <Icon name="plus" size={12} /> Add
     </button>
   );
 }
@@ -214,7 +220,10 @@ export function CatalogPanel({
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 12px 8px' }}>
         <span className="ds-label" style={{ flex: 1 }}>Add pieces</span>
-        <IconButton icon="x" label="Close library" onClick={() => setOpen(false)} size={24} iconSize={12} />
+        {/* Names the panel it closes — its heading is "Add pieces" — because an
+            accessible name of bare "Close" tells a screen-reader user nothing
+            about what is closing. */}
+        <IconButton icon="x" label="Close Add pieces" onClick={() => setOpen(false)} size={24} iconSize={12} />
       </div>
 
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '0 12px 12px' }}>

@@ -540,11 +540,15 @@ describe('the rail footer holds the room actions without spilling', () => {
 
   it('lets the Add label ellipsise rather than widening the rail', () => {
     // The footer is a ROW: a full-width button plus a 32px square. `.ds-btn` is
-    // `white-space: nowrap`, so at the 248px tight right rail "Close library" plus
-    // that square pushes the row past the rail, and `.rail` is `overflow: hidden`
-    // — no scrollbar, no ellipsis, no clue. `flex: 1` sizes the BOX and
-    // `minWidth: 0` is what lets it go below its own text; the pair is one
+    // `white-space: nowrap`, so at the 248px tight right rail the button's longest
+    // label plus that square pushes the row past the rail, and `.rail` is
+    // `overflow: hidden` — no scrollbar, no ellipsis, no clue. `flex: 1` sizes the
+    // BOX and `minWidth: 0` is what lets it go below its own text; the pair is one
     // mechanism and either half alone does nothing.
+    // The label is "Add a piece" / "Close" now, having been "Browse library" /
+    // "Close library". Shorter in both states, so this is not load-bearing for the
+    // current strings — which is exactly why it is asserted rather than eyeballed:
+    // the next label is one edit away and nothing else here would notice.
     expect(SRC).toContain('style={{ flex: 1, minWidth: 0 }}');
   });
 
