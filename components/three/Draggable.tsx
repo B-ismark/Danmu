@@ -785,6 +785,25 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   // places that clear it, and an unmount skips both — which the exclusivity
   // guards in Pickable/Draggable would then read as "some other gesture owns
   // every part, forever," freezing hover/select/drag on the whole room.
+  //
+  // It is also the whole of the cancelled-pointer story, and an explicit
+  // `onPointerCancel` prop here would be dead plumbing rather than a second
+  // safety net. R3F never dispatches `onPointerCancel` to an instance: the prop
+  // name only selects which DOM event to listen for (`DOM_EVENTS` maps it to
+  // `['pointercancel', true]`), and the handler attached for both
+  // `pointerleave` and `pointercancel` is `() => cancelPointer([])`, which walks
+  // `internal.hovered` calling `onPointerOut` and `onPointerLeave` and nothing
+  // else. `handlers.onPointerCancel` appears nowhere in the built package —
+  // there is no dispatch path, not merely a shared one. So a cancelled pointer
+  // reaches this component as an unmount or as nothing, and the teardown below
+  // is what covers it.
+  //
+  // (@react-three/fiber 9.6.1, `dist/events-*.esm.js`, `cancelPointer`.) The
+  // version is named on purpose: `package.json` declares `^9.6.1` and will
+  // float, and this is the one claim in this file that cannot be checked
+  // against this repo alone — naming it is what lets the next reader tell
+  // "still true" from "was true". Asked by danmu-62, read out of the installed
+  // dist by danmu-f4.
   useEffect(
     () => () => {
       if (raf.current) cancelAnimationFrame(raf.current);
