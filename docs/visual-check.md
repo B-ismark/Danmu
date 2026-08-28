@@ -227,10 +227,21 @@ now reaches for the first time — listed to be looked at, not because it change
 
 ## Nothing here has been in a browser
 
-Every PR gets a Vercel preview, and a preview is the only place the production-only
-service worker registers — `next dev` cannot check that one at all.
+Every commit gets a Vercel deployment, and a deployment is the only place the
+production-only service worker registers — `next dev` cannot check that one at all.
 
-An item that has been re-pointed at `main` has no open PR to click, which is the one real
-cost of not deleting it. Its preview may still be reachable from the closed PR — I have
-not checked whether this project's previews survive a merge, and nobody should write that
-down here until someone has.
+**Merging moves where you click; it does not take the link away.** Branch tips deploy to
+`Preview`, merge commits on `main` deploy to **`Production`**, and old previews persist as
+records with a live `environment_url` long after their ref is gone — including refs that no
+longer exist at all. So a re-pointed item is still clickable. Derived from
+`gh api repos/B-ismark/Danmu/deployments` by `drag`, not assumed.
+
+**But the per-deployment URLs sit behind Vercel deployment protection.** An anonymous GET
+of a deployment redirects `302` to `vercel.com/sso-api`: whoever is signed in to that
+Vercel account gets through and nobody else does. "Open the preview" is therefore an
+instruction that works for one person. If there is a public production alias, that is the
+URL this note should carry instead — nobody has found it yet, and it stays unwritten until
+someone has.
+
+Running it locally is the other route and it is not equivalent: `next dev` never registers
+the service worker, so every offline and install item on this page is unreachable that way.
