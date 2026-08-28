@@ -59,7 +59,18 @@ function rule(selector: string): string {
   // Escaped for the regex, and `[^{]*` before `{` so `.chrome-bar` does not match
   // `.chrome-bar--tight`.
   const esc = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const m = new RegExp(`${esc}\\s*\\{([^}]*)\\}`).exec(CSS);
+  // Anchored at column 0 first, and that is not tidiness -- it is the difference
+  // between reading a rule and reading an override of it. A selector appears twice
+  // whenever a container query narrows it, and every container query in this file
+  // sits ABOVE the base rules, so an unanchored match returns the query's copy and
+  // its two or three relief declarations. An assertion about `.rail-section-toggle`
+  // asked for its padding and got ' padding-left: 12px; ' out of the 240px block.
+  // Silent, and it fails in the direction that looks like the CSS being wrong.
+  //
+  // `.rail-footer` hit this first and grew its own column-0 scan inline; this is
+  // that fix moved into the helper, so the next caller does not have to know.
+  const anchored = new RegExp(`(?:^|\\n)${esc}\\s*\\{([^}]*)\\}`).exec(CSS);
+  const m = anchored ?? new RegExp(`${esc}\\s*\\{([^}]*)\\}`).exec(CSS);
   expect(m, `no rule for \`${selector}\` in globals.css`).toBeTruthy();
   return m![1];
 }
@@ -380,6 +391,52 @@ describe('a rail section reflows instead of clipping', () => {
     expect(meta![0]).toContain('flexShrink: 0');
   });
 
+  it('keeps the header action OUTSIDE the disclosure button', () => {
+    // The header used to BE the <button>. A section-level control — Room's Re-scan
+    // link — cannot live inside it: interactive content nested in a <button> is
+    // invalid HTML and a `jsx-a11y` failure, and at `--max-warnings 0` that is a red
+    // build rather than a warning. So the row is a <div className="rail-section-head">
+    // holding a `.rail-section-toggle` button and the action as its SIBLING.
+    //
+    // Read as source shape rather than rendered DOM because this file is a node
+    // suite with no jsdom, and because the mistake it guards against is a diff that
+    // looks harmless: moving `{action}` up two lines.
+    const HEAD_OPEN = '<div className="rail-section-head">';
+    const from = SRC.indexOf(HEAD_OPEN);
+    expect(from, 'no rail-section-head row in RailSection').toBeGreaterThan(-1);
+    const row = SRC.slice(from + HEAD_OPEN.length);
+    expect(row, 'the disclosure must be the .rail-section-toggle button').toMatch(
+      /<button[^>]*className="rail-section-toggle"/,
+    );
+    const btnStart = row.indexOf('<button');
+    const btnEnd = row.indexOf('</button>');
+    expect(btnStart, 'no disclosure button inside the header row').toBeGreaterThan(-1);
+    expect(btnEnd, 'the disclosure button is not closed').toBeGreaterThan(btnStart);
+    const toggle = row.slice(btnStart, btnEnd);
+    expect(toggle, '{action} must not be nested inside the disclosure button').not.toContain('{action}');
+    expect(row.slice(btnEnd), '{action} must render after the disclosure button').toContain('{action}');
+  });
+
+  it("keeps the header's leading strip inside the disclosure button", () => {
+    // The header used to BE the button, so its 16px leading padding was pressable.
+    // Splitting the row put that padding on the wrapping <div> and the button at
+    // `padding: 0`, which silently turned the strip at the start of every section
+    // header into dead space — a hit-target regression no gate can see and that
+    // reads as the header being fussy to click. Found in review.
+    //
+    // So the toggle carries the vertical padding and the LEADING inline padding,
+    // and the row carries only `padding-right`, which is the action button's side.
+    const toggle = rule('.rail-section-toggle');
+    expect(toggle, 'no .rail-section-toggle rule in globals.css').toBeTruthy();
+    expect(toggle, 'the leading strip must be inside the button').toContain('padding: 11px 0 11px 16px');
+    const head = rule('.rail-section-head');
+    expect(head, 'no .rail-section-head rule in globals.css').toBeTruthy();
+    expect(head, 'the row must not re-add a leading pad in front of the button').toContain(
+      'padding-right: 16px',
+    );
+    expect(head, 'a shorthand here would put dead space back').not.toMatch(/padding:\s/);
+  });
+
   it('states its padding in CSS, where a container query can reach it', () => {
     // Inline padding is padding the rail's own container queries cannot narrow.
     // RailSection is what the LEFT rail is built from, so while its padding was
@@ -387,10 +444,157 @@ describe('a rail section reflows instead of clipping', () => {
     expect(SRC).toMatch(/className="rail-section-head"/);
     expect(SRC).toMatch(/className="rail-section-body"/);
     expect(SRC, 'padding belongs in globals.css now').not.toMatch(/padding: '[^']*16px/);
-    const tight = /@container rail \(max-width: 240px\) \{([^}]*)\}/.exec(CSS);
-    expect(tight, 'no 240px container query in globals.css').toBeTruthy();
-    expect(tight![1]).toContain('.rail-section-head');
-    expect(tight![1]).toContain('.rail-section-body');
+    // Sliced with indexOf rather than matched with a regex. The first version used
+    // /\{([^}]*)\}/, which stops at the end of the query's FIRST rule — so a second
+    // rule inside the same query was invisible to every assertion below. That went
+    // unnoticed while the block held exactly one rule, and the hit-target fix above
+    // adds two more. A newline-anchored regex is the obvious repair and it is a trap
+    // in this repo: the checkout is CRLF, so the pattern has to carry an optional CR
+    // and the escaping does not survive being written by a script. String arithmetic
+    // cannot get that wrong.
+    const QUERY = '@container rail (max-width: 240px) {';
+    const qAt = CSS.indexOf(QUERY);
+    expect(qAt, 'no 240px container query in globals.css').toBeGreaterThan(-1);
+    const bodyFrom = qAt + QUERY.length;
+    // The closing brace of the query itself is the only one at column 0 after it.
+    const closeAt = CSS.indexOf('\n}', bodyFrom);
+    expect(closeAt, 'the 240px container query is never closed').toBeGreaterThan(bodyFrom);
+    const tight = CSS.slice(bodyFrom, closeAt);
+    expect(tight).toContain('.rail-section-body');
+    // The header's padding lives on two elements now, so BOTH need the relief.
+    expect(tight, 'the header row keeps its own padding at 240px').toContain('.rail-section-head');
+    expect(tight, 'the disclosure keeps its leading pad at 240px').toContain('.rail-section-toggle');
+  });
+});
+
+describe('the rail footer holds the room actions without spilling', () => {
+  const SRC = readSrc('components', 'studio', 'RoomActions.tsx');
+
+  /** The body of a selector's BASE rule — the occurrence whose selector starts at
+   *  column 0.
+   *
+   *  NOT the shared `rule()` helper. That one takes the FIRST match, and
+   *  `.rail-footer` is named twice: once in the base rule and once in the 240px
+   *  container query, which sits EARLIER in the file. So `rule('.rail-footer')`
+   *  returns the relief block's ` padding-left: 12px; padding-right: 12px; ` and
+   *  any assertion about the base rule passes or fails for a reason that has
+   *  nothing to do with the base rule. Indentation is the only thing separating
+   *  them, and reading it needs no line-ending assumption — which matters because
+   *  the CSS here is read raw and this repo checks out CRLF.
+   *
+   *  It lives here rather than inline in one test because two tests now ask about
+   *  this rule, and two copies of the scan is the drift this repo keeps finding. */
+  function baseRule(selector: string): string {
+    const SEL = `${selector} {`;
+    let at = -1;
+    for (let i = CSS.indexOf(SEL); i >= 0; i = CSS.indexOf(SEL, i + 1)) {
+      if (i === 0 || CSS[i - 1] !== ' ') { at = i; break; }
+    }
+    expect(at, `no top-level ${selector} rule in globals.css`).toBeGreaterThan(-1);
+    return CSS.slice(at + SEL.length, CSS.indexOf('}', at));
+  }
+
+  it('states its box model in CSS, where the container query can reach it', () => {
+    // Same argument as `.rail-section-head`: while the old footer stated
+    // `padding: 12px 16px` inline in PartTree, the 240px relief below could not
+    // narrow it, so the one row in the rail holding two controls side by side was
+    // the one row that never gave any padding back.
+    expect(SRC).toContain('className="rail-footer"');
+    expect(SRC, "padding belongs in globals.css now").not.toContain("padding: '12px 16px'");
+    const footer = baseRule('.rail-footer');
+    expect(footer).toContain('padding: 12px 16px');
+    // Never squeezed out by a tall Inspector above it. A footer that can shrink to
+    // nothing is a footer that silently is not there.
+    expect(footer).toContain('flex-shrink: 0');
+  });
+
+  /** The line three separate reports called a horizontal scrollbar.
+   *
+   *  `.rail-footer` had `border-top: 1px solid var(--hairline)`. It rendered
+   *  immediately under the Inspector's last control — an OUTLINED "Delete from
+   *  scene" button — spanning the rail's full width, with a 32px round revert
+   *  button beside it. That reads as a scrollbar, and it was reported as one three
+   *  times while two sessions looked for an overflow that did not exist.
+   *
+   *  It is deleted, not restyled, and the tone does its job alone: the footer is
+   *  `--paper-2` against the rail's `--paper`, a real surface step rather than a
+   *  1px rule. So this asserts BOTH halves — no border, and the tone still there —
+   *  because deleting the border and the background together would leave the
+   *  pinned row visually continuous with the scrolling panel above it, which is a
+   *  different defect reached by "fixing" this one. */
+  it('separates itself from the scrolling panel by tone, not by a rule that reads as a scrollbar', () => {
+    const footer = baseRule('.rail-footer');
+    expect(footer, 'a 1px hairline here is read as a horizontal scrollbar').not.toContain('border');
+    // The tone is what carries the pinning now, so it is load-bearing rather than
+    // decorative. `--paper-2` is 0.858 L against `--paper` at 0.941.
+    expect(footer).toContain('background: var(--paper-2)');
+  });
+
+  it('is in the 240px padding relief with the rest of the rail', () => {
+    const OPEN = '@container rail (max-width: 240px) {';
+    const at = CSS.indexOf(OPEN);
+    expect(at, 'no 240px container query in globals.css').toBeGreaterThan(-1);
+    const body = CSS.slice(at + OPEN.length, CSS.indexOf('}', at));
+    expect(body).toContain('.rail-footer');
+  });
+
+  it('lets the Add label ellipsise rather than widening the rail', () => {
+    // The footer is a ROW: a full-width button plus a 32px square. `.ds-btn` is
+    // `white-space: nowrap`, so at the 248px tight right rail "Close library" plus
+    // that square pushes the row past the rail, and `.rail` is `overflow: hidden`
+    // — no scrollbar, no ellipsis, no clue. `flex: 1` sizes the BOX and
+    // `minWidth: 0` is what lets it go below its own text; the pair is one
+    // mechanism and either half alone does nothing.
+    expect(SRC).toContain('style={{ flex: 1, minWidth: 0 }}');
+  });
+
+  it('gives the revert a real target and does not reuse the Re-scan glyph', () => {
+    // Once a control loses its words the glyph IS the name, so two different verbs
+    // may not share one. `refresh` is Re-scan’s, in the left rail’s Room header,
+    // and it is also CATEGORY_ICON.fan.
+    expect(SRC).toContain('icon="rotate-ccw"');
+    expect(SRC, 'refresh is the Re-scan glyph now').not.toContain('icon="refresh"');
+    // IconButton floors at 24px so nothing falls under WCAG 2.5.8. 32 is the app’s
+    // icon-target size, and the size LightingPicker’s own rail budget is derived
+    // from two describes above.
+    expect(SRC).toContain('size={32}');
+  });
+
+  it('no longer leaves the Add button in the left rail', () => {
+    // The assertion that catches a half-finished move: the footer deleted from
+    // PartTree but the trigger still rendered there, so the studio grows a third
+    // way into the same panel.
+    const tree = readSrc('components', 'studio', 'PartTree.tsx');
+    expect(tree, 'PartTree must not reference AddPiecesButton any more').not.toContain(
+      'AddPiecesButton',
+    );
+    const right = readSrc('components', 'studio', 'shells', 'shell-parts.tsx');
+    expect(right).toContain('<RoomActions />');
+  });
+});
+
+describe('the catalog panel clears the cluster it docks beside', () => {
+  const SRC = readSrc('components', 'studio', 'CatalogPanel.tsx');
+  const CHROME = readSrc('components', 'studio', 'CanvasChrome.tsx');
+
+  it('measures the top-right cluster rather than assuming one height', () => {
+    // `CanvasView` wraps — on the 2D tab it is undo/redo AND the whole zoom /
+    // rotate / fit toolbar, which folds into two rows on a cramped canvas. The
+    // panel used to begin at a flat `top: 54` (12 + a 30px control + 12), which
+    // slides it under a folded cluster. Derived now, with a fallback that
+    // reproduces the old number for the frame before the ResizeObserver reports.
+    expect(SRC).toContain('var(--canvas-view-height');
+    expect(SRC, 'a flat top: 54 is the bug this replaced').not.toContain('top: 54,');
+    // And the other half: something has to publish it.
+    expect(CHROME).toContain("'--canvas-view-height'");
+    expect(CHROME).toContain('setProperty(heightProp');
+  });
+
+  it('docks on the same side as its triggers', () => {
+    // Both triggers are on the right now. Pressing a control on one side to have a
+    // list appear on the other is a trip across the whole product.
+    expect(SRC).toContain('right: 12,');
+    expect(SRC, 'the panel follows its trigger to the right edge').not.toContain('left: 12,');
   });
 });
 

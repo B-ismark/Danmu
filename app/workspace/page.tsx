@@ -499,12 +499,32 @@ function RoomCard({
 
         {!room.detected && room.captureCount > 0 && (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {/* These used to be readouts, which left a half-captured room with no way
+                back to the screen they name: the card's one link goes to the studio,
+                and nothing else on this page points at /onboarding/*. They are links
+                now, and they carry `onOpen` for the same reason the card body does —
+                both onboarding screens read the room from `useRoom`, not from the
+                URL, so an href alone lands on "Pick a room shape first". */}
             {room.captureCount < 4 ? (
-              <Pill tone="warn">
-                Resume · <span className="mono">{room.captureCount}/4</span> walls
-              </Pill>
+              <Link
+                href="/onboarding/capture"
+                onClick={onOpen}
+                aria-label={`Add the remaining wall photos for ${room.name}`}
+                style={{ textDecoration: 'none' }}
+              >
+                <Pill tone="warn">
+                  Resume · <span className="mono">{room.captureCount}/4</span> walls
+                </Pill>
+              </Link>
             ) : (
-              <Pill tone="accent">Detect furniture</Pill>
+              <Link
+                href="/onboarding/detect"
+                onClick={onOpen}
+                aria-label={`Find the furniture in ${room.name}'s photos`}
+                style={{ textDecoration: 'none' }}
+              >
+                <Pill tone="accent">Detect furniture</Pill>
+              </Link>
             )}
           </div>
         )}

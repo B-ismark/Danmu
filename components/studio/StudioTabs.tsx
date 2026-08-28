@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useRouter, usePathname, useParams } from 'next/navigation';
 
 import { Icon, type IconName } from '@/components/ui/Icon';
@@ -14,6 +15,26 @@ export function StudioTabs() {
   const pathname = usePathname();
   const params = useParams<{ roomId: string }>();
   const active = TABS.find((t) => pathname?.includes(`/${t.id}`))?.id ?? 'model';
+
+  // Prefetch BOTH tabs, not just the inactive one.
+  //
+  // These are routes, not panels: switching unmounts one page and mounts the other,
+  // and `router.push` on a route whose chunk is not in memory pays for the fetch
+  // before anything can render. `<Link>` would have prefetched on its own — these are
+  // buttons because the switcher used to be one and `aria-current` is the right
+  // affordance for "the page you are on" — so the prefetch has to be asked for.
+  //
+  // This is the cheap half of the tab-switch cost and it is honest about being that:
+  // the expensive half is that leaving `/model` destroys the WebGL context, every
+  // geometry and material, and every compiled shader, and a prefetch does nothing
+  // about any of it. Fixing that means the canvas outliving the route, which is a
+  // structural change and wants its own diff.
+  useEffect(() => {
+    const id = params.roomId;
+    if (!id) return;
+    for (const t of TABS) router.prefetch(`/room/${id}/${t.id}`);
+  }, [router, params.roomId]);
+
   return (
     <nav
       aria-label="Studio views"

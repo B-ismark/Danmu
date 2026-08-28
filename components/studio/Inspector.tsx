@@ -97,8 +97,12 @@ export function Inspector() {
   // Hybrid swap — replace this part's model with a library one, keeping its
   // position + colour. Re-grounds Y for the new dims / mount type and clears
   // stale transform overrides (old scale would distort the new base dims).
-  // `dimOverride` carries sizes the user named in the "Describe it" tab; both
-  // entry points land here so re-grounding only ever happens in one place.
+  // `dimOverride` carries sizes the user named in the picker's search box —
+  // `sizeFromQuery` has already clamped them, and the item handed over carries the
+  // result, so the argument and `item.dimMM` are the same number by the time they
+  // arrive. It stays a separate parameter because re-grounding must be the only
+  // place that decides Y, and a caller with a size in hand should be able to say so
+  // rather than mutate the item on the way in.
   function swapModel(item: LibraryItem, dimOverride?: [number, number, number]) {
     const dimMM = dimOverride ?? ([...item.dimMM] as [number, number, number]);
     const [x, y, z] = currentXYZ();
@@ -166,7 +170,7 @@ export function Inspector() {
   const isGeneric = part.shape === 'box';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', height: '100%', minWidth: 0 }}>
       <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--hairline)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <EditableText
@@ -394,8 +398,23 @@ function LightControls({
   const set = (patch: Partial<PartLight>) => onChange({ ...spec, ...patch });
   return (
     <Section label="Light">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <label htmlFor={`lm-${part.id}`} style={{ fontSize: 12, color: 'var(--ink-2)', minWidth: 66 }}>
+      {/* Wraps, and the field shrinks — defensively, not because this row was
+          measured overflowing. Flat it is 66 + 8 + 104 + 8 + 'lm' ≈ 201px of
+          FIXED content, against ~228px of usable width at the narrowest rail that
+          ships (`--rail-right-min` 276px, less its border, the section's 16px
+          either side and a vertical scrollbar). 27px of margin, and no margin at
+          all if the label's font or the unit ever grows.
+
+          Do not read `--rail-right-tight` (248px) as the number to check against:
+          it is applied to nothing and exists only for `tests/reflow.test.ts` to
+          hold as a floor a future tightening may reach. This comment said 248 in
+          its first version and concluded the row overflowed by a pixel, which was
+          wrong in a way that would have sent the next reader hunting the wrong
+          row. The panel's stray horizontal scrollbar is real and its cause is NOT
+          identified here — it needs `scrollWidth > clientWidth` read off the live
+          box, which no test in this repo can do. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+        <label htmlFor={`lm-${part.id}`} style={{ fontSize: 12, color: 'var(--ink-2)', minWidth: 66, flex: '0 1 auto' }}>
           Brightness
         </label>
         <NumberField
@@ -409,7 +428,7 @@ function LightControls({
           max={5000}
           height={30}
           ariaLabel="Brightness in lumens"
-          style={{ width: 104 }}
+          style={{ width: 104, maxWidth: '100%', minWidth: 0 }}
         />
         <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>lm</span>
       </div>
@@ -547,7 +566,7 @@ function WallInspector({ index }: { index: number }) {
   const current = room.wallColors?.[index] ?? SCENE.wall;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', height: '100%', minWidth: 0 }}>
       <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--hairline)' }}>
         <div style={{ fontSize: 16, fontWeight: 500, letterSpacing: '-0.01em' }}>{name}</div>
         <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>

@@ -11,20 +11,25 @@
 //
 // What is left is the strip, because a modal cannot be dragged out of: it covers
 // the room you are placing pieces into, and the drop point is the whole reason
-// the canvas accepts a drag at all. It carries the modal's Describe-it tab and the
-// modal's full item list, and both triggers (`AddPiecesButton` in the rail,
-// `CatalogToggle` on the canvas) open this one panel through `useStudio`.
+// the canvas accepts a drag at all. It carries the modal's full item list, and both
+// triggers (`AddPiecesButton` in the rail, `CatalogToggle` on the canvas) open this
+// one panel through `useStudio`.
+//
+// The Describe-it tab that used to sit above the list is GONE, and its worth is
+// not: it read as a way to reach models the library does not have, which rule 1
+// forbids and no procedural catalog can do, while the part of it that was real —
+// synonym-folded scoring and "queen bed 160x200cm" arriving at that size — is on
+// the ordinary search box inside `LibraryPicker` now. One field, not two tabs.
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { v4 as uuid } from 'uuid';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
-import { searchLibrary, parseDims } from '@/lib/shape-search';
-import { clampDims } from '@/lib/dimension-ranges';
+
 import { placeNewPart, type LibraryItem, type ScenePart } from '@/lib/scene-spec';
 import { Icon } from '@/components/ui/Icon';
 import { IconButton } from '@/components/ui/primitives';
-import { LibraryPicker, PickerTabs, DescribeField, type PickerTab } from './LibraryPicker';
+import { LibraryPicker } from './LibraryPicker';
 import { announce, isTypingOrDialog } from './KeyboardShortcuts';
 
 /** The id the pages put on their canvas element, so the rail's trigger can bring
@@ -129,24 +134,35 @@ function spawnMany(items: LibraryItem[]) {
   announce(`${ids.length} ${ids.length === 1 ? 'piece' : 'pieces'} added.`);
 }
 
-/** Floating, non-blocking model catalog docked on the left edge of the
- *  viewport. Items can be DRAGGED onto the 3D room (Room's onDrop raycasts the
- *  drop point) or CLICKED to drop at room centre. Deliberately a narrow strip so
- *  the rest of the canvas stays a valid drop target. */
+/** Floating, non-blocking model catalog docked on the RIGHT edge of the canvas.
+ *  Items can be DRAGGED onto the 3D room (Room's onDrop raycasts the drop point)
+ *  or CLICKED to drop at room centre. Deliberately a narrow strip so the rest of
+ *  the canvas stays a valid drop target.
+ *
+ *  Right, not left, because both of its triggers are now on the right: the rail's
+ *  `AddPiecesButton` moved to the right rail's footer, and pressing a control on
+ *  one side to have a list appear on the other is a trip across the whole product.
+ *  It also leaves the entire left of the canvas clear. */
 export function CatalogPanel({
   /** false on the 2D plan, which has no drop handler — see LibraryPicker. */
   canDrag = false,
-  /** How far to stop short of the bottom edge. The 3D tab keeps only the 30px
-   *  help button down there; the plan stacks help ON TOP of its zoom toolbar, so
-   *  the default clears one control and this panel sat over the other. */
+  /** How far to stop short of the bottom edge.
+   *
+   *  The reason this used to give was the help button in the bottom-LEFT corner.
+   *  Help moved to the top bar, and `CanvasChrome` and `PlanChrome` both now state
+   *  that bottom-left and bottom-centre are deliberately empty — so that reason had
+   *  been false for a while and the number was surviving on nothing.
+   *
+   *  Docked right, it is load-bearing again, and against something real: the
+   *  bottom-right `CanvasAide` slot. On the 3D tab that is `ViewGizmo`; on the 2D
+   *  tab it is the taller `ComfortLegend`, and only while shading is on — which is
+   *  why the plan passes a bigger number rather than sharing this one. */
   bottomGap = 56,
 }: {
   canDrag?: boolean;
   bottomGap?: number;
 }) {
   const setOpen = useStudio((s) => s.setCatalogOpen);
-  const [tab, setTab] = useState<PickerTab>('library');
-  const [prompt, setPrompt] = useState('');
 
   // Esc closes it, like every other panel in the studio (Look, Room, help). It
   // yields to a field being edited or a dialog in front — so Esc out of the search
@@ -162,23 +178,11 @@ export function CatalogPanel({
     return () => window.removeEventListener('keydown', onKey, true);
   }, [setOpen]);
 
-  // Live local matches — recomputed as the user types. No network involved.
-  const matches = searchLibrary(prompt, 6);
-
+  // `item.dimMM` is already the size the search words asked for, clamped per
+  // piece — `LibraryPicker` resolves it before handing the item over, so this path
+  // and the drag path cannot disagree about what a query meant.
   function addItem(item: LibraryItem) {
     spawn(item.category, item.shape, [...item.dimMM], item.label);
-  }
-
-  // Spawn a match with any explicit sizes from the description applied
-  // ("queen bed 160x200cm" → those dims, clamped into the trustable range).
-  function addMatch(item: LibraryItem) {
-    const o = parseDims(prompt);
-    const dim = clampDims(item.category, item.shape, [
-      o.w ?? item.dimMM[0],
-      o.d ?? item.dimMM[1],
-      o.h ?? item.dimMM[2],
-    ]);
-    spawn(item.category, item.shape, dim, item.label);
   }
 
   return (
@@ -186,10 +190,17 @@ export function CatalogPanel({
       className="ds-card"
       style={{
         position: 'absolute',
-        top: 54,
-        left: 12,
-        // Stops short of the bottom-left corner: the studio's help button lives
-        // there, and this panel used to sit on top of it.
+        // Below the top-right cluster, measured rather than assumed. `CanvasView`
+        // wraps — on the 2D tab it is undo/redo AND the whole zoom / rotate / fit
+        // toolbar — so it is not one height, and a flat `54` (12 + a 30px control
+        // + 12) slid this panel under a folded two-row cluster. It publishes its
+        // own height for exactly this; the fallback reproduces the old number for
+        // the one frame before the ResizeObserver reports, and for a jsdom render
+        // where there is no layout at all.
+        top: 'calc(12px + var(--canvas-view-height, 30px) + 12px)',
+        right: 12,
+        // Stops short of the bottom-RIGHT corner, which is where the one canvas
+        // aide lives — see `bottomGap` above.
         bottom: bottomGap,
         // Capped against the canvas, not just stated: at 268px flat this covered
         // two thirds of a stacked layout's room, and you cannot drag a piece into
@@ -206,57 +217,14 @@ export function CatalogPanel({
         <IconButton icon="x" label="Close library" onClick={() => setOpen(false)} size={24} iconSize={12} />
       </div>
 
-      <div style={{ padding: '0 12px 8px' }}>
-        <PickerTabs tab={tab} onChange={setTab} style={{ width: '100%' }} />
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '0 12px 12px' }}>
+        <div style={{ fontSize: 11, color: 'var(--ink-3)', margin: '0 0 8px', lineHeight: 1.4 }}>
+          {canDrag
+            ? 'Drag a piece in, click to drop it in the centre, or Shift-click to mark several.'
+            : 'Click a piece to drop it into the middle of the room. Shift-click to mark several.'}
+        </div>
+        <LibraryPicker onPick={addItem} onPickMany={spawnMany} columns={1} draggable={canDrag} maxHeight={null} />
       </div>
-
-      {tab === 'library' ? (
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '0 12px 12px' }}>
-          <div style={{ fontSize: 11, color: 'var(--ink-3)', margin: '0 0 8px', lineHeight: 1.4 }}>
-            {canDrag
-              ? 'Drag a piece in, click to drop it in the centre, or Shift-click to mark several.'
-              : 'Click a piece to drop it into the middle of the room. Shift-click to mark several.'}
-          </div>
-          <LibraryPicker onPick={addItem} onPickMany={spawnMany} columns={1} draggable={canDrag} maxHeight={null} />
-        </div>
-      ) : (
-        <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '0 12px 12px' }}>
-          <p style={{ fontSize: 11, color: 'var(--ink-3)', lineHeight: 1.45, margin: '0 0 8px' }}>
-            Type what you want — sizes included (&quot;180cm wide&quot;) carry into the piece.
-          </p>
-          <DescribeField
-            value={prompt}
-            onChange={setPrompt}
-            label="Describe the piece you want"
-            placeholder={'e.g. "tall mirror 1700mm" or "queen bed 160x200cm"'}
-          />
-          {matches.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {matches.map((m) => (
-                <button
-                  key={m.label}
-                  onClick={() => addMatch(m)}
-                  className="ds-btn"
-                  style={{ height: 32, fontSize: 12, justifyContent: 'space-between', paddingLeft: 10 }}
-                >
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                    <Icon name="plus" size={11} />
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.label}</span>
-                  </span>
-                  <span className="mono" style={{ fontSize: 9.5, color: 'var(--ink-3)' }}>
-                    {m.dimMM[0]}×{m.dimMM[1]}×{m.dimMM[2]}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-          {prompt.trim().length > 1 && matches.length === 0 && (
-            <div style={{ fontSize: 12, color: 'var(--ink-3)', padding: '4px 0', lineHeight: 1.5 }}>
-              Nothing matches yet — keep typing, or browse the Library tab.
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
