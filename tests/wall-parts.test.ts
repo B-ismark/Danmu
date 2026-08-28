@@ -299,3 +299,56 @@ describe('placeNewPart: the two edges of that clamp', () => {
     expect(deep.pos[2]).toBeCloseTo(2, 6);
   });
 });
+
+describe('a floor-standing piece is added facing its wall', () => {
+  // `placeNewPart` ended `rot: 0` for everything that stands on the floor, so three
+  // beds dropped at three different walls all pointed the same way — headboards
+  // north, two of them into open floor. Reported as "all beds face that side".
+  //
+  // The room already prices this: `lib/layout-score.ts` charges a `prefers-wall`
+  // piece `FACING_GAIN * angleCost(yaw, edge.yaw)`, so Shuffle turns them the moment
+  // it runs. The defect was that adding produced a heading the solver would
+  // immediately overrule.
+  const room = { width: ROOM.width, depth: ROOM.depth, height: H, footprint: RECT };
+  const BED: [number, number, number] = [900, 2000, 600];
+
+  it('takes a different heading at each of the four walls', () => {
+    // The asymmetric check: a bed at the north wall and a bed at the west wall must
+    // NOT agree. Testing one wall proves nothing — `rot: 0` passes that.
+    const drops: Array<[string, [number, number]]> = [
+      ['north', [0, -ROOM.depth / 2 + 0.6]],
+      ['south', [0, ROOM.depth / 2 - 0.6]],
+      ['west', [-ROOM.width / 2 + 0.6, 0]],
+      ['east', [ROOM.width / 2 - 0.6, 0]],
+    ];
+    const rots = drops.map(([, at]) => placeNewPart('bed', 'bed-single', BED, room, [], at).rot);
+    // Four walls, four distinct headings, and each one is the yaw `snapToWall`
+    // reports for the wall the drop was nearest — the same answer wall-mounted
+    // pieces have always been given, read from the same function.
+    expect(new Set(rots.map((r) => r.toFixed(4))).size).toBe(4);
+    for (const [i, [, at]] of drops.entries()) {
+      expect(rots[i]).toBeCloseTo(snapToWall([at[0], 0, at[1]], BED, RECT).rot ?? 0, 6);
+    }
+  });
+
+  it('leaves a piece with no wall affinity alone', () => {
+    // The negative control. `plant` is 'free' and a lamp is 'free'; turning those to
+    // face a wall would be inventing an opinion the room does not have. Without this
+    // the test above passes for an implementation that turns everything.
+    const at: [number, number] = [-ROOM.width / 2 + 0.6, 0];
+    expect(placeNewPart('plant', 'plant', [500, 500, 1200], room, [], at).rot).toBe(0);
+    expect(placeNewPart('lamp', 'lamp-floor', [400, 400, 1500], room, [], at).rot).toBe(0);
+  });
+
+  it('does not move the piece — only turns it', () => {
+    // The promise this keeps: dropped where you aimed. Only the yaw comes from the
+    // wall, so a bed dropped a metre off the wall stays a metre off it. A version
+    // that also snapped would make a bed ride its wall on add and not on the next
+    // drag, since `lib/drag-resolve.ts` snaps `ridesWall` pieces only.
+    const at: [number, number] = [-1.2, -0.8];
+    const free = placeNewPart('plant', 'plant', [500, 500, 1200], room, [], at);
+    const bed = placeNewPart('bed', 'bed-single', BED, room, [], at);
+    expect(bed.pos[0]).toBeCloseTo(free.pos[0], 6);
+    expect(bed.pos[2]).toBeCloseTo(free.pos[2], 6);
+  });
+});
