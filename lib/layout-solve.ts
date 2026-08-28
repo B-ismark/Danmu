@@ -642,7 +642,7 @@ export function openRoutes(
  *  room". It is the one term here that needs a grid, so `hardCost` pays for a
  *  distance transform per candidate — a few dozen per solve, against the annealer's
  *  sixteen hundred evaluations, and only for pieces already inside `SNAP_TOL`. */
-const HARD_TERMS: Array<keyof ScoreWeights> = ['overlap', 'outside', 'door', 'access', 'navigation'];
+export const HARD_TERMS: Array<keyof ScoreWeights> = ['overlap', 'outside', 'door', 'access', 'navigation'];
 
 /** The hard terms, kept APART rather than added up.
  *
