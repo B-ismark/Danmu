@@ -10,8 +10,9 @@ handful of things that turned out to be live defects rather than doubts.
 
 | branch | state |
 |---|---|
-| `main` — `2f4d8d1` | PR #18 merged, which took `fix/visual-check-round-3` with it. |
-| `fix/convoy-self-support` | this round, on top of `2f4d8d1`, **uncommitted** in a session worktree. The convoy work, plus the fixes for a `/review` pass over `4326b44..391399d` **and** that work together. Gates on the tree: typecheck 0, lint 0, 1400+/71, build 0 — the exact counts are at the foot of the review section below, taken from the run they describe. |
+| `main` — `2f4d8d1` | PR #18 merged, which took `fix/visual-check-round-3` with it. **`git diff a574e0b 2f4d8d1` is empty** — that merge commit carries no content of its own, which is why the stack below is on `a574e0b` and still merges clean. |
+| `fix/visual-check-round-3` — `6e71425` | Four commits on `a574e0b`, **not** on `main` (PR #18 took an earlier state of the same branch name). Pushed. |
+| `fix/convoy-self-support` — `72051db` | This round. **Four commits on `6e71425`, eight on `a574e0b`, committed and local-only.** The convoy work, the fixes from a `/review` over `4326b44..391399d`, and two rounds of cross-review with danmu-62 on top of that. Gates on the **commit** (in a worktree with its own install at a short path, not on a working tree): typecheck 0, lint 0, **1435/71**, build 0 with the CI greps clean. **Not a fast-forward onto `main`** — `main` holds one commit the stack lacks — but a conflict-free merge, since that commit's tree equals the stack's base. |
 | PR #16 — `3b5935c` | **Open, and it needs a rebase** — see below. Its headline regression is closed. |
 | `fix/multi-select-drag` | **Not merged, and it still holds one live fix `main` lacks.** Kept for that reason. |
 | `fix/clamp-into-footprint` | Local only. Holds a written, tested fix for a known-and-left item. Kept. |
@@ -301,6 +302,14 @@ number rather than a wrong room — which is exactly why nothing caught it.
 - **PR #16 is your click, and it needs a rebase first.** See its section below.
 - **`fix/multi-select-drag` cannot be deleted yet.** It still holds `snapToWall`'s
   `alongRot` argument, which is a live 191 mm defect on `main` — see *Coverage gaps*.
+- **The 2D plan's rotate has no containment clamp; 3D's has.** Turning a piece in the
+  plan writes the angle directly, where the same gesture in 3D resolves through
+  `resolvePlacement`. So a long piece turned in the plan can end up through a wall in
+  a way it cannot in the model tab — the two tabs disagree about a gesture that looks
+  identical, which is the class of defect the convoy work exists to close. **Predates
+  this branch and is not fixed here** (`72051db` added the plan's rotate *cascade*, not
+  a clamp). Spotted by danmu-62 while reviewing that commit. To see it: turn a sofa
+  hard against a wall in the plan, then open the model tab and look at the wall.
 
 ---
 
