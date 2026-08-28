@@ -3,12 +3,15 @@ import {
   footprintForLayout,
   pointInFootprint,
   clampIntoFootprint,
+  interiorPoint,
   polygonCentroid,
   polygonSignedArea,
   wallOutwardNormal,
   wallSegments,
   footprintBounds,
   offsetWall,
+  type Footprint,
+  type LayoutId,
 } from '@/lib/footprint';
 
 const LAYOUTS = ['rect', 'l', 't', 'u', 'open'] as const;
@@ -67,6 +70,131 @@ describe('clampIntoFootprint', () => {
   it('pulls an exterior point back inside', () => {
     const [x, z] = clampIntoFootprint(100, 100, rect);
     expect(pointInFootprint(x, z, rect)).toBe(true);
+  });
+
+  // ── …on every room shape, not just the rectangle ──────────────────────────
+  //
+  // The test above is satisfied by a rectangle and a rectangle cannot show the bug:
+  // the two centroids coincide there. On a U at 7.5 x 5.6 the CORNER average — what
+  // this walked toward — is 0.70 m into the gap between the legs, outside the room.
+  // Every step of the walk was then outside too, and the function's last line handed
+  // that same outside point back. Callers read the result as "inside now"; there is
+  // no second return value telling them otherwise, which is what made it silent.
+  //
+  // The eight compass directions matter for the same reason the repo's asymmetry rule
+  // does: a U is only wrong from the side its notch faces, and one probe from the
+  // north-west would have found nothing.
+  const SHAPES: LayoutId[] = ['rect', 'l', 't', 'u', 'open'];
+  const FAR = [
+    [100, 100],
+    [-100, 100],
+    [100, -100],
+    [-100, -100],
+    [0, 100],
+    [0, -100],
+    [100, 0],
+    [-100, 0],
+  ];
+
+  it('lands inside the room from every direction, on every preset', () => {
+    const escaped: string[] = [];
+    for (const id of SHAPES) {
+      const poly = footprintForLayout(id, 7.5, 5.6);
+      for (const [fx, fz] of FAR) {
+        const [x, z] = clampIntoFootprint(fx, fz, poly);
+        if (!pointInFootprint(x, z, poly)) {
+          escaped.push(`${id} from (${fx}, ${fz}) -> (${x.toFixed(2)}, ${z.toFixed(2)})`);
+        }
+      }
+    }
+    expect(escaped, escaped.join('\n')).toEqual([]);
+  });
+});
+
+describe('interiorPoint', () => {
+  it('is inside the room on every preset', () => {
+    const outside: string[] = [];
+    for (const id of ['rect', 'l', 't', 'u', 'open'] as LayoutId[]) {
+      const poly = footprintForLayout(id, 7.5, 5.6);
+      const pt = interiorPoint(poly);
+      if (!pt || !pointInFootprint(pt[0], pt[1], poly)) {
+        outside.push(`${id} -> ${pt ? `(${pt[0].toFixed(2)}, ${pt[1].toFixed(2)})` : 'null'}`);
+      }
+    }
+    expect(outside, outside.join('\n')).toEqual([]);
+  });
+
+  it('and the corner average is not — which is why this function exists', () => {
+    // The measurement the fix is for, stated so that deleting `interiorPoint` and
+    // going back to `polygonCentroid` cannot look like a simplification.
+    const u = footprintForLayout('u', 7.5, 5.6);
+    const [cx, cz] = polygonCentroid(u);
+    expect(pointInFootprint(cx, cz, u), 'the U is the shape that shows this').toBe(false);
+  });
+
+  it('survives a room with no interior at all', () => {
+    // A polygon collapsed onto a line. Neither the scan nor the edge probe finds
+    // anything — every probe off a zero-area edge lands off the line — and the
+    // contract is to say so rather than return a plausible-looking point.
+    expect(interiorPoint([[0, 0], [1, 0], [2, 0]])).toBeNull();
+    // …and the clamp then leaves its input alone rather than moving it somewhere it
+    // cannot justify.
+    expect(clampIntoFootprint(5, 5, [[0, 0], [1, 0], [2, 0]])).toEqual([5, 5]);
+  });
+
+  it('finds the floor of a room whose legs are thinner than the grid', () => {
+    // A U 8 x 6 whose legs and base are 40 mm. This is a room the app CALLS LEGAL:
+    // `moveWall` accepts any wall drag whose bounding box stays inside `ROOM_SIDE_M`,
+    // and nothing anywhere floors the width of a leg — so a user who drags the notch
+    // walls out gets exactly this.
+    //
+    // Every one of the three answers matters here and the fixture is built so that the
+    // first two fail. The area centroid is at roughly (0, 1.19), which is in the notch
+    // and outside. The grid samples at `minX + 0.05 + 0.1k`, so its nearest columns to
+    // the legs are ±3.95 and the legs start at ±3.96; its nearest row to the base is
+    // 2.95 and the base starts at 2.96. Every sample misses, by 10 mm, on purpose —
+    // which is what the clamp used to do about it: nothing at all, silently, on all
+    // four of its call sites.
+    const thinU: Footprint = [
+      [-4, -3],
+      [-3.96, -3],
+      [-3.96, 2.96],
+      [3.96, 2.96],
+      [3.96, -3],
+      [4, -3],
+      [4, 3],
+      [-4, 3],
+    ];
+    const b = footprintBounds(thinU);
+    expect(b.width, 'the fixture has to be a room the app would accept').toBeCloseTo(8, 6);
+    expect(b.depth).toBeCloseTo(6, 6);
+    const pt = interiorPoint(thinU);
+    expect(pt, 'a room with floor in it must not come back null').not.toBeNull();
+    expect(pointInFootprint(pt![0], pt![1], thinU), `${pt} must be inside the thin U`).toBe(true);
+    expect(Object.isFrozen(pt), 'the edge-probe answer is shared too, so it is frozen too').toBe(true);
+    // And the clamp built on it now moves a point rather than shrugging.
+    const [cx, cz] = clampIntoFootprint(0, 0, thinU);
+    expect(pointInFootprint(cx, cz, thinU), `(${cx}, ${cz}) must be inside`).toBe(true);
+  });
+
+  it('answers a given polygon once and hands back the same object', () => {
+    // The memo, asserted by IDENTITY because that is the only thing about it a test
+    // can see — there is no counter to read and a timing assertion is worthless on a
+    // loaded machine. Two of the four `clampIntoFootprint` call sites are inside the
+    // annealer's proposal generator, so without this the grid scan above is paid per
+    // proposal: measured at 15.1 ms for a 50 x 50 room, against `DEFAULT_STEPS` of
+    // 1600. The answer is frozen, which is what makes handing out one instance safe.
+    const u = footprintForLayout('u', 7.5, 5.6);
+    const first = interiorPoint(u);
+    expect(interiorPoint(u)).toBe(first);
+    expect(Object.isFrozen(first)).toBe(true);
+    // Keyed on the polygon's identity, not its contents: an equal-but-distinct array
+    // gets its own answer. Stated because it is the surprising half, and because it is
+    // what makes the memo safe — a footprint is a value here, and nothing mutates one.
+    const twin = footprintForLayout('u', 7.5, 5.6);
+    expect(twin).toEqual(u);
+    expect(interiorPoint(twin)).not.toBe(first);
+    expect(interiorPoint(twin)).toEqual(first);
   });
 });
 

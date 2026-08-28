@@ -435,28 +435,54 @@ describe('squaring a piece up never cuts the room off', () => {
 // for a layout two passes downstream. So the pass is called directly, which is why it
 // is exported.
 //
-// The fixture had to be hunted for. The two grids agree almost always: over 1512 cut
-// layouts (three room shapes × three sizes × 60 scrambles × 6 repair seeds) the
-// re-check refused the proxy's answer exactly once. That once is the fixture below.
-// A version of this test written without the search was green against a build with
-// the re-check deleted, which is the failure this one exists not to repeat.
+// The fixture had to be hunted for, and it has now been hunted for TWICE. The two
+// grids agree almost always: over 1512 cut layouts (three room shapes × three sizes ×
+// 60 scrambles × 6 repair seeds, keeping only the ones the fine grid says are cut) the
+// re-check refused the proxy's answer four times. One of those four is the fixture
+// below. A version of this test written without the search was green against a build
+// with the re-check deleted, which is the failure this one exists not to repeat.
+//
+// ── Why twice, and what it costs ───────────────────────────────────────────
+//
+// The first search's fixture was a U at 7.5 × 5.6, and it did not survive
+// `clampIntoFootprint` learning to return a point that is genuinely inside the room
+// (`interiorPoint`, `lib/footprint.ts`). That clamp is on the path `defaultScene`
+// takes, so it moves the SEED layout every scramble here is derived from, and the
+// layout that used to be refused is one the proxy now improves. Nothing was wrong with
+// the old fixture; it stopped existing. Any change that moves a starter placement pays
+// this, and the payment is scriptable: 3240 `openRoutes` runs, about twelve minutes,
+// keep the ones where `openRoutes` returns its input by identity.
+//
+// The re-run's grid is `l` / `t` / `u` at 7.5 × 5.6, 6.5 × 5.0 and 8.5 × 6.4. The first
+// search's three sizes were never written down, so this is the same SHAPE of search
+// rather than provably the same search — what it is not is a fixture chosen by eye.
+// 1512 of the 3240 came back cut, which is the count the first search reported too.
 describe('the repair pass is re-checked on the grid the room report reads', () => {
-  const poly = footprintForLayout('u', 7.5, 5.6);
+  const poly = footprintForLayout('u', 8.5, 6.4);
   const b = footprintBounds(poly);
-  const base = defaultScene('u', 7.5, 5.6, { footprint: poly });
+  const base = defaultScene('u', 8.5, 6.4, { footprint: poly });
   const ctx: LayoutContext = { parts: base, movable: base.map((p) => !p.wallMounted), footprint: poly };
   const model = prepare(ctx);
   const bounds = { minX: b.minX, maxX: b.maxX, minZ: b.minZ, maxZ: b.maxZ };
   const fine = (p: Placement[]) => costBreakdown(model, p, DEFAULT_WEIGHTS, NAV_CELL).total;
 
-  /** The one layout in 1512 where the coarse proxy and the fine grid disagree.
+  /** One of the four layouts in 1512 where the coarse proxy and the fine grid
+   *  disagree: scramble 17 of the U at 8.5 × 6.4, repair seed 2.
    *
-   *  Found by search, and the search is the point: three room shapes × three sizes ×
-   *  60 scrambles × 6 repair seeds, keeping only the cut ones, and the guard rejected
-   *  the proxy's answer exactly once. Both constants below are that search's
-   *  coordinates and neither is meaningful on its own. */
-  const LAYOUT_SEED = 35 * 2654435761;
-  const REPAIR_SEED = 35 * 31 + 6;
+   *  Both constants are that search's coordinates and neither means anything on its
+   *  own. The encoding is the search's own — `i * 2654435761` for the scramble,
+   *  `i * 31 + j` for the repair seed — and it is kept in that form so a re-run can
+   *  name the same point rather than a magic number that has to be trusted.
+   *
+   *  Chosen from the four for MARGIN rather than for looks, both numbers measured:
+   *  this room is cut by 12.9 on the fine grid, so the gate below is nowhere near
+   *  vacuous, and with the re-check deleted the proxy's answer scores 450 units worse
+   *  than the layout it was handed. The other three sat at 0.3, 0.01 and 7.1 cut with
+   *  margins of 768, 315 and 608; the one with the largest margin is also the one
+   *  barely cut at all, and a fixture that stops being cut is a test that stops
+   *  meaning anything. */
+  const LAYOUT_SEED = 17 * 2654435761;
+  const REPAIR_SEED = 17 * 31 + 2;
 
   function scattered(): Placement[] {
     const r = lcg(LAYOUT_SEED);
@@ -477,6 +503,19 @@ describe('the repair pass is re-checked on the grid the room report reads', () =
     expect(navigabilityCost(model, scattered(), NAV_CELL)).toBeGreaterThan(0);
   });
 
+  it('…and the pass is not simply declining to run', () => {
+    // The test two below reads `openRoutes` returning its input BY IDENTITY as proof
+    // that the fine-grid re-check refused the proxy. Three other paths return the input
+    // by identity — no doors, nothing stranded, an empty movable pool — and only the
+    // middle one is excluded by the gate above. Re-testing the pool condition here
+    // would be a second copy of `openRoutes`' own line and the drift this repo keeps
+    // finding, so the exclusion is by CONTRAST instead: on this same model one
+    // different repair seed comes back with a different array, and none of the three
+    // early returns can do that for any seed.
+    const at = scattered();
+    expect(openRoutes(model, at, DEFAULT_WEIGHTS, bounds, lcg(17 * 31 + 1))).not.toBe(at);
+  });
+
   it('and its answer is never worse on the fine grid than what it was given', () => {
     const at = scattered();
     const out = openRoutes(model, at, DEFAULT_WEIGHTS, bounds, lcg(REPAIR_SEED));
@@ -485,7 +524,7 @@ describe('the repair pass is re-checked on the grid the room report reads', () =
 
   it('…on a fixture where the proxy really does hand back something worse', () => {
     // Without this, the test above passes on any input the proxy happens to improve,
-    // which is 1511 of the 1512 searched. What makes this one worth freezing is that
+    // which is 1508 of the 1512 searched. What makes this one worth freezing is that
     // the coarse answer is *rejected* here: `openRoutes` returns its input by
     // identity, and the only path that does so after the search has run is the
     // fine-grid re-check. Delete that re-check and this is the assertion that goes

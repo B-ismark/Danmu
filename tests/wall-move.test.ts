@@ -124,18 +124,51 @@ describe('carryAttached', () => {
   });
 });
 
-describe('wallOutwardNormal', () => {
-  it('points out of the room on every edge, and agrees with offsetWall', () => {
-    for (const layout of ['rect', 'l', 'u'] as const) {
-      const poly = footprintForLayout(layout, 5, 5);
-      for (let i = 0; i < poly.length; i++) {
-        const [nx, nz] = wallOutwardNormal(poly, i);
-        expect(Math.hypot(nx, nz)).toBeCloseTo(1, 10);
-        // offsetWall moves the edge's own vertices; that displacement IS the normal.
-        const moved = offsetWall(poly, i, 0.25);
-        expect(moved[i][0] - poly[i][0]).toBeCloseTo(nx * 0.25, 10);
-        expect(moved[i][1] - poly[i][1]).toBeCloseTo(nz * 0.25, 10);
+describe('offsetWall moves the selected edge and nothing else', () => {
+  // This describe used to be titled `wallOutwardNormal`, and its one case — *"points
+  // out of the room on every edge, and agrees with offsetWall"* — asserted only the
+  // second half of its own name. It compared `offsetWall`'s displacement against
+  // `wallOutwardNormal`, and `offsetWall` IS `wallOutwardNormal` plus an addition, so
+  // it could not fail. It swept the U, where three of eight normals were reversed at
+  // the time, and passed; it stayed green under both mutations that put the centroid
+  // flip back. A green from a gate that cannot go red is worse than no gate at all,
+  // because the name promises exactly the coverage it does not provide.
+  //
+  // Which way a normal points is swept honestly in `tests/footprint.test.ts`
+  // (`wallOutwardNormal points out of the ROOM, not away from a point`), against the
+  // polygon rather than against the function under test. Repeating it here would be a
+  // second copy of that sweep and the beginning of the next drift. What is left for
+  // this file is the half `offsetWall` owns and nothing else knows: pushing a wall is
+  // a TRANSLATION of that wall's own two corners, and every other corner stays put.
+  // Four rather than five: `footprintForLayout` returns the same rectangle for
+  // `open` as for `rect` (one switch branch, three labels), so an `open` case here
+  // would be a second copy of the `rect` one under a different name. Checked, not
+  // assumed. (The direction sweep in `tests/footprint.test.ts` does name all five, so
+  // it carries that duplicate; raised by danmu-62 as a coverage asymmetry between the
+  // two files, and this is the answer rather than a matching duplicate here.)
+  const LAYOUTS = ['rect', 'l', 't', 'u'] as const;
+
+  it.each(LAYOUTS)('translates both corners of the edge and no others, on a %s', (layout) => {
+    const poly = footprintForLayout(layout, 5, 5);
+    const n = poly.length;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      const moved = offsetWall(poly, i, 0.25);
+      for (let k = 0; k < n; k++) {
+        if (k === i || k === j) continue;
+        expect(moved[k], `${layout} edge ${i}: corner ${k} must not have moved`).toEqual(poly[k]);
       }
+      const da = [moved[i][0] - poly[i][0], moved[i][1] - poly[i][1]];
+      const db = [moved[j][0] - poly[j][0], moved[j][1] - poly[j][1]];
+      // Both ends by the SAME vector: a wall that moves is a wall, not a hinge.
+      expect(db[0], `${layout} edge ${i}`).toBeCloseTo(da[0], 10);
+      expect(db[1], `${layout} edge ${i}`).toBeCloseTo(da[1], 10);
+      // …by exactly the distance asked for, square to the wall's own run. Both are
+      // `offsetWall`'s contract and neither is readable off the normal alone.
+      expect(Math.hypot(da[0], da[1]), `${layout} edge ${i}`).toBeCloseTo(0.25, 10);
+      const ex = poly[j][0] - poly[i][0];
+      const ez = poly[j][1] - poly[i][1];
+      expect(da[0] * ex + da[1] * ez, `${layout} edge ${i}`).toBeCloseTo(0, 10);
     }
   });
 });

@@ -10,11 +10,12 @@ handful of things that turned out to be live defects rather than doubts.
 
 | branch | state |
 |---|---|
-| `main` — `4326b44` | PR #17 merged. |
-| `fix/visual-check-round-3` | this round, on top of `4326b44`. Four commits of your list, then a fifth carrying the five findings a `/review` pass turned up **on those four**. Gate counts on the tip are at the foot of the review section below. |
+| `main` — `2f4d8d1` | PR #18 merged: this round’s four commits plus the review pass. |
+| `fix/visual-check-round-3` | **Reused after the merge, and it is four commits ahead of `main` again** — `ba6324d`, `0bd90e3`, `fbf5082`, `6e71425`: the `RoomDimsEditor` NaN write, and three findings a cross-review turned up on it. **Green at `6e71425`** — typecheck 0, lint 0, 71 files / 1380 tests, `next build` 0 with its ESLint pass present; I re-gated those myself rather than quote them. **Nothing on it has been in a browser.** (This row said "merged, `main`'s numbers now" for several hours, which reads as "nothing to look at" — the reason a row names a commit and not a branch.) |
+| `fix/convoy-self-support` — `156185b` | The drag-convoy work, **stacked on the row above**: its six commits include that branch's four, so do not count them twice. Its own two are `0e100ca` (the convoy, the chevron, six gates that could not fail) and `156185b` (the gizmo owning its gesture). **Green at `156185b`** — typecheck 0, lint 0, 71 files / 1431 tests, `next build` 0 with its ESLint pass present; re-gated here too. Nothing on it has been in a browser either. |
 | PR #16 — `3b5935c` | **Open, and it needs a rebase** — see below. Its headline regression is closed. |
 | `fix/multi-select-drag` | **Not merged, and it still holds one live fix `main` lacks.** Kept for that reason. |
-| `fix/clamp-into-footprint` | Local only. Holds a written, tested fix for a known-and-left item. Kept. |
+| `fix/clamp-into-footprint` | **Green at `4eeedeb`** — typecheck 0, lint 0, **71 files / 1377 tests**, `next build` 0 with its ESLint pass confirmed present. Six commits, four of substance — the clamp, two gates that could not fail, danmu-62's review findings, and their review of those — plus two that are prose. Reviewed by danmu-62; the fixture search it was blocked on has been re-run and re-verified in a clean install. |
 
 The last full-suite run before this one showed five red in `tests/layout-solve.test.ts`.
 All five were timing assertions and all five were **load artifacts** — other sessions
@@ -507,64 +508,136 @@ Still true and unfixable by any test: none of it tells you the Check tab reads w
 
 ## Known-and-left — re-checked, with two corrections
 
-### The L/T/U notch drop — **the stated blocker is wrong, and a better fix already exists**
+### The L/T/U notch drop — **landed, and the search has been re-run**
 
 Reproduced exactly: the square L's vertex centroid is the reflex corner `[3, 2]`, which
-`pointInFootprint` calls outside, and `clampIntoFootprint(5, 3.5)` hands it straight
+`pointInFootprint` calls outside, and `clampIntoFootprint(5, 3.5)` handed it straight
 back. The U's is at `(0.00, −0.625)`, also outside.
 
-Two corrections to the entry:
+Two corrections to the entry, both still worth keeping:
 
 - Swapping in an area centroid is **not** a change to `polygonCentroid`.
   `polyAreaCentroid` already ships in `lib/geometry.ts`, exported, with its own caller.
   The blast radius the entry feared — "whose other caller derives every wall's inward
-  normal" — does not apply.
-- A **better** fix than that is already written and tested, on the local branch
-  `fix/clamp-into-footprint` (`8fbcfa9`). `interiorPoint`: shoelace centroid as the cheap
-  first guess, **checked**, with a bounded 0.1 m scan of the bounding box as the
-  fallback, and `null` — leave the input alone — when the polygon has no interior at that
-  resolution. Its test sweeps eight compass directions across all five presets, because a
-  U is only wrong from the side its notch faces.
+  normal" — does not apply, and since `wallOutwardNormal` went to winding it applies
+  even less.
+- A **better** fix than that was already written and tested on `fix/clamp-into-footprint`.
+  `interiorPoint`: shoelace centroid as the cheap first guess, **checked**, with a
+  bounded 0.1 m scan of the bounding box as the fallback, and `null` — leave the input
+  alone — when the polygon has no interior at that resolution. Its test sweeps eight
+  compass directions across all five presets, because a U is only wrong from the side
+  its notch faces.
 
-**Ported, run, and backed out again this round.** It is not free: it moves every seeded
-fixture in the repo. Two tests go red, both anticipated by its own commit message —
-`wall-parts.test.ts`'s *"does NOT yet keep a drop out of the quadrant an L cuts away"*,
-which asserts the old behaviour by name and whose comment says to change the assertion
-rather than delete the test (`clampIntoFootprint(5, 3.5, L)` now returns `[2.75, 1.85]`);
-and `suggest-tidiness.test.ts`'s *"…on a fixture where the proxy really does hand back
-something worse"*, whose fixture is **the one layout in 1512** where the coarse proxy and
-the fine grid disagree, found by a search over three room shapes × three sizes × 60
-scrambles × 6 repair seeds. Landing the clamp fix means re-running that search to find
-the next such layout. That is the whole remaining cost and it is a scriptable one.
+**Now rebased onto `2f4d8d1` and green.** The cost the entry named was real and has been
+paid rather than deferred:
 
-### Inward normals on non-convex rooms — **still true, and its gate cannot fail**
+- `wall-parts.test.ts`'s *"does NOT yet keep a drop out of the quadrant an L cuts away"*
+  keeps its title, because `placeNewPart` still does. Its **cause** changed and its
+  comment says so: the clamp can do this now, and `intoRoom` does not call it. The
+  assertion that flipped is the clamp's own — `clampIntoFootprint(5, 3.5, L)` returns
+  `[2.75, 1.85]`, inside the L.
+- `suggest-tidiness.test.ts`'s *"…on a fixture where the proxy really does hand back
+  something worse"* has a **new fixture**, found by re-running the search: `l`/`t`/`u`
+  at 7.5 × 5.6, 6.5 × 5.0 and 8.5 × 6.4, 60 scrambles, 6 repair seeds, 3240
+  `openRoutes` runs, ~12 minutes. 1512 came back cut — the same count the first search
+  reported — and the re-check refused the proxy's answer **four times**, not once. The
+  fixture is the U at 8.5 × 6.4, scramble 17, repair seed 2, chosen for margin: cut by
+  12.9 on the fine grid, and 450 cost units worse with the re-check deleted. The first
+  search's three sizes were never written down, so this is the same *shape* of search
+  and not provably the same one; that is said in the file rather than glossed.
+
+Both mutations were observed: delete the fine-grid re-check and the new fixture goes red
+on both of its assertions; point the clamp back at `polygonCentroid` and three tests go
+red across two files.
+
+**What needs eyes.** The clamp is on the path `defaultScene` takes, so **every starter
+arrangement in an L, T or U room has moved** — that is the whole reason the fixture
+had to be re-found. Nothing in it has been looked at.
+
+- Start a new room on the **L**, **T** and **U** presets in turn. Nothing should be
+  standing in the notch, and nothing should have jumped somewhere obviously silly to
+  get out of it. A rectangle is unchanged and is the control.
+- Same three, then **Suggest**. The solver already ended on `layout-settle`, so this
+  should look no different from before; if it does, the difference is the seed it
+  started from.
+- **Drag a chair into the cut-away quadrant of an L and let go.** It still stays there.
+  That is `placeNewPart`, which does the bounds inset and only that — unchanged by this,
+  named in the test, and the next thing to take if you want it.
+
+**What danmu-62's review of it found, and what that cost.** Two things, both taken:
+
+- `interiorPoint`'s fallback grid is **O(area / 0.1 m²)** and two of `clampIntoFootprint`'s
+  four call sites are inside the annealer's proposal generator, so on a custom footprint
+  whose area centroid falls outside, the scan was paid **per proposal**. Measured: 0.47 ms
+  at 6 × 4, 1.70 ms at 20 × 15, **15.1 ms at 50 × 50** — a size `ROOM_SIDE_M` permits —
+  against `DEFAULT_STEPS` of 1600. `tests/layout-solve.test.ts`'s 2000 ms ceiling cannot
+  see it, because every preset's area centroid is inside and never reaches the grid: the
+  same "the fixture cannot express the defect" shape as the bug the branch fixes. Memoised
+  on the polygon's identity now (`WeakMap`), which is bit-identical and one scan per solve.
+- The docstring's "a few thousand point-in-polygon tests" was true at 6 × 4 and wrong by
+  two orders of magnitude at 50 × 50. Corrected with the measurements, because it was the
+  sentence that would stop a reader looking.
+
+**And one hole the review left open that turned out to be real.** `moveWall` accepts any
+wall drag whose **bounding box** stays inside `ROOM_SIDE_M`, and nothing anywhere floors
+the width of a leg — so a U whose legs the user has narrowed to 40 mm is a room this app
+calls legal, and its entire interior can fall between a 0.1 m grid's samples.
+`clampIntoFootprint` would then have silently done nothing, on all four call sites. There
+is a third answer now, `edgeProbe`: step in from each edge's midpoint along its inward
+normal, O(vertices) and independent of the room's size. Confirmed by mutation — remove it
+and a legal 8 × 6 room comes back `null`.
+
+**This is the part that most wants your eyes**, because it is reachable by hand: drag a
+U's notch walls until the legs are a few centimetres, then drop a piece into the notch.
+
+### Inward normals on non-convex rooms — **fixed, and two gates that could not fail are gone**
 
 Reproduced a third time, independently: stepping 50 mm out and in from every edge
-midpoint gives **0 backwards** on `rect` and `l`, **2 of 8** on `t` (edges 2 and 6) and
+midpoint gave **0 backwards** on `rect` and `l`, **2 of 8** on `t` (edges 2 and 6) and
 **3 of 8** on `u` (the whole inner notch). Identical at 5 × 5, 5.5 × 4.7 and 6 × 5. A
 winding-derived normal gives 0 wrong on all four.
 
-**The new finding is the test.** `tests/wall-move.test.ts`'s case is titled *"points out
-of the room on every edge, and agrees with `offsetWall`"* and asserts only the second
-half — it compares `wallOutwardNormal` against `offsetWall`, and `offsetWall` **is
-implemented by calling `wallOutwardNormal`**. It cannot fail. It sweeps the U, where
-three of eight normals are backwards, and it passes. That is a green from a gate that
-cannot go red, on the exact property it claims to check.
+**Both halves have since landed, and the entry above is kept for the reasoning only.**
+`wallOutwardNormal` reads `polygonSignedArea` in `e575c1a`, and the honest sweep landed
+with it — in `tests/footprint.test.ts` (*"wallOutwardNormal points out of the ROOM, not
+away from a point"*), which walks every wall of `rect` / `l` / `t` / `u` / `open` and
+asserts that a step along the normal leaves the polygon and a step against it does not.
+Re-proven against merged `main` by a peer: restoring the centroid flip fails four cases
+there, inverting the sign outright fails twelve.
 
-Writing the honest sweep is about fifteen lines and it is **red today** — which is the
-mutation observation run in the honest direction, and it is why it cannot land on its
-own without breaking CI. It should land in the same commit as the winding fix.
+**The finding that was still live is closed on `fix/clamp-into-footprint`.**
+`tests/wall-move.test.ts`'s *"points out of the room on every edge, and agrees with
+`offsetWall`"* asserted only its second half — it compared `offsetWall`'s displacement
+against `wallOutwardNormal`, and `offsetWall` **is** `wallOutwardNormal` plus an
+addition. It could not fail, it swept the U while three of its eight normals were
+backwards, and it stayed green under **both** of the mutations that footprint's sweep
+caught. It is replaced by the half `offsetWall` actually owns and nothing else knows:
+pushing a wall translates that wall's own two corners by one vector, square to the wall's
+run, exactly the distance asked for, and moves no other corner. Four mutations, each
+observed red — hinge one end, drag a third corner, halve the distance, slide the wall
+along itself. The outward direction is **not** re-asserted there; a second copy of
+footprint's sweep is how the next drift starts.
 
-The winding fix itself is still blocked, and the blocker is unchanged: `clampIntoFootprint`
-clamps a **centre point** and says nothing about a piece's extent, and
-`tests/layout-solve.test.ts`'s scrambled-U gate (`worst of 12 < 40`) is what goes red.
-`layout-settle`'s `contain` really is the containment push the entry says it is — it
-already gates on `footInsidePoly` and ranks only the rejects by `outsideShare`, which is
-the right way round. But it is module-private, takes a `ScenePart` rather than a point,
-and **two of the four `clampIntoFootprint` call sites must not have it**: `jiggle` and
-`pickPartner` are proposal *generators*, and making them extent-legal is the identical
-trap the `wholePiece` note above describes. A third call site already gets it via
-`settleParts`. That leaves exactly one caller that would benefit.
+**A second one turned up reviewing this branch's own first commit**, and it was true of the
+fixture that commit replaced too. `suggest-tidiness.test.ts` reads `openRoutes` returning
+its input BY IDENTITY as proof the fine-grid re-check refused the proxy — and three other
+paths return the input by identity, of which only "nothing stranded" was excluded. Force
+the movable pool empty and that test passes having asserted nothing. It is excluded by
+contrast now: one different repair seed on the same model comes back with a different
+array, which no early return can do for any seed. Observed red under exactly that
+mutation, with the identity test staying green beside it — which is the hole, shown.
+
+**Still true, and not this work:** `clampIntoFootprint` clamps a **centre point** and says
+nothing about a piece's extent. `layout-settle`'s `contain` really is the containment
+push the entry describes — it gates on `footInsidePoly` and ranks only the rejects by
+`outsideShare`, which is the right way round — but it is module-private, takes a
+`ScenePart` rather than a point, and **two of the four `clampIntoFootprint` call sites
+must not have it**: `jiggle` and `pickPartner` are proposal *generators*, and making them
+extent-legal is the identical trap the `wholePiece` note above describes. A third call
+site already gets it via `settleParts`. That leaves exactly one caller that would
+benefit. What is **no longer** true is the blocker this entry recorded against it: the
+winding fix was supposed to turn `tests/layout-solve.test.ts`'s scrambled-U gate
+(`worst of 12 < 40`) red, and it did not — that gate is green on `main` and green here.
 
 ### `FanGeo` — **worse than recorded**
 
@@ -602,9 +675,11 @@ hoisted value to the area centroid.
 
 1. **Port `alongRot` + a TV wiring test** — a live 191 mm defect, fix already written,
    gated behind re-measuring the `wholePiece` number.
-2. **The honest `wallOutwardNormal` sweep**, landed with the winding fix — turns a
-   tautological green into a real gate.
-3. **Land `fix/clamp-into-footprint`** — costs one scripted fixture search.
+2. ~~**The honest `wallOutwardNormal` sweep**~~ — **done.** It landed with the winding
+   fix in `tests/footprint.test.ts`; the tautological green left in
+   `tests/wall-move.test.ts` is replaced on `fix/clamp-into-footprint`.
+3. ~~**Land `fix/clamp-into-footprint`**~~ — **done.** The search was re-run; what is
+   left of it is eyes on the L / T / U starter layouts.
 4. **Check-tab invariants in `reflow.test.ts`** — five assertions, cheap.
 5. **`fanParts` extraction** — real defect, bigger than recorded, changes the render.
 6. **The `layout-score` centroid hoist** — free, with a real assertion.

@@ -2037,16 +2037,26 @@ export function placeNewPart(
    *  clamp, here, for everything that is not placed BY a wall.
    *
    *  The bounds inset, and deliberately ONLY that. The notch an L / T / U cuts
-   *  away is invisible to a bounding box, and `clampIntoFootprint` exists to answer
-   *  exactly that — but it walks the point toward `polygonCentroid`, which is the
-   *  average of the VERTICES rather than the centroid of the area, and for an L that
-   *  average is the reflex corner itself: every step of the walk stays in the notch
-   *  and the fallback returns a point on the boundary. Verified with the L used in
-   *  `tests/wall-parts.test.ts`. Fixing that means changing `polygonCentroid`, whose
-   *  other caller (`wallSegments`) derives every wall's INWARD NORMAL from it — not
-   *  something to bundle into this. So a drop into an L's notch is still a drop into
-   *  the notch, exactly as it is for every floor piece today, and it is written down
-   *  here rather than left as a surprise.
+   *  away is invisible to a bounding box, and `clampIntoFootprint` is the function
+   *  that answers it. It used not to be able to: it walked toward `polygonCentroid`,
+   *  the average of the VERTICES rather than of the area, which for an L is the reflex
+   *  corner itself, so every step of the walk stayed in the notch. That is fixed — it
+   *  aims at `interiorPoint` and CHECKS the answer — and the reason this function does
+   *  not call it is now a scope decision rather than an impossibility.
+   *
+   *  Two halves to that decision, and both are about extent. This clamps a CENTRE, so
+   *  a point 5 cm inside the leg of a U satisfies it with a 2 m sofa mostly through
+   *  the wall; the containment that reads a piece's footprint is `contain` in
+   *  `lib/layout-settle.ts`, which every solved placement already ends on. And wiring
+   *  it in here moves every drop into an L / T / U, which wants its own diff. So a
+   *  drop into an L's notch is still a drop into the notch, and that is written down
+   *  here — and asserted, by name, in `tests/wall-parts.test.ts` — rather than left as
+   *  a surprise.
+   *
+   *  (`polygonCentroid` is untouched and still has callers. `wallSegments` is one, and
+   *  it flips its inward normals toward that vertex average, which is the defect
+   *  `wallOutwardNormal` was fixed for — it reads the polygon's winding now. Same
+   *  reflex corner, one function over; not this change's to make.)
    *
    *  The support probe below reads the CLAMPED point either way: a piece let go
    *  outside the room was asking what it could stand on out there. */
