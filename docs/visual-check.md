@@ -3,18 +3,31 @@
 Everything in this file typechecks, lints and passes tests. That is exactly why it is
 here: these are the things a green suite cannot tell you about.
 
-**This is a live list, not a record.** An item that has been checked, or whose branch has
-merged, is **deleted** — not struck through, not moved to a "done" section, not archived.
-`docs/history/` is for point-in-time studies; this file has no history and is not allowed
-to grow one. It reached 747 lines and thirty headings before the user said it was
-"outdated and too crowded", and every one of those lines had been true once. That is the
-failure mode to design against: nothing in here was ever wrong when it was written.
+**This is a live list, not a record.** An item that has been **looked at** is **deleted** —
+not struck through, not moved to a "done" section, not archived. `docs/history/` is for
+point-in-time studies; this file has no history and is not allowed to grow one. It reached
+747 lines and thirty headings before the user said it was "outdated and too crowded", and
+every one of those lines had been true once. That is the failure mode to design against:
+nothing in here was ever wrong when it was written.
+
+**Merging is not looking, and this rule used to say it was.** The first version deleted an
+item when its branch merged, which reads as tidiness and is in fact the file quietly
+discarding its own backlog: a fix that shipped without a human seeing it needs eyes *more*
+than one still sitting in a PR, not less. The contradiction was already on the page —
+two items said "merged, still wants one look" while the rule above them said they should
+have been deleted. **When practice and the rule beside it disagree, the practice is
+usually the one that has met reality.**
+
+So a merge does not delete an item. It **re-points** it: the branch and PR number are
+replaced by the merge commit on `main`, and the gate counts go, because those were measured
+on an artifact that no longer exists. What survives is the part that was always the point —
+where to click and what wrong looks like.
 
 ## How to read an item
 
-Each one names **where to click**, **what wrong looks like**, and **which branch or PR**
-it rides. An item that cannot say all three is not ready to be checked and does not
-belong here yet.
+Each one names **where to click**, **what wrong looks like**, and **where it rides** — a
+branch and PR while it is open, the merge commit on `main` once it lands. An item that
+cannot say all three is not ready to be checked and does not belong here yet.
 
 **An empty section is the rule working, not a gap.** It means that owner's fixes are
 still uncommitted, so there is nothing anyone else can click on. Filling it anyway would
@@ -30,7 +43,8 @@ reason — `1484/1487` reads as green to anyone skimming, and three reds beside 
 hash are still three reds. A count with its artifact but not its failures is the same
 defect one level up: a check whose answer nobody reads.
 
-When a branch merges its numbers stop meaning anything, and they go with the item.
+When a branch merges its numbers stop meaning anything, so they go — but the item stays,
+now naming the merge commit. Numbers are about an artifact; a click path is about the app.
 
 ## Owners
 
@@ -51,7 +65,7 @@ conflict.
 
 *Owner: `sizes`.*
 
-### A door under a low ceiling — PR #21
+### A door under a low ceiling — on `main`, `85450f7`
 
 Make a room **1.8 m** tall (Room panel, height) with a **door** in it, and open **Room
 check**.
@@ -67,9 +81,25 @@ the message names the number that would fit (160 cm).
 **Wrong looks like:** the door being told to shrink; either piece quoting a number the
 Inspector's own limit disagrees with; or both pieces getting the same sentence.
 
-Measured on `870d84d`: typecheck 0, lint 0, 1390/1390, 72/72.
+### A bed added at a wall — on `main`, `4cec92b`
 
-### A curtain the ceiling came down on — merged, still wants one look
+The user's own report, and it takes **two** fixes to be right, so check it after both are
+on `main`: this one, and `shell`'s bed geometry.
+
+Drop a **bed** near the **west** wall from the Library, then another near the **east**, then
+one near the **south**. Each should arrive with its back to the wall it was dropped at —
+three different headings, not three beds facing north.
+
+Then press **Shuffle** and watch what it does with them. Adding now picks a heading, and
+the solver has always priced facing; the two agreeing is the point.
+
+**Wrong looks like:** every bed facing the same way on drop, which is what the user
+screenshotted. Or, after Shuffle, every bed converging on one wall — that would be a
+solver question rather than this fix, because nothing prices *variety*. Also worth looking
+at while you are there: a **plant** and a **floor lamp** must still arrive at 0°, since
+those have no back to put against anything.
+
+### A curtain the ceiling came down on — still wants one look
 
 Lower a room's ceiling below a **curtain**'s height. The curtain keeps its real size and
 stands through the slab, and **Room check says so**. Not resizing is the rule; saying
@@ -77,7 +107,7 @@ nothing was the defect.
 
 **Wrong looks like:** silence in Room check, or the curtain quietly shrinking.
 
-### The mount-height field under a piece that cannot fit — merged
+### The mount-height field under a piece that cannot fit
 
 Select a wall-mounted piece taller than the room. Its **mount height** field should refuse
 the edit and say why, rather than accepting a number and pinning it to 0.
@@ -90,12 +120,13 @@ the edit and say why, rather than accepting a number and pinning it to 0.
 
 *Owner: `drag`.*
 
-Everything below rides **PR #23** (`fix/convoy-self-support`), rebased onto `main`. Measured on
-`47c946a`: typecheck 0, lint 0, **1477/1477**, 73/73, build 0. Six of those assertions are
-new and each was watched failing first — three mutations on the turn (re-grid it, hand back
-the raw spot on an invalid resolve, make the containment extent rotation-blind) and three
-on drill-in (never fire, count an empty selection as inside, accept overlap where it asks
-for containment).
+Everything below is **merged** — `main` at `b73e149`, formerly PR #23. The gate counts went
+with the artifact they were measured on. What has not gone is the reason each item is here:
+six of these assertions were watched failing first — three mutations on the turn (re-grid
+it, hand back the raw spot on an invalid resolve, make the containment extent
+rotation-blind) and three on drill-in (never fire, count an empty selection as inside,
+accept overlap where it asks for containment) — and not one of them can see any of what
+follows.
 
 ### A merged set that would not move at all
 
@@ -197,5 +228,36 @@ now reaches for the first time — listed to be looked at, not because it change
 
 ## Nothing here has been in a browser
 
-Every PR gets a Vercel preview, and a preview is the only place the production-only
-service worker registers — `next dev` cannot check that one at all.
+Every commit gets a Vercel deployment, and a deployment is the only place the
+production-only service worker registers — `next dev` cannot check that one at all.
+
+**Merging moves where you click; it does not take the link away.** Branch tips deploy to
+`Preview`, merge commits on `main` deploy to **`Production`**, and old previews persist as
+records with a live `environment_url` long after their ref is gone — including refs that no
+longer exist at all. So a re-pointed item is still clickable. Derived from
+`gh api repos/B-ismark/Danmu/deployments` by `drag`, not assumed.
+
+**But the per-deployment URLs sit behind Vercel deployment protection.** An anonymous GET
+of a deployment redirects `302` to `vercel.com/sso-api`: whoever is signed in to that
+Vercel account gets through and nobody else does. "Open the preview" is therefore an
+instruction that works for one person. If there is a public production alias, that is the
+URL this note should carry instead — nobody has found it yet, and it stays unwritten until
+someone has.
+
+**For the desktop check you do not need any of that.** `next dev` never registers the
+service worker, but `pnpm build && pnpm start` does: `ServiceWorkerRegistrar` gates on
+`process.env.NODE_ENV !== 'production'` and on nothing else — not a host, not a deployment.
+Verified on `8504929`: `next start` boots in 3.9 s, `/sw.js` serves 200 with
+`no-cache, no-store, must-revalidate`, and `serviceWorker` is in the production layout
+chunk. No auth wall anywhere in that route.
+
+The real limit is narrower than "you need a deployment", and it is worth knowing which
+half of the check it costs you. **A service worker needs a secure context.**
+`http://localhost` qualifies by spec; the `http://192.168.x.x` address the same server
+prints does not. So a local production build covers the whole desktop check, and the
+deployment is needed only for the **phone** — which is exactly where the SSO wall lands, so
+the person who can check the phone is the account holder and nobody else.
+
+One caution that comes with the local route, and it is the same one in `sw.js`'s own
+comment: a worker registered on a port **outlives the server on it**. Iterating on a
+production build at `:3000` leaves one intercepting whatever you run there next.

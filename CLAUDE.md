@@ -635,10 +635,19 @@ tests import does not belong in `lib/`, where it reads as shipped code.
 - `README.md` — quickstart + stack.
 - `PRODUCT.md` — who this is for, what counts as success, the durable constraints.
 - `docs/visual-check.md` — **the live list of what still needs a human eye.** Not a
-  study and not history: it is the working hand-off for this branch, naming the
-  places to click and what "wrong" would look like there, because everything in it
-  already typechecks, lints and passes tests. It goes stale the moment a branch
-  merges, so it names branches and gate counts and must be refreshed with them.
+  study and not history: it is the working hand-off, naming the places to click and
+  what "wrong" would look like there, because everything in it already typechecks,
+  lints and passes tests. An item is deleted when it has been **looked at**.
+  **Merging is not looking** — a merge re-points an item at its merge commit and
+  drops its gate counts, because a fix that shipped without anyone seeing it needs
+  eyes more than one still sitting in a PR, not less. The earlier rule deleted on
+  merge, and the file was already disobeying it in two places before anyone noticed
+  the rule and the practice had come apart.
+- `docs/what-is-still-open.md` — **the companion for what needs thinking about
+  rather than looking at**: open measurements, decisions only the user can make,
+  and options decided against so nobody re-proposes them. Every item says whether
+  it exists in a commit anywhere, which is what separates real work from a note in
+  a window that is about to close.
 - `docs/history/` — **point-in-time studies, not live docs.** The 2026-07 platform
   audit (`AUDIT.md` + `audit/`), the engine research (`Research.md`) and the
   remediation plan (`Plan.md`). Every phase in them is shipped or explicitly
