@@ -13,16 +13,35 @@
 // Y-adjacency) against live positions every time it's read — a stale edge
 // simply fails to cascade instead of cascading a child to the wrong place.
 // That is the one property this module exists to guarantee.
+//
+// Put precisely, because two useful consequences follow and neither is visible
+// from the code on its own: an edge is a PREDICATE over live geometry, not a
+// stored fact. `parentIds` only records that a pair is worth asking about; the
+// answer is recomputed at every read.
+//
+//   · A RESIZE is covered for free, without appearing in the list above. It moves
+//     neither part — it changes the SUPPORT's size under a child that has not gone
+//     anywhere — and nothing re-asks `parentIds` when a dim changes
+//     (`DimensionEditor` calls `setDim` and nothing else). It does not need to: the
+//     parts these reads see come from `resolveParts`, so the `dims` override is
+//     already applied and the support's NEW size is what gets asked. Shrink a desk
+//     out from under a lamp and dragging the desk carries nobody.
+//   · REVIVAL. A failed read drops the edge for that read only; nothing is ever
+//     pruned from the map. Grow the desk back and the lamp is a rigid child again,
+//     with no drop having happened. The same property that makes staleness harmless
+//     is what makes the relationship restorable — a reader who assumes the map is
+//     the truth finds the first bullet surprising, and one who assumes a stale edge
+//     gets cleaned up finds this one surprising.
+//
+// Both are pinned in `tests/rigid-parent.test.ts`. One thing that follows and is
+// deliberately NOT this module's to fix: shrinking a support's height drops the
+// edge correctly and leaves the child hanging where it was. Dropping the edge is
+// the whole job here; re-grounding that child, or reporting that it is in the air,
+// belongs to the physics and clearance layers.
 
 import type { ScenePart } from './scene-spec';
 import { footArea, footFromPart, footIntersectionArea, localToWorld, worldToLocal } from './geometry';
-import { MIN_SUPPORT_SHARE } from './physics';
-
-/** How far a child's Y may drift from its parent's current top and still count
- *  as "resting there" — generous enough for floating-point settle noise, tight
- *  enough that a part moved elsewhere and merely passing back over the old
- *  footprint at floor height doesn't re-qualify. */
-const SUPPORT_Y_EPS = 0.05;
+import { MIN_SUPPORT_SHARE, SUPPORT_Y_EPS } from './physics';
 
 export type DescendantOffset = {
   id: string;

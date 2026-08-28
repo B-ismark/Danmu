@@ -339,6 +339,22 @@ const TABLETOP_PRONE_CATEGORIES = new Set<Category>([
  *  (centre of mass over the support) stated as an area. */
 export const MIN_SUPPORT_SHARE = 0.5;
 
+/** How far a part's Y may sit off a surface's top and still count as resting on
+ *  it — generous enough for floating-point settle noise, tight enough that a part
+ *  moved elsewhere and merely passing back over the old footprint at floor height
+ *  doesn't re-qualify.
+ *
+ *  The vertical half of the same predicate `MIN_SUPPORT_SHARE` is the horizontal
+ *  half of, which is why it lives beside it rather than in the one module that
+ *  currently reads it (`lib/rigid-parent.ts`, where it was private). Anything
+ *  asking "is this piece resting on that one" — the rigid-parent edge test, and
+ *  any report of a piece left hanging in the air — has to agree on the answer, and
+ *  a second literal is how two callers come to disagree about the same piece:
+ *  under this tolerance a gap is settle noise and the piece IS supported, so a
+ *  report using a threshold of its own could call something airborne while the
+ *  drag code is still carrying it as a rigid child. */
+export const SUPPORT_Y_EPS = 0.05;
+
 /** Highest world-Y where a part at (x,z) with given XZ footprint would land on
  *  another part's top surface. Wall-mounted + rugs are ignored as supports.
  *  Returns null if nothing holds it up.
