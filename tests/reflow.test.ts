@@ -470,6 +470,28 @@ describe('a rail section reflows instead of clipping', () => {
 describe('the rail footer holds the selection, add and revert in ONE row', () => {
   const SRC = readSrc('components', 'studio', 'RailFooter.tsx');
   const CAT = readSrc('components', 'studio', 'CatalogPanel.tsx');
+  // Counting and DERIVING both read the comment-stripped source, not just the
+  // negative assertions `codeOnly` was written for.
+  //
+  // Everything below reaches into these two files for a number — how many wrappers,
+  // how many label spans, what size the square is — and both files explain
+  // themselves at length in docblocks that quote the very declarations being
+  // counted. Measured on the tree this went in on: raw and stripped agree at 3, 2,
+  // 1 and 1, so this is latent rather than live. It is fixed anyway, because the
+  // failure is asymmetric. A comment that quotes a wrapper it is explaining takes
+  // the count to 4 and the test fails for a reason that has nothing to do with the
+  // row — annoying, and findable. But delete a control and quote it in the note
+  // recording why, and the count STAYS 3: the test goes on passing about a control
+  // that is no longer rendered, which is this file's own recurring defect one level
+  // up.
+  //
+  // `codeOnly`'s comment already records two assertions that failed this way, and
+  // `layout` made the third while writing the piece row's own width assertion — a
+  // naive grep for the row's `IconButton`s returns four, because one is a JSX
+  // comment quoting `{hover && <IconButton/>}`. Three instances of one shape is
+  // the point at which "use the helper" stops being a preference.
+  const CODE = codeOnly(SRC);
+  const CATCODE = codeOnly(CAT);
 
   // There was a local `baseRule` here with a docblock explaining that the shared
   // `rule()` takes the first match and so returns the 240px container query's
@@ -533,16 +555,16 @@ describe('the rail footer holds the selection, add and revert in ONE row', () =>
     // Three wrappers, not two: the selection slot is Delete for a piece and Done
     // for a wall, written as two branches of one slot because the store makes those
     // two selections mutually exclusive.
-    const wrappers = SRC.match(/style=\{\{ flex: 1, minWidth: 0 \}\}/g) ?? [];
+    const wrappers = CODE.match(/style=\{\{ flex: 1, minWidth: 0 \}\}/g) ?? [];
     expect(wrappers, 'every labelled button in the row needs the flex/minWidth pair').toHaveLength(3);
 
     // And the label needs its OWN element or the ellipsis has nowhere to happen: a
     // bare text node beside an icon is an anonymous flex item, which is what
     // `.ds-btn`'s comment in globals.css says no per-site rule can reach.
     expect(rule('.ds-btn')).toContain('white-space: nowrap');
-    expect(SRC).toContain('<span style={LABEL}>Delete</span>');
-    expect(SRC).toContain('<span style={LABEL}>Done</span>');
-    expect(CAT).toMatch(/<span style=\{\{ overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 \}\}>/);
+    expect(CODE).toContain('<span style={LABEL}>Delete</span>');
+    expect(CODE).toContain('<span style={LABEL}>Done</span>');
+    expect(CATCODE).toMatch(/<span style=\{\{ overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 \}\}>/);
   });
 
   /** The row's fixed demand against the narrowest rail it can be given.
@@ -564,14 +586,16 @@ describe('the rail footer holds the selection, add and revert in ONE row', () =>
     const gap = Number(/gap: (\d+)px/.exec(footer)![1]);
     // Anchored on the icon name: the trash glyph's own `size={12}` comes first in
     // the file, so a bare /size=\{(\d+)\}/ reads 12 and silently under-counts the
-    // widest fixed item in the row by 20px.
-    const square = Number(/icon="rotate-ccw"[\s\S]*?size=\{(\d+)\}/.exec(SRC)![1]);
+    // widest fixed item in the row by 20px. Anchoring is not enough on its own,
+    // either — `[\s\S]*?` crosses comments, so a docblock between the two that
+    // mentions any `size={n}` would be read as the square's. Hence CODE.
+    const square = Number(/icon="rotate-ccw"[\s\S]*?size=\{(\d+)\}/.exec(CODE)![1]);
 
     const btn = rule('.ds-btn');
     const btnPadX = Number(/padding: 0 (\d+)px/.exec(btn)![1]);
     const btnGap = Number(/gap: (\d+)px/.exec(btn)![1]);
-    const trash = Number(/name="trash" size=\{(\d+)\}/.exec(SRC)![1]);
-    const plus = Number(/name=\{open \? 'x' : 'plus'\} size=\{(\d+)\}/.exec(CAT)![1]);
+    const trash = Number(/name="trash" size=\{(\d+)\}/.exec(CODE)![1]);
+    const plus = Number(/name=\{open \? 'x' : 'plus'\} size=\{(\d+)\}/.exec(CATCODE)![1]);
 
     // Two labelled buttons, one 32px square, two gaps between the three, and the
     // footer's own padding at both ends.
@@ -585,9 +609,9 @@ describe('the rail footer holds the selection, add and revert in ONE row', () =>
     // The longest each label ever renders. Delete is the wider of the two selection
     // branches; Add swaps to "Close" while the panel is open, which is the state
     // you are NOT looking at while the row is at its widest.
-    const slot = [...SRC.matchAll(/<span style=\{LABEL\}>([^<]+)<\/span>/g)].map((m) => m[1]);
+    const slot = [...CODE.matchAll(/<span style=\{LABEL\}>([^<]+)<\/span>/g)].map((m) => m[1]);
     expect(slot.length, 'the selection slot lost a branch').toBe(2);
-    const add = /textOverflow: 'ellipsis'[^>]*>\s*\{open \? '([^']+)' : '([^']+)'\}/.exec(CAT)!;
+    const add = /textOverflow: 'ellipsis'[^>]*>\s*\{open \? '([^']+)' : '([^']+)'\}/.exec(CATCODE)!;
     const chars =
       Math.max(...slot.map((l) => l.length)) + Math.max(add[1].length, add[2].length);
 
@@ -619,8 +643,8 @@ describe('the rail footer holds the selection, add and revert in ONE row', () =>
     // Once a control loses its words the glyph IS the name, so two different verbs
     // may not share one. `refresh` is Re-scan’s, in the left rail’s Room header,
     // and it is also CATEGORY_ICON.fan.
-    expect(SRC).toContain('icon="rotate-ccw"');
-    expect(SRC, 'refresh is the Re-scan glyph now').not.toContain('icon="refresh"');
+    expect(CODE).toContain('icon="rotate-ccw"');
+    expect(CODE, 'refresh is the Re-scan glyph now').not.toContain('icon="refresh"');
     // IconButton floors at 24px so nothing falls under WCAG 2.5.8. 32 is the app’s
     // icon-target size, and the size LightingPicker’s own rail budget is derived
     // from two describes above.
