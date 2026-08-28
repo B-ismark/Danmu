@@ -142,22 +142,73 @@ mutating `anchorIdx` to empty** — a green that cannot fail. Measured, then rev
 
 ## B · Decisions only the user can make
 
-7. **Shuffle and hand-placed pieces.** A Lock button now exists on each piece row, against
-   Shuffle only. Whether locking is per-piece or a mode, and what the prompt says before
-   Shuffle overrules a hand placement, is a product call.
+Four of these were put to the user and are **answered**. They are kept here rather than
+deleted because the answer is the useful part, and because two of them changed shape when
+the user went and looked.
 
-8. **After a refused turn, 3D says nothing in colour**; the plan outlines the piece, and
-   3D's only tell is Room check. Giving 3D an outline means inventing a second visual
-   channel in the scene. Not a defect — a preference.
+7. **Shuffle and hand-placed pieces — ANSWERED by the tree, not by taste.** The user
+   reported not being able to find the Lock button. They are right, and it is not a UI
+   problem: `feat/shuffle-lock-and-band-price` (`4cc7239` the bandCost fix, `301b008` the
+   Lock button) **has no remote branch** — its upstream reads `origin/main`, so both commits
+   exist on one machine. There is no Lock in any tree anyone else can run, so nothing was
+   there to find. **Push it and open a PR; the product question cannot be asked until the
+   button can be pressed.** Same failure mode as the bed fix earlier in the round, and it is
+   the reason this document asks of every item whether it exists in a commit anywhere.
 
-9. **A piece too big for the room pins when turned.** Once a piece is longer than the room
-   the containment clamp's two ends cross and `Math.max` wins unconditionally, so position
-   stops tracking input. Pre-existing, both tabs. **Pin-and-report and hold-and-report are
-   both honest** and nobody has picked one.
+8. **After a refused turn, 3D says nothing — ANSWERED, and the framing was wrong.** What
+   happens: turn a piece so its corner would go through a wall, and the plan tab draws an
+   outline round it. The 3D tab draws nothing at all; its only tell is opening Room check.
+   The same refusal is loud in one tab and silent in the other.
 
-10. **"Add" shipped as the CTA.** Whether "Library" is still the right name for the panel
-    beside it is unresolved — the rail's **Catalog** and the panel's **Library** are
-    deliberately different words, and a third one changes that balance.
+   It was recorded as taste on the grounds that telling 3D means inventing a second visual
+   channel in the scene. **That is only true of an outline.** 3D already has a channel for
+   exactly this: `blockedBy` rides the live drag channel and lands in the **size tag**,
+   which is how a refused *move* names the piece that ran out of room. A refused *turn* does
+   not use it. So the cheap fix is to route the turn's refusal through the tag that already
+   exists, which is not a new channel and not a preference — it is the same finding being
+   dropped by one of two callers, which this codebase already names as a defect class.
+   An outline in 3D remains taste and remains declined.
+
+9. **A piece too big to turn — DECIDED: it depends on whether any angle fits, and the
+   crossed interval is how you tell.**
+
+   Both answers are honest in isolation, which is why neither wins outright:
+   - **Hold-and-report** matches every other refusal in the app — the convoy refuses as a
+     unit and names the blocker — but applied unconditionally it makes a 4 m bench in a 3 m
+     room **permanently un-turnable**, with no way back. `visual-check.md` already names
+     "a piece in a tight corner becoming un-turnable" as the thing the rotate work must not
+     do.
+   - **Pin-and-report** always lets the turn happen, but silently stops position tracking
+     input, which reads as the app being broken.
+
+   The distinction that resolves it is already sitting in the code. When a piece is longer
+   than the room, the containment clamp's two ends **cross**, and `Math.max(min, Math.min(max, v))`
+   with `max < min` returns `min` unconditionally — the same degenerate shape as the door
+   whose minimum height exceeded the minimum ceiling, and as the unit-rounded ranges that
+   inverted. A crossed interval is not a tight fit; it is the arithmetic saying **no legal
+   value exists**.
+
+   So: **detect the crossed interval explicitly.** Where it is crossed — no angle fits —
+   allow the turn and report, because refusing would lock the piece out of an operation
+   forever and the room report is already saying the true thing. Where it is not crossed —
+   this angle does not fit but another does — refuse the angle, keep the last good one, and
+   name the blocker, exactly as a refused move behaves. The rule to carry: **a crossed bound
+   is a message, never a clamp.**
+
+10. **"Library" — ANSWERED, and the user's answer is a defect report.** They said *"Library
+    isn't on there"*, and the tree agrees: the panel's heading is **"Add pieces"**, its
+    trigger reads **"Add"**, and the rail carries `title="Catalog"`. The word "Library"
+    survives in exactly one user-visible place — `StudioHelp.tsx:210`, *"**Catalog** is what
+    is in this room; **Library** is what you can add"* — which teaches a label the UI no
+    longer has, under a heading that reads "The lists on the left" for a panel that now
+    lives in the **right** rail.
+
+    `CLAUDE.md` rule 4 is the third voice, still asserting the panel is called Library. So
+    three sources disagree and the only one a user can see is the one that is wrong.
+    **The help line and rule 4 follow the screen, not the other way round** — the principle
+    (two lists, named for what they hold, never interchangeable words) is untouched; the
+    specific word is not. Prose describing deleted behaviour is the next reader's source of
+    truth and no gate sees it, which is why this needed someone to look.
 
 11. **One session's tool classifier blocks `gh pr list` while allowing `gh pr create` and
     `gh api`.** That session opened a PR unable to first check whether one already existed
