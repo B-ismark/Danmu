@@ -57,6 +57,36 @@ describe('snapshotDescendants', () => {
     expect(desc).toEqual([]);
   });
 
+  it('drops the edge when the PARENT is resized out from under the child', () => {
+    // Every mover named in the module comment MOVES a part. A resize moves neither:
+    // it changes the support's size under a child that has not gone anywhere, and
+    // nothing re-asks `parentIds` when a dim changes. It needs no hook, because the
+    // edge is re-derived rather than stored — and the parts a real caller passes are
+    // `resolveParts`'d, so the `dims` override is applied before this test runs.
+    // One axis at a time: the footprint shrinks with the height held, then the
+    // height drops with the footprint held. Both together would pass on either.
+    const laptop = part({ id: 'laptop', pos: [0.3, 0.75, 0], dimMM: [340, 240, 220] });
+    const narrowed = part({ id: 'desk', pos: [0, 0, 0], dimMM: [300, 700, 750] }); // top still 0.75
+    expect(snapshotDescendants('desk', [narrowed, laptop], { laptop: 'desk' })).toEqual([]);
+
+    const lowered = part({ id: 'desk', pos: [0, 0, 0], dimMM: [1400, 700, 400] }); // top now 0.4
+    expect(snapshotDescendants('desk', [lowered, laptop], { laptop: 'desk' })).toEqual([]);
+  });
+
+  it('revives the edge when the parent is grown back — nothing is ever pruned', () => {
+    // The flip side of the same property. A failed read drops the edge for that read
+    // only, so restoring the geometry restores the relationship with no drop having
+    // happened. Asserting the map is unchanged is the load-bearing part: it is what
+    // separates "the predicate answered no" from "the edge was cleaned up", which
+    // are indistinguishable from the returned value alone.
+    const laptop = part({ id: 'laptop', pos: [0.3, 0.75, 0], dimMM: [340, 240, 220] });
+    const map = { laptop: 'desk' };
+    const narrowed = part({ id: 'desk', pos: [0, 0, 0], dimMM: [300, 700, 750] });
+    expect(snapshotDescendants('desk', [narrowed, laptop], map)).toEqual([]);
+    expect(map).toEqual({ laptop: 'desk' });
+    expect(snapshotDescendants('desk', [DESK, laptop], map).map((d) => d.id)).toEqual(['laptop']);
+  });
+
   it('skips a relationship whose child no longer exists', () => {
     const desc = snapshotDescendants('desk', [DESK], { laptop: 'desk' });
     expect(desc).toEqual([]);
