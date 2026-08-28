@@ -224,11 +224,80 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   // it is a resize-to-fit with the size left alone.
   const roomIsWideEnough =
     bnd.maxX - bnd.minX >= 2 * extX - 1e-9 && bnd.maxZ - bnd.minZ >= 2 * extZ - 1e-9;
+  //
+  // …and `pointInFootprint` is the third condition, because the two above are both
+  // about the CLAMP and the clamp is a bounding-box instrument. In anything but a
+  // rectangle there is floorless bounding box to walk into: in a T, a rug dragged
+  // into the missing south-east quadrant is never clamped (nothing there to clamp
+  // against), so nothing was shoved, the room is wide enough, and it committed
+  // `valid` standing entirely off the floor. The overhang exemption is about the
+  // rug's EDGES — under the furniture, up to the skirting, across an L's missing
+  // corner — and it was reading as an exemption from being in the room at all.
+  // Its centre is held to the same test every other piece's is; both pinned tests
+  // for the exemption place the rug's centre over real floor, which is what makes
+  // this the narrow version of the fix rather than a retraction of the exemption.
   const inRoom =
     ridesAWall ||
-    (part.category === 'rug' && roomIsWideEnough && !shovedIntoRoom) ||
+    (part.category === 'rug' &&
+      roomIsWideEnough &&
+      !shovedIntoRoom &&
+      pointInFootprint(x, z, footprint)) ||
     (obbInsidePoly(slightlyShrunk, footprint) && pointInFootprint(x, z, footprint));
   const collides = collidesAt(parts, part.id, [x, y, z], outRot, dim);
 
   return { pos: [x, y, z], rot: outRot, valid: inRoom && !collides, snapLines, supportId };
+}
+
+/**
+ * A turn, resolved: the piece stays where it stands and only its angle changes —
+ * but its FOOTPRINT does not stand still, because `extX`/`extZ` above are
+ * functions of rotation as well as size. Turning a long piece that sits against a
+ * wall drives its corners through the plaster, so a turn needs the containment
+ * clamp exactly as much as a drag does.
+ *
+ * Three decisions live here rather than in each caller, because four gestures turn
+ * a piece — the plan's rotate handle, its two keyboard paths, and the 3D gizmo —
+ * and hand-rolling them is how they drifted apart in the first place:
+ *
+ * · `snapMode: 'off'`. A turn asks to be kept in the room, not to be re-gridded or
+ *   re-magnetised where it stands. The ANGLE is quantised by the caller, which is
+ *   the only part of the snap a turn wants.
+ * · `wallEdge: null`. A wall rider is re-aimed by the wall it lands on, in both
+ *   tabs or in neither.
+ * · The caller takes the CLAMP and not the legality. Refusing an invalid frame
+ *   would make a piece in a tight spot unturnable, which no report has asked for;
+ *   `valid` comes back so the caller can say so out loud instead.
+ *
+ * That last one is why this returns a whole `Resolved` and not a position. The
+ * clamped position is produced whether or not the frame is legal, and the one
+ * caller that hand-rolled its own refusal path threw it away: 3D `commit()` fell
+ * back to the PRE-GESTURE position raw and wrote the new angle beside it — a
+ * combination nothing had ever run through containment. Turning the lead of a
+ * merged set into its own siblings made the resolve invalid, so that was the path
+ * every such turn took, and the bed was committed with its corner through the wall.
+ */
+export function turnInPlace(input: {
+  part: ScenePart;
+  /** Where it stands now. Its `y` is the mount height to preserve. */
+  at: [number, number, number];
+  /** The new angle, already quantised to the caller's step. */
+  rot: number;
+  dim: [number, number, number];
+  parts: ScenePart[];
+  footprint: Poly;
+  roomHeight: number;
+}): Resolved {
+  return resolvePlacement({
+    part: input.part,
+    rawX: input.at[0],
+    rawZ: input.at[2],
+    rot: input.rot,
+    dim: input.dim,
+    parts: input.parts,
+    footprint: input.footprint,
+    roomHeight: input.roomHeight,
+    snapMode: 'off',
+    currentY: input.at[1],
+    wallEdge: null,
+  });
 }

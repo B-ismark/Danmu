@@ -67,6 +67,31 @@ export type ConvoyMember = {
    *  slides round the corner and arrives facing a different direction from the set
    *  it left with. */
   edge: number | null;
+  /**
+   * Could this member legally stand where it already stands?
+   *
+   * A member's veto below is absolute, so one that is ALREADY illegal refuses
+   * every delta the set is ever offered and the whole thing is inert — in every
+   * direction, forever, including the ones that would fix it. Merge a dining table
+   * with a chair that stands in the notch of a T, and dragging the set does
+   * nothing at all; the reported symptom is not "only one moved" but "it will not
+   * move", which reads as the drag being broken rather than as a refusal. A chair
+   * merely tucked far enough under its table to overlap it and not far enough to
+   * be SUPPORTED by it does the same thing in a plain rectangle.
+   *
+   * A gesture is answerable for what it breaks, not for what it inherits. So this
+   * is asked once, at pointer-down — a per-frame answer is one that can change
+   * mid-gesture — and a member that answers `false` keeps travelling with the set
+   * and simply does not get a vote on where it goes.
+   *
+   * It gates the LEGALITY half of the veto only. The rigidity half is not gated,
+   * because a set arriving deformed is made deformed by this gesture by
+   * definition. One residue of that: a member whose start position is outside the
+   * room's bounding box is clamped every frame, never rigid, and still vetoes.
+   * Nothing in the app is known to place a piece there — the containment clamp is
+   * in every write path — so it is recorded rather than coded around.
+   */
+  startValid: boolean;
 };
 
 export type Convoy = {
@@ -254,8 +279,11 @@ export function planConvoy(input: {
    *  `Convoy.leadEdge`. Resolved here, at pointer-down, because a wall read per
    *  frame is a wall that can change mid-gesture, which is the thing being fixed. */
   footprint: Poly;
+  /** Needed only to answer `ConvoyMember.startValid` — `resolvePlacement` cannot
+   *  judge a piece without knowing what it has to fit under. */
+  roomHeight: number;
 }): Convoy {
-  const { draggedId, parts, selection, parentIds, footprint } = input;
+  const { draggedId, parts, selection, parentIds, footprint, roomHeight } = input;
   const byId = new Map(parts.map((p) => [p.id, p]));
   if (!byId.has(draggedId)) {
     return { own: [], members: [], travelling: new Set([draggedId]), leadEdge: null };
@@ -387,6 +415,10 @@ export function planConvoy(input: {
         startPos: [p.pos[0], p.pos[1], p.pos[2]],
         descendants: [],
         edge: wallEdgeOf(p),
+        // Answered below, once membership and descendants have settled — a
+        // member's own children are what has to come out of the world it is
+        // judged against, and that set is not known until the closure converges.
+        startValid: true,
       });
     }
 
@@ -423,6 +455,33 @@ export function planConvoy(input: {
     const carried = [...own.map((d) => d.id)];
     for (const m of members) for (const d of m.descendants) carried.push(d.id);
     if (!closeGroupsOver(carried)) break;
+  }
+
+  // Was each member legal before anyone touched anything? See
+  // `ConvoyMember.startValid` for what rides on the answer.
+  //
+  // The world each is judged against is the one `ResolveInput.parts` has always
+  // asked for: its own rigid descendants out, ITSELF left in. Not
+  // `travellingWorld`, and that is not an oversight — nothing has moved yet, so
+  // there is no delta to shift the company by, and every other travelling piece
+  // standing where it really stands is precisely the question being asked.
+  for (const m of members) {
+    const carrying = m.descendants.length > 0 ? new Set(m.descendants.map((d) => d.id)) : null;
+    m.startValid = resolvePlacement({
+      part: m.part,
+      rawX: m.startPos[0],
+      rawZ: m.startPos[2],
+      rot: m.part.rot,
+      dim: m.part.dimMM,
+      parts: carrying ? parts.filter((p) => !carrying.has(p.id)) : parts,
+      footprint,
+      roomHeight,
+      // The piece is not being asked to go anywhere, so nothing may round, snap or
+      // magnetise it on the way to the answer.
+      snapMode: 'off',
+      currentY: m.startPos[1],
+      wallEdge: m.edge,
+    }).valid;
   }
 
   // Only worth pinning if something is actually following: a lone wall rider
@@ -634,7 +693,11 @@ export function resolveConvoy(input: {
     const wallRider = ridesWall(m.part.category, m.part.shape);
     const rigid =
       wallRider || (Math.abs(r.pos[0] - tx) < RIGID_EPS && Math.abs(r.pos[2] - tz) < RIGID_EPS);
-    if (!r.valid || !rigid) {
+    // Only a member this gesture BROKE may veto it. One that could not stand where
+    // it started refuses every delta forever and takes the whole set with it — see
+    // `ConvoyMember.startValid`, which is also where the rigidity half is explained
+    // for not being gated the same way.
+    if ((!r.valid && m.startValid) || !rigid) {
       valid = false;
       if (!blocked) blocked = m.part;
       blockedIds.push(m.part.id);

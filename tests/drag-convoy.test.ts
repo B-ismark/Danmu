@@ -70,7 +70,7 @@ function carry(
 }
 
 function plan(draggedId: string, world: ScenePart[], selection: string[] = [], parentIds: Record<string, string> = {}) {
-  return planConvoy({ draggedId, parts: world, selection, parentIds, footprint: ROOM });
+  return planConvoy({ draggedId, parts: world, selection, parentIds, footprint: ROOM, roomHeight: H });
 }
 
 const posOf = (moves: Array<{ id: string; pos: [number, number, number] }>, id: string) =>
@@ -224,23 +224,65 @@ describe('planConvoy — who travels', () => {
     ];
 
     it('takes a merged set whole', () => {
-      expect(selectionForPick(world, 'side-l').sort()).toEqual(['side-l', 'side-r']);
-      expect(selectionForPick(world, 'side-r').sort()).toEqual(['side-l', 'side-r']);
+      expect(selectionForPick(world, 'side-l', []).sort()).toEqual(['side-l', 'side-r']);
+      expect(selectionForPick(world, 'side-r', []).sort()).toEqual(['side-l', 'side-r']);
     });
 
     it('takes just the piece when it is in no group', () => {
-      expect(selectionForPick(world, 'chair')).toEqual(['chair']);
+      expect(selectionForPick(world, 'chair', [])).toEqual(['chair']);
     });
 
     it('takes just the piece when its group has no one else left in it', () => {
       // `deletePart` does not scrub a surviving member's `groupId` (see
       // lib/part-rows.ts), so a lone part carrying a dead group id is a real state
       // and must not select something that is not there.
-      expect(selectionForPick(world, 'lone')).toEqual(['lone']);
+      expect(selectionForPick(world, 'lone', [])).toEqual(['lone']);
     });
 
     it('never returns a piece that is not in the world', () => {
-      expect(selectionForPick(world, 'ghost')).toEqual(['ghost']);
+      expect(selectionForPick(world, 'ghost', [])).toEqual(['ghost']);
+    });
+
+    // ── Drill-in ──
+    //
+    // Click a merged set, get the set; click again inside it, get the piece. The
+    // rule is a question about the SELECTION — "is it entirely inside this group" —
+    // rather than a count of clicks, which is what makes the sibling case below come
+    // out right instead of bouncing back to the whole set.
+    it('drills in to the one piece on a pick made from inside the set', () => {
+      const whole = ['side-l', 'side-r'];
+      expect(selectionForPick(world, 'side-r', whole)).toEqual(['side-r']);
+      expect(selectionForPick(world, 'side-l', whole)).toEqual(['side-l']);
+    });
+
+    it('stays at the member level when the next pick is a SIBLING', () => {
+      // The case a click counter gets wrong: drilled in to one sideboard, pointing
+      // at the other must give you that other one, not throw you back out to the
+      // pair. Reads as the drill-in forgetting itself otherwise.
+      expect(selectionForPick(world, 'side-l', ['side-r'])).toEqual(['side-l']);
+    });
+
+    it('takes the set whole again once the selection has left the group', () => {
+      // How you climb out: Escape or a click on empty floor clears the selection,
+      // and an empty selection is outside every group. No new gesture needed — which
+      // is only true because `every` over an empty list is deliberately not treated
+      // as "inside".
+      expect(selectionForPick(world, 'side-l', []).sort()).toEqual(['side-l', 'side-r']);
+      expect(selectionForPick(world, 'side-l', ['chair']).sort()).toEqual(['side-l', 'side-r']);
+    });
+
+    it('takes the set whole when the selection reaches outside the group', () => {
+      // A multi-selection spanning the group and something else is not "inside" it,
+      // so clicking the set collapses to the set rather than to one piece.
+      expect(selectionForPick(world, 'side-l', ['side-l', 'side-r', 'chair']).sort()).toEqual([
+        'side-l',
+        'side-r',
+      ]);
+    });
+
+    it('is unmoved by drill-in for a piece in no group', () => {
+      expect(selectionForPick(world, 'chair', ['chair'])).toEqual(['chair']);
+      expect(selectionForPick(world, 'lone', ['lone'])).toEqual(['lone']);
     });
   });
 
@@ -1174,5 +1216,106 @@ describe('gestureFor: while the gizmo is active it owns the whole answer', () =>
     // why the mode is not consulted on this path.
     expect(gestureFor(false, 'rotate', false)).toBe('move');
     expect(gestureFor(false, 'translate', true)).toBe('turn');
+  });
+});
+
+describe("a member's veto is for what this gesture broke", () => {
+  // The veto used to be absolute, so a member that was ALREADY illegal refused
+  // every delta the set was ever offered and the whole thing was inert — in every
+  // direction, forever, including the ones that would have fixed it. Reported from
+  // a T-shaped room as "I merged the dining table and its chairs and now nothing
+  // moves at all", which does not read as a refusal; it reads as the drag being
+  // broken. Both fixtures below are ordinary rooms in ordinary use.
+
+  /** A T: a 6 x 2 bar across the north, a 2 x 2 stem hanging south from the
+   *  middle of it. The two south corners are inside the bounding box and are not
+   *  floor, which is the only place this can be seen — in a rectangle the two
+   *  coincide and every one of these assertions would pass with the fix deleted. */
+  const TEE: Poly = [
+    [0, 0],
+    [6, 0],
+    [6, 2],
+    [4, 2],
+    [4, 4],
+    [2, 4],
+    [2, 2],
+    [0, 2],
+  ];
+  const chair = (id: string, x: number, z: number, gid = 'g1') =>
+    part({ id, category: 'seating', shape: 'dining-chair', dimMM: [450, 500, 900], pos: [x, 0, z], groupId: gid } as never);
+  const diner = (id: string, x: number, z: number, gid = 'g1') =>
+    part({ id, category: 'table', shape: 'dining-table', dimMM: [1600, 900, 750], pos: [x, 0, z], groupId: gid } as never);
+
+  function tee(draggedId: string, world: ScenePart[], selection: string[]) {
+    return planConvoy({ draggedId, parts: world, selection, parentIds: {}, footprint: TEE, roomHeight: H });
+  }
+  function shove(convoy: Convoy, world: ScenePart[], from: [number, number, number], dx: number, dz: number) {
+    return resolveConvoy({
+      gesture: 'move',
+      convoy,
+      draggedId: 'table',
+      pos: [from[0] + dx, from[1], from[2] + dz],
+      rot: 0,
+      startPos: from,
+      parts: world,
+      footprint: TEE,
+      roomHeight: H,
+      memberHasPosOverride: () => false,
+    });
+  }
+
+  it('a chair standing in the notch is recorded as illegal at pointer-down', () => {
+    const world = [diner('table', 3, 1), chair('stray', 5, 3)];
+    expect(tee('table', world, ['table', 'stray']).members.map((m) => m.startValid)).toEqual([false]);
+  });
+
+  it('and the set still moves, in every direction', () => {
+    const world = [diner('table', 3, 1), chair('stray', 5, 3)];
+    const convoy = tee('table', world, ['table', 'stray']);
+    for (const [dx, dz] of [
+      [0.3, 0],
+      [-0.3, 0],
+      [0, 0.3],
+      [0, -0.3],
+    ] as const) {
+      // All four, because a veto that only fires on one axis is a veto that a
+      // single-direction fixture cannot tell from no veto at all.
+      expect(shove(convoy, world, [3, 0, 1], dx, dz).valid, `delta ${dx},${dz}`).toBe(true);
+    }
+  });
+
+  it('but a member THIS gesture pushes out still stops the set, and names itself', () => {
+    // Both legal to begin with; the chair sits in the stem and the delta carries it
+    // off the side of it. Without this the fix would read "members never veto".
+    const world = [diner('table', 3, 1), chair('legal', 3, 2.5)];
+    const convoy = tee('table', world, ['table', 'legal']);
+    expect(convoy.members.map((m) => m.startValid)).toEqual([true]);
+    const r = shove(convoy, world, [3, 0, 1], 2, 0);
+    expect(r.valid).toBe(false);
+    expect(r.blockedIds).toEqual(['legal']);
+    expect(r.blocked?.id).toBe('legal');
+  });
+
+  it('a chair half-tucked under its own table does not freeze it either', () => {
+    // No notch needed for this one. The chair overlaps the table but covers too
+    // little of it to be SUPPORTED by it, so gravity leaves it on the floor and it
+    // collides with the table it is standing under — where it already stood, before
+    // anybody touched anything. A plain rectangular dining room does this.
+    const world = [diner('t', 3, 2, 'g2'), chair('c', 3, 1.45, 'g2')];
+    const convoy = planConvoy({ draggedId: 't', parts: world, selection: ['t', 'c'], parentIds: {}, footprint: ROOM, roomHeight: H });
+    expect(convoy.members.map((m) => m.startValid)).toEqual([false]);
+    const r = resolveConvoy({
+      gesture: 'move',
+      convoy,
+      draggedId: 't',
+      pos: [3.3, 0, 2],
+      rot: 0,
+      startPos: [3, 0, 2],
+      parts: world,
+      footprint: ROOM,
+      roomHeight: H,
+      memberHasPosOverride: () => false,
+    });
+    expect(r.valid).toBe(true);
   });
 });

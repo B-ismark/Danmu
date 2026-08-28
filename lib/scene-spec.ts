@@ -1443,6 +1443,34 @@ export function isParametric(shape: Shape): boolean {
   return PARAMETRIC_SHAPES.has(shape);
 }
 
+/**
+ * A three.js group scale, read back as millimetres.
+ *
+ * The axis mapping is the whole content and it is not the identity: a `dimMM` is
+ * `[width, DEPTH, HEIGHT]` while a three.js scale is `(x, y = up, z)`, so depth and
+ * height cross over. Getting it backwards swaps a wardrobe's depth with its height
+ * — invisible on anything square, gross on anything that is not.
+ *
+ * Here rather than in the component that uses it, where it was written out three
+ * times, because arithmetic that exists only inside a TSX renderer is arithmetic no
+ * test can reach. That is the `fanBlade` scar. `renderBaseDim` in lib/transforms.ts
+ * is what decides the `base` these take.
+ */
+export function dimFromGroupScale(
+  base: [number, number, number],
+  scale: { x: number; y: number; z: number },
+): [number, number, number] {
+  return [base[0] * scale.x, base[1] * scale.z, base[2] * scale.y];
+}
+
+/** The inverse of `dimFromGroupScale`, in three.js's own `(x, y, z)` order. */
+export function groupScaleForDim(
+  base: [number, number, number],
+  dim: [number, number, number],
+): [number, number, number] {
+  return [dim[0] / base[0], dim[2] / base[2], dim[1] / base[1]];
+}
+
 // Categories whose flat top surface can hold a decor collection (vase, books…).
 const DECOR_CATEGORIES = new Set<Category>(['table', 'desk', 'nightstand', 'shelf', 'wardrobe', 'ottoman']);
 export function supportsDecor(category: Category, shape: Shape): boolean {
@@ -1986,11 +2014,42 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
  *  inline and the plan had NOTHING — a press there selected one piece of a merged
  *  pair and the convoy's closure quietly put the rest back, so the plan looked
  *  right for a reason that had nothing to do with selection. Removing the closure
- *  without this would have left the two tabs dragging different sets. */
-export function selectionForPick(parts: ScenePart[], id: string): string[] {
+ *  without this would have left the two tabs dragging different sets.
+ *
+ *  DRILL-IN is the third parameter, and it is the whole reason this takes the
+ *  current selection rather than just the part. Click a merged set and you get the
+ *  set; click again, inside it, and you get the one piece you pointed at. The rule
+ *  is stated once, as a question about the selection and not as a click counter:
+ *  **you are inside a group when the selection lies entirely within it**, and a
+ *  pick made from inside names one piece. So the set comes whole from outside, the
+ *  member comes alone from inside, and pointing at a SIBLING while drilled in keeps
+ *  you at the member level rather than throwing you back out to the set — which is
+ *  what a click counter would have done, and which reads as the drill-in randomly
+ *  forgetting itself.
+ *
+ *  Climbing back out needs nothing new: Escape and a click on empty floor both
+ *  clear the selection (`KeyboardShortcuts`, `PlanView`, `Room`), and an empty
+ *  selection is outside every group by this rule, so the next click on the set
+ *  takes it whole again. A dedicated "leave group" gesture would be a fourth thing
+ *  to teach for an answer the two existing ones already give in both tabs.
+ *
+ *  `current` is REQUIRED, not defaulted. A caller that forgets it would silently
+ *  keep the old whole-group behaviour, which is drill-in working in one tab and not
+ *  the other — this repo's most-repeated defect, and one the compiler will catch
+ *  here instead. Note that it answers a different question from the click/drag gate
+ *  in `lib/drag-click.ts`, which deliberately holds NO part id: "was this press a
+ *  drag" is not "which member did it land on", and giving that gate an id is the
+ *  scar recorded there. */
+export function selectionForPick(parts: ScenePart[], id: string, current: readonly string[]): string[] {
   const me = parts.find((p) => p.id === id);
   if (!me?.groupId) return [id];
-  return parts.filter((p) => p.groupId === me.groupId).map((p) => p.id);
+  const group = parts.filter((p) => p.groupId === me.groupId).map((p) => p.id);
+  // Already inside this group — the whole selection is within it — so this pick is
+  // a drill-in and names the one piece. An empty selection is deliberately NOT
+  // "inside": `every` over nothing is true, and treating that as inside would make
+  // the very first click on a merged set select one piece of it.
+  const inside = current.length > 0 && current.every((c) => group.includes(c));
+  return inside ? [id] : group;
 }
 
 /** Whether a part renders as a wall/ceiling-mounted item (geometry centred on

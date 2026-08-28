@@ -27,7 +27,7 @@ import { footFromPart, obbExtentAlong, obbFromPart, rayToBoundary } from '@/lib/
 import { hitsAt, hitsInRect, nextInCycle, planPaintOrder, type CycleState } from '@/lib/plan-hit';
 import { wallSegments, footprintBounds } from '@/lib/footprint';
 import { moveWallCarrying, wallAttachments } from '@/lib/wall-actions';
-import { resolvePlacement, snapSteps } from '@/lib/drag-resolve';
+import { resolvePlacement, snapSteps, turnInPlace } from '@/lib/drag-resolve';
 import { snapGuideEnds, type SnapLine } from '@/lib/item-snap';
 import { convoyRestore, planConvoy, resolveConvoy, travellingWorld, type Convoy } from '@/lib/drag-convoy';
 import { cascadeTransform } from '@/lib/rigid-parent';
@@ -189,6 +189,18 @@ export const PlanView = forwardRef<PlanViewHandle, {
     moved: boolean;
     /** Where the piece was before the gesture, so Escape can put it back. */
     startPos: [number, number, number];
+    /**
+     * What was selected when the press landed — before this gesture's own
+     * press-time write, which is the whole point of recording it.
+     *
+     * Drill-in asks "did this pick come from inside the group" (see
+     * `selectionForPick`), and the press answers that question once already by
+     * selecting an unselected set WHOLE. Asking the live selection again on release
+     * therefore reads the answer the press just wrote and drills straight into it,
+     * so a single click on a merged set would land on one piece and the set could
+     * never be selected by clicking it at all.
+     */
+    selDown: readonly string[];
     /**
      * Where inside the piece the press landed, in world metres — subtracted from
      * every later pointer position so the piece travels WITH the cursor instead of
@@ -603,6 +615,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
         selection: useStudio.getState().selection,
         parentIds: useStudio.getState().parentIds,
         footprint: ROOM_DYN.footprint,
+        roomHeight: ROOM_DYN.height,
       });
     const startPos = drag?.startPos ?? part.pos;
     // A nudge has no gesture, so the live scene IS its pointer-down state and the
@@ -690,6 +703,67 @@ export const PlanView = forwardRef<PlanViewHandle, {
       );
     }
     return false;
+  }
+
+  /**
+   * Turn a piece, keeping it in the room and taking whatever stands on it along.
+   *
+   * Every turn in this tab ends here: the handle drag, the handle's own arrow keys
+   * and Shift+arrow on the piece itself. The two keyboard paths wrote the raw angle
+   * and nothing else — so a sofa could be turned through the wall a chevron at a
+   * time, and the lamp standing on a desk stayed behind, facing the way it always
+   * had, while the desk turned under it. That is the same pair of defects the handle
+   * drag had, surviving in the path nobody clicks; three call sites is exactly how
+   * it survived.
+   */
+  function turnTo(part: ScenePart, next: number) {
+    // Same rule as `moveTo`: a drag has its convoy already, a key press has no
+    // gesture to hang one off and asks for the same answer on the spot.
+    const drag = dragRef.current;
+    const convoy =
+      drag?.convoy ??
+      planConvoy({
+        draggedId: part.id,
+        parts,
+        selection: useStudio.getState().selection,
+        parentIds: useStudio.getState().parentIds,
+        footprint: ROOM_DYN.footprint,
+        roomHeight: ROOM_DYN.height,
+      });
+    const world = drag?.world ?? parts;
+    const turned = turnInPlace({
+      part,
+      at: part.pos,
+      rot: next,
+      dim: part.dimMM,
+      // Delta zero — a turn moves nobody sideways — so this is `world` with the
+      // piece's own rigid children taken out, which is what the pipeline asks for.
+      parts: convoy.travelling.size > 1 ? travellingWorld(convoy, world, 0, 0, convoy.own) : world,
+      footprint: ROOM_DYN.footprint,
+      roomHeight: ROOM_DYN.height,
+    });
+    const pos = turned.pos;
+    if (pos[0] !== part.pos[0] || pos[1] !== part.pos[1] || pos[2] !== part.pos[2]) setPosition(part.id, pos);
+    setRotation(part.id, turned.rot);
+    // …and everything standing on it turns with it, about the pivot it ACTUALLY
+    // ended on: cascading from `part.pos` while the clamp had moved the piece
+    // elsewhere would leave the lamp orbiting where the desk used to be. The
+    // convoy's own MEMBERS are deliberately not moved — a set does not pivot about
+    // the piece being turned, which is the rule `resolveConvoy` states for 'turn'.
+    if (convoy.own.length > 0) setTransformsFor(cascadeTransform(part.id, pos, turned.rot, convoy.own));
+    // The turn is TAKEN either way — refusing an invalid frame would make a piece in
+    // a tight spot unturnable, which no report has asked for. But "taken" is not
+    // "fine": the clamp keeps it in the room and something can still be in the way,
+    // and that is a finding, which per this repo's own scar is not a finding until a
+    // caller says it. A drag says it in colour; a turn said it nowhere.
+    if (turned.valid) {
+      if (blockedRef.current) clearBlocked();
+    } else if (!blockedRef.current) {
+      if (blockTimer.current) clearTimeout(blockTimer.current);
+      setBlockedIds([part.id]);
+      blockedRef.current = true;
+    }
+    return turned;
   }
 
   // ── Pointer handling ──────────────────────────────────────────────────────
@@ -846,7 +920,10 @@ export const PlanView = forwardRef<PlanViewHandle, {
     // `selectionForPick` — a merged set comes whole. The plan had no group
     // handling at all; `planConvoy` closed over `groupId` and covered for it, so
     // dragging looked right while the selection was wrong the entire time.
-    if (!useStudio.getState().selection.includes(id)) setSelection(selectionForPick(parts, id), id);
+    // Captured before that write, not after — `setSelection` is synchronous, so a
+    // read one line lower is a read of this gesture's own answer. See `selDown`.
+    const selDown = useStudio.getState().selection;
+    if (!selDown.includes(id)) setSelection(selectionForPick(parts, id, selDown), id);
     setDragging(id);
     (e.target as Element).setPointerCapture?.(e.pointerId);
 
@@ -861,12 +938,14 @@ export const PlanView = forwardRef<PlanViewHandle, {
       selection: useStudio.getState().selection,
       parentIds: useStudio.getState().parentIds,
       footprint: ROOM_DYN.footprint,
+      roomHeight: ROOM_DYN.height,
     });
     const common = {
       startX: e.clientX,
       startY: e.clientY,
       moved: false,
       startPos,
+      selDown,
       convoy,
       // Frozen here for the whole gesture — see `world` on the ref.
       world: parts,
@@ -986,18 +1065,10 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // the other.
       const step = snapSteps(snapMode).rotate;
       const next = step ? Math.round(raw / step) * step : raw;
-      setRotation(id, next);
-      // …and everything standing on it turns with it, about ITS pivot. 3D has done
-      // this since rigid parenting existed (`resolveConvoy` cascades `convoy.own`);
-      // the plan wrote the angle and nothing else, so turning a desk up here left
-      // the lamp on it behind, facing the way it always had, at the coordinates the
-      // desk used to occupy. The convoy's own MEMBERS are deliberately not moved —
-      // a set does not pivot about the piece being turned, which is the same rule
-      // `resolveConvoy` states for a 'turn' gesture.
-      const own = dragRef.current?.convoy.own;
-      if (own && own.length > 0) {
-        setTransformsFor(cascadeTransform(id, part.pos, next, own));
-      }
+      // Containment and the cascade both live in `turnTo` — this gesture had
+      // neither until recently, and the two keyboard turns still had neither after
+      // that, which is what one more copy of this block would have preserved.
+      turnTo(part, next);
     }
     force((v) => v + 1);
   }
@@ -1070,7 +1141,13 @@ export const PlanView = forwardRef<PlanViewHandle, {
       // has to keep the set in case a drag follows it (see onPointerDown).
       if (!dragRef.current.moved && dragRef.current.mode === 'translate') {
         const clicked = dragRef.current.id;
-        setSelection(selectionForPick(parts, clicked), clicked);
+        // …and what says whether that click came from inside the group is the
+        // selection as the GESTURE began, not as it stands now: the press has
+        // already answered once by selecting an unselected set whole, and reading it
+        // back here would drill into the press's own answer, so one click on a
+        // merged set would land on one piece and the set could never be clicked at
+        // all. See `selDown` and `selectionForPick`.
+        setSelection(selectionForPick(parts, clicked, dragRef.current.selDown), clicked);
       }
       // The per-gesture convoy snapshot dies with it — see the comment on the ref.
       dragRef.current = null;
@@ -1118,7 +1195,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
   function onPartKeyDown(e: React.KeyboardEvent, part: ScenePart) {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      setSelection(selectionForPick(parts, part.id), part.id);
+      setSelection(selectionForPick(parts, part.id, useStudio.getState().selection), part.id);
       return;
     }
     if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -1133,12 +1210,11 @@ export const PlanView = forwardRef<PlanViewHandle, {
     // nudge below moves the set. Unconditionally selecting here made the keys the
     // one gesture that could not move more than one piece, which is not a
     // distinction a keyboard user asked for.
-    if (!useStudio.getState().selection.includes(part.id)) setSelection(selectionForPick(parts, part.id), part.id);
+    if (!useStudio.getState().selection.includes(part.id)) {
+      setSelection(selectionForPick(parts, part.id, useStudio.getState().selection), part.id);
+    }
     if (e.shiftKey) {
-      const dir = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1;
-      const next = part.rot + dir * spin;
-      setRotation(part.id, next);
-      announce(`${part.name} turned to ${Math.round((next * 180) / Math.PI)} degrees.`);
+      turnByKey(e, part);
       return;
     }
     const dx = e.key === 'ArrowLeft' ? -nudge : e.key === 'ArrowRight' ? nudge : 0;
@@ -1147,14 +1223,30 @@ export const PlanView = forwardRef<PlanViewHandle, {
     force((v) => v + 1);
   }
 
+  /**
+   * Shift+arrow on a piece and the arrow keys on its turn handle are one gesture
+   * reached two ways, so they are one function — see `turnTo` for what both of them
+   * were missing while they were two.
+   *
+   * The angle announced is the one the room ACCEPTED, not the one asked for: a wall
+   * rider is re-aimed by the wall it lands on, and a sentence that reports the
+   * request rather than the result is the hand-typed measurement this repo keeps
+   * finding. The refusal is said out loud here and only drawn in colour on the
+   * pointer path, which is not a divergence — someone driving this from the keyboard
+   * cannot see the outline that colour is.
+   */
+  function turnByKey(e: React.KeyboardEvent, part: ScenePart) {
+    const dir = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1;
+    const turned = turnTo(part, part.rot + dir * spin);
+    const said = `${part.name} turned to ${Math.round((turned.rot * 180) / Math.PI)} degrees.`;
+    announce(turned.valid ? said : `${said} It does not fit at that angle — something is in the way.`);
+  }
+
   function onRotateKeyDown(e: React.KeyboardEvent, part: ScenePart) {
     if (!ARROWS.includes(e.key)) return;
     e.preventDefault();
     e.stopPropagation();
-    const dir = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1;
-    const next = part.rot + dir * spin;
-    setRotation(part.id, next);
-    announce(`${part.name} turned to ${Math.round((next * 180) / Math.PI)} degrees.`);
+    turnByKey(e, part);
   }
 
   function onWallKeyDown(e: React.KeyboardEvent, index: number, label: string) {

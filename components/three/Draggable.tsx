@@ -33,9 +33,16 @@ import { gestureOwnedByOther, useStudio } from '@/lib/store';
 import { clearDragClick, suppressClickAfterDrag } from '@/lib/drag-click';
 import { useScene } from '@/lib/scene-store';
 import { currentRoomScene } from '@/lib/room-scene';
+import { renderBaseDim, resolvePart } from '@/lib/transforms';
 import { useDragLive } from '@/lib/drag-live';
 import { announce } from '@/components/studio/KeyboardShortcuts';
-import { isParametric, selectionForPick, type ScenePart } from '@/lib/scene-spec';
+import {
+  dimFromGroupScale,
+  groupScaleForDim,
+  isParametric,
+  selectionForPick,
+  type ScenePart,
+} from '@/lib/scene-spec';
 import { isFloorStanding } from '@/lib/physics';
 import { clampDims } from '@/lib/dimension-ranges';
 import { type SnapLine } from '@/lib/item-snap';
@@ -237,9 +244,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // live during a drag; commit() converts that to a dim and this effect resets
     // the scale to 1, leaving the geometry to redraw at the new size.
     if (storedDim && !isParametric(part.shape)) {
-      const sx = storedDim[0] / part.dimMM[0];
-      const sy = storedDim[2] / part.dimMM[2];
-      const sz = storedDim[1] / part.dimMM[1];
+      const [sx, sy, sz] = groupScaleForDim(part.dimMM, storedDim);
       ref.current.scale.set(sx, sy, sz);
     } else {
       ref.current.scale.set(1, 1, 1);
@@ -284,6 +289,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         selection: useStudio.getState().selection,
         parentIds: useStudio.getState().parentIds,
         footprint,
+        roomHeight,
       });
     }
     return convoyCache.current;
@@ -372,12 +378,23 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
    *  commit converts to mm), clamped into the shape's real-world range. */
   function currentDim(): [number, number, number] {
     if (!ref.current || !part) return part?.dimMM ?? [100, 100, 100];
-    const s = ref.current.scale;
-    let dim: [number, number, number] = [
-      part.dimMM[0] * s.x,
-      part.dimMM[1] * s.z,
-      part.dimMM[2] * s.y,
-    ];
+    // What this group renders at scale 1 — which is NOT always the authored size.
+    //
+    // A parametric shape (sofa, curtain, WARDROBE, bookshelf, shoe-rack) rebuilds
+    // its geometry from the effective dim, so the effect above deliberately leaves
+    // its group at scale 1 and the mesh carries the resize. Everything else keeps
+    // authored geometry and wears the resize as a group scale. Multiplying the
+    // AUTHORED dim by the live scale is only right for the second kind: for the
+    // first it returns the authored size no matter how the piece was resized, and
+    // `commit()` writes that straight back through `setDim` — so resizing a
+    // wardrobe and then merely MOVING it threw the resize away, in exactly the five
+    // shapes `isParametric` names and nowhere else, which is why it reported as
+    // "sometimes".
+    //
+    // Read from the store rather than the subscribed `storedDim`: `commit` runs from
+    // handlers that can outlive the render that captured it.
+    const base = renderBaseDim(part, useStudio.getState());
+    let dim = dimFromGroupScale(base, ref.current.scale);
     if (mode === 'scale') {
       // Snap the resulting dims to the increment (TransformControls has no
       // native scaleSnap)…
@@ -392,7 +409,8 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       // …then clamp into the trustable range for this shape (a laptop can't
       // stretch to a metre; a dining table legitimately can).
       dim = clampDims(part.category, part.shape, dim);
-      ref.current.scale.set(dim[0] / part.dimMM[0], dim[2] / part.dimMM[2], dim[1] / part.dimMM[1]);
+      const [sx, sy, sz] = groupScaleForDim(base, dim);
+      ref.current.scale.set(sx, sy, sz);
     }
     return dim;
   }
@@ -497,11 +515,24 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         // occupies is a function of the delta, so a world built for a spot the
         // gesture is no longer resting at puts the company in the wrong place.
         const r = resolvePlacement(back[0], back[2], ref.current.rotation.y, dim, travelWorld(back[0], back[2]));
-        const rc = carry(r.valid ? r.pos : [back[0], back[1], back[2]], r.rot);
-        resolved = r.valid
-          ? r
-          : { pos: [back[0], back[1], back[2]], rot: ref.current.rotation.y, valid: true, supportId: r.supportId };
-        co = rc;
+        // `r`, whole — never `back` raw with the live angle written beside it, which
+        // is what this did. `resolvePlacement` returns a CONTAINMENT-CLAMPED position
+        // whether or not the frame came out legal, so throwing it away on the invalid
+        // branch discarded the one correction that always applies, and replaced it
+        // with a combination nothing had ever run through containment: the pre-gesture
+        // position, which was legal for the OLD angle and the OLD size.
+        //
+        // Harmless for a translate — `back` is a spot this piece already stood in at
+        // this angle and size — and the whole defect for the other two gestures, since
+        // a rotate and a scale never move the piece, so `back` IS where it is standing
+        // and the only thing that changed is the extent being tested against the
+        // walls. Turning the lead of a merged set into its own siblings makes the
+        // resolve invalid by collision, so that was the branch every such turn took:
+        // the bed kept the angle, kept the position, and was committed with its corner
+        // through the plaster. It also claimed `valid: true` on the way out, which is
+        // why nothing went red.
+        resolved = r;
+        co = carry(r.pos, r.rot);
       }
     }
 
@@ -510,7 +541,13 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     ref.current.rotation.y = resolved.rot;
     setPosition(partId, [x, y, z]);
     setRotation(partId, resolved.rot);
-    setDim(partId, dim);
+    // A write is not free. Per lib/transforms.ts an override PINS its value against
+    // a re-detect and persists into IndexedDB and the scene file, and this stamped
+    // one on every drop — so every piece the user had ever merely moved was pinned
+    // at its size, by a gesture that never touched a size. Same reason
+    // `ConvoyMove.rot` is optional, one field over.
+    const heldDim = resolvePart(part, useStudio.getState()).dimMM;
+    if (dim[0] !== heldDim[0] || dim[1] !== heldDim[1] || dim[2] !== heldDim[2]) setDim(partId, dim);
 
     // Rigid parenting: dropping ON something IS what creates the relationship;
     // dropping onto the floor (or a refused cycle) breaks it. Established/
@@ -876,7 +913,8 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         // "merged" lives now. `setSelected` left a merged sibling behind whenever the
         // gesture was a press-drag with no click before it.
         if (!useStudio.getState().selection.includes(partId)) {
-          useStudio.getState().setSelection(selectionForPick(useScene.getState().parts, partId), partId);
+          const sel = useStudio.getState().selection;
+          useStudio.getState().setSelection(selectionForPick(useScene.getState().parts, partId, sel), partId);
         }
       }, HOLD_MS);
     } else {
@@ -930,7 +968,8 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       // Same rule as the touch pick-up above: a press that starts a drag selects
       // what a click would have selected.
       if (!inSelection) {
-        useStudio.getState().setSelection(selectionForPick(useScene.getState().parts, partId), partId);
+        const sel = useStudio.getState().selection;
+        useStudio.getState().setSelection(selectionForPick(useScene.getState().parts, partId, sel), partId);
       }
       document.body.style.cursor = 'grabbing';
     }
