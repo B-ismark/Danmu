@@ -154,9 +154,12 @@ describe('formatDim is the only safe way to put a converted length in a sentence
         checked++;
       }
     }
-    // Assert the sweep actually swept. A loop over "whatever it found" passes
-    // just as green over nothing at all.
-    expect(checked).toBe(units.length * samples.length);
+    // Assert the sweep actually swept, against a LITERAL. The first version of
+    // this read `units.length * samples.length` — both sides derived from the
+    // arrays being counted, so shrinking either one kept it true: a check that
+    // could not fail, inside the test written to stop checks that cannot fail.
+    // Caught by mutating the sample list and watching it stay green.
+    expect(checked).toBe(45);
   });
 
   it('is not what a raw conversion gives you, in the case that caught us', () => {
