@@ -271,8 +271,20 @@ const PROBE_STEP = 0.1;
 const INTERIOR_MEMO = new WeakMap<Footprint, readonly [number, number] | null>();
 
 export function interiorPoint(poly: Footprint): readonly [number, number] | null {
-  const memo = INTERIOR_MEMO.get(poly);
-  if (memo !== undefined) return memo;
+  // `has`, not `get(...) !== undefined`, and the difference is not style. The two
+  // behave identically except when the cached answer is `null` — and there the
+  // truthy-ish version falls through, recomputes, and returns `null` again, so it
+  // gives the SAME ANSWER while doing all the work over. No test can see that: the
+  // return value is identical, and there is no counter to read. A guard whose mutant
+  // no assertion can catch is the shape this file already warns about twice, so the
+  // intent goes in the method name where it cannot be mutated into the wrong thing.
+  //
+  // The uncovered case is also the expensive one. `null` is the single input where
+  // BOTH fallbacks run to exhaustion — the whole grid, then all three edge-probe
+  // insets — so a memo that quietly stops covering it stops covering the 15.1 ms call
+  // in the annealer this memo exists for. Found by danmu-62, by mutating a guard I had
+  // just added rather than trusting it.
+  if (INTERIOR_MEMO.has(poly)) return INTERIOR_MEMO.get(poly) ?? null;
   const found = findInteriorPoint(poly);
   // ONE freeze site, deliberately. It sat on each of the three answers below until a
   // mutation showed two of them were unreachable from any fixture — a frozen value
