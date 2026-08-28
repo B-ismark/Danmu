@@ -600,7 +600,7 @@ export function PartTree() {
             {q ? (
               <>Nothing here matches “{q}”. Try another word — a sofa, a lamp, a rug.</>
             ) : (
-              <>The room is bare. Add a piece above and start arranging it.</>
+              <>The room is bare. Press Add to put the first piece in.</>
             )}
           </div>
         )}
@@ -666,7 +666,7 @@ export function PartTree() {
       </div>
 
       {/* The room-level actions that used to be pinned here are the RIGHT rail's
-          footer now (`RoomActions`). They sat in the bottom-left corner of the
+          footer now (`RailFooter`). They sat in the bottom-left corner of the
           window, diagonally opposite the Inspector that answers every other
           question about what is selected. This rail ends with the piece list,
           which already takes the leftover height. */}

@@ -12,7 +12,6 @@ import { Select } from '@/components/ui/Select';
 import { NumberField } from '@/components/ui/NumberField';
 import { EditableText, IconButton, Pill } from '@/components/ui/primitives';
 import { SwapModelModal } from './RegenerateModal';
-import { removeParts } from './KeyboardShortcuts';
 import { RailSection } from './RailSection';
 import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { isWallMountedPart, supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, DECOR_KINDS, type LibraryItem, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
@@ -26,8 +25,10 @@ import { moveWallCarrying } from '@/lib/wall-actions';
 // surface ("Suggested · 3"), Exact size (the millimetres). The fold is
 // RailSection, the left rail's own component, and its meta slot carries the
 // derived state — so the row tells you where you stand without spending a
-// screen of options on it. Where it sits, the model swap and Delete stay
-// permanently out because they are verbs, not options. The old panel opened a
+// screen of options on it. Where it sits, the model swap stays permanently out
+// because it is a verb, not an option. Delete is a verb too and is not in this
+// panel at all any more: it is the rail's pinned footer (`RailFooter`), beside
+// Add, which is what stopped it scrolling away inside this scroll box. The old panel opened a
 // sofa onto 24 swatches, 5 finish chips and 5 prop chips at once — every
 // option, no decision. Nothing was removed, only re-ranked and folded.
 export function Inspector() {
@@ -161,12 +162,6 @@ export function Inspector() {
     else clearParent(id!);
   }
 
-  // No confirm — the shared delete path answers with an Undo toast instead of a
-  // dialog (see `removeParts` in KeyboardShortcuts).
-  function onDelete() {
-    removeParts([id!]);
-  }
-
   const isGeneric = part.shape === 'box';
 
   return (
@@ -296,26 +291,6 @@ export function Inspector() {
           stays on screen either way, because that clamp is the app's promise that
           nothing can end up a fantasy size. */}
       <DimensionEditor partId={id} category={part.category} shape={part.shape} value={currentDim} defaultDim={defaultDim} onChange={(d) => setDim(id, d)} />
-
-      <div style={{ flex: 1 }} />
-
-      <div style={{ borderTop: '1px solid var(--hairline)', padding: '12px 16px', background: 'var(--paper-2)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <button
-          onClick={onDelete}
-          className="ds-btn"
-          style={{
-            width: '100%',
-            height: 32,
-            fontSize: 12,
-            justifyContent: 'center',
-            color: 'var(--danger)',
-            borderColor: 'var(--danger)',
-          }}
-        >
-          <Icon name="trash" size={12} />
-          Delete from scene
-        </button>
-      </div>
 
       {swapOpen && (
         <SwapModelModal part={part} onClose={() => setSwapOpen(false)} onSwap={swapModel} />
@@ -557,7 +532,6 @@ function WallInspector({ index }: { index: number }) {
   const setWallColor = useScene((s) => s.setWallColor);
   const setAllWallColors = useScene((s) => s.setAllWallColors);
   const resetWallColor = useScene((s) => s.resetWallColor);
-  const setSelectedWall = useStudio((s) => s.setSelectedWall);
 
   const segs = wallSegments(room.footprint);
   const seg = segs[index];
@@ -615,13 +589,6 @@ function WallInspector({ index }: { index: number }) {
         </div>
       </Section>
 
-      <div style={{ flex: 1 }} />
-
-      <div style={{ borderTop: '1px solid var(--hairline)', padding: '12px 16px', background: 'var(--paper-2)' }}>
-        <button onClick={() => setSelectedWall(null)} className="ds-btn" style={{ width: '100%', height: 32, fontSize: 12, justifyContent: 'center', gap: 6 }}>
-          <Icon name="x" size={12} /> Done
-        </button>
-      </div>
     </div>
   );
 }

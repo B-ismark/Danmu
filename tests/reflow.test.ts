@@ -467,32 +467,17 @@ describe('a rail section reflows instead of clipping', () => {
   });
 });
 
-describe('the rail footer holds the room actions without spilling', () => {
-  const SRC = readSrc('components', 'studio', 'RoomActions.tsx');
+describe('the rail footer holds the selection, add and revert in ONE row', () => {
+  const SRC = readSrc('components', 'studio', 'RailFooter.tsx');
+  const CAT = readSrc('components', 'studio', 'CatalogPanel.tsx');
 
-  /** The body of a selector's BASE rule — the occurrence whose selector starts at
-   *  column 0.
-   *
-   *  NOT the shared `rule()` helper. That one takes the FIRST match, and
-   *  `.rail-footer` is named twice: once in the base rule and once in the 240px
-   *  container query, which sits EARLIER in the file. So `rule('.rail-footer')`
-   *  returns the relief block's ` padding-left: 12px; padding-right: 12px; ` and
-   *  any assertion about the base rule passes or fails for a reason that has
-   *  nothing to do with the base rule. Indentation is the only thing separating
-   *  them, and reading it needs no line-ending assumption — which matters because
-   *  the CSS here is read raw and this repo checks out CRLF.
-   *
-   *  It lives here rather than inline in one test because two tests now ask about
-   *  this rule, and two copies of the scan is the drift this repo keeps finding. */
-  function baseRule(selector: string): string {
-    const SEL = `${selector} {`;
-    let at = -1;
-    for (let i = CSS.indexOf(SEL); i >= 0; i = CSS.indexOf(SEL, i + 1)) {
-      if (i === 0 || CSS[i - 1] !== ' ') { at = i; break; }
-    }
-    expect(at, `no top-level ${selector} rule in globals.css`).toBeGreaterThan(-1);
-    return CSS.slice(at + SEL.length, CSS.indexOf('}', at));
-  }
+  // There was a local `baseRule` here with a docblock explaining that the shared
+  // `rule()` takes the first match and so returns the 240px container query's
+  // relief block instead of the base rule. That was true when it was written and
+  // stopped being true in the same commit: the column-0 scan moved INTO `rule()`,
+  // and this copy plus its explanation stayed behind claiming the helper still had
+  // the bug. Prose describing behaviour that changed is the defect no gate sees,
+  // so the copy is deleted rather than re-worded — `rule()` is the one scan.
 
   it('states its box model in CSS, where the container query can reach it', () => {
     // Same argument as `.rail-section-head`: while the old footer stated
@@ -501,7 +486,7 @@ describe('the rail footer holds the room actions without spilling', () => {
     // the one row that never gave any padding back.
     expect(SRC).toContain('className="rail-footer"');
     expect(SRC, "padding belongs in globals.css now").not.toContain("padding: '12px 16px'");
-    const footer = baseRule('.rail-footer');
+    const footer = rule('.rail-footer');
     expect(footer).toContain('padding: 12px 16px');
     // Never squeezed out by a tall Inspector above it. A footer that can shrink to
     // nothing is a footer that silently is not there.
@@ -523,7 +508,7 @@ describe('the rail footer holds the room actions without spilling', () => {
    *  pinned row visually continuous with the scrolling panel above it, which is a
    *  different defect reached by "fixing" this one. */
   it('separates itself from the scrolling panel by tone, not by a rule that reads as a scrollbar', () => {
-    const footer = baseRule('.rail-footer');
+    const footer = rule('.rail-footer');
     expect(footer, 'a 1px hairline here is read as a horizontal scrollbar').not.toContain('border');
     // The tone is what carries the pinning now, so it is load-bearing rather than
     // decorative. `--paper-2` is 0.858 L against `--paper` at 0.941.
@@ -538,18 +523,96 @@ describe('the rail footer holds the room actions without spilling', () => {
     expect(body).toContain('.rail-footer');
   });
 
-  it('lets the Add label ellipsise rather than widening the rail', () => {
-    // The footer is a ROW: a full-width button plus a 32px square. `.ds-btn` is
-    // `white-space: nowrap`, so at the 248px tight right rail the button's longest
-    // label plus that square pushes the row past the rail, and `.rail` is
+  it('lets every label ellipsise rather than widening the rail', () => {
+    // `.ds-btn` is `white-space: nowrap`, so at the narrowest right rail two labels
+    // plus a 32px square push the row past the rail, and `.rail` is
     // `overflow: hidden` — no scrollbar, no ellipsis, no clue. `flex: 1` sizes the
     // BOX and `minWidth: 0` is what lets it go below its own text; the pair is one
     // mechanism and either half alone does nothing.
-    // The label is "Add a piece" / "Close" now, having been "Browse library" /
-    // "Close library". Shorter in both states, so this is not load-bearing for the
-    // current strings — which is exactly why it is asserted rather than eyeballed:
-    // the next label is one edit away and nothing else here would notice.
-    expect(SRC).toContain('style={{ flex: 1, minWidth: 0 }}');
+    //
+    // Three wrappers, not two: the selection slot is Delete for a piece and Done
+    // for a wall, written as two branches of one slot because the store makes those
+    // two selections mutually exclusive.
+    const wrappers = SRC.match(/style=\{\{ flex: 1, minWidth: 0 \}\}/g) ?? [];
+    expect(wrappers, 'every labelled button in the row needs the flex/minWidth pair').toHaveLength(3);
+
+    // And the label needs its OWN element or the ellipsis has nowhere to happen: a
+    // bare text node beside an icon is an anonymous flex item, which is what
+    // `.ds-btn`'s comment in globals.css says no per-site rule can reach.
+    expect(rule('.ds-btn')).toContain('white-space: nowrap');
+    expect(SRC).toContain('<span style={LABEL}>Delete</span>');
+    expect(SRC).toContain('<span style={LABEL}>Done</span>');
+    expect(CAT).toMatch(/<span style=\{\{ overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 \}\}>/);
+  });
+
+  /** The row's fixed demand against the narrowest rail it can be given.
+   *
+   *  This is the assertion the labels were shortened FOR, and the reason they read
+   *  "Delete" and "Add" rather than "Delete from scene" and "Add a piece": every
+   *  term except the text itself is read out of the file that states it, and
+   *  whatever is left over is all the two labels get. Put either long label back
+   *  and this goes red — which is the only honest form of "they did not fit", since
+   *  the version of that claim I could type by hand is a number in a comment.
+   *
+   *  The per-character figure IS an estimate — 12px `--font-sans` at 700, and
+   *  nothing in node can measure a font — so it is named rather than buried, and a
+   *  browser is still the real check. What is DERIVED is the half that drifts: the
+   *  paddings, the gaps, the icon sizes, the square, and the labels themselves. */
+  it('fits its fixed geometry inside the narrowest rail, with room for the labels', () => {
+    const footer = rule('.rail-footer');
+    const padX = Number(/padding: \d+px (\d+)px/.exec(footer)![1]);
+    const gap = Number(/gap: (\d+)px/.exec(footer)![1]);
+    // Anchored on the icon name: the trash glyph's own `size={12}` comes first in
+    // the file, so a bare /size=\{(\d+)\}/ reads 12 and silently under-counts the
+    // widest fixed item in the row by 20px.
+    const square = Number(/icon="rotate-ccw"[\s\S]*?size=\{(\d+)\}/.exec(SRC)![1]);
+
+    const btn = rule('.ds-btn');
+    const btnPadX = Number(/padding: 0 (\d+)px/.exec(btn)![1]);
+    const btnGap = Number(/gap: (\d+)px/.exec(btn)![1]);
+    const trash = Number(/name="trash" size=\{(\d+)\}/.exec(SRC)![1]);
+    const plus = Number(/name=\{open \? 'x' : 'plus'\} size=\{(\d+)\}/.exec(CAT)![1]);
+
+    // Two labelled buttons, one 32px square, two gaps between the three, and the
+    // footer's own padding at both ends.
+    const fixed =
+      2 * padX + 2 * gap + square +
+      (2 * btnPadX + btnGap + trash) +
+      (2 * btnPadX + btnGap + plus);
+    const floor = railFloor('rail-right');
+    const room = floor - fixed;
+
+    // The longest each label ever renders. Delete is the wider of the two selection
+    // branches; Add swaps to "Close" while the panel is open, which is the state
+    // you are NOT looking at while the row is at its widest.
+    const slot = [...SRC.matchAll(/<span style=\{LABEL\}>([^<]+)<\/span>/g)].map((m) => m[1]);
+    expect(slot.length, 'the selection slot lost a branch').toBe(2);
+    const add = /textOverflow: 'ellipsis'[^>]*>\s*\{open \? '([^']+)' : '([^']+)'\}/.exec(CAT)!;
+    const chars =
+      Math.max(...slot.map((l) => l.length)) + Math.max(add[1].length, add[2].length);
+
+    const PX_PER_CHAR = 7; // estimate: 12px --font-sans at 700
+    expect(
+      room,
+      `the row's fixed parts take ${fixed}px of the ${floor}px rail, leaving ${room}px for ${chars} characters`,
+    ).toBeGreaterThanOrEqual(chars * PX_PER_CHAR);
+  });
+
+  it('is the ONLY --paper-2 band at the foot of the right rail', () => {
+    // Two bands — a panel's own footer and this one — same tone, same `12px 16px`,
+    // one under the other: that reads as one footer that had wrapped. The upper one
+    // also carried the same 1px `--hairline` three separate reports called a
+    // horizontal scrollbar, so deleting it from `.rail-footer` alone moved the
+    // defect one element up rather than fixing it. Both the piece panel and the
+    // WALL panel had one, and only the piece one was ever reported.
+    const insp = codeOnly(readSrc('components', 'studio', 'Inspector.tsx'));
+    expect(
+      insp,
+      'a panel inside the rail must not end with a --paper-2 band of its own',
+    ).not.toMatch(/borderTop: '1px solid var\(--hairline\)',\s*padding: '12px 16px'/);
+    // The half-finished-move catcher, the same shape as the PartTree one below: the
+    // band deleted but the delete path left behind in the panel it moved out of.
+    expect(insp, 'Delete belongs to the rail footer now').not.toContain('removeParts');
   });
 
   it('gives the revert a real target and does not reuse the Re-scan glyph', () => {
@@ -573,7 +636,7 @@ describe('the rail footer holds the room actions without spilling', () => {
       'AddPiecesButton',
     );
     const right = readSrc('components', 'studio', 'shells', 'shell-parts.tsx');
-    expect(right).toContain('<RoomActions />');
+    expect(right).toContain('<RailFooter />');
   });
 });
 

@@ -13,7 +13,7 @@ import { useStudio } from '@/lib/store';
 import { Icon } from '@/components/ui/Icon';
 import { PartTree } from '../PartTree';
 import { Inspector } from '../Inspector';
-import { RoomActions } from '../RoomActions';
+import { RailFooter } from '../RailFooter';
 import { SelectionHeader } from '../SelectionHeader';
 import { RoomHealthDot } from '../RoomTools';
 
@@ -84,10 +84,13 @@ export function LeftRailBody({ open }: { open: boolean }): ReactNode {
 /** The selection's banner above the panel that acts on it. It used to float on
  *  the canvas's bottom edge, answering what this panel answers.
  *
- *  It ends with the room-level actions — add a piece, put every piece back.
- *  Those were the LEFT rail's pinned footer, which is the bottom-left corner of
- *  the window: the furthest point on screen from a hand editing a piece, and
- *  diagonally opposite the panel above. Pinned the same way it was, by being the
+ *  It ends with the rail's action row — delete the selected piece, add a piece,
+ *  put every piece back. Add and the revert were the LEFT rail's pinned footer,
+ *  the bottom-left corner of the window: the furthest point on screen from a hand
+ *  editing a piece, and diagonally opposite the panel above. Delete came from the
+ *  foot of the Inspector itself, which is a SCROLLING box — so it is pinned now
+ *  rather than merely low down, and the rail has one `--paper-2` band at its foot
+ *  where it had two. Pinned by being the
  *  last non-growing child of the rail's flex column — `.rail` is already
  *  `display: flex; flex-direction: column; height: 100%`, so this needs no
  *  absolute positioning in a container that clips. */
@@ -97,7 +100,7 @@ export function RightRailBody({ open }: { open: boolean }): ReactNode {
     <>
       <SelectionHeader />
       <Inspector />
-      <RoomActions />
+      <RailFooter />
     </>
   );
 }

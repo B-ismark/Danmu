@@ -37,7 +37,8 @@ import { announce, isTypingOrDialog } from './KeyboardShortcuts';
  *  room. Without it, pressing Add on a narrow window opens a panel off-screen. */
 export const STUDIO_CANVAS_ID = 'studio-canvas';
 
-/** Rail trigger — the labelled one, in the Furniture section. */
+/** Rail trigger — the labelled one, in the right rail's pinned footer
+ *  (`RailFooter`), beside Delete and the revert. */
 export function AddPiecesButton() {
   const open = useStudio((s) => s.catalogOpen);
   const setOpen = useStudio((s) => s.setCatalogOpen);
@@ -75,9 +76,24 @@ export function AddPiecesButton() {
           the collection it opens — the search field inside still searches the
           library, and `StudioHelp` still teaches Catalog-vs-Library — so rule 4's
           distinction is intact and the screen gains no second Catalog. The panel
-          this opens is headed "Add pieces", which the old label disagreed with. */}
+          this opens is headed "Add pieces", which the old label disagreed with.
+
+          One word rather than "Add a piece", and the reason is the row it sits in
+          rather than brevity for its own sake: `RailFooter` puts it beside a
+          labelled Delete and a 32px square inside a rail that floors at
+          `--rail-right-min`, and the two longer labels together ask for more width
+          than that leaves. The object is not lost — the `title` says "Add a piece
+          to the room", the panel it opens is headed "Add pieces", and the canvas
+          trigger has read a bare "Add" all along, so the two triggers now agree.
+
+          The label gets its own element so it can ellipsise: `.ds-btn` is
+          `white-space: nowrap` and a bare text node beside an icon is an anonymous
+          flex item that no per-site rule can reach, which sends the overflow out
+          through the border instead. `globals.css` names this opt-out. */}
       <Icon name={open ? 'x' : 'plus'} size={12} />
-      {open ? 'Close' : 'Add a piece'}
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+        {open ? 'Close' : 'Add'}
+      </span>
     </button>
   );
 }
