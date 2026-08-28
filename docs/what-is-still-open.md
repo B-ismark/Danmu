@@ -26,6 +26,12 @@ assertions. **Reconciling the arithmetic is part of the check** — 1600 + 17 = 
 A red list is only a baseline if the passing count is accounted for too, or a test that
 silently stopped being collected hides inside an unchanged failure count.
 
+**And the file count has to travel with it, or the arithmetic still closes over a hole.**
+`1600 + 17 = 1617 = 1612 + 5` would hold just as well if an entire test *file* stopped being
+collected and its assertions were replaced one-for-one elsewhere. **`82 files` is what rules
+that out** — the same class of gap the arithmetic catches, one level up, and the reason all
+three numbers are quoted here every time rather than the failure count alone.
+
 | test | item |
 |---|---|
 | `bed-rung-safety` › *refuses, at U 6×5, every rung above the one that ships* | 1 |
