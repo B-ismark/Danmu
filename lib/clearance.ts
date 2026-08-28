@@ -52,6 +52,7 @@ import {
   type AccessRule,
   type RuleKind,
 } from './layout-rules';
+import { dimRangeFor } from './dimension-ranges';
 
 export type ClearanceSeverity = 'error' | 'warn' | 'info';
 
@@ -512,17 +513,45 @@ export function analyzeRoom(
   // The skip was solving a WORDING problem, not a logic one: "it will not stand up
   // in here" is wrong about something that hangs. So branch the sentence and keep
   // the check.
+  //
+  // The tail sentence branches for a second reason, and this one is a defect in the
+  // range table rather than in the wording. "Danmu keeps the real size rather than
+  // shrinking it for you" tells the user the shrinking is THEIRS to do — and for a
+  // door that is a lie the Inspector then enforces. `door` has a height floor of
+  // 1980 mm and `ROOM_HEIGHT_M.min` is 1800, so **every room between 1.80 m and
+  // 1.98 m has no legal door at all**: ask `clampDims` for a 1000 mm door and it
+  // returns 1980, unchanged, four times out of four. The user reported this as "the
+  // door doesn't reduce its height", which is exactly right and is not a bug in the
+  // door — it cannot reduce, and being told to do it anyway is the whole of the
+  // complaint. Two range tables in one file disagreeing about the shortest room a
+  // door fits in is the kind of thing only arithmetic finds; neither number is
+  // wrong on its own.
+  //
+  // So compare against the piece's own FLOOR, not against the size it happens to
+  // hold, and derive the number rather than naming a shape: `dimRangeFor` already
+  // owns it, a curtain (800) and a wardrobe (1600) both pass and keep the old
+  // sentence, and a shape whose floor is raised later starts telling the truth
+  // without anyone editing this string. Deliberately not fixed by lowering the door
+  // or raising the room: 1980 mm is a real door and 1.8 m is a real attic, the
+  // combination is what does not exist, and rule 2 says report it rather than
+  // quietly resize one of them.
   for (const p of parts) {
     const h = p.dimMM[2] / 1000;
     if (h <= room.height) continue;
+    const floor = dimRangeFor(p.category, p.shape).min[2] / 1000;
+    const lead = p.wallMounted
+      ? 'there is no height it can hang at without crossing the floor or the ceiling'
+      : 'it will not stand up in here';
+    const tail =
+      floor > room.height
+        ? `It does not go any shorter than ${Math.round(floor * 100)} cm, so nothing you type will fit it in here — the ceiling has to reach ${Math.round(floor * 100)} cm, or the piece has to go.`
+        : `Danmu keeps the real size rather than shrinking it for you; ${Math.round(floor * 100)} cm is as short as this piece goes, and that would fit.`;
     issues.push({
       id: `tall-${p.id}`,
       rule: 'tall',
       severity: 'error',
       title: 'Taller than the room',
-      detail: p.wallMounted
-        ? `“${p.name}” is ${Math.round(h * 100)} cm tall and the ceiling is ${Math.round(room.height * 100)} cm — there is no height it can hang at without crossing the floor or the ceiling. Danmu keeps the real size rather than shrinking it for you.`
-        : `“${p.name}” is ${Math.round(h * 100)} cm tall and the ceiling is ${Math.round(room.height * 100)} cm — it will not stand up in here. Danmu keeps the real size rather than shrinking it for you.`,
+      detail: `“${p.name}” is ${Math.round(h * 100)} cm tall and the ceiling is ${Math.round(room.height * 100)} cm — ${lead}. ${tail}`,
       partIds: [p.id],
     });
   }

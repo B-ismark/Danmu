@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { analyzeRoom, freeFloorFraction } from '@/lib/clearance';
 import { pointInObb, pointInPoly, polygonArea, type OBB, type Poly } from '@/lib/geometry';
-import type { ScenePart } from '@/lib/scene-spec';
+import { SHAPES, type ScenePart } from '@/lib/scene-spec';
+import { dimRangeFor, ROOM_HEIGHT_M } from '@/lib/dimension-ranges';
 import type { Footprint } from '@/lib/footprint';
 
 const RECT: Footprint = [
@@ -324,5 +325,70 @@ describe('analyzeRoom · taller than the room', () => {
   it('says nothing about a wall-mounted piece that fits', () => {
     const tv = part({ category: 'tv', shape: 'tv', dimMM: [1450, 60, 820], pos: [0, 1.2, -1.95], wallMounted: true });
     expect(analyzeRoom([tv], LOW).issues.find((i) => i.rule === 'tall')).toBeUndefined();
+  });
+});
+
+describe('analyzeRoom · a piece that cannot be made to fit at all', () => {
+  // "Danmu keeps the real size rather than shrinking it for you" is an instruction:
+  // it tells the user the shrinking is theirs to do. For a door under a low ceiling
+  // it is an instruction they cannot carry out — `door` has a height floor of
+  // 1980 mm and the shortest legal room is 1800, so between those two numbers there
+  // is no legal door, and the Inspector refuses every value the message invites.
+  const LOW_ROOM = { footprint: RECT, height: 1.8 };
+
+  it('a door in the shortest legal room is told it does not go shorter, not to shrink it', () => {
+    // Not a chosen fixture: 1980 is `dimRangeFor('door','door').min[2]`, so this is
+    // the door at its own minimum. There is no smaller one to test with.
+    const min = dimRangeFor('door', 'door').min[2];
+    expect(min / 1000).toBeGreaterThan(ROOM_HEIGHT_M.min);
+
+    const door = part({ category: 'door', shape: 'door', dimMM: [900, 45, min], pos: [0, min / 2000, -1.98], wallMounted: true });
+    const hit = analyzeRoom([door], LOW_ROOM).issues.find((i) => i.rule === 'tall');
+    expect(hit).toBeDefined();
+    expect(hit!.detail).toContain('does not go any shorter than 198 cm');
+    // The half that matters. The old sentence asked for something impossible here.
+    expect(hit!.detail).not.toContain('as short as this piece goes, and that would fit');
+  });
+
+  it('a wardrobe over the same ceiling keeps the invitation, because it can be shrunk', () => {
+    // Floor is 1600 mm, under the room's 1800, so shrinking really is available and
+    // the message should say so — and name the number rather than imply one. This is
+    // the negative control for the test above: same room, same overheight, opposite
+    // wording, so a branch stuck on either answer fails one of the two.
+    const wardrobe = part({ category: 'wardrobe', shape: 'wardrobe', dimMM: [1000, 600, 2200], pos: [0, 1.1, -1.7] });
+    const hit = analyzeRoom([wardrobe], LOW_ROOM).issues.find((i) => i.rule === 'tall');
+    expect(hit).toBeDefined();
+    expect(hit!.detail).toContain('160 cm is as short as this piece goes, and that would fit');
+    expect(hit!.detail).not.toContain('does not go any shorter');
+  });
+
+  it('every shape whose own floor clears the lowest ceiling is offered the shrink', () => {
+    // The sweep, because picking examples is how the door was missed in the first
+    // place. For each shape, put it in the shortest legal room at a height that is
+    // over the ceiling, and require the wording to follow the shape's OWN floor
+    // rather than a list of names. A shape added later with a 2 m floor starts
+    // reporting honestly with no edit here.
+    let shrinkable = 0;
+    let stuck = 0;
+    for (const shape of SHAPES) {
+      const r = dimRangeFor('other', shape);
+      const tall = Math.max(r.min[2], LOW_ROOM.height * 1000 + 1);
+      if (tall > r.max[2]) continue; // cannot be made overheight at all
+      const p = part({ category: 'other', shape, dimMM: [r.min[0], r.min[1], tall], pos: [0, tall / 2000, 0] });
+      const hit = analyzeRoom([p], LOW_ROOM).issues.find((i) => i.rule === 'tall');
+      expect(hit).toBeDefined();
+      if (r.min[2] / 1000 > LOW_ROOM.height) {
+        expect(hit!.detail).toContain('does not go any shorter');
+        stuck++;
+      } else {
+        expect(hit!.detail).toContain('as short as this piece goes, and that would fit');
+        shrinkable++;
+      }
+    }
+    // Literals, not `SHAPES.length` arithmetic: a count derived from the same list
+    // the loop walks cannot fail when the list is gutted. Both sides must be
+    // non-zero or one of the two branches is going untested.
+    expect(stuck).toBe(1);
+    expect(shrinkable).toBe(12);
   });
 });
