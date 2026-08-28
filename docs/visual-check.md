@@ -14,7 +14,7 @@ handful of things that turned out to be live defects rather than doubts.
 | `fix/visual-check-round-3` | **Merged as PR #18.** Four commits of your list, then a fifth carrying the five findings a `/review` pass turned up **on those four**. Gate counts on the tip are at the foot of the review section below — they are `main`’s numbers now. |
 | PR #16 — `3b5935c` | **Open, and it needs a rebase** — see below. Its headline regression is closed. |
 | `fix/multi-select-drag` | **Not merged, and it still holds one live fix `main` lacks.** Kept for that reason. |
-| `fix/clamp-into-footprint` | **Rebased onto `2f4d8d1` and green**, two commits: the clamp itself, and two gates that could not fail. The fixture search it was blocked on has been re-run — see *Known-and-left*. |
+| `fix/clamp-into-footprint` | **Green at `66c420a`** — typecheck 0, lint 0, **71 files / 1377 tests**, `next build` 0 with its ESLint pass confirmed present. Three commits: the clamp, two gates that could not fail, and danmu-62's review findings. Reviewed by danmu-62; the fixture search it was blocked on has been re-run and re-verified in a clean install. |
 
 The last full-suite run before this one showed five red in `tests/layout-solve.test.ts`.
 All five were timing assertions and all five were **load artifacts** — other sessions
@@ -562,6 +562,32 @@ had to be re-found. Nothing in it has been looked at.
 - **Drag a chair into the cut-away quadrant of an L and let go.** It still stays there.
   That is `placeNewPart`, which does the bounds inset and only that — unchanged by this,
   named in the test, and the next thing to take if you want it.
+
+**What danmu-62's review of it found, and what that cost.** Two things, both taken:
+
+- `interiorPoint`'s fallback grid is **O(area / 0.1 m²)** and two of `clampIntoFootprint`'s
+  four call sites are inside the annealer's proposal generator, so on a custom footprint
+  whose area centroid falls outside, the scan was paid **per proposal**. Measured: 0.47 ms
+  at 6 × 4, 1.70 ms at 20 × 15, **15.1 ms at 50 × 50** — a size `ROOM_SIDE_M` permits —
+  against `DEFAULT_STEPS` of 1600. `tests/layout-solve.test.ts`'s 2000 ms ceiling cannot
+  see it, because every preset's area centroid is inside and never reaches the grid: the
+  same "the fixture cannot express the defect" shape as the bug the branch fixes. Memoised
+  on the polygon's identity now (`WeakMap`), which is bit-identical and one scan per solve.
+- The docstring's "a few thousand point-in-polygon tests" was true at 6 × 4 and wrong by
+  two orders of magnitude at 50 × 50. Corrected with the measurements, because it was the
+  sentence that would stop a reader looking.
+
+**And one hole the review left open that turned out to be real.** `moveWall` accepts any
+wall drag whose **bounding box** stays inside `ROOM_SIDE_M`, and nothing anywhere floors
+the width of a leg — so a U whose legs the user has narrowed to 40 mm is a room this app
+calls legal, and its entire interior can fall between a 0.1 m grid's samples.
+`clampIntoFootprint` would then have silently done nothing, on all four call sites. There
+is a third answer now, `edgeProbe`: step in from each edge's midpoint along its inward
+normal, O(vertices) and independent of the room's size. Confirmed by mutation — remove it
+and a legal 8 × 6 room comes back `null`.
+
+**This is the part that most wants your eyes**, because it is reachable by hand: drag a
+U's notch walls until the legs are a few centimetres, then drop a piece into the notch.
 
 ### Inward normals on non-convex rooms — **fixed, and two gates that could not fail are gone**
 
