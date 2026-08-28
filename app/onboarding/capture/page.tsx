@@ -31,6 +31,7 @@ import {
   type SlotSignal,
 } from '@/lib/capture-slots';
 import { wallSpan } from '@/lib/photo-geometry';
+import { photoDropIntent } from '@/lib/photo-drop';
 import { useDeviceTilt } from '@/lib/device-tilt';
 import { scoreQuality, flagHelp, flagLabel, flagTone, type Quality } from '@/lib/image-quality';
 import { useMediaQuery } from '@/lib/use-media-query';
@@ -199,6 +200,24 @@ export default function CapturePage() {
     };
   }, [roomId]);
 
+  /** What to say when a write to IndexedDB refuses.
+   *
+   *  Every `roomStore` call on this screen used to be unguarded. Two things throw:
+   *  a quota failure, which `lib/storage.ts` re-raises after dispatching
+   *  `danmu:storage-full`, and `reslotCaptures`, which throws outright if a mapping
+   *  would land two photos on one wall. Neither was caught, so the screen said
+   *  NOTHING — and in `addFiles` the throw also skipped the `setAnnounce` at the end
+   *  of the loop, so a batch that half-landed reported neither the half that did nor
+   *  the half that did not.
+   *
+   *  It deliberately does not apologise or guess the cause. The quota case already
+   *  has the global banner (`StorageToast` listens for that event); what this screen
+   *  owes the user is what is now TRUE on it, which is why every caller below leaves
+   *  the tiles showing the store rather than what it just tried to write. */
+  function writeFailed(what: string): string {
+    return `${what} could not be saved. Your other photos are safe — try again, or carry on with the walls you have.`;
+  }
+
   /** `blob` is stored as given — callers normalise first (see addFiles / shoot),
    *  so nothing full-resolution reaches IndexedDB or the detection request.
    *  `pose` is what we managed to learn about the camera, read from the ORIGINAL
@@ -257,11 +276,27 @@ export default function CapturePage() {
     const prepared = await Promise.all(
       placed.map(async (p) => ({ p, blob: await normalizePhoto(files[p.index]) })),
     );
+    // One at a time, and a failure does not abandon the rest: the photos after the
+    // one that threw are just as savable, and the old loop dropped them silently.
+    const landed: typeof placed = [];
+    const refused: CaptureSlot[] = [];
     for (const { p, blob } of prepared) {
-      await persistPhoto(p.slot, blob, read[p.index].pose, p.by, p.clashedWith);
+      try {
+        await persistPhoto(p.slot, blob, read[p.index].pose, p.by, p.clashedWith);
+        landed.push(p);
+      } catch {
+        refused.push(p.slot);
+      }
     }
 
-    setAnnounce(describePlacement({ placed, rejected }, labelOf));
+    // The placement sentence describes what is ON the screen, so it is built from
+    // what landed rather than from what was attempted.
+    const said = describePlacement({ placed: landed, rejected }, labelOf);
+    setAnnounce(
+      refused.length === 0
+        ? said
+        : `${said} ${writeFailed(refused.length === 1 ? `The ${labelOf(refused[0])} photo` : `${refused.length} photos`)}`,
+    );
   }
 
   /** Replace one wall's photo in place. Distinct from `addFiles`, which would
@@ -273,13 +308,25 @@ export default function CapturePage() {
       return;
     }
     const { pose } = await readCaptureFacts(file, { heightM: statedHeight });
-    await persistPhoto(slot, await normalizePhoto(file), pose, 'manual');
+    try {
+      await persistPhoto(slot, await normalizePhoto(file), pose, 'manual');
+    } catch {
+      setAnnounce(writeFailed(`The new ${labelOf(slot)} photo`));
+      return;
+    }
     setAnnounce(`${labelOf(slot)} photo replaced.`);
   }
 
   async function removePhoto(slot: CaptureSlot) {
     if (!roomId) return;
-    await roomStore.deleteCapture(roomId, slot);
+    try {
+      await roomStore.deleteCapture(roomId, slot);
+    } catch {
+      // Deliberately does NOT clear the tile. The photo is still in the store, so a
+      // screen that showed it gone would be lying about what a re-scan will read.
+      setAnnounce(writeFailed(`Removing the ${labelOf(slot)} photo`));
+      return;
+    }
     const retiring = photosRef.current[slot]?.url;
     setPhotos((p) => clearSlot(p, slot));
     if (retiring) URL.revokeObjectURL(retiring);
@@ -296,7 +343,14 @@ export default function CapturePage() {
     // The version this replaces re-wrote `{ slot, blob, takenAt }` and dropped
     // the pose, so reordering photos threw away the focal length, the tilt, and
     // the bearing.
-    await roomStore.reslotCaptures(roomId, swapMapping(photosRef.current, from, to));
+    try {
+      await roomStore.reslotCaptures(roomId, swapMapping(photosRef.current, from, to));
+    } catch {
+      // `reslotCaptures` throws rather than half-applying, so the store still holds
+      // the old arrangement and the tiles must keep showing it.
+      setAnnounce(writeFailed(`Moving the ${labelOf(from)} photo`));
+      return;
+    }
     setPhotos((p) => swapSet(p, from, to));
     setAnnounce(
       displaced ? `Swapped ${labelOf(from)} and ${labelOf(to)}.` : `Moved photo to ${labelOf(to)}.`,
@@ -309,7 +363,12 @@ export default function CapturePage() {
    *  without anything having to remember it. */
   async function rotateAll(steps: number) {
     if (!roomId) return;
-    await roomStore.reslotCaptures(roomId, rotationMapping(steps));
+    try {
+      await roomStore.reslotCaptures(roomId, rotationMapping(steps));
+    } catch {
+      setAnnounce(writeFailed(`Turning the walls ${steps > 0 ? 'forwards' : 'back'}`));
+      return;
+    }
     setPhotos((p) => rotateSet(p, steps));
     setAnnounce(`Walls turned ${steps > 0 ? 'forwards' : 'back'} one.`);
   }
@@ -575,24 +634,59 @@ export default function CapturePage() {
   );
 }
 
-/** Opaque chrome over a photo. Opaque rather than a scrim because a translucent
- *  pill over an unknown image cannot promise a contrast ratio. */
-function photoChrome(): CSSProperties {
+/** Which job a photo chip is doing. Three, because a card can carry six chips at
+ *  once and they were all one weight — the wall it is a photo OF read exactly as
+ *  loudly as the fact that the app checked its focus.
+ *
+ *  · `action` — pressable. Replace, Remove, Move.
+ *  · `fact`   — identity, or something asking to be dealt with: the wall label,
+ *               the clash warning, a quality flag. The default, because a chip
+ *               that is not a button is the common case; `cursor: pointer` used to
+ *               be the default here and six of the nine call sites had to override
+ *               it back, which is the tell that the default was the wrong way up.
+ *  · `quiet`  — derived or procedural: the wall's span, why this photo landed on
+ *               this wall, "checking this photo…". True, worth having, and not
+ *               what you look at the card to find out.
+ *
+ *  **The ground is a SOLID --ink in every tier and no variant may override it.**
+ *  Two reasons, and the second was found the hard way. A translucent chip sits on
+ *  a photograph nobody has seen, so its text contrast would be a promise about the
+ *  user's own living room. And the chip's SILHOUETTE against that photograph is
+ *  guaranteed only for this ground: --ink plus the --edge-on-ink boundary clears
+ *  3:1 against every possible photo tone, where a --warn ground manages 1.92:1 and
+ *  a --success-text ground 2.02:1 — unfixable by a heavier boundary, since a
+ *  mid-dark ground and a light edge sit too close together in luminance.
+ *
+ *  The clash chip and the two quality flags DID override it, which both escaped
+ *  that guarantee and broke it. So a chip that needs to signal something recolours
+ *  its TYPE (--on-ink-warn, --on-ink-success) and never its ground. Quiet is
+ *  spelled the same way, with weight, size and --on-ink-2 — all checkable, and
+ *  never with alpha, which is not.
+ *
+ *  tests/color-tokens.test.ts holds both halves: the 3:1 guarantee, and that no
+ *  call site in this file spreads photoChrome() and then sets a background. */
+type ChromeTier = 'action' | 'fact' | 'quiet';
+
+function photoChrome(tier: ChromeTier = 'fact'): CSSProperties {
+  const quiet = tier === 'quiet';
   return {
     display: 'inline-flex',
     alignItems: 'center',
     gap: 5,
-    height: 26,
-    padding: '0 10px',
+    height: quiet ? 22 : 26,
+    padding: quiet ? '0 8px' : '0 10px',
     borderRadius: 'var(--r-full)',
     background: 'var(--ink)',
-    border: '1px solid transparent',
-    color: 'var(--on-ink)',
+    // Was `transparent`. A dark chip on a dark photo has no outline at all —
+    // 1.00:1, measured — and --edge is --ink at 50%, so it cannot help here.
+    // See --edge-on-ink in globals.css.
+    border: '1px solid var(--edge-on-ink)',
+    color: quiet ? 'var(--on-ink-2)' : 'var(--on-ink)',
     fontFamily: 'var(--font-sans)',
-    fontSize: 11,
-    fontWeight: 700,
+    fontSize: quiet ? 10.5 : 11,
+    fontWeight: quiet ? 600 : 700,
     whiteSpace: 'nowrap',
-    cursor: 'pointer',
+    cursor: tier === 'action' ? 'pointer' : 'default',
   };
 }
 
@@ -771,12 +865,17 @@ function PhotoCard({
         e.preventDefault();
         setOver(false);
         // A file dropped onto a card replaces that card's photo — the wall is
-        // already decided by where it landed.
-        if (e.dataTransfer.files?.length) {
-          onReplace(e.dataTransfer.files);
-          return;
-        }
-        if (draggingFrom && draggingFrom !== slot) onDropFrom(draggingFrom);
+        // already decided by where it landed. But which gesture this IS cannot
+        // be decided here: a dragged tile arrives carrying its own image as a
+        // file, so `files.length` is true for a reorder too. See
+        // `lib/photo-drop.ts` for the ordering and the data loss it caused.
+        const intent = photoDropIntent({
+          slot,
+          draggingFrom,
+          hasFiles: !!e.dataTransfer.files?.length,
+        });
+        if (intent.kind === 'replace') onReplace(e.dataTransfer.files);
+        else if (intent.kind === 'reorder') onDropFrom(intent.from);
       }}
       style={{
         position: 'relative',
@@ -821,7 +920,7 @@ function PhotoCard({
           gap: 6,
         }}
       >
-        <span style={{ ...photoChrome(), cursor: 'default' }}>
+        <span style={photoChrome()}>
           <Icon name="check" size={11} color="var(--on-ink)" />
           {label}
           {/* Derived from the room's own width and depth — never a number typed in
@@ -829,7 +928,9 @@ function PhotoCard({
               a decision the user can take rather than a guess. Dropped in the
               filmstrip, where 132px of content cannot hold it and a `nowrap` chip
               does not shrink, it spills. */}
-          {span && !compact && <span style={{ fontWeight: 600, opacity: 0.8 }}>· {span} wall</span>}
+          {span && !compact && (
+            <span style={{ fontWeight: 600, color: 'var(--on-ink-2)' }}>· {span} wall</span>
+          )}
         </span>
 
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -839,13 +940,13 @@ function PhotoCard({
               reference strip, and the one thing you want from a bad shot there is
               to get rid of it and take another. */}
           {!compact && (
-            <button type="button" style={photoChrome()} onClick={() => inputRef.current?.click()}>
+            <button type="button" style={photoChrome('action')} onClick={() => inputRef.current?.click()}>
               Replace
             </button>
           )}
           {/* There was previously no way to take a photo back out — someone who
               uploaded a shot with family in it was stuck with it. */}
-          <button type="button" style={photoChrome()} onClick={onRemove}>
+          <button type="button" style={photoChrome('action')} onClick={onRemove}>
             Remove
           </button>
           {/* Reordering was drag-only, i.e. impossible without a mouse. */}
@@ -857,9 +958,12 @@ function PhotoCard({
         {photo.clashedWith && (
           <span
             title={`This photo’s compass pointed at ${labelOf(photo.clashedWith)}, which already had one. It may be a second photo of the same wall.`}
-            style={{ ...photoChrome(), cursor: 'default', background: 'var(--warn)', color: 'var(--on-accent)' }}
+            // Signalled in the TYPE, not the ground. A --warn ground looked louder and
+            // cost the chip its outline against any mid-tone photo (1.92:1) — on the one
+            // chip that is actually asking for something.
+            style={{ ...photoChrome(), color: 'var(--on-ink-warn)' }}
           >
-            <Icon name="info" size={11} color="var(--on-accent)" />
+            <Icon name="info" size={11} color="var(--on-ink-warn)" />
             Maybe {labelOf(photo.clashedWith)} again
           </span>
         )}
@@ -869,9 +973,10 @@ function PhotoCard({
             photos that could be clearer. The clash chip stays in both, because it
             is the only one that is asking for something. */}
         {!compact && photo.by && !photo.clashedWith && (
-          <span style={{ ...photoChrome(), cursor: 'default', background: 'var(--paper)', color: 'var(--ink-2)' }}>
-            {REASON[photo.by]}
-          </span>
+          // Was an inverted light chip, which made a derived footnote the only
+          // thing on the card in a second colour scheme. Same ground as everything
+          // else now, quiet by weight and size.
+          <span style={photoChrome('quiet')}>{REASON[photo.by]}</span>
         )}
         {!compact &&
           (photo.quality ? (
@@ -881,23 +986,27 @@ function PhotoCard({
                 <span
                   key={f}
                   title={flagHelp(f)}
+                  // Same rule as the clash chip: the ground is never overridden, so
+                  // these two carried the same silhouette defect (2.02:1 and 1.92:1).
                   style={{
                     ...photoChrome(),
-                    cursor: 'default',
-                    background: good ? 'var(--success-text)' : 'var(--warn)',
-                    color: 'var(--on-accent)',
+                    color: good ? 'var(--on-ink-success)' : 'var(--on-ink-warn)',
                   }}
                 >
                   {/* Icon + words: the badge used to lean on colour and a bare
                       ✓ / ⚠ glyph, which renders differently on every platform. */}
-                  <Icon name={good ? 'check' : 'info'} size={11} color="var(--on-accent)" />
+                  <Icon
+                    name={good ? 'check' : 'info'}
+                    size={11}
+                    color={good ? 'var(--on-ink-success)' : 'var(--on-ink-warn)'}
+                  />
                   {flagLabel(f)}
                   <span className="sr-only"> — {flagHelp(f)}</span>
                 </span>
               );
             })
           ) : (
-            <span role="status" aria-live="polite" style={{ ...photoChrome(), cursor: 'default' }}>
+            <span role="status" aria-live="polite" style={photoChrome('quiet')}>
               Checking this photo…
             </span>
           ))}
@@ -948,7 +1057,7 @@ function MoveMenu({
       <button
         ref={btnRef}
         type="button"
-        style={photoChrome()}
+        style={photoChrome('action')}
         aria-expanded={open}
         aria-haspopup="menu"
         onClick={() => setOpen((v) => !v)}
@@ -1197,7 +1306,7 @@ function CameraPanel({
           aria-label={nextLabel ? `Live camera preview, aimed at ${nextLabel}` : 'Live camera preview'}
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         />
-        <span style={{ ...photoChrome(), position: 'absolute', top: 8, left: 8, cursor: 'default' }}>
+        <span style={{ ...photoChrome(), position: 'absolute', top: 8, left: 8 }}>
           {nextLabel ? `Shooting · ${nextLabel}` : 'All four walls done'}
         </span>
         <div style={{ position: 'absolute', bottom: 16, left: 0, right: 0, display: 'flex', justifyContent: 'center' }}>

@@ -5,7 +5,7 @@
 // It used to be a floating pill centred on the canvas's bottom edge — a second
 // surface answering the question the Inspector already exists to answer, in the
 // one slot both references leave empty. Folding it in deletes a surface rather
-// than moving one, and the merge gesture it teaches now sits directly above the
+// than moving one, and the grouping gesture it teaches now sits directly above the
 // panel that acts on the result.
 //
 // `ds-btn--accent` is deliberately NOT used here: this is a studio panel, not an
@@ -31,8 +31,8 @@ export function SelectionHeader() {
   // One selected piece is the Inspector's normal state and needs no banner; this
   // appears when the selection is a SET, or a group, which is what the Inspector
   // alone cannot describe.
-  const canMerge = selection.length >= 2;
-  if (!grouped && !canMerge) return null;
+  const canGroup = selection.length >= 2;
+  if (!grouped && !canGroup) return null;
 
   return (
     <div
@@ -68,7 +68,7 @@ export function SelectionHeader() {
           title="Keep these pieces together — one click selects the whole set"
           style={{ height: 26, fontSize: 11.5 }}
         >
-          <Icon name="layers" size={11} /> Merge {selection.length}
+          <Icon name="layers" size={11} /> Group {selection.length}
         </button>
       )}
       <IconButton icon="x" label="Clear selection" onClick={() => setSelected(null)} size={26} iconSize={12} />

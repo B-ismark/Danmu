@@ -222,7 +222,105 @@ now reaches for the first time — listed to be looked at, not because it change
 
 ## Shell and flow
 
-*Owner: `shell`. Yours to fill — nobody else edits below this line until the next heading.*
+*Owner: `shell`. All of these ride **`fix/a-bed-that-was-rotated` / PR #26**, gated at
+`deb70f2` (`main` merged in): typecheck 0, lint 0, `next build` clean with its own ESLint
+pass confirmed to have **run** rather than skipped, suite **1595/1600** — five reds, all
+five attributed in `docs/what-is-still-open.md` and none of them in the code below.*
+
+### Every bed in the app was rotated 90° — PR #26
+
+The one thing on this page a user can see without being told what to look for, and it is
+the reason to do this item first: it was in every shipped room for months and neither
+session that argued about it found it by looking at a bed.
+
+Open a room and look at the **bed** in the 3D tab. Then add each of the four from the
+Library — Single, Double, Queen, King — and read the millimetres in the Inspector.
+
+**Wrong looks like:** the headboard running along the **long** side, the two pillows
+end-to-end instead of side by side, or a bed too short to lie down in. In the Inspector,
+the size not matching the name you pressed — a Double and a Queen both arriving as
+`1800 × 2000`, or a Single as `1700 × 1200`. That is what `main` did to three of its four
+beds the moment you pressed Add, silently, because the clamp bands were transposed to
+agree with the catalog.
+
+**Then compare the tabs.** The 2D plan draws the footprint straight off `dimMM`, so 3D and
+plan must agree on which way the bed is long. Two tabs disagreeing is the check that caught
+the ceiling fan, and it is the only one that can catch this class without measuring.
+
+### One band at the foot of the right rail, not two — PR #26
+
+Open a room and **select a piece**. Look at the bottom of the right rail.
+
+There must be **one** `--paper-2` band holding one row: `Delete`, `Add`, and the round
+revert (the revert only after you have moved something). Then **select a wall** — the same
+band, with `Done` where Delete was. Then **click empty floor** — the same band with Add
+alone.
+
+**Wrong looks like:** two grey bands stacked; a 1px horizontal line above the row — that
+line is what three separate reports called a stray scrollbar and two sessions went looking
+for an overflow that was never there; the row's right edge running under the rail's edge
+and being cut with **no scrollbar and no clue**; or a label ellipsised to `Add a pie…`.
+
+**Then make the window narrow** — down to about 1024–1280px, where the right rail is at its
+floor — and check the row again in all three selection states. The arithmetic says it fits
+and there is a test that goes red if either label gets longer, but **nothing in node can
+measure a font**, so the fit itself is unverified and this is the only way to know.
+
+### Delete stays put when the panel is taller than the rail — PR #26
+
+Select a **sofa** and open every section in the Inspector — colour, on the surface, exact
+size — until the panel scrolls.
+
+**Wrong looks like:** `Delete` scrolling up out of the rail. It used to: it sat inside the
+Inspector's own scroll box behind a spacer, so it was at the bottom only while the panel
+happened to fit.
+
+### A wider wardrobe should gain a column, not a wider door — PR #26
+
+Select a **wardrobe** and drag its width handle slowly from 600 mm to 4000 mm. Then the
+same for a **sofa**'s width.
+
+**Wrong looks like:** doors or seat cushions growing to an impossible width and then
+snapping to a different count. The old arithmetic was `Math.round(span / nominal)`, which
+minimises the error in the **count** and says nothing about the module — so 890 mm drew one
+890 mm door and 900 mm drew two of 450. The count must only ever go **up** as the piece
+gets wider.
+
+**And compare the tabs at three widths.** The plan draws the footprint off `dimMM` while
+the 3D tab rebuilds the tiling, so the two agreeing is the same cross-check as the bed.
+
+**The look changes on existing rooms** — narrower wardrobe doors, different seat counts.
+That is the fix, not a regression. What would be a regression is a module that is still a
+lie.
+
+### Three signposts and no sign: the Library — PR #26
+
+The user's own find, and the one no gate could ever have made: *"Library isn't on there."*
+
+Press **Add**. The panel that opens must be headed **Library**. Then follow each of the
+three strings that already used the word and check it leads somewhere: the help card
+(*Catalog is what is in this room; Library is what you can add*), the **sun note** in the
+left rail's Look section on a room with no door or window (*Add a window or a door from the
+Library*), and the **right-click menu on empty floor** (*Add from library…*).
+
+**Wrong looks like:** any of those three naming a list the screen does not have. The panel
+read "Add pieces" — named for what you do rather than for what it holds — so all three
+pointed at a word that was nowhere on screen.
+
+**And check the help card's group heading** while it is open: it must not say the two lists
+are *on the left*. Catalog is in the left rail; the Library docks on the right of the
+canvas.
+
+### Copy that names a feature the app does not have — PR #26
+
+Hover every control in the studio that opens the Library: the rail's `Add`, the canvas
+toolbar's `Add`, and the Inspector's model swap.
+
+**Wrong looks like:** any tooltip offering to **describe a piece in words**. That feature
+was deleted and two tooltips went on advertising it — rule 1 wearing a tooltip. Also check
+the empty-room state in the left rail: it must point at `Add` by name and not say
+"above", because Add has not been above that list since it moved to the right rail, and on
+a stacked layout it is not even on the same side.
 
 ---
 

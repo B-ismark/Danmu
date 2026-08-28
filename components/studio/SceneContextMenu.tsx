@@ -403,7 +403,7 @@ function partEntries(partId: string, req: MenuRequest): MenuEntry[] {
     entries.push({
       kind: 'item',
       id: 'merge',
-      label: `Merge ${ids.length}`,
+      label: `Group ${ids.length}`,
       icon: 'layers',
       run: () => sc.groupParts(ids),
     });

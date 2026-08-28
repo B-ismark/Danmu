@@ -26,6 +26,34 @@ export default function PlanPage() {
   // 0.4×–4× — three false claims on the one screen someone might measure from.
   const [view, setView] = useState({ zoom: 1, rot: 0, hasCutOff: false });
   const [comfort, setComfort] = useState(true);
+
+  // Warm the 3D chunk while the user is here, because from this page the 3D tab is
+  // the likeliest next click and its module graph is the heaviest in the app —
+  // three, R3F, drei and postprocessing. `/model` loads `Room` through
+  // `next/dynamic` with `ssr: false`, so nothing fetches it until that page mounts.
+  //
+  // In an idle callback so it cannot compete with this page's own first paint, and
+  // behind a `requestIdleCallback` check because Safari has only recently had one.
+  // The `catch` is deliberate and empty: this is a speculative fetch, so a failure
+  // means the user waits as long as they would have anyway, and surfacing it would
+  // be reporting a problem they do not have.
+  //
+  // It buys the FETCH only. Mounting still rebuilds the WebGL context, every
+  // geometry and material and every compiled shader, which is the larger half of the
+  // switch cost and not something a warm import can touch.
+  useEffect(() => {
+    const warm = () => {
+      import('@/components/three/Room').catch(() => {});
+    };
+    const ric = (window as unknown as { requestIdleCallback?: (cb: () => void) => number })
+      .requestIdleCallback;
+    if (ric) {
+      ric(warm);
+      return;
+    }
+    const t = window.setTimeout(warm, 1500);
+    return () => window.clearTimeout(t);
+  }, []);
   // PlanView owns the drawing's transform (wheel, pinch and drag all write it);
   // the page drives it through this handle. See PlanViewHandle.
   const planApi = useRef<PlanViewHandle | null>(null);

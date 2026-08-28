@@ -230,12 +230,17 @@ describe('roomProfile', () => {
   it('prefers a bed to a sofa when a room has both, even a bigger sofa', () => {
     // The regression, and it only became reachable when `anchor` got a reader. The
     // anchor used to be the largest FOOTPRINT among all the anchor roles at once, so a
-    // 2200 × 950 sofa (2.09 m²) beat a 1900 × 1000 single bed (1.90 m²) — and the
-    // profile said the room was a bedroom arranged around the sofa, which is two
-    // answers to one question. Rank decides first now.
+    // 2200 × 950 sofa (2.09 m²) beat a single bed (1.80 m²) — and the profile said
+    // the room was a bedroom arranged around the sofa, which is two answers to one
+    // question. Rank decides first now.
+    //
+    // The bed fixture read `[1900, 1000, 600]` until the bed axes were un-transposed,
+    // and the area in the sentence above was the old convention's too. It passes
+    // either way, which is the whole point: the fixture was never load-bearing for
+    // this assertion, so nothing but a grep could find it.
     const parts = [
       part({ category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880] }),
-      part({ category: 'bed', shape: 'bed-single', dimMM: [1900, 1000, 600] }),
+      part({ category: 'bed', shape: 'bed-single', dimMM: [900, 2000, 600] }),
     ];
     expect(roomProfile(parts).anchor).toBe(1);
   });
@@ -299,7 +304,7 @@ describe('belongTogether', () => {
   const sofa = () => part({ category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880] });
   const coffee = () => part({ category: 'table', shape: 'coffee-table', dimMM: [1100, 600, 420] });
   const armchair = () => part({ category: 'chair', shape: 'chair-armchair', dimMM: [800, 800, 900] });
-  const bed = () => part({ category: 'bed', shape: 'bed-double', dimMM: [2000, 1600, 600] });
+  const bed = () => part({ category: 'bed', shape: 'bed-double', dimMM: [1600, 2000, 600] });
   const stand = () => part({ category: 'nightstand', shape: 'nightstand', dimMM: [450, 400, 550] });
   const tv = () => part({ category: 'tv', shape: 'tv', dimMM: [1450, 60, 820], wallMounted: true });
 
