@@ -212,6 +212,38 @@ now reaches for the first time — listed to be looked at, not because it change
 
 **Wrong looks like:** the bench parking quietly, in normal colours, half outside the room.
 
+### A wall-mounted piece you can finally collide with — PR #42, `587d52c`
+
+`collidesAt` carried `if (o.wallMounted) continue;`, so **nothing in the room could collide
+with a mounted TV, a painting or a floating shelf**, and it measured every vertical extent
+as `[y, y + h]` — right for a sofa, wrong by half a height for anything centred on its
+origin. `verticalExtent` in `lib/physics.ts` is the one answer now. Gated at 83 files /
+1639 tests / 1639 passed, typecheck 0, lint 0, build exit 0 with its ESLint pass present.
+
+**Where to click.** 3D tab: add a TV to a wall, then drag a tall wardrobe along that wall
+into it — it must refuse, and **the size tag must name the TV**. Then drag a 1 m sideboard
+to the same spot: it must go under happily, because the TV's underside is at 1.05 m. Repeat
+both in the 2D plan, which shares `drag-resolve`. Then add a ceiling fan and drag a 2.3 m
+wardrobe under it — refuse — and a 2.1 m one — allow.
+
+**Wrong looks like:** a wardrobe passing through a TV (the skip is not gone); a 1 m
+sideboard refused under a TV (the extent is now wrong the other way); or a refusal with
+**no name in the tag**, which is the `blockedBy` failure mode this repo has shipped before —
+computed on both surfaces and said on one.
+
+**Also worth one look, and it is not a defect:** rooms that ALREADY contain a wardrobe
+standing through a mounted TV — a detected room, a scene file, anything Suggest produced,
+since the solver does not call `collidesAt`. Those states still load. They simply cannot be
+re-created by dragging any more, which is the intended asymmetry rather than a bug.
+
+**Not a click path, a known consequence, and it needs a decision rather than a patch:**
+`clearance.ts`'s `solid` list is filtered `!p.wallMounted && … && p.pos[1] < 0.05`, so the
+room report will **not** report a wardrobe through a mounted TV while the drag now refuses
+to create one. Same question, two answers — the shape `tests/layout-conformance.test.ts`
+exists to catch and does not. That filter is load-bearing, not sloppy: it is what makes
+four other copies of the same `pos[1] + h` arithmetic safe, because they only ever see
+floor-level pieces. It wants a `RULE_HANDLING` row, which is a behaviour call.
+
 ---
 
 ## Layout and Shuffle
