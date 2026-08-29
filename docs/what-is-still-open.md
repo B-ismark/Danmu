@@ -557,6 +557,52 @@ the user went and looked.
     silently, which is why it is in this section and not fixed.
     **Committed:** nothing but this paragraph.
 
+13. **Where does the app hang a ceiling piece? Today it hangs anything over 300 mm
+    THROUGH the slab.** `groundY`'s ceiling branch is `Math.max(roomHeight - 0.15, h)` —
+    a fixed 150 mm drop to the piece's **centre** — so its top lands at
+    `H - 0.15 + h/2` and pokes through the ceiling **iff `h > 300 mm`, at every ceiling
+    height**. The seeded Pendant is 400 mm: top **2.850 in a 2.800 m room, 50 mm
+    through**, on the `t` and `open` presets. A ceiling fan at 200 mm clears by 50 mm,
+    which is why this has never looked like a rule.
+
+    It is **already pinned as expected** — `CEILING_TOPS` in `tests/scene-seed.test.ts`
+    holds `t: ['Pendant=2.850']` and `open: ['Pendant=2.850']` — so the baseline records
+    it rather than hiding it, and changing the number is a deliberate act with a red test
+    attached.
+
+    **It is now user-visible**, which is what moved it into this section. Since PR #54
+    routes the ceiling family into `MountHeightRow` — correctly, because
+    `Inspector.tsx:262` already said the wall-snap buttons are "worse than useless" for a
+    piece that rides no wall — selecting the seeded Pendant renders `2.45` against a
+    stated maximum of `2.38`, `aria-invalid="true"`, and the line
+    `0–2.38 m under this ceiling.` in `--danger-text`, on a piece the app placed and the
+    user never touched. **Measured in a browser, not reasoned:** the same room's
+    `TV · 55″` renders `1.04` with `aria-invalid="false"`, so the row is right and the
+    seeder is what is wrong. The gap is exactly 70 mm at every ceiling height — the 50 mm
+    through the slab plus `MOUNT_PAD`'s 20.
+
+    Worse, focusing that field and tabbing away with **nothing typed** re-commits the
+    clamped value: `2.45 → 2.38`, the piece drops 70 mm, and the `role="status"` line is
+    byte-identical before and after because it reports *across* and *back* and never
+    height. `onBlur={commit}` has no "did the draft change" guard.
+
+    **The costed option**, so this is a decision rather than a bug report: hang from the
+    TOP instead of the centre — `Math.min(roomHeight - MOUNT_PAD - h / 2, …)` — which
+    puts every ceiling piece's top 20 mm under the slab regardless of height. For the
+    Pendant that moves the centre 2.65 → 2.58 and makes `bottomMM` land on **2380 =
+    `maxBottomMM` exactly**, so the field is valid by construction rather than by luck.
+    It also drops the pendant 70 mm, to 2.38 m off the floor over a 0.75 m dining table
+    — which is a look, and looks are the user's call. The alternatives are: keep the
+    150 mm drop and accept that tall ceiling pieces intersect the slab; or clamp only
+    when a piece would poke through, which keeps today's look for the fan and changes
+    only the pendant, at the cost of two behaviours where there is now one.
+
+    Nobody should pick this silently, which is why it is here. Whichever way it goes,
+    `CEILING_TOPS` moves with it and the blur re-commit is a separate one-line guard
+    that should be fixed regardless of the answer.
+    **Committed:** nothing but this paragraph. The measurements are in PR #54's review
+    comments.
+
 ---
 
 ## C · Decided against — do not re-propose
