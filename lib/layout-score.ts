@@ -981,6 +981,41 @@ function far2(a: Foot, b: Foot, reach: number): boolean {
  *  its table at the right gap and rotated 98° is not at the table, and nothing in the
  *  cost function said so. Measured yaws coming back from the solver on chairs before
  *  this: 8°, 15°, 98°, −113°, and one at 203° — facing away from its own table. */
+/** The distance a relation's band is measured against — **centre to centre** for
+ *  `faces` and `near`, **edge to edge** (`obbGap`) for everything else.
+ *
+ *  Extracted and exported because it is a RULE, not an expression, and a second
+ *  consumer recomputing it is the `lib/layout-rules.ts` scar: two files that each
+ *  carry their own copy of the same clearance question and drift. This one drifts in
+ *  the direction nobody sees — a `faces` relation measured centre-to-centre in one
+ *  file and edge-to-edge in the other disagrees by half a sofa, and **both numbers
+ *  look reasonable**, so nothing errors and no test that does not already know the
+ *  answer can tell them apart.
+ *
+ *  Why the cost is not a proxy for it, which is the whole reason this is separate:
+ *  `relationCost` adds `2 * toward()` for `faces` and `1.5 * offAxis + 1.5 * toward()`
+ *  for `in-front`, so a nightstand squarely IN band but turned the wrong way has
+ *  `cost > 0`, and a piece OUT of band with a lucky heading can be dominated by the
+ *  orientation half. "Did this relation go from out of band to in" is the distance
+ *  question alone and cannot be asked of a cost.
+ *
+ *  Reads `feet[i].cx/cz/rot`, so the caller must have written the placement into the
+ *  feet first — `relationParents` and `costBreakdown` both do, and that ordering is
+ *  the one thing a caller can get wrong here. */
+export function relationDistance(feet: Foot[], i: number, j: number, rel: Relation): number {
+  return rel.kind === 'faces' || rel.kind === 'near'
+    ? Math.hypot(feet[j].cx - feet[i].cx, feet[j].cz - feet[i].cz)
+    : obbGap(feet[i], feet[j]);
+}
+
+/** Is this relation discharged on DISTANCE alone, ignoring heading? `bandCost` is zero
+ *  everywhere inside `[min, max]`, so this is the band-membership predicate — the thing
+ *  a caller means by "in band" and cannot get from `relationCost`. Owned here so there
+ *  is one answer rather than a second `bandCost(...) === 0` somewhere else. */
+export function inRelationBand(feet: Foot[], i: number, j: number, rel: Relation): boolean {
+  return bandCost(relationDistance(feet, i, j, rel), rel.min, rel.max) === 0;
+}
+
 function relationCost(
   feet: Foot[],
   placements: Placement[],
@@ -988,10 +1023,7 @@ function relationCost(
   j: number,
   rel: Relation,
 ): number {
-  const d =
-    rel.kind === 'faces' || rel.kind === 'near'
-      ? Math.hypot(feet[j].cx - feet[i].cx, feet[j].cz - feet[i].cz)
-      : obbGap(feet[i], feet[j]);
+  const d = relationDistance(feet, i, j, rel);
   let cost = bandCost(d, rel.min, rel.max);
   const toward = () => angleCost(placements[i].yaw, Math.atan2(feet[j].cx - feet[i].cx, feet[j].cz - feet[i].cz));
   if (rel.kind === 'faces') {
@@ -1061,20 +1093,28 @@ const TIE_EPS = 1e-9;
 export function relationParents(
   m: LayoutModel,
   placements: Placement[],
-): Array<{ child: number; parent: number; specId: string; cost: number }> {
+): Array<{ child: number; parent: number; specId: string; cost: number; d: number; inBand: boolean }> {
   const feet = m.feet;
   for (let i = 0; i < feet.length; i++) {
     feet[i].cx = placements[i].x;
     feet[i].cz = placements[i].z;
     feet[i].rot = placements[i].yaw;
   }
-  const out: Array<{ child: number; parent: number; specId: string; cost: number }> = [];
+  const out: Array<{ child: number; parent: number; specId: string; cost: number; d: number; inBand: boolean }> =
+    [];
   for (const ob of m.obligations) {
     const i = ob.i;
     let best = Infinity;
+    // `bestD2` is the TIE-BREAK — squared centre-to-centre, for "the physically nearer
+    // anchor" — and it is NOT the band distance. It is centre-to-centre for every kind,
+    // where `relationDistance` is `obbGap` for all but `faces` and `near`. They differ
+    // by half a piece on the kinds that use the gap, so exposing this one as `d` would
+    // hand every consumer a wrong number that looks right. `bestRel` is kept instead and
+    // the distance is derived from it below.
     let bestD2 = Infinity;
     let bestJ = -1;
     let bestSpec = '';
+    let bestRel: Relation | null = null;
     for (const { j, rel } of ob.options) {
       const cost = relationCost(feet, placements, i, j, rel);
       const dx = feet[j].cx - feet[i].cx;
@@ -1084,9 +1124,30 @@ export function relationParents(
         bestD2 = dx * dx + dz * dz;
         bestJ = j;
         bestSpec = rel.specId;
+        bestRel = rel;
       }
     }
-    if (bestJ >= 0) out.push({ child: i, parent: bestJ, specId: bestSpec, cost: best });
+    if (bestJ >= 0 && bestRel) {
+      const d = relationDistance(feet, i, bestJ, bestRel);
+      out.push({
+        child: i,
+        parent: bestJ,
+        specId: bestSpec,
+        cost: best,
+        // The distance the band is measured against, and whether it is inside it. Both
+        // derived from the WINNING relation, because `min`/`max` and the centre-vs-gap
+        // rule are per-kind: reading them off any other option would answer about a
+        // relation this child is not discharging.
+        d,
+        // `inRelationBand`, not `bandCost(d, min, max) === 0` written out here. That
+        // inline form was a SECOND copy of the predicate this pair of functions exists
+        // to make single, three lines under the docblock saying so — and it was invisible
+        // because both copies were correct. It also left `inRelationBand` with no test
+        // that could fail: replacing its body with `return true` broke nothing, because
+        // the only assertion touching it compared it against this inline copy.
+        inBand: inRelationBand(feet, i, bestJ, bestRel),
+      });
+    }
   }
   return out;
 }

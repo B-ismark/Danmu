@@ -116,6 +116,33 @@ export type SolveResult = {
   moved: number[];
   /** …and what each of those moves bought, index-aligned with `moved`. */
   moves: MoveReason[];
+  /** The finalist pool the search kept on its way down — at most `FINALISTS`, already
+   *  deduped by `similar` at `LAYOUT_SIMILAR_M` and sorted cheapest-first, so it is
+   *  "the best few genuinely different arrangements this solve found".
+   *
+   *  `placements[0]` is not necessarily `finalists[0]`: the winner is chosen from this
+   *  pool by the navigability pass, which prices something the pool's own sort does
+   *  not. Anything ranking these must therefore read `cost` and not assume the order
+   *  is final.
+   *
+   *  **AND THE WINNER NEED NOT APPEAR IN THIS POOL AT ALL.** Four passes run AFTER the
+   *  selection — `snapYaws`, `pruneMoves`, `openRoutes` and a second tidy — so
+   *  `placements` is a post-processed descendant of a finalist rather than one of them,
+   *  and on a solve that improved nothing it is the ORIGINAL layout instead. These are
+   *  therefore raw annealer output: the best few arrangements the search visited, not
+   *  the few things a user would be shown. A ranker over them is ranking candidates,
+   *  and whatever it picks still has to go through those four passes to become a
+   *  suggestion.
+   *
+   *  Exposed rather than discarded because the alternative for a caller that wants a
+   *  diverse candidate set is to run the whole solve at four seeds and diversify those
+   *  — four solves to rebuild a set one solve already had and threw away. Empty on the
+   *  early return where there is nothing movable.
+   *
+   *  The `Placement` objects are the search's own snapshots and are not copied again on
+   *  the way out. `ReadonlyArray` says what is meant; it does not enforce it at depth,
+   *  so do not write into them. */
+  finalists: ReadonlyArray<{ placements: Placement[]; cost: number }>;
 };
 
 const DEFAULT_STEPS = 1600;
@@ -139,7 +166,12 @@ const SNAP_TOL = 0.21; // 12°
 /** Below this a turn is not worth showing as a change. The position epsilon had no
  *  sibling, so 0.02 rad — 1.1°, invisible — counted as a moved piece and inflated
  *  every "moved N pieces" the UI reported. */
-const TURN_EPSILON = 0.05; // ~3°
+/** Below this a turn is not a change the app will claim it made — ~2.9°, in radians.
+ *  Exported because it is the repo's ANSWER to "did this piece turn", read by
+ *  `displaced` and therefore by the toast that says how many pieces moved. A second
+ *  tolerance elsewhere makes the offer stage and that toast disagree about what moved,
+ *  silently and in the direction nobody checks. */
+export const TURN_EPSILON = 0.05; // ~3°
 
 /** What a suggestion has to be worth before it is worth offering.
  *
@@ -159,7 +191,11 @@ export function isWorthOffering(before: number, after: number): boolean {
  *  table or a lamp well under. */
 const LARGE_AREA = 0.9;
 /** Below this the move is not worth showing as a change. */
-const MOVE_EPSILON = 0.02;
+/** …and the same on the position axis, in metres. Exported for the same reason, and
+ *  it is NOT `LAYOUT_SIMILAR_M`: this one asks "did this piece move at all", that one
+ *  asks "are these two whole layouts the same arrangement". Both are needed and they
+ *  are not interchangeable. */
+export const MOVE_EPSILON = 0.02;
 /** How many finalists get the expensive navigability check. Small: each one costs
  *  a distance transform over the room. */
 const FINALISTS = 4;
@@ -276,7 +312,19 @@ export function solveLayout(
     if ((parts[i].dimMM[0] / 1000) * (parts[i].dimMM[1] / 1000) >= LARGE_AREA) bigIdx.push(i);
   }
   if (allIdx.length === 0) {
-    return { placements: current, before, after: before, breakdownBefore, breakdownAfter: breakdownBefore, moved: [], moves: [] };
+    return {
+      placements: current,
+      before,
+      after: before,
+      breakdownBefore,
+      breakdownAfter: breakdownBefore,
+      moved: [],
+      moves: [],
+      // Nothing was searched, so there are no finalists. An empty array rather than a
+      // pool of one: a caller diversifying over this must be able to tell "the solver
+      // found one arrangement" from "the solver never ran".
+      finalists: [],
+    };
   }
 
   // ── Groups the user already has, moved as groups ──────────────────────────
@@ -533,6 +581,7 @@ export function solveLayout(
     // door. If it did not, no move can be credited to opening a route, and the
     // distance transforms would be paid for an answer that is known in advance.
     moves: explain(model, origin, winner, weights, moved, breakdownBefore.navigation > 0 ? NAV_CELL : null),
+    finalists: pool,
   };
 }
 
@@ -979,22 +1028,56 @@ type _NoUncreditedTerm = AssertNever<
 function remember(pool: Array<{ placements: Placement[]; cost: number }>, placements: Placement[], cost: number): void {
   const snapshot = placements.map((p) => ({ ...p }));
   for (const c of pool) {
-    if (similar(c.placements, snapshot)) {
-      if (cost < c.cost) {
-        c.cost = cost;
-        c.placements = snapshot;
+    if (!similar(c.placements, snapshot)) continue;
+    if (cost >= c.cost) return;
+    c.cost = cost;
+    c.placements = snapshot;
+    // **`similar` IS NOT TRANSITIVE, and this branch used to assume it was.** Replacing
+    // `c` with a cheaper layout that is similar to it can leave the replacement similar
+    // to a DIFFERENT pool entry that `c` was not similar to — A ≁ B while A' ≈ A and
+    // A' ≈ B is perfectly possible when the predicate is "every piece within 0.25 m".
+    // The pool then holds two entries a person would call the same arrangement, which
+    // silently breaks the one property it is kept for: `FINALISTS` is 4 because four
+    // GENUINELY DIFFERENT candidates are worth a navigability pass each, and ranking
+    // near-duplicates spends the budget re-deciding the same room.
+    //
+    // Nothing noticed before because the only consumer was the ranking loop, which is
+    // merely wasteful on a duplicate rather than wrong. It became observable the moment
+    // the pool was exposed on `SolveResult` for a caller to diversify over, and it was
+    // found by the pairwise assertion in `tests/layout-solve.test.ts` — not by reading
+    // this function, where it is invisible.
+    //
+    // Collapse the cluster and keep the cheapest of it as the representative.
+    for (let k = pool.length - 1; k >= 0; k--) {
+      const o = pool[k];
+      if (o === c || !similar(o.placements, snapshot)) continue;
+      if (o.cost < c.cost) {
+        c.cost = o.cost;
+        c.placements = o.placements;
       }
-      return;
+      pool.splice(k, 1);
     }
+    pool.sort((a, z) => a.cost - z.cost);
+    return;
   }
   pool.push({ placements: snapshot, cost });
   pool.sort((a, z) => a.cost - z.cost);
   if (pool.length > FINALISTS) pool.length = FINALISTS;
 }
 
+/** How far every piece may move before two layouts count as genuinely different, in
+ *  metres. Exported because the finalist pool is now handed to callers and the next
+ *  thing anyone does with it is ask the same question in a graded form — and a second
+ *  `0.25` written beside this one is the drift this repo keeps finding. It is the
+ *  threshold `similar` uses and nothing else; a caller wanting a soft version should
+ *  scale THIS rather than pick its own. */
+export const LAYOUT_SIMILAR_M = 0.25;
+
+/** Are these two layouts the same arrangement, to a person? Every piece within
+ *  `LAYOUT_SIMILAR_M`, so it is an all-or-nothing predicate rather than a metric. */
 function similar(a: Placement[], b: Placement[]): boolean {
   for (let i = 0; i < a.length; i++) {
-    if (Math.hypot(a[i].x - b[i].x, a[i].z - b[i].z) > 0.25) return false;
+    if (Math.hypot(a[i].x - b[i].x, a[i].z - b[i].z) > LAYOUT_SIMILAR_M) return false;
   }
   return true;
 }

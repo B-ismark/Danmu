@@ -6,11 +6,13 @@ import {
   NAV_CELL,
   prepare,
   relationParents,
+  relationDistance,
+  inRelationBand,
   DEFAULT_WEIGHTS,
   type LayoutContext,
   type Placement,
 } from '@/lib/layout-score';
-import { HARD_TERMS, isWorthOffering, lockedForSolve, solveLayout } from '@/lib/layout-solve';
+import { HARD_TERMS, isWorthOffering, LAYOUT_SIMILAR_M, lockedForSolve, solveLayout } from '@/lib/layout-solve';
 import { analyzeRoom } from '@/lib/clearance';
 import { footprintBounds } from '@/lib/footprint';
 import { footprintForLayout } from '@/lib/footprint';
@@ -1184,5 +1186,185 @@ describe('lockedForSolve', () => {
     });
     expect(pinned.moved).not.toContain(1);
     expect(pinned.placements[1]).toEqual({ x: held[1].pos[0], z: held[1].pos[2], yaw: held[1].rot });
+  });
+});
+
+// ─── What the solver hands OUT, for a second consumer to rank ────────────────
+//
+// Three exposures, all additive, all for `lib/layout-offer.ts` — and each one exists to
+// stop a second copy of something rather than to add a feature. The tests below are
+// mostly about the copies, not the values.
+describe('the finalist pool the search kept', () => {
+  const messy = () => [
+    part({ category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880], pos: [1.4, 0, 1.1], rot: 0.7 }),
+    part({ category: 'table', shape: 'coffee-table', dimMM: [1100, 600, 420], pos: [-1.2, 0, -0.9], rot: 0.3 }),
+    part({ category: 'chair', shape: 'chair-armchair', dimMM: [700, 700, 900], pos: [0.4, 0, -1.6], rot: 2.1 }),
+    part({ category: 'lamp', shape: 'lamp-floor', dimMM: [400, 400, 1500], pos: [-1.9, 0, 1.5], rot: 0 }),
+  ];
+
+  it('comes back on the result instead of being thrown away', () => {
+    const parts = messy();
+    const r = solveLayout(parts, RECT, parts.map(() => false), { seed: 3 });
+    // A COUNT, not merely non-empty: the whole point is that the caller gets a SET, and
+    // an assertion satisfied by one candidate would be satisfied by the old behaviour of
+    // keeping only the winner.
+    expect(r.finalists.length).toBeGreaterThan(1);
+    expect(r.finalists.length).toBeLessThanOrEqual(4);
+  });
+
+  it('is sorted cheapest-first, so a ranker can read `cost` and not guess', () => {
+    const parts = messy();
+    const r = solveLayout(parts, RECT, parts.map(() => false), { seed: 3 });
+    const costs = r.finalists.map((f) => f.cost);
+    expect(costs.length).toBeGreaterThan(1);
+    expect([...costs].sort((a, z) => a - z)).toEqual(costs);
+  });
+
+  it('holds genuinely different arrangements, at `LAYOUT_SIMILAR_M` apart', () => {
+    // The dedup is the reason this pool is worth exposing at all — an MMR pass over four
+    // copies of one layout has nothing to diversify. Asserted pairwise rather than by
+    // trusting `similar`, and the pair count is asserted too so a pool of one cannot
+    // make this vacuous.
+    const parts = messy();
+    const r = solveLayout(parts, RECT, parts.map(() => false), { seed: 3 });
+    let pairs = 0;
+    for (let a = 0; a < r.finalists.length; a++) {
+      for (let b = a + 1; b < r.finalists.length; b++) {
+        pairs++;
+        const A = r.finalists[a].placements;
+        const B = r.finalists[b].placements;
+        const apart = A.some((q, i) => Math.hypot(q.x - B[i].x, q.z - B[i].z) > LAYOUT_SIMILAR_M);
+        expect(apart, `finalists ${a} and ${b} are the same arrangement`).toBe(true);
+      }
+    }
+    expect(pairs, 'there must be pairs to compare').toBeGreaterThan(0);
+  });
+
+  it('does NOT contain the winner, because four passes run after the pick', () => {
+    // This test was written the other way round — asserting the winner IS in the pool —
+    // and it failed, which is the useful part. `snapYaws`, `pruneMoves`, `openRoutes` and
+    // a second tidy all run AFTER a finalist is selected, so `placements` is a
+    // post-processed descendant of a pool entry rather than one of them.
+    //
+    // So this pins a CAVEAT rather than a guarantee, and it is deliberately falsifiable:
+    // if a later change makes the winner a pool member again this goes red, and whoever
+    // did it has to come back and correct the docblock that currently tells callers the
+    // pool is raw annealer output. A caveat nothing can contradict is just prose.
+    const parts = messy();
+    const r = solveLayout(parts, RECT, parts.map(() => false), { seed: 3 });
+    const same = (A: Placement[], B: Placement[]) =>
+      A.every((q, i) => Math.abs(q.x - B[i].x) < 1e-9 && Math.abs(q.z - B[i].z) < 1e-9);
+    expect(r.finalists.length, 'there must be a pool for this to be a claim about').toBeGreaterThan(0);
+    expect(r.finalists.some((f) => same(f.placements, r.placements))).toBe(false);
+  });
+
+  it('is EMPTY when nothing could move, rather than a pool of one', () => {
+    // A caller diversifying over this has to be able to tell "the solver found one
+    // arrangement" from "the solver never ran", and those are different answers.
+    const parts = messy();
+    const r = solveLayout(parts, RECT, parts.map(() => true), { seed: 3 });
+    expect(r.finalists).toEqual([]);
+    expect(r.moved).toEqual([]);
+  });
+});
+
+describe('the distance a relation`s band is measured against', () => {
+  // THE POINT OF THESE TWO TESTS: the rule is per-KIND — centre-to-centre for `faces`
+  // and `near`, edge-to-edge for everything else — and a consumer that picks one and
+  // applies it to all of them is wrong by half a piece on the other. Both numbers look
+  // reasonable, nothing throws, and no test that does not already know the answer can
+  // tell them apart. So each fixture below is built so that ONLY the correct rule puts
+  // the relation in its band: the two errors point in opposite directions and a single
+  // fixture could only ever catch one of them.
+  const lamp = () => part({ category: 'lamp', shape: 'lamp-floor', dimMM: [400, 400, 1500], pos: [0, 0, 0] });
+  const armchair = () => part({ category: 'chair', shape: 'chair-armchair', dimMM: [700, 700, 900], pos: [0, 0, 0] });
+
+  const edgeFor = (parts: ScenePart[], places: Placement[], child: number) => {
+    const m = prepare(ctxOf(parts));
+    const edge = relationParents(m, places).find((e) => e.child === child)!;
+    return { m, edge };
+  };
+
+  it('is the EDGE GAP for `beside`, not the centre distance', () => {
+    // `lamp-seat` is `beside`, band 0–0.7 m. Lamp 400 mm and armchair 700 mm at 1.05 m
+    // centre to centre: the gap is 0.50 m and INSIDE the band, the centre distance is
+    // 1.05 m and OUTSIDE it. So `inBand` is the discriminating assertion here, not
+    // decoration beside `d`.
+    const parts = [lamp(), armchair()];
+    const places: Placement[] = [
+      { x: 0, z: 0, yaw: 0 },
+      { x: 0, z: 1.05, yaw: 0 },
+    ];
+    const { edge } = edgeFor(parts, places, 0);
+    expect(edge.d, 'edge gap, not the 1.05 m between centres').toBeCloseTo(0.5, 6);
+    expect(edge.inBand).toBe(true);
+  });
+
+  it('is the CENTRE DISTANCE for `faces`, not the edge gap', () => {
+    // `armchair-sofa` is `faces`, band 1.2–2.6 m. Armchair 700 mm deep and sofa 950 mm
+    // deep at 1.5 m centre to centre: the centre distance is 1.5 m and INSIDE the band,
+    // the edge gap is 0.675 m and OUTSIDE it. The opposite direction from the test above,
+    // which is the whole reason there are two.
+    const parts = [armchair(), sofa()];
+    const places: Placement[] = [
+      { x: 0, z: 0, yaw: 0 },
+      { x: 0, z: 1.5, yaw: 0 },
+    ];
+    const { edge } = edgeFor(parts, places, 0);
+    expect(edge.d, 'centres, not the 0.675 m gap between faces').toBeCloseTo(1.5, 6);
+    expect(edge.inBand).toBe(true);
+  });
+
+  it('says NOT in band when the distance really is outside it', () => {
+    // Without this the two above pass for an `inBand` hard-wired to `true`.
+    const parts = [lamp(), armchair()];
+    const places: Placement[] = [
+      { x: 0, z: 0, yaw: 0 },
+      { x: 0, z: 2.4, yaw: 0 },
+    ];
+    const { edge } = edgeFor(parts, places, 0);
+    expect(edge.d).toBeCloseTo(1.85, 6);
+    expect(edge.inBand).toBe(false);
+  });
+
+  it('is the same answer whether you ask `relationParents` or the exported function', () => {
+    // The extraction`s own test: `relationCost`, `relationParents` and `lib/layout-offer`
+    // must all be reading ONE implementation, so the exported one has to agree with the
+    // value that comes back on the edge.
+    //
+    // BOTH cases, and that is not thoroughness for its own sake. Written with only the
+    // in-band fixture, `inRelationBand`'s body could be replaced with `return true` and
+    // this file stayed entirely green — the assertion compared a constant against another
+    // `true`. One fixture per side of the predicate is the minimum that can fail.
+    for (const [z, wantBand] of [
+      [1.05, true],
+      [2.4, false],
+    ] as const) {
+      const parts = [lamp(), armchair()];
+      const places: Placement[] = [
+        { x: 0, z: 0, yaw: 0 },
+        { x: 0, z, yaw: 0 },
+      ];
+      const { m, edge } = edgeFor(parts, places, 0);
+      const rel = m.obligations.find((o) => o.i === 0)!.options.find((o) => o.j === edge.parent)!.rel;
+      expect(edge.inBand, `z = ${z} must be ${wantBand ? 'in' : 'out of'} band`).toBe(wantBand);
+      expect(relationDistance(m.feet, 0, edge.parent, rel)).toBeCloseTo(edge.d, 12);
+      expect(inRelationBand(m.feet, 0, edge.parent, rel)).toBe(wantBand);
+    }
+  });
+
+  it('and `cost` is NOT a proxy for band membership, which is why `d` exists', () => {
+    // The reason this whole exposure was asked for. A relation squarely inside its band
+    // but turned the wrong way costs MORE than zero, because `relationCost` adds a
+    // facing term — so `cost === 0` is a stricter question than `inBand`, and a consumer
+    // asking "did this go from out of band to in" cannot ask it of the cost.
+    const parts = [armchair(), sofa()];
+    const places: Placement[] = [
+      { x: 0, z: 0, yaw: Math.PI }, // in band, facing directly away
+      { x: 0, z: 1.5, yaw: 0 },
+    ];
+    const { edge } = edgeFor(parts, places, 0);
+    expect(edge.inBand, 'the distance is inside the band').toBe(true);
+    expect(edge.cost, 'and it still costs, because of the heading').toBeGreaterThan(0);
   });
 });
