@@ -131,23 +131,6 @@ export function bestMatch(query: string): LocalMatch | null {
   return { label: item.label, category: item.category, shape: item.shape, dimMM: dim };
 }
 
-/** Every catalog row a search box should show for `query`, best first.
- *
- *  Two passes, and the second is a fallback rather than a replacement.
- *
- *  `searchLibrary` is the one that folds synonyms — "couch" finds the sofas,
- *  "carpet" finds the rugs, "armoire" finds the wardrobes — and a substring match
- *  can never do that, which is why the picker's own `label.includes(q)` filter was
- *  the weaker half of a feature the app already had twice. But scoring needs a
- *  whole token the catalog vocabulary recognises: mid-word, "ward" scores nothing
- *  while still being a perfectly good substring of "Wardrobe". Ranking alone would
- *  empty the list halfway through typing a word it is about to find, so the
- *  substring pass stays underneath it.
- *
- *  Unlimited on purpose. `searchLibrary`'s default of 5 is right for a short
- *  suggestion list; a search box is showing you the catalog, and truncating it
- *  silently is the "no silent caps" problem — a list that stops at 5 reads as
- *  "that is all there is". */
 /** The vocabulary a size is spelled WITH, as opposed to the numbers in it.
  *
  *  Deliberately not a copy of `parseDims`' patterns. The question here is only
@@ -166,6 +149,23 @@ function namesOnlySize(query: string): boolean {
   return words.length > 0 && words.every((w) => SIZE_WORDS.test(w));
 }
 
+/** Every catalog row a search box should show for `query`, best first.
+ *
+ *  Two passes, and the second is a fallback rather than a replacement.
+ *
+ *  `searchLibrary` is the one that folds synonyms — "couch" finds the sofas,
+ *  "carpet" finds the rugs, "armoire" finds the wardrobes — and a substring match
+ *  can never do that, which is why the picker's own `label.includes(q)` filter was
+ *  the weaker half of a feature the app already had twice. But scoring needs a
+ *  whole token the catalog vocabulary recognises: mid-word, "ward" scores nothing
+ *  while still being a perfectly good substring of "Wardrobe". Ranking alone would
+ *  empty the list halfway through typing a word it is about to find, so the
+ *  substring pass stays underneath it.
+ *
+ *  Unlimited on purpose. `searchLibrary`'s default of 5 is right for a short
+ *  suggestion list; a search box is showing you the catalog, and truncating it
+ *  silently is the "no silent caps" problem — a list that stops at 5 reads as
+ *  "that is all there is". */
 export function rankLibrary(query: string): LibraryItem[] {
   const q = query.trim();
   if (!q) return ALL;
