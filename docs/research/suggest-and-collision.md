@@ -237,13 +237,35 @@ so a round piece is never reported as hitting something it does not touch.
 There is no per-shape hull anywhere: a sofa's L, a dining table's legs, a curtain's drape and a
 plant's canopy are all the same rectangle.
 
-Two behaviours found while reading it, neither of them in the doc, both silent:
+Two behaviours were found while reading it, neither of them in the doc, both silent. **Both
+are fixed on `main` as of `d26ce5c` (PR #42), and this section is written in the past tense
+on purpose** — a research document that keeps describing a defect after it is repaired is the
+next reader's source of truth for a bug that no longer exists, and nothing automated sees it.
 
-- `if (o.wallMounted) continue;` — **wall-mounted pieces are not obstacles at all.** Nothing
-  collides with a mounted TV or a floating shelf.
-- The mover's vertical extent is `pos[1] … pos[1] + h`, i.e. `pos.y` as a floor anchor — but
+- `if (o.wallMounted) continue;` — **wall-mounted pieces were not obstacles at all.** Nothing
+  collided with a mounted TV or a floating shelf. The line is gone; `collidesAt` now measures
+  every obstacle.
+- The mover's vertical extent was `pos[1] … pos[1] + h`, i.e. `pos.y` as a floor anchor — but
   the same function's comment says a wall-mounted piece stores `pos.y` as *mid-height*. A
-  wall-mounted **mover** is therefore measured against the wrong half-height.
+  wall-mounted **mover** was therefore measured against the wrong half-height. Both sides now
+  go through `verticalExtent` (`lib/physics.ts`), whose predicate is the **anchor** rather
+  than the stored `wallMounted` flag — the flag answers *no* for a ceiling fan, which is
+  centred on its origin like a television and was being mis-measured with no skip in front of
+  it to hide the fact.
+
+**The measurement, because "it collides now" is not a size.** Driven in a real browser, same
+script both sides, Rectangle preset (6.0 × 4.0 m, which ships a `TV · 65″` on the north wall
+at z = −1.94): a 2400 × 600 × 2200 wardrobe walked north into it comes to rest at
+**z = −1.70 on `3da5df2`** — back face −2.00, which is the wall, with the television entirely
+inside the wardrobe and the left rail reading **"Room checks out"** — and at **z = −1.61 on
+`587d52c`**, back face −1.91, flush against the TV's front face. **90 mm**, being 60 mm of
+television plus 30 mm of `MOUNT_PAD`.
+
+That last detail is not decoration: the room report calling a room fine while a television
+stands inside a wardrobe is a *second* defect, in `lib/clearance.ts` rather than in
+`collidesAt`, and it is not fixed by #42. Same shape as every other two-consumer
+disagreement in this repo — one rule, two readers, one of them wrong — and it is tracked in
+`docs/what-is-still-open.md` rather than here.
 
 ### 4.2 What the engines actually do — one answer, four times
 
@@ -312,7 +334,7 @@ Layers are independently shippable and each is a merge candidate on its own.
 
 | # | change | depends on | gate risk |
 |---|---|---|---|
-| 0 | `research/inward-normals` lands | — | 7 red assertions, attributed, **do not loosen** |
+| 0 | `research/inward-normals` lands — **decided: yes** | — | assertions marked on purpose, attributed, **do not loosen**. The count is re-derived on the landing branch and not carried from here: "7" was a reading of a different tree, and one of the seven turned out to need a re-derived fixture rather than a mark |
 | 1a | merged sets seed groups unconditionally | 0 | low — additive |
 | 1b | group turns pivot on the anchor, not the centroid | 1a | one measurement |
 | 1c | tier model: supported pieces sampled over their parent | 0 | fixtures that assume a flat list |
@@ -323,21 +345,40 @@ Layers are independently shippable and each is a merge candidate on its own.
 | 4a | `Foot[]` compound footprints, authored in `scene-spec.ts` | — | picking must move with it |
 | 4b | per-part vertical extents | 4a | — |
 
-**3a and 3b can start today** and are independent of everything above.
+**Row 4b is half done already**, and the half that shipped is the correction rather than the
+feature: `verticalExtent` (PR #42) makes *one* extent per part correct at every anchor. What
+4b still means is a piece having **more than one** extent — a table's top and its legs — and
+that still depends on 4a.
+
+**3a and 3b can start today** and are independent of everything above. They are now the only
+part of this document that is unblocked, since 0 is decided and 2 is the one question still
+with the user.
 
 ---
 
 ## Questions for the user — recommendation first
+
+**Status, 2026-08-29: three of the four are answered. Only 2 is still open.** The answered
+ones are kept rather than deleted, because a question and its answer together say more than
+an answer alone — and because the next person to reach for a furniture CSV or a mesh
+pipeline should be able to see that it was asked and settled, not merely absent.
 
 1. **Does `research/inward-normals` land, and when?** *Recommend: yes, with the solver work,
    not before.* Everything above is written against corrected normals. If it does not land, the
    design is not wrong but its first prerequisite is unmet, and the sentence to hold onto is:
    the annealer is tuned against wall normals that are backwards on 5 of 30 preset walls, so
    any weight measured before it lands measures a different program.
+   · **ANSWERED — yes, it lands, and explicitly so that the solver work runs on corrected
+   normals.** Nothing above needs rewriting; its first prerequisite is simply met. The landing
+   work marks a number of existing assertions red on purpose, and **a mark going green is the
+   signal that this design is working, not a regression** — do not delete one to get a green.
 2. **Is the feasibility split (layer 2) in scope, or is this a layer-1-and-3 job?** *Recommend:
    in scope, and third.* It is the only change that makes the cost function tunable again, and
    § C is the evidence that no weight sweep substitutes for it. It is also the only item here
    that will turn a large number of existing assertions red on purpose.
+   · **STILL OPEN. This is the one decision outstanding in this document.** Layers 3a and 3b —
+   MMR over the offered set, and the relation-aware offer floor — need no decision and no new
+   measurement, so they are the work that can start without this answer.
 3. **Bedside clearance: 500 mm, against Panero & Repetto's 36 in ≈ 914 mm** — the source
    Merrell et al. cite, and the only place our numbers and theirs disagree by more than a
    rounding (wardrobe 600 vs 610, dining 900 vs 914, coffee table 400–500 vs 406–457 all agree).
@@ -345,6 +386,24 @@ Layers are independently shippable and each is a merge candidate on its own.
    narrower activity than the one they measured. *Recommend: keep 500 and write the
    disagreement down in `layout-rules.ts`*, because a number that disagrees with its cited
    source should disagree on purpose.
+   · **ANSWERED and SHIPPED — PR #43, on `main` at `d26ce5c`.** 500 mm kept, and the
+   disagreement is written into `layout-rules.ts` beside the number, along with the three
+   figures that do agree and the one that is deliberately more generous than its source (seat
+   pull-back 900 against 762). The header claim that our numbers "agree with each other to
+   within a few centimetres across sources" is qualified there, because it was not true of all
+   of them.
 4. **Wall-mounted pieces are not obstacles at all** (§ 4.1), and a wall-mounted mover's vertical
    extent is measured from the wrong anchor. *Recommend: fix as its own small change, not inside
    the collision rewrite* — it is a present-tense defect and the rewrite is not close.
+   · **ANSWERED and SHIPPED — PR #42, on `main` at `d26ce5c`.** It was fixed as its own change,
+   the rewrite is still not close, and § 4.1 above now carries the measured result rather than
+   the defect. What it did **not** do is retire the arithmetic elsewhere. Derived on `d26ce5c`
+   rather than recalled — `grep -rn 'pos\[1\] +' lib/` — **six sites in five files still spell
+   out their own `pos[1] … pos[1] + h`**: `clearance.ts:308` and `:439`, `fit-check.ts:287`
+   (`overlapsSomething`), `layout-score.ts:442`, `physics.ts:453` (`findSupportDetailed`) and
+   `rigid-parent.ts:70` (`isPhysicallySupported`). Several are safe because their inputs are
+   pre-filtered to floor-standing pieces; **which ones is not re-derived here, and that is the
+   point** — a rule with six hand-written copies cannot be checked by reading any one of them.
+   This is the "extracting a pipeline means extracting all of it" scar in `CLAUDE.md` arriving
+   on schedule. Six named copies of a rule this document just proved wrong is a smaller problem
+   than one unnamed copy, and it is still a problem.
