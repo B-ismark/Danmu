@@ -1,200 +1,199 @@
 /**
  * The offer stage — what gets SHOWN, as distinct from what gets searched.
  *
- * `lib/layout-solve.ts` answers "what is the best arrangement of this room". This
- * file answers the two questions that come after it and that no single arrangement
- * can answer about itself:
+ * `lib/layout-solve.ts` answers "what is the best arrangement of this room".
+ * `orderOffers` answers the one that comes after it and that no single arrangement
+ * can answer about itself: **which of several good arrangements should we show
+ * next, given the ones already shown.** Variety is a property of the SET of
+ * suggestions, so it is decided here rather than priced inside the cost function —
+ * a term in the density would make each individual layout pay for a property no
+ * individual layout has, which is why § A.2 of
+ * `docs/research/suggest-and-collision.md` was never blocked on the cost function.
  *
- *   · **Which of several good arrangements should we show next**, given the ones
- *     already shown. That is variety, and variety is a property of the SET of
- *     suggestions — see `mmrOrder`.
- *   · **Is this worth showing at all**, which `isWorthOffering` currently answers
- *     with a single scalar gain.
+ * This lives outside the solver because nothing in it can change which
+ * arrangements the annealer finds, so nothing in it can destabilise the search.
+ * That property is why the research note scopes layer 3 separately from layer 2,
+ * and it is worth keeping: a cost term added here would quietly give it up.
  *
- * Both live here rather than in the solver because both are confined to the offer
- * stage: nothing in this file can change which arrangements the annealer finds, so
- * nothing in it can destabilise the search. That property is the whole reason
- * `docs/research/suggest-and-collision.md` scopes layer 3 separately from layer 2,
- * and it is worth keeping — a cost term added here would quietly give it up.
+ * `isWorthOffering` — the other offer-stage decision — is NOT here. It is
+ * `lib/layout-solve.ts:154` and stays there; the relation-aware floor that § C asks
+ * for will compose with it rather than fork it.
  *
  * Nothing here is stateful and nothing here reads the store. A caller that wants
  * "different from what I have already offered" passes that history in.
+ *
+ * ── No thresholds are defined in this file, and that is the design ─────────────
+ *
+ * `spotM`, `yawRad` and `diversityPenalty` are all required arguments with no
+ * defaults. Every one of them is a question the SOLVER already has an answer to,
+ * and a default here would be a second copy of that answer in a second file, free
+ * to drift in the direction nobody notices. The first version of this file defined
+ * its own 15° "same turn" tolerance with a paragraph of reasoning; the reasoning
+ * was false (the annealer's free turn is uniform on ±17.19°, `layout-solve.ts:1219`,
+ * so most real turns fell inside it), and the number happened to be bit-identical to
+ * `Math.PI / 12` — the app's own rotation step — so whether one press of the turn key
+ * counted as a turn was decided by float rounding, asymmetrically in sign, on 41.6%
+ * of headings. A constant invented here to sit beside constants that already exist
+ * is how that happens.
  */
-import type { Placement } from './layout-score';
+import { angleDelta, type Placement } from './layout-score';
 
-/** How far two headings may differ and still be **the same turn**.
+/**
+ * How much of one arrangement is the same arrangement as another, in `[0, 1]`.
  *
- *  Its own constant with its own reason, rather than a borrowed one. The solver only
- *  ever *proposes* quarter turns and half turns (`propose`) and only ever *snaps* to
- *  quarter turns (`snapYaws`), so 15° is comfortably under the smallest turn any
- *  suggestion can deliberately contain — no real turn can be mistaken for none — and
- *  comfortably over the drift left by a piece that was squared in one candidate and
- *  left a degree or two off in another. Offering those two as "variety" is exactly
- *  the complaint this file exists to answer.
+ * A **share of pieces that stand in the same place, turned the same way** — 1 when
+ * every piece considered agrees, 0 when none do. Graded rather than the solver's
+ * boolean `similar()`, because ranking "mostly the same" below "half the room is
+ * different" is the whole job and a predicate cannot say that.
  *
- *  Deliberately NOT `SNAP_TOL`. That number answers "how far off square is close
- *  enough to be worth squaring", which is a different question that happens to live
- *  in the same units; borrowing a constant for its magnitude rather than its meaning
- *  is how two things start moving together that were never related. */
-export const SAME_YAW_RAD = (15 * Math.PI) / 180;
-
-/** How much of one arrangement is the same arrangement as another, in `[0, 1]`.
+ * ── `spotM` and `yawRad` are required, and they are not the same question ─────
  *
- *  A **share of pieces that stand in the same place, turned the same way** — 1 when
- *  every piece considered agrees, 0 when none do. Graded rather than the solver's
- *  boolean `similar()`, because MMR needs to rank "mostly the same" below "half the
- *  room is different" and a predicate cannot say that.
+ * `spotM` is the solver's dedup distance (`similar()`, 0.25 m) when the caller is
+ * ranking one solve's finalists, because two candidates the pool merged must score
+ * 1.0 here or the two disagree about what a different arrangement IS. `yawRad` has
+ * no counterpart in `similar()` at all — see the warning below — so the caller's
+ * honest source for it is `TURN_EPSILON` (`layout-solve.ts:142`, ~3°), which is
+ * already this app's answer to "below this, a turn is not worth showing as a
+ * change" and is what `displaced()` reads to decide what the "moved 5 pieces" toast
+ * counts. Using anything else makes the toast and the offer stage disagree silently.
  *
- *  ── `spotM` has no default, on purpose ────────────────────────────────────────
+ * ── WARNING: the solver's dedup ignores yaw entirely ──────────────────────────
  *
- *  It is the same question `similar()` asks when it decides whether a candidate is
- *  already in the finalist pool, and the two answers have to agree: a pair the pool
- *  considered identical must score 1.0 here, or the solver and the offer stage
- *  disagree about what a different arrangement IS and this file will present as
- *  variety something the pool already merged. Defaulting it would put a second copy
- *  of that threshold in a second file and let them drift in the direction nobody
- *  notices. So the caller supplies it, from the one place it is defined.
+ * `similar()` compares x/z and never reads `.yaw`, while `propose` turns a piece
+ * **in place** (`layout-solve.ts:1215`, position untouched). So `remember()` merges
+ * a turn-only variant into the candidate it turned from and keeps the cheaper one:
+ * **a rotation-only alternative cannot reach the finalist pool at any seed.** The
+ * yaw half of this function is therefore live for candidates from separate solves
+ * and dead for candidates from one pool. That is a real limit on what MMR over the
+ * pool can offer, it is not fixable here, and it is recorded rather than worked
+ * around because the failure it produces looks like "the diversity code does
+ * nothing" rather than like a missing term in someone else's predicate.
  *
- *  ── `movable` is not optional in spirit ───────────────────────────────────────
+ * ── `movable` ─────────────────────────────────────────────────────────────────
  *
- *  Pass it. A locked piece agrees with itself in every pair — it cannot do anything
- *  else — so counting locked pieces drags every similarity toward 1 in proportion to
- *  how much of the room is locked, and a room with three movable pieces among twenty
- *  fixtures reports every pair as ~87% alike. MMR over that is inert, and inert in a
- *  way that looks like a tuning problem rather than a bug. It is optional only
- *  because a caller with nothing locked has nothing to pass.
+ * Pass it whenever anything is locked. A locked piece agrees with itself in every
+ * pair — it cannot do otherwise — so counting locked pieces drags every similarity
+ * toward 1 in proportion to how much of the room is fixed, and a room with three
+ * movable pieces among twenty fixtures reports every pair as ~87% alike. Ranking
+ * over that is inert in a way that reads as a tuning problem rather than a bug. The
+ * solver's own answer is `!locked[i] && !p.wallMounted` (`layout-solve.ts:247`).
  *
- *  Throws on a length mismatch rather than comparing the common prefix: two
- *  candidates for one room always have one length, so a mismatch is a caller bug,
- *  and silently comparing five pieces against six would report a high similarity for
- *  two arrangements of different rooms. */
+ * Throws rather than coping, in all three cases — mismatched lengths, a short
+ * `movable`, a non-finite coordinate. Each of them otherwise returns a plausible
+ * number for two unrelated arrangements: a short `movable` treats every index past
+ * its end as locked, so `movable: []` reported **1.0** for arrangements agreeing on
+ * nothing, and a `NaN` coordinate fails `NaN > spotM` and fell through to *agreed*.
+ * Both are the failure this file exists to avoid — a silent claim that two
+ * arrangements are the same.
+ */
 export function layoutSimilarity(
   a: readonly Placement[],
   b: readonly Placement[],
-  opts: { spotM: number; yawRad?: number; movable?: readonly boolean[] },
+  opts: { spotM: number; yawRad: number; movable?: readonly boolean[] },
 ): number {
   if (a.length !== b.length) {
     throw new Error(`layoutSimilarity: ${a.length} placements against ${b.length}`);
   }
-  const yawRad = opts.yawRad ?? SAME_YAW_RAD;
+  if (opts.movable && opts.movable.length !== a.length) {
+    throw new Error(`layoutSimilarity: movable has ${opts.movable.length} of ${a.length}`);
+  }
   let considered = 0;
   let agreed = 0;
   for (let i = 0; i < a.length; i++) {
     if (opts.movable && !opts.movable[i]) continue;
     considered++;
-    if (Math.hypot(a[i].x - b[i].x, a[i].z - b[i].z) > opts.spotM) continue;
-    if (Math.abs(yawDelta(a[i].yaw, b[i].yaw)) > yawRad) continue;
+    const dx = a[i].x - b[i].x;
+    const dz = a[i].z - b[i].z;
+    const dyaw = angleDelta(a[i].yaw, b[i].yaw);
+    if (!Number.isFinite(dx) || !Number.isFinite(dz) || !Number.isFinite(dyaw)) {
+      throw new Error(`layoutSimilarity: placement ${i} is not finite`);
+    }
+    if (Math.hypot(dx, dz) > opts.spotM) continue;
+    if (Math.abs(dyaw) > opts.yawRad) continue;
     agreed++;
   }
   // No movable piece is not "completely different"; it is a room with nothing to
-  // distinguish, and 1 is the reading that stops MMR preferring a coin flip. The
-  // solver returns before it ever gets here in that case (`allIdx.length === 0`).
+  // distinguish, and 1 is the reading that stops the ranking preferring a coin
+  // flip. `solveLayout` returns before it ever gets here (`allIdx.length === 0`).
   return considered === 0 ? 1 : agreed / considered;
 }
 
-/** Signed smallest angle between two headings, in `(-π, π]`.
- *
- *  Local rather than imported from `layout-score`'s `angleDelta` for one reason
- *  only: this file is meant to have no dependency on the scorer's internals, so
- *  the offer stage can be reasoned about — and tested — without a `LayoutModel`.
- *  It is four lines of modular arithmetic with no room for the two to disagree.
- *
- *  **All three lines are load-bearing and each needs its own test**, which is not
- *  obvious and was not true when this was first written. The two corrections are
- *  mirror images and one seam test only ever exercises one of them — a sign error in
- *  the other is invisible until someone turns a piece the other way. And the modulo
- *  is not redundant with them: the corrections run once rather than in a loop, so
- *  they bring a delta back from `(-2π, 2π)` and no further. That is not a
- *  hypothetical range. `useStudio.setRotation` stores whatever it is handed and
- *  normalises nothing, and `solveLayout` reads `origin[i].yaw` straight off
- *  `part.rot`, so a piece a user has turned the same way often enough arrives here
- *  past 2π and, without the modulo, reads as a quarter-turn from itself. */
-function yawDelta(a: number, b: number): number {
-  let d = (a - b) % (Math.PI * 2);
-  if (d > Math.PI) d -= Math.PI * 2;
-  if (d <= -Math.PI) d += Math.PI * 2;
-  return d;
-}
-
-export type MmrOptions<T> = {
-  /** Lower is better — this is a cost, not a score, because that is what the solver
-   *  produces and converting it at each call site is how the conversion gets done
-   *  two different ways. Normalisation happens once, here. */
+export type OfferOptions<T> = {
+  /** Lower is better — a cost, because that is what the solver produces.
+   *  Converting it at each call site is how the conversion gets done two ways. */
   cost: (item: T) => number;
   /** In `[0, 1]`; 1 means "these are the same arrangement". */
   similarity: (a: T, b: T) => number;
-  /** How much the ordering cares about being GOOD versus being DIFFERENT.
-   *  1 is pure cost order — the current behaviour, and the one that converges.
-   *  0 picks the cheapest first and then the most different thing remaining,
-   *  ignoring cost entirely. */
-  lambda: number;
-  /** Stop after this many. Defaults to everything: the ordering is the product, and
-   *  a caller that wants three takes three. */
+  /** **In cost units**: the extra cost a completely-duplicate arrangement is worth
+   *  paying to avoid. 0 is pure cost order — the current behaviour, and the one
+   *  that converges. See the note on why this is not a `[0, 1]` lambda. */
+  diversityPenalty: number;
+  /** Stop after this many. Defaults to everything: the ordering is the product,
+   *  and a caller that wants three takes three. */
   k?: number;
 };
 
 /**
- * Maximal Marginal Relevance over costed candidates.
+ * Maximal Marginal Relevance over costed candidates — good, and not like the ones
+ * already picked.
  *
- * Merrell et al. do not price variety inside the cost function — they sample many
- * layouts, sort by cost, and diversify the returned SET. This is that step. A term
- * inside the density would make each individual layout pay for a property no
- * individual layout has, which is why § A.2 of the research note was never blocked
- * on the cost function.
+ * Merrell et al. do not price variety inside the cost function; they sample many
+ * layouts, sort by cost, and diversify the returned SET. This is that step. Each
+ * pick minimises `cost + diversityPenalty × (closest already picked)`.
  *
- * Each pick maximises `λ·relevance − (1 − λ)·(closest already picked)`. Relevance is
- * cost normalised into `[0, 1]` across the whole input — **the input, not the
- * remainder**, so the numbers do not shift underneath the loop as items are taken;
- * an item's relevance is a property of the candidate set it arrived in, and
- * renormalising per round would make the last pick's relevance 1 by construction
- * whatever its cost.
+ * ── Why the trade is in cost units and not a [0, 1] lambda ────────────────────
+ *
+ * Textbook MMR maximises `λ·rel − (1−λ)·sim`, with relevance normalised across the
+ * candidate set. **That form was written here first and it is wrong for this input**,
+ * because it compares a *fraction of the set's cost spread* against a *share of the
+ * room* — two quantities with no common unit — so λ has no stable meaning. Three
+ * measured consequences, all of which this form does not have:
+ *
+ *   · **A candidate that is never shown decides the one that is.** With finalists at
+ *     8.20 / 8.21 / 8.55 and `k = 2` the normalised form offers the first two for
+ *     every λ from 0.3 to 0.86; adding a fourth finalist at 14.0 — never offered —
+ *     changes the second suggestion, purely by widening the spread.
+ *   · **A rounding error gets full relevance.** With costs `[10, 10+ε, 10+2ε]` the
+ *     spread is ε, so the normalisation blows it up to the full `[0, 1]` range and
+ *     orders by it. `isWorthOffering` next door refuses exactly this reasoning, in
+ *     cost units, with a written note about rounding errors.
+ *   · **λ's meaning moved with the piece count.** Similarity is a share of the room,
+ *     so "differs in one piece" is `(N−1)/N` — the diversity term varies by at most
+ *     `1/N` between candidates while relevance always spans the full range. At λ 0.5
+ *     the same three costs gave the diverse candidate second in a 2-piece room and
+ *     pure cost order in an 8-piece one. The file was inert in the rooms it was for,
+ *     and its own tests passed because their fixtures were 2 pieces, where
+ *     similarity is only ever exactly 0 or 1.
+ *
+ * A penalty in cost units has none of those: it is absolute, so an unshown outlier
+ * cannot move it, an ε difference stays ε, and "one of eight pieces different"
+ * simply earns one eighth of the penalty. It is also the only form a caller can
+ * reason about — "I will accept this much extra cost for a completely different
+ * arrangement" is a sentence about the room; "λ = 0.7" is not.
  *
  * Deterministic in full. Ties break by lower cost and then by earlier index, never
- * on `Array.prototype.sort` stability or on insertion order, because this app is
- * deterministic per seed and a suggestion order that changed with the engine would
- * be a defect nobody could reproduce.
+ * on `Array.prototype.sort` stability, because this app is deterministic per seed
+ * and a suggestion order that changed with the engine would be a defect nobody
+ * could reproduce.
  *
- * Throws on a non-finite cost. A `NaN` compares false against everything and would
- * sort silently into an arbitrary position, which is the failure that looks like a
- * tuning problem; `Infinity` collapses the normalisation for every other candidate.
+ * Throws on a non-finite cost or a negative penalty. A `NaN` compares false against
+ * everything and would sort silently into an arbitrary position; a negative penalty
+ * inverts the term and seeks out duplicates.
  */
-export function mmrOrder<T>(items: readonly T[], opts: MmrOptions<T>): T[] {
-  const { lambda, k } = opts;
-  if (!(lambda >= 0 && lambda <= 1)) {
-    throw new Error(`mmrOrder: lambda must be in [0, 1], got ${lambda}`);
+export function orderOffers<T>(items: readonly T[], opts: OfferOptions<T>): T[] {
+  const { diversityPenalty: penalty, k } = opts;
+  // Finite as well as non-negative, and the finite half is load-bearing rather than
+  // tidy: with an infinite penalty every score is `Infinity`, no candidate ever
+  // beats the running best, and the loop pushes `-1` and returns `undefined`s.
+  if (!Number.isFinite(penalty) || penalty < 0) {
+    throw new Error(`orderOffers: diversityPenalty must be finite and >= 0, got ${penalty}`);
   }
 
   const costs = items.map((it, i) => {
     const c = opts.cost(it);
-    if (!Number.isFinite(c)) throw new Error(`mmrOrder: cost of item ${i} is ${c}`);
+    if (!Number.isFinite(c)) throw new Error(`orderOffers: cost of item ${i} is ${c}`);
     return c;
   });
-  // A loop rather than `Math.min(...costs)`: this signature is generic and the
-  // spread form passes one argument per candidate, which is a stack overflow on a
-  // large input and a silent `Infinity`/`-Infinity` on an empty one. There is no
-  // early return for the empty and single cases either — both fall through this
-  // function correctly, and a branch whose deletion changes no observable behaviour
-  // is one more thing a later reader has to prove redundant before touching it.
-  let best = Infinity;
-  let worst = -Infinity;
-  for (const c of costs) {
-    if (c < best) best = c;
-    if (c > worst) worst = c;
-  }
-  const spread = worst - best;
-  // Every candidate equally good is not every candidate worthless. With no spread
-  // the relevance half of the score is a constant, so the ordering is decided by
-  // diversity and by the tie-break — which is what "these are all as good as each
-  // other, show me different ones" ought to mean.
-  //
-  // **The `1` is unobservable and is not a decision.** A constant relevance shifts
-  // every candidate's score by the same amount at every λ, so `0` orders the set
-  // identically and no test can tell the two apart — verified by mutation, which is
-  // how this note got here rather than a test that would have to lie. It is written
-  // as `1` because "all equally good" reads better than "all equally bad"; if a
-  // future caller ever exposes the score itself, that stops being true and this
-  // becomes a real choice needing a real test.
-  const relevance = costs.map((c) => (spread > 0 ? (worst - c) / spread : 1));
 
   const want = Math.min(k ?? items.length, items.length);
   const picked: number[] = [];
@@ -202,18 +201,19 @@ export function mmrOrder<T>(items: readonly T[], opts: MmrOptions<T>): T[] {
 
   while (picked.length < want) {
     let bestIdx = -1;
-    let bestScore = -Infinity;
+    let bestScore = Infinity;
     for (let i = 0; i < items.length; i++) {
       if (taken[i]) continue;
-      // Max similarity to anything already picked. Empty selection → 0, so the first
-      // pick is decided by relevance alone at every λ, including λ = 0.
+      // The closest thing already picked — the MAXIMUM over the whole selection,
+      // not the most recent one. A third pick that duplicates the first is just as
+      // much a repeat as one that duplicates the second.
       let closest = 0;
       for (const p of picked) {
         const s = opts.similarity(items[i], items[p]);
         if (s > closest) closest = s;
       }
-      const score = lambda * relevance[i] - (1 - lambda) * closest;
-      if (bestIdx < 0 || score > bestScore || (score === bestScore && costs[i] < costs[bestIdx])) {
+      const score = costs[i] + penalty * closest;
+      if (score < bestScore || (score === bestScore && costs[i] < costs[bestIdx])) {
         bestIdx = i;
         bestScore = score;
       }
