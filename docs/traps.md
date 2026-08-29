@@ -110,6 +110,28 @@ Pin it **exactly**, both directions, and label it *regression baseline, not a
 specification*. A `<=` bar sits green while the numbers drift the good way and nobody
 re-derives. An improvement going red is the signal.
 
+**Symptom: a tolerance you chose turns out to equal a step the app already takes.**
+Then the step lands exactly ON the boundary, float rounding decides which side, and the
+answer is **asymmetric in sign** — the same magnitude of change reads as "changed" turning
+one way and "unchanged" turning the other.
+→ Compare every new tolerance against the increments in `snapSteps` and the unit steps
+before choosing it, and assert it at a value that is *not* one of them.
+*(Cost: a "same turn" tolerance that was bit-identical to `Math.PI / 12`, the app's own
+rotation step — one press of the turn key read as a turn on 58% of headings and not on
+42%. Same class as the `boundsToUnit` scar in `CLAUDE.md`, where a range narrower than one
+step of a coarse unit collapses to one number or inverts outright.)*
+
+**Symptom: every fixture in a file is built from the constant the file is testing.**
+Then the constant is never exercised at a second value and any value passes. The tell is
+a suite that is green with the parameter replaced by a literal, or with a normalisation
+replaced by `() => 1`.
+→ One fixture either side of the threshold, and at least one value the code did not
+supply. Sweeping a table is only a test if the table has rows the code did not write.
+*(Cost: 17 of 41 mutations survived a file whose 18 tests all passed one copied value —
+including the parameter with the longest docblock in it. And `tests/module-tiling.test.ts`
+checking three of six ranges against their own declared bounds, which let a bookshelf's
+max go from 450 mm to 1.2 m with the file still green.)*
+
 **Symptom: `it.fails` and you cannot see what else is broken in that test.**
 `it.fails` masks every other failure in the same body.
 → One assertion per parked body; move the guards to a sibling that still passes.
