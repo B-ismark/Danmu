@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { wallApertures } from '@/lib/apertures';
 import { clampIntoFootprint, footprintForLayout, pointInFootprint, polygonCentroid, wallSegments, type Footprint } from '@/lib/footprint';
+import { footFromPart, footInsidePoly, type Poly } from '@/lib/geometry';
 import type { LayoutId } from '@/lib/storage';
 import { openingsForRoom } from '@/lib/room-openings';
 import { anchorFor, groundY, ridesWall, snapToWall, wallStandoff, CURTAIN_STANDOFF } from '@/lib/physics';
@@ -206,33 +207,46 @@ describe('placeNewPart keeps a drop inside the room', () => {
     expect(pointInFootprint(3, 2, L), 'the fixture must actually have its middle cut away').toBe(false);
     const room = { width: 6, depth: 4, height: 2.5, footprint: L };
     const r = placeNewPart('fan', 'fan', FAN, room, [], [5.9, 3.9]);
-    // Half-width in from the bounding box, not 5.9 / 3.9 …
-    expect(r.pos[0]).toBeCloseTo(5.5, 6);
-    expect(r.pos[2]).toBeCloseTo(3.5, 6);
-    // … and that is in the notch, exactly as it is for a floor piece. Same known
-    // limitation, same place: when this starts passing as `true`, delete the
-    // assertion, not the test.
-    expect(pointInFootprint(r.pos[0], r.pos[2], L)).toBe(false);
+    // Half-width in from the bounding box would be 5.5 / 3.5, and that is in the
+    // notch. `intoRoom` now finishes on `containedXZ`, so the fan comes back inside
+    // the house — the drop point still decides WHICH part of the room, which is what
+    // "falls back to the drop point" means and is why this test is still about that.
+    expect(pointInFootprint(r.pos[0], r.pos[2], L), `${r.pos} must be inside the L`).toBe(true);
+    // The whole 1000 mm fan, not just its centre: a centre clamp would satisfy the
+    // line above with half the blades through the wall, and that distinction is the
+    // entire reason `containedXZ` reads a footprint.
+    expect(footInsidePoly(footFromPart(r.pos, r.rot, FAN), L as unknown as Poly)).toBe(true);
+    // Pinned beside the property so a walk that starts landing somewhere else shows
+    // up as a diff rather than a shrug. Measured, not chosen.
+    expect(r.pos[0]).toBeCloseTo(5.48, 6);
+    expect(r.pos[2]).toBeCloseTo(1.48, 6);
   });
 
-  it('does NOT yet keep a drop out of the quadrant an L cuts away', () => {
-    // Written down rather than left as a surprise, and the reason has MOVED.
+  it('keeps a drop out of the quadrant an L cuts away', () => {
+    // This test used to be called `does NOT yet keep a drop out of…` and its last
+    // assertion was `false`. Both flipped together, which is what the note left here
+    // asked whoever landed the fix to do.
     //
-    // It used to be that `clampIntoFootprint` could not do this: it walked the point
+    // The history, because it is two different reasons and only the second one was
+    // this change's. FIRST: `clampIntoFootprint` could not do it — it walked the point
     // toward `polygonCentroid`, which averages the VERTICES rather than the area, and
-    // for this L that average is (3, 2) — the reflex corner itself. Every step of the
-    // walk stayed inside the notch and the fallback returned the corner, which
-    // `pointInFootprint` calls outside. That is fixed: the clamp aims at
-    // `interiorPoint`, which checks its answer, so the two assertions below are the
-    // fixture stating the trap and the clamp stepping round it.
+    // for this L that average is (3, 2), the reflex corner itself. Every step of the
+    // walk stayed inside the notch. Fixed earlier: the clamp aims at `interiorPoint`,
+    // which checks its answer, and the first two assertions below are the fixture
+    // stating the trap and the clamp stepping round it.
     //
-    // What is left is not that function's fault. `placeNewPart`'s `intoRoom` does the
-    // BOUNDS inset and only that, so a drop into an L's notch is inside the box and
-    // outside the room, and no amount of fixing the clamp changes a caller that does
-    // not call it. Wiring it in is a separate change with its own blast radius — it
-    // moves every drop into an L / T / U — and it wants the extent question answered
-    // too, since this clamps a CENTRE. When that lands, this test's title and its last
-    // assertion flip together; delete the assertion, not the test.
+    // SECOND, and this is the part that just landed: `placeNewPart`'s `intoRoom` did
+    // the BOUNDS inset and only that, so a drop into an L's notch was inside the box
+    // and outside the room — and no amount of fixing the clamp changes a caller that
+    // never calls it. It now finishes on `containedXZ` from `lib/layout-settle.ts`,
+    // which is what `contain` was already doing for every solved placement.
+    //
+    // **And the clamp it calls is deliberately NOT `clampIntoFootprint`**, which is
+    // still exercised below and still not what `placeNewPart` uses: that one puts a
+    // POINT inside the polygon, and a point 5 cm inside the leg of a U satisfies it
+    // with a 2 m sofa mostly through the plaster. So the last two assertions here are
+    // a pair on purpose — the centre inside the room, and then the whole footprint
+    // inside it, which is the stronger claim and the one that was missing.
     const L: Footprint = [
       [0, 0],
       [6, 0],
@@ -250,11 +264,16 @@ describe('placeNewPart keeps a drop inside the room', () => {
     expect(c).toEqual([2.75, 1.85]);
 
     const r = placeNewPart('chair', 'chair-dining', [500, 500, 900], { width: 6, depth: 4, height: 2.5, footprint: L }, [], [5, 3.5]);
-    // The bounds clamp does its half — the piece's extents are inside the box…
+    // (5, 3.5) is inside the bounding box and inside the notch, so the bounds inset
+    // alone left it there and returned it unchanged. Now:
+    expect(pointInFootprint(r.pos[0], r.pos[2], L), `${r.pos} must be inside the L`).toBe(true);
+    expect(footInsidePoly(footFromPart(r.pos, r.rot, [500, 500, 900]), L as unknown as Poly)).toBe(true);
+    // X is untouched — 5 is in the leg of the L, and nothing needed to move it. The
+    // asymmetry is the point: a fix that simply dragged the piece toward the middle
+    // would move both coordinates, and this pins that only the one that was wrong
+    // moved. Measured.
     expect(r.pos[0]).toBeCloseTo(5, 6);
-    expect(r.pos[2]).toBeCloseTo(3.5, 6);
-    // …and the notch is still the notch, because `intoRoom` never asks the clamp.
-    expect(pointInFootprint(r.pos[0], r.pos[2], L)).toBe(false);
+    expect(r.pos[2]).toBeCloseTo(1.73, 6);
   });
 
   it('still puts a wall rider on the wall nearest where it was aimed', () => {
@@ -284,7 +303,16 @@ describe('placeNewPart: the two edges of that clamp', () => {
       dimMM: [1200, 800, 750], pos: [5.5, 0, 2], rot: 0, locked: false,
     } as unknown as ScenePart;
     const r = placeNewPart('lamp', 'lamp-table', [300, 300, 400], room6x4, [table], [7.5, 2]);
-    expect(r.pos[0]).toBeCloseTo(5.85, 6); // pulled in by its own half-width
+    // 5.83, not 5.85. The bounds inset pulls it in by its own half-width to exactly
+    // flush with the wall, and `containedXZ` then adds `WALL_GAP` — 20 mm — because a
+    // footprint whose corners sit ON the boundary is not INSIDE the polygon.
+    //
+    // That 20 mm is the settle path's own number and reaching the add path is the
+    // point rather than a side effect: `contain` has always held every SOLVED
+    // placement 20 mm off the plaster, so an added piece sitting flush meant adding a
+    // sofa and then pressing Suggest moved it 20 mm for no reason the user could see.
+    // Two answers to "how close to the wall does furniture go"; now one.
+    expect(r.pos[0]).toBeCloseTo(5.83, 6);
     expect(r.pos[1]).toBeCloseTo(0.75, 6); // and it landed on the table it arrived over
   });
 

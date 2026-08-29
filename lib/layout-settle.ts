@@ -219,33 +219,71 @@ function footAtXZ(p: ScenePart, x: number, z: number): Foot {
   return footFromPart([x, p.pos[1], z], p.rot, p.dimMM, p.circle);
 }
 
-/** Push a part until its whole footprint is inside the room.
+/** What a piece needs to be measured against the room: its angle, its size, and
+ *  whether it is round. Deliberately NOT `ScenePart` — the add path has these three
+ *  before it has a part at all, and asking it to build one would be the reason a
+ *  second copy of this containment gets written instead. */
+export type ContainSubject = {
+  rot: number;
+  dimMM: [number, number, number];
+  circle?: boolean;
+};
+
+/** The nearest position to `(x, z)` at which this piece's FOOTPRINT is inside the
+ *  room, or the closest this can get. Pure; returns `(x, z)` unchanged when it is
+ *  already inside, and unchanged again when nothing it tries is an improvement.
  *
- *  Along the inward normal of the wall it is hanging over, by exactly the deficit —
- *  its own half-extent in that direction, minus how far in it already is. Repeated,
- *  because clearing the south wall in a corner leaves the east one, and each push
- *  changes which wall is nearest. Falls back to walking toward the centroid, and if
- *  even that cannot seat it (a piece longer than the room is wide), keeps the least
- *  bad position found and lets the room report say so. */
-function contain(p: ScenePart, poly: Poly, centre: readonly [number, number], winding: 1 | -1): void {
-  let x = p.pos[0];
-  let z = p.pos[2];
-  let bestOut = escape(p, x, z, poly);
-  if (bestOut <= 0) return;
+ *  **A footprint answer, not a centre answer, and that is the whole reason it exists.**
+ *  `clampIntoFootprint` puts a POINT inside the polygon, which a point 5 cm inside the
+ *  leg of a U satisfies with a 2 m sofa mostly through the plaster. This reads the
+ *  piece's extent along the wall's own normal (`obbExtentAlong`), so the answer is
+ *  about the piece rather than about its middle.
+ *
+ *  Exported for `placeNewPart`, which had only a BOUNDING-BOX inset and so dropped
+ *  pieces into the quadrant an L / T / U cuts away — inside the box, outside the
+ *  house. Both scene paths already ended here via `contain`; the add path was the
+ *  one surface that did not, and giving it its own containment would have been the
+ *  third implementation of "put this back in the room". Same shape as
+ *  `lib/drag-resolve.ts`: one resolve, every caller.
+ *
+ *  Two passes, and the second is not a fallback for tidiness. The first walks out
+ *  along `nearestEdge`'s inward normal, which is exact for a convex room and can
+ *  point along a concave wall rather than away from it; the second lerps toward an
+ *  interior point, which every shape of room agrees is inward. `x0`/`z0` are the
+ *  ORIGINAL position on purpose — the lerp starts from where the piece was, not from
+ *  wherever the first pass left it, so a pass that made things worse cannot compound
+ *  into the next one. Same reason a convoy member derives from its start transform
+ *  rather than from the last frame.
+ *
+ *  `centre` must be an interior point, not `polygonCentroid`: the vertex average sits
+ *  in the notch on a T and between the arms on a U, so a walk toward it walks out of
+ *  the room. Callers pass `interiorPoint(poly) ?? polygonCentroid(poly)`. */
+export function containedXZ(
+  piece: ContainSubject,
+  x0: number,
+  z0: number,
+  poly: Poly,
+  centre: readonly [number, number],
+  winding: 1 | -1,
+): [number, number] {
+  let x = x0;
+  let z = z0;
+  let bestOut = escape(piece, x, z, poly);
+  if (bestOut <= 0) return [x0, z0];
   let bestX = x;
   let bestZ = z;
 
   for (let k = 0; k < 6 && bestOut > 0; k++) {
     const e = nearestEdge(poly, x, z, winding);
     if (!e) break;
-    const need = obbExtentAlong(footAtXZ(p, x, z), e.nx, e.nz) + WALL_GAP;
+    const need = obbExtentAlong(subjectFootAt(piece, x, z), e.nx, e.nz) + WALL_GAP;
     // Inside the room: the deficit is what is missing. Outside it: the whole way
     // back in, plus the same deficit.
     const push = pointInPoly(x, z, poly) ? need - e.dist : need + e.dist;
     if (push <= 1e-4) break;
     x += e.nx * push;
     z += e.nz * push;
-    const out = escape(p, x, z, poly);
+    const out = escape(piece, x, z, poly);
     if (out < bestOut) {
       bestOut = out;
       bestX = x;
@@ -256,9 +294,9 @@ function contain(p: ScenePart, poly: Poly, centre: readonly [number, number], wi
   // Still hanging out — a corner, or a concave wall the normal pointed the wrong way
   // along. Walk in toward the middle, which any shape of room agrees is inward.
   for (let t = 0.1; t <= 1.0001 && bestOut > 0; t += 0.1) {
-    const nx = p.pos[0] + (centre[0] - p.pos[0]) * t;
-    const nz = p.pos[2] + (centre[1] - p.pos[2]) * t;
-    const out = escape(p, nx, nz, poly);
+    const nx = x0 + (centre[0] - x0) * t;
+    const nz = z0 + (centre[1] - z0) * t;
+    const out = escape(piece, nx, nz, poly);
     if (out < bestOut) {
       bestOut = out;
       bestX = nx;
@@ -266,8 +304,34 @@ function contain(p: ScenePart, poly: Poly, centre: readonly [number, number], wi
     }
   }
 
-  p.pos[0] = bestX;
-  p.pos[2] = bestZ;
+  return [bestX, bestZ];
+}
+
+/** Push a part until its whole footprint is inside the room.
+ *
+ *  Along the inward normal of the wall it is hanging over, by exactly the deficit —
+ *  its own half-extent in that direction, minus how far in it already is. Repeated,
+ *  because clearing the south wall in a corner leaves the east one, and each push
+ *  changes which wall is nearest. Falls back to walking toward an INTERIOR POINT —
+ *  not the centroid, which this used to say: `polygonCentroid` averages the vertices,
+ *  so on a T it lands in the notch and on a U between the arms, and a walk toward it
+ *  walks out of the room. And if even that cannot seat the piece (one longer than the
+ *  room is wide), keeps the least bad position found and lets the room report say so,
+ *  because silently shrinking it to fit is what rule 2 forbids.
+ *
+ *  The arithmetic is `containedXZ`, which is pure and exported; this is the part-shaped
+ *  wrapper over it. `placeNewPart` is the other caller. */
+function contain(p: ScenePart, poly: Poly, centre: readonly [number, number], winding: 1 | -1): void {
+  const [x, z] = containedXZ(p, p.pos[0], p.pos[2], poly, centre, winding);
+  p.pos[0] = x;
+  p.pos[2] = z;
+}
+
+/** `footAtXZ` for a subject rather than a part. The Y handed to `footFromPart` is
+ *  discarded — a `Foot` is `{cx, cz, hw, hd, rot}` — so there is nothing to supply,
+ *  which is exactly why `containedXZ` can answer without one. */
+function subjectFootAt(piece: ContainSubject, x: number, z: number): Foot {
+  return footFromPart([x, 0, z], piece.rot, piece.dimMM, piece.circle);
 }
 
 /** How badly a part placed here escapes the room: 0 only when the whole footprint
@@ -277,9 +341,13 @@ function contain(p: ScenePart, poly: Poly, centre: readonly [number, number], wi
  *  corner is still 20 mm through the wall — its outermost samples sit 10% in from
  *  the edges. So the exact test decides WHETHER a position is acceptable and the
  *  share only ranks the unacceptable ones, which is what a piece too big for the
- *  room needs: something to be least-bad about. */
-function escape(p: ScenePart, x: number, z: number, poly: Poly): number {
-  const f = footAtXZ(p, x, z);
+ *  room needs: something to be least-bad about.
+ *
+ *  Takes a `ContainSubject` rather than a `ScenePart` because `containedXZ` has only
+ *  the three fields; every `ScenePart` satisfies it structurally, so no call site
+ *  changed. */
+function escape(piece: ContainSubject, x: number, z: number, poly: Poly): number {
+  const f = subjectFootAt(piece, x, z);
   if (footInsidePoly(f, poly)) return 0;
   return Math.max(outsideShare(f, poly, 5), 1e-4);
 }

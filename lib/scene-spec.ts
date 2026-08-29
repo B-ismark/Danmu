@@ -6,7 +6,9 @@ import {
   footprintForLayout,
   footprintBounds,
   clampIntoFootprint,
+  interiorPoint,
   pointInFootprint,
+  polygonCentroid,
   type Footprint,
   type LayoutId,
 } from './footprint';
@@ -40,7 +42,7 @@ import {
   type Foot,
   type Poly,
 } from './geometry';
-import { aabbExtents } from './geometry';
+import { aabbExtents, polygonWinding } from './geometry';
 import { backWall, baySides, roomBays, splitBay, type Bay } from './room-bays';
 import {
   accessZones,
@@ -57,7 +59,7 @@ import {
   WALL_GAP,
 } from './layout-rules';
 import { openingsForRoom, type Opening } from './room-openings';
-import { settleParts } from './layout-settle';
+import { containedXZ, settleParts } from './layout-settle';
 // Runtime, but not a cycle: `layout-score` takes only `ScenePart` from here and takes
 // it as a TYPE, so the edge back is erased at compile.
 import {
@@ -2298,19 +2300,30 @@ export function placeNewPart(
    *  aims at `interiorPoint` and CHECKS the answer — and the reason this function does
    *  not call it is now a scope decision rather than an impossibility.
    *
-   *  Two halves to that decision, and both are about extent. This clamps a CENTRE, so
-   *  a point 5 cm inside the leg of a U satisfies it with a 2 m sofa mostly through
-   *  the wall; the containment that reads a piece's footprint is `contain` in
-   *  `lib/layout-settle.ts`, which every solved placement already ends on. And wiring
-   *  it in here moves every drop into an L / T / U, which wants its own diff. So a
-   *  drop into an L's notch is still a drop into the notch, and that is written down
-   *  here — and asserted, by name, in `tests/wall-parts.test.ts` — rather than left as
-   *  a surprise.
+   *  **That diff is this one, and the clamp is not `clampIntoFootprint`.** The reason
+   *  recorded here was that it clamps a CENTRE, which a point 5 cm inside the leg of a
+   *  U satisfies with a 2 m sofa mostly through the wall — so a centre clamp would
+   *  have closed the ticket and left the defect. The function that reads a piece's
+   *  FOOTPRINT is `contain` in `lib/layout-settle.ts`, which every solved placement
+   *  already ends on; it is `containedXZ` there now, pure and exported, and this is
+   *  its second caller rather than a second copy of it. A drop into an L's notch is no
+   *  longer a drop into the notch.
+   *
+   *  **The bounds inset stays, and runs first.** It is not made redundant: it owns the
+   *  one case `containedXZ` deliberately has no answer for — a piece WIDER than the
+   *  room, which cannot be inset from both sides and is centred rather than pinned
+   *  against one wall. It keeps its real size and `lib/clearance.ts` reports that it
+   *  does not fit; silently shrinking it is what rule 2 forbids. `containedXZ` returns
+   *  its input unchanged when nothing it tries is an improvement, so that centring
+   *  survives it.
    *
    *  (`polygonCentroid` is untouched and still has callers. `wallSegments` is one, and
    *  it flips its inward normals toward that vertex average, which is the defect
    *  `wallOutwardNormal` was fixed for — it reads the polygon's winding now. Same
-   *  reflex corner, one function over; not this change's to make.)
+   *  reflex corner, one function over; not this change's to make. And it is why the
+   *  `centre` handed down below is `interiorPoint`, which CHECKS its answer, rather
+   *  than that average: on a T the vertex average lands in the notch and on a U
+   *  between the arms, so a walk toward it walks out of the room.)
    *
    *  The support probe below reads the CLAMPED point either way: a piece let go
    *  outside the room was asking what it could stand on out there. */
@@ -2338,7 +2351,23 @@ export function placeNewPart(
     // silently shrinking it to suit is what rule 2 forbids.
     const cx = halfW * 2 >= b.maxX - b.minX ? (b.minX + b.maxX) / 2 : Math.max(b.minX + halfW, Math.min(b.maxX - halfW, x));
     const cz = halfD * 2 >= b.maxZ - b.minZ ? (b.minZ + b.maxZ) / 2 : Math.max(b.minZ + halfD, Math.min(b.maxZ - halfD, z));
-    return [cx, cz];
+    // …and then out of the quadrant an L / T / U cuts away, which a bounding box
+    // cannot see. A rectangle is unaffected: the inset above already puts the piece
+    // inside, `containedXZ` finds `escapeAt` zero and returns the same pair.
+    const poly = room.footprint as Poly;
+    // No `circle`: this function is not told whether the piece is round, so the
+    // subject is its bounding box. That errs in the safe direction — a box's extent
+    // along any normal is at least a circle's, so a round piece is never left
+    // outside and is at most pulled a few centimetres further in than it needed to
+    // be. Passing a guess would be worse than passing nothing.
+    return containedXZ(
+      { rot, dimMM },
+      cx,
+      cz,
+      poly,
+      interiorPoint(poly) ?? polygonCentroid(poly),
+      polygonWinding(poly),
+    );
   }
 
   /** Where a ceiling piece hangs the moment it is added: the middle of the room.
