@@ -949,7 +949,66 @@ about copy pointing at things that are not there.
 
 ---
 
+## H · Asked for by the user after looking at it in a browser — NOT yet built
+
+### 1. The Inspector's "Where it sits" row is three buttons wide and two of them are one button
+
+The user's words, having looked at the real thing: *the section seems redundant now and it
+takes too much horizontal space.* They offered three ways out — remove it, merge Floor and
+Surface "since they're basically the same", or icons only with no text — and asked for one
+of them to happen.
+
+**They are right about the merge, and it is provable rather than a matter of taste.**
+`components/studio/Inspector.tsx`:
+
+```
+groundToFloor():  setPosition([x, 0, z]);          clearParent()
+snapToSurface():  support = findSupportDetailed(...)
+                  setPosition([x, support?.y ?? 0, z]);  support ? setParent : clearParent
+```
+
+With nothing under the piece, `snapToSurface` **is** `groundToFloor`, line for line. They
+differ in exactly one case: something IS below, and you want the piece on the floor rather
+than on it. That case is real — a vase off a table without moving it in x/z, which no drag
+can do, since dragging it off changes where it is — but it is rare, and it is the only
+thing the third button buys.
+
+**So the fix is to derive the button rather than delete the capability:** show **Floor**
+only when `findSupportDetailed` finds a support, which is precisely when it is not a
+duplicate of Surface, and size the grid to however many buttons there are — two, at 50%
+each, in the ordinary case. The gate must call `findSupportDetailed` with the *same*
+arguments `snapToSurface` uses, or the button can appear when the action would do nothing.
+
+Then drop the `Where it sits` label with it. `Section` is a plain label, not a disclosure,
+so nothing needs a heading to be clickable, and each button already carries a title that
+says more than the heading does. Keep the `.section .section--flush` wrapper for the
+spacing rhythm, and keep `rail-triple` — `app/globals.css:533` reflows it to `1fr 1fr`
+on a narrow rail, which is a second reason not to hand-roll the columns.
+
+**Not icons-only.** Three icon+word buttons at 33% each is what does not fit; two at 50%
+does. Stripping the words to fit a third button that should not be there solves the
+symptom and keeps the cause — and an icon-only control then owes an accessible name on
+focus, which is a new obligation taken on for nothing.
+
+**Nothing is committed.** `grep "Where it sits"` finds one live site
+(`Inspector.tsx:216`) and no test, so this is a contained change; the two comments above
+that JSX explain why wall-mounted parts get the mount-height row instead, and that half
+stays exactly as it is.
+
+---
+
 ## Nothing in this document has been in a browser
 
-Neither has anything in `visual-check.md`. The desktop half of both is reachable with
-`pnpm build && pnpm start` and no login.
+That is no longer true of `visual-check.md`, and this line stays as the honest boundary
+between the two files: the four `aaf2888a` items were looked at in a real browser and are
+deleted from it. Everything measured *here* is still arithmetic.
+
+The desktop half of both is reachable with `pnpm build && pnpm start` and no login. What
+worked, so nobody re-derives it: **Playwright with Chromium, installed outside the repo**
+so `package.json` is untouched, driving `next start` on a spare port. Headless needs
+`--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader` or the WebGL room is
+a blank rectangle; with them the 3D scene renders and screenshots. Onboarding is
+`/onboarding/layout-pick` → **Start decorating**, which creates a room and lands on
+`/room/<id>/model` with a 6.0 × 4.0 living room of twelve pieces, and the console is
+clean. One snag: `page.screenshot()` can exceed a 30 s timeout while the canvas is live —
+raise the timeout rather than reading it as a hang.

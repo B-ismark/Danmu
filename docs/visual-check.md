@@ -273,78 +273,13 @@ direction is in `isWorthOffering` — what gets *offered* rather than what gets 
 
 ## Shell and flow
 
-*Owner: `shell`. All of these are **on `main`**, merge commit **`aaf2888a`** (PR #26,
-merged 2026-08-28). Gate counts dropped, per the rule above: the branch's numbers were
-taken at `deb70f2` against a suite of 1600 with five known reds, and both halves of that
-have moved — `main` is green and the suite is 84 files / 1651 tests. **Merging is not
-looking, and these four are now the oldest unlooked-at items on the page.** A fix that
-shipped without anyone seeing it needs eyes more than one still sitting in a PR.*
+*Owner: `shell`. **Empty, and that is the rule working.** Its four items — every bed
+rotated 90°, two grey bands at the foot of the right rail, Delete scrolling out of a
+tall Inspector, and a wardrobe widening its door instead of gaining a column — were all
+on `main` at `aaf2888a` (PR #26) and have now been **looked at by the user, in a
+browser, and confirmed good**. So they are deleted, which is what this file does with an
+item that has been seen.*
 
-### Every bed in the app was rotated 90° — on `main`, `aaf2888a`
-
-The one thing on this page a user can see without being told what to look for, and it is
-the reason to do this item first: it was in every shipped room for months and neither
-session that argued about it found it by looking at a bed.
-
-Open a room and look at the **bed** in the 3D tab. Then add each of the four from the
-Library — Single, Double, Queen, King — and read the millimetres in the Inspector.
-
-**Wrong looks like:** the headboard running along the **long** side, the two pillows
-end-to-end instead of side by side, or a bed too short to lie down in. In the Inspector,
-the size not matching the name you pressed — a Double and a Queen both arriving as
-`1800 × 2000`, or a Single as `1700 × 1200`. That is what `main` did to three of its four
-beds the moment you pressed Add, silently, because the clamp bands were transposed to
-agree with the catalog.
-
-**Then compare the tabs.** The 2D plan draws the footprint straight off `dimMM`, so 3D and
-plan must agree on which way the bed is long. Two tabs disagreeing is the check that caught
-the ceiling fan, and it is the only one that can catch this class without measuring.
-
-### One band at the foot of the right rail, not two — on `main`, `aaf2888a`
-
-Open a room and **select a piece**. Look at the bottom of the right rail.
-
-There must be **one** `--paper-2` band holding one row: `Delete`, `Add`, and the round
-revert (the revert only after you have moved something). Then **select a wall** — the same
-band, with `Done` where Delete was. Then **click empty floor** — the same band with Add
-alone.
-
-**Wrong looks like:** two grey bands stacked; a 1px horizontal line above the row — that
-line is what three separate reports called a stray scrollbar and two sessions went looking
-for an overflow that was never there; the row's right edge running under the rail's edge
-and being cut with **no scrollbar and no clue**; or a label ellipsised to `Add a pie…`.
-
-**Then make the window narrow** — down to about 1024–1280px, where the right rail is at its
-floor — and check the row again in all three selection states. The arithmetic says it fits
-and there is a test that goes red if either label gets longer, but **nothing in node can
-measure a font**, so the fit itself is unverified and this is the only way to know.
-
-### Delete stays put when the panel is taller than the rail — on `main`, `aaf2888a`
-
-Select a **sofa** and open every section in the Inspector — colour, on the surface, exact
-size — until the panel scrolls.
-
-**Wrong looks like:** `Delete` scrolling up out of the rail. It used to: it sat inside the
-Inspector's own scroll box behind a spacer, so it was at the bottom only while the panel
-happened to fit.
-
-### A wider wardrobe should gain a column, not a wider door — on `main`, `aaf2888a`
-
-Select a **wardrobe** and drag its width handle slowly from 600 mm to 4000 mm. Then the
-same for a **sofa**'s width.
-
-**Wrong looks like:** doors or seat cushions growing to an impossible width and then
-snapping to a different count. The old arithmetic was `Math.round(span / nominal)`, which
-minimises the error in the **count** and says nothing about the module — so 890 mm drew one
-890 mm door and 900 mm drew two of 450. The count must only ever go **up** as the piece
-gets wider.
-
-**And compare the tabs at three widths.** The plan draws the footprint off `dimMM` while
-the 3D tab rebuilds the tiling, so the two agreeing is the same cross-check as the bed.
-
-**The look changes on existing rooms** — narrower wardrobe doors, different seat counts.
-That is the fix, not a regression. What would be a regression is a module that is still a
-lie.
 
 ### Three signposts and no sign: the Library — narrowed to the click-through
 
