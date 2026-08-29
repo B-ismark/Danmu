@@ -11,10 +11,27 @@ end**. Each entry is: what you see → why → the move. If an entry needs a par
 justify itself, the justification belongs in `CLAUDE.md` beside the code it is about, and
 only the tell belongs here.
 
-**Adding to it.** One rule: an entry earns its place by having cost something **twice**.
-A trap that has happened once is a story; the second time is a pattern, and the pattern
-is the only thing worth a future session's attention. Say which two occasions, briefly —
-a claim with no incident behind it rots the same way a stale branch table does.
+**Adding to it.** Two rules.
+
+**One: an entry earns its place by having cost something twice.** A trap that has happened
+once is a story; the second time is a pattern, and the pattern is the only thing worth a
+future session's attention. Say which two occasions, briefly — a claim with no incident
+behind it rots the same way a stale branch table does.
+
+**Two: if a gate can see it, it does not belong here.** This file asks every future
+session to remember something; a test checks it once and stays checked. So when a trap
+turns out to be mechanically detectable, the right artifact is the assertion, not the
+paragraph — and the paragraph is then actively worse than nothing, because it spends
+tokens on every read and still relies on someone choosing to look. The case that set this
+rule: seven docblocks across five files had been separated from the functions they
+document, always by a later insertion that kept its own block, so nothing looked wrong at
+the insertion point. It reads like a perfect entry. It is six lines of scan —
+`tests/docblock-adjacency.test.ts` — and so it is not an entry.
+
+What is left for this file, after that, is a shape worth naming: **traps whose symptom is
+a correct answer to the wrong question.** A tool that ran, succeeded, and reported about
+something other than what you asked. No gate catches those, because there is nothing
+malformed to catch.
 
 ---
 
@@ -132,6 +149,17 @@ including the parameter with the longest docblock in it. And `tests/module-tilin
 checking three of six ranges against their own declared bounds, which let a bookshelf's
 max go from 450 mm to 1.2 m with the file still green.)*
 
+**Symptom: a tie-break's second key is inverted and nothing goes red.**
+The fixture made the first key equal to the quantity the second key compares. "Equal score
+→ prefer lower cost", tested with the penalty at 0 — where score *is* cost, so the
+clause can never discriminate and inverting it leaves the suite green.
+→ One fixture where the keys **disagree**: first key tied, second key strictly
+ordered, and ordered the way the code does not already produce.
+*(Admitted at one occasion because it is the entry above one level down — there the
+fixture is built from the constant it tests, here the discriminator IS the subject. Same
+defect, and worth stating twice because the tie-break form does not look like a fixture
+problem.)*
+
 **Symptom: `it.fails` and you cannot see what else is broken in that test.**
 `it.fails` masks every other failure in the same body.
 → One assertion per parked body; move the guards to a sibling that still passes.
@@ -150,6 +178,30 @@ vitest 4 discards `console.log` from a passing run.
 ---
 
 ## Gates
+
+**Symptom: a gate prints `EXIT=0` and the output above it says the tool failed.**
+An exit code read through a pipe is the **last** command's exit code. `npx tsc --noEmit |
+tail -5` reports `tail`'s status, and `tail` always succeeds.
+→ `cmd > /tmp/out.txt 2>&1; echo "EXIT=$?"`, then read the file. Never `cmd | tail`
+followed by `$?`.
+*(Cost: `TSC EXIT=0` printed while `tsc` was exiting 1 with eleven errors, and it was
+nearly acted on. Second occasion: a `pnpm ... | tail` printing `EXIT=0` for a gate that
+never started at all — see the worktree-on-`AppData` entry below, where a startup crash
+produces no `Test Files` line and a summary grep prints an empty failure list.)*
+
+**Symptom: typecheck goes red in files you have never opened, right after your own
+change.**
+A declared devDependency that is not installed in **this** worktree. It reads as your
+change having broken the suite.
+→ The tell is one command: **the failing paths do not intersect your change set.**
+`git diff --name-only` against your base, compare. Then
+`pnpm install --frozen-lockfile` and re-run.
+*(Cost: `@testing-library/react` present in `package.json`, absent from `node_modules`,
+eleven errors across six test files, none of them in the change. Second occasion: the
+`node_modules` thinning where a package `dist` or `.bin` vanishes and a frozen install
+re-links the hollow directory and reports success — same symptom, and there the install is
+the fix that does **not** work, so check `node_modules/.bin/vitest` exists rather than
+trusting `Done in 4.6s`.)*
 
 **Symptom: `next build` exits 0 and you are not sure it linted.**
 It can print `ESLint: Invalid Options` and exit 0 having linted nothing.
@@ -218,6 +270,25 @@ saying "this is yours to merge" is *you* handing out permission you do not have.
 your three" is a smaller statement than a claim. Send wording for someone else's file
 rather than editing it.
 
+**Symptom: you and a peer independently did the same work, in files neither of you
+claimed.**
+A file claim covers the files you named. Work discovered *during* review lands wherever
+the defect is, which is by definition outside both claims — so the moment either of you
+finds something in unclaimed territory, the finding itself has to be claimed, out loud,
+before the fix is written.
+→ When you report a finding in a file nobody holds, say **who is fixing it** in the
+same message. "Confirmed, and I am doing it" or "confirmed, it is yours".
+*(Cost: two sessions produced the same seven docblock fixes and the same six-line gate,
+in parallel, from the same review — each having told the other about it. Both diffs were
+green. One was thrown away.)*
+
+**Symptom: a fix you pushed is not in `main`, and the PR says merged.**
+A merge takes the head that existed when it ran. A push to the branch afterwards is a real
+commit on a real branch and is in nothing.
+→ `git merge-base --is-ancestor <sha> origin/main` before believing any fix landed,
+and especially before telling a peer it did. The branch usually survives the merge, so
+`git branch -r --contains <sha>` finds it and a cherry-pick recovers it.
+
 **Symptom: a shared doc conflicts and you are tempted to keep both sides.**
 A union merge resurrects items the other branch **deliberately deleted**. Take their
 file, re-apply your own additions, then grep for four things they removed to prove none
@@ -241,3 +312,17 @@ show you were missing. Go looking for them.
 **Symptom: a dead-code sweep says a token or class is unused.**
 Read `tests/` too. Template-string class names match no literal grep, and some tokens
 have no `var()` reader on purpose — their consumer is a test.
+
+**Symptom: you grep for a word from a comment and conclude the thing it describes is
+gone.**
+A grep for the words **in** a comment is not a search for what the comment is **about**.
+Prose, identifier and data structure are routinely three vocabularies for one concept —
+a block saying "shapes that are fixtures" documents `isLightFixture`, which reads
+`LIGHT_BY_SHAPE`, and no single grep finds the other two.
+→ Search for plausible **identifiers**, then for the callers, then conclude. And note
+the asymmetry that makes this specific case a trap rather than sloppiness: for an
+**orphaned** docblock you cannot search by the words in the block, because if those words
+appeared at the subject the block would not have read as orphaned in the first place.
+*(Cost: a docblock judged dead and deleted in the same commit as the gate that found it,
+while its function had five live readers including the Inspector gate the block's last
+clause describes. Second occasion: the dead-code sweep above, same mechanism.)*
