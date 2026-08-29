@@ -63,10 +63,32 @@ conflict.
 
 ## Sizes and fit
 
-*Owner: `sizes`. Empty because its one item — a bed added at a wall — **has been looked
-at, and it failed.** Two separate defects came out of it and both are measured in
+*Owner: `sizes`. Its previous item — a bed added at a wall — **has been looked at, and it
+failed.** Two separate defects came out of it and both are measured in
 `what-is-still-open.md` § H.2 and § H.3; the arithmetic is settled, so neither is waiting
-on eyes any more.*
+on eyes any more. The one below is new and is here because it **cannot be gated at all**.*
+
+### The exported floor plan and the on-screen plan of one room disagree
+
+**Where to click.** *Layout pick → T-Shape → Start decorating → 2D Plan → Export → Floor
+plan*, and open the PNG that downloads. Compare it against the 2D Plan tab you exported
+it from.
+
+**What wrong looks like.** The seeded **Pendant** missing from the numbered legend, and a
+bare orange tick sitting over the dining table in open floor — no number, no legend row —
+while the tab behind it draws the same pendant normally. Right looks like: the pendant in
+the legend with its footprint and a number, and no tick anywhere but on a wall line.
+
+**Why it is here rather than in a test.** `lib/plan-export.ts` draws through a real 2D
+canvas context, `canvas` is not a dependency, and jsdom's `getContext('2d')` returns
+`null` — line 75 asserts non-null and would throw. So there is no unit test for this
+module and I did not add a dependency to manufacture one. The fix is gated only by
+typecheck and by danmu-bc's measurement of the two PNGs; the pixels are unverified.
+
+**Where it rides.** `fix/derive-mounted-and-vertical-extent`, PR #54. The cause was
+`plan-export` filtering on `wallMounted` ("geometry is centred on its origin", true for a
+ceiling fan and a pendant) where it meant `ridesWall` ("belongs flat against a wall").
+`ridesWall`'s docblock had named the pendant as exactly this case since before the bug.
 
 ## Drag and selection
 

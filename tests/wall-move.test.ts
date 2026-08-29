@@ -172,3 +172,49 @@ describe('offsetWall moves the selected edge and nothing else', () => {
     }
   });
 });
+
+describe('the ceiling family belongs to the room, not to an edge of it', () => {
+  /** `wallMounted` means "this piece's geometry is centred on its origin" and is true
+   *  for a ceiling fan and a pendant. `ridesWall` is the narrower question this module
+   *  actually asks — the `wall-*` anchors and only those — and `ridesWall`'s own
+   *  docblock already named the pendant as the case that must not be slid onto a wall.
+   *  Both sites here read the wider flag, which cost the same piece twice. */
+  const pendant = part({
+    id: 'pendant',
+    category: 'lamp',
+    shape: 'lamp-pendant',
+    wallMounted: true,
+    pos: [0, 2.45, -0.5],
+    dimMM: [350, 350, 400],
+  });
+
+  it('does not claim a pendant hanging 1.5 m clear of the wall', () => {
+    // `attachedToWall`'s mounted branch hands the question to `nearestEdge`, which
+    // always names SOME wall — so the flag made every ceiling piece attached to
+    // whichever edge happened to be nearest, and a wall drag carried it sideways off
+    // whatever it hangs over. The geometric branch answers 1.325 m and declines.
+    expect(attachedToWall([pendant, table], ROOM, NORTH)).toEqual([]);
+
+    // The control: a piece genuinely IN that wall is still claimed, so this is not
+    // "the branch stopped working".
+    expect(attachedToWall([pendant, window0], ROOM, NORTH)).toEqual(['window']);
+  });
+
+  it('will not carry a pendant out of the room it hangs in', () => {
+    // The wall-rider exemption from the was-inside/now-inside test exists because a
+    // rider's footprint sits ON the boundary, where containment is a coin flip. Gated
+    // on `wallMounted` it covered the ceiling family too — so a pendant could be
+    // carried anywhere with nothing testing whether it still fitted. Here the North
+    // wall is dragged 3.5 m past the pendant, which would land it at z = +3.0 in a
+    // room that now ends at z = +2.
+    const outward = wallOutwardNormal(ROOM, NORTH);
+    const after = offsetWall(ROOM, NORTH, -3.5);
+    const carried = carryAttached(['pendant'], [pendant], ROOM, after, outward, -3.5);
+    expect(carried).toEqual([]);
+
+    // …and the exemption still holds for something that really does ride the wall,
+    // which is what stops this being a fix that just turns the branch off.
+    const kept = carryAttached(['window'], [window0], ROOM, after, outward, -3.5);
+    expect(kept.map((c) => c.id)).toEqual(['window']);
+  });
+});
