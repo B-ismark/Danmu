@@ -1032,7 +1032,7 @@ Taken at `4b7fe7f` with a throwaway vitest probe, since deleted — every number
 reproducible by calling the functions named, and each one says which function produced it.
 Nothing here needed a browser; the user's report is what said where to look.
 
-### 2. A wall-hugging piece is clamped by its UNROTATED extent and then rotated — 200 mm into the plaster
+### 2. A wall-hugging piece is clamped by its UNROTATED extent and then rotated — 200 mm into the plaster — FIXED
 
 The user, having looked: a bed dropped at a wall *"clips through the wall."* It does, and
 only on two of the four walls.
@@ -1057,13 +1057,43 @@ CLAUDE.md's own rule says a sign or a handedness is invisible in it. It hits eve
 non-square piece with a wall affinity — bed, sofa, wardrobe, desk, bookshelf — on an east or
 west wall.
 
-`resolvePlacement` one file over already has the right arithmetic:
-`extX = halfW·|cos| + halfD·|sin|`. So the fix is not new maths, it is choosing the yaw
-before the clamp instead of after it, and insetting by the rotated extent — ideally by
-sharing that expression rather than copying it, which is how two of these came to disagree
-in the first place.
+`resolvePlacement` one file over already had the right arithmetic:
+`extX = halfW·|cos| + halfD·|sin|`. So the fix was not new maths.
 
-### 3. Clicking a Library item drops every piece on the same spot, facing the same way
+**What landed.** `aabbExtents` — which already existed, in `lib/item-snap.ts`, of all
+places — moved to `lib/geometry.ts` and is now the **one** home for this expression:
+`drag-resolve.ts` had written the same four lines out inline and `placeNewPart` had no
+rotation term at all, so a primitive with three consumers was living in the magnetism
+module and being re-derived by two of them. (`layout-score.ts` keeps a fourth copy on
+purpose — typed arrays, innermost solver loop — and says so.) `intoRoom` takes a `rot` and
+insets by that, and `placeNewPart` resolves the **yaw before the clamp**, which needs two
+passes: one rotation-blind, whose only job is to bring a drop released outside the room to
+somewhere inside it so `snapToWall` is asked about a wall of this room, and then the real
+clamp at the angle the piece is actually getting.
+
+**Three assertions, in `tests/wall-parts.test.ts`, and the fixture decision is the whole
+point:** a 1600 × 2000 **double**, at all four walls. The three tests already there use a
+900 × 2000 single and assert only `rot`, so none of them could see this — and a piece whose
+plan is square cannot express it at all. All three were watched failing, and the
+containment one reports the west wall with a difference of `0.19999999999999996` m.
+
+One thing that came out of writing them and is worth keeping: the polygon test on an
+**exactly flush** piece is a coin toss. A bed clamped flush to the north wall of a 6 × 4
+read *inside*; the mirror placement at the south wall read *outside*. Both flush, opposite
+answers, decided by floating-point noise in how each corner was reached. That is what
+`resolvePlacement`'s `slightlyShrunk` (10 mm off each plan axis) is for, and the test uses
+the same box for the same reason rather than inventing a tolerance.
+
+**Six mutations, all red:** the unrotated extents restored; the yaw resolved after the
+clamp again; `aabbExtents` with its axes swapped; `aabbExtents` with no rotation term;
+`intoRoom` clamping every drop to the middle of the room; and nothing ever turned. A
+seventh was written and came back GREEN — `const wantsWall = false && affinity === 'must-wall' || …`
+— which was the **mutation's** fault and not the test's: `&&` binds tighter than `||`, so it
+still evaluated `affinity === 'prefers-wall'` and a bed was still turned. A mutation that
+does not mutate reads exactly like an assertion that cannot fail, and the only thing that
+tells them apart is checking what the mutant actually says.
+
+### 3. Clicking a Library item drops every piece on the same spot, facing the same way — the false comment is fixed, the behaviour is a decision
 
 Same probe, three beds added the way the **click** path adds them — `spawn()` calls
 `placeNewPart` with no `at`, so `ax = az = 0`:
@@ -1084,8 +1114,16 @@ The second half is a doc that is simply false. `spawnMany`'s comment says:
 
 `placeNewPart` reads `existing` in exactly one place — `findSupportUnder`, and only when
 `isTabletopProne(cat)`. A chair is not tabletop-prone. **Four chairs land as one chair four
-times**, and the comment beside the loop says the opposite. Two sources of truth, and the
+times**, and the comment beside the loop said the opposite. Two sources of truth, and the
 prose is the one the next reader believes.
+
+**The comment is fixed** — it now states what the code does and points here. The
+*behaviour* is left alone deliberately, because "adding several should spread them out" is a
+product decision with at least three defensible answers (spread along the nearest wall, fan
+out from the drop point, or leave them stacked and let Shuffle sort it), and picking one
+quietly inside a defect fix is how the last one got here. Same for the yaw: from the room
+centre there is no wall to take a heading from, and inventing one is a guess in an answer's
+clothes.
 
 ### 4. A drop into an L / T / U's missing quadrant lands outside the house — and it is written down as current behaviour
 

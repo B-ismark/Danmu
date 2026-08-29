@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { snapToNeighbors, aabbExtents, snapGuideEnds, GUIDE_OVERHANG_M } from '@/lib/item-snap';
+import { snapToNeighbors, snapGuideEnds, GUIDE_OVERHANG_M } from '@/lib/item-snap';
+import { aabbExtents } from '@/lib/geometry';
 import type { ScenePart } from '@/lib/scene-spec';
 
 function part(p: Partial<ScenePart> & Pick<ScenePart, 'id' | 'dimMM' | 'pos'>): ScenePart {
