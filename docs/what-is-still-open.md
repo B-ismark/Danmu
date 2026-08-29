@@ -53,7 +53,7 @@ the note there on why the file count has to travel with the assertion count.
   | `origin/fix/room-report-and-tidy` | 0 — contained |
   | `origin/fix/pointer-cancel-note` | **10 — NOT contained** |
   | `origin/test/component-tests-under-jsdom` | 11 — the open PR |
-  | `origin/research/inward-normals` | 2 — the winding fix, knowingly red |
+  | `origin/research/inward-normals` | 13 — the winding fix (knowingly red), STACKED on the PR above, so 11 of the 13 are its |
   | `origin/docs/a-branch-list-that-would-have-deleted-work` | 1 — this correction |
 
   Three things that list got wrong. `fix/convoy-self-support`, `fix/a-bed-that-was-rotated`
