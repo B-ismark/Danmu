@@ -5,8 +5,14 @@
 //      the floor — it slides, snaps to walls when wall-mounted, stops against
 //      obstacles, and tints red while the spot is invalid. Scroll rotates it
 //      mid-drag; on touch, a second finger twists it.
-//   2. GIZMO (precision): Maya-style W=move E=rotate R=scale TransformControls
-//      on the selected part.
+//   2. GIZMO (precision): TransformControls on the selected part, W = move,
+//      R = rotate, S = scale. NOT "W=move E=rotate R=scale", which is what this
+//      line said for a long time and is wrong twice over: the modes are set in
+//      components/studio/KeyboardShortcuts.tsx, and E is not one of them — Q and E
+//      ORBIT THE CAMERA (components/three/CameraRig.tsx, NAV_KEYS). The cost of that
+//      sentence was a hand-off note telling the user to "press E and turn it", which
+//      spun the camera instead, so the gesture it was asking about went unchecked and
+//      came back as a question rather than an answer.
 // Both paths resolve through the same deterministic placement pipeline
 // (containment → wall snap → gravity → exact OBB collision) and commit through
 // the same code, so behaviour never diverges. On an invalid drop the part rests
@@ -35,6 +41,7 @@ import { useScene } from '@/lib/scene-store';
 import { currentRoomScene } from '@/lib/room-scene';
 import { renderBaseDim, resolvePart } from '@/lib/transforms';
 import { useDragLive } from '@/lib/drag-live';
+import { refusalAfterGesture, REFUSAL_HOLD_MS } from '@/lib/refusal';
 import { announce } from '@/components/studio/KeyboardShortcuts';
 import {
   dimFromGroupScale,
@@ -231,6 +238,17 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
    *  `releasePointerCapture`, the release runs the normal teardown and skips only
    *  the commit. Same for the gizmo's `onMouseUp`. */
   const cancelled = useRef(false);
+  /** Clears the refusal `commit()` leaves on screen when a gesture ends somewhere
+   *  the piece does not fit — see the block at the end of `commit()`. A ref, and
+   *  cleared on unmount, because it outlives the gesture by design and would
+   *  otherwise write to a store from a part that has been deleted. */
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (holdTimer.current) clearTimeout(holdTimer.current);
+    },
+    [],
+  );
 
   // Apply transforms whenever stored values change.
   useEffect(() => {
@@ -576,12 +594,71 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
 
     lastValidPos.current = [x, y, z];
     lastFreePos.current = null;
-    setDragInvalid(false);
     // The gesture is over, so the next refusal is news again even if it names the
     // same piece. Without this a drag that ended while refusing left the key set and
     // the following drag hit the same obstacle in silence.
     saidRef.current = null;
-    setLive(null);
+
+    // ── Does the placement we just committed actually fit? ────────────────────
+    //
+    // This used to end `setDragInvalid(false)` and `setLive(null)`, unconditionally,
+    // on every path — so a gesture that ends refused had its refusal COMPUTED here
+    // and cleared on the same tick, by the next two lines. The plan does the
+    // opposite: `PlanView`'s turn says in its own comment that the turn is taken
+    // either way, because refusing it would make a piece in a tight corner
+    // unturnable, and then it holds a red outline on the piece. 3D took the same
+    // turn and said nothing, which is what a user sees as "the couch is cutting
+    // through the wall instead of being constrained" — the geometry is the plan's
+    // geometry, and the difference is entirely in whether anything said so.
+    //
+    // Reported as a defect after exactly that. Measured: a 4 m sofa turned 90° in a
+    // 6 × 3 room resolves to `pos.z = 0.5` spanning `[-1.5, 2.5]` against a room of
+    // `[-1.5, 1.5]` — 1.000 m through the south wall, `valid: false`.
+    //
+    // A translate cannot get here: its fallback rests at a spot this piece already
+    // occupied at this angle and size. A ROTATE or a SCALE can, and does, because
+    // `back` is where the piece is standing and the only thing that changed is the
+    // extent being tested against the walls — which is also why the fallback's own
+    // comment claiming it "comes back legal by construction" is true for one of the
+    // three gestures.
+    //
+    // Held rather than latched, and on the channel that already draws it: every
+    // refused piece reads `blockedIds` through its own per-part selector, so the set
+    // goes red exactly as it does mid-drag, and one timer clears the lot. The same
+    // window the plan fades over, from the same constant, because two surfaces
+    // disagreeing about how long a refusal stays up is the next version of this bug.
+    const refusal = refusalAfterGesture({
+      draggedId: partId,
+      placementValid: resolved.valid,
+      convoyValid: co.valid,
+      blockedIds: co.blockedIds,
+      blockedByName: co.blocked?.name,
+    });
+    if (holdTimer.current) clearTimeout(holdTimer.current);
+    holdTimer.current = null;
+    if (!refusal) {
+      setDragInvalid(false);
+      setLive(null);
+    } else {
+      setLive({
+        partId,
+        x,
+        y,
+        z,
+        rot: resolved.rot,
+        dimMM: dim,
+        floor: isFloorStanding(part.category, part.shape),
+        valid: false,
+        blockedIds: refusal.ids,
+        blockedBy: refusal.by,
+      });
+      holdTimer.current = setTimeout(() => {
+        holdTimer.current = null;
+        setDragInvalid(false);
+        setLive(null);
+        invalidate();
+      }, REFUSAL_HOLD_MS);
+    }
     invalidate();
   }
 

@@ -12,7 +12,7 @@
 // would just re-assert the implementation back at itself.
 
 import 'fake-indexeddb/auto';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { clear, keys, set } from 'idb-keyval';
 import { roomStore, ROOM_SCHEMA_VERSION, type RoomData } from '@/lib/storage';
 
@@ -190,6 +190,27 @@ describe('purgeTrash', () => {
     await roomStore.purgeTrash(0);
     expect(await roomStore.restoreRoom(stale)).toBe(false);
     expect(await roomStore.restoreRoom(fresh)).toBe(false);
+  });
+
+  // The assertion above is the same claim, but it can only FAIL when the trash key's
+  // timestamp lands in the same millisecond as the purge's cutoff — which is a race
+  // against the machine, not a test. It duly passed locally at 74 s and went red in
+  // CI at 21 s, on a docs-only pull request, which read as that PR breaking storage.
+  // Freezing the clock makes `ts === cutoff` the case every run, on every machine.
+  it('purges a room trashed in the same millisecond as the cutoff', async () => {
+    const FROZEN = 1_700_000_000_000;
+    const now = vi.spyOn(Date, 'now').mockReturnValue(FROZEN);
+    try {
+      await roomStore.saveRoom(room('same-ms'));
+      const token = await roomStore.clearRoom('same-ms');
+      // `maxAgeMs: 0` means "nothing is worth keeping". The trash key was stamped at
+      // `FROZEN` and the cutoff is `FROZEN - 0`, so a `<` comparison calls a room
+      // trashed at this instant not-yet-expired and keeps it forever.
+      await roomStore.purgeTrash(0);
+      expect(await roomStore.restoreRoom(token)).toBe(false);
+    } finally {
+      now.mockRestore();
+    }
   });
 });
 

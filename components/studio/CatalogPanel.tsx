@@ -144,11 +144,17 @@ function spawn(category: ScenePart['category'], shape: ScenePart['shape'], dimMM
 
 /** Several at once, from a marked set.
  *
- *  Placed one after another rather than in parallel: `placeNewPart` reads the
- *  parts already in the room, so each piece avoids the one before it and four
- *  chairs land as four chairs instead of one chair four times. Nothing already in
- *  the room moves — "add three of these" is not permission to rearrange what is
- *  there. */
+ *  Placed one after another rather than in parallel, and nothing already in the room
+ *  moves — "add three of these" is not permission to rearrange what is there.
+ *
+ *  This comment used to claim the sequencing bought something it does not: that
+ *  `placeNewPart` reads the parts already in the room, "so each piece avoids the one
+ *  before it and four chairs land as four chairs instead of one chair four times."
+ *  It reads `existing` in exactly ONE place — `findSupportUnder`, and only when
+ *  `isTabletopProne(cat)`. A chair is not, so four chairs land at one point, all
+ *  four facing the same way. Whether adding several should spread them out is a
+ *  product decision and is written up in docs/what-is-still-open.md; what is not a
+ *  decision is a comment asserting the behaviour we would like. */
 function spawnMany(items: LibraryItem[]) {
   const ids: string[] = [];
   for (const item of items) ids.push(spawn(item.category, item.shape, [...item.dimMM], item.label));
