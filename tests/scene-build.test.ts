@@ -5,11 +5,13 @@ import {
   buildSceneFromRoom,
   CATALOG_SHAPES_ORDERED,
   collidesAt,
+  defaultScene,
   isLightFixture,
+  isWallMountedPart,
   lightFor,
   type ScenePart,
 } from '../lib/scene-spec';
-import type { RoomData } from '../lib/storage';
+import { LAYOUT_IDS, type RoomData } from '../lib/storage';
 import { heightForNewCeiling, MOUNT_PAD } from '../lib/physics';
 import { footprintForLayout } from '../lib/footprint';
 import { footArea, footFromPart, footIntersectionArea, outsideShare } from '../lib/geometry';
@@ -488,5 +490,71 @@ describe('one ceiling clearance: the duplication itself, not just its drift', ()
     // file whose clamp had been deleted rather than moved.
     const clampers = modules.filter((m) => /-\s*MOUNT_PAD/.test(m.src)).map((m) => m.file);
     expect(clampers, 'one owner, and the sweep must actually find it').toContain('layout-settle.ts');
+  });
+});
+
+// ─── `wallMounted` is derived, never hand-set ─────────────────────────────────
+//
+// The flag means "is this piece's geometry centred on its origin", and
+// `isWallMountedPart(category, shape)` — i.e. `anchorFor(...) !== 'floor'` — is that
+// question's only answer. Six readers trust it: `floorBlockers`, `isObstacle`,
+// `overlapsSomething`, `layout-score`'s window branch, `layout-solve`'s `movable`
+// mask, and `MeasureGuides`.
+//
+// A `lamp-pendant` was seeded `wallMounted: false` directly beneath a comment saying
+// "Ceiling-anchored, so `groundY` decides the height", so its `pos[1]` was a mesh
+// CENTRE while its flag claimed floor-standing. Found by danmu-bc's sweep, and this
+// is that sweep as an assertion: the seeder's default derives now, and the two
+// hand-set overrides are gone.
+describe('every part the app builds agrees with the derived mount flag', () => {
+  // Not a hand-typed list: the layout ids come from `storage.ts`'s `as const` array,
+  // minus `custom` (which has no preset footprint of its own to build from).
+  const LAYOUTS = LAYOUT_IDS.filter((id) => id !== 'custom');
+  const SIZES: Array<[number, number]> = [
+    [6, 4],
+    [7.5, 5.6],
+    [6, 5],
+    [12, 9],
+    [3.2, 2.6],
+  ];
+
+  it('across every preset layout at five sizes', () => {
+    const wrong: string[] = [];
+    let swept = 0;
+    for (const layoutId of LAYOUTS) {
+      for (const [w, d] of SIZES) {
+        for (const p of defaultScene(layoutId, w, d)) {
+          swept++;
+          // `!!`, not `!==`. `wallMounted` is OPTIONAL on `ScenePart` and floor-standing
+          // furniture simply omits it, so ABSENT and `false` are the same answer — which
+          // is not a shortcut here but what every reader actually does: `floorBlockers`,
+          // `isObstacle`, `overlapsSomething` and `movable` all test `!p.wallMounted`.
+          // The first version of this assertion compared strictly and reported 165 of
+          // 323 parts as wrong, every one of them `stored=undefined derived=false`.
+          const derived = isWallMountedPart(p.category, p.shape);
+          if (!!p.wallMounted !== derived) {
+            wrong.push(`${layoutId} ${w}x${d} · ${p.name} (${p.shape}) stored=${p.wallMounted} derived=${derived}`);
+          }
+        }
+      }
+    }
+    // A COUNT, and a literal floor under it. `roomBays` returns [] for a footprint it
+    // cannot fit two bays into, and `defaultScene` then returns no parts at all — so a
+    // sweep whose sizes all fell through would report zero disagreements over zero
+    // parts and read exactly like a pass.
+    expect(swept, 'the sweep must have parts to sweep').toBeGreaterThan(200);
+    expect(wrong, `${wrong.length} of ${swept} parts disagree`).toEqual([]);
+  });
+
+  it('and the detected-room path agrees too', () => {
+    // `buildSceneFromRoom` is the other builder, and it now ends on `settleHeights`,
+    // which reads the ANCHOR rather than this flag. So the two must not disagree: a
+    // piece whose flag says floor and whose anchor says ceiling gets a floor clamp and
+    // a centred geometry.
+    const parts = buildSceneFromRoom(room([]));
+    expect(parts.length, 'the fallback starter scene must produce parts').toBeGreaterThan(0);
+    for (const p of parts) {
+      expect(!!p.wallMounted, `${p.name} (${p.shape})`).toBe(isWallMountedPart(p.category, p.shape));
+    }
   });
 });

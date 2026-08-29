@@ -26,6 +26,7 @@ import {
   type Foot,
   type Poly,
 } from './geometry';
+import { verticalExtent } from './physics';
 import {
   buildClearanceField,
   componentAreas,
@@ -305,9 +306,21 @@ export function analyzeRoom(
       // Only when they also share vertical space — a monitor over a desk is a
       // stack, not a clash. (`solid` is already floor-level, but a part can sit
       // just under 0.05 m and still be short enough to pass under another.)
-      const aTop = a.pos[1] + a.dimMM[2] / 1000;
-      const bTop = b.pos[1] + b.dimMM[2] / 1000;
-      if (aTop <= b.pos[1] + 0.005 || bTop <= a.pos[1] + 0.005) continue;
+      //
+      // `verticalExtent`, not `pos[1] + h`, and the whole extent rather than a top:
+      // `pos[1]` is a bottom for a floor anchor and the mesh CENTRE for every other
+      // one. Unreachable today — `floorBlockers` admits nothing whose anchor is not
+      // the floor — and written correctly anyway, because the set this rule reads is
+      // itself an open question. `floorBlockers` answers "who gets in a WALKER's
+      // way", which is the right set for the walkway, navigation and window rules and
+      // is not obviously the right one for "are these two pieces inside each other":
+      // PR #42 taught the drag that a wardrobe CAN collide with a mounted TV, so that
+      // refusal exists while this report stays silent about one already in the room.
+      // Widening it is a decision with `RULE_HANDLING` in it, not a patch — see
+      // `docs/what-is-still-open.md`. This line is what widening it needs first.
+      const [aBottom, aTop] = verticalExtent(a.category, a.shape, a.dimMM, a.pos[1]);
+      const [bBottom, bTop] = verticalExtent(b.category, b.shape, b.dimMM, b.pos[1]);
+      if (aTop <= bBottom + 0.005 || bTop <= aBottom + 0.005) continue;
       const oa = obbs.get(a.id)!;
       const ob = obbs.get(b.id)!;
       const shared = footIntersectionArea(oa, ob);
@@ -436,7 +449,10 @@ export function analyzeRoom(
     for (const zn of accessZones(win, win.pos[0], win.pos[2], win.rot)) {
       const blockers = solid.filter((p) => {
         if (zoneExempt('window', roleOf(p))) return false;
-        if (p.pos[1] + p.dimMM[2] / 1000 <= zn.rule.aboveY + 0.05) return false;
+        // The piece's real top against the sill — `verticalExtent` for the same
+        // reason as rule 2 above, so a set that ever admits a mounted piece measures
+        // it correctly rather than by half a height.
+        if (verticalExtent(p.category, p.shape, p.dimMM, p.pos[1])[1] <= zn.rule.aboveY + 0.05) return false;
         const f = obbs.get(p.id)!;
         return footIntersectionArea(f, zn.foot) / (footArea(zn.foot) || 1) > 0.15;
       });

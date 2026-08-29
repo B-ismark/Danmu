@@ -1365,7 +1365,28 @@ function dress(
       rot,
       dimMM: clampDims(category, shape, dimMM),
       locked: false,
-      wallMounted: true,
+      // DERIVED, not `true` with exceptions. This read `wallMounted: true` because the
+      // dressing pass is mostly curtains and pictures, and then two of its three
+      // callers overrode it -- one of them WRONGLY. A pendant was added
+      // `wallMounted: false` directly under a comment saying "Ceiling-anchored, so
+      // `groundY` decides the height", so its `pos[1]` was a mesh CENTRE while its flag
+      // said floor-standing: `findSupportDetailed` did not skip it and measured its top
+      // as `pos[1] + h` = 3.05 m in a 2.8 m room, 250 mm through the slab, where a
+      // lamp could come to rest.
+      //
+      // Measured by danmu-bc across `rect`/`l`/`t`/`u`/`open` at five sizes: 8 of 323
+      // parts had a stored flag disagreeing with the derived one, and every one of
+      // them was that pendant. `tests/scene-build.test.ts` sweeps the same ground as
+      // an assertion now, so `:1429` cannot grow a sibling.
+      //
+      // Two overrides, not three: the `wallMounted: true` that used to sit here was
+      // this default itself, and the bedside lamp's `false` was correct.
+      //
+      // `isWallMountedPart(category, shape)` is `anchorFor(...) !== 'floor'`, which is
+      // the whole of what this field means. Both hand-set answers are gone;
+      // `extra` can still override for a piece that genuinely needs it, and nothing
+      // does.
+      wallMounted: isWallMountedPart(category, shape),
       ...extra,
     });
   };
@@ -1426,7 +1447,6 @@ function dress(
     const t = at(table);
     // Ceiling-anchored, so `groundY` decides the height rather than a number here.
     add('lamp', 'Pendant', 'lamp-pendant', [350, 350, 400], [t.pos[0], 0, t.pos[2]], t.rot, {
-      wallMounted: false,
       circle: true,
     });
     const last = parts[parts.length - 1];
@@ -1437,9 +1457,10 @@ function dress(
   for (let i = 0; i < parts.length; i++) {
     if (roles[i] !== 'nightstand') continue;
     const s = at(i);
-    add('lamp', 'Bedside lamp', 'lamp-table', [250, 250, 500], [s.pos[0], s.pos[1] + s.dimMM[2] / 1000, s.pos[2]], s.rot, {
-      wallMounted: false,
-    });
+    // No override: `lamp-table` has no entry in `ANCHOR_BY_SHAPE` and `lamp` none in
+    // `ANCHOR_BY_CATEGORY`, so it derives `floor` -- which is what the override said.
+    // Correct, and now not said twice.
+    add('lamp', 'Bedside lamp', 'lamp-table', [250, 250, 500], [s.pos[0], s.pos[1] + s.dimMM[2] / 1000, s.pos[2]], s.rot, {});
   }
 }
 

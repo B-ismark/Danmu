@@ -52,6 +52,7 @@ import {
   type PartLight,
   type ScenePart,
   type Shape,
+  isWallMountedPart,
 } from './scene-spec';
 import { clampDims, roomAxisRange, ROOM_SIDE_M } from './dimension-ranges';
 import { heightForNewCeiling } from './physics';
@@ -303,7 +304,7 @@ export function parseSceneFile(text: string): SceneFileParse {
   const originalToFinal = new Map<string, string>();
   let unreadable = 0;
   for (const candidate of partsIn.slice(0, MAX_PARTS)) {
-    const read = readPart(candidate, seen);
+    const read = readPart(candidate, seen, dropped);
     if (read) {
       parts.push(read.part);
       // First writer wins. On a duplicate id the FIRST piece keeps it and every
@@ -508,7 +509,14 @@ function readSite(v: unknown): Site | null {
  *  could do anything sensible without it. An unknown `shape` has no geometry, so the
  *  piece goes; an unreadable `color` just means the shape's default, so the field
  *  goes and the piece stays. */
-function readPart(v: unknown, seen: Set<string>): { part: SceneFilePart; originalId: string } | null {
+function readPart(
+  v: unknown,
+  seen: Set<string>,
+  /** Same channel `readRoom` takes, for the same reason: this parser is lossy on
+   *  purpose and never silent. A field overruled is content the user wrote and did
+   *  not get, so it is reported rather than quietly corrected. */
+  dropped: string[],
+): { part: SceneFilePart; originalId: string } | null {
   if (!isObj(v)) return null;
 
   const shape = oneOf<Shape>(v.shape, SHAPES);
@@ -548,7 +556,36 @@ function readPart(v: unknown, seen: Set<string>): { part: SceneFilePart; origina
   };
 
   if (v.circle === true) part.circle = true;
-  if (v.wallMounted === true) part.wallMounted = true;
+
+  // DERIVED, never trusted — the same boundary `clampDims` draws for a size, drawn
+  // for the one other field in this record that has a single right answer.
+  //
+  // `wallMounted` is "is this piece's geometry centred on its origin", and
+  // `isWallMountedPart(category, shape)` is that question's only answer: every path
+  // inside the app computes it from those two (`placeNewPart`, the Inspector's swap,
+  // the scene builder). Reading it off the file made this the one place the app could
+  // hold a television that believed it was floor-standing — with the centred geometry
+  // sinking half its height through the floor, which is the exact scar
+  // `isWallMountedPart`'s own docblock records from the detection path, and a support
+  // probe measuring its top 285 mm too high.
+  //
+  // Both directions matter and the absent one is the likelier: the field is OPTIONAL,
+  // so a hand-written or third-party file that simply omits it produced a mounted
+  // piece with the flag false. And a file asserting `wallMounted: true` on a sofa is
+  // refused just as firmly, because a sofa's geometry is not centred no matter what a
+  // file says.
+  //
+  // Reported only when the file DISAGREED, not on every part that carries the field:
+  // this app's own writer emits the derived value, so a round trip is silent, and a
+  // note on every export would be noise rather than the honest lossiness `dropped`
+  // is for.
+  const derivedMount = isWallMountedPart(category, shape);
+  if (derivedMount) part.wallMounted = true;
+  if (v.wallMounted !== undefined && v.wallMounted !== derivedMount) {
+    dropped.push(
+      `“${part.name}” said wallMounted: ${v.wallMounted === true}; a ${shape} is ${derivedMount ? '' : 'not '}wall-mounted, so that was ignored`,
+    );
+  }
   if (v.hidden === true) part.hidden = true;
 
   const colour = hex(v.color);

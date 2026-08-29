@@ -29,6 +29,7 @@ import { footprintBounds, type Footprint } from './footprint';
 import { footFromPart, footInsidePoly, footIntersectionArea, type Foot } from './geometry';
 import { baySides, roomBays } from './room-bays';
 import { roleOf, sharesFloor } from './layout-rules';
+import { verticalExtent } from './physics';
 import { solveLayout } from './layout-solve';
 import { settleParts } from './layout-settle';
 import type { Placement } from './layout-score';
@@ -283,10 +284,13 @@ function overlapsSomething(foot: Foot, seated: ScenePart, parts: ScenePart[]): b
   for (const other of parts) {
     if (other.wallMounted) continue;
     // Vertical clearance: a monitor over a desk is a stack, not a clash — the same
-    // test the room report makes before comparing two footprints at all.
-    const myTop = seated.pos[1] + seated.dimMM[2] / 1000;
-    const itsTop = other.pos[1] + other.dimMM[2] / 1000;
-    if (myTop <= other.pos[1] + 0.005 || itsTop <= seated.pos[1] + 0.005) continue;
+    // test the room report makes before comparing two footprints at all, and now
+    // literally the same arithmetic. `seated` is the CANDIDATE, which is the half that
+    // was reachable: a mounted piece can be the thing being fit-checked even though
+    // `other.wallMounted` skips mounted obstacles, and its `pos[1]` is a centre.
+    const [myBottom, myTop] = verticalExtent(seated.category, seated.shape, seated.dimMM, seated.pos[1]);
+    const [itsBottom, itsTop] = verticalExtent(other.category, other.shape, other.dimMM, other.pos[1]);
+    if (myTop <= itsBottom + 0.005 || itsTop <= myBottom + 0.005) continue;
     // Note the polarity: `sharesFloor` is TRUE for the pairs that legitimately occupy
     // the same square metre — a dining chair under its table, an ottoman under a coffee
     // table. Those are the ones to SKIP. Reading the name as "competes for the floor"

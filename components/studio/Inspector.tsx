@@ -84,7 +84,12 @@ export function Inspector() {
       rot: p.rot,
       dimMM: p.dimMM,
       category: p.category,
-      wallMounted: p.wallMounted,
+      // `shape`, not `wallMounted`. The support probe decides what a piece's geometry
+      // is anchored to, and that is `anchorFor(category, shape)` — keyed by shape
+      // first for a fan, a door, a curtain and a television. Handing it the stored
+      // flag instead was handing it a copy of the answer, which `lib/scene-file.ts`
+      // could get wrong; `SupportCandidate` no longer has a field to put it in.
+      shape: p.shape,
       circle: p.circle,
     }));
   }

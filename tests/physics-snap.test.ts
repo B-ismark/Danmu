@@ -58,6 +58,7 @@ const DESK: SupportPart = {
   pos: [0, 0, 0],
   dimMM: [1400, 700, 750], // top at 0.75 m; half-width 0.7 m
   category: 'desk',
+  shape: 'desk-standard',
 };
 
 /** Laptop centre X that leaves `share` of its width over the desk's +X edge. */
@@ -119,14 +120,21 @@ describe('findSupportUnder', () => {
   });
 
   it('picks the highest qualifying surface', () => {
-    const shelf: SupportPart = { id: 'shelf', pos: [0, 0.8, 0], dimMM: [800, 400, 40], category: 'shelf' };
+    const shelf: SupportPart = { id: 'shelf', pos: [0, 0.8, 0], dimMM: [800, 400, 40], category: 'shelf', shape: 'bookshelf' };
     expect(findSupportUnder([DESK, shelf], 'laptop', 0, 0, LAPTOP)).toBeCloseTo(0.84, 6);
     expect(findSupportUnder([shelf, DESK], 'laptop', 0, 0, LAPTOP)).toBeCloseTo(0.84, 6);
   });
 
   it('ignores rugs, wall-mounted pieces and itself', () => {
-    const rug: SupportPart = { id: 'rug', pos: [0, 0, 0], dimMM: [3000, 2000, 10], category: 'rug' };
-    const tv: SupportPart = { id: 'tv', pos: [0, 1.3, 0], dimMM: [1400, 60, 800], category: 'tv', wallMounted: true };
+    // **The television used to carry `wallMounted: true` and now carries nothing but
+    // its shape.** That was the fixture handing the code the answer: the old skip read
+    // the flag, so this test proved only that a piece flagged as mounted is skipped,
+    // which is true of any implementation that reads the flag — including one given a
+    // television with the flag missing, which `lib/scene-file.ts` could produce from
+    // an imported file. The skip is `!isFloorStanding(category, shape)` now, so
+    // `shape: 'tv'` is all the fixture says and `anchorFor` has to work the rest out.
+    const rug: SupportPart = { id: 'rug', pos: [0, 0, 0], dimMM: [3000, 2000, 10], category: 'rug', shape: 'rug' };
+    const tv: SupportPart = { id: 'tv', pos: [0, 1.3, 0], dimMM: [1400, 60, 800], category: 'tv', shape: 'tv' };
     expect(findSupportUnder([rug, tv], 'laptop', 0, 0, LAPTOP)).toBeNull();
     expect(findSupportUnder([DESK], 'desk', 0, 0, LAPTOP)).toBeNull();
   });
@@ -148,7 +156,7 @@ describe('findSupportDetailed', () => {
   });
 
   it('picks the highest qualifying surface, by id', () => {
-    const shelf: SupportPart = { id: 'shelf', pos: [0, 0.8, 0], dimMM: [800, 400, 40], category: 'shelf' };
+    const shelf: SupportPart = { id: 'shelf', pos: [0, 0.8, 0], dimMM: [800, 400, 40], category: 'shelf', shape: 'bookshelf' };
     expect(findSupportDetailed([DESK, shelf], 'laptop', 0, 0, LAPTOP)?.id).toBe('shelf');
     expect(findSupportDetailed([shelf, DESK], 'laptop', 0, 0, LAPTOP)?.id).toBe('shelf');
   });
