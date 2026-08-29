@@ -2,7 +2,7 @@
 // non-rectangular (L / T / U / open) instead of a single width×depth box.
 // +X = right (East), +Z = toward South — same axes as the scene.
 
-import { polyAreaCentroid, polygonSignedArea, type Poly } from './geometry';
+import { polyAreaCentroid, polygonSignedArea, polygonWinding, type Poly } from './geometry';
 
 /** Re-exported rather than defined here. This file and `lib/geometry.ts` each had
  *  their own shoelace loop, and both were answering the same question — which way
@@ -148,7 +148,12 @@ export function wallOutwardNormal(poly: Footprint, index: number): [number, numb
   // arithmetically identical to `[1, 0]` and not identical to it under `Object.is`
   // or `toEqual`. Two rooms whose East walls face the same way should not differ by
   // the sign of a zero.
-  const s = polygonSignedArea(poly) >= 0 ? 1 : -1;
+  // `polygonWinding`, not `polygonSignedArea(poly) >= 0 ? 1 : -1` written out again:
+  // that expression is literally that function's body, and this file is where the
+  // second copy of a wall-normal rule has already cost five walls once. The
+  // tie-break at zero area has to be the same one `edgeProjection` uses, and the
+  // only way to guarantee that is for there to be one of it.
+  const s = polygonWinding(poly);
   return [(s * dz) / l + 0, (-s * dx) / l + 0];
 }
 
@@ -257,7 +262,7 @@ const PROBE_STEP = 0.1;
  *  solve, so this collapses the per-proposal scan above to one scan per solve. A
  *  `WeakMap` rather than a field on the model, because three of the four call sites
  *  are not the solver and would otherwise each need their own cache — the same
- *  argument `nearestEdge`'s optional centroid parameter loses.
+ *  argument `nearestEdge`'s optional `winding` parameter loses.
  *
  *  The answer is frozen and handed out by reference, so the identity IS the test:
  *  `tests/footprint.test.ts` asserts two calls return the same object, which goes red
@@ -419,7 +424,10 @@ export function clampIntoFootprint(x: number, z: number, poly: Footprint): [numb
 }
 
 /** Per-edge wall placement: midpoint, length, and Y-rotation so a plane's +Z
- *  face points INWARD (toward the centroid). Drives RoomShell's wall meshes. */
+ *  face points INWARD — which is the polygon's WINDING, read through
+ *  `wallOutwardNormal` and negated, not a perpendicular flipped toward any point.
+ *  Drives RoomShell's wall meshes; see the body for what the point-based version
+ *  cost on five of the presets' walls. */
 export function wallSegments(
   poly: Footprint,
 ): Array<{ x: number; z: number; len: number; yaw: number }> {

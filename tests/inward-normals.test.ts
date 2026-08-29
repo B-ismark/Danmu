@@ -100,7 +100,7 @@ function landsInside(poly: Footprint, i: number, nx: number, nz: number): boolea
 }
 
 describe('the inward normal comes from the winding, on every wall of every room', () => {
-  it('edgeProjection points into the room from all 60 edges', () => {
+  it('edgeProjection points into the room from every edge of every room, both windings', () => {
     let swept = 0;
     const wrong: string[] = [];
     for (const { label, poly } of allPolys()) {
@@ -142,7 +142,14 @@ describe('the inward normal comes from the winding, on every wall of every room'
         swept++;
       }
     }
-    expect(swept, 'the sweep must have reached most edges').toBeGreaterThan(60);
+    // Measured: the guard above never fires on this fixture set — all 72 steps land
+    // inside — so this is `toBe`, not a `>` bar. It was `toBeGreaterThan(60)`, which
+    // would have stayed green with eleven edges silently skipped, and a skipped edge
+    // here is a wall whose normal nothing checked. If a future fixture genuinely
+    // cannot take a 20 mm step somewhere, this goes red and says so rather than
+    // quietly shrinking its own coverage. The literal is deliberate: deriving it from
+    // `allPolys()` would make the assertion measure its own subject.
+    expect(swept, 'every edge must be reachable from 20 mm inside it').toBe(72);
   });
 
   it('is the exact opposite of wallOutwardNormal, which was fixed the same way', () => {
