@@ -59,6 +59,7 @@ import {
   type Poly,
 } from './geometry';
 import { isObstacle, roleOf, sharesFloor, WALL_GAP } from './layout-rules';
+import { findSupportDetailed, isFloorStanding, isTabletopProne, MOUNT_PAD, verticalExtent } from './physics';
 import type { ScenePart } from './scene-spec';
 
 // Breathing room kept off a wall comes from `layout-rules` (imported above) rather
@@ -217,6 +218,118 @@ function footOf(p: ScenePart): Foot {
 
 function footAtXZ(p: ScenePart, x: number, z: number): Foot {
   return footFromPart([x, p.pos[1], z], p.rot, p.dimMM, p.circle);
+}
+
+/** One piece's height, and what it is standing on, after everything has moved.
+ *
+ *  Only the pieces whose Y actually CHANGED come back, and that is not tidiness: on
+ *  the Suggest path these are written into `useStudio.positions`, where a write is
+ *  never free — per `lib/transforms.ts` an override pins that value against a
+ *  re-detect and persists into IndexedDB and the scene file. Returning every piece
+ *  would stamp an override on the whole room for a solve that lifted nothing. */
+export type HeightFix = {
+  id: string;
+  /** The Y this piece must be at. Same meaning as `pos[1]` — a bottom for a
+   *  floor-anchored piece, the mesh CENTRE for every other anchor. */
+  y: number;
+};
+
+/** Put every piece back on top of whatever is now under it.
+ *
+ *  **This is the pass that was missing from Suggest, and its absence is what the user
+ *  saw.** Put a nightstand on an armchair, press Suggest, and the solver moves the
+ *  armchair — `Placement` is `{x, z, yaw}`, there is no vertical axis in the search
+ *  and no concept of one piece riding another — so the nightstand keeps the armchair's
+ *  height with nothing under it and hangs in the air. From directly above, in the
+ *  plan, it looks correct.
+ *
+ *  The fix is not a vertical axis in the annealer. The solver's job is where things
+ *  stand in plan; a rider's height is a CONSEQUENCE of that, so it is answered
+ *  afterwards, once. Three things it does, in the order they have to happen:
+ *
+ *    1. a tabletop-prone piece (monitor, lamp, plant, ottoman) snaps onto the highest
+ *       real surface under its footprint — taller than 0.3 m, so a rug is not a table
+ *    2. any other floor-standing piece left above the floor with nothing under it
+ *       DROPS. This is the half that fixes the nightstand.
+ *    3. the ceiling clamp, so no piece's top pokes through the slab
+ *
+ *  **Extracted rather than written.** All of it already existed inside
+ *  `buildSceneFromRoom`, which is why the detected-scene path never had this bug and
+ *  Suggest always did: one caller had the pass and the other could not reach it. A
+ *  fresh implementation would have been the third thing in this repo that moves
+ *  furniture vertically, after this and `lib/drag-resolve.ts`'s gravity step — and
+ *  `drag-resolve` is the one that must NOT be merged into it, because it answers for a
+ *  single piece under a pointer, with a live rotation and a legality verdict, where
+ *  this answers for a whole room after the fact.
+ *
+ *  Resolved in ascending Y, and that ordering is load-bearing: `findSupportDetailed`
+ *  has **no below-test at all** — it takes the highest `top` whose footprint covers
+ *  `MIN_SUPPORT_SHARE` of the mover, above or below — so a lamp resolved before the
+ *  desk it stands on can come back resting on itself-from-below. Lowest first means
+ *  every support has already reached its final height when the thing riding it asks.
+ *
+ *  Pure: `parts` is not touched. Callers apply the fixes.
+ *
+ *  **No `supportId`, deliberately.** The first version returned which piece each
+ *  rider had come to rest on, so a caller owning rigid-parent links could re-point
+ *  one. Nothing needed it: `lib/rigid-parent.ts` re-validates every edge through
+ *  `isPhysicallySupported` before trusting it, so a link left pointing at the piece
+ *  that moved away is already handled and the floating piece is fixed without
+ *  touching `parentIds`. A field with no reader is the dead-plumbing shape rule 1
+ *  describes, whoever leaves it there. RE-PARENTING a rider onto whatever now holds
+ *  it up is a real feature and a different question from this bug; when something
+ *  wants it, the field comes back in the same commit as its consumer.
+ *
+ *  `roomHeight` in metres. */
+export function settleHeights(parts: ScenePart[], roomHeight: number): HeightFix[] {
+  // `MOUNT_PAD`, not a local `CEILING_PAD = 0.02`. It was one, doing this exact job
+  // on this exact quantity, and it is the reason the constant it duplicated could
+  // claim to be "the single clearance" while a fan placed by detection and a fan
+  // placed by a drag drifted apart the first time anyone changed it. Nothing would
+  // have said so: both look right, 10 mm apart, in a picture.
+  const cap = roomHeight - MOUNT_PAD;
+  // A working copy, lowest first. Every read below is against this list, so a piece
+  // resolved earlier is already at its final height for the piece above it.
+  const work = [...parts].sort((a, b) => a.pos[1] - b.pos[1]).map((p) => ({ ...p, pos: [...p.pos] as [number, number, number] }));
+  const out: HeightFix[] = [];
+
+  for (const p of work) {
+    const before = p.pos[1];
+
+    // **The ANCHOR, not the `wallMounted` flag, and not a list of shapes.** This read
+    // `p.wallMounted || p.shape === 'fan' || p.shape === 'lamp-pendant'` — a predicate
+    // that had already needed two shapes appended to it, which is the tell CLAUDE.md
+    // names for being at the wrong layer. `isFloorStanding` is `anchorFor(...) ===
+    // 'floor'`, so a door (`wall-floor`), a curtain and a television are centred
+    // because of their anchor rather than because someone remembered them, and a file
+    // that arrives with the flag missing cannot make a television floor-standing.
+    const floor = isFloorStanding(p.category, p.shape);
+
+    if (p.category !== 'rug') {
+      const support = floor
+        ? findSupportDetailed(work, p.id, p.pos[0], p.pos[2], p.dimMM, p.rot, p.circle)
+        : null;
+      const y = support !== null && support.y > 0.3 ? support.y : null;
+      if (isTabletopProne(p.category) && floor && y !== null) {
+        p.pos[1] = y;
+      } else if (floor && p.pos[1] > 0.05) {
+        // Nothing under it any more: the floor. This is the nightstand.
+        p.pos[1] = y ?? 0;
+      }
+    }
+
+    // Ceiling clamp. `verticalExtent` because `pos[1]` means a bottom for a floor
+    // anchor and a mesh centre for every other one, so `pos[1] + h` is wrong by half
+    // a height for a television — measured at up to 1.10 m on the catalog's curtain.
+    const h = p.dimMM[2] / 1000;
+    if (verticalExtent(p.category, p.shape, p.dimMM, p.pos[1])[1] > cap) {
+      p.pos[1] = floor ? Math.max(0, cap - h) : cap - h / 2;
+    }
+
+    if (p.pos[1] !== before) out.push({ id: p.id, y: p.pos[1] });
+  }
+
+  return out;
 }
 
 /** What a piece needs to be measured against the room: its angle, its size, and

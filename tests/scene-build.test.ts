@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   buildSceneFromRoom,
@@ -448,17 +448,45 @@ describe('a wall snap is measured across the yaw the piece will actually keep', 
 });
 
 describe('one ceiling clearance: the duplication itself, not just its drift', () => {
-  it('scene-spec.ts declares no pad constant of its own', () => {
-    // The assertions in the describe above compare the two paths' RESULTS, which
-    // can only catch a duplicate that has DRIFTED. Restore
-    // `const CEILING_PAD = 0.02` next to the `MOUNT_PAD` import and every one of
-    // them stays green while the exact duplication the describe is named for is
-    // back in the file. Reading the source is the only way to see a second
-    // declaration; a regex over code, and named as such.
-    const src = readFileSync(join(process.cwd(), 'lib', 'scene-spec.ts'), 'utf8');
-    expect(src).not.toMatch(/^\s*const\s+\w*(?:CEILING|MOUNT)_PAD\s*=/m);
-    // …and it does still use the shared one, so the check above is not passing
-    // because the clamp went away.
-    expect(src).toContain('MOUNT_PAD');
+  // The assertions in the describe above compare the two paths' RESULTS, which can
+  // only catch a duplicate that has DRIFTED. Restore `const CEILING_PAD = 0.02` next
+  // to the `MOUNT_PAD` import and every one of them stays green while the exact
+  // duplication this describe is named for is back in the file. Reading the source is
+  // the only way to see a second declaration; a regex over code, and named as such.
+  //
+  // **This was written against `lib/scene-spec.ts` by name and that rotted the moment
+  // the clamp moved** — into `settleHeights` in `lib/layout-settle.ts`, so that both
+  // the detected-scene path and Suggest could reach it. The test went red, which is
+  // the right outcome and is the whole reason its second assertion existed: it says
+  // "the file that clamps still reads the shared constant", so a green cannot mean
+  // the clamp went away. It had not gone away. It had moved, and a check naming one
+  // file cannot tell those apart.
+  //
+  // So it names no file now. The declaration ban sweeps every module in `lib/`, and
+  // the positive half asks which file owns the clamp by FINDING it rather than by
+  // remembering — whichever module clamps to the ceiling must read `MOUNT_PAD`, and
+  // there must be exactly one.
+  const libDir = join(process.cwd(), 'lib');
+  const modules = readdirSync(libDir)
+    .filter((f) => f.endsWith('.ts'))
+    .map((f) => ({ file: f, src: readFileSync(join(libDir, f), 'utf8') }));
+
+  it('no module in lib/ declares a ceiling pad of its own', () => {
+    expect(modules.length, 'the sweep must have files to sweep').toBeGreaterThan(20);
+    const offenders = modules
+      .filter((m) => m.file !== 'physics.ts')
+      .filter((m) => /^\s*(?:export\s+)?const\s+\w*(?:CEILING|MOUNT)_PAD\s*=/m.test(m.src))
+      .map((m) => m.file);
+    expect(offenders, 'MOUNT_PAD lives in physics.ts and nowhere else').toEqual([]);
+  });
+
+  it('and exactly one module clamps to the ceiling, reading the shared constant', () => {
+    // `cap` is the local name the clamp gives `roomHeight - MOUNT_PAD`. Asking for the
+    // ARITHMETIC rather than for a mention of `MOUNT_PAD` is what keeps this honest:
+    // a module that imports the constant and does not use it would satisfy a
+    // `toContain`, which is how the old version of this test would have passed on a
+    // file whose clamp had been deleted rather than moved.
+    const clampers = modules.filter((m) => /-\s*MOUNT_PAD/.test(m.src)).map((m) => m.file);
+    expect(clampers, 'one owner, and the sweep must actually find it').toContain('layout-settle.ts');
   });
 });

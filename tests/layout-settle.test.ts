@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { settleParts } from '../lib/layout-settle';
+import { settleHeights, settleParts } from '../lib/layout-settle';
 import { footprintForLayout, type Footprint } from '../lib/footprint';
 import { footArea, footFromPart, footInsidePoly, footIntersectionArea, outsideShare } from '../lib/geometry';
 import type { ScenePart } from '../lib/scene-spec';
@@ -134,5 +134,95 @@ describe('settleParts · out of each other', () => {
     const settled = settleParts([a, b], poly);
     expect(settled).toHaveLength(2);
     expect(settled.every((p) => Number.isFinite(p.pos[0]) && Number.isFinite(p.pos[2]))).toBe(true);
+  });
+});
+
+// ─── settleHeights · what Suggest was missing ─────────────────────────────────
+//
+// The user's report, in one sentence: put a nightstand on an armchair, press Suggest,
+// and the armchair moves out from under it while the nightstand keeps the armchair's
+// height and hangs in the air. `Placement` is `{x, z, yaw}` — the solver has no
+// vertical axis and no concept of one piece riding another — so nothing in the search
+// could have noticed, and from directly above in the plan it looks correct.
+describe('settleHeights · a rider whose support has moved', () => {
+  const armchair = (pos: [number, number, number]) =>
+    part({ category: 'chair', shape: 'chair-armchair', dimMM: [700, 700, 900], pos });
+  // A nightstand is NOT tabletop-prone, which is what makes it the right fixture: it
+  // exercises the "floor-standing piece left in mid-air" branch rather than the
+  // "snap a lamp onto a surface" one, and those are two different clauses.
+  const nightstand = (pos: [number, number, number]) =>
+    part({ category: 'nightstand', shape: 'nightstand', dimMM: [450, 400, 550], pos });
+
+  it('drops the rider to the floor when nothing is under it any more', () => {
+    // The armchair has moved to (2, 0, 1); the nightstand still sits at the armchair's
+    // old TOP (0.9) over (0, 0, 0), where there is now nothing at all.
+    const chair = armchair([2, 0, 1]);
+    const stand = nightstand([0, 0.9, 0]);
+    const fixes = settleHeights([chair, stand], 2.8);
+    expect(fixes, 'exactly one piece needed moving').toHaveLength(1);
+    expect(fixes[0].id).toBe(stand.id);
+    expect(fixes[0].y).toBe(0);
+  });
+
+  it('leaves it alone when the support is still under it', () => {
+    // The negative control, and without it the test above passes for a function that
+    // drops everything to the floor unconditionally.
+    const chair = armchair([0, 0, 0]);
+    const stand = nightstand([0, 0.9, 0]);
+    expect(settleHeights([chair, stand], 2.8)).toEqual([]);
+  });
+
+  it('reports only the pieces whose Y changed, not every piece', () => {
+    // A write is not free: on the Suggest path each of these becomes an override in
+    // `useStudio.positions`, which per `lib/transforms.ts` pins that value against a
+    // re-detect and persists. A function returning all four would stamp the room.
+    const parts = [
+      armchair([2, 0, 1]),
+      nightstand([0, 0.9, 0]),
+      part({ category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880], pos: [-1, 0, -1] }),
+      part({ category: 'table', shape: 'coffee-table', dimMM: [1100, 600, 420], pos: [1, 0, -1] }),
+    ];
+    const fixes = settleHeights(parts, 2.8);
+    expect(fixes.map((f) => f.id)).toEqual([parts[1].id]);
+  });
+
+  it('resolves lowest-first, so a lamp on a desk does not land on itself', () => {
+    // `findSupportDetailed` has NO below-test — it takes the highest `top` whose
+    // footprint covers enough of the mover, above or below. So the order pieces are
+    // resolved in is load-bearing rather than an optimisation: a lamp asked before the
+    // desk it stands on can come back resting on a desk that is still in the air.
+    //
+    // Desk in mid-air at 0.5 with a lamp on top of it at 1.25. Both must come down,
+    // and the lamp must end on the desk's FINAL top (0.75), not on its old one.
+    const desk = part({ category: 'desk', shape: 'desk-standard', dimMM: [1400, 700, 750], pos: [0, 0.5, 0] });
+    const lamp = part({ category: 'lamp', shape: 'lamp-table', dimMM: [300, 300, 400], pos: [0, 1.25, 0] });
+    const fixes = settleHeights([lamp, desk], 2.8);
+    const by = new Map(fixes.map((f) => [f.id, f]));
+    expect(by.get(desk.id)?.y, 'the desk goes to the floor').toBe(0);
+    expect(by.get(lamp.id)?.y, 'and the lamp onto the desk it now stands on').toBeCloseTo(0.75, 9);
+  });
+
+  it('measures a mounted piece by its CENTRE, so the ceiling clamp is not off by h/2', () => {
+    // `pos[1]` is a bottom for a floor anchor and the mesh CENTRE for every other one.
+    // This clamp used to read `p.wallMounted || p.shape === 'fan' || p.shape ===
+    // 'lamp-pendant'` — a list that had already needed two shapes appended — and a
+    // DOOR is neither of those shapes, so a door with its flag unset was measured as
+    // `pos[1] + h`: 1.05 + 2.1 = 3.15 in a 2.8 m room, over a cap it is nowhere near.
+    //
+    // The door here is deliberately given NO `wallMounted` flag, which is exactly what
+    // an imported scene file can produce (`lib/scene-file.ts` trusts the field rather
+    // than deriving it). Its real extent is [0, 2.1] and it fits.
+    const door = part({ category: 'door', shape: 'door', dimMM: [900, 50, 2100], pos: [0, 1.05, -2] });
+    expect(settleHeights([door], 2.8), 'a 2.1 m door fits under a 2.8 m ceiling').toEqual([]);
+  });
+
+  it('and still clamps one that genuinely does not fit', () => {
+    // Without this the assertion above passes for a clamp that was deleted. Same door,
+    // a 2.0 m ceiling: cap is 1.98, the door's top is 2.1, so its centre must come
+    // down to 1.98 − 1.05 = 0.93.
+    const door = part({ category: 'door', shape: 'door', dimMM: [900, 50, 2100], pos: [0, 1.05, -2] });
+    const fixes = settleHeights([door], 2.0);
+    expect(fixes).toHaveLength(1);
+    expect(fixes[0].y).toBeCloseTo(0.93, 9);
   });
 });
