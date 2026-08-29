@@ -583,8 +583,46 @@ unseen because only a human eye could have caught it.
 only wiring: does the component render the sentence `lib/` already computes. 3 more are
 computed layout. The remaining 8 need a real browser and stay where they are.
 
+### A whole PAGE mounts under jsdom, which is the finding that unlocks the rest
+
+Scoping assumed component-by-component mounting and listed which components carry no
+`@react-three`. That list is still right, but it is not the ceiling: **`app/room/[roomId]/plan/page.tsx`
+mounts** — the real page, its rails, its shell, its context menu and its own
+`{catalogOpen && <CatalogPanel/>}` gate — in **3.8 s**, needing four things:
+
+- `import 'fake-indexeddb/auto'` — the page loads the saved room on mount.
+- **`window.matchMedia` shimmed.** jsdom has none, and `lib/use-media-query.ts` calls it in
+  a layout effect, so every rail throws before anything renders. `matches: false` is the
+  desktop answer; a stacked-rail run would be a different test and would need a browser.
+- **`Element.prototype.scrollIntoView` shimmed.** jsdom implements no scrolling at all, and
+  `AddPiecesButton` calls it after opening. An absent method throws *inside the click
+  handler*, which reads as the trigger being broken.
+- **`act()` around anything that is not a React handler.** `openSceneMenu` dispatches a
+  window event, so its state update is outside React's dispatch and does not flush before
+  the assertion — the `.click()`-versus-`fireEvent` trap one layer out, failing identically
+  to the menu row not existing.
+
+What it does *not* reach: `app/room/[roomId]/plan/page.tsx` warms the 3D chunk in a
+`requestIdleCallback`, and jsdom has none, so it falls to a 1500 ms `setTimeout` that never
+fires in a fast test and whose `.catch` is empty. **Do not advance timers in a page test**
+or R3F arrives. `app/room/[roomId]/model/page.tsx` imports `components/three/Room`
+statically and cannot be mounted at all.
+
+**Why this matters for the bucket:** a test that re-implements a page's gate goes green on
+a page that dropped it. Mounting the page removes that whole class, so the remaining wiring
+items should be written against pages, not harnesses.
+
 ### What landed, and what each one is worth
 
+- **`tests/library-click-through.test.tsx`** — the half of the Library item no copy test
+  could reach: pressing a signpost **opens** the panel. Mounts the real plan page and
+  presses the rail's `Add`, the panel's own `X`, and the context menu's *Add from library…*
+  row; also holds the panel shut before anything is pressed, so the rest cannot pass
+  against a panel nobody opened. **Eight mutations, eight reds**, including the page's gate
+  deleted in *both* directions (never render / always render), the trigger made a no-op,
+  the heading renamed, the X disarmed, the menu row disarmed, and `aria-expanded` pinned.
+  It also settles a wording defect: only **two** of the three signposts are pressable — the
+  sun note is a `<p>` — so `visual-check.md` no longer says "press each of the three".
 - **`tests/room-tools-findings.test.tsx`** — mounts `RoomTools` and asserts the room panel
   renders the finding `analyzeRoom` computed: the chip's count with the panel shut, the
   sentence itself once it is open, the *opposite* sentence for a piece that can be shrunk,

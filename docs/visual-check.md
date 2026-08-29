@@ -364,12 +364,30 @@ the right-click menu's *Add from library…* — and holds the help card's group
 naming the two lists rather than a side. Every one of those was watched failing by
 renaming the thing it guards.
 
-**What is left for a person:** press each of the three and check it actually *opens* that
-panel. The strings agreeing with the heading is now impossible to break silently; a
-signpost pointing at a control that no longer opens anything is not, because nothing here
-mounts the trigger and the panel together.
+**The click-through is gated too, on the 2D plan.**
+`tests/library-click-through.test.tsx` mounts the **real** `app/room/[roomId]/plan/page.tsx`
+— not a harness reproducing its `{catalogOpen && <CatalogPanel/>}` gate, which would go
+green on a page that forgot to render the panel — and presses the rail's **Add**, the
+panel's own **X**, and the context menu's *Add from library…* row. Eight mutations were
+watched failing, including deleting the page's gate in both directions.
 
-**Wrong looks like:** a signpost that reads correctly and leads nowhere.
+Two things that pass fell out of it and change what is left to look at:
+
+- **Only two of the three signposts are presses.** The sun note in the Look section is a
+  `<p>` with no control in it — asserted, so nobody goes looking for a button that never
+  existed. The item's old wording said "press each of the three".
+- **The 3D tab is not covered and cannot be.** `app/room/[roomId]/model/page.tsx` carries
+  the same gate one line apart, and mounting it pulls R3F, three, drei and
+  postprocessing. Its trigger is also a *different* one — the canvas `CatalogToggle`
+  beside the rail's `Add`.
+
+**What is left for a person:** on the **3D tab**, press the rail's `Add` and the canvas
+`Add`, and on **both** tabs check the panel that arrives is actually visible — docked to
+the right edge, above the canvas rather than behind it, not clipped by the rail. Being in
+the document is what a test can see; being on the screen is not.
+
+**Wrong looks like:** a signpost that reads correctly and leads nowhere — or a panel that
+opens somewhere you cannot see it, which the plan-page test would call a pass.
 
 ---
 
