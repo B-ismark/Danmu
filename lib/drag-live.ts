@@ -39,6 +39,10 @@ export type DragLiveInfo = {
   snapLines?: SnapLine[];
 } | null;
 
+// A refusal that OUTLIVES the gesture is not this channel's business, even though it
+// travels on it: what counts as one, which pieces it names and how long it stays up all
+// live in lib/refusal.ts. This file only carries it.
+
 export const useDragLive = create<{ live: DragLiveInfo; setLive: (l: DragLiveInfo) => void }>(
   (set) => ({ live: null, setLive: (live) => set({ live }) }),
 );

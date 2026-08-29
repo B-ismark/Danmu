@@ -6,7 +6,8 @@ import { openingsForRoom } from '@/lib/room-openings';
 import { anchorFor, groundY, ridesWall, snapToWall, wallStandoff, CURTAIN_STANDOFF } from '@/lib/physics';
 import { defaultScene, isWallMountedPart, placeNewPart, type ScenePart } from '@/lib/scene-spec';
 import { ROOM } from '@/lib/parts-catalog';
-import { localToWorld, nearestEdge } from '@/lib/geometry';
+import { aabbExtents, localToWorld, nearestEdge, obbFromPart, obbInsidePoly } from '@/lib/geometry';
+
 
 const RECT: Footprint = footprintForLayout('rect', ROOM.width, ROOM.depth);
 const H = ROOM.height;
@@ -345,10 +346,77 @@ describe('a floor-standing piece is added facing its wall', () => {
     // wall, so a bed dropped a metre off the wall stays a metre off it. A version
     // that also snapped would make a bed ride its wall on add and not on the next
     // drag, since `lib/drag-resolve.ts` snaps `ridesWall` pieces only.
+    //
+    // The drop point is deliberately well inside the room: this is about the SNAP,
+    // and the containment clamp below is allowed to move a piece dropped near a wall.
+    // Asserting "never moves" at any drop point is what let that clamp stay
+    // rotation-blind, since the two promises look identical from the middle of the
+    // floor and only one of them is real.
     const at: [number, number] = [-1.2, -0.8];
     const free = placeNewPart('plant', 'plant', [500, 500, 1200], room, [], at);
     const bed = placeNewPart('bed', 'bed-single', BED, room, [], at);
     expect(bed.pos[0]).toBeCloseTo(free.pos[0], 6);
     expect(bed.pos[2]).toBeCloseTo(free.pos[2], 6);
+  });
+
+  // A DOUBLE bed, and that is the whole fixture decision: 1600 × 2000. The three
+  // tests above use a 900 × 2000 single and assert only `rot`, so not one of them
+  // could see that every bed added at the east or west wall stood 200 mm inside the
+  // plaster — `intoRoom` inset the drop point by the UNROTATED half-extents and the
+  // yaw was chosen afterwards, on the line that returns.
+  //
+  // Both halves of that fixture matter. A piece whose plan is square has the same
+  // extent at every angle and cannot express this at all; and the north and south
+  // walls give a yaw of 0 or 180°, where the unrotated extents ARE the rotated ones.
+  // So it takes a non-square piece AND the two walls nobody measured — the symmetric
+  // case is exactly where a handedness hides.
+  const DOUBLE: [number, number, number] = [1600, 2000, 600];
+  const WALLS: Array<[string, [number, number]]> = [
+    ['north', [0, -ROOM.depth / 2 + 0.3]],
+    ['south', [0, ROOM.depth / 2 - 0.3]],
+    ['west', [-ROOM.width / 2 + 0.3, 0]],
+    ['east', [ROOM.width / 2 - 0.3, 0]],
+  ];
+
+  it('ends up INSIDE the room at all four walls, which needs the rotated extent', () => {
+    for (const [name, at] of WALLS) {
+      const { pos, rot } = placeNewPart('bed', 'bed-double', DOUBLE, room, [], at);
+      // Shrunk by 10 mm on each plan axis, which is not a fudge to get a pass — it is
+      // the same box `resolvePlacement` tests with (`slightlyShrunk`), and the reason
+      // it exists there is worth knowing here. A piece clamped EXACTLY flush to a wall
+      // has its corners on the polygon's own edge, and whether an edge-parity test
+      // calls that inside comes down to floating-point noise in how the corner was
+      // reached: measured, a bed flush to the north wall of a 6 × 4 read inside while
+      // the mirror placement at the south wall read outside. Both flush, opposite
+      // answers. The 10 mm asks "is any of this meaningfully out of the room" instead
+      // of "which way did the last bit round", and a 200 mm overhang is still 200 mm.
+      const box = obbFromPart(pos, rot, [DOUBLE[0] - 10, DOUBLE[1] - 10, DOUBLE[2]]);
+      expect(obbInsidePoly(box, RECT), `a double bed dropped at the ${name} wall is not in the room`).toBe(true);
+    }
+  });
+
+  it('is clamped by the extent it will actually have, not the one it was handed', () => {
+    // The arithmetic, stated rather than inferred from the polygon test above: at the
+    // west wall the yaw is ±90°, so the piece's extent along X is its 1000 mm half-
+    // DEPTH, and its centre can be no nearer the wall than that. The old code allowed
+    // 800 mm — its half-width — and the 200 mm difference is what the test above sees
+    // as geometry outside the room.
+    const [, at] = WALLS[2]; // west
+    const { pos, rot } = placeNewPart('bed', 'bed-double', DOUBLE, room, [], at);
+    const { ex } = aabbExtents(rot, DOUBLE);
+    expect(ex).toBeCloseTo(DOUBLE[1] / 2000, 6); // turned: the depth is the X extent
+    expect(pos[0]).toBeCloseTo(-ROOM.width / 2 + ex, 6);
+    // …and it is genuinely a different number from the rotation-blind one, or this
+    // whole fixture is measuring nothing.
+    expect(ex).not.toBeCloseTo(DOUBLE[0] / 2000, 3);
+  });
+
+  it('still leaves a piece dropped clear of the walls exactly where it landed', () => {
+    // The negative control for the clamp, and the promise `does not move the piece`
+    // above is really making: the rotated extent must bite only where it has to.
+    const at: [number, number] = [0.4, -0.5];
+    const { pos } = placeNewPart('bed', 'bed-double', DOUBLE, room, [], at);
+    expect(pos[0]).toBeCloseTo(at[0], 6);
+    expect(pos[2]).toBeCloseTo(at[1], 6);
   });
 });

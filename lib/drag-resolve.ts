@@ -21,7 +21,7 @@
 
 import { collidesAt, type ScenePart } from './scene-spec';
 import { pointInFootprint, footprintBounds } from './footprint';
-import { obbFromPart, obbInsidePoly, type Poly } from './geometry';
+import { aabbExtents, obbFromPart, obbInsidePoly, type Poly } from './geometry';
 import { snapToNeighbors, type SnapLine } from './item-snap';
 import { findSupportDetailed, groundY, isFloorStanding, MOUNT_PAD, ridesWall, snapToWall, wallStandoff } from './physics';
 
@@ -121,12 +121,10 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   // Containment clamp — keep the whole rotated footprint inside the room's
   // bounding box. Footprints can be off-centre after independent wall moves, so
   // this reads the bounds rather than assuming ±width/2.
-  const halfW = dim[0] / 2000;
-  const halfD = dim[1] / 2000;
-  const c = Math.abs(Math.cos(rot));
-  const sn = Math.abs(Math.sin(rot));
-  const extX = halfW * c + halfD * sn;
-  const extZ = halfW * sn + halfD * c;
+  // `aabbExtents`, not four lines of the same arithmetic: this file had its own copy
+  // and `placeNewPart` had none at all, which is how a bed came to be clamped by its
+  // half-WIDTH and then turned 90 degrees to face its wall. See lib/geometry.ts.
+  const { ex: extX, ez: extZ } = aabbExtents(rot, dim);
   const bnd = footprintBounds(footprint);
   let x = Math.max(bnd.minX + extX, Math.min(bnd.maxX - extX, gx));
   let z = Math.max(bnd.minZ + extZ, Math.min(bnd.maxZ - extZ, gz));

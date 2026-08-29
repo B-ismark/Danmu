@@ -156,6 +156,39 @@ export function isFloorStanding(category: Category, shape: Shape): boolean {
   return anchorFor(category, shape) === 'floor';
 }
 
+/** A part's vertical extent in metres, `[bottom, top]`.
+ *
+ *  **`pos[1]` means two different things and every caller has to know which.**
+ *  `groundY` above returns 0 for the `floor` anchor — a bottom — and the mesh
+ *  CENTRE for every other one: `wall-mid` is `min(1.4, H - h/2 - 0.1)`,
+ *  `wall-high` is `H - h/2 - 0.05`, and a door's `wall-floor` is `h / 2`
+ *  ("centred like every other wall-mounted part"). So `[y, y + h]` is right for a
+ *  sofa and wrong by half a height for a television.
+ *
+ *  Three call sites spelled that arithmetic out and all three got it wrong the same
+ *  way, which is what a missing shared answer looks like rather than three separate
+ *  mistakes. Two of them then carried `if (wallMounted) continue;`, and **the skip
+ *  was hiding the error rather than avoiding it** — `lib/clearance.ts:499` records
+ *  the same skip being removed from the room report for the same reason, where it
+ *  had deleted the one case that pass was written for.
+ *
+ *  The predicate is the ANCHOR, not the stored `wallMounted` flag, and the
+ *  difference is not academic: `isWallMountedPart` is `anchorFor(...) !== 'floor'`
+ *  and answers **yes for a ceiling fan and a pendant**, which `ridesWall` and the
+ *  `wallMounted` flag both answer no for. A fan is centred on its origin like a
+ *  television, carries no flag, and was therefore mis-measured by `h / 2` with no
+ *  skip in front of it to hide the fact. */
+export function verticalExtent(
+  category: Category,
+  shape: Shape,
+  dimMM: [number, number, number],
+  y: number,
+): [number, number] {
+  const h = dimMM[2] / 1000;
+  if (anchorFor(category, shape) === 'floor') return [y, y + h];
+  return [y - h / 2, y + h / 2];
+}
+
 /** How far a curtain hangs in FRONT of the window's front face.
  *
  *  Curtains sat at the window's exact x/z, so the cloth, the rod and the window's

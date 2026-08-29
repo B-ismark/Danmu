@@ -154,9 +154,24 @@ export function Inspector() {
     clearParent(id!);
   }
 
+  /** What this piece would come to rest ON — the highest surface under its centre,
+   *  or null for bare floor.
+   *
+   *  Pulled out of `snapToSurface` because it answers a second question: whether a
+   *  separate **Floor** button means anything at all. With nothing underneath,
+   *  `snapToSurface` and `groundToFloor` are the same three lines — y = 0, clear the
+   *  parent — so two buttons were doing one thing, which is what the user saw as the
+   *  row being redundant. It is the SAME call with the SAME arguments the action
+   *  makes, deliberately: a button shown by one predicate and driven by another is
+   *  how a control comes to appear when it does nothing. */
+  function supportBelow() {
+    const [x, , z] = currentXYZ();
+    return findSupportDetailed(partSnapshot(), id!, x, z, part!.dimMM, part!.rot);
+  }
+
   function snapToSurface() {
     const [x, , z] = currentXYZ();
-    const support = findSupportDetailed(partSnapshot(), id!, x, z, part!.dimMM, part!.rot);
+    const support = supportBelow();
     setPosition(id!, [x, support?.y ?? 0, z]);
     if (support) setParent(id!, support.id);
     else clearParent(id!);
@@ -212,31 +227,70 @@ export function Inspector() {
         <DecorCollection part={part} onChange={(decor) => updatePart(id!, { decor })} />
       )}
 
-      {/* Placement — surfaced as visible buttons (was buried in a ⋯ menu). */}
-      <Section label="Where it sits">
-        {/* Three buttons for a piece that STANDS on something, and none for a piece
-            that is fixed to the building. A wall-mounted part has nowhere else to be
-            put — "Wall" moves it along the wall it is already on, which reads as an
-            action and is barely one — and for the ceiling family it is worse than
-            useless: `snapToWallPhys` would slide a ceiling fan sideways onto a wall,
-            which is not a place a fan goes. What those parts get instead is the one
-            number that does mean something about where they sit, below.
+      {/* Placement — surfaced as visible buttons (was buried in a ⋯ menu).
 
-            `rail-triple` is the hook the elastic rail's container query reflows —
-            three icon+word buttons are the first thing in here to stop fitting. */}
-        {!part.wallMounted && (
-          <div className="rail-triple" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-            <button onClick={snapToNearestWall} className="ds-btn" title="Move to the nearest wall and face the room" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
-              <Icon name="snap-wall" size={13} /> Wall
-            </button>
-            <button onClick={snapToSurface} className="ds-btn" title="Drop onto the highest surface below — table, shelf, or floor" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
-              <Icon name="snap-surface" size={13} /> Surface
-            </button>
-            <button onClick={groundToFloor} className="ds-btn" title="Force this part to sit on the floor" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
-              <Icon name="snap-floor" size={13} /> Floor
-            </button>
-          </div>
-        )}
+          No label. It read "Where it sits", and the user's verdict after looking at
+          the real thing was that the section is redundant and takes too much
+          horizontal space. The heading was the redundant half: every button in the row
+          says where the piece will sit, in a word, and each one's `title` says it
+          again in a sentence. The horizontal half is answered below. */}
+      <div className="section section--flush">
+        {/* Two buttons for a piece that stands on the floor, THREE only when there is
+            something under it to stand on instead, and none for a piece fixed to the
+            building.
+
+            The third button was unconditional, and for most pieces it was the second
+            button again: with nothing underneath, `snapToSurface` is `groundToFloor`
+            line for line — y = 0, clear the parent. They differ in exactly one case,
+            which is real but rare: something IS below and you want the piece on the
+            floor rather than on it, which no drag can express, since dragging it clear
+            moves it in x/z. So Floor appears exactly when it has that to offer, and
+            `supportBelow()` is the same call the action makes.
+
+            Not icons-only — the other way out the user offered. Three icon+word
+            buttons at 33% is what does not fit; two at 50% does, and stripping the
+            words to keep a button that should not be there would fix the symptom,
+            keep the cause, and take on an accessible-name obligation for nothing.
+
+            A wall-mounted part gets none of them: it has nowhere else to be put —
+            "Wall" moves it along the wall it is already on, which reads as an action
+            and is barely one — and for the ceiling family it is worse than useless,
+            since `snapToWallPhys` would slide a ceiling fan sideways onto a wall.
+            What those parts get instead is the one number that does mean something
+            about where they sit, below.
+
+            `rail-triple` stays on the wrapper either way: it is the hook the elastic
+            rail's container query reflows, and the three-button case still needs it. */}
+        {!part.wallMounted && (() => {
+          const standingOn = supportBelow();
+          // The piece it would land on, by name. `findSupportDetailed` returns only
+          // { id, y }, so the name comes from the resolved world the probe was run
+          // against — the same list, so the two cannot disagree about which piece
+          // that id is.
+          const ontoName = standingOn
+            ? (effParts.find((q) => q.id === standingOn.id)?.name ?? 'the surface below')
+            : null;
+          const cols = standingOn ? 3 : 2;
+          return (
+            <div className="rail-triple" style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 6 }}>
+              <button onClick={snapToNearestWall} className="ds-btn" title="Move to the nearest wall and face the room" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
+                <Icon name="snap-wall" size={13} /> Wall
+              </button>
+              {standingOn ? (
+                <button onClick={snapToSurface} className="ds-btn" title={`Drop onto ${ontoName}`} style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
+                  <Icon name="snap-surface" size={13} /> Surface
+                </button>
+              ) : null}
+              {/* `groundToFloor` in both cases, and it is the honest one: when there is
+                  nothing below, "put this on the floor" is the whole of what the other
+                  button did too, so labelling it Surface described a surface that is
+                  not there. */}
+              <button onClick={groundToFloor} className="ds-btn" title="Put this piece on the floor" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
+                <Icon name="snap-floor" size={13} /> Floor
+              </button>
+            </div>
+          );
+        })()}
         {part.wallMounted && (
           <MountHeightRow
             key={`${id}-${currentXYZ()[1]}`}
@@ -252,7 +306,7 @@ export function Inspector() {
             }}
           />
         )}
-      </Section>
+      </div>
 
       {/* One entry point to the model library. Generic-box parts (low-confidence
           detections) read poorly, so for those the same button leads with why. */}

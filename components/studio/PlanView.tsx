@@ -28,6 +28,7 @@ import { hitsAt, hitsInRect, nextInCycle, planPaintOrder, type CycleState } from
 import { wallSegments, footprintBounds } from '@/lib/footprint';
 import { moveWallCarrying, wallAttachments } from '@/lib/wall-actions';
 import { resolvePlacement, snapSteps, turnInPlace } from '@/lib/drag-resolve';
+import { refusalAfterGesture, REFUSAL_HOLD_MS } from '@/lib/refusal';
 import { snapGuideEnds, type SnapLine } from '@/lib/item-snap';
 import { convoyRestore, planConvoy, resolveConvoy, travellingWorld, type Convoy } from '@/lib/drag-convoy';
 import { cascadeTransform } from '@/lib/rigid-parent';
@@ -595,7 +596,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
     if (blockTimer.current) clearTimeout(blockTimer.current);
     // Let the red linger a moment so a refusal is still visible if the user lets
     // go the instant it happens.
-    blockTimer.current = setTimeout(() => setBlockedIds([]), 500);
+    blockTimer.current = setTimeout(() => setBlockedIds([]), REFUSAL_HOLD_MS);
   }
 
   /** Try the full move, then each axis alone, so a piece slides along whatever it
@@ -756,11 +757,20 @@ export const PlanView = forwardRef<PlanViewHandle, {
     // "fine": the clamp keeps it in the room and something can still be in the way,
     // and that is a finding, which per this repo's own scar is not a finding until a
     // caller says it. A drag says it in colour; a turn said it nowhere.
-    if (turned.valid) {
+    // Through lib/refusal.ts rather than written out here, so the two tabs cannot
+    // drift on what counts as a refusal — 3D reads the same function on commit. A turn
+    // moves nobody sideways, so there is no company to fail: convoyValid is true by
+    // construction, and the members are deliberately not moved (see resolveConvoy).
+    const refusal = refusalAfterGesture({
+      draggedId: part.id,
+      placementValid: turned.valid,
+      convoyValid: true,
+    });
+    if (!refusal) {
       if (blockedRef.current) clearBlocked();
     } else if (!blockedRef.current) {
       if (blockTimer.current) clearTimeout(blockTimer.current);
-      setBlockedIds([part.id]);
+      setBlockedIds(refusal.ids);
       blockedRef.current = true;
     }
     return turned;

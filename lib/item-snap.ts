@@ -8,6 +8,7 @@
 // rotations (the overwhelmingly common case) snap exactly; odd angles snap via
 // their bounding box, which still reads naturally.
 
+import { aabbExtents } from './geometry';
 import type { ScenePart } from './scene-spec';
 
 /** How close an edge/centre must be (metres) before it magnetises. */
@@ -28,14 +29,11 @@ export type SnapLine = {
 
 export type SnapResult = { x: number; z: number; lines: SnapLine[] };
 
-/** Half-extents of a part's rotated footprint along world X/Z. */
-export function aabbExtents(rot: number, dimMM: [number, number, number]): { ex: number; ez: number } {
-  const hw = dimMM[0] / 2000;
-  const hd = dimMM[1] / 2000;
-  const c = Math.abs(Math.cos(rot));
-  const s = Math.abs(Math.sin(rot));
-  return { ex: hw * c + hd * s, ez: hw * s + hd * c };
-}
+// `aabbExtents` used to live here, and it is in `lib/geometry.ts` now: it is a
+// rotation primitive, not a fact about magnetism, and three other files needed it.
+// Two of them had written it out again — `lib/drag-resolve.ts` inline, and the add
+// path in `lib/scene-spec.ts` not at all, which is how a bed came to be clamped by
+// its width and then turned 90°.
 
 type Candidate = { target: number; dist: number; line: SnapLine };
 

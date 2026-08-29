@@ -591,8 +591,15 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
 ## 5. The decoration studio
 
 ### Selection & transforms — `Pickable.tsx`, `Draggable.tsx`
-- Click to select, drag to move, gizmo to rotate / scale (Maya-style modes;
-  snap `off` / `fine` 1 cm·2.5° / `coarse` 5 cm·7.5°).
+- Click to select, drag to move, gizmo to rotate / scale. The gizmo modes are
+  **W** move, **R** rotate, **S** scale, armed on the 3D tab only
+  (`KeyboardShortcuts.tsx`); **Q** and **E** orbit the camera (`CameraRig.tsx`) and are
+  not gizmo keys. Naming them here because "Maya-style modes" was all this said, and
+  `Draggable.tsx`'s own header filled the gap with "W=move E=rotate R=scale", which is
+  wrong and was believed.
+- Snap: `off` / `fine` **1 cm · 15°** / `coarse` **5 cm · 45°** — `snapSteps` in
+  `lib/drag-resolve.ts`, which is the only home for those four numbers. This line read
+  "2.5°" and "7.5°" for both angles; nothing derives them and nothing checked.
 - Wall-mounted parts (TV, mirror, painting, AC, curtain) snap flush to the
   nearest wall on commit. New parts snap to the floor; small tabletop-prone items
   seek a supporting surface.
