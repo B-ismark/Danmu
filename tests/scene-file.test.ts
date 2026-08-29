@@ -13,6 +13,7 @@ import {
 import { dimRangeFor, ROOM_HEIGHT_M } from '../lib/dimension-ranges';
 import { MOUNT_PAD } from '../lib/physics';
 import type { RoomData, Transforms } from '../lib/storage';
+import { buildSceneFromRoom } from '../lib/scene-spec';
 import type { ScenePart } from '../lib/scene-spec';
 
 const ROOM: RoomData = {
@@ -691,5 +692,164 @@ describe('a clamped ceiling takes its pieces with it', () => {
     if (!parsed.ok) throw new Error('fixture did not parse');
     expect(parsed.file.parts[0].pos[1]).toBeCloseTo(2.4, 9);
     expect(parsed.dropped.some((d) => /re-hung/.test(d))).toBe(false);
+  });
+});
+
+describe('scene file · wallMounted is derived, and the note about it is true', () => {
+  /** The eight things a file can put in a boolean field, against BOTH derived answers.
+   *
+   *  What this table catches is worth stating precisely, because it is not what it looks
+   *  like. It does NOT catch the defect it was written for: the old code produced a note
+   *  for the same six values this one does, and only the TEXT was wrong, so the counts
+   *  are identical across that fix and the table is green on it. What it does catch is
+   *  both plausible partial fixes — coercing with `=== true` and keeping one message
+   *  (`0` on a sofa then agrees and the note vanishes), and dropping the malformed branch
+   *  (every non-boolean goes silent). Measured, not assumed: those two mutations redden
+   *  it and a full revert does not. The text assertion below is what holds the original
+   *  defect down. */
+  const VALUES: Array<[string, unknown]> = [
+    ['true', true],
+    ['false', false],
+    ['zero', 0],
+    ['one', 1],
+    ['empty string', ''],
+    ['the string true', 'true'],
+    ['the string false', 'false'],
+    ['null', null],
+  ];
+
+  /** A shape `anchorFor` puts on a wall, and one it puts on the floor. Both directions
+   *  are needed: the flag is absent-means-false, so a mounted piece and a floor piece
+   *  fail in opposite directions and a single fixture is green on half of it. */
+  const MOUNTED = { category: 'tv', name: 'Telly', shape: 'tv', dimMM: [1450, 60, 820] };
+  const FLOOR = { category: 'sofa', name: 'Sofa', shape: 'sofa', dimMM: [2200, 950, 880] };
+
+  function notesFor(base: Record<string, unknown>, over: Record<string, unknown>) {
+    const { file, dropped } = withParts([rawPart({ ...base, ...over })]);
+    return { notes: dropped.filter((d) => /wallMounted/i.test(d)), part: file.parts[0] };
+  }
+
+  it('says nothing when the file agrees, or leaves the field out', () => {
+    expect(notesFor(MOUNTED, { wallMounted: true }).notes).toEqual([]);
+    expect(notesFor(FLOOR, { wallMounted: false }).notes).toEqual([]);
+    expect(notesFor(MOUNTED, {}).notes).toEqual([]);
+    expect(notesFor(FLOOR, {}).notes).toEqual([]);
+  });
+
+  it('derives the flag whatever the file said, in both directions', () => {
+    for (const [, value] of VALUES) {
+      expect(notesFor(MOUNTED, { wallMounted: value }).part.wallMounted).toBe(true);
+      expect(notesFor(FLOOR, { wallMounted: value }).part.wallMounted).toBeUndefined();
+    }
+  });
+
+  it('reports each of the eight values exactly once, or not at all', () => {
+    // `toHaveLength` and not `toContain`: the old text was produced for values that
+    // agreed, so "there is a note" was already satisfied by the defect.
+    const expected: Record<string, [number, number]> = {
+      // value            → [notes on a tv, notes on a sofa]
+      true: [0, 1],
+      false: [1, 0],
+      zero: [1, 1],
+      one: [1, 1],
+      'empty string': [1, 1],
+      'the string true': [1, 1],
+      'the string false': [1, 1],
+      null: [1, 1],
+    };
+    for (const [label, value] of VALUES) {
+      const [onMounted, onFloor] = expected[label];
+      expect(notesFor(MOUNTED, { wallMounted: value }).notes, `${label} on a tv`).toHaveLength(onMounted);
+      expect(notesFor(FLOOR, { wallMounted: value }).notes, `${label} on a sofa`).toHaveLength(onFloor);
+    }
+  });
+
+  it('never renders a claim the file did not make', () => {
+    // A boolean that disagrees is quoted back verbatim…
+    expect(notesFor(MOUNTED, { wallMounted: false }).notes[0]).toContain('said wallMounted: false');
+    expect(notesFor(FLOOR, { wallMounted: true }).notes[0]).toContain('said wallMounted: true');
+
+    // …and a non-boolean is named as malformed rather than coerced. This is the half
+    // that a harder coercion cannot fix: `1` on a tv agrees in intent, and `=== true`
+    // renders it as “said false”, which is the opposite of what the file says.
+    for (const value of [0, 1, '', 'true', 'false', null]) {
+      for (const base of [MOUNTED, FLOOR]) {
+        const note = notesFor(base, { wallMounted: value }).notes[0];
+        expect(note, `${JSON.stringify(value)} on a ${base.shape}`).toContain('neither true nor false');
+        expect(note).not.toMatch(/said wallMounted/);
+      }
+    }
+  });
+
+  it('names the derived answer, not only that the file was wrong', () => {
+    expect(notesFor(MOUNTED, { wallMounted: false }).notes[0]).toContain('a tv is wall-mounted');
+    expect(notesFor(FLOOR, { wallMounted: true }).notes[0]).toContain('a sofa is not wall-mounted');
+  });
+
+  it('is silent on a file this app wrote — and not because it cannot fire', () => {
+    const TV: ScenePart = {
+      id: 'tv-1',
+      category: 'tv',
+      name: 'Telly',
+      shape: 'tv',
+      pos: [0, 1.2, -1.9],
+      rot: 0,
+      dimMM: [1450, 60, 820],
+      locked: false,
+      wallMounted: true,
+    };
+    expect(roundTrip(ROOM, [TV, SOFA]).dropped).toEqual([]);
+
+    // The discriminator. `buildSceneFile` SPREADS the part it is handed rather than
+    // deriving the flag, so the silence above is a property of the builders in
+    // `scene-spec.ts` agreeing with `isWallMountedPart` — which can regress in that
+    // file without this one changing. Hand the writer a part that disagrees and the
+    // note comes back, which is what makes the empty array above evidence.
+    const bad = roundTrip(ROOM, [{ ...TV, wallMounted: false }, SOFA]);
+    expect(bad.dropped.filter((d) => /wallMounted/i.test(d))).toHaveLength(1);
+  });
+});
+
+describe('scene file · a detected room reloads as the room that was saved', () => {
+  /** The round trip that was NOT an identity. `buildSceneFromRoom` used to answer
+   *  "is this mounted" from the category while `groundY` answered from the shape, so a
+   *  detected pendant was built with the flag unset; `buildSceneFile` SPREADS, so the
+   *  key was absent from the JSON; and `readPart` derives, so it came back `true`.
+   *  `isAperture` and every `!p.wallMounted` reader flipped on reload, and `dropped`
+   *  was empty — a file that OMITS a field disagrees with nothing, and omitting is
+   *  exactly what our own writer did. Silent plus non-identity is the pair that makes
+   *  it a defect rather than a difference.
+   *
+   *  This sits at the file boundary on purpose. The builder-side sweep in
+   *  `scene-build.test.ts` pins the cause; this pins the consequence, and either side
+   *  can regress without the other changing. */
+  const DETECTED: RoomData = {
+    id: 'r1',
+    createdAt: 0,
+    name: 'Detected',
+    layoutId: 'rect',
+    width: 5,
+    depth: 4,
+    height: 2.8,
+    detectedObjects: [
+      { id: 1, label: 'pendant__slot:n', conf: 0.9, locked: false, box: [0.2, 0.4, 0.3, 0.3], category: 'lamp' },
+      { id: 2, label: 'sofa__slot:n', conf: 0.9, locked: false, box: [0.5, 0.6, 0.3, 0.3], category: 'sofa' },
+    ],
+  };
+
+  it('keeps every mount flag across save and reload, and says nothing', () => {
+    const built = buildSceneFromRoom(DETECTED);
+    const pendant = built.find((p) => p.shape === 'lamp-pendant');
+    expect(pendant, 'the fixture must produce a pendant').toBeDefined();
+
+    const out = parseSceneFile(sceneFileJson(buildSceneFile(DETECTED, built, NO_TRANSFORMS, 1)));
+    if (!out.ok) throw new Error(`expected a readable file, got: ${out.error}`);
+
+    expect(out.dropped).toEqual([]);
+    for (const before of built) {
+      const after = out.file.parts.find((q) => q.id === before.id);
+      expect(after, `${before.name} survived the trip`).toBeDefined();
+      expect(!!after!.wallMounted, `${before.name} (${before.shape})`).toBe(!!before.wallMounted);
+    }
   });
 });

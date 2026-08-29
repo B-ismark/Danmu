@@ -7,6 +7,7 @@ import {
   collidesAt,
   defaultScene,
   isLightFixture,
+  CATEGORIES,
   isWallMountedPart,
   lightFor,
   type ScenePart,
@@ -551,10 +552,65 @@ describe('every part the app builds agrees with the derived mount flag', () => {
     // which reads the ANCHOR rather than this flag. So the two must not disagree: a
     // piece whose flag says floor and whose anchor says ceiling gets a floor clamp and
     // a centred geometry.
-    const parts = buildSceneFromRoom(room([]));
-    expect(parts.length, 'the fallback starter scene must produce parts').toBeGreaterThan(0);
-    for (const p of parts) {
-      expect(!!p.wallMounted, `${p.name} (${p.shape})`).toBe(isWallMountedPart(p.category, p.shape));
+    //
+    // **This test used to call `buildSceneFromRoom(room([]))`** — and `buildSceneFromRoom`
+    // short-circuits an empty `detectedObjects` into `defaultScene`, so it swept the
+    // starter scene, was a duplicate of the sweep above, and the detected builder was
+    // evaluated by nothing in the suite. Its own message said "the fallback starter
+    // scene" while its title said "the detected-room path": the two disagreed in prose
+    // and the title is the half a reader believes. Hence `fromDetection` below — a key
+    // `defaultScene` never sets, so the fallback cannot satisfy this again silently.
+    // Categories ALONE cannot find this. The label is what `refineShape` reads, and the
+    // disagreement only exists where a label refines to a shape the category's own row
+    // did not describe — `lamp` + "pendant" is `lamp-pendant`, which anchors to the
+    // ceiling, out of a row that carried no flag at all. Sweeping one label per category
+    // gives each category its DEFAULT shape, where a hand-typed row and the derivation
+    // agree by construction, so the first version of this test was green against a full
+    // revert of the builder. These words are the ones `refineShape` actually branches on.
+    const LABELS = ['', 'pendant', 'ceiling', 'hanging', 'chandelier', 'bulb', 'table', 'wall', 'floor'];
+    const seen: string[] = [];
+    const wrong: string[] = [];
+    for (const cat of CATEGORIES) {
+      for (const word of LABELS) {
+        const label = `${word || cat}__slot:n`;
+        const parts = buildSceneFromRoom(room([saved(1, { category: cat, label })]));
+        for (const p of parts) {
+          expect(p.fromDetection, `${p.name} came from ${cat} without a detection`).toBeDefined();
+          seen.push(`${cat}/${word}->${p.shape}`);
+          const derived = isWallMountedPart(p.category, p.shape);
+          if (!!p.wallMounted !== derived) {
+            wrong.push(`${cat} + "${label}" · ${p.shape} stored=${p.wallMounted} derived=${derived}`);
+          }
+        }
+      }
     }
+    // The pair that made this a defect has to be IN the sweep, or the sweep is a sweep
+    // over agreement. Named, so a future narrowing of `refineShape` fails here loudly
+    // rather than quietly removing the only case with teeth.
+    expect(seen, 'the sweep must reach a ceiling-anchored refinement').toContain('lamp/pendant->lamp-pendant');
+    // A count with a floor, for the same reason the sweep above has one: a detection
+    // the builder refuses produces no parts, and a loop over nothing is green.
+    expect(seen.length, 'the sweep must have produced detected parts').toBeGreaterThanOrEqual(
+      CATEGORIES.length,
+    );
+    expect(wrong, `${wrong.length} of ${seen.length} detected parts disagree`).toEqual([]);
+  });
+
+  it('a detected ceiling piece is mounted at build time, not only after a reload', () => {
+    // The measured consequence of the flag being keyed on CATEGORY here while `groundY`
+    // keyed it on SHAPE: the builder produced a door with the flag unset, the writer
+    // spreads so the key was ABSENT from the JSON, and the reader derived `true`. So
+    // `isAperture` flipped on reload and the wall grew a light hole — with `dropped`
+    // empty, because a file that OMITS the field disagrees with nothing. The round trip
+    // was not an identity, and it was silent, which is the pair that makes it a defect
+    // rather than a difference.
+    // A DETECTED PENDANT, not a detected door. The door was the reported symptom, but
+    // `CATEGORY_DEFAULTS.door` already carried `wallMounted: true`, so a door fixture is
+    // green against the defect and would have been decoration. `lamp` carried no flag
+    // and "pendant" refines to a ceiling anchor, which is the disagreement.
+    const [lamp] = buildSceneFromRoom(room([saved(1, { category: 'lamp', label: 'pendant__slot:n' })]));
+    expect(lamp.shape, 'the fixture must actually refine to a pendant').toBe('lamp-pendant');
+    expect(isWallMountedPart(lamp.category, lamp.shape)).toBe(true);
+    expect(lamp.wallMounted, 'the builder must not answer this by category').toBe(true);
   });
 });

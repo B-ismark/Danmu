@@ -1797,10 +1797,10 @@ export const PART_LIBRARY: LibraryItem[] = [
 // Map detected category to a sensible primitive + default mm dimensions.
 const CATEGORY_DEFAULTS: Record<
   Category,
-  { shape: Shape; dim: [number, number, number]; circle?: boolean; wallMounted?: boolean }
+  { shape: Shape; dim: [number, number, number]; circle?: boolean }
 > = {
   sofa: { shape: 'sofa', dim: [2200, 950, 880] },
-  tv: { shape: 'tv', dim: [1450, 60, 820], wallMounted: true },
+  tv: { shape: 'tv', dim: [1450, 60, 820] },
   chair: { shape: 'chair-dining', dim: [500, 500, 850] },
   table: { shape: 'desk-standard', dim: [1200, 600, 750] },
   desk: { shape: 'desk-standard', dim: [1400, 700, 750] },
@@ -1811,15 +1811,15 @@ const CATEGORY_DEFAULTS: Record<
   rug: { shape: 'rug', dim: [2400, 1600, 5] },
   bed: { shape: 'bed-single', dim: [900, 2000, 600] },
   monitor: { shape: 'monitor', dim: [600, 200, 400] },
-  fan: { shape: 'fan', dim: [1000, 1000, 200], circle: true, wallMounted: true },
+  fan: { shape: 'fan', dim: [1000, 1000, 200], circle: true },
   fridge: { shape: 'fridge', dim: [550, 550, 850] },
-  curtain: { shape: 'curtain', dim: [1600, 80, 2200], wallMounted: true },
-  mirror: { shape: 'mirror', dim: [600, 30, 1400], wallMounted: true },
-  painting: { shape: 'painting', dim: [800, 30, 600], wallMounted: true },
+  curtain: { shape: 'curtain', dim: [1600, 80, 2200] },
+  mirror: { shape: 'mirror', dim: [600, 30, 1400] },
+  painting: { shape: 'painting', dim: [800, 30, 600] },
   nightstand: { shape: 'nightstand', dim: [450, 400, 550] },
   ottoman: { shape: 'ottoman', dim: [550, 400, 420] },
-  ac: { shape: 'ac-unit', dim: [800, 220, 280], wallMounted: true },
-  door: { shape: 'door', dim: [900, 50, 2100], wallMounted: true },
+  ac: { shape: 'ac-unit', dim: [800, 220, 280] },
+  door: { shape: 'door', dim: [900, 50, 2100] },
   other: { shape: 'box', dim: [600, 600, 800] },
 };
 
@@ -2032,6 +2032,15 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
         : aiShape && CATALOG_SHAPES.has(aiShape) && aiShape !== 'box'
           ? aiShape
           : labelShape;
+    // Keyed on the SHAPE, like every other answer to this question in the app.
+    // `CATEGORY_DEFAULTS` used to carry its own `wallMounted` copy and this line read
+    // it, which made the detected builder the one path that answered by CATEGORY while
+    // `groundY` two lines below answered by shape — so a detected door got a ceiling
+    // clamp and a flag saying floor. Saving that room and opening it again derived the
+    // flag honestly, `isAperture` flipped, and the wall grew a light hole with `dropped`
+    // empty. The copy is deleted rather than corrected: a second answer to a question
+    // with one right answer drifts in the direction nobody notices.
+    const mounted = isWallMountedPart(cat, refined);
     // AI-estimated dims are a HINT, never the source of truth — clamp them into
     // the shape's real-world range (lib/dimension-ranges). A wild estimate
     // (3.5 m sofa, 80 mm fridge) collapses to the nearest credible size.
@@ -2084,7 +2093,7 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
         rot: typeof aiYaw === 'number' ? aiYaw : 0,
       };
     } else {
-      placement = placementForSlot(realSlot, d.box, dim, !!cfg.wallMounted, refined, { width: rw, depth: rd, height: rh });
+      placement = placementForSlot(realSlot, d.box, dim, mounted, refined, { width: rw, depth: rd, height: rh });
     }
     // Gravity: floor-standing items must touch the floor. Wall-mounted / ceiling
     // items snap to their canonical mounting height for the current part height.
@@ -2153,7 +2162,7 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
       dimMM: dim,
       locked: d.locked,
       circle: cfg.circle,
-      wallMounted: cfg.wallMounted,
+      wallMounted: mounted || undefined,
       fromDetection: { slot: realSlot, bbox: d.box, conf: d.conf },
       color: (d as { color?: string }).color,
     });

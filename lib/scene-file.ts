@@ -575,16 +575,36 @@ function readPart(
   // refused just as firmly, because a sofa's geometry is not centred no matter what a
   // file says.
   //
-  // Reported only when the file DISAGREED, not on every part that carries the field:
-  // this app's own writer emits the derived value, so a round trip is silent, and a
-  // note on every export would be noise rather than the honest lossiness `dropped`
-  // is for.
+  // Reported only when the file DISAGREED, not on every part that carries the field,
+  // because a note on every export would be noise rather than the honest lossiness
+  // `dropped` is for. A round trip is silent, but NOT because the writer derives the
+  // flag — `buildSceneFile` spreads the `ScenePart` it is handed. It is silent because
+  // the builders that produce those parts now agree with `isWallMountedPart`, which is
+  // a property of a different file and can regress there without this one changing.
+  //
+  // Two shapes of disagreement, and they need two messages because one cannot describe
+  // both without stating something false. `v` is `unknown`, so `v.wallMounted !==
+  // derivedMount` was true for EVERY non-boolean, and the text then rendered
+  // `v.wallMounted === true`, which is `false` for every non-boolean too: `0`, `null`
+  // and `""` produced a note about a disagreement that did not exist, while `1` and
+  // `"true"` reported “said false” about a file that said the opposite. Coercing harder
+  // does not fix the second half — it only moves which values lie. A boolean's
+  // vocabulary is {true, false}, exactly as `SHAPES` and `CATEGORIES` are vocabularies,
+  // so anything else is malformed and is NAMED as malformed rather than folded into a
+  // claim the file never made. The malformed note fires even when the derived answer
+  // happens to match, because what was ignored is the value, not the conclusion.
   const derivedMount = isWallMountedPart(category, shape);
   if (derivedMount) part.wallMounted = true;
-  if (v.wallMounted !== undefined && v.wallMounted !== derivedMount) {
-    dropped.push(
-      `“${part.name}” said wallMounted: ${v.wallMounted === true}; a ${shape} is ${derivedMount ? '' : 'not '}wall-mounted, so that was ignored`,
-    );
+  const saidMount: unknown = v.wallMounted;
+  if (saidMount !== undefined) {
+    const verdict = `a ${shape} is ${derivedMount ? '' : 'not '}wall-mounted`;
+    if (typeof saidMount !== 'boolean') {
+      dropped.push(
+        `“${part.name}” gave a wallMounted that is neither true nor false; ${verdict}, so the file's value was ignored`,
+      );
+    } else if (saidMount !== derivedMount) {
+      dropped.push(`“${part.name}” said wallMounted: ${saidMount}; ${verdict}, so that was ignored`);
+    }
   }
   if (v.hidden === true) part.hidden = true;
 

@@ -388,18 +388,6 @@ export const MIN_SUPPORT_SHARE = 0.5;
  *  drag code is still carrying it as a rigid child. */
 export const SUPPORT_Y_EPS = 0.05;
 
-/** Highest world-Y where a part at (x,z) with given XZ footprint would land on
- *  another part's top surface. Wall-mounted + rugs are ignored as supports.
- *  Returns null if nothing holds it up.
- *
- *  Tests how much of the mover ACTUALLY sits on the surface, not just where its
- *  centre point is. The centre test (plus a 5 cm margin) called a laptop 90%
- *  overhanging a desk "on the desk", and a part perched on the very lip of a
- *  nightstand floated at the nightstand's height with nothing under it.
- *
- *  `rot` on either side is optional and defaults to 0 — at 0/90° the rotated
- *  rectangle and its bounding box are the same, which is the overwhelmingly
- *  common case, so callers that have not got a rotation to hand lose nothing. */
 /** What a support probe needs to know about a candidate.
  *
  *  Named, because `findSupportUnder` and `findSupportDetailed` had the same shape
@@ -423,6 +411,18 @@ export type SupportCandidate = {
   circle?: boolean;
 };
 
+/** Highest world-Y where a part at (x,z) with given XZ footprint would land on
+ *  another part's top surface. Wall-mounted + rugs are ignored as supports.
+ *  Returns null if nothing holds it up.
+ *
+ *  Tests how much of the mover ACTUALLY sits on the surface, not just where its
+ *  centre point is. The centre test (plus a 5 cm margin) called a laptop 90%
+ *  overhanging a desk "on the desk", and a part perched on the very lip of a
+ *  nightstand floated at the nightstand's height with nothing under it.
+ *
+ *  `rot` on either side is optional and defaults to 0 — at 0/90° the rotated
+ *  rectangle and its bounding box are the same, which is the overwhelmingly
+ *  common case, so callers that have not got a rotation to hand lose nothing. */
 export function findSupportUnder(
   parts: SupportCandidate[],
   selfId: string,
