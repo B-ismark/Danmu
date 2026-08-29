@@ -565,10 +565,15 @@ the user went and looked.
     through**, on the `t` and `open` presets. A ceiling fan at 200 mm clears by 50 mm,
     which is why this has never looked like a rule.
 
-    It is **already pinned as expected** — `CEILING_TOPS` in `tests/scene-seed.test.ts`
-    holds `t: ['Pendant=2.850']` and `open: ['Pendant=2.850']` — so the baseline records
-    it rather than hiding it, and changing the number is a deliberate act with a red test
-    attached.
+    It is **pinned as expected on PR #54's branch and nowhere else.** `CEILING_TOPS` in
+    `tests/scene-seed.test.ts` holds `t: ['Pendant=2.850']` and `open: ['Pendant=2.850']`,
+    asserted at `:189` by `expect(tops).toEqual(CEILING_TOPS[id])` — but
+    `git grep -ln CEILING_TOPS origin/main` returns **nothing**, so none of that exists
+    until #54 lands. Until then the number is unpinned and a change to it is silent.
+    Once #54 is in, changing it is a deliberate act with a red test attached.
+    (The first version of this paragraph said "already pinned" with no branch named, in
+    the one document whose convention is that every item says whether it exists in a
+    commit anywhere. Found by danmu-78 in review.)
 
     **It is now user-visible**, which is what moved it into this section. Since PR #54
     routes the ceiling family into `MountHeightRow` — correctly, because
