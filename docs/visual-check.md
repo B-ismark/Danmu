@@ -111,6 +111,33 @@ becoming **un-turnable** (the thing this must not do); the lamp left behind; or 
 with **no red outline at all**, which is the 3D tab's version of this and is already a
 confirmed defect — § H.5, so you do not need to check that half.
 
+### The placement row, now two buttons instead of three
+
+*The user asked for this after looking at it, so it is the one item here they have
+already half-seen: what they saw was the old row.*
+
+Right rail, select a piece **standing on the floor** — a sofa, a bed, a plant. The
+placement row is **Wall · Floor**, two buttons at half the rail each, and there is **no
+"Where it sits" heading** above it.
+
+Then put something on a surface: drag a **table lamp** onto a coffee table and select
+it. Now there are **three** — Wall · Surface · Floor — and hovering Surface says *"Drop
+onto Coffee table"*, naming the actual piece.
+
+Then narrow the window until the right rail is at its tightest (~1024–1280 px). Two
+buttons have to fit at that width; three are allowed to reflow to `1fr 1fr` and wrap,
+which is what `rail-triple` is for.
+
+**Wrong looks like:** three buttons on a piece standing on bare floor (the fix has not
+taken); a clipped or overflowing word at the narrow width, which is the complaint that
+started this and the one thing the tests cannot see; the row looking *broken* rather than
+deliberate now the heading is gone; or "Drop onto undefined".
+
+**Also worth one press each,** because these two are the reason the third button was kept
+rather than deleted: with the lamp on the table, **Floor** should drop it to the floor and
+let go of the table, and **Surface** should put it back on top. Neither is reachable by
+dragging — dragging the lamp off the table moves it sideways.
+
 ### A refused turn now says so in 3D — 500 ms of red
 
 *The one thing in this pass that no test can reach. `lib/refusal.ts` decides what counts as a

@@ -982,7 +982,7 @@ S. The bench item was answerable anyway because they substituted a couch. The ke
 not, so that gesture is still unlooked-at and `visual-check.md` now carries the correction
 beside it. A hand-off list is a claim, including when this session wrote it.
 
-### 1. The Inspector's "Where it sits" row is three buttons wide and two of them are one button
+### 1. The Inspector's "Where it sits" row is three buttons wide and two of them are one button — FIXED
 
 The user's words, having looked at the real thing: *the section seems redundant now and it
 takes too much horizontal space.* They offered three ways out — remove it, merge Floor and
