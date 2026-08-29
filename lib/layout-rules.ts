@@ -25,8 +25,10 @@
 //
 // ── Where the numbers come from ─────────────────────────────────────────────
 //
-// Residential space-planning practice, and they agree with each other to within a
-// few centimetres across sources:
+// Residential space-planning practice. They agree with each other to within a few
+// centimetres across sources — with ONE exception, which is spelled out at the
+// bedside line below rather than left for the next reader to discover. A blanket
+// "the sources agree" is the kind of claim that stops anyone checking.
 //
 //   · 600 mm — the tight minimum walkway; also the depth in front of hinged
 //     storage and a fridge. Derived here from `WALK_RADIUS` rather than typed
@@ -35,6 +37,30 @@
 //     (1050–1200 mm if people also walk behind them). Also the circulation behind
 //     a desk chair.
 //   · 500 mm — the bedside strip you need to get in and make the bed.
+//
+//     **This is the one number that disagrees with its source, and it disagrees
+//     on purpose.** Panero & Repetto (1975) — the anthropometric reference the
+//     furniture-layout literature cites for all of these, and the one Merrell et
+//     al. (SIGGRAPH 2011) tabulate directly — put bedside clearance at 36 in
+//     ≈ 914 mm. Ours is 45% under that, and it is the only one that is under.
+//     Three of ours land within a rounding of the same table — shelving 600 vs
+//     24 in ≈ 610, dining all-around 900 vs 36 in ≈ 914, coffee-table-to-seat
+//     400–500 vs 16–18 in ≈ 406–457 — and one is deliberately MORE generous: our
+//     900 mm seat pull-back against their 30 in ≈ 762 mm, because ours has to
+//     cover a diner pushing a chair back rather than someone standing in front of
+//     a seat. Being over the reference needs no defence; being 41 cm under it
+//     does.
+//
+//     The gap is a difference of activity, not of measurement. 914 mm is the
+//     figure for standing beside a bed and using the floor there as circulation;
+//     500 mm is the strip you need to get IN and to tuck a sheet, which is what
+//     this zone is titled ("to get in and make the bed") and what a bedroom that
+//     is 3 m wide can actually give. Raising it to 914 mm would report most real
+//     bedrooms as faulty, which is the opposite of useful.
+//
+//     Written down because a number that quietly contradicts its own cited source
+//     reads as an error to whoever next compares them, and the next person to
+//     check will be the third.
 //   · 400–500 mm — sofa to coffee table.
 //   · 400 mm — the band in front of a window that large furniture should stay out
 //     of, and 600 mm for the depth a door leaf sweeps.
