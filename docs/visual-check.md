@@ -63,27 +63,10 @@ conflict.
 
 ## Sizes and fit
 
-*Owner: `sizes`.*
-
-### A bed added at a wall — on `main`, `4cec92b`
-
-The user's own report, and it takes **two** fixes to be right, so check it after both are
-on `main`: this one, and `shell`'s bed geometry.
-
-Drop a **bed** near the **west** wall from the Library, then another near the **east**, then
-one near the **south**. Each should arrive with its back to the wall it was dropped at —
-three different headings, not three beds facing north.
-
-Then press **Shuffle** and watch what it does with them. Adding now picks a heading, and
-the solver has always priced facing; the two agreeing is the point.
-
-**Wrong looks like:** every bed facing the same way on drop, which is what the user
-screenshotted. Or, after Shuffle, every bed converging on one wall — that would be a
-solver question rather than this fix, because nothing prices *variety*. Also worth looking
-at while you are there: a **plant** and a **floor lamp** must still arrive at 0°, since
-those have no back to put against anything.
-
----
+*Owner: `sizes`. Empty because its one item — a bed added at a wall — **has been looked
+at, and it failed.** Two separate defects came out of it and both are measured in
+`what-is-still-open.md` § H.2 and § H.3; the arithmetic is settled, so neither is waiting
+on eyes any more.*
 
 ## Drag and selection
 
@@ -97,159 +80,66 @@ rotation-blind) and three on drill-in (never fire, count an empty selection as i
 accept overlap where it asks for containment) — and not one of them can see any of what
 follows.
 
-### A merged set that would not move at all
-
-In a **T-shaped** room, merge a dining table with its chairs and drag the table. All of
-them travel together.
-
-Then the half that must still work: drag a set until one member would leave the floor. It
-refuses **as a unit** and outlines the member that ran out of room — usually not the piece
-under your hand.
-
-**Wrong looks like:** the set sitting completely still under the cursor, in every
-direction, in a room you have not touched. Or the opposite — one chair sliding through a
-wall while the rest follow the table.
+**Five of this section's seven items have now been looked at.** Two held (a merged set does
+travel as one; a resized piece keeps its size through the next drag). Three failed, and
+their causes are measured rather than left here for another look: the rug and the sofa
+dropped into an L / T notch (§ H.4), the piece too big to turn (§ H.5), and the merged-set
+click that drills in from a nightstand but never from the bed (§ H.8). The two below are
+still unlooked-at, and the second one is only unlooked-at because **the keys it named were
+wrong** — see its note.
 
 ### Turning a piece into a wall — the handle, and now the arrow keys
 
-Plan tab. Turn a **sofa** hard against a wall by its round handle, then open the model tab
-and look at that wall from outside.
+*The user tried this and could not tell what it was asking, which is this item's fault. The
+overhang it asks you to look for is **allowed on purpose** — a piece in a tight spot has to
+stay turnable — so "is anything through the wall" is the wrong question and was never going
+to give a clean answer. What is actually being checked is narrower, and it is three things
+that must **match each other**.*
 
-Twice more with the keyboard: focus the handle and hold an **arrow key**, then **Shift +
-arrow** on the piece itself. Those two had no clamp at all and must now behave exactly like
-the handle drag, including taking a lamp standing on the piece along.
+Plan tab, a room with a **sofa longer than one of its walls is short** (make the room 3 m
+deep in Room tools if the starter room is roomier than that).
 
-**Wrong looks like:** corners through the plaster in the model tab; the lamp left behind
-facing its old way; or a piece in a tight corner becoming un-turnable, which is the thing
-this must **not** do.
+Turn the sofa with its round **handle**. Then undo, focus the handle and hold an **arrow
+key**. Then undo, and press **Shift + arrow** on the piece itself. Three gestures, one
+meaning.
+
+**What right looks like:** all three end with the sofa at the same angle in the same place,
+the sofa **outlined in red** while it overhangs, and a lamp standing on it turning with it.
+
+**Wrong looks like:** the three disagreeing with each other; a piece in a tight corner
+becoming **un-turnable** (the thing this must not do); the lamp left behind; or an overhang
+with **no red outline at all**, which is the 3D tab's version of this and is already a
+confirmed defect — § H.5, so you do not need to check that half.
 
 ### Rotate and scale on a merged set, in 3D
 
-Model tab. Merge a **bed with two nightstands**, select it, press **E** and turn the bed
-hard into its own nightstands. Then **R** and scale it up past what the room holds.
+*Correction, and the reason this is still open: this item used to say "press **E**" and
+"then **R**". **E does not rotate anything** — Q and E orbit the camera
+(`components/three/CameraRig.tsx`, `NAV_KEYS`). The gizmo modes are **W** translate, **R**
+rotate, **S** scale (`components/studio/KeyboardShortcuts.tsx`), and they are armed on the
+3D tab only. So the gesture below has not been tried yet, by anyone.*
+
+Model tab. Merge a **bed with two nightstands**, select it, press **R** and turn the bed
+hard into its own nightstands. Then **S** and scale it up past what the room holds.
 
 On release the bed is inside the room. The turn itself is allowed — a piece in a tight spot
 stays turnable — and an overlap is allowed to be reported; the geometry leaving the walls
 is not.
 
 **Wrong looks like:** the bed keeping the angle you dragged with a corner out through the
-wall. Worth knowing while you look: 3D says nothing in colour after a refused turn — its
-tell is **Room check** — where the plan outlines the piece. If that asymmetry bothers you it
-is a separate decision, not a defect in this fix.
+wall.
 
-### Clicking a merged set, then clicking into it
-
-Both tabs, identical, or it is wrong.
-
-Click a merged set → the **whole set**. Click one piece of it again → **that piece alone**.
-Click a *different* piece of the same set → that one, still one at a time. **Escape**, or a
-click on empty floor, then click the set → the **whole set** back.
-
-**Wrong looks like:** the very first click landing on one piece, so the set can never be
-selected by clicking it at all; the second click doing nothing; a sibling click bouncing
-you back out to the whole set; or the two tabs disagreeing on any of the four.
-
-### A rug walking out of the room
-
-Plan tab, **T** or **L** room. Drag a rug at the quadrant the shape cuts away.
-
-Its **centre** stays on real floor. Its **edges** may still hang off — under furniture, over
-the skirting, across a missing corner — and that must keep working.
-
-**Wrong looks like:** a rug sitting entirely in the notch, in normal colours, as though
-placed.
-
-### A resized piece losing its size on the next move
-
-Widen a **wardrobe** in the Inspector, then merely **drag** it. The width survives the drop.
-
-Again with a **coffee table**, which takes the other path internally and must be equally
-unchanged. Then resize either with the 3D scale gizmo and confirm it does not jump on
-release.
-
-**Wrong looks like:** the width snapping back to what the room was built with — sofa,
-curtain, wardrobe, closet, bookshelf and shoe-rack only, which is why it reads as
-intermittent.
-
-### A piece too big for the room, turning
-
-Room **3 m** deep, a **4 m** bench in it, turn the bench 90°.
-
-It cannot fit at that angle. Pinned-and-reported and held-and-reported are both honest;
-silence is not. Today it pins. This is old behaviour both tabs share that the plan's turn
-now reaches for the first time — listed to be looked at, not because it changed.
-
-**Wrong looks like:** the bench parking quietly, in normal colours, half outside the room.
-
----
+Worth knowing while you look: this item used to note that 3D says nothing in colour after a
+refused turn, where the plan outlines the piece, and called that *"a separate decision, not
+a defect in this fix."* **The user has now made that decision — it is a defect**, reported
+as a couch cutting through the walls instead of being constrained. It is § H.5 with the
+overhang measured, so the silence is no longer part of what you are looking for here.
 
 ## Layout and Shuffle
 
 *Owner: `layout`. The first three ride **`fa12f1a` / PR #29**, now on `main`. The fourth
 fixes nothing and is here anyway — it is the user's own report with a measured cause and a
 reverted remedy, so what it needs is a look rather than a check.*
-
-### A Lock button on every piece row — on `main`, `fa12f1a`
-
-The user asked for it and then went looking for it and could not find it, because it sat
-unpushed on one machine. It exists now, so this is the first time anyone can press it.
-
-Open a room, look at the **left rail**. Every piece row has a **padlock** before the eye.
-Press it on one piece, then press **Shuffle**. That piece must not move; the others should.
-Press the padlock again and Shuffle again — now it should move like anything else.
-
-It is deliberately **solver-only**. A locked piece still drags, turns, resizes, recolours
-and deletes by hand, and that is the intended behaviour rather than a gap: a padlock that
-stops a deliberate hand is one people learn to leave off.
-
-**Wrong looks like:** the locked piece moving anyway — which would mean the lock composes
-wrongly with something and the button is decoration. Or the padlock refusing a drag, which
-is the other feature and not this one. Or the lock surviving into a **different room**:
-open a second room and check nothing is locked there, because part ids are
-`category`-plus-counter and collide across rooms, so an inherited entry would silently
-exempt a *different* sofa.
-
-Two states share this row and must not read as one: the padlock is **"locked in place"**
-(yours), and the **camera glyph** is **"from your photo"** (the detector's). Hover both.
-
-### 58px of piece name at the narrowest rail — on `main`, `fa12f1a`
-
-The lock is a **third** button on a row that had two, and the piece name pays for it. The
-name's remaining width goes from **90px to 58px** at the left rail's own clamp floor —
-derived in `tests/reflow.test.ts` from the `.list-row` gap and padding, the rail's clamp,
-the count of `IconButton`s inside `PartRow` and the 12px status glyph, and held above a
-floor. So it is guarded, and it has never been seen.
-
-Narrow the window until the left rail is at its tightest, then look at a piece with a long
-name — a **"Dining / desk table"**, or rename something to twenty characters.
-
-**Wrong looks like:** a name clipped with no ellipsis, or one printing over the padlock.
-Those are two different failures with two different causes — `.rail` is `overflow: hidden`,
-so anything outgrowing the row is eaten at the edge with no scrollbar and no console line;
-an element with no `overflow` of its own paints over its neighbours instead. Neither errors
-and neither fails a test. **A 58px name reads as a font bug in a screenshot**, which is why
-it is written down as a number rather than left to be noticed.
-
-Same shape as `shell`'s **"Delete from scene" → "Delete"**: in both cases the row was out
-of **room**, not out of taste, and in both cases the arithmetic was only checkable because
-every term came out of the file that states it rather than out of a comment.
-
-### Shuffle and a piece a few degrees off square — on `main`, `fa12f1a`
-
-Not on the user's list. Found while measuring something else, and it is the largest thing
-in this section: over six presets × 40 seeds, **197 of the moved pieces came back between
-0.06° and 12° off square** — and every gate was green, because the twelve-seed sweep that
-guards this runs on a plain 7.5 × 5.6 rect, the one room shape where it does not happen.
-The tidy now squares such a piece *and shoves it* up to `off × radius`. That takes 197 to
-**30**.
-
-Press **Shuffle** several times on an **L**, **U** or **T** room. Look along the walls for a
-piece that is *almost* straight.
-
-**Wrong looks like:** a sofa or table sitting two or three degrees off, reading as sloppy
-rather than as angled on purpose. **The remaining 30 are real and expected** — mostly the U
-and the T, where neither the square yaw nor anything within the piece's own reach is legal
-— so finding one is not a regression. Finding a *lot* of them is.
 
 ### Does Shuffle keep the bedside table by the bed? — a known defect, `main`
 

@@ -579,10 +579,17 @@ to the whole suite. That is exactly the shape of the `blockedBy` scar in `CLAUDE
 finding the caller drops is a finding that does not exist" — and it went a whole commit
 unseen because only a human eye could have caught it.
 
-`visual-check.md` was 21 items and is **17**: three went in `95b28fa`, the mount-height
+`visual-check.md` was 21 items and is **4** — see § H for where the other seventeen went;
+of this paragraph's own arithmetic, three went in `95b28fa`, the mount-height
 field in this pass, and the Library item is narrowed twice rather than deleted. Of the 17,
 roughly **5 are still wiring** — does the component render what `lib/` already computed —
 3 are computed layout, and the remaining 8 need a real browser and stay where they are.
+
+*(That split was measured when the file held 17 and it did not survive contact. The user
+looked at all seventeen: **8 held, 5 failed, 2 could not be answered because the question
+itself was wrong, and 2 are still unchecked.** The failures land mostly in geometry the
+jsdom bucket could never have reached. The estimate is left as written because it is what
+the plan below was sized against; § H is what actually happened.)*
 
 **Deleting an item because a gate replaced it is the practice here**, not a shortcut past
 the "merging is not looking" rule: that rule is about a *fix* nobody saw, while these are
@@ -949,7 +956,31 @@ about copy pointing at things that are not there.
 
 ---
 
-## H · Asked for by the user after looking at it in a browser — NOT yet built
+## H · The user looked at the real thing. Everything here comes from that, and none of it is built.
+
+Seventeen items were put to the user as a numbered list. They have answered **1–15** and
+hold 16 and 17, and the split is:
+
+| outcome | count | items |
+|---|---|---|
+| held — looked at, nothing wrong | **8** | 1–4 (the `aaf2888a` shell four), 6 (a merged set travels as one), 11 (a resized piece keeps its size), 13 (Lock), 14 (the piece name at the narrowest rail) |
+| **failed** | **5** | 5 → § 2 + § 3 *(measured)*, 10 → § 4 *(measured)*, 12 → § 5 *(measured)*, 9 → § 8 *(no cause yet)*, 15 → § 6 *(research)* |
+| unanswerable — the question itself was wrong | **2** | 7, 8 — corrected in `visual-check.md` and still open. Item 8 threw off two findings anyway: § 8 and § 9 |
+| not yet checked | **2** | 16, 17 |
+
+So "failed" is not one kind of thing, and the fourth column is the part that matters: **three
+have a mechanism and a number** (§ 2 – § 5), **one is an observation with no cause yet**
+(§ 8), and **one is a research task** (§ 6). Everything below is one of those three, plus two
+changes the user asked for outright (§ 1, § 10) and one more measured defect that came out of
+a question they could not answer (§ 9).
+
+**Two of the questions put to them were wrong**, which is worth more than the answers: one
+named a **bench**, which is not in the catalog at all — `grep -in bench` over `lib/`,
+`components/` and `app/` returns two comments and no part — and one told them to press **E**
+and **R** to rotate and scale, where **E orbits the camera** and the gizmo modes are W / R /
+S. The bench item was answerable anyway because they substituted a couch. The keys item was
+not, so that gesture is still unlooked-at and `visual-check.md` now carries the correction
+beside it. A hand-off list is a claim, including when this session wrote it.
 
 ### 1. The Inspector's "Where it sits" row is three buttons wide and two of them are one button
 
@@ -995,13 +1026,254 @@ focus, which is a new obligation taken on for nothing.
 that JSX explain why wall-mounted parts get the mount-height row instead, and that half
 stays exactly as it is.
 
+### The measurements below
+
+Taken at `4b7fe7f` with a throwaway vitest probe, since deleted — every number is
+reproducible by calling the functions named, and each one says which function produced it.
+Nothing here needed a browser; the user's report is what said where to look.
+
+### 2. A wall-hugging piece is clamped by its UNROTATED extent and then rotated — 200 mm into the plaster
+
+The user, having looked: a bed dropped at a wall *"clips through the wall."* It does, and
+only on two of the four walls.
+
+`placeNewPart` (`lib/scene-spec.ts`), 6 × 4 rect, bed 1600 × 2000, dropped at each wall:
+
+| drop | committed | yaw | x or z span | wall at | through the plaster |
+|---|---|---|---|---|---|
+| west | `x = −2.200` | **+90°** | `[−3.200, −1.200]` | `−3.000` | **200 mm** |
+| east | `x = +2.200` | **−90°** | `[+1.200, +3.200]` | `+3.000` | **200 mm** |
+| north | `z = −1.000` | 0° | `[−2.000, 0.000]` | `−2.000` | none |
+| south | `z = +1.000` | 180° | `[0.000, +2.000]` | `+2.000` | none |
+
+`intoRoom` insets the drop point by `dimMM[0]/2000` and `dimMM[1]/2000` — the half-extents
+**before rotation** — and the yaw is chosen afterwards, by `snapToWall`, on the line that
+returns. A bed inset by its 800 mm half-width and then turned 90° needs 1000 mm of inset,
+so it keeps the 200 mm difference and spends it inside the wall.
+
+Why it survived the fix that introduced it: on the north and south walls the yaw is 0 or
+180°, where the unrotated extents **are** the rotated ones. That is the symmetric case, and
+CLAUDE.md's own rule says a sign or a handedness is invisible in it. It hits every
+non-square piece with a wall affinity — bed, sofa, wardrobe, desk, bookshelf — on an east or
+west wall.
+
+`resolvePlacement` one file over already has the right arithmetic:
+`extX = halfW·|cos| + halfD·|sin|`. So the fix is not new maths, it is choosing the yaw
+before the clamp instead of after it, and insetting by the rotated extent — ideally by
+sharing that expression rather than copying it, which is how two of these came to disagree
+in the first place.
+
+### 3. Clicking a Library item drops every piece on the same spot, facing the same way
+
+Same probe, three beds added the way the **click** path adds them — `spawn()` calls
+`placeNewPart` with no `at`, so `ax = az = 0`:
+
+    bed #1: pos=[0.000, 0.000, 0.000] rot=0.0deg
+    bed #2: pos=[0.000, 0.000, 0.000] rot=0.0deg
+    bed #3: pos=[0.000, 0.000, 0.000] rot=0.0deg
+
+Identical, all three. So the user's *"they indeed face the same way on drop"* is the **click**
+path, and the `4cec92b` fix — take the yaw from the nearest wall — can only work where the
+pointer named a spot. From the room centre the nearest wall is the same wall every time.
+
+The second half is a doc that is simply false. `spawnMany`'s comment says:
+
+> Placed one after another rather than in parallel: `placeNewPart` reads the parts already
+> in the room, so each piece avoids the one before it and four chairs land as four chairs
+> instead of one chair four times.
+
+`placeNewPart` reads `existing` in exactly one place — `findSupportUnder`, and only when
+`isTabletopProne(cat)`. A chair is not tabletop-prone. **Four chairs land as one chair four
+times**, and the comment beside the loop says the opposite. Two sources of truth, and the
+prose is the one the next reader believes.
+
+### 4. A drop into an L / T / U's missing quadrant lands outside the house — and it is written down as current behaviour
+
+The user: a TV spawned outside the wall in an L, a couch did the same in a T, and *"rug sits
+outside of the wall, seems it has no constraints in both plan and model mode."*
+
+Probe, dropping at `(2.5, 1.5)` in an L 6 × 4 and `(2.5, 1.8)` in a T 6 × 4:
+
+| piece | centre on real floor | corners outside |
+|---|---|---|
+| TV (L) | yes — the wall snap saved it | **2 of 4** |
+| sofa (L) | **no** | **4 of 4** |
+| rug (L) | **no** | **4 of 4** |
+| sofa (T) | **no** | **4 of 4** |
+
+This is not a regression. `intoRoom`'s own doc comment states it, names `clampIntoFootprint`
+as the function that would answer it, and gives the two reasons it is not called: that
+function clamps a **centre**, so a point 5 cm inside the leg of a U satisfies it with a 2 m
+sofa mostly through the wall; and wiring it in *"moves every drop into an L / T / U, which
+wants its own diff."* `tests/wall-parts.test.ts` asserts the notch drop **by name**. So the
+deferred diff is the fix, and the user has now hit it twice.
+
+Doing it properly needs the pair, because either alone is a known-insufficient half:
+`clampIntoFootprint` for the centre **and** `contain` from `lib/layout-settle.ts` for the
+extent — which is where every solved placement already ends, so the add path is the one
+path that skips it.
+
+The rug is the same defect and **not** the documented exemption. `lib/drag-resolve.ts` holds
+a *dragged* rug's centre to `pointInFootprint` — that narrow fix is already in, and the
+overhang past the skirting is deliberate — while the *add* path holds it to nothing. So "the
+rug has no constraints" is true of adding one and false of dragging one, which is the same
+two-consumers shape as everything else in this section.
+
+### 5. The 3D tab computes the refusal the plan paints red, and clears it on the same tick
+
+The user: a couch *"is cutting through the walls instead of being constrained."*
+
+`turnInPlace`, sofa 4000 × 900 turned 90° in a 6 × **3** room:
+
+    pos.z = 0.500, spans z = [−1.500, 2.500], room z = [−1.5, 1.5]
+    valid = false, overhang = 1.000 m
+
+The overhang is deliberate and `PlanView` says so in its own comment — *"the turn is TAKEN
+either way — refusing an invalid frame would make a piece in a tight spot unturnable"* — and
+then it sets `blockedIds([part.id])`, so the plan outlines the piece in red and holds it
+there.
+
+`Draggable.commit()` reaches the identical placement through its invalid-drop fallback and
+then ends with `setDragInvalid(false)` and `setLive(null)`, **unconditionally**. The
+refusal is computed and discarded in the same function. One rule, two consumers, and 3D is
+the one that drops it — the exact scar `blockedBy` was added to close, one gesture over.
+
+A second thing that branch gets wrong, in its own words: it claims the re-resolve *"comes
+back legal by construction from both branches."* True for a **translate**, where `back` is a
+spot this piece already stood in at this angle and size. False for a **rotate or a scale**,
+where `back` is where the piece is standing and the only thing that changed is the extent
+being tested against the walls. The 1.000 m above is that case, committed silently.
+
+`docs/visual-check.md` had this asymmetry written down and called it *"a separate decision,
+not a defect in this fix."* The user has now made the decision.
+
+### 6. Research: Suggest, from the ground up — the user's explicit ask
+
+Four observations, all the user's, all landing in the same place:
+
+- a merged dining set solved with **one chair hanging in the air**, no floor under it;
+- a chair put on a couch, then Suggest, ends **through a wall**;
+- a couch a few degrees off square is turned to face **away from the TV** it should face;
+- and generally, *"suggest doesn't really seem to know what to do with groups and their
+  rotations."*
+
+Their instruction: *"we really need to work on that research and look at the algorithm from
+ground up."* This is now the largest open thing in the repo, and it **subsumes** § A.2
+(nothing prices variety), § A.3, § A.7 (`snapYaws` leaves 197 of 240 solves crooked) and
+§ G.2 (the anchor pass helps two presets and hurts one). Those are four symptoms of one
+design that was never designed.
+
+What § A already settles, so the research does not re-derive it: the cost terms exist, two
+consumers read them, and `tests/layout-conformance.test.ts` holds those consumers to each
+other; `RULE_HANDLING` is production knowledge, not a fixture; and the solver already ends
+on `layout-settle`. What is **missing** is three things, and each maps to one observation
+above:
+
+1. **Nothing prices support.** A chair needs floor, or a seat, under it. The solver scores
+   an `(x, z, yaw)` and `findSupportDetailed` is not in that loop — hence the chair in the
+   air, which is not a near-miss but a placement the cost function cannot see.
+2. **Nothing prices a relation between two pieces** beyond wall affinity. Couch↔TV,
+   table↔chairs, bed↔nightstand. `lib/layout-rules.ts` has `zone`s that describe what a
+   piece needs *around* itself; there is no term for what it needs to *face*.
+3. **A group is not a unit.** N members are placed as N pieces, so a merged set can be
+   solved into a shape it was merged specifically to prevent.
+
+### 7. Research: collision, properly — and the user is open to replacing the engine
+
+Their words, kept because the scope is theirs: *"Do a detailed search to the fundamental
+workings of collision generation, simple versus complex collision, and custom collision
+hulls for both static meshes and Blueprints, check unreal engine, unity, blender and similar
+resources for a better understanding. I'm open to overhauling the current logic/engine if
+need be. If we need to build a proper engine and structured algorithm too, that's fine."*
+
+The baseline to research against, so nobody has to reconstruct it: every piece is **one box**
+in its own frame (`obbFromPart`) or **one ellipse** (`footFromPart`, when `part.circle`),
+tested by separating axes (`obbOverlap`) with a −10 mm pad, plus a vertical-extent test in
+`collidesAt` that permits stacking. There is **no per-shape hull anywhere**: a sofa's L, a
+dining table's legs, a curtain's drape and a plant's canopy are all the same rectangle. That
+is why a chair only tucks under a table by the width of the pad, and why the solver's overlap
+term is coarser than what the user can see on screen.
+
+Two properties of the current design are worth carrying into any replacement, because both
+were bought with defects: the footprint is **derived from `dimMM`**, so it recalibrates on a
+resize for free, and a round piece is tested as an **ellipse rather than its box** — which
+`lib/plan-hit.ts` also does for picking, so the thing you can click and the thing that
+collides agree.
+
+### 8. Two reports that need a real repro before they can be fixed
+
+**A group drag bounded by the dragged piece's rules rather than the set's.** The user:
+dragging a merged bed with a nightstand on each side is blocked toward the side the
+nightstands are on.
+
+The obvious mechanism is **refuted, by measurement**. `travelWorld` shifts the travelling
+company by the **raw pointer delta** while `resolvePlacement` accepts a snapped one, which
+looked like it would let the lead collide with its own company. Measured on bed + two flush
+nightstands, asking for +137 mm:
+
+    snap=off     rawDx=137.0mm  acceptedDx=137.0mm  skew=0.0mm  valid=true
+    snap=fine    rawDx=137.0mm  acceptedDx=137.0mm  skew=0.0mm  valid=true
+    snap=coarse  rawDx=137.0mm  acceptedDx=137.0mm  skew=0.0mm  valid=true
+
+Zero skew at all three settings, because `snapToNeighbors` runs **after** the grid snap and
+pulls the lead flush against the very company that travelled with it. Worth keeping on its
+own account: **a flush travelling neighbour silently defeats the grid snap**, since the
+magnet wins and lands the lead exactly on the raw delta. Coarse snap is a 50 mm lattice and
+this drag ignored it.
+
+So the block is something else. The likeliest remaining candidate is the containment clamp
+bounding the **lead** by its own extent while a **member** is the piece that runs out of
+room — in which case the set stops where the *nightstand* meets the wall and the piece named
+is not the piece under the hand, which would match the report exactly. Not settled. Needs a
+real drag.
+
+**Clicking a merged set drills in from a nightstand but never from the bed.** And, second
+half of the same report, after clicking away a nightstand click acts on that piece alone
+where it should select the whole set again. `selectionForPick` is **symmetric** — it has no
+notion of which piece — so the defect is not in that function; it is in what `current` holds
+when the click arrives. Needs a real click sequence, on both tabs, with the store read
+between clicks.
+
+Both are DOM-reachable on the **2D plan**, which is SVG with real elements and is the cheap
+way in. The 3D tab needs world→screen mapping to place a synthetic pointer.
+
+### 9. Room previews are all drawn as rectangles
+
+The user: *"Room previews should be room shape accurate, they all look like rectangular
+rooms atm."* The workspace card for a saved L / T / U room draws a rectangle. The footprint
+is stored on the room and `footprintForLayout` is pure, so the preview already has
+everything it needs to draw the real shape.
+
+### 10. Undo / redo should cover selection — a decision, not a defect
+
+The user: *"undo and redo should track selections too, so that you can undo a selection or
+redo a selection."* Today `lib/history.ts` tracks the transform and scene maps; selection
+lives in `useStudio.selection` and is not on the undo stack.
+
+Flagging one consequence before building it, because it is the reason most tools do **not**
+do this: if every click is an undo step, walking back to the move you actually want to undo
+costs one press per click you made on the way. The usual answer is a **separate** history for
+selection (a back/forward through selections, not entries in the main stack), or coalescing
+runs of selection changes into one entry. Which of those the user wants is their call.
+
 ---
 
-## Nothing in this document has been in a browser
+## What in this document has been in a browser, and what has not
 
-That is no longer true of `visual-check.md`, and this line stays as the honest boundary
-between the two files: the four `aaf2888a` items were looked at in a real browser and are
-deleted from it. Everything measured *here* is still arithmetic.
+The heading here used to read *"nothing in this document has been in a browser"*. That is
+now false in both directions and the distinction is the useful part.
+
+**Seen by the user, in a browser, on their own machine:** everything in § H. Fifteen of the
+seventeen items put to them, which is where every defect in § 2 – § 5 and § 9 came from.
+Their report is the *observation*; the mechanism and every number beside it is arithmetic
+this session did afterwards, from the functions named.
+
+**Not seen by anybody:** everything in § A – § G, § H.1's replacement row, and the two
+repros in § H.8. The four items still live in `visual-check.md`.
+
+That boundary is the reason § H.8 says "needs a real repro" rather than proposing a fix: two
+of the user's reports have a plausible mechanism and no measurement, and one of the two
+plausible mechanisms this session did measure came back **refuted**.
 
 The desktop half of both is reachable with `pnpm build && pnpm start` and no login. What
 worked, so nobody re-derives it: **Playwright with Chromium, installed outside the repo**
