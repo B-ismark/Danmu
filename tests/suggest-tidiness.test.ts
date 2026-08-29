@@ -638,11 +638,22 @@ describe('the repair pass is re-checked on the grid the room report reads', () =
    *  `i * 31 + j` for the repair seed — and it is kept in that form so a re-run can
    *  name the same point rather than a magic number that has to be trusted.
    *
-   *  **Re-derived twice, and the refusal set moved both times.** It was scramble 17 /
-   *  repair seed 2, one of four refusals; `2e3367d` retired that one. The round after
-   *  that found two — scramble 35 at repair seeds 8 and 26 — and chose 26. The
-   *  proposal-generator change in `propose` has now retired seed 8 and produced 19 and
-   *  22, so the set is 19 / 22 / 26 and 26 is the survivor of both re-runs.
+   *  **Re-derived three times, and the refusal set moved every time.** It was scramble
+   *  17 / repair seed 2, one of four refusals; `2e3367d` retired that one. The round
+   *  after that found two — scramble 35 at repair seeds 8 and 26 — and chose 26. The
+   *  proposal-generator change in `propose` retired seed 8 and produced 19 and 22, so
+   *  the set became 19 / 22 / 26. **The winding fix moved it again, to 6 / 12 / 22.**
+ *
+   *  That third re-derivation is the one worth reading, because it says the fixture
+   *  moved and the EVIDENCE did not. Swept on the landing commit: scramble 35 still cut
+   *  by 7.055, input still 1921.50, still 19 of 54 scrambles cut, still 532 trials, and
+   *  **still exactly 3 refusals, all three still on scramble 35** — the same count at the
+   *  same concentration, with different coordinates. Which matters because the
+   *  temptation here is to go looking for a scramble that restores three refusals, and
+   *  that would be choosing a fixture BECAUSE it makes the assertion pass. Nothing was
+   *  chosen: the sweep was re-run over the same 54 x 28 grid the previous rounds used,
+   *  and the count came back identical. The value of this fixture is the 3 in 532, never
+   *  the seed number — so the count is asserted below and the seed is only its address.
    *
    *  Scramble 35 is cut by 7.055 on the fine grid, which is comparable to the 7.1 an
    *  earlier round REJECTED in favour of a 12.9 — treat it as the floor rather than a
@@ -650,20 +661,20 @@ describe('the repair pass is re-checked on the grid the room report reads', () =
    *  not relax the gate. A fixture that stops being cut is a test that stops meaning
    *  anything, which is how the first two fixtures died.
    *
-   *  Seed 26 rather than 19, and NOT by the margin criterion the previous round used.
-   *  With the fine-grid re-check deleted, the proxy's answer at these three seeds
-   *  scores 1698.00, 1451.91 and 1603.91 units worse than the layout it was handed
-   *  (input 1921.50). Seed 19's margin is the biggest, by 6% — which is not the 2× gap
-   *  that made the previous round's choice free, so continuity wins instead: 26 has
-   *  refused across two generations of the proposal generator, and 19 has refused
-   *  across none.
+   *  **Seed 22 now, and by this file's own tie-break rather than a fresh one.** The
+   *  previous round chose 26 over 19 on continuity — "26 has refused across two
+   *  generations of the proposal generator, and 19 has refused across none" — and the
+   *  same rule picks 22 here without being bent: of the new set 6 / 12 / 22, only 22 was
+   *  also in the old set 19 / 22 / 26. 6 and 12 have refused across one generation; 22
+   *  has refused across two. Applying a criterion the file already had beats inventing
+   *  one that happens to select what is left.
    *
    *  None of those three figures can be read off a passing run — they need the re-check
    *  removed — and they were taken by actually removing it: `return best` in place of
    *  the final line of `openRoutes`, which turns this assertion and the one above it
    *  red together. */
   const LAYOUT_SEED = 35 * 2654435761;
-  const REPAIR_SEED = 35 * 31 + 26;
+  const REPAIR_SEED = 35 * 31 + 22;
 
   function scattered(): Placement[] {
     const r = lcg(LAYOUT_SEED);
@@ -703,6 +714,28 @@ describe('the repair pass is re-checked on the grid the room report reads', () =
     const out = openRoutes(model, at, DEFAULT_WEIGHTS, bounds, lcg(REPAIR_SEED));
     expect(fine(out)).toBeLessThanOrEqual(fine(at));
   });
+
+  // The count, not the specimen. `REPAIR_SEED` above is one address; this is the
+  // population it was taken from, and it is the assertion that would notice the
+  // re-check's evidence base thinning out. Three of 28 on this scramble, which is all
+  // three of the 532 the full 54 x 28 grid produces — that wider figure is recorded
+  // rather than asserted so this stays one scramble's worth of work.
+  //
+  // Pinned EXACTLY, in both directions. A `>= 1` bar would sit green while the
+  // re-check went from firing three times in 532 to once, and one-in-532 is much
+  // weaker evidence that a code path does anything than three-in-532 is. If a change
+  // moves this number, the sweep gets re-run and this comment gets rewritten — that
+  // is the maintenance this file has already paid three times, and it is cheaper than
+  // a guard nobody can size.
+  it('and the fine re-check refuses exactly three of the 28 repair seeds here', () => {
+    const at = scattered();
+    const refused: number[] = [];
+    for (let j = 0; j < 28; j++) {
+      if (openRoutes(model, at, DEFAULT_WEIGHTS, bounds, lcg(35 * 31 + j)) === at) refused.push(j);
+    }
+    expect(refused).toEqual([6, 12, 22]);
+    expect(refused).toContain(REPAIR_SEED - 35 * 31);
+  }, 300_000);
 
   it('…on a fixture where the proxy really does hand back something worse', () => {
     // Without this, the test above passes on any input the proxy happens to improve,

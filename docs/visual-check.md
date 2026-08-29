@@ -198,6 +198,61 @@ a defect in this fix."* **The user has now made that decision — it is a defect
 as a couch cutting through the walls instead of being constrained. It is § H.5 with the
 overhang measured, so the silence is no longer part of what you are looking for here.
 
+### A wall-mounted piece you can finally collide with — PR #42, now on `main`
+
+`collidesAt` carried `if (o.wallMounted) continue;`, so **nothing in the room could collide
+with a mounted TV, a painting or a floating shelf**, and it measured every vertical extent
+as `[y, y + h]` — right for a sofa, wrong by half a height for anything centred on its
+origin. `verticalExtent` in `lib/physics.ts` is the one answer now, keyed on the ANCHOR
+rather than the `wallMounted` flag, which is what also catches a ceiling fan.
+
+**Already seen in the plan, A/B, `3da5df2` vs `587d52c`** — and this is geometry evidence,
+not a rendering check. Rectangle preset, everything but the shipped `TV · 65"` deleted, a
+2400 x 600 x 2200 wardrobe added and arrow-keyed north at the 10 mm step to a stall:
+
+| | rest | back face | |
+|---|---|---|---|
+| before | z = −1.70 | −2.00 | the wall — **the television is entirely inside the wardrobe** |
+| after | z = −1.61 | −1.91 | the television's front face |
+
+90 mm = the TV's 60 mm depth plus the 30 mm its back sits off the plaster. **No constant
+is named on purpose**: this said "its 30 mm `MOUNT_PAD`" and `MOUNT_PAD` is `0.02`
+(`lib/physics.ts:112`), as is `WALL_GAP` (`lib/layout-rules.ts:268`). The 90 mm is
+measured and the attribution was inferred; the decomposition that produces 30 has not
+been derived, so it is not written down. **And in the before screenshot the
+left rail reads "Room checks out", green.** Read off the aria-live position readout and two
+plan screenshots, so it says nothing about how either state renders in the room.
+
+**What still needs eyes, in 3D, which none of the above touches.** Add a TV to a wall, drag
+a tall wardrobe along that wall into it: it must refuse and **the size tag must name the
+TV**. Then a 1 m sideboard to the same spot must go under happily, because the TV's
+underside is at 1.05 m. Repeat in the 2D plan. Then a ceiling fan with a 2.3 m wardrobe
+under it — refuse — and a 2.1 m one — allow.
+
+**Wrong looks like:** a wardrobe passing through a TV (the skip is not gone); a 1 m
+sideboard refused under a TV (the extent is now wrong the other way); or a refusal with
+**no name in the tag**, which is the `blockedBy` failure mode this repo has shipped before —
+computed on both surfaces and said on one.
+
+**Two traps if you drive this headlessly**, both of which cost `shell` a run. Do not click a
+piece in the plan: the parts are overlapping SVG `<g>`s and a framed print's outline
+intercepts the pointer over a television's — `focus()` + Enter selects deterministically,
+and the `g`s carry `tabindex="0"`. And **clear the room first**: the preset furnishes it, so
+a dropped wardrobe is blocked by the rug long before it reaches a wall, which is a true
+refusal about the wrong obstacle.
+
+**Also worth one look, and not a defect:** rooms that ALREADY contain a wardrobe through a
+mounted TV — a detected room, a scene file, anything Suggest produced, since the solver does
+not call `collidesAt`. Those states still load; they simply cannot be re-created by dragging.
+
+**A known consequence that needs a decision rather than a patch:** `clearance.ts`'s `solid`
+list is filtered `!p.wallMounted && … && p.pos[1] < 0.05`, so the room report will **not**
+report a wardrobe through a mounted TV while the drag now refuses to create one. Same
+question, two answers — the shape `tests/layout-conformance.test.ts` exists to catch and
+does not. That filter is load-bearing rather than sloppy: it is what makes four other copies
+of the same `pos[1] + h` arithmetic safe, because they only ever see floor-level pieces. It
+wants a `RULE_HANDLING` row.
+
 ## Layout and Shuffle
 
 *Owner: `layout`. The first three ride **`fa12f1a` / PR #29**, now on `main`. The fourth
@@ -272,7 +327,58 @@ opens somewhere you cannot see it, which the plan-page test would call a pass.
 
 ---
 
-## Nothing here has been in a browser
+## Almost nothing here has been in a browser — and here is the route that works
+
+**The heading used to say "nothing", and that stopped being true on `cb711cc`.** One
+item has now been seen, headlessly, with a before/after and a control, and the route is
+written down below because the reason nothing gets looked at is that looking is a
+half-hour of setup nobody has to hand.
+
+### What was seen, on the T and the U
+
+`fix/inward-normals-from-winding`, A/B against `origin/main` @ `3da5df2`, three
+preset rooms created through `/onboarding/layout-pick` and screenshotted on the 3D
+Model tab at 1440x900, zero console errors on all six shots:
+
+| preset | on `main` @ `3da5df2` | on `cb711cc` |
+|---|---|---|
+| T-Shape 5.5x4.7 | a **wall standing in the middle of the room**, drawn opaque and lit toward the camera, hiding the dining arm and most of its chairs | gone — the arm, its table and all four chairs are visible |
+| U-Shape 6x5.0 | the **notch is open**: you see through where its three walls are, to bare floor, and the east return is a detached unlit slab | a closed shell, notch walls present and lit from inside |
+| L-Shape 6x4.7 | — | **structurally identical to `main`** |
+
+The L is the control and it is the whole point: it is the one non-convex preset whose
+corner average can see all six of its walls, so it renders the same before and after.
+A check that swept a rectangle and an L would have shown nothing. The two rooms that
+changed are exactly the two the sweep measured wrong (`t#2`, `t#6`, `u#1`, `u#2`,
+`u#3`), which is what makes these six pictures evidence rather than six pictures.
+
+Pixel hashes differ on all three pairs, including the L — SwiftShader is not
+bit-deterministic across processes, so **do not use an image hash as the comparison**.
+Look at them.
+
+### The route, so the next person does not rebuild it
+
+Playwright lives **outside the repo** (`npm i playwright-core` in a scratch dir; the
+browsers are already under `AppData/Local/ms-playwright`), because adding it to this
+repo's `package.json` puts a browser download in everyone's install.
+
+· `pnpm exec next start -p PORT` — **not** `pnpm start -- -p PORT`, which does not
+  pass the flag through.
+· Launch flags: `--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader`.
+  Without them there is no WebGL and the canvas never appears.
+· `frameloop="demand"`, so nothing draws until something invalidates. Move the mouse
+  over the canvas, then wait seconds, not milliseconds.
+· The default camera sits inside the furniture. Fourteen `mouse.wheel(0, 240)` steps
+  with a beat between them brings the whole shell into frame, which is the only framing
+  that can answer a question about walls.
+· **One fresh browser context per room**, or IndexedDB hands you the previous room.
+· **Killing the server matters more than it looks.** `next start` survives a stopped
+  parent process: the port stays held, and if you rebuild `.next` underneath it you are
+  serving a mixture of two commits. That happened here and only failed because the
+  canvas timed out — it could as easily have produced a plausible screenshot of nothing
+  real. Check the port is free with `netstat`, and `taskkill //PID n //F` if it is not.
+
+## Nothing else here has been in a browser
 
 Every commit gets a Vercel deployment, and a deployment is the only place the
 production-only service worker registers — `next dev` cannot check that one at all.

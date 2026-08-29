@@ -250,8 +250,8 @@ export function edgeProjection(
   index: number,
   x: number,
   z: number,
-  /** The polygon's centroid, if the caller already has it — see `nearestEdge`. */
-  centroid?: Vec2,
+  /** The polygon's winding, if the caller already has it — see `nearestEdge`. */
+  winding?: 1 | -1,
 ): EdgeHit | null {
   if (poly.length < 3 || index < 0 || index >= poly.length) return null;
   const a = poly[index];
@@ -263,17 +263,25 @@ export function edgeProjection(
   const t = Math.max(0, Math.min(1, ((x - a[0]) * abx + (z - a[1]) * abz) / len2));
   const px = a[0] + abx * t;
   const pz = a[1] + abz * t;
-  const [cx, cz] = centroid ?? polyCentroid(poly);
-  // Inward normal: perpendicular flipped toward the centroid.
-  let nx = -abz;
-  let nz = abx;
-  const nl = Math.hypot(nx, nz) || 1;
-  nx /= nl;
-  nz /= nl;
-  if ((cx - px) * nx + (cz - pz) * nz < 0) {
-    nx = -nx;
-    nz = -nz;
-  }
+  // Inward normal, from the polygon's WINDING rather than from a point it is measured
+  // against. For winding +1 the interior lies to the left of a→b, which is the
+  // perpendicular (−abz, abx); for −1 it is the other one. No point is consulted, so
+  // a reflex corner cannot fool it — see `polygonWinding`.
+  //
+  // What the centroid flip cost, in this function's own callers, on 5 of the 30
+  // preset walls: `snapToWall` (`lib/physics.ts`) put a wall-mounted piece on the
+  // OUTSIDE of two of the T's walls and three of the U's, so a TV added near one
+  // spawned in the garden — reported. `contain` (`lib/layout-settle.ts`) pushed a
+  // piece hanging over such a wall further OUT rather than in, and then could not
+  // seat it at all: a sofa dropped in a U's notch measured 57 % outside the room
+  // both before and after the settle pass that exists to fix exactly that.
+  // `lib/layout-score.ts` had already measured the solver's share — 136 of 736 wall
+  // normals wrong on the T, 291 of 798 on the U — and recorded that the exact answer
+  // is the winding and that it belongs here rather than in a cached point.
+  const s = winding ?? polygonWinding(poly);
+  const nl = Math.hypot(abx, abz) || 1;
+  const nx = (-abz * s) / nl;
+  const nz = (abx * s) / nl;
   return { index, px, pz, dist: Math.hypot(x - px, z - pz), nx, nz, yaw: Math.atan2(nx, nz) };
 }
 
@@ -291,16 +299,18 @@ export function nearestEdge(
   poly: Poly,
   x: number,
   z: number,
-  /** The polygon's centroid, if the caller already has it. Only used to decide
-   *  which way is inward, and recomputing it per call is a measurable cost in the
-   *  layout solver, which asks this for every piece on every proposal. */
-  centroid?: Vec2,
+  /** The polygon's winding, if the caller already has it. Only used to decide which
+   *  way is inward, and recomputing it per call is a measurable cost in the layout
+   *  solver, which asks this for every piece on every proposal: dropping the argument
+   *  there measured 2.1x on the whole solve back when it was a centroid, and a
+   *  winding sweeps the same polygon for the same reason. */
+  winding?: 1 | -1,
 ): EdgeHit | null {
   if (poly.length < 3) return null;
-  const c = centroid ?? polyCentroid(poly);
+  const w = winding ?? polygonWinding(poly);
   let best: EdgeHit | null = null;
   for (let i = 0; i < poly.length; i++) {
-    const hit = edgeProjection(poly, i, x, z, c);
+    const hit = edgeProjection(poly, i, x, z, w);
     if (!hit) continue;
     // >= so the FIRST edge wins a tie, which is the order the outline is wound in.
     if (best && hit.dist >= best.dist) continue;
@@ -309,16 +319,53 @@ export function nearestEdge(
   return best;
 }
 
-/** Area enclosed by a polygon, m². Shoelace, so it does not care which way the
- *  outline winds. */
-export function polygonArea(poly: Poly): number {
+/** Twice the signed area of a simple polygon — the raw shoelace sum.
+ *
+ *  Private, because the factor of two is an implementation detail and nothing outside
+ *  wants it: callers want the area, the signed area, or — overwhelmingly — just which
+ *  way the outline winds. One loop for all three, because a second shoelace in this
+ *  repo is a second source of truth for which side of a wall is indoors, and this
+ *  file and `lib/footprint.ts` each owned one. */
+function shoelace2(poly: Poly): number {
   let a = 0;
   for (let i = 0; i < poly.length; i++) {
     const [x1, z1] = poly[i];
     const [x2, z2] = poly[(i + 1) % poly.length];
     a += x1 * z2 - x2 * z1;
   }
-  return Math.abs(a) / 2;
+  return a;
+}
+
+/** Area enclosed by a polygon, m². Does not care which way the outline winds. */
+export function polygonArea(poly: Poly): number {
+  return Math.abs(shoelace2(poly)) / 2;
+}
+
+/** Area enclosed by a polygon, m², signed by its winding. `lib/footprint.ts`
+ *  re-exports this under the same name; it had its own copy of the loop. */
+export function polygonSignedArea(poly: Poly): number {
+  return shoelace2(poly) / 2;
+}
+
+/** +1 when the outline winds so that the interior lies to the LEFT of each edge's
+ *  direction, −1 otherwise. The exact answer to "which way is inward", and the only
+ *  exact one.
+ *
+ *  A point-based test — flip the perpendicular toward the polygon's middle — is
+ *  correct for a convex room and wrong for the shapes this app ships, because the
+ *  middle has to be able to SEE the edge. On a non-convex polygon it cannot: the
+ *  corner average sits in a U's notch, outside the floor entirely, and on a T it is
+ *  inside the room but on the far side of two of its walls' lines. Swept over the
+ *  five presets at the sizes the picker offers, the centroid flip had **5 of 30 walls
+ *  backwards — 2 of the T's 8 and 3 of the U's 8** — the same count, on the same five
+ *  walls, that `wallOutwardNormal` in `lib/footprint.ts` was fixed for. That fix is
+ *  this one; only the file differs.
+ *
+ *  `>= 0` rather than `> 0` so a degenerate outline gets a sign rather than putting
+ *  its caller in an inverted room. A zero-area polygon has no inside to be wrong
+ *  about. */
+export function polygonWinding(poly: Poly): 1 | -1 {
+  return shoelace2(poly) >= 0 ? 1 : -1;
 }
 
 export function polyCentroid(poly: Poly): Vec2 {
