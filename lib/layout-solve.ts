@@ -163,14 +163,21 @@ const KEEP_EPS = 0.5;
  *  Beyond this the angle is a choice — a chair turned toward a sofa — and snapping it
  *  would be overruling the search rather than tidying after it. */
 const SNAP_TOL = 0.21; // 12°
-/** Below this a turn is not worth showing as a change. The position epsilon had no
- *  sibling, so 0.02 rad — 1.1°, invisible — counted as a moved piece and inflated
- *  every "moved N pieces" the UI reported. */
 /** Below this a turn is not a change the app will claim it made — ~2.9°, in radians.
+ *
+ *  **Why the value, and why the constant exists at all:** the position epsilon had no
+ *  sibling, so a turn of 0.02 rad — 1.1°, invisible on screen — counted as a moved
+ *  piece and inflated every "moved N pieces" the UI reported.
+ *
  *  Exported because it is the repo's ANSWER to "did this piece turn", read by
  *  `displaced` and therefore by the toast that says how many pieces moved. A second
  *  tolerance elsewhere makes the offer stage and that toast disagree about what moved,
- *  silently and in the direction nobody checks. */
+ *  silently and in the direction nobody checks.
+ *
+ *  And it must not equal a step the app already takes. The rotation step is
+ *  `Math.PI / 12` (15°) and the fine one 45°; a tolerance equal to either puts a
+ *  single key press exactly ON the boundary, where float rounding decides the answer
+ *  and does so asymmetrically in sign. 0.05 is not one of them. */
 export const TURN_EPSILON = 0.05; // ~3°
 
 /** What a suggestion has to be worth before it is worth offering.
@@ -190,11 +197,12 @@ export function isWorthOffering(before: number, after: number): boolean {
  *  second. Square metres of footprint — a sofa or a bed is well over, a side
  *  table or a lamp well under. */
 const LARGE_AREA = 0.9;
-/** Below this the move is not worth showing as a change. */
-/** …and the same on the position axis, in metres. Exported for the same reason, and
- *  it is NOT `LAYOUT_SIMILAR_M`: this one asks "did this piece move at all", that one
- *  asks "are these two whole layouts the same arrangement". Both are needed and they
- *  are not interchangeable. */
+/** Below this a move is not worth showing as a change — the same question as
+ *  `TURN_EPSILON`, on the position axis, in metres.
+ *
+ *  Exported for the same reason, and it is NOT `LAYOUT_SIMILAR_M`: this one asks "did
+ *  this piece move at all", that one asks "are these two whole layouts the same
+ *  arrangement". Both are needed and they are not interchangeable. */
 export const MOVE_EPSILON = 0.02;
 /** How many finalists get the expensive navigability check. Small: each one costs
  *  a distance transform over the room. */
