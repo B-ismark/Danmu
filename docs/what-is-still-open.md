@@ -1152,31 +1152,48 @@ quietly inside a defect fix is how the last one got here. Same for the yaw: from
 centre there is no wall to take a heading from, and inventing one is a guess in an answer's
 clothes.
 
-### 4. A drop into an L / T / U's missing quadrant lands outside the house — and it is written down as current behaviour
+### 4. A drop into an L / T / U's missing quadrant lands outside the house — ROOT CAUSE FOUND, and it was not the add path
 
 The user: a TV spawned outside the wall in an L, a couch did the same in a T, and *"rug sits
 outside of the wall, seems it has no constraints in both plan and model mode."*
 
-Probe, dropping at `(2.5, 1.5)` in an L 6 × 4 and `(2.5, 1.8)` in a T 6 × 4:
+**This section's original diagnosis was right about the symptom and wrong about the cause,
+and the correction is the useful part.** It said the add path skips containment, named
+`clampIntoFootprint` + `contain` as the fix, and treated the deferral as a scope decision.
+Measuring it first found something underneath: **`contain` could not have worked in a U no
+matter who called it**, and neither could `snapToWall`. See § 11, which is the fix and has
+landed.
 
-| piece | centre on real floor | corners outside |
-|---|---|---|
-| TV (L) | yes — the wall snap saved it | **2 of 4** |
-| sofa (L) | **no** | **4 of 4** |
-| rug (L) | **no** | **4 of 4** |
-| sofa (T) | **no** | **4 of 4** |
+The measurement that says so — each piece dropped at a point inside the bounding box and
+outside the room, then run through `settleParts`, the pass whose entire job is to pull a
+piece back inside:
 
-This is not a regression. `intoRoom`'s own doc comment states it, names `clampIntoFootprint`
-as the function that would answer it, and gives the two reasons it is not called: that
-function clamps a **centre**, so a point 5 cm inside the leg of a U satisfies it with a 2 m
-sofa mostly through the wall; and wiring it in *"moves every drop into an L / T / U, which
-wants its own diff."* `tests/wall-parts.test.ts` asserts the notch drop **by name**. So the
-deferred diff is the fix, and the user has now hit it twice.
+| room | piece | outside before settle | outside AFTER settle |
+|---|---|---|---|
+| L 6×4.7 | sofa | 32.7 % | **0.0 %** |
+| L 6×4.7 | coffee table | 40.8 % | **0.0 %** |
+| T 5.5×4.7 | sofa | 51.0 % | **0.0 %** |
+| T 5.5×4.7 | TV | 100 % | **100 %** |
+| U 6×5 | sofa | 57.1 % | **57.1 %** |
+| U 6×5 | rug | 57.1 % | 14.3 % |
+| U 6×5 | TV | 100 % | **100 %** |
 
-Doing it properly needs the pair, because either alone is a known-insufficient half:
-`clampIntoFootprint` for the centre **and** `contain` from `lib/layout-settle.ts` for the
-extent — which is where every solved placement already ends, so the add path is the one
-path that skips it.
+The L is fixed by the settle pass and always was. The U is not fixed at all, and the T's TV
+is not fixed, and those two facts had one cause: every inward normal in this app was decided
+by flipping an edge's perpendicular toward `polygonCentroid`, the average of the CORNERS,
+which on the U sits in the notch — outside the floor. So `contain` pushed a piece hanging
+over such a wall further OUT, and `snapToWall` put a wall rider on the far side of the
+plaster. With that fixed the settle pass can do its half.
+
+**What remains of the original plan, and it is still worth doing:** the *add* path calls no
+containment at all, so a drop into an L's notch is still a drop into the notch until
+something moves it. `intoRoom` in `placeNewPart` does the BOUNDS inset and only that, and
+`tests/wall-parts.test.ts` asserts that by name in two places with instructions to flip the
+assertion rather than delete the test. Doing it properly still needs the pair —
+`clampIntoFootprint` for the centre, `contain`-style extent containment for the piece —
+because either alone is a known-insufficient half. `clampIntoFootprint`'s own recorded
+blocker is retired: it said changing `polygonCentroid` would change every wall's normal, and
+after § 11 it no longer would.
 
 The rug is the same defect and **not** the documented exemption. `lib/drag-resolve.ts` holds
 a *dragged* rug's centre to `pointInFootprint` — that narrow fix is already in, and the
@@ -1385,6 +1402,122 @@ selection (a back/forward through selections, not entries in the main stack), or
 runs of selection changes into one entry. Which of those the user wants is their call.
 
 ---
+
+### 11. Every inward normal in the app was decided by a point that cannot see the wall — FIXED, LANDED, and it cost the solver
+
+**The defect.** Three functions answered "which way is into the room", and all three did
+it by flipping the edge's perpendicular toward `polygonCentroid` — the average of the
+polygon's CORNERS. Exact for a convex room, wrong for the shapes this app ships, because
+the point has to be able to **see** the edge. Swept over the five presets at the sizes the
+picker offers, **5 of 30 walls came back backwards**:
+
+| room | wall | why |
+|---|---|---|
+| T 5.5x4.7 | edges 2 and 6 — the arms' south walls | the corner average is inside the room but on the far side of those walls' lines |
+| U 6x5 | edges 1, 2, 3 — the notch's three walls | the corner average is at (0, −0.625), **in the notch, outside the floor** |
+
+Plus one in a dragged off-centre custom room. **The L is entirely correct under the old
+predicate** — its corner average sees all six of its walls — so a test sweeping a
+rectangle and an L would have shipped green, which is how this survived three separate
+encounters. It was also **predicted in writing three times** before anyone fixed it:
+`wallOutwardNormal` had already been fixed this way and its docblock quotes the same
+2-of-8 / 3-of-8 count; `lib/scene-spec.ts` named `wallSegments` as the survivor; and
+`lib/layout-score.ts` said outright that *"the exact answer is the polygon's winding, and
+it belongs in `edgeProjection` rather than here."*
+
+**The fix.** `polygonWinding` in `lib/geometry.ts`, one shoelace for the whole repo, read
+by `edgeProjection` / `nearestEdge` / `wallSegments`. The solver's cached `edgeCentre`
+point becomes a cached `1 | -1`.
+
+**SEEN in a browser, A/B, with a control.** Headless Chromium over SwiftShader, three
+preset rooms created through `/onboarding/layout-pick`, zero console errors on six shots:
+
+| preset | before | after |
+|---|---|---|
+| T 5.5x4.7 | **a wall standing in the middle of the room**, drawn opaque and lit toward the camera, hiding the dining arm and most of its chairs | gone |
+| U 6x5.0 | the **notch is open** — you see through where its three walls are, to bare floor — and the east return is a detached unlit slab | a closed shell, notch walls present and lit from inside |
+| L 6x4.7 | — | **structurally identical** |
+
+The L is the control and it is what makes the other two evidence rather than two
+screenshots. Do not compare these by image hash: SwiftShader is not bit-deterministic
+across processes, so all three pairs differ at the pixel level and two of the three
+differences are real. The route is in `docs/visual-check.md`.
+
+### …and the part that is a finding rather than a fix
+
+**Correcting the normals makes Suggest worse on the U.** Measured on the landing commit,
+`scrambledU` in `tests/layout-solve.test.ts`:
+
+| | before | after |
+|---|---|---|
+| clean seeds (no hard term) | 12 / 12 | **7 / 12** |
+| worst total cost | 38.53 | **92.10** |
+| U 6x5 shipped bed, sum of danger over 12 seeds | 0.00 | **118.06** |
+| seeds stranding any floor | 0 of 12 | **5 of 12** — 36.00, 5.10, 2.10, 74.10, 0.76 |
+
+Three derived facts kept that from being mis-read, and each took a measurement rather
+than an argument:
+
+1. **The scorer did not change its answer; the solver's answer did.** The old tree's
+   placements were dumped to disk and re-scored with the NEW scorer: `navigation` stays
+   0.00 on every seed. This is not "a checker stopped being blind".
+2. **No room is unsafe.** Term by term across all twelve seeds, `outside`, `door` and
+   `walkway` are **0.00 everywhere**. The whole cost is `navigation` — floor a person
+   cannot walk to.
+3. **The old clean sheet was partly bought by mis-modelling the room.** Ground truth
+   improved wherever it moved: worst outside-share 61.2% → 42.9%, and the count of pieces
+   whose CENTRE sits outside the room 1 → 0. A piece parked in the notch strands no
+   walkable floor, because it is not on the floor.
+
+**So the annealer is tuned against wall normals that were backwards on 5 of 30 preset
+walls.** That is the starting condition for § H.6, not a reason to revert the geometry.
+
+**How the seven reds were resolved, because "six marks against seven reds" reconciles
+only if you know which one is the seventh.** Six are parked with `it.fails`, which is
+self-retiring: each goes RED the moment it starts passing, so improving the solver forces
+whoever did it to come back and unmark rather than quietly collecting a green. The
+seventh was not a mark at all — see below.
+
+- **Two `it.fails` were one number.** `bed-rung-safety`'s `danger < 10` and its
+  `danger === 0` assert the **identical expression**, and `=== 0` implies `< 10`. Marking
+  both would have recorded one measurement twice and pinned nothing, so the weaker one
+  became the **regression baseline** carrying the measured 118.06 and the stronger one
+  kept the claim and the mark.
+- **One test was half true and was split.** "…and every rung above it produces a finding"
+  held two claims; only *the shipped rung is clean* stopped being true. *The ladder comes
+  down for a reason* — every wider rung over 50 — still passes and carries the file's
+  whole argument, so retiring the pair would have thrown it away. Each half is now named
+  for its own claim.
+- **The seventh was a STALE FIXTURE, not a false claim, and marking it would have
+  disarmed a guard.** `suggest-tidiness`'s "…on a fixture where the proxy really does hand
+  back something worse" asserts `openRoutes` returned its input by identity — that the
+  fine-grid re-check *refused* the coarse proxy — and it is the only assertion guarding
+  that path at all ("delete that re-check and this is the assertion that goes red"). The
+  re-swept population is **identical**: scramble 35 still cut by 7.055, input still
+  1921.50, still 19 of 54 scrambles cut, still 532 trials, **still exactly 3 refusals, all
+  three on scramble 35** — only the seeds moved, 19 / 22 / 26 → 6 / 12 / 22. So the count
+  is now asserted, all three seeds are pinned, and the specimen is seed 22 by this file's
+  own pre-existing continuity tie-break rather than a fresh one. **Nothing was selected
+  for making the assertion pass**, which is the trap the obvious fix walks into.
+- **Every parked bar was left where it was.** `layout-solve`'s clean-seed bar is 11
+  *because two mutations survived at 7*; widening 60 to clear 92.10 would record the
+  regression as the requirement. The baselines are pinned **exactly**, so an improvement
+  goes red too — a `<=` would sit green while the numbers drifted in the good direction
+  and nobody would re-derive.
+
+**Two comments were describing a program that no longer exists**, and both were corrected
+forward rather than deleted, because a bar with no argument is worse than a bar with a
+wrong one — the wrong one can be caught. `layout-solve`'s said *"at 12 of 12 clean there
+is no hard term left in any of these totals, so a total-cost bar cannot fail on danger
+here even in principle"*; at 7 of 12 the worst total is 92.10 of which 74.10 **is**
+danger. And `bed-rung-safety`'s docblock quoted medians 15.91 / 15.12 / 10.46 and "no
+trade exists at this room at all"; the real medians are 16.75 / 20.78 / 16.74 and the
+shipped rung is still the tidiest and much the safest but is no longer clean.
+
+**One measured fact for § H.6 while it is in front of us:** the `outside` cost term reads
+**0.00 with a bedside lamp 61% outside the room**, because supported tabletop pieces are
+exempt from it. So "nothing prices support" has a second half — **nothing contains a
+supported piece either.**
 
 ## What in this document has been in a browser, and what has not
 

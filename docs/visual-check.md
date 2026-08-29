@@ -215,7 +215,11 @@ not a rendering check. Rectangle preset, everything but the shipped `TV · 65"` 
 | before | z = −1.70 | −2.00 | the wall — **the television is entirely inside the wardrobe** |
 | after | z = −1.61 | −1.91 | the television's front face |
 
-90 mm = the TV's 60 mm depth plus its 30 mm `MOUNT_PAD`. **And in the before screenshot the
+90 mm = the TV's 60 mm depth plus the 30 mm its back sits off the plaster. **No constant
+is named on purpose**: this said "its 30 mm `MOUNT_PAD`" and `MOUNT_PAD` is `0.02`
+(`lib/physics.ts:112`), as is `WALL_GAP` (`lib/layout-rules.ts:268`). The 90 mm is
+measured and the attribution was inferred; the decomposition that produces 30 has not
+been derived, so it is not written down. **And in the before screenshot the
 left rail reads "Room checks out", green.** Read off the aria-live position readout and two
 plan screenshots, so it says nothing about how either state renders in the room.
 
