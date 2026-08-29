@@ -2,10 +2,15 @@
 //
 // This file exists because of a regression that was invisible in every way a test
 // normally looks. `lib/layout-score.ts` scores each part against its nearest wall,
-// and `nearestEdge` needs a point to aim at to decide which way is inward. It takes
-// one as an optional argument and computes `polyCentroid(poly)` itself when the
-// caller omits it — the same value, every time, for a footprint that does not change
-// during a solve.
+// and `nearestEdge` needs to know which way is inward. It takes that as an optional
+// argument and computes it itself when the caller omits it — the same value, every
+// time, for a footprint that does not change during a solve.
+//
+// (It was a POINT when this file was written — the average of the polygon's corners,
+// which `nearestEdge` flipped its perpendicular toward. It is the polygon's WINDING
+// now, because no point answers the question correctly on a non-convex room. Nothing
+// about this file's subject changed with it: a constant is still being recomputed per
+// part per proposal, and the argument is still the fix.)
 //
 // A change here dropped that argument. Nothing about any result moved, because the
 // value is identical either way; every seeded fixture in this suite stayed green,
@@ -24,7 +29,7 @@
 // assertions go 50/50 under contention.)
 //
 // So this asserts the CONTRACT rather than the clock — every `nearestEdge` call on
-// the hot path is handed its centroid. Exact, no timing, deterministic, and red on
+// the hot path is handed its winding. Exact, no timing, deterministic, and red on
 // the edit that caused this, which a duration assertion tuned to survive other
 // people's CPUs structurally cannot be.
 
@@ -37,7 +42,7 @@ import type { ScenePart } from '@/lib/scene-spec';
 // temporal dead zone.
 const rec = vi.hoisted(() => ({ total: 0, bare: new Map<string, number>() }));
 
-// Wrap `nearestEdge` to record which callers omitted the centroid, then delegate to
+// Wrap `nearestEdge` to record which callers omitted the winding, then delegate to
 // the real one — the values driving the solve below must be the real values, or this
 // is not the solve that ships.
 //
@@ -68,7 +73,7 @@ vi.mock('@/lib/geometry', async (importOriginal) => {
 /** The one caller that legitimately still omits it, named rather than filtered away.
  *
  *  `snapToWall` in `lib/physics.ts` takes a position and a footprint and nothing else;
- *  it has no model to read a cached centroid from, and it is reached here through the
+ *  it has no model to read a cached winding from, and it is reached here through the
  *  solver's wall proposals — about **296 calls of 29,000**, or 1 %. It is not part of
  *  this regression: `main` omits it there too, identically.
  *
@@ -87,7 +92,8 @@ const reset = () => {
 const { solveLayout } = await import('@/lib/layout-solve');
 const { costBreakdown, prepare, DEFAULT_WEIGHTS } = await import('@/lib/layout-score');
 const { defaultScene } = await import('@/lib/scene-spec');
-const { footprintForLayout, polygonCentroid } = await import('@/lib/footprint');
+const { footprintForLayout } = await import('@/lib/footprint');
+const { nearestEdge, polygonWinding } = await import('@/lib/geometry');
 
 function ctxFor(id: 'rect' | 'u', w: number, d: number): LayoutContext {
   const footprint = footprintForLayout(id, w, d);
@@ -138,7 +144,7 @@ function furnished(count: number): ScenePart[] {
   return out;
 }
 
-describe('the solver hands nearestEdge its centroid', () => {
+describe('the solver hands nearestEdge its winding', () => {
   it('on every call a scoring pass makes', () => {
     // One evaluation of an already-prepared model — what the annealer pays per
     // proposal, and where the recompute lived.
@@ -170,19 +176,35 @@ describe('the solver hands nearestEdge its centroid', () => {
     expect([...rec.bare.keys()].map((at) => at.split(':')[0])).toEqual([KNOWN_BARE]);
   });
 
-  it('and the cached point is the one nearestEdge would have computed', () => {
-    // The half that keeps the optimisation honest. `nearestEdge`'s own default is the
-    // average of the CORNERS, and the model carries the AREA centroid under the
-    // adjacent name `centre` — a different point on every room that is not a
-    // rectangle, and the one measured to make the solve worse. Caching the wrong one
-    // of the two would be bit-for-bit invisible to the two assertions above.
+  it('and the cached winding is the answer nearestEdge would have computed', () => {
+    // The half that keeps the optimisation honest: caching the WRONG value would be
+    // bit-for-bit invisible to the two assertions above, which only count whether the
+    // argument was passed.
+    //
+    // Asserted as the property rather than as the value — every edge of the room must
+    // come back identical whether the cache is passed or omitted — because that is
+    // what "passing it is free" means, and a sign pinned against `polygonWinding`
+    // alone would still be green if `prepare` cached a sign for the wrong polygon.
     const ctx = ctxFor('u', 7.5, 5.6);
     const model = prepare(ctx);
-    const [vx, vz] = polygonCentroid(ctx.footprint);
-    expect(model.edgeCentre[0]).toBeCloseTo(vx, 12);
-    expect(model.edgeCentre[1]).toBeCloseTo(vz, 12);
-    // …and it is not the area centroid, which on this U is about 1.09 m away and
-    // outside the room.
-    expect(Math.hypot(model.centre[0] - vx, model.centre[1] - vz)).toBeGreaterThan(0.5);
+    const poly = ctx.footprint as Parameters<typeof nearestEdge>[0];
+    expect(model.winding).toBe(polygonWinding(poly));
+    let checked = 0;
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i];
+      const b = poly[(i + 1) % poly.length];
+      const mx = (a[0] + b[0]) / 2;
+      const mz = (a[1] + b[1]) / 2;
+      expect(nearestEdge(poly, mx, mz, model.winding)).toEqual(nearestEdge(poly, mx, mz));
+      checked++;
+    }
+    expect(checked, 'the U must actually have edges to sweep').toBe(8);
+    // …and the negative control, without which the sweep above would pass for a
+    // `nearestEdge` that ignores the argument entirely. The opposite sign has to
+    // change the answer, or nothing up there was a test of anything.
+    const flipped = nearestEdge(poly, 0, 0, model.winding === 1 ? -1 : 1)!;
+    const honest = nearestEdge(poly, 0, 0)!;
+    expect(flipped.nx).toBeCloseTo(-honest.nx, 12);
+    expect(flipped.nz).toBeCloseTo(-honest.nz, 12);
   });
 });

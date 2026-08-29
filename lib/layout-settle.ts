@@ -43,7 +43,7 @@
 // room report is the honest answer there, not a shuffle.
 
 import type { Footprint } from './footprint';
-import { polygonCentroid } from './footprint';
+import { interiorPoint, polygonCentroid } from './footprint';
 import {
   footArea,
   footFromPart,
@@ -51,6 +51,7 @@ import {
   footIntersectionArea,
   footOverlap,
   nearestEdge,
+  polygonWinding,
   obbExtentAlong,
   outsideShare,
   pointInPoly,
@@ -110,14 +111,27 @@ export function settleParts(parts: ScenePart[], footprint: Footprint, opts: Sett
   if (poly.length < 3) return parts;
   const frozen = opts.frozen ?? new Set<string>();
   const out = parts.map((p) => ({ ...p, pos: [...p.pos] as [number, number, number] }));
-  const centre = polygonCentroid(footprint);
+  // Two different questions, and one point was answering both — wrongly, on the
+  // rooms this app ships.
+  //
+  // Which way is INWARD is the polygon's winding, and `nearestEdge` reads that
+  // directly now; `winding` here is only the cached form of what it would compute
+  // per call. Where to walk a piece that no wall normal could seat is a genuinely
+  // different question and does need a point — but an INTERIOR one.
+  // `polygonCentroid` averages the CORNERS, which on the U preset lands in the
+  // notch, outside the floor entirely, so both fallbacks aimed at the void: a sofa
+  // dropped in that notch measured 57 % outside the room before this pass and 57 %
+  // after it. `interiorPoint` checks its answer, and falls back to the corner
+  // average only when a polygon has no interior to find.
+  const inward = interiorPoint(footprint) ?? polygonCentroid(footprint);
+  const winding = polygonWinding(poly);
 
   const movable = out.map((p) => !p.wallMounted && !frozen.has(p.id));
 
   // ── Inside the room ───────────────────────────────────────────────────────
   for (let i = 0; i < out.length; i++) {
     if (!movable[i]) continue;
-    contain(out[i], poly, centre);
+    contain(out[i], poly, inward, winding);
   }
 
   // ── Out of each other ─────────────────────────────────────────────────────
@@ -164,7 +178,7 @@ export function settleParts(parts: ScenePart[], footprint: Footprint, opts: Sett
         if (stuck.has(mover)) continue;
         if (sharesFloor(world.roles[anchor], world.roles[mover])) continue;
         if (!clashes(world, anchor, mover)) continue;
-        if (pushClear(world, mover, poly, centre)) touched = true;
+        if (pushClear(world, mover, poly, inward)) touched = true;
         else stuck.add(mover);
       }
     }
@@ -213,7 +227,7 @@ function footAtXZ(p: ScenePart, x: number, z: number): Foot {
  *  changes which wall is nearest. Falls back to walking toward the centroid, and if
  *  even that cannot seat it (a piece longer than the room is wide), keeps the least
  *  bad position found and lets the room report say so. */
-function contain(p: ScenePart, poly: Poly, centre: [number, number]): void {
+function contain(p: ScenePart, poly: Poly, centre: readonly [number, number], winding: 1 | -1): void {
   let x = p.pos[0];
   let z = p.pos[2];
   let bestOut = escape(p, x, z, poly);
@@ -222,7 +236,7 @@ function contain(p: ScenePart, poly: Poly, centre: [number, number]): void {
   let bestZ = z;
 
   for (let k = 0; k < 6 && bestOut > 0; k++) {
-    const e = nearestEdge(poly, x, z, centre);
+    const e = nearestEdge(poly, x, z, winding);
     if (!e) break;
     const need = obbExtentAlong(footAtXZ(p, x, z), e.nx, e.nz) + WALL_GAP;
     // Inside the room: the deficit is what is missing. Outside it: the whole way
@@ -278,7 +292,7 @@ function escape(p: ScenePart, x: number, z: number, poly: Poly): number {
  *  makes the answer stable: pushing along the line between two centres alone sends a
  *  sofa clipped by a bed's corner diagonally into the middle of the floor, where a
  *  200 mm slide along the wall was available. */
-function pushClear(w: World, index: number, poly: Poly, centre: [number, number]): boolean {
+function pushClear(w: World, index: number, poly: Poly, centre: readonly [number, number]): boolean {
   const p = w.parts[index];
   // Outward from the room's middle, so a piece that clashes near a wall is pushed
   // along it rather than into it.

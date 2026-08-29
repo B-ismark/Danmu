@@ -2,7 +2,14 @@
 // non-rectangular (L / T / U / open) instead of a single width×depth box.
 // +X = right (East), +Z = toward South — same axes as the scene.
 
-import { polyAreaCentroid, type Poly } from './geometry';
+import { polyAreaCentroid, polygonSignedArea, type Poly } from './geometry';
+
+/** Re-exported rather than defined here. This file and `lib/geometry.ts` each had
+ *  their own shoelace loop, and both were answering the same question — which way
+ *  this outline winds, hence which side of a wall is indoors. `geometry.ts` cannot
+ *  import this file (the dependency runs the other way), so the primitive lives
+ *  there and the name stays here for the callers that already read it. */
+export { polygonSignedArea };
 
 export type LayoutId = 'rect' | 'l' | 't' | 'u' | 'open' | 'custom';
 export type Footprint = [number, number][];
@@ -143,19 +150,6 @@ export function wallOutwardNormal(poly: Footprint, index: number): [number, numb
   // the sign of a zero.
   const s = polygonSignedArea(poly) >= 0 ? 1 : -1;
   return [(s * dz) / l + 0, (-s * dx) / l + 0];
-}
-
-/** Twice-the-area-over-two of a simple polygon, signed by its winding. Positive
- *  means the vertices run in the direction `wallOutwardNormal` treats as
- *  counter-clockwise; only the SIGN is read, so the magnitude is incidental. */
-export function polygonSignedArea(poly: Footprint): number {
-  let a = 0;
-  for (let i = 0; i < poly.length; i++) {
-    const p = poly[i];
-    const q = poly[(i + 1) % poly.length];
-    a += p[0] * q[1] - q[0] * p[1];
-  }
-  return a / 2;
 }
 
 /** Move ONLY the selected wall: translate edge `index`'s two vertices along the
@@ -429,7 +423,6 @@ export function clampIntoFootprint(x: number, z: number, poly: Footprint): [numb
 export function wallSegments(
   poly: Footprint,
 ): Array<{ x: number; z: number; len: number; yaw: number }> {
-  const [cx, cz] = polygonCentroid(poly);
   const out: Array<{ x: number; z: number; len: number; yaw: number }> = [];
   for (let i = 0; i < poly.length; i++) {
     const a = poly[i];
@@ -438,17 +431,22 @@ export function wallSegments(
     const mz = (a[1] + b[1]) / 2;
     const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
     if (len < 1e-4) continue;
-    // Edge direction; perpendicular candidate.
-    let nx = -(b[1] - a[1]);
-    let nz = b[0] - a[0];
-    const nl = Math.hypot(nx, nz) || 1;
-    nx /= nl;
-    nz /= nl;
-    // Flip to point toward the centroid (inward).
-    if ((cx - mx) * nx + (cz - mz) * nz < 0) {
-      nx = -nx;
-      nz = -nz;
-    }
+    // Inward is the negated OUTWARD normal, which reads the polygon's winding —
+    // not its own perpendicular flipped toward `polygonCentroid`, which is what
+    // this did and what `wallOutwardNormal` two hundred lines up was fixed for.
+    // Same defect, same file, and this is the copy the user can see: these are the
+    // wall meshes `RoomShell` builds, so the two of the T's eight walls and three
+    // of the U's that came back reversed were drawn facing out of the room. Their
+    // `+Z` side is the lit, textured one and their back is the culled one, so on
+    // those five the room was lit from the wrong side of the plaster.
+    const [ox, oz] = wallOutwardNormal(poly, i);
+    // `+ 0` after the negation for the same reason `wallOutwardNormal` needs it on
+    // the way out: an axis-aligned wall has an exact 0 in one component, and −0
+    // there sends `atan2` to −π where +0 sends it to +π. Same direction, two
+    // numbers, and two rooms whose east walls face the same way should not differ
+    // by the sign of a zero.
+    const nx = -ox + 0;
+    const nz = -oz + 0;
     out.push({ x: mx, z: mz, len, yaw: Math.atan2(nx, nz) });
   }
   return out;
