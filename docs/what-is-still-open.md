@@ -37,12 +37,36 @@ the note there on why the file count has to travel with the assertion count.
 
 **Loose ends that live nowhere else:**
 
-- **Five branches are fully contained in `main` and await the user's word to delete** —
-  `fix/pointer-cancel-note` (its one unique commit landed as #34, then verified per-line as
-  fully present), `fix/convoy-self-support`, `fix/a-bed-that-was-rotated`,
-  `fix/visual-check-round-3`, `feat/shuffle-lock-and-band-price`. Deleting a remote ref is
-  outward-facing and is **not** covered by a grant to commit, push and open PRs. Verify
-  containment yourself before asking; do not delete on the strength of this paragraph.
+- **The branch list this paragraph used to carry was wrong in the dangerous direction, and
+  its own last sentence is what caught it.** It named five branches as "fully contained in
+  `main` and awaiting the user's word to delete". Re-derived per branch with
+  `git rev-list --count origin/main..<branch>`:
+
+  | branch | ahead of `main` |
+  |---|---|
+  | `origin/docs/layout-needs-eyes` | 0 — contained |
+  | `origin/docs/the-next-task` | 0 — contained |
+  | `origin/feat/shuffle-lock-and-band-price` | 0 — contained |
+  | `origin/fix/bed-shape-and-its-rotted-fixtures` | 0 — contained |
+  | `origin/fix/clamp-into-footprint` | 0 — contained |
+  | `origin/fix/footer-assertion-reads-code` | 0 — contained |
+  | `origin/fix/room-report-and-tidy` | 0 — contained |
+  | `origin/fix/pointer-cancel-note` | **10 — NOT contained** |
+  | `origin/test/component-tests-under-jsdom` | 11 — the open PR |
+
+  Three things that list got wrong. `fix/convoy-self-support`, `fix/a-bed-that-was-rotated`
+  and `fix/visual-check-round-3` **do not exist on `origin`** — the bed one never did under
+  that name; the real branch is `fix/bed-shape-and-its-rotted-fixtures`, merged as #38. Four
+  contained branches were **missing** from it. And `fix/pointer-cancel-note`, described as
+  having "one unique commit [which] landed as #34, then verified per-line as fully present",
+  carries **ten** commits main has never seen, among them `fix(convoy): a merged set carried
+  by a MEMBER came apart` and `fix: a chevron that raised the ceiling, a rug shoved through a
+  wall, and six gates that could not fail`. Acting on the old paragraph would have deleted
+  real work.
+
+  Deleting a remote ref is outward-facing and is **not** covered by a grant to commit, push
+  and open PRs. **Re-derive the table before asking, every time** — this one is dated
+  2026-08-29 and a branch list is exactly the kind of claim that rots between sessions.
 - **`C:/Users/bisma/danmu-rescue/`** holds two patches lifted out of dead sessions'
   `%TEMP%` worktrees. **Both turned out to be superseded drafts of work already on `main`** —
   kept only because checking cost nothing. Safe to delete; check first.
@@ -180,8 +204,9 @@ whether several pieces of the same kind face *differently*. The user's report �
 all facing one way — had two causes: how a bed is added (fixed) and how a bed is drawn
 (fixed). Whether Shuffle then spreads them or converges them on one wall is untested.
 
-**Unblocked now.** It needed the bed geometry and the added-heading fix in one tree, and
-`fix/a-bed-that-was-rotated` is that tree.
+**Unblocked now**, and no longer waiting on a tree: the bed geometry and the added-heading
+fix are both on `main`, in the merge of `fix/bed-shape-and-its-rotted-fixtures` (PR #38).
+The branch name this paragraph used to name does not exist on `origin` and never did.
 
 ### 3. `tests/suggest-tidiness.test.ts` — two reds, both real, both diagnosed
 
@@ -1125,31 +1150,45 @@ quietly inside a defect fix is how the last one got here. Same for the yaw: from
 centre there is no wall to take a heading from, and inventing one is a guess in an answer's
 clothes.
 
-### 4. A drop into an L / T / U's missing quadrant lands outside the house — and it is written down as current behaviour
+### 4. A drop into an L / T / U's missing quadrant lands outside the house — ROOT CAUSE FOUND, and it was not the add path
 
 The user: a TV spawned outside the wall in an L, a couch did the same in a T, and *"rug sits
 outside of the wall, seems it has no constraints in both plan and model mode."*
 
-Probe, dropping at `(2.5, 1.5)` in an L 6 × 4 and `(2.5, 1.8)` in a T 6 × 4:
+**This section's original diagnosis was right about the symptom and wrong about the cause,
+and the correction is the useful part.** It said the add path skips containment, named
+`clampIntoFootprint` + `contain` as the fix, and treated the deferral as a scope decision.
+Measuring it first found something underneath: **`contain` could not have worked in a U no
+matter who called it**, and neither could `snapToWall`. See § 11 below, which is the fix.
 
-| piece | centre on real floor | corners outside |
-|---|---|---|
-| TV (L) | yes — the wall snap saved it | **2 of 4** |
-| sofa (L) | **no** | **4 of 4** |
-| rug (L) | **no** | **4 of 4** |
-| sofa (T) | **no** | **4 of 4** |
+The measurement that says so, dropping each piece at a point inside the bounding box and
+outside the room, and running the result through `settleParts` — the pass whose entire job
+is to pull a piece back inside:
 
-This is not a regression. `intoRoom`'s own doc comment states it, names `clampIntoFootprint`
-as the function that would answer it, and gives the two reasons it is not called: that
-function clamps a **centre**, so a point 5 cm inside the leg of a U satisfies it with a 2 m
-sofa mostly through the wall; and wiring it in *"moves every drop into an L / T / U, which
-wants its own diff."* `tests/wall-parts.test.ts` asserts the notch drop **by name**. So the
-deferred diff is the fix, and the user has now hit it twice.
+| room | piece | outside before settle | outside AFTER settle |
+|---|---|---|---|
+| L 6×4.7 | sofa | 32.7 % | **0.0 %** |
+| L 6×4.7 | coffee table | 40.8 % | **0.0 %** |
+| T 5.5×4.7 | sofa | 51.0 % | **0.0 %** |
+| T 5.5×4.7 | TV | 100 % | **100 %** |
+| U 6×5 | sofa | 57.1 % | **57.1 %** |
+| U 6×5 | rug | 57.1 % | 14.3 % |
+| U 6×5 | TV | 100 % | **100 %** |
 
-Doing it properly needs the pair, because either alone is a known-insufficient half:
-`clampIntoFootprint` for the centre **and** `contain` from `lib/layout-settle.ts` for the
-extent — which is where every solved placement already ends, so the add path is the one
-path that skips it.
+The L is fixed by the settle pass and always was. The U is not fixed at all, and the T's TV
+is not fixed, and those two facts have one cause: every inward normal in this app was
+decided by flipping an edge's perpendicular toward `polygonCentroid`, the average of the
+CORNERS, which on the U sits in the notch — outside the floor. So `contain` pushed a piece
+hanging over such a wall further OUT, and `snapToWall` put a wall rider on the far side of
+the plaster. With that fixed (§ 11) the settle pass can do its half.
+
+**What remains of the original plan, and it is still worth doing:** the *add* path does not
+call containment at all, so a drop into an L's notch is still a drop into the notch until
+something moves it. `intoRoom` in `placeNewPart` does the BOUNDS inset and only that.
+`tests/wall-parts.test.ts` asserts that by name in two places, with instructions to flip the
+assertion rather than delete the test. Doing it properly still needs the pair —
+`clampIntoFootprint` for the centre, `contain`-style extent containment for the piece —
+because either alone is a known-insufficient half.
 
 The rug is the same defect and **not** the documented exemption. `lib/drag-resolve.ts` holds
 a *dragged* rug's centre to `pointInFootprint` — that narrow fix is already in, and the
@@ -1246,6 +1285,11 @@ above:
 3. **A group is not a unit.** N members are placed as N pieces, so a merged set can be
    solved into a shape it was merged specifically to prevent.
 
+**Read § 11 before measuring any solver baseline.** The wall normals the solver scores
+against were wrong on 5 of the 30 preset walls, the fix exists on a branch, and it moves
+this fixture's numbers — so a baseline taken on `main` is a baseline of a solver aimed at
+walls that face the wrong way.
+
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 
 Their words, kept because the scope is theirs: *"Do a detailed search to the fundamental
@@ -1253,6 +1297,10 @@ workings of collision generation, simple versus complex collision, and custom co
 hulls for both static meshes and Blueprints, check unreal engine, unity, blender and similar
 resources for a better understanding. I'm open to overhauling the current logic/engine if
 need be. If we need to build a proper engine and structured algorithm too, that's fine."*
+
+**§ 11 is the collision half of the same finding**: `nearestEdge` is what tells a piece
+which wall it is against, and it was wrong on the U's notch and the T's arms. Any hull work
+sits on top of that answer.
 
 The baseline to research against, so nobody has to reconstruct it: every piece is **one box**
 in its own frame (`obbFromPart`) or **one ellipse** (`footFromPart`, when `part.circle`),
@@ -1358,6 +1406,87 @@ selection (a back/forward through selections, not entries in the main stack), or
 runs of selection changes into one entry. Which of those the user wants is their call.
 
 ---
+
+### 11. Every inward normal in the app was decided by a point that cannot see the wall — FIXED on a branch, and the fix costs the solver
+
+Branch `research/inward-normals`, stacked on PR #39's tip. **Not a merge candidate**, and
+the reason is the second half of this section.
+
+**The defect.** Three functions answered "which way is into the room", and all three did it
+by flipping the edge's perpendicular toward `polygonCentroid` — the average of the polygon's
+CORNERS. That is exact for a convex room and wrong for the shapes this app ships, because
+the point has to be able to **see** the edge. Swept over the five presets at the sizes the
+picker offers, **5 of 30 walls came back backwards**:
+
+| room | wall | why |
+|---|---|---|
+| T 5.5×4.7 | edge 2 — the east arm's south wall | corner average is inside the room but on the far side of that wall's line |
+| T 5.5×4.7 | edge 6 — the west arm's south wall | same |
+| U 6×5 | edges 1, 2, 3 — the notch's three walls | corner average is at (0, −0.625), **in the notch, outside the floor** |
+
+Plus one more in a dragged off-centre custom room, which is why the test fixture includes
+one. The L is entirely correct under the old test — its corner average sees all six of its
+walls — so **a test that swept a rectangle and an L would have shipped green**, which is
+exactly how this survived three separate encounters.
+
+**It was predicted, in writing, three times.** `wallOutwardNormal` (`lib/footprint.ts`) was
+fixed this way already and its docblock quotes the same 2-of-8 / 3-of-8 count.
+`lib/scene-spec.ts` recorded `wallSegments` as the surviving instance — "same reflex corner,
+one function over; not this change's to make". And `lib/layout-score.ts` said it outright:
+*"on a non-convex polygon NO point decides an inward normal correctly… The exact answer is
+the polygon's winding, and it belongs in `edgeProjection` rather than here."* This is that
+change. `polygonWinding` in `lib/geometry.ts`, one shoelace loop for the whole repo, and
+`edgeProjection` / `nearestEdge` / `wallSegments` all read it.
+
+**What it cost the callers to be wrong**, measured rather than reasoned: `snapToWall`
+(`lib/physics.ts`) put a wall rider on the OUTSIDE of the plaster on those five walls — the
+TV the user reported. `contain` (`lib/layout-settle.ts`) pushed a piece hanging over such a
+wall further out and then could not seat it at all, so a sofa dropped in a U's notch
+measured 57 % outside the room both before and after the pass that exists to fix exactly
+that. `wallSegments` builds `RoomShell`'s wall meshes, so on those five the lit face pointed
+out of the room. See § 4.
+
+**Six new assertions in `tests/inward-normals.test.ts`, five watched failing on HEAD** — the
+sixth is the negative control, which re-implements the old predicate and pins it at exactly
+`['t#2', 't#6', 'u#1', 'u#2', 'u#3']`. That control is the load-bearing one: without it every
+other assertion in the file would also pass for a polygon set with no reflex corners, and
+there would be no evidence the sweep can go red.
+
+### …and now the part that is a finding rather than a fix
+
+**Correcting the normals makes Suggest worse on the U, and that is why the branch is not
+merged.** On the `scrambledU` fixture in `tests/layout-solve.test.ts`:
+
+| | before | after |
+|---|---|---|
+| clean seeds (no hard term) | 12 / 12 | **7 / 12** |
+| worst total cost | 38.53 | **92.10** |
+| `bed-rung-safety` per-seed danger | 0 on all 12 | **36.00 on seed 1** |
+
+Seven assertions across `layout-solve`, `bed-rung-safety` and `suggest-tidiness` go red.
+**Do not loosen them.** Three things about that number, all derived:
+
+1. **The scorer did not change its answer; the solver's answer changed.** The old tree's
+   placements were dumped to disk and re-scored with the NEW scorer: `navigation` stays
+   0.00 on every seed. So this is not "a checker stopped being blind".
+2. **No room is unsafe.** Term by term across all twelve seeds, `outside`, `door` and
+   `walkway` are **0.00 everywhere**. The entire cost is `navigation` — floor the user
+   cannot walk to — on 4 of 12 seeds (36.00, 5.10, 2.10, 74.10), plus 0.76 of `overlap` on
+   one. Nothing is through a wall and nothing blocks a doorway.
+3. **The old clean sheet was partly bought by mis-modelling the room.** Ground truth
+   improved where it moved at all: on seed 3 the worst outside-share went 61.2 % → 42.9 %
+   and the count of pieces whose CENTRE sits outside the room went 1 → 0. A piece parked in
+   the notch does not strand walkable floor, because it is not on the floor.
+
+So: the annealer is tuned against wrong wall normals. That is the starting condition for
+§ 6, not a reason to revert the geometry, and re-tuning weights to make seven carefully
+mutation-tested assertions green again would be the worst of the available moves — it would
+hide the finding and hand the ground-up redesign a worse baseline.
+
+One more measured fact for § 6 while it is in front of us: the `outside` cost term reads
+**0.00 with a bedside lamp 61 % outside the room**, because supported tabletop pieces are
+exempt from it. So "nothing prices support" has a second half — **nothing contains a
+supported piece either.**
 
 ## What in this document has been in a browser, and what has not
 
