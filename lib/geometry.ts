@@ -231,6 +231,16 @@ export type EdgeHit = {
   nx: number;
   nz: number;
   yaw: number;
+  /** Where along a-→b the point landed, **after** the [0, 1] clamp. `0` or `1`
+   *  therefore means the query was PAST THE END of this wall and `(px, pz)` is a
+   *  corner rather than a perpendicular foot — at which point `dist` is a distance
+   *  to that corner and `(x - px) · n̂` is no longer this wall's signed clearance.
+   *
+   *  Returned rather than recomputed by the one caller that needs it
+   *  (`containedXZ`), because the four lines that produce it are the same four lines
+   *  a caller would write, and a second copy of "where on this wall am I" is a
+   *  second source of truth for which walls a piece is actually up against. */
+  t: number;
 };
 
 /**
@@ -282,7 +292,7 @@ export function edgeProjection(
   const nl = Math.hypot(abx, abz) || 1;
   const nx = (-abz * s) / nl;
   const nz = (abx * s) / nl;
-  return { index, px, pz, dist: Math.hypot(x - px, z - pz), nx, nz, yaw: Math.atan2(nx, nz) };
+  return { index, px, pz, dist: Math.hypot(x - px, z - pz), nx, nz, yaw: Math.atan2(nx, nz), t };
 }
 
 /** Nearest polygon edge to a point.
