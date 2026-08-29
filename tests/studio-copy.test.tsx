@@ -19,7 +19,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const ROOT = join(__dirname, '..');
@@ -144,18 +144,31 @@ describe('no copy offers a feature this app deleted', () => {
     /render it for you/i,
   ];
 
-  const SURFACES = [
-    'components/studio/CatalogPanel.tsx',
-    'components/studio/LibraryPicker.tsx',
-    'components/studio/Inspector.tsx',
-    'components/studio/PartTree.tsx',
-    'components/studio/TopBar.tsx',
-    'components/studio/StudioHelp.tsx',
-    'components/studio/SceneContextMenu.tsx',
-  ];
+  // Derived from disk, never typed here. The first version of this sweep named seven
+  // studio files, which carries the exact defect the `include` gate one directory over
+  // exists to prevent: a panel added later — or renamed — is simply not swept, and the
+  // sweep stays green while the string ships. It also missed `RoomTools.tsx`, `PlanView`
+  // and the whole of `app/`, which are user-facing too. Rule 1 is about every string a
+  // user can read, so the subject is every `.tsx` under `app/` and `components/`.
+  function surfaces(rel: string, out: string[] = []): string[] {
+    for (const entry of readdirSync(join(ROOT, rel), { withFileTypes: true })) {
+      const next = `${rel}/${entry.name}`;
+      if (entry.isDirectory()) surfaces(next, out);
+      else if (entry.name.endsWith('.tsx')) out.push(next);
+    }
+    return out;
+  }
 
-  it('on any of the surfaces that open the Library', () => {
-    for (const file of SURFACES) {
+  it('on any .tsx surface under app/ or components/', () => {
+    const files = [...surfaces('app'), ...surfaces('components')];
+    // The count first. An empty list — a walk that quietly returns nothing, a directory
+    // renamed — would make the loop below vacuously true, which is the same shape as a
+    // `.tsx` test file that is never collected.
+    expect(
+      files.length,
+      'no .tsx surfaces found, so the sweep below proves nothing',
+    ).toBeGreaterThan(50);
+    for (const file of files) {
       const src = code(file);
       for (const re of FORBIDDEN) {
         expect(re.test(src), `${file} matches ${re}`).toBe(false);

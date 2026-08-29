@@ -437,6 +437,23 @@ the user went and looked.
     on the branch. A permission question, and only the user can settle it — no session may
     grant it to another.
 
+12. **Room check speaks centimetres to a user who set metres, feet or inches.** Every
+    sentence `analyzeRoom` composes hard-codes `cm` — `Math.round(x * 100)` in fifteen
+    places in `lib/clearance.ts` — and `RoomTools` renders `issue.detail` verbatim
+    (`components/studio/RoomTools.tsx:968`), so nothing converts it. `useSettings.dimUnit`
+    defaults to **`'m'`** (`lib/store.ts:408`), which means the shipping default already
+    disagrees: the room's own fields say `1.9 m` and the finding beside them says
+    `190 cm`. Found by review while checking that a component test's derived `198 cm`
+    matched its source — it does, exactly, so this is not a test defect and not new.
+    **The decision is which way it should read**, and it is genuinely a decision rather
+    than a bug: cm is the natural unit for a clearance, one panel speaking two units is
+    not, and `boundsToUnit`'s scar (`CLAUDE.md` rule 2) is about a coarse unit collapsing
+    a range — a finding sentence has no chevrons, so it would not inherit that. Three
+    coherent answers: leave it and say so here; convert the numbers through `dimUnit`;
+    or convert only where the same panel shows a `dimUnit` value. Nobody should pick
+    silently, which is why it is in this section and not fixed.
+    **Committed:** nothing but this paragraph.
+
 ---
 
 ## C · Decided against — do not re-propose
@@ -580,6 +597,14 @@ computed layout. The remaining 8 need a real browser and stay where they are.
   than a side, the absence of any tooltip offering the deleted describe-a-piece feature, and
   the piece list pointing at `Add` by name rather than by direction. Eight assertions, each
   watched failing by renaming the thing it guards.
+  **The deleted-feature sweep is derived from disk**, over every `.tsx` under `app/` and
+  `components/` — 82 files — with the count asserted before the loop. Its first version
+  named seven studio files by hand, which is the same defect the `include` gate below
+  exists to prevent: a panel added or renamed later is simply not swept and the sweep
+  stays green. It also missed `RoomTools.tsx`, `PlanView.tsx` and all of `app/`. Caught by
+  reviewing this PR's own diff, and both halves were watched failing — a forbidden string
+  planted in `RoomTools.tsx` (which the hand-kept list did not cover) goes red, and a walk
+  that returns nothing trips the count rather than passing vacuously.
 - **The `include` pin is the one that matters most**, and it is the reason step 2 grew a
   test it was only asked to "consider". Narrowing `include` back to `tests/**/*.test.ts`
   takes the run from 16 tests to 13 and **reports green**: the `.tsx` file is simply never
@@ -598,34 +623,42 @@ computed layout. The remaining 8 need a real browser and stay where they are.
    `/model`, a shorter one everywhere else. Asserting against the wrong one reads as the
    copy being missing rather than as being on the other tab. See G.3.
 
-### The toolchain facts, already derived — do not re-derive
+### The toolchain facts — as of `95b28fa`, which is after the harness landed
 
-- react / react-dom **19.2.8**, vitest **4.1.10**, jsdom **30.0.1**, vite 7.
-- `vitest.config.ts`: `environment: 'node'`, `include: ['tests/**/*.test.ts']`,
-  alias `@` to repo root, `esbuild: { jsx: 'automatic' }`.
-- **That `include` does not match `.test.tsx`**, and JSX will not parse inside a
-  `.test.ts`. So either widen it to `tests/**/*.test.{ts,tsx}` or write every component
-  test through `React.createElement`. Widening is the right call; the second is a
-  transcript of JSX rather than JSX.
-- `tests/toolchain.test.ts` does **not** pin `include`, `environment` or `esbuild` —
-  checked, not assumed. Worth pinning the way the ESLint >= 9 floor is pinned, since all
-  three fail in the direction that looks like success: a `.tsx` test that is simply never
-  collected reports as a green suite.
+The first four bullets here read as an open question until a review of this PR's own diff
+caught them: they were the **scoping's** facts, written before the work, left in present
+tense under a heading telling the next reader not to re-derive them. Every one of them was
+falsified by the commit that sits in the same PR. Corrected in place rather than deleted,
+because the shape is worth keeping — a hand-off note is a claim, and the most misleading
+kind is the one a heading vouches for.
+
+- react / react-dom **19.2.8**, vitest **4.1.10**, jsdom **30.0.1**, vite 7. Unchanged.
+- `vitest.config.ts`: `environment: 'node'`, `include: ['tests/**/*.test.{ts,tsx}']`,
+  alias `@` to repo root, `esbuild: { jsx: 'automatic' }`. The `include` was
+  `tests/**/*.test.ts` before this PR widened it.
+- **The old `include` did not match `.test.tsx`**, and JSX will not parse inside a
+  `.test.ts`. The choice was widening it or writing every component test through
+  `React.createElement`; widening was taken, because the second is a transcript of JSX
+  rather than JSX.
+- `tests/toolchain.test.ts` **now pins** `include`, `environment` and `esbuild`, the way
+  the ESLint >= 9 floor is pinned, because all three fail in the direction that looks like
+  success: a `.tsx` test that is simply never collected reports as a green suite. Measured
+  — narrowing `include` back takes the run from 16 tests to 13 with no error and no skip.
 - jsdom is opted into **per file** with a `// @vitest-environment jsdom` pragma. Keep it
   that way. Do not switch the suite over — `CLAUDE.md` says so and the reason is that the
   pure-logic files have no business paying for a DOM.
 
-### Two findings from the scoping, both of which should be fixed as part of the work
+### Two findings from the scoping. The first is FIXED; the second still holds.
 
-1. **`vitest.config.ts`'s comment is stale, and it justifies a live setting.** It says a
-   test that renders a component — naming `tests/sun-controls.test.ts` — imports a `.tsx`.
-   **That file does not exist**; it went with the sun-mood collapse. So `esbuild: { jsx:
-   'automatic' }` is currently explained by a file that is gone, and in fact **no test
-   imports a `.tsx` at all.** Do **not** delete the setting on that reading: it becomes
-   load-bearing the moment the first component test lands. Correct the comment to name the
-   real reason. This is the `CLAUDE.md` grep-refutation trap pointing the other way — prose
-   that survived its subject, and would have talked the next reader into deleting something
-   real.
+1. **`vitest.config.ts`'s comment was stale, and it justified a live setting** — FIXED in
+   `95b28fa`. It said a test that renders a component — naming `tests/sun-controls.test.ts`
+   — imports a `.tsx`. That file did not exist; it went with the sun-mood collapse. So
+   `esbuild: { jsx: 'automatic' }` was explained by a file that was gone, and at that point
+   **no test imported a `.tsx` at all** — both true then, neither true now. The setting was
+   deliberately *not* deleted on that reading, because it became load-bearing the moment the
+   first component test landed, which it has. This is the `CLAUDE.md` grep-refutation trap
+   pointing the other way: prose that survived its subject, and would have talked the next
+   reader into deleting something real.
 2. **`tests/vanishing-point.test.ts` contains a `render(` that has nothing to do with
    React** — it is a local image-drawing helper. It is why a naive `grep "render("` over
    `tests/` looks like component coverage already exists. It fooled one pass of this
