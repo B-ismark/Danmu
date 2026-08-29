@@ -1157,7 +1157,7 @@ overhang past the skirting is deliberate — while the *add* path holds it to no
 rug has no constraints" is true of adding one and false of dragging one, which is the same
 two-consumers shape as everything else in this section.
 
-### 5. The 3D tab computes the refusal the plan paints red, and clears it on the same tick
+### 5. The 3D tab computes the refusal the plan paints red, and clears it on the same tick — FIXED
 
 The user: a couch *"is cutting through the walls instead of being constrained."*
 
@@ -1184,6 +1184,36 @@ being tested against the walls. The 1.000 m above is that case, committed silent
 
 `docs/visual-check.md` had this asymmetry written down and called it *"a separate decision,
 not a defect in this fix."* The user has now made the decision.
+
+**What landed.** `lib/refusal.ts` — `refusalAfterGesture()` plus `REFUSAL_HOLD_MS`, and both
+surfaces read it. It is a module rather than four lines in `commit()` for two reasons, and
+the second is the one that matters: the rule was already written out in the plan and in 3D's
+live-drag path, so a third copy was the wrong direction; and a decision living inside an R3F
+component **cannot be tested at all** without a WebGL context, which is exactly why
+`lib/drag-click.ts` is not in `store.ts`. `Draggable.commit()` now asks that function and,
+when the answer is not null, holds the live channel — the same channel every refused piece
+already reads through its own per-part selector, so the whole set goes red exactly as it does
+mid-drag — then clears on one timer. `PlanView`'s turn asks the same function, and its bare
+`500` is now the shared constant.
+
+**Eight assertions, nine mutations, all red:** never a refusal; always a refusal; the convoy
+ignored; the dragged piece ignored; the member name kept when the dragged piece is itself the
+problem; the dragged piece dropped from the outline set; the dedup removed; the hold cut to
+one frame; and `turnInPlace` refusing the turn instead of taking it. The measurement is
+pinned too — a 4 m sofa turned 90° in a 6 × 3 room overhangs `1.0` m to six places, with a
+2.4 m sofa as the negative control, so a change that quietly starts clamping harder shows up
+here as a failing number rather than as a piece that cannot be turned.
+
+**What is NOT verified:** that the red actually appears on screen for those 500 ms. The
+decision is tested; the wiring from it to a tinted mesh is three lines in an R3F component
+and no test in this repo can see them. It is a new item in `visual-check.md`.
+
+Two things found while fixing it, both stale prose that had cost something already:
+`Draggable.tsx`'s own header said the gizmo was *"W=move E=rotate R=scale"* — wrong twice, and
+it is where this session's bad hand-off question came from — and `Design.md` gave the snap
+angles as `fine` 2.5° / `coarse` 7.5° where `snapSteps` has always returned **15°** and
+**45°**. Both corrected, and `Design.md` now names the real keys instead of "Maya-style
+modes", since the vagueness is what let the wrong version stand beside it.
 
 ### 6. Research: Suggest, from the ground up — the user's explicit ask
 

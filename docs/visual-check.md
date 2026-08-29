@@ -111,6 +111,26 @@ becoming **un-turnable** (the thing this must not do); the lamp left behind; or 
 with **no red outline at all**, which is the 3D tab's version of this and is already a
 confirmed defect — § H.5, so you do not need to check that half.
 
+### A refused turn now says so in 3D — 500 ms of red
+
+*The one thing in this pass that no test can reach. `lib/refusal.ts` decides what counts as a
+refusal and `tests/refusal.test.ts` holds it to that with nine mutations; what nobody has
+seen is whether the answer reaches a tinted mesh.*
+
+3D tab, a room **3 m deep** (Room tools) and a sofa longer than that — 4 m if the Inspector
+will give you one. Select it, press **R**, and turn it hard across the room.
+
+**What right looks like:** the turn is taken — a piece in a tight corner must stay turnable —
+and the sofa is **outlined red for about half a second** after you let go, then goes back to
+normal. Same gesture in the 2D plan, same red, same duration: that is the point of the fix,
+so check both.
+
+**Wrong looks like:** no red at all in 3D (the defect, unfixed); red that never goes away
+(the timer is not clearing); red on the wrong piece; or the two tabs holding it for visibly
+different lengths of time. Also worth a look: drag a piece into a wall until it refuses, let
+go, and confirm the red still clears — the same code path runs for a translate, where it
+should almost never fire.
+
 ### Rotate and scale on a merged set, in 3D
 
 *Correction, and the reason this is still open: this item used to say "press **E**" and
