@@ -210,9 +210,11 @@ all facing one way — had two causes: how a bed is added (fixed) and how a bed 
 fix are both on `main`, in the merge of `fix/bed-shape-and-its-rotted-fixtures` (PR #38).
 The branch name this paragraph used to name does not exist on `origin` and never did.
 
-**Started, in a commit, not on `main`.** `lib/layout-offer.ts` + `tests/layout-offer.test.ts`
-exist on `feat/suggest-offer-mmr` (`e999522`) — layer 3a's two pure pieces, ranked and
-tested, **imported by nothing**. What is written is `orderOffers` (the ranking) and
+**On `main`, and still imported by nothing.** `lib/layout-offer.ts` +
+`tests/layout-offer.test.ts` landed with `e999522`; `tests/layout-offer-pool.test.ts`
+followed. The sentence here used to say they were "in a commit, not on `main`" and that
+stopped being true when they merged — layer 3a's two pure pieces are shipped, ranked and
+tested, and **nothing calls them**. What is written is `orderOffers` (the ranking) and
 `layoutSimilarity` (how alike two arrangements are). What is not written is the wiring at
 `RoomTools.tsx:534`, and three things below have to be settled before it can be.
 
@@ -226,9 +228,44 @@ tested, **imported by nothing**. What is written is `orderOffers` (the ranking) 
   refuses next door in cost units; and lambda's meaning moved with piece count, so the same
   three costs put the diverse candidate second in a two-piece room and gave pure cost order
   in an eight-piece one. `cost + penalty × closest` has none of the three.
-  **The number itself is unmeasured** — what `diversityPenalty` should be, in cost units,
-  is the one open value, and `MIN_GAIN_ABS` is the obvious scale to measure it against
-  rather than to borrow.
+  **The number is measured now: 4, with a working range of 2–8.** Taken against
+  `MIN_GAIN_ABS`, as this paragraph asked, rather than borrowed from it.
+
+  Method, because the input is the part that decides the answer: five presets × three
+  deterministic shoves = fifteen *rearranged* rooms, since the starter arrangements are
+  local optima the annealer cannot beat and hand back a pool of one — which
+  `tests/layout-offer-pool.test.ts` already pins in both directions, and which is
+  therefore the wrong input to tune on. `spotM` and `yawRad` are **not chosen here**:
+  they are `LAYOUT_SIMILAR_M` (0.25) and `TURN_EPSILON` (0.05), read off the solver,
+  which is what the "no thresholds are defined in this file" rule requires of a caller
+  as much as of the file.
+
+  Measured across those fifteen, every one leaving a pool of 3–4:
+
+  | | observed |
+  |---|---|
+  | finalist cost spread | 0.42 – 15.35, typically 1.5–5 |
+  | pairwise similarity | 0.00 – 0.91, per-room means 0.29–0.79 |
+  | penalty that first changes the offered set | `[0.25 ×3, 0.5, 2 ×3, 4 ×5, 8 ×2, >128]`, **median 4** |
+
+  Below **0.25** the term never fires in any room measured — it is inert, which is the
+  failure this whole design note exists to avoid. Above about **8** the order stops
+  responding: cost has stopped mattering and the offer is chosen purely on difference.
+  **4** is the value at which the term is live in roughly half the rooms without
+  dominating any of them, and it is a median of observations rather than a round number
+  someone liked.
+
+  One room refused to reorder at any penalty up to 128 (`l`, seed 3, a pool of three at
+  costs 26.79 / 28.90 / 30.46), and the reason is a property of the technique rather
+  than a bad number. Both remaining candidates sit at **exactly 0.250** similarity to
+  the first pick, so the penalty adds the same quantity to both scores and cancels out
+  of the comparison: at penalty 128 they score 60.90 and 62.46, still 1.566 apart,
+  which is the cost gap untouched. **A penalty can only ever reorder candidates that
+  DIFFER in how alike they are to what is already picked** — an equal-similarity tie is
+  immune to it at any magnitude. Worth knowing before someone reads a single unmoved
+  room as the term being broken, and worth knowing that the first version of this
+  paragraph blamed `k = 3` offering everything anyway, which is wrong: the set is
+  indeed fixed, but the ORDER was always still in play and had to be measured.
 
 · **The finalist pool cannot supply orientation variety, which is what §A.2 asked for.**
   `similar()` compares x/z and never reads `.yaw`, while `propose` turns a piece *in place*,
