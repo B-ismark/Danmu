@@ -65,22 +65,6 @@ conflict.
 
 *Owner: `sizes`.*
 
-### A door under a low ceiling — on `main`, `85450f7`
-
-Make a room **1.8 m** tall (Room panel, height) with a **door** in it, and open **Room
-check**.
-
-It should say the door is 198 cm against a 180 cm ceiling and that it **does not go any
-shorter than 198 cm** — the ceiling has to reach 198, or the door has to go. It must
-**not** invite you to shrink it, because you cannot: 1980 mm is `door`'s own floor and the
-Inspector refuses everything below it.
-
-Same room, a **wardrobe** at 2.2 m, gets the opposite wording. That one can be shrunk, and
-the message names the number that would fit (160 cm).
-
-**Wrong looks like:** the door being told to shrink; either piece quoting a number the
-Inspector's own limit disagrees with; or both pieces getting the same sentence.
-
 ### A bed added at a wall — on `main`, `4cec92b`
 
 The user's own report, and it takes **two** fixes to be right, so check it after both are
@@ -98,14 +82,6 @@ screenshotted. Or, after Shuffle, every bed converging on one wall — that woul
 solver question rather than this fix, because nothing prices *variety*. Also worth looking
 at while you are there: a **plant** and a **floor lamp** must still arrive at 0°, since
 those have no back to put against anything.
-
-### A curtain the ceiling came down on — still wants one look
-
-Lower a room's ceiling below a **curtain**'s height. The curtain keeps its real size and
-stands through the slab, and **Room check says so**. Not resizing is the rule; saying
-nothing was the defect.
-
-**Wrong looks like:** silence in Room check, or the curtain quietly shrinking.
 
 ### The mount-height field under a piece that cannot fit
 
@@ -375,34 +351,23 @@ the 3D tab rebuilds the tiling, so the two agreeing is the same cross-check as t
 That is the fix, not a regression. What would be a regression is a module that is still a
 lie.
 
-### Three signposts and no sign: the Library — PR #26
+### Three signposts and no sign: the Library — narrowed to the click-through
 
 The user's own find, and the one no gate could ever have made: *"Library isn't on there."*
 
-Press **Add**. The panel that opens must be headed **Library**. Then follow each of the
-three strings that already used the word and check it leads somewhere: the help card
-(*Catalog is what is in this room; Library is what you can add*), the **sun note** in the
-left rail's Look section on a room with no door or window (*Add a window or a door from the
-Library*), and the **right-click menu on empty floor** (*Add from library…*).
+**The words are gated now** and this item is down to one question a test cannot answer.
+`tests/studio-copy.test.tsx` holds the panel's heading at **Library**, holds all three
+strings that name it — the help card, the sun note in the left rail's Look section, and
+the right-click menu's *Add from library…* — and holds the help card's group heading to
+naming the two lists rather than a side. Every one of those was watched failing by
+renaming the thing it guards.
 
-**Wrong looks like:** any of those three naming a list the screen does not have. The panel
-read "Add pieces" — named for what you do rather than for what it holds — so all three
-pointed at a word that was nowhere on screen.
+**What is left for a person:** press each of the three and check it actually *opens* that
+panel. The strings agreeing with the heading is now impossible to break silently; a
+signpost pointing at a control that no longer opens anything is not, because nothing here
+mounts the trigger and the panel together.
 
-**And check the help card's group heading** while it is open: it must not say the two lists
-are *on the left*. Catalog is in the left rail; the Library docks on the right of the
-canvas.
-
-### Copy that names a feature the app does not have — PR #26
-
-Hover every control in the studio that opens the Library: the rail's `Add`, the canvas
-toolbar's `Add`, and the Inspector's model swap.
-
-**Wrong looks like:** any tooltip offering to **describe a piece in words**. That feature
-was deleted and two tooltips went on advertising it — rule 1 wearing a tooltip. Also check
-the empty-room state in the left rail: it must point at `Add` by name and not say
-"above", because Add has not been above that list since it moved to the right rail, and on
-a stacked layout it is not even on the same side.
+**Wrong looks like:** a signpost that reads correctly and leads nowhere.
 
 ---
 

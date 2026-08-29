@@ -543,27 +543,60 @@ the user went and looked.
 
 ---
 
-## E · The next task, scoped but NOT started: component tests under jsdom
+## E · Component tests under jsdom — STARTED. The harness is in; the bucket is not.
 
-This section exists because the scoping is worth more than it looks and lived nowhere
-durable. It was derived in a session that is about to be cleared, and a scratchpad note
-dies with its session id. **Nothing below is in a commit** — no dependency added, no
-config touched, no test written.
+**Steps 1–4 of the plan below are in a commit.** `@testing-library/react` is a
+devDependency, `include` is widened, the config comment is corrected, four assertions in
+`tests/toolchain.test.ts` pin the settings, and two component test files exist. Three
+`visual-check.md` items are deleted and a fourth is narrowed to the one question a test
+cannot answer. What remains is the rest of the bucket — the plan is kept verbatim below,
+because the reasoning in it survived contact.
 
-### Why this is the next thing
+### Why this was the next thing
 
 `docs/visual-check.md` says nothing in this app has been in a browser. The reason that
-list keeps growing is structural: **no test in this repo has ever mounted a component.**
-Derived, not remembered — `grep -rln "from '@/components" tests/` returns nothing. Every
-function in `lib/` is asserted; **nothing checks that a component calls it**, so a correct
-`lib/` answer computed and then dropped on the floor by its caller is invisible to all
-82 test files. That is exactly the shape of the `blockedBy` scar in `CLAUDE.md` — "a
+list keeps growing was structural: **no test in this repo had ever mounted a component.**
+Every function in `lib/` is asserted; **nothing checked that a component calls it**, so a
+correct `lib/` answer computed and then dropped on the floor by its caller was invisible
+to the whole suite. That is exactly the shape of the `blockedBy` scar in `CLAUDE.md` — "a
 finding the caller drops is a finding that does not exist" — and it went a whole commit
 unseen because only a human eye could have caught it.
 
-Of the 21 items in `visual-check.md`, roughly **10 need no browser at all**, only wiring:
-does the component render the sentence `lib/` already computes. 3 more are computed
-layout. The remaining 8 need a real browser and stay where they are.
+`visual-check.md` was 21 items and is 18. Of those, roughly **7 need no browser at all**,
+only wiring: does the component render the sentence `lib/` already computes. 3 more are
+computed layout. The remaining 8 need a real browser and stay where they are.
+
+### What landed, and what each one is worth
+
+- **`tests/room-tools-findings.test.tsx`** — mounts `RoomTools` and asserts the room panel
+  renders the finding `analyzeRoom` computed: the chip's count with the panel shut, the
+  sentence itself once it is open, the *opposite* sentence for a piece that can be shrunk,
+  that the two are not the same sentence and are not swapped, and that something which
+  HANGS is told it cannot hang rather than that it cannot stand. Six assertions, each
+  watched failing by mutating `lib/clearance.ts` or `RoomTools.tsx` — never a threshold in
+  the test. Removing the finding entirely fails all six.
+- **`tests/studio-copy.test.tsx`** — the two pure-copy items. The Library panel's heading,
+  all three strings that name it, the help card's group heading naming the two lists rather
+  than a side, the absence of any tooltip offering the deleted describe-a-piece feature, and
+  the piece list pointing at `Add` by name rather than by direction. Eight assertions, each
+  watched failing by renaming the thing it guards.
+- **The `include` pin is the one that matters most**, and it is the reason step 2 grew a
+  test it was only asked to "consider". Narrowing `include` back to `tests/**/*.test.ts`
+  takes the run from 16 tests to 13 and **reports green**: the `.tsx` file is simply never
+  collected. No error, no skip, no line of output. The toolchain gate catches it by
+  deriving the `.tsx` files from disk and checking each against the declared patterns —
+  and it asserts the count first, because a pattern with no subject would make the loop
+  vacuously true.
+
+### Two things the spike found that the scoping had wrong
+
+1. **`fireEvent`, not the DOM's own `.click()`.** React 19 batches, and a raw dispatch runs
+   outside `act()`, so the panel was still shut when the assertion looked for its content.
+   It fails identically to the sentence not being rendered at all, which is the trap: the
+   first reading of that red was "the component drops the finding".
+2. **`StudioHelp` renders two different cards and picks by route** — the full one on
+   `/model`, a shorter one everywhere else. Asserting against the wrong one reads as the
+   copy being missing rather than as being on the other tab. See G.3.
 
 ### The toolchain facts, already derived — do not re-derive
 
@@ -799,6 +832,26 @@ preset's tail against another's, which is a statement about which rooms this app
 Deliberately not tuned. Whoever picks it up should also read A.6, which reached a
 compatible conclusion from a different fixture (4 shapes, 8 seeds, sizes unrecorded) and
 recommended moving the U test to the T.
+
+### 3. The help card has two versions and only one of them explains the two lists
+
+`StudioHelp` reads `usePathname()` and branches on `pathname.endsWith('/model')`. The
+full card — including the **The two lists** group that tells the user Catalog is in the
+left rail and Library is on the right of the canvas — renders on the 3D tab only. On the
+2D Plan tab a shorter card renders and that group is absent.
+
+Found by a component test asserting against the wrong one, which is the reason it is
+written down at all: the red looked exactly like the copy having been deleted.
+
+**The question, and it is the user's:** the Library trigger is reachable from both tabs,
+so a person who opens Help on the plan is told about pieces, panning and keys but never
+what the two lists are. That is either a deliberately shorter card or the same
+signpost gap `visual-check.md`'s Library item was about, one tab over. Not touched here,
+because adding a group to a help card is a copy decision and the item it would serve was
+about copy pointing at things that are not there.
+
+**Committed:** nothing but this paragraph and the comment in
+`tests/studio-copy.test.tsx` naming it.
 
 ---
 
