@@ -643,6 +643,13 @@ tests import does not belong in `lib/`, where it reads as shipped code.
   eyes more than one still sitting in a PR, not less. The earlier rule deleted on
   merge, and the file was already disobeying it in two places before anyone noticed
   the rule and the practice had come apart.
+- `docs/traps.md` — **the companion for what wastes your time.** The mistakes that have
+  cost real time here more than once, indexed by **the symptom you see first** rather than
+  by cause, because that is what you search for at the moment one bites. Written to be
+  grepped, never read end to end. An entry earns its place by having cost something
+  **twice** — once is a story, twice is a pattern — and says which two occasions. Read it
+  before a mutation-testing session, before reading any git diff as a merge preview, and
+  before quoting a number from earlier in your own session.
 - `docs/what-is-still-open.md` — **the companion for what needs thinking about
   rather than looking at**: open measurements, decisions only the user can make,
   and options decided against so nobody re-proposes them. Every item says whether
