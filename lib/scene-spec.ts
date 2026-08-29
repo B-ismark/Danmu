@@ -22,6 +22,7 @@ import {
   pullToward,
   findSupportUnder,
   isTabletopProne,
+  verticalExtent,
   MOUNT_PAD,
 } from './physics';
 import type { CaptureSlot, RoomData } from './storage';
@@ -2419,18 +2420,19 @@ export function collidesAt(
   const mover = parts.find((p) => p.id === movingId);
   if (!mover) return false;
   if (mover.category === 'rug') return false;
-  const mh = dimMM[2] / 1000;
-  // Mover y-bottom (pos.y is the floor anchor in our scene; for wall-mounted it's mid-height).
-  const myBottom = pos[1];
-  const myTop = pos[1] + mh;
+  // `pos[1]` is a BOTTOM for a floor-anchored part and a mesh CENTRE for every
+  // other anchor, so the extent is `verticalExtent`'s answer and not `[y, y + h]`.
+  // This function spelled the floor version out for both sides, which put a
+  // television half its own height too high — and then skipped wall-mounted
+  // obstacles entirely, which hid that rather than avoiding it and meant nothing in
+  // the room could collide with a mounted TV or a floating shelf at all. A ceiling
+  // fan was never skipped and was mis-measured the same way.
+  const [myBottom, myTop] = verticalExtent(mover.category, mover.shape, dimMM, pos[1]);
   const me = footFromPart(pos, rot, dimMM, mover.circle);
   for (const o of parts) {
     if (o.id === movingId) continue;
     if (o.category === 'rug') continue;
-    if (o.wallMounted) continue;
-    const oh = o.dimMM[2] / 1000;
-    const oyBottom = o.pos[1];
-    const oyTop = o.pos[1] + oh;
+    const [oyBottom, oyTop] = verticalExtent(o.category, o.shape, o.dimMM, o.pos[1]);
 
     // Vertical separation → no collision (stacking allowed).
     const yOverlap = !(myTop <= oyBottom + 0.005 || myBottom >= oyTop - 0.005);
