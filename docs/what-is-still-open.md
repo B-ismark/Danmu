@@ -579,9 +579,17 @@ to the whole suite. That is exactly the shape of the `blockedBy` scar in `CLAUDE
 finding the caller drops is a finding that does not exist" — and it went a whole commit
 unseen because only a human eye could have caught it.
 
-`visual-check.md` was 21 items and is 18. Of those, roughly **7 need no browser at all**,
-only wiring: does the component render the sentence `lib/` already computes. 3 more are
-computed layout. The remaining 8 need a real browser and stay where they are.
+`visual-check.md` was 21 items and is **17**: three went in `95b28fa`, the mount-height
+field in this pass, and the Library item is narrowed twice rather than deleted. Of the 17,
+roughly **5 are still wiring** — does the component render what `lib/` already computed —
+3 are computed layout, and the remaining 8 need a real browser and stay where they are.
+
+**Deleting an item because a gate replaced it is the practice here**, not a shortcut past
+the "merging is not looking" rule: that rule is about a *fix* nobody saw, while these are
+questions a test can now answer in full. The mount-height field is the clearest case — its
+three states are three sentences, and each one is asserted. What a gate cannot replace is
+anything about pixels, and where a residue like that exists the item is narrowed instead
+(see the Library item, twice).
 
 ### A whole PAGE mounts under jsdom, which is the finding that unlocks the rest
 
@@ -614,6 +622,21 @@ items should be written against pages, not harnesses.
 
 ### What landed, and what each one is worth
 
+- **`tests/mount-height-refusal.test.tsx`** — the mount-height field, which had three
+  states and no gate: a piece **taller than the room** (disabled, `aria-invalid`, "there is
+  no height it can hang at", and — the user's exact report — typing 120 writes **no**
+  position override rather than pinning it to 0); a number **outside 0…max**, told the range
+  while it is still being typed, with the bound derived from `MOUNT_PAD` rather than typed;
+  and a range **narrower than one step of the display unit**, which is said in words
+  instead of quoted as "0–0.0 ft" — that one in **feet**, where all fourteen of this repo's
+  earlier bound defects lived, with the fixture's band asserted so it cannot drift into a
+  neighbouring branch and pass for the wrong reason. Eight assertions, eight mutations,
+  eight reds.
+  One thing found in passing and left alone: **`outOfRange` is evaluated before `noRoom`**,
+  so a piece already parked above a sub-step maximum is told the range rather than told
+  there is no room to move it. Both messages are true; which one a crossed case should show
+  is a copy decision, and the first fixture written here tripped over it and read as the
+  `noRoom` branch being dead.
 - **`tests/library-click-through.test.tsx`** — the half of the Library item no copy test
   could reach: pressing a signpost **opens** the panel. Mounts the real plan page and
   presses the rail's `Add`, the panel's own `X`, and the context menu's *Add from library…*

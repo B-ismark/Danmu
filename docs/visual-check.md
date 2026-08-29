@@ -83,13 +83,6 @@ solver question rather than this fix, because nothing prices *variety*. Also wor
 at while you are there: a **plant** and a **floor lamp** must still arrive at 0°, since
 those have no back to put against anything.
 
-### The mount-height field under a piece that cannot fit
-
-Select a wall-mounted piece taller than the room. Its **mount height** field should refuse
-the edit and say why, rather than accepting a number and pinning it to 0.
-
-**Wrong looks like:** typing 120 and watching it become 0 with no message.
-
 ---
 
 ## Drag and selection
