@@ -119,7 +119,12 @@ describe('a docblock documents the thing under it', () => {
       }
     }
     expect(offenders, `a docblock here is followed by another, so it documents nothing`).toEqual([]);
-  });
+    // An explicit timeout because this reads every first-party source file — ~400 of
+    // them — and vitest's 5 s default is not a budget anyone chose for a filesystem
+    // sweep. It runs in ~0.4 s alone and blew the default under a full-suite run on
+    // Windows, which reads as a failure of the thing being gated rather than of the
+    // clock. A generous ceiling is honest here: this test has no timing claim to make.
+  }, 120_000);
 
   // The detector itself, against the two shapes that actually occurred and the three
   // that must NOT be reported. Without this the sweep above could return [] because
