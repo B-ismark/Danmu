@@ -24,7 +24,7 @@
 // reports it to nobody.
 
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadESLint } from 'eslint';
 import semver from 'semver';
@@ -194,5 +194,102 @@ describe('the test script keeps its console output', () => {
     // satisfied by the commentary about the reporting rather than by the reporting:
     // delete the call, leave the paragraph, and the gate stayed green.
     expect(src).toMatch(/^\s*console\.log\(/m);
+  });
+});
+
+// ── The three vitest settings the component tests depend on ─────────────────
+//
+// All three fail in the direction that looks like success, which is the only reason
+// they are worth a test at all:
+//
+//   · `include` not matching `.tsx` means a component test file is **never
+//     collected**. No error, no skip, no line of output — the suite reports green
+//     and one file's worth of assertions has silently left the building. This is
+//     the same shape as the `--disableConsoleIntercept` gate above, one level up:
+//     not a broken check, an absent one.
+//   · `environment` flipping to `jsdom` for the whole suite would make everything
+//     pass while quietly charging every pure-logic file for a DOM. `CLAUDE.md` says
+//     per-file, and the per-file pragma only works if the default stays `node`.
+//   · `esbuild.jsx` falling back to the classic runtime emits `React.createElement`
+//     into files that never import React, so **every** `.tsx` test fails to
+//     compile. That one is loud, and it is pinned because the setting spent months
+//     justified by a comment naming a file that had been deleted — the next reader
+//     was one grep away from removing it as dead.
+describe('vitest is configured so a component test can exist', () => {
+  // The declared config, imported rather than read as text: a regex over the source
+  // would pass on a commented-out setting.
+  async function config() {
+    const mod = (await import('../vitest.config')) as { default: Record<string, unknown> };
+    return mod.default as {
+      test: { include: string[]; environment: string };
+      esbuild: { jsx: string };
+    };
+  }
+
+  /** Glob → RegExp for the three constructs these patterns use: `**` (any depth),
+   *  `*` (one segment) and `{a,b}` (alternatives). Written out rather than pulled
+   *  from a dependency because there is no glob matcher in this tree — vitest's is
+   *  bundled — and six lines that can be read beat a transitive import that cannot. */
+  function globToRe(glob: string): RegExp {
+    let out = '';
+    for (let i = 0; i < glob.length; i++) {
+      const c = glob[i];
+      if (c === '*' && glob[i + 1] === '*') {
+        out += '.*';
+        i++;
+        if (glob[i + 1] === '/') i++;
+      } else if (c === '*') out += '[^/]*';
+      else if (c === '{') out += '(';
+      else if (c === '}') out += ')';
+      else if (c === ',') out += '|';
+      else if (c === '.') out += '\\.';
+      else if (c === '/') out += '/';
+      else out += c.replace(/[\\^$+?()[\]|]/g, '\\$&');
+    }
+    return new RegExp('^' + out + '$');
+  }
+
+  it('collects every .tsx test file that exists on disk', async () => {
+    // Derived from the directory, never from a list typed here: the whole failure
+    // this guards is a file nobody notices is uncollected, and a hand-kept list
+    // would be the same defect wearing a test's clothes.
+    const tsx = readdirSync(join(ROOT, 'tests'))
+      .filter((f) => f.endsWith('.test.tsx'))
+      .map((f) => `tests/${f}`);
+    // A pattern with no subject would make the loop below vacuously true — the
+    // iterate-over-whatever-you-found shape. So the count is asserted first.
+    expect(tsx.length, 'no .test.tsx files found, so the loop below proves nothing').toBeGreaterThan(0);
+
+    const patterns = (await config()).test.include.map(globToRe);
+    for (const file of tsx) {
+      expect(
+        patterns.some((re) => re.test(file)),
+        `${file} matches none of vitest's include patterns, so it is never collected`,
+      ).toBe(true);
+    }
+  });
+
+  it('and the matcher this test relies on can actually say no', () => {
+    // The glob translation above is code written in the same hour as the assertion
+    // that uses it, which `CLAUDE.md` names as the most likely thing in a change to
+    // be decoration. So it is exercised in both directions on the two patterns that
+    // matter here.
+    const wide = globToRe('tests/**/*.test.{ts,tsx}');
+    const narrow = globToRe('tests/**/*.test.ts');
+    expect(wide.test('tests/room-tools-findings.test.tsx')).toBe(true);
+    expect(wide.test('tests/units.test.ts')).toBe(true);
+    expect(narrow.test('tests/room-tools-findings.test.tsx')).toBe(false);
+    expect(narrow.test('tests/units.test.ts')).toBe(true);
+    expect(wide.test('tests/nested/deep.test.tsx')).toBe(true);
+    expect(wide.test('lib/units.ts')).toBe(false);
+    expect(wide.test('tests/helpers/color.ts')).toBe(false);
+  });
+
+  it('leaves the default environment as node, so jsdom stays per-file', async () => {
+    expect((await config()).test.environment).toBe('node');
+  });
+
+  it('names the automatic JSX runtime, which tsconfig deliberately does not', async () => {
+    expect((await config()).esbuild.jsx).toBe('automatic');
   });
 });

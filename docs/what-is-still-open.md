@@ -464,6 +464,23 @@ the user went and looked.
     on the branch. A permission question, and only the user can settle it — no session may
     grant it to another.
 
+12. **Room check speaks centimetres to a user who set metres, feet or inches.** Every
+    sentence `analyzeRoom` composes hard-codes `cm` — `Math.round(x * 100)` in fifteen
+    places in `lib/clearance.ts` — and `RoomTools` renders `issue.detail` verbatim
+    (`components/studio/RoomTools.tsx:968`), so nothing converts it. `useSettings.dimUnit`
+    defaults to **`'m'`** (`lib/store.ts:408`), which means the shipping default already
+    disagrees: the room's own fields say `1.9 m` and the finding beside them says
+    `190 cm`. Found by review while checking that a component test's derived `198 cm`
+    matched its source — it does, exactly, so this is not a test defect and not new.
+    **The decision is which way it should read**, and it is genuinely a decision rather
+    than a bug: cm is the natural unit for a clearance, one panel speaking two units is
+    not, and `boundsToUnit`'s scar (`CLAUDE.md` rule 2) is about a coarse unit collapsing
+    a range — a finding sentence has no chevrons, so it would not inherit that. Three
+    coherent answers: leave it and say so here; convert the numbers through `dimUnit`;
+    or convert only where the same panel shows a `dimUnit` value. Nobody should pick
+    silently, which is why it is in this section and not fixed.
+    **Committed:** nothing but this paragraph.
+
 ---
 
 ## C · Decided against — do not re-propose
@@ -570,56 +587,173 @@ the user went and looked.
 
 ---
 
-## E · The next task, scoped but NOT started: component tests under jsdom
+## E · Component tests under jsdom — STARTED. The harness is in; the bucket is not.
 
-This section exists because the scoping is worth more than it looks and lived nowhere
-durable. It was derived in a session that is about to be cleared, and a scratchpad note
-dies with its session id. **Nothing below is in a commit** — no dependency added, no
-config touched, no test written.
+**Steps 1–4 of the plan below are in a commit.** `@testing-library/react` is a
+devDependency, `include` is widened, the config comment is corrected, four assertions in
+`tests/toolchain.test.ts` pin the settings, and two component test files exist. Three
+`visual-check.md` items are deleted and a fourth is narrowed to the one question a test
+cannot answer. What remains is the rest of the bucket — the plan is kept verbatim below,
+because the reasoning in it survived contact.
 
-### Why this is the next thing
+### Why this was the next thing
 
 `docs/visual-check.md` says nothing in this app has been in a browser. The reason that
-list keeps growing is structural: **no test in this repo has ever mounted a component.**
-Derived, not remembered — `grep -rln "from '@/components" tests/` returns nothing. Every
-function in `lib/` is asserted; **nothing checks that a component calls it**, so a correct
-`lib/` answer computed and then dropped on the floor by its caller is invisible to all
-82 test files. That is exactly the shape of the `blockedBy` scar in `CLAUDE.md` — "a
+list keeps growing was structural: **no test in this repo had ever mounted a component.**
+Every function in `lib/` is asserted; **nothing checked that a component calls it**, so a
+correct `lib/` answer computed and then dropped on the floor by its caller was invisible
+to the whole suite. That is exactly the shape of the `blockedBy` scar in `CLAUDE.md` — "a
 finding the caller drops is a finding that does not exist" — and it went a whole commit
 unseen because only a human eye could have caught it.
 
-Of the 21 items in `visual-check.md`, roughly **10 need no browser at all**, only wiring:
-does the component render the sentence `lib/` already computes. 3 more are computed
-layout. The remaining 8 need a real browser and stay where they are.
+`visual-check.md` was 21 items and is **4** — see § H for where the other seventeen went;
+of this paragraph's own arithmetic, three went in `95b28fa`, the mount-height
+field in this pass, and the Library item is narrowed twice rather than deleted. Of the 17,
+roughly **5 are still wiring** — does the component render what `lib/` already computed —
+3 are computed layout, and the remaining 8 need a real browser and stay where they are.
 
-### The toolchain facts, already derived — do not re-derive
+*(That split was measured when the file held 17 and it did not survive contact. The user
+looked at all seventeen: **8 held, 5 failed, 2 could not be answered because the question
+itself was wrong, and 2 are still unchecked.** The failures land mostly in geometry the
+jsdom bucket could never have reached. The estimate is left as written because it is what
+the plan below was sized against; § H is what actually happened.)*
 
-- react / react-dom **19.2.8**, vitest **4.1.10**, jsdom **30.0.1**, vite 7.
-- `vitest.config.ts`: `environment: 'node'`, `include: ['tests/**/*.test.ts']`,
-  alias `@` to repo root, `esbuild: { jsx: 'automatic' }`.
-- **That `include` does not match `.test.tsx`**, and JSX will not parse inside a
-  `.test.ts`. So either widen it to `tests/**/*.test.{ts,tsx}` or write every component
-  test through `React.createElement`. Widening is the right call; the second is a
-  transcript of JSX rather than JSX.
-- `tests/toolchain.test.ts` does **not** pin `include`, `environment` or `esbuild` —
-  checked, not assumed. Worth pinning the way the ESLint >= 9 floor is pinned, since all
-  three fail in the direction that looks like success: a `.tsx` test that is simply never
-  collected reports as a green suite.
+**Deleting an item because a gate replaced it is the practice here**, not a shortcut past
+the "merging is not looking" rule: that rule is about a *fix* nobody saw, while these are
+questions a test can now answer in full. The mount-height field is the clearest case — its
+three states are three sentences, and each one is asserted. What a gate cannot replace is
+anything about pixels, and where a residue like that exists the item is narrowed instead
+(see the Library item, twice).
+
+### A whole PAGE mounts under jsdom, which is the finding that unlocks the rest
+
+Scoping assumed component-by-component mounting and listed which components carry no
+`@react-three`. That list is still right, but it is not the ceiling: **`app/room/[roomId]/plan/page.tsx`
+mounts** — the real page, its rails, its shell, its context menu and its own
+`{catalogOpen && <CatalogPanel/>}` gate — in **3.8 s**, needing four things:
+
+- `import 'fake-indexeddb/auto'` — the page loads the saved room on mount.
+- **`window.matchMedia` shimmed.** jsdom has none, and `lib/use-media-query.ts` calls it in
+  a layout effect, so every rail throws before anything renders. `matches: false` is the
+  desktop answer; a stacked-rail run would be a different test and would need a browser.
+- **`Element.prototype.scrollIntoView` shimmed.** jsdom implements no scrolling at all, and
+  `AddPiecesButton` calls it after opening. An absent method throws *inside the click
+  handler*, which reads as the trigger being broken.
+- **`act()` around anything that is not a React handler.** `openSceneMenu` dispatches a
+  window event, so its state update is outside React's dispatch and does not flush before
+  the assertion — the `.click()`-versus-`fireEvent` trap one layer out, failing identically
+  to the menu row not existing.
+
+What it does *not* reach: `app/room/[roomId]/plan/page.tsx` warms the 3D chunk in a
+`requestIdleCallback`, and jsdom has none, so it falls to a 1500 ms `setTimeout` that never
+fires in a fast test and whose `.catch` is empty. **Do not advance timers in a page test**
+or R3F arrives. `app/room/[roomId]/model/page.tsx` imports `components/three/Room`
+statically and cannot be mounted at all.
+
+**Why this matters for the bucket:** a test that re-implements a page's gate goes green on
+a page that dropped it. Mounting the page removes that whole class, so the remaining wiring
+items should be written against pages, not harnesses.
+
+### What landed, and what each one is worth
+
+- **`tests/mount-height-refusal.test.tsx`** — the mount-height field, which had three
+  states and no gate: a piece **taller than the room** (disabled, `aria-invalid`, "there is
+  no height it can hang at", and — the user's exact report — typing 120 writes **no**
+  position override rather than pinning it to 0); a number **outside 0…max**, told the range
+  while it is still being typed, with the bound derived from `MOUNT_PAD` rather than typed;
+  and a range **narrower than one step of the display unit**, which is said in words
+  instead of quoted as "0–0.0 ft" — that one in **feet**, where all fourteen of this repo's
+  earlier bound defects lived, with the fixture's band asserted so it cannot drift into a
+  neighbouring branch and pass for the wrong reason. Eight assertions, eight mutations,
+  eight reds.
+  One thing found in passing and left alone: **`outOfRange` is evaluated before `noRoom`**,
+  so a piece already parked above a sub-step maximum is told the range rather than told
+  there is no room to move it. Both messages are true; which one a crossed case should show
+  is a copy decision, and the first fixture written here tripped over it and read as the
+  `noRoom` branch being dead.
+- **`tests/library-click-through.test.tsx`** — the half of the Library item no copy test
+  could reach: pressing a signpost **opens** the panel. Mounts the real plan page and
+  presses the rail's `Add`, the panel's own `X`, and the context menu's *Add from library…*
+  row; also holds the panel shut before anything is pressed, so the rest cannot pass
+  against a panel nobody opened. **Eight mutations, eight reds**, including the page's gate
+  deleted in *both* directions (never render / always render), the trigger made a no-op,
+  the heading renamed, the X disarmed, the menu row disarmed, and `aria-expanded` pinned.
+  It also settles a wording defect: only **two** of the three signposts are pressable — the
+  sun note is a `<p>` — so `visual-check.md` no longer says "press each of the three".
+- **`tests/room-tools-findings.test.tsx`** — mounts `RoomTools` and asserts the room panel
+  renders the finding `analyzeRoom` computed: the chip's count with the panel shut, the
+  sentence itself once it is open, the *opposite* sentence for a piece that can be shrunk,
+  that the two are not the same sentence and are not swapped, and that something which
+  HANGS is told it cannot hang rather than that it cannot stand. Six assertions, each
+  watched failing by mutating `lib/clearance.ts` or `RoomTools.tsx` — never a threshold in
+  the test. Removing the finding entirely fails all six.
+- **`tests/studio-copy.test.tsx`** — the two pure-copy items. The Library panel's heading,
+  all three strings that name it, the help card's group heading naming the two lists rather
+  than a side, the absence of any tooltip offering the deleted describe-a-piece feature, and
+  the piece list pointing at `Add` by name rather than by direction. Eight assertions, each
+  watched failing by renaming the thing it guards.
+  **The deleted-feature sweep is derived from disk**, over every `.tsx` under `app/` and
+  `components/` — 82 files — with the count asserted before the loop. Its first version
+  named seven studio files by hand, which is the same defect the `include` gate below
+  exists to prevent: a panel added or renamed later is simply not swept and the sweep
+  stays green. It also missed `RoomTools.tsx`, `PlanView.tsx` and all of `app/`. Caught by
+  reviewing this PR's own diff, and both halves were watched failing — a forbidden string
+  planted in `RoomTools.tsx` (which the hand-kept list did not cover) goes red, and a walk
+  that returns nothing trips the count rather than passing vacuously.
+- **The `include` pin is the one that matters most**, and it is the reason step 2 grew a
+  test it was only asked to "consider". Narrowing `include` back to `tests/**/*.test.ts`
+  takes the run from 16 tests to 13 and **reports green**: the `.tsx` file is simply never
+  collected. No error, no skip, no line of output. The toolchain gate catches it by
+  deriving the `.tsx` files from disk and checking each against the declared patterns —
+  and it asserts the count first, because a pattern with no subject would make the loop
+  vacuously true.
+
+### Two things the spike found that the scoping had wrong
+
+1. **`fireEvent`, not the DOM's own `.click()`.** React 19 batches, and a raw dispatch runs
+   outside `act()`, so the panel was still shut when the assertion looked for its content.
+   It fails identically to the sentence not being rendered at all, which is the trap: the
+   first reading of that red was "the component drops the finding".
+2. **`StudioHelp` renders two different cards and picks by route** — the full one on
+   `/model`, a shorter one everywhere else. Asserting against the wrong one reads as the
+   copy being missing rather than as being on the other tab. See G.3.
+
+### The toolchain facts — as of `95b28fa`, which is after the harness landed
+
+The first four bullets here read as an open question until a review of this PR's own diff
+caught them: they were the **scoping's** facts, written before the work, left in present
+tense under a heading telling the next reader not to re-derive them. Every one of them was
+falsified by the commit that sits in the same PR. Corrected in place rather than deleted,
+because the shape is worth keeping — a hand-off note is a claim, and the most misleading
+kind is the one a heading vouches for.
+
+- react / react-dom **19.2.8**, vitest **4.1.10**, jsdom **30.0.1**, vite 7. Unchanged.
+- `vitest.config.ts`: `environment: 'node'`, `include: ['tests/**/*.test.{ts,tsx}']`,
+  alias `@` to repo root, `esbuild: { jsx: 'automatic' }`. The `include` was
+  `tests/**/*.test.ts` before this PR widened it.
+- **The old `include` did not match `.test.tsx`**, and JSX will not parse inside a
+  `.test.ts`. The choice was widening it or writing every component test through
+  `React.createElement`; widening was taken, because the second is a transcript of JSX
+  rather than JSX.
+- `tests/toolchain.test.ts` **now pins** `include`, `environment` and `esbuild`, the way
+  the ESLint >= 9 floor is pinned, because all three fail in the direction that looks like
+  success: a `.tsx` test that is simply never collected reports as a green suite. Measured
+  — narrowing `include` back takes the run from 16 tests to 13 with no error and no skip.
 - jsdom is opted into **per file** with a `// @vitest-environment jsdom` pragma. Keep it
   that way. Do not switch the suite over — `CLAUDE.md` says so and the reason is that the
   pure-logic files have no business paying for a DOM.
 
-### Two findings from the scoping, both of which should be fixed as part of the work
+### Two findings from the scoping. The first is FIXED; the second still holds.
 
-1. **`vitest.config.ts`'s comment is stale, and it justifies a live setting.** It says a
-   test that renders a component — naming `tests/sun-controls.test.ts` — imports a `.tsx`.
-   **That file does not exist**; it went with the sun-mood collapse. So `esbuild: { jsx:
-   'automatic' }` is currently explained by a file that is gone, and in fact **no test
-   imports a `.tsx` at all.** Do **not** delete the setting on that reading: it becomes
-   load-bearing the moment the first component test lands. Correct the comment to name the
-   real reason. This is the `CLAUDE.md` grep-refutation trap pointing the other way — prose
-   that survived its subject, and would have talked the next reader into deleting something
-   real.
+1. **`vitest.config.ts`'s comment was stale, and it justified a live setting** — FIXED in
+   `95b28fa`. It said a test that renders a component — naming `tests/sun-controls.test.ts`
+   — imports a `.tsx`. That file did not exist; it went with the sun-mood collapse. So
+   `esbuild: { jsx: 'automatic' }` was explained by a file that was gone, and at that point
+   **no test imported a `.tsx` at all** — both true then, neither true now. The setting was
+   deliberately *not* deleted on that reading, because it became load-bearing the moment the
+   first component test landed, which it has. This is the `CLAUDE.md` grep-refutation trap
+   pointing the other way: prose that survived its subject, and would have talked the next
+   reader into deleting something real.
 2. **`tests/vanishing-point.test.ts` contains a `render(` that has nothing to do with
    React** — it is a local image-drawing helper. It is why a naive `grep "render("` over
    `tests/` looks like component coverage already exists. It fooled one pass of this
@@ -827,9 +961,454 @@ Deliberately not tuned. Whoever picks it up should also read A.6, which reached 
 compatible conclusion from a different fixture (4 shapes, 8 seeds, sizes unrecorded) and
 recommended moving the U test to the T.
 
+### 3. The help card has two versions and only one of them explains the two lists
+
+`StudioHelp` reads `usePathname()` and branches on `pathname.endsWith('/model')`. The
+full card — including the **The two lists** group that tells the user Catalog is in the
+left rail and Library is on the right of the canvas — renders on the 3D tab only. On the
+2D Plan tab a shorter card renders and that group is absent.
+
+Found by a component test asserting against the wrong one, which is the reason it is
+written down at all: the red looked exactly like the copy having been deleted.
+
+**The question, and it is the user's:** the Library trigger is reachable from both tabs,
+so a person who opens Help on the plan is told about pieces, panning and keys but never
+what the two lists are. That is either a deliberately shorter card or the same
+signpost gap `visual-check.md`'s Library item was about, one tab over. Not touched here,
+because adding a group to a help card is a copy decision and the item it would serve was
+about copy pointing at things that are not there.
+
+**Committed:** nothing but this paragraph and the comment in
+`tests/studio-copy.test.tsx` naming it.
+
 ---
 
-## Nothing in this document has been in a browser
+## H · The user looked at the real thing. Everything here comes from that, and none of it is built.
 
-Neither has anything in `visual-check.md`. The desktop half of both is reachable with
-`pnpm build && pnpm start` and no login.
+Seventeen items were put to the user as a numbered list. They have answered **1–15** and
+hold 16 and 17, and the split is:
+
+| outcome | count | items |
+|---|---|---|
+| held — looked at, nothing wrong | **8** | 1–4 (the `aaf2888a` shell four), 6 (a merged set travels as one), 11 (a resized piece keeps its size), 13 (Lock), 14 (the piece name at the narrowest rail) |
+| **failed** | **5** | 5 → § 2 + § 3 *(measured)*, 10 → § 4 *(measured)*, 12 → § 5 *(measured)*, 9 → § 8 *(no cause yet)*, 15 → § 6 *(research)* |
+| unanswerable — the question itself was wrong | **2** | 7, 8 — corrected in `visual-check.md` and still open. Item 8 threw off two findings anyway: § 8 and § 9 |
+| not yet checked | **2** | 16, 17 |
+
+So "failed" is not one kind of thing, and the fourth column is the part that matters: **three
+have a mechanism and a number** (§ 2 – § 5), **one is an observation with no cause yet**
+(§ 8), and **one is a research task** (§ 6). Everything below is one of those three, plus two
+changes the user asked for outright (§ 1, § 10) and one more measured defect that came out of
+a question they could not answer (§ 9).
+
+**Two of the questions put to them were wrong**, which is worth more than the answers: one
+named a **bench**, which is not in the catalog at all — `grep -in bench` over `lib/`,
+`components/` and `app/` returns two comments and no part — and one told them to press **E**
+and **R** to rotate and scale, where **E orbits the camera** and the gizmo modes are W / R /
+S. The bench item was answerable anyway because they substituted a couch. The keys item was
+not, so that gesture is still unlooked-at and `visual-check.md` now carries the correction
+beside it. A hand-off list is a claim, including when this session wrote it.
+
+### 1. The Inspector's "Where it sits" row is three buttons wide and two of them are one button — FIXED
+
+The user's words, having looked at the real thing: *the section seems redundant now and it
+takes too much horizontal space.* They offered three ways out — remove it, merge Floor and
+Surface "since they're basically the same", or icons only with no text — and asked for one
+of them to happen.
+
+**They are right about the merge, and it is provable rather than a matter of taste.**
+`components/studio/Inspector.tsx`:
+
+```
+groundToFloor():  setPosition([x, 0, z]);          clearParent()
+snapToSurface():  support = findSupportDetailed(...)
+                  setPosition([x, support?.y ?? 0, z]);  support ? setParent : clearParent
+```
+
+With nothing under the piece, `snapToSurface` **is** `groundToFloor`, line for line. They
+differ in exactly one case: something IS below, and you want the piece on the floor rather
+than on it. That case is real — a vase off a table without moving it in x/z, which no drag
+can do, since dragging it off changes where it is — but it is rare, and it is the only
+thing the third button buys.
+
+**So the fix is to derive the button rather than delete the capability:** show **Floor**
+only when `findSupportDetailed` finds a support, which is precisely when it is not a
+duplicate of Surface, and size the grid to however many buttons there are — two, at 50%
+each, in the ordinary case. The gate must call `findSupportDetailed` with the *same*
+arguments `snapToSurface` uses, or the button can appear when the action would do nothing.
+
+Then drop the `Where it sits` label with it. `Section` is a plain label, not a disclosure,
+so nothing needs a heading to be clickable, and each button already carries a title that
+says more than the heading does. Keep the `.section .section--flush` wrapper for the
+spacing rhythm, and keep `rail-triple` — `app/globals.css:533` reflows it to `1fr 1fr`
+on a narrow rail, which is a second reason not to hand-roll the columns.
+
+**Not icons-only.** Three icon+word buttons at 33% each is what does not fit; two at 50%
+does. Stripping the words to fit a third button that should not be there solves the
+symptom and keeps the cause — and an icon-only control then owes an accessible name on
+focus, which is a new obligation taken on for nothing.
+
+**Nothing is committed.** `grep "Where it sits"` finds one live site
+(`Inspector.tsx:216`) and no test, so this is a contained change; the two comments above
+that JSX explain why wall-mounted parts get the mount-height row instead, and that half
+stays exactly as it is.
+
+### The measurements below
+
+Taken at `4b7fe7f` with a throwaway vitest probe, since deleted — every number is
+reproducible by calling the functions named, and each one says which function produced it.
+Nothing here needed a browser; the user's report is what said where to look.
+
+### 2. A wall-hugging piece is clamped by its UNROTATED extent and then rotated — 200 mm into the plaster — FIXED
+
+The user, having looked: a bed dropped at a wall *"clips through the wall."* It does, and
+only on two of the four walls.
+
+`placeNewPart` (`lib/scene-spec.ts`), 6 × 4 rect, bed 1600 × 2000, dropped at each wall:
+
+| drop | committed | yaw | x or z span | wall at | through the plaster |
+|---|---|---|---|---|---|
+| west | `x = −2.200` | **+90°** | `[−3.200, −1.200]` | `−3.000` | **200 mm** |
+| east | `x = +2.200` | **−90°** | `[+1.200, +3.200]` | `+3.000` | **200 mm** |
+| north | `z = −1.000` | 0° | `[−2.000, 0.000]` | `−2.000` | none |
+| south | `z = +1.000` | 180° | `[0.000, +2.000]` | `+2.000` | none |
+
+`intoRoom` insets the drop point by `dimMM[0]/2000` and `dimMM[1]/2000` — the half-extents
+**before rotation** — and the yaw is chosen afterwards, by `snapToWall`, on the line that
+returns. A bed inset by its 800 mm half-width and then turned 90° needs 1000 mm of inset,
+so it keeps the 200 mm difference and spends it inside the wall.
+
+Why it survived the fix that introduced it: on the north and south walls the yaw is 0 or
+180°, where the unrotated extents **are** the rotated ones. That is the symmetric case, and
+CLAUDE.md's own rule says a sign or a handedness is invisible in it. It hits every
+non-square piece with a wall affinity — bed, sofa, wardrobe, desk, bookshelf — on an east or
+west wall.
+
+`resolvePlacement` one file over already had the right arithmetic:
+`extX = halfW·|cos| + halfD·|sin|`. So the fix was not new maths.
+
+**What landed.** `aabbExtents` — which already existed, in `lib/item-snap.ts`, of all
+places — moved to `lib/geometry.ts` and is now the **one** home for this expression:
+`drag-resolve.ts` had written the same four lines out inline and `placeNewPart` had no
+rotation term at all, so a primitive with three consumers was living in the magnetism
+module and being re-derived by two of them. (`layout-score.ts` keeps a fourth copy on
+purpose — typed arrays, innermost solver loop — and says so.) `intoRoom` takes a `rot` and
+insets by that, and `placeNewPart` resolves the **yaw before the clamp**, which needs two
+passes: one rotation-blind, whose only job is to bring a drop released outside the room to
+somewhere inside it so `snapToWall` is asked about a wall of this room, and then the real
+clamp at the angle the piece is actually getting.
+
+**Three assertions, in `tests/wall-parts.test.ts`, and the fixture decision is the whole
+point:** a 1600 × 2000 **double**, at all four walls. The three tests already there use a
+900 × 2000 single and assert only `rot`, so none of them could see this — and a piece whose
+plan is square cannot express it at all. All three were watched failing, and the
+containment one reports the west wall with a difference of `0.19999999999999996` m.
+
+One thing that came out of writing them and is worth keeping: the polygon test on an
+**exactly flush** piece is a coin toss. A bed clamped flush to the north wall of a 6 × 4
+read *inside*; the mirror placement at the south wall read *outside*. Both flush, opposite
+answers, decided by floating-point noise in how each corner was reached. That is what
+`resolvePlacement`'s `slightlyShrunk` (10 mm off each plan axis) is for, and the test uses
+the same box for the same reason rather than inventing a tolerance.
+
+**Six mutations, all red:** the unrotated extents restored; the yaw resolved after the
+clamp again; `aabbExtents` with its axes swapped; `aabbExtents` with no rotation term;
+`intoRoom` clamping every drop to the middle of the room; and nothing ever turned. A
+seventh was written and came back GREEN — `const wantsWall = false && affinity === 'must-wall' || …`
+— which was the **mutation's** fault and not the test's: `&&` binds tighter than `||`, so it
+still evaluated `affinity === 'prefers-wall'` and a bed was still turned. A mutation that
+does not mutate reads exactly like an assertion that cannot fail, and the only thing that
+tells them apart is checking what the mutant actually says.
+
+### 3. Clicking a Library item drops every piece on the same spot, facing the same way — the false comment is fixed, the behaviour is a decision
+
+Same probe, three beds added the way the **click** path adds them — `spawn()` calls
+`placeNewPart` with no `at`, so `ax = az = 0`:
+
+    bed #1: pos=[0.000, 0.000, 0.000] rot=0.0deg
+    bed #2: pos=[0.000, 0.000, 0.000] rot=0.0deg
+    bed #3: pos=[0.000, 0.000, 0.000] rot=0.0deg
+
+Identical, all three. So the user's *"they indeed face the same way on drop"* is the **click**
+path, and the `4cec92b` fix — take the yaw from the nearest wall — can only work where the
+pointer named a spot. From the room centre the nearest wall is the same wall every time.
+
+The second half is a doc that is simply false. `spawnMany`'s comment says:
+
+> Placed one after another rather than in parallel: `placeNewPart` reads the parts already
+> in the room, so each piece avoids the one before it and four chairs land as four chairs
+> instead of one chair four times.
+
+`placeNewPart` reads `existing` in exactly one place — `findSupportUnder`, and only when
+`isTabletopProne(cat)`. A chair is not tabletop-prone. **Four chairs land as one chair four
+times**, and the comment beside the loop said the opposite. Two sources of truth, and the
+prose is the one the next reader believes.
+
+**The comment is fixed** — it now states what the code does and points here. The
+*behaviour* is left alone deliberately, because "adding several should spread them out" is a
+product decision with at least three defensible answers (spread along the nearest wall, fan
+out from the drop point, or leave them stacked and let Shuffle sort it), and picking one
+quietly inside a defect fix is how the last one got here. Same for the yaw: from the room
+centre there is no wall to take a heading from, and inventing one is a guess in an answer's
+clothes.
+
+### 4. A drop into an L / T / U's missing quadrant lands outside the house — and it is written down as current behaviour
+
+The user: a TV spawned outside the wall in an L, a couch did the same in a T, and *"rug sits
+outside of the wall, seems it has no constraints in both plan and model mode."*
+
+Probe, dropping at `(2.5, 1.5)` in an L 6 × 4 and `(2.5, 1.8)` in a T 6 × 4:
+
+| piece | centre on real floor | corners outside |
+|---|---|---|
+| TV (L) | yes — the wall snap saved it | **2 of 4** |
+| sofa (L) | **no** | **4 of 4** |
+| rug (L) | **no** | **4 of 4** |
+| sofa (T) | **no** | **4 of 4** |
+
+This is not a regression. `intoRoom`'s own doc comment states it, names `clampIntoFootprint`
+as the function that would answer it, and gives the two reasons it is not called: that
+function clamps a **centre**, so a point 5 cm inside the leg of a U satisfies it with a 2 m
+sofa mostly through the wall; and wiring it in *"moves every drop into an L / T / U, which
+wants its own diff."* `tests/wall-parts.test.ts` asserts the notch drop **by name**. So the
+deferred diff is the fix, and the user has now hit it twice.
+
+Doing it properly needs the pair, because either alone is a known-insufficient half:
+`clampIntoFootprint` for the centre **and** `contain` from `lib/layout-settle.ts` for the
+extent — which is where every solved placement already ends, so the add path is the one
+path that skips it.
+
+The rug is the same defect and **not** the documented exemption. `lib/drag-resolve.ts` holds
+a *dragged* rug's centre to `pointInFootprint` — that narrow fix is already in, and the
+overhang past the skirting is deliberate — while the *add* path holds it to nothing. So "the
+rug has no constraints" is true of adding one and false of dragging one, which is the same
+two-consumers shape as everything else in this section.
+
+### 5. The 3D tab computes the refusal the plan paints red, and clears it on the same tick — FIXED
+
+The user: a couch *"is cutting through the walls instead of being constrained."*
+
+`turnInPlace`, sofa 4000 × 900 turned 90° in a 6 × **3** room:
+
+    pos.z = 0.500, spans z = [−1.500, 2.500], room z = [−1.5, 1.5]
+    valid = false, overhang = 1.000 m
+
+The overhang is deliberate and `PlanView` says so in its own comment — *"the turn is TAKEN
+either way — refusing an invalid frame would make a piece in a tight spot unturnable"* — and
+then it sets `blockedIds([part.id])`, so the plan outlines the piece in red and holds it
+there.
+
+`Draggable.commit()` reaches the identical placement through its invalid-drop fallback and
+then ends with `setDragInvalid(false)` and `setLive(null)`, **unconditionally**. The
+refusal is computed and discarded in the same function. One rule, two consumers, and 3D is
+the one that drops it — the exact scar `blockedBy` was added to close, one gesture over.
+
+A second thing that branch gets wrong, in its own words: it claims the re-resolve *"comes
+back legal by construction from both branches."* True for a **translate**, where `back` is a
+spot this piece already stood in at this angle and size. False for a **rotate or a scale**,
+where `back` is where the piece is standing and the only thing that changed is the extent
+being tested against the walls. The 1.000 m above is that case, committed silently.
+
+`docs/visual-check.md` had this asymmetry written down and called it *"a separate decision,
+not a defect in this fix."* The user has now made the decision.
+
+**What landed.** `lib/refusal.ts` — `refusalAfterGesture()` plus `REFUSAL_HOLD_MS`, and both
+surfaces read it. It is a module rather than four lines in `commit()` for two reasons, and
+the second is the one that matters: the rule was already written out in the plan and in 3D's
+live-drag path, so a third copy was the wrong direction; and a decision living inside an R3F
+component **cannot be tested at all** without a WebGL context, which is exactly why
+`lib/drag-click.ts` is not in `store.ts`. `Draggable.commit()` now asks that function and,
+when the answer is not null, holds the live channel — the same channel every refused piece
+already reads through its own per-part selector, so the whole set goes red exactly as it does
+mid-drag — then clears on one timer. `PlanView`'s turn asks the same function, and its bare
+`500` is now the shared constant.
+
+**Eight assertions, nine mutations, all red:** never a refusal; always a refusal; the convoy
+ignored; the dragged piece ignored; the member name kept when the dragged piece is itself the
+problem; the dragged piece dropped from the outline set; the dedup removed; the hold cut to
+one frame; and `turnInPlace` refusing the turn instead of taking it. The measurement is
+pinned too — a 4 m sofa turned 90° in a 6 × 3 room overhangs `1.0` m to six places, with a
+2.4 m sofa as the negative control, so a change that quietly starts clamping harder shows up
+here as a failing number rather than as a piece that cannot be turned.
+
+**What is NOT verified:** that the red actually appears on screen for those 500 ms. The
+decision is tested; the wiring from it to a tinted mesh is three lines in an R3F component
+and no test in this repo can see them. It is a new item in `visual-check.md`.
+
+Two things found while fixing it, both stale prose that had cost something already:
+`Draggable.tsx`'s own header said the gizmo was *"W=move E=rotate R=scale"* — wrong twice, and
+it is where this session's bad hand-off question came from — and `Design.md` gave the snap
+angles as `fine` 2.5° / `coarse` 7.5° where `snapSteps` has always returned **15°** and
+**45°**. Both corrected, and `Design.md` now names the real keys instead of "Maya-style
+modes", since the vagueness is what let the wrong version stand beside it.
+
+### 6. Research: Suggest, from the ground up — the user's explicit ask
+
+Four observations, all the user's, all landing in the same place:
+
+- a merged dining set solved with **one chair hanging in the air**, no floor under it;
+- a chair put on a couch, then Suggest, ends **through a wall**;
+- a couch a few degrees off square is turned to face **away from the TV** it should face;
+- and generally, *"suggest doesn't really seem to know what to do with groups and their
+  rotations."*
+
+Their instruction: *"we really need to work on that research and look at the algorithm from
+ground up."* This is now the largest open thing in the repo, and it **subsumes** § A.2
+(nothing prices variety), § A.3, § A.7 (`snapYaws` leaves 197 of 240 solves crooked) and
+§ G.2 (the anchor pass helps two presets and hurts one). Those are four symptoms of one
+design that was never designed.
+
+What § A already settles, so the research does not re-derive it: the cost terms exist, two
+consumers read them, and `tests/layout-conformance.test.ts` holds those consumers to each
+other; `RULE_HANDLING` is production knowledge, not a fixture; and the solver already ends
+on `layout-settle`. What is **missing** is three things, and each maps to one observation
+above:
+
+1. **Nothing prices support.** A chair needs floor, or a seat, under it. The solver scores
+   an `(x, z, yaw)` and `findSupportDetailed` is not in that loop — hence the chair in the
+   air, which is not a near-miss but a placement the cost function cannot see.
+2. **Nothing prices a relation between two pieces** beyond wall affinity. Couch↔TV,
+   table↔chairs, bed↔nightstand. `lib/layout-rules.ts` has `zone`s that describe what a
+   piece needs *around* itself; there is no term for what it needs to *face*.
+3. **A group is not a unit.** N members are placed as N pieces, so a merged set can be
+   solved into a shape it was merged specifically to prevent.
+
+### 7. Research: collision, properly — and the user is open to replacing the engine
+
+Their words, kept because the scope is theirs: *"Do a detailed search to the fundamental
+workings of collision generation, simple versus complex collision, and custom collision
+hulls for both static meshes and Blueprints, check unreal engine, unity, blender and similar
+resources for a better understanding. I'm open to overhauling the current logic/engine if
+need be. If we need to build a proper engine and structured algorithm too, that's fine."*
+
+The baseline to research against, so nobody has to reconstruct it: every piece is **one box**
+in its own frame (`obbFromPart`) or **one ellipse** (`footFromPart`, when `part.circle`),
+tested by separating axes (`obbOverlap`) with a −10 mm pad, plus a vertical-extent test in
+`collidesAt` that permits stacking. There is **no per-shape hull anywhere**: a sofa's L, a
+dining table's legs, a curtain's drape and a plant's canopy are all the same rectangle. That
+is why a chair only tucks under a table by the width of the pad, and why the solver's overlap
+term is coarser than what the user can see on screen.
+
+Two properties of the current design are worth carrying into any replacement, because both
+were bought with defects: the footprint is **derived from `dimMM`**, so it recalibrates on a
+resize for free, and a round piece is tested as an **ellipse rather than its box** — which
+`lib/plan-hit.ts` also does for picking, so the thing you can click and the thing that
+collides agree.
+
+### 8. Two reports that need a real repro before they can be fixed
+
+**A group drag bounded by the dragged piece's rules rather than the set's.** The user:
+dragging a merged bed with a nightstand on each side is blocked toward the side the
+nightstands are on.
+
+The obvious mechanism is **refuted, by measurement**. `travelWorld` shifts the travelling
+company by the **raw pointer delta** while `resolvePlacement` accepts a snapped one, which
+looked like it would let the lead collide with its own company. Measured on bed + two flush
+nightstands, asking for +137 mm:
+
+    snap=off     rawDx=137.0mm  acceptedDx=137.0mm  skew=0.0mm  valid=true
+    snap=fine    rawDx=137.0mm  acceptedDx=137.0mm  skew=0.0mm  valid=true
+    snap=coarse  rawDx=137.0mm  acceptedDx=137.0mm  skew=0.0mm  valid=true
+
+Zero skew at all three settings, because `snapToNeighbors` runs **after** the grid snap and
+pulls the lead flush against the very company that travelled with it. Worth keeping on its
+own account: **a flush travelling neighbour silently defeats the grid snap**, since the
+magnet wins and lands the lead exactly on the raw delta. Coarse snap is a 50 mm lattice and
+this drag ignored it.
+
+So the block is something else. The likeliest remaining candidate is the containment clamp
+bounding the **lead** by its own extent while a **member** is the piece that runs out of
+room — in which case the set stops where the *nightstand* meets the wall and the piece named
+is not the piece under the hand, which would match the report exactly. Not settled. Needs a
+real drag.
+
+**Clicking a merged set drills in from a nightstand but never from the bed.** And, second
+half of the same report, after clicking away a nightstand click acts on that piece alone
+where it should select the whole set again. `selectionForPick` is **symmetric** — it has no
+notion of which piece — so the defect is not in that function; it is in what `current` holds
+when the click arrives. Needs a real click sequence, on both tabs, with the store read
+between clicks.
+
+Both are DOM-reachable on the **2D plan**, which is SVG with real elements and is the cheap
+way in. The 3D tab needs world→screen mapping to place a synthetic pointer.
+
+### 9. Room previews are all drawn as rectangles — FIXED
+
+The user: *"Room previews should be room shape accurate, they all look like rectangular
+rooms atm."*
+
+`PlanThumb` drew `<rect>` from `room.width` and `room.depth` and **never read `layoutId`
+or `footprint` at all** — so an L, a T and a U were the same picture, and furniture standing
+in the quadrant an L cuts away looked like it was on the floor. It draws the polygon now,
+from `room.footprint ?? footprintForLayout(room.layoutId, W, D)`, and its `aria-label` names
+the shape when there is one to name.
+
+**The order of that fallback is the fix, not a detail.** `footprint` is only written after a
+wall has been dragged, so reading only `footprint` would have looked right in a diff and
+changed nothing for almost every room in existence. `layoutId` is always there.
+
+Two more things came out of it. The fit now reads the polygon's **bounds** rather than
+`±W / 2`, which is the same correction `resolvePlacement` carries: after independent wall
+moves a footprint can be off-centre, and the old origin put such a room's far wall outside
+the 240 × 150 picture. And `MiniPlan` in `RoomTools.tsx` — the other plan thumbnail in this
+app — was **already** drawing the polygon against the bounds, correctly. Two previews of the
+same thing, one right and one wrong, which is this repo's most-repeated shape; the fixed one
+now matches the one that was never broken.
+
+**Five assertions, seven mutations, all red** — and two of those mutations survived the first
+attempt, both because of the FIXTURE rather than the assertion:
+
+- the T-room test stored `footprintForLayout('t', …)` on a room whose `layoutId` was
+  already `'t'`, so honouring the override and ignoring it gave the same eight vertices.
+  Deleting the override entirely was green. It stores a five-vertex polygon now.
+- the off-centre test shifted x only and left z symmetric at ±2, so reverting the z mapping
+  to `z + D / 2` was green. It is off-centre on both axes now.
+
+Both are the failure this repo already names — *"every test for that function used a
+rectangle, where the vertex average IS the true centroid"* — reproduced in a file written
+the same hour as the fix. Which is the argument for mutating, in one paragraph: the
+assertions were real, and the fixtures could not express the defect.
+
+**NOT verified:** that the shape reads correctly at 240 × 150 with furniture drawn over it.
+An item in `visual-check.md`.
+
+### 10. Undo / redo should cover selection — a decision, not a defect
+
+The user: *"undo and redo should track selections too, so that you can undo a selection or
+redo a selection."* Today `lib/history.ts` tracks the transform and scene maps; selection
+lives in `useStudio.selection` and is not on the undo stack.
+
+Flagging one consequence before building it, because it is the reason most tools do **not**
+do this: if every click is an undo step, walking back to the move you actually want to undo
+costs one press per click you made on the way. The usual answer is a **separate** history for
+selection (a back/forward through selections, not entries in the main stack), or coalescing
+runs of selection changes into one entry. Which of those the user wants is their call.
+
+---
+
+## What in this document has been in a browser, and what has not
+
+The heading here used to read *"nothing in this document has been in a browser"*. That is
+now false in both directions and the distinction is the useful part.
+
+**Seen by the user, in a browser, on their own machine:** everything in § H. Fifteen of the
+seventeen items put to them, which is where every defect in § 2 – § 5 and § 9 came from.
+Their report is the *observation*; the mechanism and every number beside it is arithmetic
+this session did afterwards, from the functions named.
+
+**Not seen by anybody:** everything in § A – § G, § H.1's replacement row, and the two
+repros in § H.8. The four items still live in `visual-check.md`.
+
+That boundary is the reason § H.8 says "needs a real repro" rather than proposing a fix: two
+of the user's reports have a plausible mechanism and no measurement, and one of the two
+plausible mechanisms this session did measure came back **refuted**.
+
+The desktop half of both is reachable with `pnpm build && pnpm start` and no login. What
+worked, so nobody re-derives it: **Playwright with Chromium, installed outside the repo**
+so `package.json` is untouched, driving `next start` on a spare port. Headless needs
+`--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader` or the WebGL room is
+a blank rectangle; with them the 3D scene renders and screenshots. Onboarding is
+`/onboarding/layout-pick` → **Start decorating**, which creates a room and lands on
+`/room/<id>/model` with a 6.0 × 4.0 living room of twelve pieces, and the console is
+clean. One snag: `page.screenshot()` can exceed a 30 s timeout while the canvas is live —
+raise the timeout rather than reading it as a hang.

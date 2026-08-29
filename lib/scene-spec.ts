@@ -39,6 +39,7 @@ import {
   type Foot,
   type Poly,
 } from './geometry';
+import { aabbExtents } from './geometry';
 import { backWall, baySides, roomBays, splitBay, type Bay } from './room-bays';
 import {
   accessZones,
@@ -2312,11 +2313,24 @@ export function placeNewPart(
    *
    *  The support probe below reads the CLAMPED point either way: a piece let go
    *  outside the room was asking what it could stand on out there. */
-  function intoRoom(x: number, z: number): [number, number] {
+  function intoRoom(x: number, z: number, rot: number): [number, number] {
     if (!room.footprint) return [x, z];
     const b = footprintBounds(room.footprint);
-    const halfW = dimMM[0] / 2000;
-    const halfD = dimMM[1] / 2000;
+    // The extent the piece will have AT THE ANGLE IT IS ABOUT TO BE GIVEN, which is
+    // why `rot` is a parameter and why the caller below resolves the yaw before it
+    // calls this. It used to read `dimMM[0] / 2000` and `dimMM[1] / 2000` — the half-
+    // extents before rotation — while the yaw was chosen afterwards, on the line that
+    // returns. A 1600 × 2000 bed was therefore inset by its 800 mm half-width, then
+    // turned 90° to face its wall, where it needs 1000, and kept the 200 mm difference
+    // inside the plaster: every bed, sofa, wardrobe and bookshelf added at an east or
+    // west wall, in every room.
+    //
+    // Invisible at the north and south walls, where the yaw is 0 or 180° and the
+    // unrotated extents ARE the rotated ones — so the three tests written for the
+    // heading fix all passed, and so did the two walls anybody would think to check
+    // first. `aabbExtents` is the one place this arithmetic lives; `lib/drag-resolve.ts`
+    // had its own copy of the same four lines and now reads this one too.
+    const { ex: halfW, ez: halfD } = aabbExtents(rot, dimMM);
     // A piece wider than the room cannot be inset from both sides — centre it,
     // rather than letting the min beat the max and pin it against one wall. It
     // keeps its real size and `lib/clearance.ts` reports that it does not fit;
@@ -2342,7 +2356,9 @@ export function placeNewPart(
     const b = footprintBounds(room.footprint);
     const mx = (b.minX + b.maxX) / 2;
     const mz = (b.minZ + b.maxZ) / 2;
-    return pointInFootprint(mx, mz, room.footprint) ? [mx, mz] : intoRoom(ax, az);
+    // `rot: 0` — a ceiling piece is returned with `rot: 0` by the branch that calls
+    // this, so 0 is the angle it will actually have rather than a stand-in.
+    return pointInFootprint(mx, mz, room.footprint) ? [mx, mz] : intoRoom(ax, az, 0);
   }
   if (wallMounted) {
     const h = dimMM[2] / 1000;
@@ -2367,10 +2383,6 @@ export function placeNewPart(
     const [cx, cz] = ceilingSpot();
     return { pos: [cx, y, cz], rot: 0, wallMounted };
   }
-  // Only small "goes on a table" items seek a surface; everything else floors.
-  const [fx, fz] = intoRoom(ax, az);
-  const support = isTabletopProne(cat) ? findSupportUnder(existing, '__new__', fx, fz, dimMM) : null;
-  const y = support !== null && support > 0.3 ? support : 0;
   // …facing the wall it belongs against, which used to be a flat `rot: 0` for every
   // floor-standing piece there is. Add three beds to three different walls and all
   // three point the same way — headboards north, two of them into open floor — which
@@ -2388,21 +2400,43 @@ export function placeNewPart(
   // press a button to get an orientation the app already knew.
   //
   // A DEFAULT, not a rule, in the same sense `ceilingSpot` above means it. Only the
-  // YAW is taken from the wall; `fx` / `fz` stay exactly where the drop landed,
-  // because being placed where you aimed is a promise and facing north is not. That
-  // is also why this does not make a floor piece ride its wall: `lib/drag-resolve.ts`
-  // snaps `ridesWall` pieces only, a bed is not one, and a bed that snapped on add
-  // but not on the next drag would be two behaviours for one piece.
+  // YAW is taken from the wall; the piece is not moved to it, because being placed
+  // where you aimed is a promise and facing north is not. That is also why this does
+  // not make a floor piece ride its wall: `lib/drag-resolve.ts` snaps `ridesWall`
+  // pieces only, a bed is not one, and a bed that snapped on add but not on the next
+  // drag would be two behaviours for one piece.
   //
   // Nearest wall unconditionally rather than within some threshold. A piece with a
   // wall affinity dropped in the middle of the floor is going to a wall sooner or
   // later, so the nearest one is a better guess than a fixed heading, and a distance
   // cutoff here would be a number with nothing to derive it from.
+  //
+  // ── Order: the YAW is resolved BEFORE the containment clamp, and that ordering is
+  // the whole of the 200 mm fix described in `intoRoom`. A piece's extent along X is a
+  // function of its angle, so a clamp that runs first is clamping the wrong number.
+  //
+  // Which needs a point to name a wall from, before there is a clamped one — hence two
+  // passes. The first is rotation-blind and exists only to bring a drop released
+  // outside the room to somewhere inside it, so that `snapToWall` is asked about a wall
+  // of this room rather than one behind the user's pointer; `rot` is not yet known, and
+  // 0 is honest about that rather than a guess at it. The second pass is the real
+  // clamp, at the angle the piece is actually getting. Both agree on the wall for any
+  // drop that was inside to begin with, which is every drop the UI can produce except
+  // a drag released past the wall.
   const affinity = wallAffinity(cat);
+  const wantsWall = affinity === 'must-wall' || affinity === 'prefers-wall';
+  const [nameWallFromX, nameWallFromZ] = intoRoom(ax, az, 0);
   const rot =
-    room.footprint && (affinity === 'must-wall' || affinity === 'prefers-wall')
-      ? (snapToWall([fx, 0, fz], dimMM, room.footprint).rot ?? 0)
+    room.footprint && wantsWall
+      ? (snapToWall([nameWallFromX, 0, nameWallFromZ], dimMM, room.footprint).rot ?? 0)
       : 0;
+
+  // Only small "goes on a table" items seek a surface; everything else floors. The
+  // support probe reads the FINAL point, not the rotation-blind one above: a piece
+  // asks what it can stand on where it is going to be standing.
+  const [fx, fz] = intoRoom(ax, az, rot);
+  const support = isTabletopProne(cat) ? findSupportUnder(existing, '__new__', fx, fz, dimMM) : null;
+  const y = support !== null && support > 0.3 ? support : 0;
   return { pos: [fx, y, fz], rot, wallMounted };
 }
 

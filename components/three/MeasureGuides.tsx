@@ -20,8 +20,8 @@ import { useRoomScene } from '@/lib/room-scene';
 import { useSettings } from '@/lib/store';
 import { useDragLive } from '@/lib/drag-live';
 import { SCENE } from '@/lib/scene-palette';
-import { rayToBoundary, obbExtentAlong, obbFromPart } from '@/lib/geometry';
-import { aabbExtents, snapGuideEnds } from '@/lib/item-snap';
+import { aabbExtents, rayToBoundary, obbExtentAlong, obbFromPart } from '@/lib/geometry';
+import { snapGuideEnds } from '@/lib/item-snap';
 import { formatDim } from '@/lib/units';
 
 const GUIDE_Y = 0.02;

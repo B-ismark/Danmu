@@ -394,6 +394,28 @@ export function obbExtentAlong(b: OBB, dx: number, dz: number): number {
   return Math.abs((ux * dx + uz * dz) * b.hw) + Math.abs((vx * dx + vz * dz) * b.hd);
 }
 
+/** Half-extents of a part's rotated footprint along world X and Z, in metres.
+ *
+ *  The one home for this arithmetic, and it earned that by being got wrong in two
+ *  places at once. `lib/drag-resolve.ts` had the same four lines written out inline,
+ *  and `placeNewPart` in `lib/scene-spec.ts` had no rotation term at all — it inset a
+ *  drop point by `dimMM[0] / 2000` and then turned the piece to face its wall, so a
+ *  1600 × 2000 bed added at an east or west wall stood 200 mm inside the plaster.
+ *
+ *  Note what a caller has to get right, because the type cannot say it: `rot` is the
+ *  angle the piece **will have**, not the angle it has now. Anything that clamps first
+ *  and rotates afterwards is asking this function the wrong question.
+ *
+ *  (`lib/layout-score.ts` keeps a fourth copy on purpose — it runs this over typed
+ *  arrays with `hw` / `hd` already split out, in the solver's innermost loop.) */
+export function aabbExtents(rot: number, dimMM: [number, number, number]): { ex: number; ez: number } {
+  const hw = dimMM[0] / 2000;
+  const hd = dimMM[1] / 2000;
+  const c = Math.abs(Math.cos(rot));
+  const s = Math.abs(Math.sin(rot));
+  return { ex: hw * c + hd * s, ez: hw * s + hd * c };
+}
+
 /** True when the whole OBB sits inside the polygon (all 4 corners in, which is
  *  exact for convex polygons and the right call for our rectilinear rooms). */
 export function obbInsidePoly(b: OBB, poly: Poly): boolean {
