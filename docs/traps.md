@@ -22,11 +22,24 @@ behind it rots the same way a stale branch table does.
 session to remember something; a test checks it once and stays checked. So when a trap
 turns out to be mechanically detectable, the right artifact is the assertion, not the
 paragraph — and the paragraph is then actively worse than nothing, because it spends
-tokens on every read and still relies on someone choosing to look. The case that set this
-rule: seven docblocks across five files had been separated from the functions they
-document, always by a later insertion that kept its own block, so nothing looked wrong at
-the insertion point. It reads like a perfect entry. It is six lines of scan —
-`tests/docblock-adjacency.test.ts` — and so it is not an entry.
+tokens on every read and still relies on someone choosing to look.
+
+**Two limits on rule two, both of which it needs stated.** It applies to entries being
+ADDED, not retroactively — an existing entry is not evicted by someone later writing a
+test for it, because the entry usually says something the assertion cannot. And "a gate
+can see it" means a gate *you* will see fire: `next build`'s silent ESLint skip is
+grepped by `ci.yml`, and that entry stays, because a developer running `pnpm build` by
+hand gets the exit code and not the grep. The question rule two asks is whether the next
+session will be TOLD, not whether a machine somewhere knows.
+
+The case that set this rule: seven docblocks across five files had been separated from
+the functions they document, always by a later insertion that kept its own block, so
+nothing looked wrong at
+the insertion point. It reads like a perfect entry. It is a **26-line scan** —
+`adjacentDocblocks` in `tests/docblock-adjacency.test.ts`, 145 lines with its fixtures and
+its reasons — and so it is not an entry. (It said "six lines" in the commit that added it,
+which is out by 4x and was nobody's measurement. In the one file whose job is to tell the
+next session not to trust an unnamed number, that is the wrong place to round.)
 
 What is left for this file, after that, is a shape worth naming: **traps whose symptom is
 a correct answer to the wrong question.** A tool that ran, succeeded, and reported about
@@ -278,16 +291,28 @@ finds something in unclaimed territory, the finding itself has to be claimed, ou
 before the fix is written.
 → When you report a finding in a file nobody holds, say **who is fixing it** in the
 same message. "Confirmed, and I am doing it" or "confirmed, it is yours".
-*(Cost: two sessions produced the same seven docblock fixes and the same six-line gate,
+*(Cost: two sessions produced the same seven docblock fixes and the same 26-line gate,
 in parallel, from the same review — each having told the other about it. Both diffs were
 green. One was thrown away.)*
 
-**Symptom: a fix you pushed is not in `main`, and the PR says merged.**
-A merge takes the head that existed when it ran. A push to the branch afterwards is a real
-commit on a real branch and is in nothing.
-→ `git merge-base --is-ancestor <sha> origin/main` before believing any fix landed,
-and especially before telling a peer it did. The branch usually survives the merge, so
-`git branch -r --contains <sha>` finds it and a cherry-pick recovers it.
+**Symptom: a fix you pushed is not in the tree you are about to ship, and every gate is
+green.**
+A branch's tip is not what a stack contains. A merge takes the head that existed when it
+ran, and a fix pushed to a branch *after* something else branched off it is a real commit
+on a real branch and is in neither. Every tip stays green, because a tip is gated against
+its own tree.
+→ `git merge-base --is-ancestor <sha> <target>` before believing any fix is in
+anything, and especially before telling a peer it is. Then check the sha against the tree
+you will actually create — a merge simulated in the intended ORDER, not the branch tip and
+not `main + branch` alone. The branch survives the merge, so `git branch -r --contains
+<sha>` finds a stranded commit and a cherry-pick recovers it.
+*(Admitted at ONE occasion, like the tie-break entry above, and for the same reason: the
+mechanism is general and the near-miss was expensive. A containment fix was pushed to one
+branch after two others had already branched from it, so the stack carried the unfixed
+version; both dependent tips were green over trees that had never seen the fix, and a peer
+reproduced the original 240 mm defect on `main + the last PR`. What saved it was measuring
+the tree the merge ORDER would produce, where all four corners came back at 20 mm. Both
+measurements were true of different trees — which is the whole entry.)*
 
 **Symptom: a shared doc conflicts and you are tempted to keep both sides.**
 A union merge resurrects items the other branch **deliberately deleted**. Take their
