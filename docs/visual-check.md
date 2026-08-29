@@ -280,12 +280,14 @@ direction is in `isWorthOffering` — what gets *offered* rather than what gets 
 
 ## Shell and flow
 
-*Owner: `shell`. All of these ride **`fix/a-bed-that-was-rotated` / PR #26**, gated at
-`deb70f2` (`main` merged in): typecheck 0, lint 0, `next build` clean with its own ESLint
-pass confirmed to have **run** rather than skipped, suite **1595/1600** — five reds, all
-five attributed in `docs/what-is-still-open.md` and none of them in the code below.*
+*Owner: `shell`. All of these are **on `main`**, merge commit **`aaf2888a`** (PR #26,
+merged 2026-08-28). Gate counts dropped, per the rule above: the branch's numbers were
+taken at `deb70f2` against a suite of 1600 with five known reds, and both halves of that
+have moved — `main` is green and the suite is 84 files / 1651 tests. **Merging is not
+looking, and these four are now the oldest unlooked-at items on the page.** A fix that
+shipped without anyone seeing it needs eyes more than one still sitting in a PR.*
 
-### Every bed in the app was rotated 90° — PR #26
+### Every bed in the app was rotated 90° — on `main`, `aaf2888a`
 
 The one thing on this page a user can see without being told what to look for, and it is
 the reason to do this item first: it was in every shipped room for months and neither
@@ -305,7 +307,7 @@ agree with the catalog.
 plan must agree on which way the bed is long. Two tabs disagreeing is the check that caught
 the ceiling fan, and it is the only one that can catch this class without measuring.
 
-### One band at the foot of the right rail, not two — PR #26
+### One band at the foot of the right rail, not two — on `main`, `aaf2888a`
 
 Open a room and **select a piece**. Look at the bottom of the right rail.
 
@@ -324,7 +326,7 @@ floor — and check the row again in all three selection states. The arithmetic 
 and there is a test that goes red if either label gets longer, but **nothing in node can
 measure a font**, so the fit itself is unverified and this is the only way to know.
 
-### Delete stays put when the panel is taller than the rail — PR #26
+### Delete stays put when the panel is taller than the rail — on `main`, `aaf2888a`
 
 Select a **sofa** and open every section in the Inspector — colour, on the surface, exact
 size — until the panel scrolls.
@@ -333,7 +335,7 @@ size — until the panel scrolls.
 Inspector's own scroll box behind a spacer, so it was at the bottom only while the panel
 happened to fit.
 
-### A wider wardrobe should gain a column, not a wider door — PR #26
+### A wider wardrobe should gain a column, not a wider door — on `main`, `aaf2888a`
 
 Select a **wardrobe** and drag its width handle slowly from 600 mm to 4000 mm. Then the
 same for a **sofa**'s width.
