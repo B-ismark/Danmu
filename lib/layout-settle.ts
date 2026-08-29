@@ -236,8 +236,18 @@ export type HeightFix = {
 
 /** Put every piece back on top of whatever is now under it.
  *
- *  **This is the pass that was missing from Suggest, and its absence is what the user
- *  saw.** Put a nightstand on an armchair, press Suggest, and the solver moves the
+ *  **This is the pass Suggest is missing — and Suggest does not call it yet.** Said
+ *  plainly because the first version of this docblock said "was missing" and the commit
+ *  that carried it was titled `fix(suggest):`, which was a claim about a path no caller
+ *  reaches. `grep settleHeights lib/ components/ app/` finds exactly one production
+ *  caller, `buildSceneFromRoom` in `lib/scene-spec.ts`. The Suggest handler in
+ *  `components/studio/RoomTools.tsx` writes `positions[p.id] = [x, p.pos[1], z]` — the
+ *  pre-solve Y, verbatim — and until that line is changed to apply these fixes, this
+ *  function fixes nothing a user can press. Wiring it is a different lane's change; the
+ *  point of saying so here is that a commit message and a docblock are the two places a
+ *  false claim survives every gate in this repo.
+ *
+ *  What the user saw: put a nightstand on an armchair, press Suggest, and the solver moves the
  *  armchair — `Placement` is `{x, z, yaw}`, there is no vertical axis in the search
  *  and no concept of one piece riding another — so the nightstand keeps the armchair's
  *  height with nothing under it and hangs in the air. From directly above, in the
@@ -265,10 +275,29 @@ export type HeightFix = {
  *  Resolved in ascending Y, and that ordering is load-bearing: `findSupportDetailed`
  *  has **no below-test at all** — it takes the highest `top` whose footprint covers
  *  `MIN_SUPPORT_SHARE` of the mover, above or below — so a lamp resolved before the
- *  desk it stands on can come back resting on itself-from-below. Lowest first means
- *  every support has already reached its final height when the thing riding it asks.
+ *  desk it stands on can come back resting on itself-from-below.
  *
- *  Pure: `parts` is not touched. Callers apply the fixes.
+ *  **Ascending Y is necessary and it is NOT sufficient, and the earlier wording here
+ *  claimed otherwise.** It said "every support has already reached its final height
+ *  when the thing riding it asks", which holds only while every support starts BELOW
+ *  its rider. Start a desk above its monitor — `[desk y=0.6 h=0.75, monitor y=0.3]` —
+ *  and the monitor sorts first, takes the floating desk's top at 1.35, and the desk
+ *  then drops to the floor: the monitor is left at 1.35 with nothing under it, which
+ *  is the very bug this pass exists to fix, one level up. `tests/layout-settle.test.ts`
+ *  holds that case as a PARKED `it.fails` so it retires itself the day it is fixed.
+ *
+ *  Not fixed here, and the reason is a scope one rather than a difficulty one: a
+ *  fixed-point loop can DIVERGE, because with no below-test two pieces over one
+ *  footprint each take the other's top and both rise every pass. A correct fix has to
+ *  say which pieces may act as supports, which is a rule about furniture and belongs in
+ *  `lib/layout-rules.ts` beside the others. Unreachable through `buildSceneFromRoom`,
+ *  where everything enters at y = 0; reachable the moment Suggest is wired up, which is
+ *  why it is written down rather than left to be rediscovered.
+ *
+ *  Pure: `parts` is not touched — the working copy deep-copies each `pos`, and
+ *  `tests/layout-settle.test.ts` asserts it, because dropping the `.map` is otherwise a
+ *  silent mutant that every other assertion here still passes. Callers apply the fixes,
+ *  and at least one of them hands in the array it is rendering from.
  *
  *  **No `supportId`, deliberately.** The first version returned which piece each
  *  rider had come to rest on, so a caller owning rigid-parent links could re-point
@@ -323,7 +352,18 @@ export function settleHeights(parts: ScenePart[], roomHeight: number): HeightFix
     // a height for a television — measured at up to 1.10 m on the catalog's curtain.
     const h = p.dimMM[2] / 1000;
     if (verticalExtent(p.category, p.shape, p.dimMM, p.pos[1])[1] > cap) {
-      p.pos[1] = floor ? Math.max(0, cap - h) : cap - h / 2;
+      // Both branches need the lower guard, and the centred one did not have it: a
+      // 2100 mm door under a 2.0 m ceiling got `1.98 - 1.05 = 0.93`, a CENTRE, which
+      // puts its bottom at -0.12 m and `wallApertures` cuts the light hole into the
+      // ground. `MOUNT_PAD` on the low side as well as the high side is not invented
+      // here — `drag-resolve.ts:187` and `heightForNewCeiling` are both already
+      // `Math.max(h / 2 + MOUNT_PAD, Math.min(... - h / 2 - MOUNT_PAD, y))`, so this is
+      // the third reader agreeing with them rather than a fourth rule.
+      //
+      // A piece too tall for the room keeps its real height and pokes through: the
+      // guard wins, the clamp loses, and `lib/clearance.ts` reports `tall`. Silently
+      // shrinking it to fit is the thing this repo does not do.
+      p.pos[1] = floor ? Math.max(0, cap - h) : Math.max(h / 2 + MOUNT_PAD, cap - h / 2);
     }
 
     if (p.pos[1] !== before) out.push({ id: p.id, y: p.pos[1] });

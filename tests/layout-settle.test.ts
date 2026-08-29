@@ -3,6 +3,7 @@ import { settleHeights, settleParts } from '../lib/layout-settle';
 import { footprintForLayout, type Footprint } from '../lib/footprint';
 import { footArea, footFromPart, footInsidePoly, footIntersectionArea, outsideShare } from '../lib/geometry';
 import type { ScenePart } from '../lib/scene-spec';
+import { MOUNT_PAD } from '../lib/physics';
 
 const RECT: Footprint = footprintForLayout('rect', 6, 4);
 
@@ -216,13 +217,62 @@ describe('settleHeights · a rider whose support has moved', () => {
     expect(settleHeights([door], 2.8), 'a 2.1 m door fits under a 2.8 m ceiling').toEqual([]);
   });
 
-  it('and still clamps one that genuinely does not fit', () => {
+  it('and still clamps one that genuinely does not fit — without burying it', () => {
     // Without this the assertion above passes for a clamp that was deleted. Same door,
-    // a 2.0 m ceiling: cap is 1.98, the door's top is 2.1, so its centre must come
-    // down to 1.98 − 1.05 = 0.93.
+    // a 2.0 m ceiling: cap is 1.98 and the door's top is 2.1, so the clamp wants a
+    // CENTRE of 1.98 − 1.05 = 0.93.
+    //
+    // **This test used to assert 0.93, which pinned the defect rather than the fix.**
+    // 0.93 is a centre, so the door's bottom is 0.93 − 1.05 = −0.12 m and
+    // `wallApertures` cuts the light hole into the ground. A 2.1 m door does not fit
+    // under a 2.0 m ceiling by 120 mm, and the honest answer is that it keeps its
+    // height and pokes through the TOP — `lib/clearance.ts` reports `tall` — rather
+    // than sinking through the floor, where nothing reports anything at all.
     const door = part({ category: 'door', shape: 'door', dimMM: [900, 50, 2100], pos: [0, 1.05, -2] });
     const fixes = settleHeights([door], 2.0);
     expect(fixes).toHaveLength(1);
-    expect(fixes[0].y).toBeCloseTo(0.93, 9);
+    // h/2 + MOUNT_PAD = 1.05 + 0.02, the same low guard `drag-resolve.ts:187` and
+    // `heightForNewCeiling` already use, so all three answer this with one number.
+    expect(fixes[0].y).toBeCloseTo(1.05 + MOUNT_PAD, 9);
+    // Derived rather than restated: the bottom is off the floor, which is the point.
+    expect(fixes[0].y - 1.05, 'the bottom must not be underground').toBeGreaterThan(0);
+  });
+
+  it('does not touch the array it is handed', () => {
+    // The docblock says "Pure: `parts` is not touched", and nothing asserted it —
+    // dropping the `.map(p => ({ ...p, pos: [...p.pos] }))` from the working copy is a
+    // silent mutant that every other assertion in this file still passes, because they
+    // all read the returned fixes and never the input. One caller hands in the array it
+    // is rendering from.
+    // One piece, floating, with nothing under it — so the pass certainly has work to
+    // do. A chair-plus-nightstand pair does not move at all: the chair's top IS the
+    // nightstand's support, which is the pass working and no use as a fixture here.
+    const stand = part({ id: 'stand', category: 'nightstand', shape: 'nightstand', dimMM: [450, 400, 550], pos: [0, 0.85, 0] });
+    const parts = [stand];
+    const snapshot = JSON.stringify(parts);
+    const fixes = settleHeights(parts, 2.8);
+    expect(fixes.length, 'the fixture must actually move something').toBeGreaterThan(0);
+    expect(JSON.stringify(parts), 'settleHeights mutated its input').toBe(snapshot);
+  });
+
+  // PARKED, and self-retiring. `it.fails` goes RED the day someone fixes this, which is
+  // what stops a documented limit from becoming a forgotten one.
+  //
+  // Ascending Y is necessary and not sufficient. A support that starts ABOVE its rider
+  // is resolved second, so the rider has already taken its floating top: the desk drops
+  // to the floor and the monitor is left at 1.35 with nothing under it — the exact bug
+  // `settleHeights` exists to fix, one level up. Unreachable through
+  // `buildSceneFromRoom`, where everything enters at y = 0, and reachable the moment
+  // Suggest is wired up.
+  //
+  // ONE assertion in the body on purpose: `it.fails` passes if anything in it throws, so
+  // a second assertion could be the one failing while the parked case is quietly fixed.
+  it.fails('resolves a support that starts above its rider — PARKED, monitor left at 1.35', () => {
+    const desk = part({ id: 'desk', category: 'desk', shape: 'desk-standard', dimMM: [1400, 700, 750], pos: [0, 0.6, 0] });
+    const monitor = part({ id: 'monitor', category: 'monitor', shape: 'monitor', dimMM: [600, 200, 400], pos: [0, 0.3, 0] });
+    const fixes = settleHeights([desk, monitor], 2.8);
+    // The monitor belongs on the desk's SETTLED top, 0.75 — not on the height the desk
+    // had before it fell.
+    expect(fixes.find((f) => f.id === 'monitor')?.y).toBeCloseTo(0.75, 9);
   });
 });
