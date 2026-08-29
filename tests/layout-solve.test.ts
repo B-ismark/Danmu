@@ -864,11 +864,41 @@ describe('the room’s anchor is settled first', () => {
   // A field that asserts a behaviour the code does not have is worse than an absent
   // one, because the next reader believes it.
   //
-  // What it buys is the tail, not the median. Twelve seeds on a scrambled U, worst
-  // run: 154.7 without the pass, 6.9 with it. A catastrophic run is one where the
-  // biggest piece never found its wall and everything else spent the budget arranging
-  // itself around a bed in the middle of the floor.
-  it('stops a scrambled bedroom from ending in the occasional disaster', () => {
+  // What the pass buys, re-measured at `4be144c` by emptying `anchorIdx` and running
+  // twelve seeds per preset on a scrambled room — every preset at 6 × 5, which the
+  // table this replaces did not say of itself:
+  //
+  //   preset   n      worst  without → with       median  without → with
+  //   rect    11              16.17 →  12.60               8.77 →  6.83
+  //   l       14              33.68 →  35.38              17.68 → 17.87
+  //   t       18             490.10 → 277.78              84.22 → 39.43
+  //   u       12              36.24 →  38.53              12.08 → 10.46
+  //   open    17              36.60 → 253.31              11.49 → 15.22
+  //
+  // It used to say `u 155 → 6.9`, `open 37 → 22`, and that the disasters stop
+  // happening. On this tree the pass rescues the T, helps the rectangle, is a wash on
+  // the L and the U, and makes `open` five times worse in the tail. Since the old
+  // table named no room size, this is not that experiment re-run and the difference is
+  // not evidence of a regression — it is evidence that a measurement whose fixture was
+  // never written down cannot be checked, only replaced.
+  //
+  // One honest limit on the ablation: skipping a pass also shifts the RNG stream every
+  // later pass draws from, so "without" is a different trajectory rather than this one
+  // minus a pass. `passSteps` is computed per pool and never reads `anchorIdx`, so the
+  // other two passes do get identical budgets.
+  //
+  // What the pass demonstrably still buys HERE is the number of seeds that end SAFE:
+  // 12 of 12 shipped, 9 of 12 with the pool emptied. That is the first test below, and
+  // it is the only assertion in the file that can see this pass at all.
+  const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+
+  // One solve set, shared by the three tests that read it. Twelve solves of a
+  // twelve-piece room is ~1.5 s and each test below asserts one fact about the same
+  // run, so re-solving per test would be three times the wall clock for the same
+  // numbers — and, worse, three separate runs to reconcile if they ever disagreed.
+  let cached: { rows: ReturnType<typeof costBreakdown>[]; unsolved: ReturnType<typeof costBreakdown> } | null = null;
+  function scrambledU() {
+    if (cached) return cached;
     const poly = footprintForLayout('u', 6, 5);
     const base = defaultScene('u', 6, 5, { footprint: poly, height: 2.8 });
     const messy = base.map((q, i) =>
@@ -885,8 +915,7 @@ describe('the room’s anchor is settled first', () => {
       movable: messy.map((q) => !q.wallMounted),
       footprint: poly,
     } as LayoutContext);
-
-    const rows = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((seed) =>
+    const rows = SEEDS.map((seed) =>
       costBreakdown(
         model,
         solveLayout(messy, poly, messy.map(() => false), { seed }).placements,
@@ -894,92 +923,94 @@ describe('the room’s anchor is settled first', () => {
         NAV_CELL,
       ),
     );
+    cached = { rows, unsolved: costBreakdown(model, at(messy), DEFAULT_WEIGHTS, NAV_CELL) };
+    return cached;
+  }
+
+  it('stops a scrambled bedroom from ending in the occasional disaster', () => {
+    const { rows } = scrambledU();
+    const clean = rows.filter((r) => HARD_TERMS.every((k) => r[k] === 0)).length;
+
+    // A COUNT of seeds that end with nothing on any hard term, never a sum.
+    // `HARD_TERMS` is the solver's own exported list and this reads it term by term
+    // the way `hardCosts` does, because four terms added together means any of them
+    // buys any other: reclaiming 0.05 m² of stranded floor is worth 6 units, which
+    // would pay for 60 cm² of overlap.
+    //
+    // 12 of 12 measured. The bar is 11 — one seed of slack, deliberately, because a
+    // seeded solver fixture is a canary for chaos rather than a ratchet, and pinning
+    // one to its exact current value is how `main` stayed red across nine merges.
+    //
+    // Two mutations were watched failing it, which is the whole reason the number
+    // moved from the 7 it used to be:
+    //
+    //  · `anchorIdx = []` → 9 of 12. That is the pass this describe block is named
+    //    for, and nothing else in the file notices its absence: the total-cost bar in
+    //    the next test comes back 36.24, comfortably inside its own 60.
+    //  · `DEFAULT_WEIGHTS.outside = 0` → 8 of 12. This mutation SURVIVED at a bar of
+    //    7, and the note recording that drew the wrong conclusion from it — that the
+    //    predicate is blind to the term it is named for. It is blind to it: a weight
+    //    of zero zeroes the READING as well as the solver's incentive, so `r.outside`
+    //    is 0 with a piece through the plaster. What catches the mutation is that a
+    //    solver no longer paying for walls wrecks three other terms as well.
+    //
+    // And one that survives, which is the smaller claim this line can honestly make:
+    // `steps = 1` still ends 12 of 12. Not because containment is free, but because
+    // `passSteps` has a floor of 120 per pool — `steps = 1` still spends 360
+    // proposals, 15% of the ~2400 a default solve does, and containment is the
+    // cheapest thing the anneal buys. This note used to explain that survival with
+    // "`clampIntoFootprint` runs regardless of step count", which is no longer true of
+    // anything: `c9fe1a4` took that call out of the solver.
+    expect(clean).toBeGreaterThanOrEqual(11);
+  }, 120_000);
+
+  it('keeps the untidiest seed bounded, which is a different claim from safe', () => {
+    const { rows } = scrambledU();
     const costs = rows.map((r) => r.total);
 
-    // The bar is the WORST run, which is the one this pass exists for. Without it the
-    // twelve seeds spread 3.3 … 154.7; with it, 3.3 … 6.9.
+    // Twelve seeds spread 1.38 … 38.53, median 10.46. This is a bar on TIDINESS and it
+    // says so: at 12 of 12 clean there is no hard term left in any of these totals, so
+    // all 38.53 of the worst one is `alignment` 10.78 + `relation` 24.60 + `balance`
+    // 3.15 on seed 8. A total-cost bar cannot fail on danger here even in principle —
+    // which is what the previous version of this comment had backwards, when it read
+    // `sorted(costs)[6] < 10` and called that the safety check. It also claimed seven
+    // terms sit at 0.00 on every seed: `HARD_TERMS` is five, `walkway` and `window` are
+    // not in it, and seed 7 carries `window` 1.37.
     //
-    // ⚠ THIS LINE IS CURRENTLY RED, and deliberately left so rather than retuned.
-    // Un-transposing the bed's dims (`2e3367d`) took the seeded bed from 1900 × 1000
-    // to 900 × 2000 — twice as deep, so it reaches twice as far off its wall. At U
-    // 6 × 5 seed 5 the solver now returns `navigation` **80.70 having been handed
-    // 26.40**: it makes the room three times worse than it found it, piling all six
-    // movable pieces into the U's east arm. The other eleven seeds are 0.00 on every
-    // danger term, and the UNSCRAMBLED starter room this same `defaultScene` produces
-    // is nav 0.00 / total 3.57 — so neither the seeding nor the bed is at fault. It is
-    // one seed in twelve, in this pass. `PR #26` touched no solver file at all.
+    // 60 rather than the 40 it was. 40 passed by 3.7% on a chaotic solver, which is a
+    // future red that costs a session to diagnose and buys nothing — both mutations
+    // that reach this line are caught at 60 too: `DEFAULT_WEIGHTS.outside = 0` (66.76)
+    // and `HARD_TERMS = []` (144.50, because that list is also the solver's own veto,
+    // so emptying it lets the anneal ship a layout it would have refused).
     //
-    // Raising the 40 would be writing off a room that seals its own route, which is a
-    // finding `lib/clearance.ts` reports to the user by name. See section F of
-    // `docs/what-is-still-open.md`.
-    expect(Math.max(...costs)).toBeLessThan(40);
+    // THERE IS NO ASSERTION ON THE MEDIAN, and that is the finding rather than an
+    // omission. Seven mutations were measured — anchor pool emptied, `steps = 1`,
+    // `snapYaws` removed, `HARD_TERMS = []`, and the `outside` / `alignment` weights
+    // zeroed — and the medians they produce are 12.08, 13.22, 10.30, 11.57, 14.13 and
+    // 5.24 against a baseline of 10.46. Every bar that any of them crosses is inside
+    // the noise of the baseline, so a median assertion here could be green or red for
+    // reasons unrelated to what it claims to watch. The line that used to sit here was
+    // decoration in exactly that way. What actually watches the median is the table in
+    // this describe block's comment, re-derived when the fixture moves.
+    expect(Math.max(...costs)).toBeLessThan(60);
+  }, 120_000);
 
-    // …and the median must not have paid for it — measured over the terms that make
-    // a room UNUSABLE, not over its total.
+  it('can tell the solved room from the scrambled one it started from', () => {
+    const { unsolved } = scrambledU();
+
+    // The negative control, and it is not decoration. `HARD_TERMS.every(...)` over an
+    // EMPTY list is vacuously true, so emptying that array would take the count in the
+    // first test to 12 and leave it green having checked nothing. Scoring the same
+    // scrambled room WITHOUT solving is what closes that: it carries `outside`
+    // **1555.56**, `overlap` 167.38, `navigation` 26.40, `door` 25.26 and `access`
+    // 20.00, so the predicate has to be able to say no. Confirmed by replacing
+    // `HARD_TERMS` with `[]`, which fails this line and nothing else.
     //
-    // This line read `sorted(costs)[6] < 10` and it was measuring the wrong quantity.
-    // Probed at `origin/main`, twelve seeds: `overlap`, `outside`, `door`,
-    // `navigation`, `access`, `walkway` and `window` are **0.00 on every seed**. The
-    // whole of the total is `alignment` / `relation` / `balance`. So a bar on the
-    // total could only ever fail on TIDINESS, while the sentence above it says
-    // "disaster" and the worst-case bar beneath it is the one that means it.
-    //
-    // Worse than merely imprecise: danmu-62 swept the bed ladder at this exact room,
-    // and a median tidiness bar cannot be read off it in either direction. **Every
-    // number that paragraph used to quote here has been re-derived and none of them
-    // survived**, so they are replaced rather than kept — a stale measurement scopes
-    // the next reader's search, which is the whole lesson of `docs/visual-check.md`.
-    //
-    //   rung          width     worst    median    Σdanger      Σdoor    Σalign
-    //   Queen bed      1600    282.96     47.73     700.20       0.00      32.7
-    //   Double bed     1400    254.85     16.26     430.20       0.00      62.1
-    //   Single bed      900     86.43     13.73      80.70       0.00      68.0
-    //
-    // It said: Double median 7.01 / Σnavigation 453.60, Queen 8.71 / Σdoor 176.84,
-    // Single 14.43 / Σdanger 3.90, and concluded **the safe rung is the untidy one**.
-    // Measured: the medians run 47.73 / 16.26 / 13.73, so the Single is the TIDIEST
-    // as well as the safest and the trade it described does not exist. `Σdoor` is
-    // **0.00 on all three rungs** — no rung parks a bed across the doorway at this
-    // room, and that claim was never true of any committed state (it is 0.00 at
-    // `2e3367d`, the commit that introduced the sweep). What IS true is the part the
-    // old numbers were reaching for: the danger is monotone in bed width, 700.20 →
-    // 430.20 → 80.70, so coming DOWN the ladder is right. It is a bar on the worst
-    // case that means anything here, not one on the median — which is what the line
-    // above already is.
-    //
-    // `HARD_TERMS` is the solver's own list, exported rather than copied — and it is
-    // read here the way `hardCosts` reads it, term by term. Summing them is what its
-    // comment forbids, because four terms in one number means any of them buys any
-    // other. "The median run is safe" is therefore a COUNT of seeds with nothing on
-    // any hard term, never a sum that happens to be small.
-    //
-    // The negative control, and it is not decoration. `HARD_TERMS.every(...)` over
-    // an EMPTY list is vacuously true, so emptying that array would take `clean` to
-    // 12 and leave the assertion below green having checked nothing. Scoring the
-    // same scrambled room WITHOUT solving is what closes that: it carries
-    // `outside 3000.00` and `access 180.00`, so the predicate must be able to say
-    // no. Confirmed — replacing `HARD_TERMS` with `[]` fails this line.
-    const unsolved = costBreakdown(model, at(messy), DEFAULT_WEIGHTS, NAV_CELL);
+    // The `outside 3000.00` / `access 180.00` this used to quote was stale before the
+    // branch opened, and stale in the way that is hardest to notice: no solver runs in
+    // this line at all, so both numbers are pure geometry over a fixed fixture and
+    // could only ever have come from a different room.
     expect(HARD_TERMS.some((k) => unsolved[k] > 0)).toBe(true);
-
-    const clean = rows.filter((r) => HARD_TERMS.every((k) => r[k] === 0)).length;
-    expect(clean).toBeGreaterThanOrEqual(7);
-    // WHAT THIS LINE ACTUALLY GUARDS, because two mutations survived it and a
-    // comment claiming more than was demonstrated is the thing this file keeps
-    // catching in other people's work:
-    //
-    //  · `DEFAULT_WEIGHTS.outside = 0` SURVIVED. A weight of zero removes the term
-    //    from the READING, not only from the solver's incentive, so `r.outside`
-    //    is 0 whether or not a piece is through the wall and the predicate goes
-    //    blind to exactly what it is named for. It went red on a different test,
-    //    which is where that class is covered; it is not covered here.
-    //  · `steps = 1` SURVIVED — a barely-annealed layout still has every hard term
-    //    at zero. Containment is not the annealer's work: `clampIntoFootprint` runs
-    //    regardless of step count.
-    //
-    // So this guards the SETTLE stage, not the anneal, and it guards it against
-    // regression rather than against a zeroed weight. That is a smaller claim than
-    // the line it replaced made, and unlike that one it is true.
   }, 120_000);
 
   it('is the piece the room is named after', () => {

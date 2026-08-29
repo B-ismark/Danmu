@@ -370,15 +370,36 @@ export function solveLayout(
   // A field asserting a behaviour the code does not have is worse than an absent one,
   // because the next reader believes it.
   //
-  // It is true now, and it earns its place in the TAIL rather than the median. Twelve
-  // seeds per preset on a scrambled room, worst run, without → with:
+  // It is read now. What it buys, re-measured at `4be144c` — twelve seeds per preset
+  // on a scrambled room, every preset at 6 × 5, this pool emptied versus shipped:
   //
-  //   rect 9.7 → 8.7 · l 1081 → 136 · t 310 → 67 · u 155 → 6.9 · open 37 → 22
+  //   preset   n      worst  without → with       median  without → with
+  //   rect    11              16.17 →  12.60               8.77 →  6.83
+  //   l       14              33.68 →  35.38              17.68 → 17.87
+  //   t       18             490.10 → 277.78              84.22 → 39.43
+  //   u       12              36.24 →  38.53              12.08 → 10.46
+  //   open    17              36.60 → 253.31              11.49 → 15.22
   //
-  // Medians move a little (18.6 → 15.8 on the L, 46.7 → 28.7 on the T); the disasters
-  // stop happening. Which is what the idea predicts: a catastrophic run is one where
-  // the biggest piece never found its wall, and everything else spent the budget
-  // arranging itself around a bed in the middle of the floor.
+  // So it rescues the T, helps the rectangle, is a wash on the L and the U, and makes
+  // `open` five times worse in the tail. That is NOT what this comment used to claim —
+  // `rect 9.7 → 8.7 · l 1081 → 136 · t 310 → 67 · u 155 → 6.9 · open 37 → 22`, and
+  // "the disasters stop happening". Those numbers named no room size, so this is not
+  // the same experiment re-run and the difference is not evidence of a regression; it
+  // is evidence that a measurement whose fixture was never written down can only be
+  // replaced, never checked. The fixture is written down here and in
+  // `tests/layout-solve.test.ts`, which asserts the one column of it that holds
+  // robustly: the count of seeds ending with no hard term at all, 12 of 12 with this
+  // pool and 9 of 12 without.
+  //
+  // One limit on the ablation, stated because it cuts both ways: skipping a pass also
+  // shifts the RNG stream every later pass draws from, so "without" is a different
+  // trajectory rather than this one minus a pass. `passSteps` is per pool and never
+  // reads `anchorIdx`, so the other two passes do get identical budgets.
+  //
+  // Whether `open` wants this pass skipped is open — see section G of
+  // `docs/what-is-still-open.md`. It is not being tuned here, because a change that
+  // helps one preset's tail and hurts another's is a decision about which rooms this
+  // app is for, not an optimisation.
   //
   // Costs one pool of one, and `passSteps` is pro rata, so it is the 120-step floor.
   const anchorIdx =
@@ -747,17 +768,26 @@ export function snapYaws(
     // back until it fits.
     //
     // Measured over six presets x 40 seeds = 240 solves, counting every moved piece
-    // handed back between 0.06 deg and `SNAP_TOL` of square:
+    // handed back between 0.06 deg and `SNAP_TOL` of square. Two sweeps, because
+    // `propose` changed underneath the first one — `c9fe1a4` declines an out-of-room
+    // nudge instead of collapsing it onto a single interior point:
     //
-    //     no shove          197
-    //     axes only          48
-    //     axes + diagonals   30
+    //                        before   now
+    //     no shove              197     —
+    //     axes only              48    63
+    //     axes + diagonals       30    40
     //
     // So the crooked piece was never rare — 197 of them, and the suite was green,
     // because the one room the twelve-seed sweep above uses is a plain 7.5 x 5.6 rect
-    // where it does not happen. The shove clears about six in seven. **The remaining 30
-    // are real**, mostly the U and the T, where neither the square yaw nor anything
-    // within the piece's own reach is legal.
+    // where it does not happen. **The remainder is real**, mostly the U and the T,
+    // where neither the square yaw nor anything within the piece's own reach is legal.
+    //
+    // The two columns are NOT the same experiment and must not be read as a regression:
+    // the "before" sweep's room sizes were never recorded. What they agree on is the
+    // ratio — the diagonals clear about a third of what the axes leave, 48 → 30 and
+    // 63 → 40. `tests/suggest-tidiness.test.ts` owns this table, the fixture it was
+    // measured on, and the four coordinates that come free only on a diagonal; keep the
+    // numbers in one place and let this be the pointer to them.
     //
     // Putting the piece back where it came from instead was tried first and does NOT
     // work: by the time the tidy runs, something else has moved into the space it came

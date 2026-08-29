@@ -182,10 +182,15 @@ describe('interiorPoint', () => {
   it('answers a given polygon once and hands back the same object', () => {
     // The memo, asserted by IDENTITY because that is the only thing about it a test
     // can see — there is no counter to read and a timing assertion is worthless on a
-    // loaded machine. Two of the four `clampIntoFootprint` call sites are inside the
-    // annealer's proposal generator, so without this the grid scan above is paid per
-    // proposal: measured at 15.1 ms for a 50 x 50 room, against `DEFAULT_STEPS` of
-    // 1600. The answer is frozen, which is what makes handing out one instance safe.
+    // loaded machine. It was load-bearing when two of `clampIntoFootprint`'s four call
+    // sites were inside the annealer's proposal generator: the grid scan above cost
+    // 15.1 ms on a 50 × 50 room against `DEFAULT_STEPS` of 1600, so the memo was the
+    // difference between a solve finishing and not. `c9fe1a4` took both of those call
+    // sites out. `interiorPoint` now has exactly one caller in `lib/` —
+    // `clampIntoFootprint` — and that has exactly one, `scene-spec.ts`, once per piece
+    // as a starter room is built. So this is a small saving now, kept for the frozen
+    // shared instance as much as for the scan, and a test can see neither reason: what
+    // it can see is identity, which is the same assertion either way.
     const u = footprintForLayout('u', 7.5, 5.6);
     const first = interiorPoint(u);
     expect(interiorPoint(u)).toBe(first);
