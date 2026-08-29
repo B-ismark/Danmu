@@ -470,7 +470,15 @@ export const roomStore = {
     const expired = all.filter((key): key is string => {
       if (typeof key !== 'string' || !key.startsWith(TRASH)) return false;
       const ts = Number(key.slice(TRASH.length).split(':')[0]);
-      return Number.isFinite(ts) && ts < cutoff;
+      // `<=`, not `<`. `maxAgeMs: 0` means "nothing in here is worth keeping", and
+      // with a strict comparison a key stamped in the same millisecond as the cutoff
+      // is called not-yet-expired and survives every subsequent purge that is also
+      // given 0. At the 30-day default the difference is one millisecond and nobody
+      // could see it; at 0 it is the whole behaviour. It is also the only reason
+      // `tests/storage.test.ts`'s zero-TTL assertion was a race — it passed on a
+      // 74 s local run and went red on a 21 s CI run of a DOCS-ONLY pull request,
+      // where it read as that PR having broken storage.
+      return Number.isFinite(ts) && ts <= cutoff;
     });
     await Promise.all(expired.map((key) => del(key)));
   },
