@@ -37,12 +37,38 @@ the note there on why the file count has to travel with the assertion count.
 
 **Loose ends that live nowhere else:**
 
-- **Five branches are fully contained in `main` and await the user's word to delete** —
-  `fix/pointer-cancel-note` (its one unique commit landed as #34, then verified per-line as
-  fully present), `fix/convoy-self-support`, `fix/a-bed-that-was-rotated`,
-  `fix/visual-check-round-3`, `feat/shuffle-lock-and-band-price`. Deleting a remote ref is
-  outward-facing and is **not** covered by a grant to commit, push and open PRs. Verify
-  containment yourself before asking; do not delete on the strength of this paragraph.
+- **The branch list this paragraph used to carry was wrong in the dangerous direction, and
+  its own last sentence is what caught it.** It named five branches as "fully contained in
+  `main` and awaiting the user's word to delete". Re-derived per branch with
+  `git rev-list --count origin/main..<branch>`:
+
+  | branch | ahead of `main` |
+  |---|---|
+  | `origin/docs/layout-needs-eyes` | 0 — contained |
+  | `origin/docs/the-next-task` | 0 — contained |
+  | `origin/feat/shuffle-lock-and-band-price` | 0 — contained |
+  | `origin/fix/bed-shape-and-its-rotted-fixtures` | 0 — contained |
+  | `origin/fix/clamp-into-footprint` | 0 — contained |
+  | `origin/fix/footer-assertion-reads-code` | 0 — contained |
+  | `origin/fix/room-report-and-tidy` | 0 — contained |
+  | `origin/fix/pointer-cancel-note` | **10 — NOT contained** |
+  | `origin/test/component-tests-under-jsdom` | 11 — the open PR |
+  | `origin/research/inward-normals` | 2 — the winding fix, knowingly red |
+  | `origin/docs/a-branch-list-that-would-have-deleted-work` | 1 — this correction |
+
+  Three things that list got wrong. `fix/convoy-self-support`, `fix/a-bed-that-was-rotated`
+  and `fix/visual-check-round-3` **do not exist on `origin`** — the bed one never did under
+  that name; the real branch is `fix/bed-shape-and-its-rotted-fixtures`, merged as #38. Four
+  contained branches were **missing** from it. And `fix/pointer-cancel-note`, described as
+  having "one unique commit [which] landed as #34, then verified per-line as fully present",
+  carries **ten** commits main has never seen, among them `fix(convoy): a merged set carried
+  by a MEMBER came apart` and `fix: a chevron that raised the ceiling, a rug shoved through a
+  wall, and six gates that could not fail`. Acting on the old paragraph would have deleted
+  real work.
+
+  Deleting a remote ref is outward-facing and is **not** covered by a grant to commit, push
+  and open PRs. **Re-derive the table before asking, every time** — this one is dated
+  2026-08-29 and a branch list is exactly the kind of claim that rots between sessions.
 - **`C:/Users/bisma/danmu-rescue/`** holds two patches lifted out of dead sessions'
   `%TEMP%` worktrees. **Both turned out to be superseded drafts of work already on `main`** —
   kept only because checking cost nothing. Safe to delete; check first.
@@ -180,8 +206,9 @@ whether several pieces of the same kind face *differently*. The user's report �
 all facing one way — had two causes: how a bed is added (fixed) and how a bed is drawn
 (fixed). Whether Shuffle then spreads them or converges them on one wall is untested.
 
-**Unblocked now.** It needed the bed geometry and the added-heading fix in one tree, and
-`fix/a-bed-that-was-rotated` is that tree.
+**Unblocked now**, and no longer waiting on a tree: the bed geometry and the added-heading
+fix are both on `main`, in the merge of `fix/bed-shape-and-its-rotted-fixtures` (PR #38).
+The branch name this paragraph used to name does not exist on `origin` and never did.
 
 ### 3. `tests/suggest-tidiness.test.ts` — two reds, both real, both diagnosed
 
