@@ -40,7 +40,7 @@ import type { ScenePart } from './scene-spec';
 import type { Footprint } from './footprint';
 import { footprintBounds } from './footprint';
 import { snapToWall } from './physics';
-import { clampIntoFootprint } from './footprint';
+import { distanceToFootprintEdge, ON_WALL_M, pointInFootprint } from './footprint';
 import { localToWorld, nearestEdge } from './geometry';
 import {
   angleDelta,
@@ -370,15 +370,36 @@ export function solveLayout(
   // A field asserting a behaviour the code does not have is worse than an absent one,
   // because the next reader believes it.
   //
-  // It is true now, and it earns its place in the TAIL rather than the median. Twelve
-  // seeds per preset on a scrambled room, worst run, without → with:
+  // It is read now. What it buys, re-measured at `4be144c` — twelve seeds per preset
+  // on a scrambled room, every preset at 6 × 5, this pool emptied versus shipped:
   //
-  //   rect 9.7 → 8.7 · l 1081 → 136 · t 310 → 67 · u 155 → 6.9 · open 37 → 22
+  //   preset   n      worst  without → with       median  without → with
+  //   rect    11              16.17 →  12.60               8.77 →  6.83
+  //   l       14              33.68 →  35.38              17.68 → 17.87
+  //   t       18             490.10 → 277.78              84.22 → 39.43
+  //   u       12              36.24 →  38.53              12.08 → 10.46
+  //   open    17              36.60 → 253.31              11.49 → 15.22
   //
-  // Medians move a little (18.6 → 15.8 on the L, 46.7 → 28.7 on the T); the disasters
-  // stop happening. Which is what the idea predicts: a catastrophic run is one where
-  // the biggest piece never found its wall, and everything else spent the budget
-  // arranging itself around a bed in the middle of the floor.
+  // So it rescues the T, helps the rectangle, is a wash on the L and the U, and makes
+  // `open` five times worse in the tail. That is NOT what this comment used to claim —
+  // `rect 9.7 → 8.7 · l 1081 → 136 · t 310 → 67 · u 155 → 6.9 · open 37 → 22`, and
+  // "the disasters stop happening". Those numbers named no room size, so this is not
+  // the same experiment re-run and the difference is not evidence of a regression; it
+  // is evidence that a measurement whose fixture was never written down can only be
+  // replaced, never checked. The fixture is written down here and in
+  // `tests/layout-solve.test.ts`, which asserts the one column of it that holds
+  // robustly: the count of seeds ending with no hard term at all, 12 of 12 with this
+  // pool and 9 of 12 without.
+  //
+  // One limit on the ablation, stated because it cuts both ways: skipping a pass also
+  // shifts the RNG stream every later pass draws from, so "without" is a different
+  // trajectory rather than this one minus a pass. `passSteps` is per pool and never
+  // reads `anchorIdx`, so the other two passes do get identical budgets.
+  //
+  // Whether `open` wants this pass skipped is open — see section G of
+  // `docs/what-is-still-open.md`. It is not being tuned here, because a change that
+  // helps one preset's tail and hurts another's is a decision about which rooms this
+  // app is for, not an optimisation.
   //
   // Costs one pool of one, and `passSteps` is pro rata, so it is the 120-step floor.
   const anchorIdx =
@@ -747,17 +768,26 @@ export function snapYaws(
     // back until it fits.
     //
     // Measured over six presets x 40 seeds = 240 solves, counting every moved piece
-    // handed back between 0.06 deg and `SNAP_TOL` of square:
+    // handed back between 0.06 deg and `SNAP_TOL` of square. Two sweeps, because
+    // `propose` changed underneath the first one — `c9fe1a4` declines an out-of-room
+    // nudge instead of collapsing it onto a single interior point:
     //
-    //     no shove          197
-    //     axes only          48
-    //     axes + diagonals   30
+    //                        before   now
+    //     no shove              197     —
+    //     axes only              48    63
+    //     axes + diagonals       30    40
     //
     // So the crooked piece was never rare — 197 of them, and the suite was green,
     // because the one room the twelve-seed sweep above uses is a plain 7.5 x 5.6 rect
-    // where it does not happen. The shove clears about six in seven. **The remaining 30
-    // are real**, mostly the U and the T, where neither the square yaw nor anything
-    // within the piece's own reach is legal.
+    // where it does not happen. **The remainder is real**, mostly the U and the T,
+    // where neither the square yaw nor anything within the piece's own reach is legal.
+    //
+    // The two columns are NOT the same experiment and must not be read as a regression:
+    // the "before" sweep's room sizes were never recorded. What they agree on is the
+    // ratio — the diagonals clear about a third of what the axes leave, 48 → 30 and
+    // 63 → 40. `tests/suggest-tidiness.test.ts` owns this table, the fixture it was
+    // measured on, and the four coordinates that come free only on a diagonal; keep the
+    // numbers in one place and let this be the pointer to them.
     //
     // Putting the piece back where it came from instead was tried first and does NOT
     // work: by the time the tidy runs, something else has moved into the space it came
@@ -1199,12 +1229,65 @@ function propose(
         : { ...p, z: current[j].z, yaw: normaliseYaw(current[j].yaw) };
     }
   }
-  const [x, z] = clampIntoFootprint(
-    clamp(p.x + (rng() - 0.5) * 2 * reach, b.minX, b.maxX),
-    clamp(p.z + (rng() - 0.5) * 2 * reach, b.minZ, b.maxZ),
-    m.ctx.footprint,
-  );
-  return { ...p, x, z };
+  // The last resort: nudge it. The bounding-box clamp is what keeps the nudge on the
+  // floor, and a nudge that ends up in an L, T or U's NOTCH is DECLINED rather than
+  // relocated. One that ends up pinned to a wall is kept exactly where it is. Those are
+  // different outcomes and `pointInFootprint` alone cannot separate them — it is a ray
+  // test, so a point exactly ON an edge reads as outside, and clamping to the bounding
+  // box puts a point exactly there on every overshoot. `distanceToFootprintEdge` is what
+  // tells the two apart.
+  //
+  // This used to call `clampIntoFootprint`, whose one destination is `interiorPoint`. On
+  // a U the interior scan puts that in the base, so every nudge that fell in the notch —
+  // a different offset each time, from a different piece — came back as the SAME spot,
+  // and an annealer handed one location over and over takes it. Measured at U 6 × 5: six
+  // movable pieces converging on one bay, and one solve seed in twelve leaving ~0.67 m²
+  // of floor unreachable from the door. Declining costs nothing — a returned `p` is a
+  // no-op the annealer evaluates and keeps, so the step is simply spent elsewhere.
+  //
+  // Why this surfaced only recently, which is the opposite of intuition. Before
+  // `c4eee4d`, `clampIntoFootprint` walked toward `polygonCentroid` — the VERTEX
+  // average, which on a U is in the void between the arms — and returned that point when
+  // the walk never got inside. So the proposal came back OUTSIDE the room, `outside`
+  // priced it at 1000 a unit, and the annealer discarded it. **The broken clamp was
+  // acting as a filter**, and fixing it — correctly; the function now honours its name —
+  // turned every discarded proposal into an attractive one. That is why a
+  // clamp-correctness fix made arrangements worse, and why reverting `lib/footprint.ts`
+  // alone took `tests/bed-rung-safety.test.ts` from 2 failed to 2 passed.
+  //
+  // Keeping the wall-pinned point is the second half of this and it is not cosmetic. The
+  // old code walked such a point 15% of the way toward `interiorPoint` — on a 5 × 4 rect
+  // that is 375 mm in from the east wall — so a nudge that overshot could not propose a
+  // piece flush against the wall at all, which is exactly where a wardrobe wants to be.
+  // It also means this change is NOT confined to the non-convex rooms it was written
+  // for: a rectangle's footprint IS its bounding box, so every overshoot in every room
+  // shape went through that walk. Anything that perturbs an RNG-driven layout perturbs
+  // seed-specific fixtures with it, and re-deriving those is part of the change rather
+  // than a surprise from it — see `DIAGONAL_ONLY` in `tests/suggest-tidiness.test.ts`,
+  // which says so in its own prose and was re-searched here.
+  //
+  // Three alternatives, each refuted by measurement over the whole suite. The baseline
+  // they were measured against was `5fd2dd2`, 3 failures.
+  //
+  //  1. Nearest-interior projection inside `clampIntoFootprint` — the minimum move that
+  //     puts the point inside, so a piece stays in its own arm. Local, but not diverse:
+  //     the shipped rung went from 80.70 total danger to 102.60 and the bed ladder lost
+  //     monotonicity (Double 79.80 below Single 102.60).
+  //  2. Declining on `!pointInFootprint` with the bounding box inset 1 mm. 2 failures —
+  //     an inset perturbs every wall-pinned proposal without answering the question that
+  //     matters, which is which side of the wall the point is on.
+  //  3. Accepting the clamp unless it travelled further than `reach`. 6 failures:
+  //     `reach` is largest while the anneal is hot, so the teleport is accepted exactly
+  //     when it does the most damage.
+  const jx = clamp(p.x + (rng() - 0.5) * 2 * reach, b.minX, b.maxX);
+  const jz = clamp(p.z + (rng() - 0.5) * 2 * reach, b.minZ, b.maxZ);
+  if (
+    !pointInFootprint(jx, jz, m.ctx.footprint) &&
+    distanceToFootprintEdge(jx, jz, m.ctx.footprint) > ON_WALL_M
+  ) {
+    return p;
+  }
+  return { ...p, x: jx, z: jz };
 }
 
 /** A point on some wall to snap toward — usually the nearest one, sometimes
@@ -1271,8 +1354,17 @@ function pickPartner(m: LayoutModel, current: Placement[], i: number, rng: () =>
   const a = rng() * Math.PI * 2;
   const x = anchor.x + Math.sin(a) * d;
   const z = anchor.z + Math.cos(a) * d;
-  const [cx, cz] = clampIntoFootprint(x, z, m.ctx.footprint);
-  return { x: cx, z: cz, yaw: normaliseYaw(Math.atan2(anchor.x - cx, anchor.z - cz)) };
+  // Same rule as `propose`'s nudge, and for the same reason. No bounding-box clamp feeds
+  // this one — the point comes off a ring around the anchor — so the wall tolerance
+  // should never be what decides anything here; it is applied anyway so the two proposal
+  // paths cannot drift apart on what "outside the room" means.
+  if (
+    !pointInFootprint(x, z, m.ctx.footprint) &&
+    distanceToFootprintEdge(x, z, m.ctx.footprint) > ON_WALL_M
+  ) {
+    return current[i];
+  }
+  return { x, z, yaw: normaliseYaw(Math.atan2(anchor.x - x, anchor.z - z)) };
 }
 
 /** The nearest movable neighbour, for an alignment move. */

@@ -136,28 +136,47 @@ describe('a suggestion never hands back a piece a few degrees off square', () =>
   //
   // **The sweep above is the one room where none of that is needed.** Measured over six
   // presets × 40 seeds, 240 solves, counting every moved piece handed back between
-  // 0.06° and `SNAP_TOL` of square:
+  // 0.06° and `SNAP_TOL` of square. Two sweeps, because the annealer's proposal
+  // generator changed underneath this one (`propose` in `lib/layout-solve.ts` no longer
+  // collapses an out-of-room nudge onto a single interior point):
   //
-  //     no shove          197   ← what shipped, and the suite was green
-  //     axes only          48
-  //     axes + diagonals   30   ← now
+  //                        before   now
+  //     no shove              197     —     ← what shipped, and the suite was green
+  //     axes only              48    63
+  //     axes + diagonals       30    40
   //
-  // A hundred and ninety-seven crooked pieces, and every gate was green, because the
-  // plain 7.5 × 5.6 rect above is the room where it does not happen. The shove clears
-  // about six in seven. **It is a partial fix and the remaining 30 are real** — mostly
-  // the U and the T, where the square yaw is illegal and nothing within the piece's own
-  // reach is legal either.
+  // A hundred and ninety-seven crooked pieces at the point this was written, and every
+  // gate green, because the plain 7.5 × 5.6 rect above is the room where it does not
+  // happen. **The shove is a partial fix and the remainder is real** — mostly the U and
+  // the T, where neither the square yaw nor anything within the piece's own reach is
+  // legal.
   //
-  // The three below are the narrow thing this can assert cheaply: coordinates where the
-  // piece comes free ONLY on a diagonal, found by deleting all four diagonals and
-  // re-running the sweep. Not one of them is in the room above, which is why deleting
-  // the diagonals left the suite green — and the pairs are NOT stable across a change to
-  // the cost function, so a re-price means re-running the search rather than nudging
-  // these numbers.
+  // The two columns are NOT the same experiment and must not be read as a regression:
+  // the "before" sweep's room sizes are not recorded, and mine are the four rows of
+  // `DIAGONAL_ONLY` plus `open` 7.5 × 5.6 and `custom` 5 × 4 — which is the same
+  // polygon as `rect` 5 × 4, so six of my 40 are that room counted twice. What the two
+  // columns agree on is the ratio: the diagonals clear about a third of what the axes
+  // leave, on both trees.
+  //
+  // The four below are the narrow thing this can assert cheaply: coordinates where the
+  // piece comes free ONLY on a diagonal, found by truncating `NUDGE_DIRS` to its first
+  // four entries and re-running the sweep. Not one of them is the room above, which is
+  // why deleting the diagonals left the suite green.
+  //
+  // **These are re-derived, not nudged, and the previous round's note is why.** It said
+  // the pairs are not stable across a change to the cost function — true, and it
+  // understates it: they are not stable across a change to the PROPOSAL GENERATOR
+  // either, which is not a re-price and touches no weight. The old set was `rect 5×4`
+  // seed 24, `l 6×5` seed 1, `u 5×4.5` seed 7; seed 24 of the rect is now crooked WITH
+  // the diagonals, so it no longer witnesses anything about them. Re-run the truncated
+  // sweep, take the difference, do not adjust a number until the test passes. `t` is in
+  // the set now because it is the shape with the most crooked pieces and it had no
+  // witness at all.
   const DIAGONAL_ONLY: Array<[LayoutId, number, number, number]> = [
-    ['rect', 5, 4, 24],
+    ['rect', 5, 4, 5],
     ['l', 6, 5, 1],
-    ['u', 5, 4.5, 7],
+    ['t', 6, 5, 1],
+    ['u', 5, 4.5, 8],
   ];
 
   it.each(DIAGONAL_ONLY)('squares a piece only a diagonal shove can reach: %s %sx%s seed %i', (id, w, d, seed) => {
@@ -347,12 +366,56 @@ describe('a suggestion leaves alone what it did not move', () => {
 // The fixture below is a U with every movable piece thrown into the bounding box at
 // a random angle by a fixed LCG. It is deliberately not a solve seed: the scramble
 // has to be identical on every branch for a number measured here to mean anything,
-// and `solveLayout`'s own rng is an implementation detail. On it, `openRoutes` runs
-// on all 24 seeds.
+// and `solveLayout`'s own rng is an implementation detail.
+//
+// `SCRAMBLE_SEED` is **re-derived, not chosen**. It was 99, and 99 stopped cutting this
+// room the moment the bed's dims were un-transposed (`2e3367d`): the seeded bed went
+// from 2000 mm wide and 1000 deep to 1600 x 2000, and a narrower piece thrown at a
+// random angle seals fewer routes. Scramble 99's scrambled layout scores
+// `navigabilityCost` **0.000** — so the three assertions below were being asked about a
+// room that was not cut. That is the failure the first `it` in this block exists to
+// catch, and it caught it.
+//
+// Swept all 400 seeds: 186 cut the room at all, and 43 was picked out of those by
+// measuring what the fixture is FOR. Its numbers, all taken on this commit:
+//
+//     scramble   navigabilityCost   solve seeds openRoutes searched on
+//     43                   23.503                          20 of 24
+//     164                  23.773                          12 of 24
+//     99                    0.000                          13 of 24
+//
+// 164 is the largest cut of the 186 and was the previous round's pick for exactly that
+// reason. Margin on the INPUT turns out to be close to irrelevant: it buys 12 of 24
+// against 43's 20, and 43's cut is 1% smaller. Choose on coverage.
+//
+// ── The two numbers here are not the same number, and the second is unassertable ──
+//
+// `breakdownBefore.navigation > 0` — what the first `it` checks — is a fact about the
+// INPUT. `openRoutes` gates on the post-anneal winner, which is internal state. They
+// differ in BOTH directions, which is why the guard cannot stand in for the coverage:
+// at 43 all 24 inputs are cut and the pass searches on 20 of them, and at 99 not one
+// input is cut yet it still searches on 13, because a 1600-step anneal can cut a room
+// it was handed intact. So the earlier claim that at 99 "`openRoutes` never ran" was
+// wrong in the direction that matters — the pass ran, on a room whose original state
+// this fixture was not describing.
+//
+// The coverage column is instrumented rather than asserted, and deliberately: counting
+// it needs `openRoutes` to report that it ran, and a counter in `lib/` whose only
+// reader is a test is the dead plumbing this repo keeps deleting. Re-derive it by
+// putting a `console.log` after that function's `stranded <= 0` early return and
+// running the 24 solves. Two minutes, and it is the number that decides this constant.
+//
+// One more caveat, because the obvious check for it is vacuous: the scrambled layout is
+// the SAME input for every solve seed, so `breakdownBefore` is one fact asserted 24
+// times, not 24 facts. And `breakdownBefore.navigation` is `navigabilityCost` x 120,
+// not the raw cost — comparing the two at seed 99 looked like agreement only because
+// both ends were 0.
+const SCRAMBLE_SEED = 43;
+
 function scrambledU(): { poly: Footprint; parts: ScenePart[] } {
   const poly = footprintForLayout('u', 7.5, 5.6);
   const b = footprintBounds(poly);
-  const r = lcg(99);
+  const r = lcg(SCRAMBLE_SEED);
   const parts = defaultScene('u', 7.5, 5.6, { footprint: poly }).map((p) =>
     p.wallMounted
       ? p
@@ -386,13 +449,17 @@ describe('the finish passes on a room that was cut', () => {
     // exercising the code they name, which is the exact failure they were written
     // for.
     expect(results.every((r) => r.breakdownBefore.navigation > 0)).toBe(true);
+    // 142 pieces move across the 24 seeds, so the bar is not near either edge.
     expect(results.reduce((n, r) => n + r.moved.length, 0)).toBeGreaterThan(100);
   });
 
   it('still hands back nothing a few degrees off square that it could have squared', () => {
-    // The tidy after the repair. Deleting that second pass leaves 12 crooked pieces
-    // across these 24 seeds — the residue of a search that runs after the first tidy
-    // has already gone. A room that is never cut cannot show this at all.
+    // The tidy after the repair. Deleting that second pass leaves **20** crooked pieces
+    // across these 24 seeds against 0 with it — the residue of a search that runs after
+    // the first tidy has already gone. A room that is never cut cannot show this at all,
+    // which is what the seed above is for. (It was 12 when written, at scramble 164.
+    // Measured by commenting out the second `snapYaws` call in `solveLayout` and
+    // counting `moved` pieces between 0.06° and `SNAP_TOL` of square.)
     //
     // ── Why this is not simply "nothing comes back crooked" ────────────────────
     //
@@ -517,28 +584,43 @@ describe('squaring a piece up never cuts the room off', () => {
 // for a layout two passes downstream. So the pass is called directly, which is why it
 // is exported.
 //
-// The fixture had to be hunted for, and it has now been hunted for TWICE. The two
-// grids agree almost always: over 1512 cut layouts (three room shapes × three sizes ×
-// 60 scrambles × 6 repair seeds, keeping only the ones the fine grid says are cut) the
-// re-check refused the proxy's answer four times. One of those four is the fixture
-// below. A version of this test written without the search was green against a build
-// with the re-check deleted, which is the failure this one exists not to repeat.
+// The fixture had to be hunted for, and it has now been hunted for THREE times. The two
+// grids agree almost always, so a fixture where they disagree cannot be picked by eye —
+// and a version of this test written without a search was green against a build with the
+// re-check deleted, which is the failure this one exists not to repeat.
 //
-// ── Why twice, and what it costs ───────────────────────────────────────────
+// The current sweep, taken on this commit: 54 scrambles of the U at 8.5 × 6.4 × 28
+// repair seeds, keeping only the scrambles the fine grid says are cut. **19 of the 54
+// are cut, giving 532 runs, and the re-check refuses the proxy's answer 3 times** — all
+// three on scramble 35, at repair seeds 19, 22 and 26. So the property holds on 529 of
+// the 532, which is what makes freezing one of the three worth the search.
 //
-// The first search's fixture was a U at 7.5 × 5.6, and it did not survive
-// `clampIntoFootprint` learning to return a point that is genuinely inside the room
-// (`interiorPoint`, `lib/footprint.ts`). That clamp is on the path `defaultScene`
-// takes, so it moves the SEED layout every scramble here is derived from, and the
-// layout that used to be refused is one the proxy now improves. Nothing was wrong with
-// the old fixture; it stopped existing. Any change that moves a starter placement pays
-// this, and the payment is scriptable: 3240 `openRoutes` runs, about twelve minutes,
-// keep the ones where `openRoutes` returns its input by identity.
+// ── Why three times, and what it costs ─────────────────────────────────────
 //
-// The re-run's grid is `l` / `t` / `u` at 7.5 × 5.6, 6.5 × 5.0 and 8.5 × 6.4. The first
-// search's three sizes were never written down, so this is the same SHAPE of search
-// rather than provably the same search — what it is not is a fixture chosen by eye.
-// 1512 of the 3240 came back cut, which is the count the first search reported too.
+// Each re-run was paid for by a change that moved this space, and none of the three was
+// a change to the cost function:
+//
+//  1. The first fixture was a U at 7.5 × 5.6, and it did not survive
+//     `clampIntoFootprint` learning to return a point genuinely inside the room
+//     (`interiorPoint`, `lib/footprint.ts`). That clamp is on the path `defaultScene`
+//     takes, so it moved the SEED layout every scramble is derived from.
+//  2. Then the bed's dims were un-transposed (`2e3367d`), which moved every scrambled
+//     room again. Scramble 17 / repair seed 2 stopped being a refusal.
+//  3. Then `propose` stopped collapsing an out-of-room nudge onto a single interior
+//     point. `openRoutes` CALLS `propose`, so its search path changed with it: repair
+//     seed 8 stopped refusing and 19 and 22 started.
+//
+// Nothing was wrong with any of the retired fixtures; they stopped existing. The
+// payment is scriptable and it is two minutes, not twelve: 54 × 28 runs on one room,
+// keeping the ones where `openRoutes` returns its input by identity.
+//
+// **The denominator is 532 and not 1512, and the difference is worth naming.** The
+// previous round reported "two refusals in 1512", where 1512 was 54 × 28 — the whole
+// grid, including the 35 scrambles that are not cut at all. `openRoutes` returns its
+// input by identity on every one of those without searching, so they are not trials of
+// anything and counting them makes the property look 3× better tested than it is. It
+// also collided with the FIRST search's 1512, which was a count of cut layouts across a
+// nine-room grid: two different quantities, coincidentally equal, in one file.
 describe('the repair pass is re-checked on the grid the room report reads', () => {
   const poly = footprintForLayout('u', 8.5, 6.4);
   const b = footprintBounds(poly);
@@ -548,23 +630,40 @@ describe('the repair pass is re-checked on the grid the room report reads', () =
   const bounds = { minX: b.minX, maxX: b.maxX, minZ: b.minZ, maxZ: b.maxZ };
   const fine = (p: Placement[]) => costBreakdown(model, p, DEFAULT_WEIGHTS, NAV_CELL).total;
 
-  /** One of the four layouts in 1512 where the coarse proxy and the fine grid
-   *  disagree: scramble 17 of the U at 8.5 × 6.4, repair seed 2.
+  /** One of the THREE runs in 532 where the coarse proxy and the fine grid disagree:
+   *  scramble 35 of the U at 8.5 x 6.4, repair seed 26.
    *
    *  Both constants are that search's coordinates and neither means anything on its
    *  own. The encoding is the search's own — `i * 2654435761` for the scramble,
    *  `i * 31 + j` for the repair seed — and it is kept in that form so a re-run can
    *  name the same point rather than a magic number that has to be trusted.
    *
-   *  Chosen from the four for MARGIN rather than for looks, both numbers measured:
-   *  this room is cut by 12.9 on the fine grid, so the gate below is nowhere near
-   *  vacuous, and with the re-check deleted the proxy's answer scores 450 units worse
-   *  than the layout it was handed. The other three sat at 0.3, 0.01 and 7.1 cut with
-   *  margins of 768, 315 and 608; the one with the largest margin is also the one
-   *  barely cut at all, and a fixture that stops being cut is a test that stops
-   *  meaning anything. */
-  const LAYOUT_SEED = 17 * 2654435761;
-  const REPAIR_SEED = 17 * 31 + 2;
+   *  **Re-derived twice, and the refusal set moved both times.** It was scramble 17 /
+   *  repair seed 2, one of four refusals; `2e3367d` retired that one. The round after
+   *  that found two — scramble 35 at repair seeds 8 and 26 — and chose 26. The
+   *  proposal-generator change in `propose` has now retired seed 8 and produced 19 and
+   *  22, so the set is 19 / 22 / 26 and 26 is the survivor of both re-runs.
+   *
+   *  Scramble 35 is cut by 7.055 on the fine grid, which is comparable to the 7.1 an
+   *  earlier round REJECTED in favour of a 12.9 — treat it as the floor rather than a
+   *  comfortable margin. If a later change un-cuts scramble 35, RE-RUN the sweep; do
+   *  not relax the gate. A fixture that stops being cut is a test that stops meaning
+   *  anything, which is how the first two fixtures died.
+   *
+   *  Seed 26 rather than 19, and NOT by the margin criterion the previous round used.
+   *  With the fine-grid re-check deleted, the proxy's answer at these three seeds
+   *  scores 1698.00, 1451.91 and 1603.91 units worse than the layout it was handed
+   *  (input 1921.50). Seed 19's margin is the biggest, by 6% — which is not the 2× gap
+   *  that made the previous round's choice free, so continuity wins instead: 26 has
+   *  refused across two generations of the proposal generator, and 19 has refused
+   *  across none.
+   *
+   *  None of those three figures can be read off a passing run — they need the re-check
+   *  removed — and they were taken by actually removing it: `return best` in place of
+   *  the final line of `openRoutes`, which turns this assertion and the one above it
+   *  red together. */
+  const LAYOUT_SEED = 35 * 2654435761;
+  const REPAIR_SEED = 35 * 31 + 26;
 
   function scattered(): Placement[] {
     const r = lcg(LAYOUT_SEED);
@@ -593,9 +692,10 @@ describe('the repair pass is re-checked on the grid the room report reads', () =
     // would be a second copy of `openRoutes`' own line and the drift this repo keeps
     // finding, so the exclusion is by CONTRAST instead: on this same model one
     // different repair seed comes back with a different array, and none of the three
-    // early returns can do that for any seed.
+    // early returns can do that for any seed. Measured on scramble 35: 25 of the 28
+    // repair seeds come back with a different array, and only 19, 22 and 26 refuse.
     const at = scattered();
-    expect(openRoutes(model, at, DEFAULT_WEIGHTS, bounds, lcg(17 * 31 + 1))).not.toBe(at);
+    expect(openRoutes(model, at, DEFAULT_WEIGHTS, bounds, lcg(35 * 31 + 1))).not.toBe(at);
   });
 
   it('and its answer is never worse on the fine grid than what it was given', () => {
@@ -606,7 +706,7 @@ describe('the repair pass is re-checked on the grid the room report reads', () =
 
   it('…on a fixture where the proxy really does hand back something worse', () => {
     // Without this, the test above passes on any input the proxy happens to improve,
-    // which is 1508 of the 1512 searched. What makes this one worth freezing is that
+    // which is 529 of the 532 searched. What makes this one worth freezing is that
     // the coarse answer is *rejected* here: `openRoutes` returns its input by
     // identity, and the only path that does so after the search has run is the
     // fine-grid re-check. Delete that re-check and this is the assertion that goes
