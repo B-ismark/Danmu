@@ -259,7 +259,17 @@ at z = −1.94): a 2400 × 600 × 2200 wardrobe walked north into it comes to re
 **z = −1.70 on `3da5df2`** — back face −2.00, which is the wall, with the television entirely
 inside the wardrobe and the left rail reading **"Room checks out"** — and at **z = −1.61 on
 `587d52c`**, back face −1.91, flush against the TV's front face. **90 mm**, being 60 mm of
-television plus 30 mm of `MOUNT_PAD`.
+television plus the 30 mm its back sits off the plaster.
+
+An earlier draft of this paragraph attributed that 30 mm to `MOUNT_PAD`, which is `0.02`
+(`lib/physics.ts:112`) — so did the pull request that shipped the fix. Everything measured in
+the A/B held; the one figure that was *inferred* rather than read was wrong, and it survived
+into a merged document, a PR body and a memory file before a one-line `grep` settled it. The
+30 mm is arithmetic on measured values — wall face at −2.00, TV centre at −1.94, depth 60 mm
+— and **the constant that produces it is deliberately not named here**, because `WALL_GAP` is
+also `0.02` and `snapToWall`'s inset is `dimMM[1]/2000 + WALL_GAP + standoff`, which would
+need `standoff = 0.01` for this piece. That decomposition is plausible and unverified, which
+is exactly the kind of sentence this document should not contain.
 
 That last detail is not decoration: the room report calling a room fine while a television
 stands inside a wardrobe is a *second* defect, in `lib/clearance.ts` rather than in
@@ -376,9 +386,12 @@ pipeline should be able to see that it was asked and settled, not merely absent.
    in scope, and third.* It is the only change that makes the cost function tunable again, and
    § C is the evidence that no weight sweep substitutes for it. It is also the only item here
    that will turn a large number of existing assertions red on purpose.
-   · **STILL OPEN. This is the one decision outstanding in this document.** Layers 3a and 3b —
-   MMR over the offered set, and the relation-aware offer floor — need no decision and no new
-   measurement, so they are the work that can start without this answer.
+   · **ANSWERED — in scope.** Which makes every question in this document settled, and the
+   order stands: **3a and 3b first, the split third.** The reason for that order is not
+   caution, it is that 3a and 3b are measurable on their own and the split is not: a change
+   that alters what the solver *accepts* moves every number the suite pins, so shipping it
+   before the cheap selection work would leave nothing stable to measure the selection work
+   against. Ship the two that need no decision, re-derive, then take the accept step apart.
 3. **Bedside clearance: 500 mm, against Panero & Repetto's 36 in ≈ 914 mm** — the source
    Merrell et al. cite, and the only place our numbers and theirs disagree by more than a
    rounding (wardrobe 600 vs 610, dining 900 vs 914, coffee table 400–500 vs 406–457 all agree).
