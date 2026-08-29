@@ -199,6 +199,53 @@ Variety is a property of the *set of suggestions*. A term inside the density wou
 individual layout pay for a property no individual layout has. So § A.2 is not blocked on the
 cost function and never was: it is a change to whatever picks the finalists.
 
+#### 3.1.1 Take MMR's criterion, not its parameterisation — measured
+
+**Written, in `lib/layout-offer.ts` on `feat/suggest-offer-mmr` (`e999522`), imported by
+nothing.** The criterion survives the port; the textbook `λ·rel − (1−λ)·sim` form does not,
+and the reason is dimensional rather than a matter of taste. Relevance there is cost
+**normalised across the candidate set**; similarity is a **share of the room**. Those have no
+common unit, so λ is not a knob with a stable meaning. Three consequences, each measured on
+this input and each now an assertion:
+
+| | |
+|---|---|
+| a candidate that is never shown decides the one that is | finalists at 8.20 / 8.21 / 8.55 with `k = 2` offer the first two at every λ from 0.3 to 0.86; adding a fourth at **14.0**, never offered, changes the second suggestion — it only widened the spread |
+| a rounding error gets full relevance | costs `[10, 10+ε, 10+2ε]` have spread ε, which the normalisation stretches to the whole `[0, 1]` range and then orders by. **`isWorthOffering` refuses exactly this reasoning eight lines away**, in cost units, with a written note about rounding errors |
+| λ's meaning moves with the piece count | similarity is a share of the room, so "differs in one piece" is `(N−1)/N` — the diversity term varies by at most `1/N` while relevance always spans the full range. At λ 0.5 the same three costs put the diverse candidate second in a **2-piece** room and gave pure cost order in an **8-piece** one |
+
+The third is also how it got shipped: the first suite's fixtures were two pieces, where
+similarity is only ever exactly 0 or 1 — the one shape in which a term that scales with piece
+count cannot show itself. The file was inert in the rooms it was written for and green.
+
+**`cost + diversityPenalty × (closest already picked)` has none of the three.** The penalty
+is in cost units, so an unshown outlier cannot move it, ε stays ε, and "one of eight pieces
+different" earns one eighth of the penalty. It is also the only form a caller can state:
+*"I will accept this much extra cost for a completely different arrangement"* is a sentence
+about a room; λ = 0.7 is not. **The value of the penalty is unmeasured** — that is the open
+number, and `MIN_GAIN_ABS` is the scale to measure it against rather than to adopt.
+
+#### 3.1.2 Two limits on ranking the finalist pool, both discovered after the layer was scoped
+
+Neither is fixable at the offer stage, and the migration table's "none; offer stage only"
+risk column is right about *destabilising the annealer* and wrong if read as "nothing else to
+decide".
+
+· **The pool cannot contain orientation variety.** `similar()` compares x/z and never reads
+  `.yaw`; `propose` turns a piece **in place**. So `remember()` merges a turn-only variant
+  into the candidate it turned from and keeps the cheaper, and a rotation-only alternative
+  cannot survive into the pool at any seed. Ranking it therefore delivers **positional**
+  variety and cannot deliver the thing § A.2 actually complains about. Adding a yaw term to
+  `similar()` changes which candidates survive — layer 2's territory, and it moves the
+  assertions parked by the winding fix — so this is recorded rather than fixed. The symptom
+  if it is forgotten is "MMR did nothing".
+· **Ranking candidates is not ranking outcomes.** `snapYaws`, `pruneMoves`, `openRoutes` and
+  a second tidy all run *after* a finalist is picked, so the pool holds raw annealer output
+  and not the thing a user would be shown. Two distinct finalists can post-process to the
+  **same** suggestion — on screen, indistinguishable from the ranking doing nothing — and
+  `openRoutes` can refuse the pick outright, so the wiring has to walk down the ranked list
+  rather than take one.
+
 ### 3.2 The offer floor, which § C already scoped
 
 § C's untried direction — *"the fault is in what gets OFFERED, not what gets searched. A
@@ -349,8 +396,8 @@ Layers are independently shippable and each is a merge candidate on its own.
 | 1b | group turns pivot on the anchor, not the centroid | 1a | one measurement |
 | 1c | tier model: supported pieces sampled over their parent | 0 | fixtures that assume a flat list |
 | 2 | feasibility split, with the **"no feasible candidate" fallback that names the violated rule** | 1c | high — most of `layout-solve.test.ts` reads `cost.total` |
-| 3a | MMR over the offered set | — | none; offer stage only |
-| 3b | relation-aware floor in `isWorthOffering` (§ C's own untried direction) | — | none; offer stage only |
+| 3a | MMR over the offered set — **the two pure pieces are written** (`lib/layout-offer.ts`, `e999522`), the wiring is not | — | none to the annealer, and that is not the same as nothing to decide: see § 3.1.1 for the parameterisation and § 3.1.2 for two limits found after this row was written |
+| 3b | relation-aware floor in `isWorthOffering` (§ C's own untried direction) | `relationDistance` / `inRelationBand`, PR #46 | none; offer stage only |
 | 3c | sweep the orientation:distance ratio | **2** | meaningless before 2 |
 | 4a | `Foot[]` compound footprints, authored in `scene-spec.ts` | — | picking must move with it |
 | 4b | per-part vertical extents | 4a | — |
@@ -363,6 +410,16 @@ that still depends on 4a.
 **3a and 3b can start today** and are independent of everything above. They are now the only
 part of this document that is unblocked, since 0 is decided and 2 is the one question still
 with the user.
+
+**Both halves of that sentence have since needed correcting, and the corrections run in the
+order they were found.** 3a *did* start — its two pure pieces are `lib/layout-offer.ts` on
+`feat/suggest-offer-mmr` — and starting it turned up § 3.1.2's two limits, which are about
+what ranking the pool can *achieve* rather than about what it can destabilise. 3b is no
+longer startable from `main` alone: it needs `relationDistance` / `inRelationBand`, which
+sit in PR #46, because deriving band membership at the offer stage without them means
+re-deriving what distance a relation measures — `hypot` of centres for `faces`/`near`,
+`obbGap` otherwise — in a second file. And "independent of everything above" was read once
+as "nothing to decide"; the open decision is § 3.1.1's penalty, in cost units, unmeasured.
 
 ---
 

@@ -210,6 +210,45 @@ all facing one way — had two causes: how a bed is added (fixed) and how a bed 
 fix are both on `main`, in the merge of `fix/bed-shape-and-its-rotted-fixtures` (PR #38).
 The branch name this paragraph used to name does not exist on `origin` and never did.
 
+**Started, in a commit, not on `main`.** `lib/layout-offer.ts` + `tests/layout-offer.test.ts`
+exist on `feat/suggest-offer-mmr` (`e999522`) — layer 3a's two pure pieces, ranked and
+tested, **imported by nothing**. What is written is `orderOffers` (the ranking) and
+`layoutSimilarity` (how alike two arrangements are). What is not written is the wiring at
+`RoomTools.tsx:534`, and three things below have to be settled before it can be.
+
+· **The diversity trade is in COST UNITS, not a `[0, 1]` lambda, and that is a result about
+  the technique rather than a preference.** Textbook MMR normalises relevance across the
+  candidate set, which compares a fraction of the set's cost spread against a share of the
+  room — no common unit, so lambda has no stable meaning. Measured, on this input: a
+  finalist costing 14.0 that is *never offered* changed which candidate was offered second,
+  purely by widening the spread; costs `[10, 10+ε, 10+2ε]` had ε blown up to the full
+  relevance range and ordered by it, which is exactly the reasoning `isWorthOffering`
+  refuses next door in cost units; and lambda's meaning moved with piece count, so the same
+  three costs put the diverse candidate second in a two-piece room and gave pure cost order
+  in an eight-piece one. `cost + penalty × closest` has none of the three.
+  **The number itself is unmeasured** — what `diversityPenalty` should be, in cost units,
+  is the one open value, and `MIN_GAIN_ABS` is the obvious scale to measure it against
+  rather than to borrow.
+
+· **The finalist pool cannot supply orientation variety, which is what §A.2 asked for.**
+  `similar()` compares x/z and never reads `.yaw`, while `propose` turns a piece *in place*,
+  so `remember()` merges a turn-only variant into the candidate it turned from and keeps the
+  cheaper. A rotation-only alternative cannot reach the pool at any seed. Adding a yaw term
+  to `similar()` would change which candidates survive — squarely inside what layer 2 is
+  meant to settle first, and it would move the parked assertions — so this is **recorded,
+  not fixed**. Ranking over the pool gives positional variety and nothing else, and the
+  symptom if it is forgotten is "the diversity code does nothing".
+
+· **The pool is raw annealer output, so ranking candidates is not ranking outcomes.**
+  `snapYaws`, `pruneMoves`, `openRoutes` and a second tidy all run *after* a finalist is
+  picked. Two consequences, neither designed for yet: two distinct finalists can
+  post-process to the **same** suggestion, which on screen is indistinguishable from the
+  ranking doing nothing; and `openRoutes` can refuse the pick outright, so the wiring needs
+  to walk down the ranked list rather than take one.
+
+**Layer 3b has not been started.** It needs `relationDistance` / `inRelationBand`, which are
+in PR #46 and not on `main`.
+
 ### 3. `tests/suggest-tidiness.test.ts` — two reds, both real, both diagnosed
 
 Neither is load-sensitive. Both reproduce running that file alone in ~20 s on an idle
