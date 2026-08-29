@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import { roomStore } from '@/lib/storage';
+import { footprintBounds, footprintForLayout, type Footprint } from '@/lib/footprint';
 import type { ScenePart } from '@/lib/scene-spec';
 import type { RoomData } from '@/lib/storage';
 
@@ -50,14 +51,47 @@ export function PlanThumb({ roomId }: { roomId: string }) {
 
   const W = room.width;
   const D = room.depth;
-  const scale = Math.min((VW - PAD * 2) / W, (VH - PAD * 2) / D);
-  const ox = (VW - W * scale) / 2;
-  const oy = (VH - D * scale) / 2;
+
+  // The room's actual SHAPE. This drew a `<rect>` from width and depth alone and never
+  // read `layoutId` or `footprint` at all, so every saved room came back a rectangle on
+  // its card — an L, a T and a U all looked like the same room, and furniture standing
+  // in the quadrant an L cuts away looked like it was on the floor.
+  //
+  // `footprint` first because it is the override: it is written after independent wall
+  // moves and the studio treats it as authoritative when present (see `RoomData`).
+  // `layoutId` is the fallback and is always present, which is what makes this work for
+  // the rooms nobody has dragged a wall in — that is nearly all of them, and it is why
+  // reading only `footprint` would have looked like a fix and changed almost nothing.
+  const poly: Footprint = (room.footprint as Footprint | undefined) ?? footprintForLayout(room.layoutId, W, D);
+
+  // Fitted to the polygon's BOUNDS rather than to width × depth. Those agree for a
+  // preset and stop agreeing the moment a wall is moved: a footprint can end up
+  // off-centre, and `±W / 2` is then the wrong origin for the outline and for every
+  // piece of furniture in it. Same reason `resolvePlacement` reads the bounds.
+  const b = footprintBounds(poly);
+  const spanX = Math.max(b.maxX - b.minX, 0.001);
+  const spanZ = Math.max(b.maxZ - b.minZ, 0.001);
+  const scale = Math.min((VW - PAD * 2) / spanX, (VH - PAD * 2) / spanZ);
+  const ox = (VW - spanX * scale) / 2;
+  const oy = (VH - spanZ * scale) / 2;
+  /** Metres in the room's own frame → pixels in the thumbnail. One function, so the
+   *  outline and the furniture cannot end up on different origins. */
+  const px = (x: number) => ox + (x - b.minX) * scale;
+  const pz = (z: number) => oy + (z - b.minZ) * scale;
 
   // This SVG carries information (room proportions, how full the room is), so it
   // is an image with a description — not decoration a screen reader can skip.
   const count = parts?.length ?? 0;
-  const label = `Floor plan — ${W.toFixed(1)} by ${D.toFixed(1)} metres, ${
+  // The shape is named when it is not a plain rectangle, because the two numbers
+  // describe the bounding box and for an L or a U that is not the room. 'open' is a
+  // rectangle in `footprintForLayout`, so it adds nothing and is absent here.
+  const SHAPE_WORD: Partial<Record<RoomData['layoutId'], string>> = {
+    l: 'L-shaped, ',
+    t: 'T-shaped, ',
+    u: 'U-shaped, ',
+    custom: 'custom shape, ',
+  };
+  const label = `Floor plan — ${SHAPE_WORD[room.layoutId] ?? ''}${W.toFixed(1)} by ${D.toFixed(1)} metres, ${
     count === 0 ? 'nothing in it yet' : count === 1 ? '1 piece of furniture' : `${count} pieces of furniture`
   }`;
 
@@ -69,25 +103,25 @@ export function PlanThumb({ roomId }: { roomId: string }) {
         viewBox={`0 0 ${VW} ${VH}`}
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
       >
-        <rect
-          x={ox}
-          y={oy}
-          width={W * scale}
-          height={D * scale}
+        {/* The footprint, not a rectangle. `polygon` closes itself, so an L, a T and a
+            U each draw their own notch and the card stops claiming every room is a
+            box. */}
+        <polygon
+          points={poly.map(([x, z]) => `${px(x)},${pz(z)}`).join(' ')}
           fill="var(--paper)"
           stroke="var(--ink)"
           strokeWidth="1.5"
         />
         {(parts ?? []).map((p) => {
-          const px = ox + (p.pos[0] + W / 2) * scale;
-          const py = oy + (p.pos[2] + D / 2) * scale;
+          const cx = px(p.pos[0]);
+          const py = pz(p.pos[2]);
           const wpx = (p.dimMM[0] / 1000) * scale;
           const dpx = (p.dimMM[1] / 1000) * scale;
           const color = p.locked ? 'var(--locked)' : 'var(--accent)';
           const fill = p.locked ? 'var(--locked-tint)' : 'var(--accent-tint)';
           const rotDeg = -(p.rot * 180) / Math.PI;
           return (
-            <g key={p.id} transform={`translate(${px} ${py}) rotate(${rotDeg})`}>
+            <g key={p.id} transform={`translate(${cx} ${py}) rotate(${rotDeg})`}>
               {p.circle ? (
                 <circle r={Math.max(2, wpx / 2)} fill={fill} stroke={color} strokeWidth="0.8" />
               ) : (

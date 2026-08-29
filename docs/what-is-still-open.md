@@ -1305,12 +1305,45 @@ between clicks.
 Both are DOM-reachable on the **2D plan**, which is SVG with real elements and is the cheap
 way in. The 3D tab needs world→screen mapping to place a synthetic pointer.
 
-### 9. Room previews are all drawn as rectangles
+### 9. Room previews are all drawn as rectangles — FIXED
 
 The user: *"Room previews should be room shape accurate, they all look like rectangular
-rooms atm."* The workspace card for a saved L / T / U room draws a rectangle. The footprint
-is stored on the room and `footprintForLayout` is pure, so the preview already has
-everything it needs to draw the real shape.
+rooms atm."*
+
+`PlanThumb` drew `<rect>` from `room.width` and `room.depth` and **never read `layoutId`
+or `footprint` at all** — so an L, a T and a U were the same picture, and furniture standing
+in the quadrant an L cuts away looked like it was on the floor. It draws the polygon now,
+from `room.footprint ?? footprintForLayout(room.layoutId, W, D)`, and its `aria-label` names
+the shape when there is one to name.
+
+**The order of that fallback is the fix, not a detail.** `footprint` is only written after a
+wall has been dragged, so reading only `footprint` would have looked right in a diff and
+changed nothing for almost every room in existence. `layoutId` is always there.
+
+Two more things came out of it. The fit now reads the polygon's **bounds** rather than
+`±W / 2`, which is the same correction `resolvePlacement` carries: after independent wall
+moves a footprint can be off-centre, and the old origin put such a room's far wall outside
+the 240 × 150 picture. And `MiniPlan` in `RoomTools.tsx` — the other plan thumbnail in this
+app — was **already** drawing the polygon against the bounds, correctly. Two previews of the
+same thing, one right and one wrong, which is this repo's most-repeated shape; the fixed one
+now matches the one that was never broken.
+
+**Five assertions, seven mutations, all red** — and two of those mutations survived the first
+attempt, both because of the FIXTURE rather than the assertion:
+
+- the T-room test stored `footprintForLayout('t', …)` on a room whose `layoutId` was
+  already `'t'`, so honouring the override and ignoring it gave the same eight vertices.
+  Deleting the override entirely was green. It stores a five-vertex polygon now.
+- the off-centre test shifted x only and left z symmetric at ±2, so reverting the z mapping
+  to `z + D / 2` was green. It is off-centre on both axes now.
+
+Both are the failure this repo already names — *"every test for that function used a
+rectangle, where the vertex average IS the true centroid"* — reproduced in a file written
+the same hour as the fix. Which is the argument for mutating, in one paragraph: the
+assertions were real, and the fixtures could not express the defect.
+
+**NOT verified:** that the shape reads correctly at 240 × 150 with furniture drawn over it.
+An item in `visual-check.md`.
 
 ### 10. Undo / redo should cover selection — a decision, not a defect
 

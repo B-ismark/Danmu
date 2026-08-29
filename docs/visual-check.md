@@ -111,6 +111,22 @@ becoming **un-turnable** (the thing this must not do); the lamp left behind; or 
 with **no red outline at all**, which is the 3D tab's version of this and is already a
 confirmed defect — § H.5, so you do not need to check that half.
 
+### Room cards that are the shape of the room
+
+Workspace. You need one saved room per shape — from **Start decorating** pick **L**, then
+**T**, then **U**, then a plain rectangle, and give each a name you can tell apart.
+
+**What right looks like:** each card's little floor plan is **that room's outline** — the L
+has its notch, the U has its two arms — fitted in the picture with the furniture inside the
+walls rather than floating in the cut-away part.
+
+**Wrong looks like:** any card still drawing a rectangle (the defect, unfixed); an outline
+that runs off the edge of the picture or sits crushed in a corner; or furniture drawn
+outside the outline. Two of those would be the fit reading the wrong origin, which is what
+happens on a room whose walls have been dragged — so **drag one wall outward in a room, go
+back to the workspace, and look at that card again**, which is the case tests can only check
+arithmetically.
+
 ### The placement row, now two buttons instead of three
 
 *The user asked for this after looking at it, so it is the one item here they have
