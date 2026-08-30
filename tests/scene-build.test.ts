@@ -14,6 +14,7 @@ import {
 } from '../lib/scene-spec';
 import { LAYOUT_IDS, type RoomData } from '../lib/storage';
 import { heightForNewCeiling, MOUNT_PAD } from '../lib/physics';
+import { stripCommentsAndStrings } from './helpers/source';
 import { footprintForLayout } from '../lib/footprint';
 import { footArea, footFromPart, footIntersectionArea, outsideShare } from '../lib/geometry';
 
@@ -469,10 +470,44 @@ describe('one ceiling clearance: the duplication itself, not just its drift', ()
   // the positive half asks which file owns the clamp by FINDING it rather than by
   // remembering — whichever module clamps to the ceiling must read `MOUNT_PAD`, and
   // there must be exactly one.
+  // Comments STRIPPED, and this is not tidiness — it is the difference between the
+  // sweep working and not. Both assertions below are regexes over source, and a
+  // docblock that QUOTES the arithmetic satisfies them exactly as well as the
+  // arithmetic does. That is not hypothetical: the commit that added this line also
+  // added a comment to `layout-settle.ts` reading `... - h / 2 - MOUNT_PAD ...` to
+  // explain why the low guard matches `drag-resolve`, and with raw `src` the clamp
+  // could then be deleted outright with this test still green. Measured by deleting
+  // it. A check a comment can satisfy is a check that cannot fail.
+  // One PASS, not two regexes. The regex version was wrong in both orderings and both
+  // were measured wrong: comments-first lets a `/*` inside a STRING swallow real code
+  // (planting `const GLOB_ALL = ...` above a duplicate pad left this sweep green with
+  // the duplicate in the file), and strings-first lets an apostrophe in a comment eat
+  // whatever follows - and this codebase's comments are full of apostrophes. See
+  // `tests/helpers/source.ts` for the scanner and for the one limit it still has.
   const libDir = join(process.cwd(), 'lib');
   const modules = readdirSync(libDir)
     .filter((f) => f.endsWith('.ts'))
-    .map((f) => ({ file: f, src: readFileSync(join(libDir, f), 'utf8') }));
+    .map((f) => ({ file: f, src: stripCommentsAndStrings(readFileSync(join(libDir, f), 'utf8')) }));
+
+  it('and the stripper leaves the code it is asked about', () => {
+    // The stripper has a known limit (a regex literal containing a quote), so every
+    // sweep below is paired with a positive check. Without this, a stripper that ate
+    // code would make both assertions pass over nothing, which is the exact failure
+    // they exist to catch, one layer down.
+    const physics = modules.find((m) => m.file === 'physics.ts');
+    expect(physics, 'physics.ts must be in the sweep').toBeDefined();
+    expect(physics!.src, 'the declaration must survive stripping').toMatch(/export const MOUNT_PAD\s*=/);
+    const clampers = modules.filter((m) => /-\s*MOUNT_PAD/.test(m.src)).map((m) => m.file);
+    expect(clampers.length, 'the readers must survive stripping').toBeGreaterThan(0);
+  });
+
+  it('and MOUNT_PAD is the value every one of them agrees on', () => {
+    // Pinned, because nothing else in the suite pins it and every test that reads it
+    // DERIVES from it - which is right, and leaves the constant itself free to move
+    // silently. Measured: changing it to 0.05 left the whole suite green. A clearance
+    // is a look, so changing it should be a deliberate act with a red test attached.
+    expect(MOUNT_PAD).toBeCloseTo(0.02, 12);
+  });
 
   it('no module in lib/ declares a ceiling pad of its own', () => {
     expect(modules.length, 'the sweep must have files to sweep').toBeGreaterThan(20);
@@ -483,14 +518,30 @@ describe('one ceiling clearance: the duplication itself, not just its drift', ()
     expect(offenders, 'MOUNT_PAD lives in physics.ts and nowhere else').toEqual([]);
   });
 
-  it('and exactly one module clamps to the ceiling, reading the shared constant', () => {
+  it('and every module that clamps to the ceiling reads the shared constant', () => {
     // `cap` is the local name the clamp gives `roomHeight - MOUNT_PAD`. Asking for the
-    // ARITHMETIC rather than for a mention of `MOUNT_PAD` is what keeps this honest:
-    // a module that imports the constant and does not use it would satisfy a
-    // `toContain`, which is how the old version of this test would have passed on a
-    // file whose clamp had been deleted rather than moved.
-    const clampers = modules.filter((m) => /-\s*MOUNT_PAD/.test(m.src)).map((m) => m.file);
-    expect(clampers, 'one owner, and the sweep must actually find it').toContain('layout-settle.ts');
+    // ARITHMETIC rather than for a mention of `MOUNT_PAD` is what keeps this honest: a
+    // module that imports the constant and does not use it would satisfy a mention.
+    //
+    // **The whole set, not `toContain('layout-settle.ts')` — and the title said
+    // "exactly one" while the assertion could not check it.** `toContain` is satisfied
+    // by any N >= 1, and N is THREE, so it held while saying nothing and would have held
+    // just as well if a fourth module had grown a clamp of its own overnight. It also
+    // could not fail in the direction the comment above it cares about — a clamp
+    // DELETED rather than moved — unless the deleted one happened to be the single file
+    // it named.
+    //
+    // Three is correct and is not a smell: they answer three different questions — a
+    // piece under a live pointer, a whole room after a solve, and a ceiling the user has
+    // just changed. What matters is that none of them declares its own pad, which is the
+    // assertion above. This one pins WHO, so a fourth reader arrives as a decision
+    // rather than as a diff nobody reads.
+    const clampers = modules.filter((m) => /-\s*MOUNT_PAD/.test(m.src)).map((m) => m.file).sort();
+    expect(clampers, 'the sweep must actually find the clampers').toEqual([
+      'drag-resolve.ts',
+      'layout-settle.ts',
+      'physics.ts',
+    ]);
   });
 });
 

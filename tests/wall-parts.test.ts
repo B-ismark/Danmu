@@ -1,12 +1,26 @@
 import { describe, it, expect } from 'vitest';
 import { wallApertures } from '@/lib/apertures';
 import { clampIntoFootprint, footprintForLayout, pointInFootprint, polygonCentroid, wallSegments, type Footprint } from '@/lib/footprint';
-import { footFromPart, footInsidePoly, type Poly } from '@/lib/geometry';
+import { footExtentAlong, footFromPart, footInsidePoly, obbExtentAlong, type Poly } from '@/lib/geometry';
 import type { LayoutId } from '@/lib/storage';
 import { openingsForRoom } from '@/lib/room-openings';
 import { anchorFor, groundY, ridesWall, snapToWall, wallStandoff, CURTAIN_STANDOFF } from '@/lib/physics';
 import { defaultScene, isWallMountedPart, placeNewPart, type ScenePart } from '@/lib/scene-spec';
 import { ROOM } from '@/lib/parts-catalog';
+// `WALL_GAP` is imported, never spelled. An assertion that wrote `0.02` would still
+// be green if the constant were re-tuned and the pushes stopped reaching it, which is
+// the failure mode this whole change is about.
+import { WALL_GAP } from '@/lib/layout-rules';
+import { containedXZ } from '@/lib/layout-settle';
+import { interiorPoint } from '@/lib/footprint';
+import { polygonWinding } from '@/lib/geometry';
+
+/** `containedXZ` with the two arguments every caller derives the same way, so a test
+ *  below reads as the question it is asking rather than as six lines of setup. */
+function seat(dimMM: [number, number, number], rot: number, x: number, z: number, poly: Footprint): [number, number] {
+  const p = poly as unknown as Poly;
+  return containedXZ({ rot, dimMM }, x, z, p, interiorPoint(p) ?? polygonCentroid(poly), polygonWinding(p));
+}
 import { aabbExtents, localToWorld, nearestEdge, obbFromPart, obbInsidePoly } from '@/lib/geometry';
 
 
@@ -276,6 +290,110 @@ describe('placeNewPart keeps a drop inside the room', () => {
     expect(r.pos[2]).toBeCloseTo(1.73, 6);
   });
 
+  it('leaves exactly WALL_GAP at all four walls, not at two of them', () => {
+    // The defect, in one sentence: acceptance was `footInsidePoly`, and `pointInPoly`'s
+    // ray test is half-open in z, so a footprint corner lying exactly on min-x or
+    // min-z read INSIDE while its mirror on max-x / max-z read outside. A piece
+    // dropped flush was therefore returned untouched at the west and north walls and
+    // pushed 20 mm off at the east and south. Measured on a 6 × 4 with a 300 mm piece
+    // before the fix: **0.000 / 0.020 / 0.000 / 0.020**.
+    //
+    // `WALL_GAP`'s own docblock in `lib/layout-rules.ts` says "every path that puts
+    // something against a wall has to agree on it" and names three that did not. A
+    // path that disagrees with itself on two of its own four walls is a fourth.
+    //
+    // All four in one loop deliberately: choosing examples is how the first version of
+    // this missed it, and either single-ended test is green on the half that works.
+    // `containedXZ` directly rather than through `placeNewPart`, because the add path
+    // also clamps dimensions and turns floor pieces to face their wall, and neither
+    // belongs in an assertion about a gap.
+    const S: [number, number, number] = [300, 300, 1500];
+    const h = 0.15;
+    for (const [name, x, z, axis] of [
+      ['west', h, 2, 0],
+      ['east', 6 - h, 2, 0],
+      ['north', 3, h, 2],
+      ['south', 3, 4 - h, 2],
+    ] as Array<[string, number, number, 0 | 2]>) {
+      const [sx, sz] = seat(S, 0, x, z, RECT6x4);
+      const far = axis === 0 ? 6 : 4;
+      const at = axis === 0 ? sx : sz;
+      expect(Math.min(at - h, far - at - h), `the ${name} wall`).toBeCloseTo(WALL_GAP, 6);
+    }
+  });
+
+  it('clears BOTH walls of a corner when the piece is not square', () => {
+    // The regression this pins was found by danmu-bc on a built tree, and it is why
+    // `worstWall` ranks by deficit rather than by distance. `nearestEdge` orders walls
+    // by how far the piece's CENTRE is from each; what a containment push has to clear
+    // is the piece's own extent along that wall MINUS how far in it already is. The
+    // two orderings agree only when hw === hd. A 1200 × 600 wardrobe dropped flush
+    // into a corner violates both walls by 20 mm, but the near wall (0.30 m) is still
+    // nearest after being cleared, so iteration 2 computed `push = 0` and broke with
+    // the far wall untouched — handing the answer to the lerp, whose step is
+    // `0.1 × |x0 - centre|`. Measured on the shipped branch: **240 mm / 170 mm off two
+    // walls the piece was dropped flush against**, and 500 mm / 460 mm in a 12 × 10.
+    //
+    // Two rooms, and the second is not redundant: the displacement is a FRACTION of
+    // the room, so one room's numbers are equally consistent with a fixed 240 mm
+    // error. 8 × 6 is chosen because its half-extents differ from the 6 × 4 the
+    // four-wall test above uses, so the two cannot share a failure.
+    //
+    // And 30° as well as 0°, because at 0° the piece's extents are its own half-sizes
+    // and every wrong-axis substitution is still a plausible number; at 30° they are
+    // 0.6696 / 0.5598 and nothing but the rotated extent lands on 20 mm.
+    const SIZE: [number, number, number] = [1200, 600, 2000];
+    for (const rot of [0, Math.PI / 6]) {
+      const { ex, ez } = aabbExtents(rot, SIZE);
+      for (const [w, d] of [[6, 4], [8, 6]] as Array<[number, number]>) {
+        const poly = footprintForLayout('rect', w, d);
+        for (const sx of [1, -1]) {
+          for (const sz of [1, -1]) {
+            // The flush centre. `footprintForLayout` is CENTRED on the origin — which
+            // the first draft of this test got wrong, and the 1.24 m it then measured
+            // was the fixture, not the code.
+            const x0 = sx * (w / 2 - ex);
+            const z0 = sz * (d / 2 - ez);
+            const [x, z] = seat(SIZE, rot, x0, z0, poly);
+            const where = `${w}x${d} rot ${rot.toFixed(3)} corner (${sx > 0 ? '+' : '-'}x, ${sz > 0 ? '+' : '-'}z)`;
+            expect(Math.min(x + w / 2 - ex, w / 2 - x - ex), `${where}: X`).toBeCloseTo(WALL_GAP, 6);
+            expect(Math.min(z + d / 2 - ez, d / 2 - z - ez), `${where}: Z`).toBeCloseTo(WALL_GAP, 6);
+          }
+        }
+      }
+    }
+  });
+
+  it('sends a piece dropped OUTSIDE back the short way, not the deep way', () => {
+    // The other half of the same rule, and why `worstWall` declines to answer when the
+    // centre is out of the room. A deficit is "how much more clearance this wall
+    // wants", so for a piece already outside, the wall of GREATEST deficit is the one
+    // it is furthest beyond — ranking by it sends the piece the longest way back.
+    //
+    // Measured while building the fix, on this exact fixture: deficit-ranked, the fan
+    // came back at (2.48, 3.48) — 3.45 m from where it was aimed and in the L's OTHER
+    // ARM. Nearest-wall, it comes back at (5.48, 1.48), 2.46 m away and in the arm it
+    // was pointing at. Both are legally inside with 20 mm to spare, which is precisely
+    // why `footInsidePoly` alone cannot tell them apart, and why this measures the
+    // DISTANCE MOVED and not only the legality.
+    const L: Footprint = [
+      [0, 0],
+      [6, 0],
+      [6, 2],
+      [3, 2],
+      [3, 4],
+      [0, 4],
+    ];
+    const at: [number, number] = [5.9, 3.9];
+    expect(pointInFootprint(at[0], at[1], L), 'the drop must be in the cut-away quadrant').toBe(false);
+    const [sx, sz] = seat(FAN, 0, at[0], at[1], L);
+    expect(footInsidePoly(footFromPart([sx, 0, sz], 0, FAN), L as unknown as Poly)).toBe(true);
+    const moved = Math.hypot(sx - at[0], sz - at[1]);
+    // Pinned as a number so a walk that starts going the deep way shows up as a diff.
+    expect(moved).toBeCloseTo(2.456, 3);
+    expect(moved, 'the deep answer was 3.45 m — anything near that is the wrong wall').toBeLessThan(3);
+  });
+
   it('still puts a wall rider on the wall nearest where it was aimed', () => {
     // placeNewPart's own wall path is unchanged and must stay so: the drop point
     // decides WHICH wall, and the clamp must not run first and move it.
@@ -326,6 +444,30 @@ describe('placeNewPart: the two edges of that clamp', () => {
     expect(r.pos[0]).toBeCloseTo(3, 6);
     const deep = placeNewPart('sofa', 'sofa', [900, 5000, 800], room6x4, [], [3, 0.2]);
     expect(deep.pos[2]).toBeCloseTo(2, 6);
+
+    // ── The two assertions above are consistent with containment being NEVER
+    // REACHED, and were for as long as they existed. Both only say "the centred
+    // answer survived", which is equally true of a `containedXZ` that correctly
+    // declines to move an unseatable piece and of an `intoRoom` that never calls it.
+    // Three additions, because the discrimination takes all three:
+    //
+    // 1. It genuinely does not fit. Were this ever true, the answer above would be an
+    //    ACCEPTANCE rather than the least-bad position kept, and the pair would be
+    //    measuring a different branch from the one its comment describes.
+    expect(
+      footInsidePoly(footFromPart(r.pos, r.rot, [7000, 900, 800]), RECT6x4 as unknown as Poly),
+      'a 7 m sofa in a 6 m room must NOT come back seated — the centred answer is the least-bad one',
+    ).toBe(false);
+    // 2. The oversized axis is centred and the axis that FITS is contained — the
+    //    assertion that cannot pass if containment was skipped. Dropped at z = 3.9 in
+    //    a 4 m room, a 900 mm-deep sofa has 3.55 as its flush centre and 3.53 once the
+    //    gap is honoured; a skipped containment leaves it at 3.55.
+    const mixed = placeNewPart('sofa', 'sofa', [7000, 900, 800], room6x4, [], [1, 3.9]);
+    expect(mixed.pos[0], 'still centred on the axis it cannot fit').toBeCloseTo(3, 6);
+    expect(mixed.pos[2], 'and contained on the axis it can').toBeCloseTo(4 - 0.45 - WALL_GAP, 6);
+    // 3. …and that is a different number from the flush one, or assertion 2 is
+    //    satisfied by doing nothing.
+    expect(mixed.pos[2]).not.toBeCloseTo(4 - 0.45, 4);
   });
 });
 
@@ -433,7 +575,13 @@ describe('a floor-standing piece is added facing its wall', () => {
     const { pos, rot } = placeNewPart('bed', 'bed-double', DOUBLE, room, [], at);
     const { ex } = aabbExtents(rot, DOUBLE);
     expect(ex).toBeCloseTo(DOUBLE[1] / 2000, 6); // turned: the depth is the X extent
-    expect(pos[0]).toBeCloseTo(-ROOM.width / 2 + ex, 6);
+    // `+ WALL_GAP`, and this assertion used to read without it — which is exactly what
+    // the four-wall test below now pins. The bed at the WEST wall came back precisely
+    // flush while its mirror at the east wall came back 20 mm off, because acceptance
+    // was `footInsidePoly` and `pointInPoly`'s ray test is half-open in z: a foot
+    // corner sitting on min-x reads INSIDE and its twin on max-x reads outside. So
+    // this fixture was pinning the asymmetry rather than catching it.
+    expect(pos[0]).toBeCloseTo(-ROOM.width / 2 + ex + WALL_GAP, 6);
     // …and it is genuinely a different number from the rotation-blind one, or this
     // whole fixture is measuring nothing.
     expect(ex).not.toBeCloseTo(DOUBLE[0] / 2000, 3);
@@ -446,5 +594,64 @@ describe('a floor-standing piece is added facing its wall', () => {
     const { pos } = placeNewPart('bed', 'bed-double', DOUBLE, room, [], at);
     expect(pos[0]).toBeCloseTo(at[0], 6);
     expect(pos[2]).toBeCloseTo(at[1], 6);
+  });
+});
+
+describe('a ROUND piece is measured as the ellipse it draws, not as its box', () => {
+  // `escape` honours `circle` through `footCorners`; the shortfall did not, so `Seat.out`
+  // and `Seat.short` described two different pieces and were then ranked as one. The
+  // numbers are the whole finding: at 45 degrees a 1200 mm round piece's bounding box
+  // reaches 0.8485 m along a world axis and its footprint reaches 0.6000 m.
+  const SIZE: [number, number, number] = [1200, 1200, 400];
+
+  it('the two extents differ by (root2 - 1) * r at 45 degrees, and by nothing at 0', () => {
+    const at = (rot: number) => {
+      const f = footFromPart([0, 0, 0], rot, SIZE, true);
+      return { box: obbExtentAlong(f, 1, 0), foot: footExtentAlong(f, 1, 0) };
+    };
+    // At 0 degrees a square box and its inscribed circle have the same reach along x, so
+    // this axis alone cannot tell the two functions apart — which is exactly why the
+    // rotated case is the one that matters.
+    const zero = at(0);
+    expect(zero.box).toBeCloseTo(0.6, 9);
+    expect(zero.foot).toBeCloseTo(0.6, 9);
+
+    const tilt = at(Math.PI / 4);
+    expect(tilt.box).toBeCloseTo(0.6 * Math.SQRT2, 6);
+    expect(tilt.foot).toBeCloseTo(0.6, 9);
+    expect(tilt.box - tilt.foot).toBeCloseTo(0.6 * (Math.SQRT2 - 1), 6);
+
+    // A NON-round piece must be untouched by the new branch, or this is a change to
+    // every other caller as well.
+    const sq = footFromPart([0, 0, 0], Math.PI / 4, SIZE, false);
+    expect(footExtentAlong(sq, 1, 0)).toBeCloseTo(obbExtentAlong(sq, 1, 0), 12);
+  });
+
+  it('and a round piece already at WALL_GAP is left alone, at every angle', () => {
+    // The consequence, and the reason this is a defect rather than a rounding difference:
+    // the box overstates the reach, so the shortfall was positive for a piece that was
+    // already correctly placed and `contain` pushed it 249 mm further in — then again on
+    // the next settle, since nothing about the position made the answer stable.
+    const r = 0.6;
+    const poly = footprintForLayout('rect', 6, 4);
+    for (const rot of [0, Math.PI / 8, Math.PI / 4, Math.PI / 3, 1.1]) {
+      for (const [x0, z0] of [
+        [-(3 - r - WALL_GAP), 0],
+        [3 - r - WALL_GAP, 0],
+        [0, -(2 - r - WALL_GAP)],
+        [0, 2 - r - WALL_GAP],
+      ] as Array<[number, number]>) {
+        const p = poly as unknown as Poly;
+        const [x1, z1] = containedXZ(
+          { rot, dimMM: SIZE, circle: true },
+          x0,
+          z0,
+          p,
+          interiorPoint(p) ?? polygonCentroid(poly),
+          polygonWinding(p),
+        );
+        expect(Math.hypot(x1 - x0, z1 - z0), `rot ${rot.toFixed(2)} at (${x0}, ${z0})`).toBeLessThan(1e-6);
+      }
+    }
   });
 });

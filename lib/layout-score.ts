@@ -973,14 +973,6 @@ function far2(a: Foot, b: Foot, reach: number): boolean {
   return dx * dx + dz * dz > reach * reach;
 }
 
-/** How badly `i` discharges one relation against one candidate anchor `j`.
- *
- *  Distance in the band the relation asks for, plus — for the two kinds where the
- *  heading is half the point — being turned toward the anchor. `in-front` carries a
- *  facing term for the same reason `faces` does, and did not: a dining chair beside
- *  its table at the right gap and rotated 98° is not at the table, and nothing in the
- *  cost function said so. Measured yaws coming back from the solver on chairs before
- *  this: 8°, 15°, 98°, −113°, and one at 203° — facing away from its own table. */
 /** The distance a relation's band is measured against — **centre to centre** for
  *  `faces` and `near`, **edge to edge** (`obbGap`) for everything else.
  *
@@ -1016,6 +1008,18 @@ export function inRelationBand(feet: Foot[], i: number, j: number, rel: Relation
   return bandCost(relationDistance(feet, i, j, rel), rel.min, rel.max) === 0;
 }
 
+/** How badly `i` discharges one relation against one candidate anchor `j`.
+ *
+ *  Distance in the band the relation asks for, plus — for the two kinds where the
+ *  heading is half the point — being turned toward the anchor. `in-front` carries a
+ *  facing term for the same reason `faces` does, and did not: a dining chair beside
+ *  its table at the right gap and rotated 98° is not at the table, and nothing in the
+ *  cost function said so. Measured yaws coming back from the solver on chairs before
+ *  this: 8°, 15°, 98°, −113°, and one at 203° — facing away from its own table.
+ *
+ *  The band half of that is `relationDistance` + `bandCost` above, and is deliberately
+ *  askable on its own — see `inRelationBand`. This function is band PLUS heading, so
+ *  `cost === 0` is a stricter question than "is the distance right". */
 function relationCost(
   feet: Foot[],
   placements: Placement[],
