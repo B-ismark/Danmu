@@ -342,7 +342,20 @@ export function analyzeRoom(
       // chair sits, so the square version reported the most ordinary dining
       // arrangement there is as a collision.
       const smaller = Math.min(footArea(oa), footArea(ob));
-      if (smaller <= 0 || shared / smaller < clashShare(a, b)) continue;
+      // `<=`, so the bar itself is NOT yet a clash, matching `lib/layout-score.ts`,
+      // which charges the EXCESS above the same bar and is therefore exactly 0
+      // there. At `>=` the two faced opposite ways: a share of precisely 0.85 was a
+      // "Two pieces in the same place" finding with `overlap` at 0.0000 behind it,
+      // carrying a **Try a fix** button for something the solver could not see.
+      //
+      // **Measure-zero, and worth saying so.** The share is a quotient of two float
+      // geometry results and lands a part in 1e15 either side of the bar, never on
+      // it — `tests/layout-conformance.test.ts` sweeps the neighbourhood and cannot
+      // construct the case, and reverting this line fails nothing. It is kept
+      // because two comparisons pivoting on one shared constant should face the
+      // same way, not because a user could meet the old one. Do not read it as a
+      // fixed bug; the fix in that commit is the solver's tolerance.
+      if (smaller <= 0 || shared / smaller <= clashShare(a, b)) continue;
       issues.push({
         id: `clash-${a.id}-${b.id}`,
         rule: 'clash',

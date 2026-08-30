@@ -614,14 +614,31 @@ export function costBreakdown(
       // The number is `layout-rules`' now, next to `sharesFloor` itself.
       //
       // Charged on the EXCESS above the bar rather than as a step at it, because a
-      // cost function is read as a gradient: a cliff gives the annealer nothing to
-      // walk down, while `share - tolerance` slopes continuously from 0 at the bar
-      // to 0.15 when the chair is exactly where the table is. Continuity at the bar
-      // is what keeps this from re-pricing arrangements that were already fine —
-      // this app's own seeded rooms tuck at share 0.231, so they are charged 0
-      // before and after, and `tests/layout-conformance.test.ts` pins the pair.
+      // cost function is read as a gradient and a cliff gives the annealer nothing
+      // to walk down. Continuity at the bar is what keeps this from re-pricing
+      // arrangements that were already fine — this app's own seeded rooms tuck at
+      // share 0.231, so they are charged 0 before and after.
+      //
+      // ── …and the excess is NORMALISED, which is not cosmetic ─────────────────
+      //
+      // The raw `share - tolerance` tops out at 0.15, so a chair standing exactly
+      // where the table is cost 150 weighted units against the 1000 an ordinary
+      // pair pays for the same thing. Worse at the bottom of the ramp: just past
+      // the bar it bought a *reported collision* for about one weighted unit —
+      // less than a single `alignment` unit (4) and under the inertia of a small
+      // move — so taste could outbid a finding the room report was making. The
+      // weight table above says in as many words that three orders of magnitude
+      // exist so "no amount of taste can buy a collision", and the un-normalised
+      // ramp quietly carved out a window where it could.
+      //
+      // Dividing by `1 - tolerance` maps the excess onto the same 0…1 scale every
+      // other overlap uses, so a fully-buried tucked pair costs exactly what a
+      // fully-overlapping ordinary pair costs. That is the right answer on its
+      // face: at share 1.0 the two ARE the same arrangement — one piece standing
+      // where another is — and the tolerance only ever existed to forgive the part
+      // of the overlap that is by design.
       const tolerance = sharesFloor(roles[i], roles[j]) ? TUCKED_CLASH_SHARE : 0;
-      if (share > tolerance) c.overlap += share - tolerance;
+      if (share > tolerance) c.overlap += (share - tolerance) / (1 - tolerance);
     }
     c.outside += outsideShare(feet[i], poly);
   }

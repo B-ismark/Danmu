@@ -643,7 +643,9 @@ export function sharesFloor(a: Role, b: Role): boolean {
  * chair tucked under a table and becomes a chair standing where the table is.
  *
  * **It lives here, with the predicate, because it is the second half of the same
- * rule and the two consumers must not answer it separately.** They did. It was a
+ * rule and the report and the solver must not answer it separately.** They did.
+ * (A third reader of `sharesFloor`, `lib/layout-settle.ts`, deliberately does not
+ * consult this at all — see the note at the end.) It was a
  * `TUCKED_CLASH_SHARE` private to `lib/clearance.ts`, and `lib/layout-score.ts`'s
  * overlap term had no threshold at all — a blanket `continue` that exempted the
  * pair however deep it was. So the solver paid *nothing* for burying a dining

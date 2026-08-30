@@ -1157,7 +1157,9 @@ are what serve "communicate a plan", and they stay.
   in it, all over again. **That exemption is a TOLERANCE now, not a blanket pass** —
   `TUCKED_CLASH_SHARE` moved to `lib/layout-rules.ts` beside `sharesFloor` itself and
   the overlap term charges the excess above it, so dead centre is no longer free and
-  the two modules agree about where tucking ends. The ranking here stays as it is: it
+  the report and the solver agree about where tucking ends (`lib/layout-settle.ts`
+  is a third reader of `sharesFloor` and deliberately consults neither — its own
+  bar is a 2% touch epsilon, not a clash test). The ranking here stays as it is: it
   was the right answer for a second reason (the report prices things a single cost term
   never will), and this was only ever one of the three places the missing bar surfaced —
   the others being Room check flagging a solved room, and a scattered search burying a
