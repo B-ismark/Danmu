@@ -25,7 +25,7 @@
 //     test is `footInsidePoly`, not `outsideShare`, whose probes sit 10% in from
 //     the edges and forgive a piece 20 mm through the plaster (rule 3).
 
-import { footFromPart, footInsidePoly, nearestEdge, obbExtentAlong, obbFromPart } from './geometry';
+import { footFromPart, footInsidePoly, nearestEdge, obbExtentAlong, obbFromPart, type Foot } from './geometry';
 import { wallOutwardNormal, type Footprint } from './footprint';
 import { WALL_ATTACH_TOL } from './layout-rules';
 import { ridesWall } from './physics';
@@ -34,6 +34,31 @@ import type { ScenePart } from './scene-spec';
 /** A carried piece's new position. `y` is never touched: moving a wall sideways
  *  changes nothing about how high anything sits. */
 export type CarriedPos = { id: string; pos: [number, number, number] };
+
+/** How far a footprint may cross the wall line and still count as contained.
+ *
+ *  Two millimetres, and it is not a fudge — without it the containment guard
+ *  below is INERT for exactly the pieces it exists to protect. `footInsidePoly`
+ *  is `every corner pointInPoly`, and a piece standing flush against a wall has
+ *  two corners ON the polygon edge, where a ray cast is a coin flip. Measured: a
+ *  sofa pushed right up to the east wall of a 6 × 4 room reports `false`, and one
+ *  150 mm clear of it reports `true`. So the piece most likely to be carried —
+ *  the one touching the wall — was being read as "already outside" and waved
+ *  through the was-inside/now-inside test every time.
+ *
+ *  Deliberately tiny, and deliberately applied to BOTH sides of that comparison.
+ *  Symmetry is the point: "was it in" and "is it still in" have to be the same
+ *  question or the guard means nothing. 2 mm is two orders below the 20 mm that
+ *  `outsideShare` forgives — the sampling error CLAUDE.md rule 3 warns about —
+ *  so this cannot pass a piece that is meaningfully through the plaster. */
+const CONTAIN_EPS = 0.002;
+
+function contained(f: Foot, poly: Footprint): boolean {
+  return footInsidePoly(
+    { ...f, hw: Math.max(0, f.hw - CONTAIN_EPS), hd: Math.max(0, f.hd - CONTAIN_EPS) },
+    poly,
+  );
+}
 
 /**
  * Ids of the parts that belong to wall `index` and should travel with it.
@@ -142,8 +167,127 @@ export function carryAttached(
     // was-inside/now-inside check for the ceiling family too, so a pendant could be
     // carried straight out of the room with nothing testing whether it still fitted.
     if (!ridesWall(p.category, p.shape)) {
-      const wasInside = footInsidePoly(footFromPart(p.pos, p.rot, p.dimMM, p.circle), before);
-      const nowInside = footInsidePoly(footFromPart(pos, p.rot, p.dimMM, p.circle), after);
+      const wasInside = contained(footFromPart(p.pos, p.rot, p.dimMM, p.circle), before);
+      const nowInside = contained(footFromPart(pos, p.rot, p.dimMM, p.circle), after);
+      if (wasInside && !nowInside) continue;
+    }
+    out.push({ id: p.id, pos });
+  }
+  return out;
+}
+
+/**
+ * How far each wall moved along its OWN outward normal, between two footprints of
+ * the same shape.
+ *
+ * This is the piece that lets a whole-room resize reuse the wall rule. Dragging a
+ * wall gives you one index and one delta; typing a new width in Room tools does
+ * not — `setRoom` rebuilds the polygon from scratch through `footprintForLayout`,
+ * so there is no "the wall that moved". Every wall moved, most of them by zero.
+ *
+ * Measured at the edge MIDPOINT rather than at a vertex, and **no test pins that
+ * choice because none in this codebase can.** The argument for the midpoint is
+ * that `offsetWall` translates one edge and stretches its two neighbours, so a
+ * neighbour's start vertex moves while the wall itself has not gone anywhere, and
+ * a vertex reading would report that stretch as a translation. That argument is
+ * sound in general and UNREACHABLE here: every footprint this app produces is
+ * axis-aligned and rectilinear, so a stretching neighbour is always perpendicular
+ * to the wall that moved and its vertex displacement dots to exactly zero against
+ * its own normal. Vertex and midpoint agree on every input `footprintForLayout`
+ * and `offsetWall` can make.
+ *
+ * Mutating it to a vertex reading leaves all 29 tests green, which is the honest
+ * state of the claim rather than a gap to paper over. The midpoint stays because
+ * it is right for the general case and costs nothing; it is written down as
+ * untested rather than described as a property this file guarantees. A fixture
+ * that could tell them apart needs a non-rectilinear footprint, which is a shape
+ * the app cannot currently build — same family as the rectangle that could not
+ * express `wallOutwardNormal`'s defect.
+ *
+ * Returns [] when the two footprints do not correspond wall-for-wall — a layout
+ * change is not a resize, and there is no honest mapping between an L's six walls
+ * and a rectangle's four.
+ */
+export function wallDisplacements(before: Footprint, after: Footprint): number[] {
+  const n = before.length;
+  if (n < 3 || after.length !== n) return [];
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const a0 = before[i];
+    const b0 = before[(i + 1) % n];
+    const a1 = after[i];
+    const b1 = after[(i + 1) % n];
+    const [ox, oz] = wallOutwardNormal(before, i);
+    const mx0 = (a0[0] + b0[0]) / 2;
+    const mz0 = (a0[1] + b0[1]) / 2;
+    const mx1 = (a1[0] + b1[0]) / 2;
+    const mz1 = (a1[1] + b1[1]) / 2;
+    out.push((mx1 - mx0) * ox + (mz1 - mz0) * oz);
+  }
+  return out;
+}
+
+/**
+ * New positions for everything standing against a wall, after the room itself was
+ * resized — the typed-in-Room-tools case, as opposed to the dragged-wall case
+ * `carryAttached` serves.
+ *
+ * **Why this exists at all.** `RoomDimsEditor` already carried the pieces hung
+ * from the CEILING when the height changed (`regradeForNewCeiling`) and carried
+ * nothing at all when width or depth changed. One axis of three. So shrinking a
+ * room left the sofa standing exactly where it was while the wall retreated
+ * through it, and the user's screenshot showed a sofa and a floor lamp outside the
+ * shell entirely.
+ *
+ * **A piece can be attached to more than one wall, and the displacements ADD.** A
+ * sofa in a corner belongs to both walls that meet there; shrinking the room on
+ * both axes has to move it diagonally, and taking only the first wall would leave
+ * it through the other one. Summing is also what makes the degenerate case behave:
+ * a piece spanning two OPPOSITE walls gets two cancelling deltas and stays put,
+ * which is correct — it does not fit, and saying so is `lib/clearance.ts`'s job,
+ * not this function's.
+ *
+ * **Never makes containment worse**, exactly as `carryAttached` does not: a piece
+ * that was inside and would end up outside is dropped from the move and keeps its
+ * place, so the room reports a wall standing in it rather than the app silently
+ * shoving it (CLAUDE.md rule 2). Wall riders are exempt from that test because
+ * their footprint sits ON the boundary, where containment is a coin flip — the
+ * same exemption, for the same reason, and NOT gated on `wallMounted`, which would
+ * hand the ceiling family a free pass out of the room.
+ *
+ * `parts` must be at their EFFECTIVE transforms, for the reason `attachedToWall`
+ * gives: attachment is decided from where a piece actually is.
+ */
+export function carryForResize(
+  parts: ScenePart[],
+  before: Footprint,
+  after: Footprint,
+): CarriedPos[] {
+  const deltas = wallDisplacements(before, after);
+  if (deltas.length === 0) return [];
+
+  // id → accumulated (dx, dz). Built per wall so a corner piece collects both.
+  const shift = new Map<string, [number, number]>();
+  for (let i = 0; i < deltas.length; i++) {
+    const d = deltas[i];
+    if (d === 0) continue;
+    const [ox, oz] = wallOutwardNormal(before, i);
+    for (const id of attachedToWall(parts, before, i)) {
+      const prev = shift.get(id) ?? [0, 0];
+      shift.set(id, [prev[0] + ox * d, prev[1] + oz * d]);
+    }
+  }
+  if (shift.size === 0) return [];
+
+  const out: CarriedPos[] = [];
+  for (const p of parts) {
+    const s = shift.get(p.id);
+    if (!s) continue;
+    if (s[0] === 0 && s[1] === 0) continue;
+    const pos: [number, number, number] = [p.pos[0] + s[0], p.pos[1], p.pos[2] + s[1]];
+    if (!ridesWall(p.category, p.shape)) {
+      const wasInside = contained(footFromPart(p.pos, p.rot, p.dimMM, p.circle), before);
+      const nowInside = contained(footFromPart(pos, p.rot, p.dimMM, p.circle), after);
       if (wasInside && !nowInside) continue;
     }
     out.push({ id: p.id, pos });

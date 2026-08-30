@@ -30,6 +30,8 @@
 
 import { isParametric, type ScenePart } from './scene-spec';
 import { heightForNewCeiling } from './physics';
+import { carryForResize } from './wall-move';
+import type { Footprint } from './footprint';
 
 /** The user's edits, as the studio store holds them. */
 export type TransformOverrides = {
@@ -121,6 +123,65 @@ export function regradeForNewCeiling(
       const b = heightForNewCeiling(p.category, p.shape, dim, ov[1], oldHeight, newHeight);
       if (b !== ov[1]) overridden.push({ id: p.id, y: b });
     }
+  }
+  return { authored, overridden };
+}
+
+/** Both layers, after the ROOM was resized — the x/z companion to
+ *  `regradeForNewCeiling`, and it exists because that function was the whole of
+ *  the story for one axis out of three.
+ *
+ *  Typing a new height in Room tools regraded everything hanging from the
+ *  ceiling. Typing a new width or depth carried nothing, so the wall retreated
+ *  through the furniture and left it outside the room.
+ *
+ *  Attachment is decided ONCE, on the EFFECTIVE parts, because that is where a
+ *  piece actually is — a sofa the user dragged against the north wall is attached
+ *  to the north wall regardless of where `defaultScene` first put it. The
+ *  resulting displacement is then applied to BOTH layers, which is what keeps
+ *  them from drifting apart: the override is what renders, and the authored
+ *  position is what a re-detect falls back to.
+ *
+ *  A part that does not move is OMITTED rather than written back unchanged, for
+ *  the reason `regradeForNewCeiling` gives — a no-op write to the override layer
+ *  still CREATES an override, which pins the piece against a re-detect and gets
+ *  persisted. Same rule, and it is the reason this returns two sparse lists
+ *  rather than a new parts array. */
+export function recarryForResize(
+  parts: ScenePart[],
+  o: Partial<TransformOverrides>,
+  before: Footprint,
+  after: Footprint,
+): {
+  authored: Array<{ id: string; pos: [number, number, number] }>;
+  overridden: Array<{ id: string; pos: [number, number, number] }>;
+} {
+  const authored: Array<{ id: string; pos: [number, number, number] }> = [];
+  const overridden: Array<{ id: string; pos: [number, number, number] }> = [];
+
+  const effective = resolveParts(parts, o);
+  const carried = carryForResize(effective, before, after);
+  if (carried.length === 0) return { authored, overridden };
+
+  // The DISPLACEMENT, not the absolute position: `carryForResize` answered about
+  // the effective parts, and the authored layer may sit somewhere else entirely.
+  const byId = new Map(effective.map((p) => [p.id, p.pos]));
+  const shift = new Map<string, [number, number]>();
+  for (const c of carried) {
+    const from = byId.get(c.id);
+    if (!from) continue;
+    const dx = c.pos[0] - from[0];
+    const dz = c.pos[2] - from[2];
+    if (dx === 0 && dz === 0) continue;
+    shift.set(c.id, [dx, dz]);
+  }
+
+  for (const p of parts) {
+    const s = shift.get(p.id);
+    if (!s) continue;
+    authored.push({ id: p.id, pos: [p.pos[0] + s[0], p.pos[1], p.pos[2] + s[1]] });
+    const ov = o.positions?.[p.id];
+    if (ov) overridden.push({ id: p.id, pos: [ov[0] + s[0], ov[1], ov[2] + s[1]] });
   }
   return { authored, overridden };
 }
