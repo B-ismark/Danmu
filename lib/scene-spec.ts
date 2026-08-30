@@ -2284,6 +2284,22 @@ export function isWallMountedPart(cat: Category, shape: Shape): boolean {
  *  so no test was in a position to notice, and CI is a fresh install by definition. It
  *  bites exactly the users who have history.
  *
+ *  **Since verified in a browser, which is the only place it can be.** A room record was
+ *  written straight into IndexedDB with no `version` field (a pre-stamp record, which
+ *  `storage.ts` says to treat as 0) and two parts whose stored flag disagreed with their
+ *  own anchor — a `lamp-pendant` at `false`, a `sofa` at `true` — then loaded from a
+ *  production build. The tell needs no instrumentation, because `Inspector.tsx` branches
+ *  on this flag into two MUTUALLY EXCLUSIVE rows: `{!part.wallMounted && …}` renders the
+ *  Wall / Surface / Floor buttons, `{part.wallMounted && …}` renders "Height off the
+ *  floor". The pendant showed the height row and no Wall button; the sofa showed Wall and
+ *  Floor and no height row. Both wrong on disk, both right on screen.
+ *
+ *  Seeding both directions wrong is the whole design and not thoroughness: any single
+ *  default gets one of the two right, so only a derivation gets both. And the Inspector's
+ *  own comment is what makes the pendant's half matter — `snapToWallPhys` "would slide a
+ *  ceiling fan sideways onto a wall", so a stale flag does not merely mislabel a piece,
+ *  it offers the user a button that ruins it.
+ *
  *  Exactly ONE field today, deliberately. Sizes went through `clampDims` when they were
  *  written and shapes were checked against the vocabulary then, so re-deriving those
  *  would be re-litigating a decision rather than closing a gap. If a second field ever

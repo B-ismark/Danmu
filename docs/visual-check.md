@@ -63,67 +63,17 @@ conflict.
 
 ## Sizes and fit
 
-*Owner: `sizes`. Its previous item — a bed added at a wall — **has been looked at, and it
-failed.** Two separate defects came out of it and both are measured in
-`what-is-still-open.md` § H.2 and § H.3; the arithmetic is settled, so neither is waiting
-on eyes any more. The one below is new and is here because it **cannot be gated at all**.*
-
-### The exported floor plan and the on-screen plan of one room disagree
-
-**Where to click.** *Layout pick → T-Shape → Start decorating → 2D Plan → Export → Floor
-plan*, and open the PNG that downloads. Compare it against the 2D Plan tab you exported
-it from.
-
-**What wrong looks like.** The seeded **Pendant** missing from the numbered legend, and a
-bare orange tick sitting over the dining table in open floor — no number, no legend row —
-while the tab behind it draws the same pendant normally. Right looks like: the pendant in
-the legend with its footprint and a number, and no tick anywhere but on a wall line.
-
-**Why it was here rather than in a test — and why that reason was wrong.** What this said,
-for as long as the item has existed: `lib/plan-export.ts` draws through a real 2D canvas
-context, `canvas` is not a dependency, and jsdom's `getContext('2d')` returns `null`, so
-line 75's non-null assertion would throw. Every clause of that is true and none of it made
-the module untestable. **Pixels need `canvas`; a draw ORDER does not** — what the module
-does to a context is a sequence of calls, and a sequence can be recorded by replacing
-`getContext` with a tape. `tests/plan-export-order.test.ts` does that, in jsdom, with no
-new dependency. The reason was not a lie and it was still the expensive kind of wrong: it
-answered "can we check the pixels" and was read as "can we check anything", so nobody
-asked the cheaper question for months.
-
-**Half of this has now been looked at, by screenshot, and the half that has not is named.**
-The exported PNG was captured from a production build of the branch (`acceptDownloads`,
-Export → Floor plan, `waitForEvent('download')`) and the legend is right: a room holding a
-Ceiling fan and a Sofa exports `1 Ceiling fan — 1.00 × 1.00 × 0.20 m (W×D×H)` and
-`2 Sofa — 2.20 × 0.95 × 0.88 m`, both numbered, no bare tick anywhere. So the
-`wallMounted` → `ridesWall` regression is closed and that is a picture, not an inference.
-
-**One of the two open halves is now closed, and not by looking — by reading.** The fan's
-number badge was missing from the sheet, and the guess written here was that it sat under
-the sofa's footprint. That was right and it did not need a person: badges and footprints
-were drawn in **one loop**, per piece, so piece `i + 1`'s fill and outline landed on top of
-piece `i`'s digit. The legend is keyed on that digit and has no other join to its row, so an
-overlap — the one thing a floor plan exists to show — silently removed a piece's only
-identifier. Two passes now, footprints then badges, and the ordering is the first assertion
-in `tests/plan-export-order.test.ts`. **An eyes-item that turns out to be answerable from
-the source is not an eyes-item**, and this one was for a whole commit.
-
-**Still wants a person, narrowed to one thing.** The fan came out as a **1 × 1 m square
-rather than a circle** — and that is NOT this fix failing: the 2D Plan tab drew it as a
-rectangle too, because a Library `Ceiling fan` carries no `circle` flag at all while a
-seeded or detected one does. That is its own defect and it is `what-is-still-open.md` § B
-item 15, and it is a decision rather than a bug to fix. That the module honours the flag it
-is *given* is now asserted both ways (ellipse for a round piece, rectangle for a square
-one), so what is left for a person is the flag's source, not this module.
-
-**And what is still not verified by eye here:** that the exported PNG now *shows* every
-number. The gate proves the call order, and later canvas draws compositing over earlier ones
-is specified rather than hoped for — but nobody has opened the sheet since the split. One
-export of a room with two overlapping floor pieces settles it.
-
-**Where it rides.** `fix/derive-mounted-and-vertical-extent`, PR #54. The cause was
-`plan-export` filtering on `wallMounted` ("geometry is centred on its origin", true for a
-ceiling fan and a pendant) where it meant `ridesWall` ("belongs flat against a wall").
-`ridesWall`'s docblock had named the pendant as exactly this case since before the bug.
+*Owner: `sizes`. **This section is empty, and both of its items were looked at.** A bed
+added at a wall failed and produced two defects, both measured in `what-is-still-open.md`
+§ H.2 and § H.3; the arithmetic there is settled, so neither waits on eyes any more.
+The exported floor plan disagreeing with the on-screen plan is closed too,
+and how it closed is the part worth keeping: half of it was answerable **from the source**
+— footprints and number badges were drawn in one loop, so a later piece buried an earlier
+piece's digit and the legend has no other join to its row — and the other half needed a
+real exported PNG, decoded. **An eyes-item answerable from the source is not an
+eyes-item.** See `tests/plan-export-order.test.ts` for the call order and PR #59 for the
+fix; the Library-vs-seeded `circle` flag that came out of the same screenshot is not a bug
+to look at but a decision, and it is § B item 15.*
 
 ## Drag and selection
 

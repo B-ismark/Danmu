@@ -147,11 +147,28 @@ history and not `scene-spec.ts`; the pair that disagreed was `lamp` refining to
 `lamp-pendant`); or a **geometry the existing fixtures never had** (every test for a wall
 normal used a rectangle, where the vertex average IS the true centroid and all four normals
 come out right).
-*(Cost: five times in one night — the rectangle, the unflagged fan, the already-true door,
+*(Cost: six times in one night — the rectangle, the unflagged fan, the already-true door,
 a `CATEGORIES` sweep that yields only each category's DEFAULT shape and was green against a
-**full revert** until a label dimension was added, and a browser check that added a Library
-`Ceiling fan` to exercise a `circle` branch `PART_LIBRARY` sets on no entry. Review found
-none of the five; mutation found all five.)*
+**full revert** until a label dimension was added, a browser check that added a Library
+`Ceiling fan` to exercise a `circle` branch `PART_LIBRARY` sets on no entry, and the one
+below. Review found none of the six; mutation found all six.)*
+
+**Symptom: the check runs against a BUILT artifact, so there is nothing in the source to
+revert.** The sixth above, and it needs its own move. A PNG export was checked by decoding
+the sheet and counting ink pixels in a box at each number badge — a real measurement, with
+an empty-floor control, and it **passed against the defect**: `plan-export` fills a
+footprint at alpha `0x40`, so a piece drawn over a badge does not erase the digit, it
+**tints** it, and "is there ink here" cannot tell those apart.
+→ **Rebuild the artifact from the pre-fix source and run the same check against both.**
+Two servers, two ports, one script. What that A/B showed is the assertion worth having: the
+buried badge's darkest pixel was `[88,52,39]` before and `[42,37,32]` — `PLAN.ink` exactly
+— after, while the two unoverlapped badges were byte-identical in both runs and are the
+internal control. So the discriminating question was never "is there ink" but **"is the
+darkest pixel the badge's own colour"**.
+*(Admitted at one occasion, and the reason is that it is not a variant of the entry above:
+there the fixture omitted state, here the fixture was right and the MEASURE could not
+resolve the defect. Same green, different cause, and a different move — you cannot mutate
+a source file to test a check that reads a binary.)*
 
 **Symptom: the expected value is derived from real constants and the test still pins the
 bug.** The sharpest form of the entry above: a derived expectation feels safe and is not.
