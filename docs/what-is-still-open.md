@@ -724,6 +724,83 @@ the user went and looked.
     **Committed:** nothing but this paragraph. The predicate is not written; the browser
     measurement above is real.
 
+16. **A rider floats after a reload — ANSWERED: derive at read time, write nothing.** The user picked the second option. `resolvePart` / `resolveParts` already own the one fallback in the app, so a rider Y derived there from its support current dims persists nothing and leaves a re-detect clean. NOT BUILT — this is § H.12. The original framing follows, because the two rejected options are the useful part of the record.
+
+    **Which of three repairs, and each one costs something
+    different.** The defect is confirmed by eye (§ H.12) and the arithmetic is already
+    gated; what is undecided is where the fix goes, because the obvious one writes to the
+    user's room.
+
+    · **Re-settle on load.** Smallest diff, and it writes a position override for every
+      rider in the room. Each override pins that value against a re-detect and persists, so
+      a user who has never dragged anything acquires a room full of hand-placed pieces.
+      That is the objection, and it is the reason this was not done on sight.
+    · **Settle at read time, write nothing.** `resolvePart` / `resolveParts` already own the
+      one fallback; a rider's Y could be derived there from its support's *current* dims
+      rather than stored. Nothing persists, and a re-detect stays clean. Costs: the
+      derivation runs on every read, and it needs the support relationship at hand.
+    · **Re-settle only the pieces whose support was resized, and only in the session that
+      resized it.** Narrowest blast radius, most state to keep, and the least honest of the
+      three — the room on disk stays wrong and the screen looks right.
+
+    **Not a decision about whether to fix it.** The user has seen it and it is a defect.
+
+    **Committed:** nothing. § H.12 is the record.
+
+17. **Does the placement row earn its place at all? — ANSWERED: make dragging work.** The user said *"dragging would work"*, which is the middle option: keep the two operations, drop the row. Dragging a lamp clear of a table should DROP it to the floor, and the row becomes redundant rather than removed. NOT BUILT. The framing follows.
+
+    **Original question.** Asked because the user said it
+    outright, unprompted, having just confirmed the row was correct: *"I don't think we need
+    these 3 features to be honest."*
+
+    That is a harder question than the padding bug beside it (§ H.13) and it should not be
+    answered by fixing the padding and moving on. The row is Wall · Surface · Floor, and its
+    third button was deliberately kept for a reason recorded in `visual-check.md`: **neither
+    Floor-off-a-table nor Surface-back-onto-it is reachable by dragging.** Dragging a lamp
+    off a table moves it sideways. So the row is the only way to perform two real operations,
+    and deleting it deletes them rather than deleting a control.
+
+    Three ways out, and the middle one is the one worth arguing for:
+
+    · **Keep it.** Fix the padding, leave the model alone.
+    · **Keep the operations, drop the row.** Make the two reachable some other way — a drag
+      that leaves a surface should drop the piece, which is arguably what a user means by
+      dragging a lamp off a table — and the row becomes redundant rather than removed.
+    · **Delete it.** Accept that a piece put on a table stays on it until deleted.
+
+    **This needs the user, and it needs them to see the second option**, because "we don't
+    need these" and "this should be a drag" are the same complaint if dragging worked.
+
+    **Committed:** nothing.
+
+18. **Should deleting a merged group ask first? — ANSWERED and SHIPPED.** The user checked the fact this turned on: the Undo toast DOES fire on a group delete. So the reversal argument holds, and their answer draws the line somewhere the framing below did not consider — not on blast radius but on GESTURE. *"Delete on group does trigger a toast but that should be acceptable if they used the button, using backspace to delete should require confirmatory modal whether a group or not."* A button labelled Delete cannot be pressed by accident; Backspace is a typing reflex that missed a field. Built in `deleteSelection`. The framing follows, and the count-based middle option it proposed was declined by that same reasoning — a threshold puts the prompt where it is least needed.
+
+    **Original question.** The user reported *"there's no confirmation
+    dialogue for grouped models and also other instances of deletion"*.
+
+    **The absence is deliberate and documented in four places**, so this is a decision to
+    revisit rather than a defect to fix. `removeParts` in `KeyboardShortcuts.tsx` is the one
+    delete path from every surface, and its own comment argues the case: *"Removing a chair
+    is cheap and fully reversible — history covers structure, and the toast puts the reversal
+    one click away… A dialog on a reversible action only teaches people to dismiss dialogs,
+    which is what makes the irreversible ones dangerous."* Deleting a saved layout and
+    resetting every transform keep their confirms; this does not.
+
+    **Establish one fact before deciding anything, because it changes which question this
+    is.** Does the Undo toast actually appear when a *merged group* is deleted? If it does,
+    the argument above holds and the user is asking us to overturn it. If it does not, there
+    is no defect in the reasoning at all — the reasoning depends on a reversal being one
+    click away on the same screen, and a group delete that reverses silently or not at all
+    is simply a bug in the delete path. **Nobody has checked which.**
+
+    A middle answer exists if the toast works and the user still wants a prompt: a group is
+    N pieces at once, so the confirm could be scoped to a count — one piece stays instant,
+    a set of five asks. That keeps the "don't teach people to dismiss dialogs" property while
+    matching what actually feels irreversible.
+
+    **Committed:** nothing.
+
+
 ---
 
 ## C · Decided against — do not re-propose
@@ -1824,3 +1901,344 @@ a blank rectangle; with them the 3D scene renders and screenshots. Onboarding is
 `/room/<id>/model` with a 6.0 × 4.0 living room of twelve pieces, and the console is
 clean. One snag: `page.screenshot()` can exceed a 30 s timeout while the canvas is live —
 raise the timeout rather than reading it as a hang.
+
+---
+
+## H (second pass) · Nine more items put to the user, answered 2026-08-30
+
+The nine were `visual-check.md`'s whole live list. **Four held, one could not be attempted
+because the question named no axis, and the rest produced eight defects — six of them
+reported unprompted, off gestures the item was not asking about.** That ratio is the
+argument for eyes: the four that held were the four a test could most nearly have reached.
+
+| outcome | items |
+|---|---|
+| held | three turn gestures agree · room cards draw their own outline · the Library panel is visible on both tabs · a merged set will not scale out through the walls |
+| held on its own question, defect alongside | the placement row is two buttons (§ 13) · a wardrobe no longer passes through a mounted TV (§ 17) |
+| failed as predicted | the rider floats after a reload (§ 12) · Shuffle will not close a bedside gap — confirms the measured diagnosis; § 18 is the new half |
+| could not be attempted | the 500 ms red — the item said "a 4 m sofa" and never said **which field**; the user set Height, found it capped at 1.10 m, and reported the cap. The cap is correct. `visual-check.md` now names Width. |
+
+**The lesson is the same one this file keeps learning.** An instruction that does not name
+its axis is not a check, and the person following it reports the wall they hit rather than
+the thing you meant. Nobody was wrong here except the note.
+
+### 12. A rider stays at the size the room was BUILT at, after a reload — CONFIRMED by eye
+
+The prediction in `visual-check.md` was exact and the user saw exactly it: resize a surface,
+reopen the room, the piece standing on it hangs in the air above the shrunk top.
+
+**Nothing new is needed to diagnose this** and nothing here re-derives it. `settleHeights`
+answers entirely in `dimMM` and is pinned in `tests/layout-settle.test.ts` at the wrong
+answer with the right one named, mutation-checked three ways. The sequence no test reaches
+is the load: `loadFromRoom` rebuilds through `buildSceneFromRoom`, which settles against the
+**authored** dims, then `loadTransforms` re-applies the saved `dims` by id with nothing
+settling afterwards.
+
+**It is not built because it is a decision, not a patch** — re-settling on load writes
+position overrides, and every override pins that value against a re-detect and persists it.
+That stamps the user's room to fix a display bug. **§ B.16.**
+
+### 13. The placement row's Floor button sits flush against the window edge
+
+The row itself is right — the user confirmed **Wall · Floor** on a floor-standing piece, so
+the two-button fix took and § H.1 stays FIXED. What they reported alongside it is that at
+the narrow rail the **Floor button touches the edge of the window with no padding**.
+
+**A candidate cause, NOT yet confirmed against a screenshot.** `app/globals.css` carries
+`@container rail (max-width: 240px)` whose own comment says *"The last thing to give is
+padding, because it is the only thing here whose loss costs nothing but air"* — it drops
+`.rail-section-*` padding to zero by design. If that is what fired, the degradation is
+working as written and the written intent is wrong: losing the last few pixels of padding
+does not cost only air, it costs the boundary between a control and the window. Whether the
+rail was actually at or below 240px when they saw it is unverified, and that is the first
+thing to establish, because the other possibility is a container-query breakpoint firing
+wider than it should.
+
+This is rule 4's own territory — a control that does not fit must **reflow**, not spill —
+and the fix is likely a floor of 4–6px rather than `0`, which the same comment already
+concedes is the last thing to give rather than a thing that may go entirely.
+
+### 14. A merged group's member cannot be selected by clicking it on the canvas
+
+*"Selecting a member of a group individually by clicking on it doesn't seem to work again.
+Though it works when you individually click on it in the layer."*
+
+**Read that against § H.8**, which recorded the drill-in working from a nightstand and never
+from the bed. This report is broader and worse: not one member, by canvas click, on a bed
+plus two nightstands. `PartTree` selects the same member fine, which is the finding that
+narrows it — **the selection store is not the broken half.** Whatever `PartTree` calls, the
+canvas path is not reaching.
+
+The drill-in has three mutations watched failing (never fire, count an empty selection as
+inside, accept overlap where it asks for containment), so the *predicate* is gated. The gap
+is between the pointer and the predicate. No cause yet; do not guess one.
+
+### 15. The rotate gizmo moves whatever its ring passes over, not the piece you selected
+
+The sharpest of the nine, and the user generalised it themselves: *"I selected bed to rotate
+but the rotate control overlaps the nightstand and it ended up moving the nightstand. I
+don't think this issue only exists with nightstands or only in 3d mode."*
+
+**Take the generalisation seriously — it is the same shape as a defect this repo has already
+shipped twice.** `docs/traps.md` and CLAUDE.md both carry the pattern: a gesture that
+resolves *what is under the pointer* instead of *what the gesture belongs to*.
+`drag-click.ts` exists because the first version of the click gate asked the arriving click
+which piece it landed on; the answer here is expected to be the same — a gizmo drag belongs
+to the selected piece and there is nothing to hit-test.
+
+A rotate that can retarget mid-gesture is also a **silent data change**: it writes a rotation
+override onto a piece the user never selected, and `lib/transforms.ts` pins and persists it.
+
+### 16. Pieces still pass through walls in the 2D plan
+
+*"models are still going through walls in 2d plan mode."*
+
+Both tabs are supposed to end in `lib/drag-resolve.ts` — grid snap, containment, wall snap,
+item snap, gravity, vertical clamp, OBB collision — and containment is step two. So either
+the plan is not calling it, is calling it with a footprint it should not, or the containment
+step is passing a piece it should refuse.
+
+**This is the exact failure the one-drag-one-resolve extraction was meant to end**, and that
+extraction has already shipped once with a step left behind in the caller — the grid snap
+lived in the 3D pointer-move handler and did not travel. **Look for a step living in
+`PlanView` before looking inside `drag-resolve`.**
+
+Needs a repro before anything else: which piece, which wall, dragged or arrow-keyed.
+
+### 17. A drag refused by a wall-mounted TV says nothing and names nothing
+
+The collision half of PR #42 **holds** — the user got *"a little space between wardrobe and
+tv. It's not clipping through"*, which is the 90 mm standoff behaving. The fan case holds
+too. What failed is the half `visual-check.md` named in advance: *"not triggering any alarms
+either."*
+
+That is the `blockedBy` failure mode this repo has shipped before — **computed on both
+surfaces and said on one**. The size tag is supposed to name the TV.
+
+**And a second answer to the same question, already predicted and now confirmed from the
+other side.** `clearance.ts`'s `solid` list is filtered on not-wall-mounted and floor-level,
+so the room report will not report a wardrobe through a mounted TV even though the drag now
+refuses to create one. Same question, two answers. That filter is load-bearing — it is what
+makes four other copies of the same height arithmetic safe — so this wants a `RULE_HANDLING`
+row rather than a change to the filter.
+
+### 18. Shuffle leaves a nightstand through the bed
+
+*"Shuffle didn't close gap, nightstand passes through bed."*
+
+The first half **confirms** the measured diagnosis in § A.2 — at 300 mm out of place all ten
+furniture relations cost less than `isWorthOffering`'s threshold, so Shuffle finds the fix
+and stays quiet. That is not new.
+
+The second half is, and it is worse than a gap: the solver **produced an overlap**.
+`visual-check.md` already recorded that *the solver does not call `collidesAt`*, filed as a
+state that "still loads but cannot be re-created by dragging". A user pressing Shuffle and
+getting one is a different claim — it is the app creating that state on request.
+
+**Do not fix this by giving the solver `collidesAt`** without measuring it: the last repair
+aimed at this area was written, measured and reverted because it gave the solver four runs
+in 48 with a piece through a wall.
+
+### 19. Library search: `stand` does not reach `Nightstand` — MEASURED, and it is one line
+
+*"I typed stand but I didn't get nightstand as a suggestion."*
+
+**Cause, read off the source rather than reproduced.** `scoreItem` in `lib/shape-search.ts`
+scores a query token two ways and neither is containment: an exact token match scores 3, and
+a prefix match in either direction scores 1.5.
+
+The haystack for that item is `nightstand`, `tables`, `nightstand`, `nightstand`. The query
+token is `stand`. It is not equal to `nightstand`; `nightstand` does not start with `stand`;
+`stand` does not start with `nightstand`. Score **0**, and `searchLibrary` filters to
+`s > 0`, so the item is not merely ranked low — **it is not in the list at all.**
+
+`SYNONYM` already maps `bedside` to `nightstand`, so the word the user reached for is the one
+form nobody thought of: the compound's own tail.
+
+**The fix is a third branch at a weight below prefix** — containment, for a query token of
+some minimum length. Two things to get right rather than guess: the length floor (`tokens()`
+already drops 1-character tokens, and a floor of 2 would let `an` match half the catalog),
+and the weight, which must sit under 1.5 so a genuine prefix still outranks a suffix. This is
+pure `lib/` logic with an existing test file, so it is gated the moment it is written — and
+the assertion to watch fail is `stand` reaching `Nightstand`, plus a negative that a
+2-character token does not drag in the whole catalog.
+
+### 20. Deleting a merged group removed only the bed — FIXED
+
+*"when two nightstands and a bed are grouped, deleting group using the one in the right rail
+or backspace only deletes the bed."*
+
+**Cause: one expression.** `RailFooter` called `removeParts([selectedId!])`. `selectedPartId`
+is the piece a click LANDED on; `selection` is what is selected, and a merged set is selected
+whole (`selectionForPick`). The two are the same value for a lone chair and different for
+every merged set — which is exactly why it survived, because the defect is invisible on the
+pieces anyone tests with.
+
+**The fix is at the call site, not in `removeParts`,** and that is the load-bearing part. The
+tempting repair is to expand `groupId` inside the shared delete path, which would then delete
+the whole set when a **drilled-in member** is selected — a second bug wearing the first one's
+fix. `tests/group-delete.test.tsx` pins the drill-in case and it fails against exactly that
+mutation.
+
+**The Backspace half of the report is unreproduced and probably was not the same bug.**
+`deleteSelection` already read `selectedIds()`, which returns the whole selection, so by the
+code it should have deleted all three. It may have been the rail button pressed first, or a
+collapsed selection (§ H.14 is about the canvas click losing group members). Worth one look
+now the rail button is fixed; if Backspace still takes only the bed, the cause is in
+selection, not in delete.
+
+Shipped with six mutations watched failing. One of them was an apparent survivor and was
+not: **a needle spanning a newline matches nothing in a CRLF tree**, so the mutation had
+never applied and the green meant nothing. `docs/traps.md` already carries that one.
+
+### 21. Shrinking the room leaves the furniture where it was
+
+*"reducing room size doesn't seem to move the models on the ground along."* Their screenshot
+shows a sofa and a floor lamp standing entirely outside the shell.
+
+**Two paths change a room's size and only one of them carries the furniture.** Dragging a
+wall goes through `lib/wall-move.ts`, which exists precisely to bring the pieces with it —
+CLAUDE.md's own account of `offsetWall` describes `wall-move.ts` carrying furniture inward.
+The dimension fields in Room tools are the other path, and the report says they do not.
+
+**Not yet confirmed which half is missing** — whether the dims editor never calls the
+carry, or calls it and the carry declines. Establish that before touching either. It is the
+same shape as every other scar in this repo: one operation, two entry points, one of them
+carrying its own copy of the rule.
+
+Note this is NOT the same as a piece the room can no longer hold. Carrying is what happens
+while there is room to move into; § 22 is what happens when there is not.
+
+### 22. There is no minimum room size, and no floor under a shrink
+
+The user's own framing, and it is a design more than a bug: *"there should be default size
+and also min width imposed because present models have width that won't allow the room to be
+reduced further, so basically, the room be reduced moves models along until the model width
+won't allow any further reduction of room width or room meets the default min width for
+rooms. It needs to be flexible but close to standard small rooms."*
+
+So the shrink has **two** stops and today it has neither:
+
+· a **hard floor** — a room may not go below some standard-small-room side, whatever is in it;
+· a **furniture-derived stop** — before the floor, the widest piece on the axis being
+  squeezed is what blocks further reduction.
+
+`ROOM_SIDE_M` already bounds a room's side and `roomAxisRange` already feeds the fields, so
+the hard floor has a home. The furniture-derived stop does not, and it is the more
+interesting half: it is a *dynamic* minimum, so `boundsToUnit`'s pair-conversion problem
+applies to it — a bound that moves has to reach the control in the control's own unit and
+round toward the interior, or the arrows and the commit disagree again.
+
+**And it must refuse rather than resize**, per rule 2. When the room cannot shrink further
+the app says so; it does not quietly shrink the sofa to make the number fit.
+
+**ANSWERED 2026-08-30: "permit corridors."** So there is no hard floor to raise and the
+list above has one stop, not two — `ROOM_SIDE_M.min` stays at 1 m and the furniture-derived
+stop is the whole mechanism.
+
+That is also the safer of the two designs, for a reason nobody had priced when the hard
+floor was proposed: `lib/scene-file.ts` treats an out-of-range width or depth as **fatal**,
+so raising the minimum would make previously-saved small rooms refuse to open — a
+regression on real user data, and it would have needed an author-time bound distinct from
+the load bound to avoid. Permitting corridors removes that problem rather than solving it.
+
+The dynamic minimum still owes `boundsToUnit` the pair treatment described above.
+
+### 23. Every long button lied about being busy — FIXED
+
+Not reported by eye and not in `visual-check.md`; found while wiring the loading states the
+user asked for, in the code that was supposed to already have them.
+
+`SuggestButton` and `TryFixButton` both held a `busy` flag, both passed it to `disabled`,
+and **neither could ever show it.** `solveLayout` is synchronous and runs for seconds on a
+furnished room — the #67 shuffle tests measure 2.1–3.5 s for one solve — and the flag was
+set on the same tick the solve ran on. React flushes the state change, but the browser is
+never handed a frame to paint it in, and `setBusy(false)` has already run by the time it
+would be. `TryFixButton`'s `{busy ? 'Trying…' : 'Try a fix'}` had therefore never once been
+on screen. Pressing Suggest looked like pressing nothing, for several seconds, and then the
+room jumped.
+
+**The third site had the cure written out inline.** `FitCheck.check()` set the flag and then
+`setTimeout(…, 0)`, with a comment explaining precisely why — "React cannot paint while the
+same tick is still solving". That is the shape `drag-resolve.ts` already records: a step
+that lives in ONE caller rather than in the pipeline is a step the next caller is written
+without. There are three call sites and there was one yield.
+
+`lib/after-paint.ts` owns it now, and `components/ui/useBusyAction` is the only holder of a
+busy flag over synchronous work. Two things in there are load-bearing and neither is
+obvious:
+
+· **Two frames, not one.** A `requestAnimationFrame` callback runs *before* the paint of the
+  frame it was registered for, so working in the first frame blocks the very paint it is
+  waiting for — the yield would be decoration in exactly the way the flag already was. The
+  second callback runs after that frame is presented. `setTimeout(…, 0)` is the fallback and
+  deliberately not the primary: a macrotask is only promised to run after the current *task*,
+  not after a *paint*, so the old inline version worked by coincidence.
+· **The re-entry guard is a ref, not the flag.** `disabled` cannot cover the gap between the
+  press and the paint, because the render carrying it has not been presented — which is the
+  same window the bug lived in. A double-click used to queue two three-second solves.
+
+Mutation-checked seven ways across the two files; every assertion in both was reached.
+
+**What is NOT verified: the paint itself.** jsdom has no compositor. The tests prove the work
+is deferred past a frame boundary, which is the mechanism, not the pixel. Someone has to press
+Suggest in a browser and see "Thinking…". That is now the only live item in `visual-check.md`.
+
+### 24. What the room-shuffling research is worth — one idea, and two that are not ours
+
+A second agent supplied how games handle "shuffle": modular slots, constraint-based
+placement with an A\* check, and Wave Function Collapse. Recorded here so nobody re-proposes
+the two that do not apply.
+
+**Modular slots — no, except for one piece.** That pattern shuffles *content*: authored
+anchor nodes, each with a table of style options, multiplying out to millions of
+permutations. Danmu's furniture is the user's own room, so swapping their sofa for a
+different sofa is editing their room, not rearranging it — and there are no authored anchors
+to hang it on, because footprints are user-dragged polygons.
+
+The part that transfers is the **counting argument**, and it is a real candidate for § 18.
+Shuffle's difficulty is finding arrangements that are structurally *different*, and
+re-seeding one annealer mostly re-walks one basin. `room-bays.ts` already derives the
+anchors — `roomBays` gives the real rectangles of floor, `baySides` gives each side an
+inward normal, a yaw and whether it is a true wall — so **enumerating bay × side × role
+assignments is a source of seeds the annealer cannot reach by RNG alone**. Unmeasured, and
+cheap to measure: count distinct finalists per preset with and without it, against the table
+`tests/layout-shuffle.test.ts` already prints.
+
+**Constraint-based placement — already here, and further along.** Bounding boxes and snap are
+`drag-resolve.ts`; "TV faces sofa", "nightstand beside bed" are `Relation`/`relationFor`;
+"rug under the seating" is `sharesFloor`; the pathfinding check is `navigabilityCost`, a
+distance transform over connected components seeded at the door. The difference is that ours
+is a weight *hierarchy* — three orders of magnitude between `overlap` and `balance`, so no
+amount of taste buys a collision — rather than a filter.
+
+One thing does transfer: the research runs the path check as a **post-filter**, and #67's
+`newRoomFindings` is exactly that. Which says how to test it — *a post-filter is tested by
+feeding it something it must reject.* That is the missing fixture behind the finding below.
+
+**Wave Function Collapse — no, and not merely inapplicable.** WFC generates *architecture*
+from tile adjacency. The room here is the user's real room, measured; generating its shape is
+the one thing this product must not do. Two further blockers even if it were wanted: WFC needs
+a discrete tile grid, and sizes here are continuous millimetres through `clampDims`, so
+discretising throws away the trust boundary rule 2 exists to protect.
+
+### 25. PR #67 review — three findings, none fixed, and one of them blocks the PR
+
+Reviewed at head `52d30ed` on 2026-08-30, gating the PR head itself rather than the tree.
+
+1. **The `newRoomFindings` gate is unpinned.** Deleting `if (newRoomFindings(...).length > 0)
+   continue;` from `shuffleRoom` leaves **all 11 tests green**, including the 41-second *never
+   offers a room that ROOM CHECK would report*. After #68 the solver largely stops generating
+   the candidates the gate discards, so on the fixture presets it never fires and that test
+   measures the solver, not the gate. The PR's own commit message calls this gate "what makes
+   the zero a guarantee rather than a measurement" — which is precisely the claim nothing
+   verifies. See § 24 for the shape of the fixture that would.
+2. **Three tests sit at 1.4–2.3× of vitest's default 5000 ms timeout**, so they go red under
+   load: 3429 ms, 3548 ms, 2129 ms measured idle. Two neighbouring tests in the same file
+   already carry explicit `{ timeout: … }`, so the mechanism was known and these were missed.
+   This one is a **dependency of everything else** — while it flakes, no red anywhere can be
+   believed, and `main` is already intermittently red on machine speed.
+3. **`lib/layout-shuffle.ts` contradicts itself 155 lines apart** about whether #68 landed:
+   line 79 says `layout-score.ts` "no longer exempts" a `sharesFloor` pair from `overlap`;
+   lines 234–239 say it exempts them "entirely — a blanket `continue`". #68 did land, and
+   `layout-score.ts:649` is now `sharesFloor(...) ? TUCKED_CLASH_SHARE : 0`.

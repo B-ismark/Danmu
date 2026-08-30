@@ -68,7 +68,7 @@ import { Tooltip } from '@/components/ui/Tooltip';
 import { useConfirm } from '@/components/ui/Confirm';
 import { toast } from '@/components/ui/StorageToast';
 import { AddPiecesButton } from './CatalogPanel';
-import { removeParts } from './KeyboardShortcuts';
+import { removeParts, selectedIds } from './KeyboardShortcuts';
 
 /** The label's own box, so it can ellipsise inside a `nowrap` pill. */
 const LABEL = { overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 } as const;
@@ -92,6 +92,16 @@ export function RailFooter() {
   const selectedName = useScene((s) =>
     selectedId ? s.parts.find((p) => p.id === selectedId)?.name ?? null : null,
   );
+  // How many pieces the button will actually take, which is not always one. A
+  // merged set is selected whole, so the accessible name has to say so — a button
+  // that reads "Delete Bed" and removes three pieces is the defect this fixes
+  // wearing a label. Subscribed to the COUNT rather than the array for the same
+  // reason `selectedName` is: the footer re-runs on every scene write otherwise.
+  const selectedCount = useStudio((s) => s.selection.length);
+  const deleteLabel =
+    selectedCount > 1
+      ? `Delete ${selectedCount} selected pieces from the scene`
+      : `Delete ${selectedName} from the scene`;
   const confirm = useConfirm();
 
   return (
@@ -110,15 +120,25 @@ export function RailFooter() {
         </div>
       ) : selectedName != null ? (
         <div style={{ flex: 1, minWidth: 0 }}>
-          {/* No confirm — the shared delete path answers with an Undo toast rather
-              than a dialog (see `removeParts` in KeyboardShortcuts), and it is the
-              single delete path for the keyboard, the tree and the context menu
-              too. */}
+          {/* No confirm — pressing a button labelled Delete is a decision, and the
+              shared path answers with an Undo toast rather than a dialog (see
+              `removeParts`). Backspace is the one delete gesture that asks first,
+              because it is the one that can be a typing reflex; see
+              `deleteSelection`.
+
+              `selectedIds()`, NOT `[selectedId]`. This button used to delete the
+              primary id alone, so deleting a merged bed-and-two-nightstands from
+              here removed the bed and silently left the nightstands — the button
+              named one piece, the user meant the set, and the set is what every
+              other surface deletes. `selectedPartId` is the piece a click LANDED
+              on; the selection is what is selected, and a merged set is selected
+              whole (`selectionForPick`). Anything acting on "what is selected"
+              wants the latter. */}
           <button
-            onClick={() => removeParts([selectedId!])}
+            onClick={() => removeParts(selectedIds())}
             className="ds-btn"
-            title={`Delete ${selectedName} from the scene`}
-            aria-label={`Delete ${selectedName} from the scene`}
+            title={deleteLabel}
+            aria-label={deleteLabel}
             style={{
               width: '100%',
               height: 32,

@@ -10,6 +10,7 @@
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/ui/Icon';
+import { Spinner } from '@/components/ui/primitives';
 import { toast } from '@/components/ui/StorageToast';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
@@ -152,11 +153,12 @@ export function ImportSceneButton({
       <button
         onClick={() => inputRef.current?.click()}
         disabled={busy}
+        aria-busy={busy}
         className="ds-btn"
         style={large ? { height: 40, padding: '0 20px', fontSize: 14 } : { height: 32, fontSize: 12 }}
         title="Open a room someone shared with you, or one you saved earlier"
       >
-        <Icon name="file" size={large ? 14 : 12} />
+        {busy ? <Spinner size={large ? 14 : 12} /> : <Icon name="file" size={large ? 14 : 12} />}
         {busy ? 'Opening…' : 'Open a file'}
       </button>
       {/* .sr-only, never display:none — a file input hidden by display is gone from
