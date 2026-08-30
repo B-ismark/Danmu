@@ -87,13 +87,40 @@ and three more defects came out of gestures these items were not asking about.*
 
 ## Layout and Shuffle
 
-*Owner: `layout`. **Empty, and that is the rule working.** The Shuffle item was a look
-rather than a check, and the look was taken on 2026-08-30: Shuffle declined to close a
-300–400 mm bedside gap, which **confirms the measured diagnosis** rather than contradicting
-it. The item's job was to tell us whether the arithmetic matched the room, and it did, so it
-is gone. Two things came out of that same look and neither is an eyes-item: a nightstand
-passing **through** the bed after a Shuffle (§ H.17), and the Library search failing to match
-`stand` → `Nightstand` (§ H.18).*
+*Owner: `layout`. The Shuffle item was a look rather than a check, and the look was taken on
+2026-08-30: Shuffle declined to close a 300–400 mm bedside gap, which **confirms the measured
+diagnosis** rather than contradicting it. The item's job was to tell us whether the arithmetic
+matched the room, and it did, so it is gone. Two things came out of that same look and neither
+is an eyes-item: a nightstand passing **through** the bed after a Shuffle (§ H.18), and the
+Library search failing to match `stand` → `Nightstand` (§ H.19).*
+
+### The solve buttons say they are working — and this is the one thing no test here can see
+
+**Where.** Any room with furniture in it. Open **Room tools → Suggest**. Also **Room check →
+Try a fix** on any finding, and **Fit → Check the room**.
+
+**What right looks like.** The instant you press, and *before* the room changes: the button
+goes to a turning ring and reads **Thinking…** (Suggest), **Trying…** (Try a fix),
+**Checking…** (Check the room). It is disabled while it does. Then the room moves and the
+word comes back.
+
+**What wrong looks like.** The old behaviour: press, nothing at all happens for one to four
+seconds — no ring, no word, no disabled state, the whole window frozen — and then the
+furniture jumps. If that is still what you see, the yield is not reaching the screen.
+
+**Why a person has to do this.** The tests prove the work is deferred past a frame boundary;
+they cannot prove a **paint**, because jsdom has no compositor. This is the whole residue of
+that fix and it is the reason the item exists. Two seconds of clicking settles it.
+
+**Also worth a glance while you are there:** a *double*-click on Suggest must run one solve,
+not two, and under **prefers-reduced-motion** the ring should sit still while the word still
+changes — the label is the tell that has to survive.
+
+**Where it rides.** `fix/busy-states-that-paint`, PR #71. Measured on commit **`a8ba8f5`**
+with a clean tree, not on a working copy: typecheck 0, lint 0 at `--max-warnings 0`,
+`pnpm test` 101 files / **1857 passed, 0 failed**, 5 expected-fail, `pnpm build` exit 0 with
+neither `ESLint: Invalid Options` nor `plugin was not detected` in its output — which is the
+absence CI reads as the lint pass having actually run.
 
 
 ## Shell and flow

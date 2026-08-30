@@ -223,6 +223,13 @@ export function Dot({
   );
 }
 
+/** The ring a control shows while it is working. Decorative only — `aria-hidden`
+ *  because the control it sits in changes its own label and carries `aria-busy`,
+ *  and a screen reader being told "image" mid-sentence is worse than silence. */
+export function Spinner({ size = 12, style }: { size?: number; style?: CSSProperties }) {
+  return <span className="ds-spinner" aria-hidden="true" style={{ width: size, height: size, ...style }} />;
+}
+
 // The title is a real <h1>: these are separate routes, and without a heading
 // element the page has no document outline *and* the display-serif rule in
 // globals.css never fires — which is why Fraunces was absent from onboarding.
