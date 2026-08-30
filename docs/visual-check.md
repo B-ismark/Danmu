@@ -116,9 +116,11 @@ that fix and it is the reason the item exists. Two seconds of clicking settles i
 not two, and under **prefers-reduced-motion** the ring should sit still while the word still
 changes — the label is the tell that has to survive.
 
-**Where it rides.** `fix/busy-states-that-paint`, PR pending. Gated on that branch:
-typecheck 0, lint 0, `pnpm test` 101 files / 1857 passed / 5 expected-fail, `pnpm build`
-clean with its ESLint pass confirmed present.
+**Where it rides.** `fix/busy-states-that-paint`, PR #71. Measured on commit **`a8ba8f5`**
+with a clean tree, not on a working copy: typecheck 0, lint 0 at `--max-warnings 0`,
+`pnpm test` 101 files / **1857 passed, 0 failed**, 5 expected-fail, `pnpm build` exit 0 with
+neither `ESLint: Invalid Options` nor `plugin was not detected` in its output — which is the
+absence CI reads as the lint pass having actually run.
 
 
 ## Shell and flow
