@@ -29,6 +29,7 @@ import { collidesAt, type ScenePart } from '@/lib/scene-spec';
 import { clampIntoFootprint } from '@/lib/footprint';
 import { formatDim } from '@/lib/units';
 import { toast } from '@/components/ui/StorageToast';
+import { confirmDialog } from '@/components/ui/Confirm';
 
 export const STUDIO_SURFACE_ID = 'danmu-studio-surface';
 
@@ -165,12 +166,20 @@ export function selectedIds(): string[] {
 /** The one way a piece leaves the room, from every surface: the row trash, the
  *  Inspector button, the plan and the Delete key.
  *
- *  No confirmation dialog. Removing a chair is cheap and fully reversible —
- *  history covers structure, and the toast puts the reversal one click away, on
+ *  No confirmation dialog HERE, and that is a statement about this function
+ *  rather than about every delete. Removing a chair is cheap and fully reversible
+ *  — history covers structure, and the toast puts the reversal one click away, on
  *  the same screen, without asking permission first. A dialog on a reversible
  *  action only teaches people to dismiss dialogs, which is what makes the
  *  irreversible ones (deleting a saved layout, resetting every transform)
  *  dangerous. Those keep their confirm; this doesn't.
+ *
+ *  **One caller does ask first, and the axis is intent, not blast radius.**
+ *  `deleteSelection` — Delete/Backspace — puts a dialog in front of this, because
+ *  a keypress can be a typing reflex that missed a field while a button labelled
+ *  Delete cannot be pressed by accident in the same way. The prompt belongs to
+ *  that gesture, so it lives there and not in here, where it would also catch the
+ *  row trash, the context menu and the rail button.
  *
  *  Undo here restores through the store rather than through `applySnapshot`:
  *  history snapshots are debounced 250ms, so a fast click on Undo would
@@ -232,8 +241,58 @@ function restoreParts(doomed: ScenePart[], before: ScenePart[]) {
   announce(back.length === 1 ? `“${back[0].name}” is back.` : `${back.length} pieces are back.`);
 }
 
-function deleteSelection() {
-  removeParts(selectedIds());
+/** Delete/Backspace, and the ONE delete gesture that asks first.
+ *
+ *  The rail's Delete button, the tree's row trash and the context menu all go
+ *  straight to `removeParts` and answer with an Undo toast — that argument is
+ *  unchanged and it is written out above `removeParts`. This one is different for
+ *  a reason that has nothing to do with blast radius and everything to do with
+ *  INTENT: pressing a button labelled Delete is a decision, and hitting Backspace
+ *  is very often a typing reflex that missed a text field. Same outcome, two
+ *  completely different levels of "did you mean it", so the dialog goes on the
+ *  gesture that can be made by accident rather than on the one that cannot.
+ *
+ *  The user asked for it whether or not a group is involved, so there is no size
+ *  threshold here. A count-based rule ("ask above three pieces") would put the
+ *  prompt exactly where it is least needed — the deliberate multi-select — and
+ *  omit it from the slip.
+ *
+ *  `ids` is captured BEFORE the await. The dialog is async and the selection is
+ *  live; resolving it afterwards would delete whatever happened to be selected
+ *  when the user pressed Delete in the dialog, which is the same class of defect
+ *  as a convoy member resolving against a fresh world instead of a snapshot. */
+export async function deleteSelection() {
+  const ids = selectedIds();
+  if (ids.length === 0) return;
+  const sc = useScene.getState().parts;
+  const names = ids
+    .map((id) => sc.find((p) => p.id === id)?.name)
+    .filter((n): n is string => !!n);
+
+  const ok = await confirmDialog({
+    title: names.length === 1 ? `Delete “${names[0]}”?` : `Delete ${ids.length} pieces?`,
+    // Enumerated rather than counted: `body` is a ReactNode precisely so a
+    // destructive dialog can say WHAT it destroys. A merged set is the case that
+    // needs it — "3 pieces" does not tell you the two nightstands are going with
+    // the bed, and that surprise is what this whole item started as.
+    body:
+      names.length === 1 ? (
+        'It leaves the room. You can undo this.'
+      ) : (
+        <>
+          <div style={{ marginBottom: 8 }}>These leave the room together:</div>
+          <ul style={{ margin: 0, paddingInlineStart: 20 }}>
+            {names.map((n, i) => (
+              <li key={`${n}-${i}`}>{n}</li>
+            ))}
+          </ul>
+        </>
+      ),
+    confirmLabel: 'Delete',
+    danger: true,
+  });
+  if (!ok) return;
+  removeParts(ids);
 }
 
 /** @param explicit which pieces to copy, when the gesture names them rather than
@@ -386,7 +445,9 @@ export function KeyboardShortcuts() {
         case 'Delete':
         case 'Backspace':
           e.preventDefault();
-          deleteSelection();
+          // `void`: the dialog is async and nothing here waits on it. The key
+          // handler must stay synchronous so `preventDefault` above still lands.
+          void deleteSelection();
           return;
       }
       // The gizmo's three modes only exist on the 3D tab. Armed on the plan they

@@ -43,6 +43,21 @@ export function useConfirm() {
   return useConfirmStore((s) => s.open);
 }
 
+/** The same dialog, raised from module scope.
+ *
+ *  `useConfirm` is a hook and a keyboard accelerator is not a component: the
+ *  Delete/Backspace handler lives in a `useEffect` that is installed once and
+ *  must not be re-bound, so it cannot close over a hook result without either a
+ *  ref dance or re-running the effect. The store underneath is already global —
+ *  a single host, a single `pending` — so reading it directly is not a second
+ *  source of truth, it is the same one without React in the way.
+ *
+ *  Deliberately NOT the general escape hatch. Anything rendering a component
+ *  should keep using `useConfirm`; this exists for the accelerator layer. */
+export function confirmDialog(req: ConfirmRequest): Promise<boolean> {
+  return useConfirmStore.getState().open(req);
+}
+
 // The room-delete confirm lives here, once, because it is raised from two
 // surfaces (a workspace card and Settings) and the two must not drift: on a grid
 // of near-identical cards the room's *name* is the only thing preventing a
