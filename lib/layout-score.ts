@@ -609,15 +609,24 @@ export function costBreakdown(
       // `if (sharesFloor(...)) continue` meant a dining chair cost NOTHING no
       // matter how far inside the table it stood, while `lib/clearance.ts` called
       // the same pair a clash past `TUCKED_CLASH_SHARE`. Same predicate, no shared
-      // bar — so the search would happily produce a room the report then flagged,
-      // in 8 of 40 arrangements once anything searched from a scattered start.
+      // bar — so the search would happily produce a room the report then flagged.
       // The number is `layout-rules`' now, next to `sharesFloor` itself.
+      //
+      // Two measurements of that, and they are different harnesses rather than two
+      // readings of one — which is why both are named here instead of one figure
+      // floating loose. Over the SHUFFLE OFFER pipeline (five presets × eight
+      // presses, counting offers that introduce a report finding): 8 of 40. Over
+      // RAW SCATTERED SOLVES (three presets × forty seeds, counting solves ending
+      // with a buried tucked pair): 4 of 120. The first counts what a user would
+      // have been shown, the second what the search produces before anything
+      // filters it.
       //
       // Charged on the EXCESS above the bar rather than as a step at it, because a
       // cost function is read as a gradient and a cliff gives the annealer nothing
       // to walk down. Continuity at the bar is what keeps this from re-pricing
-      // arrangements that were already fine — this app's own seeded rooms tuck at
-      // share 0.231, so they are charged 0 before and after.
+      // arrangements that were already fine — the seeded rooms that HAVE such a
+      // pair (`t` and `open`; `rect`, `l` and `u` contain none) tuck at share
+      // 0.231, so they are charged 0 before and after.
       //
       // ── …and the excess is NORMALISED, which is not cosmetic ─────────────────
       //

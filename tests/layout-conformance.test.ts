@@ -516,19 +516,35 @@ describe('layout-rules · the report and the solver meet cleanly at TUCKED_CLASH
     return { parts: [t, c], at };
   }
 
-  it('the geometry helper actually produces the share it is asked for', () => {
-    // The floor under both assertions below: if `tuckedAt` were wrong, each of them
-    // would be measuring some other arrangement and passing for the wrong reason.
-    // Read back off the solver, since `overlap` is a known function of the share.
-    for (const want of [0.5, 0.9]) {
-      const { parts, at } = tuckedAt(want);
-      const got = 1 - (1 - costAt(parts, at).overlap / 1000) * (1 - TUCKED_CLASH_SHARE);
-      if (want > TUCKED_CLASH_SHARE) expect(got).toBeCloseTo(want, 3);
-    }
-    // …and one below the bar must genuinely cost nothing, or the read-back above is
-    // reading a saturated zero and would agree with anything.
-    expect(costAt(...Object.values(tuckedAt(0.5)) as [ScenePart[], Placement[]]).overlap).toBe(0);
-    expect(costAt(...Object.values(tuckedAt(0.9)) as [ScenePart[], Placement[]]).overlap).toBeGreaterThan(0);
+  it('the fixture geometry and the ramp invert each other', () => {
+    // The floor under the two assertions below: if `tuckedAt` were wrong, each of
+    // them would be measuring some other arrangement and passing for the wrong
+    // reason. Read back off the solver, since `overlap` is a known function of the
+    // share — `u = overlap / w = (share − T) / (1 − T)`, so `T + u(1 − T)` returns
+    // the share. Weight read from `DEFAULT_WEIGHTS`, never typed: a hand-written
+    // 1000 here is a hidden dependency on a number three assertions below already
+    // import, and re-pricing `overlap` would make this fail while blaming geometry.
+    //
+    // **Named for both halves on purpose.** It pins the ramp's formula as much as
+    // the fixture's geometry — reverting the normalisation fails it — so calling it
+    // "the geometry helper" (as it was) reports a cost-function change as a broken
+    // test helper, and sends the next reader to the wrong file.
+    const w = DEFAULT_WEIGHTS.overlap;
+    const readBack = (share: number) => {
+      const { parts, at } = tuckedAt(share);
+      const u = costAt(parts, at).overlap / w;
+      return TUCKED_CLASH_SHARE + u * (1 - TUCKED_CLASH_SHARE);
+    };
+    // Above the bar the read-back is exact, and two samples rather than one so a
+    // constant answer cannot satisfy it.
+    expect(readBack(0.9)).toBeCloseTo(0.9, 3);
+    expect(readBack(0.95)).toBeCloseTo(0.95, 3);
+    // Below the bar there is nothing to read back — the charge is 0 by design — so
+    // this half asserts that directly instead of running the inversion on a
+    // saturated zero, which would agree with anything. (It used to sit inside the
+    // loop above under an `if` that skipped it, i.e. asserting nothing at all.)
+    const below = tuckedAt(0.5);
+    expect(costAt(below.parts, below.at).overlap, 'a properly tucked chair is free').toBe(0);
   });
 
   it('across the bar’s whole neighbourhood, the two never disagree', () => {

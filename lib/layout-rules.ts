@@ -657,11 +657,15 @@ export function sharesFloor(a: Role, b: Role): boolean {
  * That is exactly the scar rule 3 of `CLAUDE.md` is about — a rule with one
  * consumer's copy of a number in it — and it stayed invisible while the only
  * caller was inertia-anchored, because a repair barely moves anything. Search from
- * a scattered start and it surfaced in 8 of 40 arrangements.
+ * a scattered start and it surfaces: 8 of 40 offers over the shuffle pipeline, and
+ * 4 of 120 raw solves over a different harness. Both are named at the overlap term
+ * in `lib/layout-score.ts`, with what each one counted — they are two experiments,
+ * not two readings of one.
  *
  * The value is unchanged from the one `clearance.ts` chose: a chair pushed hard
- * under a table reaches perhaps 60% of its own footprint — measured on this app's
- * own seeded rooms it is **0.231** — while a chair standing where the table is
+ * under a table reaches perhaps 60% of its own footprint — measured on the seeded
+ * rooms that contain such a pair (`t` and `open`) it is **0.231** — while a chair
+ * standing where the table is
  * reaches all of it, and that is still worth saying.
  *
  * `tests/layout-conformance.test.ts` holds the two consumers to it.

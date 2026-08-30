@@ -392,3 +392,34 @@ describe('analyzeRoom · a piece that cannot be made to fit at all', () => {
     expect(shrinkable).toBe(12);
   });
 });
+
+describe('the clash bar is closed on the side the solver charges from', () => {
+  // A one-directional property cannot see this. `tests/layout-conformance.test.ts`
+  // asserts "flagged ⇒ the solver charges more", so a layout the solver prices and
+  // the report is SILENT about slips straight through it — and that is exactly what
+  // a `<` → `<=` flip on `clashShare` produced. It was made to align the tucked bar
+  // (0.85) with the solver's excess-above-tolerance, which is 0 there; but the same
+  // comparison serves `CLASH_SHARE` (0.5), where the solver has no tolerance and
+  // charges the share outright.
+  //
+  // 0.5 is not a measure-zero boundary the way 0.85 is. Round millimetre dimensions
+  // on the 10 mm drag grid hit it exactly, so this is a room a user can build.
+  it('reports two ordinary pieces overlapping by exactly half', () => {
+    const a = part({ category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850], pos: [0, 0, 0] });
+    // 250 mm apart: the intersection is 0.5 × 0.25 m² against a 0.25 m² foot, so the
+    // share is exactly 0.5 in IEEE double rather than near it.
+    const b = part({ category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850], pos: [0, 0, 0.25] });
+    const { issues } = analyzeRoom([a, b], ROOM);
+    const clash = issues.filter((i) => i.rule === 'clash');
+    expect(clash.length, 'half a chair inside another chair is a collision worth saying').toBe(1);
+    expect(clash[0].partIds).toEqual(expect.arrayContaining([a.id, b.id]));
+  });
+
+  it('and stays quiet a hair below it', () => {
+    // The other half, so the assertion above cannot be satisfied by a rule that
+    // fires on any contact at all.
+    const a = part({ category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850], pos: [0, 0, 0] });
+    const b = part({ category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850], pos: [0, 0, 0.26] });
+    expect(analyzeRoom([a, b], ROOM).issues.filter((i) => i.rule === 'clash')).toEqual([]);
+  });
+});

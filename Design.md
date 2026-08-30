@@ -1163,7 +1163,8 @@ are what serve "communicate a plan", and they stay.
   was the right answer for a second reason (the report prices things a single cost term
   never will), and this was only ever one of the three places the missing bar surfaced —
   the others being Room check flagging a solved room, and a scattered search burying a
-  chair in 4 of 120 solves.
+  chair in 4 of 120 raw solves (8 of 40 counted over the shuffle offer pipeline —
+  two harnesses, both named at the overlap term in `lib/layout-score.ts`).
 - **The room report offers, it does not just report** (`RoomTools.tsx` `CheckPanel`).
   An earlier pass fixed how the panel *sounds* — findings badged FIX / TIGHT / NOTE
   in tracked caps became "Worth fixing" / "A bit tight" / "Just so you know", which
