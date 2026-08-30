@@ -53,6 +53,7 @@ import {
   edgeProjection,
   nearestEdge,
   polygonWinding,
+  footExtentAlong,
   obbExtentAlong,
   outsideShare,
   pointInPoly,
@@ -60,6 +61,7 @@ import {
   type Poly,
 } from './geometry';
 import { isObstacle, roleOf, sharesFloor, WALL_GAP } from './layout-rules';
+import { ridesWall } from './physics';
 import type { ScenePart } from './scene-spec';
 
 // Breathing room kept off a wall comes from `layout-rules` (imported above) rather
@@ -127,7 +129,14 @@ export function settleParts(parts: ScenePart[], footprint: Footprint, opts: Sett
   const inward = interiorPoint(footprint) ?? polygonCentroid(footprint);
   const winding = polygonWinding(poly);
 
-  const movable = out.map((p) => !p.wallMounted && !frozen.has(p.id));
+  // `ridesWall`, not `wallMounted`. A piece IN a wall must not be dragged off it by a
+  // containment push - its footprint sits on the boundary by design. The ceiling family
+  // is not in a wall: a fan or a pendant rides nothing, and `contain` is the only thing
+  // that would pull one back inside an L's cut-away quadrant. Gated on the wider flag it
+  // was skipped, so a detected fan taking the AI-position branch - which accepts a centre
+  // up to 200 mm outside the bounding box - hung outside the house with nothing to bring
+  // it in. Same exemption, same fix, as `carryAttached` in `lib/wall-move.ts`.
+  const movable = out.map((p) => !ridesWall(p.category, p.shape) && !frozen.has(p.id));
 
   // ── Inside the room ───────────────────────────────────────────────────────
   for (let i = 0; i < out.length; i++) {
@@ -335,7 +344,14 @@ function wallDeficits(
     if (e.t <= 1e-9 || e.t >= 1 - 1e-9) continue;
     any = true;
     const d = (x - e.px) * e.nx + (z - e.pz) * e.nz;
-    const short = obbExtentAlong(f, e.nx, e.nz) + WALL_GAP - d;
+    // `footExtentAlong`, not `obbExtentAlong`: a round piece's reach towards a wall
+    // is its ELLIPSE's, and the box overstates it by up to (root2 - 1) * r, which is
+    // 249 mm on a 1200 mm piece at 45 degrees. `escape` above already honours `circle`
+    // through `footCorners`, so measuring the shortfall off the box made `Seat.out` and
+    // `Seat.short` describe two different pieces and then ranked them as one. Measured:
+    // such a piece, already 20 mm clear of a wall, was pushed 249 mm further in and
+    // re-pushed on every settle.
+    const short = footExtentAlong(f, e.nx, e.nz) + WALL_GAP - d;
     // Only walls that WANT clearance contribute, to the push and to the total alike.
     // A wall with room to spare pushing back would be a spring, not a containment,
     // and would pull every piece to the middle of the floor.
@@ -397,7 +413,7 @@ function seatBetter(a: Seat, b: Seat): boolean {
  *  agrees on it, and four different answers.
  *
  *  Two passes, and the second is not a fallback for tidiness. The first walks out
- *  along the inward normal of the wall the piece is most short of (`worstWall`),
+ *  along the summed inward normals of EVERY wall the piece is short of,
  *  which is exact for a convex room and can point along a concave wall rather than
  *  away from it; the second lerps toward an interior point, which every shape of
  *  room agrees is inward. `x0`/`z0` are the ORIGINAL position on purpose — the lerp

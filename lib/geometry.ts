@@ -441,7 +441,43 @@ export function rayToBoundary(x: number, z: number, dx: number, dz: number, poly
   return best;
 }
 
-/** Half-extent of an OBB projected onto a world direction (dx,dz must be unit). */
+/** A footprint: an oriented box, plus whether the piece draws as a round one.
+ *  Declared here rather than beside `footFromPart` because `footExtentAlong` needs it
+ *  and sits with the other projection helpers. */
+export type Foot = OBB & { circle?: boolean };
+
+/** Half-extent of a FOOTPRINT projected onto a world direction (dx,dz must be unit) —
+ *  the OBB's, or the ellipse's when the piece is round.
+ *
+ *  These are not the same number and the difference is not small: a 1200 mm round piece
+ *  at 45° has a bounding-box half-extent of 0.8485 m along either world axis and a true
+ *  footprint half-extent of 0.6000 m, so the box overstates by 248.5 mm. Anything asking
+ *  "how far does this reach towards that wall" has to ask the footprint, or a round piece
+ *  is refused a corner it fits in perfectly well. Measured: `containedXZ` pushed such a
+ *  piece 249 mm off a wall it was already 20 mm clear of, and re-pushed it on every
+ *  settle, because `escape` honours `circle` through `footCorners` and the shortfall did
+ *  not — so `Seat.out` and `Seat.short` described two different pieces and were then
+ *  ranked as one.
+ *
+ *  The ELLIPSE rather than the drawn 24-gon, deliberately. `footCorners` INSCRIBES that
+ *  polygon, so the ellipse circumscribes what is drawn and this function can never
+ *  UNDER-measure. For containment that is the safe direction: a piece may end a fraction
+ *  of a millimetre further inside than it strictly needs, and can never be left hanging
+ *  through the plaster. */
+export function footExtentAlong(f: Foot, dx: number, dz: number): number {
+  if (!f.circle) return obbExtentAlong(f, dx, dz);
+  const c = Math.cos(f.rot);
+  const s = Math.sin(f.rot);
+  // The support function of an ellipse with semi-axes (hw, hd): the direction is taken
+  // into the piece's own frame and the two components combine in quadrature, not as a
+  // sum. Summing them is exactly what `obbExtentAlong` does, and is what overstates it.
+  const along = (c * dx - s * dz) * f.hw;
+  const across = (s * dx + c * dz) * f.hd;
+  return Math.hypot(along, across);
+}
+
+/** Half-extent of an OBB projected onto a world direction (dx,dz must be unit).
+ *  Ignores `circle` - prefer `footExtentAlong` when you have a `Foot`. */
 export function obbExtentAlong(b: OBB, dx: number, dz: number): number {
   const c = Math.cos(b.rot);
   const s = Math.sin(b.rot);
@@ -695,7 +731,6 @@ export function pointInObb(x: number, z: number, b: OBB): boolean {
  *  bounding box, which is the conservative direction for the two that matter
  *  (`faceClearance` reports slightly LESS room in front of a wardrobe, never
  *  more). */
-export type Foot = OBB & { circle?: boolean };
 
 export function footFromPart(
   pos: [number, number, number],

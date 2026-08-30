@@ -2353,7 +2353,8 @@ export function placeNewPart(
     const cz = halfD * 2 >= b.maxZ - b.minZ ? (b.minZ + b.maxZ) / 2 : Math.max(b.minZ + halfD, Math.min(b.maxZ - halfD, z));
     // …and then out of the quadrant an L / T / U cuts away, which a bounding box
     // cannot see. A rectangle is unaffected: the inset above already puts the piece
-    // inside, `containedXZ` finds `escapeAt` zero and returns the same pair.
+    // inside, `containedXZ` finds no escape and no shortfall and returns the same pair.
+    // (This named `escapeAt`, which is not a function in this repo and never was.)
     const poly = room.footprint as Poly;
     // No `circle`: this function is not told whether the piece is round, so the
     // subject is its bounding box. That errs in the safe direction — a box's extent

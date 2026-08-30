@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { wallApertures } from '@/lib/apertures';
 import { clampIntoFootprint, footprintForLayout, pointInFootprint, polygonCentroid, wallSegments, type Footprint } from '@/lib/footprint';
-import { footFromPart, footInsidePoly, type Poly } from '@/lib/geometry';
+import { footExtentAlong, footFromPart, footInsidePoly, obbExtentAlong, type Poly } from '@/lib/geometry';
 import type { LayoutId } from '@/lib/storage';
 import { openingsForRoom } from '@/lib/room-openings';
 import { anchorFor, groundY, ridesWall, snapToWall, wallStandoff, CURTAIN_STANDOFF } from '@/lib/physics';
@@ -594,5 +594,64 @@ describe('a floor-standing piece is added facing its wall', () => {
     const { pos } = placeNewPart('bed', 'bed-double', DOUBLE, room, [], at);
     expect(pos[0]).toBeCloseTo(at[0], 6);
     expect(pos[2]).toBeCloseTo(at[1], 6);
+  });
+});
+
+describe('a ROUND piece is measured as the ellipse it draws, not as its box', () => {
+  // `escape` honours `circle` through `footCorners`; the shortfall did not, so `Seat.out`
+  // and `Seat.short` described two different pieces and were then ranked as one. The
+  // numbers are the whole finding: at 45 degrees a 1200 mm round piece's bounding box
+  // reaches 0.8485 m along a world axis and its footprint reaches 0.6000 m.
+  const SIZE: [number, number, number] = [1200, 1200, 400];
+
+  it('the two extents differ by (root2 - 1) * r at 45 degrees, and by nothing at 0', () => {
+    const at = (rot: number) => {
+      const f = footFromPart([0, 0, 0], rot, SIZE, true);
+      return { box: obbExtentAlong(f, 1, 0), foot: footExtentAlong(f, 1, 0) };
+    };
+    // At 0 degrees a square box and its inscribed circle have the same reach along x, so
+    // this axis alone cannot tell the two functions apart — which is exactly why the
+    // rotated case is the one that matters.
+    const zero = at(0);
+    expect(zero.box).toBeCloseTo(0.6, 9);
+    expect(zero.foot).toBeCloseTo(0.6, 9);
+
+    const tilt = at(Math.PI / 4);
+    expect(tilt.box).toBeCloseTo(0.6 * Math.SQRT2, 6);
+    expect(tilt.foot).toBeCloseTo(0.6, 9);
+    expect(tilt.box - tilt.foot).toBeCloseTo(0.6 * (Math.SQRT2 - 1), 6);
+
+    // A NON-round piece must be untouched by the new branch, or this is a change to
+    // every other caller as well.
+    const sq = footFromPart([0, 0, 0], Math.PI / 4, SIZE, false);
+    expect(footExtentAlong(sq, 1, 0)).toBeCloseTo(obbExtentAlong(sq, 1, 0), 12);
+  });
+
+  it('and a round piece already at WALL_GAP is left alone, at every angle', () => {
+    // The consequence, and the reason this is a defect rather than a rounding difference:
+    // the box overstates the reach, so the shortfall was positive for a piece that was
+    // already correctly placed and `contain` pushed it 249 mm further in — then again on
+    // the next settle, since nothing about the position made the answer stable.
+    const r = 0.6;
+    const poly = footprintForLayout('rect', 6, 4);
+    for (const rot of [0, Math.PI / 8, Math.PI / 4, Math.PI / 3, 1.1]) {
+      for (const [x0, z0] of [
+        [-(3 - r - WALL_GAP), 0],
+        [3 - r - WALL_GAP, 0],
+        [0, -(2 - r - WALL_GAP)],
+        [0, 2 - r - WALL_GAP],
+      ] as Array<[number, number]>) {
+        const p = poly as unknown as Poly;
+        const [x1, z1] = containedXZ(
+          { rot, dimMM: SIZE, circle: true },
+          x0,
+          z0,
+          p,
+          interiorPoint(p) ?? polygonCentroid(poly),
+          polygonWinding(p),
+        );
+        expect(Math.hypot(x1 - x0, z1 - z0), `rot ${rot.toFixed(2)} at (${x0}, ${z0})`).toBeLessThan(1e-6);
+      }
+    }
   });
 });
