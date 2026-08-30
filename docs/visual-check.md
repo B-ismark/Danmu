@@ -63,7 +63,7 @@ conflict.
 
 ## Sizes and fit
 
-*Owner: `sizes`. **This section is empty, and both of its items were looked at.** A bed
+*Owner: `sizes`. **One item, and it is new — the two older ones were looked at.** A bed
 added at a wall failed and produced two defects, both measured in `what-is-still-open.md`
 § H.2 and § H.3; the arithmetic there is settled, so neither waits on eyes any more.
 The exported floor plan disagreeing with the on-screen plan is closed too,
@@ -74,6 +74,40 @@ real exported PNG, decoded. **An eyes-item answerable from the source is not an
 eyes-item.** See `tests/plan-export-order.test.ts` for the call order and PR #59 for the
 fix; the Library-vs-seeded `circle` flag that came out of the same screenshot is not a bug
 to look at but a decision, and it is § B item 15.*
+
+### A rider left at the size the room was BUILT at, once you resize what it stands on
+
+**Where to click.** Any preset with one piece standing on another - a lamp or a monitor on
+a desk. Select the piece **underneath** and change its height in the Inspector's size
+fields. Then leave the room and open it again.
+
+**Do not add, delete, rename or reshape anything in that room first.** Any of those writes
+a scene snapshot, `RoomSync` prefers the snapshot over the rebuild, and this disappears
+completely. A resize alone writes no snapshot, because `Inspector.tsx:352` sends it to
+`useStudio.dims` and never touches `useScene.parts`. That narrowing is why nobody hit it
+by accident.
+
+**What wrong looks like.** After the reload the lamp hangs in the air above a desk you
+shrank, or is sunk into one you grew. Measured rather than guessed, on a lamp settled onto
+a 750 mm desk: **+0.350 m** above that desk shrunk to 400 mm, **-0.350 m** inside it grown
+to 1100 mm, and **0.000** with the desk untouched. The control is the reason the other two
+numbers are the override and not the fixture.
+
+**What is already gated, so do not re-derive it.** The arithmetic is pinned in
+`tests/layout-settle.test.ts` - at the wrong answer with the right one named, the way the
+monitor case beside it is, and mutation-checked three ways. `settleHeights` answers
+entirely in `dimMM`, so the size a caller hands it IS the answer.
+
+**What needs the eye** is only the reload: `loadFromRoom` rebuilds the parts through
+`buildSceneFromRoom`, which settles against the **authored** dims, and then
+`loadTransforms` re-applies your saved `dims` by id with nothing settling afterwards. No
+test here reaches that sequence, and whether a person notices depends on how tall the
+piece was.
+
+**Do not fix it on sight.** Re-settling on load writes position overrides, and each one
+pins that value against a re-detect and persists - stamping the user's room. That is a
+decision and nobody has been asked it yet; it is not in § B.
+
 
 ## Drag and selection
 
