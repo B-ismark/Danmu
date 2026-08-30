@@ -48,9 +48,13 @@ now naming the merge commit. Numbers are about an artifact; a click path is abou
 
 ## Owners
 
-Four sessions, named for what they own rather than for their ids. Each keeps its own
-section and touches no other, which is what lets four of us edit one file without a merge
-conflict.
+Four lanes, named for what they own rather than for their ids. A lane keeps to its own
+section and touches no other, which is what lets several sessions edit one file without a
+merge conflict.
+
+**A lane is not a promise that anyone is holding it.** The table says which surface an
+item belongs to; it does not say its owner is awake. A stale preamble in someone else's
+section is yours to fix if you are the one reading it.
 
 | section | owner | surface |
 |---|---|---|
