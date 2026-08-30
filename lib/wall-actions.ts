@@ -26,7 +26,7 @@ import { attachedToWall, carryAttached } from './wall-move';
 import { footprintBounds, offsetWall, wallOutwardNormal } from './footprint';
 import { useScene } from './scene-store';
 import { announce } from './announce';
-import { ROOM_SIDE_M } from './dimension-ranges';
+import { ROOM_SIDE_EPS, ROOM_SIDE_M } from './dimension-ranges';
 import { floorRefusal, furnitureFloor, roomFloor, type FloorAxis } from './room-floor';
 import { formatDim } from './units';
 import type { ScenePart } from './scene-spec';
@@ -87,16 +87,23 @@ function wallRefusal(
   const unit = useSettings.getState().dimUnit;
   const size = (metres: number) => `${formatDim(metres * 1000, unit)} ${unit}`;
   for (const axis of ['width', 'depth'] as FloorAxis[]) {
-    if (next[axis] > ROOM_SIDE_M.max)
+    if (next[axis] > ROOM_SIDE_M.max + ROOM_SIDE_EPS)
       return `The room will not go ${axis === 'width' ? 'wider' : 'deeper'} than ${size(ROOM_SIDE_M.max)}.`;
     const stop = furnitureFloor(parts, axis);
-    if (next[axis] >= roomFloor(stop, current[axis])) continue;
+    if (next[axis] >= roomFloor(stop, current[axis]) - ROOM_SIDE_EPS) continue;
     // Same ordering rule as `applyRoomEdits`: name the piece while the piece is
     // what is binding, and fall back to the static range when it is not — below
     // the hard floor there is no piece to point at, and a refusal pointing at
     // nothing is the one the user cannot act on.
+    // `+ ROOM_SIDE_EPS` on the fits test as well, and it is the same reason as the
+    // comparison above rather than a second tolerance: a wall walked exactly onto
+    // its stop sits at 2.3999999999999995, so a bare `<=` reports a 2.4 m piece as
+    // not fitting a 2.4 m room and flips the sentence to "already does not fit" at
+    // the one value the user is most likely to be standing on. Seen in a browser
+    // immediately after the first tolerance was added — the fix moved the defect
+    // from the geometry into the wording.
     if (stop && stop.metres > ROOM_SIDE_M.min)
-      return floorRefusal(stop, axis, size(stop.metres), stop.metres <= current[axis]);
+      return floorRefusal(stop, axis, size(stop.metres), stop.metres <= current[axis] + ROOM_SIDE_EPS);
     return `The room will not go ${axis === 'width' ? 'narrower' : 'shallower'} than ${size(ROOM_SIDE_M.min)}.`;
   }
   return null;

@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useScene } from '@/lib/scene-store';
 import { useSettings, useStudio } from '@/lib/store';
 import { boundsToUnit, formatDim, fromMM, toMM, stepFor, precisionFor } from '@/lib/units';
-import { applyRoomEdits, roomAxisRange, ROOM_AXES, type RoomAxis, type RoomRejection } from '@/lib/dimension-ranges';
+import { applyRoomEdits, roomAxisRange, ROOM_AXES, ROOM_SIDE_EPS, type RoomAxis, type RoomRejection } from '@/lib/dimension-ranges';
 import { floorRefusal, roomFloors, type FloorAxis } from '@/lib/room-floor';
 import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { recarryForResize, regradeForNewCeiling } from '@/lib/transforms';
@@ -228,7 +228,13 @@ export function RoomDimsEditor() {
       // sentence may say the room "will not go narrower than that". When it does
       // not fit, the floor is pinned to the current side and naming that as what
       // the piece needs would be a false number.
-      stop.metres <= (axis === 'width' ? room.width : room.depth),
+      //
+      // `ROOM_SIDE_EPS`, because a room walked here by dragging a wall sits a
+      // rounding error under its own stop: a bare `<=` calls a 2.4 m piece too big
+      // for a 2.4 m room and prints "already does not fit" at exactly the size the
+      // user just achieved. Same tolerance as `lib/wall-actions.ts`, from the same
+      // constant, since it is the same question about the same number.
+      stop.metres <= (axis === 'width' ? room.width : room.depth) + ROOM_SIDE_EPS,
     );
   }
 

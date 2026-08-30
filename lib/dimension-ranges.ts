@@ -151,6 +151,29 @@ export function clampDims(category: Category, shape: Shape, dim: Dim3): Dim3 {
  *  derived from the rule, never typed next to it. */
 export const ROOM_SIDE_M = { min: 1, max: 50 } as const;
 
+/** How close to a room-side bound counts as being ON it, in metres — a micron.
+ *
+ *  A typed number reaches a bound by one conversion and needs none of this. A
+ *  DRAGGED wall reaches it by repeated addition: `offsetWall` translates the edge
+ *  and `footprintBounds` re-derives the side from the moved vertex, so thirty-two
+ *  presses of the plan's 50 mm step land on 2.3999999999999995 rather than 2.4.
+ *  Measured in a browser: a 2.4 m sectional stopped its wall at **2.45** while the
+ *  sentence underneath said the piece needs 2.40 — a whole step of room refused,
+ *  and the number the user is told disagreeing with the number they can reach,
+ *  which is the failure `boundsToUnit` exists to prevent one layer up.
+ *
+ *  Deliberately far below anything the app can display — the coarsest unit here
+ *  still renders tenths of an inch — so it can only ever forgive arithmetic, never
+ *  a real millimetre.
+ *
+ *  It lives beside the bound rather than beside either consumer because there are
+ *  TWO and they must agree: `lib/wall-actions.ts` decides what to say, and
+ *  `scene-store.moveWall` decides what to do. One with a tolerance and one without
+ *  is a wall that stops for a reason the message cannot name — the store refuses,
+ *  `moveWallCarrying` sees a bare 0 and falls back to "that wall will not move any
+ *  further", and the piece in the way goes unmentioned. */
+export const ROOM_SIDE_EPS = 1e-6;
+
 /** How tall a ceiling may be, in metres.
  *
  *  Separate from `ROOM_SIDE_M` because a ceiling is not a side, and sharing that

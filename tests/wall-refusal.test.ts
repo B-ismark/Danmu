@@ -157,6 +157,62 @@ describe('a wall will not close on the furniture', () => {
     expect(moveWallCarrying(d, -0.1)).toBe(0);
   });
 
+  it('reaches the stop exactly, after enough steps to accumulate float drift', () => {
+    // Found in a browser, not here: thirty-two presses of the plan's 50 mm step
+    // walked a 4 m room to 2.3999999999999995 and the wall stopped at **2.45**,
+    // while the sentence underneath said the sectional needs 2.40. A whole step of
+    // room refused, and the number the user is told disagreeing with the number
+    // they can reach. `ROOM_SIDE_EPS` is what closes it, in `wall-actions` and in
+    // `scene-store.moveWall` both — one with a tolerance and one without stops the
+    // wall for a reason no message can name.
+    //
+    // The step count is the assertion: a fixture of two or three moves lands on
+    // exact binary values and cannot see this at all.
+    setRoom(4, 3, [part({ dimMM: [2400, 900, 800], name: 'Sectional' })]);
+    const w = widthWall();
+    for (let k = 0; k < 32; k++) moveWallCarrying(w, -0.05);
+    expect(useScene.getState().room.width).toBeCloseTo(2.4, 9);
+    expect(heard).toEqual([]);
+    // …and the step after it is still refused, so the tolerance forgives the
+    // arithmetic and not a real 50 mm.
+    expect(moveWallCarrying(w, -0.05)).toBe(0);
+    expect(heard.at(-1)).toContain('Sectional');
+    // The WORDING has to survive the same drift. A room walked exactly onto its
+    // stop is 2.3999999999999995, so an untolerant `<=` calls a 2.4 m piece too big
+    // for a 2.4 m room and prints "already does not fit" at the one size the user
+    // has just worked to reach. Seen in a browser one minute after the tolerance
+    // above was added — the first fix moved the defect from the geometry into the
+    // sentence, which is exactly the kind of thing that ships.
+    expect(heard.at(-1)).toContain('needs');
+    expect(heard.at(-1)).not.toContain('already does not fit');
+  });
+
+  it('reaches the HARD floor exactly too, which is the store\'s own clamp', () => {
+    // The companion to the test above, and it exists because that one could not
+    // see `scene-store.moveWall`'s copy of the tolerance: it stops at the
+    // FURNITURE floor of 2.4, nowhere near the store's 1 m bound, so deleting the
+    // epsilon there left the file green. Sixty steps of 50 mm from 4 m lands on
+    // 0.9999999999999998; without the tolerance the store refuses, `moveWall`
+    // returns a bare 0, and the wall stops at 1.05 under a message that cannot say
+    // why.
+    // BOTH axes, because the store spells its clamp out per side and a test that
+    // walks one wall leaves the other three comparisons unpinned — deleting the
+    // depth tolerance alone was green against a width-only fixture.
+    for (const [pick, side, word] of [
+      [widthWall, 'width', 'narrower'],
+      [depthWall, 'depth', 'shallower'],
+    ] as const) {
+      heard = [];
+      setRoom(4, 4, []);
+      const w = pick();
+      for (let k = 0; k < 60; k++) moveWallCarrying(w, -0.05);
+      expect(useScene.getState().room[side], `${side} did not reach the floor`).toBeCloseTo(1, 9);
+      expect(heard, `${side} was refused on the way down`).toEqual([]);
+      expect(moveWallCarrying(w, -0.05)).toBe(0);
+      expect(heard.at(-1)).toContain(`will not go ${word}`);
+    }
+  });
+
   it('refuses the far end too, and says which way it will not go', () => {
     // The stop is a FLOOR, so every fixture above pushes inward and none of them
     // can see the ceiling `ROOM_SIDE_M.max` — deleting that branch entirely left

@@ -4,7 +4,7 @@ import { create } from 'zustand';
 import { defaultScene, buildSceneFromRoom, type ScenePart } from './scene-spec';
 import { ROOM as ROOM_DEFAULT } from './parts-catalog';
 import { footprintForLayout, offsetWall, footprintBounds, type Footprint, type LayoutId } from './footprint';
-import { ROOM_SIDE_M } from './dimension-ranges';
+import { ROOM_SIDE_EPS, ROOM_SIDE_M } from './dimension-ranges';
 import type { RoomData, Site } from './storage';
 
 export type RoomShape = {
@@ -156,11 +156,15 @@ export const useScene = create<SceneState>((set, get) => ({
     // that is on this wall by the SAME delta, and a rejected wall move with an
     // accepted furniture move would walk a sofa through the plaster one clamped
     // frame at a time.
+    // The tolerance is ROOM_SIDE_EPS, and it is shared with lib/wall-actions.ts
+    // rather than written here: a dragged wall reaches a bound by repeated
+    // addition and lands a rounding error short, and a store that refuses what the
+    // message-writer allowed is a wall stopping for a reason nothing can name.
     if (
-      b.width < ROOM_SIDE_M.min ||
-      b.depth < ROOM_SIDE_M.min ||
-      b.width > ROOM_SIDE_M.max ||
-      b.depth > ROOM_SIDE_M.max
+      b.width < ROOM_SIDE_M.min - ROOM_SIDE_EPS ||
+      b.depth < ROOM_SIDE_M.min - ROOM_SIDE_EPS ||
+      b.width > ROOM_SIDE_M.max + ROOM_SIDE_EPS ||
+      b.depth > ROOM_SIDE_M.max + ROOM_SIDE_EPS
     )
       return 0;
     set({ room: { ...s.room, footprint: poly, width: b.width, depth: b.depth, layoutId: 'custom' } });
