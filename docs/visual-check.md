@@ -63,7 +63,7 @@ conflict.
 
 ## Sizes and fit
 
-*Owner: `sizes`. **One item, and it is new — the two older ones were looked at.** A bed
+*Owner: `sizes`. **The older items here were looked at.** A bed
 added at a wall failed and produced two defects, both measured in `what-is-still-open.md`
 § H.2 and § H.3; the arithmetic there is settled, so neither waits on eyes any more.
 The exported floor plan disagreeing with the on-screen plan is closed too,
