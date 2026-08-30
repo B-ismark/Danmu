@@ -2098,6 +2098,113 @@ round toward the interior, or the arrows and the commit disagree again.
 **And it must refuse rather than resize**, per rule 2. When the room cannot shrink further
 the app says so; it does not quietly shrink the sofa to make the number fit.
 
-**The number is not chosen.** "Close to standard small rooms" wants a real figure — a UK
-single bedroom minimum is around 2.15 m on its short side, and a 2.1–2.4 m floor is the
-range worth putting to the user rather than picking silently.
+**ANSWERED 2026-08-30: "permit corridors."** So there is no hard floor to raise and the
+list above has one stop, not two — `ROOM_SIDE_M.min` stays at 1 m and the furniture-derived
+stop is the whole mechanism.
+
+That is also the safer of the two designs, for a reason nobody had priced when the hard
+floor was proposed: `lib/scene-file.ts` treats an out-of-range width or depth as **fatal**,
+so raising the minimum would make previously-saved small rooms refuse to open — a
+regression on real user data, and it would have needed an author-time bound distinct from
+the load bound to avoid. Permitting corridors removes that problem rather than solving it.
+
+The dynamic minimum still owes `boundsToUnit` the pair treatment described above.
+
+### 23. Every long button lied about being busy — FIXED
+
+Not reported by eye and not in `visual-check.md`; found while wiring the loading states the
+user asked for, in the code that was supposed to already have them.
+
+`SuggestButton` and `TryFixButton` both held a `busy` flag, both passed it to `disabled`,
+and **neither could ever show it.** `solveLayout` is synchronous and runs for seconds on a
+furnished room — the #67 shuffle tests measure 2.1–3.5 s for one solve — and the flag was
+set on the same tick the solve ran on. React flushes the state change, but the browser is
+never handed a frame to paint it in, and `setBusy(false)` has already run by the time it
+would be. `TryFixButton`'s `{busy ? 'Trying…' : 'Try a fix'}` had therefore never once been
+on screen. Pressing Suggest looked like pressing nothing, for several seconds, and then the
+room jumped.
+
+**The third site had the cure written out inline.** `FitCheck.check()` set the flag and then
+`setTimeout(…, 0)`, with a comment explaining precisely why — "React cannot paint while the
+same tick is still solving". That is the shape `drag-resolve.ts` already records: a step
+that lives in ONE caller rather than in the pipeline is a step the next caller is written
+without. There are three call sites and there was one yield.
+
+`lib/after-paint.ts` owns it now, and `components/ui/useBusyAction` is the only holder of a
+busy flag over synchronous work. Two things in there are load-bearing and neither is
+obvious:
+
+· **Two frames, not one.** A `requestAnimationFrame` callback runs *before* the paint of the
+  frame it was registered for, so working in the first frame blocks the very paint it is
+  waiting for — the yield would be decoration in exactly the way the flag already was. The
+  second callback runs after that frame is presented. `setTimeout(…, 0)` is the fallback and
+  deliberately not the primary: a macrotask is only promised to run after the current *task*,
+  not after a *paint*, so the old inline version worked by coincidence.
+· **The re-entry guard is a ref, not the flag.** `disabled` cannot cover the gap between the
+  press and the paint, because the render carrying it has not been presented — which is the
+  same window the bug lived in. A double-click used to queue two three-second solves.
+
+Mutation-checked seven ways across the two files; every assertion in both was reached.
+
+**What is NOT verified: the paint itself.** jsdom has no compositor. The tests prove the work
+is deferred past a frame boundary, which is the mechanism, not the pixel. Someone has to press
+Suggest in a browser and see "Thinking…". That is now the only live item in `visual-check.md`.
+
+### 24. What the room-shuffling research is worth — one idea, and two that are not ours
+
+A second agent supplied how games handle "shuffle": modular slots, constraint-based
+placement with an A\* check, and Wave Function Collapse. Recorded here so nobody re-proposes
+the two that do not apply.
+
+**Modular slots — no, except for one piece.** That pattern shuffles *content*: authored
+anchor nodes, each with a table of style options, multiplying out to millions of
+permutations. Danmu's furniture is the user's own room, so swapping their sofa for a
+different sofa is editing their room, not rearranging it — and there are no authored anchors
+to hang it on, because footprints are user-dragged polygons.
+
+The part that transfers is the **counting argument**, and it is a real candidate for § 18.
+Shuffle's difficulty is finding arrangements that are structurally *different*, and
+re-seeding one annealer mostly re-walks one basin. `room-bays.ts` already derives the
+anchors — `roomBays` gives the real rectangles of floor, `baySides` gives each side an
+inward normal, a yaw and whether it is a true wall — so **enumerating bay × side × role
+assignments is a source of seeds the annealer cannot reach by RNG alone**. Unmeasured, and
+cheap to measure: count distinct finalists per preset with and without it, against the table
+`tests/layout-shuffle.test.ts` already prints.
+
+**Constraint-based placement — already here, and further along.** Bounding boxes and snap are
+`drag-resolve.ts`; "TV faces sofa", "nightstand beside bed" are `Relation`/`relationFor`;
+"rug under the seating" is `sharesFloor`; the pathfinding check is `navigabilityCost`, a
+distance transform over connected components seeded at the door. The difference is that ours
+is a weight *hierarchy* — three orders of magnitude between `overlap` and `balance`, so no
+amount of taste buys a collision — rather than a filter.
+
+One thing does transfer: the research runs the path check as a **post-filter**, and #67's
+`newRoomFindings` is exactly that. Which says how to test it — *a post-filter is tested by
+feeding it something it must reject.* That is the missing fixture behind the finding below.
+
+**Wave Function Collapse — no, and not merely inapplicable.** WFC generates *architecture*
+from tile adjacency. The room here is the user's real room, measured; generating its shape is
+the one thing this product must not do. Two further blockers even if it were wanted: WFC needs
+a discrete tile grid, and sizes here are continuous millimetres through `clampDims`, so
+discretising throws away the trust boundary rule 2 exists to protect.
+
+### 25. PR #67 review — three findings, none fixed, and one of them blocks the PR
+
+Reviewed at head `52d30ed` on 2026-08-30, gating the PR head itself rather than the tree.
+
+1. **The `newRoomFindings` gate is unpinned.** Deleting `if (newRoomFindings(...).length > 0)
+   continue;` from `shuffleRoom` leaves **all 11 tests green**, including the 41-second *never
+   offers a room that ROOM CHECK would report*. After #68 the solver largely stops generating
+   the candidates the gate discards, so on the fixture presets it never fires and that test
+   measures the solver, not the gate. The PR's own commit message calls this gate "what makes
+   the zero a guarantee rather than a measurement" — which is precisely the claim nothing
+   verifies. See § 24 for the shape of the fixture that would.
+2. **Three tests sit at 1.4–2.3× of vitest's default 5000 ms timeout**, so they go red under
+   load: 3429 ms, 3548 ms, 2129 ms measured idle. Two neighbouring tests in the same file
+   already carry explicit `{ timeout: … }`, so the mechanism was known and these were missed.
+   This one is a **dependency of everything else** — while it flakes, no red anywhere can be
+   believed, and `main` is already intermittently red on machine speed.
+3. **`lib/layout-shuffle.ts` contradicts itself 155 lines apart** about whether #68 landed:
+   line 79 says `layout-score.ts` "no longer exempts" a `sharesFloor` pair from `overlap`;
+   lines 234–239 say it exempts them "entirely — a blanket `continue`". #68 did land, and
+   `layout-score.ts:649` is now `sharesFloor(...) ? TUCKED_CLASH_SHARE : 0`.

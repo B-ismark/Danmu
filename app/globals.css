@@ -322,6 +322,27 @@ h1, h2, h3 { margin: 0; }
 .ds-btn:hover { background: var(--paper-2); transform: translateY(-1px); box-shadow: var(--shadow-lift); }
 .ds-btn:active { transform: translateY(0); box-shadow: var(--shadow-soft); }
 .ds-btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+
+/* ─── Busy ────────────────────────────────────────────────────────────────
+   A ring in `currentColor`, so it takes the colour of whatever control it sits
+   in and no token is named a second time. Sized in `em` for the same reason:
+   an 11px button gets an 11px spinner without either number being written down.
+
+   The reduced-motion block far below stops the rotation, and that is correct
+   rather than a gap: every busy control in this app also changes its LABEL, so
+   the state never rests on movement — or on colour — alone. */
+.ds-spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: var(--r-full);
+  opacity: 0.65;
+  flex-shrink: 0;
+  animation: danmu-spin 0.7s linear infinite;
+}
+@keyframes danmu-spin { to { transform: rotate(360deg); } }
 /* WHICH ONE TO REACH FOR. Both variants existed with no rule about when, so five
    files used one, five used the other, and two pages used both at once — the
    workspace showed an ink "New Room" beside a terracotta "Create your first

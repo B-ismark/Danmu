@@ -66,7 +66,8 @@ import { NumberField } from '@/components/ui/NumberField';
 import { v4 as uuid } from 'uuid';
 import { savedLabel } from '@/lib/dates';
 import { Icon } from '@/components/ui/Icon';
-import { IconButton, Pill, Segmented } from '@/components/ui/primitives';
+import { IconButton, Pill, Segmented, Spinner } from '@/components/ui/primitives';
+import { useBusyAction } from '@/components/ui/useBusyAction';
 import { Modal } from '@/components/ui/Modal';
 import { useConfirm } from '@/components/ui/Confirm';
 import { toast } from '@/components/ui/StorageToast';
@@ -571,45 +572,47 @@ function SuggestButton({
   appPlaced: AppPlacedRef;
 }) {
   const suggest = useSuggest(effParts, footprint, appPlaced);
-  const [busy, setBusy] = useState(false);
+  // `useBusyAction`, not a bare `useState`: `solveLayout` is synchronous and runs
+  // for seconds on a furnished room, so a flag set on the same tick never reaches
+  // the screen. This button had exactly that — `disabled={busy}` over a solve the
+  // window was already frozen for, and no label change either, so pressing
+  // Suggest looked like pressing nothing until the room jumped. See
+  // `lib/after-paint.ts`.
+  const [busy, run] = useBusyAction();
   // Pressing again asks for a DIFFERENT arrangement rather than recomputing the
   // same one — the solver is deterministic per seed, which is what makes both
   // behaviours possible at once.
   const attempt = useRef(0);
 
-  function run() {
-    setBusy(true);
-    try {
-      const result = suggest('arrange', ++attempt.current);
-      if (!result) {
-        toast({
-          title: 'This is already a good arrangement',
-          message: 'Nothing was moved — the pieces are where the guidelines want them.',
-        });
-        return;
-      }
-      // One piece named beats a count. A single move says exactly what happened; a
-      // handful still gets the biggest one first, then the room-level summary.
-      const lead = biggestMove(result.moves, effParts);
+  function solve() {
+    const result = suggest('arrange', ++attempt.current);
+    if (!result) {
       toast({
-        title:
-          result.moved.length === 1 && lead
-            ? lead
-            : `Moved ${result.moved.length} ${result.moved.length === 1 ? 'piece' : 'pieces'}`,
-        message:
-          result.moved.length === 1 || !lead
-            ? whatChanged(result.breakdownBefore, result.breakdownAfter)
-            : `${lead} ${whatChanged(result.breakdownBefore, result.breakdownAfter)}`,
+        title: 'This is already a good arrangement',
+        message: 'Nothing was moved — the pieces are where the guidelines want them.',
       });
-    } finally {
-      setBusy(false);
+      return;
     }
+    // One piece named beats a count. A single move says exactly what happened; a
+    // handful still gets the biggest one first, then the room-level summary.
+    const lead = biggestMove(result.moves, effParts);
+    toast({
+      title:
+        result.moved.length === 1 && lead
+          ? lead
+          : `Moved ${result.moved.length} ${result.moved.length === 1 ? 'piece' : 'pieces'}`,
+      message:
+        result.moved.length === 1 || !lead
+          ? whatChanged(result.breakdownBefore, result.breakdownAfter)
+          : `${lead} ${whatChanged(result.breakdownBefore, result.breakdownAfter)}`,
+    });
   }
 
   return (
     <button
-      onClick={run}
+      onClick={() => run(solve)}
       disabled={busy}
+      aria-busy={busy}
       className="ds-btn"
       title="Rearrange the unlocked furniture using the same guidelines Room check measures"
       style={{
@@ -622,8 +625,11 @@ function SuggestButton({
         boxShadow: 'var(--shadow-soft)',
       }}
     >
-      <Icon name="sparkles" size={12} />
-      Suggest
+      {busy ? <Spinner size={12} /> : <Icon name="sparkles" size={12} />}
+      {/* The word changes as well as the glyph. Under `prefers-reduced-motion`
+          the ring does not turn, so the label is the tell that survives — and it
+          is the only one a screen reader gets from the button's own content. */}
+      {busy ? 'Thinking…' : 'Suggest'}
     </button>
   );
 }
@@ -765,7 +771,11 @@ function FixButton({
   appPlaced: AppPlacedRef;
 }) {
   const suggest = useSuggest(effParts, footprint, appPlaced);
-  const [busy, setBusy] = useState(false);
+  // The label below has said "Trying…" since the day it was written and had never
+  // been seen: the solve ran on the same tick that set the flag, so the render
+  // carrying that word was flushed and replaced before the browser was given a
+  // frame to paint it in. `useBusyAction` yields first — see `lib/after-paint.ts`.
+  const [busy, run] = useBusyAction();
   // Pressing again asks for a different attempt, the same way Suggest does.
   const attempt = useRef(0);
 
@@ -773,48 +783,45 @@ function FixButton({
   // has nothing to confine to, so it falls back to the whole room.
   const scope = issue.partIds.length > 0 ? issue.partIds : undefined;
 
-  function run() {
-    setBusy(true);
-    try {
-      const result = suggest('refit', ++attempt.current, scope);
-      if (!result) {
-        toast({
-          title: 'Moving those didn’t clear it',
-          message: scope
-            ? 'Nothing better was found without touching the rest of the room. Suggest can rearrange everything.'
-            : 'Nothing better was found. Try unlocking a piece, or making some space.',
-        });
-        return;
-      }
-      const lead = biggestMove(result.moves, effParts);
+  function solve() {
+    const result = suggest('refit', ++attempt.current, scope);
+    if (!result) {
       toast({
-        tone: 'success',
-        title:
-          result.moved.length === 1 && lead
-            ? lead
-            : `Moved ${result.moved.length} ${result.moved.length === 1 ? 'piece' : 'pieces'}`,
-        message:
-          result.moved.length === 1 || !lead
-            ? whatChanged(result.breakdownBefore, result.breakdownAfter)
-            : `${lead} ${whatChanged(result.breakdownBefore, result.breakdownAfter)}`,
+        title: 'Moving those didn’t clear it',
+        message: scope
+          ? 'Nothing better was found without touching the rest of the room. Suggest can rearrange everything.'
+          : 'Nothing better was found. Try unlocking a piece, or making some space.',
       });
-    } finally {
-      setBusy(false);
+      return;
     }
+    const lead = biggestMove(result.moves, effParts);
+    toast({
+      tone: 'success',
+      title:
+        result.moved.length === 1 && lead
+          ? lead
+          : `Moved ${result.moved.length} ${result.moved.length === 1 ? 'piece' : 'pieces'}`,
+      message:
+        result.moved.length === 1 || !lead
+          ? whatChanged(result.breakdownBefore, result.breakdownAfter)
+          : `${lead} ${whatChanged(result.breakdownBefore, result.breakdownAfter)}`,
+    });
   }
 
   return (
     <button
-      onClick={run}
+      onClick={() => run(solve)}
       disabled={busy}
+      aria-busy={busy}
       className="ds-btn"
       title={
         scope
           ? 'Move just the pieces named here, leaving the rest of the room alone'
           : 'Rearrange the unlocked furniture to open the floor up'
       }
-      style={{ height: 28, fontSize: 10, padding: '0 10px', flexShrink: 0, alignSelf: 'flex-start' }}
+      style={{ height: 28, fontSize: 10, padding: '0 10px', gap: 6, flexShrink: 0, alignSelf: 'flex-start' }}
     >
+      {busy && <Spinner size={10} />}
       {busy ? 'Trying…' : 'Try a fix'}
     </button>
   );
@@ -1108,7 +1115,7 @@ function FitPanel({ effParts, room }: { effParts: ScenePart[]; room: RoomShape }
   const [d, setD] = useState('');
   const [h, setH] = useState('');
   const [result, setResult] = useState<FitResult | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, run] = useBusyAction();
 
   const kind = FIT_KINDS.find((k) => k.id === kindId) ?? FIT_KINDS[0];
   const dimMM: [number, number, number] = [
@@ -1133,20 +1140,19 @@ function FitPanel({ effParts, room }: { effParts: ScenePart[]; room: RoomShape }
   }
 
   function check() {
-    if (!ready || busy) return;
+    if (!ready) return;
     // `checkFit` is synchronous and runs the solver several times — measured at 42 ms
     // for an obvious yes and ~330 ms for a furnished room it has to work at. That is
     // long enough to feel, and setting state alone would not show it: React cannot
-    // paint while the same tick is still solving. So yield one turn to let the busy
-    // label render, then block.
-    setBusy(true);
-    setTimeout(() => {
-      try {
-        setResult(checkFit({ category: kind.category, shape: kind.shape, dimMM, name: kind.label }, effParts, room));
-      } finally {
-        setBusy(false);
-      }
-    }, 0);
+    // paint while the same tick is still solving.
+    //
+    // The yield used to be written out here, which is how the two solve buttons
+    // came to be written without one. `useBusyAction` owns it now — including the
+    // re-entry guard this had as `busy` in the line above, which could not work
+    // during the very gap it was guarding.
+    run(() => {
+      setResult(checkFit({ category: kind.category, shape: kind.shape, dimMM, name: kind.label }, effParts, room));
+    });
   }
 
   /** Put it in the room, where the check said it goes. This is the one path that
@@ -1261,10 +1267,11 @@ function FitPanel({ effParts, room }: { effParts: ScenePart[]; room: RoomShape }
       <button
         onClick={check}
         disabled={!ready || busy}
+        aria-busy={busy}
         className="ds-btn ds-btn--primary"
         style={{ height: 30, fontSize: 11.5 }}
       >
-        <Icon name="ruler" size={12} />
+        {busy ? <Spinner size={12} /> : <Icon name="ruler" size={12} />}
         {busy ? 'Checking…' : 'Check the room'}
       </button>
 
@@ -1499,6 +1506,11 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
   const { roomId } = useParams<{ roomId: string }>();
   const [layouts, setLayouts] = useState<LayoutVariant[]>([]);
   const [pendingApply, setPendingApply] = useState<LayoutVariant | null>(null);
+  // A plain flag on purpose, and NOT `useBusyAction`: the work here is a real
+  // `await` into IndexedDB, so the thread is handed back and the flag paints
+  // without any help. The hook exists for the opposite case — synchronous work
+  // that never lets go. Converting this would also throw away `saveCurrent`'s
+  // return value, which the button needs to name the layout it just wrote.
   const [busy, setBusy] = useState(false);
   const setParts = useScene((s) => s.setParts);
   const baseParts = useScene((s) => s.parts);
@@ -1649,8 +1661,13 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
           width={440}
           footer={
             <>
+              {/* Disabled while the save is in flight like the other two. It was
+                  the one way out of this dialog that stayed live mid-write, so
+                  dismissing it left a save running against a room the user had
+                  already moved on from. */}
               <button
                 onClick={() => setPendingApply(null)}
+                disabled={busy}
                 className="ds-btn"
                 style={{ height: 36, fontSize: 13, justifyContent: 'center' }}
               >
@@ -1680,9 +1697,11 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
                   if (v) apply(v);
                   if (saved) toast({ title: `Current arrangement saved as ${saved.name}` });
                 }}
+                aria-busy={busy}
                 className="ds-btn ds-btn--primary"
-                style={{ height: 36, fontSize: 13, justifyContent: 'center' }}
+                style={{ height: 36, fontSize: 13, gap: 8, justifyContent: 'center' }}
               >
+                {busy && <Spinner size={12} />}
                 {busy ? 'Saving…' : 'Save first, then apply'}
               </button>
             </>
