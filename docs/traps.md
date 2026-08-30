@@ -130,6 +130,42 @@ inconvenience.
 itself**. A predicate checked against an inline `bandCost(...) === 0` elsewhere in the
 same module passes when the predicate is replaced by `return true`.
 
+**Symptom: you revert your own fix and the test you just wrote for it stays green.**
+The assertion is usually sound; the **fixture** cannot reach the defect. A hand-built
+object is missing a piece of state that every real producer sets, so the branch with the
+bug in it is never entered. (Why, in one place only: `CLAUDE.md`, "mutate what you just
+wrote".)
+→ Revert the production change and watch **that named test** go red before believing it.
+Not "the suite goes red": one mutation reddens a pre-existing test and credits the wrong
+half. When it stays green the fixture is the thing to fix, and what it is missing is nearly
+always one of three — a **derived flag** the builders all set and the fixture omits
+(`wallMounted` absent, and `!undefined` is true, so an unflagged ceiling fan was movable
+under the old code and the new); a **refined shape**, where the hand-typed default and the
+derivation agree by construction (a `door` fixture was green against a bug about doors,
+because that category's row already said `true` — the column is derived now, so grep the
+history and not `scene-spec.ts`; the pair that disagreed was `lamp` refining to
+`lamp-pendant`); or a **geometry the existing fixtures never had** (every test for a wall
+normal used a rectangle, where the vertex average IS the true centroid and all four normals
+come out right).
+*(Cost: five times in one night — the rectangle, the unflagged fan, the already-true door,
+a `CATEGORIES` sweep that yields only each category's DEFAULT shape and was green against a
+**full revert** until a label dimension was added, and a browser check that added a Library
+`Ceiling fan` to exercise a `circle` branch `PART_LIBRARY` sets on no entry. Review found
+none of the five; mutation found all five.)*
+
+**Symptom: the expected value is derived from real constants and the test still pins the
+bug.** The sharpest form of the entry above: a derived expectation feels safe and is not.
+`toBeCloseTo(h / 2 + MOUNT_PAD)` cannot look wrong — every term is a real constant
+read out of the module under test — and it pinned a door lifted `MOUNT_PAD` off its
+own threshold. It was convincing *because* it was derived: the expression came from
+the same misreading as the code, so of course it agreed with it.
+→ Derive the expectation from the **requirement, in the requirement's own words** —
+a door's bottom sits ON the floor, so its centre is `h / 2` and nothing else — never
+from the terms the implementation happens to be written in.
+*(Admitted at one occasion because it is the entry above at its worst: same hour, same
+model, except that here the unreachable half is the number being compared against rather
+than the object being fed in.)*
+
 **Symptom: a sweep passes but you cannot say how many things it swept.**
 → Assert the count as a literal. `toBeGreaterThan(60)` where the real answer is exactly
 72 stays green with **eleven** items silently skipped. And do not derive the literal from
