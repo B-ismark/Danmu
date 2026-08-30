@@ -210,9 +210,11 @@ all facing one way — had two causes: how a bed is added (fixed) and how a bed 
 fix are both on `main`, in the merge of `fix/bed-shape-and-its-rotted-fixtures` (PR #38).
 The branch name this paragraph used to name does not exist on `origin` and never did.
 
-**Started, in a commit, not on `main`.** `lib/layout-offer.ts` + `tests/layout-offer.test.ts`
-exist on `feat/suggest-offer-mmr` (`e999522`) — layer 3a's two pure pieces, ranked and
-tested, **imported by nothing**. What is written is `orderOffers` (the ranking) and
+**On `main`, and still imported by nothing.** `lib/layout-offer.ts` +
+`tests/layout-offer.test.ts` landed with `e999522`; `tests/layout-offer-pool.test.ts`
+followed. The sentence here used to say they were "in a commit, not on `main`" and that
+stopped being true when they merged — layer 3a's two pure pieces are shipped, ranked and
+tested, and **nothing calls them**. What is written is `orderOffers` (the ranking) and
 `layoutSimilarity` (how alike two arrangements are). What is not written is the wiring at
 `RoomTools.tsx:534`, and three things below have to be settled before it can be.
 
@@ -226,9 +228,44 @@ tested, **imported by nothing**. What is written is `orderOffers` (the ranking) 
   refuses next door in cost units; and lambda's meaning moved with piece count, so the same
   three costs put the diverse candidate second in a two-piece room and gave pure cost order
   in an eight-piece one. `cost + penalty × closest` has none of the three.
-  **The number itself is unmeasured** — what `diversityPenalty` should be, in cost units,
-  is the one open value, and `MIN_GAIN_ABS` is the obvious scale to measure it against
-  rather than to borrow.
+  **The number is measured now: 4, with a working range of 2–8.** Taken against
+  `MIN_GAIN_ABS`, as this paragraph asked, rather than borrowed from it.
+
+  Method, because the input is the part that decides the answer: five presets × three
+  deterministic shoves = fifteen *rearranged* rooms, since the starter arrangements are
+  local optima the annealer cannot beat and hand back a pool of one — which
+  `tests/layout-offer-pool.test.ts` already pins in both directions, and which is
+  therefore the wrong input to tune on. `spotM` and `yawRad` are **not chosen here**:
+  they are `LAYOUT_SIMILAR_M` (0.25) and `TURN_EPSILON` (0.05), read off the solver,
+  which is what the "no thresholds are defined in this file" rule requires of a caller
+  as much as of the file.
+
+  Measured across those fifteen, every one leaving a pool of 3–4:
+
+  | | observed |
+  |---|---|
+  | finalist cost spread | 0.42 – 15.35, typically 1.5–5 |
+  | pairwise similarity | 0.00 – 0.91, per-room means 0.29–0.79 |
+  | penalty that first changes the offered set | `[0.25 ×3, 0.5, 2 ×3, 4 ×5, 8 ×2, >128]`, **median 4** |
+
+  Below **0.25** the term never fires in any room measured — it is inert, which is the
+  failure this whole design note exists to avoid. Above about **8** the order stops
+  responding: cost has stopped mattering and the offer is chosen purely on difference.
+  **4** is the value at which the term is live in roughly half the rooms without
+  dominating any of them, and it is a median of observations rather than a round number
+  someone liked.
+
+  One room refused to reorder at any penalty up to 128 (`l`, seed 3, a pool of three at
+  costs 26.79 / 28.90 / 30.46), and the reason is a property of the technique rather
+  than a bad number. Both remaining candidates sit at **exactly 0.250** similarity to
+  the first pick, so the penalty adds the same quantity to both scores and cancels out
+  of the comparison: at penalty 128 they score 60.90 and 62.46, still 1.566 apart,
+  which is the cost gap untouched. **A penalty can only ever reorder candidates that
+  DIFFER in how alike they are to what is already picked** — an equal-similarity tie is
+  immune to it at any magnitude. Worth knowing before someone reads a single unmoved
+  room as the term being broken, and worth knowing that the first version of this
+  paragraph blamed `k = 3` offering everything anyway, which is wrong: the set is
+  indeed fixed, but the ORDER was always still in play and had to be measured.
 
 · **The finalist pool cannot supply orientation variety, which is what §A.2 asked for.**
   `similar()` compares x/z and never reads `.yaw`, while `propose` turns a piece *in place*,
@@ -519,6 +556,57 @@ the user went and looked.
     or convert only where the same panel shows a `dimUnit` value. Nobody should pick
     silently, which is why it is in this section and not fixed.
     **Committed:** nothing but this paragraph.
+
+13. **Where does the app hang a ceiling piece? Today it hangs anything over 300 mm
+    THROUGH the slab.** `groundY`'s ceiling branch is `Math.max(roomHeight - 0.15, h)` —
+    a fixed 150 mm drop to the piece's **centre** — so its top lands at
+    `H - 0.15 + h/2` and pokes through the ceiling **iff `h > 300 mm`, at every ceiling
+    height**. The seeded Pendant is 400 mm: top **2.850 in a 2.800 m room, 50 mm
+    through**, on the `t` and `open` presets. A ceiling fan at 200 mm clears by 50 mm,
+    which is why this has never looked like a rule.
+
+    It is **pinned as expected on PR #54's branch and nowhere else.** `CEILING_TOPS` in
+    `tests/scene-seed.test.ts` holds `t: ['Pendant=2.850']` and `open: ['Pendant=2.850']`,
+    asserted at `:189` by `expect(tops).toEqual(CEILING_TOPS[id])` — but
+    `git grep -ln CEILING_TOPS origin/main` returns **nothing**, so none of that exists
+    until #54 lands. Until then the number is unpinned and a change to it is silent.
+    Once #54 is in, changing it is a deliberate act with a red test attached.
+    (The first version of this paragraph said "already pinned" with no branch named, in
+    the one document whose convention is that every item says whether it exists in a
+    commit anywhere. Found by danmu-78 in review.)
+
+    **It is now user-visible**, which is what moved it into this section. Since PR #54
+    routes the ceiling family into `MountHeightRow` — correctly, because
+    `Inspector.tsx:262` already said the wall-snap buttons are "worse than useless" for a
+    piece that rides no wall — selecting the seeded Pendant renders `2.45` against a
+    stated maximum of `2.38`, `aria-invalid="true"`, and the line
+    `0–2.38 m under this ceiling.` in `--danger-text`, on a piece the app placed and the
+    user never touched. **Measured in a browser, not reasoned:** the same room's
+    `TV · 55″` renders `1.04` with `aria-invalid="false"`, so the row is right and the
+    seeder is what is wrong. The gap is exactly 70 mm at every ceiling height — the 50 mm
+    through the slab plus `MOUNT_PAD`'s 20.
+
+    Worse, focusing that field and tabbing away with **nothing typed** re-commits the
+    clamped value: `2.45 → 2.38`, the piece drops 70 mm, and the `role="status"` line is
+    byte-identical before and after because it reports *across* and *back* and never
+    height. `onBlur={commit}` has no "did the draft change" guard.
+
+    **The costed option**, so this is a decision rather than a bug report: hang from the
+    TOP instead of the centre — `Math.min(roomHeight - MOUNT_PAD - h / 2, …)` — which
+    puts every ceiling piece's top 20 mm under the slab regardless of height. For the
+    Pendant that moves the centre 2.65 → 2.58 and makes `bottomMM` land on **2380 =
+    `maxBottomMM` exactly**, so the field is valid by construction rather than by luck.
+    It also drops the pendant 70 mm, to 2.38 m off the floor over a 0.75 m dining table
+    — which is a look, and looks are the user's call. The alternatives are: keep the
+    150 mm drop and accept that tall ceiling pieces intersect the slab; or clamp only
+    when a piece would poke through, which keeps today's look for the fan and changes
+    only the pendant, at the cost of two behaviours where there is now one.
+
+    Nobody should pick this silently, which is why it is here. Whichever way it goes,
+    `CEILING_TOPS` moves with it and the blur re-commit is a separate one-line guard
+    that should be fixed regardless of the answer.
+    **Committed:** nothing but this paragraph. The measurements are in PR #54's review
+    comments.
 
 ---
 
@@ -1224,21 +1312,57 @@ which on the U sits in the notch — outside the floor. So `contain` pushed a pi
 over such a wall further OUT, and `snapToWall` put a wall rider on the far side of the
 plaster. With that fixed the settle pass can do its half.
 
-**What remains of the original plan, and it is still worth doing:** the *add* path calls no
-containment at all, so a drop into an L's notch is still a drop into the notch until
-something moves it. `intoRoom` in `placeNewPart` does the BOUNDS inset and only that, and
-`tests/wall-parts.test.ts` asserts that by name in two places with instructions to flip the
-assertion rather than delete the test. Doing it properly still needs the pair —
-`clampIntoFootprint` for the centre, `contain`-style extent containment for the piece —
-because either alone is a known-insufficient half. `clampIntoFootprint`'s own recorded
-blocker is retired: it said changing `polygonCentroid` would change every wall's normal, and
-after § 11 it no longer would.
+**What remained of the original plan is DONE, and not the way this paragraph prescribed.**
+It used to say the *add* path called no containment at all, that `intoRoom` in
+`placeNewPart` did the bounds inset "and only that", that `tests/wall-parts.test.ts`
+asserted as much by name in two places, and that doing it properly "still needs the pair —
+`clampIntoFootprint` for the centre, `contain`-style extent containment for the piece".
+Every clause of that is now false. `intoRoom` calls `containedXZ`, the two named
+assertions are flipped and joined by three more, and **the pair was declined**: the
+footprint answer alone is exact, so a second centre-only clamp would have been the third
+copy of containment rather than the missing half. Landed in `fix/add-path-containment`.
+
+Kept because it is the only place the reasoning is written down: `clampIntoFootprint`'s
+own recorded blocker really was retired by § 11 — it said changing `polygonCentroid` would
+change every wall's normal, and after the winding fix it no longer would.
+
+Three things the add path's containment turned out to need, none of which this paragraph
+anticipated, all of them measured rather than reasoned:
+
+· **Rank walls by DEFICIT, not by distance.** `nearestEdge` orders walls by how far the
+  piece's CENTRE is from each; what a push has to clear is the piece's extent along that
+  wall MINUS how far in it already is. The two agree only for a square piece. A 1200 × 600
+  wardrobe dropped flush into a 6 × 4 corner came back **240 mm / 170 mm out**, and
+  500/460 in a 12 × 10 — because the displacement was a fraction of the room, not a length.
+
+· **A round piece is an ELLIPSE, not its bounding box.** `obbExtentAlong` overstates a
+  1200 mm round piece's reach at 45° by **248.5 mm**, so the shortfall was positive for a
+  piece already correctly placed and it was pushed 249 mm further in, every settle.
+  `footExtentAlong` is the one that honours `circle`, as `escape` already did.
+
+· **The ceiling family is not a wall rider.** `settleParts` exempted anything with
+  `wallMounted` from containment — correct for a door, whose footprint sits on the boundary
+  by design, and wrong for a fan, which rides nothing and had no other way back into an
+  L's cut-away quadrant.
+
+**Still open, and it is the drag path, not the add path.** `WALL_GAP`'s own docblock says
+every path that puts something against a wall has to agree on it. Three now do — seed,
+solve and add all leave 20 mm. The fourth does not: `lib/drag-resolve.ts` sends only
+`ridesWall` pieces to `snapToWall`, so a floor-standing piece dragged to a wall is clamped
+by a bare bounding-box `Math.max(bnd.minX + extX, …)` with no gap and lands **flush**.
+Measured in a browser: a 2400 mm wardrobe walked into the west and north walls of a 6 × 4
+room with the arrow keys reports `-1.80 across and -1.70 back`, whose edges are exactly
+−3.00 and −2.00. So the same wardrobe is 20 mm off the wall if the app placed it and 0 mm
+off if you pushed it there. Pre-existing — `drag-resolve.ts` has never referenced
+`WALL_GAP` — and it is a decision rather than an obvious bug: for a drag, stopping where
+the user pushed is arguable. Whoever settles it should settle it for all four paths at
+once, which is what that docblock asks for.
 
 The rug is the same defect and **not** the documented exemption. `lib/drag-resolve.ts` holds
 a *dragged* rug's centre to `pointInFootprint` — that narrow fix is already in, and the
-overhang past the skirting is deliberate — while the *add* path holds it to nothing. So "the
-rug has no constraints" is true of adding one and false of dragging one, which is the same
-two-consumers shape as everything else in this section.
+overhang past the skirting is deliberate — while the *add* path now runs the rug through
+`containedXZ` like everything else. So "the rug has no constraints" is false of both paths
+now; what is left is whether a rug SHOULD be contained, which is a look, not a bug.
 
 ### 5. The 3D tab computes the refusal the plan paints red, and clears it on the same tick — FIXED
 

@@ -83,7 +83,48 @@ export type SolveOptions = {
   /** Ids of pieces the USER placed by hand. Those cost more to move than ones the
    *  app guessed at — see `LayoutContext.placed`. */
   placed?: Set<string>;
+  /** Which finalist becomes the suggestion. Returns an index into the candidates it
+   *  is handed; omit it and the argmin on `total` is used, which is what this has
+   *  always done.
+   *
+   *  The seam exists because **variety is a property of the set of suggestions**, and
+   *  no single solve can see that set — only the caller knows what it has already
+   *  offered this session. `lib/layout-offer.ts` is the ranker; this is where it gets
+   *  to act. Deliberately an index rather than a `Placement[]`: a picker chooses among
+   *  what the search found and cannot invent an arrangement, which keeps the trust
+   *  boundary where § 3 of `docs/research/suggest-and-collision.md` puts it.
+   *
+   *  **A picker chooses a CANDIDATE, not an OUTCOME.** `snapYaws`, `pruneMoves`,
+   *  `openRoutes` and a second tidy all run after this, so two finalists can
+   *  post-process to the same suggestion, and a pick can still collapse to the
+   *  original layout when the result is not an improvement — in which case `moved`
+   *  comes back empty exactly as it would have without a picker.
+   *
+   *  An out-of-range index is ignored rather than fatal. */
+  pick?: (candidates: readonly Candidate[]) => number;
 };
+
+/** A finalist, priced the way the winner is chosen — the annealer's own `cost` plus
+ *  the navigability term that only the finalists are expensive enough to earn. A
+ *  ranker wanting "how good is this arrangement" wants `total`; `cost` alone is the
+ *  number the pool was sorted by and is not what the default picker compares. */
+export type Candidate = {
+  placements: Placement[];
+  cost: number;
+  navCost: number;
+  total: number;
+};
+
+/** Index of the cheapest candidate on `total`, ties to the earliest. The behaviour
+ *  `solveLayout` has always had, named so the default and the fallback are one thing
+ *  rather than two copies of an argmin. */
+function lowestTotal(candidates: readonly Candidate[]): number {
+  let bestIdx = 0;
+  for (let i = 1; i < candidates.length; i++) {
+    if (candidates[i].total < candidates[bestIdx].total) bestIdx = i;
+  }
+  return bestIdx;
+}
 
 /** Why one piece ended up somewhere else.
  *
@@ -163,14 +204,21 @@ const KEEP_EPS = 0.5;
  *  Beyond this the angle is a choice — a chair turned toward a sofa — and snapping it
  *  would be overruling the search rather than tidying after it. */
 const SNAP_TOL = 0.21; // 12°
-/** Below this a turn is not worth showing as a change. The position epsilon had no
- *  sibling, so 0.02 rad — 1.1°, invisible — counted as a moved piece and inflated
- *  every "moved N pieces" the UI reported. */
 /** Below this a turn is not a change the app will claim it made — ~2.9°, in radians.
+ *
+ *  **Why the value, and why the constant exists at all:** the position epsilon had no
+ *  sibling, so a turn of 0.02 rad — 1.1°, invisible on screen — counted as a moved
+ *  piece and inflated every "moved N pieces" the UI reported.
+ *
  *  Exported because it is the repo's ANSWER to "did this piece turn", read by
  *  `displaced` and therefore by the toast that says how many pieces moved. A second
  *  tolerance elsewhere makes the offer stage and that toast disagree about what moved,
- *  silently and in the direction nobody checks. */
+ *  silently and in the direction nobody checks.
+ *
+ *  And it must not equal a step the app already takes. The rotation step is
+ *  `Math.PI / 12` (15°) and the fine one 45°; a tolerance equal to either puts a
+ *  single key press exactly ON the boundary, where float rounding decides the answer
+ *  and does so asymmetrically in sign. 0.05 is not one of them. */
 export const TURN_EPSILON = 0.05; // ~3°
 
 /** What a suggestion has to be worth before it is worth offering.
@@ -190,11 +238,12 @@ export function isWorthOffering(before: number, after: number): boolean {
  *  second. Square metres of footprint — a sofa or a bed is well over, a side
  *  table or a lamp well under. */
 const LARGE_AREA = 0.9;
-/** Below this the move is not worth showing as a change. */
-/** …and the same on the position axis, in metres. Exported for the same reason, and
- *  it is NOT `LAYOUT_SIMILAR_M`: this one asks "did this piece move at all", that one
- *  asks "are these two whole layouts the same arrangement". Both are needed and they
- *  are not interchangeable. */
+/** Below this a move is not worth showing as a change — the same question as
+ *  `TURN_EPSILON`, on the position axis, in metres.
+ *
+ *  Exported for the same reason, and it is NOT `LAYOUT_SIMILAR_M`: this one asks "did
+ *  this piece move at all", that one asks "are these two whole layouts the same
+ *  arrangement". Both are needed and they are not interchangeable. */
 export const MOVE_EPSILON = 0.02;
 /** How many finalists get the expensive navigability check. Small: each one costs
  *  a distance transform over the room. */
@@ -502,17 +551,31 @@ export function solveLayout(
   }
 
   // ── Finalists: the question the annealer's terms cannot ask ────────────────
+  //
+  // `remember` snapshots, so `best` is now IN the pool and the pool is the whole
+  // candidate set. (The identity guard that used to sit in this loop — `if
+  // (cand.placements === best) continue` — could never fire for that reason, and
+  // skipping it changed nothing because the snapshot carries `best`'s own cost and
+  // never beats it on a strict `<`.)
   remember(pool, best, bestCost);
-  let winner = best;
-  let winnerCost = bestCost + weights.navigation * navigabilityCost(model, best, NAV_CELL);
-  for (const cand of pool) {
-    if (cand.placements === best) continue;
-    const total = cand.cost + weights.navigation * navigabilityCost(model, cand.placements, NAV_CELL);
-    if (total < winnerCost) {
-      winnerCost = total;
-      winner = cand.placements;
-    }
-  }
+  const rated: Candidate[] = pool.map((c) => {
+    // The expensive term the pool's own sort does not price — a raster and a distance
+    // transform each, which is why only the finalists ever get it.
+    const navCost = weights.navigation * navigabilityCost(model, c.placements, NAV_CELL);
+    return { placements: c.placements, cost: c.cost, navCost, total: c.cost + navCost };
+  });
+
+  // Which finalist becomes the suggestion. The default is the argmin this has always
+  // taken; a caller may substitute its own — see `SolveOptions.pick`. An out-of-range
+  // answer falls back to the argmin rather than throwing: a ranker is a preference,
+  // and a room with no suggestion in it is a worse failure than an unheeded one.
+  const chosen = opts.pick ? opts.pick(rated) : lowestTotal(rated);
+  const picked = rated[chosen] ?? rated[lowestTotal(rated)];
+
+  // Copied before anything mutates it. `winner` is normalised in place on the next
+  // line and `pool` is handed back as `SolveResult.finalists`, so without this a
+  // picked finalist is silently rewritten inside the very array a caller is ranking.
+  let winner = picked.placements.map((p) => ({ ...p }));
 
   for (const p of winner) p.yaw = normaliseYaw(p.yaw);
 

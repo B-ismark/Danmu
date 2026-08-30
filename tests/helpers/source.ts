@@ -1,9 +1,14 @@
-/** Source-text helpers for the sweeps that have to regex over `lib/`.
- *
- *  A test-only module, so it lives here rather than in `lib/` — a module only tests
- *  import does not belong where it reads as shipped code. `vitest`'s `include` is
- *  `tests/ ** / *.test.ts`, so nothing here is collected as a suite.
- */
+// Source-text helpers for the sweeps that have to regex over `lib/`.
+//
+// A test-only module, so it lives here rather than in `lib/` — a module only tests
+// import does not belong where it reads as shipped code. `vitest`'s `include` is
+// `tests/**/*.test.ts`, so nothing here is collected as a suite.
+//
+// A `//` header, not a `/** */` one, and that is the gate working rather than a style
+// choice: `tests/docblock-adjacency.test.ts` fails on two doc comments in a row, which
+// is the orphan pattern it exists to catch — a file-level docblock immediately above a
+// function docblock is indistinguishable from a docblock separated from its subject.
+// It caught this file on the merge, which is exactly where it should have.
 
 /** Blank out every comment and every string/template literal, leaving code.
  *
@@ -23,11 +28,18 @@
  *  is in. Literals collapse to `''` rather than vanishing, so `const x = 'a';` stays a
  *  syntactically recognisable declaration.
  *
- *  **Known limit, stated rather than papered over:** a regex literal containing a quote or
- *  a slash-star is read as a string start and can swallow the rest of
- *  the line. That is why every consumer pairs this with a positive assertion that the
- *  stripped text still contains what it is looking for — if this function ever eats code,
- *  that check fails loudly instead of the sweep silently passing over nothing.
+ *  **Known limit, stated rather than papered over:** a regex literal containing a quote
+ *  or a slash-star is read as a string start and can swallow the rest of the line.
+ *
+ *  Consumers pair this with a positive assertion that the stripped text still contains
+ *  what the sweep is looking for. **That pairing is a floor, not the mitigation, and it
+ *  is worth being exact about which.** It catches "the strip ate EVERYTHING"; it does
+ *  not catch "the strip ate the OFFENDER". Measured by danmu-bc against a real 7324-
+ *  character module: a targeted attack — a string holding an opener, the offending line,
+ *  a string holding a closer — removes four lines, and a length check and a
+ *  content-presence check both still pass while the offender is invisible. So this
+ *  scanner is doing all of the real work, and the paired check only stops the sweep
+ *  from silently running over nothing at all.
  */
 export function stripCommentsAndStrings(src: string): string {
   let out = '';
