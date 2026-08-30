@@ -55,16 +55,11 @@ import { analyzeRoom, type ClearanceIssue, type ClearanceSeverity } from '@/lib/
 import {
   isWorthOffering,
   lockedForSolve,
-  makeRng,
   movableFor,
-  randomizeStart,
   solveLayout,
-  LAYOUT_SIMILAR_M,
-  TURN_EPSILON,
   type MoveReason,
-  type SolveResult,
 } from '@/lib/layout-solve';
-import { orderOffers, layoutSimilarity } from '@/lib/layout-offer';
+import { HISTORY_DEPTH, lockedForShuffle, shuffleRoom } from '@/lib/layout-shuffle';
 import { RULE_HANDLING, type CostBreakdown, type Placement } from '@/lib/layout-score';
 import { roomStore, type LayoutVariant, type Transforms } from '@/lib/storage';
 import { footprintBounds, type Footprint } from '@/lib/footprint';
@@ -649,34 +644,24 @@ function FixAllButton({
 // anything, so a room with nothing wrong has nothing to offer, and pressing it
 // again mostly finds the same local minimum. That is correct FOR Fix, and it is
 // exactly the complaint about the old single "Suggest" button: it read as
-// creative rearranging but behaved as repair-only. Shuffle is the other half —
-// no inertia, no anchor to today's placement, no floor on how much better the
-// answer must be. It runs `solveLayout(..., { mode: 'shuffle' })` from a handful
-// of independently randomised starts (`randomizeStart`) so each is a real
-// restart into a different basin rather than a perturbation of the current one,
-// and ranks the results with the diversity-aware `orderOffers` from
-// `lib/layout-offer.ts` — shipped and tested since it landed, and never wired to
-// anything until now (see § A.2 of docs/what-is-still-open.md, "Nothing calls
-// them"). `diversityPenalty = 4` is that section's own measured number, not a
-// value invented here. A few seeds' worth of extra search is the trade the user
-// asked for explicitly: slower and genuinely different beats instant and the
-// same room back.
+// creative rearranging but behaved as repair-only. Shuffle is the other half.
+//
+// The pipeline itself is `lib/layout-shuffle.ts` — several independent solves,
+// the faulted ones thrown away, the survivors ranked for cost AND variety. It
+// lives there rather than here because every part of it is a decision a test
+// should be able to reach: without that, "how often does a shuffle hand back a
+// room with a piece across the doorway" is a question nobody can ask, and the
+// answer turned out to be 14 of 20 seeds on the T preset. See that file's header
+// for the measurements.
 //
 // What never moves: locked pieces, wall-mounted fixtures (doors, windows, the
-// ceiling light, the fan) — `randomizeStart` and `solveLayout` both read the
-// same `movable` array Fix does, so a fixture that cannot move for Fix cannot
-// move for Shuffle either.
+// ceiling light, the fan). `movableFor` is the one answer to that question and
+// both buttons read it.
 
-const SHUFFLE_SEEDS = 4;
-/** Above this, two arrangements are the same idea shown twice — not because it
- *  differs from `layout-solve.ts`'s own `LAYOUT_SIMILAR_M` dedup, but because it
- *  is answering the same question about a different pair (this offer against
- *  ones already shown this session, not one solve's own finalists against each
- *  other), so it earns its own name rather than reusing that constant's. */
-const REPEAT_SIMILARITY = 0.85;
-/** How many recent offers Shuffle avoids repeating. Small and fixed: a longer
- *  memory would eventually rule out every arrangement a small room actually has. */
-const SHUFFLE_HISTORY = 3;
+/** How many recent offers Shuffle keeps, so pressing it repeatedly does not cycle
+ *  between two rooms. The list is per-mount session state and deliberately not
+ *  persisted — it is about this sitting, not about the room. */
+const HISTORY_KEEP = HISTORY_DEPTH;
 
 function useShuffle(effParts: ScenePart[], footprint: Footprint, appPlaced: AppPlacedRef) {
   const loadTransforms = useStudio((s) => s.loadTransforms);
@@ -684,51 +669,14 @@ function useShuffle(effParts: ScenePart[], footprint: Footprint, appPlaced: AppP
   return useCallback(
     (attempt: number) => {
       const t = useStudio.getState();
-      const locked = lockedForSolve(effParts, t.pinned, null);
-      const movable = movableFor(effParts, locked);
-      const placed = new Set(
-        [...Object.keys(t.positions), ...Object.keys(t.rotations)].filter(
-          (id) => !stillTheApps(appPlaced.current, id, t.positions, t.rotations),
-        ),
-      );
-
-      const results: SolveResult[] = [];
-      for (let s = 0; s < SHUFFLE_SEEDS; s++) {
-        // One seed drives both the random start and the search that follows it,
-        // so the whole attempt stays reproducible — same room, same attempt
-        // number, same set of ideas.
-        const seed = attempt * 1000 + s;
-        const start = randomizeStart(effParts, footprint, movable, makeRng(seed));
-        const result = solveLayout(effParts, footprint, locked, {
-          seed,
-          mode: 'shuffle',
-          start,
-          placed,
-        });
-        if (result.moved.length > 0) results.push(result);
-      }
-      if (results.length === 0) return null;
-
-      const similarity = (a: SolveResult, b: SolveResult) =>
-        layoutSimilarity(a.placements, b.placements, { spotM: LAYOUT_SIMILAR_M, yawRad: TURN_EPSILON, movable });
-      const ranked = orderOffers(results, {
-        cost: (r) => r.after,
-        similarity,
-        diversityPenalty: 4,
+      const outcome = shuffleRoom(effParts, footprint, lockedForShuffle(effParts, t.pinned), {
+        attempt,
+        history: history.current,
       });
-      // Prefer the first candidate that is not basically a repeat of something
-      // already shown this session; fall back to the top-ranked one rather than
-      // refuse outright — a repeat is still a valid, different-from-today room.
-      const chosen =
-        ranked.find(
-          (cand) => !history.current.some((prev) => layoutSimilarity(cand.placements, prev, {
-            spotM: LAYOUT_SIMILAR_M,
-            yawRad: TURN_EPSILON,
-            movable,
-          }) > REPEAT_SIMILARITY),
-        ) ?? ranked[0];
+      if (!outcome) return null;
+      const chosen = outcome.result;
 
-      history.current = [...history.current.slice(-(SHUFFLE_HISTORY - 1)), chosen.placements];
+      history.current = [...history.current.slice(-(HISTORY_KEEP - 1)), chosen.placements];
 
       const positions = { ...t.positions };
       const rotations = { ...t.rotations };
@@ -738,8 +686,11 @@ function useShuffle(effParts: ScenePart[], footprint: Footprint, appPlaced: AppP
         rotations[p.id] = chosen.placements[i].yaw;
         appPlaced.current.set(p.id, { pos: positions[p.id], rot: rotations[p.id] });
       }
+      // dims carried through untouched, for the same reason Fix does it: the
+      // solver moves and turns, and a suggestion that resized the furniture is
+      // the one thing this app refuses to do.
       loadTransforms({ positions, rotations, dims: t.dims });
-      return chosen;
+      return outcome;
     },
     [effParts, footprint, loadTransforms, appPlaced],
   );
@@ -761,17 +712,32 @@ function ShuffleButton({
   function run() {
     setBusy(true);
     try {
-      const result = shuffle(++attempt.current);
-      if (!result) {
-        toast({
-          title: 'Nothing to shuffle',
-          message: 'Every piece is locked or wall-mounted — there is nothing left to move.',
-        });
+      const outcome = shuffle(++attempt.current);
+      // Two different "no", and telling them apart is the honest part. Nothing
+      // movable is a fact about the room; every candidate faulted is the search
+      // failing, and in that case the room is deliberately left ALONE rather than
+      // handed an arrangement with a piece across the doorway.
+      if (!outcome) {
+        const anythingToMove = movableFor(effParts, lockedForShuffle(effParts, useStudio.getState().pinned)).some(
+          Boolean,
+        );
+        toast(
+          anythingToMove
+            ? {
+                title: 'Couldn’t find another arrangement',
+                message: 'Every layout it tried left something blocked. Your room is unchanged — try again, or unlock a piece.',
+              }
+            : {
+                title: 'Nothing to shuffle',
+                message: 'Every piece is locked or wall-mounted — there is nothing left to move.',
+              },
+        );
         return;
       }
+      const moved = outcome.result.moved.length;
       toast({
-        title: `Shuffled ${result.moved.length} ${result.moved.length === 1 ? 'piece' : 'pieces'}`,
-        message: 'A different valid arrangement, not a fix. Undo puts the previous one back.',
+        title: `Shuffled ${moved} ${moved === 1 ? 'piece' : 'pieces'}`,
+        message: 'A different arrangement, not a fix. Undo puts the previous one back.',
       });
     } finally {
       setBusy(false);
