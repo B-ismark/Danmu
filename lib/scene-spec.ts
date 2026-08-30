@@ -15,7 +15,6 @@ import {
 import {
   anchorFor,
   groundY,
-  isFloorStanding,
   ridesWall,
   wallAffinity,
   wallStandoff,
@@ -25,7 +24,6 @@ import {
   findSupportUnder,
   isTabletopProne,
   verticalExtent,
-  MOUNT_PAD,
 } from './physics';
 import type { CaptureSlot, RoomData } from './storage';
 import { clampDims, dimRangeFor } from './dimension-ranges';
@@ -59,7 +57,7 @@ import {
   WALL_GAP,
 } from './layout-rules';
 import { openingsForRoom, type Opening } from './room-openings';
-import { containedXZ, settleParts } from './layout-settle';
+import { containedXZ, settleHeights, settleParts } from './layout-settle';
 // Runtime, but not a cycle: `layout-score` takes only `ScenePart` from here and takes
 // it as a TYPE, so the edge back is erased at compile.
 import {
@@ -2152,43 +2150,15 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
   const settled = settleParts(parts, footprint);
 
   // ─── Settle pass ─────────────────────────────────────────────────────────
-  // The per-part placement above respects wall affinity + anchor type, but the
-  // AI frequently puts a monitor at wall-mid Y (~1.4m) even though there's a
-  // desk under it. Do a second pass to:
-  //   1. Snap tabletop-prone parts (monitor, lamp, plant, ottoman, "other") onto
-  //      the highest supporting surface under their XZ footprint when one exists
-  //      and the surface is taller than 0.3m (i.e. a real table, not a rug).
-  //   2. For any floor-standing part whose Y ended up > 0 with no support
-  //      beneath, drop it to the floor — recovers from bad AI Y estimates.
-  //   3. Ceiling clamp — no part top should poke through the ceiling.
-  // `MOUNT_PAD`, not a local `CEILING_PAD = 0.02`. It was one, doing this exact
-  // job on this exact quantity, and it is the reason the constant it duplicated
-  // could claim to be "the single clearance" while a fan placed by detection and
-  // a fan placed by a drag would have drifted apart the first time anyone changed
-  // it. Nothing would have said so: both look right, 10 mm apart, in a picture.
-  const cap = rh - MOUNT_PAD;
-  for (const p of settled) {
-    if (p.category !== 'rug') {
-      const support =
-        p.wallMounted ? null : findSupportUnder(settled, p.id, p.pos[0], p.pos[2], p.dimMM, p.rot);
-
-      if (!p.wallMounted && isTabletopProne(p.category) && support !== null && support > 0.3) {
-        p.pos[1] = support;
-      } else if (!p.wallMounted && isFloorStanding(p.category, p.shape) && p.pos[1] > 0.05) {
-        p.pos[1] = support !== null && support > 0.3 ? support : 0;
-      }
-    }
-
-    // Ceiling clamp — semantics differ for floor vs wall/ceiling-mounted parts.
-    // Floor-standing items have pos[1] = bottom of bounding box; wall-mounted
-    // items have pos[1] = mesh center. Keep both under the ceiling.
-    const h = p.dimMM[2] / 1000;
-    if (p.wallMounted || p.shape === 'fan' || p.shape === 'lamp-pendant') {
-      const top = p.pos[1] + h / 2;
-      if (top > cap) p.pos[1] = cap - h / 2;
-    } else {
-      if (p.pos[1] + h > cap) p.pos[1] = Math.max(0, cap - h);
-    }
+  // Snap tabletop-prone pieces onto a real surface, drop anything left in mid-air,
+  // clamp to the ceiling. This used to be written out here, which is exactly why
+  // Suggest did not have it: a nightstand standing on an armchair the solver then
+  // moved kept the armchair's height and hung in the air, because the only code that
+  // puts a rider back on something lived inside this builder. It is `settleHeights`
+  // in `lib/layout-settle.ts` now and both paths call it.
+  for (const fix of settleHeights(settled, rh)) {
+    const p = settled.find((q) => q.id === fix.id);
+    if (p) p.pos[1] = fix.y;
   }
 
   return settled;
