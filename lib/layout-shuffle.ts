@@ -81,9 +81,24 @@
  * — so the search largely stops *generating* the arrangements this gate discards
  * rather than making them and having them thrown away. Same six presets × twelve
  * attempts: **58/72 offers before it, 63/72 after**, `t` 5/12 → 8/12 and `open`
- * 8/12 → 10/12, with the finding count still 0. The gate stays: it is what makes
- * that zero a guarantee rather than a measurement, and the two modules can still differ on
- * things beyond this one bar.
+ * 8/12 → 10/12, with the finding count still 0.
+ *
+ * **That sentence used to end "the gate stays: it is what makes that zero a
+ * guarantee rather than a measurement", and it was claiming more than anything
+ * checked.** Deleting the gate left every test in `tests/layout-shuffle.test.ts`
+ * green. Measured since: **816 candidates over thirteen room configurations — five
+ * presets and four dining rooms built to provoke it — and it rejected none of them**,
+ * because #68 is what closed the gap it was written for. Both modules read
+ * `TUCKED_CLASH_SHARE` now, and `isCleanShuffle` demands `overlap === 0` exactly, so
+ * nothing reaching this gate can hold a pair past that bar.
+ *
+ * The gate STAYS, and for the honest reason rather than the flattering one: these
+ * two modules have already drifted apart once, and it costs two `analyzeRoom` calls
+ * on candidates that have passed the cheap filter — a small price for the one
+ * failure it exists to catch. What it is not is *covered*, and
+ * `tests/shuffle-gate.test.ts` now pins the agreement it depends on instead: that
+ * file goes red the moment either threshold moves, which is the moment this gate
+ * starts having work to do again.
  */
 import {
   HARD_TERMS,
@@ -229,14 +244,23 @@ export function applyPlacements(parts: ScenePart[], result: SolveResult): SceneP
  *
  * ── Why the solver's own verdict is not enough ────────────────────────────────
  *
- * `isCleanShuffle` asks the cost function; this asks `analyzeRoom`, and the two do
- * not agree about a chair pushed under a table. `lib/layout-score.ts` exempts a
- * `sharesFloor` pair from `overlap` **entirely** — a blanket `continue` — while
- * `lib/clearance.ts` gives the same pair a *tolerance* of `TUCKED_CLASH_SHARE`
- * (0.85). So the solver pays nothing for burying a dining chair completely inside
- * the dining table, and the report calls it a clash. `clearance.ts` states that the
- * two "cannot disagree about whether a tucked-in chair is a collision"; they share
- * the predicate and not the threshold, so that sentence is not true today.
+ * `isCleanShuffle` asks the cost function; this asks `analyzeRoom`, and the two ask
+ * different questions about a chair pushed under a table. They share the predicate
+ * — `sharesFloor` — and they do not share the bar. `lib/layout-score.ts` charges a
+ * tucked pair for the share of the overlap **above** `TUCKED_CLASH_SHARE` (0.85),
+ * normalised onto the same 0…1 scale as any other overlap; `lib/clearance.ts` draws
+ * its own line at `CLASH_SHARE` (0.5) and reports anything past it. So a chair
+ * buried 0.6 of the way into its table is silent to the solver and a clash in the
+ * report, and the two only coincide at the extremes.
+ *
+ * **This paragraph used to say something stronger and it is no longer true.** Before
+ * #68 landed, `layout-score.ts` exempted a `sharesFloor` pair from `overlap`
+ * entirely — a blanket `continue` — so the solver paid *nothing* for burying a
+ * dining chair completely inside a dining table, and this file said so. #68 replaced
+ * the exemption with the tolerance above, and `clearance.ts` has since retired the
+ * "cannot disagree" sentence quoted here. Both halves of the old wording are gone;
+ * what survives is a narrower and still-real gap between 0.5 and 0.85, which is what
+ * this gate is scoped to.
  *
  * Measured before this gate existed: **8 of 40 offers** (five presets × eight
  * attempts) introduced a clash the room report flags and the solver could not see —
@@ -259,6 +283,14 @@ export function newRoomFindings(
   result: SolveResult,
 ): ClearanceIssue[] {
   const key = (f: ClearanceIssue) => `${f.rule}:${[...f.partIds].sort().join(',')}`;
+  // The `clash` half of this is REDUNDANT today and is kept deliberately. There is
+  // exactly one place in `lib/clearance.ts` that emits `rule: 'clash'` and it emits
+  // it at `severity: 'error'`, so the first test already selects every clash.
+  // Deleting the disjunct is a mutation `tests/shuffle-gate.test.ts` does NOT kill,
+  // and that is said here rather than covered up with an assertion that would only
+  // be restating the redundancy. It stays because a clash is the finding this gate
+  // was built for, and a later decision to report a mild clash as a warning would
+  // otherwise silently take it out of scope.
   const serious = (f: ClearanceIssue) => f.severity === 'error' || f.rule === 'clash';
   const had = new Set(analyzeRoom(parts, room).issues.filter(serious).map(key));
   return analyzeRoom(applyPlacements(parts, result), room)
