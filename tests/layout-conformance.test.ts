@@ -501,6 +501,21 @@ describe('layout-rules · nothing is reported without a decision about the solve
 // mutating BOTH defects below, which is the "fixture that cannot express the
 // defect" this repo keeps finding — so the bar gets direct assertions instead.
 describe('layout-rules · the report and the solver meet cleanly at TUCKED_CLASH_SHARE', () => {
+  it('the bar is a share, strictly inside 0 and 1', () => {
+    // `lib/layout-score.ts` divides the excess by `1 - TUCKED_CLASH_SHARE` to put it
+    // on the same 0..1 scale as an ordinary overlap. At exactly 1 that is a division
+    // by zero yielding `Infinity` inside a term weighted 1000 — every arrangement
+    // with a tucked pair would score `Infinity`, compare equal to every other, and
+    // the annealer would walk at random with nothing to descend. It would not throw
+    // and no other assertion here would catch it, because the fixtures all sit at
+    // finite shares below or above a bar that no longer separates anything.
+    //
+    // One line, because the alternative is a silent catastrophe behind a constant
+    // that looks innocuous to edit.
+    expect(TUCKED_CLASH_SHARE).toBeGreaterThan(0);
+    expect(TUCKED_CLASH_SHARE).toBeLessThan(1);
+  });
+
   /** A dining chair sitting `share` of its own footprint inside the table.
    *  Both are centred on x and the chair is the narrower, so the share is purely
    *  the z overlap over the chair's own depth. */
