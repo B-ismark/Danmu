@@ -7,7 +7,7 @@ import {
   Zap, Leaf, Crosshair, Sofa, Bed, Tv, Lamp, Table, Sprout, KeyRound,
   Eye, EyeOff, Info, HelpCircle, BarChart3, ExternalLink, Pencil, Trash2, RefreshCw,
   Image, Play, Replace, Circle, Sun, Sunrise, Sunset, Moon, Cloud, Compass,
-  RotateCcw, RotateCw, Maximize, Copy, type LucideIcon,
+  RotateCcw, RotateCw, Maximize, Copy, Shuffle, type LucideIcon,
 } from 'lucide-react';
 
 // Single icon surface for the whole app. Backed by Lucide (MIT, free) — a
@@ -34,7 +34,7 @@ export type IconName =
   | 'rotate-ccw' | 'rotate-cw' | 'fit'
   | 'sun' | 'sunrise' | 'sunset'
   | 'moon' | 'cloud' | 'compass'
-  | 'swap' | 'snap-wall' | 'snap-floor' | 'snap-surface';
+  | 'swap' | 'shuffle' | 'snap-wall' | 'snap-floor' | 'snap-surface';
 
 const MAP: Record<Exclude<IconName, 'whatsapp' | 'snap-wall' | 'snap-floor' | 'snap-surface'>, LucideIcon> = {
   'arrow-right': ArrowRight, 'arrow-left': ArrowLeft, 'arrow-up-right': ArrowUpRight,
@@ -50,7 +50,7 @@ const MAP: Record<Exclude<IconName, 'whatsapp' | 'snap-wall' | 'snap-floor' | 's
   key: KeyRound, eye: Eye, 'eye-off': EyeOff,
   info: Info, help: HelpCircle, chart: BarChart3, external: ExternalLink,
   edit: Pencil, trash: Trash2, refresh: RefreshCw, copy: Copy,
-  image: Image, play: Play, swap: Replace,
+  image: Image, play: Play, swap: Replace, shuffle: Shuffle,
   'rotate-ccw': RotateCcw, 'rotate-cw': RotateCw, fit: Maximize,
   sun: Sun, sunrise: Sunrise, sunset: Sunset,
   moon: Moon, cloud: Cloud, compass: Compass,

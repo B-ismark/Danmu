@@ -5,7 +5,7 @@
 // leaving it on the canvas meant the health of the room was chrome you could bury,
 // and it cost a corner that also had to hold the camera, the lighting and the grid.
 //
-// A health chip and Suggest, plus one "Room" button whose panel carries four
+// A health chip and Fix / Shuffle, plus one "Room" button whose panel carries four
 // readings as tabs:
 //   · Check — deterministic ergonomics review (door swings, walkways, storage
 //     clearance, bed access, TV distance, crowding). Click a finding to select the
@@ -52,8 +52,20 @@ import { useScene, type RoomShape } from '@/lib/scene-store';
 import { resolveParts, useRoomScene } from '@/lib/room-scene';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
 import { analyzeRoom, type ClearanceIssue, type ClearanceSeverity } from '@/lib/clearance';
-import { isWorthOffering, lockedForSolve, solveLayout, type MoveReason } from '@/lib/layout-solve';
-import { RULE_HANDLING, type CostBreakdown } from '@/lib/layout-score';
+import {
+  isWorthOffering,
+  lockedForSolve,
+  makeRng,
+  movableFor,
+  randomizeStart,
+  solveLayout,
+  LAYOUT_SIMILAR_M,
+  TURN_EPSILON,
+  type MoveReason,
+  type SolveResult,
+} from '@/lib/layout-solve';
+import { orderOffers, layoutSimilarity } from '@/lib/layout-offer';
+import { RULE_HANDLING, type CostBreakdown, type Placement } from '@/lib/layout-score';
 import { roomStore, type LayoutVariant, type Transforms } from '@/lib/storage';
 import { footprintBounds, type Footprint } from '@/lib/footprint';
 import { formatDim, fromMM, stepFor, toMM } from '@/lib/units';
@@ -386,12 +398,15 @@ export function RoomTools() {
         <Icon name={open ? 'chevron-up' : 'chevron-right'} size={12} />
       </button>
 
-      <SuggestButton effParts={effParts} footprint={room.footprint} appPlaced={appPlaced} />
+      <div style={{ display: 'flex', gap: 6 }}>
+        <FixAllButton effParts={effParts} footprint={room.footprint} appPlaced={appPlaced} />
+        <ShuffleButton effParts={effParts} footprint={room.footprint} appPlaced={appPlaced} />
+      </div>
     </div>
   );
 }
 
-// ─── Suggest an arrangement ─────────────────────────────────────────────────
+// ─── Fix: clear what is wrong, moving as little as possible ────────────────
 //
 // Preview IS applying it: the room is right there, and a thumbnail of a
 // suggestion would be a worse view of it than the 3D scene already on screen.
@@ -561,7 +576,7 @@ function useSuggest(effParts: ScenePart[], footprint: Footprint, appPlaced: AppP
   );
 }
 
-function SuggestButton({
+function FixAllButton({
   effParts,
   footprint,
   appPlaced,
@@ -611,7 +626,7 @@ function SuggestButton({
       onClick={run}
       disabled={busy}
       className="ds-btn"
-      title="Rearrange the unlocked furniture using the same guidelines Room check measures"
+      title="Clear what's wrong (a blocked door, a crowded walkway…) moving as little as possible"
       style={{
         height: 30,
         fontSize: 11,
@@ -623,7 +638,164 @@ function SuggestButton({
       }}
     >
       <Icon name="sparkles" size={12} />
-      Suggest
+      Fix
+    </button>
+  );
+}
+
+// ─── Shuffle: a different valid arrangement, not a repair ──────────────────
+//
+// `Fix` is anchored to the room it is handed — it pays `inertia` to move
+// anything, so a room with nothing wrong has nothing to offer, and pressing it
+// again mostly finds the same local minimum. That is correct FOR Fix, and it is
+// exactly the complaint about the old single "Suggest" button: it read as
+// creative rearranging but behaved as repair-only. Shuffle is the other half —
+// no inertia, no anchor to today's placement, no floor on how much better the
+// answer must be. It runs `solveLayout(..., { mode: 'shuffle' })` from a handful
+// of independently randomised starts (`randomizeStart`) so each is a real
+// restart into a different basin rather than a perturbation of the current one,
+// and ranks the results with the diversity-aware `orderOffers` from
+// `lib/layout-offer.ts` — shipped and tested since it landed, and never wired to
+// anything until now (see § A.2 of docs/what-is-still-open.md, "Nothing calls
+// them"). `diversityPenalty = 4` is that section's own measured number, not a
+// value invented here. A few seeds' worth of extra search is the trade the user
+// asked for explicitly: slower and genuinely different beats instant and the
+// same room back.
+//
+// What never moves: locked pieces, wall-mounted fixtures (doors, windows, the
+// ceiling light, the fan) — `randomizeStart` and `solveLayout` both read the
+// same `movable` array Fix does, so a fixture that cannot move for Fix cannot
+// move for Shuffle either.
+
+const SHUFFLE_SEEDS = 4;
+/** Above this, two arrangements are the same idea shown twice — not because it
+ *  differs from `layout-solve.ts`'s own `LAYOUT_SIMILAR_M` dedup, but because it
+ *  is answering the same question about a different pair (this offer against
+ *  ones already shown this session, not one solve's own finalists against each
+ *  other), so it earns its own name rather than reusing that constant's. */
+const REPEAT_SIMILARITY = 0.85;
+/** How many recent offers Shuffle avoids repeating. Small and fixed: a longer
+ *  memory would eventually rule out every arrangement a small room actually has. */
+const SHUFFLE_HISTORY = 3;
+
+function useShuffle(effParts: ScenePart[], footprint: Footprint, appPlaced: AppPlacedRef) {
+  const loadTransforms = useStudio((s) => s.loadTransforms);
+  const history = useRef<Placement[][]>([]);
+  return useCallback(
+    (attempt: number) => {
+      const t = useStudio.getState();
+      const locked = lockedForSolve(effParts, t.pinned, null);
+      const movable = movableFor(effParts, locked);
+      const placed = new Set(
+        [...Object.keys(t.positions), ...Object.keys(t.rotations)].filter(
+          (id) => !stillTheApps(appPlaced.current, id, t.positions, t.rotations),
+        ),
+      );
+
+      const results: SolveResult[] = [];
+      for (let s = 0; s < SHUFFLE_SEEDS; s++) {
+        // One seed drives both the random start and the search that follows it,
+        // so the whole attempt stays reproducible — same room, same attempt
+        // number, same set of ideas.
+        const seed = attempt * 1000 + s;
+        const start = randomizeStart(effParts, footprint, movable, makeRng(seed));
+        const result = solveLayout(effParts, footprint, locked, {
+          seed,
+          mode: 'shuffle',
+          start,
+          placed,
+        });
+        if (result.moved.length > 0) results.push(result);
+      }
+      if (results.length === 0) return null;
+
+      const similarity = (a: SolveResult, b: SolveResult) =>
+        layoutSimilarity(a.placements, b.placements, { spotM: LAYOUT_SIMILAR_M, yawRad: TURN_EPSILON, movable });
+      const ranked = orderOffers(results, {
+        cost: (r) => r.after,
+        similarity,
+        diversityPenalty: 4,
+      });
+      // Prefer the first candidate that is not basically a repeat of something
+      // already shown this session; fall back to the top-ranked one rather than
+      // refuse outright — a repeat is still a valid, different-from-today room.
+      const chosen =
+        ranked.find(
+          (cand) => !history.current.some((prev) => layoutSimilarity(cand.placements, prev, {
+            spotM: LAYOUT_SIMILAR_M,
+            yawRad: TURN_EPSILON,
+            movable,
+          }) > REPEAT_SIMILARITY),
+        ) ?? ranked[0];
+
+      history.current = [...history.current.slice(-(SHUFFLE_HISTORY - 1)), chosen.placements];
+
+      const positions = { ...t.positions };
+      const rotations = { ...t.rotations };
+      for (const i of chosen.moved) {
+        const p = effParts[i];
+        positions[p.id] = [chosen.placements[i].x, p.pos[1], chosen.placements[i].z];
+        rotations[p.id] = chosen.placements[i].yaw;
+        appPlaced.current.set(p.id, { pos: positions[p.id], rot: rotations[p.id] });
+      }
+      loadTransforms({ positions, rotations, dims: t.dims });
+      return chosen;
+    },
+    [effParts, footprint, loadTransforms, appPlaced],
+  );
+}
+
+function ShuffleButton({
+  effParts,
+  footprint,
+  appPlaced,
+}: {
+  effParts: ScenePart[];
+  footprint: Footprint;
+  appPlaced: AppPlacedRef;
+}) {
+  const shuffle = useShuffle(effParts, footprint, appPlaced);
+  const [busy, setBusy] = useState(false);
+  const attempt = useRef(0);
+
+  function run() {
+    setBusy(true);
+    try {
+      const result = shuffle(++attempt.current);
+      if (!result) {
+        toast({
+          title: 'Nothing to shuffle',
+          message: 'Every piece is locked or wall-mounted — there is nothing left to move.',
+        });
+        return;
+      }
+      toast({
+        title: `Shuffled ${result.moved.length} ${result.moved.length === 1 ? 'piece' : 'pieces'}`,
+        message: 'A different valid arrangement, not a fix. Undo puts the previous one back.',
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      onClick={run}
+      disabled={busy}
+      className="ds-btn"
+      title="Try a different arrangement, whether or not anything is wrong — takes a bit longer than Fix"
+      style={{
+        height: 30,
+        fontSize: 11,
+        gap: 6,
+        background: 'var(--paper)',
+        borderColor: 'var(--edge)',
+        color: 'var(--ink-2)',
+        boxShadow: 'var(--shadow-soft)',
+      }}
+    >
+      <Icon name="shuffle" size={12} />
+      Shuffle
     </button>
   );
 }
@@ -781,7 +953,7 @@ function FixButton({
         toast({
           title: 'Moving those didn’t clear it',
           message: scope
-            ? 'Nothing better was found without touching the rest of the room. Suggest can rearrange everything.'
+            ? 'Nothing better was found without touching the rest of the room. Fix can rearrange everything.'
             : 'Nothing better was found. Try unlocking a piece, or making some space.',
         });
         return;
@@ -1367,7 +1539,7 @@ function FitAnswer({
               <span className="mono">
                 {formatDim(result.largestBay.width * 1000, dimUnit)} × {formatDim(result.largestBay.depth * 1000, dimUnit)} {dimUnit}
               </span>
-              . Moving what is already in here might make room — try <b>Suggest</b>.
+              . Moving what is already in here might make room — try <b>Fix</b> or <b>Shuffle</b>.
             </>
           ) : (
             <>This room has no clear stretch of floor to put it on.</>
