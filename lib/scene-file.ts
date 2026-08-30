@@ -55,7 +55,7 @@ import {
   isWallMountedPart,
 } from './scene-spec';
 import { clampDims, roomAxisRange, ROOM_SIDE_M } from './dimension-ranges';
-import { heightForNewCeiling } from './physics';
+import { anchorFor, heightForNewCeiling } from './physics';
 import { resolveParts } from './transforms';
 import { fileSlug } from './exports';
 import { wouldCreateCycle } from './rigid-parent';
@@ -597,7 +597,19 @@ function readPart(
   if (derivedMount) part.wallMounted = true;
   const saidMount: unknown = v.wallMounted;
   if (saidMount !== undefined) {
-    const verdict = `a ${shape} is ${derivedMount ? '' : 'not '}wall-mounted`;
+    // Named by ANCHOR, not by the flag. `derivedMount` is `anchorFor(...) !== 'floor'`,
+    // so rendering it as "is wall-mounted" said a pendant and a ceiling fan are fixed to
+    // a wall — false, and the file two lines up knows better. It also interpolated
+    // `shape`, which is the internal kebab-case id, so the user was shown "a lamp-pendant"
+    // and "an ac-unit". The piece is already named in quotes at the front of the sentence,
+    // so this clause only has to say where it belongs.
+    const anchor = anchorFor(category, shape);
+    const verdict =
+      anchor === 'ceiling'
+        ? 'it hangs from the ceiling'
+        : anchor === 'floor'
+          ? 'it stands on the floor'
+          : 'it is fixed to a wall';
     if (typeof saidMount !== 'boolean') {
       dropped.push(
         `“${part.name}” gave a wallMounted that is neither true nor false; ${verdict}, so the file's value was ignored`,

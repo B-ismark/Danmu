@@ -721,8 +721,12 @@ describe('scene file · wallMounted is derived, and the note about it is true', 
   /** A shape `anchorFor` puts on a wall, and one it puts on the floor. Both directions
    *  are needed: the flag is absent-means-false, so a mounted piece and a floor piece
    *  fail in opposite directions and a single fixture is green on half of it. */
-  const MOUNTED = { category: 'tv', name: 'Telly', shape: 'tv', dimMM: [1450, 60, 820] };
-  const FLOOR = { category: 'sofa', name: 'Sofa', shape: 'sofa', dimMM: [2200, 950, 880] };
+  const MOUNTED = { category: 'tv', name: 'Telly', shape: 'tv', dimMM: [1450, 60, 820], expectMounted: true };
+  const FLOOR = { category: 'sofa', name: 'Sofa', shape: 'sofa', dimMM: [2200, 950, 880], expectMounted: false };
+  /** The ceiling family, which `wallMounted` lumps in with the wall pieces and which is
+   *  the reason the note is phrased by anchor. `lamp-pendant` is also the one shape id
+   *  whose leak into user copy would be unmistakable. */
+  const CEILING = { category: 'lamp', name: 'Pendant', shape: 'lamp-pendant', dimMM: [350, 350, 400], expectMounted: true };
 
   function notesFor(base: Record<string, unknown>, over: Record<string, unknown>) {
     const { file, dropped } = withParts([rawPart({ ...base, ...over })]);
@@ -739,6 +743,7 @@ describe('scene file · wallMounted is derived, and the note about it is true', 
   it('derives the flag whatever the file said, in both directions', () => {
     for (const [, value] of VALUES) {
       expect(notesFor(MOUNTED, { wallMounted: value }).part.wallMounted).toBe(true);
+      expect(notesFor(CEILING, { wallMounted: value }).part.wallMounted).toBe(true);
       expect(notesFor(FLOOR, { wallMounted: value }).part.wallMounted).toBeUndefined();
     }
   });
@@ -781,9 +786,22 @@ describe('scene file · wallMounted is derived, and the note about it is true', 
     }
   });
 
-  it('names the derived answer, not only that the file was wrong', () => {
-    expect(notesFor(MOUNTED, { wallMounted: false }).notes[0]).toContain('a tv is wall-mounted');
-    expect(notesFor(FLOOR, { wallMounted: true }).notes[0]).toContain('a sofa is not wall-mounted');
+  it('names where the piece belongs, by ANCHOR, and never by the flag', () => {
+    // The first version of this read `a ${shape} is ${derived ? '' : 'not '}wall-mounted`,
+    // which is two defects in one clause. `derivedMount` is `anchorFor(...) !== 'floor'`,
+    // so it called a pendant and a ceiling fan "wall-mounted" — false, about a piece the
+    // file two lines above knows hangs from the ceiling. And `shape` is the internal
+    // kebab-case id, so a user was shown "a lamp-pendant" and "an ac-unit". The three
+    // anchors are asserted TOGETHER because a single one is satisfied by a constant.
+    expect(notesFor(MOUNTED, { wallMounted: false }).notes[0]).toContain('it is fixed to a wall');
+    expect(notesFor(CEILING, { wallMounted: false }).notes[0]).toContain('it hangs from the ceiling');
+    expect(notesFor(FLOOR, { wallMounted: true }).notes[0]).toContain('it stands on the floor');
+
+    // And no internal id reaches the user. `lamp-pendant` is the one that would.
+    for (const base of [MOUNTED, CEILING, FLOOR]) {
+      const note = notesFor(base, { wallMounted: !base.expectMounted }).notes[0] ?? '';
+      expect(note, `${base.shape} leaked its shape id`).not.toContain(base.shape);
+    }
   });
 
   it('is silent on a file this app wrote — and not because it cannot fire', () => {

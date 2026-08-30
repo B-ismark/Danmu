@@ -57,7 +57,11 @@ export function snapToNeighbors(
 
   for (const o of parts) {
     if (o.id === movingId) continue;
-    if (o.wallMounted) continue; // wall snap owns those
+    // Skipped as a snap TARGET. The reason used to read "wall snap owns those", which
+    // is false for the ceiling family — `drag-resolve.ts` sends only `ridesWall` pieces
+    // to `snapToWall`, so nothing owns a pendant. It is skipped because it is overhead:
+    // aligning a sofa's edge to a fan 2.4 m above it is not a placement anyone wants.
+    if (o.wallMounted) continue;
     const oe = aabbExtents(o.rot, o.dimMM);
     const ox = o.pos[0];
     const oz = o.pos[2];

@@ -114,8 +114,21 @@ export function exportPlanPng(
     ctx.fillStyle = `${p.color ?? PLAN.accent}40`;
     ctx.strokeStyle = PLAN.outline;
     ctx.lineWidth = 1.2;
-    ctx.fillRect(-w / 2, -d / 2, w, d);
-    ctx.strokeRect(-w / 2, -d / 2, w, d);
+    // `circle`, because `PlanView` draws one — a round piece is tested against the
+    // ellipse it draws (`lib/plan-hit.ts`) and has to be DRAWN as one here too, or the
+    // exported sheet and the tab it was exported from disagree about the shape of a 1 m
+    // object. Latent for round floor pieces (a floor lamp, a plant) and reached the
+    // moment `ridesWall` moved the ceiling family into this loop: a 1000 mm ceiling fan
+    // was a wall tick before and would otherwise have become a square.
+    if (p.circle) {
+      ctx.beginPath();
+      ctx.ellipse(0, 0, w / 2, d / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      ctx.fillRect(-w / 2, -d / 2, w, d);
+      ctx.strokeRect(-w / 2, -d / 2, w, d);
+    }
     ctx.restore();
     // Number badge (unrotated, centred).
     ctx.fillStyle = PLAN.ink;

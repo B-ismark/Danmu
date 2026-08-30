@@ -59,7 +59,7 @@ import { footprintBounds, type Footprint } from '@/lib/footprint';
 import { formatDim, fromMM, stepFor, toMM } from '@/lib/units';
 import { checkFit, PROBE_ID, type FitCandidate, type FitResult, type FitStatus } from '@/lib/fit-check';
 import { clampDims } from '@/lib/dimension-ranges';
-import { groundY } from '@/lib/physics';
+import { groundY, ridesWall } from '@/lib/physics';
 import { PART_LIBRARY } from '@/lib/scene-spec';
 import { Select } from '@/components/ui/Select';
 import { NumberField } from '@/components/ui/NumberField';
@@ -1723,7 +1723,13 @@ function MiniPlan({ parts, footprint }: { parts: ScenePart[]; footprint: Footpri
         strokeWidth={1}
       />
       {parts
-        .filter((p) => !p.wallMounted)
+        // `ridesWall`, like `lib/plan-export.ts`. Asking `wallMounted` here dropped the
+        // ceiling family out of every layout thumbnail while the exported PNG listed it
+        // with a number and a legend row — the same room, two plans, disagreeing about
+        // whether a 1 m ceiling fan is in it. Three surfaces answer this question and
+        // they were answering it three ways: `PlanView` draws every piece, this filtered
+        // on the stored flag, and the export filtered on the anchor.
+        .filter((p) => !ridesWall(p.category, p.shape))
         .map((p) => {
           const w = (p.dimMM[0] / 1000) * s;
           const d = (p.dimMM[1] / 1000) * s;
