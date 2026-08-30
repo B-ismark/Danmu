@@ -789,7 +789,7 @@ function ShuffleButton({
           anythingToMove
             ? {
                 // Not an error, and worded so it does not read as one: on a
-                // complex footprint this is 4–7 attempts in 12 (see
+                // complex footprint this is 2–4 attempts in 12 (see
                 // `lib/layout-shuffle.ts`). Nothing went wrong — every
                 // arrangement it found would have left something in the way, and
                 // showing one of those is the thing it is refusing to do. "Press

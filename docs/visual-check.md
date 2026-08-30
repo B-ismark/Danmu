@@ -329,7 +329,7 @@ point of the change, and no test can tell you it reads that way on screen.
   is supposed to paint as disabled and read `Shuffling…` *before* that starts (a double
   `requestAnimationFrame`). If the label never changes and the app simply locks up, the
   deferral is not working — that is the whole reason it exists.
-- **The refusal.** On a `t` or `open` footprint roughly a third to a half of presses
+- **The refusal.** On a `t` or `open` footprint roughly a sixth to a third of presses
   answer *"No new arrangement this time"* and leave the room alone. That is **correct**
   — it is refusing to show a room with something in the way — but it must not read as a
   failure, and pressing again must genuinely try something new. Watch whether it feels

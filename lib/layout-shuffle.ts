@@ -61,9 +61,12 @@
  * the one the feature is for.
  *
  * **The cost is refusals, and it is not evenly spread.** Offers per twelve attempts
- * at `MAX_CANDIDATES = 12`: rect 6×4 12/12, l 12/12, u 12/12, rect 7.5×5.6 9/12,
- * open 8/12, **t 5/12**. Raising the cap buys yield at a price that is not worth
- * paying — the whole search is synchronous on the main thread:
+ * at `MAX_CANDIDATES = 12`, measured on `main` after the threshold fix below:
+ * rect 6×4 12/12, l 12/12, u 12/12, open 10/12, rect 7.5×5.6 9/12, **t 8/12**.
+ *
+ * Raising the cap buys the rest at a price not worth paying — the whole search is
+ * synchronous on the main thread. Measured BEFORE the threshold fix, when refusals
+ * were commoner, so read it for the shape of the trade rather than for its rows:
  *
  *   cap        t 6x5 offers / worst ms     open 6x4 offers / worst ms
  *   12              5/12  ·  2.9 s               8/12  ·  2.1 s
@@ -72,12 +75,15 @@
  *
  * So 12 stays: a refusal is honest and survivable, a six-second freeze is not.
  *
- * **The real repair is upstream and is deliberately not attempted here.** Align the
- * solver's `sharesFloor` exemption with `TUCKED_CLASH_SHARE` and the search would
- * stop *generating* the arrangements this gate discards — yield and time would both
- * improve. That is a change to a cost term every solve in the app reads, it changes
- * `Fix` on the way past, and this repo's own notes record that any re-price
- * reshuffles which seeds end badly. It wants its own change and its own table.
+ * **The upstream repair LANDED, and it is why those first numbers moved** (#68, on
+ * `main`). `lib/layout-score.ts` no longer exempts a `sharesFloor` pair from
+ * `overlap` outright — it charges the excess above `TUCKED_CLASH_SHARE`, normalised
+ * — so the search largely stops *generating* the arrangements this gate discards
+ * rather than making them and having them thrown away. Same six presets × twelve
+ * attempts: **58/72 offers before it, 63/72 after**, `t` 5/12 → 8/12 and `open`
+ * 8/12 → 10/12, with the finding count still 0. The gate stays: it is what makes
+ * that zero a guarantee rather than a measurement, and the two modules can still differ on
+ * things beyond this one bar.
  */
 import {
   HARD_TERMS,
@@ -269,7 +275,7 @@ export function newRoomFindings(
  * arrangement because the user pressed a button would be the app knowingly handing
  * them a room with a piece blocking the door.
  *
- * **It is not rare on a complex footprint** — 7 of 12 attempts on the `t` preset, 4
+ * **It is not rare on a complex footprint** — 4 of 12 attempts on the `t` preset, 2
  * of 12 on `open`, none at all on `rect`, `l` or `u`. The header has the table and
  * the reason. So the caller's message for `null` is a real piece of UI rather than
  * an edge case, and it must not read as an error: nothing went wrong, the search
