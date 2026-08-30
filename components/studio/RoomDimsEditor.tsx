@@ -8,7 +8,7 @@ import { useScene } from '@/lib/scene-store';
 import { useSettings, useStudio } from '@/lib/store';
 import { boundsToUnit, fromMM, toMM, stepFor, precisionFor } from '@/lib/units';
 import { applyRoomEdits, roomAxisRange, ROOM_AXES, type RoomAxis } from '@/lib/dimension-ranges';
-import { regradeForNewCeiling } from '@/lib/transforms';
+import { recarryForResize, regradeForNewCeiling } from '@/lib/transforms';
 import { roomStore } from '@/lib/storage';
 import { useParams } from 'next/navigation';
 import { NumberField } from '@/components/ui/NumberField';
@@ -97,7 +97,39 @@ export function RoomDimsEditor() {
       }
       setRangeError(null);
       const oldHeight = base.height;
+      const beforeFp = useScene.getState().room.footprint;
       setRoom(r);
+
+      // Width or depth moved the walls, so everything standing against them comes
+      // too. This was missing entirely: the ceiling regrade below has been here
+      // since a fan was left hanging at 1.60 m in a 2.80 m room, and the two floor
+      // axes carried NOTHING — so shrinking a room walked the wall straight through
+      // the sofa and left it outside the shell. One axis of three.
+      //
+      // `setRoom` rebuilds the polygon through `footprintForLayout` rather than
+      // nudging one edge, so there is no single wall and no single delta to hand
+      // `carryAttached`; `carryForResize` reads the displacement of every wall off
+      // the two footprints instead. Same rules underneath — only the dragged wall's
+      // own pieces, and never make containment worse.
+      const afterFp = useScene.getState().room.footprint;
+      if (afterFp !== beforeFp) {
+        const { parts, setParts } = useScene.getState();
+        const studio = useStudio.getState();
+        const { authored, overridden } = recarryForResize(parts, studio, beforeFp, afterFp);
+        if (authored.length > 0) {
+          // Identity preserved for a part that did not move, like the regrade
+          // below: `RoomSync` saves on every `parts` identity change, and a piece
+          // rebuilt unchanged is a write nobody asked for.
+          const byId = new Map(authored.map((a) => [a.id, a.pos]));
+          setParts(
+            parts.map((p) => {
+              const pos = byId.get(p.id);
+              return pos === undefined ? p : { ...p, pos };
+            }),
+          );
+        }
+        for (const b of overridden) studio.setPosition(b.id, b.pos);
+      }
       // The ceiling moved, so the pieces whose height is measured from it move
       // with it — a fan hung under a 1.75 m ceiling was left at 1.60 m when the
       // room grew to 2.80 m, and read as a fan that will not stay up. Both
