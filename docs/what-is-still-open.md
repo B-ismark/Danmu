@@ -2222,23 +2222,47 @@ the one thing this product must not do. Two further blockers even if it were wan
 a discrete tile grid, and sizes here are continuous millimetres through `clampDims`, so
 discretising throws away the trust boundary rule 2 exists to protect.
 
-### 25. PR #67 review — three findings, none fixed, and one of them blocks the PR
+### 25. PR #67 review — three findings, ALL FIXED in `c75242b`
 
 Reviewed at head `52d30ed` on 2026-08-30, gating the PR head itself rather than the tree.
+Kept because finding 1 turned into a standing fact about the code rather than a defect
+that went away when it was fixed.
 
-1. **The `newRoomFindings` gate is unpinned.** Deleting `if (newRoomFindings(...).length > 0)
+1. **FIXED, and it grew. The `newRoomFindings` gate was unpinned.** Deleting `if (newRoomFindings(...).length > 0)
    continue;` from `shuffleRoom` leaves **all 11 tests green**, including the 41-second *never
    offers a room that ROOM CHECK would report*. After #68 the solver largely stops generating
    the candidates the gate discards, so on the fixture presets it never fires and that test
    measures the solver, not the gate. The PR's own commit message calls this gate "what makes
    the zero a guarantee rather than a measurement" — which is precisely the claim nothing
-   verifies. See § 24 for the shape of the fixture that would.
-2. **Three tests sit at 1.4–2.3× of vitest's default 5000 ms timeout**, so they go red under
+   verifies.
+
+   **Probed, and the answer is stronger than "unpinned": 816 candidates over thirteen
+   room configurations — the five presets plus four dining rooms built to provoke it, six
+   attempts each — and the gate rejected NONE of them.** That is structural. Only three
+   rules in `clearance.ts` reach the severity it filters on: `door`, already refused by
+   `isCleanShuffle` through `HARD_TERMS`; `tall`, a fact about a piece's size that the
+   gate's own before/after diff cancels; and `clash`, whose gap **#68 closed** — both
+   modules read `TUCKED_CLASH_SHARE` now and `isCleanShuffle` demands `overlap === 0`
+   exactly, so nothing reaching the gate can hold a pair past that bar.
+
+   **The gate stays.** These two modules have drifted apart once already; what was wrong
+   was the claim that a test covered it. `tests/shuffle-gate.test.ts` pins the agreement
+   the quiet depends on instead — it walks a chair into a desk in 10 mm steps and asserts
+   the room report calls it a clash at exactly the depths the solver charges overlap, so
+   it goes red the moment either threshold moves, which is the moment the gate has work
+   again. Killed by mutating either tolerance independently; the gate's own wiring is
+   pinned separately. **One mutation survives and is recorded in the source rather than
+   papered over:** the `|| f.rule === 'clash'` half of `serious` is redundant today,
+   because the one place that emits a clash emits it at error severity.
+2. **FIXED. Three tests sat at 1.4–2.3× of vitest's default 5000 ms timeout**, so they go red under
    load: 3429 ms, 3548 ms, 2129 ms measured idle. Two neighbouring tests in the same file
    already carry explicit `{ timeout: … }`, so the mechanism was known and these were missed.
-   This one is a **dependency of everything else** — while it flakes, no red anywhere can be
-   believed, and `main` is already intermittently red on machine speed.
-3. **`lib/layout-shuffle.ts` contradicts itself 155 lines apart** about whether #68 landed:
+   They carry an explicit 30 s now — ~8.5× the worst of the three, so it survives
+   contention while still failing on a real order-of-magnitude regression, and deliberately
+   not the 60 s / 300 s of the two sweeps beside them. Verified wired by setting it to 1 ms
+   and watching exactly those three time out. Compounds the standing note that `main` is
+   already intermittently red on machine speed.
+3. **FIXED. `lib/layout-shuffle.ts` contradicted itself 155 lines apart** about whether #68 landed:
    line 79 says `layout-score.ts` "no longer exempts" a `sharesFloor` pair from `overlap`;
    lines 234–239 say it exempts them "entirely — a blanket `continue`". #68 did land, and
    `layout-score.ts:649` is now `sharesFloor(...) ? TUCKED_CLASH_SHARE : 0`.
