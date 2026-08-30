@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { settleParts } from '../lib/layout-settle';
-import { footprintForLayout, type Footprint } from '../lib/footprint';
+import { footprintForLayout, pointInFootprint, type Footprint } from '../lib/footprint';
 import { footArea, footFromPart, footInsidePoly, footIntersectionArea, outsideShare } from '../lib/geometry';
 import type { ScenePart } from '../lib/scene-spec';
 
@@ -134,5 +134,60 @@ describe('settleParts · out of each other', () => {
     const settled = settleParts([a, b], poly);
     expect(settled).toHaveLength(2);
     expect(settled.every((p) => Number.isFinite(p.pos[0]) && Number.isFinite(p.pos[2]))).toBe(true);
+  });
+});
+
+describe('settleParts brings the ceiling family back inside too', () => {
+  // `movable` gated on `wallMounted`, which is true for a fan and a pendant, so the one
+  // pass that would pull them back into the room skipped them. A piece IN a wall is
+  // exempt for a real reason — its footprint sits on the boundary and a containment push
+  // would drag it off the plaster — and the ceiling family is not in a wall. Same
+  // exemption, same fix, as `carryAttached` in `lib/wall-move.ts`.
+  const L = footprintForLayout('l', 6, 5);
+
+  /** A point in the quadrant an L cuts away, so "inside the bounding box" and "inside
+   *  the room" disagree — which is the only place this can be observed. */
+  function inTheVoid(poly: Footprint): [number, number] {
+    let best: [number, number] | null = null;
+    for (let x = -2.8; x <= 2.8; x += 0.1) {
+      for (let z = -2.3; z <= 2.3; z += 0.1) {
+        if (!pointInFootprint(x, z, poly)) best = best ?? [x, z];
+      }
+    }
+    if (!best) throw new Error('the L fixture has no cut-away quadrant');
+    return best;
+  }
+
+  it('pulls a ceiling fan out of the void of an L', () => {
+    const [vx, vz] = inTheVoid(L);
+    // `wallMounted: true` is not decoration on this fixture, it IS the fixture. Without
+    // it the test passes against the defect: `!p.wallMounted` is true for a part that
+    // simply omits the field, so an unflagged fan was movable all along and the
+    // assertion measured nothing. Every builder sets it — `CATEGORY_DEFAULTS.fan`, and
+    // `isWallMountedPart` derives it — so a fan in the app always carries it.
+    const fan = part({ category: 'fan', shape: 'fan', dimMM: [1000, 1000, 200], pos: [vx, 2.4, vz], circle: true, wallMounted: true });
+    // The fixture has to start outside, or the assertion below is vacuous.
+    expect(footInsidePoly(footFromPart(fan.pos, fan.rot, fan.dimMM, fan.circle), L as never), 'fixture must start outside').toBe(false);
+
+    const [settled] = settleParts([fan], L);
+    expect(
+      footInsidePoly(footFromPart(settled.pos, settled.rot, settled.dimMM, settled.circle), L as never),
+      `fan ended at (${settled.pos[0].toFixed(2)}, ${settled.pos[2].toFixed(2)})`,
+    ).toBe(true);
+    // Its HEIGHT is not this pass's business — it still hangs where it hung.
+    expect(settled.pos[1]).toBeCloseTo(2.4, 9);
+  });
+
+  it('and still leaves a piece that rides a wall exactly where it is', () => {
+    // The control. Without it, "the ceiling family is now contained" is indistinguishable
+    // from "the exemption was deleted", which would drag every door and window off its
+    // own wall — the reason the exemption exists.
+    const RECT = footprintForLayout('rect', 6, 4);
+    // Same reason: the flag has to be on it, or the control is testing an unflagged
+    // part and the exemption it exists to protect is never reached.
+    const door = part({ category: 'door', shape: 'door', dimMM: [900, 50, 2100], pos: [0, 1.05, -2], wallMounted: true });
+    const [settled] = settleParts([door], RECT);
+    expect(settled.pos[0]).toBeCloseTo(0, 9);
+    expect(settled.pos[2]).toBeCloseTo(-2, 9);
   });
 });

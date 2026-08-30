@@ -1312,21 +1312,57 @@ which on the U sits in the notch — outside the floor. So `contain` pushed a pi
 over such a wall further OUT, and `snapToWall` put a wall rider on the far side of the
 plaster. With that fixed the settle pass can do its half.
 
-**What remains of the original plan, and it is still worth doing:** the *add* path calls no
-containment at all, so a drop into an L's notch is still a drop into the notch until
-something moves it. `intoRoom` in `placeNewPart` does the BOUNDS inset and only that, and
-`tests/wall-parts.test.ts` asserts that by name in two places with instructions to flip the
-assertion rather than delete the test. Doing it properly still needs the pair —
-`clampIntoFootprint` for the centre, `contain`-style extent containment for the piece —
-because either alone is a known-insufficient half. `clampIntoFootprint`'s own recorded
-blocker is retired: it said changing `polygonCentroid` would change every wall's normal, and
-after § 11 it no longer would.
+**What remained of the original plan is DONE, and not the way this paragraph prescribed.**
+It used to say the *add* path called no containment at all, that `intoRoom` in
+`placeNewPart` did the bounds inset "and only that", that `tests/wall-parts.test.ts`
+asserted as much by name in two places, and that doing it properly "still needs the pair —
+`clampIntoFootprint` for the centre, `contain`-style extent containment for the piece".
+Every clause of that is now false. `intoRoom` calls `containedXZ`, the two named
+assertions are flipped and joined by three more, and **the pair was declined**: the
+footprint answer alone is exact, so a second centre-only clamp would have been the third
+copy of containment rather than the missing half. Landed in `fix/add-path-containment`.
+
+Kept because it is the only place the reasoning is written down: `clampIntoFootprint`'s
+own recorded blocker really was retired by § 11 — it said changing `polygonCentroid` would
+change every wall's normal, and after the winding fix it no longer would.
+
+Three things the add path's containment turned out to need, none of which this paragraph
+anticipated, all of them measured rather than reasoned:
+
+· **Rank walls by DEFICIT, not by distance.** `nearestEdge` orders walls by how far the
+  piece's CENTRE is from each; what a push has to clear is the piece's extent along that
+  wall MINUS how far in it already is. The two agree only for a square piece. A 1200 × 600
+  wardrobe dropped flush into a 6 × 4 corner came back **240 mm / 170 mm out**, and
+  500/460 in a 12 × 10 — because the displacement was a fraction of the room, not a length.
+
+· **A round piece is an ELLIPSE, not its bounding box.** `obbExtentAlong` overstates a
+  1200 mm round piece's reach at 45° by **248.5 mm**, so the shortfall was positive for a
+  piece already correctly placed and it was pushed 249 mm further in, every settle.
+  `footExtentAlong` is the one that honours `circle`, as `escape` already did.
+
+· **The ceiling family is not a wall rider.** `settleParts` exempted anything with
+  `wallMounted` from containment — correct for a door, whose footprint sits on the boundary
+  by design, and wrong for a fan, which rides nothing and had no other way back into an
+  L's cut-away quadrant.
+
+**Still open, and it is the drag path, not the add path.** `WALL_GAP`'s own docblock says
+every path that puts something against a wall has to agree on it. Three now do — seed,
+solve and add all leave 20 mm. The fourth does not: `lib/drag-resolve.ts` sends only
+`ridesWall` pieces to `snapToWall`, so a floor-standing piece dragged to a wall is clamped
+by a bare bounding-box `Math.max(bnd.minX + extX, …)` with no gap and lands **flush**.
+Measured in a browser: a 2400 mm wardrobe walked into the west and north walls of a 6 × 4
+room with the arrow keys reports `-1.80 across and -1.70 back`, whose edges are exactly
+−3.00 and −2.00. So the same wardrobe is 20 mm off the wall if the app placed it and 0 mm
+off if you pushed it there. Pre-existing — `drag-resolve.ts` has never referenced
+`WALL_GAP` — and it is a decision rather than an obvious bug: for a drag, stopping where
+the user pushed is arguable. Whoever settles it should settle it for all four paths at
+once, which is what that docblock asks for.
 
 The rug is the same defect and **not** the documented exemption. `lib/drag-resolve.ts` holds
 a *dragged* rug's centre to `pointInFootprint` — that narrow fix is already in, and the
-overhang past the skirting is deliberate — while the *add* path holds it to nothing. So "the
-rug has no constraints" is true of adding one and false of dragging one, which is the same
-two-consumers shape as everything else in this section.
+overhang past the skirting is deliberate — while the *add* path now runs the rug through
+`containedXZ` like everything else. So "the rug has no constraints" is false of both paths
+now; what is left is whether a rug SHOULD be contained, which is a look, not a bug.
 
 ### 5. The 3D tab computes the refusal the plan paints red, and clears it on the same tick — FIXED
 
