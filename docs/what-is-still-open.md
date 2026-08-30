@@ -648,6 +648,48 @@ the user went and looked.
     three.js object with no DOM, so a drag cannot be aimed at it), and the menu path needs
     a right-click that lands on a piece in the selection with nothing over it.
 
+15. **The same piece is round or square depending on how it got into the room, and
+    `circle` has three sources of truth.** Found by a fixture that could not reach the
+    defect it was written for, which is how the last four of these were found.
+
+    `circle` says "draw this footprint as an ellipse" and it is set in three places that
+    do not agree:
+
+    | path | sets `circle` | so a Ceiling fan is |
+    |---|---|---|
+    | detected (`CATEGORY_DEFAULTS`) | `lamp`, `plant`, `fan` | round |
+    | seeded (`dress` / `defaultScene`) | four hand-set `{ circle: true }` sites | round |
+    | **Library** (`PART_LIBRARY`) | **nothing, on any entry** | **square** |
+
+    So `Ceiling fan`, `Floor lamp`, `Plant` and `Pendant lamp` added from the Library are
+    drawn as rectangles in the plan and in the exported PNG, while the identical shape
+    seeded into a starter room or found by detection is drawn as an ellipse. **Measured in
+    a browser**, not reasoned: a Library ceiling fan comes out of the 2D Plan tab as
+    `rect,line,g,text` with no `ellipse`, and the exported sheet draws it as a 1 × 1 m
+    square. `PlanView` and `lib/plan-export.ts` both honour the flag correctly — the flag
+    is simply absent.
+
+    It is also the reason `lib/plan-export.ts`'s new `circle` branch could not be
+    exercised by a Library fixture: the fix is right and reachable (a seeded pendant, a
+    detected fan), and the test that was meant to prove it in a browser reached a piece
+    that is not round.
+
+    **The fix is `rule 3`, not a fourth column:** derive it from the SHAPE, the way
+    `wallMounted` now derives from the anchor. The round set, read off the three existing
+    sources rather than chosen: `fan`, `plant`, `lamp-floor`, `lamp-pendant`. Then
+    `CATEGORY_DEFAULTS`' `circle` column is deleted like its `wallMounted` column was, the
+    four hand-set seed sites lose their `{ circle: true }`, and `PART_LIBRARY` needs
+    nothing.
+
+    **Why it is here and not done:** it changes what four Library pieces LOOK like — they
+    become round — and looks are the user's call, even when the direction is the one three
+    of the four paths and the 3D geometry already agree on. `lamp-table` is deliberately
+    NOT in that set, because no path marks a table lamp round today and adding it would be
+    a new decision rather than a reconciliation.
+
+    **Committed:** nothing but this paragraph. The predicate is not written; the browser
+    measurement above is real.
+
 ---
 
 ## C · Decided against — do not re-propose
