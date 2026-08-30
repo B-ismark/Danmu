@@ -70,7 +70,7 @@ function isPhysicallySupported(child: ScenePart, parent: ScenePart): boolean {
   // `verticalExtent`, because `pos[1]` is a bottom for a floor anchor and the mesh
   // CENTRE for every other one. This function has no wall-mounted skip in front of it
   // at all — unlike the two in `lib/clearance.ts` and `lib/fit-check.ts` — so it is
-  // the one of the six copies of this arithmetic that was protected by nothing except
+  // the one reader of this arithmetic that was protected by nothing except
   // the fact that `findSupportDetailed` refuses to hand out a mounted piece as a
   // support, and therefore no drag could create the link this then re-validates.
   // Correct by luck at one remove, which is not a property to keep.

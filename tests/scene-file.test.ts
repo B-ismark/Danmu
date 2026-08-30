@@ -13,7 +13,16 @@ import {
 import { dimRangeFor, ROOM_HEIGHT_M } from '../lib/dimension-ranges';
 import { MOUNT_PAD } from '../lib/physics';
 import type { RoomData, Transforms } from '../lib/storage';
-import { buildSceneFromRoom } from '../lib/scene-spec';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import {
+  buildSceneFromRoom,
+  CATALOG_SHAPES_ORDERED,
+  CATEGORIES,
+  isWallMountedPart,
+  normalizeStoredParts,
+} from '../lib/scene-spec';
+import { stripCommentsAndStrings } from './helpers/source';
 import type { ScenePart } from '../lib/scene-spec';
 
 const ROOM: RoomData = {
@@ -868,6 +877,99 @@ describe('scene file · a detected room reloads as the room that was saved', () 
       const after = out.file.parts.find((q) => q.id === before.id);
       expect(after, `${before.name} survived the trip`).toBeDefined();
       expect(!!after!.wallMounted, `${before.name} (${before.shape})`).toBe(!!before.wallMounted);
+    }
+  });
+});
+
+describe('a persisted snapshot is re-derived, not trusted', () => {
+  // The boundary a fresh install can never reach. `RoomSync` prefers the IndexedDB
+  // `scene` snapshot over rebuilding, and `dress` used to write `wallMounted: false` on
+  // the dining pendant — so a room saved before the derivation landed holds a part whose
+  // stored flag contradicts `isWallMountedPart`, and the same part is then read two ways
+  // at once: derived by `settleHeights` / `plan-export` / `wall-move`, stored-flag by the
+  // solver / `clearance` / `apertures` / `item-snap` / the Inspector.
+  //
+  // Every other fixture in this suite BUILDS a scene rather than loading one, which is
+  // exactly why nothing noticed: it looks perfect on a fresh install and on CI, and bites
+  // only users with history.
+  const stored = (over: Partial<ScenePart>): ScenePart => ({
+    id: 'x',
+    category: 'other',
+    name: 'X',
+    shape: 'box',
+    pos: [0, 0, 0],
+    rot: 0,
+    dimMM: [600, 600, 800],
+    locked: false,
+    ...over,
+  });
+
+  it('corrects a stale flag in both directions', () => {
+    // The real case, verbatim: a pendant written as floor-standing.
+    const pendant = stored({ id: 'p', category: 'lamp', shape: 'lamp-pendant', dimMM: [350, 350, 400], wallMounted: false });
+    // And the mirror, which is the half a one-directional fix would miss: a sofa that a
+    // hand-edited or older snapshot claims is mounted.
+    const sofa = stored({ id: 's', category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880], wallMounted: true });
+
+    const [p, s] = normalizeStoredParts([pendant, sofa]);
+    expect(p.wallMounted, 'a pendant hangs from the ceiling').toBe(true);
+    expect(s.wallMounted, 'a sofa stands on the floor').toBeUndefined();
+    // ABSENT, not `false` — the flag is optional and every reader tests `!p.wallMounted`,
+    // so matching what the builders emit keeps one answer rather than two spellings.
+    expect('wallMounted' in s ? s.wallMounted : undefined).toBeUndefined();
+  });
+
+  it('leaves an agreeing part completely alone, object identity included', () => {
+    // Not cosmetic. `useScene.setParts` feeds React, and rebuilding every part on every
+    // load would change every reference and re-render the whole scene for nothing.
+    const tv = stored({ id: 't', category: 'tv', shape: 'tv', dimMM: [1450, 60, 820], wallMounted: true });
+    const table = stored({ id: 'c', category: 'table', shape: 'coffee-table', dimMM: [1000, 600, 400] });
+    const out = normalizeStoredParts([tv, table]);
+    expect(out[0]).toBe(tv);
+    expect(out[1]).toBe(table);
+  });
+
+  it('and it agrees with the builders on every catalog pair', () => {
+    // The two must not answer differently, or a load would silently rewrite a scene the
+    // builder had just got right. A count with a floor under it, for the usual reason.
+    let swept = 0;
+    const wrong: string[] = [];
+    for (const cat of CATEGORIES) {
+      for (const shape of CATALOG_SHAPES_ORDERED) {
+        swept++;
+        const [out] = normalizeStoredParts([stored({ category: cat, shape })]);
+        if (!!out.wallMounted !== isWallMountedPart(cat, shape)) wrong.push(`${cat}/${shape}`);
+      }
+    }
+    expect(swept, 'the sweep must have pairs to sweep').toBeGreaterThan(200);
+    expect(wrong, `${wrong.length} of ${swept} pairs disagree`).toEqual([]);
+  });
+});
+
+describe('every path that loads a persisted scene re-derives it', () => {
+  // A regex over source, and the same deliberate second-best as the sweeps in
+  // `scene-build.test.ts` and `plan-surfaces.test.ts`: there are THREE call sites and the
+  // failure being guarded is a fourth one arriving without the normaliser. Comments and
+  // string literals are stripped by the shared scanner first, because prose quoting the
+  // call satisfies a match exactly as well as the call does.
+  const LOADERS = [
+    'components/studio/RoomSync.tsx',
+    'components/studio/PlanThumb.tsx',
+    'components/studio/RoomTools.tsx',
+  ];
+
+  it('and no loader hands a raw snapshot to setParts', () => {
+    for (const rel of LOADERS) {
+      const src = stripCommentsAndStrings(readFileSync(join(process.cwd(), rel), 'utf8'));
+      // The positive half first: this is a floor, not the mitigation — it catches a
+      // stripper that ate everything, not one that ate the offending line.
+      expect(src.length, `${rel} must exist and have content`).toBeGreaterThan(500);
+      expect(src, `${rel} must actually call setParts`).toMatch(/setParts\(/);
+      const calls = src.match(/setParts\([^)]*\)/g) ?? [];
+      expect(calls.length, `${rel} must have a setParts call to check`).toBeGreaterThan(0);
+      for (const call of calls) {
+        expect(call, `${rel}: ${call} does not re-derive`).toMatch(/normalizeStoredParts|null/);
+      }
     }
   });
 });

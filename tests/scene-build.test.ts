@@ -509,6 +509,26 @@ describe('one ceiling clearance: the duplication itself, not just its drift', ()
     expect(MOUNT_PAD).toBeCloseTo(0.02, 12);
   });
 
+  it("and no module in lib/ computes a piece's top by hand", () => {
+    // `pos[1]` is a BOTTOM for a floor anchor and the mesh CENTRE for every other one, so
+    // `pos[1] + dimMM[2] / 1000` is wrong by half a height for a television and for the
+    // whole ceiling family. `verticalExtent` is the one answer. Converting the last two
+    // readers was otherwise unguarded: restoring either one killed no test, which is why
+    // this sweep exists rather than a behavioural test of one call site.
+    //
+    // ZERO, not "zero except" - an exception list is how the next copy gets in. The one
+    // legitimate-looking reader, a bedside lamp stood on a nightstand, was converted for
+    // exactly that reason even though it was right.
+    const offenders = modules
+      .filter((m) => m.file !== 'physics.ts')
+      .filter((m) => /pos\[1\] \+ [^;,)]*dimMM\[2\] \/ 1000/.test(m.src))
+      .map((m) => m.file);
+    expect(offenders, 'ask verticalExtent - pos[1] is not always a bottom').toEqual([]);
+    // And the positive half: the readers must be findable, or this passes over nothing.
+    const readers = modules.filter((m) => /verticalExtent\(/.test(m.src)).map((m) => m.file);
+    expect(readers.length, 'the sweep must find the shared answer being used').toBeGreaterThan(3);
+  });
+
   it('no module in lib/ declares a ceiling pad of its own', () => {
     expect(modules.length, 'the sweep must have files to sweep').toBeGreaterThan(20);
     const offenders = modules

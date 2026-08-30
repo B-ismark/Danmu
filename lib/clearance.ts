@@ -316,8 +316,13 @@ export function analyzeRoom(
       // is not obviously the right one for "are these two pieces inside each other":
       // PR #42 taught the drag that a wardrobe CAN collide with a mounted TV, so that
       // refusal exists while this report stays silent about one already in the room.
-      // Widening it is a decision with `RULE_HANDLING` in it, not a patch — see
-      // `docs/what-is-still-open.md`. This line is what widening it needs first.
+      // Widening it is a decision with `RULE_HANDLING` in it, not a patch, and this line
+      // is what widening it needs first. Stated here rather than pointed at: the
+      // reference used to read "see `docs/what-is-still-open.md`" and that document has
+      // no item for it, so the pointer resolved to a 400-line file and cost a search.
+      // What widening needs is a `RuleKind` and a `RULE_HANDLING` row saying whether the
+      // solver can move a piece out of the way, or `tests/layout-conformance.test.ts`
+      // fails - which is that test working, not an obstacle.
       const [aBottom, aTop] = verticalExtent(a.category, a.shape, a.dimMM, a.pos[1]);
       const [bBottom, bTop] = verticalExtent(b.category, b.shape, b.dimMM, b.pos[1]);
       if (aTop <= bBottom + 0.005 || bTop <= aBottom + 0.005) continue;

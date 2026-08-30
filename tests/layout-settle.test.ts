@@ -211,8 +211,13 @@ describe('settleHeights · a rider whose support has moved', () => {
     // `pos[1] + h`: 1.05 + 2.1 = 3.15 in a 2.8 m room, over a cap it is nowhere near.
     //
     // The door here is deliberately given NO `wallMounted` flag, which is exactly what
-    // an imported scene file can produce (`lib/scene-file.ts` trusts the field rather
-    // than deriving it). Its real extent is [0, 2.1] and it fits.
+    // a PERSISTED snapshot can produce. It used to say "what an imported scene file can
+    // produce (`lib/scene-file.ts` trusts the field rather than deriving it)", and that
+    // stopped being true in the same stack: `readPart` derives the flag now and reports
+    // the disagreement in `dropped`. The boundary that really can still hand this over
+    // is the IndexedDB `scene` snapshot, which is why `normalizeStoredParts` exists -
+    // so the fixture is still exactly right and only its reason had rotted.
+    // Its real extent is [0, 2.1] and it fits.
     const door = part({ category: 'door', shape: 'door', dimMM: [900, 50, 2100], pos: [0, 1.05, -2] });
     expect(settleHeights([door], 2.8), 'a 2.1 m door fits under a 2.8 m ceiling').toEqual([]);
   });

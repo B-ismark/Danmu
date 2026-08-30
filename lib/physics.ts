@@ -165,11 +165,21 @@ export function isFloorStanding(category: Category, shape: Shape): boolean {
  *  ("centred like every other wall-mounted part"). So `[y, y + h]` is right for a
  *  sofa and wrong by half a height for a television.
  *
- *  Three call sites spelled that arithmetic out and all three got it wrong the same
- *  way, which is what a missing shared answer looks like rather than three separate
- *  mistakes. Two of them then carried `if (wallMounted) continue;`, and **the skip
- *  was hiding the error rather than avoiding it** — `lib/clearance.ts:499` records
- *  the same skip being removed from the room report for the same reason, where it
+ *  Several call sites spelled that arithmetic out and every one of them got it wrong the
+ *  same way, which is what a missing shared answer looks like rather than separate
+ *  mistakes. (**No number here on purpose.** Two comments in this repo carried counts of
+ *  these copies -- "three call sites" and "six copies" -- and by the time anyone checked,
+ *  there were ten call sites in six files and neither number described the repo. A
+ *  hand-kept census of call sites rots in the direction nobody notices; `grep
+ *  "verticalExtent("` is the answer that cannot.) Two of them then carried
+ *  `if (wallMounted) continue;`, and **the skip
+ *  was hiding the error rather than avoiding it** — `lib/clearance.ts` records the
+ *  same skip being removed from the room report for the same reason, in the comment
+ *  above `floorBlockers` that begins "This used to open". **No line number**: the
+ *  one that used to be here pointed at 499, our own later commits moved the content
+ *  to 515, and 499 became an unrelated TV finding. A citation that names a symbol or
+ *  a phrase survives an insertion; one that names a line does not, and it fails in
+ *  the worst direction because it still resolves — to the wrong thing. Where it
  *  had deleted the one case that pass was written for.
  *
  *  The predicate is the ANCHOR, not the stored `wallMounted` flag, and the

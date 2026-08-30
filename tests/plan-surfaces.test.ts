@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { anchorFor, ridesWall } from '../lib/physics';
+import { stripCommentsAndStrings } from './helpers/source';
 import { CATEGORIES, isWallMountedPart, type Category, type Shape } from '../lib/scene-spec';
 import { CATALOG_SHAPES_ORDERED } from '../lib/scene-spec';
 
@@ -20,10 +21,14 @@ import { CATALOG_SHAPES_ORDERED } from '../lib/scene-spec';
  *  expression satisfies the match exactly as well as the expression does — that has
  *  already happened once in this repo, to the MOUNT_PAD sweep, and it made a deleted
  *  clamp look present. */
-const stripComments = (src: string) =>
-  src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+// The shared one-pass scanner, not a local pair of regexes. The pair this replaced had
+// the hole it was meant to close, one syntax over: a `/*` inside a STRING opens the
+// block-comment match and swallows the code between it and the next closer. Measured
+// against the real `lib/plan-export.ts` by danmu-bc: a targeted plant removes four lines
+// out of 7324 and the offender goes invisible while both positive checks below still
+// pass - so those checks are a floor, and the scanner is the mitigation.
 
-const read = (rel: string) => stripComments(readFileSync(join(process.cwd(), rel), 'utf8'));
+const read = (rel: string) => stripCommentsAndStrings(readFileSync(join(process.cwd(), rel), 'utf8'));
 
 const PLAN_SURFACES = [
   'lib/plan-export.ts',

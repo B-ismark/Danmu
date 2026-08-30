@@ -60,7 +60,7 @@ import { formatDim, fromMM, stepFor, toMM } from '@/lib/units';
 import { checkFit, PROBE_ID, type FitCandidate, type FitResult, type FitStatus } from '@/lib/fit-check';
 import { clampDims } from '@/lib/dimension-ranges';
 import { groundY, ridesWall } from '@/lib/physics';
-import { PART_LIBRARY } from '@/lib/scene-spec';
+import { normalizeStoredParts, PART_LIBRARY } from '@/lib/scene-spec';
 import { Select } from '@/components/ui/Select';
 import { NumberField } from '@/components/ui/NumberField';
 import { v4 as uuid } from 'uuid';
@@ -1528,7 +1528,9 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
   }
 
   function apply(v: LayoutVariant) {
-    setParts(v.parts as ScenePart[]);
+    // A saved layout is a persisted snapshot too, so it goes through the same
+    // re-derivation as the scene load paths.
+    setParts(normalizeStoredParts(v.parts as ScenePart[]));
     loadTransforms(v.transforms);
     // Layouts saved before this shipped simply have nothing here — reset
     // rather than leave whatever the room had live before applying.

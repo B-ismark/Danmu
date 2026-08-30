@@ -1377,7 +1377,9 @@ function dress(
       // Measured by danmu-bc across `rect`/`l`/`t`/`u`/`open` at five sizes: 8 of 323
       // parts had a stored flag disagreeing with the derived one, and every one of
       // them was that pendant. `tests/scene-build.test.ts` sweeps the same ground as
-      // an assertion now, so `:1429` cannot grow a sibling.
+      // an assertion now, so the pendant's `add` in `dress` below cannot grow a sibling.
+      // (This named a line number, `:1429`, and this commit's own additions to `dress`
+      // moved it to 1449 - where 1429 lands inside the painting block instead.)
       //
       // Two overrides, not three: the `wallMounted: true` that used to sit here was
       // this default itself, and the bedside lamp's `false` was correct.
@@ -1460,7 +1462,13 @@ function dress(
     // No override: `lamp-table` has no entry in `ANCHOR_BY_SHAPE` and `lamp` none in
     // `ANCHOR_BY_CATEGORY`, so it derives `floor` -- which is what the override said.
     // Correct, and now not said twice.
-    add('lamp', 'Bedside lamp', 'lamp-table', [250, 250, 500], [s.pos[0], s.pos[1] + s.dimMM[2] / 1000, s.pos[2]], s.rot, {});
+    // `verticalExtent`, even though `s` is a nightstand and `pos[1] + h` is genuinely its
+    // top today. Converted anyway so the sweep in `tests/scene-build.test.ts` can assert
+    // ZERO hand-written tops in `lib/` rather than "zero except this one" - an exception
+    // list is how the eighth copy gets in. It also stops being correct the moment anyone
+    // makes this rule fire for a centred support.
+    const sTop = verticalExtent(s.category, s.shape, s.dimMM, s.pos[1])[1];
+    add('lamp', 'Bedside lamp', 'lamp-table', [250, 250, 500], [s.pos[0], sTop, s.pos[2]], s.rot, {});
   }
 }
 
@@ -2256,6 +2264,40 @@ export function selectionForPick(parts: ScenePart[], id: string, current: readon
  *  → centred geometry sinking half-way through the floor. */
 export function isWallMountedPart(cat: Category, shape: Shape): boolean {
   return anchorFor(cat, shape) !== 'floor';
+}
+
+/** Re-derive what a PERSISTED part is not allowed to be trusted about.
+ *
+ *  The same trust boundary `lib/scene-file.ts`'s `readPart` draws for a file someone
+ *  else produced, drawn for a snapshot THIS app wrote — because the snapshot can be
+ *  older than the derivation. `wallMounted` used to be written by the builders as a
+ *  stored value, and `dress` wrote `false` on the dining pendant; every room saved
+ *  before that changed still holds it. Without this, the same part is read two ways at
+ *  once after a load: derived (ceiling) by `settleHeights`, `findSupportDetailed`,
+ *  `lib/plan-export.ts` and `lib/wall-move.ts`, and stored-flag (floor furniture) by
+ *  `layout-solve`, `layout-score`, `lib/clearance.ts`, `lib/apertures.ts`,
+ *  `lib/item-snap.ts` and the Inspector. Press Suggest on such a room and the solver
+ *  re-places the pendant as movable furniture while `settleHeights` refuses to drop it.
+ *
+ *  **This is the boundary a fresh install can never reach, and that is why it needed
+ *  finding by hand.** Every fixture in the suite builds a scene rather than loading one,
+ *  so no test was in a position to notice, and CI is a fresh install by definition. It
+ *  bites exactly the users who have history.
+ *
+ *  Exactly ONE field today, deliberately. Sizes went through `clampDims` when they were
+ *  written and shapes were checked against the vocabulary then, so re-deriving those
+ *  would be re-litigating a decision rather than closing a gap. If a second field ever
+ *  becomes derivable-not-stored, it belongs here rather than at a call site — there are
+ *  three call sites and they are the reason this function exists at all. */
+export function normalizeStoredParts(parts: ScenePart[]): ScenePart[] {
+  return parts.map((p) => {
+    const derived = isWallMountedPart(p.category, p.shape);
+    if (!!p.wallMounted === derived) return p;
+    // `|| undefined` rather than `false`, to match what the builders emit: the flag is
+    // optional and floor-standing furniture omits it, so ABSENT and `false` are one
+    // answer everywhere that reads it.
+    return { ...p, wallMounted: derived || undefined };
+  });
 }
 
 /** Compute a sane spawn transform for a NEW part added at the room centre.
