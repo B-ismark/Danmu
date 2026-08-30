@@ -296,9 +296,10 @@ wants a `RULE_HANDLING` row.
 
 ## Layout and Shuffle
 
-*Owner: `layout`. The first three ride **`fa12f1a` / PR #29**, now on `main`. The fourth
-fixes nothing and is here anyway — it is the user's own report with a measured cause and a
-reverted remedy, so what it needs is a look rather than a check.*
+*Owner: `layout`. The items that rode **`fa12f1a` / PR #29** have been looked at and
+deleted. What is left fixes nothing and is here anyway — it is the user's own report
+with a measured cause and a reverted remedy, so what it needs is a look rather than a
+check.*
 
 ### Does Shuffle keep the bedside table by the bed? — a known defect, `main`
 
@@ -322,12 +323,12 @@ direction is in `isWorthOffering` — what gets *offered* rather than what gets 
 
 ## Shell and flow
 
-*Owner: `shell`. **Empty, and that is the rule working.** Its four items — every bed
-rotated 90°, two grey bands at the foot of the right rail, Delete scrolling out of a
-tall Inspector, and a wardrobe widening its door instead of gaining a column — were all
-on `main` at `aaf2888a` (PR #26) and have now been **looked at by the user, in a
-browser, and confirmed good**. So they are deleted, which is what this file does with an
-item that has been seen.*
+*Owner: `shell`. **What this section shipped with is gone, and that is the rule
+working.** Those items — every bed rotated 90°, two grey bands at the foot of the right
+rail, Delete scrolling out of a tall Inspector, and a wardrobe widening its door instead
+of gaining a column — were all on `main` at `aaf2888a` (PR #26) and have now been
+**looked at by the user, in a browser, and confirmed good**. So they are deleted, which
+is what this file does with an item that has been seen.*
 
 
 ### Three signposts and no sign: the Library — narrowed to the click-through
