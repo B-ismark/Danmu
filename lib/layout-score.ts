@@ -58,6 +58,7 @@ import {
   roomProfile,
   routeWidth,
   sharesFloor,
+  TUCKED_CLASH_SHARE,
   wallDebt,
   WALK_MIN,
   zoneExempt,
@@ -595,13 +596,58 @@ export function costBreakdown(
     for (let j = i + 1; j < feet.length; j++) {
       if (!obstacle[j]) continue;
       if (boxGap(i, j) > 0) continue; // cannot overlap
+      const shared = footIntersectionArea(feet[i], feet[j]);
+      if (shared <= 0) continue;
+      const share = shared / Math.min(area[i], area[j]);
       // Only seating pushed under a surface genuinely occupies the same floor. NOT
       // the access-zone guests: a nightstand belongs in the strip beside a bed and
       // emphatically not inside it, and exempting it here let the solver bury one
       // in the mattress — which the room report then reported, correctly.
-      if (sharesFloor(roles[i], roles[j])) continue;
-      const shared = footIntersectionArea(feet[i], feet[j]);
-      if (shared > 0) c.overlap += shared / Math.min(area[i], area[j]);
+      //
+      // ── …but a tolerance, not the blanket exemption this used to be ──────────
+      //
+      // `if (sharesFloor(...)) continue` meant a dining chair cost NOTHING no
+      // matter how far inside the table it stood, while `lib/clearance.ts` called
+      // the same pair a clash past `TUCKED_CLASH_SHARE`. Same predicate, no shared
+      // bar — so the search would happily produce a room the report then flagged.
+      // The number is `layout-rules`' now, next to `sharesFloor` itself.
+      //
+      // Two measurements of that, and they are different harnesses rather than two
+      // readings of one — which is why both are named here instead of one figure
+      // floating loose. Over the SHUFFLE OFFER pipeline (five presets × eight
+      // presses, counting offers that introduce a report finding): 8 of 40. Over
+      // RAW SCATTERED SOLVES (three presets × forty seeds, counting solves ending
+      // with a buried tucked pair): 4 of 120. The first counts what a user would
+      // have been shown, the second what the search produces before anything
+      // filters it.
+      //
+      // Charged on the EXCESS above the bar rather than as a step at it, because a
+      // cost function is read as a gradient and a cliff gives the annealer nothing
+      // to walk down. Continuity at the bar is what keeps this from re-pricing
+      // arrangements that were already fine — the seeded rooms that HAVE such a
+      // pair (`t` and `open`; `rect`, `l` and `u` contain none) tuck at share
+      // 0.231, so they are charged 0 before and after.
+      //
+      // ── …and the excess is NORMALISED, which is not cosmetic ─────────────────
+      //
+      // The raw `share - tolerance` tops out at 0.15, so a chair standing exactly
+      // where the table is cost 150 weighted units against the 1000 an ordinary
+      // pair pays for the same thing. Worse at the bottom of the ramp: just past
+      // the bar it bought a *reported collision* for about one weighted unit —
+      // less than a single `alignment` unit (4) and under the inertia of a small
+      // move — so taste could outbid a finding the room report was making. The
+      // weight table above says in as many words that three orders of magnitude
+      // exist so "no amount of taste can buy a collision", and the un-normalised
+      // ramp quietly carved out a window where it could.
+      //
+      // Dividing by `1 - tolerance` maps the excess onto the same 0…1 scale every
+      // other overlap uses, so a fully-buried tucked pair costs exactly what a
+      // fully-overlapping ordinary pair costs. That is the right answer on its
+      // face: at share 1.0 the two ARE the same arrangement — one piece standing
+      // where another is — and the tolerance only ever existed to forgive the part
+      // of the overlap that is by design.
+      const tolerance = sharesFloor(roles[i], roles[j]) ? TUCKED_CLASH_SHARE : 0;
+      if (share > tolerance) c.overlap += (share - tolerance) / (1 - tolerance);
     }
     c.outside += outsideShare(feet[i], poly);
   }

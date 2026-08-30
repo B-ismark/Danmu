@@ -39,6 +39,7 @@ import { join } from 'node:path';
 import { analyzeRoom } from '@/lib/clearance';
 import {
   costBreakdown,
+  DEFAULT_WEIGHTS,
   NAV_CELL,
   prepare,
   RULE_HANDLING,
@@ -46,7 +47,7 @@ import {
   type LayoutContext,
   type Placement,
 } from '@/lib/layout-score';
-import { RULE_KINDS, routeWidth, WALK_MIN, type RuleKind } from '@/lib/layout-rules';
+import { RULE_KINDS, routeWidth, TUCKED_CLASH_SHARE, WALK_MIN, type RuleKind } from '@/lib/layout-rules';
 import type { ScenePart } from '@/lib/scene-spec';
 import type { Footprint } from '@/lib/footprint';
 
@@ -184,6 +185,49 @@ function cases(): Case[] {
       good: [
         { x: -2, z: 1.4, yaw: 0 },
         { x: 2, z: -1.6, yaw: 0 },
+      ],
+    });
+  }
+
+  // ── …and the same rule for a pair that is ALLOWED to share floor ──────────
+  //
+  // The fixture above is a sofa and a wardrobe, which `sharesFloor` says nothing
+  // about — so it cannot express the way these two modules actually came apart.
+  // A dining chair and a table are *supposed* to overlap: `clearance.ts` forgives
+  // them up to `TUCKED_CLASH_SHARE`, and `layout-score.ts` used to forgive them
+  // **entirely**, a blanket `continue` with no bar at all. Same predicate, one
+  // threshold, and the file that owned the number said in a comment that the two
+  // "cannot disagree about whether a tucked-in chair is a collision".
+  //
+  // They disagreed for every chair past 85%: the solver would happily bury one
+  // completely inside the table for free and the report called the result a clash.
+  // Invisible while the only caller was inertia-anchored — a repair barely moves
+  // anything — and 8 of 40 arrangements once anything searched from a scattered
+  // start.
+  //
+  // `bad` is the chair standing exactly where the table is (share 1.0); `good` is
+  // the chair pushed hard under its near edge, at share 0.25 — comfortably under
+  // the bar, so the pair also pins that the fix did NOT make ordinary tucking
+  // expensive. (0.25 is this fixture's own measured share. The 0.231 quoted in
+  // `lib/layout-rules.ts` is a different number about a different room — what the
+  // seeded `t` and `open` presets actually produce — and the two were briefly
+  // conflated here, which is the hand-typed-measurement trap rule 2 names.)
+  {
+    const t = diningTable();
+    const c = part({ category: 'chair', shape: 'chair-dining', dimMM: [450, 480, 900], pos: [0, 0, 0] });
+    out.push({
+      family: 'clash',
+      what: 'a dining chair buried in the table rather than tucked under it',
+      parts: [t, c],
+      bad: [
+        { x: 0, z: 0, yaw: 0 },
+        { x: 0, z: 0, yaw: 0 },
+      ],
+      good: [
+        { x: 0, z: 0, yaw: 0 },
+        // Half the table's depth out, less a little, so the chair's own footprint
+        // is mostly clear of it — a chair at the table, not inside it.
+        { x: 0, z: 0.52, yaw: Math.PI },
       ],
     });
   }
@@ -444,5 +488,127 @@ describe('layout-rules · nothing is reported without a decision about the solve
       `${untested.join(', ')} claim a cost term with no layout pair holding the two ` +
         'modules to it. Add a case, or reclassify.',
     ).toEqual([]);
+  });
+});
+
+// ─── The bar itself, which a good/bad pair cannot reach ─────────────────────
+//
+// The `clash` fixtures above straddle `TUCKED_CLASH_SHARE` at share 1.0 against
+// 0.25, and a pair like that proves the rule fires — not that the two modules meet
+// cleanly at the number they now share. It cannot: the harness asserts a term
+// *rises* between two layouts, which stays true however shallow the ramp is and
+// wherever the boundary sits. A near-bar pair was written first and survived
+// mutating BOTH defects below, which is the "fixture that cannot express the
+// defect" this repo keeps finding — so the bar gets direct assertions instead.
+describe('layout-rules · the report and the solver meet cleanly at TUCKED_CLASH_SHARE', () => {
+  it('the bar is a share, strictly inside 0 and 1', () => {
+    // `lib/layout-score.ts` divides the excess by `1 - TUCKED_CLASH_SHARE` to put it
+    // on the same 0..1 scale as an ordinary overlap. At exactly 1 that is a division
+    // by zero yielding `Infinity` inside a term weighted 1000 — every arrangement
+    // with a tucked pair would score `Infinity`, compare equal to every other, and
+    // the annealer would walk at random with nothing to descend. It would not throw
+    // and no other assertion here would catch it, because the fixtures all sit at
+    // finite shares below or above a bar that no longer separates anything.
+    //
+    // One line, because the alternative is a silent catastrophe behind a constant
+    // that looks innocuous to edit.
+    expect(TUCKED_CLASH_SHARE).toBeGreaterThan(0);
+    expect(TUCKED_CLASH_SHARE).toBeLessThan(1);
+  });
+
+  /** A dining chair sitting `share` of its own footprint inside the table.
+   *  Both are centred on x and the chair is the narrower, so the share is purely
+   *  the z overlap over the chair's own depth. */
+  function tuckedAt(share: number) {
+    const t = diningTable();
+    const c = part({ category: 'chair', shape: 'chair-dining', dimMM: [450, 480, 900], pos: [0, 0, 0] });
+    const chairD = c.dimMM[1] / 1000;
+    const z = t.dimMM[1] / 2000 + chairD / 2 - chairD * share;
+    const at: Placement[] = [
+      { x: 0, z: 0, yaw: 0 },
+      { x: 0, z, yaw: Math.PI },
+    ];
+    return { parts: [t, c], at };
+  }
+
+  it('the fixture geometry and the ramp invert each other', () => {
+    // The floor under the two assertions below: if `tuckedAt` were wrong, each of
+    // them would be measuring some other arrangement and passing for the wrong
+    // reason. Read back off the solver, since `overlap` is a known function of the
+    // share — `u = overlap / w = (share − T) / (1 − T)`, so `T + u(1 − T)` returns
+    // the share. Weight read from `DEFAULT_WEIGHTS`, never typed: a hand-written
+    // 1000 here is a hidden dependency on a number three assertions below already
+    // import, and re-pricing `overlap` would make this fail while blaming geometry.
+    //
+    // **Named for both halves on purpose.** It pins the ramp's formula as much as
+    // the fixture's geometry — reverting the normalisation fails it — so calling it
+    // "the geometry helper" (as it was) reports a cost-function change as a broken
+    // test helper, and sends the next reader to the wrong file.
+    const w = DEFAULT_WEIGHTS.overlap;
+    const readBack = (share: number) => {
+      const { parts, at } = tuckedAt(share);
+      const u = costAt(parts, at).overlap / w;
+      return TUCKED_CLASH_SHARE + u * (1 - TUCKED_CLASH_SHARE);
+    };
+    // Above the bar the read-back is exact, and two samples rather than one so a
+    // constant answer cannot satisfy it.
+    expect(readBack(0.9)).toBeCloseTo(0.9, 3);
+    expect(readBack(0.95)).toBeCloseTo(0.95, 3);
+    // Below the bar there is nothing to read back — the charge is 0 by design — so
+    // this half asserts that directly instead of running the inversion on a
+    // saturated zero, which would agree with anything. (It used to sit inside the
+    // loop above under an `if` that skipped it, i.e. asserting nothing at all.)
+    const below = tuckedAt(0.5);
+    expect(costAt(below.parts, below.at).overlap, 'a properly tucked chair is free').toBe(0);
+  });
+
+  it('across the bar’s whole neighbourhood, the two never disagree', () => {
+    // What the exact-bar case turned out to be, once measured rather than reasoned
+    // about. The two comparisons DID face opposite ways — the report flagged at
+    // `>=` the bar while the solver charges the excess above it, which is 0 there —
+    // so in principle a share of exactly 0.85 was a finding the solver could not
+    // see, carrying a **Try a fix** button that could do nothing. Aligning them is
+    // still right and costs nothing.
+    //
+    // **But it is measure-zero and this test says so rather than pretending.** The
+    // share is a quotient of two float geometry results; it lands a part in 1e15
+    // either side of the bar and never on it, so no fixture can sit a piece exactly
+    // there and the old boundary was unobservable in practice. Asserting the
+    // neighbourhood is the honest version: at every sample, the report flagging and
+    // the solver charging must be the same answer. That catches any divergence with
+    // real width, which is the only kind a user can meet.
+    const disagreements: string[] = [];
+    for (let k = -20; k <= 20; k++) {
+      const share = TUCKED_CLASH_SHARE + k * 0.002;
+      if (share <= 0 || share >= 1) continue;
+      const { parts, at } = tuckedAt(share);
+      // `> 0`, not `> epsilon`. An epsilon here re-creates the very mismatch this
+      // is looking for: at the sample sitting a part in 1e15 above the bar the
+      // solver charges ~1e-14, which any tolerance above that reads as "silent"
+      // while the report — correctly — flags. The question is whether the solver
+      // charges at all.
+      const charges = costAt(parts, at).overlap > 0;
+      const reports = flagged(parts, at, 'clash');
+      if (charges !== reports) {
+        disagreements.push(`share ${share.toFixed(3)}: solver ${charges ? 'charges' : 'silent'}, report ${reports ? 'flags' : 'quiet'}`);
+      }
+    }
+    expect(disagreements, disagreements.join('\n')).toEqual([]);
+  });
+
+  it('just past the bar, the charge already outweighs any taste term', () => {
+    // `DEFAULT_WEIGHTS` says three orders of magnitude exist so that "no amount of
+    // taste can buy a collision". The un-normalised ramp carved out a window where
+    // it could: at share 0.851 it charged about one weighted unit, under a single
+    // `alignment` unit, so the solver could prefer — or decline to repair — an
+    // arrangement the report was flagging. Normalising the excess over `1 - bar`
+    // closes it, and this is the assertion that can tell the two apart.
+    const share = TUCKED_CLASH_SHARE + 0.001;
+    const { parts, at } = tuckedAt(share);
+    expect(flagged(parts, at, 'clash'), 'the report flags just past the bar').toBe(true);
+    expect(
+      costAt(parts, at).overlap,
+      'a reported collision must cost more than one unit of taste',
+    ).toBeGreaterThan(DEFAULT_WEIGHTS.alignment);
   });
 });

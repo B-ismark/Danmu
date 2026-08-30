@@ -49,6 +49,7 @@ import {
   roleOf,
   sharesFloor,
   zoneExempt,
+  TUCKED_CLASH_SHARE,
   WALK_MIN,
   type AccessRule,
   type RuleKind,
@@ -111,25 +112,31 @@ const MIN_WALKWAY = WALK_MIN;
 const SWING_CLASH_SHARE = 0.02;
 
 // ── Same-place rule thresholds ──────────────────────────────────────────────
-// Which pieces genuinely share floor is `sharesFloor` in lib/layout-rules — the
-// same predicate the solver's overlap term reads, so the two cannot disagree about
-// whether a tucked-in chair is a collision. It used to be a pair of category sets
-// here: seating pushed under a work surface shares that surface's footprint ON
-// PURPOSE, and the chair back rises above the table top so no vertical test
-// separates the two. Four chairs round a dining table is the most ordinary
-// arrangement there is; reporting four errors on it would teach people to ignore
-// this panel.
+// Which pieces genuinely share floor is `sharesFloor` in lib/layout-rules, and so
+// is **how far into each other they may be** — `TUCKED_CLASH_SHARE`, imported
+// above. It used to be a pair of category sets here: seating pushed under a work
+// surface shares that surface's footprint ON PURPOSE, and the chair back rises
+// above the table top so no vertical test separates the two. Four chairs round a
+// dining table is the most ordinary arrangement there is; reporting four errors on
+// it would teach people to ignore this panel.
+//
+// **This comment used to claim the solver and this file "cannot disagree about
+// whether a tucked-in chair is a collision".** They shared the predicate and not
+// the bar: `layout-score`'s overlap term exempted the pair outright, at any depth,
+// while this file drew the line at 0.85. A shared predicate with a private
+// threshold reads exactly like agreement and is not it — see the number's own doc
+// in `lib/layout-rules.ts` for what that cost.
 
 /** Share of the SMALLER piece's footprint that must lie inside the other before
  *  this is a collision rather than two pieces meeting untidily. Half of a piece
- *  buried in another is unambiguous; a few centimetres of clip is a nudge. */
+ *  buried in another is unambiguous; a few centimetres of clip is a nudge.
+ *
+ *  Stays local, unlike `TUCKED_CLASH_SHARE`: this one is about what is worth
+ *  *telling the user*, and the solver deliberately charges every overlap of an
+ *  ordinary pair however small, because a cost is a gradient and a report is a
+ *  sentence. Those are different questions and a shared constant would assert they
+ *  are the same one. */
 const CLASH_SHARE = 0.5;
-
-/** …and for a pair that legitimately shares floor, the bar instead of a blanket
- *  exemption. A chair pushed hard under a table reaches perhaps 60% of its own
- *  footprint; a chair standing where the table is reaches all of it, and that is
- *  still worth saying. */
-const TUCKED_CLASH_SHARE = 0.85;
 
 /** Issue-id prefix per zone rule, so a finding keeps the id the UI and the tests
  *  already know it by. Anything not listed keys off the rule's own id. */
@@ -335,6 +342,27 @@ export function analyzeRoom(
       // chair sits, so the square version reported the most ordinary dining
       // arrangement there is as a collision.
       const smaller = Math.min(footArea(oa), footArea(ob));
+      // `<`, and it stays `<` — this was briefly `<=` and that was a regression.
+      //
+      // The argument for flipping it was that `lib/layout-score.ts` charges the
+      // EXCESS above the tucked bar and is therefore exactly 0 at it, so flagging
+      // at `>=` put a "Two pieces in the same place" finding — and a **Try a fix**
+      // button — behind an `overlap` of 0.0000. True, and worth exactly nothing:
+      // that share is a quotient of two float geometry results and never lands on
+      // 0.85, so the case cannot be constructed and reverting the line fails no
+      // test in the repo.
+      //
+      // What it DID do is move the other bar. `clashShare` returns
+      // `TUCKED_CLASH_SHARE` only for a pair that shares floor by design; for every
+      // ordinary pair it returns `CLASH_SHARE`, 0.5 — where the solver has no
+      // tolerance at all and charges `share` outright, i.e. **500 of a 1000-unit
+      // hard term**. And 0.5 is not measure-zero: two 500 mm chairs 250 mm apart,
+      // whole steps of the 10 mm drag grid, hit it exactly, and the report went
+      // silent on a collision the solver was pricing at half its maximum. That is
+      // the divergence this file exists to close, reintroduced at the other end and
+      // pointing the more dangerous way. `layout-conformance`'s property is
+      // one-directional (flagged ⇒ costlier), so silence was invisible to it — the
+      // exact-half case is pinned in `tests/clearance.test.ts` instead.
       if (smaller <= 0 || shared / smaller < clashShare(a, b)) continue;
       issues.push({
         id: `clash-${a.id}-${b.id}`,
