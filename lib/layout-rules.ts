@@ -663,6 +663,23 @@ export function sharesFloor(a: Role, b: Role): boolean {
  * reaches all of it, and that is still worth saying.
  *
  * `tests/layout-conformance.test.ts` holds the two consumers to it.
+ *
+ * ── There is a THIRD consumer, and it deliberately does not read this ─────────
+ *
+ * `lib/layout-settle.ts` keeps its own blanket `sharesFloor` exemption, and that
+ * is a decision rather than the same bug left half-fixed. It is not a clash test:
+ * its bar is `TOUCH_SHARE` (0.02), deliberately far stricter than the report,
+ * because its job on every room open is the cheap guarantee that nothing is inside
+ * anything else. Giving it this tolerance would mean a blunt positional push
+ * against a pair that is *supposed* to overlap, on every open, to fix a state the
+ * solver can no longer produce.
+ *
+ * What that leaves is narrow and worth stating plainly: a room that already
+ * contains a buried pair — an imported scene file, or one saved before this — is
+ * not repaired on open. The room report still names it and **Fix** now prices it,
+ * so it is reported and actionable rather than silent. If that ever needs closing,
+ * close it there and measure what it moves in existing rooms; do not quietly widen
+ * this constant's readership to a pass that is answering a different question.
  */
 export const TUCKED_CLASH_SHARE = 0.85;
 
