@@ -49,6 +49,7 @@ import {
   roleOf,
   sharesFloor,
   zoneExempt,
+  TUCKED_CLASH_SHARE,
   WALK_MIN,
   type AccessRule,
   type RuleKind,
@@ -111,25 +112,31 @@ const MIN_WALKWAY = WALK_MIN;
 const SWING_CLASH_SHARE = 0.02;
 
 // ── Same-place rule thresholds ──────────────────────────────────────────────
-// Which pieces genuinely share floor is `sharesFloor` in lib/layout-rules — the
-// same predicate the solver's overlap term reads, so the two cannot disagree about
-// whether a tucked-in chair is a collision. It used to be a pair of category sets
-// here: seating pushed under a work surface shares that surface's footprint ON
-// PURPOSE, and the chair back rises above the table top so no vertical test
-// separates the two. Four chairs round a dining table is the most ordinary
-// arrangement there is; reporting four errors on it would teach people to ignore
-// this panel.
+// Which pieces genuinely share floor is `sharesFloor` in lib/layout-rules, and so
+// is **how far into each other they may be** — `TUCKED_CLASH_SHARE`, imported
+// above. It used to be a pair of category sets here: seating pushed under a work
+// surface shares that surface's footprint ON PURPOSE, and the chair back rises
+// above the table top so no vertical test separates the two. Four chairs round a
+// dining table is the most ordinary arrangement there is; reporting four errors on
+// it would teach people to ignore this panel.
+//
+// **This comment used to claim the solver and this file "cannot disagree about
+// whether a tucked-in chair is a collision".** They shared the predicate and not
+// the bar: `layout-score`'s overlap term exempted the pair outright, at any depth,
+// while this file drew the line at 0.85. A shared predicate with a private
+// threshold reads exactly like agreement and is not it — see the number's own doc
+// in `lib/layout-rules.ts` for what that cost.
 
 /** Share of the SMALLER piece's footprint that must lie inside the other before
  *  this is a collision rather than two pieces meeting untidily. Half of a piece
- *  buried in another is unambiguous; a few centimetres of clip is a nudge. */
+ *  buried in another is unambiguous; a few centimetres of clip is a nudge.
+ *
+ *  Stays local, unlike `TUCKED_CLASH_SHARE`: this one is about what is worth
+ *  *telling the user*, and the solver deliberately charges every overlap of an
+ *  ordinary pair however small, because a cost is a gradient and a report is a
+ *  sentence. Those are different questions and a shared constant would assert they
+ *  are the same one. */
 const CLASH_SHARE = 0.5;
-
-/** …and for a pair that legitimately shares floor, the bar instead of a blanket
- *  exemption. A chair pushed hard under a table reaches perhaps 60% of its own
- *  footprint; a chair standing where the table is reaches all of it, and that is
- *  still worth saying. */
-const TUCKED_CLASH_SHARE = 0.85;
 
 /** Issue-id prefix per zone rule, so a finding keeps the id the UI and the tests
  *  already know it by. Anything not listed keys off the rule's own id. */

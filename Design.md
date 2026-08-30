@@ -1151,10 +1151,17 @@ are what serve "communicate a plan", and they stay.
   **Cost sorts the candidates; the report decides between them.** Those rankings are
   not interchangeable, and swapping them cost a regression worth recording: for a pair
   `sharesFloor` exempts — a dining chair and its table — the solver's cheapest answer
-  is the chair at the table's dead centre, since the relation distance is zero and the
-  overlap it exempts costs nothing, while the report calls that same placement a clash.
+  was the chair at the table's dead centre, since the relation distance is zero and the
+  overlap it exempted cost nothing, while the report called that same placement a clash.
   Ranking on cost alone therefore answered "no room" for a chair in a room with a table
-  in it, all over again.
+  in it, all over again. **That exemption is a TOLERANCE now, not a blanket pass** —
+  `TUCKED_CLASH_SHARE` moved to `lib/layout-rules.ts` beside `sharesFloor` itself and
+  the overlap term charges the excess above it, so dead centre is no longer free and
+  the two modules agree about where tucking ends. The ranking here stays as it is: it
+  was the right answer for a second reason (the report prices things a single cost term
+  never will), and this was only ever one of the three places the missing bar surfaced —
+  the others being Room check flagging a solved room, and a scattered search burying a
+  chair in 4 of 120 solves.
 - **The room report offers, it does not just report** (`RoomTools.tsx` `CheckPanel`).
   An earlier pass fixed how the panel *sounds* — findings badged FIX / TIGHT / NOTE
   in tracked caps became "Worth fixing" / "A bit tight" / "Just so you know", which

@@ -188,6 +188,46 @@ function cases(): Case[] {
     });
   }
 
+  // ── …and the same rule for a pair that is ALLOWED to share floor ──────────
+  //
+  // The fixture above is a sofa and a wardrobe, which `sharesFloor` says nothing
+  // about — so it cannot express the way these two modules actually came apart.
+  // A dining chair and a table are *supposed* to overlap: `clearance.ts` forgives
+  // them up to `TUCKED_CLASH_SHARE`, and `layout-score.ts` used to forgive them
+  // **entirely**, a blanket `continue` with no bar at all. Same predicate, one
+  // threshold, and the file that owned the number said in a comment that the two
+  // "cannot disagree about whether a tucked-in chair is a collision".
+  //
+  // They disagreed for every chair past 85%: the solver would happily bury one
+  // completely inside the table for free and the report called the result a clash.
+  // Invisible while the only caller was inertia-anchored — a repair barely moves
+  // anything — and 8 of 40 arrangements once anything searched from a scattered
+  // start.
+  //
+  // `bad` is the chair standing exactly where the table is (share 1.0); `good` is
+  // the chair pushed hard under its near edge, which is share ~0.23 — what this
+  // app's own seeded rooms actually produce, and comfortably under the bar. So the
+  // pair also pins that the fix did NOT make ordinary tucking expensive.
+  {
+    const t = diningTable();
+    const c = part({ category: 'chair', shape: 'chair-dining', dimMM: [450, 480, 900], pos: [0, 0, 0] });
+    out.push({
+      family: 'clash',
+      what: 'a dining chair buried in the table rather than tucked under it',
+      parts: [t, c],
+      bad: [
+        { x: 0, z: 0, yaw: 0 },
+        { x: 0, z: 0, yaw: 0 },
+      ],
+      good: [
+        { x: 0, z: 0, yaw: 0 },
+        // Half the table's depth out, less a little, so the chair's own footprint
+        // is mostly clear of it — a chair at the table, not inside it.
+        { x: 0, z: 0.52, yaw: Math.PI },
+      ],
+    });
+  }
+
   // ── A walkway too narrow to use ───────────────────────────────────────────
   // Gaps are derived from the rule rather than typed: a bad gap well under WALK_MIN
   // even after the field's quantisation band, a good one past the route width this

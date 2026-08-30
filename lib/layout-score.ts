@@ -58,6 +58,7 @@ import {
   roomProfile,
   routeWidth,
   sharesFloor,
+  TUCKED_CLASH_SHARE,
   wallDebt,
   WALK_MIN,
   zoneExempt,
@@ -595,13 +596,32 @@ export function costBreakdown(
     for (let j = i + 1; j < feet.length; j++) {
       if (!obstacle[j]) continue;
       if (boxGap(i, j) > 0) continue; // cannot overlap
+      const shared = footIntersectionArea(feet[i], feet[j]);
+      if (shared <= 0) continue;
+      const share = shared / Math.min(area[i], area[j]);
       // Only seating pushed under a surface genuinely occupies the same floor. NOT
       // the access-zone guests: a nightstand belongs in the strip beside a bed and
       // emphatically not inside it, and exempting it here let the solver bury one
       // in the mattress — which the room report then reported, correctly.
-      if (sharesFloor(roles[i], roles[j])) continue;
-      const shared = footIntersectionArea(feet[i], feet[j]);
-      if (shared > 0) c.overlap += shared / Math.min(area[i], area[j]);
+      //
+      // ── …but a tolerance, not the blanket exemption this used to be ──────────
+      //
+      // `if (sharesFloor(...)) continue` meant a dining chair cost NOTHING no
+      // matter how far inside the table it stood, while `lib/clearance.ts` called
+      // the same pair a clash past `TUCKED_CLASH_SHARE`. Same predicate, no shared
+      // bar — so the search would happily produce a room the report then flagged,
+      // in 8 of 40 arrangements once anything searched from a scattered start.
+      // The number is `layout-rules`' now, next to `sharesFloor` itself.
+      //
+      // Charged on the EXCESS above the bar rather than as a step at it, because a
+      // cost function is read as a gradient: a cliff gives the annealer nothing to
+      // walk down, while `share - tolerance` slopes continuously from 0 at the bar
+      // to 0.15 when the chair is exactly where the table is. Continuity at the bar
+      // is what keeps this from re-pricing arrangements that were already fine —
+      // this app's own seeded rooms tuck at share 0.231, so they are charged 0
+      // before and after, and `tests/layout-conformance.test.ts` pins the pair.
+      const tolerance = sharesFloor(roles[i], roles[j]) ? TUCKED_CLASH_SHARE : 0;
+      if (share > tolerance) c.overlap += share - tolerance;
     }
     c.outside += outsideShare(feet[i], poly);
   }
