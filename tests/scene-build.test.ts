@@ -11,6 +11,7 @@ import {
 } from '../lib/scene-spec';
 import type { RoomData } from '../lib/storage';
 import { heightForNewCeiling, MOUNT_PAD } from '../lib/physics';
+import { stripCommentsAndStrings } from './helpers/source';
 import { footprintForLayout } from '../lib/footprint';
 import { footArea, footFromPart, footIntersectionArea, outsideShare } from '../lib/geometry';
 
@@ -474,12 +475,36 @@ describe('one ceiling clearance: the duplication itself, not just its drift', ()
   // explain why the low guard matches `drag-resolve`, and with raw `src` the clamp
   // could then be deleted outright with this test still green. Measured by deleting
   // it. A check a comment can satisfy is a check that cannot fail.
-  const stripComments = (src: string) =>
-    src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  // One PASS, not two regexes. The regex version was wrong in both orderings and both
+  // were measured wrong: comments-first lets a `/*` inside a STRING swallow real code
+  // (planting `const GLOB_ALL = ...` above a duplicate pad left this sweep green with
+  // the duplicate in the file), and strings-first lets an apostrophe in a comment eat
+  // whatever follows - and this codebase's comments are full of apostrophes. See
+  // `tests/helpers/source.ts` for the scanner and for the one limit it still has.
   const libDir = join(process.cwd(), 'lib');
   const modules = readdirSync(libDir)
     .filter((f) => f.endsWith('.ts'))
-    .map((f) => ({ file: f, src: stripComments(readFileSync(join(libDir, f), 'utf8')) }));
+    .map((f) => ({ file: f, src: stripCommentsAndStrings(readFileSync(join(libDir, f), 'utf8')) }));
+
+  it('and the stripper leaves the code it is asked about', () => {
+    // The stripper has a known limit (a regex literal containing a quote), so every
+    // sweep below is paired with a positive check. Without this, a stripper that ate
+    // code would make both assertions pass over nothing, which is the exact failure
+    // they exist to catch, one layer down.
+    const physics = modules.find((m) => m.file === 'physics.ts');
+    expect(physics, 'physics.ts must be in the sweep').toBeDefined();
+    expect(physics!.src, 'the declaration must survive stripping').toMatch(/export const MOUNT_PAD\s*=/);
+    const clampers = modules.filter((m) => /-\s*MOUNT_PAD/.test(m.src)).map((m) => m.file);
+    expect(clampers.length, 'the readers must survive stripping').toBeGreaterThan(0);
+  });
+
+  it('and MOUNT_PAD is the value every one of them agrees on', () => {
+    // Pinned, because nothing else in the suite pins it and every test that reads it
+    // DERIVES from it - which is right, and leaves the constant itself free to move
+    // silently. Measured: changing it to 0.05 left the whole suite green. A clearance
+    // is a look, so changing it should be a deliberate act with a red test attached.
+    expect(MOUNT_PAD).toBeCloseTo(0.02, 12);
+  });
 
   it('no module in lib/ declares a ceiling pad of its own', () => {
     expect(modules.length, 'the sweep must have files to sweep').toBeGreaterThan(20);

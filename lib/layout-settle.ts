@@ -363,7 +363,21 @@ export function settleHeights(parts: ScenePart[], roomHeight: number): HeightFix
       // A piece too tall for the room keeps its real height and pokes through: the
       // guard wins, the clamp loses, and `lib/clearance.ts` reports `tall`. Silently
       // shrinking it to fit is the thing this repo does not do.
-      p.pos[1] = floor ? Math.max(0, cap - h) : Math.max(h / 2 + MOUNT_PAD, cap - h / 2);
+      // The low guard is `h / 2`, not `h / 2 + MOUNT_PAD`. The first version of this line
+      // contradicted the docblock of the constant it read: `MOUNT_PAD` says `placeNewPart`
+      // deliberately does not use it, because "a door's canonical height IS h/2, and
+      // padding stood every door 2 cm off its own threshold". `pos[1]` is a CENTRE here,
+      // so the pad lifted the bottom - measured: a 2100 mm door under a 2.0 m ceiling
+      // came out at bottom 0.020, and a 2400 mm door in a 2.4 m room the same, after
+      // which `lib/apertures.ts` cuts the light hole 20 mm up and leaves a strip of
+      // plaster under the doorway. `wall-floor` is a centred anchor that is still
+      // floor-REFERENCED, which is the trap.
+      //
+      // A piece too tall for the room therefore keeps its real height and pokes through
+      // the TOP, where `lib/clearance.ts` reports `tall`. For a door the clamp declines
+      // to move it at all. The HIGH bound is unchanged and does read the constant, so
+      // `drag-resolve.ts:187` and `heightForNewCeiling` still answer it with one number.
+      p.pos[1] = floor ? Math.max(0, cap - h) : Math.max(h / 2, cap - h / 2);
     }
 
     if (p.pos[1] !== before) out.push({ id: p.id, y: p.pos[1] });
