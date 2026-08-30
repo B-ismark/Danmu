@@ -102,8 +102,18 @@ export function exportPlanPng(
   ctx.lineWidth = 5;
   ctx.stroke();
 
-  // Furniture — numbered, rotated rectangles.
-  floorParts.forEach((p, i) => {
+  // Furniture — numbered, rotated rectangles, in **two passes, and the split is not
+  // cosmetic.** This was one loop drawing each piece's footprint and then its badge, so
+  // piece `i + 1`'s fill and outline landed on top of piece `i`'s NUMBER — a fan under a
+  // sofa, a rug under a table. The legend below is keyed on that digit and has no other
+  // join to its row, so losing it does not degrade the sheet, it breaks it, and it does
+  // so precisely on the overlaps a floor plan is drawn to show. Footprints first, every
+  // badge after: a number can now only be crossed by another number.
+  //
+  // Seen in an exported PNG before it was understood here — a Ceiling fan's `1` was
+  // absent from the sheet while its legend row was present, which reads as the numbering
+  // being broken rather than as a draw order.
+  floorParts.forEach((p) => {
     const cx = px(p.pos[0]);
     const cy = pz(p.pos[2]);
     const w = (p.dimMM[0] / 1000) * PX_PER_M;
@@ -130,15 +140,18 @@ export function exportPlanPng(
       ctx.strokeRect(-w / 2, -d / 2, w, d);
     }
     ctx.restore();
-    // Number badge (unrotated, centred).
-    ctx.fillStyle = PLAN.ink;
-    ctx.font = BADGE_FONT;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(String(i + 1), cx, cy);
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
   });
+
+  // Pass two: the number badges (unrotated, centred), after every footprint.
+  ctx.fillStyle = PLAN.ink;
+  ctx.font = BADGE_FONT;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  floorParts.forEach((p, i) => {
+    ctx.fillText(String(i + 1), px(p.pos[0]), pz(p.pos[2]));
+  });
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
 
   // Items that ride a wall, as ticks on the wall line (doors, windows, TV…). The
   // ceiling family is deliberately not here — see `floorParts` above.
