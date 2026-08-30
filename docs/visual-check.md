@@ -79,10 +79,16 @@ bare orange tick sitting over the dining table in open floor — no number, no l
 while the tab behind it draws the same pendant normally. Right looks like: the pendant in
 the legend with its footprint and a number, and no tick anywhere but on a wall line.
 
-**Why it is here rather than in a test.** `lib/plan-export.ts` draws through a real 2D
-canvas context, `canvas` is not a dependency, and jsdom's `getContext('2d')` returns
-`null` — line 75 asserts non-null and would throw. So there is no unit test for this
-module and I did not add a dependency to manufacture one.
+**Why it was here rather than in a test — and why that reason was wrong.** What this said,
+for as long as the item has existed: `lib/plan-export.ts` draws through a real 2D canvas
+context, `canvas` is not a dependency, and jsdom's `getContext('2d')` returns `null`, so
+line 75's non-null assertion would throw. Every clause of that is true and none of it made
+the module untestable. **Pixels need `canvas`; a draw ORDER does not** — what the module
+does to a context is a sequence of calls, and a sequence can be recorded by replacing
+`getContext` with a tape. `tests/plan-export-order.test.ts` does that, in jsdom, with no
+new dependency. The reason was not a lie and it was still the expensive kind of wrong: it
+answered "can we check the pixels" and was read as "can we check anything", so nobody
+asked the cheaper question for months.
 
 **Half of this has now been looked at, by screenshot, and the half that has not is named.**
 The exported PNG was captured from a production build of the branch (`acceptDownloads`,
@@ -91,15 +97,28 @@ Ceiling fan and a Sofa exports `1 Ceiling fan — 1.00 × 1.00 × 0.20 m (W×D×
 `2 Sofa — 2.20 × 0.95 × 0.88 m`, both numbered, no bare tick anywhere. So the
 `wallMounted` → `ridesWall` regression is closed and that is a picture, not an inference.
 
-**Still wants a person, and here is exactly what for.** Two things a screenshot could not
-settle. First, the fan came out as a **1 × 1 m square rather than a circle** — and that is
-NOT this fix failing: the 2D Plan tab drew it as a rectangle too, because a Library
-`Ceiling fan` carries no `circle` flag at all while a seeded or detected one does. That is
-its own defect and it is `what-is-still-open.md` § B item 15; the `circle` branch here is
-right and is reached by a seeded pendant, which is the fixture to use. Second, the fan's
-number badge did not appear in the sheet — it is drawn under the sofa's footprint, so
-whether a numbered piece can be hidden by an overlapping one is a z-order question about
-`plan-export`'s draw order, unmeasured and worth one look.
+**One of the two open halves is now closed, and not by looking — by reading.** The fan's
+number badge was missing from the sheet, and the guess written here was that it sat under
+the sofa's footprint. That was right and it did not need a person: badges and footprints
+were drawn in **one loop**, per piece, so piece `i + 1`'s fill and outline landed on top of
+piece `i`'s digit. The legend is keyed on that digit and has no other join to its row, so an
+overlap — the one thing a floor plan exists to show — silently removed a piece's only
+identifier. Two passes now, footprints then badges, and the ordering is the first assertion
+in `tests/plan-export-order.test.ts`. **An eyes-item that turns out to be answerable from
+the source is not an eyes-item**, and this one was for a whole commit.
+
+**Still wants a person, narrowed to one thing.** The fan came out as a **1 × 1 m square
+rather than a circle** — and that is NOT this fix failing: the 2D Plan tab drew it as a
+rectangle too, because a Library `Ceiling fan` carries no `circle` flag at all while a
+seeded or detected one does. That is its own defect and it is `what-is-still-open.md` § B
+item 15, and it is a decision rather than a bug to fix. That the module honours the flag it
+is *given* is now asserted both ways (ellipse for a round piece, rectangle for a square
+one), so what is left for a person is the flag's source, not this module.
+
+**And what is still not verified by eye here:** that the exported PNG now *shows* every
+number. The gate proves the call order, and later canvas draws compositing over earlier ones
+is specified rather than hoped for — but nobody has opened the sheet since the split. One
+export of a room with two overlapping floor pieces settles it.
 
 **Where it rides.** `fix/derive-mounted-and-vertical-extent`, PR #54. The cause was
 `plan-export` filtering on `wallMounted` ("geometry is centred on its origin", true for a
