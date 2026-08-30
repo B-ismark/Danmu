@@ -426,7 +426,32 @@ export function solveLayout(
   // Navigation is priced in from the very first number, so `before` and `after` are
   // comparable and a suggestion that opens a sealed-off half of the room is
   // recognised as the large improvement it is.
-  const breakdownBefore = costBreakdown(model, current, weights, NAV_CELL);
+  //
+  // ── `before` is the ROOM WE WERE GIVEN, never where the search begins ────────
+  //
+  // Those are the same thing in `arrange` and `refit` (`current` is a copy of
+  // `origin`), and they are NOT in `shuffle`, where the search starts from a random
+  // scatter the caller invented. Measuring `before` from `current` there made three
+  // things quietly wrong, all of which read as working:
+  //
+  //   · The late `if (breakdownAfter.total >= before)` invariant — whose whole
+  //     purpose is "never hand back something worse than what we were given" —
+  //     compared the answer against the NOISE. A scatter costs hundreds (overlap and
+  //     outside are weighted 1000), so the guard could not fire, and if it ever had
+  //     it would have produced a result whose `placements`, `after` and `before`
+  //     described three different layouts.
+  //   · `before` / `breakdownBefore` are returned to the caller. Measured on
+  //     `rect 6x4` seed 9: `before = 349.9`, `after = 2.0`, for a room whose real
+  //     cost was ~2.0 — so `whatChanged()` next door would have announced that it
+  //     "separated pieces that were in the same place" about a tidy room, and
+  //     `isWorthOffering` would pass for any shuffle at all.
+  //   · `explain`'s nav flag below reads `breakdownBefore.navigation > 0` to decide
+  //     whether to pay for distance transforms. A scatter essentially always has
+  //     one, so it paid, every solve, for `moves` the shuffle path never reads.
+  //
+  // Taking it from `origin` is behaviour-identical for the two anchored modes —
+  // `origin` and `current` hold equal values there — so no seed fixture moves.
+  const breakdownBefore = costBreakdown(model, origin, weights, NAV_CELL);
   const before = breakdownBefore.total;
 
   const b = footprintBounds(footprint);
@@ -711,7 +736,23 @@ export function solveLayout(
   // near-optimal that slack can eat the entire gain — at which point the honest
   // answer is that there was nothing worth moving. An invariant rather than a
   // safeguard: every caller downstream assumes `after <= before`.
-  if (breakdownAfter.total >= before) {
+  //
+  // ── …except in `shuffle`, where "worse" is not a reason to refuse ────────────
+  //
+  // This mode answers "show me a different arrangement", not "show me a better
+  // one". Its rooms are routinely ALREADY optimal — a `defaultScene` is a local
+  // minimum by construction — so any genuinely different arrangement of one costs
+  // more, and that is the honest answer to what was asked rather than a failure.
+  // Applying the invariant here does not make shuffle safer, it turns it off: with
+  // `before` correctly measured from the real room, this branch fired on nearly
+  // every candidate of every preset, `moved` came back empty, `isCleanShuffle`
+  // refused it, and the button reported "couldn't find another arrangement" for
+  // every room in the app. (It was inert before only because `before` was then the
+  // cost of a random scatter, which nothing beats — two wrongs looking like a
+  // working feature.) What keeps a shuffle honest is `isCleanShuffle`'s per-term
+  // `HARD_TERMS` check in `lib/layout-shuffle.ts`, which is about faults rather
+  // than about totals, and refuses the things a person would actually call broken.
+  if (!shuffle && breakdownAfter.total >= before) {
     winner = origin.map((p) => ({ ...p }));
     breakdownAfter = breakdownBefore;
   }

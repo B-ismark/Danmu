@@ -41,7 +41,7 @@
  * this to stay quick enough to press repeatedly.
  *
  * What does work is asking more than once and **throwing the faulty answers away**.
- * Attempts yielding at least one clean candidate, 25 attempts per preset:
+ * Attempts yielding at least one candidate the SOLVER calls clean, 25 per preset:
  *
  *   candidates   n=4     n=6     n=8    n=12
  *   t 6x5      21/25   24/25   24/25   25/25
@@ -51,6 +51,33 @@
  * Hence `MAX_CANDIDATES`. The solves are independent, so this is the same search run
  * from more places rather than a longer one — which is exactly what a chaotic
  * objective responds to.
+ *
+ * ── …and the solver's verdict is not the last word ────────────────────────────
+ *
+ * `newRoomFindings` is a second gate, because the cost function and the room report
+ * disagree about a chair buried in a table (its own doc has the detail). With both
+ * gates, over six presets × twelve attempts: **0 of 72 offers introduce a finding**,
+ * against 8 of 40 before the gate existed. That is the number that matters and it is
+ * the one the feature is for.
+ *
+ * **The cost is refusals, and it is not evenly spread.** Offers per twelve attempts
+ * at `MAX_CANDIDATES = 12`: rect 6×4 12/12, l 12/12, u 12/12, rect 7.5×5.6 9/12,
+ * open 8/12, **t 5/12**. Raising the cap buys yield at a price that is not worth
+ * paying — the whole search is synchronous on the main thread:
+ *
+ *   cap        t 6x5 offers / worst ms     open 6x4 offers / worst ms
+ *   12              5/12  ·  2.9 s               8/12  ·  2.1 s
+ *   20              7/12  ·  4.7 s              10/12  ·  3.1 s
+ *   30             10/12  ·  6.6 s              12/12  ·  5.2 s
+ *
+ * So 12 stays: a refusal is honest and survivable, a six-second freeze is not.
+ *
+ * **The real repair is upstream and is deliberately not attempted here.** Align the
+ * solver's `sharesFloor` exemption with `TUCKED_CLASH_SHARE` and the search would
+ * stop *generating* the arrangements this gate discards — yield and time would both
+ * improve. That is a change to a cost term every solve in the app reads, it changes
+ * `Fix` on the way past, and this repo's own notes record that any re-price
+ * reshuffles which seeds end badly. It wants its own change and its own table.
  */
 import {
   HARD_TERMS,
@@ -64,9 +91,14 @@ import {
   type SolveResult,
 } from './layout-solve';
 import { layoutSimilarity, orderOffers } from './layout-offer';
+import { analyzeRoom, type ClearanceIssue } from './clearance';
 import type { Placement } from './layout-score';
 import type { ScenePart } from './scene-spec';
 import type { Footprint } from './footprint';
+
+/** The room a shuffle happens in, in the shape `analyzeRoom` already asks for, so
+ *  the two cannot be handed different rooms. */
+export type ShuffleRoom = { footprint: Footprint; height: number };
 
 /** How many independent solves one press may run. The measured n=12 above, where
  *  every preset reached 25/25. It is a CEILING and not a count — see `MIN_CLEAN`. */
@@ -94,14 +126,49 @@ export const REPEAT_SIMILARITY = 0.85;
  *  when everything is ruled out is to show a repeat anyway. */
 export const HISTORY_DEPTH = 3;
 
+/**
+ * One arrangement this room has already been offered.
+ *
+ * **It carries the part ids, and that is not bookkeeping.** A `Placement[]` is
+ * index-aligned to one particular `parts` array and says so nowhere, while the
+ * history that holds it outlives any number of edits to the room: the studio's
+ * Shuffle button keeps it in a `useRef` on a component that adding or deleting
+ * furniture does not remount. So the two drift, in two different ways and only one
+ * of them is loud.
+ *
+ * · **Different length** — `layoutSimilarity` throws (`lib/layout-offer.ts`,
+ *   deliberately, rather than returning a plausible number). Shuffle, delete a
+ *   chair, Shuffle again: `layoutSimilarity: 11 placements against 12`, out of a
+ *   click handler, no toast and no arrangement.
+ * · **Same length, different order** — nothing throws, and the repeat filter
+ *   compares each piece against a *different* piece's old placement. The answer is
+ *   meaningless and looks exactly like a working filter.
+ *
+ * `sameRoom` below is what stops both, and it is checked rather than assumed
+ * because the silent half cannot be noticed any other way.
+ */
+export type ShuffleOffer = {
+  /** `parts.map(p => p.id)` as it stood when this arrangement was offered. */
+  ids: readonly string[];
+  placements: Placement[];
+};
+
+/** Do these two id lists describe the same furniture in the same order — i.e. is a
+ *  `Placement[]` recorded against one of them index-aligned to the other? */
+function sameRoom(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((id, i) => id === b[i]);
+}
+
 export type ShuffleOptions = {
   /** Which press this is. Drives the seeds, so the same room and the same attempt
    *  give the same set of ideas — pressing again asks a genuinely different
    *  question rather than re-rolling the same one. */
   attempt: number;
   /** Arrangements already offered this session, newest last. Anything too much like
-   *  one of these is passed over while a different candidate is available. */
-  history?: readonly Placement[][];
+   *  one of these is passed over while a different candidate is available. Entries
+   *  recorded against a different set of furniture are ignored rather than compared
+   *  — see `ShuffleOffer`. */
+  history?: readonly ShuffleOffer[];
   maxCandidates?: number;
   minClean?: number;
   diversityPenalty?: number;
@@ -109,6 +176,9 @@ export type ShuffleOptions = {
 
 export type ShuffleOutcome = {
   result: SolveResult;
+  /** What to put in the history, already carrying the ids it is aligned to, so the
+   *  caller cannot record a bare `Placement[]` and reintroduce the drift above. */
+  offer: ShuffleOffer;
   /** How many solves were run and how many survived the fault filter. Reported
    *  rather than discarded because "we tried twelve and none was usable" and "the
    *  first four were all fine" are different facts about a room, and only one of
@@ -117,7 +187,7 @@ export type ShuffleOutcome = {
   clean: number;
 };
 
-/** Is this an arrangement worth putting in front of someone?
+/** Is this an arrangement the SOLVER thinks is sound?
  *
  *  `HARD_TERMS` is the solver's own list — overlap, outside, door, access,
  *  navigation — read term by term rather than as a total, because a total lets a
@@ -125,33 +195,98 @@ export type ShuffleOutcome = {
  *  moved nothing is refused too: it is the original room, which is not an answer to
  *  "show me another way".
  *
- *  Exported because it is the whole of what "usable" means here, and a caller
- *  re-deriving it is how the offer stage and the test drift apart. */
+ *  **This is necessary and not sufficient**, which is the whole reason
+ *  `newRoomFindings` exists beside it. Asserting only this in a test is asserting
+ *  the filter against its own definition — see the note on `roomChecks` below. */
 export function isCleanShuffle(result: SolveResult): boolean {
   if (result.moved.length === 0) return false;
   return HARD_TERMS.every((term) => result.breakdownAfter[term] === 0);
+}
+
+/** Apply a solved arrangement to the parts, so the room can be asked about it.
+ *  Heights are carried through untouched — the solver moves and turns only. */
+export function applyPlacements(parts: ScenePart[], result: SolveResult): ScenePart[] {
+  const moved = new Set(result.moved);
+  return parts.map((p, i) =>
+    moved.has(i)
+      ? {
+          ...p,
+          pos: [result.placements[i].x, p.pos[1], result.placements[i].z] as [number, number, number],
+          rot: result.placements[i].yaw,
+        }
+      : p,
+  );
+}
+
+/**
+ * The findings this arrangement would ADD to the room, as Room check reports them.
+ *
+ * ── Why the solver's own verdict is not enough ────────────────────────────────
+ *
+ * `isCleanShuffle` asks the cost function; this asks `analyzeRoom`, and the two do
+ * not agree about a chair pushed under a table. `lib/layout-score.ts` exempts a
+ * `sharesFloor` pair from `overlap` **entirely** — a blanket `continue` — while
+ * `lib/clearance.ts` gives the same pair a *tolerance* of `TUCKED_CLASH_SHARE`
+ * (0.85). So the solver pays nothing for burying a dining chair completely inside
+ * the dining table, and the report calls it a clash. `clearance.ts` states that the
+ * two "cannot disagree about whether a tucked-in chair is a collision"; they share
+ * the predicate and not the threshold, so that sentence is not true today.
+ *
+ * Measured before this gate existed: **8 of 40 offers** (five presets × eight
+ * attempts) introduced a clash the room report flags and the solver could not see —
+ * all of them on `t` and `open`. Anchored modes mostly hide it because inertia keeps
+ * the room roughly where it was; shuffle removes the anchor, so it surfaces.
+ *
+ * Aligning the two thresholds is the real repair and it is deliberately NOT done
+ * here: `overlap` is priced into every solve this app runs, the repo's own notes
+ * record that any re-price reshuffles which seeds end badly, and it would change
+ * `Fix` — behaviour nobody asked to change — on the way past. So this gate is scoped
+ * to the new feature: a shuffle may not INTRODUCE a finding, while a finding the
+ * room already had is not this button's to answer for.
+ *
+ * Compared by rule and by the pieces named, not by count: a room that swaps one
+ * clash for a different one has not stayed still.
+ */
+export function newRoomFindings(
+  parts: ScenePart[],
+  room: ShuffleRoom,
+  result: SolveResult,
+): ClearanceIssue[] {
+  const key = (f: ClearanceIssue) => `${f.rule}:${[...f.partIds].sort().join(',')}`;
+  const serious = (f: ClearanceIssue) => f.severity === 'error' || f.rule === 'clash';
+  const had = new Set(analyzeRoom(parts, room).issues.filter(serious).map(key));
+  return analyzeRoom(applyPlacements(parts, result), room)
+    .issues.filter(serious)
+    .filter((f) => !had.has(key(f)));
 }
 
 /**
  * Run the shuffle pipeline and return the arrangement to offer, or `null`.
  *
  * `null` means *no usable arrangement was found* — every candidate either changed
- * nothing or came back with a hard fault. The caller must say so and leave the room
- * alone; applying a faulted arrangement because the user pressed a button would be
- * the app knowingly handing them a room with a piece blocking the door. Measured, it
- * is rare: 25/25 attempts found one on every preset at `MAX_CANDIDATES`.
+ * nothing, came back with a hard fault, or would have introduced a finding the room
+ * report shows. The caller must say so and leave the room alone; applying a faulted
+ * arrangement because the user pressed a button would be the app knowingly handing
+ * them a room with a piece blocking the door.
+ *
+ * **It is not rare on a complex footprint** — 7 of 12 attempts on the `t` preset, 4
+ * of 12 on `open`, none at all on `rect`, `l` or `u`. The header has the table and
+ * the reason. So the caller's message for `null` is a real piece of UI rather than
+ * an edge case, and it must not read as an error: nothing went wrong, the search
+ * looked and did not find one it was willing to show.
  *
  * Deterministic per `(room, attempt)`, like everything else in the solver — a
  * suggestion that differs between two runs of the same room is a slot machine.
  */
 export function shuffleRoom(
   parts: ScenePart[],
-  footprint: Footprint,
+  room: ShuffleRoom,
   locked: boolean[],
   opts: ShuffleOptions,
 ): ShuffleOutcome | null {
   const maxCandidates = opts.maxCandidates ?? MAX_CANDIDATES;
   const minClean = opts.minClean ?? MIN_CLEAN;
+  const { footprint } = room;
   const movable = movableFor(parts, locked);
   // An early-out, NOT the thing that makes a fully-locked room return null — the
   // fault filter below already does that, since every solve in such a room comes
@@ -171,7 +306,12 @@ export function shuffleRoom(
     const seed = opts.attempt * 1000 + s;
     const start = randomizeStart(parts, footprint, movable, makeRng(seed));
     const result = solveLayout(parts, footprint, locked, { seed, mode: 'shuffle', start });
-    if (isCleanShuffle(result)) clean.push(result);
+    // Both gates, and in this order: the solver's verdict is far cheaper than a
+    // clearance field, so the room report is only asked about candidates that have
+    // already passed the cheap check.
+    if (!isCleanShuffle(result)) continue;
+    if (newRoomFindings(parts, room, result).length > 0) continue;
+    clean.push(result);
   }
   if (clean.length === 0) return null;
 
@@ -193,19 +333,27 @@ export function shuffleRoom(
   // Falls back to the top-ranked candidate rather than refusing: a repeat is still a
   // valid room and still different from the one on screen, and "no" to someone who
   // pressed the button is the worse answer.
-  const history = opts.history ?? [];
+  //
+  // Only history recorded against THIS furniture is comparable. An entry from before
+  // a piece was added or deleted is not stale-but-usable, it is index-aligned to a
+  // different room: comparing it either throws or silently measures one piece
+  // against another's old position. Dropping it means a room that has just been
+  // edited briefly forgets what it was shown, which is the harmless direction.
+  const ids = parts.map((p) => p.id);
+  const history = (opts.history ?? []).filter((prev) => sameRoom(prev.ids, ids));
   const fresh = ranked.find(
     (cand) =>
       !history.some(
         (prev) =>
-          layoutSimilarity(cand.placements, prev, {
+          layoutSimilarity(cand.placements, prev.placements, {
             spotM: LAYOUT_SIMILAR_M,
             yawRad: TURN_EPSILON,
             movable,
           }) > REPEAT_SIMILARITY,
       ),
   );
-  return { result: fresh ?? ranked[0], tried, clean: clean.length };
+  const result = fresh ?? ranked[0];
+  return { result, offer: { ids, placements: result.placements }, tried, clean: clean.length };
 }
 
 /** The three reasons a piece may not move, for a whole-room shuffle. A thin re-export

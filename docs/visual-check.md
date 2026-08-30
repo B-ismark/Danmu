@@ -306,6 +306,45 @@ deleted. What is left fixes nothing and is here anyway — it is the user's own 
 with a measured cause and a reverted remedy, so what it needs is a look rather than a
 check.*
 
+### Fix and Shuffle are two buttons now — PR #67, branch `claude/project-readme-review-yawa21`
+
+**Where to click.** Left rail, top: the health chip now has **two** buttons under it,
+`Fix` (sparkles) and `Shuffle` (shuffle icon). Open any room. Press `Fix` on a room with
+nothing wrong — it should say *"This is already a good arrangement"*. Then press
+`Shuffle` on the same room: it must actually rearrange it. That difference is the whole
+point of the change, and no test can tell you it reads that way on screen.
+
+**What wrong looks like.**
+
+- **The row clipping.** Two `.ds-btn`s sit in a `display: flex` row with **no
+  `flexWrap`**, inside a rail whose box is `overflow: hidden`. The derived budget is
+  ~166px of button in 176px of rail at `--rail-left-tight` — about 10px of slack, never
+  measured on a real font. Drag the left rail to its narrowest and watch for `Shuffle`
+  losing its right-hand side or its label. There is no scrollbar and no error; the
+  glyphs just stop. (`LightingPicker` next door solves the same problem with
+  `flexWrap: 'wrap'` *and* two assertions in `tests/reflow.test.ts`; this row has
+  neither yet.)
+- **The freeze.** One `Shuffle` press is up to twelve solves, synchronous on the main
+  thread — measured at a median 2.0 s and a worst 2.9 s on a T-shaped room. The button
+  is supposed to paint as disabled and read `Shuffling…` *before* that starts (a double
+  `requestAnimationFrame`). If the label never changes and the app simply locks up, the
+  deferral is not working — that is the whole reason it exists.
+- **The refusal.** On a `t` or `open` footprint roughly a third to a half of presses
+  answer *"No new arrangement this time"* and leave the room alone. That is **correct**
+  — it is refusing to show a room with something in the way — but it must not read as a
+  failure, and pressing again must genuinely try something new. Watch whether it feels
+  like a broken button.
+- **Repeats after a tab switch.** `RoomTools` unmounts when you move between `3D Model`
+  and `2D Plan`, and both the attempt counter and the offer history are per-mount refs.
+  So: Shuffle, switch tabs, Shuffle again — **the identical arrangement is expected to
+  come back**, with the toast still claiming it moved things. Known, not fixed, and the
+  same shape as the `APP_PLACED` scar recorded in `RoomTools.tsx` itself.
+- **A room that got worse.** Shuffle is allowed to cost more than the arrangement you
+  had — that is what "a different arrangement" of an already-optimal room means. What it
+  may **not** do is introduce something Room check reports. After a shuffle, open
+  **Room** → **Check**: any new error or clash is a defect (0 of 72 in measurement, so
+  one on screen is worth reporting).
+
 ### Does Shuffle keep the bedside table by the bed? — a known defect, `main`
 
 **Nothing was fixed here, so this is a look rather than a check**, and it is the user's own

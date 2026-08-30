@@ -1,13 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
-  HARD_TERMS,
   lockedForSolve,
   makeRng,
   movableFor,
   randomizeStart,
   solveLayout,
 } from '@/lib/layout-solve';
-import { isCleanShuffle, shuffleRoom, MAX_CANDIDATES } from '@/lib/layout-shuffle';
+import { isCleanShuffle, newRoomFindings, shuffleRoom } from '@/lib/layout-shuffle';
 import { defaultScene } from '@/lib/scene-spec';
 import { footprintForLayout, pointInFootprint, type LayoutId } from '@/lib/footprint';
 
@@ -38,11 +37,21 @@ const SETTLED: Array<[LayoutId, number, number]> = [
 ];
 const ALL: Array<[LayoutId, number, number]> = [...SETTLED, ['t', 6, 5]];
 
+/** The ceiling the presets are seeded against, so the room-report gate inside
+ *  `shuffleRoom` measures the same room `defaultScene` built. */
+const CEILING = 2.4;
+
 const room = (id: LayoutId, w: number, d: number) => {
   const parts = defaultScene(id, w, d);
   const footprint = footprintForLayout(id, w, d);
   const locked = lockedForSolve(parts, {}, null);
-  return { parts, footprint, locked, movable: movableFor(parts, locked) };
+  return {
+    parts,
+    footprint,
+    room: { footprint, height: CEILING },
+    locked,
+    movable: movableFor(parts, locked),
+  };
 };
 
 describe('randomizeStart', () => {
@@ -120,6 +129,8 @@ describe("solveLayout mode: 'shuffle'", () => {
     for (const seed of [1, 2, 3, 4, 5]) {
       const start = randomizeStart(parts, footprint, movable, makeRng(seed));
       const result = solveLayout(parts, footprint, locked, { seed, mode: 'shuffle', start });
+      // A floor first: both assertions below pass vacuously on an empty `moved`.
+      expect(result.moved.length, `seed ${seed} moved nothing`).toBeGreaterThan(0);
       for (const i of result.moved) {
         expect(movable[i], `${parts[i].id} moved but is locked or wall-mounted`).toBe(true);
       }
@@ -155,58 +166,72 @@ describe('shuffleRoom — the offer, not the search', () => {
     expect(faulted, 'raw shuffle solves on the T fault often — see lib/layout-shuffle.ts').toBeGreaterThan(0);
   });
 
-  it('only ever offers an arrangement with none of the hard faults Room check reports', { timeout: 180_000 }, () => {
-    // `HARD_TERMS` is the solver's own list (overlap / outside / door / access /
-    // navigation), read term by term rather than as a total, because a total lets a
-    // tidy room average away a piece standing inside another one.
+  it('never offers a room that ROOM CHECK would report', { timeout: 300_000 }, () => {
+    // ── Asserted through `analyzeRoom`, deliberately, and this is the point ────
+    //
+    // The first version of this test swept `HARD_TERMS` — which is the exact list
+    // `isCleanShuffle` filters on, so it could not fail: the filter guarantees it.
+    // It even called itself "the hard faults Room check reports" while never asking
+    // Room check. That is this repo's "measures its own subject", and it hid a real
+    // defect: the solver exempts a `sharesFloor` pair from `overlap` outright while
+    // `clearance.ts` allows it only up to `TUCKED_CLASH_SHARE`, so a dining chair
+    // buried inside the dining table costs the search nothing and the report calls
+    // it a clash. Measured before the room-report gate existed: 8 of 40 offers.
+    //
+    // `newRoomFindings` compares against the room BEFORE the shuffle, because a
+    // preset that already has a finding is not this button's to answer for; what a
+    // shuffle may not do is INTRODUCE one.
+    let offers = 0;
     for (const [id, w, d] of ALL) {
-      const { parts, footprint, locked } = room(id, w, d);
+      const { parts, room: rm, locked } = room(id, w, d);
       for (const attempt of [1, 2, 3]) {
-        const outcome = shuffleRoom(parts, footprint, locked, { attempt });
-        expect(outcome, `${id} attempt ${attempt} found nothing`).not.toBeNull();
-        const r = outcome!.result;
-        expect(r.moved.length, `${id} attempt ${attempt}`).toBeGreaterThan(0);
-        for (const term of HARD_TERMS) {
-          expect(r.breakdownAfter[term], `${id} attempt ${attempt}: ${term}`).toBe(0);
-        }
-        expect(outcome!.tried).toBeLessThanOrEqual(MAX_CANDIDATES);
-        expect(outcome!.clean).toBeGreaterThan(0);
+        const outcome = shuffleRoom(parts, rm, locked, { attempt });
+        if (!outcome) continue; // refusing is allowed; offering something broken is not
+        offers++;
+        const found = newRoomFindings(parts, rm, outcome.result);
+        expect(
+          found.map((f) => `${f.rule}:${f.partIds.join(',')}`),
+          `${id} attempt ${attempt} introduced a finding`,
+        ).toEqual([]);
+        expect(outcome.result.moved.length, `${id} attempt ${attempt}`).toBeGreaterThan(0);
       }
     }
+    // The floor. Without it a build where `shuffleRoom` always returned null would
+    // pass this sweep having asserted nothing at all — which is exactly how the
+    // `before`-from-origin regression got as far as it did.
+    expect(offers, 'the sweep must actually have offers to check').toBeGreaterThanOrEqual(
+      ALL.length * 2,
+    );
   });
 
   it('returns null rather than offering a faulted room when nothing can move', () => {
-    const { parts, footprint } = room('rect', 6, 4);
+    const { parts, room: rm } = room('rect', 6, 4);
     // Everything pinned: there is no arrangement to find, and the honest answer is
     // "no" rather than the room it was handed.
     const allPinned = Object.fromEntries(parts.map((p) => [p.id, true]));
     const locked = lockedForSolve(parts, allPinned, null);
-    expect(shuffleRoom(parts, footprint, locked, { attempt: 1 })).toBeNull();
+    expect(shuffleRoom(parts, rm, locked, { attempt: 1 })).toBeNull();
   });
 
   it('avoids repeating an arrangement it has just offered', () => {
-    const { parts, footprint, locked } = room('rect', 6, 4);
-    const first = shuffleRoom(parts, footprint, locked, { attempt: 1 });
+    const { parts, room: rm, locked } = room('rect', 6, 4);
+    const first = shuffleRoom(parts, rm, locked, { attempt: 1 });
     expect(first).not.toBeNull();
-    // Handed its own answer as history, it must pick something else — provided it
-    // found more than one candidate to choose between, which is what `clean > 1`
-    // establishes rather than assumes.
-    if (first!.clean > 1) {
-      const second = shuffleRoom(parts, footprint, locked, {
-        attempt: 1,
-        history: [first!.result.placements],
-      });
-      expect(second).not.toBeNull();
-      expect(second!.result.placements).not.toEqual(first!.result.placements);
-    }
+    // Asserted, not guarded: the whole body used to sit inside `if (clean > 1)`,
+    // so a build that found a single candidate passed having checked nothing.
+    // There must be something to choose between for the claim to mean anything.
+    expect(first!.clean, 'needs more than one candidate to prefer between').toBeGreaterThan(1);
+    const second = shuffleRoom(parts, rm, locked, { attempt: 1, history: [first!.offer] });
+    expect(second).not.toBeNull();
+    expect(second!.result.placements).not.toEqual(first!.result.placements);
   });
 
   it('is deterministic per (room, attempt), and a new attempt is a new question', () => {
-    const { parts, footprint, locked } = room('rect', 6, 4);
-    const a = shuffleRoom(parts, footprint, locked, { attempt: 1 });
-    const b = shuffleRoom(parts, footprint, locked, { attempt: 1 });
+    const { parts, room: rm, locked } = room('rect', 6, 4);
+    const a = shuffleRoom(parts, rm, locked, { attempt: 1 });
+    const b = shuffleRoom(parts, rm, locked, { attempt: 1 });
     expect(a!.result.placements).toEqual(b!.result.placements);
-    const c = shuffleRoom(parts, footprint, locked, { attempt: 2 });
+    const c = shuffleRoom(parts, rm, locked, { attempt: 2 });
     expect(c!.result.placements).not.toEqual(a!.result.placements);
   });
 });

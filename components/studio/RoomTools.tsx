@@ -59,8 +59,14 @@ import {
   solveLayout,
   type MoveReason,
 } from '@/lib/layout-solve';
-import { HISTORY_DEPTH, lockedForShuffle, shuffleRoom } from '@/lib/layout-shuffle';
-import { RULE_HANDLING, type CostBreakdown, type Placement } from '@/lib/layout-score';
+import {
+  HISTORY_DEPTH,
+  lockedForShuffle,
+  shuffleRoom,
+  type ShuffleOffer,
+  type ShuffleRoom,
+} from '@/lib/layout-shuffle';
+import { RULE_HANDLING, type CostBreakdown } from '@/lib/layout-score';
 import { roomStore, type LayoutVariant, type Transforms } from '@/lib/storage';
 import { footprintBounds, type Footprint } from '@/lib/footprint';
 import { formatDim, fromMM, stepFor, toMM } from '@/lib/units';
@@ -393,9 +399,18 @@ export function RoomTools() {
         <Icon name={open ? 'chevron-up' : 'chevron-right'} size={12} />
       </button>
 
-      <div style={{ display: 'flex', gap: 6 }}>
+      {/* `wrap`, because this row is two `.ds-btn`s and a `.ds-btn` is
+          `white-space: nowrap` with fixed padding — it cannot shrink. The rail
+          around it is `overflow: hidden`, so anything past the edge is eaten with
+          no scrollbar and no error, which is the "Look panel" failure CLAUDE.md
+          names by hand. The budget is about 166px of button inside the 176px
+          `--rail-left-tight` leaves: ~10px, on labels whose width depends on a
+          font nobody has measured here. Wrapping costs a row of height in the
+          worst case and removes the whole failure mode; `LightingPicker` next
+          door already does exactly this. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         <FixAllButton effParts={effParts} footprint={room.footprint} appPlaced={appPlaced} />
-        <ShuffleButton effParts={effParts} footprint={room.footprint} appPlaced={appPlaced} />
+        <ShuffleButton effParts={effParts} room={room} appPlaced={appPlaced} />
       </div>
     </div>
   );
@@ -658,25 +673,57 @@ function FixAllButton({
 // ceiling light, the fan). `movableFor` is the one answer to that question and
 // both buttons read it.
 
-/** How many recent offers Shuffle keeps, so pressing it repeatedly does not cycle
- *  between two rooms. The list is per-mount session state and deliberately not
- *  persisted — it is about this sitting, not about the room. */
-const HISTORY_KEEP = HISTORY_DEPTH;
+// How many recent offers Shuffle keeps is `HISTORY_DEPTH`, read from
+// `lib/layout-shuffle.ts` rather than restated here — it is the same number the
+// pipeline's own repeat-avoidance is documented against, and a second copy is
+// free to drift.
+//
+// ── Module scope, for the reason `APP_PLACED` is ─────────────────────────────
+//
+// Both of these were `useRef` first, which is wrong here for a reason this file
+// already records twenty lines up: **`RoomTools` unmounts on a tab switch**,
+// because `3D Model` and `2D Plan` are different ROUTES. A per-mount attempt
+// counter therefore restarts at 0, and `shuffleRoom` is deterministic per
+// `(room, attempt)` — so Shuffle, switch to the plan, Shuffle again handed back
+// the IDENTICAL arrangement while the toast cheerfully said it had moved six
+// pieces, with the history that would have suppressed it gone in the same
+// breath. Two refs, one bug, both invisible to every test in the suite.
+//
+// Keyed by room id, because these are facts about one room's session and the
+// user can open another; an unkeyed pair would carry one room's history into
+// the next and suppress an arrangement nobody had been shown.
+const SHUFFLE_ATTEMPT = new Map<string, number>();
+const SHUFFLE_HISTORY = new Map<string, ShuffleOffer[]>();
 
-function useShuffle(effParts: ScenePart[], footprint: Footprint, appPlaced: AppPlacedRef) {
+function useShuffle(effParts: ScenePart[], room: ShuffleRoom, appPlaced: AppPlacedRef) {
   const loadTransforms = useStudio((s) => s.loadTransforms);
-  const history = useRef<Placement[][]>([]);
+  const { roomId } = useParams<{ roomId: string }>();
+  // Falls back to one shared bucket when there is no route param. A single bucket
+  // is the safe direction: the worst it does is carry one room's recent offers
+  // into another and pass over an arrangement, where a per-mount store loses them
+  // on every tab switch — which is the bug this replaced.
+  const key = roomId ?? '~';
   return useCallback(
     (attempt: number) => {
       const t = useStudio.getState();
-      const outcome = shuffleRoom(effParts, footprint, lockedForShuffle(effParts, t.pinned), {
+      // `ShuffleOffer`, not `Placement[]`: this history outlives every edit to the
+      // room, and a bare placement list is index-aligned to the `parts` array it
+      // was recorded against while saying so nowhere. The ids travel with it so
+      // `shuffleRoom` can tell an entry from this room apart from one recorded
+      // when the room had two more pieces in it.
+      const history = SHUFFLE_HISTORY.get(key) ?? [];
+      const outcome = shuffleRoom(effParts, room, lockedForShuffle(effParts, t.pinned), {
         attempt,
-        history: history.current,
+        history,
       });
       if (!outcome) return null;
       const chosen = outcome.result;
 
-      history.current = [...history.current.slice(-(HISTORY_KEEP - 1)), chosen.placements];
+      // Append THEN trim, rather than trimming to `DEPTH - 1` and appending. The
+      // second form reads the same and is a landmine on a tunable constant: at
+      // `HISTORY_DEPTH = 1` it is `slice(-0)`, and `-0 === 0`, so it keeps the whole
+      // array and the history grows without bound instead of holding one entry.
+      SHUFFLE_HISTORY.set(key, [...history, outcome.offer].slice(-HISTORY_DEPTH));
 
       const positions = { ...t.positions };
       const rotations = { ...t.rotations };
@@ -692,27 +739,44 @@ function useShuffle(effParts: ScenePart[], footprint: Footprint, appPlaced: AppP
       loadTransforms({ positions, rotations, dims: t.dims });
       return outcome;
     },
-    [effParts, footprint, loadTransforms, appPlaced],
+    [effParts, room, loadTransforms, appPlaced, key],
   );
 }
 
 function ShuffleButton({
   effParts,
-  footprint,
+  room,
   appPlaced,
 }: {
   effParts: ScenePart[];
-  footprint: Footprint;
+  room: ShuffleRoom;
   appPlaced: AppPlacedRef;
 }) {
-  const shuffle = useShuffle(effParts, footprint, appPlaced);
+  const shuffle = useShuffle(effParts, room, appPlaced);
   const [busy, setBusy] = useState(false);
-  const attempt = useRef(0);
+  const { roomId } = useParams<{ roomId: string }>();
+  const attemptKey = roomId ?? '~';
+  // Whether this component is still on screen when the deferred work finishes.
+  // Assigned in the effect body rather than only in its cleanup: under StrictMode
+  // the mount effect runs, tears down and runs again, so a ref that is only ever
+  // set to `false` stays false for the rest of the component's life and every
+  // press would silently skip its own `setBusy(false)`.
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
 
-  function run() {
-    setBusy(true);
+  function work() {
     try {
-      const outcome = shuffle(++attempt.current);
+      // Module scope, keyed by room — NOT a `useRef`. See `SHUFFLE_ATTEMPT`: this
+      // component unmounts on a tab switch, so a per-mount counter restarted at 0
+      // and re-served the identical arrangement.
+      const next = (SHUFFLE_ATTEMPT.get(attemptKey) ?? 0) + 1;
+      SHUFFLE_ATTEMPT.set(attemptKey, next);
+      const outcome = shuffle(next);
       // Two different "no", and telling them apart is the honest part. Nothing
       // movable is a fact about the room; every candidate faulted is the search
       // failing, and in that case the room is deliberately left ALONE rather than
@@ -724,8 +788,15 @@ function ShuffleButton({
         toast(
           anythingToMove
             ? {
-                title: 'Couldn’t find another arrangement',
-                message: 'Every layout it tried left something blocked. Your room is unchanged — try again, or unlock a piece.',
+                // Not an error, and worded so it does not read as one: on a
+                // complex footprint this is 4–7 attempts in 12 (see
+                // `lib/layout-shuffle.ts`). Nothing went wrong — every
+                // arrangement it found would have left something in the way, and
+                // showing one of those is the thing it is refusing to do. "Press
+                // again" is real advice: the next attempt is a different search.
+                title: 'No new arrangement this time',
+                message:
+                  'Every layout it tried left something in the way, so your room is unchanged. Press Shuffle again for a different try.',
               }
             : {
                 title: 'Nothing to shuffle',
@@ -740,8 +811,24 @@ function ShuffleButton({
         message: 'A different arrangement, not a fix. Undo puts the previous one back.',
       });
     } finally {
-      setBusy(false);
+      if (alive.current) setBusy(false);
     }
+  }
+
+  function run() {
+    if (busy) return;
+    setBusy(true);
+    // The search blocks the main thread — measured at a median 2.0 s and a worst
+    // 2.3 s on the `t` preset, because one press is up to twelve solves (see
+    // `lib/layout-shuffle.ts` for why it is more than one). Running it in this tick
+    // means React flushes the disabled state and the freeze together, so the button
+    // never renders as busy and the app simply stops with no explanation.
+    //
+    // TWO frames, not one: a `requestAnimationFrame` callback runs BEFORE the
+    // browser paints the frame that scheduled it, so work started in the first one
+    // blocks the very paint it is waiting for. The second fires after the disabled
+    // button is actually on screen.
+    requestAnimationFrame(() => requestAnimationFrame(work));
   }
 
   return (
@@ -761,7 +848,11 @@ function ShuffleButton({
       }}
     >
       <Icon name="shuffle" size={12} />
-      Shuffle
+      {/* The label carries the busy state, because the freeze it covers is up to
+          two seconds long and a greyed-out button alone reads as broken rather
+          than as working. Both strings are the same width to within a character,
+          so the row does not reflow mid-press. */}
+      {busy ? 'Shuffling…' : 'Shuffle'}
     </button>
   );
 }

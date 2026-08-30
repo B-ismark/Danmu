@@ -155,7 +155,7 @@ export function checkFit(
   const withProbe = [...parts, probe];
   // Everything that is already in the room stays put. That is the whole premise: the
   // user is asking whether this piece fits their room, not whether their room could be
-  // rearranged around it. (`Suggest` is the other question, and it already exists.)
+  // rearranged around it. (`Fix` and `Shuffle` are the other question, and they exist.)
   const locked = withProbe.map((p) => p.id !== PROBE_ID);
 
   // Everything already in the room is frozen for the settle as well as locked for the
