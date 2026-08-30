@@ -638,6 +638,57 @@ export function sharesFloor(a: Role, b: Role): boolean {
   return false;
 }
 
+/**
+ * How far a `sharesFloor` pair may be inside one another before it stops being a
+ * chair tucked under a table and becomes a chair standing where the table is.
+ *
+ * **It lives here, with the predicate, because it is the second half of the same
+ * rule and the report and the solver must not answer it separately.** They did.
+ * (A third reader of `sharesFloor`, `lib/layout-settle.ts`, deliberately does not
+ * consult this at all — see the note at the end.) It was a
+ * `TUCKED_CLASH_SHARE` private to `lib/clearance.ts`, and `lib/layout-score.ts`'s
+ * overlap term had no threshold at all — a blanket `continue` that exempted the
+ * pair however deep it was. So the solver paid *nothing* for burying a dining
+ * chair completely inside the dining table, and the room report called the result
+ * a clash. The file that owned the number said in a comment that the two "cannot
+ * disagree about whether a tucked-in chair is a collision"; they shared the
+ * predicate and not the bar, which is a different thing and reads identical.
+ *
+ * That is exactly the scar rule 3 of `CLAUDE.md` is about — a rule with one
+ * consumer's copy of a number in it — and it stayed invisible while the only
+ * caller was inertia-anchored, because a repair barely moves anything. Search from
+ * a scattered start and it surfaces: 8 of 40 offers over the shuffle pipeline, and
+ * 4 of 120 raw solves over a different harness. Both are named at the overlap term
+ * in `lib/layout-score.ts`, with what each one counted — they are two experiments,
+ * not two readings of one.
+ *
+ * The value is unchanged from the one `clearance.ts` chose: a chair pushed hard
+ * under a table reaches perhaps 60% of its own footprint — measured on the seeded
+ * rooms that contain such a pair (`t` and `open`) it is **0.231** — while a chair
+ * standing where the table is
+ * reaches all of it, and that is still worth saying.
+ *
+ * `tests/layout-conformance.test.ts` holds the two consumers to it.
+ *
+ * ── There is a THIRD consumer, and it deliberately does not read this ─────────
+ *
+ * `lib/layout-settle.ts` keeps its own blanket `sharesFloor` exemption, and that
+ * is a decision rather than the same bug left half-fixed. It is not a clash test:
+ * its bar is `TOUCH_SHARE` (0.02), deliberately far stricter than the report,
+ * because its job on every room open is the cheap guarantee that nothing is inside
+ * anything else. Giving it this tolerance would mean a blunt positional push
+ * against a pair that is *supposed* to overlap, on every open, to fix a state the
+ * solver can no longer produce.
+ *
+ * What that leaves is narrow and worth stating plainly: a room that already
+ * contains a buried pair — an imported scene file, or one saved before this — is
+ * not repaired on open. The room report still names it and **Fix** now prices it,
+ * so it is reported and actionable rather than silent. If that ever needs closing,
+ * close it there and measure what it moves in existing rooms; do not quietly widen
+ * this constant's readership to a pass that is answering a different question.
+ */
+export const TUCKED_CLASH_SHARE = 0.85;
+
 // ─── Functional relations ───────────────────────────────────────────────────
 //
 // The other half of "what is this for": a nightstand's whole job is to be within

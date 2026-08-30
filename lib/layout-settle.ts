@@ -72,9 +72,11 @@ import type { ScenePart } from './scene-spec';
 /** Share of the smaller footprint two pieces may share before this pass treats them
  *  as touching and pushes them apart.
  *
- *  Deliberately NOT the bar `lib/clearance.ts` reports a collision at: that one is
- *  `CLASH_SHARE = 0.5` (and `TUCKED_CLASH_SHARE = 0.85` where two pieces legitimately
- *  share floor). This is a settle pass, so it wants the tight epsilon — the same
+ *  Deliberately NOT the bar the room report calls a collision at: that one is
+ *  `CLASH_SHARE = 0.5` in `lib/clearance.ts` (and, where two pieces legitimately
+ *  share floor, `TUCKED_CLASH_SHARE` — which lives in `lib/layout-rules.ts` beside
+ *  `sharesFloor` itself, since the solver reads it too; this pass deliberately
+ *  reads neither, and the constant's own doc says why). This is a settle pass, so it wants the tight epsilon — the same
  *  order as that file's `SWING_CLASH_SHARE`, which exists so a millimetre of
  *  floating-point contact is not a finding.
  *
