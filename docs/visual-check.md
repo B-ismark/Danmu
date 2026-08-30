@@ -371,8 +371,8 @@ opens somewhere you cannot see it, which the plan-page test would call a pass.
 
 ## Almost nothing here has been in a browser — and here is the route that works
 
-**The heading used to say "nothing", and that stopped being true on `cb711cc`.** One
-item has now been seen, headlessly, with a before/after and a control, and the route is
+**The heading used to say "nothing", and that stopped being true on `cb711cc`.** Some of
+this has now been seen, headlessly, with a before/after and a control, and the route is
 written down below because the reason nothing gets looked at is that looking is a
 half-hour of setup nobody has to hand.
 
