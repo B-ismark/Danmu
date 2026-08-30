@@ -690,7 +690,9 @@ the user went and looked.
     **Committed:** nothing but this paragraph. The predicate is not written; the browser
     measurement above is real.
 
-16. **A rider floats after a reload — which of three repairs, and each one costs something
+16. **A rider floats after a reload — ANSWERED: derive at read time, write nothing.** The user picked the second option. `resolvePart` / `resolveParts` already own the one fallback in the app, so a rider Y derived there from its support current dims persists nothing and leaves a re-detect clean. NOT BUILT — this is § H.12. The original framing follows, because the two rejected options are the useful part of the record.
+
+    **Which of three repairs, and each one costs something
     different.** The defect is confirmed by eye (§ H.12) and the arithmetic is already
     gated; what is undecided is where the fix goes, because the obvious one writes to the
     user's room.
@@ -711,7 +713,9 @@ the user went and looked.
 
     **Committed:** nothing. § H.12 is the record.
 
-17. **Does the placement row earn its place at all?** Asked because the user said it
+17. **Does the placement row earn its place at all? — ANSWERED: make dragging work.** The user said *"dragging would work"*, which is the middle option: keep the two operations, drop the row. Dragging a lamp clear of a table should DROP it to the floor, and the row becomes redundant rather than removed. NOT BUILT. The framing follows.
+
+    **Original question.** Asked because the user said it
     outright, unprompted, having just confirmed the row was correct: *"I don't think we need
     these 3 features to be honest."*
 
@@ -735,7 +739,9 @@ the user went and looked.
 
     **Committed:** nothing.
 
-18. **Should deleting a merged group ask first?** The user reported *"there's no confirmation
+18. **Should deleting a merged group ask first? — ANSWERED and SHIPPED.** The user checked the fact this turned on: the Undo toast DOES fire on a group delete. So the reversal argument holds, and their answer draws the line somewhere the framing below did not consider — not on blast radius but on GESTURE. *"Delete on group does trigger a toast but that should be acceptable if they used the button, using backspace to delete should require confirmatory modal whether a group or not."* A button labelled Delete cannot be pressed by accident; Backspace is a typing reflex that missed a field. Built in `deleteSelection`. The framing follows, and the count-based middle option it proposed was declined by that same reasoning — a threshold puts the prompt where it is least needed.
+
+    **Original question.** The user reported *"there's no confirmation
     dialogue for grouped models and also other instances of deletion"*.
 
     **The absence is deliberate and documented in four places**, so this is a decision to
@@ -2022,3 +2028,76 @@ and the weight, which must sit under 1.5 so a genuine prefix still outranks a su
 pure `lib/` logic with an existing test file, so it is gated the moment it is written — and
 the assertion to watch fail is `stand` reaching `Nightstand`, plus a negative that a
 2-character token does not drag in the whole catalog.
+
+### 20. Deleting a merged group removed only the bed — FIXED
+
+*"when two nightstands and a bed are grouped, deleting group using the one in the right rail
+or backspace only deletes the bed."*
+
+**Cause: one expression.** `RailFooter` called `removeParts([selectedId!])`. `selectedPartId`
+is the piece a click LANDED on; `selection` is what is selected, and a merged set is selected
+whole (`selectionForPick`). The two are the same value for a lone chair and different for
+every merged set — which is exactly why it survived, because the defect is invisible on the
+pieces anyone tests with.
+
+**The fix is at the call site, not in `removeParts`,** and that is the load-bearing part. The
+tempting repair is to expand `groupId` inside the shared delete path, which would then delete
+the whole set when a **drilled-in member** is selected — a second bug wearing the first one's
+fix. `tests/group-delete.test.tsx` pins the drill-in case and it fails against exactly that
+mutation.
+
+**The Backspace half of the report is unreproduced and probably was not the same bug.**
+`deleteSelection` already read `selectedIds()`, which returns the whole selection, so by the
+code it should have deleted all three. It may have been the rail button pressed first, or a
+collapsed selection (§ H.14 is about the canvas click losing group members). Worth one look
+now the rail button is fixed; if Backspace still takes only the bed, the cause is in
+selection, not in delete.
+
+Shipped with six mutations watched failing. One of them was an apparent survivor and was
+not: **a needle spanning a newline matches nothing in a CRLF tree**, so the mutation had
+never applied and the green meant nothing. `docs/traps.md` already carries that one.
+
+### 21. Shrinking the room leaves the furniture where it was
+
+*"reducing room size doesn't seem to move the models on the ground along."* Their screenshot
+shows a sofa and a floor lamp standing entirely outside the shell.
+
+**Two paths change a room's size and only one of them carries the furniture.** Dragging a
+wall goes through `lib/wall-move.ts`, which exists precisely to bring the pieces with it —
+CLAUDE.md's own account of `offsetWall` describes `wall-move.ts` carrying furniture inward.
+The dimension fields in Room tools are the other path, and the report says they do not.
+
+**Not yet confirmed which half is missing** — whether the dims editor never calls the
+carry, or calls it and the carry declines. Establish that before touching either. It is the
+same shape as every other scar in this repo: one operation, two entry points, one of them
+carrying its own copy of the rule.
+
+Note this is NOT the same as a piece the room can no longer hold. Carrying is what happens
+while there is room to move into; § 22 is what happens when there is not.
+
+### 22. There is no minimum room size, and no floor under a shrink
+
+The user's own framing, and it is a design more than a bug: *"there should be default size
+and also min width imposed because present models have width that won't allow the room to be
+reduced further, so basically, the room be reduced moves models along until the model width
+won't allow any further reduction of room width or room meets the default min width for
+rooms. It needs to be flexible but close to standard small rooms."*
+
+So the shrink has **two** stops and today it has neither:
+
+· a **hard floor** — a room may not go below some standard-small-room side, whatever is in it;
+· a **furniture-derived stop** — before the floor, the widest piece on the axis being
+  squeezed is what blocks further reduction.
+
+`ROOM_SIDE_M` already bounds a room's side and `roomAxisRange` already feeds the fields, so
+the hard floor has a home. The furniture-derived stop does not, and it is the more
+interesting half: it is a *dynamic* minimum, so `boundsToUnit`'s pair-conversion problem
+applies to it — a bound that moves has to reach the control in the control's own unit and
+round toward the interior, or the arrows and the commit disagree again.
+
+**And it must refuse rather than resize**, per rule 2. When the room cannot shrink further
+the app says so; it does not quietly shrink the sofa to make the number fit.
+
+**The number is not chosen.** "Close to standard small rooms" wants a real figure — a UK
+single bedroom minimum is around 2.15 m on its short side, and a 2.1–2.4 m floor is the
+range worth putting to the user rather than picking silently.
