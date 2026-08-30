@@ -3,7 +3,8 @@ import { settleHeights, settleParts } from '../lib/layout-settle';
 import { footprintForLayout, pointInFootprint, type Footprint } from '../lib/footprint';
 import { footArea, footFromPart, footInsidePoly, footIntersectionArea, outsideShare } from '../lib/geometry';
 import type { ScenePart } from '../lib/scene-spec';
-import { MOUNT_PAD } from '../lib/physics';
+import { MOUNT_PAD, verticalExtent } from '../lib/physics';
+import { resolveParts } from '../lib/transforms';
 
 const RECT: Footprint = footprintForLayout('rect', 6, 4);
 
@@ -373,5 +374,71 @@ describe('settleParts brings the ceiling family back inside too', () => {
     const [settled] = settleParts([door], RECT);
     expect(settled.pos[0]).toBeCloseTo(0, 9);
     expect(settled.pos[2]).toBeCloseTo(-2, 9);
+  });
+});
+
+// ─── settleHeights · the size it is handed is the size it answers for ──────
+//
+// Every number this pass produces is a function of `dimMM`: `findSupportDetailed` takes
+// it, `h` is `dimMM[2] / 1000`, and the ceiling clamp measures through `verticalExtent`.
+// So the size a caller hands in IS the answer, and the caller owes it the size the user
+// is looking at rather than the authored one on `ScenePart`.
+//
+// Not a style note. `lib/transforms.ts` keeps the resize in `useStudio.dims` keyed by id,
+// and `resolvePart` applies it to EVERY shape - the parametric/scale distinction is
+// `renderBaseDim`'s and a different question - so the authored `dimMM` is not the size on
+// screen for any piece the user has resized.
+describe('settleHeights · answers in the size it is handed', () => {
+  const desk = (dimMM: [number, number, number]) =>
+    part({ id: 'desk', category: 'desk', shape: 'desk-standard', dimMM, pos: [0, 0, 0] });
+  const lamp = () =>
+    part({ id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [300, 300, 400], pos: [0, 1.25, 0] });
+
+  // Three sizes, one of them the authored one. A single case is satisfied by a pass that
+  // ignores `dimMM` entirely and always answers 0.75.
+  it.each([
+    [400, 0.4],
+    [750, 0.75],
+    [1100, 1.1],
+  ])('a %i mm desk puts the lamp at %f', (mm, top) => {
+    const fixes = settleHeights([desk([1400, 700, mm]), lamp()], 2.8);
+    expect(fixes.find((f) => f.id === 'lamp')?.y, 'the lamp must get a fix at all').toBeDefined();
+    expect(fixes.find((f) => f.id === 'lamp')!.y).toBeCloseTo(top, 9);
+  });
+
+  // A DOCUMENTED LIMIT, pinned at the wrong answer, the way the monitor above is.
+  //
+  // The load path, in the order `components/studio/RoomSync.tsx` runs it: `loadFromRoom`
+  // rebuilds the parts through `buildSceneFromRoom`, which ends on this pass against the
+  // AUTHORED dims; then `loadTransforms(t)` re-applies the user's saved `dims` by id.
+  // Nothing settles again afterwards.
+  //
+  // Reachable, and the narrowing is the interesting half: `RoomSync` prefers a saved scene
+  // snapshot over the rebuild, so this needs a room with overrides and NO snapshot.
+  // Resizing is exactly that - `Inspector.tsx:352` writes `setDim`, which lands in
+  // `useStudio.dims` and never touches `useScene.parts`, so it persists through
+  // `saveTransforms` and writes no snapshot. Any add, delete, relabel or reshape DOES
+  // write one and hides this. A detected room the user has only moved and resized things
+  // in is the case `lib/transforms.ts` is designed around.
+  //
+  // Both directions, because a one-sided assertion here is satisfied by a pass that always
+  // leaves the lamp high; and the untouched control first, so the numbers below are the
+  // override rather than the fixture.
+  it('leaves a rider at the AUTHORED support top after a resize - documented limit', () => {
+    const parts = [desk([1400, 700, 750]), lamp()];
+    for (const fix of settleHeights(parts, 2.8)) {
+      const p = parts.find((q) => q.id === fix.id);
+      if (p) p.pos[1] = fix.y;
+    }
+
+    const gapAfterResize = (mm: number) => {
+      const [rDesk, rLamp] = resolveParts(parts, { dims: { desk: [1400, 700, mm] } });
+      return rLamp.pos[1] - verticalExtent(rDesk.category, rDesk.shape, rDesk.dimMM, rDesk.pos[1])[1];
+    };
+
+    expect(gapAfterResize(750), 'control: untouched, the lamp rests on the desk').toBeCloseTo(0, 9);
+    // 0 is the right answer for both of these too. These are what it does.
+    expect(gapAfterResize(400), 'limit: +0.35 is wrong, 0 is right - the lamp floats').toBeCloseTo(0.35, 9);
+    expect(gapAfterResize(1100), 'limit: -0.35 is wrong, 0 is right - the lamp is inside the desk').toBeCloseTo(-0.35, 9);
   });
 });
