@@ -13,6 +13,16 @@ import {
 import { dimRangeFor, ROOM_HEIGHT_M } from '../lib/dimension-ranges';
 import { MOUNT_PAD } from '../lib/physics';
 import type { RoomData, Transforms } from '../lib/storage';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import {
+  buildSceneFromRoom,
+  CATALOG_SHAPES_ORDERED,
+  CATEGORIES,
+  isWallMountedPart,
+  normalizeStoredParts,
+} from '../lib/scene-spec';
+import { stripCommentsAndStrings } from './helpers/source';
 import type { ScenePart } from '../lib/scene-spec';
 
 const ROOM: RoomData = {
@@ -691,5 +701,275 @@ describe('a clamped ceiling takes its pieces with it', () => {
     if (!parsed.ok) throw new Error('fixture did not parse');
     expect(parsed.file.parts[0].pos[1]).toBeCloseTo(2.4, 9);
     expect(parsed.dropped.some((d) => /re-hung/.test(d))).toBe(false);
+  });
+});
+
+describe('scene file · wallMounted is derived, and the note about it is true', () => {
+  /** The eight things a file can put in a boolean field, against BOTH derived answers.
+   *
+   *  What this table catches is worth stating precisely, because it is not what it looks
+   *  like. It does NOT catch the defect it was written for: the old code produced a note
+   *  for the same six values this one does, and only the TEXT was wrong, so the counts
+   *  are identical across that fix and the table is green on it. What it does catch is
+   *  both plausible partial fixes — coercing with `=== true` and keeping one message
+   *  (`0` on a sofa then agrees and the note vanishes), and dropping the malformed branch
+   *  (every non-boolean goes silent). Measured, not assumed: those two mutations redden
+   *  it and a full revert does not. The text assertion below is what holds the original
+   *  defect down. */
+  const VALUES: Array<[string, unknown]> = [
+    ['true', true],
+    ['false', false],
+    ['zero', 0],
+    ['one', 1],
+    ['empty string', ''],
+    ['the string true', 'true'],
+    ['the string false', 'false'],
+    ['null', null],
+  ];
+
+  /** A shape `anchorFor` puts on a wall, and one it puts on the floor. Both directions
+   *  are needed: the flag is absent-means-false, so a mounted piece and a floor piece
+   *  fail in opposite directions and a single fixture is green on half of it. */
+  const MOUNTED = { category: 'tv', name: 'Telly', shape: 'tv', dimMM: [1450, 60, 820], expectMounted: true };
+  const FLOOR = { category: 'sofa', name: 'Sofa', shape: 'sofa', dimMM: [2200, 950, 880], expectMounted: false };
+  /** The ceiling family, which `wallMounted` lumps in with the wall pieces and which is
+   *  the reason the note is phrased by anchor. `lamp-pendant` is also the one shape id
+   *  whose leak into user copy would be unmistakable. */
+  const CEILING = { category: 'lamp', name: 'Pendant', shape: 'lamp-pendant', dimMM: [350, 350, 400], expectMounted: true };
+
+  function notesFor(base: Record<string, unknown>, over: Record<string, unknown>) {
+    const { file, dropped } = withParts([rawPart({ ...base, ...over })]);
+    return { notes: dropped.filter((d) => /wallMounted/i.test(d)), part: file.parts[0] };
+  }
+
+  it('says nothing when the file agrees, or leaves the field out', () => {
+    expect(notesFor(MOUNTED, { wallMounted: true }).notes).toEqual([]);
+    expect(notesFor(FLOOR, { wallMounted: false }).notes).toEqual([]);
+    expect(notesFor(MOUNTED, {}).notes).toEqual([]);
+    expect(notesFor(FLOOR, {}).notes).toEqual([]);
+  });
+
+  it('derives the flag whatever the file said, in both directions', () => {
+    for (const [, value] of VALUES) {
+      expect(notesFor(MOUNTED, { wallMounted: value }).part.wallMounted).toBe(true);
+      expect(notesFor(CEILING, { wallMounted: value }).part.wallMounted).toBe(true);
+      expect(notesFor(FLOOR, { wallMounted: value }).part.wallMounted).toBeUndefined();
+    }
+  });
+
+  it('reports each of the eight values exactly once, or not at all', () => {
+    // `toHaveLength` and not `toContain`: the old text was produced for values that
+    // agreed, so "there is a note" was already satisfied by the defect.
+    const expected: Record<string, [number, number]> = {
+      // value            → [notes on a tv, notes on a sofa]
+      true: [0, 1],
+      false: [1, 0],
+      zero: [1, 1],
+      one: [1, 1],
+      'empty string': [1, 1],
+      'the string true': [1, 1],
+      'the string false': [1, 1],
+      null: [1, 1],
+    };
+    for (const [label, value] of VALUES) {
+      const [onMounted, onFloor] = expected[label];
+      expect(notesFor(MOUNTED, { wallMounted: value }).notes, `${label} on a tv`).toHaveLength(onMounted);
+      expect(notesFor(FLOOR, { wallMounted: value }).notes, `${label} on a sofa`).toHaveLength(onFloor);
+    }
+  });
+
+  it('never renders a claim the file did not make', () => {
+    // A boolean that disagrees is quoted back verbatim…
+    expect(notesFor(MOUNTED, { wallMounted: false }).notes[0]).toContain('said wallMounted: false');
+    expect(notesFor(FLOOR, { wallMounted: true }).notes[0]).toContain('said wallMounted: true');
+
+    // …and a non-boolean is named as malformed rather than coerced. This is the half
+    // that a harder coercion cannot fix: `1` on a tv agrees in intent, and `=== true`
+    // renders it as “said false”, which is the opposite of what the file says.
+    for (const value of [0, 1, '', 'true', 'false', null]) {
+      for (const base of [MOUNTED, FLOOR]) {
+        const note = notesFor(base, { wallMounted: value }).notes[0];
+        expect(note, `${JSON.stringify(value)} on a ${base.shape}`).toContain('neither true nor false');
+        expect(note).not.toMatch(/said wallMounted/);
+      }
+    }
+  });
+
+  it('names where the piece belongs, by ANCHOR, and never by the flag', () => {
+    // The first version of this read `a ${shape} is ${derived ? '' : 'not '}wall-mounted`,
+    // which is two defects in one clause. `derivedMount` is `anchorFor(...) !== 'floor'`,
+    // so it called a pendant and a ceiling fan "wall-mounted" — false, about a piece the
+    // file two lines above knows hangs from the ceiling. And `shape` is the internal
+    // kebab-case id, so a user was shown "a lamp-pendant" and "an ac-unit". The three
+    // anchors are asserted TOGETHER because a single one is satisfied by a constant.
+    expect(notesFor(MOUNTED, { wallMounted: false }).notes[0]).toContain('it is fixed to a wall');
+    expect(notesFor(CEILING, { wallMounted: false }).notes[0]).toContain('it hangs from the ceiling');
+    expect(notesFor(FLOOR, { wallMounted: true }).notes[0]).toContain('it stands on the floor');
+
+    // And no internal id reaches the user. `lamp-pendant` is the one that would.
+    for (const base of [MOUNTED, CEILING, FLOOR]) {
+      const note = notesFor(base, { wallMounted: !base.expectMounted }).notes[0] ?? '';
+      expect(note, `${base.shape} leaked its shape id`).not.toContain(base.shape);
+    }
+  });
+
+  it('is silent on a file this app wrote — and not because it cannot fire', () => {
+    const TV: ScenePart = {
+      id: 'tv-1',
+      category: 'tv',
+      name: 'Telly',
+      shape: 'tv',
+      pos: [0, 1.2, -1.9],
+      rot: 0,
+      dimMM: [1450, 60, 820],
+      locked: false,
+      wallMounted: true,
+    };
+    expect(roundTrip(ROOM, [TV, SOFA]).dropped).toEqual([]);
+
+    // The discriminator. `buildSceneFile` SPREADS the part it is handed rather than
+    // deriving the flag, so the silence above is a property of the builders in
+    // `scene-spec.ts` agreeing with `isWallMountedPart` — which can regress in that
+    // file without this one changing. Hand the writer a part that disagrees and the
+    // note comes back, which is what makes the empty array above evidence.
+    const bad = roundTrip(ROOM, [{ ...TV, wallMounted: false }, SOFA]);
+    expect(bad.dropped.filter((d) => /wallMounted/i.test(d))).toHaveLength(1);
+  });
+});
+
+describe('scene file · a detected room reloads as the room that was saved', () => {
+  /** The round trip that was NOT an identity. `buildSceneFromRoom` used to answer
+   *  "is this mounted" from the category while `groundY` answered from the shape, so a
+   *  detected pendant was built with the flag unset; `buildSceneFile` SPREADS, so the
+   *  key was absent from the JSON; and `readPart` derives, so it came back `true`.
+   *  `isAperture` and every `!p.wallMounted` reader flipped on reload, and `dropped`
+   *  was empty — a file that OMITS a field disagrees with nothing, and omitting is
+   *  exactly what our own writer did. Silent plus non-identity is the pair that makes
+   *  it a defect rather than a difference.
+   *
+   *  This sits at the file boundary on purpose. The builder-side sweep in
+   *  `scene-build.test.ts` pins the cause; this pins the consequence, and either side
+   *  can regress without the other changing. */
+  const DETECTED: RoomData = {
+    id: 'r1',
+    createdAt: 0,
+    name: 'Detected',
+    layoutId: 'rect',
+    width: 5,
+    depth: 4,
+    height: 2.8,
+    detectedObjects: [
+      { id: 1, label: 'pendant__slot:n', conf: 0.9, locked: false, box: [0.2, 0.4, 0.3, 0.3], category: 'lamp' },
+      { id: 2, label: 'sofa__slot:n', conf: 0.9, locked: false, box: [0.5, 0.6, 0.3, 0.3], category: 'sofa' },
+    ],
+  };
+
+  it('keeps every mount flag across save and reload, and says nothing', () => {
+    const built = buildSceneFromRoom(DETECTED);
+    const pendant = built.find((p) => p.shape === 'lamp-pendant');
+    expect(pendant, 'the fixture must produce a pendant').toBeDefined();
+
+    const out = parseSceneFile(sceneFileJson(buildSceneFile(DETECTED, built, NO_TRANSFORMS, 1)));
+    if (!out.ok) throw new Error(`expected a readable file, got: ${out.error}`);
+
+    expect(out.dropped).toEqual([]);
+    for (const before of built) {
+      const after = out.file.parts.find((q) => q.id === before.id);
+      expect(after, `${before.name} survived the trip`).toBeDefined();
+      expect(!!after!.wallMounted, `${before.name} (${before.shape})`).toBe(!!before.wallMounted);
+    }
+  });
+});
+
+describe('a persisted snapshot is re-derived, not trusted', () => {
+  // The boundary a fresh install can never reach. `RoomSync` prefers the IndexedDB
+  // `scene` snapshot over rebuilding, and `dress` used to write `wallMounted: false` on
+  // the dining pendant — so a room saved before the derivation landed holds a part whose
+  // stored flag contradicts `isWallMountedPart`, and the same part is then read two ways
+  // at once: derived by `settleHeights` / `plan-export` / `wall-move`, stored-flag by the
+  // solver / `clearance` / `apertures` / `item-snap` / the Inspector.
+  //
+  // Every other fixture in this suite BUILDS a scene rather than loading one, which is
+  // exactly why nothing noticed: it looks perfect on a fresh install and on CI, and bites
+  // only users with history.
+  const stored = (over: Partial<ScenePart>): ScenePart => ({
+    id: 'x',
+    category: 'other',
+    name: 'X',
+    shape: 'box',
+    pos: [0, 0, 0],
+    rot: 0,
+    dimMM: [600, 600, 800],
+    locked: false,
+    ...over,
+  });
+
+  it('corrects a stale flag in both directions', () => {
+    // The real case, verbatim: a pendant written as floor-standing.
+    const pendant = stored({ id: 'p', category: 'lamp', shape: 'lamp-pendant', dimMM: [350, 350, 400], wallMounted: false });
+    // And the mirror, which is the half a one-directional fix would miss: a sofa that a
+    // hand-edited or older snapshot claims is mounted.
+    const sofa = stored({ id: 's', category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880], wallMounted: true });
+
+    const [p, s] = normalizeStoredParts([pendant, sofa]);
+    expect(p.wallMounted, 'a pendant hangs from the ceiling').toBe(true);
+    expect(s.wallMounted, 'a sofa stands on the floor').toBeUndefined();
+    // ABSENT, not `false` — the flag is optional and every reader tests `!p.wallMounted`,
+    // so matching what the builders emit keeps one answer rather than two spellings.
+    expect('wallMounted' in s ? s.wallMounted : undefined).toBeUndefined();
+  });
+
+  it('leaves an agreeing part completely alone, object identity included', () => {
+    // Not cosmetic. `useScene.setParts` feeds React, and rebuilding every part on every
+    // load would change every reference and re-render the whole scene for nothing.
+    const tv = stored({ id: 't', category: 'tv', shape: 'tv', dimMM: [1450, 60, 820], wallMounted: true });
+    const table = stored({ id: 'c', category: 'table', shape: 'coffee-table', dimMM: [1000, 600, 400] });
+    const out = normalizeStoredParts([tv, table]);
+    expect(out[0]).toBe(tv);
+    expect(out[1]).toBe(table);
+  });
+
+  it('and it agrees with the builders on every catalog pair', () => {
+    // The two must not answer differently, or a load would silently rewrite a scene the
+    // builder had just got right. A count with a floor under it, for the usual reason.
+    let swept = 0;
+    const wrong: string[] = [];
+    for (const cat of CATEGORIES) {
+      for (const shape of CATALOG_SHAPES_ORDERED) {
+        swept++;
+        const [out] = normalizeStoredParts([stored({ category: cat, shape })]);
+        if (!!out.wallMounted !== isWallMountedPart(cat, shape)) wrong.push(`${cat}/${shape}`);
+      }
+    }
+    expect(swept, 'the sweep must have pairs to sweep').toBeGreaterThan(200);
+    expect(wrong, `${wrong.length} of ${swept} pairs disagree`).toEqual([]);
+  });
+});
+
+describe('every path that loads a persisted scene re-derives it', () => {
+  // A regex over source, and the same deliberate second-best as the sweeps in
+  // `scene-build.test.ts` and `plan-surfaces.test.ts`: there are THREE call sites and the
+  // failure being guarded is a fourth one arriving without the normaliser. Comments and
+  // string literals are stripped by the shared scanner first, because prose quoting the
+  // call satisfies a match exactly as well as the call does.
+  const LOADERS = [
+    'components/studio/RoomSync.tsx',
+    'components/studio/PlanThumb.tsx',
+    'components/studio/RoomTools.tsx',
+  ];
+
+  it('and no loader hands a raw snapshot to setParts', () => {
+    for (const rel of LOADERS) {
+      const src = stripCommentsAndStrings(readFileSync(join(process.cwd(), rel), 'utf8'));
+      // The positive half first: this is a floor, not the mitigation — it catches a
+      // stripper that ate everything, not one that ate the offending line.
+      expect(src.length, `${rel} must exist and have content`).toBeGreaterThan(500);
+      expect(src, `${rel} must actually call setParts`).toMatch(/setParts\(/);
+      const calls = src.match(/setParts\([^)]*\)/g) ?? [];
+      expect(calls.length, `${rel} must have a setParts call to check`).toBeGreaterThan(0);
+      for (const call of calls) {
+        expect(call, `${rel}: ${call} does not re-derive`).toMatch(/normalizeStoredParts|null/);
+      }
+    }
   });
 });

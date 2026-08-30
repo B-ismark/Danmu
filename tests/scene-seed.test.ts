@@ -4,6 +4,7 @@ import { footprintForLayout, offsetWall, pointInFootprint, type Footprint, type 
 import { footFromPart, footInsidePoly, footIntersectionArea, footArea, distToBoundary, nearestEdge, obbGap } from '../lib/geometry';
 import { isObstacle, relationFor, roleOf, sharesFloor, WALK_MIN } from '../lib/layout-rules';
 import { analyzeRoom } from '../lib/clearance';
+import { anchorFor, ridesWall, verticalExtent } from '../lib/physics';
 import { solveLayout } from '../lib/layout-solve';
 import {
   costBreakdown,
@@ -72,6 +73,35 @@ function clashes(parts: ReturnType<typeof defaultScene>): string[] {
   return out;
 }
 
+/** The top of every ceiling-anchored piece each preset seeds, measured at HEIGHT = 2.8.
+ *
+ *  **A defect written down, not a specification.** `t` and `open` seed a 400 mm pendant
+ *  and its top is 2.850 in a 2.8 m room — 50 mm through the slab. `groundY`'s `ceiling`
+ *  branch is `max(roomHeight - 0.15, h)`, which hangs the CENTRE 150 mm below the
+ *  ceiling, so anything taller than 300 mm passes through it.
+ *
+ *  Same defect `ANCHOR_BY_CATEGORY` already records for curtains — a 2.6 m curtain's
+ *  centre at 2.55 m put most of the cloth through the ceiling, which is why a curtain is
+ *  `wall-high` and not `ceiling`. A 400 mm pendant is a smaller instance, 50 mm rather
+ *  than most of it.
+ *
+ *  Invisible until the mount flag was derived: the seeder set the pendant
+ *  `wallMounted: false` by hand, so nothing measured it as centred geometry at all.
+ *  `buildSceneFromRoom` does not have this problem — it ends on `settleHeights`, whose
+ *  ceiling clamp catches exactly this — so it is `defaultScene` alone.
+ *
+ *  Not fixed with the flag: `groundY` is read by the add path, the detection builder,
+ *  the Inspector and `heightForNewCeiling`, and `tests/scene-build.test.ts` pins two of
+ *  those against each other on a fan's height. That is a change with its own
+ *  measurements. */
+const CEILING_TOPS: Record<string, string[]> = {
+  rect: [],
+  l: [],
+  t: ['Pendant=2.850'],
+  u: [],
+  open: ['Pendant=2.850'],
+};
+
 describe.each(PRESETS)('starter scene · $id', ({ id, w, d }) => {
   const poly = footprintForLayout(id, w, d);
   const parts = defaultScene(id, w, d, { footprint: poly, height: HEIGHT });
@@ -86,11 +116,79 @@ describe.each(PRESETS)('starter scene · $id', ({ id, w, d }) => {
     expect(escaped(parts, poly)).toEqual([]);
   });
 
-  it('puts every wall-mounted part on a wall', () => {
-    for (const p of parts.filter((x) => x.wallMounted)) {
+  it('puts every WALL RIDER on a wall', () => {
+    // **`ridesWall`, not `wallMounted`, and the old title was the tell.** It said
+    // "wall-mounted" while the assertion said "on a wall", which are two different
+    // questions: `wallMounted` is "is this piece's geometry centred on its origin"
+    // (`anchorFor(...) !== 'floor'`) and it is TRUE for a ceiling fan and a pendant,
+    // which ride no wall and belong in the middle of the ceiling. `ridesWall` is the
+    // narrow one — the `wall-*` anchors and only those — and it is what "on a wall"
+    // means. `lib/physics.ts` documents the distinction and this filter had not read it.
+    //
+    // It passed because the seeder set the pendant `wallMounted: false` by hand, which
+    // was itself the defect: its `pos[1]` was a mesh centre while its flag said
+    // floor-standing. Deriving the flag turned the pendant mounted and this test red on
+    // exactly the two presets that seed one — `t` and `open`. The test was right to go
+    // red and its predicate was the thing that was wrong.
+    const riders = parts.filter((x) => ridesWall(x.category, x.shape));
+    expect(riders.length, 'a starter room has doors and windows, so there are riders').toBeGreaterThan(0);
+    for (const p of riders) {
       expect(pointInFootprint(p.pos[0], p.pos[2], poly)).toBe(true);
       expect(distToBoundary(poly, p.pos[0], p.pos[2])).toBeLessThan(0.2);
     }
+  });
+
+  it('hangs every ceiling piece inside the room, and does NOT ask it to touch a wall', () => {
+    // The other half, so narrowing the filter above loses nothing. A fan or a pendant
+    // still has to be over real floor — `placeNewPart`'s `ceilingSpot` tests the bounds
+    // midpoint against the polygon precisely because the middle of an L's bounding box
+    // is the corner it cuts away — but requiring it near a wall is what the old
+    // predicate accidentally did, and it is wrong for this family.
+    for (const p of parts.filter((x) => anchorFor(x.category, x.shape) === 'ceiling')) {
+      expect(pointInFootprint(p.pos[0], p.pos[2], poly), `${p.name} hangs outside the room`).toBe(true);
+    }
+  });
+
+  // FOUND BY THE ASSERTION BELOW, WHICH IS PARKED RATHER THAN WEAKENED.
+  //
+  // The starter scene's pendant pokes **50 mm through the ceiling**: `groundY`'s
+  // `ceiling` branch is `max(roomHeight - 0.15, h)`, which hangs the piece's CENTRE
+  // 150 mm below the slab, so anything taller than 300 mm has its top above it. The
+  // pendant is 400 mm, giving `[2.45, 2.85]` in a 2.8 m room.
+  //
+  // It is the same defect `ANCHOR_BY_CATEGORY` already records for curtains — "that
+  // branch hangs a small thing just under the slab, which for a 2.6 m curtain put its
+  // CENTRE at 2.55 m and most of the cloth through the ceiling" — which is why a
+  // curtain is `wall-high` and not `ceiling`. A 400 mm pendant is a smaller instance of
+  // it, 50 mm rather than most of the cloth.
+  //
+  // Invisible until now because the seeder set the pendant `wallMounted: false` by
+  // hand, so nothing measured it as centred geometry at all; deriving the flag is what
+  // exposed it. `buildSceneFromRoom` does NOT have this problem — it ends on
+  // `settleHeights`, whose ceiling clamp catches exactly this — so it is `defaultScene`
+  // alone, and the fix is either `groundY`'s ceiling branch or a settle pass on the
+  // preset path.
+  //
+  // NOT fixed here on purpose: `groundY` is read by the add path, the detection
+  // builder, the Inspector and `heightForNewCeiling`, and `tests/scene-build.test.ts`
+  // pins two paths against each other on a fan's height. That is a change with its own
+  // measurements, not a line to slip into this one. `it.fails` so it retires itself the
+  // moment someone fixes it.
+  it('records the ceiling overhang each preset has TODAY — baseline, not a specification', () => {
+    // Pinned exactly and in BOTH directions rather than as a `<=` bar, so fixing
+    // `groundY` turns this red and whoever does it comes back and deletes the baseline.
+    // A bar would sit green through the fix and nobody would re-derive.
+    //
+    // Not `it.fails`: only `t` and `open` seed a pendant, so on the other three presets
+    // the strict assertion PASSES and `it.fails` then reports a failure of its own. A
+    // per-preset literal says which presets have the defect, which is more than the
+    // strict form could.
+    const tops = parts
+      .filter((x) => anchorFor(x.category, x.shape) === 'ceiling')
+      .map((p) => `${p.name}=${verticalExtent(p.category, p.shape, p.dimMM, p.pos[1])[1].toFixed(3)}`);
+    expect(tops).toEqual(CEILING_TOPS[id]);
+    // …and the room's own ceiling, so the numbers above can be read against something.
+    expect(HEIGHT).toBe(2.8);
   });
 
   it('does not put two pieces in the same place', () => {

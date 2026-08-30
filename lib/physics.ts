@@ -165,11 +165,21 @@ export function isFloorStanding(category: Category, shape: Shape): boolean {
  *  ("centred like every other wall-mounted part"). So `[y, y + h]` is right for a
  *  sofa and wrong by half a height for a television.
  *
- *  Three call sites spelled that arithmetic out and all three got it wrong the same
- *  way, which is what a missing shared answer looks like rather than three separate
- *  mistakes. Two of them then carried `if (wallMounted) continue;`, and **the skip
- *  was hiding the error rather than avoiding it** — `lib/clearance.ts:499` records
- *  the same skip being removed from the room report for the same reason, where it
+ *  Several call sites spelled that arithmetic out and every one of them got it wrong the
+ *  same way, which is what a missing shared answer looks like rather than separate
+ *  mistakes. (**No number here on purpose.** Two comments in this repo carried counts of
+ *  these copies -- "three call sites" and "six copies" -- and by the time anyone checked,
+ *  there were ten call sites in six files and neither number described the repo. A
+ *  hand-kept census of call sites rots in the direction nobody notices; `grep
+ *  "verticalExtent("` is the answer that cannot.) Two of them then carried
+ *  `if (wallMounted) continue;`, and **the skip
+ *  was hiding the error rather than avoiding it** — `lib/clearance.ts` records the
+ *  same skip being removed from the room report for the same reason, in the comment
+ *  above `floorBlockers` that begins "This used to open". **No line number**: the
+ *  one that used to be here pointed at 499, our own later commits moved the content
+ *  to 515, and 499 became an unrelated TV finding. A citation that names a symbol or
+ *  a phrase survives an insertion; one that names a line does not, and it fails in
+ *  the worst direction because it still resolves — to the wrong thing. Where it
  *  had deleted the one case that pass was written for.
  *
  *  The predicate is the ANCHOR, not the stored `wallMounted` flag, and the
@@ -388,6 +398,29 @@ export const MIN_SUPPORT_SHARE = 0.5;
  *  drag code is still carrying it as a rigid child. */
 export const SUPPORT_Y_EPS = 0.05;
 
+/** What a support probe needs to know about a candidate.
+ *
+ *  Named, because `findSupportUnder` and `findSupportDetailed` had the same shape
+ *  written out inline twice and this change had to widen both — which is the drift
+ *  this repo keeps finding, one edit before it happens.
+ *
+ *  **`shape` is required and `wallMounted` is absent.** `anchorFor` is keyed by SHAPE
+ *  first — `fan`, `lamp-pendant`, `door`, `curtain`, `tv`, `mirror`, `painting`,
+ *  `ac-unit` and `window` all take their anchor that way rather than from their
+ *  category — so a candidate without a shape can only be judged by the stored flag,
+ *  and the flag is a copy of an answer these functions can compute exactly. Dropping
+ *  it from the type is the point rather than a tidy-up: it makes passing the copy
+ *  instead of the question a compile error. */
+export type SupportCandidate = {
+  id: string;
+  pos: [number, number, number];
+  dimMM: [number, number, number];
+  category: Category;
+  shape: Shape;
+  rot?: number;
+  circle?: boolean;
+};
+
 /** Highest world-Y where a part at (x,z) with given XZ footprint would land on
  *  another part's top surface. Wall-mounted + rugs are ignored as supports.
  *  Returns null if nothing holds it up.
@@ -401,15 +434,7 @@ export const SUPPORT_Y_EPS = 0.05;
  *  rectangle and its bounding box are the same, which is the overwhelmingly
  *  common case, so callers that have not got a rotation to hand lose nothing. */
 export function findSupportUnder(
-  parts: Array<{
-    id: string;
-    pos: [number, number, number];
-    dimMM: [number, number, number];
-    category: Category;
-    rot?: number;
-    wallMounted?: boolean;
-    circle?: boolean;
-  }>,
+  parts: SupportCandidate[],
   selfId: string,
   x: number,
   z: number,
@@ -423,15 +448,7 @@ export function findSupportUnder(
 /** Same test as `findSupportUnder`, but also names which part won — the signal
  *  a rigid-parenting relationship is established from (see `lib/rigid-parent.ts`). */
 export function findSupportDetailed(
-  parts: Array<{
-    id: string;
-    pos: [number, number, number];
-    dimMM: [number, number, number];
-    category: Category;
-    rot?: number;
-    wallMounted?: boolean;
-    circle?: boolean;
-  }>,
+  parts: SupportCandidate[],
   selfId: string,
   x: number,
   z: number,
@@ -448,9 +465,28 @@ export function findSupportDetailed(
   let best: { id: string; y: number } | null = null;
   for (const o of parts) {
     if (o.id === selfId) continue;
-    if (o.wallMounted) continue;
+    // **The ANCHOR, not the `wallMounted` flag.** Nothing rests on a television, a
+    // curtain or a ceiling fan, and the question "is this piece's geometry centred on
+    // its origin" has exactly one right answer for a given category and shape —
+    // `anchorFor`. The flag is a stored copy of that answer, and `lib/scene-file.ts`
+    // used to take it from the file, so an imported scene could hand this loop a
+    // television with the flag unset: not skipped, and then measured as
+    // `pos[1] + h` when `pos[1]` is its CENTRE, which put its top 285 mm too high and
+    // let a lamp come to rest in mid-air beside it.
+    //
+    // Two things could go wrong and only one of them is visible: the flag being wrong
+    // is now impossible at the parse boundary, and the arithmetic being wrong is now
+    // impossible here. Fixing only the first would have left this loop correct by
+    // luck, which is what it has been.
+    if (!isFloorStanding(o.category, o.shape)) continue;
     if (o.category === 'rug') continue;
-    const top = o.pos[1] + o.dimMM[2] / 1000;
+    // `verticalExtent`, not `pos[1] + h`. Unreachable for anything that survives the
+    // skip above — a floor anchor's extent IS `[y, y + h]` — and written this way so
+    // that the day something else is allowed through, the arithmetic is already right
+    // rather than silently half a height out. Measured across the catalog: 13 of 43
+    // items have a non-floor anchor and `pos[1] + h` overstates their top by up to
+    // 1.10 m.
+    const top = verticalExtent(o.category, o.shape, o.dimMM, o.pos[1])[1];
     // Nothing lower than the best candidate can win — skip the area maths.
     if (best !== null && top <= best.y) continue;
     const shared = footIntersectionArea(mover, footFromPart(o.pos, o.rot ?? 0, o.dimMM, o.circle));

@@ -24,6 +24,7 @@
 // inside the trust boundary — a suggestion cannot change a measurement.
 
 import type { ScenePart } from './scene-spec';
+import { verticalExtent } from './physics';
 import type { Footprint } from './footprint';
 import {
   buildClearanceField,
@@ -433,7 +434,13 @@ export function prepare(ctx: LayoutContext): LayoutModel {
     profile,
     roles,
     obstacle: parts.map(isObstacle),
-    top: parts.map((p) => p.pos[1] + p.dimMM[2] / 1000),
+    // `verticalExtent`, not `pos[1] + h`. `pos[1]` is a bottom for a floor anchor and the
+    // mesh CENTRE for every other one, so the raw sum is wrong by half a height for a
+    // television and for the whole ceiling family. `top[i]` is read by the window rule
+    // below, whose only guard is the mount flag, so a stale flag and a wrong top compound:
+    // a pendant at 2.65 in a 2.8 m room measured 2.85 instead of 2.75 and was priced as
+    // obstructing a sill it hangs 1.3 m above. This was the last un-converted copy.
+    top: parts.map((p) => verticalExtent(p.category, p.shape, p.dimMM, p.pos[1])[1]),
     radius: parts.map((p) => Math.hypot(p.dimMM[0], p.dimMM[1]) / 2000),
     area: parts.map((p) => {
       const a = (p.dimMM[0] / 1000) * (p.dimMM[1] / 1000);

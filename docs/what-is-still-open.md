@@ -608,6 +608,46 @@ the user went and looked.
     **Committed:** nothing but this paragraph. The measurements are in PR #54's review
     comments.
 
+14. **A turn that puts a corner through the wall: keep it and report it, or refuse it?
+    Two places in this repo answer that opposite ways, in the same words.**
+
+    `spinSelection`'s docblock (`components/studio/KeyboardShortcuts.tsx`) is explicit:
+
+    > *It deliberately does NOT shuffle anything to make room. If the turn puts a wardrobe
+    > corner through the plaster, the piece keeps its real rotation and Room check reports
+    > it — silently nudging furniture to make an action succeed is the one thing this app
+    > must never do.*
+
+    That is CLAUDE.md rule 2's "say so, never silently resize it to fit", applied to a
+    rotation. And `docs/visual-check.md`'s item *Rotate and scale on a merged set, in 3D*
+    says the opposite about the same outcome: *"the turn itself is allowed … and an overlap
+    is allowed to be reported; the geometry leaving the walls is not"*, with **"the bed
+    keeping the angle you dragged with a corner out through the wall"** listed as what
+    wrong looks like. Plaster is the wall. So one document calls that outcome the contract
+    and the other calls it the defect.
+
+    **Both may be right, and that is the thing to decide.** They are different code paths:
+    the context menu's *Turn a quarter* is `spinSelection`, which writes `setRotation`
+    directly and runs **no containment resolve at all** (verified by reading it); the R
+    gizmo goes through `Draggable` → `resolveDrag`, which does contain. So "a menu turn
+    keeps its rotation and gets reported, a gizmo turn is constrained" is a coherent
+    position — it is just nowhere written down, and two paths producing different results
+    from one user intention is the shape CLAUDE.md warns about under *two features that
+    render the same must not be two code paths*.
+
+    **Why it needs deciding before it needs looking at:** item 8 is the one item in
+    `docs/visual-check.md` that no one has verified, and verifying it means judging an
+    outcome against an expectation. Verifying against the wrong expectation is worse than
+    not verifying, because it produces a confident wrong answer. Whoever settles this
+    should also say whether *Turn a quarter* and the gizmo are allowed to differ.
+
+    **Committed:** nothing but this paragraph. What is measured: `spinSelection` calls
+    `setRotation` with no resolve, `resolveDrag` contains, and the two docs say what is
+    quoted above. What is NOT measured: what either path actually does to a merged set at
+    a wall — the gizmo could not be driven headless (drei's `TransformControls` is a
+    three.js object with no DOM, so a drag cannot be aimed at it), and the menu path needs
+    a right-click that lands on a piece in the selection with nothing over it.
+
 ---
 
 ## C · Decided against — do not re-propose

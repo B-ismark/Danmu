@@ -5,11 +5,14 @@ import {
   buildSceneFromRoom,
   CATALOG_SHAPES_ORDERED,
   collidesAt,
+  defaultScene,
   isLightFixture,
+  CATEGORIES,
+  isWallMountedPart,
   lightFor,
   type ScenePart,
 } from '../lib/scene-spec';
-import type { RoomData } from '../lib/storage';
+import { LAYOUT_IDS, type RoomData } from '../lib/storage';
 import { heightForNewCeiling, MOUNT_PAD } from '../lib/physics';
 import { stripCommentsAndStrings } from './helpers/source';
 import { footprintForLayout } from '../lib/footprint';
@@ -506,6 +509,26 @@ describe('one ceiling clearance: the duplication itself, not just its drift', ()
     expect(MOUNT_PAD).toBeCloseTo(0.02, 12);
   });
 
+  it("and no module in lib/ computes a piece's top by hand", () => {
+    // `pos[1]` is a BOTTOM for a floor anchor and the mesh CENTRE for every other one, so
+    // `pos[1] + dimMM[2] / 1000` is wrong by half a height for a television and for the
+    // whole ceiling family. `verticalExtent` is the one answer. Converting the last two
+    // readers was otherwise unguarded: restoring either one killed no test, which is why
+    // this sweep exists rather than a behavioural test of one call site.
+    //
+    // ZERO, not "zero except" - an exception list is how the next copy gets in. The one
+    // legitimate-looking reader, a bedside lamp stood on a nightstand, was converted for
+    // exactly that reason even though it was right.
+    const offenders = modules
+      .filter((m) => m.file !== 'physics.ts')
+      .filter((m) => /pos\[1\] \+ [^;,)]*dimMM\[2\] \/ 1000/.test(m.src))
+      .map((m) => m.file);
+    expect(offenders, 'ask verticalExtent - pos[1] is not always a bottom').toEqual([]);
+    // And the positive half: the readers must be findable, or this passes over nothing.
+    const readers = modules.filter((m) => /verticalExtent\(/.test(m.src)).map((m) => m.file);
+    expect(readers.length, 'the sweep must find the shared answer being used').toBeGreaterThan(3);
+  });
+
   it('no module in lib/ declares a ceiling pad of its own', () => {
     expect(modules.length, 'the sweep must have files to sweep').toBeGreaterThan(20);
     const offenders = modules
@@ -539,5 +562,126 @@ describe('one ceiling clearance: the duplication itself, not just its drift', ()
       'layout-settle.ts',
       'physics.ts',
     ]);
+  });
+});
+
+// ─── `wallMounted` is derived, never hand-set ─────────────────────────────────
+//
+// The flag means "is this piece's geometry centred on its origin", and
+// `isWallMountedPart(category, shape)` — i.e. `anchorFor(...) !== 'floor'` — is that
+// question's only answer. Six readers trust it: `floorBlockers`, `isObstacle`,
+// `overlapsSomething`, `layout-score`'s window branch, `layout-solve`'s `movable`
+// mask, and `MeasureGuides`.
+//
+// A `lamp-pendant` was seeded `wallMounted: false` directly beneath a comment saying
+// "Ceiling-anchored, so `groundY` decides the height", so its `pos[1]` was a mesh
+// CENTRE while its flag claimed floor-standing. Found by danmu-bc's sweep, and this
+// is that sweep as an assertion: the seeder's default derives now, and the two
+// hand-set overrides are gone.
+describe('every part the app builds agrees with the derived mount flag', () => {
+  // Not a hand-typed list: the layout ids come from `storage.ts`'s `as const` array,
+  // minus `custom` (which has no preset footprint of its own to build from).
+  const LAYOUTS = LAYOUT_IDS.filter((id) => id !== 'custom');
+  const SIZES: Array<[number, number]> = [
+    [6, 4],
+    [7.5, 5.6],
+    [6, 5],
+    [12, 9],
+    [3.2, 2.6],
+  ];
+
+  it('across every preset layout at five sizes', () => {
+    const wrong: string[] = [];
+    let swept = 0;
+    for (const layoutId of LAYOUTS) {
+      for (const [w, d] of SIZES) {
+        for (const p of defaultScene(layoutId, w, d)) {
+          swept++;
+          // `!!`, not `!==`. `wallMounted` is OPTIONAL on `ScenePart` and floor-standing
+          // furniture simply omits it, so ABSENT and `false` are the same answer — which
+          // is not a shortcut here but what every reader actually does: `floorBlockers`,
+          // `isObstacle`, `overlapsSomething` and `movable` all test `!p.wallMounted`.
+          // The first version of this assertion compared strictly and reported 165 of
+          // 323 parts as wrong, every one of them `stored=undefined derived=false`.
+          const derived = isWallMountedPart(p.category, p.shape);
+          if (!!p.wallMounted !== derived) {
+            wrong.push(`${layoutId} ${w}x${d} · ${p.name} (${p.shape}) stored=${p.wallMounted} derived=${derived}`);
+          }
+        }
+      }
+    }
+    // A COUNT, and a literal floor under it. `roomBays` returns [] for a footprint it
+    // cannot fit two bays into, and `defaultScene` then returns no parts at all — so a
+    // sweep whose sizes all fell through would report zero disagreements over zero
+    // parts and read exactly like a pass.
+    expect(swept, 'the sweep must have parts to sweep').toBeGreaterThan(200);
+    expect(wrong, `${wrong.length} of ${swept} parts disagree`).toEqual([]);
+  });
+
+  it('and the detected-room path agrees too', () => {
+    // `buildSceneFromRoom` is the other builder, and it now ends on `settleHeights`,
+    // which reads the ANCHOR rather than this flag. So the two must not disagree: a
+    // piece whose flag says floor and whose anchor says ceiling gets a floor clamp and
+    // a centred geometry.
+    //
+    // **This test used to call `buildSceneFromRoom(room([]))`** — and `buildSceneFromRoom`
+    // short-circuits an empty `detectedObjects` into `defaultScene`, so it swept the
+    // starter scene, was a duplicate of the sweep above, and the detected builder was
+    // evaluated by nothing in the suite. Its own message said "the fallback starter
+    // scene" while its title said "the detected-room path": the two disagreed in prose
+    // and the title is the half a reader believes. Hence `fromDetection` below — a key
+    // `defaultScene` never sets, so the fallback cannot satisfy this again silently.
+    // Categories ALONE cannot find this. The label is what `refineShape` reads, and the
+    // disagreement only exists where a label refines to a shape the category's own row
+    // did not describe — `lamp` + "pendant" is `lamp-pendant`, which anchors to the
+    // ceiling, out of a row that carried no flag at all. Sweeping one label per category
+    // gives each category its DEFAULT shape, where a hand-typed row and the derivation
+    // agree by construction, so the first version of this test was green against a full
+    // revert of the builder. These words are the ones `refineShape` actually branches on.
+    const LABELS = ['', 'pendant', 'ceiling', 'hanging', 'chandelier', 'bulb', 'table', 'wall', 'floor'];
+    const seen: string[] = [];
+    const wrong: string[] = [];
+    for (const cat of CATEGORIES) {
+      for (const word of LABELS) {
+        const label = `${word || cat}__slot:n`;
+        const parts = buildSceneFromRoom(room([saved(1, { category: cat, label })]));
+        for (const p of parts) {
+          expect(p.fromDetection, `${p.name} came from ${cat} without a detection`).toBeDefined();
+          seen.push(`${cat}/${word}->${p.shape}`);
+          const derived = isWallMountedPart(p.category, p.shape);
+          if (!!p.wallMounted !== derived) {
+            wrong.push(`${cat} + "${label}" · ${p.shape} stored=${p.wallMounted} derived=${derived}`);
+          }
+        }
+      }
+    }
+    // The pair that made this a defect has to be IN the sweep, or the sweep is a sweep
+    // over agreement. Named, so a future narrowing of `refineShape` fails here loudly
+    // rather than quietly removing the only case with teeth.
+    expect(seen, 'the sweep must reach a ceiling-anchored refinement').toContain('lamp/pendant->lamp-pendant');
+    // A count with a floor, for the same reason the sweep above has one: a detection
+    // the builder refuses produces no parts, and a loop over nothing is green.
+    expect(seen.length, 'the sweep must have produced detected parts').toBeGreaterThanOrEqual(
+      CATEGORIES.length,
+    );
+    expect(wrong, `${wrong.length} of ${seen.length} detected parts disagree`).toEqual([]);
+  });
+
+  it('a detected ceiling piece is mounted at build time, not only after a reload', () => {
+    // The measured consequence of the flag being keyed on CATEGORY here while `groundY`
+    // keyed it on SHAPE: the builder produced a door with the flag unset, the writer
+    // spreads so the key was ABSENT from the JSON, and the reader derived `true`. So
+    // `isAperture` flipped on reload and the wall grew a light hole — with `dropped`
+    // empty, because a file that OMITS the field disagrees with nothing. The round trip
+    // was not an identity, and it was silent, which is the pair that makes it a defect
+    // rather than a difference.
+    // A DETECTED PENDANT, not a detected door. The door was the reported symptom, but
+    // `CATEGORY_DEFAULTS.door` already carried `wallMounted: true`, so a door fixture is
+    // green against the defect and would have been decoration. `lamp` carried no flag
+    // and "pendant" refines to a ceiling anchor, which is the disagreement.
+    const [lamp] = buildSceneFromRoom(room([saved(1, { category: 'lamp', label: 'pendant__slot:n' })]));
+    expect(lamp.shape, 'the fixture must actually refine to a pendant').toBe('lamp-pendant');
+    expect(isWallMountedPart(lamp.category, lamp.shape)).toBe(true);
+    expect(lamp.wallMounted, 'the builder must not answer this by category').toBe(true);
   });
 });

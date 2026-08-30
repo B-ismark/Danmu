@@ -28,6 +28,7 @@
 import { footFromPart, footInsidePoly, nearestEdge, obbExtentAlong, obbFromPart } from './geometry';
 import { wallOutwardNormal, type Footprint } from './footprint';
 import { WALL_ATTACH_TOL } from './layout-rules';
+import { ridesWall } from './physics';
 import type { ScenePart } from './scene-spec';
 
 /** A carried piece's new position. `y` is never touched: moving a wall sideways
@@ -81,7 +82,12 @@ export function attachedToWall(
   for (const p of parts) {
     const dx = p.pos[0] - mx;
     const dz = p.pos[2] - mz;
-    if (p.wallMounted) {
+    // `ridesWall`, not `wallMounted`. This branch means "the piece IS part of this
+    // wall", and it hands the question to `nearestEdge`, which always names some wall
+    // — so a ceiling pendant 1.355 m clear of every wall in the room was claimed by
+    // whichever edge happened to be nearest and carried 0.5 m sideways, off the table
+    // it hangs over. A ceiling piece belongs to the room, not to an edge of it.
+    if (ridesWall(p.category, p.shape)) {
       if (nearestEdge(poly, p.pos[0], p.pos[2])?.index === index) out.push(p.id);
       continue;
     }
@@ -130,9 +136,12 @@ export function carryAttached(
   for (const p of parts) {
     if (!wanted.has(p.id)) continue;
     const pos: [number, number, number] = [p.pos[0] + ox * delta, p.pos[1], p.pos[2] + oz * delta];
-    // A wall-mounted piece IS part of the wall: it goes where the wall goes, and
-    // its footprint sits ON the boundary, where a containment test is a coin flip.
-    if (!p.wallMounted) {
+    // A piece that rides the wall IS part of it: it goes where the wall goes, and its
+    // footprint sits ON the boundary, where a containment test is a coin flip. That
+    // exemption is for wall riders only — gating it on `wallMounted` skipped the
+    // was-inside/now-inside check for the ceiling family too, so a pendant could be
+    // carried straight out of the room with nothing testing whether it still fitted.
+    if (!ridesWall(p.category, p.shape)) {
       const wasInside = footInsidePoly(footFromPart(p.pos, p.rot, p.dimMM, p.circle), before);
       const nowInside = footInsidePoly(footFromPart(pos, p.rot, p.dimMM, p.circle), after);
       if (wasInside && !nowInside) continue;

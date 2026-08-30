@@ -1365,7 +1365,30 @@ function dress(
       rot,
       dimMM: clampDims(category, shape, dimMM),
       locked: false,
-      wallMounted: true,
+      // DERIVED, not `true` with exceptions. This read `wallMounted: true` because the
+      // dressing pass is mostly curtains and pictures, and then two of its three
+      // callers overrode it -- one of them WRONGLY. A pendant was added
+      // `wallMounted: false` directly under a comment saying "Ceiling-anchored, so
+      // `groundY` decides the height", so its `pos[1]` was a mesh CENTRE while its flag
+      // said floor-standing: `findSupportDetailed` did not skip it and measured its top
+      // as `pos[1] + h` = 3.05 m in a 2.8 m room, 250 mm through the slab, where a
+      // lamp could come to rest.
+      //
+      // Measured by danmu-bc across `rect`/`l`/`t`/`u`/`open` at five sizes: 8 of 323
+      // parts had a stored flag disagreeing with the derived one, and every one of
+      // them was that pendant. `tests/scene-build.test.ts` sweeps the same ground as
+      // an assertion now, so the pendant's `add` in `dress` below cannot grow a sibling.
+      // (This named a line number, `:1429`, and this commit's own additions to `dress`
+      // moved it to 1449 - where 1429 lands inside the painting block instead.)
+      //
+      // Two overrides, not three: the `wallMounted: true` that used to sit here was
+      // this default itself, and the bedside lamp's `false` was correct.
+      //
+      // `isWallMountedPart(category, shape)` is `anchorFor(...) !== 'floor'`, which is
+      // the whole of what this field means. Both hand-set answers are gone;
+      // `extra` can still override for a piece that genuinely needs it, and nothing
+      // does.
+      wallMounted: isWallMountedPart(category, shape),
       ...extra,
     });
   };
@@ -1426,7 +1449,6 @@ function dress(
     const t = at(table);
     // Ceiling-anchored, so `groundY` decides the height rather than a number here.
     add('lamp', 'Pendant', 'lamp-pendant', [350, 350, 400], [t.pos[0], 0, t.pos[2]], t.rot, {
-      wallMounted: false,
       circle: true,
     });
     const last = parts[parts.length - 1];
@@ -1437,9 +1459,16 @@ function dress(
   for (let i = 0; i < parts.length; i++) {
     if (roles[i] !== 'nightstand') continue;
     const s = at(i);
-    add('lamp', 'Bedside lamp', 'lamp-table', [250, 250, 500], [s.pos[0], s.pos[1] + s.dimMM[2] / 1000, s.pos[2]], s.rot, {
-      wallMounted: false,
-    });
+    // No override: `lamp-table` has no entry in `ANCHOR_BY_SHAPE` and `lamp` none in
+    // `ANCHOR_BY_CATEGORY`, so it derives `floor` -- which is what the override said.
+    // Correct, and now not said twice.
+    // `verticalExtent`, even though `s` is a nightstand and `pos[1] + h` is genuinely its
+    // top today. Converted anyway so the sweep in `tests/scene-build.test.ts` can assert
+    // ZERO hand-written tops in `lib/` rather than "zero except this one" - an exception
+    // list is how the eighth copy gets in. It also stops being correct the moment anyone
+    // makes this rule fire for a centred support.
+    const sTop = verticalExtent(s.category, s.shape, s.dimMM, s.pos[1])[1];
+    add('lamp', 'Bedside lamp', 'lamp-table', [250, 250, 500], [s.pos[0], sTop, s.pos[2]], s.rot, {});
   }
 }
 
@@ -1776,10 +1805,10 @@ export const PART_LIBRARY: LibraryItem[] = [
 // Map detected category to a sensible primitive + default mm dimensions.
 const CATEGORY_DEFAULTS: Record<
   Category,
-  { shape: Shape; dim: [number, number, number]; circle?: boolean; wallMounted?: boolean }
+  { shape: Shape; dim: [number, number, number]; circle?: boolean }
 > = {
   sofa: { shape: 'sofa', dim: [2200, 950, 880] },
-  tv: { shape: 'tv', dim: [1450, 60, 820], wallMounted: true },
+  tv: { shape: 'tv', dim: [1450, 60, 820] },
   chair: { shape: 'chair-dining', dim: [500, 500, 850] },
   table: { shape: 'desk-standard', dim: [1200, 600, 750] },
   desk: { shape: 'desk-standard', dim: [1400, 700, 750] },
@@ -1790,15 +1819,15 @@ const CATEGORY_DEFAULTS: Record<
   rug: { shape: 'rug', dim: [2400, 1600, 5] },
   bed: { shape: 'bed-single', dim: [900, 2000, 600] },
   monitor: { shape: 'monitor', dim: [600, 200, 400] },
-  fan: { shape: 'fan', dim: [1000, 1000, 200], circle: true, wallMounted: true },
+  fan: { shape: 'fan', dim: [1000, 1000, 200], circle: true },
   fridge: { shape: 'fridge', dim: [550, 550, 850] },
-  curtain: { shape: 'curtain', dim: [1600, 80, 2200], wallMounted: true },
-  mirror: { shape: 'mirror', dim: [600, 30, 1400], wallMounted: true },
-  painting: { shape: 'painting', dim: [800, 30, 600], wallMounted: true },
+  curtain: { shape: 'curtain', dim: [1600, 80, 2200] },
+  mirror: { shape: 'mirror', dim: [600, 30, 1400] },
+  painting: { shape: 'painting', dim: [800, 30, 600] },
   nightstand: { shape: 'nightstand', dim: [450, 400, 550] },
   ottoman: { shape: 'ottoman', dim: [550, 400, 420] },
-  ac: { shape: 'ac-unit', dim: [800, 220, 280], wallMounted: true },
-  door: { shape: 'door', dim: [900, 50, 2100], wallMounted: true },
+  ac: { shape: 'ac-unit', dim: [800, 220, 280] },
+  door: { shape: 'door', dim: [900, 50, 2100] },
   other: { shape: 'box', dim: [600, 600, 800] },
 };
 
@@ -2011,6 +2040,15 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
         : aiShape && CATALOG_SHAPES.has(aiShape) && aiShape !== 'box'
           ? aiShape
           : labelShape;
+    // Keyed on the SHAPE, like every other answer to this question in the app.
+    // `CATEGORY_DEFAULTS` used to carry its own `wallMounted` copy and this line read
+    // it, which made the detected builder the one path that answered by CATEGORY while
+    // `groundY` two lines below answered by shape — so a detected door got a ceiling
+    // clamp and a flag saying floor. Saving that room and opening it again derived the
+    // flag honestly, `isAperture` flipped, and the wall grew a light hole with `dropped`
+    // empty. The copy is deleted rather than corrected: a second answer to a question
+    // with one right answer drifts in the direction nobody notices.
+    const mounted = isWallMountedPart(cat, refined);
     // AI-estimated dims are a HINT, never the source of truth — clamp them into
     // the shape's real-world range (lib/dimension-ranges). A wild estimate
     // (3.5 m sofa, 80 mm fridge) collapses to the nearest credible size.
@@ -2063,7 +2101,7 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
         rot: typeof aiYaw === 'number' ? aiYaw : 0,
       };
     } else {
-      placement = placementForSlot(realSlot, d.box, dim, !!cfg.wallMounted, refined, { width: rw, depth: rd, height: rh });
+      placement = placementForSlot(realSlot, d.box, dim, mounted, refined, { width: rw, depth: rd, height: rh });
     }
     // Gravity: floor-standing items must touch the floor. Wall-mounted / ceiling
     // items snap to their canonical mounting height for the current part height.
@@ -2132,7 +2170,7 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
       dimMM: dim,
       locked: d.locked,
       circle: cfg.circle,
-      wallMounted: cfg.wallMounted,
+      wallMounted: mounted || undefined,
       fromDetection: { slot: realSlot, bbox: d.box, conf: d.conf },
       color: (d as { color?: string }).color,
     });
@@ -2226,6 +2264,40 @@ export function selectionForPick(parts: ScenePart[], id: string, current: readon
  *  → centred geometry sinking half-way through the floor. */
 export function isWallMountedPart(cat: Category, shape: Shape): boolean {
   return anchorFor(cat, shape) !== 'floor';
+}
+
+/** Re-derive what a PERSISTED part is not allowed to be trusted about.
+ *
+ *  The same trust boundary `lib/scene-file.ts`'s `readPart` draws for a file someone
+ *  else produced, drawn for a snapshot THIS app wrote — because the snapshot can be
+ *  older than the derivation. `wallMounted` used to be written by the builders as a
+ *  stored value, and `dress` wrote `false` on the dining pendant; every room saved
+ *  before that changed still holds it. Without this, the same part is read two ways at
+ *  once after a load: derived (ceiling) by `settleHeights`, `findSupportDetailed`,
+ *  `lib/plan-export.ts` and `lib/wall-move.ts`, and stored-flag (floor furniture) by
+ *  `layout-solve`, `layout-score`, `lib/clearance.ts`, `lib/apertures.ts`,
+ *  `lib/item-snap.ts` and the Inspector. Press Suggest on such a room and the solver
+ *  re-places the pendant as movable furniture while `settleHeights` refuses to drop it.
+ *
+ *  **This is the boundary a fresh install can never reach, and that is why it needed
+ *  finding by hand.** Every fixture in the suite builds a scene rather than loading one,
+ *  so no test was in a position to notice, and CI is a fresh install by definition. It
+ *  bites exactly the users who have history.
+ *
+ *  Exactly ONE field today, deliberately. Sizes went through `clampDims` when they were
+ *  written and shapes were checked against the vocabulary then, so re-deriving those
+ *  would be re-litigating a decision rather than closing a gap. If a second field ever
+ *  becomes derivable-not-stored, it belongs here rather than at a call site — there are
+ *  three call sites and they are the reason this function exists at all. */
+export function normalizeStoredParts(parts: ScenePart[]): ScenePart[] {
+  return parts.map((p) => {
+    const derived = isWallMountedPart(p.category, p.shape);
+    if (!!p.wallMounted === derived) return p;
+    // `|| undefined` rather than `false`, to match what the builders emit: the flag is
+    // optional and floor-standing furniture omits it, so ABSENT and `false` are one
+    // answer everywhere that reads it.
+    return { ...p, wallMounted: derived || undefined };
+  });
 }
 
 /** Compute a sane spawn transform for a NEW part added at the room centre.

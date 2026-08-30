@@ -12,6 +12,7 @@ import { useStudio } from '@/lib/store';
 import { livingParents } from '@/lib/rigid-parent';
 import { seedHistory } from '@/lib/history';
 import type { ScenePart } from '@/lib/scene-spec';
+import { normalizeStoredParts } from '@/lib/scene-spec';
 
 const DEBOUNCE_MS = 300;
 
@@ -44,7 +45,9 @@ export function RoomSync() {
       // snapshot — `loadSceneParts` returns undefined for that. Treating [] as
       // "nothing saved" rebuilt the starter scene, so deleting every piece and
       // reloading brought all the furniture back.
-      if (savedScene) setParts(savedScene);
+      // Re-derived, not trusted. See `normalizeStoredParts` — this snapshot can be
+      // older than the derivation that replaced the stored flag.
+      if (savedScene) setParts(normalizeStoredParts(savedScene));
       if (t) {
         loadTransforms(t);
         if (t.hidden) setHiddenMap(t.hidden);

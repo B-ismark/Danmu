@@ -52,9 +52,10 @@ import {
   type PartLight,
   type ScenePart,
   type Shape,
+  isWallMountedPart,
 } from './scene-spec';
 import { clampDims, roomAxisRange, ROOM_SIDE_M } from './dimension-ranges';
-import { heightForNewCeiling } from './physics';
+import { anchorFor, heightForNewCeiling } from './physics';
 import { resolveParts } from './transforms';
 import { fileSlug } from './exports';
 import { wouldCreateCycle } from './rigid-parent';
@@ -303,7 +304,7 @@ export function parseSceneFile(text: string): SceneFileParse {
   const originalToFinal = new Map<string, string>();
   let unreadable = 0;
   for (const candidate of partsIn.slice(0, MAX_PARTS)) {
-    const read = readPart(candidate, seen);
+    const read = readPart(candidate, seen, dropped);
     if (read) {
       parts.push(read.part);
       // First writer wins. On a duplicate id the FIRST piece keeps it and every
@@ -508,7 +509,14 @@ function readSite(v: unknown): Site | null {
  *  could do anything sensible without it. An unknown `shape` has no geometry, so the
  *  piece goes; an unreadable `color` just means the shape's default, so the field
  *  goes and the piece stays. */
-function readPart(v: unknown, seen: Set<string>): { part: SceneFilePart; originalId: string } | null {
+function readPart(
+  v: unknown,
+  seen: Set<string>,
+  /** Same channel `readRoom` takes, for the same reason: this parser is lossy on
+   *  purpose and never silent. A field overruled is content the user wrote and did
+   *  not get, so it is reported rather than quietly corrected. */
+  dropped: string[],
+): { part: SceneFilePart; originalId: string } | null {
   if (!isObj(v)) return null;
 
   const shape = oneOf<Shape>(v.shape, SHAPES);
@@ -548,7 +556,68 @@ function readPart(v: unknown, seen: Set<string>): { part: SceneFilePart; origina
   };
 
   if (v.circle === true) part.circle = true;
-  if (v.wallMounted === true) part.wallMounted = true;
+
+  // DERIVED, never trusted — the same boundary `clampDims` draws for a size, drawn
+  // for the one other field in this record that has a single right answer.
+  //
+  // `wallMounted` is "is this piece's geometry centred on its origin", and
+  // `isWallMountedPart(category, shape)` is that question's only answer: every path
+  // inside the app computes it from those two (`placeNewPart`, the Inspector's swap,
+  // the scene builder). Reading it off the file made this the one place the app could
+  // hold a television that believed it was floor-standing — with the centred geometry
+  // sinking half its height through the floor, which is the exact scar
+  // `isWallMountedPart`'s own docblock records from the detection path, and a support
+  // probe measuring its top 285 mm too high.
+  //
+  // Both directions matter and the absent one is the likelier: the field is OPTIONAL,
+  // so a hand-written or third-party file that simply omits it produced a mounted
+  // piece with the flag false. And a file asserting `wallMounted: true` on a sofa is
+  // refused just as firmly, because a sofa's geometry is not centred no matter what a
+  // file says.
+  //
+  // Reported only when the file DISAGREED, not on every part that carries the field,
+  // because a note on every export would be noise rather than the honest lossiness
+  // `dropped` is for. A round trip is silent, but NOT because the writer derives the
+  // flag — `buildSceneFile` spreads the `ScenePart` it is handed. It is silent because
+  // the builders that produce those parts now agree with `isWallMountedPart`, which is
+  // a property of a different file and can regress there without this one changing.
+  //
+  // Two shapes of disagreement, and they need two messages because one cannot describe
+  // both without stating something false. `v` is `unknown`, so `v.wallMounted !==
+  // derivedMount` was true for EVERY non-boolean, and the text then rendered
+  // `v.wallMounted === true`, which is `false` for every non-boolean too: `0`, `null`
+  // and `""` produced a note about a disagreement that did not exist, while `1` and
+  // `"true"` reported “said false” about a file that said the opposite. Coercing harder
+  // does not fix the second half — it only moves which values lie. A boolean's
+  // vocabulary is {true, false}, exactly as `SHAPES` and `CATEGORIES` are vocabularies,
+  // so anything else is malformed and is NAMED as malformed rather than folded into a
+  // claim the file never made. The malformed note fires even when the derived answer
+  // happens to match, because what was ignored is the value, not the conclusion.
+  const derivedMount = isWallMountedPart(category, shape);
+  if (derivedMount) part.wallMounted = true;
+  const saidMount: unknown = v.wallMounted;
+  if (saidMount !== undefined) {
+    // Named by ANCHOR, not by the flag. `derivedMount` is `anchorFor(...) !== 'floor'`,
+    // so rendering it as "is wall-mounted" said a pendant and a ceiling fan are fixed to
+    // a wall — false, and the file two lines up knows better. It also interpolated
+    // `shape`, which is the internal kebab-case id, so the user was shown "a lamp-pendant"
+    // and "an ac-unit". The piece is already named in quotes at the front of the sentence,
+    // so this clause only has to say where it belongs.
+    const anchor = anchorFor(category, shape);
+    const verdict =
+      anchor === 'ceiling'
+        ? 'it hangs from the ceiling'
+        : anchor === 'floor'
+          ? 'it stands on the floor'
+          : 'it is fixed to a wall';
+    if (typeof saidMount !== 'boolean') {
+      dropped.push(
+        `“${part.name}” gave a wallMounted that is neither true nor false; ${verdict}, so the file's value was ignored`,
+      );
+    } else if (saidMount !== derivedMount) {
+      dropped.push(`“${part.name}” said wallMounted: ${saidMount}; ${verdict}, so that was ignored`);
+    }
+  }
   if (v.hidden === true) part.hidden = true;
 
   const colour = hex(v.color);

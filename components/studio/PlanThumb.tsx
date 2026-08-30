@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { roomStore } from '@/lib/storage';
 import { footprintBounds, footprintForLayout, type Footprint } from '@/lib/footprint';
 import type { ScenePart } from '@/lib/scene-spec';
+import { normalizeStoredParts } from '@/lib/scene-spec';
 import type { RoomData } from '@/lib/storage';
 
 // Viewport of the drawing, and therefore the card's picture height: a card is
@@ -28,7 +29,9 @@ export function PlanThumb({ roomId }: { roomId: string }) {
       const p = await roomStore.loadSceneParts<ScenePart[]>(roomId);
       if (cancelled) return;
       setRoom(r ?? null);
-      setParts(p ?? null);
+      // Re-derived, like the studio load path. A thumbnail drawing the mount flag one
+      // way while the studio draws it the other is the two-plans-disagree shape again.
+      setParts(p ? normalizeStoredParts(p) : null);
     })();
     return () => {
       cancelled = true;

@@ -59,8 +59,8 @@ import { footprintBounds, type Footprint } from '@/lib/footprint';
 import { formatDim, fromMM, stepFor, toMM } from '@/lib/units';
 import { checkFit, PROBE_ID, type FitCandidate, type FitResult, type FitStatus } from '@/lib/fit-check';
 import { clampDims } from '@/lib/dimension-ranges';
-import { groundY } from '@/lib/physics';
-import { PART_LIBRARY } from '@/lib/scene-spec';
+import { groundY, ridesWall } from '@/lib/physics';
+import { normalizeStoredParts, PART_LIBRARY } from '@/lib/scene-spec';
 import { Select } from '@/components/ui/Select';
 import { NumberField } from '@/components/ui/NumberField';
 import { v4 as uuid } from 'uuid';
@@ -1528,7 +1528,9 @@ function LayoutsPanel({ effParts, footprint }: { effParts: ScenePart[]; footprin
   }
 
   function apply(v: LayoutVariant) {
-    setParts(v.parts as ScenePart[]);
+    // A saved layout is a persisted snapshot too, so it goes through the same
+    // re-derivation as the scene load paths.
+    setParts(normalizeStoredParts(v.parts as ScenePart[]));
     loadTransforms(v.transforms);
     // Layouts saved before this shipped simply have nothing here — reset
     // rather than leave whatever the room had live before applying.
@@ -1723,7 +1725,13 @@ function MiniPlan({ parts, footprint }: { parts: ScenePart[]; footprint: Footpri
         strokeWidth={1}
       />
       {parts
-        .filter((p) => !p.wallMounted)
+        // `ridesWall`, like `lib/plan-export.ts`. Asking `wallMounted` here dropped the
+        // ceiling family out of every layout thumbnail while the exported PNG listed it
+        // with a number and a legend row — the same room, two plans, disagreeing about
+        // whether a 1 m ceiling fan is in it. Three surfaces answer this question and
+        // they were answering it three ways: `PlanView` draws every piece, this filtered
+        // on the stored flag, and the export filtered on the anchor.
+        .filter((p) => !ridesWall(p.category, p.shape))
         .map((p) => {
           const w = (p.dimMM[0] / 1000) * s;
           const d = (p.dimMM[1] / 1000) * s;

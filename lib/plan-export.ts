@@ -13,6 +13,7 @@ import type { DimUnit } from './store';
 import { downloadBlob } from './snapshot';
 import { PLAN } from './scene-palette';
 import { fileSlug } from './exports';
+import { ridesWall } from './physics';
 
 const PX_PER_M = 90; // plan scale on canvas
 const MARGIN = 70;
@@ -39,7 +40,13 @@ export function exportPlanPng(
   const planW = b.width * PX_PER_M;
   const planH = b.depth * PX_PER_M;
 
-  const floorParts = parts.filter((p) => !p.wallMounted);
+  // `ridesWall`, not `wallMounted`. The flag means "geometry is centred on the
+  // origin" and is true for a ceiling fan and a pendant, which belong in this legend
+  // with a footprint — they hang over the floor, they are not features of a wall.
+  // Reading the wider question dropped the seeded pendant out of the legend entirely
+  // and drew it as a bare tick in open floor, mid-room, with no number, while the 2D
+  // Plan tab went on drawing it normally: two plans of one room disagreeing.
+  const floorParts = parts.filter((p) => !ridesWall(p.category, p.shape));
   const legendH = floorParts.length * LEGEND_LINE + 56;
 
   // Legend rows carry a user-typed name (up to 80 characters) plus its
@@ -107,8 +114,21 @@ export function exportPlanPng(
     ctx.fillStyle = `${p.color ?? PLAN.accent}40`;
     ctx.strokeStyle = PLAN.outline;
     ctx.lineWidth = 1.2;
-    ctx.fillRect(-w / 2, -d / 2, w, d);
-    ctx.strokeRect(-w / 2, -d / 2, w, d);
+    // `circle`, because `PlanView` draws one — a round piece is tested against the
+    // ellipse it draws (`lib/plan-hit.ts`) and has to be DRAWN as one here too, or the
+    // exported sheet and the tab it was exported from disagree about the shape of a 1 m
+    // object. Latent for round floor pieces (a floor lamp, a plant) and reached the
+    // moment `ridesWall` moved the ceiling family into this loop: a 1000 mm ceiling fan
+    // was a wall tick before and would otherwise have become a square.
+    if (p.circle) {
+      ctx.beginPath();
+      ctx.ellipse(0, 0, w / 2, d / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      ctx.fillRect(-w / 2, -d / 2, w, d);
+      ctx.strokeRect(-w / 2, -d / 2, w, d);
+    }
     ctx.restore();
     // Number badge (unrotated, centred).
     ctx.fillStyle = PLAN.ink;
@@ -120,9 +140,10 @@ export function exportPlanPng(
     ctx.textBaseline = 'alphabetic';
   });
 
-  // Wall-mounted items as ticks on the wall line (doors, windows, TV…).
+  // Items that ride a wall, as ticks on the wall line (doors, windows, TV…). The
+  // ceiling family is deliberately not here — see `floorParts` above.
   parts
-    .filter((p) => p.wallMounted)
+    .filter((p) => ridesWall(p.category, p.shape))
     .forEach((p) => {
       const cx = px(p.pos[0]);
       const cy = pz(p.pos[2]);

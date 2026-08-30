@@ -41,7 +41,7 @@
 
 import type { ScenePart } from './scene-spec';
 import { footArea, footFromPart, footIntersectionArea, localToWorld, worldToLocal } from './geometry';
-import { MIN_SUPPORT_SHARE, SUPPORT_Y_EPS } from './physics';
+import { MIN_SUPPORT_SHARE, SUPPORT_Y_EPS, verticalExtent } from './physics';
 
 export type DescendantOffset = {
   id: string;
@@ -67,7 +67,14 @@ function isPhysicallySupported(child: ScenePart, parent: ScenePart): boolean {
   const parentFoot = footFromPart(parent.pos, parent.rot, parent.dimMM, parent.circle);
   const shared = footIntersectionArea(childFoot, parentFoot);
   if (shared / childArea < MIN_SUPPORT_SHARE) return false;
-  const parentTop = parent.pos[1] + parent.dimMM[2] / 1000;
+  // `verticalExtent`, because `pos[1]` is a bottom for a floor anchor and the mesh
+  // CENTRE for every other one. This function has no wall-mounted skip in front of it
+  // at all — unlike the two in `lib/clearance.ts` and `lib/fit-check.ts` — so it is
+  // the one reader of this arithmetic that was protected by nothing except
+  // the fact that `findSupportDetailed` refuses to hand out a mounted piece as a
+  // support, and therefore no drag could create the link this then re-validates.
+  // Correct by luck at one remove, which is not a property to keep.
+  const parentTop = verticalExtent(parent.category, parent.shape, parent.dimMM, parent.pos[1])[1];
   return Math.abs(child.pos[1] - parentTop) < SUPPORT_Y_EPS;
 }
 
