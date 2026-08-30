@@ -35,7 +35,8 @@ import { cascadeTransform } from '@/lib/rigid-parent';
 import { formatDim } from '@/lib/units';
 import { clientDeltaToViewBox, clientToViewBox } from '@/lib/plan-view-transform';
 import { v4 as uuid } from 'uuid';
-import { announce, removeParts, studioSurfaceFocused } from './KeyboardShortcuts';
+import { removeParts, studioSurfaceFocused } from './KeyboardShortcuts';
+import { announce } from '@/lib/announce';
 import { openPickMenu, openSceneMenu } from './SceneContextMenu';
 
 const SCALE = 100; // px per metre at zoom = 1, in viewBox units
@@ -1270,8 +1271,16 @@ export const PlanView = forwardRef<PlanViewHandle, {
     e.stopPropagation();
     const out = e.key === 'ArrowRight' || e.key === 'ArrowUp' ? WALL_STEP : -WALL_STEP;
     setSelectedWall(index);
-    moveWallCarrying(index, out);
+    const applied = moveWallCarrying(index, out);
     force((v) => v + 1);
+    // Only when it MOVED. This announced the move and the room's new size on every
+    // press, including the ones the room clamp refused — so a wall held at its
+    // limit reported a move it had not made, and repeated the same unchanged size
+    // as though it were news. `moveWallCarrying` had been returning the applied
+    // delta for exactly this and all four of its call sites threw it away; a
+    // refusal now speaks for itself from there, and this only has to stop
+    // contradicting it.
+    if (applied === 0) return;
     const b = footprintBounds(useScene.getState().room.footprint);
     announce(
       `${label} moved ${out > 0 ? 'out' : 'in'}. Room is now ${formatDim(b.width * 1000, dimUnit)} by ${formatDim(

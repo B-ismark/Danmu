@@ -28,6 +28,7 @@ import { useHistory, applySnapshot, startHistoryRecording } from '@/lib/history'
 import { collidesAt, type ScenePart } from '@/lib/scene-spec';
 import { clampIntoFootprint } from '@/lib/footprint';
 import { formatDim } from '@/lib/units';
+import { ANNOUNCE_EVENT, announce } from '@/lib/announce';
 import { toast } from '@/components/ui/StorageToast';
 import { confirmDialog } from '@/components/ui/Confirm';
 
@@ -77,17 +78,11 @@ export function isTypingOrDialog(target: EventTarget | null): boolean {
 }
 
 // ─── Announcements ──────────────────────────────────────────────────────────
-
-const ANNOUNCE_EVENT = 'danmu:announce';
-
-/** Speak one sentence in the studio's live region. For things a screen reader
- *  cannot otherwise know: a move that was refused, a piece that was duplicated.
- *  A window event rather than a store field so any surface — including the 3D
- *  canvas — can call it without a store contract change. */
-export function announce(message: string) {
-  if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent<string>(ANNOUNCE_EVENT, { detail: message }));
-}
+//
+// `announce` itself moved to `lib/announce.ts`. Only the RENDERING is left here,
+// which is the half that needs to be a component; the dispatch had to be reachable
+// from `lib/`, where a wall move now has a refusal to speak and cannot import a
+// component to do it.
 
 export function StudioAnnouncer() {
   // Resolved: what it reads out is where the piece is now, not where it started.

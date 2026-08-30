@@ -30,7 +30,8 @@ import { placeNewPart, type LibraryItem, type ScenePart } from '@/lib/scene-spec
 import { Icon } from '@/components/ui/Icon';
 import { IconButton } from '@/components/ui/primitives';
 import { LibraryPicker } from './LibraryPicker';
-import { announce, isTypingOrDialog } from './KeyboardShortcuts';
+import { isTypingOrDialog } from './KeyboardShortcuts';
+import { announce } from '@/lib/announce';
 
 /** The id the pages put on their canvas element, so the rail's trigger can bring
  *  the panel into view when the studio is stacked and the rail sits below the

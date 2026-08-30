@@ -3,11 +3,13 @@
 // Edit room shell dimensions (W × D × H). Live updates 3D + 2D.
 // Uses the user's selected dim unit. Writes back to IDB on commit.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useScene } from '@/lib/scene-store';
 import { useSettings, useStudio } from '@/lib/store';
-import { boundsToUnit, fromMM, toMM, stepFor, precisionFor } from '@/lib/units';
-import { applyRoomEdits, roomAxisRange, ROOM_AXES, type RoomAxis } from '@/lib/dimension-ranges';
+import { boundsToUnit, formatDim, fromMM, toMM, stepFor, precisionFor } from '@/lib/units';
+import { applyRoomEdits, roomAxisRange, ROOM_AXES, type RoomAxis, type RoomRejection } from '@/lib/dimension-ranges';
+import { floorRefusal, roomFloors, type FloorAxis } from '@/lib/room-floor';
+import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { recarryForResize, regradeForNewCeiling } from '@/lib/transforms';
 import { roomStore } from '@/lib/storage';
 import { useParams } from 'next/navigation';
@@ -32,6 +34,23 @@ export function RoomDimsEditor() {
   // It holds the AXIS rather than a boolean, because the three axes no longer
   // share one range and a message naming the wrong one is worse than no message.
   const [rangeError, setRangeError] = useState<RoomAxis | null>(null);
+  // WHICH rule refused, so the sentence can name the piece in the way rather than
+  // restating the arrows' own limits. A boolean beside `rangeError` would be a
+  // second thing to keep in step with it; both are set and cleared together below.
+  const [errorBy, setErrorBy] = useState<RoomRejection | null>(null);
+
+  // How small the furniture will let each side get. RESOLVED parts — a piece the
+  // user has resized carries its new size in the `useStudio` override, and
+  // measuring `useScene.parts` would answer about a piece nobody can see.
+  //
+  // Memoised on the two things it reads because it runs on every render of a rail
+  // that re-renders on every drag: `roomFloors` is O(parts) with two trig calls
+  // apiece, which is nothing on its own and is not free once per frame.
+  const parts = useRoomScene();
+  const floors = useMemo(
+    () => roomFloors(parts, { width: room.width, depth: room.depth }),
+    [parts, room.width, room.depth],
+  );
 
   // Which fields have been typed in since the last commit fired. The debounce
   // coalesces a fast width-then-depth into one write, so the batch is a set and
@@ -62,6 +81,7 @@ export function RoomDimsEditor() {
     // is not an exotic thing to do. Found by danmu-cd in review.
     edited.current.clear();
     setRangeError(null);
+    setErrorBy(null);
   }, [room.width, room.depth, room.height, dimUnit, prec]);
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -78,9 +98,16 @@ export function RoomDimsEditor() {
         batch[axis] = toMM(parseFloat(next[ROOM_AXES.indexOf(axis)]), dimUnit) / 1000;
       }
       const base = useScene.getState().room;
-      const { room: r, rejected, pending } = applyRoomEdits(
+      // Recomputed here rather than read off the render's `floors` memo, and that
+      // is not tidiness: this runs 200 ms after the last keystroke, and a wall
+      // drag or a resize inside that window would leave the closure holding a
+      // floor for a room that has since changed shape. The memo above is for the
+      // arrows, which re-render; the commit reads the live scene.
+      const live = roomFloors(currentRoomScene(), { width: base.width, depth: base.depth });
+      const { room: r, rejected, rejectedBy, pending } = applyRoomEdits(
         { width: base.width, depth: base.depth, height: base.height },
         batch,
+        { width: live.width.metres, depth: live.depth.metres },
       );
       // What to keep holding is the rule's answer, not this component's — see
       // `applyRoomEdits`. A refusal hands the whole batch back so the form
@@ -93,9 +120,11 @@ export function RoomDimsEditor() {
       edited.current = new Set(Object.keys(pending) as RoomAxis[]);
       if (rejected) {
         setRangeError(rejected);
+        setErrorBy(rejectedBy);
         return;
       }
       setRangeError(null);
+      setErrorBy(null);
       const oldHeight = base.height;
       const beforeFp = useScene.getState().room.footprint;
       setRoom(r);
@@ -163,9 +192,17 @@ export function RoomDimsEditor() {
 
   // One derivation for the arrows' limits and for the sentence that names them.
   // Written twice, they disagree the moment a unit is not metres.
+  //
+  // The two floor axes take the FURNITURE floor rather than the static minimum,
+  // which is what makes the stop a bound and not merely a refusal: the arrows
+  // cannot walk the room somewhere the commit will then reject, in either
+  // direction and in any of the five units. A ceiling keeps `ROOM_HEIGHT_M` — a
+  // piece taller than the ceiling keeps its height and `lib/clearance.ts` reports
+  // it, which is a different answer from this one.
   const bounds = (axis: RoomAxis) => {
     const r = roomAxisRange(axis);
-    return boundsToUnit(r.min * 1000, r.max * 1000, dimUnit);
+    const min = axis === 'height' ? r.min : floors[axis].metres;
+    return boundsToUnit(min * 1000, r.max * 1000, dimUnit);
   };
 
   // Paired by index with `ROOM_AXES` — the rule's own order — and so with
@@ -173,6 +210,27 @@ export function RoomDimsEditor() {
   // second copy of that tuple sitting here; the rule owns it now, because a
   // component that keeps its own order can put it back in a different one.
   const labels: ['Width', 'Depth', 'Height'] = ['Width', 'Depth', 'Height'];
+
+  // The furniture refusal, in the user's unit. `applyRoomEdits` only reports
+  // `'floor'` while the stop is above the static minimum, and a stop above the
+  // static minimum came from a piece — so this branch always has one to name and
+  // the fallback below is unreachable rather than a hidden second message. It is
+  // there because the type cannot say that and a thrown `!` would be worse.
+  function floorMessage(axis: RoomAxis): string {
+    if (axis === 'height') return '';
+    const { stop } = floors[axis as FloorAxis];
+    if (!stop) return '';
+    return floorRefusal(
+      stop,
+      axis as FloorAxis,
+      `${formatDim(stop.metres * 1000, dimUnit)} ${dimUnit}`,
+      // The piece fits the room it is in — which is what decides whether the
+      // sentence may say the room "will not go narrower than that". When it does
+      // not fit, the floor is pinned to the current side and naming that as what
+      // the piece needs would be a false number.
+      stop.metres <= (axis === 'width' ? room.width : room.depth),
+    );
+  }
 
   // No disclosure of its own any more. This was a collapsible "Room shell" header
   // sitting INSIDE the rail's collapsible "Room" section — two locks on one door,
@@ -218,7 +276,9 @@ export function RoomDimsEditor() {
           ))}
         </div>
         <div style={{ fontSize: 11, marginTop: 6, lineHeight: 1.4, color: rangeError ? 'var(--danger-text)' : 'var(--ink-3)' }}>
-          {rangeError
+          {rangeError && errorBy === 'floor'
+            ? floorMessage(rangeError)
+            : rangeError
             ? `That ${rangeError} is outside ${bounds(rangeError).min}–${bounds(rangeError).max} ${dimUnit} — enter one in that range and the room will follow.`
             // Was "Sizes in {unit}. Anything from 1 to 50 m a side." Trimmed
             // because the range only matters once you are outside it, which is

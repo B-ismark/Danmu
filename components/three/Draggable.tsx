@@ -42,7 +42,7 @@ import { currentRoomScene } from '@/lib/room-scene';
 import { renderBaseDim, resolvePart } from '@/lib/transforms';
 import { useDragLive } from '@/lib/drag-live';
 import { refusalAfterGesture, REFUSAL_HOLD_MS } from '@/lib/refusal';
-import { announce } from '@/components/studio/KeyboardShortcuts';
+import { announce } from '@/lib/announce';
 import {
   dimFromGroupScale,
   groupScaleForDim,
