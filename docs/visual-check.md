@@ -82,8 +82,24 @@ the legend with its footprint and a number, and no tick anywhere but on a wall l
 **Why it is here rather than in a test.** `lib/plan-export.ts` draws through a real 2D
 canvas context, `canvas` is not a dependency, and jsdom's `getContext('2d')` returns
 `null` — line 75 asserts non-null and would throw. So there is no unit test for this
-module and I did not add a dependency to manufacture one. The fix is gated only by
-typecheck and by danmu-bc's measurement of the two PNGs; the pixels are unverified.
+module and I did not add a dependency to manufacture one.
+
+**Half of this has now been looked at, by screenshot, and the half that has not is named.**
+The exported PNG was captured from a production build of the branch (`acceptDownloads`,
+Export → Floor plan, `waitForEvent('download')`) and the legend is right: a room holding a
+Ceiling fan and a Sofa exports `1 Ceiling fan — 1.00 × 1.00 × 0.20 m (W×D×H)` and
+`2 Sofa — 2.20 × 0.95 × 0.88 m`, both numbered, no bare tick anywhere. So the
+`wallMounted` → `ridesWall` regression is closed and that is a picture, not an inference.
+
+**Still wants a person, and here is exactly what for.** Two things a screenshot could not
+settle. First, the fan came out as a **1 × 1 m square rather than a circle** — and that is
+NOT this fix failing: the 2D Plan tab drew it as a rectangle too, because a Library
+`Ceiling fan` carries no `circle` flag at all while a seeded or detected one does. That is
+its own defect and it is `what-is-still-open.md` § B item 15; the `circle` branch here is
+right and is reached by a seeded pendant, which is the fixture to use. Second, the fan's
+number badge did not appear in the sheet — it is drawn under the sofa's footprint, so
+whether a numbered piece can be hidden by an overlapping one is a z-order question about
+`plan-export`'s draw order, unmeasured and worth one look.
 
 **Where it rides.** `fix/derive-mounted-and-vertical-extent`, PR #54. The cause was
 `plan-export` filtering on `wallMounted` ("geometry is centred on its origin", true for a
