@@ -121,13 +121,14 @@ rotation-blind) and three on drill-in (never fire, count an empty selection as i
 accept overlap where it asks for containment) — and not one of them can see any of what
 follows.
 
-**Five of this section's seven items have now been looked at.** Two held (a merged set does
-travel as one; a resized piece keeps its size through the next drag). Three failed, and
-their causes are measured rather than left here for another look: the rug and the sofa
-dropped into an L / T notch (§ H.4), the piece too big to turn (§ H.5), and the merged-set
-click that drills in from a nightstand but never from the bed (§ H.8). The two below are
-still unlooked-at, and the second one is only unlooked-at because **the keys it named were
-wrong** — see its note.
+**Some of this section's items have been looked at, and those are gone.** Two held (a
+merged set does travel as one; a resized piece keeps its size through the next drag).
+Three failed, and their causes are measured rather than left here for another look: the
+rug and the sofa dropped into an L / T notch (§ H.4), the piece too big to turn (§ H.5),
+and the merged-set click that drills in from a nightstand but never from the bed
+(§ H.8). **Everything still below is unlooked-at** — including *Rotate and scale on a
+merged set*, which is only unlooked-at because **the keys it named were wrong**; see its
+note.
 
 ### Turning a piece into a wall — the handle, and now the arrow keys
 
