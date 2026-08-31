@@ -65,7 +65,7 @@ type StudioState = {
    *  a floor-standing part lands on / off another. An edge here is a HINT, not
    *  a guarantee — `lib/rigid-parent.ts`'s `snapshotDescendants` re-validates
    *  each one physically against live positions before trusting it, so a
-   *  relationship left stale by a programmatic mover (Suggest layout, a saved
+   *  relationship left stale by a programmatic mover (a solver layout, a saved
    *  Layout A/B, a wall carrying furniture) is inert rather than wrong. */
   parentIds: Record<string, string>;
   /** active gizmo mode (Maya-style) */
@@ -117,7 +117,7 @@ type StudioState = {
   frameSelectedToken: number;
   /** hidden parts (visibility toggle) — keyed by partId */
   hidden: Record<string, boolean>;
-  /** Parts the user locked against **Suggest** — keyed by partId.
+  /** Parts the user locked against **Fix** and **Shuffle** — keyed by partId.
    *
    *  What it blocks is *being moved by the solver*, and only that: a locked piece
    *  still drags, turns, resizes, recolours and deletes by hand. That is the

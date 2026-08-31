@@ -5,7 +5,7 @@
 // leaving it on the canvas meant the health of the room was chrome you could bury,
 // and it cost a corner that also had to hold the camera, the lighting and the grid.
 //
-// A health chip and Suggest, plus one "Room" button whose panel carries four
+// A health chip and Fix / Shuffle, plus one "Room" button whose panel carries four
 // readings as tabs:
 //   · Check — deterministic ergonomics review (door swings, walkways, storage
 //     clearance, bed access, TV distance, crowding). Click a finding to select the
@@ -52,7 +52,20 @@ import { useScene, type RoomShape } from '@/lib/scene-store';
 import { resolveParts, useRoomScene } from '@/lib/room-scene';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
 import { analyzeRoom, type ClearanceIssue, type ClearanceSeverity } from '@/lib/clearance';
-import { isWorthOffering, lockedForSolve, solveLayout, type MoveReason } from '@/lib/layout-solve';
+import {
+  isWorthOffering,
+  lockedForSolve,
+  movableFor,
+  solveLayout,
+  type MoveReason,
+} from '@/lib/layout-solve';
+import {
+  HISTORY_DEPTH,
+  lockedForShuffle,
+  shuffleRoom,
+  type ShuffleOffer,
+  type ShuffleRoom,
+} from '@/lib/layout-shuffle';
 import { RULE_HANDLING, type CostBreakdown } from '@/lib/layout-score';
 import { roomStore, type LayoutVariant, type Transforms } from '@/lib/storage';
 import { footprintBounds, type Footprint } from '@/lib/footprint';
@@ -387,12 +400,24 @@ export function RoomTools() {
         <Icon name={open ? 'chevron-up' : 'chevron-right'} size={12} />
       </button>
 
-      <SuggestButton effParts={effParts} footprint={room.footprint} appPlaced={appPlaced} />
+      {/* `wrap`, because this row is two `.ds-btn`s and a `.ds-btn` is
+          `white-space: nowrap` with fixed padding — it cannot shrink. The rail
+          around it is `overflow: hidden`, so anything past the edge is eaten with
+          no scrollbar and no error, which is the "Look panel" failure CLAUDE.md
+          names by hand. The budget is about 166px of button inside the 176px
+          `--rail-left-tight` leaves: ~10px, on labels whose width depends on a
+          font nobody has measured here. Wrapping costs a row of height in the
+          worst case and removes the whole failure mode; `LightingPicker` next
+          door already does exactly this. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        <FixAllButton effParts={effParts} footprint={room.footprint} appPlaced={appPlaced} />
+        <ShuffleButton effParts={effParts} room={room} appPlaced={appPlaced} />
+      </div>
     </div>
   );
 }
 
-// ─── Suggest an arrangement ─────────────────────────────────────────────────
+// ─── Fix: clear what is wrong, moving as little as possible ────────────────
 //
 // Preview IS applying it: the room is right there, and a thumbnail of a
 // suggestion would be a worse view of it than the 3D scene already on screen.
@@ -562,7 +587,7 @@ function useSuggest(effParts: ScenePart[], footprint: Footprint, appPlaced: AppP
   );
 }
 
-function SuggestButton({
+function FixAllButton({
   effParts,
   footprint,
   appPlaced,
@@ -614,7 +639,7 @@ function SuggestButton({
       disabled={busy}
       aria-busy={busy}
       className="ds-btn"
-      title="Rearrange the unlocked furniture using the same guidelines Room check measures"
+      title="Clear what's wrong (a blocked door, a crowded walkway…) moving as little as possible"
       style={{
         height: 30,
         fontSize: 11,
@@ -626,10 +651,195 @@ function SuggestButton({
       }}
     >
       {busy ? <Spinner size={12} /> : <Icon name="sparkles" size={12} />}
-      {/* The word changes as well as the glyph. Under `prefers-reduced-motion`
-          the ring does not turn, so the label is the tell that survives — and it
-          is the only one a screen reader gets from the button's own content. */}
-      {busy ? 'Thinking…' : 'Suggest'}
+      {/* The word changes as well as the glyph. Under `prefers-reduced-motion` the
+          ring does not turn, so the label is the tell that survives — and it is the
+          only one a screen reader gets from the button's own content. */}
+      {busy ? 'Fixing…' : 'Fix'}
+    </button>
+  );
+}
+
+// ─── Shuffle: a different valid arrangement, not a repair ──────────────────
+//
+// `Fix` is anchored to the room it is handed — it pays `inertia` to move
+// anything, so a room with nothing wrong has nothing to offer, and pressing it
+// again mostly finds the same local minimum. That is correct FOR Fix, and it is
+// exactly the complaint about the old single "Suggest" button: it read as
+// creative rearranging but behaved as repair-only. Shuffle is the other half.
+//
+// The pipeline itself is `lib/layout-shuffle.ts` — several independent solves,
+// the faulted ones thrown away, the survivors ranked for cost AND variety. It
+// lives there rather than here because every part of it is a decision a test
+// should be able to reach: without that, "how often does a shuffle hand back a
+// room with a piece across the doorway" is a question nobody can ask, and the
+// answer turned out to be 14 of 20 seeds on the T preset. See that file's header
+// for the measurements.
+//
+// What never moves: locked pieces, wall-mounted fixtures (doors, windows, the
+// ceiling light, the fan). `movableFor` is the one answer to that question and
+// both buttons read it.
+
+// How many recent offers Shuffle keeps is `HISTORY_DEPTH`, read from
+// `lib/layout-shuffle.ts` rather than restated here — it is the same number the
+// pipeline's own repeat-avoidance is documented against, and a second copy is
+// free to drift.
+//
+// ── Module scope, for the reason `APP_PLACED` is ─────────────────────────────
+//
+// Both of these were `useRef` first, which is wrong here for a reason this file
+// already records twenty lines up: **`RoomTools` unmounts on a tab switch**,
+// because `3D Model` and `2D Plan` are different ROUTES. A per-mount attempt
+// counter therefore restarts at 0, and `shuffleRoom` is deterministic per
+// `(room, attempt)` — so Shuffle, switch to the plan, Shuffle again handed back
+// the IDENTICAL arrangement while the toast cheerfully said it had moved six
+// pieces, with the history that would have suppressed it gone in the same
+// breath. Two refs, one bug, both invisible to every test in the suite.
+//
+// Keyed by room id, because these are facts about one room's session and the
+// user can open another; an unkeyed pair would carry one room's history into
+// the next and suppress an arrangement nobody had been shown.
+const SHUFFLE_ATTEMPT = new Map<string, number>();
+const SHUFFLE_HISTORY = new Map<string, ShuffleOffer[]>();
+
+function useShuffle(effParts: ScenePart[], room: ShuffleRoom, appPlaced: AppPlacedRef) {
+  const loadTransforms = useStudio((s) => s.loadTransforms);
+  const { roomId } = useParams<{ roomId: string }>();
+  // Falls back to one shared bucket when there is no route param. A single bucket
+  // is the safe direction: the worst it does is carry one room's recent offers
+  // into another and pass over an arrangement, where a per-mount store loses them
+  // on every tab switch — which is the bug this replaced.
+  const key = roomId ?? '~';
+  return useCallback(
+    (attempt: number) => {
+      const t = useStudio.getState();
+      // `ShuffleOffer`, not `Placement[]`: this history outlives every edit to the
+      // room, and a bare placement list is index-aligned to the `parts` array it
+      // was recorded against while saying so nowhere. The ids travel with it so
+      // `shuffleRoom` can tell an entry from this room apart from one recorded
+      // when the room had two more pieces in it.
+      const history = SHUFFLE_HISTORY.get(key) ?? [];
+      const outcome = shuffleRoom(effParts, room, lockedForShuffle(effParts, t.pinned), {
+        attempt,
+        history,
+      });
+      if (!outcome) return null;
+      const chosen = outcome.result;
+
+      // Append THEN trim, rather than trimming to `DEPTH - 1` and appending. The
+      // second form reads the same and is a landmine on a tunable constant: at
+      // `HISTORY_DEPTH = 1` it is `slice(-0)`, and `-0 === 0`, so it keeps the whole
+      // array and the history grows without bound instead of holding one entry.
+      SHUFFLE_HISTORY.set(key, [...history, outcome.offer].slice(-HISTORY_DEPTH));
+
+      const positions = { ...t.positions };
+      const rotations = { ...t.rotations };
+      for (const i of chosen.moved) {
+        const p = effParts[i];
+        positions[p.id] = [chosen.placements[i].x, p.pos[1], chosen.placements[i].z];
+        rotations[p.id] = chosen.placements[i].yaw;
+        appPlaced.current.set(p.id, { pos: positions[p.id], rot: rotations[p.id] });
+      }
+      // dims carried through untouched, for the same reason Fix does it: the
+      // solver moves and turns, and a suggestion that resized the furniture is
+      // the one thing this app refuses to do.
+      loadTransforms({ positions, rotations, dims: t.dims });
+      return outcome;
+    },
+    [effParts, room, loadTransforms, appPlaced, key],
+  );
+}
+
+function ShuffleButton({
+  effParts,
+  room,
+  appPlaced,
+}: {
+  effParts: ScenePart[];
+  room: ShuffleRoom;
+  appPlaced: AppPlacedRef;
+}) {
+  const shuffle = useShuffle(effParts, room, appPlaced);
+  // This button arrived with its own copy of the yield — a hand-rolled
+  // `requestAnimationFrame(() => requestAnimationFrame(work))`, an `alive` ref and
+  // a `busy` guard, reasoned out from first principles and correct. It is the
+  // FOURTH place in this file to need it and the third to write it out, which is
+  // the argument for `useBusyAction` rather than against it: two of the other
+  // three did not have it at all and shipped a flag that could never paint.
+  const [busy, run] = useBusyAction();
+  const { roomId } = useParams<{ roomId: string }>();
+  const attemptKey = roomId ?? '~';
+
+  function work() {
+      // Module scope, keyed by room — NOT a `useRef`. See `SHUFFLE_ATTEMPT`: this
+      // component unmounts on a tab switch, so a per-mount counter restarted at 0
+      // and re-served the identical arrangement.
+      const next = (SHUFFLE_ATTEMPT.get(attemptKey) ?? 0) + 1;
+      SHUFFLE_ATTEMPT.set(attemptKey, next);
+      const outcome = shuffle(next);
+      // Two different "no", and telling them apart is the honest part. Nothing
+      // movable is a fact about the room; every candidate faulted is the search
+      // failing, and in that case the room is deliberately left ALONE rather than
+      // handed an arrangement with a piece across the doorway.
+      if (!outcome) {
+        const anythingToMove = movableFor(effParts, lockedForShuffle(effParts, useStudio.getState().pinned)).some(
+          Boolean,
+        );
+        toast(
+          anythingToMove
+            ? {
+                // Not an error, and worded so it does not read as one: on a
+                // complex footprint this is 2–4 attempts in 12 (see
+                // `lib/layout-shuffle.ts`). Nothing went wrong — every
+                // arrangement it found would have left something in the way, and
+                // showing one of those is the thing it is refusing to do. "Press
+                // again" is real advice: the next attempt is a different search.
+                title: 'No new arrangement this time',
+                message:
+                  'Every layout it tried left something in the way, so your room is unchanged. Press Shuffle again for a different try.',
+              }
+            : {
+                title: 'Nothing to shuffle',
+                message: 'Every piece is locked or wall-mounted — there is nothing left to move.',
+              },
+        );
+        return;
+      }
+      const moved = outcome.result.moved.length;
+      toast({
+        title: `Shuffled ${moved} ${moved === 1 ? 'piece' : 'pieces'}`,
+        message: 'A different arrangement, not a fix. Undo puts the previous one back.',
+    });
+  }
+
+  // Why this one needs the yield at all: the search blocks the main thread —
+  // measured at a median 2.0 s and a worst 2.3 s on the `t` preset, because one
+  // press is up to twelve solves (see `lib/layout-shuffle.ts` for why it is more
+  // than one). It is the longest freeze in the app and the least survivable without
+  // a tell. The mechanism is `lib/after-paint.ts`.
+
+  return (
+    <button
+      onClick={() => run(work)}
+      disabled={busy}
+      aria-busy={busy}
+      className="ds-btn"
+      title="Try a different arrangement, whether or not anything is wrong — takes a bit longer than Fix"
+      style={{
+        height: 30,
+        fontSize: 11,
+        gap: 6,
+        background: 'var(--paper)',
+        borderColor: 'var(--edge)',
+        color: 'var(--ink-2)',
+        boxShadow: 'var(--shadow-soft)',
+      }}
+    >
+      {busy ? <Spinner size={12} /> : <Icon name="shuffle" size={12} />}
+      {/* The label carries the busy state, because the freeze it covers is up to
+          two seconds long and a greyed-out button alone reads as broken rather
+          than as working. Both strings are the same width to within a character,
+          so the row does not reflow mid-press. */}
+      {busy ? 'Shuffling…' : 'Shuffle'}
     </button>
   );
 }
@@ -789,7 +999,7 @@ function FixButton({
       toast({
         title: 'Moving those didn’t clear it',
         message: scope
-          ? 'Nothing better was found without touching the rest of the room. Suggest can rearrange everything.'
+          ? 'Nothing better was found without touching the rest of the room. Fix can rearrange everything.'
           : 'Nothing better was found. Try unlocking a piece, or making some space.',
       });
       return;
@@ -1374,7 +1584,7 @@ function FitAnswer({
               <span className="mono">
                 {formatDim(result.largestBay.width * 1000, dimUnit)} × {formatDim(result.largestBay.depth * 1000, dimUnit)} {dimUnit}
               </span>
-              . Moving what is already in here might make room — try <b>Suggest</b>.
+              . Moving what is already in here might make room — try <b>Fix</b> or <b>Shuffle</b>.
             </>
           ) : (
             <>This room has no clear stretch of floor to put it on.</>

@@ -210,13 +210,27 @@ all facing one way — had two causes: how a bed is added (fixed) and how a bed 
 fix are both on `main`, in the merge of `fix/bed-shape-and-its-rotted-fixtures` (PR #38).
 The branch name this paragraph used to name does not exist on `origin` and never did.
 
-**On `main`, and still imported by nothing.** `lib/layout-offer.ts` +
-`tests/layout-offer.test.ts` landed with `e999522`; `tests/layout-offer-pool.test.ts`
-followed. The sentence here used to say they were "in a commit, not on `main`" and that
-stopped being true when they merged — layer 3a's two pure pieces are shipped, ranked and
-tested, and **nothing calls them**. What is written is `orderOffers` (the ranking) and
-`layoutSimilarity` (how alike two arrangements are). What is not written is the wiring at
-`RoomTools.tsx:534`, and three things below have to be settled before it can be.
+**WIRED, by `lib/layout-shuffle.ts` — but not into the offer stage this section was
+written about.** `lib/layout-offer.ts` + `tests/layout-offer.test.ts` landed with
+`e999522`; `tests/layout-offer-pool.test.ts` followed. For a long time the sentence
+here read "**On `main`, and still imported by nothing**", and that stopped being true
+when the Shuffle button landed: `shuffleRoom` imports both `orderOffers` and
+`layoutSimilarity` and ranks its candidate solves with them at
+`DIVERSITY_PENALTY = 4`, the median this section measured.
+
+**Two caveats, because "wired" is doing less work here than it sounds.**
+
+· It ranks a set and then takes **one**. `orderOffers`' first pick has `picked = []`,
+  so `closest` is 0 and the score is pure cost — the penalty cannot move `ranked[0]`.
+  It only decides the order in which the history filter walks the rest. So the
+  diversity term is live for *"do not show me the same room twice in a row"* and inert
+  for the first offer, which is not what a median measured over `k`-sized offer sets
+  was measuring. **Nothing pins it**; a test that fails at `diversityPenalty: 0` is
+  still owed.
+· The three bullets below still stand unchanged — the finalist pool cannot supply
+  orientation variety, and ranking candidates is not ranking outcomes. Shuffle sidesteps
+  both by ranking *whole separate solves* rather than one solve's finalists, which is a
+  different technique from the one this section proposed, not a completion of it.
 
 · **The diversity trade is in COST UNITS, not a `[0, 1]` lambda, and that is a result about
   the technique rather than a preference.** Textbook MMR normalises relevance across the
@@ -408,11 +422,31 @@ knowable by someone who noticed the witnesses were the fragile part. They then w
 exactly that reason one commit later, which is the confirmation rather than the refutation:
 the property that made them worth checking is the property that made them fragile.
 
-### The Shuffle rename is NOT started
+### The Shuffle rename LANDED, and not as the sweep this section demanded
 
-Recorded because a half-done rename reads as a bug, and this document twice implied it was in
-hand. The new Lock strings deliberately say **"Suggest"**, so the vocabulary stays internally
-consistent. If it lands it lands as **one sweep across all 36 files**, never a file at a time.
+This section used to say the rename was not started, that the Lock strings deliberately said
+**"Suggest"** to keep the vocabulary internally consistent, and that *"if it lands it lands as
+one sweep across all 36 files, never a file at a time."* What actually happened is neither:
+the toolbar button was **split** rather than renamed — **Fix** (the old repair behaviour) and
+**Shuffle** (`lib/layout-shuffle.ts`, a different arrangement) — so there is no longer one
+name to sweep to.
+
+**The user-facing half is complete and was checked, not assumed.** No on-screen string names
+a control called "Suggest": the Lock labels say Fix/Shuffle, `RoomTools`' own copy does, and
+the one survivor — `Inspector.tsx`'s *"Suggested · 3"* — is about decor props and is a
+different word. `Design.md`'s two live references and the four code comments naming the
+control (`storage.ts`, `store.ts` ×2, `fit-check.ts`) were swept with it.
+
+**What is deliberately NOT swept, and why it is not half-done:** every occurrence narrating
+what the old button *did wrong* — `layout-rules.ts:7`, `clearance.ts:9`, `Design.md`'s
+wall-debt and seeder paragraphs, `layout-conformance.test.ts:10`, `CLAUDE.md` — is a scar
+about a thing called Suggest at the time it happened, and renaming those falsifies the
+record. `docs/history/**` and `docs/research/**` are point-in-time studies and are untouched
+for the same reason.
+
+**Still owed:** the internal hook is `useSuggest` and is now shared by `FixAllButton` and the
+per-finding `FixButton`. Internal only, no user can see it, but it is a name for a control the
+UI no longer has.
 
 ---
 
@@ -2188,23 +2222,47 @@ the one thing this product must not do. Two further blockers even if it were wan
 a discrete tile grid, and sizes here are continuous millimetres through `clampDims`, so
 discretising throws away the trust boundary rule 2 exists to protect.
 
-### 25. PR #67 review — three findings, none fixed, and one of them blocks the PR
+### 25. PR #67 review — three findings, ALL FIXED in `c75242b`
 
 Reviewed at head `52d30ed` on 2026-08-30, gating the PR head itself rather than the tree.
+Kept because finding 1 turned into a standing fact about the code rather than a defect
+that went away when it was fixed.
 
-1. **The `newRoomFindings` gate is unpinned.** Deleting `if (newRoomFindings(...).length > 0)
+1. **FIXED, and it grew. The `newRoomFindings` gate was unpinned.** Deleting `if (newRoomFindings(...).length > 0)
    continue;` from `shuffleRoom` leaves **all 11 tests green**, including the 41-second *never
    offers a room that ROOM CHECK would report*. After #68 the solver largely stops generating
    the candidates the gate discards, so on the fixture presets it never fires and that test
    measures the solver, not the gate. The PR's own commit message calls this gate "what makes
    the zero a guarantee rather than a measurement" — which is precisely the claim nothing
-   verifies. See § 24 for the shape of the fixture that would.
-2. **Three tests sit at 1.4–2.3× of vitest's default 5000 ms timeout**, so they go red under
+   verifies.
+
+   **Probed, and the answer is stronger than "unpinned": 816 candidates over thirteen
+   room configurations — the five presets plus four dining rooms built to provoke it, six
+   attempts each — and the gate rejected NONE of them.** That is structural. Only three
+   rules in `clearance.ts` reach the severity it filters on: `door`, already refused by
+   `isCleanShuffle` through `HARD_TERMS`; `tall`, a fact about a piece's size that the
+   gate's own before/after diff cancels; and `clash`, whose gap **#68 closed** — both
+   modules read `TUCKED_CLASH_SHARE` now and `isCleanShuffle` demands `overlap === 0`
+   exactly, so nothing reaching the gate can hold a pair past that bar.
+
+   **The gate stays.** These two modules have drifted apart once already; what was wrong
+   was the claim that a test covered it. `tests/shuffle-gate.test.ts` pins the agreement
+   the quiet depends on instead — it walks a chair into a desk in 10 mm steps and asserts
+   the room report calls it a clash at exactly the depths the solver charges overlap, so
+   it goes red the moment either threshold moves, which is the moment the gate has work
+   again. Killed by mutating either tolerance independently; the gate's own wiring is
+   pinned separately. **One mutation survives and is recorded in the source rather than
+   papered over:** the `|| f.rule === 'clash'` half of `serious` is redundant today,
+   because the one place that emits a clash emits it at error severity.
+2. **FIXED. Three tests sat at 1.4–2.3× of vitest's default 5000 ms timeout**, so they go red under
    load: 3429 ms, 3548 ms, 2129 ms measured idle. Two neighbouring tests in the same file
    already carry explicit `{ timeout: … }`, so the mechanism was known and these were missed.
-   This one is a **dependency of everything else** — while it flakes, no red anywhere can be
-   believed, and `main` is already intermittently red on machine speed.
-3. **`lib/layout-shuffle.ts` contradicts itself 155 lines apart** about whether #68 landed:
+   They carry an explicit 30 s now — ~8.5× the worst of the three, so it survives
+   contention while still failing on a real order-of-magnitude regression, and deliberately
+   not the 60 s / 300 s of the two sweeps beside them. Verified wired by setting it to 1 ms
+   and watching exactly those three time out. Compounds the standing note that `main` is
+   already intermittently red on machine speed.
+3. **FIXED. `lib/layout-shuffle.ts` contradicted itself 155 lines apart** about whether #68 landed:
    line 79 says `layout-score.ts` "no longer exempts" a `sharesFloor` pair from `overlap`;
    lines 234–239 say it exempts them "entirely — a blanket `continue`". #68 did land, and
    `layout-score.ts:649` is now `sharesFloor(...) ? TUCKED_CLASH_SHARE : 0`.

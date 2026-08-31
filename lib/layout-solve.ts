@@ -75,11 +75,27 @@ export type SolveOptions = {
    *  thread while a person waits for a button. */
   steps?: number;
   weights?: ScoreWeights;
-  /** `'arrange'` looks for the best arrangement it can find. `'refit'` looks for
-   *  the SMALLEST set of moves that clears what is currently wrong — what you want
-   *  after the room or a piece has been resized, where the layout was fine until
-   *  one number changed and reinventing it would throw away the user's work. */
-  mode?: 'arrange' | 'refit';
+  /** `'arrange'` looks for the best arrangement it can find, anchored to the
+   *  layout it is handed — moving a piece costs `inertia`, so a room that is
+   *  already good stays put. `'refit'` looks for the SMALLEST set of moves that
+   *  clears what is currently wrong — what you want after the room or a piece has
+   *  been resized, where the layout was fine until one number changed and
+   *  reinventing it would throw away the user's work. `'shuffle'` is `'arrange'`
+   *  with the anchor removed: no inertia cost, and it searches from `start`
+   *  (typically a randomised placement) rather than from `origin`, so a room that
+   *  is already good is not a fixed point — see `randomizeStart`. Its free revert
+   *  to `origin` (`pruneMoves`) is skipped for the same reason: there is no
+   *  "the user's own placement" to protect when the search began from noise. */
+  mode?: 'arrange' | 'refit' | 'shuffle';
+  /** The search's own starting placement, index-aligned with `parts`. Defaults to
+   *  `origin` (today's real positions), which is what makes `'arrange'` and
+   *  `'refit'` explore *from* the current room. `'shuffle'` passes a randomised
+   *  placement here instead — `origin` still carries the REAL current position for
+   *  the inertia term (0 in shuffle, so unused), the `moved`/`explain` reporting,
+   *  and `snapYaws`'s scoping, all of which must answer "what would a person
+   *  watching the real room call different", not "different from the noise this
+   *  solve started at". */
+  start?: Placement[];
   /** Ids of pieces the USER placed by hand. Those cost more to move than ones the
    *  app guessed at — see `LayoutContext.placed`. */
   placed?: Set<string>;
@@ -269,8 +285,10 @@ const REPAIR_STEPS = 260;
 const REPAIR_CELL = 0.1;
 
 /** Seeded PRNG (mulberry32). Explicit because a layout suggestion that differs
- *  between two runs of the same room is not a suggestion, it is a slot machine. */
-function makeRng(seed: number): () => number {
+ *  between two runs of the same room is not a suggestion, it is a slot machine.
+ *  Exported so a caller building a `shuffle` `start` uses the app's one PRNG
+ *  rather than a second implementation that would drift from it. */
+export function makeRng(seed: number): () => number {
   let s = seed >>> 0;
   return () => {
     s = (s + 0x6d2b79f5) | 0;
@@ -307,6 +325,65 @@ export function lockedForSolve(
   return parts.map((p) => !!pinned[p.id] || p.locked || (confined ? !confined.has(p.id) : false));
 }
 
+/** Which pieces a solve may actually move: not locked, and not wall-mounted — a
+ *  door, window, or ceiling fixture rides the wall or ceiling it was placed on,
+ *  and sliding one along it is not a layout decision. `solveLayout` derives this
+ *  internally; exported so a caller that needs the same answer BEFORE calling it
+ *  — building a `shuffle` `start`, or scoring `layoutSimilarity` — computes it
+ *  once, here, rather than re-deriving `!p.wallMounted` a second place. (That
+ *  second place is exactly what `tests/plan-surfaces.test.ts` polices for the
+ *  plan-drawing surfaces, over a different flag with the same shape of bug.) */
+export function movableFor(parts: ScenePart[], locked: boolean[]): boolean[] {
+  return parts.map((p, i) => !locked[i] && !p.wallMounted);
+}
+
+/**
+ * A starting placement for `mode: 'shuffle'` — every movable piece scattered to a
+ * random point and heading, everything else (locked, wall-mounted) left at its
+ * real position. `solveLayout` then anneals it, with no inertia charged against
+ * either this noise or the real room, into a different valid arrangement.
+ *
+ * Deliberately not required to be collision-free or even inside the footprint on
+ * every piece: the annealer's `overlap` / `outside` terms exist precisely to price
+ * that, and its early (hot) steps are the ones built to escape a bad start. A
+ * generator that worked harder to make every point legal would just be a second,
+ * worse copy of the search. It DOES bias toward the footprint's own interior
+ * rather than its bounding box — `pointInFootprint`, resampled a few times — so an
+ * L/T/U shaped room does not spend its whole budget climbing out of the notch the
+ * bounding box adds; see rule 3 of `CLAUDE.md` on why a box is not a floor.
+ *
+ * `locked`/`movable` is `parts`-index-aligned, the same array `solveLayout` itself
+ * derives from `locked` and `wallMounted` — passed in rather than recomputed so the
+ * two never compute it two different ways.
+ */
+export function randomizeStart(
+  parts: ScenePart[],
+  footprint: Footprint,
+  movable: boolean[],
+  rng: () => number,
+): Placement[] {
+  const b = footprintBounds(footprint);
+  return parts.map((p, i) => {
+    if (!movable[i]) return { x: p.pos[0], z: p.pos[2], yaw: p.rot };
+    let x = p.pos[0];
+    let z = p.pos[2];
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const cx = b.minX + rng() * (b.maxX - b.minX);
+      const cz = b.minZ + rng() * (b.maxZ - b.minZ);
+      if (pointInFootprint(cx, cz, footprint)) {
+        x = cx;
+        z = cz;
+        break;
+      }
+      // Keep the last try even if every attempt landed outside — a room-shaped
+      // start beats an arbitrary one, and the annealer prices the rest.
+      x = cx;
+      z = cz;
+    }
+    return { x, z, yaw: rng() * Math.PI * 2 };
+  });
+}
+
 /**
  * Suggest an arrangement.
  *
@@ -322,14 +399,19 @@ export function solveLayout(
   opts: SolveOptions = {},
 ): SolveResult {
   const refit = opts.mode === 'refit';
+  // No anchor at all: a shuffle is searching from a placement that carries no
+  // claim on staying put, so charging it `inertia` would just pull the search
+  // back toward the noise it started from.
+  const shuffle = opts.mode === 'shuffle';
   const weights: ScoreWeights = {
     ...(opts.weights ?? DEFAULT_WEIGHTS),
     ...(refit && !opts.weights ? { inertia: REFIT_INERTIA } : null),
+    ...(shuffle && !opts.weights ? { inertia: 0 } : null),
   };
   const steps = opts.steps ?? DEFAULT_STEPS;
   const rng = makeRng(opts.seed ?? 1);
 
-  const movable = parts.map((p, i) => !locked[i] && !p.wallMounted);
+  const movable = movableFor(parts, locked);
   const origin: Placement[] = parts.map((p) => ({ x: p.pos[0], z: p.pos[2], yaw: p.rot }));
   const ctx: LayoutContext = {
     parts,
@@ -340,11 +422,36 @@ export function solveLayout(
   };
   const model = prepare(ctx);
 
-  const current: Placement[] = origin.map((p) => ({ ...p }));
+  const current: Placement[] = (opts.start ?? origin).map((p) => ({ ...p }));
   // Navigation is priced in from the very first number, so `before` and `after` are
   // comparable and a suggestion that opens a sealed-off half of the room is
   // recognised as the large improvement it is.
-  const breakdownBefore = costBreakdown(model, current, weights, NAV_CELL);
+  //
+  // ── `before` is the ROOM WE WERE GIVEN, never where the search begins ────────
+  //
+  // Those are the same thing in `arrange` and `refit` (`current` is a copy of
+  // `origin`), and they are NOT in `shuffle`, where the search starts from a random
+  // scatter the caller invented. Measuring `before` from `current` there made three
+  // things quietly wrong, all of which read as working:
+  //
+  //   · The late `if (breakdownAfter.total >= before)` invariant — whose whole
+  //     purpose is "never hand back something worse than what we were given" —
+  //     compared the answer against the NOISE. A scatter costs hundreds (overlap and
+  //     outside are weighted 1000), so the guard could not fire, and if it ever had
+  //     it would have produced a result whose `placements`, `after` and `before`
+  //     described three different layouts.
+  //   · `before` / `breakdownBefore` are returned to the caller. Measured on
+  //     `rect 6x4` seed 9: `before = 349.9`, `after = 2.0`, for a room whose real
+  //     cost was ~2.0 — so `whatChanged()` next door would have announced that it
+  //     "separated pieces that were in the same place" about a tidy room, and
+  //     `isWorthOffering` would pass for any shuffle at all.
+  //   · `explain`'s nav flag below reads `breakdownBefore.navigation > 0` to decide
+  //     whether to pay for distance transforms. A scatter essentially always has
+  //     one, so it paid, every solve, for `moves` the shuffle path never reads.
+  //
+  // Taking it from `origin` is behaviour-identical for the two anchored modes —
+  // `origin` and `current` hold equal values there — so no seed fixture moves.
+  const breakdownBefore = costBreakdown(model, origin, weights, NAV_CELL);
   const before = breakdownBefore.total;
 
   const b = footprintBounds(footprint);
@@ -588,7 +695,11 @@ export function solveLayout(
   // Scoped to what the search touched — a piece it never proposed a move for has no
   // residue to tidy, and its angle is the user's own. See `untouched`.
   winner = snapYaws(model, winner, weights, true, origin);
-  winner = pruneMoves(model, origin, winner, weights);
+  // Shuffle skips this: pruneMoves offers a piece its ORIGIN place back for free
+  // when the room is barely worse without it, which is exactly the "free revert
+  // toward the room you already have" this mode exists to not do. There is no
+  // "the user's own placement" being protected here — the search began at noise.
+  winner = shuffle ? winner : pruneMoves(model, origin, winner, weights);
   // …then the repair, because it is the only pass whose objective the prune cannot
   // see: a move that opens a route would be reverted by a prune scoring without
   // navigation.
@@ -625,7 +736,23 @@ export function solveLayout(
   // near-optimal that slack can eat the entire gain — at which point the honest
   // answer is that there was nothing worth moving. An invariant rather than a
   // safeguard: every caller downstream assumes `after <= before`.
-  if (breakdownAfter.total >= before) {
+  //
+  // ── …except in `shuffle`, where "worse" is not a reason to refuse ────────────
+  //
+  // This mode answers "show me a different arrangement", not "show me a better
+  // one". Its rooms are routinely ALREADY optimal — a `defaultScene` is a local
+  // minimum by construction — so any genuinely different arrangement of one costs
+  // more, and that is the honest answer to what was asked rather than a failure.
+  // Applying the invariant here does not make shuffle safer, it turns it off: with
+  // `before` correctly measured from the real room, this branch fired on nearly
+  // every candidate of every preset, `moved` came back empty, `isCleanShuffle`
+  // refused it, and the button reported "couldn't find another arrangement" for
+  // every room in the app. (It was inert before only because `before` was then the
+  // cost of a random scatter, which nothing beats — two wrongs looking like a
+  // working feature.) What keeps a shuffle honest is `isCleanShuffle`'s per-term
+  // `HARD_TERMS` check in `lib/layout-shuffle.ts`, which is about faults rather
+  // than about totals, and refuses the things a person would actually call broken.
+  if (!shuffle && breakdownAfter.total >= before) {
     winner = origin.map((p) => ({ ...p }));
     breakdownAfter = breakdownBefore;
   }

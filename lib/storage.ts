@@ -174,7 +174,7 @@ export type Transforms = {
    *  refresh silently brought hidden parts back while the top bar had been
    *  showing a "saved" state the whole time. */
   hidden?: Record<string, boolean>;
-  /** which parts the user locked against **Suggest** — same optional per-room
+  /** which parts the user locked against **Fix** and **Shuffle** — same optional per-room
    *  shape as `hidden`, and optional for the same reason.
    *
    *  Not called `locked`, because that word is already spent: `ScenePart.locked`

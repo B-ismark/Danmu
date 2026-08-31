@@ -94,33 +94,70 @@ matched the room, and it did, so it is gone. Two things came out of that same lo
 is an eyes-item: a nightstand passing **through** the bed after a Shuffle (§ H.18), and the
 Library search failing to match `stand` → `Nightstand` (§ H.19).*
 
+### Fix and Shuffle are two buttons now — PR #67, branch `claude/project-readme-review-yawa21`
+
+**Where to click.** Left rail, top: the health chip now has **two** buttons under it,
+`Fix` (sparkles) and `Shuffle` (shuffle icon). Open any room. Press `Fix` on a room with
+nothing wrong — it should say *"This is already a good arrangement"*. Then press
+`Shuffle` on the same room: it must actually rearrange it. That difference is the whole
+point of the change, and no test can tell you it reads that way on screen.
+
+**What wrong looks like.**
+
+- **The row clipping.** Two `.ds-btn`s sit in a `display: flex` row with **no
+  `flexWrap`**, inside a rail whose box is `overflow: hidden`. The derived budget is
+  ~166px of button in 176px of rail at `--rail-left-tight` — about 10px of slack, never
+  measured on a real font. Drag the left rail to its narrowest and watch for `Shuffle`
+  losing its right-hand side or its label. There is no scrollbar and no error; the
+  glyphs just stop. (`LightingPicker` next door solves the same problem with
+  `flexWrap: 'wrap'` *and* two assertions in `tests/reflow.test.ts`; this row has
+  neither yet.)
+- **The refusal.** On a `t` or `open` footprint roughly a sixth to a third of presses
+  answer *"No new arrangement this time"* and leave the room alone. That is **correct**
+  — it is refusing to show a room with something in the way — but it must not read as a
+  failure, and pressing again must genuinely try something new. Watch whether it feels
+  like a broken button.
+- **A room that got worse.** Shuffle is allowed to cost more than the arrangement you
+  had — that is what "a different arrangement" of an already-optimal room means. What it
+  may **not** do is introduce something Room check reports. After a shuffle, open
+  **Room** → **Check**: any new error or clash is a defect (0 of 72 in measurement, and
+  the gate meant to catch it has since been measured never to fire — see § H.25 — so one
+  on screen is worth reporting loudly).
+
+**The freeze and the repeat-after-a-tab-switch are both gone from this list on purpose.**
+The tab-switch repeat was fixed on this branch — the attempt counter and the offer history
+are module-scope maps keyed by room id now, not per-mount refs. The freeze is the item
+below, which covers all four solve buttons rather than only this one.
+
+### Does Shuffle keep the bedside table by the bed? — a known defect, `main`
+
 ### The solve buttons say they are working — and this is the one thing no test here can see
 
-**Where.** Any room with furniture in it. Open **Room tools → Suggest**. Also **Room check →
-Try a fix** on any finding, and **Fit → Check the room**.
+**Where.** Any room with furniture in it. Open **Room tools** and press **Fix**, then
+**Shuffle**. Also **Room check → Try a fix** on any finding, and **Fit → Check the room**.
 
 **What right looks like.** The instant you press, and *before* the room changes: the button
-goes to a turning ring and reads **Thinking…** (Suggest), **Trying…** (Try a fix),
-**Checking…** (Check the room). It is disabled while it does. Then the room moves and the
-word comes back.
+goes to a turning ring and reads **Fixing…**, **Shuffling…**, **Trying…** or **Checking…**
+depending on which one you pressed. It is disabled while it does. Then the room moves and
+the word comes back.
 
 **What wrong looks like.** The old behaviour: press, nothing at all happens for one to four
 seconds — no ring, no word, no disabled state, the whole window frozen — and then the
 furniture jumps. If that is still what you see, the yield is not reaching the screen.
+**Shuffle is the one to try first**: one press is up to twelve solves, a median 2.0 s and a
+worst 2.9 s on a T-shaped room, so it is the longest freeze in the app.
 
 **Why a person has to do this.** The tests prove the work is deferred past a frame boundary;
 they cannot prove a **paint**, because jsdom has no compositor. This is the whole residue of
 that fix and it is the reason the item exists. Two seconds of clicking settles it.
 
-**Also worth a glance while you are there:** a *double*-click on Suggest must run one solve,
-not two, and under **prefers-reduced-motion** the ring should sit still while the word still
+**Also worth a glance while you are there:** a *double*-click must run one solve, not two,
+and under **prefers-reduced-motion** the ring should sit still while the word still
 changes — the label is the tell that has to survive.
 
-**Where it rides.** `fix/busy-states-that-paint`, PR #71. Measured on commit **`a8ba8f5`**
-with a clean tree, not on a working copy: typecheck 0, lint 0 at `--max-warnings 0`,
-`pnpm test` 101 files / **1857 passed, 0 failed**, 5 expected-fail, `pnpm build` exit 0 with
-neither `ESLint: Invalid Options` nor `plugin was not detected` in its output — which is the
-absence CI reads as the lint pass having actually run.
+**Where it rides.** Merged to `main` in `28e0994` (PR #71) for Fix / Try a fix / Check the
+room; Shuffle's own is on `claude/project-readme-review-yawa21` (PR #67), which routes it
+through the same `useBusyAction` rather than the hand-rolled copy it arrived with.
 
 
 ## Shell and flow

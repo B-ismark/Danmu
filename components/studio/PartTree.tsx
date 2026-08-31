@@ -851,8 +851,8 @@ function PartRow({
           `is-on` pins the eye open while a piece is hidden, so the state is
           visible without hovering. */}
       {/* Lock, beside Hide and pinned open by `is-on` for the same reason: a piece
-          Suggest may not move is a state you need to see without hovering every
-          row to find it.
+          Fix or Shuffle may not move is a state you need to see without hovering
+          every row to find it.
 
           The label says what it does rather than what it is. "Lock" alone invites
           the reading the padlock that used to sit in the status glyph got wrong —
@@ -860,8 +860,8 @@ function PartRow({
           solver only: it still drags, turns, resizes and deletes by hand. */}
       <IconButton
         icon={isPinned ? 'lock' : 'unlock'}
-        label={isPinned ? `Let Suggest move ${name}` : `Keep ${name} where it is`}
-        title={isPinned ? 'Suggest may not move this — click to release' : 'Keep where it is when Suggest rearranges'}
+        label={isPinned ? `Let Fix/Shuffle move ${name}` : `Keep ${name} where it is`}
+        title={isPinned ? 'Fix and Shuffle may not move this — click to release' : 'Keep where it is when the room is rearranged'}
         active={isPinned}
         className={`row-action${isPinned ? ' is-on' : ''}`}
         onClick={(e) => {
