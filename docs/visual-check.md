@@ -94,7 +94,7 @@ matched the room, and it did, so it is gone. Two things came out of that same lo
 is an eyes-item: a nightstand passing **through** the bed after a Shuffle (§ H.18), and the
 Library search failing to match `stand` → `Nightstand` (§ H.19).*
 
-### Fix and Shuffle are two buttons now — PR #67, branch `claude/project-readme-review-yawa21`
+### Fix and Shuffle are two buttons now — merged to `main` in `9ecce9f` (PR #67)
 
 **Where to click.** Left rail, top: the health chip now has **two** buttons under it,
 `Fix` (sparkles) and `Shuffle` (shuffle icon). Open any room. Press `Fix` on a room with
@@ -131,33 +131,67 @@ below, which covers all four solve buttons rather than only this one.
 
 ### Does Shuffle keep the bedside table by the bed? — a known defect, `main`
 
-### The solve buttons say they are working — and this is the one thing no test here can see
+### The solve buttons say they are working — LOOKED AT for three of the four
 
-**Where.** Any room with furniture in it. Open **Room tools** and press **Fix**, then
-**Shuffle**. Also **Room check → Try a fix** on any finding, and **Fit → Check the room**.
+Kept as a paragraph rather than deleted, because the measurement is the point and because
+the fourth button has only just landed.
 
-**What right looks like.** The instant you press, and *before* the room changes: the button
-goes to a turning ring and reads **Fixing…**, **Shuffling…**, **Trying…** or **Checking…**
-depending on which one you pressed. It is disabled while it does. Then the room moves and
-the word comes back.
+Chromium against a production build, per-frame sampling from inside the page: pressing
+**Suggest** on a scrambled room put `.ds-spinner` in the DOM with `aria-busy="true"`, the
+label **Thinking…** and the button `disabled` across **two consecutive animation frames**
+17 ms apart — so the compositor had a frame boundary with it up, which is a paint — and the
+frames either side of it show gaps of **2983 ms and 2899 ms**, the synchronous solve
+blocking the main thread *after* the busy state was already on screen. That is exactly the
+sequence `afterPaint`'s two rAFs are for. Try a fix and Check the room share the identical
+`useBusyAction` hook, which is what the extraction was for.
 
-**What wrong looks like.** The old behaviour: press, nothing at all happens for one to four
-seconds — no ring, no word, no disabled state, the whole window frozen — and then the
-furniture jumps. If that is still what you see, the yield is not reaching the screen.
-**Shuffle is the one to try first**: one press is up to twelve solves, a median 2.0 s and a
-worst 2.9 s on a T-shaped room, so it is the longest freeze in the app.
+Three earlier versions of that probe each reported "never observed" for a reason of their
+own making — polling slower than the window, matching the wrong label, and a
+MutationObserver whose callback reads the current DOM and so cannot see a state that opens
+and closes inside one microtask checkpoint. Worth knowing before anyone re-measures it.
 
-**Why a person has to do this.** The tests prove the work is deferred past a frame boundary;
-they cannot prove a **paint**, because jsdom has no compositor. This is the whole residue of
-that fix and it is the reason the item exists. Two seconds of clicking settles it.
+**Still unlooked-at, and small.** **Shuffle** was routed through the same hook on PR #67 and
+has the longest solve in the app — one press is up to twelve solves, a median 2.0 s and a
+worst 2.9 s on a T — so it is the one worth pressing, and the only one where a missing ring
+would be unmistakable. And under **prefers-reduced-motion** the ring should sit still while
+the word still changes: the label is the tell that has to survive.
 
-**Also worth a glance while you are there:** a *double*-click must run one solve, not two,
-and under **prefers-reduced-motion** the ring should sit still while the word still
-changes — the label is the tell that has to survive.
+### A wall that stops has nothing to SAY to someone who can see
 
-**Where it rides.** Merged to `main` in `28e0994` (PR #71) for Fix / Try a fix / Check the
-room; Shuffle's own is on `claude/project-readme-review-yawa21` (PR #67), which routes it
-through the same `useBusyAction` rather than the hand-rolled copy it arrived with.
+**Where.** A room whose widest piece nearly fills it — drop a sofa in and drag the room
+narrow, or open any room and pull a wall inward until it will not go further. All four wall
+surfaces: the 3D handle, the 2D plan's handle, the plan's arrow keys on a focused wall, and
+the Inspector's **Pull in 10 cm**.
+
+**What happens now.** The wall stops dead at the widest piece and the reason —
+*"“Big sectional” needs 2.4 m — the room will not go narrower than that."* — is spoken into
+the studio's live region, which is `sr-only`. A screen-reader user hears it. **Everyone else
+gets a wall that stops and no explanation**, and the Inspector's button is the worst case:
+press "Pull in" at the stop and literally nothing on screen changes.
+
+**The question for a person**, because it is a judgement and not a defect: does the stop read
+as a *limit* or as a *broken button*? A wall that halts under the pointer may well be
+self-explanatory, the way bumping a piece into another piece is. If it is not, the fix is a
+line in the Inspector's wall panel — `selectedWall` is set on all four paths, so it is on
+screen for every one of them — and **not** a toast: `moveWallCarrying` runs once per
+animation frame during a drag.
+
+**What is already verified and does not need re-checking**: the width field's `min` is the
+furniture floor rather than the static 1; the refusal names the piece in `--danger-text` and
+wraps to two lines without overflowing or spilling its rail; the arrows stop dead on the
+stop; a room already too small for its sofa reports the piece's real 3.60 m; and the plan's
+arrow-key nudge walks the wall to exactly 2.40 and then refuses with the right sentence.
+
+**One layout case not reached.** The message interpolates a **user-authored part name**, and
+this is the only place in the app one is rendered as free-flowing text at a fixed narrow
+width (everywhere else ellipsises). Names allow 80 characters through `EditableText` and 200
+through a scene file, with no space requirement. `overflowWrap: 'anywhere'` is on the line,
+but it has only been seen at a 1400px viewport with short names. **Rename a piece to a
+~45-character unbroken string, drag the left rail to its narrowest, and refuse a width** — if
+the rail grows a horizontal scrollbar, the wrap is not doing its job.
+
+**Where it rides.** `fix/room-shrink-stops-at-the-furniture`, PR #72.
+
 
 
 ## Shell and flow

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { applyRoomEdits, clampDims, dimRangeFor, dimsWithinRange, ROOM_AXES, roomAxisRange, type RoomAxis } from '@/lib/dimension-ranges';
+import { applyRoomEdits, clampDims, dimRangeFor, dimsWithinRange, ROOM_AXES, ROOM_SIDE_EPS, ROOM_SIDE_M, roomAxisRange, type RoomAxis } from '@/lib/dimension-ranges';
+import { stepFor, toMM } from '@/lib/units';
 
 describe('dimRangeFor', () => {
   it('keeps electronics on a tight leash (fixed tier)', () => {
@@ -203,6 +204,113 @@ describe('applyRoomEdits pending', () => {
     const retry = applyRoomEdits(ROOM, { ...first.pending, height: 2.6 });
     expect(retry.rejected).toBeNull();
     expect(retry.room).toEqual({ width: 5, depth: 3, height: 2.6 });
+  });
+});
+
+describe('ROOM_SIDE_EPS', () => {
+  it('is far below the finest size the app can display', () => {
+    // Pinned only from BELOW before this: a review set it to 0.04 — forty
+    // millimetres — and every test in three files stayed green, because both drift
+    // fixtures step 50 mm, which is larger than the surviving tolerance. At 40 mm a
+    // wall stops 40 mm INSIDE the sectional and `moveWall` persists a room narrower
+    // than the piece standing in it: rule 2's "never silently resize it to fit", in
+    // the constant added to prevent it.
+    //
+    // The bound is DERIVED from the unit table rather than typed, so a new unit
+    // with a finer step tightens it automatically.
+    const finestMM = Math.min(...(['m', 'cm', 'mm', 'ft', 'in'] as const).map((u) => toMM(stepFor(u), u)));
+    expect(ROOM_SIDE_EPS).toBeGreaterThan(0);
+    expect(ROOM_SIDE_EPS * 1000, 'a tolerance the user can see is not a tolerance').toBeLessThan(finestMM / 100);
+  });
+});
+
+describe('applyRoomEdits furniture floors', () => {
+  const ROOM = { width: 4, depth: 3, height: 2.5 };
+
+  it('refuses a side the furniture will not fit on, and says which rule refused', () => {
+    const r = applyRoomEdits(ROOM, { width: 2 }, { width: 2.4 });
+    expect(r.rejected).toBe('width');
+    expect(r.rejectedBy).toBe('floor');
+    expect(r.room).toEqual(ROOM);
+  });
+
+  it('takes the same edit when no floor is given — the bound is opt-in', () => {
+    // Every caller that existed before the stop passes two arguments and must keep
+    // behaving exactly as it did. A third parameter that changed the two-argument
+    // answer would be a silent behaviour change for `lib/scene-file.ts`'s
+    // neighbours and for every existing test above.
+    const r = applyRoomEdits(ROOM, { width: 2 });
+    expect(r.rejected).toBeNull();
+    expect(r.rejectedBy).toBeNull();
+    expect(r.room.width).toBe(2);
+  });
+
+  it('takes a value exactly ON the floor', () => {
+    // The stop is the size the piece needs, so that size fits. An exclusive
+    // comparison here makes the number the message names the one number the field
+    // will not accept, which is the shape of the `boundsToUnit` bug in a different
+    // place.
+    expect(applyRoomEdits(ROOM, { width: 2.4 }, { width: 2.4 }).rejected).toBeNull();
+  });
+
+  it('lets the room GROW past the floor', () => {
+    expect(applyRoomEdits(ROOM, { width: 6 }, { width: 2.4 }).rejected).toBeNull();
+  });
+
+  it('applies the floor per axis, and never to the ceiling', () => {
+    // A floor is a fact about the plan, so it has no business bounding a height —
+    // a piece taller than the ceiling keeps its height and clearance.ts reports it.
+    expect(applyRoomEdits(ROOM, { depth: 2 }, { width: 2.4 }).rejected).toBeNull();
+    expect(applyRoomEdits(ROOM, { depth: 2 }, { depth: 2.4 }).rejected).toBe('depth');
+    expect(applyRoomEdits(ROOM, { height: 2 }, { width: 2.4, depth: 2.4 }).rejected).toBeNull();
+  });
+
+  it('says "range" rather than "floor" when the floor is only the hard minimum', () => {
+    // `roomFloor` returns ROOM_SIDE_M.min for an empty room, so the editor passes
+    // that number on every commit. Reporting it as a furniture refusal would make
+    // the caller render "… needs 1 m" with no piece to name — a refusal pointing at
+    // nothing. Below the static min the static message is the honest one.
+    const r = applyRoomEdits(ROOM, { width: 0.5 }, { width: ROOM_SIDE_M.min });
+    expect(r.rejected).toBe('width');
+    expect(r.rejectedBy).toBe('range');
+  });
+
+  it('names the piece even when the value is below the static minimum too', () => {
+    // This is the ORDER, and it is the only assertion that can see it: 0.5 fails
+    // both rules, so checking the static range first answers "outside 2.4–50 m"
+    // where checking the floor first answers "the sectional needs 2.4 m". Every
+    // other case here fails exactly one rule and passes under either ordering.
+    const r = applyRoomEdits(ROOM, { width: 0.5 }, { width: 2.4 });
+    expect(r.rejectedBy).toBe('floor');
+  });
+
+  it('reports "range" for an infinite value even while a floor is in force', () => {
+    // `NaN < floor` is false all by itself; `-Infinity < floor` is TRUE, so without
+    // the finiteness guard a room whose width parsed to -Infinity would be blamed
+    // on the sofa. The one case that guard exists for, and the only one that can
+    // observe it.
+    expect(applyRoomEdits(ROOM, { width: -Infinity }, { width: 2.4 }).rejectedBy).toBe('range');
+  });
+
+  it('reports "range" for a NaN even while a floor is in force', () => {
+    // `NaN < floor` is false, so a cleared field falls through to the static check
+    // and keeps the message it had. An `<=` or a negated comparison here would
+    // start telling the user a sofa is the reason their empty Height box was
+    // refused.
+    const r = applyRoomEdits(ROOM, { width: NaN }, { width: 2.4 });
+    expect(r.rejected).toBe('width');
+    expect(r.rejectedBy).toBe('range');
+  });
+
+  it('reports "range" for a value over the maximum, floor or no floor', () => {
+    const r = applyRoomEdits(ROOM, { width: 99 }, { width: 2.4 });
+    expect(r.rejectedBy).toBe('range');
+  });
+
+  it('hands the whole batch back on a floor refusal, exactly as on a range one', () => {
+    const r = applyRoomEdits(ROOM, { depth: 2.8, width: 2 }, { width: 2.4 });
+    expect(r.rejectedBy).toBe('floor');
+    expect(r.pending).toEqual({ depth: 2.8, width: 2 });
   });
 });
 

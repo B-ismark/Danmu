@@ -2109,7 +2109,7 @@ carrying its own copy of the rule.
 Note this is NOT the same as a piece the room can no longer hold. Carrying is what happens
 while there is room to move into; § 22 is what happens when there is not.
 
-### 22. There is no minimum room size, and no floor under a shrink
+### 22. There is no minimum room size, and no floor under a shrink — FIXED
 
 The user's own framing, and it is a design more than a bug: *"there should be default size
 and also min width imposed because present models have width that won't allow the room to be
@@ -2143,6 +2143,60 @@ regression on real user data, and it would have needed an author-time bound dist
 the load bound to avoid. Permitting corridors removes that problem rather than solving it.
 
 The dynamic minimum still owes `boundsToUnit` the pair treatment described above.
+
+**SHIPPED 2026-08-30** — `db97bf7` + `f3641c1`, branch
+`fix/room-shrink-stops-at-the-furniture`.
+
+`lib/room-floor.ts` is the rule. `furnitureFloor(parts, axis)` is the largest
+world-space extent any single piece needs on that axis, rotated, through
+`footExtentAlong` — so a round table needs its DIAMETER rather than its bounding
+box, which differ by 248.5 mm on a 1200 mm piece. **Every part counts**, and the
+filter that looks like it belongs there does not: `floorBlockers` drops rugs,
+wall-hung items and anything under 250 mm tall because it answers "what gets in a
+walker's way", and a 3 m rug needs 3 m of floor exactly as a 3 m sofa does.
+
+`roomFloor(stop, current)` then clamps to the room's **current** side, which is the
+half that is easy to omit and impossible to see afterwards. A room can already be
+narrower than something standing in it. Without it the floor sits above the current
+width, `NumberField` clamps the value up to its own `min` and one chevron silently
+GROWS the room, while a wall drag outward is refused for being still under the
+piece — so the one gesture that could fix the room is the one blocked.
+
+Both paths read it: `RoomDimsEditor` → `applyRoomEdits` (which takes a plain number
+per axis, so `dimension-ranges.ts` never learns about `ScenePart`), and
+`lib/wall-actions.ts`, the single chokepoint for all four wall surfaces. The bound
+reaches the stepper through `boundsToUnit` like every other one, so the arrows
+cannot walk the room somewhere the commit will refuse.
+
+**And the wall half was not merely missing a stop — it had no voice.**
+`moveWallCarrying` has always returned the applied delta and **not one of its four
+call sites read it**, so every refusal was silent; `PlanView.onWallKeyDown` was
+worse, announcing *"moved in. Room is now 3.0 by 2.4"* on a press that moved
+nothing. The refusal now speaks from the chokepoint, once per gesture, which needed
+`announce` to be reachable from `lib/` — its dispatch is `lib/announce.ts` now and
+only the rendering stayed in `KeyboardShortcuts`.
+
+**Two defects were found in a browser and by nothing else**, both in the same
+fifteen minutes, and they are the argument for looking:
+
+· A wall reaches a bound by repeated addition, so thirty-two presses of the plan's
+  50 mm step land on 2.3999999999999995 and the wall stopped at **2.45** under a
+  message saying the piece needs 2.40 — the number the user is told disagreeing with
+  the number they can reach. `ROOM_SIDE_EPS` lives beside `ROOM_SIDE_M` because
+  `wall-actions` decides what to SAY and `scene-store.moveWall` decides what to DO,
+  and one with a tolerance and one without is a wall that stops for a reason no
+  message can name.
+· Fixing that moved the defect into the wording. At exactly 2.40 the `fits`
+  predicate said a 2.4 m piece does not fit a 2.4 m room, so the alarming *"already
+  does not fit"* branch fired at the one size the user had just worked to reach.
+
+**Still open here, and it is the honest residue:** a sighted user gets no sentence
+on the wall path. The wall stops — which is legible, the way a collision is — but
+the reason travels only through the `sr-only` live region. A toast was considered
+and declined: `moveWallCarrying` runs per animation frame during a drag, and the
+toast host caps at three with a 9 s TTL. If this is worth solving it wants the drag
+channel (`lib/drag-live.ts` / `lib/refusal.ts`), which already carries a per-frame
+refusal for pieces and has a surface drawn for it.
 
 ### 23. Every long button lied about being busy — FIXED
 
@@ -2266,3 +2320,54 @@ that went away when it was fixed.
    line 79 says `layout-score.ts` "no longer exempts" a `sharesFloor` pair from `overlap`;
    lines 234–239 say it exempts them "entirely — a blanket `continue`". #68 did land, and
    `layout-score.ts:649` is now `sharesFloor(...) ? TUCKED_CLASH_SHARE : 0`.
+
+### 26. PR #72 review — five lenses, four defects the gates could not see, ALL FIXED
+
+Run over `db97bf7` + `f3641c1` **after** typecheck, lint, the full suite, a build, a real
+browser probe and 31 mutations with zero survivors. It still found four defects and a whole
+class of unpinned assertion, which is the argument for the fan-out rather than for a second
+pass by the same eyes.
+
+1. **A saved room could be made unopenable — the worst of the four, and only the
+   *artifact* lens was ever going to see it.** The tolerance added for the wall drag lets a
+   width persist at `0.99999999999999844` (five of six plausible start-width / step pairs
+   land there), and `lib/scene-file.ts` treats a width under 1 m as **fatal** on import. A
+   room this app had just written came back as *"that room file has no usable room"* — and
+   only when the user tried to hand it to someone, which is the whole sharing story of
+   rule 5. It is also, exactly, the regression § 22 chose "permit corridors" to avoid,
+   arriving from the other end: the tolerance went to the two movers and not to the one
+   boundary already documented as fatal. `readRoom` is the third reader of `ROOM_SIDE_EPS`.
+2. **The message named a number the field would then refuse.** `formatDim` renders at
+   `precisionFor`; the arrows are bounded by `boundsToUnit`, which rounds up to the step
+   grid. A 2.4 m rug was announced as needing `7.87 ft`, and 7.87 ft is 2.3988 m, which the
+   commit rejected. Four of the five units. This risk had been *reasoned about* while
+   writing the code and checked in the arrow direction only — the failure was not missing
+   the concern, it was testing the half of it that came to mind.
+3. **The refusal was re-derived at render time rather than carried from the commit that
+   made it**, so deleting the named piece rewrote the sentence under a standing refusal, and
+   deleting every piece rendered an **empty** line in `--danger-text` beside an
+   `aria-invalid` field — a silent refusal, in the component whose job is to report one.
+4. **One predicate written twice over different operands**, agreeing only while the room is
+   wider than 1 m. `namesTheStop` is the predicate now, and because `applyRoomEdits` cannot
+   call it (pure over numbers, deliberately), a test pins the *agreement* over the whole
+   grid rather than trusting a comment.
+
+**And the finding that changes how assertions get written here.** `ROOM_SIDE_EPS` was pinned
+only from BELOW: setting it to **40 mm** left three test files green, because every drift
+fixture steps 50 mm — larger than the surviving tolerance, so none of them could see it. At
+40 mm the wall walks 40 mm *inside* the sofa and the store persists a room narrower than the
+piece in it. **A tolerance, a threshold or a step needs a fixture finer than itself.** Mutate
+a constant's VALUE in both directions, not just delete it.
+
+Also fixed from the same review: a de-duplication keyed on message text alone, which
+swallowed a second wall's refusal (the sentence names the piece and the axis, not the wall)
+while spamming a held one; the resting hint printing the width floor and calling it "a side";
+and a wall that **refused a whole frame** rather than stopping at its limit, which at the
+plan's minimum zoom left a fast drag up to a metre short of the stop it was naming.
+
+38 mutations across five files, 0 survivors. One is documented as unreachable in the source
+rather than given a tautological test — `permittedDelta`'s sign guard, which cannot fire
+while `roomFloor` clamps the floor to the current side.
+
+**Still open, and it is a judgement rather than a defect:** a sighted user gets no sentence
+on the wall path. See `docs/visual-check.md`.

@@ -151,6 +151,29 @@ export function clampDims(category: Category, shape: Shape, dim: Dim3): Dim3 {
  *  derived from the rule, never typed next to it. */
 export const ROOM_SIDE_M = { min: 1, max: 50 } as const;
 
+/** How close to a room-side bound counts as being ON it, in metres — a micron.
+ *
+ *  A typed number reaches a bound by one conversion and needs none of this. A
+ *  DRAGGED wall reaches it by repeated addition: `offsetWall` translates the edge
+ *  and `footprintBounds` re-derives the side from the moved vertex, so thirty-two
+ *  presses of the plan's 50 mm step land on 2.3999999999999995 rather than 2.4.
+ *  Measured in a browser: a 2.4 m sectional stopped its wall at **2.45** while the
+ *  sentence underneath said the piece needs 2.40 — a whole step of room refused,
+ *  and the number the user is told disagreeing with the number they can reach,
+ *  which is the failure `boundsToUnit` exists to prevent one layer up.
+ *
+ *  Deliberately far below anything the app can display — the coarsest unit here
+ *  still renders tenths of an inch — so it can only ever forgive arithmetic, never
+ *  a real millimetre.
+ *
+ *  It lives beside the bound rather than beside either consumer because there are
+ *  TWO and they must agree: `lib/wall-actions.ts` decides what to say, and
+ *  `scene-store.moveWall` decides what to do. One with a tolerance and one without
+ *  is a wall that stops for a reason the message cannot name — the store refuses,
+ *  `moveWallCarrying` sees a bare 0 and falls back to "that wall will not move any
+ *  further", and the piece in the way goes unmentioned. */
+export const ROOM_SIDE_EPS = 1e-6;
+
 /** How tall a ceiling may be, in metres.
  *
  *  Separate from `ROOM_SIDE_M` because a ceiling is not a side, and sharing that
@@ -195,6 +218,16 @@ export function roomAxisWithin(axis: RoomAxis, metres: number): boolean {
 /** The room shell, in metres. */
 export type RoomDims = Record<RoomAxis, number>;
 
+/** Which rule refused a room edit.
+ *
+ *  A VALUE rather than something the caller re-derives by comparing the number it
+ *  just sent against the floor it just passed in — the same reason
+ *  `ClearanceIssue.rule` is a value and not a prefix of an id. The two refusals
+ *  read differently on screen (`'floor'` names the piece in the way, `'range'`
+ *  names the range) and a consumer working it out for itself is a second copy of
+ *  the ordering decision made above. */
+export type RoomRejection = 'range' | 'floor';
+
 /** Fold a batch of pending per-axis edits into the room, in metres.
  *
  *  `RoomDimsEditor` judged the ONE axis being edited and then wrote all THREE,
@@ -230,11 +263,26 @@ export type RoomDims = Record<RoomAxis, number>;
  *  simplification, not an oversight: it is deterministic, and the alternative
  *  needs the caller to say which field it was, which is a second source of truth
  *  for something the batch already contains. Do not read it as "the axis being
- *  edited". */
+ *  edited".
+ *
+ *  `floors` is the per-axis minimum the FURNITURE imposes, in metres — plain
+ *  numbers, because this module knows about rooms and not about `ScenePart`s and
+ *  is not going to start. `lib/room-floor.ts` owns that rule and both consumers of
+ *  it (this, and `lib/wall-actions.ts`) read the same function, which is the whole
+ *  point: the dims editor and a wall drag are one operation with two entry points,
+ *  and § 21 in `docs/what-is-still-open.md` is what happens when only one of them
+ *  carries the rule. Omit it and the static range is the only bound, which is what
+ *  every caller got before the stop existed. */
 export function applyRoomEdits(
   current: RoomDims,
   edits: Partial<Record<RoomAxis, number>>,
-): { room: RoomDims; rejected: RoomAxis | null; pending: Partial<Record<RoomAxis, number>> } {
+  floors?: Partial<Record<RoomAxis, number>>,
+): {
+  room: RoomDims;
+  rejected: RoomAxis | null;
+  rejectedBy: RoomRejection | null;
+  pending: Partial<Record<RoomAxis, number>>;
+} {
   const room = { ...current };
   for (const axis of ROOM_AXES) {
     const v = edits[axis];
@@ -245,10 +293,22 @@ export function applyRoomEdits(
     // stopped being harmless, which is the whole shape of a check that cannot
     // fail. A caller that held this and added the next keystroke's axis to it
     // would be mutating the batch the rule handed back. Raised by danmu-cd.
-    if (!roomAxisWithin(axis, v)) return { room: current, rejected: axis, pending: { ...edits } };
+    const floor = floors?.[axis];
+    // The furniture stop is checked FIRST and only while it is the binding one.
+    // Both orderings are correct arithmetic and they differ only in which sentence
+    // the user gets: typing 0.1 into a room holding a 2.4 m sectional is refused
+    // either way, and `"Sectional" needs 2.4 m` is an answer they can act on where
+    // "outside 2.4–50 m" is a restatement of the field's own arrows. The
+    // `floor > min` guard is what keeps that promise honest — below it there is no
+    // piece to name, so the static range answers and the caller never has to
+    // render a "floor" refusal with nothing pointed at.
+    if (floor !== undefined && Number.isFinite(v) && v < floor && floor > roomAxisRange(axis).min)
+      return { room: current, rejected: axis, rejectedBy: 'floor', pending: { ...edits } };
+    if (!roomAxisWithin(axis, v))
+      return { room: current, rejected: axis, rejectedBy: 'range', pending: { ...edits } };
     room[axis] = v;
   }
-  return { room, rejected: null, pending: {} };
+  return { room, rejected: null, rejectedBy: null, pending: {} };
 }
 
 /** True if the given dims already sit inside the allowed range. */

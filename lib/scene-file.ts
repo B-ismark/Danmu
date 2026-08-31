@@ -54,7 +54,7 @@ import {
   type Shape,
   isWallMountedPart,
 } from './scene-spec';
-import { clampDims, roomAxisRange, ROOM_SIDE_M } from './dimension-ranges';
+import { clampDims, roomAxisRange, ROOM_SIDE_EPS, ROOM_SIDE_M } from './dimension-ranges';
 import { anchorFor, heightForNewCeiling } from './physics';
 import { resolveParts } from './transforms';
 import { fileSlug } from './exports';
@@ -410,8 +410,22 @@ function readRoom(
   ceiling?: { raw: number | null },
 ): SceneFileRoom | null {
   if (!isObj(v)) return null;
-  const width = num(v.width, ROOM_SIDE_M.min, ROOM_SIDE_M.max);
-  const depth = num(v.depth, ROOM_SIDE_M.min, ROOM_SIDE_M.max);
+  // `ROOM_SIDE_EPS` on both ends, and this reader is the THIRD consumer of that
+  // constant rather than a place that got lenient. A wall is dragged to a bound by
+  // repeated addition, so a room walked to its 1 m floor is stored as
+  // 0.99999999999999844 — measured, on five of six (start width, step) pairs. An
+  // exact `>= lo` here makes that width FATAL, and a fatal width is the whole file
+  // refused: *"That room file has no usable room."* About a room this app itself
+  // just wrote, and only when the user tries to hand it to someone else, which is
+  // the entire sharing story of rule 5.
+  //
+  // It is also, precisely, the regression `docs/what-is-still-open.md` § 22 chose
+  // "permit corridors" in order to avoid — arriving from the other end, because the
+  // tolerance was added to the two movers and not to the one boundary already
+  // documented as fatal. A bound with a tolerance has to carry it everywhere it is
+  // read, or the readers disagree about what the bound is.
+  const width = num(v.width, ROOM_SIDE_M.min - ROOM_SIDE_EPS, ROOM_SIDE_M.max + ROOM_SIDE_EPS);
+  const depth = num(v.depth, ROOM_SIDE_M.min - ROOM_SIDE_EPS, ROOM_SIDE_M.max + ROOM_SIDE_EPS);
   // A ceiling takes the ceiling's range, not the side's — `ROOM_HEIGHT_M`, via the
   // one function that decides which range an axis gets. This file needing a copy
   // of the side bound is the reason that range moved to `dimension-ranges.ts`; it
