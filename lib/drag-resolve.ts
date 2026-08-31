@@ -192,9 +192,28 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   // Legality: inside the actual polygon (which catches the notch an L/T/U has and
   // a bounding box does not) and clear of everything.
   //
-  // A wall rider skips the polygon test because the snap above just placed it
-  // exactly on an edge — the exemption is EARNED by that snap, which is why it has
-  // to be the same predicate. A ceiling fan gets no snap, so it gets no exemption:
+  // **A wall rider used to skip the polygon test entirely, and that was the hole.**
+  // The reason given was that the snap above had "just placed it exactly on an edge,
+  // so the exemption is EARNED by that snap" — and `snapToWall` says in its own
+  // comment that it does no such thing when the piece is wider than the wall it
+  // landed on: it CENTRES it and lets both ends hang past the corners, on purpose,
+  // because shrinking it is what rule 2 forbids and `lib/clearance.ts` is what
+  // reports it. On a rectangle those ends hang over the neighbouring wall's floor
+  // and nobody notices. On an L, a T or a U they hang into the missing quadrant —
+  // outside the room — and the drag committed `valid` with no red and nothing said.
+  //
+  // The exemption is deleted rather than repaired, because it turned out to be pure
+  // hole. Measured over every category at min/mid/max size, five layouts, three
+  // angles and 35 targets: removing it costs **exactly** the 374 placements that
+  // were leaving the room (311 curtain, 45 painting, 18 TV — "wider than the wall
+  // it landed on", not a property of curtains) and not one placement besides.
+  // `ac`, `door`, `mirror` and `monitor` — the pieces that sit in or on the plaster
+  // and are the reason such an exemption would be written — pass the polygon test
+  // on their own merits at every size in every layout, all 1575 samples each. The
+  // 10 mm shrink below is what lets a back flush against a wall through, and it was
+  // already doing that job for everything else.
+  //
+  // A ceiling fan never had the exemption and still does not: it gets no snap, so
   // its blades have to be inside the room like anything else.
   const slightlyShrunk = obbFromPart([x, y, z], outRot, [dim[0] - 10, dim[1] - 10, dim[2]]);
   // Does the room have room for it AT ALL, at this angle? The containment clamp
@@ -235,7 +254,6 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   // for the exemption place the rug's centre over real floor, which is what makes
   // this the narrow version of the fix rather than a retraction of the exemption.
   const inRoom =
-    ridesAWall ||
     (part.category === 'rug' &&
       roomIsWideEnough &&
       !shovedIntoRoom &&

@@ -1357,7 +1357,32 @@ component's pointer-move handler when the rest of the pipeline moved out, which
 meant the extraction that existed to end "snap works in one tab only" shipped with
 snap working in one tab only. It is quantised before the clamp on purpose: rounding
 a clamped edge afterwards would push the piece back through the wall the clamp had
-just pulled it out of. What stays in the components is only what is genuinely theirs: the 3D
+just pulled it out of.
+
+**The legality test has no exemption for wall-mounted pieces any more, and that was
+§ H.16.** It used to open `ridesAWall ||`, on the stated grounds that `snapToWall`
+had "just placed it exactly on an edge, so the exemption is EARNED by that snap".
+`snapToWall` says in its own comment that it does no such thing when the piece is
+wider than the wall it landed on: it **centres it and lets both ends hang past the
+corners**, deliberately, because shrinking it is what rule 2 forbids and
+`clearance.ts` is what reports it. On a rectangle those ends hang over the next
+wall's floor and nobody notices. On an L, a T or a U they hang into the missing
+quadrant — outside the room — and the drag committed `valid` with no red and
+nothing said. Reported as *"models are still going through walls in 2d plan mode"*,
+and it was never the plan: both tabs end here.
+
+It was **deleted rather than repaired**, because it measured as pure hole. Over
+every category at min/mid/max size, five layouts, three angles and 35 targets:
+removing it costs **exactly** the 374 placements that were leaving the room — 311
+curtain, 45 painting, 18 TV, i.e. *wider than the wall it landed on* rather than a
+property of curtains — and not one placement besides. `door`, `ac` and `mirror`,
+the pieces that sit in or on the plaster and are the reason such an exemption gets
+written, pass the polygon test on their own merits at all 1575 samples each; the
+10 mm shrink was already doing that job for everything else. A predicate that needs
+a carve-out per shape is the tell §3 names, and this one had grown its justification
+after the fact. `tests/wall-rider-containment.test.ts` is the sweep, and it carries
+its positive half — riders are still accepted everywhere they fit — because
+`valid = false` for everything would satisfy the negative half alone. What stays in the components is only what is genuinely theirs: the 3D
 view reads a live mount height off the object3D it is animating, the plan reads
 it off the stored transform, and each decides for itself what to say when a spot
 is refused. **A new snap, clearance or gravity rule goes in the lib** — this is
