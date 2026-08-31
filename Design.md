@@ -1364,26 +1364,44 @@ just pulled it out of.
 had "just placed it exactly on an edge, so the exemption is EARNED by that snap".
 `snapToWall` says in its own comment that it does no such thing when the piece is
 wider than the wall it landed on: it **centres it and lets both ends hang past the
-corners**, deliberately, because shrinking it is what rule 2 forbids and
-`clearance.ts` is what reports it. On a rectangle those ends hang over the next
+corners**, deliberately, because shrinking it is what rule 2 forbids. (`snapToWall`
+adds "and `clearance.ts` is what says it does not fit", and **that half is false** —
+`clearance.ts` emits door · entry · clash · walk · zone · window · tv · tall ·
+crowding · reach · cut-off · turning, none of which is *outside the room*, and
+`freeFloorShare` discards the outside portion rather than reporting it. The claim was
+repeated into two more files before anyone checked it; see § H.16b in
+`docs/what-is-still-open.md`.) On a rectangle those ends hang over the next
 wall's floor and nobody notices. On an L, a T or a U they hang into the missing
 quadrant — outside the room — and the drag committed `valid` with no red and
 nothing said. Reported as *"models are still going through walls in 2d plan mode"*,
 and it was never the plan: both tabs end here.
 
 It was **deleted rather than repaired**, because it measured as pure hole — an A/B
-over both builds rather than an inference from the escape count. Over every category
-at min/mid/max size, five layouts, three angles and 35 targets, the whole catalogue
-accepted **28,739** placements with the exemption and **28,365** without it: removing
-it costs **exactly** the 374 that were leaving the room — 311 curtain, 45 painting,
-18 TV, i.e. *wider than the wall it landed on* rather than a property of curtains —
-and not one placement besides. `door`, `ac` and `mirror`,
-the pieces that sit in or on the plaster and are the reason such an exemption gets
-written, pass the polygon test on their own merits at all 1575 samples each; the
-10 mm shrink was already doing that job for everything else. A predicate that needs
-a carve-out per shape is the tell §3 names, and this one had grown its justification
-after the fact. `tests/wall-rider-containment.test.ts` is the sweep, and it carries
-its positive half — riders are still accepted everywhere they fit — because
+scored in one run rather than an inference from the escape count. Over every pair in
+`PART_LIBRARY` at min/mid/max size, five layout ids, three angles and 35 targets —
+59,850 placements — the catalogue accepts **50,431** with the exemption and **49,861**
+without: removing it costs **exactly** the 570 that were leaving the room — 311
+curtain, 196 window, 45 painting, 18 TV, i.e. *wider than the wall it landed on*
+rather than a property of curtains — and not one placement besides. Five of the nine
+riders in the catalogue (`door`, `ac/ac-unit`, both mirrors, `tv/soundbar`), the ones
+that sit in or on the plaster and are the reason such an exemption gets written, pass
+the polygon test on their own merits at all 1,575 samples each; the inset was already
+doing that job for everything else — and it is **5 mm per face**, not the "10 mm" four
+documents used to say, because it subtracts 10 from a dimension in millimetres and
+`obbFromPart` then halves it. A predicate that needs a carve-out per shape is the tell
+§3 names, and this one had grown its justification after the fact.
+
+`tests/wall-rider-containment.test.ts` is the sweep, and two things about it are the
+finding rather than the plumbing. It **enumerates `PART_LIBRARY`**, because the first
+version enumerated `CATEGORIES` with a hand-written shape per category and therefore
+could not see `other/window` — 196 of the 570, the second largest escaper — a
+wall-riding SHAPE under a category that does not ride, since `anchorFor` reads
+`ANCHOR_BY_SHAPE` before `ANCHOR_BY_CATEGORY`. That version reported the cost as 374,
+and measured `ac` as a *box*. And its oracle is now a **second implementation** of the
+corner maths rather than the repo's: the previous one reduced to `obbInsidePoly` by
+function identity, so `valid ⇒ inside` was a theorem, and turning `pointInPoly` into
+`return true` left the escape assertion green with zero escapes. It also carries its
+positive half — riders are still accepted everywhere they fit — because
 `valid = false` for everything would satisfy the negative half alone. What stays in the components is only what is genuinely theirs: the 3D
 view reads a live mount height off the object3D it is animating, the plan reads
 it off the stored transform, and each decides for itself what to say when a spot

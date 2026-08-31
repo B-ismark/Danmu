@@ -90,7 +90,38 @@ export type Resolved = {
   snapLines?: SnapLine[];
   /** What the piece came to rest ON, if anything. */
   supportId?: string;
+  /** Why `valid` is false, for the surfaces that say it out loud. Undefined when
+   *  `valid`.
+   *
+   *  This exists because deleting the wall-rider exemption (§ H.16) gave
+   *  `valid: false` a **second cause** and both surfaces were hard-coding the
+   *  sentence for the only one it used to have. Before that change a rider could
+   *  fail only by colliding, so "something is in the way" was true by
+   *  construction; after it, a 2.4 m curtain on a 2.1 m wall is refused in an
+   *  empty room and told that something is in the way. A finding the caller drops
+   *  is a finding that does not exist, and a finding the caller MISREPORTS is
+   *  worse — it sends the user looking for an obstruction that is not there.
+   *
+   *  `'room'` beats `'blocked'` when both hold, because it is the one the user
+   *  cannot solve by moving something else. */
+  refusal?: Refusal;
 };
+
+/** Why a placement was refused. `'wall'` is the wall-rider case of `'room'` and is
+ *  separate because the remedy differs: a rider is snapped flush to a wall, so its
+ *  containment failure is always along-wall overhang — it is wider than that wall,
+ *  and no amount of nudging fixes it. */
+export type Refusal = 'wall' | 'room' | 'blocked';
+
+/** The trailing clause a surface says when a move is refused. One derivation, three
+ *  readers — the 3D drag, the plan drag and the plan's keyboard turn — because two
+ *  of them were already carrying identical hand-written copies of the same sentence
+ *  and that is the drift CLAUDE.md § 3 forbids. */
+export function refusalCause(r: Pick<Resolved, 'refusal'>): string {
+  if (r.refusal === 'wall') return 'it is wider than that wall.';
+  if (r.refusal === 'room') return 'it would stick out of the room.';
+  return 'something is in the way.';
+}
 
 /**
  * The deterministic placement pipeline. Order matters and each step feeds the
@@ -145,9 +176,12 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   // deciding how to GROUND a piece and the wrong one for deciding to slide it onto
   // the plaster. `physics.ts` has said so in `ridesWall`'s own doc comment since
   // the day it was written, and this file asked the other question anyway: a ceiling
-  // fan dragged anywhere in the room was pushed to the nearest wall and — see the
-  // legality test below — excused the containment check on the way. Reported as
-  // "it only sticks to the edges" and "it spawned outside the room".
+  // fan dragged anywhere in the room was pushed to the nearest wall and, back when
+  // the legality test below carried a blanket wall-rider exemption, excused the
+  // containment check on the way. Reported as "it only sticks to the edges" and
+  // "it spawned outside the room". Only the first half is still reachable: that
+  // exemption is gone, so a mis-classified piece now gets the wrong SNAP but not a
+  // free pass through the wall.
   const ridesAWall = ridesWall(part.category, part.shape);
   if (ridesAWall) {
     const snapped = snapToWall([x, 0, z], dim, footprint, wallStandoff(part.shape), input.wallEdge);
@@ -197,27 +231,42 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   // so the exemption is EARNED by that snap" — and `snapToWall` says in its own
   // comment that it does no such thing when the piece is wider than the wall it
   // landed on: it CENTRES it and lets both ends hang past the corners, on purpose,
-  // because shrinking it is what rule 2 forbids and `lib/clearance.ts` is what
-  // reports it. On a rectangle those ends hang over the neighbouring wall's floor
+  // because shrinking it is what rule 2 forbids. (`snapToWall`'s own comment adds
+  // "and `lib/clearance.ts` is what says it does not fit" — that part is **not**
+  // true and was propagated from there rather than checked. `clearance.ts` emits
+  // door · entry · clash · walk · zone · window · tv · tall · crowding · reach ·
+  // cut-off · turning, and not one of them is "outside the room": `tall` is a
+  // height check and `freeFloorShare` DISCARDS the outside portion rather than
+  // reporting it. So nothing reports this today, which is why it is written down
+  // in `docs/what-is-still-open.md` rather than implied here.) On a rectangle those
+  // ends hang over the neighbouring wall's floor
   // and nobody notices. On an L, a T or a U they hang into the missing quadrant —
   // outside the room — and the drag committed `valid` with no red and nothing said.
   //
   // The exemption is deleted rather than repaired, because it turned out to be pure
-  // hole — and that is an A/B rather than an inference from the escape count. The
-  // sweep in `tests/wall-rider-containment.test.ts` was run against both builds over
-  // every category at min/mid/max size, five layouts, three angles and 35 targets:
-  // the whole catalogue accepted 28,739 placements with the exemption and 28,365
-  // without it. The 374 that went are **exactly** the 374 that were leaving the room
-  // (311 curtain, 45 painting, 18 TV — "wider than the wall it landed on", not a
-  // property of curtains), and no other category moved by one. Both columns are
-  // pinned there, so the second half of that sentence is a gate and not a memory.
-  // `ac`, `door` and `mirror` — the pieces that sit in or on the plaster and are the
-  // reason such an exemption would be written — pass the polygon test on their own
-  // merits at every size in every layout, all 1575 samples each. (`monitor` reads
-  // like a fourth member of that list and is not one: its anchor is not a wall
-  // anchor, so `ridesWall` is false and this exemption never covered it.) The 10 mm
-  // shrink below is what lets a back flush against a wall through, and it was
-  // already doing that job for everything else.
+  // hole — and that is an A/B measured in one run rather than an inference from the
+  // escape count. `tests/wall-rider-containment.test.ts` sweeps every pair in
+  // `PART_LIBRARY` at min/mid/max size, five layout ids, three angles and 35 targets
+  // — 59,850 placements — and scores each one both ways. With the exemption the
+  // catalogue accepts 50,431; without it, 49,861. The **570** that go are exactly
+  // the 570 that were leaving the room (311 curtain, 196 window, 45 painting,
+  // 18 TV — "wider than the wall it landed on", not a property of curtains), and
+  // nothing else moves by one. Both columns are pinned, so the second half of that
+  // sentence is a gate and not a memory.
+  //
+  // Five of the nine riders in the catalogue — `door`, `ac/ac-unit`, both mirrors
+  // and `tv/soundbar`, the pieces that sit in or on the plaster and are the reason
+  // such an exemption gets written — pass the polygon test on their own merits at
+  // every size in every layout, all 1,575 samples each. The inset below is what
+  // lets a snapped corner sitting exactly on the clamp boundary through, and it was
+  // already doing that job for everything else. It is **5 mm per face**, not 10: it
+  // subtracts 10 from a dimension in MILLIMETRES and `obbFromPart` then halves it.
+  //
+  // The first version of that sweep was keyed by CATEGORY and reported 374. It could
+  // not see `other/window` — 196 of the 570, the second largest — because riding a
+  // wall is a property of the SHAPE first (`anchorFor` reads `ANCHOR_BY_SHAPE`
+  // before `ANCHOR_BY_CATEGORY`), and it measured `ac` as a *box*. The catalogue
+  // enumerates itself now.
   //
   // A ceiling fan never had the exemption and still does not: it gets no snap, so
   // its blades have to be inside the room like anything else.
@@ -266,8 +315,23 @@ export function resolvePlacement(input: ResolveInput): Resolved {
       pointInFootprint(x, z, footprint)) ||
     (obbInsidePoly(slightlyShrunk, footprint) && pointInFootprint(x, z, footprint));
   const collides = collidesAt(parts, part.id, [x, y, z], outRot, dim);
+  // `inRoom` first: see `Resolved.refusal` for why the order is the whole point.
+  const refusal: Refusal | undefined = !inRoom
+    ? ridesAWall
+      ? 'wall'
+      : 'room'
+    : collides
+      ? 'blocked'
+      : undefined;
 
-  return { pos: [x, y, z], rot: outRot, valid: inRoom && !collides, snapLines, supportId };
+  return {
+    pos: [x, y, z],
+    rot: outRot,
+    valid: inRoom && !collides,
+    snapLines,
+    supportId,
+    refusal,
+  };
 }
 
 /**
