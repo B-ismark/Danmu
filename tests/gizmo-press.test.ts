@@ -7,14 +7,37 @@ import {
   releasePress,
 } from '@/lib/gizmo-press';
 
+/** The gate's value **at import**, read before any `beforeEach` can touch it.
+ *
+ *  `tests/drag-click.test.ts` does the same for the same reason, and `Design.md`
+ *  states the rule for both: a reset in a `beforeEach` hides a module that started
+ *  armed, and one that did would have `Pickable` swallow the FIRST click of the
+ *  session — the first selection after a page load would silently do nothing. It
+ *  has to be captured at module scope, because the reset below is deliberately
+ *  thorough enough to destroy the evidence. */
+const ARMED_AT_IMPORT = consumeGizmoClick();
+
 // `lib/gizmo-press.ts` is module state, so every test starts from a known one.
-// `clearGizmoClick` is the only reset the module offers and it is enough: a hold
-// is dropped by whoever took it, and every test here that takes one gives it back.
+//
+// **This used to be three hand-typed ids fed to an id-gated `releasePress`, which
+// is not a reset**: a hold under any fourth id survived it, and the module exports
+// nothing else that would clear one. It was also inert — emptying the body left all
+// twelve tests green, because no test happened to leak. Both halves of that are the
+// same defect: a reset that cannot be observed working is a reset nobody can trust,
+// and the next test to take a hold and not give it back would have had its
+// teardown run by whichever test claimed next.
+//
+// `claimPressForGizmo` alone is not the answer either, and the ordered pair below
+// caught that on its first run: claiming clears a holder under ANY id, but it also
+// RUNS its teardown — so the reset would execute the very leaked callback it exists
+// to protect the next test from. `holdPress` replaces without running (the property
+// pinned two tests further down), so displacing the stale hold with a harmless one
+// and claiming that away is the reset: no ids, nothing of the previous test's is
+// executed, and the `consumeGizmoClick` disarms the gate the claim just armed.
 beforeEach(() => {
-  clearGizmoClick();
-  releasePress('bed');
-  releasePress('nightstand');
-  releasePress('rug');
+  holdPress('__reset__', () => {});
+  claimPressForGizmo();
+  consumeGizmoClick();
 });
 
 describe('holding and handing back a press', () => {
@@ -66,21 +89,6 @@ describe('holding and handing back a press', () => {
     expect(released).toBe(0);
   });
 
-  it('survives a release that calls releasePress from inside its own teardown', () => {
-    // Which is what `Draggable`'s does, by way of the shared teardown. The holder
-    // is cleared BEFORE `release` runs, so this is a no-op rather than a second
-    // trip through `claimPressForGizmo`.
-    let released = 0;
-    holdPress('nightstand', () => {
-      released += 1;
-      releasePress('nightstand');
-    });
-
-    expect(() => claimPressForGizmo()).not.toThrow();
-    expect(released).toBe(1);
-    expect(claimPressForGizmo()).toBeNull();
-  });
-
   it('gives a hold back exactly once even when the teardown throws', () => {
     // This is what pins the ORDER inside `claimPressForGizmo` — clearing the holder
     // before running its release. Swapping the two lines is invisible to every
@@ -106,6 +114,52 @@ describe('holding and handing back a press', () => {
     holdPress('nightstand', () => {});
 
     expect(claimPressForGizmo()).toBe('nightstand');
+  });
+
+  it('does NOT run the replaced hold’s teardown', () => {
+    // The tidy-looking version of `holdPress` — release the stale one before taking
+    // the new one — survived a twelve-mutation sweep with every test green, because
+    // the only test about replacement passed `() => {}` for both holds and asserted
+    // the id alone. In production that closure releases a pointer capture, clears
+    // `_gestureOwner` and calls `setDragging(null)`, so tidying up here would do all
+    // of that in the middle of the press that has just begun on ANOTHER piece.
+    let staleRan = 0;
+    holdPress('rug', () => {
+      staleRan += 1;
+    });
+    holdPress('nightstand', () => {});
+
+    expect(staleRan).toBe(0);
+    claimPressForGizmo();
+    expect(staleRan).toBe(0);
+  });
+});
+
+describe('the reset this file runs between tests', () => {
+  // These two are an ORDERED PAIR and only mean anything together: the first leaves
+  // a hold standing under an id nothing else here uses, and the second asserts the
+  // next test did not inherit it. Vitest runs a file's tests in declaration order
+  // and `vitest.config.ts` sets no `sequence.shuffle`, so the order is a fact rather
+  // than a hope.
+  //
+  // They exist because the first version of the `beforeEach` was three hand-typed
+  // ids fed to an id-gated `releasePress` — not a reset, since a hold under any
+  // fourth id survived it — AND was inert: emptying its body left every test green.
+  // A reset nobody can watch working is the same defect as a check that cannot fail.
+  it('leaves a hold standing on purpose', () => {
+    holdPress('leaked-by-the-test-above', () => {
+      throw new Error('the reset let a stale teardown run');
+    });
+
+    expect(true).toBe(true);
+  });
+
+  it('has cleared it before this test starts', () => {
+    expect(claimPressForGizmo()).toBeNull();
+  });
+
+  it('starts the session with the click gate disarmed', () => {
+    expect(ARMED_AT_IMPORT).toBe(false);
   });
 });
 

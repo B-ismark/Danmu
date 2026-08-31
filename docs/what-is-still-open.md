@@ -1973,7 +1973,7 @@ The drill-in has three mutations watched failing (never fire, count an empty sel
 inside, accept overlap where it asks for containment), so the *predicate* is gated. The gap
 is between the pointer and the predicate. No cause yet; do not guess one.
 
-### 15. The rotate gizmo moves whatever its ring passes over, not the piece you selected
+### 15. The rotate gizmo moves whatever its ring passes over, not the piece you selected — FIXED, see § 27
 
 The sharpest of the nine, and the user generalised it themselves: *"I selected bed to rotate
 but the rotate control overlaps the nightstand and it ended up moving the nightstand. I
@@ -1988,6 +1988,13 @@ to the selected piece and there is nothing to hit-test.
 
 A rotate that can retarget mid-gesture is also a **silent data change**: it writes a rotation
 override onto a piece the user never selected, and `lib/transforms.ts` pins and persists it.
+
+**The guess above was right about the shape and wrong about the mechanism, and § 27 has the
+measured version.** There is nothing hit-testing the gizmo to correct: R3F cannot SEE it, so
+the same press is delivered twice, and the three guards that would have refused the second
+delivery all read state the gizmo sets after R3F has already dispatched. Two things this entry
+did not know about are in § 27 as well — the click steals the selection too, and the 2D plan
+has the same defect by a different route.
 
 ### 16. Pieces still pass through walls in the 2D plan
 
@@ -2429,3 +2436,71 @@ written before anything could see it.
 dispatch, and that a real ring press over a real neighbour now turns one piece and moves
 nothing. The 2D half is browser-checked (`elementFromPoint` at the handle, plus the drag);
 drei's `TransformControls` has no DOM, so the 3D half is in `docs/visual-check.md`.
+
+### 28. PR #73 review — five lenses, nine defects, and the sharpest one was mine to make
+
+Run over `150bbfa` **after** typecheck, lint, the full suite, a build, a two-artifact browser
+A/B and 12 mutations with zero survivors. The fan-out still found nine, and the pattern
+across them is worth naming: **eight of the nine are about a window of time, not a value.**
+This change is a gate, and a gate's defects are all "for how long" and "who else".
+
+1. **The hold outlived the press it belonged to** — the worst, and only reachable on touch.
+   `holdPress` was installed at pointer-down and given back only at pointer-UP, so it stood
+   for the whole drag. Put a finger on a drawer unit, dwell past 280 ms, start sliding, then
+   put a second finger on the ring of the piece that is still *selected*: `Draggable` refuses
+   the second press at `_gestureOwner` so it installs no hold of its own, three-stdlib's
+   `TransformControls` has no multi-pointer guard, and its `mouseDown` takes the FIRST
+   finger's press back. The drawer stops following, `commit()` never runs for it, and 3D goes
+   on drawing it where the drag left it while the store, the plan and any saved file hold the
+   old position. The module's own comment — *"nothing has moved yet, so handing it back is
+   lossless"* — was true at the instant of the press and false across the window it was open.
+   Given back at the touch pick-up and at both places `started` is set.
+2. **The two gates have opposite lifetimes and were treated as one rule.** `drag-click` arms
+   on pointer-UP, so any later press is a new gesture and can clear it unconditionally. This
+   one arms on pointer-DOWN, so a SECOND pointer landing mid-rotate reached
+   `clearGizmoClick()` one line before the guards below would have refused the press — two
+   fingers on a merged group and the click ending the rotate drilled into it, which is the
+   one thing the gate exists to stop.
+3. **One consumer was not enough.** A ring sweeps over furniture, walls and floor; only
+   furniture consumed. A rotate finishing over plaster left the gate armed with nothing to
+   take it, and the next press that would have cleared it can be one that never reaches
+   `Draggable` — `WallHandles` stops propagation on its own knob — so it ate an ordinary
+   selection a gesture later. `RoomShell`'s wall and `Room`'s `onPointerMissed` consume it
+   now, and each is right on its own terms too: a gesture is not a click on whatever it
+   happened to finish over.
+4. **A press on the plan's leader line fell through to the canvas** — deselect on a tap,
+   marquee on a drag, down the middle of the piece you had just selected. Nested inside the
+   piece's `<g onPointerDown>` it had been a target that bubbled harmlessly, so nobody had
+   noticed it was hittable; every other decorative layer in that file already declines
+   presses.
+5. **Enter, Space, Delete and Backspace went dead on the turn handle.** `onRotateKeyDown`
+   takes the arrows and returns bare for everything else, which used to bubble to the piece's
+   own `onKeyDown`. `role="button"` was left advertising an activation key that did nothing,
+   and the global Delete is gated on the canvas surface holding focus, which it does not.
+6. **An unkeyed `<g>` let React reuse the circle by index**, so Ctrl+D kept DOM focus on a
+   node whose piece had changed underneath it: focus ring gone off a control that still had
+   focus, `aria-label` silently another piece's name, next arrow key turning the piece the
+   user was not being told about.
+7. **A cursor cleared that was never set.** The teardown wrote `document.body.style.cursor =
+   ''`, which `Pickable` owns while hovering and only re-sets on a fresh `pointerover` — and
+   the pointer has not left the mesh, so none is coming. The whole rotate ran under the
+   default arrow.
+8. **`holdPress` dropping a replaced hold's teardown unrun was unpinned** — the tidy-looking
+   version (release the stale one first) survived all 12 mutations with every test green,
+   because the only test about replacement passed `() => {}` for both holds.
+9. **The `beforeEach` was not a reset and was inert.** Three hand-typed ids fed to an
+   id-gated `releasePress`: a hold under any fourth id survived it, and emptying the body left
+   every test green. Its replacement caught a second defect on its first run — the obvious
+   fix, `claimPressForGizmo()`, *runs* the leaked teardown, so it would have executed the very
+   callback it existed to protect the next test from. Displacing the stale hold with a
+   harmless one and claiming THAT away is the reset, which ties it to finding 8's property.
+
+**Two things about the method.** A comment I had written was wrong in a way no gate could
+see: `claimPressForGizmo`'s docstring said every teardown ends by calling `releasePress`, and
+none of them does — so the test built on that sentence modelled a re-entrancy production
+never produces. And **a mutation that never applied reported as a kill**: the script's
+`assert` threw, the next line was not chained with `&&`, and the build ran unmutated source.
+The probe went green and I read it as the assertion holding. Verify the mutation is IN the
+artifact — `grep` the file before building — rather than trusting the script said so.
+
+15 mutations on `lib/gizmo-press.ts` after the review, 0 survivors.

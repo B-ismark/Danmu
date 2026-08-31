@@ -1711,11 +1711,19 @@ export const PlanView = forwardRef<PlanViewHandle, {
               above the furniture, because it was drawn at its own piece's depth.
               It stays inside the zoom/rotate group and repeats its piece's
               transform, so it rides the piece exactly as before.
-              The one thing this changes besides paint order is tab order: the
-              handle is now the last stop in the drawing rather than the one after
-              its own piece. That is the honest trade — `painted` is ordered by
-              area, not by anything the eye can follow, so "after its piece" was
-              never a spatial promise either, and there is exactly one handle. */}
+              The one thing this changes besides paint order is TAB ORDER, and the
+              first version of this note defended it badly. The old adjacency was not
+              a claim about where the handle sat on screen — `painted` is ordered by
+              area, so that was never spatial — it was the semantic pairing of a
+              control with the object it acts on, and that is what the move costs:
+              the handle is now the last stop in the drawing, so reaching it from its
+              own piece walks every other piece, and it is furthest for the LARGEST
+              piece, which paints first. What makes that survivable is that it is not
+              the only way to turn a piece from the keyboard, or even the primary
+              one: **Shift+arrow on the piece itself turns it**, which is what the
+              piece's own `aria-label` says, and the piece is adjacent to itself.
+              The keys this control does not handle still reach `onPartKeyDown`,
+              because the wrapper below carries it — see the note there. */}
           {(() => {
             const part = painted.find((p) => p.id === selected);
             if (!part) return null;
@@ -1728,8 +1736,41 @@ export const PlanView = forwardRef<PlanViewHandle, {
                 : 'var(--accent)';
             const focused = focusKey === `rot:${part.id}`;
             return (
-              <g transform={`translate(${c.x} ${c.y}) rotate(${-(part.rot * 180) / Math.PI})`}>
+              <g
+                // Keyed by the piece, so a change of primary REMOUNTS this rather
+                // than letting React reuse the circle by index. Reuse kept DOM focus
+                // on a node whose `part` had changed underneath it: `focusKey` still
+                // named the old piece, so the focus ring vanished off a control that
+                // was still focused, its `aria-label` silently became another
+                // piece's name, and the next arrow key turned the piece the user was
+                // not being told about. Ctrl+D reaches that state without touching
+                // the pointer — it re-primaries to the copy and is not gated on the
+                // surface having focus.
+                key={part.id}
+                transform={`translate(${c.x} ${c.y}) rotate(${-(part.rot * 180) / Math.PI})`}
+                // The keys the handle does NOT handle used to bubble to the piece's
+                // own `<g onKeyDown>`, because the handle was inside it: Enter and
+                // Space selected, Delete and Backspace removed. `onRotateKeyDown`
+                // takes the arrows and stops them, and returns bare for everything
+                // else — so out here, with no ancestor left, `role="button"` was
+                // advertising an activation key that did nothing and Delete had gone
+                // dead (the global one in `KeyboardShortcuts` is gated on the canvas
+                // surface holding focus, which it does not while this disc has it).
+                // Same handler, same piece: this restores the chain rather than
+                // imitating it.
+                onKeyDown={(e) => onPartKeyDown(e, part)}
+              >
                 <g transform={`translate(0 ${-hpx / 2 - 26 * k})`}>
+                  {/* The leader is decoration and must say so, which it did not have
+                      to while it was nested inside the piece's own `<g
+                      onPointerDown>`: a press on a dash bubbled up and moved the
+                      piece, so nobody noticed it was a target. Out here that press
+                      reaches the canvas handler instead, which means DESELECT on a
+                      tap and a marquee on a drag — and most of this line lies over
+                      the piece's own body (it runs from 8k above the front edge to
+                      8k short of the centre), so it is a live strip down the middle
+                      of whatever you just selected. Every other decorative layer in
+                      this file already carries this. */}
                   <line
                     x1={0}
                     y1={18 * k}
@@ -1738,6 +1779,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
                     stroke={color}
                     strokeWidth={1.2 * k}
                     strokeDasharray={`${2 * k} ${2 * k}`}
+                    style={{ pointerEvents: 'none' }}
                   />
                   <circle
                     cx={0}

@@ -1537,6 +1537,20 @@ bare floor, or over the turned piece's own body, still ends in a click, and on t
 piece itself that is not harmless: a plain click is `selectionForPick`, which
 drills *into* a merged group.
 
+**Where the two gates are NOT the same rule is lifetime, and that is where the
+review found most of what was wrong.** `drag-click` arms on pointer-UP, so any
+later press is necessarily a new gesture and may clear it unconditionally. This one
+arms on pointer-DOWN, so a second pointer landing mid-rotate reaches `Draggable`
+while the gate is doing its job — the clear is conditional on no gesture being in
+flight. For the same reason the HOLD is given back the moment the press becomes a
+gesture (the touch pick-up, and both places `started` is set): the claim is lossless
+only because nothing has happened yet, and a hold left standing into a live drag is
+a teardown waiting to run on a gesture someone is in the middle of. And the gate has
+**three** consumers, because a ring sweeps over three kinds of thing — `Pickable`
+for furniture, `RoomShell`'s wall, `Room`'s `onPointerMissed` for bare floor.
+Furniture alone left it armed with nothing to take it whenever a rotate finished
+over plaster or air, and an armed gate outlives its gesture.
+
 **The 2D plan had the same defect by a different mechanism**, which is why the
 handle now draws in a layer of its own after every piece. `planPaintOrder` sorts by
 footprint area **descending**, so the smallest piece paints last and sits on top: a

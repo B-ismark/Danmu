@@ -106,10 +106,20 @@ squares reach over the same neighbour.
 Also worth a second: rotating a piece with **nothing behind the ring** must be exactly as it
 was, and a plain click on a neighbour immediately after a rotate must select that neighbour
 — the gate is armed per gesture and dropped by the next press, so a click that goes missing
-means it is being armed and never consumed.
+means it is being armed and never consumed. Two more the review added, both about a gesture
+finishing somewhere other than on furniture: a rotate released over a **wall** must not
+select that wall, and one released over bare **floor** must not clear the selection.
+
+**And the one that needs two hands, which is why it is the last line of this item.** On a
+touch device: press a drawer unit, hold past a second so it picks up, start sliding it, and
+while it is still moving put a **second finger on the ring** of whatever is selected. The
+drawer must keep following finger one. If it stops dead — and worse, if it is back where it
+started after a reload while 3D showed it moved — the hold is outliving its press again.
+This is the only defect in the whole item that a mouse cannot produce.
 
 **Where it rides.** `lib/gizmo-press.ts` + `components/three/Draggable.tsx` +
-`components/three/Pickable.tsx`. Branch `fix/gizmo-press-belongs-to-the-gizmo`.
+`components/three/Pickable.tsx` + `components/three/RoomShell.tsx` +
+`components/three/Room.tsx`. Branch `fix/gizmo-press-belongs-to-the-gizmo`.
 
 
 ## Layout and Shuffle
