@@ -58,12 +58,39 @@ function tokens(s: string): string[] {
     .map((t) => SYNONYM[t] ?? t);
 }
 
+/** The shortest query token allowed to match by containment.
+ *
+ *  Measured over the real query space rather than chosen: every substring of every
+ *  hay token in the catalog (797 of them), asking how many admit more than ten
+ *  items. At a floor of 2 that is 12 queries, at 3 it is exactly one — `ing`, the
+ *  gerund tail, which reaches 14 — and at 4 it is none. Four is the smallest floor
+ *  that admits no catch-all, and it is what lets `room`, `robe` and `wave` reach
+ *  Bedroom, Wardrobe and Microwave. */
+const CONTAINS_MIN = 4;
+
+/** Weight for a containment match. Strictly under the prefix branch's 1.5 so a
+ *  genuine prefix still outranks a tail: `stand` finds Nightstand, and still finds
+ *  the `desk-standard` table first. */
+const CONTAINS_SCORE = 1;
+
 function scoreItem(qTokens: string[], item: LibraryItem): number {
   const hay = tokens(`${item.label} ${item.group} ${item.category} ${item.shape}`);
   let score = 0;
   for (const q of qTokens) {
     if (hay.includes(q)) score += 3;
     else if (hay.some((h) => h.startsWith(q) || q.startsWith(h))) score += 1.5;
+    // Containment, and it is the compound's TAIL that this is really for. English
+    // puts the head noun last — a nightstand is a stand, an armchair is a chair, a
+    // bookshelf is a shelf — so the tail is the word naming what the thing IS, and
+    // it was the one form neither of the branches above could reach. `stand` is not
+    // equal to `nightstand`, neither starts with the other, so the item scored 0 and
+    // `searchLibrary` filters to `s > 0`: it was not ranked low, it was absent.
+    //
+    // One direction only, query inside hay. The reverse (a hay token inside the
+    // query) needs a floor on the HAY token instead, which is a different
+    // measurement and one nothing here has taken — a 2-character `tv` would match
+    // every query containing those two letters in a row.
+    else if (q.length >= CONTAINS_MIN && hay.some((h) => h.includes(q))) score += CONTAINS_SCORE;
   }
   return score;
 }
