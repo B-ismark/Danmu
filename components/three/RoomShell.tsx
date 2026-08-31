@@ -72,6 +72,7 @@ import { type ThreeEvent } from '@react-three/fiber';
 import { Line } from '@react-three/drei';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
+import { consumeGizmoClick } from '@/lib/gizmo-press';
 import { useRoomScene } from '@/lib/room-scene';
 import { SCENE } from '@/lib/scene-palette';
 import { wallApertures, skirtingRuns } from '@/lib/apertures';
@@ -249,6 +250,12 @@ export function RoomShell() {
               castShadow
               onClick={(e: ThreeEvent<MouseEvent>) => {
                 e.stopPropagation();
+                // A rotate whose ring passed over this wall ends in a click here,
+                // and a gesture is not a click on the thing it happened to finish
+                // over. Without this the wall got selected by a gizmo drag AND the
+                // gate stayed armed with nothing to consume it, so it went on to eat
+                // an ordinary click one gesture later. See lib/gizmo-press.ts.
+                if (consumeGizmoClick()) return;
                 setSelectedWall(i);
               }}
               onPointerOver={(e: ThreeEvent<PointerEvent>) => {

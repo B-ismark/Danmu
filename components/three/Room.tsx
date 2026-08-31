@@ -9,7 +9,8 @@ import { ContactShadows, Environment, Lightformer, AdaptiveDpr, PerformanceMonit
 import { EffectComposer, N8AO, SMAA } from '@react-three/postprocessing';
 import { ACESFilmicToneMapping, Raycaster, Vector2, Vector3, Plane, type Camera, type DirectionalLight, type Scene, type WebGLRenderer } from 'three';
 import { v4 as uuid } from 'uuid';
-import { useStudio } from '@/lib/store';
+import { useStudio } from '@/lib/store';
+import { consumeGizmoClick } from '@/lib/gizmo-press';
 import { useScene } from '@/lib/scene-store';
 import { useRoomScene } from '@/lib/room-scene';
 import { placeNewPart, DND_MIME, type Category, type Shape } from '@/lib/scene-spec';
@@ -243,6 +244,12 @@ export function Room() {
       onPointerMissed={() => {
         // A pan that ends over bare floor is not a click on nothing.
         if (useStudio.getState().panKeyHeld) return;
+        // Neither is a gizmo gesture whose ring was over bare floor. R3F only calls
+        // this when the click moved 2px or less, so a real rotate does not reach
+        // here — but a press on a handle that turned nothing does, and it must not
+        // deselect the piece the handle belongs to. It also stops the gate being
+        // left armed with nothing to consume it. See lib/gizmo-press.ts.
+        if (consumeGizmoClick()) return;
         useStudio.getState().setSelected(null);
       }}
       onContextMenu={(e) => e.preventDefault()}

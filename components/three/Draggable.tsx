@@ -37,6 +37,7 @@ import { useThree, type ThreeEvent } from '@react-three/fiber';
 import { Group, Mesh, MeshStandardMaterial, Plane, Vector3 } from 'three';
 import { gestureOwnedByOther, useStudio } from '@/lib/store';
 import { clearDragClick, suppressClickAfterDrag } from '@/lib/drag-click';
+import { claimPressForGizmo, clearGizmoClick, holdPress, releasePress } from '@/lib/gizmo-press';
 import { useScene } from '@/lib/scene-store';
 import { currentRoomScene } from '@/lib/room-scene';
 import { renderBaseDim, resolvePart } from '@/lib/transforms';
@@ -763,6 +764,8 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // rotation is committed on release instead of being visually orphaned.
     if (!d.started) {
       d.started = true;
+      // Same as the pick-up above: past here the gesture has done something.
+      releasePress(partId);
       dragStartPos.current = [ref.current.position.x, ref.current.position.y, ref.current.position.z];
       dragStartRot.current = ref.current.rotation.y;
       cancelled.current = false;
@@ -923,6 +926,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       if (raf.current) cancelAnimationFrame(raf.current);
       if (drag.current?.hold) window.clearTimeout(drag.current.hold);
       if (_gestureOwner === partId) _gestureOwner = null;
+      releasePress(partId);
       if (useStudio.getState().draggingId === partId) setDragging(null);
       detachTouch();
     },
@@ -943,14 +947,39 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // calls `clearDragClick`" — and the Alt guard used to return first, so the
     // Alt-click after such a drag was swallowed and did nothing at all.
     clearDragClick();
+    // …and the gizmo's own gate, for the same reason — a rotate released over bare
+    // floor produces no click, so the gate it armed has to be dropped by the next
+    // press rather than by a click that never comes.
+    //
+    // **But NOT while a gesture is still in flight, which is where the two gates
+    // stop being the same rule.** `drag-click` arms on pointer-UP, so any later
+    // press is necessarily a new gesture. This one arms on pointer-DOWN, so a
+    // SECOND pointer landing mid-rotate reaches here while the gate is doing its
+    // job — and an unconditional clear disarmed it one line before the guards below
+    // would have refused the press anyway. Two fingers on a merged group and the
+    // click ending the rotate drills into it, which is the one thing this gate
+    // exists to stop. Both readings are needed: `gizmoActive` catches a press on
+    // the turning piece's own body (where `draggingId` IS this part), and
+    // `gestureOwnedByOther` catches one on any neighbour.
+    if (!gizmoActive.current && !gestureOwnedByOther(partId)) clearGizmoClick();
     if (useStudio.getState().panKeyHeld) return;
     // Alt held = the press is asking WHICH piece, not moving one. `Pickable`
     // answers it on the click; starting a drag here first would nudge the very
     // piece the user is saying they did not mean. Same reasoning as the pan guard
     // above, and checked in the same place for the same reason.
     if (e.altKey) return;
-    // The gizmo's own handles run their interaction — only grab presses on the
-    // part body itself.
+    // Claim the press against the rest of the R3F tree — the pieces behind this
+    // one, and the room shell.
+    //
+    // **It said "the gizmo's own handles run their interaction, so only presses on
+    // the part body itself get here", and that is precisely the belief this
+    // function now exists to correct.** R3F never sees the gizmo: it raycasts only
+    // objects carrying handlers, and drei's `TransformControls` is a `<primitive>`
+    // with none, so a press on a ring, an arrow or a translate plane arrives here
+    // like any other. `stopPropagation` cannot help with that — it orders siblings
+    // in one raycast, and the gizmo is not in the raycast at all. What handles it is
+    // `holdPress` below. Left uncorrected, this comment is an argument for deleting
+    // that as redundant plumbing, 45 lines above the code that disproves it.
     e.stopPropagation();
 
     // The gizmo already owns this part's transform — a second finger pressing
@@ -994,6 +1023,37 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     };
     _gestureOwner = partId;
     (e.target as Element).setPointerCapture(e.pointerId);
+    // R3F handed this press to furniture without ever asking the gizmo, because
+    // the gizmo is invisible to its raycaster. If the press was in fact aimed at a
+    // handle, the gizmo's `mouseDown` — microseconds away, in this same DOM
+    // dispatch — takes it back through here. Everything above is bookkeeping;
+    // nothing has moved yet, which is what makes handing it back lossless.
+    // `lib/gizmo-press.ts` has the whole reasoning.
+    const captureTarget = e.target as Element;
+    const capturedId = e.pointerId;
+    holdPress(partId, () => {
+      const d = drag.current;
+      if (d?.hold) window.clearTimeout(d.hold);
+      drag.current = null;
+      if (_gestureOwner === partId) _gestureOwner = null;
+      detachTouch();
+      try {
+        captureTarget.releasePointerCapture(capturedId);
+      } catch {
+        /* already released */
+      }
+      // No cursor write here, deliberately. This press never set one — `grabbing`
+      // is set by the first move that actually starts a drag — so clearing would
+      // discard the `pointer` that `Pickable` put up on hover, and `Pickable` only
+      // re-sets it on a fresh `pointerover`. The pointer has not left the mesh, so
+      // none is coming: the whole rotate would run under the default arrow and stay
+      // there afterwards.
+      // Only if it is still ours. A touch press has not called `setDragging` at
+      // all yet — that waits for the dwell — so `draggingId` here may belong to
+      // nobody or to somebody else, and clearing it unconditionally would park
+      // another gesture's camera guard.
+      if (useStudio.getState().draggingId === partId) setDragging(null);
+    });
     if (isTouch) {
       touchPts.current.set(e.pointerId, [e.clientX, e.clientY]);
       attachTouch();
@@ -1003,6 +1063,10 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         const d = drag.current;
         if (!d) return;
         d.armed = true;
+        // The press has become a pick-up, so the window `holdPress` is for has
+        // closed — see the note at the hold itself. Everything below this line is
+        // something to undo rather than nothing.
+        releasePress(partId);
         setDragging(partId);
         // Selecting on pick-up is the feedback that the part is now in hand, and it
         // must take the same set a CLICK would — `selectionForPick`, which is where
@@ -1032,6 +1096,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     }
     drag.current = null;
     if (_gestureOwner === partId) _gestureOwner = null;
+    releasePress(partId);
     detachTouch();
   }
 
@@ -1055,6 +1120,8 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       const dist = Math.hypot(e.clientX - d.startClient[0], e.clientY - d.startClient[1]);
       if (dist < 4) return;
       d.started = true;
+      // Same as the pick-up above: past here the gesture has done something.
+      releasePress(partId);
       dragStartPos.current = [ref.current.position.x, ref.current.position.y, ref.current.position.z];
       dragStartRot.current = ref.current.rotation.y;
       cancelled.current = false;
@@ -1085,6 +1152,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     if (d.hold) window.clearTimeout(d.hold);
     drag.current = null;
     if (_gestureOwner === partId) _gestureOwner = null;
+    releasePress(partId);
     detachTouch();
     try {
       (e.target as Element).releasePointerCapture(d.pointerId);
@@ -1190,6 +1258,15 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
           rotationSnap={mode === 'rotate' ? rotationSnap : null}
           onObjectChange={onGizmoChange}
           onMouseDown={() => {
+            // This fires only when `pointerDown` found an axis — the press really
+            // did land on a handle — and three-stdlib re-runs its hover test at the
+            // press point first, so it is right for a finger as well as a mouse.
+            //
+            // R3F has already dispatched this same press to whatever furniture sits
+            // behind the ring, which for a bed's rotate arc is routinely the
+            // nightstand beside it. Take it back before anything else here runs:
+            // `setDragging` below must be the LAST word on who owns the gesture.
+            claimPressForGizmo();
             gizmoActive.current = true;
             setDragging(partId);
             const pp = ref.current?.position;

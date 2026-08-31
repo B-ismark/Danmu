@@ -1498,6 +1498,66 @@ localStorage. `tests/drag-click.test.ts` reads the flag's initial value **at
 import**, because a `beforeEach` reset hides a module that started armed, and one
 that did would swallow the first click of the session.
 
+### The press the gizmo takes — `lib/gizmo-press.ts`
+Reported as *"I selected bed to rotate but the rotate control overlaps the
+nightstand and it ended up moving the nightstand."* The gizmo is not doing
+anything wrong; the same press is simply **delivered twice**.
+
+**R3F cannot see the gizmo.** It raycasts `internal.interaction` — the objects
+that carry event handlers — and drei's `<TransformControls>` is a `<primitive>`
+with none, so the ring, the arrows and the planes are transparent to picking. A
+press aimed at a handle goes straight through to whatever furniture sits behind
+it, and that piece starts a direct drag of its own.
+
+`Draggable.onPointerDown` already has three guards that would refuse it —
+`gizmoActive`, `_gestureOwner`, `gestureOwnedByOther` — and **every one of them
+reads state the gizmo sets in its `mouseDown`, which has not happened yet.** Both
+listen on the same element (drei passes R3F's `events.connected` as the controls'
+`domElement`), R3F registered it at Canvas mount and the controls when the piece
+was selected, so R3F's dispatch is always first. *Ordering, not logic, was what
+was missing.*
+
+So the claim is **undone rather than pre-empted**. Nothing the press set up has
+moved anything yet, so `claimPressForGizmo()` in the gizmo's own `onMouseDown` —
+microseconds later, same DOM dispatch — hands it back and the drag never starts.
+Order-independent by construction: were the two ever to swap, `gestureOwnedByOther`
+catches it instead.
+
+**Asking the gizmo beats hit-testing for it.** The alternative was a capture-phase
+listener re-running the gizmo's hover test at the press point. It would work, and
+it is worse: it reads `axis`, `dragging`, `enabled` and `pointerHover`, all
+declared `private` by three-stdlib — a cast today and a silent no-op the day one is
+renamed. `onMouseDown` is drei's own prop, fires only when `pointerDown` found an
+axis, and three-stdlib re-runs `pointerHover` at the press point first, which is
+what makes it right for a **finger** too, where there is no previous hover to read.
+
+The click gate is the same shape as `lib/drag-click.ts`'s and takes no part id for
+the same reason. It is armed **even when the press held nothing** — a ring over
+bare floor, or over the turned piece's own body, still ends in a click, and on the
+piece itself that is not harmless: a plain click is `selectionForPick`, which
+drills *into* a merged group.
+
+**Where the two gates are NOT the same rule is lifetime, and that is where the
+review found most of what was wrong.** `drag-click` arms on pointer-UP, so any
+later press is necessarily a new gesture and may clear it unconditionally. This one
+arms on pointer-DOWN, so a second pointer landing mid-rotate reaches `Draggable`
+while the gate is doing its job — the clear is conditional on no gesture being in
+flight. For the same reason the HOLD is given back the moment the press becomes a
+gesture (the touch pick-up, and both places `started` is set): the claim is lossless
+only because nothing has happened yet, and a hold left standing into a live drag is
+a teardown waiting to run on a gesture someone is in the middle of. And the gate has
+**three** consumers, because a ring sweeps over three kinds of thing — `Pickable`
+for furniture, `RoomShell`'s wall, `Room`'s `onPointerMissed` for bare floor.
+Furniture alone left it armed with nothing to take it whenever a rotate finished
+over plaster or air, and an armed gate outlives its gesture.
+
+**The 2D plan had the same defect by a different mechanism**, which is why the
+handle now draws in a layer of its own after every piece. `planPaintOrder` sorts by
+footprint area **descending**, so the smallest piece paints last and sits on top: a
+nightstand's filled rect covered the bed's turn handle, and SVG hit-testing gives
+the press to whatever is topmost. Inside the parts loop that control could never be
+above the furniture, because it was drawn at its own piece's depth.
+
 ### Removing a piece — `removeParts` in `KeyboardShortcuts.tsx`
 One path for every surface: the row trash, the Inspector button, the Delete key
 and the 2D plan all call it.
