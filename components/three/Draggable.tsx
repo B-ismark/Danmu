@@ -54,7 +54,12 @@ import {
 import { isFloorStanding } from '@/lib/physics';
 import { clampDims } from '@/lib/dimension-ranges';
 import { type SnapLine } from '@/lib/item-snap';
-import { resolvePlacement as resolveDrag, snapSteps } from '@/lib/drag-resolve';
+import {
+  resolvePlacement as resolveDrag,
+  snapSteps,
+  refusalCause,
+  type Resolved,
+} from '@/lib/drag-resolve';
 import { wouldCreateCycle } from '@/lib/rigid-parent';
 import { convoyRestore, gestureFor, planConvoy, resolveConvoy, travellingWorld, type Convoy, type ConvoyResult } from '@/lib/drag-convoy';
 import { Pickable } from './Pickable';
@@ -442,7 +447,12 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
    *  can afford to skip the store because the drag animates its own object3D; the
    *  others cannot be reached that way, and a set that only catches up on release
    *  is indistinguishable from a set that is not coming. */
-  function liveUpdate(resolved: { pos: [number, number, number]; rot: number; valid: boolean; snapLines?: SnapLine[] }, dim: [number, number, number]) {
+  // Typed as `Resolved` rather than a hand-written structural copy of it. The copy
+  // listed four of the fields and silently dropped any fifth, so when `refusal` was
+  // added to carry WHY a spot was refused, this function could not see it and the
+  // sentence below went on saying "something is in the way" — a re-declaration of a
+  // type is a second source of truth like any other.
+  function liveUpdate(resolved: Resolved, dim: [number, number, number]) {
     if (!ref.current || !part) return;
     ref.current.position.set(resolved.pos[0], resolved.pos[1], resolved.pos[2]);
     ref.current.rotation.y = resolved.rot;
@@ -475,7 +485,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         announce(
           namesMember
             ? `${namesMember.name} will not fit there — the rest of the selection cannot follow.`
-            : `${part.name} will not fit there — something is in the way.`,
+            : `${part.name} will not fit there — ${refusalCause(resolved)}`,
         );
       }
     }

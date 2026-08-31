@@ -78,10 +78,40 @@ room. See `what-is-still-open.md` § H.12 and § B.16.*
 ## Drag and selection
 
 *Owner: `drag`. All seven of the previous items were looked at on 2026-08-30 and are gone.
-The one below is new, and it is here for a specific reason rather than by default: drei's
-`TransformControls` is a three.js object with **no DOM**, so nothing in Playwright can aim a
-press at its ring. The 2D half of the same defect **is** browser-checked and is not in this
-list.*
+The two below are new, and each is here for a specific reason rather than by default. The
+rotate ring, because drei's `TransformControls` is a three.js object with **no DOM**, so
+nothing in Playwright can aim a press at its ring — the 2D half of that defect **is**
+browser-checked and is not in this list. The refusal sentence, because the question it
+raises is a judgement about what the app should do, not a fact a test can settle.*
+
+### A refusal that names the wall instead of an obstruction that is not there
+
+**Where to click.** Any room. Add a **curtain** from the Library, then in the Inspector set
+its width to **4 m** — the range allows 5 m and nothing stops you doing it in a 3 m room.
+Now drag it, on **both** tabs.
+
+**What should happen.** It refuses everywhere, because every wall is too short: measured,
+**0 of 5,184** swept targets are legal where all 5,184 were before § H.16. The sentence in
+the live region should read *"Curtain will not fit there — **it is wider than that wall**"*.
+Before this branch it read *"— something is in the way"* in an empty room, which sends you
+hunting an obstruction that does not exist. Third place to check: focus the piece in the
+plan and press an arrow to **turn** it — that path says *"It does not fit at that angle — "*
+and reads the same clause.
+
+**What wrong looks like.** Any of the three still saying "something is in the way" for a
+piece with clear floor all round it. Or the opposite over-reach: a piece refused by a real
+obstruction being told it is wider than its wall. Put a wardrobe where a normal-width
+curtain wants to go — that one should still say "something is in the way".
+
+**The judgement, which is why this is here and not merely a test.** The piece is now
+**un-draggable** until you shrink it or grow the room, and nothing on screen says so in as
+many words — the sentence explains the refusal, it does not name the way out. Is a true,
+actionable refusal enough, or does a piece that fits on no wall need to be *allowed* and
+reported instead (the rule-2 shape: it keeps its real size and something else says it does
+not fit)? Nothing reports it today — that is § H.16b — so refusing honestly is the interim,
+not the answer. **This needs a person's opinion, not a test.**
+
+**Where it rides.** `fix/wall-riders-must-be-in-the-room`, PR #74.
 
 ### The rotate ring no longer drags the piece behind it — 3D only
 

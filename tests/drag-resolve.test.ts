@@ -293,12 +293,19 @@ describe('a ceiling piece is not a wall rider', () => {
   });
 
   it('is refused over the quadrant an L cuts away', () => {
-    // The exemption from the polygon test is EARNED by the wall snap placing a
-    // piece exactly on an edge. A fan gets no snap, so it gets no exemption.
+    // A fan gets no wall snap, so it is contained like anything else.
     //
-    // It takes an L to show it, and that is the point: the containment clamp above
-    // is a BOUNDING BOX, so inside a rectangle nothing can ever fail the polygon
-    // test and the exemption looks harmless. The notch is the only place the two
+    // **The exemption this used to be contrasted against is gone**, and the sentence
+    // that stood here — "the exemption from the polygon test is EARNED by the wall
+    // snap placing a piece exactly on an edge" — was the justification § H.16 took
+    // apart: `snapToWall` centres a piece wider than its wall and lets both ends
+    // hang past the corners, so the snap earned nothing. See
+    // `tests/wall-rider-containment.test.ts`.
+    //
+    // What is still exactly right here is why it took an L to show it, and it is
+    // the same reason for a fan and for a curtain: the containment clamp above is a
+    // BOUNDING BOX, so inside a rectangle nothing can ever fail the polygon test and
+    // an exemption from it looks harmless. The notch is the only place the two
     // disagree — which is why "wall-mounted parts skip the polygon test" hid a
     // ceiling fan hanging over next door for as long as it did.
     const L: Poly = [

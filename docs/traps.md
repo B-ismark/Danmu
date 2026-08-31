@@ -115,9 +115,17 @@ for.
 your work is uncommitted, it is destroyed.
 → **Commit before mutating.** A throwaway `wip:` commit, squashed later, costs nothing.
 The tell is a needle that stops matching, or a lint error naming a parameter you never
-touched.
-*(Cost: twice in one session — `lib/footprint.ts`, then `lib/layout-score.ts`. Both
-recovered, both avoidable.)*
+touched — **or, worst of the three, no tell at all.** The third occasion was a *comment*
+rewrite in `lib/drag-resolve.ts` correcting a false claim, made while the fix itself was
+already committed. Two mutation rounds each ended `git checkout -- lib/drag-resolve.ts`,
+which is correct for the mutation and fatal for the comment. Nothing stopped matching and
+nothing failed to lint, because the file was simply back to a state that compiles; it
+surfaced only when `git status` listed three modified files where four were expected. A
+restore that eats prose is invisible to every gate in the repo.
+→ So: **read the file list, not just the exit code**, after any restore — and prefer
+mutating a copy, or committing first, whenever the same file also holds work of yours.
+*(Cost: three times — `lib/footprint.ts`, then `lib/layout-score.ts`, then
+`lib/drag-resolve.ts`'s comment. All recovered, all avoidable.)*
 
 **Symptom: a mutation you are testing in a BUILT artifact comes back green, and the
 assertion looks like decoration.**
@@ -334,6 +342,25 @@ Determinism, not corroboration — same solver, same seed, same fixture, observe
 → Do not lift it into a shared constant. That asserts they must always be equal, which
 no measurement supports, and couples them the first time one legitimately moves.
 
+**Symptom: a count measured one way is quoted as a fact about something measured another
+way — and it is a count, so it looks like a measurement.**
+Two predicates that answer nearly the same question are not the same predicate, and a
+number crossing between them is an inference wearing a measurement's clothes. The sweep
+for § H.16 counted placements that were **accepted while outside the room** using
+`footInsidePoly(footFromPart(..., shrunk))` and got 374. `resolvePlacement`'s own legality
+test is `obbInsidePoly(slightlyShrunk) && pointInFootprint(...)`. "374 escaped" was then
+written up — in a source comment, in `Design.md` and in `docs/what-is-still-open.md` — as
+"removing the exemption costs exactly 374 placements and not one besides", which is a claim
+about the SECOND predicate. It happened to be true. Nothing had shown it was.
+→ **If the claim is about what a change costs, measure the change**: run the sweep against
+both builds and subtract. Here that is one `git checkout`, two runs and a table — 28,739
+accepted with the exemption, 28,365 without — and it turns a sentence into a pinned
+literal. The tell is a sentence of the form *"X, and nothing else"* where only X was
+counted; the second half is always the load-bearing half and is usually the unmeasured one.
+*(Cost: twice in the same item. The other direction first — the sweep's initial check asked
+whether the WHOLE footprint was inside, where the pipeline asks about one shrunk by 10 mm,
+and reported 11,890 findings of which every single one was false. Stricter predicate, same
+mistake, opposite sign.)*
 **Symptom: a peer reports a gate that matches your prediction.**
 Check the **sha**. A cherry-pick onto a different base is a different artifact, and a red
 set does not transfer for free.

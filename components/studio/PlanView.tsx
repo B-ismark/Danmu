@@ -27,7 +27,13 @@ import { footFromPart, obbExtentAlong, obbFromPart, rayToBoundary } from '@/lib/
 import { hitsAt, hitsInRect, nextInCycle, planPaintOrder, type CycleState } from '@/lib/plan-hit';
 import { wallSegments, footprintBounds } from '@/lib/footprint';
 import { moveWallCarrying, wallAttachments } from '@/lib/wall-actions';
-import { resolvePlacement, snapSteps, turnInPlace } from '@/lib/drag-resolve';
+import {
+  resolvePlacement,
+  snapSteps,
+  turnInPlace,
+  refusalCause,
+  type Refusal,
+} from '@/lib/drag-resolve';
 import { refusalAfterGesture, REFUSAL_HOLD_MS } from '@/lib/refusal';
 import { snapGuideEnds, type SnapLine } from '@/lib/item-snap';
 import { convoyRestore, planConvoy, resolveConvoy, travellingWorld, type Convoy } from '@/lib/drag-convoy';
@@ -635,9 +641,16 @@ export const PlanView = forwardRef<PlanViewHandle, {
      *  so a set stopped by three pieces sent the user to fix one at a time while the
      *  refusal appeared to wander round the room. */
     let refusers: string[] = [];
+    /** Why the move the user actually asked for was refused — the FIRST candidate,
+     *  not the last. The two fallbacks are this function's own idea (keep x, take z),
+     *  so the reason one of THEM failed is an answer to a question nobody asked. */
+    let refusedAs: Refusal | undefined;
     for (const [tx, tz] of candidates) {
       const r = resolveAt(part, tx, tz, convoy, world, startPos);
-      if (!r.valid) continue;
+      if (!r.valid) {
+        refusedAs ??= r.refusal;
+        continue;
+      }
       // Where the company lands, and its veto. A candidate this piece could take
       // but its set cannot is not a candidate: the set refuses as a unit rather
       // than deforming or shoving a member through the plaster.
@@ -701,7 +714,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
       announce(
         blocker
           ? `${blocker.name} will not fit there — the rest of the selection cannot follow.`
-          : `${part.name} will not fit there — something is in the way.`,
+          : `${part.name} will not fit there — ${refusalCause({ refusal: refusedAs })}`,
       );
     }
     return false;
@@ -1250,7 +1263,9 @@ export const PlanView = forwardRef<PlanViewHandle, {
     const dir = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1;
     const turned = turnTo(part, part.rot + dir * spin);
     const said = `${part.name} turned to ${Math.round((turned.rot * 180) / Math.PI)} degrees.`;
-    announce(turned.valid ? said : `${said} It does not fit at that angle — something is in the way.`);
+    announce(
+      turned.valid ? said : `${said} It does not fit at that angle — ${refusalCause(turned)}`,
+    );
   }
 
   function onRotateKeyDown(e: React.KeyboardEvent, part: ScenePart) {

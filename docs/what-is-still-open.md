@@ -1996,7 +1996,7 @@ delivery all read state the gizmo sets after R3F has already dispatched. Two thi
 did not know about are in § 27 as well — the click steals the selection too, and the 2D plan
 has the same defect by a different route.
 
-### 16. Pieces still pass through walls in the 2D plan
+### 16. Pieces still pass through walls in the 2D plan — FIXED, see § 29
 
 *"models are still going through walls in 2d plan mode."*
 
@@ -2011,6 +2011,13 @@ lived in the 3D pointer-move handler and did not travel. **Look for a step livin
 `PlanView` before looking inside `drag-resolve`.**
 
 Needs a repro before anything else: which piece, which wall, dragged or arrow-keyed.
+
+**Answered, and the guess above was wrong in the useful direction.** It was not a step
+left in `PlanView`, and it was not the plan at all — both tabs end in the shared resolve,
+and the hole was in the resolve's own legality test. § 29 has it. The repro this asked for
+turned out to be cheaper as a sweep than as a click path, because the piece that fails is
+whichever one is wider than the shortest wall of the room it is in: a property of the pair,
+which is exactly the kind of thing choosing an example misses.
 
 ### 17. A drag refused by a wall-mounted TV says nothing and names nothing
 
@@ -2504,3 +2511,175 @@ The probe went green and I read it as the assertion holding. Verify the mutation
 artifact — `grep` the file before building — rather than trusting the script said so.
 
 15 mutations on `lib/gizmo-press.ts` after the review, 0 survivors.
+
+### 29. § H.16 — a wall rider was exempt from being in the room. SHIPPED
+
+*"models are still going through walls in 2d plan mode."*
+
+**It was never the plan.** Both tabs end in `resolvePlacement`, and its legality test
+opened with a blanket exemption:
+
+```
+const inRoom = ridesAWall || (rug…) || (obbInsidePoly(slightlyShrunk) && pointInFootprint(x, z));
+```
+
+The stated reason was that *"the snap above just placed it exactly on an edge — the
+exemption is EARNED by that snap"*. **`snapToWall` says in its own comment that it does no
+such thing** when the piece is wider than the wall it landed on: it centres it and lets both
+ends hang past the corners, on purpose, because shrinking it is what rule 2 forbids and
+`clearance.ts` is what reports it. Two functions, one of them stating the premise the other
+one denies, in files that already cross-reference each other.
+
+On a rectangle those ends hang over the neighbouring wall's floor and nobody notices. On an
+**L, a T or a U** they hang into the missing quadrant — outside the room — and the drag
+committed `valid` with no red and nothing said.
+
+| | |
+|---|---|
+| escapes | **570** of 50,431 accepted placements |
+| who | curtain 311 · **window 196** · painting 45 · TV 18 |
+| where | L, T, U only. `rect` and `open` clean at every size |
+| swept | 38 `PART_LIBRARY` pairs × 3 sizes × 3 angles × 35 targets × 5 layout ids = 59,850 |
+
+Not a curtain defect: **wider than the wall it landed on**. A max-size TV and a max-size
+painting do it too, and a mid-size curtain does it in all three non-rectangular presets.
+
+**Deleted rather than repaired, and that was measured rather than judged.** The sweep
+scores both builds in one run: the catalogue accepts **50,431** placements with the
+exemption and **49,861** without it, so removing it costs **exactly** those 570 and not
+one besides — the second half of that sentence is the load-bearing one, and it is a
+subtraction rather than a hope. Both columns are pinned in the test. Five of the nine
+riders — `door`, `ac/ac-unit`, both mirrors and `tv/soundbar`, the ones that sit in or on
+the plaster and are the reason such an exemption gets written — are accepted at all 1,575
+samples each without it. The inset in `slightlyShrunk` was already doing that job for
+everything else, and it is **5 mm per face**: it subtracts 10 from a dimension in
+millimetres and `obbFromPart` halves it. Four documents called it "a 10 mm shrink". A predicate that
+needs a carve-out per shape is the tell CLAUDE.md § 3 names, and this one had grown its
+justification after the fact.
+
+**Five mistakes on the way, and every one of them was in the CHECKER rather than the fix.
+The fix is one deleted line; everything below is the instrument being wrong about it.**
+
+1. **The first sweep reported 11,890 findings and every one was false.** It asked whether
+   the whole footprint was inside the polygon; the pipeline asks whether a footprint inset
+   by 5 mm a face is, because the clamp parks a piece EXACTLY on the wall and a corner on
+   the boundary is not outside. **A checker stricter than the code is not a checker, it is
+   a second opinion nobody asked for** — and at 41% noise it would have buried the real
+   ones.
+   **Then it overshot the other way and nobody said so.** Correcting it left the oracle
+   asking only about corners while the pipeline asks about corners *and* the centre, so 54
+   samples had four inset corners inside an L and their middle in the removed quadrant.
+   Deleting `&& pointInFootprint(x, z, footprint)` from the source made all 54 legal and
+   **the escape assertion — the one the file is named for — stayed green**; only a total in
+   a different `it` noticed.
+2. **The sweep's own coverage assertion measured its own subject.** `expect(considered)
+   .toBe(LAYOUTS.length * ROTS.length * …)` shrinks with the arrays it is checking: cut the
+   sweep down to the rectangular layouts and the expectation shrinks with it and the file
+   stays green, while the sweep can no longer reach a single one of the placements it exists
+   for. Both survived a mutation run. Literals now, plus a named check that `l`, `t` and `u`
+   are in the list. This is the `module-tiling` defect again in a new place: **a range
+   checked against its own declared bounds only ever asks whether it sits inside itself.**
+   The reason written beside that literal was **half wrong, and the wrong half was the
+   confident one**: it claimed cutting `ROTS` to zero degrees would reach none of the
+   escapes, "all of which were in an L, a T or a U at an angle". Measured, the withdrawn
+   placements split 170 / 199 / 201 across the three angles. The LAYOUTS half is true (rect
+   0, open 0). What the angles actually buy is the asymmetric case — a square-on sweep
+   cannot tell a piece's width from its depth.
+3. **Five layout ids are four rooms.** `rect`, `open` and `custom` all fall through to the
+   same rectangle, so "five layouts" overstated coverage by a room and spent a fifth of the
+   budget on a repeat — the one shape that produces zero escapes. Making
+   `footprintForLayout` ignore its argument entirely, so all five rooms became that
+   rectangle, passed every assertion in the coverage block.
+4. **The oracle was the predicate it audits.** `footInsidePoly(footFromPart(pos, rot,
+   inset))` reduces to `obbInsidePoly(obbFromPart(pos, rot, inset))` *exactly* —
+   `footCorners` returns `obbCorners` verbatim when `circle` is falsy, and both end in the
+   same `pointInPoly`. So `valid ⇒ inside` was a theorem about function identity. Replacing
+   `pointInPoly` with `return true` turns containment off across the whole app and the
+   escape assertion stayed green with **zero** escapes. It is a second implementation now,
+   written from the rotation convention rather than copied, and pinned by controls including
+   a 2 × 1 m box given a quarter turn — because every rectangle is symmetric in ±x and ±z,
+   so a handedness error is invisible and only a **swap of which axis carries width** is
+   catchable. The same mutation now reports 3,352.
+5. **The sweep was keyed by CATEGORY and the rule is keyed by SHAPE, so it missed a
+   shipping rider — and the headline number was wrong by 196.** `anchorFor` reads
+   `ANCHOR_BY_SHAPE` before `ANCHOR_BY_CATEGORY`, so a wall-riding shape under a
+   non-riding category is unreachable from a category-keyed loop. `other/window` is exactly
+   that: in the Library, emitted by `local-detect` and `room-openings`, **196 escapes**, and
+   structurally invisible to the guard written to protect the claim. `mirror/mirror-oval`
+   and `tv/soundbar` were missing too, and `ac` was worse than missing — the hand-written
+   shape map had no row for it, so `shapeFor('ac')` fell through to `'box'` and the row
+   reported as "`ac` passes on its own merits" was a **box wearing the `ac` category**. The
+   cost of the deletion is 570, not 374. `PART_LIBRARY` enumerates itself now, so a rider
+   added tomorrow enters the sweep with no edit and the pinned counts go red until someone
+   re-measures.
+
+**The shape all five share:** the fix was one deleted line and was right the first time;
+every defect was in the thing measuring it. Four of the five were found by mutation or by a
+reviewer with one narrow question, and **none by re-reading the diff**.
+
+16 mutations, **one survivor, and the survivor is the point.** Reversing the precedence in
+the new `refusal` derivation — so an obstruction outranks leaving the room — left the test
+written to assert that precedence green. The fixture parked a blocker at a plausible-looking
+(0, 1.4); the curtain snaps to whichever wall is nearest and went somewhere else entirely,
+so `collides` was false and only ONE of the two causes ever held. A test for "when both are
+true, X wins" in which both are never true. It derives the blocker's spot from where the
+piece actually lands now, and carries two control assertions establishing each cause
+separately before asserting their order — and it kills that mutation.
+
+**What it actually feels like, measured in a browser rather than guessed.** The first
+version of this paragraph said the fix made a wrong sentence easier to reach — *"Curtain
+will not fit there — something is in the way"*, when nothing is in the way and the wall is
+too short. **That was written before the probe ran and it is wrong.** Dragging a 2.4 m
+curtain from an L's 5 m west wall at the 2.1 m inner stub, it slides along the wall it is
+already on — z = 0.00 to z = 1.30 — and simply never jumps to the stub. Nothing is refused,
+so nothing is said, and nothing should be: `moveTo` tries the full move and then each axis
+alone, and the "keep x, take z" candidate stays legal the whole way. That is the *"slide
+along whatever it hit rather than freezing"* behaviour doing its job, and it is why this fix
+costs the user nothing where the old one silently cost them a wall.
+
+So the wording question is **not** a consequence of this change *in that room*. But the
+paragraph then left it as a question — *"it would take a room where every wall is too short
+for the piece, so that all three candidates fail"* — and the review answered it: **it takes
+three clicks.** `dimRangeFor('curtain', 'curtain').max[0]` is 5000 mm, so the Inspector
+accepts a 4 m curtain in a 3 m room with no clamp and no warning. `snapToWall` centres it on
+whichever wall is nearest and lets 500 mm hang past each corner, and every wall is too
+short, so all three candidates fail: **0 of 5,184 swept targets are valid, where all 5,184
+were before.** The piece is not merely refused somewhere, it is un-draggable everywhere.
+
+That is a real cost of this change and it is stated rather than argued away. What is fixed
+here is the half that was a lie: `Resolved` now carries a **`refusal`**, so the sentence in
+an empty room reads *"Curtain will not fit there — it is wider than that wall"* instead of
+*"something is in the way"*, which sent the user hunting an obstruction that does not exist.
+One derivation, `refusalCause`, read by all three surfaces that say it — the 3D drag, the
+plan drag and the plan's keyboard turn — because two of them were already carrying identical
+hand-written copies of the same sentence, which is the drift that makes two surfaces
+disagree in the first place.
+
+**Two things it deliberately does not do**, both recorded rather than done quietly:
+
+- **It does not un-freeze the piece.** Whether a rider that fits on no wall should be
+  refused everywhere, or allowed to sit somewhere and be *reported*, is the rule-2 question
+  ("it keeps its real size and something else says it does not fit") and the answer depends
+  on the reporter below existing. Refusing with a true, actionable sentence is the honest
+  interim; silently accepting it again is not.
+- **Nothing reports it in the Room panel.** `clearance.ts` emits door · entry · clash ·
+  walk · zone · window · tv · tall · crowding · reach · cut-off · turning, and not one is
+  *outside the room* — `tall` is a height check, `freeFloorShare` DISCARDS the outside
+  portion rather than reporting it. So `snapToWall`'s own comment, which says
+  "`clearance.ts` is what says it does not fit", is **false**, and this branch propagated it
+  into two more files before anyone checked. Corrected in all three; the missing rule is
+  § H.16b below.
+
+### § H.16b — nothing reports a piece that is outside the room
+
+A new `ClearanceIssue` kind, which per CLAUDE.md § 3 means a `RULE_HANDLING` row in
+`layout-score.ts` as well — and `tests/layout-conformance.test.ts` will fail until it has
+one, which is the gate working. The cost term already exists (`layout-score.ts`'s `outside`,
+via `outsideShare`), so this is `movable: true` with a real `costTerm`, not one of the
+written-reason rows. Three other paths still exempt riders from containment and would each
+either feed this rule or be fixed by it — `scene-spec.ts`'s `seats()` (centre-only, and it
+uses the *wider* `wallMounted` flag), `wall-move.ts`'s `carryAttached` (exempts riders from
+its was-inside/now-inside test), and `layout-settle.ts` (`movable = !ridesWall`, so
+`contain()` never runs on one). `placeNewPart` has no legality test at all, so adding an
+oversized curtain from the Library seeds the state this branch now refuses to reproduce.
+**Not started; no commit anywhere.**
