@@ -829,6 +829,28 @@ describe('the rail asks about itself', () => {
     // which is the half that was false.
     const blocks = [...CSS.matchAll(/@container rail \(max-width: (\d+)px\)\s*\{([\s\S]*?)\n\}/g)];
     expect(blocks.length, 'no @container rail blocks parsed').toBeGreaterThan(0);
+
+    // Why `rail-right` is the token to measure against, asserted rather than
+    // assumed. Both classes are markup in `Inspector.tsx` and nowhere else, and
+    // `shell-parts`' `RightRailBody` is the only thing that renders an Inspector —
+    // so the right rail's floor is the narrowest either class ever sees. Mutating
+    // the line below to `rail-left` leaves the check green (228px is under any
+    // plausible breakpoint), which is exactly why the premise is pinned here: move
+    // one of these classes into the piece tree and this goes red rather than
+    // quietly measuring the wrong rail.
+    const sources = walk(root('components')).filter((f) => /\.tsx$/.test(f));
+    for (const cls of ['rail-triple', 'rail-swatches']) {
+      // A word match, not `"${cls}"` — `className="rail-triple something"` is a
+      // perfectly ordinary thing to write and an exact-attribute match reads it as
+      // nobody rendering the class at all. Both readings go red rather than green,
+      // but only one of them names the real change.
+      const users = sources.filter((f) => new RegExp(`\\b${cls}\\b`).test(readFileSync(f, 'utf8')));
+      expect(users.map((f) => f.split(/[\\/]/).pop()), `who renders .${cls}`).toEqual(['Inspector.tsx']);
+    }
+    expect(readSrc('components', 'studio', 'shells', 'shell-parts.tsx')).toMatch(
+      /export function RightRailBody[\s\S]*?<Inspector\s*\/>/,
+    );
+
     const floor = railFloor('rail-right');
     for (const cls of ['.rail-triple', '.rail-swatches']) {
       const owning = blocks.filter((b) => codeOnly(b[2]).includes(cls));
