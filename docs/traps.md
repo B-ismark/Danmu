@@ -119,6 +119,22 @@ touched.
 *(Cost: twice in one session — `lib/footprint.ts`, then `lib/layout-score.ts`. Both
 recovered, both avoidable.)*
 
+**Symptom: a mutation you are testing in a BUILT artifact comes back green, and the
+assertion looks like decoration.**
+The mutation never reached the artifact. A patch script that `assert`s its needle matched
+exactly once will throw when the needle matches twice — and if the next line of the shell
+command is on a **new line rather than chained with `&&`**, the build runs anyway, on
+unmutated source. The probe then passes for the most boring reason there is and reads as
+"this assertion cannot fail".
+→ **Grep the file for the mutated text after patching and before building**, and print the
+count. One line, and it is the only thing that distinguishes "the assertion is decoration"
+from "I tested the wrong bytes". Same family as the `EXIT=0` entry under Gates: a step that
+did not run reporting success because nothing read its status.
+*(Cost: `PlanView.tsx`'s turn handle — two identical `onKeyDown={(e) => onPartKeyDown(e,
+part)}` lines, so an anchor that assumed one threw; a full rebuild and probe cycle was spent
+concluding a real assertion was worthless. Second occasion in this family: the `EXIT=0`
+through a pipe, below.)*
+
 **Symptom: a mutation is applied and lint fails with `'x' is defined but never used`.**
 The mutation is still applied. Un-mutate by hand if the restore would eat uncommitted
 work.
