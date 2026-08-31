@@ -5,6 +5,7 @@ import { type ThreeEvent } from '@react-three/fiber';
 import { Group } from 'three';
 import { gestureOwnedByOther, useStudio } from '@/lib/store';
 import { consumeDragClick } from '@/lib/drag-click';
+import { consumeGizmoClick } from '@/lib/gizmo-press';
 import { useScene } from '@/lib/scene-store';
 import { selectionForPick } from '@/lib/scene-spec';
 import { cycleThrough, type CycleState } from '@/lib/plan-hit';
@@ -118,6 +119,16 @@ export function Pickable({
         // flag it was let a click that raycast onto a DIFFERENT piece eat the flag
         // and select itself, which is the collapse this guard exists to stop.
         if (consumeDragClick()) return;
+        // …and the tail of a GIZMO gesture, which is a different press with the
+        // same ending. R3F cannot see the gizmo, so a rotate whose ring passes
+        // over this mesh sends it the press AND the click. `Draggable` hands the
+        // press back the moment the gizmo claims it; the click arrives after
+        // `onMouseUp` has already cleared `draggingId`, so `gestureOwnedByOther`
+        // above is false by then and this is the only thing standing between a
+        // rotate and a silent re-selection. On the turned piece itself that is not
+        // even harmless: a plain click is `selectionForPick`, which drills INTO a
+        // merged group. See lib/gizmo-press.ts.
+        if (consumeGizmoClick()) return;
         // ── Alt: choose between pieces that overlap on screen ────────────────
         // The one question a plain click cannot answer, because only the frontmost
         // handler runs. `e.intersections` is the whole depth-sorted list from this

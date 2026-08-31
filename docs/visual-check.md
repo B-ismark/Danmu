@@ -77,12 +77,39 @@ room. See `what-is-still-open.md` § H.12 and § B.16.*
 
 ## Drag and selection
 
-*Owner: `drag`. **Empty, and that is the rule working.** All seven items were looked at on
-2026-08-30. The last one out was the 500 ms red, which could not be attempted on the first
-pass because the note never named an axis — retried with **Width** set to 4000 mm and it
-**held**: a 4 m sofa turned hard in a tight room flashes red and clears. Four of the seven
-held outright; the three that failed are measured in `what-is-still-open.md` § H.14 – § H.16,
-and three more defects came out of gestures these items were not asking about.*
+*Owner: `drag`. All seven of the previous items were looked at on 2026-08-30 and are gone.
+The one below is new, and it is here for a specific reason rather than by default: drei's
+`TransformControls` is a three.js object with **no DOM**, so nothing in Playwright can aim a
+press at its ring. The 2D half of the same defect **is** browser-checked and is not in this
+list.*
+
+### The rotate ring no longer drags the piece behind it — 3D only
+
+**Where to click.** 3D tab. Put a nightstand hard against the head of a bed, select the
+**bed**, press **R** for rotate. The ring is drawn around the bed and sweeps over the
+nightstand. Press **on the ring, at a point where it crosses the nightstand**, and drag to
+turn the bed. Do it again in **W** (move) mode, where the arrows and the flat translate
+squares reach over the same neighbour.
+
+**What wrong looks like.** Three separate things, and only the first is the reported one:
+
+1. **The nightstand slides.** That was the bug: R3F cannot see the gizmo, so it handed the
+   same press to the furniture behind the ring and that piece started a drag of its own.
+2. **The selection jumps to the nightstand when you let go.** A gizmo gesture ends in a DOM
+   click like any drag, and by then nothing is guarding it. Watch the Inspector's title
+   after the drag, not during.
+3. **You end up holding one drawer unit instead of the bed.** Merge a bed and two
+   nightstands into a group first, then rotate it. A plain click is *drill into the group*,
+   so the click ending the gesture used to select one member. The rail's Catalog is where
+   this shows: after the rotate the header must still name the whole group.
+
+Also worth a second: rotating a piece with **nothing behind the ring** must be exactly as it
+was, and a plain click on a neighbour immediately after a rotate must select that neighbour
+— the gate is armed per gesture and dropped by the next press, so a click that goes missing
+means it is being armed and never consumed.
+
+**Where it rides.** `lib/gizmo-press.ts` + `components/three/Draggable.tsx` +
+`components/three/Pickable.tsx`. Branch `fix/gizmo-press-belongs-to-the-gizmo`.
 
 
 ## Layout and Shuffle

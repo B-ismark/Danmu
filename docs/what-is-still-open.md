@@ -2371,3 +2371,61 @@ while `roomFloor` clamps the floor to the current side.
 
 **Still open, and it is a judgement rather than a defect:** a sighted user gets no sentence
 on the wall path. See `docs/visual-check.md`.
+
+### 27. § H.15 — the rotate gizmo moved whatever its ring passed over. SHIPPED
+
+Cause read out of the installed source rather than reproduced, because the chain is
+complete and each link is checkable in `node_modules`:
+
+- `@react-three/fiber` **9.6.1** raycasts `internal.interaction` — the objects that carry
+  event handlers. drei **10.7.7** renders `TransformControls` as a `<primitive>` with none,
+  so the ring, the arrows and the planes are **transparent to picking**. A press aimed at a
+  handle is delivered to whatever furniture sits behind it, and that piece starts a drag.
+- `Draggable.onPointerDown` already had three guards that would refuse such a press —
+  `gizmoActive`, `_gestureOwner`, `gestureOwnedByOther` — and **all three read state the
+  gizmo sets in its `mouseDown`, which has not happened yet.** drei passes R3F's
+  `events.connected` as the controls' `domElement`, so both listen on the same element;
+  R3F registered at Canvas mount and the controls when the piece was selected, so R3F's
+  dispatch is always first. *Ordering, not logic.*
+
+So the claim is **undone rather than pre-empted** (`lib/gizmo-press.ts`). Nothing the press
+set up has moved anything yet, so handing it back in the gizmo's own `onMouseDown` — same
+DOM dispatch, microseconds later — is lossless, and it is order-independent: were the two
+ever to swap, `gestureOwnedByOther` catches it instead.
+
+**Two things the item did not know about.**
+
+1. **The click steals the selection too, and nothing was stopping it.** A gizmo gesture ends
+   in a DOM `click` like any drag; by then `onMouseUp` has cleared `draggingId`, so
+   `Pickable`'s `gestureOwnedByOther` is false and the click re-selects whatever mesh the
+   ring happened to be over. On the turned piece itself that is not even harmless — a plain
+   click is `selectionForPick`, which drills **into** a merged group, so rotating a merged
+   bed left you holding one drawer unit. Same gate shape as `lib/drag-click.ts`, same
+   deliberate absence of a part id, and armed even when the press held nothing.
+2. **The 2D plan has the same defect by a different mechanism** — which is the half of the
+   user's *"I don't think this issue only exists with nightstands or only in 3d mode"* that
+   turned out to be right. `planPaintOrder` sorts by footprint area **descending**, so the
+   smallest piece paints last and sits on top; the turn handle was drawn inside its own
+   piece's `<g>`, at that piece's depth, and a nightstand's filled rect covered a bed's
+   handle. SVG hit-testing gives the press to whatever is topmost. It draws in a layer of
+   its own now, after every piece.
+
+**What was rejected, so nobody re-proposes it.** A capture-phase `pointerdown` listener that
+re-runs the gizmo's hover test at the press point and refuses up front. It works, and it is
+worse: `axis`, `dragging`, `enabled` and `pointerHover` are all declared `private` in
+three-stdlib's `.d.ts`, so it is a cast today and a **silent no-op** the day any of them is
+renamed. Asking the gizmo is one source of truth for which presses it took, and
+`onPointerDown` re-runs `pointerHover` at the press point before dispatching `mouseDown`,
+which is what makes the answer right for a **finger** as well — there is no previous hover to
+read on touch, so the stale-`axis` version would have covered mice only.
+
+12 mutations on `lib/gizmo-press.ts`, 0 survivors — after one round in which **M11 survived
+and was not equivalent**: swapping the two lines of `claimPressForGizmo` is invisible to
+every test whose teardown ends by calling `releasePress`, which is all of them, and stops
+being invisible only when a teardown **throws**. The comment claiming the order mattered was
+written before anything could see it.
+
+**What no test here reaches:** that the gizmo's `mouseDown` genuinely lands in the same DOM
+dispatch, and that a real ring press over a real neighbour now turns one piece and moves
+nothing. The 2D half is browser-checked (`elementFromPoint` at the handle, plus the drag);
+drei's `TransformControls` has no DOM, so the 3D half is in `docs/visual-check.md`.

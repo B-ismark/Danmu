@@ -1580,11 +1580,11 @@ export const PlanView = forwardRef<PlanViewHandle, {
             const color = blocked ? 'var(--danger)' : part.locked ? 'var(--locked)' : 'var(--accent)';
             const labelColor = blocked ? 'var(--danger-text)' : part.locked ? 'var(--locked)' : 'var(--accent-text)';
             const fill = blocked ? 'var(--danger-tint)' : part.locked ? 'var(--locked-tint)' : 'var(--accent-tint)';
-            // In the selection, and separately whether it is the PRIMARY of it:
-            // every selected piece draws heavier, but only one carries the rotate
-            // handle, or a five-piece selection would sprout five of them.
+            // Every selected piece draws heavier. Only the PRIMARY carries the turn
+            // handle — a five-piece selection must not sprout five of them — and
+            // that handle is no longer drawn here: it is a layer of its own, below,
+            // so that no piece painted after this one can cover it.
             const isSel = selection.includes(part.id);
-            const isPrimary = selected === part.id;
             // Weight, not only colour. `--accent-tint` and `--danger-tint` are 0.077
             // apart in OKLab — the distance `lib/themes.ts` itself calls
             // indistinguishable — so the refusal was being signalled by a hue shift
@@ -1694,43 +1694,75 @@ export const PlanView = forwardRef<PlanViewHandle, {
                     </text>
                   </g>
                 )}
-
-                {isPrimary && (
-                  <g transform={`translate(0 ${-hpx / 2 - 26 * k})`}>
-                    <line
-                      x1={0}
-                      y1={18 * k}
-                      x2={0}
-                      y2={hpx / 2 + (26 - 8) * k}
-                      stroke={color}
-                      strokeWidth={1.2 * k}
-                      strokeDasharray={`${2 * k} ${2 * k}`}
-                    />
-                    <circle
-                      cx={0}
-                      cy={0}
-                      r={9 * k}
-                      fill="var(--paper)"
-                      stroke={focusKey === `rot:${part.id}` ? 'var(--accent-text)' : color}
-                      strokeWidth={(focusKey === `rot:${part.id}` ? 3 : 2) * k}
-                      tabIndex={0}
-                      role="button"
-                      aria-label={`Turn ${part.name}. Arrow keys turn it.`}
-                      onPointerDown={(e) => onPointerDown(e, part.id, 'rotate')}
-                      onKeyDown={(e) => onRotateKeyDown(e, part)}
-                      onFocus={() => setFocusKey(`rot:${part.id}`)}
-                      onBlur={() => setFocusKey(null)}
-                      style={{ cursor: 'grab', outline: 'none' }}
-                    />
-                    <g transform={`scale(${k})`} style={{ pointerEvents: 'none' }}>
-                      <path d="M -4 -1 A 4 4 0 1 1 4 -1" fill="none" stroke={color} strokeWidth="1.4" />
-                      <polygon points="3,-1 5,-3 3,-3" fill={color} />
-                    </g>
-                  </g>
-                )}
               </g>
             );
           })}
+
+          {/* The turn handle, drawn in its own layer AFTER every piece — which is
+              the 2D half of the same defect the 3D gizmo has, arriving by a
+              different mechanism.
+              `planPaintOrder` sorts by footprint area DESCENDING, so the smallest
+              piece is painted last and sits on top. A bed is large and a nightstand
+              is small, so the nightstand's filled rect was painted over the bed's
+              turn handle — and SVG hit-testing gives the press to whatever is
+              topmost. Pressing the handle where the two overlap grabbed the
+              nightstand and slid it, which is the same sentence the user wrote
+              about the 3D ring. Inside the parts loop this control could never be
+              above the furniture, because it was drawn at its own piece's depth.
+              It stays inside the zoom/rotate group and repeats its piece's
+              transform, so it rides the piece exactly as before.
+              The one thing this changes besides paint order is tab order: the
+              handle is now the last stop in the drawing rather than the one after
+              its own piece. That is the honest trade — `painted` is ordered by
+              area, not by anything the eye can follow, so "after its piece" was
+              never a spatial promise either, and there is exactly one handle. */}
+          {(() => {
+            const part = painted.find((p) => p.id === selected);
+            if (!part) return null;
+            const c = toLocal(part.pos[0], part.pos[2]);
+            const hpx = (part.dimMM[1] / 1000) * SCALE;
+            const color = blockedIds.includes(part.id)
+              ? 'var(--danger)'
+              : part.locked
+                ? 'var(--locked)'
+                : 'var(--accent)';
+            const focused = focusKey === `rot:${part.id}`;
+            return (
+              <g transform={`translate(${c.x} ${c.y}) rotate(${-(part.rot * 180) / Math.PI})`}>
+                <g transform={`translate(0 ${-hpx / 2 - 26 * k})`}>
+                  <line
+                    x1={0}
+                    y1={18 * k}
+                    x2={0}
+                    y2={hpx / 2 + (26 - 8) * k}
+                    stroke={color}
+                    strokeWidth={1.2 * k}
+                    strokeDasharray={`${2 * k} ${2 * k}`}
+                  />
+                  <circle
+                    cx={0}
+                    cy={0}
+                    r={9 * k}
+                    fill="var(--paper)"
+                    stroke={focused ? 'var(--accent-text)' : color}
+                    strokeWidth={(focused ? 3 : 2) * k}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Turn ${part.name}. Arrow keys turn it.`}
+                    onPointerDown={(e) => onPointerDown(e, part.id, 'rotate')}
+                    onKeyDown={(e) => onRotateKeyDown(e, part)}
+                    onFocus={() => setFocusKey(`rot:${part.id}`)}
+                    onBlur={() => setFocusKey(null)}
+                    style={{ cursor: 'grab', outline: 'none' }}
+                  />
+                  <g transform={`scale(${k})`} style={{ pointerEvents: 'none' }}>
+                    <path d="M -4 -1 A 4 4 0 1 1 4 -1" fill="none" stroke={color} strokeWidth="1.4" />
+                    <polygon points="3,-1 5,-3 3,-3" fill={color} />
+                  </g>
+                </g>
+              </g>
+            );
+          })()}
 
           {/* How far the piece being moved is from the walls it is heading for.
               This is the tab whose whole premise is that the dimensions are real,
