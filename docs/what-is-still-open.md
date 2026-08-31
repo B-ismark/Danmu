@@ -2512,7 +2512,7 @@ artifact — `grep` the file before building — rather than trusting the script
 
 15 mutations on `lib/gizmo-press.ts` after the review, 0 survivors.
 
-### 29. § H.16 — a wall rider was exempt from being in the room. SHIPPED
+### 29. § H.16 — a wall rider was exempt from being in the room. SHIPPED in `20654e5`
 
 *"models are still going through walls in 2d plan mode."*
 
