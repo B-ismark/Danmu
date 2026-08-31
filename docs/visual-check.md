@@ -111,7 +111,7 @@ reported instead (the rule-2 shape: it keeps its real size and something else sa
 not fit)? Nothing reports it today — that is § H.16b — so refusing honestly is the interim,
 not the answer. **This needs a person's opinion, not a test.**
 
-**Where it rides.** `fix/wall-riders-must-be-in-the-room`, PR #74.
+**Where it rides.** Merged to `main` in `20654e5` (PR #74).
 
 ### The rotate ring no longer drags the piece behind it — 3D only
 
