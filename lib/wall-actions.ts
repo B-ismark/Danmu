@@ -27,7 +27,7 @@ import { footprintBounds, offsetWall, wallOutwardNormal } from './footprint';
 import { useScene } from './scene-store';
 import { announce } from './announce';
 import { ROOM_SIDE_EPS, ROOM_SIDE_M } from './dimension-ranges';
-import { floorRefusal, furnitureFloor, roomFloor, type FloorAxis } from './room-floor';
+import { floorRefusal, furnitureFloor, namesTheStop, roomFloor, type FloorAxis } from './room-floor';
 import { formatDim } from './units';
 import type { ScenePart } from './scene-spec';
 
@@ -62,18 +62,121 @@ export function wallAttachments(index: number): string[] {
 // component, and a rule in `lib/` reaching for it would have inverted the one
 // import direction this codebase keeps.
 
-/** The last thing said, so a drag that is refused for eighty consecutive frames
- *  says it once. `announce` deliberately re-speaks identical text (its live region
- *  needs a content change to fire at all), so the de-duplication has to be here —
- *  the same shape as `PlanView`'s `announcedRef`, hoisted to the chokepoint the
- *  four surfaces already share. Reset by `wallAttachments` and by any move that
- *  is taken. */
-let said: string | null = null;
+/** How long the same refusal about the same wall stays stale, in ms. Long enough
+ *  to cover a drag held against a stop; short enough that a deliberate second
+ *  press is heard. */
+const REPEAT_MS = 1000;
 
-function say(message: string): void {
-  if (message === said) return;
-  said = message;
+/** The last refusal spoken, keyed by WALL and by text, with the time it was said.
+ *
+ *  `announce` deliberately re-speaks identical text — its live region needs a
+ *  content change to fire at all — so the de-duplication has to live here. Three
+ *  things about the key are load-bearing, and the first version got all three
+ *  wrong in a way no test caught:
+ *
+ *  · **Keyed by wall index.** The sentence names the piece and the axis and NOT
+ *    the wall, so two walls on the same axis produce byte-identical text. Refuse
+ *    the west wall with an arrow key, then focus the east wall and refuse that:
+ *    the second was swallowed, and a screen-reader user could not tell whether it
+ *    had moved.
+ *  · **Rate-limited rather than cleared on an accepted move.** Clearing on
+ *    acceptance is what made a later refusal news again, and it also made a wall
+ *    held against its stop spam the reader: the floor is `min(stop, current)`, so
+ *    an OUTWARD frame is always accepted, and a hand that is not perfectly still
+ *    reverses direction every few frames — accept, clear, refuse, speak, tens of
+ *    times a second. The clock does both jobs at once.
+ *  · **Still reset by `wallAttachments`**, so a new drag is heard immediately
+ *    rather than waiting out the second. That covers the two drag surfaces; the
+ *    arrow key and the Inspector's buttons never call it, which is exactly why
+ *    the key and the clock have to carry the rest. */
+let said: { key: string; at: number } | null = null;
+
+function say(index: number, cur: { width: number; depth: number }, message: string): void {
+  // The ROOM's own size is in the key, alongside the wall and the text. A refusal
+  // is only stale while nothing about it has changed, and a room that has resized
+  // between two identical sentences is a different refusal — so this is the
+  // "cleared on an accepted move" rule expressed as part of the key rather than as
+  // a separate reset, which is what stops the clock from swallowing a genuine
+  // second refusal.
+  //
+  // It also closes a leak the clock alone had: this is module state, so two
+  // different ROOMS with a same-named piece on the same wall index produced the
+  // same key. Opening room B within a second of refusing room A silently ate B's
+  // refusal. The unit suite found it first — every test in it runs inside one
+  // millisecond, so the first refusal muted the next six.
+  const key = `${index}|${cur.width.toFixed(3)}x${cur.depth.toFixed(3)}|${message}`;
+  const now = Date.now();
+  if (said && said.key === key && now - said.at < REPEAT_MS) return;
+  said = { key, at: now };
   announce(message);
+}
+
+/**
+ * The largest part of `delta` that keeps both sides in range — `delta` itself when
+ * the whole move fits, a smaller step in the same direction when it runs into a
+ * bound, and 0 when there is nowhere to go.
+ *
+ * A wall STOPS at its limit; it does not refuse to move. The first version rejected
+ * the whole frame, and that is wrong for a gesture rather than merely strict,
+ * because both drag surfaces feed this a raw per-frame pointer delta:
+ * `svgToWorldAt` divides by `zoom`, so at the plan's minimum 0.4 one frame of a
+ * brisk drag is ~250 mm of floor. From 2.61 m the next frame asks for 2.36, is
+ * refused whole, and the wall sticks at 2.61 under a message promising 2.40 —
+ * while `prevTotal` advances on the refused frame, so the wall never catches the
+ * pointer again for the rest of the gesture. A flick left it a metre short. The
+ * smallest room the drag could reach was a function of pointer speed and zoom.
+ *
+ * It also lands the wall exactly ON the bound instead of a float hair under it,
+ * which is what `lib/scene-file.ts` needs: a room walked to its 1 m floor by
+ * repeated addition stores 0.99999999999999844, and that width is fatal on import.
+ *
+ * Linear in `delta`, which is exact here: `offsetWall` translates one edge along a
+ * fixed normal, so each side of the bounding box moves at a constant rate per unit
+ * of delta. The rate is measured from the probe rather than assumed, so it needs no
+ * knowledge of which wall faces which axis — and a wall that changes neither side
+ * (rate 0) is simply never the binding one.
+ */
+function permittedDelta(
+  delta: number,
+  cur: { width: number; depth: number },
+  next: { width: number; depth: number },
+  limits: Record<FloorAxis, { min: number; max: number }>,
+): number {
+  if (delta === 0) return 0;
+  let allowed = delta;
+  for (const axis of ['width', 'depth'] as FloorAxis[]) {
+    const rate = (next[axis] - cur[axis]) / delta;
+    if (Math.abs(rate) < 1e-12) continue;
+    const bound =
+      next[axis] < limits[axis].min - ROOM_SIDE_EPS
+        ? limits[axis].min
+        : next[axis] > limits[axis].max + ROOM_SIDE_EPS
+          ? limits[axis].max
+          : null;
+    if (bound === null) continue;
+    const room = (bound - cur[axis]) / rate;
+    // `room` is in delta's own units and carries ITS sign, so the test is on the
+    // sign AGREEING, not on being positive — an inward step is negative, and an
+    // earlier `room <= 0` guard swallowed every one of them, permitting nothing on
+    // the half of the gesture this whole feature is about.
+    //
+    // The magnitude tolerance is the half that fires: a wall sitting exactly ON its
+    // bound computes float dust rather than zero, and 1.55e-15 m of permitted
+    // travel is not a move — returning it lets a caller believe a step was taken.
+    //
+    // **The sign half is unreachable today and is kept deliberately**, which is the
+    // `layout-shuffle` treatment of a mutation no test kills rather than a claim
+    // that one does. Reaching it needs `room` to point away from `delta`, i.e. a
+    // side already past the bound it is being tested against — and it cannot be:
+    // the low bound comes from `roomFloor`, which clamps to the current side, so
+    // `min <= cur` by construction, and the high bound is `ROOM_SIDE_M.max`, which
+    // `moveWall` has never let a side exceed. Both invariants live in other files
+    // and neither is enforced here, so the guard is what stops a change to either
+    // from turning into a wall that walks the wrong way.
+    if (room * delta <= 0 || Math.abs(room) <= ROOM_SIDE_EPS) return 0;
+    if (Math.abs(room) < Math.abs(allowed)) allowed = room;
+  }
+  return allowed;
 }
 
 /** Why this wall move cannot be taken, or null. Reads the prospective bounds
@@ -91,19 +194,16 @@ function wallRefusal(
       return `The room will not go ${axis === 'width' ? 'wider' : 'deeper'} than ${size(ROOM_SIDE_M.max)}.`;
     const stop = furnitureFloor(parts, axis);
     if (next[axis] >= roomFloor(stop, current[axis]) - ROOM_SIDE_EPS) continue;
-    // Same ordering rule as `applyRoomEdits`: name the piece while the piece is
-    // what is binding, and fall back to the static range when it is not — below
-    // the hard floor there is no piece to point at, and a refusal pointing at
-    // nothing is the one the user cannot act on.
-    // `+ ROOM_SIDE_EPS` on the fits test as well, and it is the same reason as the
-    // comparison above rather than a second tolerance: a wall walked exactly onto
-    // its stop sits at 2.3999999999999995, so a bare `<=` reports a 2.4 m piece as
-    // not fitting a 2.4 m room and flips the sentence to "already does not fit" at
-    // the one value the user is most likely to be standing on. Seen in a browser
-    // immediately after the first tolerance was added — the fix moved the defect
-    // from the geometry into the wording.
-    if (stop && stop.metres > ROOM_SIDE_M.min)
-      return floorRefusal(stop, axis, size(stop.metres), stop.metres <= current[axis] + ROOM_SIDE_EPS);
+    // Which rule to name is `namesTheStop`'s answer, not a comparison written out
+    // here. It WAS written out here, against a DIFFERENT operand from the one
+    // `applyRoomEdits` used — raw `stop.metres` against the hard floor, where the
+    // editor compared the clamped floor. `roomFloor` is `max(min, min(stop,
+    // current))`, so the two agree only while the room is wider than 1 m: in a 1 m
+    // room holding a 2.4 m sectional the wall named the sectional and the dims
+    // field named the static range. One rule, one refusal, two surfaces giving two
+    // different causes — which is the drift this file exists to prevent, committed
+    // inside the file itself.
+    if (namesTheStop(stop, current[axis])) return floorRefusal(stop, axis, current[axis], unit);
     return `The room will not go ${axis === 'width' ? 'narrower' : 'shallower'} than ${size(ROOM_SIDE_M.min)}.`;
   }
   return null;
@@ -133,10 +233,19 @@ export function moveWallCarrying(index: number, delta: number, ids?: string[]): 
   // duplicated THRESHOLD would be the drift, and there is none: both ends of the
   // static range are `ROOM_SIDE_M` and the furniture end is `lib/room-floor.ts`,
   // read here and by `RoomDimsEditor` and by nothing else.
-  const refusal = wallRefusal(footprintBounds(offsetWall(before, index, delta)), footprintBounds(before), resolved);
+  const cur = footprintBounds(before);
+  const asked = footprintBounds(offsetWall(before, index, delta));
+  const refusal = wallRefusal(asked, cur, resolved);
   if (refusal !== null) {
-    say(refusal);
-    return 0;
+    say(index, cur, refusal);
+    // Say it AND take as much of the step as fits. The two are not alternatives:
+    // the wall stops at the stop, and the sentence explains why it stopped there.
+    const limits = {
+      width: { min: roomFloor(furnitureFloor(resolved, 'width'), cur.width), max: ROOM_SIDE_M.max },
+      depth: { min: roomFloor(furnitureFloor(resolved, 'depth'), cur.depth), max: ROOM_SIDE_M.max },
+    };
+    delta = permittedDelta(delta, cur, asked, limits);
+    if (delta === 0) return 0;
   }
   // Read before the move: the moved edge translates along this normal and keeps its
   // direction, so one reading holds for the whole gesture — but the polygon object
@@ -149,10 +258,9 @@ export function moveWallCarrying(index: number, delta: number, ids?: string[]): 
   // either. Not silent — a refusal nobody can hear is what this whole section
   // exists to end.
   if (applied === 0) {
-    say('That wall will not move any further.');
+    say(index, cur, 'That wall will not move any further.');
     return 0;
   }
-  said = null;
   if (attached.length === 0) return applied;
   const after = useScene.getState().room.footprint;
   const moves = carryAttached(attached, currentRoomScene(), before, after, outward, applied);

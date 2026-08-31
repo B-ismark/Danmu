@@ -21,7 +21,9 @@
 // two entry points, one of them carrying its own copy of the rule.
 
 import { footExtentAlong, footFromPart } from './geometry';
-import { ROOM_SIDE_M } from './dimension-ranges';
+import { ROOM_SIDE_EPS, ROOM_SIDE_M } from './dimension-ranges';
+import { boundsToUnit, formatDim } from './units';
+import type { DimUnit } from './store';
 import type { ScenePart } from './scene-spec';
 
 /** Which side of the room's bounding box a stop is about. Deliberately the two
@@ -122,25 +124,67 @@ export function roomFloors(
   };
 }
 
-/** The sentence. One phrasing, shared by the dims editor and the wall move, so the
- *  two surfaces cannot come to describe the same refusal differently — which is
- *  what `lib/refusal.ts` exists to prevent for the drag surfaces.
+/**
+ * Whether a refusal on this axis may NAME the piece, rather than falling back to
+ * the static range. True exactly when the furniture is what is binding.
  *
- *  `size` is the piece's own extent, already formatted in the user's unit: this
- *  takes a string rather than a `DimUnit`, because `lib/units.ts` formatting is the
- *  caller's business and threading the unit in here would make this module the
- *  second place that decides how a measurement reads.
+ * The predicate, as a function, because it was written out twice and the two
+ * copies used different operands. `lib/wall-actions.ts` compared the RAW
+ * `stop.metres` against `ROOM_SIDE_M.min`; `applyRoomEdits` compares the CLAMPED
+ * floor, which is `roomFloor`'s `max(min, min(stop, current))`. Those agree only
+ * while the room is wider than the hard floor, so in a 1 m room holding a 2.4 m
+ * sectional a wall drag named the sectional and the dims field named "outside
+ * 1–50 m" — one rule, one refusal, two surfaces giving two different causes.
  *
- *  `fits` is whether the room currently holds the piece at all, and it earns its
- *  place by being the difference between a true sentence and a false one. When a
- *  room is ALREADY narrower than something standing in it, `roomFloor` pins the
- *  floor to the current side rather than to the piece — so a single phrasing built
- *  around the bound would announce that a 4 m sectional "needs 3 m", which is both
- *  wrong and unactionable. Name the piece's real size in both branches and let the
- *  clause differ. */
-export function floorRefusal(stop: FloorStop, axis: FloorAxis, size: string, fits: boolean): string {
+ * `applyRoomEdits` cannot call this: it is deliberately pure over numbers and
+ * knows nothing about a `ScenePart`, so it keeps `floor > roomAxisRange(axis).min`
+ * over the floor it was handed. That is the SAME comparison on the SAME quantity,
+ * and `tests/room-floor.test.ts` pins the two to each other rather than trusting
+ * this sentence — the `layout-conformance` move: when a rule has two consumers
+ * that cannot share the code, pin the agreement.
+ *
+ * A type guard, so a caller that passes it cannot then have to re-check for null
+ * before naming the piece.
+ */
+export function namesTheStop(stop: FloorStop | null, current: number): stop is FloorStop {
+  return stop !== null && roomFloor(stop, current) > ROOM_SIDE_M.min;
+}
+
+/** The sentence, and the NUMBER in it. One function, called identically by the dims
+ *  editor and by a wall move, so the two surfaces cannot come to describe one
+ *  refusal differently — the job `lib/refusal.ts` does for the drag surfaces.
+ *
+ *  It takes the `unit` rather than a pre-formatted string, and that is a reversal
+ *  of the first version, which took the caller's own `formatDim` output. The
+ *  reversal is the fix for a real defect and not a tidy-up. `formatDim` renders at
+ *  `precisionFor`; the field's arrows are bounded by `boundsToUnit`, which rounds
+ *  **up** to the step grid. Those differ for ft (2 decimals vs 1), in and cm — so a
+ *  2.4 m rug was announced as needing `7.87 ft`, and typing 7.87 ft is 2.3988 m,
+ *  which the commit then REFUSED. The message named the one number the field would
+ *  not accept, in four of the five units. That is CLAUDE.md rule 2's own scar, and
+ *  the only way to keep the promise is for the sentence and the arrows to read the
+ *  same call — which they cannot do while the caller does the formatting.
+ *
+ *  Two branches, because the two numbers answer different questions:
+ *
+ *  · **fits** — the room holds the piece, so the sentence names a BOUND, and the
+ *    bound has to be one the user can reach and type. `boundsToUnit`, rounded
+ *    toward the interior, exactly as `RoomDimsEditor`'s stepper is bounded.
+ *  · **does not fit** — `roomFloor` has pinned the floor to the room's current side,
+ *    so there is no bound to name; a phrasing built around one would announce that
+ *    a 4 m sectional "needs 3 m". The sentence states the piece's own SIZE as a
+ *    fact instead, and a fact is rendered at display precision.
+ *
+ *  `current` is the room's live side in metres. The `ROOM_SIDE_EPS` on that
+ *  comparison is not decoration either: a wall walked exactly onto its stop sits at
+ *  2.3999999999999995, and a bare `<=` reports a 2.4 m piece as not fitting a 2.4 m
+ *  room — flipping to the alarming branch at the one size the user has just worked
+ *  to reach. Seen in a browser. */
+export function floorRefusal(stop: FloorStop, axis: FloorAxis, current: number, unit: DimUnit): string {
   const way = axis === 'width' ? 'narrower' : 'shallower';
-  return fits
-    ? `“${stop.name}” needs ${size} — the room will not go ${way} than that.`
-    : `“${stop.name}” is ${size} and already does not fit — the room will not get any ${way}.`;
+  if (stop.metres > current + ROOM_SIDE_EPS) {
+    return `“${stop.name}” is ${formatDim(stop.metres * 1000, unit)} ${unit} and already does not fit — the room will not get any ${way}.`;
+  }
+  const needs = boundsToUnit(stop.metres * 1000, ROOM_SIDE_M.max * 1000, unit).min;
+  return `“${stop.name}” needs ${needs} ${unit} — the room will not go ${way} than that.`;
 }

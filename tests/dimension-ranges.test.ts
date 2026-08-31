@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { applyRoomEdits, clampDims, dimRangeFor, dimsWithinRange, ROOM_AXES, ROOM_SIDE_M, roomAxisRange, type RoomAxis } from '@/lib/dimension-ranges';
+import { applyRoomEdits, clampDims, dimRangeFor, dimsWithinRange, ROOM_AXES, ROOM_SIDE_EPS, ROOM_SIDE_M, roomAxisRange, type RoomAxis } from '@/lib/dimension-ranges';
+import { stepFor, toMM } from '@/lib/units';
 
 describe('dimRangeFor', () => {
   it('keeps electronics on a tight leash (fixed tier)', () => {
@@ -203,6 +204,23 @@ describe('applyRoomEdits pending', () => {
     const retry = applyRoomEdits(ROOM, { ...first.pending, height: 2.6 });
     expect(retry.rejected).toBeNull();
     expect(retry.room).toEqual({ width: 5, depth: 3, height: 2.6 });
+  });
+});
+
+describe('ROOM_SIDE_EPS', () => {
+  it('is far below the finest size the app can display', () => {
+    // Pinned only from BELOW before this: a review set it to 0.04 — forty
+    // millimetres — and every test in three files stayed green, because both drift
+    // fixtures step 50 mm, which is larger than the surviving tolerance. At 40 mm a
+    // wall stops 40 mm INSIDE the sectional and `moveWall` persists a room narrower
+    // than the piece standing in it: rule 2's "never silently resize it to fit", in
+    // the constant added to prevent it.
+    //
+    // The bound is DERIVED from the unit table rather than typed, so a new unit
+    // with a finer step tightens it automatically.
+    const finestMM = Math.min(...(['m', 'cm', 'mm', 'ft', 'in'] as const).map((u) => toMM(stepFor(u), u)));
+    expect(ROOM_SIDE_EPS).toBeGreaterThan(0);
+    expect(ROOM_SIDE_EPS * 1000, 'a tolerance the user can see is not a tolerance').toBeLessThan(finestMM / 100);
   });
 });
 

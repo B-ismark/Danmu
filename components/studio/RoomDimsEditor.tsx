@@ -6,9 +6,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useScene } from '@/lib/scene-store';
 import { useSettings, useStudio } from '@/lib/store';
-import { boundsToUnit, formatDim, fromMM, toMM, stepFor, precisionFor } from '@/lib/units';
-import { applyRoomEdits, roomAxisRange, ROOM_AXES, ROOM_SIDE_EPS, type RoomAxis, type RoomRejection } from '@/lib/dimension-ranges';
-import { floorRefusal, roomFloors, type FloorAxis } from '@/lib/room-floor';
+import { boundsToUnit, fromMM, toMM, stepFor, precisionFor } from '@/lib/units';
+import { applyRoomEdits, roomAxisRange, ROOM_AXES, type RoomAxis, type RoomRejection } from '@/lib/dimension-ranges';
+import { floorRefusal, namesTheStop, roomFloors, type FloorAxis } from '@/lib/room-floor';
 import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { recarryForResize, regradeForNewCeiling } from '@/lib/transforms';
 import { roomStore } from '@/lib/storage';
@@ -121,10 +121,22 @@ export function RoomDimsEditor() {
       if (rejected) {
         setRangeError(rejected);
         setErrorBy(rejectedBy);
+        // Built HERE, from the same `live` floors the refusal was decided on, and
+        // then held. `namesTheStop` is the rule's own predicate rather than a
+        // comparison written in this component — it and `applyRoomEdits`'s
+        // `floor > roomAxisRange(axis).min` are one decision, and
+        // `tests/room-floor.test.ts` pins them to each other.
+        const axis = rejected === 'height' ? null : (rejected as FloorAxis);
+        const stop = axis ? live[axis].stop : null;
+        const side = axis === 'width' ? base.width : base.depth;
+        setFloorError(
+          axis && namesTheStop(stop, side) ? floorRefusal(stop, axis, side, dimUnit) : '',
+        );
         return;
       }
       setRangeError(null);
       setErrorBy(null);
+      setFloorError('');
       const oldHeight = base.height;
       const beforeFp = useScene.getState().room.footprint;
       setRoom(r);
@@ -211,32 +223,35 @@ export function RoomDimsEditor() {
   // component that keeps its own order can put it back in a different one.
   const labels: ['Width', 'Depth', 'Height'] = ['Width', 'Depth', 'Height'];
 
-  // The furniture refusal, in the user's unit. `applyRoomEdits` only reports
-  // `'floor'` while the stop is above the static minimum, and a stop above the
-  // static minimum came from a piece — so this branch always has one to name and
-  // the fallback below is unreachable rather than a hidden second message. It is
-  // there because the type cannot say that and a thrown `!` would be worse.
-  function floorMessage(axis: RoomAxis): string {
-    if (axis === 'height') return '';
-    const { stop } = floors[axis as FloorAxis];
-    if (!stop) return '';
-    return floorRefusal(
-      stop,
-      axis as FloorAxis,
-      `${formatDim(stop.metres * 1000, dimUnit)} ${dimUnit}`,
-      // The piece fits the room it is in — which is what decides whether the
-      // sentence may say the room "will not go narrower than that". When it does
-      // not fit, the floor is pinned to the current side and naming that as what
-      // the piece needs would be a false number.
-      //
-      // `ROOM_SIDE_EPS`, because a room walked here by dragging a wall sits a
-      // rounding error under its own stop: a bare `<=` calls a 2.4 m piece too big
-      // for a 2.4 m room and prints "already does not fit" at exactly the size the
-      // user just achieved. Same tolerance as `lib/wall-actions.ts`, from the same
-      // constant, since it is the same question about the same number.
-      stop.metres <= (axis === 'width' ? room.width : room.depth) + ROOM_SIDE_EPS,
-    );
+  /** One floor axis of the resting hint: its range, and the piece setting the low
+   *  end when a piece is setting it. Reads `bounds()`, so it cannot name a number
+   *  the arrows will not reach — and it names the piece for the same reason the
+   *  refusal does: a minimum that moved when the user added furniture, with nothing
+   *  on screen saying why, is a number they cannot act on. */
+  function axisRange(axis: FloorAxis): string {
+    const b = bounds(axis);
+    const { stop } = floors[axis];
+    const who = namesTheStop(stop, axis === 'width' ? room.width : room.depth) ? ` (“${stop.name}”)` : '';
+    return `${b.min}–${b.max} ${dimUnit}${who}`;
   }
+
+  // The furniture refusal, in the user's unit — and it is CARRIED from the commit
+  // that made it, not re-derived at render time.
+  //
+  // Re-deriving is what the first version did, and it had two failure modes that a
+  // review found within a minute of each other. `rangeError` is cleared by an
+  // effect keyed on the room's dimensions, so it survives a change to the
+  // FURNITURE: refuse a width, then delete the piece that was in the way, and the
+  // sentence rewrote itself to name whatever was now widest — a bound the typed
+  // number does not violate — while the field stayed invalid. Delete every piece
+  // and there was no stop at all, so it rendered an EMPTY line in `--danger-text`
+  // beside an `aria-invalid` field still holding the refused number: a silent
+  // refusal, which is the exact thing this whole change exists to end, reintroduced
+  // in the component that reports it.
+  //
+  // Holding the finished sentence fixes both. It cannot go stale against parts it
+  // no longer describes, because it describes the commit it came from.
+  const [floorError, setFloorError] = useState<string>('');
 
   // No disclosure of its own any more. This was a collapsible "Room shell" header
   // sitting INSIDE the rail's collapsible "Room" section — two locks on one door,
@@ -281,9 +296,18 @@ export function RoomDimsEditor() {
             </label>
           ))}
         </div>
-        <div style={{ fontSize: 11, marginTop: 6, lineHeight: 1.4, color: rangeError ? 'var(--danger-text)' : 'var(--ink-3)' }}>
-          {rangeError && errorBy === 'floor'
-            ? floorMessage(rangeError)
+        {/* `overflowWrap: 'anywhere'` because this is the one place in the app a
+            user-authored part NAME is rendered as free-flowing text at a fixed
+            narrow width. Every other render of a name ellipsises (`.editable`,
+            `PartTree`, `RailSection`); this one wraps, and a name has no space
+            requirement — `EditableText` allows 80 characters and a scene file 200.
+            An unbreakable 43-character run at the rail's 228px floor leaves ~204px
+            of content, overflows into `PartTree`'s scroller and grows a horizontal
+            scrollbar across the whole left rail: the artefact `globals.css`
+            already records as having been reported three times. */}
+        <div style={{ fontSize: 11, marginTop: 6, lineHeight: 1.4, overflowWrap: 'anywhere', color: rangeError ? 'var(--danger-text)' : 'var(--ink-3)' }}>
+          {rangeError && errorBy === 'floor' && floorError
+            ? floorError
             : rangeError
             ? `That ${rangeError} is outside ${bounds(rangeError).min}–${bounds(rangeError).max} ${dimUnit} — enter one in that range and the room will follow.`
             // Was "Sizes in {unit}. Anything from 1 to 50 m a side." Trimmed
@@ -298,7 +322,18 @@ export function RoomDimsEditor() {
             // is what makes both correct at once, and the numbers here are the
             // SAME call the arrows are bounded by, so the sentence cannot name a
             // range the stepper will not reach.
-            : `${bounds('width').min}–${bounds('width').max} ${dimUnit} a side, ${bounds('height').min}–${bounds('height').max} ${dimUnit} tall.`}
+            //
+            // PER AXIS, and that is new. "a side" was exact while both floor axes
+            // shared one static bound; the furniture stop is per-axis, so a room
+            // with a 3.6 m sofa along x and nothing deep read "3.60–50 m a side"
+            // while the Depth chevron walked happily down to 1.00 — two numbers on
+            // one 200px panel, about the same word, disagreeing. It also answers
+            // the stepper's silent stop: pressing DOWN at the floor is correctly
+            // inert (`steppedValue` refuses a clamp that moves a value against its
+            // own arrow), so the refusal sentence never fires on that path and this
+            // line is the only thing on screen that can explain why. Naming the
+            // piece here is what makes the inert press legible.
+            : `${axisRange('width')} wide, ${axisRange('depth')} deep, ${bounds('height').min}–${bounds('height').max} ${dimUnit} tall.`}
         </div>
     </div>
   );

@@ -2075,7 +2075,7 @@ carrying its own copy of the rule.
 Note this is NOT the same as a piece the room can no longer hold. Carrying is what happens
 while there is room to move into; § 22 is what happens when there is not.
 
-### 22. There is no minimum room size, and no floor under a shrink
+### 22. There is no minimum room size, and no floor under a shrink — FIXED
 
 The user's own framing, and it is a design more than a bug: *"there should be default size
 and also min width imposed because present models have width that won't allow the room to be
@@ -2109,6 +2109,60 @@ regression on real user data, and it would have needed an author-time bound dist
 the load bound to avoid. Permitting corridors removes that problem rather than solving it.
 
 The dynamic minimum still owes `boundsToUnit` the pair treatment described above.
+
+**SHIPPED 2026-08-30** — `db97bf7` + `f3641c1`, branch
+`fix/room-shrink-stops-at-the-furniture`.
+
+`lib/room-floor.ts` is the rule. `furnitureFloor(parts, axis)` is the largest
+world-space extent any single piece needs on that axis, rotated, through
+`footExtentAlong` — so a round table needs its DIAMETER rather than its bounding
+box, which differ by 248.5 mm on a 1200 mm piece. **Every part counts**, and the
+filter that looks like it belongs there does not: `floorBlockers` drops rugs,
+wall-hung items and anything under 250 mm tall because it answers "what gets in a
+walker's way", and a 3 m rug needs 3 m of floor exactly as a 3 m sofa does.
+
+`roomFloor(stop, current)` then clamps to the room's **current** side, which is the
+half that is easy to omit and impossible to see afterwards. A room can already be
+narrower than something standing in it. Without it the floor sits above the current
+width, `NumberField` clamps the value up to its own `min` and one chevron silently
+GROWS the room, while a wall drag outward is refused for being still under the
+piece — so the one gesture that could fix the room is the one blocked.
+
+Both paths read it: `RoomDimsEditor` → `applyRoomEdits` (which takes a plain number
+per axis, so `dimension-ranges.ts` never learns about `ScenePart`), and
+`lib/wall-actions.ts`, the single chokepoint for all four wall surfaces. The bound
+reaches the stepper through `boundsToUnit` like every other one, so the arrows
+cannot walk the room somewhere the commit will refuse.
+
+**And the wall half was not merely missing a stop — it had no voice.**
+`moveWallCarrying` has always returned the applied delta and **not one of its four
+call sites read it**, so every refusal was silent; `PlanView.onWallKeyDown` was
+worse, announcing *"moved in. Room is now 3.0 by 2.4"* on a press that moved
+nothing. The refusal now speaks from the chokepoint, once per gesture, which needed
+`announce` to be reachable from `lib/` — its dispatch is `lib/announce.ts` now and
+only the rendering stayed in `KeyboardShortcuts`.
+
+**Two defects were found in a browser and by nothing else**, both in the same
+fifteen minutes, and they are the argument for looking:
+
+· A wall reaches a bound by repeated addition, so thirty-two presses of the plan's
+  50 mm step land on 2.3999999999999995 and the wall stopped at **2.45** under a
+  message saying the piece needs 2.40 — the number the user is told disagreeing with
+  the number they can reach. `ROOM_SIDE_EPS` lives beside `ROOM_SIDE_M` because
+  `wall-actions` decides what to SAY and `scene-store.moveWall` decides what to DO,
+  and one with a tolerance and one without is a wall that stops for a reason no
+  message can name.
+· Fixing that moved the defect into the wording. At exactly 2.40 the `fits`
+  predicate said a 2.4 m piece does not fit a 2.4 m room, so the alarming *"already
+  does not fit"* branch fired at the one size the user had just worked to reach.
+
+**Still open here, and it is the honest residue:** a sighted user gets no sentence
+on the wall path. The wall stops — which is legible, the way a collision is — but
+the reason travels only through the `sr-only` live region. A toast was considered
+and declined: `moveWallCarrying` runs per animation frame during a drag, and the
+toast host caps at three with a 9 s TTL. If this is worth solving it wants the drag
+channel (`lib/drag-live.ts` / `lib/refusal.ts`), which already carries a per-frame
+refusal for pieces and has a surface drawn for it.
 
 ### 23. Every long button lied about being busy — FIXED
 

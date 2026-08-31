@@ -280,6 +280,16 @@ describe('scene file · a file is untrusted input', () => {
     expect(parseSceneFile(rawFile({ room: { width: 0, depth: 4, height: 2.6 } })).ok).toBe(false);
     // A height that is not a number is fatal for the same reason a width is.
     expect(parseSceneFile(rawFile({ room: { width: 5, depth: 4, height: 'tall' } })).ok).toBe(false);
+    // …but a side a rounding error under the bound is a room THIS APP JUST WROTE.
+    // A wall reaches the 1 m floor by repeated addition, and five of six plausible
+    // (start width, step) pairs land on 0.99999999999999844. An exact `>= lo` here
+    // makes that file fatal — "that room file has no usable room" — and it fails
+    // only when the user tries to hand the room to someone else, which is the
+    // entire sharing story. `ROOM_SIDE_EPS` is the same tolerance the two wall
+    // movers carry; a bound with a tolerance has to carry it everywhere it is read.
+    expect(parseSceneFile(rawFile({ room: { name: 'R', layoutId: 'rect', width: 0.99999999999999844, depth: 4, height: 2.6 } })).ok).toBe(true);
+    // And it forgives arithmetic only — a 0.99 m side is still a refusal.
+    expect(parseSceneFile(rawFile({ room: { name: 'R', layoutId: 'rect', width: 0.99, depth: 4, height: 2.6 } })).ok).toBe(false);
     expect(parseSceneFile(rawFile({ room: { width: 5, depth: 4 } })).ok).toBe(false);
     // 1 m is a legal SIDE, which is what made the old copy of the bound invisible:
     // the number was in range, for the wrong axis.
