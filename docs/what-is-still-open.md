@@ -2570,12 +2570,21 @@ justification after the fact.
 
 8 mutations, 0 survivors, and the two above were among them. 107 files / 1948 passed.
 
-**One thing left open, deliberately, because it is two surfaces and this was one.** The
-refusal now reachable on a short wall says *"Curtain will not fit there — something is in
-the way"*, and nothing is in the way; the wall is too short. `resolvePlacement` already
-computes `inRoom` and `collides` separately, so the honest sentence is one field away — but
-3D says its refusal through `MeasureGuides`/`refusalAfterGesture` and 2D says it in
-`moveTo`, and adding a reason to one of them is the "computed on both surfaces, said on
-one" scar this repo keeps finding. It wants doing as its own change, to both. Note the wrong
-wording predates this fix — a containment refusal has always said "something is in the way"
-— so this made an existing wrong sentence easier to reach rather than introducing it.
+**What it actually feels like, measured in a browser rather than guessed.** The first
+version of this paragraph said the fix made a wrong sentence easier to reach — *"Curtain
+will not fit there — something is in the way"*, when nothing is in the way and the wall is
+too short. **That was written before the probe ran and it is wrong.** Dragging a 2.4 m
+curtain from an L's 5 m west wall at the 2.1 m inner stub, it slides along the wall it is
+already on — z = 0.00 to z = 1.30 — and simply never jumps to the stub. Nothing is refused,
+so nothing is said, and nothing should be: `moveTo` tries the full move and then each axis
+alone, and the "keep x, take z" candidate stays legal the whole way. That is the *"slide
+along whatever it hit rather than freezing"* behaviour doing its job, and it is why this fix
+costs the user nothing where the old one silently cost them a wall.
+
+So the wording question is **not** a consequence of this change, and I have not established
+that the sentence is reachable here at all — it would take a room where every wall is too
+short for the piece, so that all three candidates fail. Left as a question rather than a
+finding. What is true either way: `resolvePlacement` computes `inRoom` and `collides`
+separately and reports neither, so no caller can say WHY a spot was refused. Giving it a
+reason is a two-surface change — 3D speaks through `refusalAfterGesture`, 2D through
+`moveTo` — and doing one of them is the "computed on both surfaces, said on one" scar.
