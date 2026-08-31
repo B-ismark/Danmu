@@ -2320,3 +2320,54 @@ that went away when it was fixed.
    line 79 says `layout-score.ts` "no longer exempts" a `sharesFloor` pair from `overlap`;
    lines 234–239 say it exempts them "entirely — a blanket `continue`". #68 did land, and
    `layout-score.ts:649` is now `sharesFloor(...) ? TUCKED_CLASH_SHARE : 0`.
+
+### 26. PR #72 review — five lenses, four defects the gates could not see, ALL FIXED
+
+Run over `db97bf7` + `f3641c1` **after** typecheck, lint, the full suite, a build, a real
+browser probe and 31 mutations with zero survivors. It still found four defects and a whole
+class of unpinned assertion, which is the argument for the fan-out rather than for a second
+pass by the same eyes.
+
+1. **A saved room could be made unopenable — the worst of the four, and only the
+   *artifact* lens was ever going to see it.** The tolerance added for the wall drag lets a
+   width persist at `0.99999999999999844` (five of six plausible start-width / step pairs
+   land there), and `lib/scene-file.ts` treats a width under 1 m as **fatal** on import. A
+   room this app had just written came back as *"that room file has no usable room"* — and
+   only when the user tried to hand it to someone, which is the whole sharing story of
+   rule 5. It is also, exactly, the regression § 22 chose "permit corridors" to avoid,
+   arriving from the other end: the tolerance went to the two movers and not to the one
+   boundary already documented as fatal. `readRoom` is the third reader of `ROOM_SIDE_EPS`.
+2. **The message named a number the field would then refuse.** `formatDim` renders at
+   `precisionFor`; the arrows are bounded by `boundsToUnit`, which rounds up to the step
+   grid. A 2.4 m rug was announced as needing `7.87 ft`, and 7.87 ft is 2.3988 m, which the
+   commit rejected. Four of the five units. This risk had been *reasoned about* while
+   writing the code and checked in the arrow direction only — the failure was not missing
+   the concern, it was testing the half of it that came to mind.
+3. **The refusal was re-derived at render time rather than carried from the commit that
+   made it**, so deleting the named piece rewrote the sentence under a standing refusal, and
+   deleting every piece rendered an **empty** line in `--danger-text` beside an
+   `aria-invalid` field — a silent refusal, in the component whose job is to report one.
+4. **One predicate written twice over different operands**, agreeing only while the room is
+   wider than 1 m. `namesTheStop` is the predicate now, and because `applyRoomEdits` cannot
+   call it (pure over numbers, deliberately), a test pins the *agreement* over the whole
+   grid rather than trusting a comment.
+
+**And the finding that changes how assertions get written here.** `ROOM_SIDE_EPS` was pinned
+only from BELOW: setting it to **40 mm** left three test files green, because every drift
+fixture steps 50 mm — larger than the surviving tolerance, so none of them could see it. At
+40 mm the wall walks 40 mm *inside* the sofa and the store persists a room narrower than the
+piece in it. **A tolerance, a threshold or a step needs a fixture finer than itself.** Mutate
+a constant's VALUE in both directions, not just delete it.
+
+Also fixed from the same review: a de-duplication keyed on message text alone, which
+swallowed a second wall's refusal (the sentence names the piece and the axis, not the wall)
+while spamming a held one; the resting hint printing the width floor and calling it "a side";
+and a wall that **refused a whole frame** rather than stopping at its limit, which at the
+plan's minimum zoom left a fast drag up to a metre short of the stop it was naming.
+
+38 mutations across five files, 0 survivors. One is documented as unreachable in the source
+rather than given a tautological test — `permittedDelta`'s sign guard, which cannot fire
+while `roomFloor` clamps the floor to the current side.
+
+**Still open, and it is a judgement rather than a defect:** a sighted user gets no sentence
+on the wall path. See `docs/visual-check.md`.
