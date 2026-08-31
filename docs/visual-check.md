@@ -94,10 +94,47 @@ matched the room, and it did, so it is gone. Two things came out of that same lo
 is an eyes-item: a nightstand passing **through** the bed after a Shuffle (§ H.18), and the
 Library search failing to match `stand` → `Nightstand` (§ H.19).*
 
-### The solve buttons say they are working — LOOKED AT, in a real browser
+### Fix and Shuffle are two buttons now — merged to `main` in `9ecce9f` (PR #67)
 
-Kept as one paragraph rather than deleted, because the measurement is the point and because
-one of the four buttons is not on `main` yet.
+**Where to click.** Left rail, top: the health chip now has **two** buttons under it,
+`Fix` (sparkles) and `Shuffle` (shuffle icon). Open any room. Press `Fix` on a room with
+nothing wrong — it should say *"This is already a good arrangement"*. Then press
+`Shuffle` on the same room: it must actually rearrange it. That difference is the whole
+point of the change, and no test can tell you it reads that way on screen.
+
+**What wrong looks like.**
+
+- **The row clipping.** Two `.ds-btn`s sit in a `display: flex` row with **no
+  `flexWrap`**, inside a rail whose box is `overflow: hidden`. The derived budget is
+  ~166px of button in 176px of rail at `--rail-left-tight` — about 10px of slack, never
+  measured on a real font. Drag the left rail to its narrowest and watch for `Shuffle`
+  losing its right-hand side or its label. There is no scrollbar and no error; the
+  glyphs just stop. (`LightingPicker` next door solves the same problem with
+  `flexWrap: 'wrap'` *and* two assertions in `tests/reflow.test.ts`; this row has
+  neither yet.)
+- **The refusal.** On a `t` or `open` footprint roughly a sixth to a third of presses
+  answer *"No new arrangement this time"* and leave the room alone. That is **correct**
+  — it is refusing to show a room with something in the way — but it must not read as a
+  failure, and pressing again must genuinely try something new. Watch whether it feels
+  like a broken button.
+- **A room that got worse.** Shuffle is allowed to cost more than the arrangement you
+  had — that is what "a different arrangement" of an already-optimal room means. What it
+  may **not** do is introduce something Room check reports. After a shuffle, open
+  **Room** → **Check**: any new error or clash is a defect (0 of 72 in measurement, and
+  the gate meant to catch it has since been measured never to fire — see § H.25 — so one
+  on screen is worth reporting loudly).
+
+**The freeze and the repeat-after-a-tab-switch are both gone from this list on purpose.**
+The tab-switch repeat was fixed on this branch — the attempt counter and the offer history
+are module-scope maps keyed by room id now, not per-mount refs. The freeze is the item
+below, which covers all four solve buttons rather than only this one.
+
+### Does Shuffle keep the bedside table by the bed? — a known defect, `main`
+
+### The solve buttons say they are working — LOOKED AT for three of the four
+
+Kept as a paragraph rather than deleted, because the measurement is the point and because
+the fourth button has only just landed.
 
 Chromium against a production build, per-frame sampling from inside the page: pressing
 **Suggest** on a scrambled room put `.ds-spinner` in the DOM with `aria-busy="true"`, the
@@ -105,18 +142,19 @@ label **Thinking…** and the button `disabled` across **two consecutive animati
 17 ms apart — so the compositor had a frame boundary with it up, which is a paint — and the
 frames either side of it show gaps of **2983 ms and 2899 ms**, the synchronous solve
 blocking the main thread *after* the busy state was already on screen. That is exactly the
-sequence `afterPaint`'s two rAFs are for.
+sequence `afterPaint`'s two rAFs are for. Try a fix and Check the room share the identical
+`useBusyAction` hook, which is what the extraction was for.
 
 Three earlier versions of that probe each reported "never observed" for a reason of their
 own making — polling slower than the window, matching the wrong label, and a
 MutationObserver whose callback reads the current DOM and so cannot see a state that opens
 and closes inside one microtask checkpoint. Worth knowing before anyone re-measures it.
 
-**Still unlooked-at, and small:** under **prefers-reduced-motion** the ring should sit still
-while the word still changes, and **Shuffle** (PR #67, not merged) has the longest solve in
-the app — a median 2.0 s and a worst 2.9 s on a T — so it is the one worth pressing first
-once that lands. The other three share the identical `useBusyAction` hook, which is what the
-extraction was for.
+**Still unlooked-at, and small.** **Shuffle** was routed through the same hook on PR #67 and
+has the longest solve in the app — one press is up to twelve solves, a median 2.0 s and a
+worst 2.9 s on a T — so it is the one worth pressing, and the only one where a missing ring
+would be unmistakable. And under **prefers-reduced-motion** the ring should sit still while
+the word still changes: the label is the tell that has to survive.
 
 ### A wall that stops has nothing to SAY to someone who can see
 
@@ -152,7 +190,8 @@ but it has only been seen at a 1400px viewport with short names. **Rename a piec
 ~45-character unbroken string, drag the left rail to its narrowest, and refuse a width** — if
 the rail grows a horizontal scrollbar, the wrap is not doing its job.
 
-**Where it rides.** `fix/room-shrink-stops-at-the-furniture`.
+**Where it rides.** `fix/room-shrink-stops-at-the-furniture`, PR #72.
+
 
 
 ## Shell and flow
