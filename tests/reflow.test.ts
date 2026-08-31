@@ -810,6 +810,39 @@ describe('the rail asks about itself', () => {
     expect(readFileSync(root('components', 'studio', 'Inspector.tsx'), 'utf8')).toMatch(/className="rail-triple"/);
   });
 
+  it('and the reflow fires at a width the rail can actually reach', () => {
+    // The one that was missing, and the defect it would have caught shipped for
+    // months. `.rail-triple` and `.rail-swatches` live only in the Inspector — the
+    // RIGHT rail — and their fold was written at `max-width: 268px`, below that
+    // rail's own `--rail-right-min` of 276px. `DockedShell` renders a dragged sash
+    // as `clamp(--rail-right-min, Npx, --rail-max)`, so 276px is the narrowest a
+    // dragged right rail gets: the whole band a drag can reach sat ABOVE the
+    // breakpoint and never folded. Measured at 276px, the three buttons wanted
+    // 261px of 243px and "Floor" painted past the right edge of the window.
+    //
+    // It looked alive because `--rail-right-tight` (248px, the compact step) does
+    // clear 268px — so the fold fired for the width nobody drags to and not for
+    // the width they do. A test naming a viewport would have agreed with it.
+    //
+    // Necessary, not sufficient: nothing here can measure a button's min-content,
+    // so this cannot say the folded layout FITS. It says the fold is reachable,
+    // which is the half that was false.
+    const blocks = [...CSS.matchAll(/@container rail \(max-width: (\d+)px\)\s*\{([\s\S]*?)\n\}/g)];
+    expect(blocks.length, 'no @container rail blocks parsed').toBeGreaterThan(0);
+    const floor = railFloor('rail-right');
+    for (const cls of ['.rail-triple', '.rail-swatches']) {
+      const owning = blocks.filter((b) => codeOnly(b[2]).includes(cls));
+      expect(owning.length, `${cls} is not reflowed by any container query`).toBeGreaterThan(0);
+      // The WIDEST such block is the one that decides: a narrower one below it can
+      // only add relief that the wider has already begun.
+      const at = Math.max(...owning.map((b) => Number(b[1])));
+      expect(
+        at,
+        `${cls} folds at ${at}px, but the right rail's floor is ${floor}px — every width a drag can reach is above the fold`,
+      ).toBeGreaterThanOrEqual(floor);
+    }
+  });
+
   it('only goes tighter than the shipping floor where the contents reflow', () => {
     // The tight tokens are the `compact` step (1024–1279px), not a lower version of
     // the wide widths — a 1920px window has no reason to lose 94px of Inspector.
