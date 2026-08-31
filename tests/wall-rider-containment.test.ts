@@ -161,20 +161,54 @@ describe('a placement the pipeline calls VALID is inside the room', () => {
   // The positive half, and it is the half that makes the negative half mean
   // anything: `valid = false` for everything would satisfy the sweep above.
   it('still accepts wall-mounted pieces everywhere they fit', () => {
-    // A door, an AC unit and a mirror sit in or on the plaster, which is the case an
-    // exemption from the polygon test would have been written for. They are accepted
-    // at EVERY sample without it — measured, and the reason it could be deleted
-    // rather than repaired.
-    // Literal for the same reason as `considered` above: one size class x every
-    // angle x every target x every layout = 3 x 3 x 7 x 5 x 5.
+    // Every one of these numbers is HALF of an A/B: the sweep was run once against
+    // the exemption and once without it, and both columns are recorded here. That
+    // matters because the whole case for DELETING the exemption rather than
+    // narrowing it is a claim about what it cost, and a post-fix count on its own
+    // cannot support a claim about a build it never ran.
+    //
+    // With the exemption, all six riders sat at 1575 — necessarily, since it made
+    // `inRoom` unconditionally true for them. `every` is that ceiling: one size
+    // class x 3 sizes x 3 angles x 7 x-targets x 5 z-targets x 5 layouts.
     const every = 1575;
+
+    // A door, an AC unit and a mirror sit in or on the plaster, which is precisely
+    // the case an exemption from the polygon test would have been written for. They
+    // keep every placement they had WITHOUT it: the 10 mm shrink was already doing
+    // that job. (`monitor` reads like a fourth member of this list and is not one —
+    // its anchor is not a wall anchor, so `ridesWall` is false for it and the
+    // exemption never applied. A comment here claimed otherwise and claimed 1575
+    // for it; it is 1306, and always was.)
     for (const c of ['door', 'ac', 'mirror'] as const) {
       expect(accepts.get(c), `${c} lost placements it used to have`).toBe(every);
     }
-    // …and the three that DID escape keep most of what they had: this is a fix for
-    // the walls that are too short, not a ban on wall-mounted furniture.
-    for (const c of ['curtain', 'painting', 'tv'] as const) {
-      expect(accepts.get(c) ?? 0, `${c} was refused too widely`).toBeGreaterThan(every * 0.7);
+
+    // The three that DID escape, pinned at the exact post-fix count rather than a
+    // loose floor, because the floor was the weaker assertion in both directions:
+    // `> every * 0.7` passes on the unfixed build (where all three are 1575) and so
+    // could not tell the two columns apart at all.
+    const KEPT = { curtain: 1264, painting: 1530, tv: 1557 } as const;
+    for (const [c, n] of Object.entries(KEPT)) {
+      expect(accepts.get(c as Category), `${c} moved`).toBe(n);
     }
+
+    // …and the sentence the fix is actually defended with, as one number. Deleting
+    // the exemption cost 374 placements — 311 curtain, 45 painting, 18 TV — and the
+    // point is the SECOND half: **not one placement besides**. 28,739 were accepted
+    // with the exemption and 28,365 without, across all 22 categories, so a non-rider
+    // that gains or loses a placement moves this even though no line above names it.
+    // That is not hypothetical: of the mutations run against this file, breaking the
+    // rug exemption — which touches no wall rider at all — was caught by this line
+    // ALONE, with the escape sweep and all six per-rider pins still green.
+    const totalAccepted = [...accepts.values()].reduce((a, b) => a + b, 0);
+    expect(totalAccepted, 'the fix moved something outside the six wall riders').toBe(28365);
+
+    // Arithmetic over the four literals above, and deliberately not more than that:
+    // no source mutation can reach it, because a wrong `KEPT` fails the loop first.
+    // What it guards is the PROSE — 374 is quoted in `Design.md`, in
+    // `docs/what-is-still-open.md` and in `drag-resolve.ts`'s own comment, and this
+    // is the line that goes red when someone re-measures the pins and leaves those
+    // three saying the old number.
+    expect(every * 3 - (KEPT.curtain + KEPT.painting + KEPT.tv)).toBe(374);
   });
 });

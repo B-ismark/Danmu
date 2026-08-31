@@ -1371,11 +1371,13 @@ quadrant — outside the room — and the drag committed `valid` with no red and
 nothing said. Reported as *"models are still going through walls in 2d plan mode"*,
 and it was never the plan: both tabs end here.
 
-It was **deleted rather than repaired**, because it measured as pure hole. Over
-every category at min/mid/max size, five layouts, three angles and 35 targets:
-removing it costs **exactly** the 374 placements that were leaving the room — 311
-curtain, 45 painting, 18 TV, i.e. *wider than the wall it landed on* rather than a
-property of curtains — and not one placement besides. `door`, `ac` and `mirror`,
+It was **deleted rather than repaired**, because it measured as pure hole — an A/B
+over both builds rather than an inference from the escape count. Over every category
+at min/mid/max size, five layouts, three angles and 35 targets, the whole catalogue
+accepted **28,739** placements with the exemption and **28,365** without it: removing
+it costs **exactly** the 374 that were leaving the room — 311 curtain, 45 painting,
+18 TV, i.e. *wider than the wall it landed on* rather than a property of curtains —
+and not one placement besides. `door`, `ac` and `mirror`,
 the pieces that sit in or on the plaster and are the reason such an exemption gets
 written, pass the polygon test on their own merits at all 1575 samples each; the
 10 mm shrink was already doing that job for everything else. A predicate that needs

@@ -2543,8 +2543,11 @@ committed `valid` with no red and nothing said.
 Not a curtain defect: **wider than the wall it landed on**. A max-size TV and a max-size
 painting do it too, and a mid-size curtain does it in all three non-rectangular presets.
 
-**Deleted rather than repaired, and that was measured rather than judged.** Removing the
-exemption costs **exactly** those 374 placements and not one besides. `door`, `ac` and
+**Deleted rather than repaired, and that was measured rather than judged.** The sweep was
+run against both builds: the whole catalogue accepted **28,739** placements with the
+exemption and **28,365** without it, so removing it costs **exactly** those 374 and not
+one besides — the second half of that sentence is the load-bearing one, and it is a
+subtraction rather than a hope. Both columns are pinned in the test. `door`, `ac` and
 `mirror` — the pieces that sit in or on the plaster, and the reason such an exemption gets
 written in the first place — are accepted at all 1575 samples each without it. The 10 mm
 shrink in `slightlyShrunk` was already doing that job for everything else. A predicate that

@@ -203,14 +203,20 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   // outside the room — and the drag committed `valid` with no red and nothing said.
   //
   // The exemption is deleted rather than repaired, because it turned out to be pure
-  // hole. Measured over every category at min/mid/max size, five layouts, three
-  // angles and 35 targets: removing it costs **exactly** the 374 placements that
-  // were leaving the room (311 curtain, 45 painting, 18 TV — "wider than the wall
-  // it landed on", not a property of curtains) and not one placement besides.
-  // `ac`, `door`, `mirror` and `monitor` — the pieces that sit in or on the plaster
-  // and are the reason such an exemption would be written — pass the polygon test
-  // on their own merits at every size in every layout, all 1575 samples each. The
-  // 10 mm shrink below is what lets a back flush against a wall through, and it was
+  // hole — and that is an A/B rather than an inference from the escape count. The
+  // sweep in `tests/wall-rider-containment.test.ts` was run against both builds over
+  // every category at min/mid/max size, five layouts, three angles and 35 targets:
+  // the whole catalogue accepted 28,739 placements with the exemption and 28,365
+  // without it. The 374 that went are **exactly** the 374 that were leaving the room
+  // (311 curtain, 45 painting, 18 TV — "wider than the wall it landed on", not a
+  // property of curtains), and no other category moved by one. Both columns are
+  // pinned there, so the second half of that sentence is a gate and not a memory.
+  // `ac`, `door` and `mirror` — the pieces that sit in or on the plaster and are the
+  // reason such an exemption would be written — pass the polygon test on their own
+  // merits at every size in every layout, all 1575 samples each. (`monitor` reads
+  // like a fourth member of that list and is not one: its anchor is not a wall
+  // anchor, so `ridesWall` is false and this exemption never covered it.) The 10 mm
+  // shrink below is what lets a back flush against a wall through, and it was
   // already doing that job for everything else.
   //
   // A ceiling fan never had the exemption and still does not: it gets no snap, so
