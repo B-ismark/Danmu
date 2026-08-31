@@ -69,6 +69,34 @@ the note there on why the file count has to travel with the assertion count.
   Deleting a remote ref is outward-facing and is **not** covered by a grant to commit, push
   and open PRs. **Re-derive the table before asking, every time** — this one is dated
   2026-08-29 and a branch list is exactly the kind of claim that rots between sessions.
+
+  **Re-derived 2026-08-31.** Four branches are still ahead of `main`:
+  `feat/expose-finalists-and-relation-distance` (1), `fix/derive-mounted-and-vertical-extent`
+  (1), `fix/pointer-cancel-note` (10), `research/inward-normals` (2).
+
+  On `fix/pointer-cancel-note` specifically, because it is the one that reads as lost work
+  and the reading keeps coming out differently. What is derived rather than remembered: 33
+  files and 2,316 insertions against its merge base; `main` already defines `gestureFor`,
+  `applyRoomEdits` and `boundsToUnit`, so a good deal of its content did land by another
+  route; and its `docs/visual-check.md` is the retired **621-line** version that `main`
+  deliberately cut to **359**, so a merge resurrects a backlog someone chose to delete.
+
+  **And a correction to a claim made about it in this session, before anyone acts on that
+  either.** It was described as an add/add that would redeclare `gestureFor` and break the
+  build. That is wrong. `git merge-tree --write-tree origin/main origin/fix/pointer-cancel-note`
+  exits 1 with **19 conflicted files, every one of them carrying stages 1, 2 AND 3** — stage 1
+  is the common ancestor, so these are ordinary three-way edit/edit conflicts on files both
+  sides have changed. Not an add/add, and not a build error waiting to happen: a real
+  per-file resolution across `PlanView`, `RoomDimsEditor`, `RoomTools`, `Draggable`,
+  `drag-convoy`, `drag-resolve`, `physics`, `rigid-parent`, `scene-file`, `dimension-ranges`
+  and nine test files.
+
+  This is the third different account of that branch in this document's history, which is
+  the actual finding: **it is neither deletable nor mergeable on any evidence gathered so
+  far**, and every session that has looked at it has produced a confident summary from a
+  cheaper instrument than the question deserved. The next person to touch it should do a
+  per-line pass or leave it alone — and, per CLAUDE.md, read the stage numbers rather than
+  the conflict list.
 - **`C:/Users/bisma/danmu-rescue/`** holds two patches lifted out of dead sessions'
   `%TEMP%` worktrees. **Both turned out to be superseded drafts of work already on `main`** —
   kept only because checking cost nothing. Safe to delete; check first.
@@ -1938,13 +1966,45 @@ settling afterwards.
 position overrides, and every override pins that value against a re-detect and persists it.
 That stamps the user's room to fix a display bug. **§ B.16.**
 
-### 13. The placement row's Floor button sits flush against the window edge
+### 13. The placement row's Floor button sits flush against the window edge — FIXED, and the recorded cause was wrong
 
 The row itself is right — the user confirmed **Wall · Floor** on a floor-standing piece, so
 the two-button fix took and § H.1 stays FIXED. What they reported alongside it is that at
 the narrow rail the **Floor button touches the edge of the window with no padding**.
 
-**A candidate cause, NOT yet confirmed against a screenshot.** `app/globals.css` carries
+**FIXED in `42def4b`. The candidate cause below was wrong twice over**, and it is kept
+because the way it was wrong is the point: it was a reading of the stylesheet that nobody
+had put a browser in front of.
+
+**What it actually was.** `.rail-triple` and `.rail-swatches` are markup in `Inspector.tsx`
+and nowhere else — the RIGHT rail. That rail takes three kinds of width: `--rail-right`'s
+clamp (276–320px), `--rail-right-tight` (248px, the `compact` step), and whatever the sash
+was dragged to, which `DockedShell` renders as `clamp(--rail-right-min, Npx, --rail-max)`.
+So **276px is the narrowest a dragged right rail can be, and the fold was written at 268px**
+— below it. Every width a drag can reach sat above the breakpoint, and the fold could never
+fire.
+
+It looked alive because 248px does clear 268px: **the fold fired for the width nobody drags
+to and not for the width they do**, which is why reading the stylesheet agrees with itself
+and disagrees with the screen.
+
+Measured in a browser at a rail dragged to 276px, where 33px goes to padding and the border:
+the three buttons want 261px of the 243px they get, so “Floor” painted at
+**x = 1401.8 in a 1400px window**. `.rail-swatches` wanted 252px in the same 243px — same
+dead breakpoint, second victim, and nobody had reported that one. Nothing clips and nothing
+scrolls, because `.rail` is `overflow: visible`; `1fr` is `minmax(auto, 1fr)`, so the columns
+could not shrink below their own content and the grid overflowed instead.
+
+304px clears both minimums (294px and 285px) and still leaves the narrowest rail that ships
+un-dragged three-up: 307px, at a 1280px viewport, with 13px to spare.
+
+**The assertion is token-derived**: the widest container query folding each class must be at
+least `--rail-right`'s clamp floor. Necessary and not sufficient — nothing in a test can
+measure a button's min-content — but reachability was the half that was false, and a test
+naming a viewport would have agreed with the bug. Its own premise is pinned too, because
+mutating the token to `rail-left` left it green.
+
+**The cause recorded before any of that, and why it was wrong.** `app/globals.css` carries
 `@container rail (max-width: 240px)` whose own comment says *"The last thing to give is
 padding, because it is the only thing here whose loss costs nothing but air"* — it drops
 `.rail-section-*` padding to zero by design. If that is what fired, the degradation is
@@ -1954,9 +2014,15 @@ rail was actually at or below 240px when they saw it is unverified, and that is 
 thing to establish, because the other possibility is a container-query breakpoint firing
 wider than it should.
 
-This is rule 4's own territory — a control that does not fit must **reflow**, not spill —
-and the fix is likely a floor of 4–6px rather than `0`, which the same comment already
-concedes is the last thing to give rather than a thing that may go entirely.
+Two things kill it. That block drops `.rail-section-*` padding to **12px, not to zero**, so
+even had it fired there would still have been padding; and it fires at ≤240px, which the
+right rail never reaches at all. The guessed remedy — “a floor of 4–6px rather than `0`” —
+would have changed a number that was already 12 and left the actual overflow untouched.
+
+This is rule 4's own territory — a control that does not fit must **reflow**, not spill. The
+lesson is narrower than the rule, though: the stylesheet was read carefully, the reading was
+self-consistent, and it took one measurement to find that the block under suspicion could
+not fire and the one that mattered was a different one.
 
 ### 14. A merged group's member cannot be selected by clicking it on the canvas
 
@@ -2053,7 +2119,7 @@ getting one is a different claim — it is the app creating that state on reques
 aimed at this area was written, measured and reverted because it gave the solver four runs
 in 48 with a piece through a wall.
 
-### 19. Library search: `stand` does not reach `Nightstand` — MEASURED, and it is one line
+### 19. Library search: `stand` does not reach `Nightstand` — FIXED
 
 *"I typed stand but I didn't get nightstand as a suggestion."*
 
@@ -2069,13 +2135,37 @@ token is `stand`. It is not equal to `nightstand`; `nightstand` does not start w
 `SYNONYM` already maps `bedside` to `nightstand`, so the word the user reached for is the one
 form nobody thought of: the compound's own tail.
 
-**The fix is a third branch at a weight below prefix** — containment, for a query token of
+**FIXED in `cf96b48`.** The paragraphs above are the diagnosis as written before the
+fix; what shipped, and the two things the plan did not know, are below.
+
+**The plan's fix was a third branch at a weight below prefix** — containment, for a query token of
 some minimum length. Two things to get right rather than guess: the length floor (`tokens()`
 already drops 1-character tokens, and a floor of 2 would let `an` match half the catalog),
 and the weight, which must sit under 1.5 so a genuine prefix still outranks a suffix. This is
 pure `lib/` logic with an existing test file, so it is gated the moment it is written — and
 the assertion to watch fail is `stand` reaching `Nightstand`, plus a negative that a
 2-character token does not drag in the whole catalog.
+
+**What the plan had wrong: `rankLibrary`'s substring fallback could never have saved
+this.** It runs only when scoring returns NOTHING, and `stand` does score — the
+`desk-standard` shape prefix-matches it at 1.5, so the list came back non-empty with
+Nightstand missing from it and the fallback never ran. A reader of the section above would
+reasonably expect the search box to have found it by substring; it could not.
+
+**The floor is 4, measured rather than picked.** Every substring of every hay token in the
+catalog is a query a user can type — 797 of them — and the question asked of each is how
+many of the 43 rows it admits. At a floor of 2, twelve queries reach more than ten rows; at
+3, exactly one does (`ing`, the gerund tail, at 14); at 4, none. Four is the smallest floor
+with no catch-all, and it is what lets `room`, `robe` and `wave` reach Bedroom, Wardrobe and
+Microwave.
+
+**And the assertion the obvious one could not make.** Pinning that `stand` puts the desk
+table above Nightstand survives the weight drifting to exactly 1.5: the two rows tie, `sort`
+is stable, and the desk table is the earlier catalog row, so it stays first while the
+decision is gone. `achi` is the ONE query in the whole substring space where the containment
+match sits earlier in `PART_LIBRARY` than the prefix match — AC unit prefix-matches at 1.5,
+Washing machine contains it at 1, rows 41 and 34 — so a tie flips the order there and
+nowhere else. Five mutations, five kills; the 1.5 one is killed by that assertion alone.
 
 ### 20. Deleting a merged group removed only the bed — FIXED
 
@@ -2682,4 +2772,40 @@ uses the *wider* `wallMounted` flag), `wall-move.ts`'s `carryAttached` (exempts 
 its was-inside/now-inside test), and `layout-settle.ts` (`movable = !ridesWall`, so
 `contain()` never runs on one). `placeNewPart` has no legality test at all, so adding an
 oversized curtain from the Library seeds the state this branch now refuses to reproduce.
-**Not started; no commit anywhere.**
+**Still not started — no commit anywhere. What HAS been done is the measurement that
+decides whether it is shippable, and it is, so the next person does not have to take that
+risk blind.**
+
+The worry was false positives: this rule fires on pieces nobody dragged, so every seeded and
+detected room in existence gets re-judged by it the moment it lands. Measured over
+`defaultScene` for all six `LAYOUT_IDS` at four sizes each — 24 rooms, **273 seeded parts** —
+with the same predicate the drag uses (`obbInsidePoly` of the piece shrunk by 10 mm, plus
+`pointInFootprint` of its centre):
+
+**2 of 273 would be flagged, and both are real.** A 1450 mm `tv/tv` on the east wall of a
+3.0 × 2.4 **L** at (1.44, −0.50), and the same TV in the **T** at (1.44, −0.66). That wall
+runs 1.2 m; the TV is 1.45 m and overhangs both ends — one into the notch, one past the
+corner. So the checker's first act would be to report a defect the SEEDER still creates,
+which is the same class § H.16 fixed for dragging and did not fix for seeding. Nothing else
+in any preset moves, at any of the four sizes.
+
+**Design notes that survived that measurement**, worth keeping rather than re-deriving:
+
+- The predicate must be the drag's, or the report and the drag disagree about one piece. The
+  strict half is shared; the **rug** exemption is not, because the drag's version also asks
+  `roomIsWideEnough` and `!shovedIntoRoom`, which are questions about a GESTURE and mean
+  nothing for a piece standing still. For a static report a rug is outside only when its
+  CENTRE is out — overhang is what a rug is for.
+- Keep the disjunction when extracting. The drag reads
+  `(rug && … && centreIn) || (obbInside && centreIn)`, and a rug that is fully inside passes
+  through the SECOND branch — so collapsing it to `partInsideRoom(…) && (…gesture tests…)`
+  silently refuses a shoved rug that ended up entirely in the room.
+- The finding's magnitude comes free from the two predicates already being evaluated: centre
+  out reads as “standing outside the room”, centre in with corners out as “sticks out of the
+  room”. No new instrument — and in particular **not `outsideShare`**, whose samples sit 10%
+  in from the edges and would report 0% for a piece 20 mm through the plaster.
+- `RULE_HANDLING` wants `outside: { costTerm: 'outside', movable: true }`, and
+  `tests/layout-conformance.test.ts` then demands a `cases()` entry: a bad/good pair in its
+  6 × 4 `RECT` where the report raises `outside` on the bad layout, is quiet on the good one,
+  and the solver's `outside` term rises between them and is exactly 0 on the good one. A sofa
+  at x ≈ 3.2 against x = 0 is the obvious pair; the term already exists, weighted 1000.

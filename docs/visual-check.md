@@ -263,11 +263,37 @@ the rail grows a horizontal scrollbar, the wrap is not doing its job.
 
 ## Shell and flow
 
-*Owner: `shell`. **Empty, and that is the rule working.** The Library click-through was
-looked at on 2026-08-30 — the Add rail is present and the panel is visible on both tabs,
-which is the whole of what was left for a person. The three signposts and the click-through
-are gated by `tests/studio-copy.test.tsx` and `tests/library-click-through.test.tsx`; there
-is nothing here a test cannot now see.*
+*Owner: `shell`. The Library click-through was looked at on 2026-08-30 — the Add rail is
+present and the panel is visible on both tabs, which is the whole of what was left for a
+person. The three signposts and the click-through are gated by `tests/studio-copy.test.tsx`
+and `tests/library-click-through.test.tsx`. The one item below is new, and it is here
+because what a test can check about it and what a person can see are different halves.*
+
+### The placement row now folds to two rows on a narrow rail — does it look folded, or broken?
+
+**Where to click.** Open any room, select a piece with **something under it** — a lamp
+standing on a desk — so the placement row shows three buttons (**Wall · Surface · Floor**)
+rather than two. Then **drag the right rail's sash as far left as it goes**.
+
+**What was wrong.** The fold to two columns was written at `max-width: 268px` while a
+dragged right rail floors at `--rail-right-min: 276px`, so the fold could never fire for any
+width a drag can reach. Measured at 276px: the three buttons wanted 261px of the 243px they
+had, and “Floor” painted at **x = 1401.8 in a 1400px window**. The swatch grid in the same
+rail wanted 252px in the same 243px, and nobody had reported that one at all.
+
+**What to look for now.** Three buttons should become **two on the first row and one on the
+second**, with the section's padding intact on both sides and nothing touching the window
+edge. The colour swatches in the same rail should be **six across and square**, not eight
+narrow rectangles. Both are measured — `tests/reflow.test.ts` holds the breakpoint above the
+rail's own floor, and a browser probe confirms nothing overflows at 276px.
+
+**What a test cannot settle, and why this is here.** Nothing in a test can measure a
+button's min-content, so the assertion is only that the fold is *reachable*, not that the
+folded layout *reads well*. A lone “Floor” sitting under two buttons may look like a
+mistake rather than a row that wrapped — and if it does, the answer is a different
+arrangement of that row, not a different breakpoint.
+
+**Where it rides.** `fix/search-suffix-match`.
 
 ---
 
