@@ -119,7 +119,7 @@ This is the only defect in the whole item that a mouse cannot produce.
 
 **Where it rides.** `lib/gizmo-press.ts` + `components/three/Draggable.tsx` +
 `components/three/Pickable.tsx` + `components/three/RoomShell.tsx` +
-`components/three/Room.tsx`. Branch `fix/gizmo-press-belongs-to-the-gizmo`.
+`components/three/Room.tsx`. Merged to `main` in **`d2ef257`** (PR #73).
 
 
 ## Layout and Shuffle
