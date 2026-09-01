@@ -810,6 +810,30 @@ describe('the rail asks about itself', () => {
     expect(readFileSync(root('components', 'studio', 'Inspector.tsx'), 'utf8')).toMatch(/className="rail-triple"/);
   });
 
+  it('and the Inspector measures its own scroll box, not the rail around it', () => {
+    // A nested container, and the nesting is the point: `@container rail` resolves
+    // to the NEAREST ancestor named `rail`, so everything inside the Inspector asks
+    // the scroll box while the left rail still asks `.rail`.
+    //
+    // Why it has to be the scroll box: a container query reads its container's
+    // content box, and a classic scrollbar is carved out of the scroll box's — so
+    // `.rail` reports a width the grids inside never get. The breakpoint was derived
+    // against `.rail` for one commit and the missing term was the scrollbar, which
+    // is 0 on macOS and ~11-12px on Windows. No single number is right for both, and
+    // measuring the inner box means none is needed.
+    expect(rule('.rail-scroll')).toMatch(/container-type:\s*inline-size/);
+    expect(rule('.rail-scroll')).toMatch(/container-name:\s*rail/);
+
+    // The class is inert unless it lands on the element that actually scrolls, and
+    // that element is inline-styled, so nothing else can see the two drift apart.
+    // Both Inspector panes are scroll boxes and both must carry it: the wall pane
+    // renders the swatch grid this file's breakpoint is half about.
+    const insp = readSrc('components', 'studio', 'Inspector.tsx');
+    const scrollers = [...insp.matchAll(/<div\b[^>]*overflow:\s*'auto'[^>]*>/g)].map((m) => m[0]);
+    expect(scrollers.length, 'no inline scroll box found in the Inspector').toBeGreaterThan(0);
+    for (const s of scrollers) expect(s, 'a scroll box in the Inspector without .rail-scroll').toMatch(/className="rail-scroll"/);
+  });
+
   it('and the reflow fires at a width the rail can actually reach', () => {
     // The one that was missing, and the defect it would have caught shipped for
     // months. `.rail-triple` and `.rail-swatches` live only in the Inspector — the
@@ -827,7 +851,25 @@ describe('the rail asks about itself', () => {
     // Necessary, not sufficient: nothing here can measure a button's min-content,
     // so this cannot say the folded layout FITS. It says the fold is reachable,
     // which is the half that was false.
-    const blocks = [...CSS.matchAll(/@container rail \(max-width: (\d+)px\)\s*\{([\s\S]*?)\n\}/g)];
+    // Brace-counted, not `[\s\S]*?\n\}` — that ends a block at the first `}` sitting
+    // at column 0, which makes the parse a function of INDENTATION. Indent the
+    // closing brace of the wider block and it swallows the narrower one below it,
+    // and this test then reads `.rail-swatches` as folding at 240px — a width no
+    // drag can reach, which is the precise defect it exists to catch, reported
+    // green. Verified by doing exactly that.
+    const src = codeOnly(CSS);
+    const blocks: { at: number; body: string }[] = [];
+    const open = /@container rail \(max-width: (\d+)px\)\s*\{/g;
+    for (let m = open.exec(src); m; m = open.exec(src)) {
+      let depth = 1;
+      let i = open.lastIndex;
+      for (; i < src.length && depth > 0; i++) {
+        if (src[i] === '{') depth++;
+        else if (src[i] === '}') depth--;
+      }
+      expect(depth, `@container rail (max-width: ${m[1]}px) is never closed`).toBe(0);
+      blocks.push({ at: Number(m[1]), body: src.slice(open.lastIndex, i - 1) });
+    }
     expect(blocks.length, 'no @container rail blocks parsed').toBeGreaterThan(0);
 
     // Why `rail-right` is the token to measure against, asserted rather than
@@ -851,17 +893,40 @@ describe('the rail asks about itself', () => {
       /export function RightRailBody[\s\S]*?<Inspector\s*\/>/,
     );
 
+    // The ceiling, which the first version of this test did not have — and one-sided
+    // is the same defect as unpinned, because the half it left free is the half that
+    // names a number. 304 → 320, 600, even 99999 all stayed green: any of them folds
+    // the shipping default rail to two columns permanently, which is the opposite
+    // failure to the one below and just as silent.
+    //
+    // The bound is the narrowest rail that ships OUTSIDE the compact step, since
+    // that is the width the three-up row was sized for. `COMPACT_WIDTH` is the last
+    // viewport that gets `--rail-*-tight`, so one past it is the first that gets the
+    // clamp, and the clamp's middle term is a share of the viewport. Less the rail's
+    // own border, because the container query reads a content box. Derived end to
+    // end: change any of the three and this moves with them.
+    const banner = readSrc('components', 'studio', 'NarrowViewportBanner.tsx');
+    const compactMax = Number(/COMPACT_WIDTH = (\d+)/.exec(banner)![1]);
+    const vw = Number(/clamp\([^,]+,\s*([\d.]+)vw/.exec(token('rail-right'))![1]);
+    const border = Number(/border-left:\s*(\d+(?:\.\d+)?)px/.exec(rule('.rail--right'))![1]);
+    const widestQueryBox = ((compactMax + 1) * vw) / 100 - border;
+    expect(widestQueryBox, 'the ceiling did not resolve to a width').toBeGreaterThan(200);
+
     const floor = railFloor('rail-right');
     for (const cls of ['.rail-triple', '.rail-swatches']) {
-      const owning = blocks.filter((b) => codeOnly(b[2]).includes(cls));
+      const owning = blocks.filter((b) => b.body.includes(cls));
       expect(owning.length, `${cls} is not reflowed by any container query`).toBeGreaterThan(0);
       // The WIDEST such block is the one that decides: a narrower one below it can
       // only add relief that the wider has already begun.
-      const at = Math.max(...owning.map((b) => Number(b[1])));
+      const at = Math.max(...owning.map((b) => b.at));
       expect(
         at,
         `${cls} folds at ${at}px, but the right rail's floor is ${floor}px — every width a drag can reach is above the fold`,
       ).toBeGreaterThanOrEqual(floor);
+      expect(
+        at,
+        `${cls} folds at ${at}px, at or above the ${widestQueryBox}px query box of the narrowest rail that ships un-dragged (${compactMax + 1}px viewport) — the fold would be permanent`,
+      ).toBeLessThan(widestQueryBox);
     }
   });
 
@@ -877,8 +942,9 @@ describe('the rail asks about itself', () => {
     // And the TIGHT left one still has to hold the lighting row on one line —
     // the same derivation the ordinary floor answers to above, against the
     // narrower token. This is the assertion `--rail-left-tight` exists for: it is
-    // applied to nothing at runtime, and its only consumer is this file holding
-    // it below the width its contents need.
+    // what `DockedShell` renders for the whole `compact` step, through a template
+    // string that a grep for the literal token name cannot see — which is why three
+    // comments in this repo, this one included, used to call it applied to nothing.
     //
     // 208px − 32px of `.section` padding = 176px, and the row needs exactly 176.
     // Zero slack is deliberate and is why this is measured rather than eyeballed.

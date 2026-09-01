@@ -184,8 +184,13 @@ export function Inspector() {
 
   const isGeneric = part.shape === 'box';
 
+  // `rail-scroll` carries nothing but `container-type` — it is what makes THIS box
+  // the one `@container rail` measures, rather than the rail outside the scrollbar.
+  // Both Inspector panes are scroll boxes and both take it; see globals.css for why
+  // the outer rail is the wrong box. If the `overflow` ever moves, the class moves
+  // with it, because it is the scrollbar that makes the two boxes differ.
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', height: '100%', minWidth: 0 }}>
+    <div className="rail-scroll" style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', height: '100%', minWidth: 0 }}>
       <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--hairline)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <EditableText
@@ -439,14 +444,20 @@ function LightControls({
           either side and a vertical scrollbar). 27px of margin, and no margin at
           all if the label's font or the unit ever grows.
 
-          Do not read `--rail-right-tight` (248px) as the number to check against:
-          it is applied to nothing and exists only for `tests/reflow.test.ts` to
-          hold as a floor a future tightening may reach. This comment said 248 in
-          its first version and concluded the row overflowed by a pixel, which was
-          wrong in a way that would have sent the next reader hunting the wrong
-          row. The panel's stray horizontal scrollbar is real and its cause is NOT
-          identified here — it needs `scrollWidth > clientWidth` read off the live
-          box, which no test in this repo can do. */}
+          `--rail-right-tight` (248px) is NOT the number to check against, but not
+          for the reason this comment used to give. It said the token "is applied to
+          nothing"; `DockedShell` applies it for the whole `compact` step, through a
+          template string that a grep for the token name cannot see. The reason is
+          narrower: 276px is the narrowest a rail gets in the layout this row was
+          sized for, and a laptop at 248px is a band whose contents nobody has
+          measured this row against.
+
+          This comment said 248 in its first version and concluded the row
+          overflowed by a pixel, which was wrong in a way that would have sent the
+          next reader hunting the wrong row. The panel's stray horizontal scrollbar
+          is real and its cause is NOT identified here — it needs
+          `scrollWidth > clientWidth` read off the live box, which no test in this
+          repo can do. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
         <label htmlFor={`lm-${part.id}`} style={{ fontSize: 12, color: 'var(--ink-2)', minWidth: 66, flex: '0 1 auto' }}>
           Brightness
@@ -599,7 +610,7 @@ function WallInspector({ index }: { index: number }) {
   const current = room.wallColors?.[index] ?? SCENE.wall;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', height: '100%', minWidth: 0 }}>
+    <div className="rail-scroll" style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', height: '100%', minWidth: 0 }}>
       <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--hairline)' }}>
         <div style={{ fontSize: 16, fontWeight: 500, letterSpacing: '-0.01em' }}>{name}</div>
         <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>

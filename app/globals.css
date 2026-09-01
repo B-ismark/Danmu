@@ -171,12 +171,16 @@
   --rail-max: calc(var(--rail-max-share) * 100vw);
 
   /* How narrow a rail may go if its contents are reflowed to suit — deliberately
-     BELOW the two floors above, and deliberately not applied to anything: they are
-     the width a future tightening is allowed to reach, not a width that ships.
-     `var()` reads them nowhere, which is exactly why they look like dead tokens on
-     a grep. Their consumer is `tests/reflow.test.ts`, which holds each below its
-     own floor and holds the left one wide enough for the four lighting moods
-     two-up, so lowering a floor to one of these cannot quietly break that. */
+     BELOW the two floors above. `DockedShell` renders them for the whole `compact`
+     step (1024–1279px viewports), and it does so through a template string
+     — `var(--rail-${side}-tight)` — so a grep for the literal token name finds
+     these declarations and no reader, which is exactly the false negative that had
+     three comments in this repo calling them dead. They are not: this is the width
+     the Inspector ships at on a laptop.
+
+     Their second consumer is `tests/reflow.test.ts`, which holds each below its own
+     floor and holds the left one wide enough for the four lighting moods two-up, so
+     lowering a floor to one of these cannot quietly break that. */
   --rail-left-tight: 208px;
   --rail-right-tight: 248px;
   /* The narrowest the rails go once their contents answer to their OWN width
@@ -189,9 +193,10 @@
        right = two dimension fields on a row + their gap + the same padding,
                which is what the 3-up row folds to below the `@container rail`
                breakpoint. That number lives in the block itself and deliberately
-               not here as well: it moved from 268px to 304px once somebody
-               measured what the 3-up row needs, and a copy in this sentence would
-               now be the stale one.
+               not here as well: it has moved twice — 268px, then 304px once
+               somebody measured what the 3-up row needs, then 293px once the
+               scrollbar was taken out of the arithmetic — and a copy in this
+               sentence would have been the stale one on both occasions.
      They are separate tokens from `--rail-*-min` on purpose: those are the floors
      for a rail whose contents do NOT reflow, and lowering them would quietly
      change the layout that ships. */
@@ -470,6 +475,30 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
    thing to verify when a `position: fixed` child of a rail lands oddly. */
 .rail { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--paper); container-type: inline-size; container-name: rail; }
 
+/* The Inspector's scroll box, and it is a SECOND container named `rail` on
+   purpose — a nested one shadows `.rail` for its own descendants, which is the
+   whole point.
+
+   `.rail` is the wrong box to measure the Inspector's contents against, because
+   the scrollbar sits between the two. A container query reads its container's
+   CONTENT box, and a classic scrollbar is carved out of the scroll box's content
+   box — so a grid inside the Inspector gets `railWidth − border − padding − sbw`
+   while `@container rail` was being told `railWidth − border`. The breakpoint
+   below was derived from the second of those and the term was simply missing;
+   `Inspector.tsx` had already written down the first, 15px away, which is what
+   two answers to one question looks like.
+
+   Measuring the scroll box instead makes `sbw` cancel rather than be estimated.
+   That matters because the estimate is not one number: Chromium and Firefox on
+   Windows honour `scrollbar-width: thin` at ~11-12px, macOS overlay scrollbars
+   are 0, and a user on a large text setting can push it further. There is no
+   value for the breakpoint that is right in all three; there is no need for one.
+
+   No new `position: fixed` hazard from the second container (see the note above
+   the container-query section): `.rail` is already an ancestor of everything in
+   here, so any fixed descendant was contained before this rule existed. */
+.rail-scroll { container-type: inline-size; container-name: rail; }
+
 /* The rail/room divider (RailSash). 10px of hit area straddling the rail's own
    border — VS Code ships 4px and has a standing complaint that it cannot be
    grabbed — with a single painted hairline down the middle. The strip itself is
@@ -551,7 +580,7 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
    two if this turns out to bite. Open a Select and the room report and look; it
    is a ten-second check and it is in `docs/visual-check.md`. */
 
-/* 304px, and the number is measured rather than judged. This block was at 268px,
+/* 293px, and the number is measured rather than judged. This block was at 268px,
    which is BELOW `--rail-right-min` — so for the one width band a user can reach
    by dragging the sash, the fold could never fire.
 
@@ -563,20 +592,32 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
    which is exactly why this looked alive: the compact step folded, and only the
    drag did not.
 
-   Measured in a browser at a rail dragged to 276px, where 33px goes to padding and
-   the border: `.rail-triple`'s three buttons want 261px of the 243px they get, so
-   “Floor” painted 1.8px PAST the right edge of a 1400px window — `.rail` is
-   `overflow: visible`, so nothing clipped, nothing scrolled and nothing errored.
-   `.rail-swatches` wanted 252px in the same 243px. The two need the rail at 294px
-   and 285px respectively; 304px clears the larger with room, and still leaves the
-   narrowest rail that ships un-dragged three-up (307px, at a 1280px viewport,
-   which has 13px to spare).
+   Measured in a browser at a rail dragged to 276px: `.rail-triple`'s three buttons
+   want 261px of the 243px they get, so “Floor” painted 1.8px PAST the right edge of
+   a 1400px window — `.rail` is `overflow: visible`, so nothing clipped, nothing
+   scrolled and nothing errored. `.rail-swatches` wanted 252px in the same 243px.
+
+   The container is `.rail-scroll`, not `.rail` (see that rule for why), so the
+   query box IS the box the section's padding is taken out of and the arithmetic has
+   no third term: the grid gets `queryWidth − 32px`. 261 + 32 = 293, so 293px is the
+   widest query box that cannot hold the row, and `max-width` is inclusive. The
+   swatches need 284 by the same subtraction, so one block serves both — folding
+   them from 293 rather than 284 costs two columns over a 9px band nobody can stop
+   inside on purpose.
+
+   This was 304px for one commit, and the 11px was not headroom: it was an omitted
+   scrollbar. Deriving the number against `.rail` meant estimating a width that is
+   ~11-12px on Windows and 0 on macOS, and 304 was the estimate with the term set to
+   zero. What it now does at the narrowest wide rail (307.2px at a 1280px viewport,
+   the shipping default) is the honest answer rather than a chosen one: three-up
+   with no scrollbar or a thin one, folded when the scrollbar is fat enough that the
+   row genuinely does not fit.
 
    Note what the failure was NOT: `1fr` is `minmax(auto, 1fr)`, so the columns could
    not shrink below their own content and the GRID overflowed instead. There is no
    clipping and no ellipsis to notice — the row keeps its width and hangs off the
    end of the rail. */
-@container rail (max-width: 304px) {
+@container rail (max-width: 293px) {
   /* Three 11px buttons with icons stop fitting first. Two rows of two reads
      better than three clipped labels — and better than what a too-narrow flex
      row does, which is print each label over the button beside it. */
