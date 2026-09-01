@@ -663,7 +663,10 @@ the user went and looked.
 
     The branch takes the lower of the nominal drop and the piece's own half-height now,
     so a shallow fixture stays exactly where it was and a deep one stops crossing the
-    slab. The seeded Pendant tops out at **2.800**. `CEILING_TOPS` in
+    slab. The seeded Pendant tops out at **2.780** — `roomHeight` less `MOUNT_PAD`, the
+    same pad every other clamp of this quantity uses, because landing it exactly on the
+    slab put it 20 mm over `settleHeights`' cap and it would have crept down on each
+    load. `CEILING_TOPS` in
     `tests/scene-seed.test.ts` — which #54 landed — went red on the fix, which is what
     it was pinned in both directions to do, and holds the new literals; a `<=` bar would
     have sat green through it and nobody would have come back.

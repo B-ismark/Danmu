@@ -80,8 +80,12 @@ function clashes(parts: ReturnType<typeof defaultScene>): string[] {
  *  400 mm pendant whose top came to 2.850 in a 2.8 m room — 50 mm through the slab —
  *  because `groundY`'s `ceiling` branch hung the CENTRE a flat 150 mm below the
  *  ceiling, so anything taller than 300 mm passed through it. The branch takes the
- *  lower of that nominal drop and the piece's own half-height now, which leaves a
- *  shallow fixture exactly where it was and stops a deep one crossing the slab.
+ *  lower of that nominal drop and the piece's own half-height LESS `MOUNT_PAD` now,
+ *  which leaves a shallow fixture exactly where it was and stops a deep one crossing the
+ *  slab. The pad is not decoration: without it the top lands EXACTLY on the ceiling,
+ *  which is 20 mm over `settleHeights`' own cap, and every fixture over 300 mm would
+ *  creep down 20 mm on each load. Hence 2.780 rather than 2.800 — `roomHeight` minus the
+ *  same pad every other clamp of this quantity uses.
  *
  *  Kept as a per-preset table rather than collapsed to `every top <= HEIGHT`, and the
  *  reason is the whole value of the file: a bar cannot tell a preset that seeds a
@@ -99,9 +103,9 @@ function clashes(parts: ReturnType<typeof defaultScene>): string[] {
 const CEILING_TOPS: Record<string, string[]> = {
   rect: [],
   l: [],
-  t: ['Pendant=2.800'],
+  t: ['Pendant=2.780'],
   u: [],
-  open: ['Pendant=2.800'],
+  open: ['Pendant=2.780'],
 };
 
 describe.each(PRESETS)('starter scene · $id', ({ id, w, d }) => {
