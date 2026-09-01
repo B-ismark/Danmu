@@ -68,7 +68,14 @@ export function RoomSync() {
         t ?? {},
         room?.height ?? useScene.getState().room.height,
       );
-      if (fixed.parts !== useScene.getState().parts) setParts(fixed.parts);
+      // Through the normaliser, like every other load-path `setParts` — and it is not
+      // ceremony to satisfy `tests/scene-file.test.ts`. These parts came from the saved
+      // snapshot a few lines up, so the reason that call re-derives applies here too:
+      // a snapshot can be older than the derivation that replaced the stored flag. It
+      // is idempotent and returns the SAME object for a part it does not change, so the
+      // second pass costs nothing and keeps the referential equality the memoised part
+      // list depends on.
+      if (fixed.parts !== useScene.getState().parts) setParts(normalizeStoredParts(fixed.parts));
       if (t) {
         loadTransforms({ ...t, positions: fixed.positions });
         if (t.hidden) setHiddenMap(t.hidden);

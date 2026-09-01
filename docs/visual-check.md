@@ -67,13 +67,55 @@ section is yours to fix if you are the one reading it.
 
 ## Sizes and fit
 
-*Owner: `sizes`. **Empty, and that is the rule working.** The last item here — a rider
-left at the size the room was BUILT at — was looked at on 2026-08-30 and **failed exactly
-as predicted**: the user resized a surface, reopened the room, and found the mounted piece
-hanging above it. There is nothing left to look at, so the item is gone; what it turned
-into is a decision, because the obvious repair stamps position overrides onto the user's
-room. See `what-is-still-open.md` § H.12 and § B.16.*
+*Owner: `sizes`. The section emptied on 2026-08-30 and has two items again. The first is
+the only kind of thing the shape contract genuinely cannot answer — **no test in this repo
+renders geometry**, so nothing here has an opinion about whether a shape looks like the
+thing it is named after. The second is a fix whose whole point is that it is invisible
+when it works.*
 
+### Four new shapes have never been looked at, and no test can look at them
+
+**Where to click.** Any room → the **Library** panel → **Appliances** for *Standing fan*
+and *Chest freezer*, **Storage** for *TV console*, **Seating** for *Stool*. Add each,
+then switch to **2D Plan** and back.
+
+**What wrong looks like.** In 3D: a shape that does not read as the thing it is called —
+the standing fan is the one to look at hardest, because a guard ring, a hub and a pole
+can easily come out as a lollipop. Also look for anything drawn *outside* its own
+footprint (compare against the plan, which draws the declared `dimMM` and nothing else),
+and for a piece that is visibly not touching the floor.
+
+**Why a test cannot.** The contract checks that a shape is authored at `dimMM`, that its
+widest element matches, that it lands on the floor, that it has a colour and a size band
+and a role. None of that is a claim about appearance. This is the honest limit of the
+whole exercise and it is written down as `what-is-still-open.md` § 33.1.
+
+**Gates.** typecheck 0 · lint 0 · 16/16 contract clauses, all mutation-killed. Shipped in
+PR #82.
+
+### A lamp on a desk you shrank, after a reload
+
+**Where to click.** Any room. Put a **Table lamp** on a **Dining / desk table** (drag it
+onto the top until it settles). In the Inspector, set the desk's **height** to something
+much smaller — 400 mm against its default 750. The lamp will visibly stay in the air:
+**that part is still a defect and is expected.** Now reload the page.
+
+**What right looks like.** After the reload the lamp is sitting on the desk top.
+
+**What wrong looks like.** The lamp still hanging 350 mm above the desk — the original
+report. Or the opposite failure, which is the one to watch for: a piece that was somewhere
+deliberate has *moved* on reload. Check a wall-mounted TV and a rug are exactly where you
+left them, because the settle runs over every part, not only riders.
+
+**Why it is here and not closed by its tests.** Seven assertions, all mutation-killed, and
+they all exercise `settleRiders` directly. Nothing exercises `RoomSync`'s load block —
+the ordering of `setParts` / `settleRiders` / `loadTransforms` inside an async effect is
+the part no unit test on this branch reaches.
+
+**Known and deliberate:** the in-session float before the reload. It is the half that is
+still open, for the reason in `what-is-still-open.md` § 12.
+
+**Gates.** typecheck 0 · lint 0 · 7/7 mutation-killed. Shipped in PR #82.
 
 ## Drag and selection
 
