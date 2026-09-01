@@ -876,7 +876,10 @@ max 0.1 ft, and every arrow press then lands on the wrong end).
 wrong size at scale 1 — see `fanBlade` above. The widest element **is** `dimMM[0]`:
 the standing fan's guard is the full width with a narrower base, and the stool's
 legs sit inside its radius at the floor. If a piece is round, the plan needs
-`circle` — which a Library item cannot currently express (§ 32).
+`circle`, and that is derived from the shape by `isRoundPart` rather than stated on
+the catalogue row — so a round shape is round however it entered the room. Add it to
+`ROUND_SHAPES` and every path agrees; state it on a row and you have made a second
+answer, which is the defect § 32 records.
 
 **Colour** comes from `BY_SHAPE`, hand-synced to the CSS tokens and guarded by
 `tests/color-tokens.test.ts`. Never a literal hex in a renderer for a surface the

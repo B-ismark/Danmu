@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import { defaultScene, buildSceneFromRoom, type ScenePart } from './scene-spec';
+import { defaultScene, buildSceneFromRoom, isRoundPart, type ScenePart } from './scene-spec';
 import { ROOM as ROOM_DEFAULT } from './parts-catalog';
 import { footprintForLayout, offsetWall, footprintBounds, type Footprint, type LayoutId } from './footprint';
 import { ROOM_SIDE_EPS, ROOM_SIDE_M } from './dimension-ranges';
@@ -173,7 +173,14 @@ export const useScene = create<SceneState>((set, get) => ({
   updatePart: (id, patch) =>
     set((s) => ({ parts: s.parts.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
   deletePart: (id) => set((s) => ({ parts: s.parts.filter((p) => p.id !== id) })),
-  addPart: (p) => set((s) => ({ parts: [...s.parts, p] })),
+  // `circle` is derived here rather than at each caller, because there are three of
+  // them — the Catalog panel's `spawn`, the plan's drop and the 3D canvas's drop — and
+  // `LibraryItem` carries no such field for any of them to copy. That is exactly how
+  // every piece added from the Library came to be square-footed, the ceiling fan
+  // included, while the same shape found in a photograph was round. One door, one
+  // answer; `normalizeStoredParts` re-derives it on the way back in.
+  addPart: (p) =>
+    set((s) => ({ parts: [...s.parts, { ...p, circle: isRoundPart(p.shape) || undefined }] })),
   groupParts: (ids) =>
     set((s) => {
       const gid = `g-${Date.now().toString(36)}`;

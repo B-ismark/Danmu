@@ -1806,12 +1806,12 @@ export const PART_LIBRARY: LibraryItem[] = [
   // the footprint every other module measures, which is the `fanBlade` scar in a new
   // shape.
   //
-  // NOT marked round, and neither is the stool, because `LibraryItem` has no `circle`
-  // field and `spawn` never sets one: a piece added from the Library is square-footed
-  // whatever its shape, the CEILING FAN included. That is a pre-existing gap between
-  // the detection path (`CATEGORY_DEFAULTS` does carry `circle`) and the add path, and
-  // it is left alone here rather than half-closed for two new shapes — see
-  // docs/what-is-still-open.md § 32.
+  // Roundness is NOT stated on this row, and that is the fix rather than the omission
+  // it used to be. It is a property of the SHAPE (`isRoundPart`), so the fan and the
+  // stool are round wherever they come from. When this row was written `LibraryItem`
+  // had no `circle` field and `spawn` set none, so a piece added from the picker was
+  // square-footed whatever its shape — the CEILING FAN included — while the same shape
+  // found in a photograph was round. That was § 32 and it is closed.
   { label: 'Standing fan', group: 'Appliances', category: 'fan', shape: 'fan-standing', dimMM: [450, 450, 1300] },
   { label: 'Chest freezer', group: 'Appliances', category: 'fridge', shape: 'chest-freezer', dimMM: [1250, 650, 850] },
   { label: 'AC unit', group: 'Appliances', category: 'ac', shape: 'ac-unit', dimMM: [800, 220, 280] },
@@ -1820,23 +1820,23 @@ export const PART_LIBRARY: LibraryItem[] = [
 
 // ─── Detection → scene builder ────────────────────────────────────────────
 // Map detected category to a sensible primitive + default mm dimensions.
-const CATEGORY_DEFAULTS: Record<
-  Category,
-  { shape: Shape; dim: [number, number, number]; circle?: boolean }
-> = {
+// No `circle` here any more: roundness is a property of the SHAPE (`isRoundPart`), and
+// a copy on the category was the reason the detection path and the add path disagreed
+// about the same fan.
+const CATEGORY_DEFAULTS: Record<Category, { shape: Shape; dim: [number, number, number] }> = {
   sofa: { shape: 'sofa', dim: [2200, 950, 880] },
   tv: { shape: 'tv', dim: [1450, 60, 820] },
   chair: { shape: 'chair-dining', dim: [500, 500, 850] },
   table: { shape: 'desk-standard', dim: [1200, 600, 750] },
   desk: { shape: 'desk-standard', dim: [1400, 700, 750] },
-  lamp: { shape: 'lamp-floor', dim: [300, 300, 1700], circle: true },
-  plant: { shape: 'plant', dim: [400, 400, 1600], circle: true },
+  lamp: { shape: 'lamp-floor', dim: [300, 300, 1700] },
+  plant: { shape: 'plant', dim: [400, 400, 1600] },
   shelf: { shape: 'bookshelf', dim: [900, 350, 1800] },
   wardrobe: { shape: 'wardrobe', dim: [2000, 600, 2100] },
   rug: { shape: 'rug', dim: [2400, 1600, 5] },
   bed: { shape: 'bed-single', dim: [900, 2000, 600] },
   monitor: { shape: 'monitor', dim: [600, 200, 400] },
-  fan: { shape: 'fan', dim: [1000, 1000, 200], circle: true },
+  fan: { shape: 'fan', dim: [1000, 1000, 200] },
   fridge: { shape: 'fridge', dim: [550, 550, 850] },
   curtain: { shape: 'curtain', dim: [1600, 80, 2200] },
   mirror: { shape: 'mirror', dim: [600, 30, 1400] },
@@ -2220,7 +2220,7 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
       rot: placement.rot,
       dimMM: dim,
       locked: d.locked,
-      circle: cfg.circle,
+      circle: isRoundPart(refined) || undefined,
       wallMounted: mounted || undefined,
       fromDetection: { slot: realSlot, bbox: d.box, conf: d.conf },
       color: (d as { color?: string }).color,
@@ -2308,6 +2308,36 @@ export function selectionForPick(parts: ScenePart[], id: string, current: readon
   return inside ? [id] : group;
 }
 
+/** Shapes whose footprint is a CIRCLE rather than a box.
+ *
+ *  Roundness is a property of the SHAPE, and until this existed it was written down in
+ *  two other places instead — `CATEGORY_DEFAULTS.circle`, which only the detection
+ *  builder read, and four hand-written `{ circle: true }` literals in the seeder. The
+ *  add path had it nowhere at all: `LibraryItem` has no such field and `spawn` never set
+ *  one, so **every piece added from the Library was square-footed, the ceiling fan
+ *  included** — the same shape drawn as a circle when a photo found it and as a square
+ *  when the picker added it. Seen in the plan, not merely inferred: see
+ *  `docs/what-is-still-open.md` § 32.
+ *
+ *  It matters beyond the drawing. `footFromPart` feeds `lib/plan-hit.ts` (so a round
+ *  piece is picked by the ellipse it draws), `footOverlap`, `footArea` — a circle is
+ *  π/4 of its box — and every clearance and collision answer downstream.
+ *
+ *  Deliberately NOT here: `mirror-oval`, which is oval on the WALL and a thin rectangle
+ *  in plan; and `side-table` / `ottoman`, which the catalogue ships square and which
+ *  come in both shapes in life. Guessing at those is how this table starts drifting from
+ *  what is drawn. */
+const ROUND_SHAPES = new Set<Shape>([
+  'fan', 'fan-standing', 'lamp-floor', 'lamp-table', 'lamp-pendant',
+  'plant', 'stool', 'cylinder',
+]);
+
+/** Whether a part's footprint is a circle. The companion to `isWallMountedPart`, and
+ *  derived for the same reason: a persisted flag can be older than the answer. */
+export function isRoundPart(shape: Shape): boolean {
+  return ROUND_SHAPES.has(shape);
+}
+
 /** Whether a part renders as a wall/ceiling-mounted item (geometry centred on
  *  the group origin) rather than floor-anchored. SHAPE-aware: a mirror/tv/etc.
  *  is wall-mounted even if the AI labelled it with an off category — relying on
@@ -2359,11 +2389,17 @@ export function isWallMountedPart(cat: Category, shape: Shape): boolean {
 export function normalizeStoredParts(parts: ScenePart[]): ScenePart[] {
   return parts.map((p) => {
     const derived = isWallMountedPart(p.category, p.shape);
-    if (!!p.wallMounted === derived) return p;
+    const round = isRoundPart(p.shape);
+    // `circle` is re-derived for the same reason and with the same `|| undefined`: a
+    // room saved before `ROUND_SHAPES` existed holds `circle` only where the DETECTION
+    // path happened to set it, so the identical fan is round or square depending on how
+    // it got into the room. Nothing has ever let a user choose, so deriving can only
+    // correct.
+    if (!!p.wallMounted === derived && !!p.circle === round) return p;
     // `|| undefined` rather than `false`, to match what the builders emit: the flag is
     // optional and floor-standing furniture omits it, so ABSENT and `false` are one
     // answer everywhere that reads it.
-    return { ...p, wallMounted: derived || undefined };
+    return { ...p, wallMounted: derived || undefined, circle: round || undefined };
   });
 }
 
