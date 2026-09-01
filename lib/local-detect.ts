@@ -114,7 +114,14 @@ const NAME_TO_CATEGORY: Record<string, Category> = {
 // what an open-vocabulary model responds to, and several phrases deliberately
 // share one category: real rooms hold clothes rails and stacked fabric cubes,
 // not the canonical `Wardrobe` that a fixed-label model was trained on.
-const WORLD_PROMPTS = [
+// Exported for `tests/shape-contract.test.ts`, which holds this array against
+// `WORLD_VOCAB` in scripts/export-detector.py — the dict whose KEY ORDER
+// `set_classes()` baked into the graph. The two were mirrored by hand with nothing
+// checking them, and the failure mode is not a crash: every label after the edit
+// point comes back shifted by one, so the detector confidently reports a sofa as an
+// armchair and a fan as a fridge. Adding a prompt here alone does nothing at all —
+// the model has no channel for it until it is re-exported and MODEL_DIGESTS re-pinned.
+export const WORLD_PROMPTS = [
   'sofa', 'couch', 'armchair',
   'chair', 'office chair', 'stool',
   'table', 'coffee table', 'dining table',
@@ -156,7 +163,7 @@ function displayLabel(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-const WORLD_TO_CATEGORY: Record<string, Category> = {
+export const WORLD_TO_CATEGORY: Record<string, Category> = {
   sofa: 'sofa', couch: 'sofa', armchair: 'sofa',
   chair: 'chair', 'office chair': 'chair', stool: 'chair',
   table: 'table', 'coffee table': 'table', 'dining table': 'table',
@@ -185,7 +192,7 @@ const WORLD_TO_CATEGORY: Record<string, Category> = {
 // Classes whose best 3D representation is a specific shape (category alone
 // would land on a generic box). Keyed by lowercase label, so it serves both
 // the OIV7 names and the YOLO-World prompts.
-const NAME_TO_SHAPE: Partial<Record<string, Shape>> = {
+export const NAME_TO_SHAPE: Partial<Record<string, Shape>> = {
   window: 'window',
   laptop: 'laptop',
   'washing machine': 'washing-machine',

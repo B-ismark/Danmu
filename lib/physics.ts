@@ -38,6 +38,20 @@ const ANCHOR_BY_CATEGORY: Partial<Record<Category, Anchor>> = {
 const ANCHOR_BY_SHAPE: Partial<Record<Shape, Anchor>> = {
   door: 'wall-floor',
   fan: 'ceiling',
+  // A pedestal fan stands on the floor, and the row is here because its CATEGORY
+  // says otherwise: `fan` means the ceiling one, so the shape has to overrule it.
+  //
+  // It shipped without this row and hung a 1300 mm fan from the slab. Worse than it
+  // sounds, because 'ceiling' is the mesh-CENTRE model: `groundY` returned 2.65 and
+  // the fan spanned 2.00–3.30 m, half a metre through a 2.8 m ceiling. And nothing
+  // said so — `isObstacle` gates on `pos[1] < 0.05`, so the room report could not see
+  // it, the solver never priced it, and every catalogue-wide sweep stayed green.
+  //
+  // The general rule, now enforced by tests/shape-contract.test.ts: a new shape that
+  // shares a category with a differently-anchored piece MUST name its own anchor.
+  // Sharing a category is how a shape inherits behaviour, which is a feature right up
+  // to the moment two shapes in one category belong in different places.
+  'fan-standing': 'floor',
   'lamp-pendant': 'ceiling',
   curtain: 'wall-high',
   tv: 'wall-mid',
@@ -65,8 +79,23 @@ export function groundY(
     case 'floor':
       return 0;
     case 'ceiling':
-      // mesh-center model (fan, pendant) hung just below ceiling
-      return Math.max(roomHeight - 0.15, h);
+      // mesh-center model (fan, pendant) hung just below ceiling.
+      //
+      // The 150 mm drop is a shallow fixture's, and taking it unconditionally put a
+      // fixture's own TOP through the slab as soon as it was taller than 300 mm: the
+      // catalogue's 400 mm pendant centred at 2.65 m reached 2.85 m in a 2.8 m room.
+      // So hang it by whichever is lower — the nominal drop, or its own half-height —
+      // which leaves the shallow case (a 200 mm fan at 2.65 m) exactly where it was.
+      //
+      // `MOUNT_PAD`, not zero, and that is why this is not a one-character change.
+      // `settleHeights` clamps the same quantity at `roomHeight - MOUNT_PAD`, so a bare
+      // `roomHeight - h / 2` puts the top EXACTLY on the slab, the settle pass then finds
+      // it 20 mm over its own cap, and every ceiling fixture taller than 300 mm creeps
+      // down 20 mm on each load. Two clearances for one quantity is the scar
+      // `settleHeights`' own header describes: "a fan placed by detection and a fan
+      // placed by a drag drifted apart the first time anyone changed it. Nothing would
+      // have said so: both look right, 10 mm apart, in a picture."
+      return Math.max(Math.min(roomHeight - 0.15, roomHeight - MOUNT_PAD - h / 2), h);
     case 'wall-high':
       // AC unit, curtain rod — top edge near ceiling
       return Math.min(roomHeight - h / 2 - 0.05, roomHeight - 0.1);
@@ -261,7 +290,16 @@ const WALL_AFFINITY_BY_CATEGORY: Partial<Record<Category, WallAffinity>> = {
   chair: 'free',
 };
 
-export function wallAffinity(category: Category): WallAffinity {
+/** Where the solver is allowed to put this piece.
+ *
+ *  The shape is not optional and the first line is not a lookup: a piece ANCHORED to
+ *  a wall must be ON a wall, so that answer is derived rather than restated in a
+ *  second table. `window`'s category is `other`, whose affinity is `free`, so the
+ *  table alone told the solver it could park a window in the middle of the room —
+ *  while `anchorFor` had already decided it was wall-mid. Two tables, one question,
+ *  and the disagreement was invisible because a window is rarely moved. */
+export function wallAffinity(category: Category, shape: Shape): WallAffinity {
+  if (ridesWall(category, shape)) return 'must-wall';
   return WALL_AFFINITY_BY_CATEGORY[category] ?? 'free';
 }
 

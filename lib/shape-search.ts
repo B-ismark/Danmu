@@ -85,9 +85,27 @@ export function hayTokens(item: LibraryItem): string[] {
   return tokens(`${item.label} ${item.group} ${item.category} ${item.shape}`);
 }
 
+/** An exact match on the item's own name outranks every partial one.
+ *
+ *  Without it a query that IS a catalogue name ties with every item merely holding
+ *  that word as a token, and the tie is then broken by however `PART_LIBRARY` happens
+ *  to be ordered: typing `Door` — the exact, complete name of a shipped item —
+ *  returned **French door fridge**, because `door` scores 3 against both and the
+ *  fridge is listed first. A ranking decided by array order is not a ranking.
+ *
+ *  It cannot widen a result set, which is what keeps the measured query-space
+ *  ceilings in `tests/shape-search.test.ts` honest: an exact label match means every
+ *  query token was already in the haystack, so the item already scored above the
+ *  `s > 0` filter. This only reorders. */
+const EXACT_LABEL_SCORE = 10;
+
 function scoreItem(qTokens: string[], item: LibraryItem): number {
   const hay = hayTokens(item);
   let score = 0;
+  const label = tokens(item.label);
+  if (label.length === qTokens.length && label.every((t, k) => t === qTokens[k])) {
+    score += EXACT_LABEL_SCORE;
+  }
   for (const q of qTokens) {
     if (hay.includes(q)) score += 3;
     else if (hay.some((h) => h.startsWith(q) || q.startsWith(h))) score += 1.5;

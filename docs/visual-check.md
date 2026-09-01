@@ -67,13 +67,48 @@ section is yours to fix if you are the one reading it.
 
 ## Sizes and fit
 
-*Owner: `sizes`. **Empty, and that is the rule working.** The last item here — a rider
-left at the size the room was BUILT at — was looked at on 2026-08-30 and **failed exactly
-as predicted**: the user resized a surface, reopened the room, and found the mounted piece
-hanging above it. There is nothing left to look at, so the item is gone; what it turned
-into is a decision, because the obvious repair stamps position overrides onto the user's
-room. See `what-is-still-open.md` § H.12 and § B.16.*
+*Owner: `sizes`. **The four new shapes were LOOKED AT on 2026-09-01 and are gone from this
+list.** Standing fan, chest freezer, TV console and stool, seeded apart in a 7 x 5 room and
+photographed front-on and from the corner: the fan reads as a pedestal fan — round guard,
+dark pole, weighted base — and not as the lollipop the contract could not rule out; the
+freezer has its lid seam and handle; the console has two open bays; the stool is a round
+seat on splayed legs. Nothing draws outside its own footprint. That is the one question no
+test in this repo can answer, and it is answered.
 
+Two things were seen while looking that are NOT shape defects and are filed elsewhere:
+every Library click still drops at room centre, so five added pieces land in one heap
+(§ H.3); and the plan draws the standing fan and the stool as SQUARES, which is § 32 seen
+rather than inferred.
+
+The item below is what replaced them, and it is the opposite case — a defect that
+`verticalExtent` cannot express, so no gate will ever go red on it.*
+
+### The pendant lamp and the ceiling fan are drawn bigger than they declare
+
+**Where to click.** Any room, **3D Model** tab. Add a **Pendant lamp** from the Library
+(Lighting) and look at the ceiling. Then a **Ceiling fan** (Appliances).
+
+**What wrong looks like.** The pendant's cord going *into* or *through* the ceiling
+rather than stopping at it, and the fan's downrod doing the same. Look from a low camera
+angle with the dollhouse cut away, because from above the ceiling hides it.
+
+**The arithmetic, so you know what you are looking for.** `PendantLampGeo` draws a 600 mm
+cord at `y = +0.3` and a dome reaching `y = -0.2` — **800 mm of geometry for a shape whose
+`dimMM[2]` is 400 mm**, and asymmetric about its own origin. `groundY` hangs it by the
+model `verticalExtent` believes, so the app thinks its top is at 2.80 in a 2.8 m room and
+it is drawn to **3.20**. The ceiling fan is the same defect at 70 mm.
+
+**Why no test sees it.** Every clause that measures this — including the new
+`tests/shape-contract.test.ts` ones — asks `verticalExtent`, which computes from `dimMM`.
+The renderer disagrees with `dimMM`, so the model and the drawing are both self-consistent
+and wrong together. This is `CLAUDE.md` rule 2's `fanBlade` corollary in two more shapes,
+and it is the reason that corollary exists.
+
+**Not fixed on sight**, deliberately: moving authored geometry changes what every existing
+room looks like, and nobody has had eyes on these two. Recorded as
+`what-is-still-open.md` § 34.
+
+**Gates.** Nothing. No test can express it — that is the finding.
 
 ## Drag and selection
 
