@@ -3230,6 +3230,8 @@ from the **Library** is square-footed, including:
 | Pendant lamp | `lamp-pendant` | a square |
 | Oval mirror | `mirror-oval` | a rectangle |
 
+**Confirmed by eye on 2026-09-01**, in the 2D plan of a room holding both: the standing fan and the stool are drawn as dashed SQUARES, not circles.
+
 The ceiling fan is the one that matters most and it is **today, on `main`**: the same
 piece is a circle when detected from a photo and a square when added from the picker,
 so the two paths disagree about the geometry of one shape. It is also the piece whose

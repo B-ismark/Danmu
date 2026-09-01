@@ -67,31 +67,21 @@ section is yours to fix if you are the one reading it.
 
 ## Sizes and fit
 
-*Owner: `sizes`. The section emptied on 2026-08-30 and has two items again. The first is
-the only kind of thing the shape contract genuinely cannot answer — **no test in this repo
-renders geometry**, so nothing here has an opinion about whether a shape looks like the
-thing it is named after. The second is a fix whose whole point is that it is invisible
-when it works.*
+*Owner: `sizes`. **The four new shapes were LOOKED AT on 2026-09-01 and are gone from this
+list.** Standing fan, chest freezer, TV console and stool, seeded apart in a 7 x 5 room and
+photographed front-on and from the corner: the fan reads as a pedestal fan — round guard,
+dark pole, weighted base — and not as the lollipop the contract could not rule out; the
+freezer has its lid seam and handle; the console has two open bays; the stool is a round
+seat on splayed legs. Nothing draws outside its own footprint. That is the one question no
+test in this repo can answer, and it is answered.
 
-### Four new shapes have never been looked at, and no test can look at them
+Two things were seen while looking that are NOT shape defects and are filed elsewhere:
+every Library click still drops at room centre, so five added pieces land in one heap
+(§ H.3); and the plan draws the standing fan and the stool as SQUARES, which is § 32 seen
+rather than inferred.
 
-**Where to click.** Any room → the **Library** panel → **Appliances** for *Standing fan*
-and *Chest freezer*, **Storage** for *TV console*, **Seating** for *Stool*. Add each,
-then switch to **2D Plan** and back.
-
-**What wrong looks like.** In 3D: a shape that does not read as the thing it is called —
-the standing fan is the one to look at hardest, because a guard ring, a hub and a pole
-can easily come out as a lollipop. Also look for anything drawn *outside* its own
-footprint (compare against the plan, which draws the declared `dimMM` and nothing else),
-and for a piece that is visibly not touching the floor.
-
-**Why a test cannot.** The contract checks that a shape is authored at `dimMM`, that its
-widest element matches, that it lands on the floor, that it has a colour and a size band
-and a role. None of that is a claim about appearance. This is the honest limit of the
-whole exercise and it is written down as `what-is-still-open.md` § 33.1.
-
-**Gates.** typecheck 0 · lint 0 · 16/16 contract clauses, all mutation-killed. Shipped in
-PR #82.
+The item below is what replaced them, and it is the opposite case — a defect that
+`verticalExtent` cannot express, so no gate will ever go red on it.*
 
 ### The pendant lamp and the ceiling fan are drawn bigger than they declare
 
