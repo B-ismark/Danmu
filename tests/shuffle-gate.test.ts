@@ -40,7 +40,7 @@
 import { describe, it, expect } from 'vitest';
 import { analyzeRoom } from '@/lib/clearance';
 import { costBreakdown, prepare, DEFAULT_WEIGHTS, type Placement } from '@/lib/layout-score';
-import { isCleanShuffle, newRoomFindings, applyPlacements } from '@/lib/layout-shuffle';
+import { isCleanShuffle, newRoomFindings, applyPlacements, shuffleRoom } from '@/lib/layout-shuffle';
 import { lockedForSolve, movableFor, type SolveResult } from '@/lib/layout-solve';
 import { defaultScene, type ScenePart } from '@/lib/scene-spec';
 import { footprintForLayout } from '@/lib/footprint';
@@ -185,5 +185,79 @@ describe('newRoomFindings itself — the gate works, it is simply never handed a
     expect(applied[2].pos[2]).toBeCloseTo(0.1, 5);
     expect(reportsClash(applied)).toBe(true);
     expect(reportsClash(from)).toBe(false);
+  });
+});
+
+// ─── § H.16b gave this gate two new error kinds ─────────────────────────────
+//
+// `serious` is `severity === 'error'`, and `outside` / `overhang` are both errors, so
+// the two arrived inside the gate's scope without a line of this file changing. Per
+// the measurement in `docs/what-is-still-open.md` the gate had rejected 0 of 816
+// candidates before them, so these are the first teeth it has ever had and nothing
+// had looked at what they bite.
+//
+// The consequence to be afraid of is not a rejection, it is a room where Shuffle
+// stops working at all: the `l` and `t` presets at 3.0 x 2.4 SHIP with an `overhang`
+// on their 1450 mm TV, and if that finding's key were not stable across the
+// before/after diff it would appear in every candidate's "after", match nothing in
+// "before", and refuse every arrangement — the button silently doing nothing, on two
+// shipped presets, with no error anywhere.
+
+describe('the shuffle gate and the two findings § H.16b added', () => {
+  const seededRoom = (id: 'l' | 't', w: number, d: number) => {
+    const footprint = footprintForLayout(id, w, d);
+    return { parts: defaultScene(id, w, d), room: { footprint, height: CEILING } };
+  };
+
+  it('a preset that ships with an overhang can still be shuffled', () => {
+    // The regression above, asked directly. `movableFor` excludes the wall-mounted TV,
+    // so no candidate can move it and its key is identical either side of the diff.
+    // That is WHY this holds; the assertion is that it does.
+    for (const [id, w, d] of [['l', 3.0, 2.4], ['t', 3.0, 2.4]] as const) {
+      const { parts, room } = seededRoom(id, w, d);
+      const before = analyzeRoom(parts, room).issues.filter((i) => i.rule === 'overhang');
+      expect(before.length, `${id} ${w}x${d} must start with the overhang this is about`).toBe(1);
+
+      const locked = parts.map(() => false);
+      let offered = 0;
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const out = shuffleRoom(parts, room, locked, { attempt });
+        if (out) {
+          offered++;
+          expect(
+            newRoomFindings(parts, room, out.result).map((f) => f.rule),
+            `${id} attempt ${attempt} was offered while introducing a finding`,
+          ).toEqual([]);
+        }
+      }
+      expect(offered, `${id} ${w}x${d}: Shuffle offered nothing at all in six presses`).toBeGreaterThan(0);
+    }
+    // Twelve real shuffle presses at ~0.5 s each. The budget is explicit rather than
+    // the measurement being thinned to fit the 5 s default: a sweep cut down until it
+    // is fast is a sweep that has stopped answering the question.
+  }, 40000);
+
+  it('and the pre-existing overhang is never blamed on the shuffle', () => {
+    // The keyed diff, at the level that matters: run the real gate against the real
+    // seeded room and assert the TV's own finding is not in the result. Mutating
+    // `newRoomFindings` to drop its `had` filter turns this red.
+    const { parts, room } = seededRoom('l', 3.0, 2.4);
+    const locked = parts.map(() => false);
+    const out = shuffleRoom(parts, room, locked, { attempt: 0 });
+    expect(out, 'no arrangement to test the diff with').not.toBeNull();
+    expect(newRoomFindings(parts, room, out!.result).map((f) => f.rule)).not.toContain('overhang');
+  });
+
+  it('but still refuses an arrangement that puts a piece outside the room', () => {
+    // The other direction, or the two tests above are satisfied by a gate that has
+    // been switched off. `outside` is an error, so `serious` selects it; a shuffle
+    // that introduced one must be refused like a clash.
+    const room = { footprint: FOOTPRINT, height: CEILING };
+    const from = diningPair(0.9);
+    const escaped: Placement[] = from.map((p) => ({ x: p.pos[0], z: p.pos[2], yaw: p.rot }));
+    escaped[2] = { x: 4.2, z: 0, yaw: 0 };
+    const result = { placements: escaped, before: 0, after: 0, moved: [2] } as unknown as SolveResult;
+    const kinds = newRoomFindings(from, room, result).map((f) => f.rule);
+    expect(kinds, 'a piece shoved off the plan must be caught').toContain('outside');
   });
 });

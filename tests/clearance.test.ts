@@ -3,7 +3,7 @@ import { analyzeRoom, freeFloorFraction } from '@/lib/clearance';
 import { pointInObb, pointInPoly, polygonArea, type OBB, type Poly } from '@/lib/geometry';
 import { SHAPES, type ScenePart } from '@/lib/scene-spec';
 import { dimRangeFor, ROOM_HEIGHT_M } from '@/lib/dimension-ranges';
-import { partInsideRoom, type Footprint } from '@/lib/footprint';
+import { partInsideRoom, ROOM_FIT_SLACK_MM, type Footprint } from '@/lib/footprint';
 
 const RECT: Footprint = [
   [-3, -2],
@@ -517,6 +517,7 @@ describe('a piece that is not in the room', () => {
     // whole east half of the room at 100 mm, both answers taken from the production
     // functions, so the two cannot be reconciled by editing this file.
     let compared = 0;
+    let disagreed = 0;
     for (let x = 1.5; x <= 4.5; x += 0.1) {
       const s = sofa(x, 0, Math.PI / 2);
       const flagged = outside([s]).length > 0;
@@ -524,11 +525,50 @@ describe('a piece that is not in the room', () => {
       // the drag's disjunction reduces to exactly this.
       expect(flagged, `x = ${x.toFixed(1)}`).toBe(!partInsideRoom(s.pos, s.rot, s.dimMM, RECT));
       compared++;
+      if (flagged) disagreed++;
     }
     // Both answers must appear, or the sweep agrees by never disagreeing about
     // anything: a range entirely inside the room would pass with the rule deleted.
     expect(compared).toBe(31);
+    expect(disagreed, 'the sweep must cross the boundary, not sit on one side of it').toBe(20);
     expect(outside([sofa(1.5, 0, Math.PI / 2)])).toEqual([]);
     expect(outside([sofa(4.5, 0, Math.PI / 2)]).length).toBe(1);
+  });
+
+  it('and both of them agree with the arithmetic', () => {
+    // The sweep above compares two CALLERS of `roomContainment`, so it cannot see a
+    // defect in `roomContainment` itself: break the shared predicate and both sides
+    // move together and the sweep stays green. That is the tautology this repo keeps
+    // finding, one module further out than usual.
+    //
+    // So the same sweep again against an oracle that imports nothing. The room is the
+    // axis-aligned rectangle +/-3 x +/-2 and the sofa is turned side-on, so its world
+    // half-extent along x is just its (slackened) DEPTH over two -- no matrix, no
+    // polygon, no `geometry.ts`. Any change to how containment is computed now has to
+    // be defended here in millimetres.
+    const halfDepthM = (950 - ROOM_FIT_SLACK_MM) / 2000;
+    for (let x = 1.5; x <= 4.5; x += 0.1) {
+      const s = sofa(x, 0, Math.PI / 2);
+      const boxInside = x + halfDepthM <= 3;
+      const centreInside = x <= 3;
+      expect(outside([s]).length > 0, `x = ${x.toFixed(1)}`).toBe(!(boxInside && centreInside));
+    }
+  });
+
+  it('and puts the slack at five millimetres a face, not merely somewhere sane', () => {
+    // `ROOM_FIT_SLACK_MM` had a floor (the flush sofa, 1 mm out) and a ceiling (20 mm
+    // out), which brackets it to roughly [2 mm, 40 mm) -- so 30 survived, and 10 was a
+    // tolerance the suite tolerated rather than a decision it held. One-sided is the
+    // same defect as unpinned, and a bracket twenty times wider than the value is
+    // barely better than one side.
+    //
+    // Side-on the sofa is flush at x = 3 - 0.475 = 2.525, so these two are 4.9 mm and
+    // 5.1 mm through the plaster. Quiet at one and loud at the other puts the slack in
+    // [9.8, 10.2) mm -- half of it per face, since it comes off a dimension and
+    // `obbFromPart` then halves it. Neither sample sits ON the boundary, because a
+    // corner exactly on the edge is a polygon-test coin flip.
+    expect(ROOM_FIT_SLACK_MM).toBe(10);
+    expect(outside([sofa(2.5299, 0, Math.PI / 2)]), '4.9 mm out is within the slack').toEqual([]);
+    expect(outside([sofa(2.5301, 0, Math.PI / 2)]).length, '5.1 mm out is not').toBe(1);
   });
 });

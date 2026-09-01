@@ -2836,10 +2836,12 @@ disagree in the first place.
   ("it keeps its real size and something else says it does not fit") and the answer depends
   on the reporter below existing. Refusing with a true, actionable sentence is the honest
   interim; silently accepting it again is not.
-- **Nothing reports it in the Room panel.** `clearance.ts` emits door · entry · clash ·
-  walk · zone · window · tv · tall · crowding · reach · cut-off · turning, and not one is
+- **Nothing reported it in the Room panel.** `clearance.ts` emitted door · entry · clash ·
+  walk · zone · window · tv · tall · crowding · reach · cut-off · turning, and not one was
   *outside the room* — `tall` is a height check, `freeFloorShare` DISCARDS the outside
-  portion rather than reporting it. So `snapToWall`'s own comment, which says
+  portion rather than reporting it. (Past tense as of § H.16b below, which adds `outside`
+  and `overhang`. Do not read the list above as current; `RULE_KINDS` in
+  `lib/layout-rules.ts` is the one that cannot go stale.) So `snapToWall`'s own comment, which says
   "`clearance.ts` is what says it does not fit", was **false**, and this branch propagated it
   into two more files before anyone checked. Corrected in all three, and the missing rule
   landed as § H.16b below — so the sentence is true now, for the first time, and it is true
@@ -2849,21 +2851,28 @@ disagree in the first place.
 
 A new `ClearanceIssue` kind, which per CLAUDE.md § 3 means a `RULE_HANDLING` row in
 `layout-score.ts` as well — and `tests/layout-conformance.test.ts` will fail until it has
-one, which is the gate working. The cost term already exists (`layout-score.ts`'s `outside`,
-via `outsideShare`), so this is `movable: true` with a real `costTerm`, not one of the
-written-reason rows. Three other paths still exempt riders from containment and would each
+one, which is the gate working. Three other paths still exempt riders from containment and would each
 either feed this rule or be fixed by it — `scene-spec.ts`'s `seats()` (centre-only, and it
 uses the *wider* `wallMounted` flag), `wall-move.ts`'s `carryAttached` (exempts riders from
 its was-inside/now-inside test), and `layout-settle.ts` (`movable = !ridesWall`, so
 `contain()` never runs on one). `placeNewPart` has no legality test at all, so adding an
 oversized curtain from the Library seeds the state this branch now refuses to reproduce.
-**FIXED.** `RULE_KINDS` gains `outside`, `RULE_HANDLING` gains
-`outside: { costTerm: 'outside', movable: true }`, and `clearance.ts` emits it. The
-measurement below is what decided it was shippable, and it reproduces on the shipped rule:
-**24 rooms, 269 parts, 2 findings**, both `warn`, both the 1450 mm TV, at exactly the
-positions recorded here. (The 273 above was taken from an earlier seeder; 269 is what the
-gate prints now, and the gate prints it on every green run rather than leaving the number in
-a document.)
+**FIXED.** `RULE_KINDS` gains **two** kinds, not one, and the second is the review's
+finding rather than the plan's: `outside` (the centre is off the plan) is
+`{ costTerm: 'outside', movable: true }`, but `overhang` (centre in, corners out) is
+`{ costTerm: null, movable: false }` with a written reason. The first version had one kind
+at `movable: true`, which put a **Try a fix** button on the only finding this rule actually
+produces on a shipped preset — a wall-mounted TV — and `movableFor` is
+`!locked && !p.wallMounted`, so no solve this app runs can move it. Three lenses found that
+independently. `outsideShare` is the wrong instrument for the other half besides: its
+samples sit a third of the half-extent in from the edge, so for a sofa side-on the term
+reads a flat **0 from 5 mm to 158 mm** of overhang. Both are errors.
+
+The measurement below is what decided it was shippable, and it reproduces on the shipped
+rule: **24 rooms, 269 parts, 2 findings**, both `overhang`, both the 1450 mm TV, at exactly
+the positions recorded there. (The 273 in the plan block BELOW was taken from an earlier seeder;
+269 is what the gate prints now, and the gate prints it on every green run rather than
+leaving the number in a document.)
 
 **The predicate is shared, not restated.** `roomContainment` and `partInsideRoom` are in
 `lib/footprint.ts` now, and `drag-resolve.ts` reads the second one — a report and a gesture
@@ -2878,6 +2887,25 @@ floor.
 **Nine mutations, nine kills.** slack 0 · slack 200 · `box && centre` → `||` · the rug rule
 applied to everything · the rug rule dropped · severity always `error` · the rule deleted ·
 and the last two again against the preset sweep.
+
+**Seen in a browser, not merely reasoned about.** `scratchpad/pw/probe-h16b.mjs` seeds one
+3.0 × 2.4 room holding both kinds — a 1450 mm wall TV overhanging its wall by 425 mm, and an
+armchair whose centre is 400 mm past the east wall — and reads the Room panel. The trigger
+says **2 issues**; both rows carry the `Worth fixing` pill on `--danger-tint` with
+`--danger-text`; *Sticks out of the room* offers **Show me** only, and *Outside the room*
+offers **Show me** and **Try a fix**. Each row's copy matches the button it actually has.
+Nothing in `.rail-scroll` overflows at 1440 / 1280 / 1100 px. So the `movable` split is
+correct **on screen**, which is the only place it was ever going to be wrong.
+
+Two things about that probe are worth keeping. Its first version walked to the innermost
+element holding a title and reported *no buttons on either row* — which reads exactly like
+the defect being looked for, and would have been believed if the expected answer had been
+"no button". A probe that reports the outcome you expect is not evidence; it has to be able
+to find the button before its failure to find one means anything. And the screenshot showed
+a defect nothing was looking for — see § 30 below, which is not this branch's.
+
+**Still not verified:** whether **Try a fix** on the `outside` row actually clears it. The
+button renders and is enabled; what the solver does when pressed is a separate question.
 
 The worry was false positives: this rule fires on pieces nobody dragged, so every seeded and
 detected room in existence gets re-judged by it the moment it lands. Measured over
@@ -2907,8 +2935,45 @@ in any preset moves, at any of the four sizes.
   out reads as “standing outside the room”, centre in with corners out as “sticks out of the
   room”. No new instrument — and in particular **not `outsideShare`**, whose samples sit 10%
   in from the edges and would report 0% for a piece 20 mm through the plaster.
-- `RULE_HANDLING` wants `outside: { costTerm: 'outside', movable: true }`, and
+- **Superseded by the review — do not implement this bullet as written.** It says
+  `RULE_HANDLING` wants `outside: { costTerm: 'outside', movable: true }`, and
   `tests/layout-conformance.test.ts` then demands a `cases()` entry: a bad/good pair in its
   6 × 4 `RECT` where the report raises `outside` on the bad layout, is quiet on the good one,
   and the solver's `outside` term rises between them and is exactly 0 on the good one. A sofa
   at x ≈ 3.2 against x = 0 is the obvious pair; the term already exists, weighted 1000.
+
+### § 30 — the 2D plan draws a wall NAME and a wall RULER in the same place — NOT FIXED
+
+Found by looking at a screenshot taken for § H.16b, which is the only reason it is here: no
+test asks whether two pieces of text land on each other, and nothing else in this document
+names it. It is a defect that has shipped, is visible on the first room anyone opens in the
+2D tab, and was invisible to typecheck, lint and 1,983 assertions.
+
+In **2D Plan**, the North and East wall labels and the room dimension rulers are both drawn
+just outside the same wall, and they collide. On a bare 3.0 × 2.4 rect, `East wall` renders
+as `Ea` — gap — `wall`, with the vertical `2.40 m` running straight through the middle of
+the words, and the `3.00 m` rule strikes through `North wall`. It is not a furniture problem
+and not a small-room problem: it reproduces with **an empty room at every size measured**,
+and only the amount changes.
+
+Measured by a scratch Playwright probe (`probe-walllabel.mjs`, not in the repo — the method
+is the part worth keeping) that intersects the client rect of every
+`svg text` node pairwise — a question a browser answers exactly, with nothing eyeballed:
+
+| room | North wall × width | East wall × depth |
+|---|---|---|
+| 3.0 × 2.4 | 61 × 10 px | 22 × 26 px |
+| 5.0 × 4.0 | 43 × 7 px | 15 × 18 px |
+| 7.5 × 5.6 | 32 × 5 px | 12 × 13 px |
+
+The overlap **shrinks as the room grows**, which is the useful part of the measurement: it
+says the two are positioned in different spaces — one placed in world units that scale with
+the fit, the other at a fixed screen offset that does not. Whichever way round it is, that
+is the fix. Nudging a constant until these three sizes happen to clear would leave a fourth
+size to find, and this is a repo with a scar for exactly that shape of answer. South and
+West are quiet only because their rulers are drawn on the far side of the room, so there are
+two walls' worth of evidence, not four.
+
+Deliberately not fixed on the § H.16b branch: it is untouched by that work, sits in a
+different module, and folding it in would put an unrelated change under a review that was
+about something else.

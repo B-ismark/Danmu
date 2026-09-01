@@ -1127,8 +1127,10 @@ are what serve "communicate a plan", and they stay.
   arrangement of the floor can help with a ceiling.
   Two checks it makes itself rather than reading off the report, both because the two
   have opposite error budgets — a panel must avoid crying wolf, a fit answer must avoid
-  a false yes. **Containment**, because the report has no finding for a piece that is
-  outside the room (`outside` is a cost with no checker counterpart); without it, a sofa
+  a false yes. **Containment** — the report does now have findings for a piece that is
+  outside (`outside` / `overhang`, § H.16b), but it asks them through `roomContainment`,
+  which forgives `ROOM_FIT_SLACK_MM` — 5 mm a face — so a snapped corner on the boundary
+  is not called a defect. This gate is the full `dimMM`; without one at all, a sofa
   parked through the wall of a too-small room came back "fits". And **overlap**, because
   the report's clash rule is a generous share of the smaller footprint so an ordinary
   dining set is not called a collision; without it, a sofa 31% inside a bed came back
