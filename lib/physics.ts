@@ -86,7 +86,16 @@ export function groundY(
       // catalogue's 400 mm pendant centred at 2.65 m reached 2.85 m in a 2.8 m room.
       // So hang it by whichever is lower — the nominal drop, or its own half-height —
       // which leaves the shallow case (a 200 mm fan at 2.65 m) exactly where it was.
-      return Math.max(Math.min(roomHeight - 0.15, roomHeight - h / 2), h);
+      //
+      // `MOUNT_PAD`, not zero, and that is why this is not a one-character change.
+      // `settleHeights` clamps the same quantity at `roomHeight - MOUNT_PAD`, so a bare
+      // `roomHeight - h / 2` puts the top EXACTLY on the slab, the settle pass then finds
+      // it 20 mm over its own cap, and every ceiling fixture taller than 300 mm creeps
+      // down 20 mm on each load. Two clearances for one quantity is the scar
+      // `settleHeights`' own header describes: "a fan placed by detection and a fan
+      // placed by a drag drifted apart the first time anyone changed it. Nothing would
+      // have said so: both look right, 10 mm apart, in a picture."
+      return Math.max(Math.min(roomHeight - 0.15, roomHeight - MOUNT_PAD - h / 2), h);
     case 'wall-high':
       // AC unit, curtain rod — top edge near ceiling
       return Math.min(roomHeight - h / 2 - 0.05, roomHeight - 0.1);

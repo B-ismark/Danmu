@@ -1,10 +1,13 @@
 // The contract every shape in the catalogue has to satisfy.
 //
-// Adding a shape means touching seven places (Design.md § Adding a shape lists
-// them). Five are held by the compiler — an `as const` array, a union derived from
-// it, two exhaustive `Record<Shape, …>`s. The other two are not, and that asymmetry
-// is the whole reason this file exists: `Partial<Record<Shape, …>>` tables are how
-// a shape inherits behaviour it never declared, and inheriting is silent.
+// Adding a shape means touching eleven places (Design.md § Adding a shape lists them
+// and is the prose half of this file). FIVE are places you put the shape and SIX are
+// tables it otherwise inherits from its category — and of all eleven the compiler holds
+// exactly ONE: `scene-palette`'s `BY_SHAPE`, the only exhaustive `Record<Shape, …>` in
+// the tree. `CATALOG_SHAPES_ORDERED` is a `readonly Shape[]` and `PART_LIBRARY` a
+// `LibraryItem[]`; omitting a shape from either compiles. That asymmetry is the whole
+// reason this file exists: a `Partial<Record<Shape, …>>` is how a shape inherits
+// behaviour it never declared, and inheriting is silent.
 //
 // The scar. `fan-standing` shipped with no row in `ANCHOR_BY_SHAPE`, so it took its
 // CATEGORY's answer — and `fan` means the ceiling one. A 1300 mm pedestal fan hung
@@ -94,12 +97,16 @@ describe('a catalogue shape is spelled the same everywhere', () => {
     // A regex over a renderer, which this suite normally treats as a smell. The
     // exception is named rather than assumed: `ShapeDispatch` is a `switch` in TSX
     // whose arms are JSX elements, so there is no value to import and no table to
-    // read — and the failure it guards is the quietest in the file. A shape with no
-    // arm falls to the default box, renders at the right SIZE, and so looks like a
-    // deliberately blocky piece of furniture rather than a missing one.
+    // read — and the failure it guards is the quietest in the file. `ShapeDispatch` has
+    // no `default:` arm, so a shape with no case of its own renders NOTHING at all: an
+    // invisible, still-selectable, still-collidable piece of furniture.
+    //
+    // Its limit, named rather than left to be discovered: it sees a missing LABEL, not a
+    // missing body. Delete the `return` under `case 'chest-freezer':` and it falls
+    // through to the next arm's geometry with this clause still green.
     const src = read('components/three/DynamicPart.tsx');
     const missing = CATALOG_SHAPES_ORDERED.filter((s) => !src.includes(`case '${s}':`));
-    expect(missing, `these shapes fall through to the default box: ${missing.join(', ')}`).toEqual([]);
+    expect(missing, `these shapes have no arm in ShapeDispatch: ${missing.join(', ')}`).toEqual([]);
   });
 });
 
@@ -113,6 +120,18 @@ describe('a shape lands somewhere the room can hold it', () => {
       // This is the clause the standing fan failed: hung at mesh-centre 2.65 m it
       // spanned 2.00–3.30 m. Slack is one millimetre, not a tolerance — a piece is
       // either inside the room or it is a bug.
+      //
+      // **For a CEILING anchor this is now true by construction and cannot fail**, and
+      // saying so is the point: `groundY` returns `roomHeight - MOUNT_PAD - h/2` for any
+      // fixture over 300 mm, so `hi` is `roomHeight - MOUNT_PAD` whatever `h` is. It had
+      // teeth against the pendant before that fix and has none now. The clause still
+      // earns its place on the floor and wall anchors, where the arithmetic is not
+      // circular — the ceiling case is guarded by the NEXT clause, which stays
+      // falsifiable and is what killed the deleted-anchor mutation.
+      //
+      // It measures `verticalExtent`, which computes from `dimMM`, so it is blind to a
+      // renderer drawing outside its own declared size — and two of them do
+      // (`what-is-still-open.md` § 34).
       expect(lo, `"${i.label}" (${anchorFor(i.category, i.shape)}) starts ${lo.toFixed(2)} m — below the floor`).toBeGreaterThanOrEqual(-0.001);
       expect(
         hi,
@@ -126,12 +145,13 @@ describe('a shape lands somewhere the room can hold it', () => {
     // clause exists rather than the one above alone. Deleting `fan-standing`'s anchor
     // row — the exact defect that shipped — no longer overflows the ceiling, because
     // the `groundY` fix hangs a deep fixture by its own half-height: a 1300 mm fan
-    // comes to rest spanning 1.50–2.80 m. Inside the room, entirely, with its base
+    // comes to rest spanning 1.48–2.78 m. Inside the room, entirely, with its base
     // floating at chest height. The first clause goes green on it.
     //
     // So the ceiling case needs its own question, and it is what "hung from the
     // ceiling" actually means: you can walk under it. A ceiling fan clears 2.55 m, the
-    // pendant 2.40 m, and a pedestal fan that has lost its floor anchor clears 1.50 m.
+    // pendant 2.38 m, and a pedestal fan that has lost its floor anchor clears 1.48 m —
+    // all three re-derived below rather than trusted from this comment.
     let hung = 0;
     for (const i of PART_LIBRARY) {
       if (anchorFor(i.category, i.shape) !== 'ceiling') continue;
@@ -144,7 +164,34 @@ describe('a shape lands somewhere the room can hold it', () => {
           'ceiling fixture, it is a floor piece that has lost its anchor row',
       ).toBeGreaterThanOrEqual(HEAD_CLEARANCE_M);
     }
-    expect(hung, 'the catalogue ships ceiling fixtures and this found none').toBeGreaterThan(1);
+    expect(hung, 'the catalogue ships ceiling fixtures and this found none').toBe(2);
+
+    // **Pinned from BOTH sides, because this constant is the sole guard for the defect
+    // this branch is named after.** Mutation testing found that with
+    // `'fan-standing': 'floor'` deleted AND this lowered to 1.0, the whole suite was
+    // green — 111 files, 2014 passed. Anything in [1.51, 2.40] was free, and under 1.50
+    // the scar returns in silence. A bound asserted from one side is not a bound.
+    expect(HEAD_CLEARANCE_M, 'a decision, not a threshold that drifted to fit').toBe(2.0);
+    // The floor under it is DERIVED, not typed: where does a pedestal fan come to rest
+    // if it loses its anchor row again? `lamp-pendant` is ceiling-anchored, so asking
+    // `groundY` for it at the fan's own height runs the real ceiling rule without
+    // restating it here.
+    const fan = PART_LIBRARY.find((i) => i.shape === 'fan-standing');
+    expect(fan, 'the fan this clause exists for is not in the catalogue').toBeDefined();
+    const asIfHung = groundY('lamp', 'lamp-pendant', fan!.dimMM, ROOM.height) - fan!.dimMM[2] / 2000;
+    expect(
+      HEAD_CLEARANCE_M,
+      `a fan that lost its anchor hangs at ${asIfHung.toFixed(2)} m and must be rejected`,
+    ).toBeGreaterThan(asIfHung);
+    // …and a ceiling over it, so it cannot drift up and start rejecting real fixtures.
+    const lowest = Math.min(
+      ...PART_LIBRARY.filter((i) => anchorFor(i.category, i.shape) === 'ceiling').map(
+        (i) => verticalExtent(i.category, i.shape, i.dimMM, groundY(i.category, i.shape, i.dimMM, ROOM.height))[0],
+      ),
+    );
+    expect(lowest, 'the lowest real fixture must clear the bound with room to spare').toBeGreaterThan(
+      HEAD_CLEARANCE_M + 0.25,
+    );
   });
 
   it('agrees with itself about whether it is on a wall', () => {
@@ -164,7 +211,7 @@ describe('a shape lands somewhere the room can hold it', () => {
       wallRiders++;
       expect(wallAffinity(i.category, i.shape), `"${i.label}"`).toBe('must-wall');
     }
-    expect(wallRiders, 'the catalogue ships wall-mounted pieces and this found none').toBeGreaterThan(5);
+    expect(wallRiders, 'the catalogue ships wall-mounted pieces and this found none').toBe(11);
     // The named case: `other` is `free`, and the window overrules it by anchor alone.
     expect(wallAffinity('other', 'window')).toBe('must-wall');
     expect(wallAffinity('other', 'box')).toBe('free');
@@ -175,9 +222,11 @@ describe('a shape lands somewhere the room can hold it', () => {
   });
 
   it('is something the room report and the solver can both see', () => {
+    let obstacles = 0;
     for (const i of PART_LIBRARY) {
       const part = asPart(i);
       if (!isObstacle(part)) continue;
+      obstacles++;
       // 'other' is a legal role for a ceiling fan, which nothing on the floor has to
       // make room for. For a piece standing IN the room it is not a description, it
       // is a gap: no access zone, nothing it belongs beside, and `RULE_HANDLING` has
@@ -188,6 +237,9 @@ describe('a shape lands somewhere the room can hold it', () => {
           'give it a row in ROLE_BY_SHAPE or ROLE_BY_CATEGORY',
       ).not.toBe('other');
     }
+    // The one filtered loop here that had no count, which is exactly how a narrowed
+    // `isObstacle` could make it iterate zero times and stay green.
+    expect(obstacles, 'the catalogue is mostly floor-standing furniture').toBe(32);
   });
 });
 
@@ -293,7 +345,7 @@ describe('the detector and the app agree on what the labels mean', () => {
     }
     // …and the skip must not be able to swallow the sweep: a typo in the guard that
     // skipped every prompt would leave this a green loop over nothing.
-    expect(checked, 'the label sweep checked almost nothing').toBeGreaterThan(30);
+    expect(checked, 'the label sweep checked almost nothing').toBe(40);
   });
 
   it('tells a pedestal fan from a ceiling fan', () => {

@@ -28,12 +28,13 @@ them. Where two items are the same defect one layer apart, they are listed as on
 
 | # | item | why here | cost | blocks / blocked by |
 |---|---|---|---|---|
-| ~~1~~ | ~~**§ 12** rider keeps the size the room was BUILT at~~ | **FIXED on load** (`lib/rider-settle.ts`). The in-session half — `setDim` settles nothing, so it floats immediately — is open and is a decision: see § 12 | — | its remaining half sits with § B.16 |
+| 1 | **§ 12** rider keeps the size the room was BUILT at | Confirmed by eye, and the user has already chosen the repair — derive at read time, write nothing (§ B.16). An attempt at the OTHER option was built and reverted; read § 12 before starting | M | **blocked on § 33.3** — B.16's stated cost is "the derivation runs on every read" and the render budget is unmeasured |
 | 2 | **§ 32** everything added from the Library is square-footed | The **ceiling fan** is a circle when detected and a square when added, today, on `main`. Two paths disagreeing about one shape is the failure this repo keeps finding | S, once the decision is made | wants the "roundness belongs to the SHAPE" call, which is the same move as § 33.1's contract |
 | 3 | **§ 14** a merged group's member cannot be clicked | User-reported, no cause yet. `PartTree` selects it fine, so it is the canvas hit path | M — unknown | do not guess a cause; sits beside § 17 (both are canvas-pointer) |
 | 4 | **§ 17** a drag refused by a wall TV names nothing | Same surface as § 14 and `refusalCause` is already half of it | S | do with § 14, one pointer-path session |
 | 5 | **§ 18** Shuffle leaves a nightstand through the bed | User-reported. A clash the solver should price and does not | M | overlaps § 31 — both are "what the cost function is allowed to trade" |
 | 6 | **§ 31** containment now outranks a blocked door by a hair | A decision only the user can make, and the third option (veto rather than price) is the largest change. Nothing a user sees today is wrong | M–L | **blocked on the user**; § 18 may make the answer obvious, so do § 18 first |
+| 7 | **§ 34** the pendant and the ceiling fan draw outside their declared size | `fanBlade`'s own defect in two more shapes, and NO gate can see it — every clause reads `dimMM` and so does the renderer's disagreement | S once the meaning of a pendant's height is decided | pairs with § 33.1 — both want the same pair of eyes on the 3D tab |
 | 7 | **§ 33.1** the four newest shapes have never been seen in 3D | Cheap, and it is the honest limit of the shape contract — no test renders geometry | S | none. `visual-check.md` item |
 | 8 | **G.1** a brand-new room seals its own routes at the size the app ships | Measured, real, and a first-run defect — the worst kind to leave | M | related to § 31: both are the solver's idea of "navigable" |
 | 9 | **A.7** `snapYaws` leaves the piece crooked in 197 of 240 solves | Measured, visible, nobody has decided whether it matters | M | after § 31, which may change what a finalist is |
@@ -1990,50 +1991,65 @@ argument for eyes: the four that held were the four a test could most nearly hav
 its axis is not a check, and the person following it reports the wall they hit rather than
 the thing you meant. Nobody was wrong here except the note.
 
-### 12. A rider stays at the size the room was BUILT at, after a reload — FIXED on load; the in-session half is NOT
+### 12. A rider stays at the size the room was BUILT at, after a reload — STILL OPEN, and a fix for it was written and REVERTED
 
 The prediction in `visual-check.md` was exact and the user saw exactly it: resize a surface,
 reopen the room, the piece standing on it hangs in the air above the shrunk top.
 
 `settleHeights` answers entirely in `dimMM`, and a resize never touches `dimMM` — it writes
-a `dims` override. So the load was: `buildSceneFromRoom` settles against the **authored**
+a `dims` override. So the load is: `buildSceneFromRoom` settles against the **authored**
 sizes, `loadTransforms` applies the saved ones over the top, and nothing settles again.
 
-**`lib/rider-settle.ts` is the fix, and § B.16's objection is answered rather than
-overruled.** That objection was that re-settling on load "writes position overrides, and
-every override pins that value against a re-detect and persists it — that stamps the user's
-room to fix a display bug." True of **creating** an override; false of correcting one that
-is already there. So `settleRiders` puts each fix on the layer that already holds that
-part's position — an existing `positions[id]`, or the authored `part.pos` — and **never
-mints a key**. A piece the user has not moved still has no override afterwards, so a
-re-detect still reaches it.
+**A fix was built on `feat/shape-contract` and taken back out before the PR merged. It was
+the wrong one of the three, and § B.16 already said so.** It re-settled on load and wrote
+the result into the store — the first option in B.16's list, the one recorded there with
+the objection that is the reason it "was not done on sight". **The user has already picked
+the second option: derive at read time, write nothing.** Building the first was not a
+judgement call that went the other way; it was a decision that had been made being made
+again, by someone who had not read the section that made it.
 
-It runs in `RoomSync`'s load block **before `ready.current = true`**, and both persist
-effects gate on that flag, so it corrects what is drawn and writes nothing to IndexedDB.
+Two things about how it went wrong are worth keeping, because neither is about riders:
 
-Seven assertions, all seven mutation-killed at the intended clause — including the
-asymmetric case (a desk that GREW, which a drop-only fix passes) and the identity return
-(a fresh array every load would make `useScene`'s subscribers re-persist an unchanged
-scene). The first attempt at that mutation run was worthless and nearly believed: the file
-was still untracked, so `git checkout --` restored nothing, every mutation accumulated on
-the last, and six "kills" were six mutations killing each other. The runner verifies its own
-restore now. **Commit before mutating.**
+- The implementation genuinely believed it had answered the objection, on the grounds that
+  it never *created* a position override — only corrected one already there. That is true
+  and it is not the same as "writes nothing": correcting an existing entry still mutates
+  the persisted `positions` map, which is flushed on the next transform change. **A
+  narrower version of a rejected option is still the rejected option.**
+- It was caught by a review lens pointed at stale documentation, not by one pointed at
+  behaviour. Nothing in the code could have said it: every gate passed, seven assertions
+  were mutation-killed at the intended clause, and the fix worked. The contradiction was
+  between two sections of one document, and the only reason it surfaced is that **§ B.16
+  was never re-read before § 12 was rewritten.** A hand-off document is a claim to
+  re-derive — including a claim about what the user decided.
 
-**The half that is NOT fixed, found while fixing this one.** `setDim` is
+**What is actually wanted, from B.16.** `resolvePart` / `resolveParts` own the one fallback
+in the app; a rider's Y is derived there from its support's *current* dims rather than
+stored. Nothing persists and a re-detect stays clean.
+
+**What that costs, and why it is not a five-minute change.** `useRoomScene` memoises
+`resolveParts` on four store slices and `components/three/Room.tsx` renders from it, so the
+render path does reach it. But `usePartTransform` deliberately does **not** go through the
+list — it exists for the hot paths, `Draggable` mid-gesture and `Dressing` following its
+owner — and a per-part read cannot see the support it stands on. So either the derivation
+lives in the list-level readers only and the two paths answer differently, which is the
+two-sources-of-truth shape this repo keeps finding, or `usePartTransform` gains the list
+and loses the point of its narrow subscription.
+
+**What would unblock it:** a measurement. B.16's stated cost is that "the derivation runs
+on every read", and `settleHeights` does a support lookup per part. § 33.3 records that
+nobody has measured this app's render budget at all, which makes "is a settle per resolve
+affordable" unanswerable rather than merely unanswered. That measurement is the dependency,
+and it is why this is not simply the next thing to do.
+
+**Committed:** nothing. The reverted attempt is in `feat/shape-contract`'s history if the
+pure settle helper is wanted later, but it is not on `main` and it is not the shape the
+answer should take.
+
+**Also still open, and found while building the wrong fix:** `setDim` is
 `set((s) => ({ dims: { ...s.dims, [id]: dim } }))` and nothing settles after it, ever — so
-the lamp floats **immediately, in-session**, and the reload merely made it stick. The load
-fix means it now comes back right on the next open, which is strictly better and still
-visibly odd.
-
-It is not fixed here because the same trick does not work: after `ready.current = true` the
-persist effects are live, and for a piece with no position override the only place to put
-the fix is the authored `parts` — which for a **detected room that has no scene snapshot
-yet** would create one, and a snapshot is preferred over a rebuild from detections. That is
-a stamp by a different door, and it is the same shape of decision § B.16 already is.
-
-**What would unblock it:** deciding whether a settle may create a scene snapshot for a room
-that has none. If not, the honest alternative is to settle at read time in `resolveParts`,
-which is a hot path and wants its own measurement.
+the rider floats **immediately, in-session**, and the reload merely makes it stick. Read-time
+derivation would fix both halves at once, which is a point in its favour that B.16 did not
+have when it was written.
 
 ### 13. The placement row's Floor button sits flush against the window edge — FIXED, and the recorded cause was wrong
 
@@ -3279,3 +3295,42 @@ a drag, on a throttled device — the same shape of measurement `tests/detect-pi
 prints for detection. Until that exists, "how many segments is too many" is a guess,
 and adding detail on the strength of a guess is how a phone-first app stops running on
 phones.
+
+
+### § 34 — two ceiling shapes are drawn bigger than they declare, and no test can see it — OPEN
+
+`CLAUDE.md` rule 2's first corollary, in two more shapes, and `fanBlade` was supposed to be
+the end of it. Found by a review lens pointed at units and frames, not by any gate.
+
+`PendantLampGeo` (`components/three/DynamicPart.tsx`) nets its group offsets to zero, then
+draws a 600 mm cord at `y = +0.3` and a dome cone reaching `y = -0.2`. That is **800 mm of
+geometry for a shape whose `dimMM[2]` is 400 mm**, and asymmetric about its own origin —
+its top is `3 × h/2`. `FanGeo` is the same defect smaller: drawn extent `[-0.04, +0.22]`
+against a declared 200 mm.
+
+| piece | declared | drawn | at its hung Y, in a 2.8 m room |
+|---|---|---|---|
+| Pendant lamp | 400 mm | 800 mm, `[-0.20, +0.60]` | app believes top = 2.78; **draws to 3.18** |
+| Ceiling fan | 200 mm | 260 mm, `[-0.04, +0.22]` | downrod top **2.85**, shade bottom 2.61 |
+
+**Why every gate is green on it.** `verticalExtent` computes from `dimMM`, and so does
+`groundY`, and so does `settleHeights`, and so do both new clauses in
+`tests/shape-contract.test.ts`. The model is self-consistent; the drawing is
+self-consistent; they disagree with each other, and nothing that reads `dimMM` can tell.
+`Draggable` scales by `storedDim / part.dimMM`, so this is the truth at scale 1 rather
+than an artefact of a resize. **This is exactly the class the `fanBlade` extraction was
+supposed to close** — the arithmetic is back inside a TSX renderer, where no test reaches
+it.
+
+**Not fixed on sight.** Moving authored geometry changes how every existing room looks,
+and nobody has had eyes on these two. It is a `visual-check.md` item first.
+
+**What would unblock it:** deciding what the declared height of a pendant *means* — the
+fixture alone, or the fixture plus its drop. The catalogue's 150–900 mm band
+(`dimension-ranges.ts`) reads like the fixture, but a pendant is bought by its drop, and
+`lamp-pendant` is the one shape where the two differ by more than the piece itself. Answer
+that and the geometry follows; guess at it and the next person re-opens this.
+
+**The general repair, if it is wanted:** the same one `fanBlade` got. Pull the span out of
+the renderer into `scene-spec.ts` as a function of `dimMM`, so a test can assert that the
+drawn extent equals the declared one. That is the only version of this that stays fixed.

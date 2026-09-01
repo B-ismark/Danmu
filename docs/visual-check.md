@@ -93,29 +93,32 @@ whole exercise and it is written down as `what-is-still-open.md` § 33.1.
 **Gates.** typecheck 0 · lint 0 · 16/16 contract clauses, all mutation-killed. Shipped in
 PR #82.
 
-### A lamp on a desk you shrank, after a reload
+### The pendant lamp and the ceiling fan are drawn bigger than they declare
 
-**Where to click.** Any room. Put a **Table lamp** on a **Dining / desk table** (drag it
-onto the top until it settles). In the Inspector, set the desk's **height** to something
-much smaller — 400 mm against its default 750. The lamp will visibly stay in the air:
-**that part is still a defect and is expected.** Now reload the page.
+**Where to click.** Any room, **3D Model** tab. Add a **Pendant lamp** from the Library
+(Lighting) and look at the ceiling. Then a **Ceiling fan** (Appliances).
 
-**What right looks like.** After the reload the lamp is sitting on the desk top.
+**What wrong looks like.** The pendant's cord going *into* or *through* the ceiling
+rather than stopping at it, and the fan's downrod doing the same. Look from a low camera
+angle with the dollhouse cut away, because from above the ceiling hides it.
 
-**What wrong looks like.** The lamp still hanging 350 mm above the desk — the original
-report. Or the opposite failure, which is the one to watch for: a piece that was somewhere
-deliberate has *moved* on reload. Check a wall-mounted TV and a rug are exactly where you
-left them, because the settle runs over every part, not only riders.
+**The arithmetic, so you know what you are looking for.** `PendantLampGeo` draws a 600 mm
+cord at `y = +0.3` and a dome reaching `y = -0.2` — **800 mm of geometry for a shape whose
+`dimMM[2]` is 400 mm**, and asymmetric about its own origin. `groundY` hangs it by the
+model `verticalExtent` believes, so the app thinks its top is at 2.80 in a 2.8 m room and
+it is drawn to **3.20**. The ceiling fan is the same defect at 70 mm.
 
-**Why it is here and not closed by its tests.** Seven assertions, all mutation-killed, and
-they all exercise `settleRiders` directly. Nothing exercises `RoomSync`'s load block —
-the ordering of `setParts` / `settleRiders` / `loadTransforms` inside an async effect is
-the part no unit test on this branch reaches.
+**Why no test sees it.** Every clause that measures this — including the new
+`tests/shape-contract.test.ts` ones — asks `verticalExtent`, which computes from `dimMM`.
+The renderer disagrees with `dimMM`, so the model and the drawing are both self-consistent
+and wrong together. This is `CLAUDE.md` rule 2's `fanBlade` corollary in two more shapes,
+and it is the reason that corollary exists.
 
-**Known and deliberate:** the in-session float before the reload. It is the half that is
-still open, for the reason in `what-is-still-open.md` § 12.
+**Not fixed on sight**, deliberately: moving authored geometry changes what every existing
+room looks like, and nobody has had eyes on these two. Recorded as
+`what-is-still-open.md` § 34.
 
-**Gates.** typecheck 0 · lint 0 · 7/7 mutation-killed. Shipped in PR #82.
+**Gates.** Nothing. No test can express it — that is the finding.
 
 ## Drag and selection
 

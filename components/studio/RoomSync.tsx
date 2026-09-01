@@ -13,7 +13,6 @@ import { livingParents } from '@/lib/rigid-parent';
 import { seedHistory } from '@/lib/history';
 import type { ScenePart } from '@/lib/scene-spec';
 import { normalizeStoredParts } from '@/lib/scene-spec';
-import { settleRiders } from '@/lib/rider-settle';
 
 const DEBOUNCE_MS = 300;
 
@@ -49,35 +48,8 @@ export function RoomSync() {
       // Re-derived, not trusted. See `normalizeStoredParts` — this snapshot can be
       // older than the derivation that replaced the stored flag.
       if (savedScene) setParts(normalizeStoredParts(savedScene));
-      // Riders, against the sizes actually in force.
-      //
-      // `buildSceneFromRoom` ends on `settleHeights`, which answers entirely in
-      // `dimMM` — and a resize does not touch `dimMM`, it writes a `dims` override.
-      // So the sequence was: settle against the AUTHORED sizes, then apply the saved
-      // ones over the top, and never settle again. Shrink a desk, reopen the room,
-      // and the lamp hangs in the air at the height the desk used to be.
-      //
-      // Here rather than inside the builder because the builder cannot see the
-      // overrides, and BEFORE `ready.current = true` because both persist effects
-      // below gate on it: this corrects what is drawn and writes nothing to
-      // IndexedDB. `settleRiders` never creates a position override either — see the
-      // rule in lib/rider-settle.ts, which is what answers § B.16's objection rather
-      // than overruling it.
-      const fixed = settleRiders(
-        useScene.getState().parts,
-        t ?? {},
-        room?.height ?? useScene.getState().room.height,
-      );
-      // Through the normaliser, like every other load-path `setParts` — and it is not
-      // ceremony to satisfy `tests/scene-file.test.ts`. These parts came from the saved
-      // snapshot a few lines up, so the reason that call re-derives applies here too:
-      // a snapshot can be older than the derivation that replaced the stored flag. It
-      // is idempotent and returns the SAME object for a part it does not change, so the
-      // second pass costs nothing and keeps the referential equality the memoised part
-      // list depends on.
-      if (fixed.parts !== useScene.getState().parts) setParts(normalizeStoredParts(fixed.parts));
       if (t) {
-        loadTransforms({ ...t, positions: fixed.positions });
+        loadTransforms(t);
         if (t.hidden) setHiddenMap(t.hidden);
       }
       // Unconditional, for the reason `parentIds` below is and `hidden` above is
