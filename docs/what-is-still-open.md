@@ -1995,14 +1995,51 @@ dead breakpoint, second victim, and nobody had reported that one. Nothing clips 
 scrolls, because `.rail` is `overflow: visible`; `1fr` is `minmax(auto, 1fr)`, so the columns
 could not shrink below their own content and the grid overflowed instead.
 
-304px clears both minimums (294px and 285px) and still leaves the narrowest rail that ships
-un-dragged three-up: 307px, at a 1280px viewport, with 13px to spare.
+**And then the fix was itself short by a scrollbar, which is the more useful half of this
+entry.** `42def4b` put the breakpoint at 304px and called the 11px above the stated minimum
+headroom — “13px to spare at a 1280px viewport”. It was not headroom. It was an omitted
+term. The query container was `.rail`, and the Inspector is a scroll box **inside** it, so a
+classic scrollbar sits between the box the query measures and the box the grid gets: the
+grid has `railWidth − border − padding − sbw` while `@container rail` was being told
+`railWidth − border`. 304 was that arithmetic with `sbw` set to zero, and the repo already
+held the other derivation 15px away, in `Inspector.tsx`'s own comment about the lighting row
+— *"less its border, the section's 16px either side **and a vertical scrollbar**"*. Two
+answers to one question, and the breakpoint was taken off the one missing a term.
 
-**The assertion is token-derived**: the widest container query folding each class must be at
-least `--rail-right`'s clamp floor. Necessary and not sufficient — nothing in a test can
-measure a button's min-content — but reachability was the half that was false, and a test
-naming a viewport would have agreed with the bug. Its own premise is pinned too, because
-mutating the token to `rail-left` left it green.
+**Raising the number would have been the wrong repair**, because there is no number: the
+scrollbar is ~11-12px on Windows with `scrollbar-width: thin`, 0 with macOS overlay
+scrollbars, and larger again at high OS text scaling. Instead the query container moved to
+the scroll box itself (`.rail-scroll`, a nested container of the same name, so `@container
+rail` inside the Inspector resolves to it while the left rail still resolves to `.rail`).
+The scrollbar then cancels rather than being estimated: the grid is exactly
+`queryWidth − 32px`, so `261 + 32 = 293` is the widest query box that cannot hold the row,
+and the breakpoint is **293px**.
+
+**Measured, and the old arrangement measured failing beside it.** Headless Chromium renders
+no scrollbar in any launch configuration tried, so a 12px/15px transparent right border on
+the scroll box stands in for one — geometrically the same band. At a **1280px viewport**
+with a 15px stand-in: the shipped arrangement folds to two columns at 259px and nothing
+overflows; the `dcfe1af` arrangement (`container-type: normal` on `.rail-scroll`, so the
+query falls back to `.rail`) stays three-up and **overflows by 2px**. At 12px both are fine,
+by one pixel. That one configuration is the entire defect, and it is the shipping default
+window width.
+
+**The assertion is token-derived and now two-sided**: the widest container query folding each
+class must be at least `--rail-right`'s clamp floor **and strictly below the query box of the
+narrowest rail that ships un-dragged** — `(COMPACT_WIDTH + 1) × 24vw − border`, every term
+read from the source that owns it. The ceiling was missing for one commit and 304 → 320 →
+600 → 99999 all stayed green; each of those folds the shipping default to two columns
+permanently, which is the opposite failure and just as silent. Necessary and not sufficient
+— nothing in a test can measure a button's min-content — but reachability was the half that
+was false, and a test naming a viewport would have agreed with the bug. Its own premise is
+pinned too, because mutating the token to `rail-left` left it green.
+
+**The block parser was reading brace indentation, not braces.** `[\s\S]*?\n\}` ends a block
+at the first `}` in column 1, so indenting the wider block's closing brace merges the
+narrower one into it. Verified: move `.rail-swatches` into the 240px block and indent the
+293px block's brace, and the old regex reports the swatches folding at 293 — green, while
+the real fold is at a width no drag can reach, which is precisely the defect the test exists
+to catch. Brace-counted over `codeOnly(CSS)` now, and the same mutation goes red.
 
 **The cause recorded before any of that, and why it was wrong.** `app/globals.css` carries
 `@container rail (max-width: 240px)` whose own comment says *"The last thing to give is
@@ -2166,6 +2203,37 @@ decision is gone. `achi` is the ONE query in the whole substring space where the
 match sits earlier in `PART_LIBRARY` than the prefix match — AC unit prefix-matches at 1.5,
 Washing machine contains it at 1, rows 41 and 34 — so a tie flips the order there and
 nowhere else. Five mutations, five kills; the 1.5 one is killed by that assertion alone.
+
+**Three survivors the five mutations did not reach, because they were the decisions rather
+than the code.** Each is now pinned, each verified going red.
+
+- **The direction was unguarded.** `hay.includes(q)` widened to
+  `hay.includes(q) || q.includes(h)` survived all 56 assertions in the file. What it admits
+  is not hypothetical: `armchair` contains `air`, so an air purifier answers a query for a
+  chair; `outdoor` contains `door`, so a query the catalog has no answer for comes back with
+  two confident wrong ones instead of an empty list. The comment beside the branch already
+  refused the reverse direction — and a comment is not a check.
+- **Accumulation was untested.** `score +=` → `score =` survived, because every new
+  assertion passed a *single* token. `storage robe` is two, landing on Wardrobe by different
+  branches (group exact 3 + label containment 1 = 4); under `=` the second overwrites the
+  first, Wardrobe scores 1, and the query naming it most precisely ranks it third behind
+  Bookshelf and Shoe rack. A multi-word box is what `rankLibrary` is actually fed.
+- **The catch-all sweep was measuring the other branch.** Its worst query was `ap` — two
+  characters, so a prefix hit on `Appliances`, and the branches are an else-if chain, so
+  containment never ran. **Restricting the sweep by token length does not fix it**, which is
+  worth writing down because it is the obvious repair: at the floor and above, the widest
+  query is `appl`, still a prefix, still the same ten rows. What isolates the branch is a
+  query no hay token could match any other way — not equal to one, not a prefix of one, none
+  a prefix of it. The answer there is `ppli`, also ten. The two ceilings agreeing is the
+  reassuring result; it was only knowable once the query naming it was one the branch served.
+
+Two smaller repairs alongside. The test kept its own copy of the tokeniser, which omitted
+`SYNONYM` — correct today only because `plant` is the one synonym key that is also a hay
+token and maps to itself — and hard-coded the four haystack fields, so a fifth would have
+left the measurement silently scoped to the old four; it imports `hayTokens` from the module
+under test now. And `subs.size === 797` was a tripwire on the **catalog**, not a check on the
+scorer: no edit to `shape-search.ts` can move it and one added row of furniture turns it red.
+It is a floor now, which is all the sweep needs to know it has a space to sweep.
 
 ### 20. Deleting a merged group removed only the bed — FIXED
 

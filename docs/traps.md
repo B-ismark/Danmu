@@ -155,6 +155,58 @@ nothing, which is the same asymmetry as a green from a hollow `node_modules`.
 a baseline run at the top of every battery so a pre-existing red is visible before the
 first mutation.
 
+**Symptom: three separate comments confidently describe a token, class or handler as
+"applied to nothing" / "read nowhere" — and it ships.**
+The reader is a **template string**. `var(--rail-${side}-tight)` in `DockedShell.tsx`
+applies both tight tokens for the whole `compact` step, and a grep for
+`var(--rail-right-tight)` finds the declaration and no reader. The first comment said "dead
+token"; the next two copied it, each adding a sentence of reasoning on top of a false
+premise — and one of them told the next reader *not* to check the number, which scoped a
+later search away from a live band.
+→ **Grep the token's distinctive tail, not the whole name** (`-tight`, `rail-sash--`,
+`--${`), before writing that anything is unused. CLAUDE.md's dead-code sweep names this
+class; the failure mode worth remembering is that a wrong "unused" note **propagates**,
+because it reads as settled and is cheaper to quote than to re-derive.
+*(Cost: twice — three stale comments about `--rail-*-tight` found by one review lens, and
+the same shape earlier with `rail-sash--${side}` in a dead-code sweep.)*
+
+**Symptom: a sweep over "every possible input" reports a worst case that has nothing to do
+with the branch you added.**
+Score-style code is an **else-if chain**, so an input matching an earlier branch never
+reaches the later one. A sweep over the whole input space reports the widest match across
+*all* branches, and if an earlier branch is broader — a prefix match usually is — the number
+it reports is that branch's, and it stays green whatever the new one does.
+→ **Filtering the sweep by the new branch's own guard does not fix this**, and that is the
+trap rather than a footnote: restricting `shape-search`'s substring sweep to tokens at or
+above `CONTAINS_MIN` moved the worst query from `ap` to `appl` — still a prefix of
+`appliances`, still the same ten rows, still the wrong branch. A length guard filters
+*eligibility*, not *attribution*.
+→ **Filter to inputs that can only reach the branch under test** — for containment, queries
+that are not equal to, a prefix of, or prefixed by any haystack token. Then every row
+returned is that branch's and the ceiling is its own. (The right answer here turned out to
+be the same number, 10 at `ppli`; that agreement is only meaningful once the query naming it
+is one the branch actually served.)
+*(Cost: twice — the ceiling was set by the prefix branch when it was first written, and then
+the obvious "filter by length" repair was proposed by a review lens and re-measured to be
+the same defect.)*
+
+**Symptom: a width bug involving a scrollbar cannot be reproduced in a browser probe.**
+**Headless Chromium here renders no scrollbar at all.** `offsetWidth - clientWidth` is 0 on
+a genuinely scrolling box, in every launch configuration tried: default,
+`--disable-features=OverlayScrollbar`, `+FluentOverlayScrollbar,FluentScrollbar`, and old
+`--headless`. So any arithmetic whose missing term IS the scrollbar measures 0 and the probe
+passes — which is exactly how a breakpoint derived with `sbw = 0` was confirmed by a probe
+that could not see the term it omitted.
+→ **Stand a transparent border in for it**: `el.style.borderRight = '15px solid transparent'`
+on the scroll box is the same band taken out of the same content box, and it is injectable
+per-configuration, so one page can be read at 0 / 12 / 15px. Do the same for the arrangement
+under test (`style.containerType = 'normal'` reverts a container move) and the probe becomes
+an A/B on one build instead of two.
+→ 12px and 15px are both worth running: at 12 the old and new arrangements agreed and only
+15 separated them, so a single stand-in value would have shown nothing.
+*(Cost: twice — a probe "confirming" the 304px breakpoint, and then the flag hunt for a
+configuration that renders a classic scrollbar, which does not exist here.)*
+
 **Symptom: a mutation you are testing in a BUILT artifact comes back green, and the
 assertion looks like decoration.**
 The mutation never reached the artifact. A patch script that `assert`s its needle matched

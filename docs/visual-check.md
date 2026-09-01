@@ -285,7 +285,8 @@ rail wanted 252px in the same 243px, and nobody had reported that one at all.
 second**, with the section's padding intact on both sides and nothing touching the window
 edge. The colour swatches in the same rail should be **six across and square**, not eight
 narrow rectangles. Both are measured — `tests/reflow.test.ts` holds the breakpoint above the
-rail's own floor, and a browser probe confirms nothing overflows at 276px.
+rail's own floor and below the narrowest rail that ships un-dragged, and a browser probe
+confirms nothing overflows at 276px.
 
 **What a test cannot settle, and why this is here.** Nothing in a test can measure a
 button's min-content, so the assertion is only that the fold is *reachable*, not that the
@@ -293,7 +294,20 @@ folded layout *reads well*. A lone “Floor” sitting under two buttons may loo
 mistake rather than a row that wrapped — and if it does, the answer is a different
 arrangement of that row, not a different breakpoint.
 
-**Where it rides.** `fix/search-suffix-match`.
+**The second half, and it needs a REAL browser rather than a headless one.** The first fix
+was derived against `.rail`, which is outside the Inspector's scrollbar, so the breakpoint
+was short by whatever that scrollbar is wide. The container is `.rail-scroll` now — the
+scroll box itself — so the scrollbar cancels instead of being estimated, and the number
+dropped from 304 to 293. **Headless Chromium renders no scrollbar at all here** (measured:
+`offsetWidth - clientWidth` is 0 in four launch configurations, with the box genuinely
+scrolling), so what a browser probe can show is a 12px/15px transparent border standing in
+for one — never the real thing. On a Windows machine with classic scrollbars, at a **1280px
+window**, the un-dragged right rail is 307.2px and the row has about a pixel to spare: look
+at whether the three buttons are three, and whether anything is touching the rail's right
+edge. That single width is the whole question.
+
+**Where it rides.** `dcfe1af` (the 268 → 304 fix, merged unseen), then
+`fix/review-survivors` (the container move and 304 → 293).
 
 ---
 
