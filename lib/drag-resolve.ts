@@ -249,8 +249,8 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   // hole — and that is an A/B measured in one run rather than an inference from the
   // escape count. `tests/wall-rider-containment.test.ts` sweeps every pair in
   // `PART_LIBRARY` at min/mid/max size, five layout ids, three angles and 35 targets
-  // — 59,850 placements — and scores each one both ways. With the exemption the
-  // catalogue accepts 50,431; without it, 49,861. The **570** that go are exactly
+  // — 66,150 placements — and scores each one both ways. With the exemption the
+  // catalogue accepts 55,528; without it, 54,958. The **570** that go are exactly
   // the 570 that were leaving the room (311 curtain, 196 window, 45 painting,
   // 18 TV — "wider than the wall it landed on", not a property of curtains), and
   // nothing else moves by one. Both columns are pinned, so the second half of that

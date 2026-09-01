@@ -2710,17 +2710,17 @@ committed `valid` with no red and nothing said.
 
 | | |
 |---|---|
-| escapes | **570** of 50,431 accepted placements |
+| escapes | **570** of 55,528 accepted placements |
 | who | curtain 311 · **window 196** · painting 45 · TV 18 |
 | where | L, T, U only. `rect` and `open` clean at every size |
-| swept | 38 `PART_LIBRARY` pairs × 3 sizes × 3 angles × 35 targets × 5 layout ids = 59,850 |
+| swept | 42 `PART_LIBRARY` pairs × 3 sizes × 3 angles × 35 targets × 5 layout ids = 66,150 |
 
 Not a curtain defect: **wider than the wall it landed on**. A max-size TV and a max-size
 painting do it too, and a mid-size curtain does it in all three non-rectangular presets.
 
 **Deleted rather than repaired, and that was measured rather than judged.** The sweep
-scores both builds in one run: the catalogue accepts **50,431** placements with the
-exemption and **49,861** without it, so removing it costs **exactly** those 570 and not
+scores both builds in one run: the catalogue accepts **55,528** placements with the
+exemption and **54,958** without it, so removing it costs **exactly** those 570 and not
 one besides — the second half of that sentence is the load-bearing one, and it is a
 subtraction rather than a hope. Both columns are pinned in the test. Five of the nine
 riders — `door`, `ac/ac-unit`, both mirrors and `tv/soundbar`, the ones that sit in or on
