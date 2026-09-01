@@ -624,46 +624,58 @@ export function analyzeRoom(
   // ── Why this emits TWO kinds ──
   //
   // `RULE_HANDLING.movable` answers "could rearranging clear it", and the honest
-  // answer here depends on the PIECE, not on the rule. The first version said
-  // `movable: true` for everything, which put a **Try a fix** button on the only
-  // finding this rule actually produces today — a wall-mounted TV — and
-  // `movableFor` is `!locked && !p.wallMounted`, so no solve this app runs can move
-  // it. A button that spins and then reports it found nothing is the exact
-  // anti-pattern `RULE_HANDLING` exists to prevent; `reach` was the last row to
-  // claim a capability it did not have.
+  // answer here depends on the PIECE, not on where it happens to be standing. The
+  // first version said `movable: true` for everything, which put a **Try a fix**
+  // button on a wall-mounted TV that `movableFor` (`!locked && !p.wallMounted`) can
+  // never move. A button that spins and then reports it found nothing is the exact
+  // anti-pattern this table exists to prevent.
   //
-  // So the split is by whether the solver can BOTH move it and see it:
-  //   · `isObstacle` is false for a wall rider, a rug, a piece under
-  //     `OBSTACLE_HEIGHT` and anything standing on a surface — and `c.outside`
-  //     accumulates inside `if (!obstacle[i]) continue`, so for all of those the
-  //     term the table names is identically zero however far out the piece is.
-  //   · Centre out is what `outsideShare` can price. `n` is odd, so its sample grid
-  //     includes the exact centre and the share is at least 1/9 whenever the centre
-  //     is outside. The overhang case it CANNOT price: its outermost sample sits
-  //     ⅙ of the width in from the edge, so a sofa 20 mm through the plaster scores
-  //     a flat 0 — the same sampled instrument CLAUDE.md names as the wrong one for
-  //     this question, which is why the report's own test is corner-exact.
+  // The SECOND version split on geometry — centre off the plan is fixable, merely
+  // crossing a wall is not — and a user found it in one screenshot within a day: a
+  // sofa 300 mm through the wall is ordinary movable furniture standing on the floor,
+  // and it was filed under the immovable kind, so the room reported a fault and
+  // offered nothing. The geometry answers "where is it", which is what the TITLE is
+  // for. It does not answer "can this be fixed".
   //
-  // `outside` is the intersection of those two — an obstacle whose centre is off the
-  // plan — and it is priced, movable, and pinned by `tests/layout-conformance.ts`.
-  // Everything else is `overhang`, with a written reason and no button.
+  // So the split is `isObstacle`, and it is the same predicate `layout-score` gates
+  // `c.outside` on (`if (!obstacle[i]) continue`). That identity is the whole point
+  // and `tests/layout-conformance.test.ts` holds it: **a containment finding is
+  // fixable exactly when the cost term can see the piece.** For a wall rider, a rug,
+  // a piece under `OBSTACLE_HEIGHT` or anything standing on a surface, that term is
+  // identically zero however far out it is — so no amount of searching can improve
+  // it, and the honest row has no button.
+  //
+  // The cost's own dead band was the other half of that report and is fixed in
+  // `layout-score.ts`: `outsideShare` samples a grid whose outermost points sit a
+  // third of the half-extent in from the edge, so it read a flat 0.000 up to ~160 mm
+  // of overhang on a sofa. `outsideDeficit` is corner-exact and non-zero as soon as
+  // any corner is out, so `outside` is now priced across the whole range in which it
+  // is reported. Without that, `movable: true` here would have been a second lie.
   for (const p of parts) {
     const c = roomContainment(p.pos, p.rot, p.dimMM, poly, p.circle);
     const out = p.category === 'rug' ? !c.centre : !(c.box && c.centre);
     if (!out) continue;
+    // WHERE it is — the title and the remedy sentence.
     const standing = !c.centre;
-    const fixable = standing && isObstacle(p);
+    // WHETHER anything can be done — the rule, and so the button.
+    const fixable = isObstacle(p);
     issues.push({
-      id: `${fixable ? 'outside' : 'overhang'}-${p.id}`,
-      rule: fixable ? 'outside' : 'overhang',
+      id: `${fixable ? 'outside' : 'outside-immovable'}-${p.id}`,
+      rule: fixable ? 'outside' : 'outside-immovable',
       // Both are errors. `warn` reads "A bit tight" in the panel, and a piece
       // through the plaster is not a tightness — it is a piece that does not fit,
       // which rule 2 says to state plainly rather than soften.
       severity: 'error',
       title: standing ? 'Outside the room' : 'Sticks out of the room',
-      detail: standing
-        ? `“${p.name}” is standing off the floor plan entirely — there is no room under it.${fixable ? ' Drag it back inside, or use Try a fix.' : ' Drag it back inside.'}`
-        : `“${p.name}” crosses a wall: part of it is outside the room. Turn it, move it along the wall, or give it a wall it fits on.`,
+      detail:
+        (standing
+          ? `“${p.name}” is standing off the floor plan entirely — there is no room under it.`
+          : `“${p.name}” crosses a wall: part of it is outside the room.`) +
+        (fixable
+          ? ' Drag it back inside, or use Try a fix.'
+          : standing
+            ? ' Drag it back inside.'
+            : ' Turn it, move it along the wall, or give it a wall it fits on.'),
       partIds: [p.id],
     });
   }

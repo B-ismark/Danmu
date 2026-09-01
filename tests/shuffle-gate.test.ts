@@ -215,7 +215,7 @@ describe('the shuffle gate and the two findings § H.16b added', () => {
     // That is WHY this holds; the assertion is that it does.
     for (const [id, w, d] of [['l', 3.0, 2.4], ['t', 3.0, 2.4]] as const) {
       const { parts, room } = seededRoom(id, w, d);
-      const before = analyzeRoom(parts, room).issues.filter((i) => i.rule === 'overhang');
+      const before = analyzeRoom(parts, room).issues.filter((i) => i.rule === 'outside-immovable');
       expect(before.length, `${id} ${w}x${d} must start with the overhang this is about`).toBe(1);
 
       const locked = parts.map(() => false);
@@ -245,7 +245,7 @@ describe('the shuffle gate and the two findings § H.16b added', () => {
     const locked = parts.map(() => false);
     const out = shuffleRoom(parts, room, locked, { attempt: 0 });
     expect(out, 'no arrangement to test the diff with').not.toBeNull();
-    expect(newRoomFindings(parts, room, out!.result).map((f) => f.rule)).not.toContain('overhang');
+    expect(newRoomFindings(parts, room, out!.result).map((f) => f.rule)).not.toContain('outside-immovable');
   });
 
   it('but still refuses an arrangement that puts a piece outside the room', () => {

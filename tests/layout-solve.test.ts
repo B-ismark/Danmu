@@ -15,6 +15,7 @@ import {
 } from '@/lib/layout-score';
 import { HARD_TERMS, isWorthOffering, LAYOUT_SIMILAR_M, lockedForSolve, solveLayout } from '@/lib/layout-solve';
 import { analyzeRoom } from '@/lib/clearance';
+import { footFromPart, footInsidePoly } from '@/lib/geometry';
 import { footprintBounds } from '@/lib/footprint';
 import { footprintForLayout } from '@/lib/footprint';
 import { defaultScene } from '@/lib/scene-spec';
@@ -49,10 +50,24 @@ describe('scoreLayout', () => {
   it('costs two pieces in the same place more than anything else', () => {
     const parts = [sofa(), wardrobe()];
     const ctx = ctxOf(parts);
-    const apart = scoreLayout(ctx, [
-      { x: -2, z: 1.4, yaw: 0 },
-      { x: 2, z: -1.6, yaw: 0 },
-    ]);
+    // Both wholly INSIDE the room, which the first version of this fixture was not:
+    // a 2.2 m sofa centred at x = -2 reaches -3.1 against a wall at -3, so 100 mm of
+    // it was through the plaster and the "apart" arrangement was paying a containment
+    // cost as well as demonstrating a cheap one. It passed anyway only because
+    // `outsideShare` could not see an overhang that small; the moment the term learned
+    // to, this test started measuring two things and reported it as overlap no longer
+    // dominating. Kept inside deliberately, and asserted below rather than eyeballed.
+    const apartAt: Placement[] = [
+      { x: -1.85, z: 1.4, yaw: 0 },
+      { x: 1.9, z: -1.6, yaw: 0 },
+    ];
+    for (const [i, pl] of apartAt.entries()) {
+      expect(
+        footInsidePoly(footFromPart([pl.x, 0, pl.z], pl.yaw, parts[i].dimMM, parts[i].circle), RECT),
+        `the "apart" fixture must be wholly in the room, or this measures containment too (piece ${i})`,
+      ).toBe(true);
+    }
+    const apart = scoreLayout(ctx, apartAt);
     const same = scoreLayout(ctx, [
       { x: 0, z: 0, yaw: 0 },
       { x: 0, z: 0, yaw: 0 },
@@ -1061,8 +1076,26 @@ describe('the room’s anchor is settled first', () => {
     const { rows } = scrambledU();
     const clean = rows.filter((r) => HARD_TERMS.every((k) => r[k] === 0)).length;
     expect(rows.length, 'twelve seeds, not whatever the fixture returned').toBe(12);
-    expect(clean, 'seeds ending with nothing on any hard term').toBe(7);
-    expect(Math.max(...rows.map((r) => r.total)), 'worst total').toBeCloseTo(92.1018827121954, 6);
+    expect(clean, 'seeds ending with nothing on any hard term').toBe(9);
+    // Was 7 clean / 92.1018827121954 worst. Both moved when `c.outside` learned to see
+    // an overhang (`outsideDeficit`), and the direction of each is the point:
+    //
+    //   · clean 7 → 9. Two more seeds now end with nothing on any hard term.
+    //   · `outside` is **0.00 on all twelve seeds**, pinned below. Before the change the
+    //     term could not see a piece a few centimetres through the plaster, so a 0 there
+    //     meant "nothing large enough to sample"; now it means what it says.
+    //   · worst total 92.10 → 412.85, and it is NOT containment: seed 1 ends on
+    //     `navigation` 408 with every hard term but that at zero. The solver used to buy
+    //     a connected floor on that seed by letting something overhang for free, and
+    //     cannot any more. Containment is weighted 1000 against navigation's 120, so
+    //     preferring "inside and awkward" to "through the wall" is the ordering working
+    //     rather than a regression — but ~3.4 m² of stranded floor on one seed in twelve
+    //     is a real cost of this change and is recorded here rather than absorbed.
+    expect(Math.max(...rows.map((r) => r.total)), 'worst total').toBeCloseTo(412.85033373443853, 6);
+    expect(
+      rows.map((r) => r.outside),
+      'the solver leaves nothing outside the room on any seed',
+    ).toEqual(rows.map(() => 0));
   }, 120_000);
 
   it('can tell the solved room from the scrambled one it started from', () => {
@@ -1261,22 +1294,46 @@ describe('the finalist pool the search kept', () => {
     expect(pairs, 'there must be pairs to compare').toBeGreaterThan(0);
   });
 
-  it('does NOT contain the winner, because four passes run after the pick', () => {
-    // This test was written the other way round — asserting the winner IS in the pool —
-    // and it failed, which is the useful part. `snapYaws`, `pruneMoves`, `openRoutes` and
-    // a second tidy all run AFTER a finalist is selected, so `placements` is a
-    // post-processed descendant of a pool entry rather than one of them.
-    //
-    // So this pins a CAVEAT rather than a guarantee, and it is deliberately falsifiable:
-    // if a later change makes the winner a pool member again this goes red, and whoever
-    // did it has to come back and correct the docblock that currently tells callers the
-    // pool is raw annealer output. A caveat nothing can contradict is just prose.
-    const parts = messy();
-    const r = solveLayout(parts, RECT, parts.map(() => false), { seed: 3 });
+  // WAS `does NOT contain the winner, because four passes run after the pick`, and it
+  // went red exactly as its own docblock said it should. That note ended "if a later
+  // change makes the winner a pool member again this goes red, and whoever did it has
+  // to come back and correct the docblock" — so this is that correction rather than a
+  // re-pinned number.
+  //
+  // What changed: `c.outside` learned to see an overhang (`outsideDeficit`, added when
+  // a user reported a sofa reported as crossing a wall that **Fix** would not move).
+  // The anneal now pulls pieces wholly inside instead of leaving them a few centimetres
+  // through the plaster at zero cost, so by the time a finalist is picked there is
+  // nothing left for `snapYaws`, `pruneMoves`, `openRoutes` and the second tidy to
+  // change, and the winner comes out byte-identical to its pool entry.
+  //
+  // Verified as caused by that change and not by the fixture: on the pre-change cost
+  // function this same test passes asserting the opposite.
+  //
+  // The CAVEAT the old test existed to pin is UNCHANGED and still the thing callers
+  // need: four passes run after the pick, so the winner is normally a post-processed
+  // descendant of a pool entry rather than one of them. Measured over eight seeds it
+  // is still 7 of 8. What is no longer true is the absolute — seed 3, which the old
+  // single-seed test happened to use, is now the exception, which is why a claim
+  // resting on one seed was worth replacing with a count.
+  //
+  // Pinned EXACTLY, both halves, so a drift in either direction is a red somebody has
+  // to re-derive rather than a bar that quietly stays satisfied.
+  it('contains the winner for one seed in eight, and the caveat still stands', () => {
     const same = (A: Placement[], B: Placement[]) =>
       A.every((q, i) => Math.abs(q.x - B[i].x) < 1e-9 && Math.abs(q.z - B[i].z) < 1e-9);
-    expect(r.finalists.length, 'there must be a pool for this to be a claim about').toBeGreaterThan(0);
-    expect(r.finalists.some((f) => same(f.placements, r.placements))).toBe(false);
+    let pooled = 0;
+    let seeds = 0;
+    for (let seed = 1; seed <= 8; seed++) {
+      const parts = messy();
+      const r = solveLayout(parts, RECT, parts.map(() => false), { seed });
+      if (r.finalists.length === 0) continue;
+      seeds++;
+      if (r.finalists.some((f) => same(f.placements, r.placements))) pooled++;
+    }
+    expect(seeds, 'there must be pools for this to be a claim about').toBe(8);
+    expect(pooled, 'seeds whose winner survived post-processing unchanged').toBe(1);
+    expect(seeds - pooled, 'seeds where the four passes still changed the winner').toBe(7);
   });
 
   it('is EMPTY when nothing could move, rather than a pool of one', () => {

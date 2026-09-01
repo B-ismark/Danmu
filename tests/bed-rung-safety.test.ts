@@ -10,7 +10,9 @@ const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 /** How many of those seeds leave floor a person cannot reach, after the winding fix.
  *  A measurement, not a target — see the baseline tests below. Derived from the table
  *  this file prints; if it moves, read the table rather than editing this to match. */
-const SEEDS_WITH_DANGER = 5;
+// Was 5. One fewer seed carries any danger since `outsideDeficit` — the direction
+// worth noting, because every other figure in this file went UP and this one did not.
+const SEEDS_WITH_DANGER = 4;
 
 /** Scramble exactly as `layout-solve`'s bedroom test does, so the two are
  *  measuring the same room and a number can be carried between them. */
@@ -239,7 +241,17 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
     expect(rows.length).toBe(3);
     const single = rows[rows.length - 1];
     expect(single.width, 'the shipped rung is the narrowest').toBe(900);
-    expect(single.danger, 'sum of danger over 12 seeds').toBeCloseTo(118.0587814554503, 6);
+    // 118.0587814554503 before `outsideDeficit` taught the containment term to see an
+    // overhang. It is NOT a containment regression — `outside` is 0.00 on all twelve
+    // seeds now, pinned in `layout-solve.test.ts` — it is `navigation`: seed 1 alone
+    // carries 408 of stranded floor where it used to carry 36. The solver used to buy
+    // a connected floor on that seed by letting a piece hang through a wall for free,
+    // and cannot any more. Containment is weighted 1000 against navigation's 120, so
+    // preferring “inside and awkward” to “through the wall” is the ordering doing what
+    // it says. Recorded rather than absorbed: ~3.4 m² stranded on one seed in twelve is
+    // a real cost of that trade and somebody should decide whether the weights are
+    // right — see docs/what-is-still-open.md § 31.
+    expect(single.danger, 'sum of danger over 12 seeds').toBeCloseTo(535.2543956332997, 6);
     // Coincides with `layout-solve.test.ts`'s worst-total figure to fifteen digits, and
     // THE COINCIDENCE IS NOT LOAD-BEARING. Both run the same solver over the same seeds
     // on the same scrambled U, so the agreement says the pipeline is deterministic and
@@ -248,7 +260,7 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
     // lift it into a shared constant: that asserts they must always be equal, which no
     // measurement supports, and couples the two files the first time one legitimately
     // moves.
-    expect(single.worst, 'worst total of the 12').toBeCloseTo(92.1018827121954, 6);
+    expect(single.worst, 'worst total of the 12').toBeCloseTo(412.8503337344385, 6);
   }, 180_000);
 
   // The assertion is not "the wider bed scores worse" but "the wider bed produces the
@@ -347,9 +359,24 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
   it('the door term is live, and no rung blocks the door at U 6x5', () => {
     const rows = sweep();
     expect(rows.length, 'over every rung, not whatever the sweep happened to return').toBe(3);
-    for (const r of rows) {
-      expect(r.door, `${r.label} does not block the door at U 6x5`).toBe(0);
-    }
+    // NARROWED, and the narrowing is the finding rather than a re-baseline.
+    //
+    // This loop asserted `door === 0` on ALL THREE rungs. After `outsideDeficit`, the
+    // DOUBLE (1400 mm, not a rung this app ships) scores 165.69: on U 6x5 the solver
+    // now prefers 20% of the door zone blocked to ~190 mm of bed through the wall, and
+    // with containment at 1000 against door at 800 those two price within a few units
+    // of each other. That near-tie is a weights question nobody has decided — recorded
+    // as docs/what-is-still-open.md § 31 rather than papered over here.
+    //
+    // The property this file exists for is UNCHANGED and is the first assertion below:
+    // the rung the app actually ships keeps the door clear. `the ladder comes down for
+    // a reason` above independently requires every rung over it to be unsafe, so a
+    // Double that blocks a door is a rung the ladder already refuses.
+    const shippedRung = rows[rows.length - 1];
+    expect(shippedRung.width, 'the shipped rung is the narrowest').toBe(900);
+    expect(shippedRung.door, 'THE SHIPPED RUNG MUST NOT BLOCK THE DOOR').toBe(0);
+    expect(rows[0].door, 'Queen at U 6x5').toBe(0);
+    expect(rows[1].door, 'Double at U 6x5 — see § 31').toBeCloseTo(165.68806954937938, 6);
     const poly = footprintForLayout('u', 6, 5);
     const base = defaultScene('u', 6, 5, { footprint: poly, height: 2.8 });
     const door = base.findIndex((q) => q.category === 'door');
@@ -404,9 +431,24 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
     // the bed's `dimMM`; dropping that line is the mutation this catches.
     expect(new Set(rows.map((r) => r.median.toFixed(6))).size, 'each rung solves differently').toBe(3);
     const narrowest = rows[rows.length - 1];
-    expect(narrowest.median, 'the narrowest rung is no less tidy than the widest').toBeLessThanOrEqual(
-      rows[0].median,
-    );
+    // WAS `narrowest.median <= rows[0].median` — “coming down the ladder costs no
+    // tidiness”. That ordering no longer holds and is not re-pinned as one: after
+    // `outsideDeficit`, medians are Queen 20.38 / Double 20.77 / Single 22.04, so the
+    // narrowest rung is now about 8% LESS tidy by median than the widest. The reason is
+    // the same one behind every other number that moved in this file: a 900 mm bed has
+    // more freedom to be placed badly-but-legally than a 1600 mm one, and the solver can
+    // no longer spend any of the difference on hanging a piece through a wall.
+    //
+    // What the ladder actually needs is unchanged and is asserted by
+    // `the ladder comes down for a reason` above: the shipped rung is safe and every
+    // rung over it is not. Tidiness was never the argument, so the honest form is a
+    // bound wide enough to be a fact rather than a preference — the rungs are within a
+    // quarter of each other, in either direction, which a genuine tidiness collapse
+    // (the tidy passes not running on one rung) would blow straight through.
+    expect(
+      Math.abs(narrowest.median - rows[0].median) / rows[0].median,
+      'the rungs are not in different tidiness leagues',
+    ).toBeLessThan(0.25);
   }, 180_000);
 
   it('the room as it ships comes down to the narrowest rung', () => {
@@ -466,11 +508,11 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
         `  ${String(SEEDS[i]).padStart(4)} ${danger[i].toFixed(2).padStart(9)} ${r.total.toFixed(2).padStart(10)}`,
       );
     }
-    expect(danger[0], 'seed 1').toBeCloseTo(36.00000000000003, 6);
+    expect(danger[0], 'seed 1').toBeCloseTo(407.99999999999926, 6);
     expect(danger.filter((d) => d > 0.005).length, 'seeds carrying any danger').toBe(SEEDS_WITH_DANGER);
     expect(
       danger.reduce((a, d) => a + d, 0),
       'and they sum to the figure the sweep prints',
-    ).toBeCloseTo(118.0587814554503, 6);
+    ).toBeCloseTo(535.2543956332997, 6);
   }, 180_000);
 });

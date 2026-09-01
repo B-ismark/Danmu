@@ -473,7 +473,7 @@ describe('no preset opens with a piece outside its own room', () => {
         rooms++;
         parts += ps.length;
         for (const i of analyzeRoom(ps, room).issues) {
-          if (i.rule !== 'outside' && i.rule !== 'overhang') continue;
+          if (i.rule !== 'outside' && i.rule !== 'outside-immovable') continue;
           const p = ps.find((q) => q.id === i.partIds[0])!;
           rows.push({
             where: `${id} ${w}×${d}`,
@@ -523,8 +523,8 @@ describe('no preset opens with a piece outside its own room', () => {
     // for a shallow room.
     const { rows } = sweep();
     expect(rows.map((r) => `${r.where} ${r.severity} ${r.what.split(' @ ')[0]}`)).toEqual([
-      'l 3×2.4 overhang tv/tv 1450 mm',
-      't 3×2.4 overhang tv/tv 1450 mm',
+      'l 3×2.4 outside-immovable tv/tv 1450 mm',
+      't 3×2.4 outside-immovable tv/tv 1450 mm',
     ]);
   });
 });
