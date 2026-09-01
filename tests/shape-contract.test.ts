@@ -44,6 +44,15 @@ import { NAME_TO_SHAPE, WORLD_PROMPTS, WORLD_TO_CATEGORY } from '@/lib/local-det
 const root = join(__dirname, '..');
 const read = (p: string) => readFileSync(join(root, p), 'utf8');
 
+/** The lowest a ceiling fixture may hang at its catalogue size, in metres.
+ *
+ *  Not a building regulation and not tuned to pass: it is the line between the two
+ *  things `anchorFor` can mean. Above it a piece is hung and you walk under it; below
+ *  it a piece is standing in the room, and if it is hanging there it is because it
+ *  lost its floor anchor. The catalogue's real fixtures clear it by 400 mm and more,
+ *  so nothing here sits near the bound. */
+const HEAD_CLEARANCE_M = 2.0;
+
 /** A library entry as the scene would hold it, standing where the app puts it. */
 function asPart(i: (typeof PART_LIBRARY)[number]): ScenePart {
   const y = groundY(i.category, i.shape, i.dimMM, ROOM.height);
@@ -110,6 +119,32 @@ describe('a shape lands somewhere the room can hold it', () => {
         `"${i.label}" (${anchorFor(i.category, i.shape)}) reaches ${hi.toFixed(2)} m through a ${ROOM.height} m ceiling`,
       ).toBeLessThanOrEqual(ROOM.height + 0.001);
     }
+  });
+
+  it('hangs nothing from the ceiling that a person would walk into', () => {
+    // Fitting inside the room is not enough, and finding that out is the reason this
+    // clause exists rather than the one above alone. Deleting `fan-standing`'s anchor
+    // row — the exact defect that shipped — no longer overflows the ceiling, because
+    // the `groundY` fix hangs a deep fixture by its own half-height: a 1300 mm fan
+    // comes to rest spanning 1.50–2.80 m. Inside the room, entirely, with its base
+    // floating at chest height. The first clause goes green on it.
+    //
+    // So the ceiling case needs its own question, and it is what "hung from the
+    // ceiling" actually means: you can walk under it. A ceiling fan clears 2.55 m, the
+    // pendant 2.40 m, and a pedestal fan that has lost its floor anchor clears 1.50 m.
+    let hung = 0;
+    for (const i of PART_LIBRARY) {
+      if (anchorFor(i.category, i.shape) !== 'ceiling') continue;
+      hung++;
+      const y = groundY(i.category, i.shape, i.dimMM, ROOM.height);
+      const [lo] = verticalExtent(i.category, i.shape, i.dimMM, y);
+      expect(
+        lo,
+        `"${i.label}" hangs down to ${lo.toFixed(2)} m — under head height, so it is not a ` +
+          'ceiling fixture, it is a floor piece that has lost its anchor row',
+      ).toBeGreaterThanOrEqual(HEAD_CLEARANCE_M);
+    }
+    expect(hung, 'the catalogue ships ceiling fixtures and this found none').toBeGreaterThan(1);
   });
 
   it('agrees with itself about whether it is on a wall', () => {
@@ -272,6 +307,13 @@ describe('the detector and the app agree on what the labels mean', () => {
     expect(refineShape('fan', 'ceiling fan')).toBe('fan');
     // A bare label keeps the old default rather than being silently re-answered.
     expect(refineShape('fan', 'fan')).toBe('fan');
+    // The case that makes the ceiling branch load-bearing rather than decorative.
+    // Cloud labels are free noun phrases, not a fixed vocabulary, and "ceiling fan over
+    // the dining table" is an ordinary thing for one to say — `table` is a standing-fan
+    // word, so with the ceiling test removed this label lands on the floor. Checked by
+    // deleting that line and watching this go red; without it the mutation survived,
+    // because for every SINGLE-word label the branch and the default agree.
+    expect(refineShape('fan', 'ceiling fan over the dining table')).toBe('fan');
   });
 
   it('tells the other three new shapes from their neighbours', () => {
