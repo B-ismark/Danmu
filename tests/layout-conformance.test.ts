@@ -174,15 +174,24 @@ function cases(): Case[] {
   //
   // The rule fires on pieces nobody dragged, so it re-judges every seeded and
   // detected room the moment it lands. That was measured before it did: over
-  // `defaultScene` for all six layout ids at four sizes — 24 rooms, 273 parts — it
+  // `defaultScene` for all six layout ids at four sizes — 24 rooms, 269 parts — it
   // flags 2, and both are the same real defect (a 1450 mm TV on a 1.2 m wall in the
   // 3.0 x 2.4 L and T).
   //
-  // The bad placement puts the sofa's CENTRE past x = 3, which is the "standing
-  // outside" half. The other half — box out, centre in — is a different sentence and
-  // a different severity, and it is covered in `tests/clearance.test.ts`; this pair
-  // exists to hold the report and the solver to each other, and one placement does
-  // that.
+  // The bad placement puts the sofa's CENTRE past x = 3, and that is not a
+  // convenience — it is the whole extent of what `costTerm: 'outside'` can price.
+  //
+  // Three review lenses found this independently, and it is why the rule emits two
+  // kinds. `outsideShare` is a 3x3 sample grid whose outermost samples sit a THIRD of
+  // the half-extent in from the edge, so for this sofa side-on the term reads a flat 0
+  // from 5 mm to 158 mm of overhang. Measured, not inferred: at x = 2.545 the report
+  // says "Sticks out of the room" and `outside` goes 0.000 -> 0.000, so pointing this
+  // fixture's `bad` there makes `the solver charges outside for it` assert 0 > 0. What
+  // saves the centre-out case is that `n` is ODD — the grid includes the exact centre,
+  // so the share is at least 1/9 whenever the centre is out.
+  //
+  // So the overhang half is `overhang`, `costTerm: null`, with a written reason, and it
+  // needs no pair here. That is the classification this file demands, not a gap in it.
   {
     const s = sofa();
     out.push({
@@ -465,7 +474,13 @@ describe('layout-rules · the checker and the solver agree', () => {
 function emittedFamilies(): Set<string> {
   const src = readFileSync(join(process.cwd(), 'lib', 'clearance.ts'), 'utf8');
   const out = new Set<string>();
-  for (const m of src.matchAll(/^\s*rule: '([a-z-]+)',$/gm)) out.add(m[1]);
+  // Every quoted kind on a `rule:` line, not just a line that IS one quoted kind.
+  // `outside` and `overhang` are chosen by a ternary — one finding, two answers to
+  // "could the solver clear it" — and an anchored single-literal regex saw neither,
+  // so the anti-drift guard went quiet on exactly the addition it exists to catch.
+  for (const m of src.matchAll(/^\s*rule: ([^,\n]+),$/gm)) {
+    for (const q of m[1].matchAll(/'([a-z-]+)'/g)) out.add(q[1]);
+  }
   return out;
 }
 

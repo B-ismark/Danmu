@@ -473,11 +473,11 @@ describe('no preset opens with a piece outside its own room', () => {
         rooms++;
         parts += ps.length;
         for (const i of analyzeRoom(ps, room).issues) {
-          if (i.rule !== 'outside') continue;
+          if (i.rule !== 'outside' && i.rule !== 'overhang') continue;
           const p = ps.find((q) => q.id === i.partIds[0])!;
           rows.push({
             where: `${id} ${w}×${d}`,
-            severity: i.severity,
+            severity: i.rule,
             what: `${p.category}/${p.shape} ${p.dimMM[0]} mm @ ${p.pos[0].toFixed(2)},${p.pos[2].toFixed(2)}`,
           });
         }
@@ -494,11 +494,19 @@ describe('no preset opens with a piece outside its own room', () => {
   seeded rooms ${rooms}, parts ${parts}, outside findings ${rows.length}`);
     for (const r of rows) console.log(`    ${r.where.padEnd(12)} ${r.severity.padEnd(5)} ${r.what}`);
 
-    expect(rooms, 'the sweep found no rooms to judge').toBe(LAYOUT_IDS.length * SIZES.length);
+    // NOT `LAYOUT_IDS.length * SIZES.length` — that is the assertion measuring its
+    // own subject, since `rooms` is incremented once per iteration of those same two
+    // arrays and can only fail if a loop body throws. Verified: deleting `'open'` from
+    // `LAYOUT_IDS` left this file green at 89/89 with a whole preset unswept, and the
+    // `parts` floor did not catch it either (269 − open's ~46 is still over 200). The
+    // ids are named instead, so losing one is a red that says which.
+    expect([...LAYOUT_IDS].sort()).toEqual(['custom', 'l', 'open', 'rect', 't', 'u']);
+    expect(rooms).toBe(24);
     expect(parts, 'the sweep found no furniture to judge').toBeGreaterThan(200);
-    // `error` is centre-out: no floor under the middle of the piece. A shipped
-    // preset may never do that at any size, and nothing here does.
-    expect(rows.filter((r) => r.severity === 'error')).toEqual([]);
+    // `outside` is centre-out: no floor under the middle of the piece, and the solver
+    // can both move it and charge for it. A shipped preset may never do that at any
+    // size, and nothing here does. The two `overhang` rows below are the other kind.
+    expect(rows.filter((r) => r.severity === 'outside')).toEqual([]);
   });
 
   it('and the two that overhang are the ones already measured', () => {
@@ -515,8 +523,8 @@ describe('no preset opens with a piece outside its own room', () => {
     // for a shallow room.
     const { rows } = sweep();
     expect(rows.map((r) => `${r.where} ${r.severity} ${r.what.split(' @ ')[0]}`)).toEqual([
-      'l 3×2.4 warn tv/tv 1450 mm',
-      't 3×2.4 warn tv/tv 1450 mm',
+      'l 3×2.4 overhang tv/tv 1450 mm',
+      't 3×2.4 overhang tv/tv 1450 mm',
     ]);
   });
 });

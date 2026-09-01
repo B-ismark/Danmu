@@ -45,6 +45,7 @@ import {
   belongTogether,
   doorPath,
   formsRoute,
+  isObstacle,
   routeWidth,
   roleOf,
   sharesFloor,
@@ -613,38 +614,55 @@ export function analyzeRoom(
   // portion rather than counting it, so a sofa half out of the room read as a room
   // with more free floor than it has.
   //
-  // The predicate is the drag's, shared through `roomContainment` — a report and a
-  // gesture disagreeing about one piece reads as whichever half you are looking at
-  // being broken. What is NOT shared is the drag's rug exemption: its version also
-  // asks `roomIsWideEnough` and `!shovedIntoRoom`, and both are questions about a
-  // gesture. For a piece standing still a rug is outside only when its CENTRE is
-  // out, because overhang — under the furniture, up to the skirting, across an L's
-  // missing corner — is what a rug is for.
+  // The predicate is the drag's, shared through `roomContainment`. What is NOT
+  // shared is the drag's rug exemption: its version also asks `roomIsWideEnough`
+  // and `!shovedIntoRoom`, and both are questions about a gesture. For a piece
+  // standing still a rug is outside only when its CENTRE is out, because overhang —
+  // under the furniture, up to the skirting, across an L's missing corner — is what
+  // a rug is for.
   //
-  // The magnitude costs nothing: both halves are already evaluated. Centre out is
-  // "standing outside", box out with centre in is "sticks out". Deliberately not
-  // `outsideShare`, whose samples sit 10% in from the edges and read 0% for a piece
-  // 20 mm through the plaster.
+  // ── Why this emits TWO kinds ──
   //
-  // Measured before it landed, because this fires on pieces nobody dragged and so
-  // re-judges every seeded and detected room in existence: over `defaultScene` for
-  // all six layout ids at four sizes — 24 rooms, 273 parts — it flags **2**, and
-  // both are real. A 1450 mm TV on a 1.2 m wall in a 3.0 × 2.4 L and the same TV in
-  // the T: the wall runs 1.2 m and the TV overhangs both ends. So the rule's first
-  // act is to report a defect the SEEDER still creates, which is the same class
-  // § H.16 fixed for dragging and did not fix for seeding.
+  // `RULE_HANDLING.movable` answers "could rearranging clear it", and the honest
+  // answer here depends on the PIECE, not on the rule. The first version said
+  // `movable: true` for everything, which put a **Try a fix** button on the only
+  // finding this rule actually produces today — a wall-mounted TV — and
+  // `movableFor` is `!locked && !p.wallMounted`, so no solve this app runs can move
+  // it. A button that spins and then reports it found nothing is the exact
+  // anti-pattern `RULE_HANDLING` exists to prevent; `reach` was the last row to
+  // claim a capability it did not have.
+  //
+  // So the split is by whether the solver can BOTH move it and see it:
+  //   · `isObstacle` is false for a wall rider, a rug, a piece under
+  //     `OBSTACLE_HEIGHT` and anything standing on a surface — and `c.outside`
+  //     accumulates inside `if (!obstacle[i]) continue`, so for all of those the
+  //     term the table names is identically zero however far out the piece is.
+  //   · Centre out is what `outsideShare` can price. `n` is odd, so its sample grid
+  //     includes the exact centre and the share is at least 1/9 whenever the centre
+  //     is outside. The overhang case it CANNOT price: its outermost sample sits
+  //     ⅙ of the width in from the edge, so a sofa 20 mm through the plaster scores
+  //     a flat 0 — the same sampled instrument CLAUDE.md names as the wrong one for
+  //     this question, which is why the report's own test is corner-exact.
+  //
+  // `outside` is the intersection of those two — an obstacle whose centre is off the
+  // plan — and it is priced, movable, and pinned by `tests/layout-conformance.ts`.
+  // Everything else is `overhang`, with a written reason and no button.
   for (const p of parts) {
-    const c = roomContainment(p.pos, p.rot, p.dimMM, poly);
+    const c = roomContainment(p.pos, p.rot, p.dimMM, poly, p.circle);
     const out = p.category === 'rug' ? !c.centre : !(c.box && c.centre);
     if (!out) continue;
     const standing = !c.centre;
+    const fixable = standing && isObstacle(p);
     issues.push({
-      id: `outside-${p.id}`,
-      rule: 'outside',
-      severity: standing ? 'error' : 'warn',
+      id: `${fixable ? 'outside' : 'overhang'}-${p.id}`,
+      rule: fixable ? 'outside' : 'overhang',
+      // Both are errors. `warn` reads "A bit tight" in the panel, and a piece
+      // through the plaster is not a tightness — it is a piece that does not fit,
+      // which rule 2 says to state plainly rather than soften.
+      severity: 'error',
       title: standing ? 'Outside the room' : 'Sticks out of the room',
       detail: standing
-        ? `“${p.name}” is standing off the floor plan entirely — there is no room under it. Drag it back inside, or use Try a fix.`
+        ? `“${p.name}” is standing off the floor plan entirely — there is no room under it.${fixable ? ' Drag it back inside, or use Try a fix.' : ' Drag it back inside.'}`
         : `“${p.name}” crosses a wall: part of it is outside the room. Turn it, move it along the wall, or give it a wall it fits on.`,
       partIds: [p.id],
     });

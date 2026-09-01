@@ -242,6 +242,7 @@ export const RULE_KINDS = [
   'cut-off',
   'turning',
   'outside',
+  'overhang',
 ] as const;
 export type RuleKind = (typeof RULE_KINDS)[number];
 

@@ -322,7 +322,7 @@ export function resolvePlacement(input: ResolveInput): Resolved {
       roomIsWideEnough &&
       !shovedIntoRoom &&
       pointInFootprint(x, z, footprint)) ||
-    partInsideRoom([x, y, z], outRot, dim, footprint);
+    partInsideRoom([x, y, z], outRot, dim, footprint, part.circle);
   const collides = collidesAt(parts, part.id, [x, y, z], outRot, dim);
   // `inRoom` first: see `Resolved.refusal` for why the order is the whole point.
   const refusal: Refusal | undefined = !inRoom

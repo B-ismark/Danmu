@@ -11,6 +11,7 @@ import {
   DEFAULT_WEIGHTS,
   type LayoutContext,
   type Placement,
+  RULE_HANDLING,
 } from '@/lib/layout-score';
 import { HARD_TERMS, isWorthOffering, LAYOUT_SIMILAR_M, lockedForSolve, solveLayout } from '@/lib/layout-solve';
 import { analyzeRoom } from '@/lib/clearance';
@@ -580,6 +581,7 @@ describe('the solver and the room report agree', () => {
 
   it('leaves no blocked door and no two pieces in the same place', () => {
     const complaints: string[] = [];
+    const unpriced: string[] = [];
     for (let seed = 1; seed <= 12; seed++) {
       const parts = randomRoom(seed);
       const r = solveLayout(parts, RECT, parts.map(() => false), { seed });
@@ -590,10 +592,29 @@ describe('the solver and the room report agree', () => {
       }));
       for (const issue of analyzeRoom(after, RECT_ROOM).issues) {
         if (issue.severity !== 'error') continue;
+        // Only the findings the solver CLAIMS to price. Severity alone was the filter
+        // until `overhang` arrived, and that kind is `costTerm: null` by decision: a
+        // piece wider than the room at that spot cannot be moved into fitting, and
+        // `outsideShare` reads a flat 0 for the whole band anyway. Holding the solver
+        // to a rule nothing charges it for is the mirror of the defect this file's
+        // sibling `layout-conformance` exists to catch.
+        if (RULE_HANDLING[issue.rule].costTerm === null) {
+          unpriced.push(`seed ${seed}: ${issue.rule} - ${issue.title}`);
+          continue;
+        }
         complaints.push(`seed ${seed}: ${issue.id} — ${issue.title}`);
       }
     }
     expect(complaints).toEqual([]);
+    // Printed rather than asserted, because it is a MEASUREMENT of a known asymmetry
+    // and not a contract: these are arrangements the room report calls errors and the
+    // solver has no term to descend. It was 13 across 12 seeds when `overhang` landed,
+    // all of them pieces left crossing a wall by a random start the annealer had no
+    // reason to pull back. Pin it and every weight change becomes a red; hide it and
+    // nobody learns the number moved.
+    console.log(`
+  unpriced findings the solver left behind: ${unpriced.length}`);
+    for (const u of unpriced.slice(0, 4)) console.log(`    ${u}`);
   });
 });
 

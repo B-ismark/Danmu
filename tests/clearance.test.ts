@@ -436,7 +436,7 @@ describe('the clash bar is closed on the side the solver charges from', () => {
 describe('a piece that is not in the room', () => {
   const sofa = (x: number, z = 0, rot = 0) =>
     part({ category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880], pos: [x, 0, z], rot });
-  const outside = (parts: ScenePart[]) => analyzeRoom(parts, ROOM).issues.filter((i) => i.rule === 'outside');
+  const outside = (parts: ScenePart[]) => analyzeRoom(parts, ROOM).issues.filter((i) => i.rule === 'outside' || i.rule === 'overhang');
 
   it('says so when the centre is off the plan, and calls it an error', () => {
     // x = 3.2 in a room that ends at x = 3: there is no floor under the middle of
@@ -462,7 +462,7 @@ describe('a piece that is not in the room', () => {
     const s = sofa(0, 0, Math.PI / 2);
     const hits = outside([sofa(2.6, 0)]);
     expect(hits.length).toBe(1);
-    expect(hits[0].severity).toBe('warn');
+    expect(hits[0].severity).toBe('error');
     expect(hits[0].title).toBe('Sticks out of the room');
     expect(outside([s])).toEqual([]);
   });
@@ -492,7 +492,7 @@ describe('a piece that is not in the room', () => {
     const s = sofa(2.545, 0, Math.PI / 2);
     const hits = outside([s]);
     expect(hits.length, '20 mm through the wall is out of the room').toBe(1);
-    expect(hits[0].severity).toBe('warn');
+    expect(hits[0].severity).toBe('error');
   });
 
   it('forgives a rug its overhang, and only its overhang', () => {

@@ -2,7 +2,7 @@
 // non-rectangular (L / T / U / open) instead of a single width×depth box.
 // +X = right (East), +Z = toward South — same axes as the scene.
 
-import { obbFromPart, obbInsidePoly, polyAreaCentroid, polygonSignedArea, polygonWinding, type Poly } from './geometry';
+import { footFromPart, footInsidePoly, polyAreaCentroid, polygonSignedArea, polygonWinding, type Poly } from './geometry';
 
 /** Re-exported rather than defined here. This file and `lib/geometry.ts` each had
  *  their own shoelace loop, and both were answering the same question — which way
@@ -498,13 +498,24 @@ export function roomContainment(
   rot: number,
   dimMM: [number, number, number],
   poly: Footprint,
+  circle?: boolean,
 ): { box: boolean; centre: boolean } {
-  const shrunk = obbFromPart(pos, rot, [
-    dimMM[0] - ROOM_FIT_SLACK_MM,
-    dimMM[1] - ROOM_FIT_SLACK_MM,
-    dimMM[2],
-  ]);
-  return { box: obbInsidePoly(shrunk, poly), centre: pointInFootprint(pos[0], pos[2], poly) };
+  // `footFromPart`, not `obbFromPart` — the drag had the second one and could get
+  // away with it, because it never had `circle` in scope. Every other containment
+  // gate in this repo is circle-aware (`layout-settle`, `seats()`, `wall-move`,
+  // `fit-check`), and a round piece's bounding-square corner sits (√2−1)r beyond the
+  // circle, which 5 mm of slack does not begin to cover. Against an L's re-entrant
+  // corner that is a false POSITIVE with nothing to see: a 400 mm pot plant whose
+  // circle is entirely on the floor has a box corner 135 mm into the notch, so every
+  // other gate seats it and this one would have called it outside the room. A report
+  // that contradicts the placement rule the seeder used is worse than no report.
+  const shrunk = footFromPart(
+    pos,
+    rot,
+    [dimMM[0] - ROOM_FIT_SLACK_MM, dimMM[1] - ROOM_FIT_SLACK_MM, dimMM[2]],
+    circle,
+  );
+  return { box: footInsidePoly(shrunk, poly), centre: pointInFootprint(pos[0], pos[2], poly) };
 }
 
 /** The strict half of the drag's containment test: box AND centre.
@@ -518,7 +529,8 @@ export function partInsideRoom(
   rot: number,
   dimMM: [number, number, number],
   poly: Footprint,
+  circle?: boolean,
 ): boolean {
-  const c = roomContainment(pos, rot, dimMM, poly);
+  const c = roomContainment(pos, rot, dimMM, poly, circle);
   return c.box && c.centre;
 }
