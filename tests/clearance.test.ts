@@ -3,7 +3,7 @@ import { analyzeRoom, freeFloorFraction } from '@/lib/clearance';
 import { pointInObb, pointInPoly, polygonArea, type OBB, type Poly } from '@/lib/geometry';
 import { SHAPES, type ScenePart } from '@/lib/scene-spec';
 import { dimRangeFor, ROOM_HEIGHT_M } from '@/lib/dimension-ranges';
-import type { Footprint } from '@/lib/footprint';
+import { partInsideRoom, type Footprint } from '@/lib/footprint';
 
 const RECT: Footprint = [
   [-3, -2],
@@ -421,5 +421,114 @@ describe('the clash bar is closed on the side the solver charges from', () => {
     const a = part({ category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850], pos: [0, 0, 0] });
     const b = part({ category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850], pos: [0, 0, 0.26] });
     expect(analyzeRoom([a, b], ROOM).issues.filter((i) => i.rule === 'clash')).toEqual([]);
+  });
+});
+
+// ─── Outside the room ───────────────────────────────────────────────────────
+//
+// The drag has refused these placements since H.16 and nothing REPORTED one, so a
+// piece that got outside by any other route -- seeded that way, resized after it
+// was placed, or left behind when a wall moved past it -- sat there in silence.
+// `freeFloorShare` was the nearest thing to a witness and it DISCARDS the outside
+// portion rather than counting it, so a sofa half out of the room read as a room
+// with MORE free floor than it has.
+
+describe('a piece that is not in the room', () => {
+  const sofa = (x: number, z = 0, rot = 0) =>
+    part({ category: 'sofa', shape: 'sofa', dimMM: [2200, 950, 880], pos: [x, 0, z], rot });
+  const outside = (parts: ScenePart[]) => analyzeRoom(parts, ROOM).issues.filter((i) => i.rule === 'outside');
+
+  it('says so when the centre is off the plan, and calls it an error', () => {
+    // x = 3.2 in a room that ends at x = 3: there is no floor under the middle of
+    // it. Nothing else in the room, so nothing else can be raising this.
+    const s = sofa(3.2);
+    const hits = outside([s]);
+    expect(hits.length).toBe(1);
+    expect(hits[0].severity).toBe('error');
+    expect(hits[0].title).toBe('Outside the room');
+    expect(hits[0].partIds).toEqual([s.id]);
+  });
+
+  it('and distinguishes sticking out from standing outside', () => {
+    // Centre in, corners out -- 2.2 m of sofa centred 400 mm from the east wall, so
+    // about 700 mm crosses it. A different sentence and a different severity,
+    // because the remedy differs: this one turns or slides, the one above has to
+    // come back into the room entirely.
+    //
+    // The two are the whole magnitude instrument and they cost nothing, being the
+    // two halves of the containment predicate that is evaluated anyway. Both
+    // assertions are here because a rule that reported one severity for both would
+    // satisfy either of them alone.
+    const s = sofa(0, 0, Math.PI / 2);
+    const hits = outside([sofa(2.6, 0)]);
+    expect(hits.length).toBe(1);
+    expect(hits[0].severity).toBe('warn');
+    expect(hits[0].title).toBe('Sticks out of the room');
+    expect(outside([s])).toEqual([]);
+  });
+
+  it('is quiet about a piece against the wall it belongs to', () => {
+    // The half that stops this being a rule that fires on everything, and it is
+    // placed to be load-bearing rather than comfortable. Turned side-on the sofa is
+    // 950 mm deep, so flush against the east wall its centre sits at
+    // 3 - 0.475 = 2.525; this is 1 mm PAST that, so a millimetre of it is through the
+    // plaster. `ROOM_FIT_SLACK_MM` is 10 mm off each dimension, which is 5 mm per
+    // face, and it is the only reason this is quiet -- set the slack to 0 and this
+    // is the assertion that goes red. A snapped corner landing exactly on the
+    // boundary is a polygon-test coin flip, and that is what the slack exists for.
+    expect(outside([sofa(2.526, 0, Math.PI / 2)])).toEqual([]);
+  });
+
+  it('and reports twenty millimetres through the plaster', () => {
+    // The other end of `ROOM_FIT_SLACK_MM`, and it was missing: the assertion above
+    // pins the slack from BELOW -- set it to 0 and the flush sofa is flagged -- and
+    // nothing pinned it from above. Widening it to 200 mm forgives 100 mm per face
+    // and the whole battery stayed green, which is the same one-sided defect as a
+    // breakpoint with only a floor.
+    //
+    // 20 mm is the number CLAUDE.md names when it says why `outsideShare` is the
+    // wrong instrument here: its samples sit 10% in from the edges and read 0% for a
+    // piece this far out. This rule reads it as a finding.
+    const s = sofa(2.545, 0, Math.PI / 2);
+    const hits = outside([s]);
+    expect(hits.length, '20 mm through the wall is out of the room').toBe(1);
+    expect(hits[0].severity).toBe('warn');
+  });
+
+  it('forgives a rug its overhang, and only its overhang', () => {
+    // Overhang is what a rug is FOR -- under the furniture, up to the skirting,
+    // across an L's missing corner -- so a rug is outside only when its CENTRE is
+    // out. What is deliberately NOT shared from the drag is its rug branch's other
+    // two conditions: `roomIsWideEnough` and `!shovedIntoRoom` are questions about a
+    // GESTURE, and neither means anything about a piece standing still.
+    const overhanging = part({ category: 'rug', shape: 'rug', dimMM: [2000, 1400, 10], pos: [2.6, 0, 0] });
+    expect(outside([overhanging]), 'a rug is allowed over the boundary').toEqual([]);
+
+    const gone = part({ category: 'rug', shape: 'rug', dimMM: [2000, 1400, 10], pos: [3.6, 0, 0] });
+    const hits = outside([gone]);
+    expect(hits.length, 'but not off the plan altogether').toBe(1);
+    expect(hits[0].severity).toBe('error');
+  });
+
+  it('agrees with the drag about the same placement', () => {
+    // The two-sources-of-truth half, and the reason `roomContainment` is shared
+    // rather than restated: a report and a gesture disagreeing about one piece reads
+    // as whichever half you happen to be looking at being broken. Swept over the
+    // whole east half of the room at 100 mm, both answers taken from the production
+    // functions, so the two cannot be reconciled by editing this file.
+    let compared = 0;
+    for (let x = 1.5; x <= 4.5; x += 0.1) {
+      const s = sofa(x, 0, Math.PI / 2);
+      const flagged = outside([s]).length > 0;
+      // `partInsideRoom` is the drag's own strict branch; a sofa is not a rug, so
+      // the drag's disjunction reduces to exactly this.
+      expect(flagged, `x = ${x.toFixed(1)}`).toBe(!partInsideRoom(s.pos, s.rot, s.dimMM, RECT));
+      compared++;
+    }
+    // Both answers must appear, or the sweep agrees by never disagreeing about
+    // anything: a range entirely inside the room would pass with the rule deleted.
+    expect(compared).toBe(31);
+    expect(outside([sofa(1.5, 0, Math.PI / 2)])).toEqual([]);
+    expect(outside([sofa(4.5, 0, Math.PI / 2)]).length).toBe(1);
   });
 });

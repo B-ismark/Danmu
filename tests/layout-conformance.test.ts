@@ -170,6 +170,30 @@ function cases(): Case[] {
     });
   }
 
+  // ── A piece that is not in the room at all ────────────────────────────────
+  //
+  // The rule fires on pieces nobody dragged, so it re-judges every seeded and
+  // detected room the moment it lands. That was measured before it did: over
+  // `defaultScene` for all six layout ids at four sizes — 24 rooms, 273 parts — it
+  // flags 2, and both are the same real defect (a 1450 mm TV on a 1.2 m wall in the
+  // 3.0 x 2.4 L and T).
+  //
+  // The bad placement puts the sofa's CENTRE past x = 3, which is the "standing
+  // outside" half. The other half — box out, centre in — is a different sentence and
+  // a different severity, and it is covered in `tests/clearance.test.ts`; this pair
+  // exists to hold the report and the solver to each other, and one placement does
+  // that.
+  {
+    const s = sofa();
+    out.push({
+      family: 'outside',
+      what: 'a sofa standing off the floor plan',
+      parts: [s],
+      bad: [{ x: 3.2, z: 0, yaw: 0 }],
+      good: [{ x: 0, z: 0, yaw: 0 }],
+    });
+  }
+
   // ── Two pieces in the same place ──────────────────────────────────────────
   {
     const s = sofa();

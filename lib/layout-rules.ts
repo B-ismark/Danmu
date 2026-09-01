@@ -241,6 +241,7 @@ export const RULE_KINDS = [
   'reach',
   'cut-off',
   'turning',
+  'outside',
 ] as const;
 export type RuleKind = (typeof RULE_KINDS)[number];
 

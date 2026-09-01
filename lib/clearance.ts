@@ -17,7 +17,7 @@
 // "Everything fits" over an arrangement that plainly did not.
 
 import type { ScenePart } from './scene-spec';
-import type { Footprint } from './footprint';
+import { roomContainment, type Footprint } from './footprint';
 import {
   faceClearance,
   footArea,
@@ -601,6 +601,51 @@ export function analyzeRoom(
       severity: 'error',
       title: 'Taller than the room',
       detail: `“${p.name}” is ${Math.round(h * 100)} cm tall and the ceiling is ${Math.round(room.height * 100)} cm — ${lead}. ${tail}`,
+      partIds: [p.id],
+    });
+  }
+
+  // ── 7b. Outside the room ─────────────────────────────────────────────────
+  // The drag has refused this placement since § H.16 and nothing REPORTED it, so a
+  // piece that got outside by any other route — seeded that way, resized after it
+  // was placed, or left behind when a wall moved past it — sat there silently.
+  // `freeFloorShare` was the nearest thing to a witness and it DISCARDS the outside
+  // portion rather than counting it, so a sofa half out of the room read as a room
+  // with more free floor than it has.
+  //
+  // The predicate is the drag's, shared through `roomContainment` — a report and a
+  // gesture disagreeing about one piece reads as whichever half you are looking at
+  // being broken. What is NOT shared is the drag's rug exemption: its version also
+  // asks `roomIsWideEnough` and `!shovedIntoRoom`, and both are questions about a
+  // gesture. For a piece standing still a rug is outside only when its CENTRE is
+  // out, because overhang — under the furniture, up to the skirting, across an L's
+  // missing corner — is what a rug is for.
+  //
+  // The magnitude costs nothing: both halves are already evaluated. Centre out is
+  // "standing outside", box out with centre in is "sticks out". Deliberately not
+  // `outsideShare`, whose samples sit 10% in from the edges and read 0% for a piece
+  // 20 mm through the plaster.
+  //
+  // Measured before it landed, because this fires on pieces nobody dragged and so
+  // re-judges every seeded and detected room in existence: over `defaultScene` for
+  // all six layout ids at four sizes — 24 rooms, 273 parts — it flags **2**, and
+  // both are real. A 1450 mm TV on a 1.2 m wall in a 3.0 × 2.4 L and the same TV in
+  // the T: the wall runs 1.2 m and the TV overhangs both ends. So the rule's first
+  // act is to report a defect the SEEDER still creates, which is the same class
+  // § H.16 fixed for dragging and did not fix for seeding.
+  for (const p of parts) {
+    const c = roomContainment(p.pos, p.rot, p.dimMM, poly);
+    const out = p.category === 'rug' ? !c.centre : !(c.box && c.centre);
+    if (!out) continue;
+    const standing = !c.centre;
+    issues.push({
+      id: `outside-${p.id}`,
+      rule: 'outside',
+      severity: standing ? 'error' : 'warn',
+      title: standing ? 'Outside the room' : 'Sticks out of the room',
+      detail: standing
+        ? `“${p.name}” is standing off the floor plan entirely — there is no room under it. Drag it back inside, or use Try a fix.`
+        : `“${p.name}” crosses a wall: part of it is outside the room. Turn it, move it along the wall, or give it a wall it fits on.`,
       partIds: [p.id],
     });
   }

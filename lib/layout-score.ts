@@ -188,6 +188,7 @@ export const RULE_HANDLING: Record<
   zone: { costTerm: 'access', movable: true },
   window: { costTerm: 'window', movable: true },
   tv: { costTerm: 'relation', movable: true },
+  outside: { costTerm: 'outside', movable: true },
 
   // Both of these used to say `costTerm: null` with a note that they were "priced by
   // navigabilityCost over the finalists rather than per proposal". That was not true
