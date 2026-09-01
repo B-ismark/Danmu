@@ -186,12 +186,16 @@ export function checkFit(
       // 2.28 m sofa 73 mm through the wall.
       const settledPart = settleParts([...parts, posed], room.footprint, { frozen }).at(-1)!;
 
-      // Inside the room is then checked HERE rather than read off the room report,
-      // because the report has no finding for a piece that is outside — containment is
-      // a `layout-score` cost (`outside`) with no checker counterpart, one of the
-      // asymmetries `RULE_HANDLING` exists to make visible. Leaving it out is not a
-      // technicality: with nothing else to say about a sofa half through the wall of a
-      // room too small for it, the answer came back "fits".
+      // Inside the room is then checked HERE rather than read off the room report, and
+      // the reason changed under this comment: the report used to have no finding for a
+      // piece that is outside at all, and now it has two (`outside` / `overhang`). What
+      // survives that is the STRICTNESS, which is the half that was doing the work.
+      // `analyzeRoom` asks `roomContainment`, which shrinks the piece by
+      // `ROOM_FIT_SLACK_MM` first, so it forgives 5 mm a face — right for a panel that
+      // must not cry wolf at a snapped corner sitting on the boundary, wrong for an
+      // answer where a false "yes, it fits" costs someone a sofa. This gate is the full
+      // `dimMM`. It also runs on every attempt, where `explain()` runs on `MAX_EXPLAIN`
+      // of them, so the pruning is not free to give up either.
       //
       // `footInsidePoly`, not `outsideShare` — the latter samples, and its samples sit
       // 10% in from the edges, so it forgives a piece 20 mm through the plaster.

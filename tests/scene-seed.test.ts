@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { defaultScene, PART_LIBRARY } from '../lib/scene-spec';
 import { footprintForLayout, offsetWall, pointInFootprint, type Footprint, type LayoutId } from '../lib/footprint';
+import { LAYOUT_IDS } from '../lib/storage';
 import { footFromPart, footInsidePoly, footIntersectionArea, footArea, distToBoundary, nearestEdge, obbGap } from '../lib/geometry';
 import { isObstacle, relationFor, roleOf, sharesFloor, WALK_MIN } from '../lib/layout-rules';
 import { analyzeRoom } from '../lib/clearance';
@@ -439,6 +440,92 @@ describe('starter scene keeps the preset’s promise', () => {
     expect(parts.some((p) => p.category === 'bed')).toBe(true);
     expect(parts.filter((p) => p.category === 'nightstand')).toHaveLength(2);
     expect(parts.some((p) => p.category === 'wardrobe')).toBe(true);
+  });
+});
+
+// ─── What the seed looks like to the room report ────────────────────────────
+//
+// `escaped()` above filters `!p.wallMounted`, so the one class of piece it cannot
+// see is the one that hangs ON a wall — and a wall-rider wider than its wall is
+// exactly how § H.16 got written. `clearance.ts`'s `outside` rule has no such
+// exemption, so this sweep sees what that helper is blind to.
+//
+// Run over every layout id at four sizes, which is the measurement that decided
+// whether the rule was safe to ship: it fires on pieces nobody dragged, so it
+// re-judges every seeded room in existence the moment it lands.
+
+describe('no preset opens with a piece outside its own room', () => {
+  const SIZES: Array<[number, number]> = [
+    [3.0, 2.4],
+    [4.5, 3.6],
+    [6.0, 4.0],
+    [7.5, 5.6],
+  ];
+
+  function sweep() {
+    const rows: Array<{ where: string; severity: string; what: string }> = [];
+    let rooms = 0;
+    let parts = 0;
+    for (const id of LAYOUT_IDS) {
+      for (const [w, d] of SIZES) {
+        const room = { footprint: footprintForLayout(id, w, d), height: HEIGHT };
+        const ps = defaultScene(id, w, d, room);
+        rooms++;
+        parts += ps.length;
+        for (const i of analyzeRoom(ps, room).issues) {
+          if (i.rule !== 'outside' && i.rule !== 'overhang') continue;
+          const p = ps.find((q) => q.id === i.partIds[0])!;
+          rows.push({
+            where: `${id} ${w}×${d}`,
+            severity: i.rule,
+            what: `${p.category}/${p.shape} ${p.dimMM[0]} mm @ ${p.pos[0].toFixed(2)},${p.pos[2].toFixed(2)}`,
+          });
+        }
+      }
+    }
+    return { rows, rooms, parts };
+  }
+
+  it('never stands one off the floor plan altogether', () => {
+    const { rows, rooms, parts } = sweep();
+    // Printed on every green run, which is what `--disableConsoleIntercept` is for:
+    // a drifting baseline should be visible without reading a diff.
+    console.log(`
+  seeded rooms ${rooms}, parts ${parts}, outside findings ${rows.length}`);
+    for (const r of rows) console.log(`    ${r.where.padEnd(12)} ${r.severity.padEnd(5)} ${r.what}`);
+
+    // NOT `LAYOUT_IDS.length * SIZES.length` — that is the assertion measuring its
+    // own subject, since `rooms` is incremented once per iteration of those same two
+    // arrays and can only fail if a loop body throws. Verified: deleting `'open'` from
+    // `LAYOUT_IDS` left this file green at 89/89 with a whole preset unswept, and the
+    // `parts` floor did not catch it either (269 − open's ~46 is still over 200). The
+    // ids are named instead, so losing one is a red that says which.
+    expect([...LAYOUT_IDS].sort()).toEqual(['custom', 'l', 'open', 'rect', 't', 'u']);
+    expect(rooms).toBe(24);
+    expect(parts, 'the sweep found no furniture to judge').toBeGreaterThan(200);
+    // `outside` is centre-out: no floor under the middle of the piece, and the solver
+    // can both move it and charge for it. A shipped preset may never do that at any
+    // size, and nothing here does. The two `overhang` rows below are the other kind.
+    expect(rows.filter((r) => r.severity === 'outside')).toEqual([]);
+  });
+
+  it('and the two that overhang are the ones already measured', () => {
+    // Pinned as a DECISION rather than left to a floor, because both directions
+    // matter. These two are real — a 1450 mm TV on the 1.2 m wall of a 3.0 × 2.4 L
+    // and of the same T, overhanging both ends — so the rule's first act is to
+    // report a defect the SEEDER still creates. § H.16 fixed dragging a rider past
+    // the end of its wall; it did not fix seeding one, and `placeNewPart` has no
+    // legality test at all.
+    //
+    // A red here in the LOW direction is the good news, and the fix is to delete the
+    // row rather than to widen the bar: it means somebody taught the seeder to pick
+    // a screen that fits the wall it chose, the way it already picks a smaller one
+    // for a shallow room.
+    const { rows } = sweep();
+    expect(rows.map((r) => `${r.where} ${r.severity} ${r.what.split(' @ ')[0]}`)).toEqual([
+      'l 3×2.4 overhang tv/tv 1450 mm',
+      't 3×2.4 overhang tv/tv 1450 mm',
+    ]);
   });
 });
 

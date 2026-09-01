@@ -188,6 +188,26 @@ export const RULE_HANDLING: Record<
   zone: { costTerm: 'access', movable: true },
   window: { costTerm: 'window', movable: true },
   tv: { costTerm: 'relation', movable: true },
+  // Only ever emitted for a piece the solver can BOTH move and price, which is
+  // `isObstacle` — and that predicate is doing two jobs here, both of them real.
+  // `movableFor` is `!locked && !p.wallMounted`, so a wall rider is excluded from
+  // every solve this app runs; and `c.outside` accumulates inside `if (!obstacle[i])
+  // continue`, so a rug, a piece under `OBSTACLE_HEIGHT` and anything standing on a
+  // surface are invisible to the term whatever the report says. Both exclusions are
+  // in the row's own predicate now, because a `movable: true` that is false for the
+  // piece in front of the user is a button that spins and then says it found
+  // nothing. That is what this table exists to prevent — see `reach` below, which
+  // was the last row to claim a capability it did not have.
+  outside: { costTerm: 'outside', movable: true },
+  overhang: {
+    costTerm: null,
+    movable: false,
+    why:
+      'the piece is wider than the room can hold at that spot, and every version of ' +
+      'it the solver cannot reach: a wall rider is excluded by `movableFor`, and a ' +
+      'rug, a low piece or anything on a surface is excluded from `c.outside` by ' +
+      '`isObstacle`. Turning or sliding it is the user’s move, not the annealer’s.',
+  },
 
   // Both of these used to say `costTerm: null` with a note that they were "priced by
   // navigabilityCost over the finalists rather than per proposal". That was not true

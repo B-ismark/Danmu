@@ -2,7 +2,7 @@
 // non-rectangular (L / T / U / open) instead of a single width×depth box.
 // +X = right (East), +Z = toward South — same axes as the scene.
 
-import { polyAreaCentroid, polygonSignedArea, polygonWinding, type Poly } from './geometry';
+import { footFromPart, footInsidePoly, polyAreaCentroid, polygonSignedArea, polygonWinding, type Poly } from './geometry';
 
 /** Re-exported rather than defined here. This file and `lib/geometry.ts` each had
  *  their own shoelace loop, and both were answering the same question — which way
@@ -458,4 +458,79 @@ export function wallSegments(
     out.push({ x: mx, z: mz, len, yaw: Math.atan2(nx, nz) });
   }
   return out;
+}
+
+// ─── Is a piece in the room? ────────────────────────────────────────────────
+
+/** How much a piece is shrunk before its box is tested against the walls, mm.
+ *
+ *  The drag has always used it, on both horizontal axes, and it is the difference
+ *  between "against the wall" and "through the wall": a piece snapped flush leaves
+ *  its corners exactly on the boundary, where `pointInPoly` is a coin flip. 10 mm
+ *  is small enough that nothing a person would call outside survives it and large
+ *  enough to absorb the float error a rotation leaves behind. */
+export const ROOM_FIT_SLACK_MM = 10;
+
+/** Whether a piece is in the room, as the two separate facts the drag asks for.
+ *
+ *  Extracted from `lib/drag-resolve.ts` rather than restated, because a report and
+ *  a gesture disagreeing about one piece is the two-sources-of-truth defect this
+ *  repo keeps finding: the drag would refuse a drop the room check called fine, or
+ *  the other way about, and both readings look like the other half being broken.
+ *
+ *  The two are kept apart on purpose — they are different findings, not one with a
+ *  tolerance. `centre` out means the piece is *standing* outside the room; `box` out
+ *  with `centre` in means it *sticks out* of one. That is the whole magnitude
+ *  instrument, and it is free because both predicates are evaluated anyway.
+ *
+ *  **Not `outsideShare`.** That samples the footprint, and its samples sit 10% in
+ *  from the edges, so it reads 0% for a piece 20 mm through the plaster — the exact
+ *  case this is for.
+ *
+ *  What is deliberately NOT here is the rug exemption. The drag's version of that
+ *  also asks `roomIsWideEnough` and `!shovedIntoRoom`, and both are questions about a
+ *  GESTURE — what the pointer chose, and whether the clamp moved the piece away from
+ *  it. Neither means anything for a piece standing still, so a caller reporting on a
+ *  static room applies its own rug rule to `centre` and leaves `box` alone. Overhang
+ *  is what a rug is for. */
+export function roomContainment(
+  pos: [number, number, number],
+  rot: number,
+  dimMM: [number, number, number],
+  poly: Footprint,
+  circle?: boolean,
+): { box: boolean; centre: boolean } {
+  // `footFromPart`, not `obbFromPart` — the drag had the second one and could get
+  // away with it, because it never had `circle` in scope. Every other containment
+  // gate in this repo is circle-aware (`layout-settle`, `seats()`, `wall-move`,
+  // `fit-check`), and a round piece's bounding-square corner sits (√2−1)r beyond the
+  // circle, which 5 mm of slack does not begin to cover. Against an L's re-entrant
+  // corner that is a false POSITIVE with nothing to see: a 400 mm pot plant whose
+  // circle is entirely on the floor has a box corner 135 mm into the notch, so every
+  // other gate seats it and this one would have called it outside the room. A report
+  // that contradicts the placement rule the seeder used is worse than no report.
+  const shrunk = footFromPart(
+    pos,
+    rot,
+    [dimMM[0] - ROOM_FIT_SLACK_MM, dimMM[1] - ROOM_FIT_SLACK_MM, dimMM[2]],
+    circle,
+  );
+  return { box: footInsidePoly(shrunk, poly), centre: pointInFootprint(pos[0], pos[2], poly) };
+}
+
+/** The strict half of the drag's containment test: box AND centre.
+ *
+ *  The drag reads `(rug && …gesture tests… && centre) || partInsideRoom(…)`, and the
+ *  disjunction matters — a rug that is fully inside passes through this second
+ *  branch, so folding the rug case into here would silently refuse a shoved rug that
+ *  ended up entirely in the room. */
+export function partInsideRoom(
+  pos: [number, number, number],
+  rot: number,
+  dimMM: [number, number, number],
+  poly: Footprint,
+  circle?: boolean,
+): boolean {
+  const c = roomContainment(pos, rot, dimMM, poly, circle);
+  return c.box && c.centre;
 }

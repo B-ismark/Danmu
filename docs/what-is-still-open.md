@@ -2263,7 +2263,7 @@ Shipped with six mutations watched failing. One of them was an apparent survivor
 not: **a needle spanning a newline matches nothing in a CRLF tree**, so the mutation had
 never applied and the green meant nothing. `docs/traps.md` already carries that one.
 
-### 21. Shrinking the room leaves the furniture where it was
+### 21. Shrinking the room leaves the furniture where it was — FIXED, and this entry was the stale half
 
 *"reducing room size doesn't seem to move the models on the ground along."* Their screenshot
 shows a sofa and a floor lamp standing entirely outside the shell.
@@ -2273,10 +2273,26 @@ wall goes through `lib/wall-move.ts`, which exists precisely to bring the pieces
 CLAUDE.md's own account of `offsetWall` describes `wall-move.ts` carrying furniture inward.
 The dimension fields in Room tools are the other path, and the report says they do not.
 
-**Not yet confirmed which half is missing** — whether the dims editor never calls the
-carry, or calls it and the carry declines. Establish that before touching either. It is the
-same shape as every other scar in this repo: one operation, two entry points, one of them
-carrying its own copy of the rule.
+**FIXED in `c3ff399` (2026-08-30), and the paragraph above had already been overtaken when
+it was last read.** `carryForResize` in `lib/wall-move.ts` is the typed-in-Room-tools half,
+`recarryForResize` in `lib/transforms.ts` splits its answer across the authored and override
+layers, and `RoomDimsEditor` calls it. The missing half was the second one the paragraph
+guessed at and worse: the editor carried the pieces hung from the CEILING when the height
+changed (`regradeForNewCeiling`) and carried nothing at all when width or depth changed —
+one axis of three.
+
+**This entry was stale for two days and nothing noticed**, which is the hand-off rule in
+CLAUDE.md meeting its own subject: the fix's docblock names this defect in full, the doc did
+not, and a reader trusting the doc would have re-derived a diagnosis that already existed in
+code. Re-derive before acting on a note, and correct the note in the same breath.
+
+Two properties worth keeping. **Displacements ADD** — a sofa in a corner belongs to both
+walls that meet there, and shrinking on both axes has to move it diagonally; a piece spanning
+two OPPOSITE walls gets two cancelling deltas and stays put, which is correct, because it
+does not fit and saying so is the room report's job. And it **never makes containment worse**:
+a piece that was inside and would end up outside is dropped from the move and keeps its
+place, so the room reports a wall standing in it rather than the app silently shoving it.
+That decline is exactly what § H.16b now makes visible.
 
 Note this is NOT the same as a piece the room can no longer hold. Carrying is what happens
 while there is room to move into; § 22 is what happens when there is not.
@@ -2820,29 +2836,76 @@ disagree in the first place.
   ("it keeps its real size and something else says it does not fit") and the answer depends
   on the reporter below existing. Refusing with a true, actionable sentence is the honest
   interim; silently accepting it again is not.
-- **Nothing reports it in the Room panel.** `clearance.ts` emits door · entry · clash ·
-  walk · zone · window · tv · tall · crowding · reach · cut-off · turning, and not one is
+- **Nothing reported it in the Room panel.** `clearance.ts` emitted door · entry · clash ·
+  walk · zone · window · tv · tall · crowding · reach · cut-off · turning, and not one was
   *outside the room* — `tall` is a height check, `freeFloorShare` DISCARDS the outside
-  portion rather than reporting it. So `snapToWall`'s own comment, which says
-  "`clearance.ts` is what says it does not fit", is **false**, and this branch propagated it
-  into two more files before anyone checked. Corrected in all three; the missing rule is
-  § H.16b below.
+  portion rather than reporting it. (Past tense as of § H.16b below, which adds `outside`
+  and `overhang`. Do not read the list above as current; `RULE_KINDS` in
+  `lib/layout-rules.ts` is the one that cannot go stale.) So `snapToWall`'s own comment, which says
+  "`clearance.ts` is what says it does not fit", was **false**, and this branch propagated it
+  into two more files before anyone checked. Corrected in all three, and the missing rule
+  landed as § H.16b below — so the sentence is true now, for the first time, and it is true
+  because the two share one predicate rather than because one of them was fixed to agree.
 
-### § H.16b — nothing reports a piece that is outside the room
+### § H.16b — nothing reports a piece that is outside the room — FIXED
 
 A new `ClearanceIssue` kind, which per CLAUDE.md § 3 means a `RULE_HANDLING` row in
 `layout-score.ts` as well — and `tests/layout-conformance.test.ts` will fail until it has
-one, which is the gate working. The cost term already exists (`layout-score.ts`'s `outside`,
-via `outsideShare`), so this is `movable: true` with a real `costTerm`, not one of the
-written-reason rows. Three other paths still exempt riders from containment and would each
+one, which is the gate working. Three other paths still exempt riders from containment and would each
 either feed this rule or be fixed by it — `scene-spec.ts`'s `seats()` (centre-only, and it
 uses the *wider* `wallMounted` flag), `wall-move.ts`'s `carryAttached` (exempts riders from
 its was-inside/now-inside test), and `layout-settle.ts` (`movable = !ridesWall`, so
 `contain()` never runs on one). `placeNewPart` has no legality test at all, so adding an
 oversized curtain from the Library seeds the state this branch now refuses to reproduce.
-**Still not started — no commit anywhere. What HAS been done is the measurement that
-decides whether it is shippable, and it is, so the next person does not have to take that
-risk blind.**
+**FIXED.** `RULE_KINDS` gains **two** kinds, not one, and the second is the review's
+finding rather than the plan's: `outside` (the centre is off the plan) is
+`{ costTerm: 'outside', movable: true }`, but `overhang` (centre in, corners out) is
+`{ costTerm: null, movable: false }` with a written reason. The first version had one kind
+at `movable: true`, which put a **Try a fix** button on the only finding this rule actually
+produces on a shipped preset — a wall-mounted TV — and `movableFor` is
+`!locked && !p.wallMounted`, so no solve this app runs can move it. Three lenses found that
+independently. `outsideShare` is the wrong instrument for the other half besides: its
+samples sit a third of the half-extent in from the edge, so for a sofa side-on the term
+reads a flat **0 from 5 mm to 158 mm** of overhang. Both are errors.
+
+The measurement below is what decided it was shippable, and it reproduces on the shipped
+rule: **24 rooms, 269 parts, 2 findings**, both `overhang`, both the 1450 mm TV, at exactly
+the positions recorded there. (The 273 in the plan block BELOW was taken from an earlier seeder;
+269 is what the gate prints now, and the gate prints it on every green run rather than
+leaving the number in a document.)
+
+**The predicate is shared, not restated.** `roomContainment` and `partInsideRoom` are in
+`lib/footprint.ts` now, and `drag-resolve.ts` reads the second one — a report and a gesture
+disagreeing about one piece reads as whichever half you are looking at being broken. The
+drag keeps its disjunction and its rug branch; the report applies its own rug rule to the
+centre. `ROOM_FIT_SLACK_MM` is the drag's 10 mm, in one place, and it is pinned at BOTH ends:
+set it to 0 and a sofa flush against the east wall is flagged, widen it to 200 and a sofa
+20 mm through the plaster is not. The upper end was missing from the first battery and seven
+mutations stayed green through it — the same one-sided defect as a breakpoint with only a
+floor.
+
+**Nine mutations, nine kills.** slack 0 · slack 200 · `box && centre` → `||` · the rug rule
+applied to everything · the rug rule dropped · severity always `error` · the rule deleted ·
+and the last two again against the preset sweep.
+
+**Seen in a browser, not merely reasoned about.** `scratchpad/pw/probe-h16b.mjs` seeds one
+3.0 × 2.4 room holding both kinds — a 1450 mm wall TV overhanging its wall by 425 mm, and an
+armchair whose centre is 400 mm past the east wall — and reads the Room panel. The trigger
+says **2 issues**; both rows carry the `Worth fixing` pill on `--danger-tint` with
+`--danger-text`; *Sticks out of the room* offers **Show me** only, and *Outside the room*
+offers **Show me** and **Try a fix**. Each row's copy matches the button it actually has.
+Nothing in `.rail-scroll` overflows at 1440 / 1280 / 1100 px. So the `movable` split is
+correct **on screen**, which is the only place it was ever going to be wrong.
+
+Two things about that probe are worth keeping. Its first version walked to the innermost
+element holding a title and reported *no buttons on either row* — which reads exactly like
+the defect being looked for, and would have been believed if the expected answer had been
+"no button". A probe that reports the outcome you expect is not evidence; it has to be able
+to find the button before its failure to find one means anything. And the screenshot showed
+a defect nothing was looking for — see § 30 below, which is not this branch's.
+
+**Still not verified:** whether **Try a fix** on the `outside` row actually clears it. The
+button renders and is enabled; what the solver does when pressed is a separate question.
 
 The worry was false positives: this rule fires on pieces nobody dragged, so every seeded and
 detected room in existence gets re-judged by it the moment it lands. Measured over
@@ -2872,8 +2935,61 @@ in any preset moves, at any of the four sizes.
   out reads as “standing outside the room”, centre in with corners out as “sticks out of the
   room”. No new instrument — and in particular **not `outsideShare`**, whose samples sit 10%
   in from the edges and would report 0% for a piece 20 mm through the plaster.
-- `RULE_HANDLING` wants `outside: { costTerm: 'outside', movable: true }`, and
+- **Superseded by the review — do not implement this bullet as written.** It says
+  `RULE_HANDLING` wants `outside: { costTerm: 'outside', movable: true }`, and
   `tests/layout-conformance.test.ts` then demands a `cases()` entry: a bad/good pair in its
   6 × 4 `RECT` where the report raises `outside` on the bad layout, is quiet on the good one,
   and the solver's `outside` term rises between them and is exactly 0 on the good one. A sofa
   at x ≈ 3.2 against x = 0 is the obvious pair; the term already exists, weighted 1000.
+
+### § 30 — the 2D plan draws a wall NAME and a wall RULER in the same place — NOT FIXED
+
+Found by looking at a screenshot taken for § H.16b, which is the only reason it is here: no
+test asks whether two pieces of text land on each other, and nothing else in this document
+names it. It is a defect that has shipped, is visible on the first room anyone opens in the
+2D tab, and was invisible to typecheck, lint and 1,983 assertions.
+
+In **2D Plan**, the North and East wall labels and the room dimension rulers are both drawn
+just outside the same wall, and they collide. On a bare 3.0 × 2.4 rect, `East wall` renders
+as `Ea` — gap — `wall`, with the vertical `2.40 m` running straight through the middle of
+the words, and the `3.00 m` rule strikes through `North wall`. It is not a furniture problem
+and not a small-room problem: it reproduces with **an empty room at every size measured**,
+and only the amount changes.
+
+Measured by a scratch Playwright probe (`probe-walllabel.mjs`, not in the repo — the method
+is the part worth keeping) that intersects the client rect of every
+`svg text` node pairwise — a question a browser answers exactly, with nothing eyeballed:
+
+| room | North wall × width | East wall × depth |
+|---|---|---|
+| 3.0 × 2.4 | 61 × 10 px | 22 × 26 px |
+| 5.0 × 4.0 | 43 × 7 px | 15 × 18 px |
+| 7.5 × 5.6 | 32 × 5 px | 12 × 13 px |
+
+The overlap **shrinks as the room grows** only because the whole plan is scaled to fit, and
+both texts scale with it — `North wall` measures 92 x 26 px at 3.0 x 2.4 and 47 x 13 px at
+7.5 x 5.6, the ruler 61 x 22 and 32 x 12. In the plan's own user units the collision is
+constant, and there is no size that escapes it.
+
+The mechanism is exact, and it is not a near miss. Both are drawn in `PlanView.tsx`. A wall
+label sits 26 user units along its edge's outward normal; the overall-dimension ruler is a
+band at 11-26 units outside the plan box on the top and right. For a rectangle the north and
+east walls ARE those two sides of the box, so the label is placed inside the ruler's band by
+construction. And the ruler is not merely near it: each of its numbers carries an opaque
+`fill="var(--paper)"` backdrop rect, drawn AFTER the labels, so it does not overlap the word
+so much as **erase the middle of it**. That is exactly what `Ea` - gap - `wall` is. South and
+West are quiet because no ruler is drawn on those two sides, so this is two walls' worth of
+evidence rather than four.
+
+The first version of this entry blamed "one placed in world units, the other at a fixed
+screen offset". That was read off the source and it was wrong — both offsets are fixed, and
+the px numbers shrink because of the fit scale. Recorded because a wrong reason in a document
+is worse than no reason: it is cheaper to quote than to re-derive, and it scopes the next
+person's search.
+
+The fix is therefore a one-line question — move the label out of the band, not nudge it
+within one — and the constants are already there to do it against rather than by taste.
+
+Deliberately not fixed on the § H.16b branch: it is untouched by that work, sits in a
+different module, and folding it in would put an unrelated change under a review that was
+about something else.
