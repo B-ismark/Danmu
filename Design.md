@@ -803,6 +803,91 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
   left was a dead subsystem wearing the names of a permanently removed feature,
   which reads as a rule-1 violation to whoever finds it next.
 
+### Adding a shape — the contract
+
+Ten places, and knowing which of them the compiler holds is the whole point. This
+list is the answer to "what rules does a new model have to follow"; the executable
+half is `tests/shape-contract.test.ts`, whose sixteen clauses are named for the
+rules below, so a failure says which one was broken.
+
+**The five the compiler holds.** Add the id to `SHAPES` (`lib/scene-spec.ts`) — an
+`as const` array with `Shape` derived from it, never a union beside a hand-kept
+`Set`. Then `CATALOG_SHAPES_ORDERED` if a person may add it; `PART_LIBRARY` for the
+row the picker draws; `BY_SHAPE` in `lib/scene-palette.ts`, an exhaustive
+`Record<Shape, string>`; and a `case` in `ShapeDispatch`. Miss one of the first four
+and it will not build. Miss the renderer and **it builds**, drawing a plain box at
+the right size — which reads as deliberately blocky furniture, not as a missing
+arm. That is the contract's first clause.
+
+**The five that are `Partial<Record<Shape, …>>`, which is where shapes go wrong.**
+A partial table is how a shape inherits behaviour from its category, and inheriting
+is silent — you get an answer, just not yours.
+
+| table | file | what a wrong inherited answer looks like |
+|---|---|---|
+| `BY_SHAPE` | `dimension-ranges.ts` | a 1250 mm chest freezer clamped to an upright fridge's 950 mm — a catalogue default the app itself refuses |
+| `ANCHOR_BY_SHAPE` | `physics.ts` | **the scar below** |
+| `ROLE_BY_SHAPE` | `layout-rules.ts` | role `other`: no access zone, nothing it belongs beside, and no `RULE_HANDLING` term that can move it |
+| `LIGHT_BY_SHAPE` | `scene-spec.ts` | a fixture that looks lit and emits nothing |
+| access / belongs-with zones | `layout-rules.ts` | the solver parks a bed across it |
+
+**The scar.** `fan-standing` shipped with no `ANCHOR_BY_SHAPE` row, so it took its
+category's — and `fan` means the *ceiling* one. A 1300 mm pedestal fan hung from the
+slab at mesh-centre 2.65 m, spanning 2.00–3.30 m: half a metre through a 2.8 m
+ceiling. Nothing said so. `isObstacle` gates on `pos[1] < 0.05`, so the room report
+could not see it, the solver never priced it, and every catalogue-wide sweep in the
+suite stayed green — because each one asks whether a shape is **present** in some
+table, and this shape was present in all of them. Absence was never the defect. So
+the contract asks about **behaviour at the catalogue's own default** instead: where
+does it end up, can anything move it, can a person find it, can a photograph produce
+it.
+
+The fix for that one clause is worth stating too, because it caught a second thing.
+Deleting the anchor row no longer overflows the ceiling — `groundY` now hangs a deep
+fixture by its own half-height, so the fan comes to rest spanning 1.50–2.80 m,
+entirely inside the room with its base floating at chest height. A fix masking the
+defect its sibling clause was written for. Hence a second question, which is what
+"hung from the ceiling" actually means: **you can walk under it.**
+
+**Sizes.** Pick a tier — `fixed` for a manufactured item, `standard` for real
+variety, `flexible` for made-to-measure — and give the shape its own band rather
+than letting it borrow its category's. The band must be legal **in every unit the
+user can switch to**, which is what `boundsToUnit` is for: a range narrower than one
+step of a coarse unit collapses or inverts (a door's 35–60 mm rounds to min 0.2 ft /
+max 0.1 ft, and every arrow press then lands on the wrong end).
+
+**Geometry is authored at exactly `part.dimMM`.** `Draggable` scales by
+`storedDim / part.dimMM`, so a renderer with its own idea of the size renders the
+wrong size at scale 1 — see `fanBlade` above. The widest element **is** `dimMM[0]`:
+the standing fan's guard is the full width with a narrower base, and the stool's
+legs sit inside its radius at the floor. If a piece is round, the plan needs
+`circle` — which a Library item cannot currently express (§ 32).
+
+**Colour** comes from `BY_SHAPE`, hand-synced to the CSS tokens and guarded by
+`tests/color-tokens.test.ts`. Never a literal hex in a renderer for a surface the
+user can recolour.
+
+**Grouping is load-bearing for search, not just for the picker.** `hayTokens` scores
+against label + group + category + shape, so the group a shape joins widens the
+query space: two shapes joining `Appliances` moved a measured substring ceiling from
+10 to 12 rows. Adding any shape also moves the wall-rider sweep's three counts,
+which are pinned exactly — re-derive them, never widen them.
+
+**Detection is a vocabulary problem, not a geometry one.** The detector never sees
+these meshes; it emits a *label and a box*, and `refineShape` maps that to a shape.
+A shape no label refines to is one a photograph can never produce, however good it
+looks. `refineShape` had no `fan` case, so every fan a photo found became a ceiling
+fan — including `electric fan`, which is what the exported vocabulary calls a
+pedestal one.
+
+**The on-device vocabulary is frozen and cannot be extended from TypeScript.**
+`WORLD_PROMPTS` mirrors `WORLD_VOCAB` in `scripts/export-detector.py`, whose **key
+order** `set_classes()` baked into the graph as class channels. Insert a prompt in
+the middle and every label after it comes back shifted by one — no crash, just a
+detector reporting a sofa as an armchair. Adding one means re-exporting the graph
+and re-pinning `MODEL_DIGESTS`. The cloud path has no such limit: its prompt
+interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
+
 ### Set-dressing & decor — `Dressing.tsx`
 - Surface-capable parts carry props (books, vase, plant, bowl, candle),
   auto-suggested via a **seeded** generator (stable per part id) or user-managed

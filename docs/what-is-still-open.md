@@ -15,6 +15,40 @@ point of writing this down.
 
 ---
 
+## The queue — what is open, in the order it should be done
+
+**Re-derive before trusting this.** It is an ordering of the sections below, written
+2026-09-01; the sections themselves are the source and they say whether each item
+exists in a commit. An item disappears from here when its section says FIXED.
+
+Ranked by three things together, not by any one of them: **criticality** (does a user
+hit it), **ease** (is it an afternoon or a measurement campaign), and **dependence** —
+which is what moves several of these off the position their severity alone would give
+them. Where two items are the same defect one layer apart, they are listed as one.
+
+| # | item | why here | cost | blocks / blocked by |
+|---|---|---|---|---|
+| 1 | **§ 12** rider keeps the size the room was BUILT at | Confirmed by eye, wrong pixels on every reload of a resized room, and the diagnosis is already written: `buildSceneFromRoom` settles against AUTHORED dims, then `loadTransforms` applies saved ones and nothing settles again | S–M | none — the reason it is first |
+| 2 | **§ 32** everything added from the Library is square-footed | The **ceiling fan** is a circle when detected and a square when added, today, on `main`. Two paths disagreeing about one shape is the failure this repo keeps finding | S, once the decision is made | wants the "roundness belongs to the SHAPE" call, which is the same move as § 33.1's contract |
+| 3 | **§ 14** a merged group's member cannot be clicked | User-reported, no cause yet. `PartTree` selects it fine, so it is the canvas hit path | M — unknown | do not guess a cause; sits beside § 17 (both are canvas-pointer) |
+| 4 | **§ 17** a drag refused by a wall TV names nothing | Same surface as § 14 and `refusalCause` is already half of it | S | do with § 14, one pointer-path session |
+| 5 | **§ 18** Shuffle leaves a nightstand through the bed | User-reported. A clash the solver should price and does not | M | overlaps § 31 — both are "what the cost function is allowed to trade" |
+| 6 | **§ 31** containment now outranks a blocked door by a hair | A decision only the user can make, and the third option (veto rather than price) is the largest change. Nothing a user sees today is wrong | M–L | **blocked on the user**; § 18 may make the answer obvious, so do § 18 first |
+| 7 | **§ 33.1** the four newest shapes have never been seen in 3D | Cheap, and it is the honest limit of the shape contract — no test renders geometry | S | none. `visual-check.md` item |
+| 8 | **G.1** a brand-new room seals its own routes at the size the app ships | Measured, real, and a first-run defect — the worst kind to leave | M | related to § 31: both are the solver's idea of "navigable" |
+| 9 | **A.7** `snapYaws` leaves the piece crooked in 197 of 240 solves | Measured, visible, nobody has decided whether it matters | M | after § 31, which may change what a finalist is |
+| 10 | **§ 33.3** the render budget is unmeasured | Blocks any answer to "how detailed may a shape be", which was asked directly | M — needs a throttled device | blocks nothing shipping; blocks a decision |
+| 11 | **§ 33.2** the on-device detector cannot name the four new shapes | Needs a 50 MB re-export and a digest re-pin on a Python toolchain | L, and mostly not code | the cloud path already handles them, so this is a completeness item |
+| 12 | **A.2 / G.2 / G.3** variety in Shuffle, the anchor-first trade, the two help cards | Real but none of them is a defect a user has reported | varies | after everything above |
+| 13 | **E** the jsdom component bucket | The harness is in and the bucket is not. Infrastructure, so it pays off across every item above — but it has paid off least when done first | L | none |
+
+**Three that are deliberately not on this list**, so nobody adds them back: the seeder
+putting a 1450 mm TV on a 1.2 m wall in the small L and T (`placeNewPart` has no
+legality test — real, but it is the *seeder*, and § C says do not grow the presets);
+anything in § C at all; and § A.5, the Vercel alias question, which is not engineering.
+
+---
+
 ## Picking this up cold
 
 **Derive the state; do not trust this file for it.** Everything below the next heading was
@@ -3112,3 +3146,101 @@ worst seed went from 92.10 to 412.85 total, all of it `navigation` — the solve
 connected floor on that seed by letting a piece hang through a wall for free. It strands about
 3.4 m² instead now. Eleven of twelve seeds are unaffected and two MORE seeds end completely
 clean than before, so the exchange is favourable on balance; it is the tail that moved.
+
+
+### § 32 — a piece added from the Library is square-footed, whatever shape it is — OPEN
+
+**Two files cited this section before it existed.** `lib/scene-spec.ts` and `Design.md`
+both point at "§ 32" and it was never written down — the reference was made in the
+commit that decided not to fix the thing, and the entry it pointed at did not follow.
+A dangling cross-reference is worse than no reference: it reads as settled, and the
+next person looks for a decision that is not there. Written now, from the code.
+
+`ScenePart` carries `circle?: boolean`, and it is what makes the plan draw a round
+piece as the ellipse it is rather than as its bounding box — `lib/plan-hit.ts` tests
+the pointer against that same footprint, so it is hit-testing as well as drawing.
+`CATEGORY_DEFAULTS` sets it for `lamp`, `plant` and `fan`, so a piece the **detector**
+produces is round when it should be.
+
+`LibraryItem` has no `circle` field and `spawn` never sets one. So everything added
+from the **Library** is square-footed, including:
+
+| piece | shape | drawn in plan as |
+|---|---|---|
+| Ceiling fan | `fan` | a 1000 mm **square** |
+| Standing fan | `fan-standing` | a 450 mm square |
+| Stool | `stool` | a 350 mm square |
+| Floor lamp | `lamp-floor` | a 300 mm square |
+| Table lamp | `lamp-table` | a square |
+| Plant | `plant` | a square |
+| Pendant lamp | `lamp-pendant` | a square |
+| Oval mirror | `mirror-oval` | a rectangle |
+
+The ceiling fan is the one that matters most and it is **today, on `main`**: the same
+piece is a circle when detected from a photo and a square when added from the picker,
+so the two paths disagree about the geometry of one shape. It is also the piece whose
+round footprint is most load-bearing, since `fanBlade` exists precisely so the swept
+circle equals the declared width.
+
+**Not fixed here, deliberately, and this is the decision.** The cheap patch is a
+`circle?: boolean` on `LibraryItem` copied through `spawn` — which creates a *third*
+place the roundness of a shape is written down (`CATEGORY_DEFAULTS`, `PART_LIBRARY`,
+and whatever the plan falls back to), and they will disagree, because two already do.
+The honest fix is that **roundness is a property of the SHAPE**, not of a catalogue
+row or a category: one `ROUND_SHAPES` set beside `SHAPES`, read by both paths, with
+`CATEGORY_DEFAULTS.circle` deleted rather than left as a second answer. That is the
+same move `fanBlade` and `wallAffinity` already made, and it is small — but it changes
+what every existing saved room's `circle` field means on load, so it wants its own
+measurement of the persisted data path rather than being slipped into a catalogue
+commit.
+
+**What would unblock it:** deciding whether `circle` stays a per-part override at all,
+or becomes purely derived from the shape. If derived, a persisted `circle` that
+disagrees with its shape is either dropped or honoured, and that is the only real
+question.
+
+### § 33 — three things the shape contract left open — OPEN
+
+From the same session that added `tests/shape-contract.test.ts`. All three are
+**measurements or capabilities that do not exist**, not defects.
+
+**1. The four newest shapes have never been looked at in 3D.** `fan-standing`,
+`chest-freezer`, `tv-console` and `stool` typecheck, lint, and satisfy all sixteen
+contract clauses — and **no test renders geometry**, so nothing in this repo has an
+opinion about whether the standing fan reads as a fan or as a lollipop. The contract
+can prove a shape is authored at `dimMM` and that its widest element matches; it
+cannot prove it looks like the thing it is named after. This is a `visual-check.md`
+item, and it is the honest limit of the whole contract.
+
+**2. The on-device detector cannot name any of the four, and TypeScript cannot fix
+it.** `WORLD_PROMPTS` mirrors `WORLD_VOCAB` in `scripts/export-detector.py`, whose key
+order `set_classes()` baked into the graph as class channels — so adding a prompt in
+TS alone does *nothing*, and adding one in the middle shifts every label after it by
+one. Naming the new shapes on-device means re-running the export, re-hosting the
+weights, and re-pinning `MODEL_DIGESTS` on both sides. The cloud path already handles
+them, because its prompt interpolates `CATALOG_SHAPES_ORDERED` and `refineShape` now
+has cases for all four. `tests/shape-contract.test.ts` pins the two lists against each
+other so the drift cannot happen silently again.
+
+**What would unblock it:** a machine with the Python + torch toolchain, and a decision
+about whether four more prompts are worth a 50 MB re-export and a re-pin — the
+open-vocabulary model's accuracy on added prompts is itself unmeasured.
+
+**3. Nobody has measured the render budget, so "how detailed can a shape be" has no
+answer.** The question was asked directly and the framing it came with is worth
+correcting first: **subdivision is not a network cost here.** There is no GLB path —
+zero `useGLTF`, `GLTFLoader` or `.glb` in the tree, since rule 1 deleted `mesh-cache`
+— so every shape is procedural three.js primitives and a more detailed one costs a few
+hundred bytes of JS, not a download. The real ceiling is draw calls and frame time.
+
+What is known: the whole renderer uses 25 cylinders, 14 planes, 5 spheres, 5 circles,
+3 cones, 2 tori and 2 boxes, with radial segments spanning 8–28. What is **not** known
+is the frame cost of a furnished room on a mid-range phone, which is the machine this
+is for, and `frameloop="demand"` means the interesting number is cost-per-interaction
+rather than steady-state FPS.
+
+**What would unblock it:** a scene with a known part count, `renderer.info` read after
+a drag, on a throttled device — the same shape of measurement `tests/detect-pipeline`
+prints for detection. Until that exists, "how many segments is too many" is a guess,
+and adding detail on the strength of a guess is how a phone-first app stops running on
+phones.
