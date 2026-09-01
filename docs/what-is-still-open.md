@@ -2966,13 +2966,29 @@ is the part worth keeping) that intersects the client rect of every
 | 5.0 × 4.0 | 43 × 7 px | 15 × 18 px |
 | 7.5 × 5.6 | 32 × 5 px | 12 × 13 px |
 
-The overlap **shrinks as the room grows**, which is the useful part of the measurement: it
-says the two are positioned in different spaces — one placed in world units that scale with
-the fit, the other at a fixed screen offset that does not. Whichever way round it is, that
-is the fix. Nudging a constant until these three sizes happen to clear would leave a fourth
-size to find, and this is a repo with a scar for exactly that shape of answer. South and
-West are quiet only because their rulers are drawn on the far side of the room, so there are
-two walls' worth of evidence, not four.
+The overlap **shrinks as the room grows** only because the whole plan is scaled to fit, and
+both texts scale with it — `North wall` measures 92 x 26 px at 3.0 x 2.4 and 47 x 13 px at
+7.5 x 5.6, the ruler 61 x 22 and 32 x 12. In the plan's own user units the collision is
+constant, and there is no size that escapes it.
+
+The mechanism is exact, and it is not a near miss. Both are drawn in `PlanView.tsx`. A wall
+label sits 26 user units along its edge's outward normal; the overall-dimension ruler is a
+band at 11-26 units outside the plan box on the top and right. For a rectangle the north and
+east walls ARE those two sides of the box, so the label is placed inside the ruler's band by
+construction. And the ruler is not merely near it: each of its numbers carries an opaque
+`fill="var(--paper)"` backdrop rect, drawn AFTER the labels, so it does not overlap the word
+so much as **erase the middle of it**. That is exactly what `Ea` - gap - `wall` is. South and
+West are quiet because no ruler is drawn on those two sides, so this is two walls' worth of
+evidence rather than four.
+
+The first version of this entry blamed "one placed in world units, the other at a fixed
+screen offset". That was read off the source and it was wrong — both offsets are fixed, and
+the px numbers shrink because of the fit scale. Recorded because a wrong reason in a document
+is worse than no reason: it is cheaper to quote than to re-derive, and it scopes the next
+person's search.
+
+The fix is therefore a one-line question — move the label out of the band, not nudge it
+within one — and the constants are already there to do it against rather than by taste.
 
 Deliberately not fixed on the § H.16b branch: it is untouched by that work, sits in a
 different module, and folding it in would put an unrelated change under a review that was
