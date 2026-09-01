@@ -2263,7 +2263,7 @@ Shipped with six mutations watched failing. One of them was an apparent survivor
 not: **a needle spanning a newline matches nothing in a CRLF tree**, so the mutation had
 never applied and the green meant nothing. `docs/traps.md` already carries that one.
 
-### 21. Shrinking the room leaves the furniture where it was
+### 21. Shrinking the room leaves the furniture where it was — FIXED, and this entry was the stale half
 
 *"reducing room size doesn't seem to move the models on the ground along."* Their screenshot
 shows a sofa and a floor lamp standing entirely outside the shell.
@@ -2273,10 +2273,26 @@ wall goes through `lib/wall-move.ts`, which exists precisely to bring the pieces
 CLAUDE.md's own account of `offsetWall` describes `wall-move.ts` carrying furniture inward.
 The dimension fields in Room tools are the other path, and the report says they do not.
 
-**Not yet confirmed which half is missing** — whether the dims editor never calls the
-carry, or calls it and the carry declines. Establish that before touching either. It is the
-same shape as every other scar in this repo: one operation, two entry points, one of them
-carrying its own copy of the rule.
+**FIXED in `c3ff399` (2026-08-30), and the paragraph above had already been overtaken when
+it was last read.** `carryForResize` in `lib/wall-move.ts` is the typed-in-Room-tools half,
+`recarryForResize` in `lib/transforms.ts` splits its answer across the authored and override
+layers, and `RoomDimsEditor` calls it. The missing half was the second one the paragraph
+guessed at and worse: the editor carried the pieces hung from the CEILING when the height
+changed (`regradeForNewCeiling`) and carried nothing at all when width or depth changed —
+one axis of three.
+
+**This entry was stale for two days and nothing noticed**, which is the hand-off rule in
+CLAUDE.md meeting its own subject: the fix's docblock names this defect in full, the doc did
+not, and a reader trusting the doc would have re-derived a diagnosis that already existed in
+code. Re-derive before acting on a note, and correct the note in the same breath.
+
+Two properties worth keeping. **Displacements ADD** — a sofa in a corner belongs to both
+walls that meet there, and shrinking on both axes has to move it diagonally; a piece spanning
+two OPPOSITE walls gets two cancelling deltas and stays put, which is correct, because it
+does not fit and saying so is the room report's job. And it **never makes containment worse**:
+a piece that was inside and would end up outside is dropped from the move and keeps its
+place, so the room reports a wall standing in it rather than the app silently shoving it.
+That decline is exactly what § H.16b now makes visible.
 
 Note this is NOT the same as a piece the room can no longer hold. Carrying is what happens
 while there is room to move into; § 22 is what happens when there is not.
@@ -2824,11 +2840,12 @@ disagree in the first place.
   walk · zone · window · tv · tall · crowding · reach · cut-off · turning, and not one is
   *outside the room* — `tall` is a height check, `freeFloorShare` DISCARDS the outside
   portion rather than reporting it. So `snapToWall`'s own comment, which says
-  "`clearance.ts` is what says it does not fit", is **false**, and this branch propagated it
-  into two more files before anyone checked. Corrected in all three; the missing rule is
-  § H.16b below.
+  "`clearance.ts` is what says it does not fit", was **false**, and this branch propagated it
+  into two more files before anyone checked. Corrected in all three, and the missing rule
+  landed as § H.16b below — so the sentence is true now, for the first time, and it is true
+  because the two share one predicate rather than because one of them was fixed to agree.
 
-### § H.16b — nothing reports a piece that is outside the room
+### § H.16b — nothing reports a piece that is outside the room — FIXED
 
 A new `ClearanceIssue` kind, which per CLAUDE.md § 3 means a `RULE_HANDLING` row in
 `layout-score.ts` as well — and `tests/layout-conformance.test.ts` will fail until it has
@@ -2840,9 +2857,27 @@ uses the *wider* `wallMounted` flag), `wall-move.ts`'s `carryAttached` (exempts 
 its was-inside/now-inside test), and `layout-settle.ts` (`movable = !ridesWall`, so
 `contain()` never runs on one). `placeNewPart` has no legality test at all, so adding an
 oversized curtain from the Library seeds the state this branch now refuses to reproduce.
-**Still not started — no commit anywhere. What HAS been done is the measurement that
-decides whether it is shippable, and it is, so the next person does not have to take that
-risk blind.**
+**FIXED.** `RULE_KINDS` gains `outside`, `RULE_HANDLING` gains
+`outside: { costTerm: 'outside', movable: true }`, and `clearance.ts` emits it. The
+measurement below is what decided it was shippable, and it reproduces on the shipped rule:
+**24 rooms, 269 parts, 2 findings**, both `warn`, both the 1450 mm TV, at exactly the
+positions recorded here. (The 273 above was taken from an earlier seeder; 269 is what the
+gate prints now, and the gate prints it on every green run rather than leaving the number in
+a document.)
+
+**The predicate is shared, not restated.** `roomContainment` and `partInsideRoom` are in
+`lib/footprint.ts` now, and `drag-resolve.ts` reads the second one — a report and a gesture
+disagreeing about one piece reads as whichever half you are looking at being broken. The
+drag keeps its disjunction and its rug branch; the report applies its own rug rule to the
+centre. `ROOM_FIT_SLACK_MM` is the drag's 10 mm, in one place, and it is pinned at BOTH ends:
+set it to 0 and a sofa flush against the east wall is flagged, widen it to 200 and a sofa
+20 mm through the plaster is not. The upper end was missing from the first battery and seven
+mutations stayed green through it — the same one-sided defect as a breakpoint with only a
+floor.
+
+**Nine mutations, nine kills.** slack 0 · slack 200 · `box && centre` → `||` · the rug rule
+applied to everything · the rug rule dropped · severity always `error` · the rule deleted ·
+and the last two again against the preset sweep.
 
 The worry was false positives: this rule fires on pieces nobody dragged, so every seeded and
 detected room in existence gets re-judged by it the moment it lands. Measured over
