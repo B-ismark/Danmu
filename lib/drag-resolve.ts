@@ -20,8 +20,8 @@
 // that one value is passed in rather than reached for.
 
 import { collidesAt, type ScenePart } from './scene-spec';
-import { pointInFootprint, footprintBounds } from './footprint';
-import { aabbExtents, obbFromPart, obbInsidePoly, type Poly } from './geometry';
+import { partInsideRoom, pointInFootprint, footprintBounds } from './footprint';
+import { aabbExtents, type Poly } from './geometry';
 import { snapToNeighbors, type SnapLine } from './item-snap';
 import { findSupportDetailed, groundY, isFloorStanding, MOUNT_PAD, ridesWall, snapToWall, wallStandoff } from './physics';
 
@@ -235,10 +235,12 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   // "and `lib/clearance.ts` is what says it does not fit" — that part is **not**
   // true and was propagated from there rather than checked. `clearance.ts` emits
   // door · entry · clash · walk · zone · window · tv · tall · crowding · reach ·
-  // cut-off · turning, and not one of them is "outside the room": `tall` is a
+  // cut-off · turning, and not one of them was "outside the room": `tall` is a
   // height check and `freeFloorShare` DISCARDS the outside portion rather than
-  // reporting it. So nothing reports this today, which is why it is written down
-  // in `docs/what-is-still-open.md` rather than implied here.) On a rectangle those
+  // reporting it, so a sofa half out of the room read as a room with MORE free floor
+  // than it has. `outside` exists now — § H.16b — and it shares this function's
+  // containment predicate through `roomContainment`, so the drag and the report
+  // cannot come apart over one piece.) On a rectangle those
   // ends hang over the neighbouring wall's floor
   // and nobody notices. On an L, a T or a U they hang into the missing quadrant —
   // outside the room — and the drag committed `valid` with no red and nothing said.
@@ -257,7 +259,7 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   // Five of the nine riders in the catalogue — `door`, `ac/ac-unit`, both mirrors
   // and `tv/soundbar`, the pieces that sit in or on the plaster and are the reason
   // such an exemption gets written — pass the polygon test on their own merits at
-  // every size in every layout, all 1,575 samples each. The inset below is what
+  // every size in every layout, all 1,575 samples each. `ROOM_FIT_SLACK_MM` is what
   // lets a snapped corner sitting exactly on the clamp boundary through, and it was
   // already doing that job for everything else. It is **5 mm per face**, not 10: it
   // subtracts 10 from a dimension in MILLIMETRES and `obbFromPart` then halves it.
@@ -270,7 +272,7 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   //
   // A ceiling fan never had the exemption and still does not: it gets no snap, so
   // its blades have to be inside the room like anything else.
-  const slightlyShrunk = obbFromPart([x, y, z], outRot, [dim[0] - 10, dim[1] - 10, dim[2]]);
+  //
   // Does the room have room for it AT ALL, at this angle? The containment clamp
   // above pins an over-wide piece to `minX + extX` — a silent shove of however much
   // it overhangs — and for everything else that shove is caught, because the piece
@@ -308,12 +310,19 @@ export function resolvePlacement(input: ResolveInput): Resolved {
   // Its centre is held to the same test every other piece's is; both pinned tests
   // for the exemption place the rug's centre over real floor, which is what makes
   // this the narrow version of the fix rather than a retraction of the exemption.
+  //
+  // The second branch is `partInsideRoom` in `lib/footprint.ts` now, shared with the
+  // room report — a gesture and a report that disagree about one piece is the
+  // two-sources-of-truth defect, and it reads as whichever half you are looking at
+  // being broken. The DISJUNCTION stays here: a rug that is fully inside passes
+  // through the second branch, so folding the rug case into the shared predicate
+  // would silently refuse a shoved rug that ended up entirely in the room.
   const inRoom =
     (part.category === 'rug' &&
       roomIsWideEnough &&
       !shovedIntoRoom &&
       pointInFootprint(x, z, footprint)) ||
-    (obbInsidePoly(slightlyShrunk, footprint) && pointInFootprint(x, z, footprint));
+    partInsideRoom([x, y, z], outRot, dim, footprint);
   const collides = collidesAt(parts, part.id, [x, y, z], outRot, dim);
   // `inRoom` first: see `Resolved.refusal` for why the order is the whole point.
   const refusal: Refusal | undefined = !inRoom
