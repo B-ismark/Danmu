@@ -456,12 +456,22 @@ in
 false positive here, and each nearly cost something real. A class or token reached
 through a template string (`` `rail-sash rail-sash--${side}` ``, or a name a test
 builds per side in a loop) matches no literal grep. And a token can have **no
-`var()` reader at all and still be load-bearing**: `--rail-left-tight` /
-`--rail-right-tight` are applied to nothing on purpose — they are the width a
-future tightening is allowed to reach, and their consumer is
-`tests/reflow.test.ts`, which holds each below its shipping floor. Deleting them
-was caught by that test, which is the good outcome; the bad one is deleting the
-test as well to make the sweep look right.
+`var()` reader at all and still be load-bearing**, because its consumer is a test
+holding it as a bound.
+
+**`--rail-*-tight` was the example given here, and it was wrong** — which makes it
+a better one. This paragraph asserted the two are "applied to nothing on purpose",
+and `DockedShell` in fact renders both for the whole `compact` step (1024–1279px)
+through `` var(--rail-${side}-tight) ``: a template string, the first false
+positive in this very list, hiding the second. Three comments elsewhere in the repo
+had copied the claim, and one of them told the next reader not to check the number
+— **a wrong "unused" note propagates, because it reads as settled and is cheaper to
+quote than to re-derive.** Grep the distinctive tail (`-tight`, `--${`) rather than
+the whole name before writing that anything is unused.
+
+The class the paragraph describes is real all the same: deleting a token whose only
+reader is an assertion is caught by that test, which is the good outcome; the bad
+one is deleting the test as well to make the sweep look right.
 
 The `--disableConsoleIntercept` on `pnpm test` is load-bearing, not tidy-up.
 vitest 4's default reporter **discards `console.log` from a passing run** — at module

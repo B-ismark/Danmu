@@ -4,6 +4,8 @@ import {
   parseDims,
   bestMatch,
   rankLibrary,
+  hayTokens,
+  CONTAINS_MIN,
   sizeFromQuery,
   queryNamesSize,
 } from '@/lib/shape-search';
@@ -276,11 +278,12 @@ describe('the tail of a compound word', () => {
   // `stand` is not equal to `nightstand`, and neither starts with the other, so the
   // row scored 0 and `searchLibrary` filters to `s > 0`: not ranked low, absent.
 
-  const hayOf = (i: { label: string; group: string; category: string; shape: string }) =>
-    `${i.label} ${i.group} ${i.category} ${i.shape}`
-      .toLowerCase()
-      .split(/[^a-z0-9]+/)
-      .filter((t) => t.length > 1);
+  // `hayTokens` and `CONTAINS_MIN` come from the module under test rather than
+  // being restated here. The first version of this block wrote its own tokeniser,
+  // which omitted `SYNONYM` — correct only by the accident that `plant` is the one
+  // synonym key that is also a hay token and maps to itself — and hard-coded the
+  // four fields, so a fifth would have left the measurement below silently scoped
+  // to the old four. An oracle built from a copy of the subject measures the copy.
 
   it('reaches Nightstand for "stand"', () => {
     const labels = searchLibrary('stand', PART_LIBRARY.length).map((i) => i.label);
@@ -312,6 +315,35 @@ describe('the tail of a compound word', () => {
     expect(labels).toEqual(['AC unit', 'Washing machine']);
   });
 
+  it('and only in that direction — a hay token inside the QUERY must not match', () => {
+    // The branch is `hay.includes(q)`. Widening it to
+    // `hay.includes(q) || q.includes(h)` survives every other assertion in this
+    // file, and the comment beside the branch is the only thing refusing it — a
+    // comment is not a check. What it admits, both real English queries:
+    //   `armchair` contains `air`, so an air purifier answers a query for a chair
+    //             (and `chair`, so both dining and office chairs join it);
+    //   `outdoor` contains `door`, so a query this catalog has no answer for gets
+    //             two confident wrong ones instead of an empty list.
+    // The reverse direction is not unthinkable, but it needs a floor on the HAY
+    // token rather than the query, which is a different measurement and one nobody
+    // has taken. Until somebody does, this holds it absent.
+    expect(searchLibrary('armchair', PART_LIBRARY.length).map((i) => i.label)).toEqual(['Armchair']);
+    expect(searchLibrary('outdoor', PART_LIBRARY.length)).toEqual([]);
+  });
+
+  it('and a second token ADDS to the first rather than replacing it', () => {
+    // `score +=` → `score =` survives everything above, because every query above is
+    // a single token. `storage robe` is two, and they land on one row by different
+    // branches: Wardrobe's group is Storage (exact, 3) and its label contains `robe`
+    // (containment, 1) = 4, which puts it ahead of Bookshelf and Shoe rack on 3.
+    // Under `=` the containment hit OVERWRITES the group hit, Wardrobe scores 1, and
+    // the query that names it most precisely ranks it third. A multi-word box is
+    // what `rankLibrary` is fed, so this is the ordinary case and not a corner.
+    const labels = searchLibrary('storage robe', PART_LIBRARY.length).map((i) => i.label);
+    expect(labels[0]).toBe('Wardrobe');
+    expect(labels.slice(1, 3)).toEqual(['Bookshelf', 'Shoe rack']);
+  });
+
   it('reaches Wardrobe for "robe" and Microwave for "wave"', () => {
     // Two more real English words that are somebody's tail. `stand` alone would be a
     // fixture that could be satisfied by special-casing one row.
@@ -325,7 +357,7 @@ describe('the tail of a compound word', () => {
     // is not a word anybody typed on purpose, admitting a third of the catalog. This
     // is the assertion that fails if CONTAINS_MIN drops.
     expect(searchLibrary('ing', PART_LIBRARY.length)).toEqual([]);
-    const wouldMatch = PART_LIBRARY.filter((i) => hayOf(i).some((h) => h.includes('ing')));
+    const wouldMatch = PART_LIBRARY.filter((i) => hayTokens(i).some((h) => h.includes('ing')));
     expect(wouldMatch.length).toBe(14);
   });
 
@@ -335,20 +367,56 @@ describe('the tail of a compound word', () => {
     // token is a query a user can type; none may reach more than a quarter of the
     // catalog. At a floor of 3 `ing` reaches 14 of 43 and this goes red — which is
     // the same fact as the test above, arrived at without naming `ing`.
-    const hay = PART_LIBRARY.map(hayOf);
     const subs = new Set<string>();
-    for (const t of new Set(hay.flat())) {
+    for (const t of new Set(PART_LIBRARY.flatMap(hayTokens))) {
       for (let a = 0; a < t.length; a++) for (let b = a + 1; b <= t.length; b++) subs.add(t.slice(a, b));
     }
-    expect(subs.size).toBe(797);
+    // A floor, not the exact count. The exact count was 797 and it was a tripwire on
+    // the CATALOG rather than a check on the scorer: no edit to `shape-search.ts`
+    // can move it, and one added row of furniture turns it red for nothing. What
+    // this needs to know is that the sweep below has a real space to sweep — a
+    // helper returning `[]` would otherwise make the whole measurement vacuous.
+    expect(subs.size).toBeGreaterThan(500);
 
-    let worst = { q: '', n: 0 };
-    for (const q of subs) {
-      const n = searchLibrary(q, PART_LIBRARY.length).length;
-      if (n > worst.n) worst = { q, n };
-    }
-    // 10 = the `Appliances` group, reached by `ance` / `ances` / `iance` and the rest
-    // of that word's tails. A real group name, so ten rows is the honest answer.
-    expect(worst.n, `widest query was "${worst.q}"`).toBeLessThanOrEqual(10);
+    const widest = (qs: Iterable<string>) => {
+      let worst = { q: '', n: 0 };
+      for (const q of qs) {
+        const n = searchLibrary(q, PART_LIBRARY.length).length;
+        if (n > worst.n) worst = { q, n };
+      }
+      return worst;
+    };
+
+    // Split in two, because the whole-space answer does not measure this branch.
+    // Its widest query is `ap` — two characters, a PREFIX hit on `Appliances`, and
+    // the branches are an else-if chain, so containment never ran. A ceiling set by
+    // the prefix branch stays green whatever containment does.
+    //
+    // Length alone does not isolate it either, and that is worth writing down
+    // because it is the obvious fix and it is wrong: at `CONTAINS_MIN` and above the
+    // widest query is `appl`, still a prefix of `appliances`, still the same 10
+    // rows. What isolates the branch is a query that no hay token could match any
+    // other way — not equal to one, not a prefix of one, none a prefix of it. Every
+    // row those queries return is a containment hit and nothing else, so this
+    // ceiling is the branch's own.
+    const hay = new Set(PART_LIBRARY.flatMap(hayTokens));
+    const tailOnly = [...subs].filter(
+      (q) => q.length >= CONTAINS_MIN && ![...hay].some((h) => h.startsWith(q) || q.startsWith(h)),
+    );
+    expect(tailOnly.length, 'no query reaches the containment branch on its own').toBeGreaterThan(100);
+    // Ten, and it is `ppli` — the same ten rows as the prefix branch's `ap`, reached
+    // from inside the same group name. That the two ceilings agree is the reassuring
+    // answer, not a redundant one: it is only knowable now that the query naming it
+    // is one the branch actually served. Drop the floor to 3 and `ing` becomes
+    // tail-only at 14, so this is where that shows.
+    const deep = widest(tailOnly);
+    expect(deep.n, `widest containment-only query was "${deep.q}"`).toBeLessThanOrEqual(10);
+
+    // And the whole space as well, which is the property the floor was picked for:
+    // at 3 the gerund tail `ing` reaches 14 and this goes red without naming it.
+    // 10 = the `Appliances` group, reached by `ance` / `ances` / `iance` and the
+    // rest of that word's tails. A real group name, so ten rows is honest.
+    const all = widest(subs);
+    expect(all.n, `widest query was "${all.q}"`).toBeLessThanOrEqual(10);
   });
 });

@@ -66,15 +66,27 @@ function tokens(s: string): string[] {
  *  gerund tail, which reaches 14 — and at 4 it is none. Four is the smallest floor
  *  that admits no catch-all, and it is what lets `room`, `robe` and `wave` reach
  *  Bedroom, Wardrobe and Microwave. */
-const CONTAINS_MIN = 4;
+export const CONTAINS_MIN = 4;
 
 /** Weight for a containment match. Strictly under the prefix branch's 1.5 so a
  *  genuine prefix still outranks a tail: `stand` finds Nightstand, and still finds
  *  the `desk-standard` table first. */
 const CONTAINS_SCORE = 1;
 
+/** The tokens a query is scored against — the four fields, through `tokens`.
+ *
+ *  Exported for `tests/shape-search.test.ts`, which measures the query space this
+ *  scorer admits and so needs the same haystack the scorer sees. It kept a hand
+ *  copy for one commit, and the copy was already two facts behind: it did not
+ *  apply `SYNONYM`, and nothing would have told it if a fifth field joined the
+ *  list. Both directions of that drift are silent, and the second one makes a
+ *  measured floor quietly stop measuring what it names. */
+export function hayTokens(item: LibraryItem): string[] {
+  return tokens(`${item.label} ${item.group} ${item.category} ${item.shape}`);
+}
+
 function scoreItem(qTokens: string[], item: LibraryItem): number {
-  const hay = tokens(`${item.label} ${item.group} ${item.category} ${item.shape}`);
+  const hay = hayTokens(item);
   let score = 0;
   for (const q of qTokens) {
     if (hay.includes(q)) score += 3;
