@@ -306,8 +306,9 @@ window**, the un-dragged right rail is 307.2px and the row has about a pixel to 
 at whether the three buttons are three, and whether anything is touching the rail's right
 edge. That single width is the whole question.
 
-**Where it rides.** `dcfe1af` (the 268 → 304 fix, merged unseen), then
-`fix/review-survivors` (the container move and 304 → 293).
+**Where it rides.** `dcfe1af` (the 268 → 304 fix) and `e4a9f25` (the container move and
+304 → 293). **Both merged with nobody having looked at either**, which is why this item is
+still here and why its gate counts are gone.
 
 ---
 
