@@ -3208,6 +3208,12 @@ Two files cited this section before it existed, and the entry was written from t
 2026-09-01. **Confirmed by eye the same day**, in the 2D plan of a room holding both: the
 standing fan and the stool were drawn as dashed SQUARES.
 
+**And the fix was confirmed the same way**, which is the only honest way to close an item
+whose evidence was a picture: the same plan, the same two pieces, now drawn as dashed
+CIRCLES while the freezer and the console stay rectangles. The room in that shot was
+seeded straight into IndexedDB with no `circle` on any part, so it also exercises the
+persisted path end to end — `normalizeStoredParts` derived every one of them on load.
+
 The defect was never "the fan is drawn wrong". It was that the SAME shape got a different
 footprint depending on how it entered the room. Three answers to one question:
 `CATEGORY_DEFAULTS.circle`, which only the detection builder read; four hand-written
