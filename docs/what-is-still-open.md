@@ -29,7 +29,7 @@ them. Where two items are the same defect one layer apart, they are listed as on
 | # | item | why here | cost | blocks / blocked by |
 |---|---|---|---|---|
 | 1 | **§ 12** rider keeps the size the room was BUILT at | Confirmed by eye, and the user has already chosen the repair — derive at read time, write nothing (§ B.16). An attempt at the OTHER option was built and reverted; read § 12 before starting | M | **blocked on § 33.3** — B.16's stated cost is "the derivation runs on every read" and the render budget is unmeasured |
-| 2 | **§ 32** everything added from the Library is square-footed | The **ceiling fan** is a circle when detected and a square when added, today, on `main`. Two paths disagreeing about one shape is the failure this repo keeps finding | S, once the decision is made | wants the "roundness belongs to the SHAPE" call, which is the same move as § 33.1's contract |
+| ~~2~~ | ~~**§ 32** everything added from the Library is square-footed~~ | **FIXED** — `isRoundPart` + `ROUND_SHAPES`, derived at all four doors, `CATEGORY_DEFAULTS.circle` deleted | — | — |
 | 3 | **§ 14** a merged group's member cannot be clicked | User-reported, no cause yet. `PartTree` selects it fine, so it is the canvas hit path | M — unknown | do not guess a cause; sits beside § 17 (both are canvas-pointer) |
 | 4 | **§ 17** a drag refused by a wall TV names nothing | Same surface as § 14 and `refusalCause` is already half of it | S | do with § 14, one pointer-path session |
 | 5 | **§ 18** Shuffle leaves a nightstand through the bed | User-reported. A clash the solver should price and does not | M | overlaps § 31 — both are "what the cost function is allowed to trade" |
@@ -3202,58 +3202,54 @@ connected floor on that seed by letting a piece hang through a wall for free. It
 clean than before, so the exchange is favourable on balance; it is the tail that moved.
 
 
-### § 32 — a piece added from the Library is square-footed, whatever shape it is — OPEN
+### § 32 — a piece added from the Library was square-footed, whatever shape it was — FIXED
 
-**Two files cited this section before it existed.** `lib/scene-spec.ts` and `Design.md`
-both point at "§ 32" and it was never written down — the reference was made in the
-commit that decided not to fix the thing, and the entry it pointed at did not follow.
-A dangling cross-reference is worse than no reference: it reads as settled, and the
-next person looks for a decision that is not there. Written now, from the code.
+Two files cited this section before it existed, and the entry was written from the code on
+2026-09-01. **Confirmed by eye the same day**, in the 2D plan of a room holding both: the
+standing fan and the stool were drawn as dashed SQUARES.
 
-`ScenePart` carries `circle?: boolean`, and it is what makes the plan draw a round
-piece as the ellipse it is rather than as its bounding box — `lib/plan-hit.ts` tests
-the pointer against that same footprint, so it is hit-testing as well as drawing.
-`CATEGORY_DEFAULTS` sets it for `lamp`, `plant` and `fan`, so a piece the **detector**
-produces is round when it should be.
+**And the fix was confirmed the same way**, which is the only honest way to close an item
+whose evidence was a picture: the same plan, the same two pieces, now drawn as dashed
+CIRCLES while the freezer and the console stay rectangles. The room in that shot was
+seeded straight into IndexedDB with no `circle` on any part, so it also exercises the
+persisted path end to end — `normalizeStoredParts` derived every one of them on load.
 
-`LibraryItem` has no `circle` field and `spawn` never sets one. So everything added
-from the **Library** is square-footed, including:
+The defect was never "the fan is drawn wrong". It was that the SAME shape got a different
+footprint depending on how it entered the room. Three answers to one question:
+`CATEGORY_DEFAULTS.circle`, which only the detection builder read; four hand-written
+`{ circle: true }` literals in the seeder; and, for the add path, nothing at all —
+`LibraryItem` has no such field and `spawn` never set one. So a ceiling fan found in a
+photograph was a circle and one added from the picker was a square, for the whole life of
+the add path.
 
-| piece | shape | drawn in plan as |
-|---|---|---|
-| Ceiling fan | `fan` | a 1000 mm **square** |
-| Standing fan | `fan-standing` | a 450 mm square |
-| Stool | `stool` | a 350 mm square |
-| Floor lamp | `lamp-floor` | a 300 mm square |
-| Table lamp | `lamp-table` | a square |
-| Plant | `plant` | a square |
-| Pendant lamp | `lamp-pendant` | a square |
-| Oval mirror | `mirror-oval` | a rectangle |
+It is not cosmetic. `footFromPart` feeds `lib/plan-hit.ts` (a round piece is picked by the
+ellipse it draws), `footOverlap` and `footArea` — a circle is π/4 of its box — and every
+clearance and collision answer downstream of those.
 
-**Confirmed by eye on 2026-09-01**, in the 2D plan of a room holding both: the standing fan and the stool are drawn as dashed SQUARES, not circles.
+**Fixed the way the entry said it should be**, rather than with the cheap patch it warned
+against: roundness is a property of the SHAPE. `ROUND_SHAPES` + `isRoundPart` sit beside
+`SHAPES`; `CATEGORY_DEFAULTS.circle` is **deleted** rather than left as a second answer;
+and the flag is derived at each of the four doors — `addPart`, `normalizeStoredParts`, the
+detection builder, and `readPart` at the file boundary, where it joins `clampDims` and
+`isWallMountedPart` as something a file has nothing to say about.
 
-The ceiling fan is the one that matters most and it is **today, on `main`**: the same
-piece is a circle when detected from a photo and a square when added from the picker,
-so the two paths disagree about the geometry of one shape. It is also the piece whose
-round footprint is most load-bearing, since `fanBlade` exists precisely so the swept
-circle equals the declared width.
+The persisted question the entry flagged as a blocker turned out to have a clean answer:
+nothing has ever let a user CHOOSE a footprint shape, so deriving can only correct. A room
+saved before this holds `circle` only where the detection path happened to set it.
 
-**Not fixed here, deliberately, and this is the decision.** The cheap patch is a
-`circle?: boolean` on `LibraryItem` copied through `spawn` — which creates a *third*
-place the roundness of a shape is written down (`CATEGORY_DEFAULTS`, `PART_LIBRARY`,
-and whatever the plan falls back to), and they will disagree, because two already do.
-The honest fix is that **roundness is a property of the SHAPE**, not of a catalogue
-row or a category: one `ROUND_SHAPES` set beside `SHAPES`, read by both paths, with
-`CATEGORY_DEFAULTS.circle` deleted rather than left as a second answer. That is the
-same move `fanBlade` and `wallAffinity` already made, and it is small — but it changes
-what every existing saved room's `circle` field means on load, so it wants its own
-measurement of the persisted data path rather than being slipped into a catalogue
-commit.
+`ROUND_SHAPES` is a decision and is pinned exactly, members and non-members both, because
+the failure it guards is a shape being added on a hunch. `mirror-oval` is the one that
+keeps wanting to join and must not: it is oval on the WALL and a thin rectangle in plan.
+`side-table` and `ottoman` are out for the honest reason — the catalogue ships them square
+and life has them both ways.
 
-**What would unblock it:** deciding whether `circle` stays a per-part override at all,
-or becomes purely derived from the shape. If derived, a persisted `circle` that
-disagrees with its shape is either dropped or honoured, and that is the only real
-question.
+Ten assertions, and each compares ROUTES against each other rather than checking one route
+against a literal, because a test asserting only "the fan is round" would have passed on
+the broken code for the detection path and never asked the question that mattered. All ten
+mutations die. One of them survived the first run and the gap was real: the seeded test
+uses `defaultScene`, and `buildSceneFromRoom` short-circuits an empty detection list into
+it, so the DETECTION path — the one that already worked — had no guard at all until a
+fixture with a real detection was added.
 
 ### § 33 — three things the shape contract left open — OPEN
 

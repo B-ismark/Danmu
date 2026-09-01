@@ -53,6 +53,7 @@ import {
   type ScenePart,
   type Shape,
   isWallMountedPart,
+  isRoundPart,
 } from './scene-spec';
 import { clampDims, roomAxisRange, ROOM_SIDE_EPS, ROOM_SIDE_M } from './dimension-ranges';
 import { anchorFor, heightForNewCeiling } from './physics';
@@ -569,7 +570,14 @@ function readPart(
     locked: v.locked === true,
   };
 
-  if (v.circle === true) part.circle = true;
+  // DERIVED, exactly like `wallMounted` below and for the same reason: roundness is a
+  // property of the shape (`isRoundPart`), so a file has nothing to say about it. This
+  // read the file's own `circle`, which made an imported ceiling fan round or square
+  // according to what happened to be in the bytes — while every path inside the app now
+  // computes it. Not reported in `dropped`: unlike `wallMounted`, a wrong `circle` costs
+  // a footprint's shape rather than a piece sunk through the floor, and files written
+  // before `ROUND_SHAPES` existed would all report, which is noise rather than lossiness.
+  if (isRoundPart(shape)) part.circle = true;
 
   // DERIVED, never trusted — the same boundary `clampDims` draws for a size, drawn
   // for the one other field in this record that has a single right answer.
