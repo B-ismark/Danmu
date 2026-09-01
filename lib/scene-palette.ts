@@ -167,6 +167,12 @@ const BY_SHAPE: Record<Shape, string> = {
   'washing-machine': '#EFEFEC',
   microwave: '#3A3A3D',
   'water-dispenser': '#EDEDEA',
+  // Hand-synced to app/globals.css like everything else here; tests/color-tokens
+  // reads the stylesheet rather than a literal.
+  'fan-standing': '#E8E4DC',
+  'chest-freezer': '#EDEDEA',
+  'tv-console': '#8A6B44',
+  stool: '#8A5A2B',
   // generic primitives — resolved by category instead (see defaultBodyColor)
   box: '#C9A98E',
   cylinder: '#C9A98E',

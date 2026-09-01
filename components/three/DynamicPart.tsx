@@ -170,6 +170,14 @@ function ShapeDispatch({ part, locked }: { part: ScenePart; locked: boolean }) {
       return <MicrowaveGeo part={part} />;
     case 'water-dispenser':
       return <WaterDispenserGeo part={part} />;
+    case 'fan-standing':
+      return <StandingFanGeo part={part} />;
+    case 'chest-freezer':
+      return <ChestFreezerGeo part={part} locked={locked} />;
+    case 'tv-console':
+      return <TvConsoleGeo part={part} locked={locked} />;
+    case 'stool':
+      return <StoolGeo part={part} locked={locked} />;
     case 'box':
       return <BoxGeo part={part} locked={locked} />;
     case 'cylinder':
@@ -1223,6 +1231,118 @@ function WaterDispenserGeo({ part }: { part: ScenePart }) {
         <cylinderGeometry args={[w * 0.3, w * 0.33, h * 0.32, 20]} />
         <meshStandardMaterial color="#bcd6e6" transparent opacity={0.5} roughness={0.1} metalness={0.1} />
       </mesh>
+    </>
+  );
+}
+
+/** Pedestal fan.
+ *
+ *  Authored so the widest thing in it is exactly `dimMM[0]`: the head's guard is the
+ *  full width, the base is deliberately narrower, and nothing reaches past the box.
+ *  That is the `fanBlade` lesson applied on the way in rather than after a bug — a
+ *  renderer whose geometry is wider than the size it declares renders the wrong size
+ *  the moment the user resizes it, because `Draggable` scales by `stored / dimMM`. */
+function StandingFanGeo({ part }: { part: ScenePart }) {
+  const w = part.dimMM[0] / 1000;
+  const h = part.dimMM[2] / 1000;
+  const r = w / 2;
+  const bodyC = tint(part);
+  const headY = h - r;
+  return (
+    <>
+      {/* base — narrower than the head on purpose */}
+      <mesh position={[0, 0.02, 0]}>
+        <cylinderGeometry args={[r * 0.62, r * 0.68, 0.04, 24]} />
+        <meshStandardMaterial color={bodyC} roughness={0.6} />
+      </mesh>
+      {/* pole */}
+      <mesh position={[0, headY / 2, 0]}>
+        <cylinderGeometry args={[0.017, 0.021, headY, 12]} />
+        <meshStandardMaterial color="#9aa0a6" metalness={0.45} roughness={0.35} />
+      </mesh>
+      {/* guard: a flat disc the width of the piece, standing upright */}
+      <mesh position={[0, headY, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[r, r, 0.05, 28]} />
+        <meshStandardMaterial color={bodyC} roughness={0.45} transparent opacity={0.55} />
+      </mesh>
+      {/* hub */}
+      <mesh position={[0, headY, 0.035]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[r * 0.22, r * 0.22, 0.06, 16]} />
+        <meshStandardMaterial color="#7e8388" metalness={0.4} roughness={0.4} />
+      </mesh>
+    </>
+  );
+}
+
+/** Chest freezer — a lid-on-top box, which is what distinguishes it from `fridge`. */
+function ChestFreezerGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
+  const w = part.dimMM[0] / 1000;
+  const d = part.dimMM[1] / 1000;
+  const h = part.dimMM[2] / 1000;
+  const c = body(part, locked);
+  const lid = h * 0.1;
+  return (
+    <>
+      <Box size={[w, h - lid, d]} position={[0, (h - lid) / 2, 0]} color={c} roughness={0.4} />
+      <Box size={[w, lid, d]} position={[0, h - lid / 2, 0]} color={c} roughness={0.3} />
+      {/* lid handle, along the front edge */}
+      <Box
+        size={[w * 0.34, 0.03, 0.035]}
+        position={[0, h - lid - 0.03, d / 2 + 0.018]}
+        color="#8d9296"
+        metalness={0.4}
+        roughness={0.4}
+      />
+    </>
+  );
+}
+
+/** Low TV unit: a plinth, a top, and two open bays. */
+function TvConsoleGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
+  const w = part.dimMM[0] / 1000;
+  const d = part.dimMM[1] / 1000;
+  const h = part.dimMM[2] / 1000;
+  const c = body(part, locked);
+  const t = Math.min(0.03, h * 0.08);
+  const foot = Math.min(0.06, h * 0.14);
+  return (
+    <>
+      <Box size={[w, t, d]} position={[0, h - t / 2, 0]} color={c} roughness={0.45} />
+      <Box size={[w, t, d]} position={[0, foot + t / 2, 0]} color={c} roughness={0.45} />
+      {/* sides and a centre divider */}
+      {[-w / 2 + t / 2, 0, w / 2 - t / 2].map((x, i) => (
+        <Box key={i} size={[t, h - foot - t, d]} position={[x, foot + (h - foot) / 2 - t / 2, 0]} color={c} roughness={0.45} />
+      ))}
+      <Box size={[w * 0.92, foot, d * 0.8]} position={[0, foot / 2, 0]} color={c} roughness={0.6} />
+    </>
+  );
+}
+
+/** Round wooden stool: seat plus three splayed legs. */
+function StoolGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
+  const w = part.dimMM[0] / 1000;
+  const h = part.dimMM[2] / 1000;
+  const r = w / 2;
+  const c = body(part, locked);
+  const seat = Math.min(0.05, h * 0.12);
+  return (
+    <>
+      <mesh position={[0, h - seat / 2, 0]}>
+        <cylinderGeometry args={[r, r, seat, 24]} />
+        <meshStandardMaterial color={c} roughness={0.55} />
+      </mesh>
+      {[0, 1, 2].map((i) => {
+        const a = (i / 3) * Math.PI * 2;
+        // Legs sit inside `r` at the floor as well as at the seat, so the stool never
+        // occupies more floor than the width it declares.
+        const rr = r * 0.66;
+        return (
+          <mesh key={i} position={[Math.cos(a) * rr, (h - seat) / 2, Math.sin(a) * rr]}>
+            <cylinderGeometry args={[0.016, 0.02, h - seat, 10]} />
+            <meshStandardMaterial color={c} roughness={0.6} />
+          </mesh>
+        );
+      })}
     </>
   );
 }

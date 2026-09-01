@@ -36,6 +36,13 @@ const BY_SHAPE: Partial<Record<Shape, DimRange>> = {
   radiator: R('fixed', [400, 60, 300], [2000, 200, 900]),
   'ac-unit': R('fixed', [700, 180, 250], [1200, 300, 350]),
   fan: R('fixed', [900, 900, 150], [1500, 1500, 450]),
+  // Head diameter, not base: see the catalog entry. A pedestal fan is a standard
+  // appliance, so 'fixed' — the user is describing one they own, not sizing a
+  // built-in.
+  'fan-standing': R('fixed', [300, 300, 900], [650, 650, 1650]),
+  'chest-freezer': R('fixed', [700, 500, 750], [2000, 850, 1000]),
+  'tv-console': R('flexible', [700, 280, 300], [2600, 600, 800]),
+  stool: R('fixed', [260, 260, 300], [520, 520, 700]),
   door: R('fixed', [620, 35, 1980], [1100, 60, 2400]),
   fridge: R('fixed', [500, 500, 800], [950, 800, 2100]),
 

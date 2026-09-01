@@ -1385,7 +1385,7 @@ and it was never the plan: both tabs end here.
 It was **deleted rather than repaired**, because it measured as pure hole — an A/B
 scored in one run rather than an inference from the escape count. Over every pair in
 `PART_LIBRARY` at min/mid/max size, five layout ids, three angles and 35 targets —
-59,850 placements — the catalogue accepts **50,431** with the exemption and **49,861**
+66,150 placements — the catalogue accepts **55,528** with the exemption and **54,958**
 without: removing it costs **exactly** the 570 that were leaving the room — 311
 curtain, 196 window, 45 painting, 18 TV, i.e. *wider than the wall it landed on*
 rather than a property of curtains — and not one placement besides. Five of the nine

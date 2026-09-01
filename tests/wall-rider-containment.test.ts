@@ -322,10 +322,10 @@ describe('a placement the pipeline calls VALID is inside the room', () => {
     // reach a single one of the placements this test exists for, all of which are
     // in an L, a T or a U.
     //
-    // 38 catalogue pairs × 3 sizes × 3 angles × 7 x-targets × 5 z-targets ×
+    // 42 catalogue pairs × 3 sizes × 3 angles × 7 x-targets × 5 z-targets ×
     // 5 layout ids.
-    expect(PAIRS.length).toBe(38);
-    expect(considered).toBe(59850);
+    expect(PAIRS.length).toBe(42);
+    expect(considered).toBe(66150);
 
     // …and the coverage that matters is named rather than counted, because the
     // number above is satisfiable by any five layout ids — five copies of the
@@ -417,8 +417,8 @@ describe('a placement the pipeline calls VALID is inside the room', () => {
     // Not hypothetical: breaking the rug exemption — which touches no wall rider at
     // all — leaves the escape sweep and every per-rider pin green, and is caught by
     // these two alone.
-    expect(acceptedBefore, 'the pre-fix column moved').toBe(50431);
-    expect(acceptedNow, 'the fix moved something outside the nine wall riders').toBe(49861);
+    expect(acceptedBefore, 'the pre-fix column moved').toBe(55528);
+    expect(acceptedNow, 'the fix moved something outside the nine wall riders').toBe(54958);
 
     // Arithmetic over the pins above, and deliberately not more than that: no source
     // mutation can reach it, because a wrong `KEPT` fails its own loop first. What

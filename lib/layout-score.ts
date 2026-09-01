@@ -39,6 +39,7 @@ import {
   frontVector,
   nearestEdge,
   obbGap,
+  outsideDeficit,
   outsideShare,
   polyAreaCentroid,
   polygonWinding,
@@ -198,15 +199,23 @@ export const RULE_HANDLING: Record<
   // piece in front of the user is a button that spins and then says it found
   // nothing. That is what this table exists to prevent — see `reach` below, which
   // was the last row to claim a capability it did not have.
+  // Containment. The two rows are the same fault seen from opposite sides of one
+  // question — can the solver do anything — and `clearance.ts` decides which by
+  // asking `isObstacle`, the SAME predicate the `outside` term below gates on. That
+  // identity is what makes both rows true rather than plausible, and
+  // `tests/layout-conformance.test.ts` pins it.
   outside: { costTerm: 'outside', movable: true },
-  overhang: {
+  'outside-immovable': {
     costTerm: null,
     movable: false,
     why:
-      'the piece is wider than the room can hold at that spot, and every version of ' +
-      'it the solver cannot reach: a wall rider is excluded by `movableFor`, and a ' +
-      'rug, a low piece or anything on a surface is excluded from `c.outside` by ' +
-      '`isObstacle`. Turning or sliding it is the user’s move, not the annealer’s.',
+      'nothing the solver can search will move this piece off the wall it crosses. ' +
+      '`c.outside` accumulates inside `if (!obstacle[i]) continue`, so for a wall ' +
+      'rider, a rug, a piece under `OBSTACLE_HEIGHT` or anything standing on a ' +
+      'surface the term is identically zero however far out it is — there is no ' +
+      'gradient to descend, and a button here would spin and report nothing. ' +
+      'Turning it, sliding it along its wall or giving it a wall it fits on is the ' +
+      'user’s move, not the annealer’s.',
   },
 
   // Both of these used to say `costTerm: null` with a note that they were "priced by
@@ -669,7 +678,24 @@ export function costBreakdown(
       const tolerance = sharesFloor(roles[i], roles[j]) ? TUCKED_CLASH_SHARE : 0;
       if (share > tolerance) c.overlap += (share - tolerance) / (1 - tolerance);
     }
-    c.outside += outsideShare(feet[i], poly);
+    // Containment, and it takes BOTH instruments because neither can do the whole
+    // range. `outsideShare` samples a 3×3 grid whose outermost points sit a third of
+    // the half-extent in from the edge, so for a 2.2 m sofa side-on it reads exactly
+    // 0.000 until ~160 mm is through the plaster — a flat dead band across the whole
+    // region where `clearance.ts` reports the piece as crossing a wall. The room check
+    // said so and **Fix** moved nothing, because there was nothing to save. The
+    // deficit is corner-exact and non-zero the instant any corner is out.
+    //
+    // `max`, not a sum: they measure the same fault, and the deficit is normalised by
+    // the piece's own radius so both are the same 0..1 currency. The max is also what
+    // makes this safe to land — it is `>=` the old value for every footprint and every
+    // polygon, so a term that already cost something costs no less, and the only
+    // assertions that can move are the ones that read 0.
+    const deficit = outsideDeficit(feet[i], poly);
+    c.outside += Math.min(
+      1,
+      Math.max(outsideShare(feet[i], poly), radius[i] > 0 ? deficit / radius[i] : 0),
+    );
   }
 
   // ── Openings: the room's own structure, which nothing may stand in ────────

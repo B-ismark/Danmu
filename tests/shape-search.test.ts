@@ -358,7 +358,7 @@ describe('the tail of a compound word', () => {
     // is the assertion that fails if CONTAINS_MIN drops.
     expect(searchLibrary('ing', PART_LIBRARY.length)).toEqual([]);
     const wouldMatch = PART_LIBRARY.filter((i) => hayTokens(i).some((h) => h.includes('ing')));
-    expect(wouldMatch.length).toBe(14);
+    expect(wouldMatch.length).toBe(16);
   });
 
   it('and no query in the catalog\'s own substring space becomes a catch-all', () => {
@@ -404,19 +404,20 @@ describe('the tail of a compound word', () => {
       (q) => q.length >= CONTAINS_MIN && ![...hay].some((h) => h.startsWith(q) || q.startsWith(h)),
     );
     expect(tailOnly.length, 'no query reaches the containment branch on its own').toBeGreaterThan(100);
-    // Ten, and it is `ppli` — the same ten rows as the prefix branch's `ap`, reached
-    // from inside the same group name. That the two ceilings agree is the reassuring
-    // answer, not a redundant one: it is only knowable now that the query naming it
-    // is one the branch actually served. Drop the floor to 3 and `ing` becomes
-    // tail-only at 14, so this is where that shows.
+    // TWELVE now, and it is still `ppli` — the same rows as the prefix branch's `ap`,
+    // reached from inside the same group name. That the two ceilings agree is the
+    // reassuring answer rather than a redundant one. It was ten until `Standing fan`
+    // and `Chest freezer` joined `Appliances`, and it moving WITH the group is the
+    // point: this bound is a fact about the catalogue, so it is re-derived when the
+    // catalogue grows and never widened to buy a green.
     const deep = widest(tailOnly);
-    expect(deep.n, `widest containment-only query was "${deep.q}"`).toBeLessThanOrEqual(10);
+    expect(deep.n, `widest containment-only query was "${deep.q}"`).toBeLessThanOrEqual(12);
 
     // And the whole space as well, which is the property the floor was picked for:
-    // at 3 the gerund tail `ing` reaches 14 and this goes red without naming it.
-    // 10 = the `Appliances` group, reached by `ance` / `ances` / `iance` and the
-    // rest of that word's tails. A real group name, so ten rows is honest.
-    const all = widest(subs);
-    expect(all.n, `widest query was "${all.q}"`).toBeLessThanOrEqual(10);
+    // at 3 the gerund tail `ing` reaches 16 and this goes red without naming it.
+    // 12 = the `Appliances` group, reached by `ance` / `ances` / `iance` and the rest
+    // of that word's tails. A real group name, so twelve rows is honest.
+    const all = widest([...subs]);
+    expect(all.n, `widest query was "${all.q}"`).toBeLessThanOrEqual(12);
   });
 });

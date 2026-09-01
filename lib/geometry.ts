@@ -788,6 +788,33 @@ export function footInsidePoly(f: Foot, poly: Poly): boolean {
   return footCorners(f).every(([x, z]) => pointInPoly(x, z, poly));
 }
 
+/** How far the worst corner sits OUTSIDE the polygon, in metres. 0 when wholly in.
+ *
+ *  The magnitude `footInsidePoly` refuses to give and `outsideShare` cannot see. The
+ *  share is sampled on a grid whose outermost points sit a third of the half-extent in
+ *  from the edge, so a 2.2 m sofa reads **exactly 0.000 until about 160 mm** of it is
+ *  through the plaster — measured, not estimated. A cost built on the share alone is
+ *  therefore flat across the whole range where a piece is reported as crossing a wall
+ *  and the solver is asked to pull it back: the room check says "sticks out of the
+ *  room" and **Fix** answers by moving nothing, because moving it saves nothing.
+ *
+ *  Corner-exact and cheap: four points for a box, and one `distToBoundary` each only
+ *  for the corners that are actually out. Round footprints polygonise like everywhere
+ *  else, so a circle is measured as a circle.
+ *
+ *  It is a DEFICIT, not a distance to the nearest wall — see `layout-settle.ts` for
+ *  why those rank differently. This one is only ever asked about corners already
+ *  outside, where the two agree: the shortest way back in. */
+export function outsideDeficit(f: Foot, poly: Poly): number {
+  let worst = 0;
+  for (const [x, z] of footCorners(f)) {
+    if (pointInPoly(x, z, poly)) continue;
+    const d = distToBoundary(poly, x, z);
+    if (d > worst) worst = d;
+  }
+  return worst;
+}
+
 /** Do these two footprints overlap? Falls through to the rectangle fast path
  *  when neither is round, so nothing about rectangles changes. */
 export function footOverlap(a: Foot, b: Foot, pad = 0): boolean {

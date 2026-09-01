@@ -241,8 +241,19 @@ export const RULE_KINDS = [
   'reach',
   'cut-off',
   'turning',
+  // Containment, split by whether the SOLVER can do anything about it rather than
+  // by where the piece sits. `outside` is a piece `isObstacle` accepts, which is
+  // exactly the set `layout-score`'s `outside` term measures, so a cost exists and a
+  // **Try a fix** button is honest. `outside-immovable` is the rest — a wall rider, a
+  // rug, a low piece, anything on a surface — where no arrangement this app can
+  // search will move it and the button would be a lie.
+  //
+  // The first version split on GEOMETRY (centre off the plan vs merely crossing a
+  // wall) and a user found it in one screenshot: a sofa 300 mm through the wall is
+  // ordinary movable furniture, and it was filed under the immovable kind. The title
+  // still says where the piece is; the RULE says what can be done about it.
   'outside',
-  'overhang',
+  'outside-immovable',
 ] as const;
 export type RuleKind = (typeof RULE_KINDS)[number];
 

@@ -98,6 +98,7 @@ export const SHAPES = [
   'bookshelf', 'shoe-rack', 'door',
   // appliances
   'soundbar', 'radiator', 'air-purifier', 'washing-machine', 'microwave', 'water-dispenser',
+  'fan-standing', 'chest-freezer', 'tv-console', 'stool',
   'box', 'cylinder', 'plane',
 ] as const;
 export type Shape = (typeof SHAPES)[number];
@@ -1730,6 +1731,7 @@ export const PART_LIBRARY: LibraryItem[] = [
   { label: 'Dining chair', group: 'Seating', category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 850] },
   { label: 'Office chair', group: 'Seating', category: 'chair', shape: 'chair-office', dimMM: [600, 600, 1100] },
   { label: 'Ottoman', group: 'Seating', category: 'ottoman', shape: 'ottoman', dimMM: [550, 400, 420] },
+  { label: 'Stool', group: 'Seating', category: 'chair', shape: 'stool', dimMM: [350, 350, 450] },
   // Tables
   { label: 'Coffee table', group: 'Tables', category: 'table', shape: 'coffee-table', dimMM: [1100, 600, 420] },
   { label: 'Side table', group: 'Tables', category: 'table', shape: 'side-table', dimMM: [450, 450, 550] },
@@ -1795,8 +1797,23 @@ export const PART_LIBRARY: LibraryItem[] = [
   { label: 'Water dispenser', group: 'Appliances', category: 'fridge', shape: 'water-dispenser', dimMM: [330, 330, 1000] },
   { label: 'Air purifier', group: 'Appliances', category: 'fridge', shape: 'air-purifier', dimMM: [300, 300, 620] },
   { label: 'Radiator', group: 'Appliances', category: 'fridge', shape: 'radiator', dimMM: [800, 120, 580] },
+  { label: 'TV console', group: 'Storage', category: 'shelf', shape: 'tv-console', dimMM: [1600, 400, 500] },
   { label: 'Soundbar', group: 'Tech', category: 'tv', shape: 'soundbar', dimMM: [1000, 110, 90] },
   { label: 'Ceiling fan', group: 'Appliances', category: 'fan', shape: 'fan', dimMM: [1000, 1000, 200] },
+  // A pedestal fan is the fan most rooms actually have, and `fan` is the ceiling one.
+  // `dimMM[0]` is the HEAD's swept diameter rather than the base's, because that is the
+  // widest thing about it — authoring the base there would let the head reach outside
+  // the footprint every other module measures, which is the `fanBlade` scar in a new
+  // shape.
+  //
+  // NOT marked round, and neither is the stool, because `LibraryItem` has no `circle`
+  // field and `spawn` never sets one: a piece added from the Library is square-footed
+  // whatever its shape, the CEILING FAN included. That is a pre-existing gap between
+  // the detection path (`CATEGORY_DEFAULTS` does carry `circle`) and the add path, and
+  // it is left alone here rather than half-closed for two new shapes — see
+  // docs/what-is-still-open.md § 32.
+  { label: 'Standing fan', group: 'Appliances', category: 'fan', shape: 'fan-standing', dimMM: [450, 450, 1300] },
+  { label: 'Chest freezer', group: 'Appliances', category: 'fridge', shape: 'chest-freezer', dimMM: [1250, 650, 850] },
   { label: 'AC unit', group: 'Appliances', category: 'ac', shape: 'ac-unit', dimMM: [800, 220, 280] },
   { label: 'Door', group: 'Appliances', category: 'door', shape: 'door', dimMM: [900, 50, 2100] },
 ];
@@ -1888,6 +1905,7 @@ export const CATALOG_SHAPES_ORDERED: readonly Shape[] = [
   'monitor', 'laptop', 'fan', 'fridge', 'curtain',
   'bookshelf', 'shoe-rack', 'door',
   'soundbar', 'radiator', 'air-purifier', 'washing-machine', 'microwave', 'water-dispenser',
+  'fan-standing', 'chest-freezer', 'tv-console', 'stool',
 ] as const;
 
 const CATALOG_SHAPES = new Set<Shape>(CATALOG_SHAPES_ORDERED);

@@ -2710,17 +2710,17 @@ committed `valid` with no red and nothing said.
 
 | | |
 |---|---|
-| escapes | **570** of 50,431 accepted placements |
+| escapes | **570** of 55,528 accepted placements |
 | who | curtain 311 · **window 196** · painting 45 · TV 18 |
 | where | L, T, U only. `rect` and `open` clean at every size |
-| swept | 38 `PART_LIBRARY` pairs × 3 sizes × 3 angles × 35 targets × 5 layout ids = 59,850 |
+| swept | 42 `PART_LIBRARY` pairs × 3 sizes × 3 angles × 35 targets × 5 layout ids = 66,150 |
 
 Not a curtain defect: **wider than the wall it landed on**. A max-size TV and a max-size
 painting do it too, and a mid-size curtain does it in all three non-rectangular presets.
 
 **Deleted rather than repaired, and that was measured rather than judged.** The sweep
-scores both builds in one run: the catalogue accepts **50,431** placements with the
-exemption and **49,861** without it, so removing it costs **exactly** those 570 and not
+scores both builds in one run: the catalogue accepts **55,528** placements with the
+exemption and **54,958** without it, so removing it costs **exactly** those 570 and not
 one besides — the second half of that sentence is the load-bearing one, and it is a
 subtraction rather than a hope. Both columns are pinned in the test. Five of the nine
 riders — `door`, `ac/ac-unit`, both mirrors and `tv/soundbar`, the ones that sit in or on
@@ -3016,3 +3016,99 @@ the two, exactly as it was.
 
 Verified after the fix by the same probe that found it: rect, L and U at 3.0 × 2.4, 5.0 × 4.0
 and 7.5 × 5.6 — nine rooms, up to twelve labels each, no two text boxes intersecting.
+
+### § H.16c — the room said a piece was outside and Fix would not move it — FIXED
+
+Reported by the user with a screenshot, one day after § H.16b shipped, and it was **two
+independent defects wearing one symptom**. A sofa in a 6.0 × 4.7 room, reported *Sticks out of
+the room*, with no **Try a fix** on the row and the rail's **Fix** moving nothing.
+
+**1. The rule was split on the wrong question.** § H.16b split containment by GEOMETRY — centre
+off the plan was `outside` (movable), merely crossing a wall was `overhang` (not movable) — and
+justified the second with "every version of it the solver cannot reach: a wall rider, a rug, a
+low piece". That reasoning is true of a wall-mounted TV and simply false of a sofa, which is
+ordinary movable furniture standing on the floor. The geometry answers *where is it*, which is
+what the TITLE is for; it does not answer *can this be fixed*.
+
+The split is `isObstacle` now, which is the **same predicate `layout-score` gates `c.outside`
+on** (`if (!obstacle[i]) continue`). That identity is the whole design: a containment finding is
+fixable exactly when the cost term can see the piece. The kinds are `outside` and
+`outside-immovable`; the titles are unchanged and still geometric.
+
+**2. The cost term had a dead band, so even the rail's Fix could not act.** `outsideShare`
+samples a 3 × 3 grid whose outermost points sit a third of the half-extent in from the edge, so
+for a 2.2 m sofa side-on it reads **exactly 0.000 until about 160 mm** is through the plaster.
+Measured:
+
+| overhang | rule (before) | `outsideShare` | Try a fix (before) |
+|---|---|---|---|
+| 20 mm | overhang | **0.000** | no |
+| 100 mm | overhang | **0.000** | no |
+| 300 mm | overhang | 0.333 | no — *though the solver could* |
+| 500 mm | outside | 0.667 | yes |
+
+So below ~160 mm the room reported a fault that nothing could price; between there and the
+centre leaving the plan, the solver could act and the panel refused to offer it. Fixing only the
+rule would have replaced "no button" with "a button that does nothing" for the first band —
+which is the anti-pattern `RULE_HANDLING` exists to prevent, arrived at from the other side.
+`outsideDeficit` (`lib/geometry.ts`) is corner-exact and non-zero as soon as any corner is out;
+`c.outside` takes the **max** of it (normalised by the piece's radius) and the share, so the term
+is `>=` its old value for every input and only assertions that read 0 could move.
+
+**Driven end to end in a browser**, which is the only place the original report could be
+confirmed: a 6.0 × 4.7 room, sofa at 60 mm (inside the old dead band) and at 300 mm (the
+screenshot's case). Both now show **Try a fix**, both move the sofa back inside — persisted to
+IndexedDB, read back from there rather than off the screen — and in both the finding is gone and
+the panel returns to *Everything fits*.
+
+**What it cost, all of it recorded rather than absorbed.** Seven measured baselines across three
+files moved, and each was checked for direction rather than re-pinned:
+
+- `outside` is now **0.00 on all twelve seeds** of the scrambled U, and two more seeds end with
+  nothing on any hard term (7 → 9). The term works.
+- The phantom-move rate — a piece reported as moved that only got squared up — went **down**,
+  23.17% → 13.75%, measured as an A/B on one fixture over 80 seeds.
+- The worst seed's total went 92.10 → 412.85, **all of it `navigation`**, and the Double bed rung
+  at U 6 × 5 now blocks a door where nothing did before. Both are the same trade and both are
+  § 31, which is a decision nobody has made rather than a defect.
+
+The shipped bed rung still keeps the door clear, and that assertion is now named in capitals in
+`tests/bed-rung-safety.test.ts` so the next person cannot re-baseline it by accident.
+
+### § 31 — containment now outranks a blocked door by a hair, and nobody decided that — OPEN
+
+Surfaced by § H.16c above, and it is a **decision, not a defect**: two hard terms now price
+within a few units of each other on one room, and which one wins is currently an accident of
+their weights rather than anything anyone chose.
+
+`DEFAULT_WEIGHTS` has `outside: 1000` and `door: 800`, both against terms normalised to 0..1.
+Until `outsideDeficit` landed, containment could not see an overhang below roughly 160 mm on a
+sofa-sized piece, so the two never competed and the ordering was never exercised. They compete
+now. On the **U 6 × 5** with a 1400 mm Double bed, the solver ends up blocking about 20% of the
+door zone — `door` 165.69 — because the containment alternative was around 190 mm of bed through
+the wall, which prices at roughly 175. It picked the door by about ten units out of a thousand.
+
+**Neither answer is good, and that is the point.** The room genuinely has no arrangement that is
+both fully inside and clear of the door at that bed width, which is exactly what the bed ladder
+exists to detect — and it does: the Double is not a rung this app ships, the shipped rung is the
+900 mm Single, and `tests/bed-rung-safety.test.ts` still pins that **the shipped rung keeps the
+door clear**. So nothing a user sees today is wrong.
+
+What is undecided is the ordering itself, for the next room where it comes up:
+
+- **Is a blocked door always worse than any overhang?** A door is the room's only entrance; a
+  piece 20 mm through the plaster is a drawing error. An argument for `door` above `outside`.
+- **Or is being outside the room categorical?** A piece that is not in the room is not in the
+  room, and a partially blocked swing is a degree. An argument for the ordering as it stands.
+- **Or should the two stop being comparable at all** — a veto rather than a price, the way
+  `HARD_TERMS` already keeps the hard terms apart rather than summing them?
+
+The third is the most likely right answer and the largest change, which is why this is written
+down rather than done. **Do not re-tune `DEFAULT_WEIGHTS` to make one test go green**; the
+numbers in `bed-rung-safety.test.ts` are pinned exactly so that a change here is visible.
+
+The other measured cost of the same trade, recorded in the same place: on the scrambled U the
+worst seed went from 92.10 to 412.85 total, all of it `navigation` — the solver used to buy a
+connected floor on that seed by letting a piece hang through a wall for free. It strands about
+3.4 m² instead now. Eleven of twelve seeds are unaffected and two MORE seeds end completely
+clean than before, so the exchange is favourable on balance; it is the tail that moved.
