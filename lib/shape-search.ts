@@ -183,11 +183,20 @@ function namesOnlySize(query: string): boolean {
  *  `searchLibrary` is the one that folds synonyms — "couch" finds the sofas,
  *  "carpet" finds the rugs, "armoire" finds the wardrobes — and a substring match
  *  can never do that, which is why the picker's own `label.includes(q)` filter was
- *  the weaker half of a feature the app already had twice. But scoring needs a
- *  whole token the catalog vocabulary recognises: mid-word, "ward" scores nothing
- *  while still being a perfectly good substring of "Wardrobe". Ranking alone would
- *  empty the list halfway through typing a word it is about to find, so the
- *  substring pass stays underneath it.
+ *  the weaker half of a feature the app already had twice.
+ *
+ *  What the fallback is still FOR, now that `scoreItem` has a containment branch:
+ *  the fragments too short to reach it. Scoring wants a whole token, a prefix
+ *  relationship, or — at four characters and up — containment. Below four it has
+ *  nothing, so "obe" scores zero while being a perfectly good substring of
+ *  "Wardrobe", and ranking alone would empty the list halfway through typing a word
+ *  it is about to find. The substring pass stays underneath it for those.
+ *
+ *  (This paragraph used to offer "ward" as the mid-word example that scores
+ *  nothing. It was wrong before the containment branch existed and is worth keeping
+ *  as a correction rather than a silent edit: `"wardrobe".startsWith("ward")` is the
+ *  prefix branch, so "ward" has always scored 1.5. The test beside it knew that and
+ *  used "obe"; the source comment did not, which is two accounts of one rule.)
  *
  *  Unlimited on purpose. `searchLibrary`'s default of 5 is right for a short
  *  suggestion list; a search box is showing you the catalog, and truncating it
