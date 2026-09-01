@@ -28,7 +28,7 @@ them. Where two items are the same defect one layer apart, they are listed as on
 
 | # | item | why here | cost | blocks / blocked by |
 |---|---|---|---|---|
-| 1 | **§ 12** rider keeps the size the room was BUILT at | Confirmed by eye, wrong pixels on every reload of a resized room, and the diagnosis is already written: `buildSceneFromRoom` settles against AUTHORED dims, then `loadTransforms` applies saved ones and nothing settles again | S–M | none — the reason it is first |
+| ~~1~~ | ~~**§ 12** rider keeps the size the room was BUILT at~~ | **FIXED on load** (`lib/rider-settle.ts`). The in-session half — `setDim` settles nothing, so it floats immediately — is open and is a decision: see § 12 | — | its remaining half sits with § B.16 |
 | 2 | **§ 32** everything added from the Library is square-footed | The **ceiling fan** is a circle when detected and a square when added, today, on `main`. Two paths disagreeing about one shape is the failure this repo keeps finding | S, once the decision is made | wants the "roundness belongs to the SHAPE" call, which is the same move as § 33.1's contract |
 | 3 | **§ 14** a merged group's member cannot be clicked | User-reported, no cause yet. `PartTree` selects it fine, so it is the canvas hit path | M — unknown | do not guess a cause; sits beside § 17 (both are canvas-pointer) |
 | 4 | **§ 17** a drag refused by a wall TV names nothing | Same surface as § 14 and `refusalCause` is already half of it | S | do with § 14, one pointer-path session |
@@ -1984,21 +1984,50 @@ argument for eyes: the four that held were the four a test could most nearly hav
 its axis is not a check, and the person following it reports the wall they hit rather than
 the thing you meant. Nobody was wrong here except the note.
 
-### 12. A rider stays at the size the room was BUILT at, after a reload — CONFIRMED by eye
+### 12. A rider stays at the size the room was BUILT at, after a reload — FIXED on load; the in-session half is NOT
 
 The prediction in `visual-check.md` was exact and the user saw exactly it: resize a surface,
 reopen the room, the piece standing on it hangs in the air above the shrunk top.
 
-**Nothing new is needed to diagnose this** and nothing here re-derives it. `settleHeights`
-answers entirely in `dimMM` and is pinned in `tests/layout-settle.test.ts` at the wrong
-answer with the right one named, mutation-checked three ways. The sequence no test reaches
-is the load: `loadFromRoom` rebuilds through `buildSceneFromRoom`, which settles against the
-**authored** dims, then `loadTransforms` re-applies the saved `dims` by id with nothing
-settling afterwards.
+`settleHeights` answers entirely in `dimMM`, and a resize never touches `dimMM` — it writes
+a `dims` override. So the load was: `buildSceneFromRoom` settles against the **authored**
+sizes, `loadTransforms` applies the saved ones over the top, and nothing settles again.
 
-**It is not built because it is a decision, not a patch** — re-settling on load writes
-position overrides, and every override pins that value against a re-detect and persists it.
-That stamps the user's room to fix a display bug. **§ B.16.**
+**`lib/rider-settle.ts` is the fix, and § B.16's objection is answered rather than
+overruled.** That objection was that re-settling on load "writes position overrides, and
+every override pins that value against a re-detect and persists it — that stamps the user's
+room to fix a display bug." True of **creating** an override; false of correcting one that
+is already there. So `settleRiders` puts each fix on the layer that already holds that
+part's position — an existing `positions[id]`, or the authored `part.pos` — and **never
+mints a key**. A piece the user has not moved still has no override afterwards, so a
+re-detect still reaches it.
+
+It runs in `RoomSync`'s load block **before `ready.current = true`**, and both persist
+effects gate on that flag, so it corrects what is drawn and writes nothing to IndexedDB.
+
+Seven assertions, all seven mutation-killed at the intended clause — including the
+asymmetric case (a desk that GREW, which a drop-only fix passes) and the identity return
+(a fresh array every load would make `useScene`'s subscribers re-persist an unchanged
+scene). The first attempt at that mutation run was worthless and nearly believed: the file
+was still untracked, so `git checkout --` restored nothing, every mutation accumulated on
+the last, and six "kills" were six mutations killing each other. The runner verifies its own
+restore now. **Commit before mutating.**
+
+**The half that is NOT fixed, found while fixing this one.** `setDim` is
+`set((s) => ({ dims: { ...s.dims, [id]: dim } }))` and nothing settles after it, ever — so
+the lamp floats **immediately, in-session**, and the reload merely made it stick. The load
+fix means it now comes back right on the next open, which is strictly better and still
+visibly odd.
+
+It is not fixed here because the same trick does not work: after `ready.current = true` the
+persist effects are live, and for a piece with no position override the only place to put
+the fix is the authored `parts` — which for a **detected room that has no scene snapshot
+yet** would create one, and a snapshot is preferred over a rebuild from detections. That is
+a stamp by a different door, and it is the same shape of decision § B.16 already is.
+
+**What would unblock it:** deciding whether a settle may create a scene snapshot for a room
+that has none. If not, the honest alternative is to settle at read time in `resolveParts`,
+which is a hot path and wants its own measurement.
 
 ### 13. The placement row's Floor button sits flush against the window edge — FIXED, and the recorded cause was wrong
 
