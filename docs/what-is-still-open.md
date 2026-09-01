@@ -653,20 +653,26 @@ the user went and looked.
     silently, which is why it is in this section and not fixed.
     **Committed:** nothing but this paragraph.
 
-13. **Where does the app hang a ceiling piece? Today it hangs anything over 300 mm
-    THROUGH the slab.** `groundY`'s ceiling branch is `Math.max(roomHeight - 0.15, h)` —
-    a fixed 150 mm drop to the piece's **centre** — so its top lands at
-    `H - 0.15 + h/2` and pokes through the ceiling **iff `h > 300 mm`, at every ceiling
-    height**. The seeded Pendant is 400 mm: top **2.850 in a 2.800 m room, 50 mm
-    through**, on the `t` and `open` presets. A ceiling fan at 200 mm clears by 50 mm,
-    which is why this has never looked like a rule.
+13. **Where does the app hang a ceiling piece? — ANSWERED AND FIXED.** It used to hang
+    anything over 300 mm THROUGH the slab: `groundY`'s ceiling branch was
+    `Math.max(roomHeight - 0.15, h)`, a fixed 150 mm drop to the piece's **centre**, so
+    its top landed at `H - 0.15 + h/2` and poked through **iff `h > 300 mm`, at every
+    ceiling height**. The seeded Pendant is 400 mm: top 2.850 in a 2.800 m room. A
+    ceiling fan at 200 mm cleared by 50 mm, which is why it never looked like a rule.
 
-    It is **pinned as expected on PR #54's branch and nowhere else.** `CEILING_TOPS` in
-    `tests/scene-seed.test.ts` holds `t: ['Pendant=2.850']` and `open: ['Pendant=2.850']`,
-    asserted at `:189` by `expect(tops).toEqual(CEILING_TOPS[id])` — but
-    `git grep -ln CEILING_TOPS origin/main` returns **nothing**, so none of that exists
-    until #54 lands. Until then the number is unpinned and a change to it is silent.
-    Once #54 is in, changing it is a deliberate act with a red test attached.
+    The branch takes the lower of the nominal drop and the piece's own half-height now,
+    so a shallow fixture stays exactly where it was and a deep one stops crossing the
+    slab. The seeded Pendant tops out at **2.800**. `CEILING_TOPS` in
+    `tests/scene-seed.test.ts` — which #54 landed — went red on the fix, which is what
+    it was pinned in both directions to do, and holds the new literals; a `<=` bar would
+    have sat green through it and nobody would have come back.
+
+    The catalogue-wide version of the question is `tests/shape-contract.test.ts`: no
+    Library piece may reach through the ceiling at its shipped size, **and** nothing hung
+    from the ceiling may hang below head height. The second clause exists because the
+    first one alone goes green on a pedestal fan that has lost its floor anchor — it
+    comes to rest spanning 1.50–2.80 m, entirely inside the room, base at chest height.
+
     (The first version of this paragraph said "already pinned" with no branch named, in
     the one document whose convention is that every item says whether it exists in a
     commit anywhere. Found by danmu-78 in review.)
