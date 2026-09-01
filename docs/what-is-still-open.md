@@ -2942,7 +2942,7 @@ in any preset moves, at any of the four sizes.
   and the solver's `outside` term rises between them and is exactly 0 on the good one. A sofa
   at x ≈ 3.2 against x = 0 is the obvious pair; the term already exists, weighted 1000.
 
-### § 30 — the 2D plan draws a wall NAME and a wall RULER in the same place — NOT FIXED
+### § 30 — the 2D plan draws a wall NAME and a wall RULER in the same place — FIXED
 
 Found by looking at a screenshot taken for § H.16b, which is the only reason it is here: no
 test asks whether two pieces of text land on each other, and nothing else in this document
@@ -2990,6 +2990,29 @@ person's search.
 The fix is therefore a one-line question — move the label out of the band, not nudge it
 within one — and the constants are already there to do it against rather than by taste.
 
-Deliberately not fixed on the § H.16b branch: it is untouched by that work, sits in a
-different module, and folding it in would put an unrelated change under a review that was
-about something else.
+**FIXED.** `lib/plan-annotations.ts` now holds both offsets, the ruler’s backdrop extent and
+the label’s half-extents, so the numbers being drawn and the numbers being checked are the
+same numbers; `PlanView` reads them and `tests/plan-annotations.test.ts` asserts the bands
+are disjoint. The RULER moved (18 → 62), not the label: `WALL_LABEL_OFFSET` applies to every
+edge of every footprint including the interior edges of an L, T or U, while the ruler only
+ever runs along the bounding box — so moving the label would have moved it on six-edge rooms
+that never had the problem.
+
+**The first fix was wrong and the browser is the only thing that said so.** It modelled ONE
+half-extent for the label, cleared the north wall, and left east overlapping by 4 units —
+with every assertion green, because they all derived the label’s band from the same constant
+they were checking. A label reaches the ruler by its HEIGHT on a vertical normal (~12 units)
+and by its WIDTH on a horizontal one (~42). That is this repo’s "verify in the asymmetric
+case" exactly: a north-wall screenshot and a square room hide it identically. The test sweeps
+`WALL_AXES` now rather than checking the axis that was looked at.
+
+Two mutation notes worth keeping. Setting the label half-extent to **2** passed all five of
+the first assertions — shrinking it moves the band AND the thing measuring the band, so the
+gap widens and the plan overlaps exactly as before. It is pinned against the browser numbers
+now, and an under-estimate is the only direction that silently re-opens the defect. And a
+renderer that went back to a literal would leave every band assertion green, so the test
+greps `PlanView` for both rulers — fixing only the top one leaves "East wall", the worse of
+the two, exactly as it was.
+
+Verified after the fix by the same probe that found it: rect, L and U at 3.0 × 2.4, 5.0 × 4.0
+and 7.5 × 5.6 — nine rooms, up to twelve labels each, no two text boxes intersecting.

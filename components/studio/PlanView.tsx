@@ -44,6 +44,11 @@ import { v4 as uuid } from 'uuid';
 import { removeParts, studioSurfaceFocused } from './KeyboardShortcuts';
 import { announce } from '@/lib/announce';
 import { openPickMenu, openSceneMenu } from './SceneContextMenu';
+import {
+  DIM_BACKDROP_ABOVE,
+  DIM_RULER_OFFSET,
+  WALL_LABEL_OFFSET,
+} from '@/lib/plan-annotations';
 
 const SCALE = 100; // px per metre at zoom = 1, in viewBox units
 const PAD = 80;
@@ -1526,8 +1531,8 @@ export const PlanView = forwardRef<PlanViewHandle, {
               normal, so they stay correct on a six-edge L or U room. */}
           {segs.map((seg, i) => {
             const l = toLocal(seg.x, seg.z);
-            const x = l.x - Math.sin(seg.yaw) * 26;
-            const y = l.y - Math.cos(seg.yaw) * 26;
+            const x = l.x - Math.sin(seg.yaw) * WALL_LABEL_OFFSET;
+            const y = l.y - Math.cos(seg.yaw) * WALL_LABEL_OFFSET;
             return (
               <text
                 key={`wall-label-${i}`}
@@ -1550,32 +1555,32 @@ export const PlanView = forwardRef<PlanViewHandle, {
           {/* Overall dimensions, in the unit Settings owns — this used to print a
               bare millimetre number with no unit at all. */}
           <g fontFamily="var(--font-mono)" fontSize="10" fill="var(--accent-text)" style={{ pointerEvents: 'none' }}>
-            <line x1={PAD} y1={PAD - 18} x2={PAD + planW} y2={PAD - 18} stroke="var(--accent-text)" strokeWidth="0.8" />
-            <line x1={PAD} y1={PAD - 22} x2={PAD} y2={PAD - 14} stroke="var(--accent-text)" />
-            <line x1={PAD + planW} y1={PAD - 22} x2={PAD + planW} y2={PAD - 14} stroke="var(--accent-text)" />
+            <line x1={PAD} y1={PAD - DIM_RULER_OFFSET} x2={PAD + planW} y2={PAD - DIM_RULER_OFFSET} stroke="var(--accent-text)" strokeWidth="0.8" />
+            <line x1={PAD} y1={PAD - DIM_RULER_OFFSET - 4} x2={PAD} y2={PAD - DIM_RULER_OFFSET + 4} stroke="var(--accent-text)" />
+            <line x1={PAD + planW} y1={PAD - DIM_RULER_OFFSET - 4} x2={PAD + planW} y2={PAD - DIM_RULER_OFFSET + 4} stroke="var(--accent-text)" />
             <rect
               x={PAD + planW / 2 - (widthLabel.length * 3.3 + 6)}
-              y={PAD - 26}
+              y={PAD - DIM_RULER_OFFSET - DIM_BACKDROP_ABOVE}
               width={widthLabel.length * 6.6 + 12}
               height="15"
               fill="var(--paper)"
             />
-            <text x={PAD + planW / 2} y={PAD - 15} textAnchor="middle">
+            <text x={PAD + planW / 2} y={PAD - DIM_RULER_OFFSET + 3} textAnchor="middle">
               {widthLabel}
             </text>
 
-            <line x1={PAD + planW + 18} y1={PAD} x2={PAD + planW + 18} y2={PAD + planH} stroke="var(--accent-text)" strokeWidth="0.8" />
-            <line x1={PAD + planW + 14} y1={PAD} x2={PAD + planW + 22} y2={PAD} stroke="var(--accent-text)" />
-            <line x1={PAD + planW + 14} y1={PAD + planH} x2={PAD + planW + 22} y2={PAD + planH} stroke="var(--accent-text)" />
-            <g transform={`rotate(90 ${PAD + planW + 18} ${PAD + planH / 2})`}>
+            <line x1={PAD + planW + DIM_RULER_OFFSET} y1={PAD} x2={PAD + planW + DIM_RULER_OFFSET} y2={PAD + planH} stroke="var(--accent-text)" strokeWidth="0.8" />
+            <line x1={PAD + planW + DIM_RULER_OFFSET - 4} y1={PAD} x2={PAD + planW + DIM_RULER_OFFSET + 4} y2={PAD} stroke="var(--accent-text)" />
+            <line x1={PAD + planW + DIM_RULER_OFFSET - 4} y1={PAD + planH} x2={PAD + planW + DIM_RULER_OFFSET + 4} y2={PAD + planH} stroke="var(--accent-text)" />
+            <g transform={`rotate(90 ${PAD + planW + DIM_RULER_OFFSET} ${PAD + planH / 2})`}>
               <rect
-                x={PAD + planW + 18 - (depthLabel.length * 3.3 + 6)}
+                x={PAD + planW + DIM_RULER_OFFSET - (depthLabel.length * 3.3 + 6)}
                 y={PAD + planH / 2 - 13}
                 width={depthLabel.length * 6.6 + 12}
                 height="15"
                 fill="var(--paper)"
               />
-              <text x={PAD + planW + 18} y={PAD + planH / 2 - 2} textAnchor="middle">
+              <text x={PAD + planW + DIM_RULER_OFFSET} y={PAD + planH / 2 - 2} textAnchor="middle">
                 {depthLabel}
               </text>
             </g>
