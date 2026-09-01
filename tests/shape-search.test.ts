@@ -268,3 +268,87 @@ describe('queryNamesSize', () => {
     expect(queryNamesSize('sofa 3')).toBe(false);
   });
 });
+
+describe('the tail of a compound word', () => {
+  // The reported defect: "I typed stand but I didn't get nightstand as a suggestion."
+  // English puts the head noun last, so a compound's tail is the word naming what the
+  // thing IS — and it was the one form neither branch of the scorer could reach.
+  // `stand` is not equal to `nightstand`, and neither starts with the other, so the
+  // row scored 0 and `searchLibrary` filters to `s > 0`: not ranked low, absent.
+
+  const hayOf = (i: { label: string; group: string; category: string; shape: string }) =>
+    `${i.label} ${i.group} ${i.category} ${i.shape}`
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t.length > 1);
+
+  it('reaches Nightstand for "stand"', () => {
+    const labels = searchLibrary('stand', PART_LIBRARY.length).map((i) => i.label);
+    expect(labels).toContain('Nightstand');
+  });
+
+  it('and a genuine prefix still outranks that tail', () => {
+    // The weight decision, visible because both kinds of match exist for this one
+    // query: the `desk-standard` shape prefix-matches `stand` at 1.5, Nightstand
+    // contains it at 1. Both appear; the prefix is first.
+    const labels = searchLibrary('stand', PART_LIBRARY.length).map((i) => i.label);
+    expect(labels.length).toBeGreaterThanOrEqual(2);
+    expect(labels[0]).toBe('Dining / desk table');
+    expect(labels.indexOf('Nightstand')).toBeGreaterThan(0);
+  });
+
+  it('and "outranks" means strictly, which `stand` cannot show', () => {
+    // `stand` above is a decorative assertion against the one mutation the weight
+    // most plausibly drifts to. At exactly 1.5 the two rows TIE, `sort` is stable,
+    // and the desk table is earlier in `PART_LIBRARY` — so it stays first and the
+    // test passes while the decision it guards is gone.
+    //
+    // `achi` is the only query in the catalog's whole substring space where the
+    // containment match sits EARLIER than the prefix match, so a tie flips the
+    // order: AC unit prefix-matches at 1.5, Washing machine contains it at 1, and
+    // Washing machine is row 34 against AC unit's 41. Not a word anyone types —
+    // it is a probe for the ordering, and it is the only one the catalog affords.
+    const labels = searchLibrary('achi', PART_LIBRARY.length).map((i) => i.label);
+    expect(labels).toEqual(['AC unit', 'Washing machine']);
+  });
+
+  it('reaches Wardrobe for "robe" and Microwave for "wave"', () => {
+    // Two more real English words that are somebody's tail. `stand` alone would be a
+    // fixture that could be satisfied by special-casing one row.
+    expect(searchLibrary('robe', PART_LIBRARY.length).map((i) => i.label)).toContain('Wardrobe');
+    expect(searchLibrary('wave', PART_LIBRARY.length).map((i) => i.label)).toContain('Microwave');
+  });
+
+  it('but three letters do not, because "ing" would reach fourteen rows', () => {
+    // The floor, pinned as the decision it is. At a floor of 3 the gerund tail `ing`
+    // matches Lighting, Seating, Dining and every row in those groups — a query that
+    // is not a word anybody typed on purpose, admitting a third of the catalog. This
+    // is the assertion that fails if CONTAINS_MIN drops.
+    expect(searchLibrary('ing', PART_LIBRARY.length)).toEqual([]);
+    const wouldMatch = PART_LIBRARY.filter((i) => hayOf(i).some((h) => h.includes('ing')));
+    expect(wouldMatch.length).toBe(14);
+  });
+
+  it('and no query in the catalog\'s own substring space becomes a catch-all', () => {
+    // The floor was MEASURED rather than picked, so the measurement is the assertion
+    // rather than the number 4 sitting alone above it. Every substring of every hay
+    // token is a query a user can type; none may reach more than a quarter of the
+    // catalog. At a floor of 3 `ing` reaches 14 of 43 and this goes red — which is
+    // the same fact as the test above, arrived at without naming `ing`.
+    const hay = PART_LIBRARY.map(hayOf);
+    const subs = new Set<string>();
+    for (const t of new Set(hay.flat())) {
+      for (let a = 0; a < t.length; a++) for (let b = a + 1; b <= t.length; b++) subs.add(t.slice(a, b));
+    }
+    expect(subs.size).toBe(797);
+
+    let worst = { q: '', n: 0 };
+    for (const q of subs) {
+      const n = searchLibrary(q, PART_LIBRARY.length).length;
+      if (n > worst.n) worst = { q, n };
+    }
+    // 10 = the `Appliances` group, reached by `ance` / `ances` / `iance` and the rest
+    // of that word's tails. A real group name, so ten rows is the honest answer.
+    expect(worst.n, `widest query was "${worst.q}"`).toBeLessThanOrEqual(10);
+  });
+});

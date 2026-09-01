@@ -58,12 +58,39 @@ function tokens(s: string): string[] {
     .map((t) => SYNONYM[t] ?? t);
 }
 
+/** The shortest query token allowed to match by containment.
+ *
+ *  Measured over the real query space rather than chosen: every substring of every
+ *  hay token in the catalog (797 of them), asking how many admit more than ten
+ *  items. At a floor of 2 that is 12 queries, at 3 it is exactly one — `ing`, the
+ *  gerund tail, which reaches 14 — and at 4 it is none. Four is the smallest floor
+ *  that admits no catch-all, and it is what lets `room`, `robe` and `wave` reach
+ *  Bedroom, Wardrobe and Microwave. */
+const CONTAINS_MIN = 4;
+
+/** Weight for a containment match. Strictly under the prefix branch's 1.5 so a
+ *  genuine prefix still outranks a tail: `stand` finds Nightstand, and still finds
+ *  the `desk-standard` table first. */
+const CONTAINS_SCORE = 1;
+
 function scoreItem(qTokens: string[], item: LibraryItem): number {
   const hay = tokens(`${item.label} ${item.group} ${item.category} ${item.shape}`);
   let score = 0;
   for (const q of qTokens) {
     if (hay.includes(q)) score += 3;
     else if (hay.some((h) => h.startsWith(q) || q.startsWith(h))) score += 1.5;
+    // Containment, and it is the compound's TAIL that this is really for. English
+    // puts the head noun last — a nightstand is a stand, an armchair is a chair, a
+    // bookshelf is a shelf — so the tail is the word naming what the thing IS, and
+    // it was the one form neither of the branches above could reach. `stand` is not
+    // equal to `nightstand`, neither starts with the other, so the item scored 0 and
+    // `searchLibrary` filters to `s > 0`: it was not ranked low, it was absent.
+    //
+    // One direction only, query inside hay. The reverse (a hay token inside the
+    // query) needs a floor on the HAY token instead, which is a different
+    // measurement and one nothing here has taken — a 2-character `tv` would match
+    // every query containing those two letters in a row.
+    else if (q.length >= CONTAINS_MIN && hay.some((h) => h.includes(q))) score += CONTAINS_SCORE;
   }
   return score;
 }
@@ -156,11 +183,20 @@ function namesOnlySize(query: string): boolean {
  *  `searchLibrary` is the one that folds synonyms — "couch" finds the sofas,
  *  "carpet" finds the rugs, "armoire" finds the wardrobes — and a substring match
  *  can never do that, which is why the picker's own `label.includes(q)` filter was
- *  the weaker half of a feature the app already had twice. But scoring needs a
- *  whole token the catalog vocabulary recognises: mid-word, "ward" scores nothing
- *  while still being a perfectly good substring of "Wardrobe". Ranking alone would
- *  empty the list halfway through typing a word it is about to find, so the
- *  substring pass stays underneath it.
+ *  the weaker half of a feature the app already had twice.
+ *
+ *  What the fallback is still FOR, now that `scoreItem` has a containment branch:
+ *  the fragments too short to reach it. Scoring wants a whole token, a prefix
+ *  relationship, or — at four characters and up — containment. Below four it has
+ *  nothing, so "obe" scores zero while being a perfectly good substring of
+ *  "Wardrobe", and ranking alone would empty the list halfway through typing a word
+ *  it is about to find. The substring pass stays underneath it for those.
+ *
+ *  (This paragraph used to offer "ward" as the mid-word example that scores
+ *  nothing. It was wrong before the containment branch existed and is worth keeping
+ *  as a correction rather than a silent edit: `"wardrobe".startsWith("ward")` is the
+ *  prefix branch, so "ward" has always scored 1.5. The test beside it knew that and
+ *  used "obe"; the source comment did not, which is two accounts of one rule.)
  *
  *  Unlimited on purpose. `searchLibrary`'s default of 5 is right for a short
  *  suggestion list; a search box is showing you the catalog, and truncating it

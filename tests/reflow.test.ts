@@ -810,6 +810,61 @@ describe('the rail asks about itself', () => {
     expect(readFileSync(root('components', 'studio', 'Inspector.tsx'), 'utf8')).toMatch(/className="rail-triple"/);
   });
 
+  it('and the reflow fires at a width the rail can actually reach', () => {
+    // The one that was missing, and the defect it would have caught shipped for
+    // months. `.rail-triple` and `.rail-swatches` live only in the Inspector — the
+    // RIGHT rail — and their fold was written at `max-width: 268px`, below that
+    // rail's own `--rail-right-min` of 276px. `DockedShell` renders a dragged sash
+    // as `clamp(--rail-right-min, Npx, --rail-max)`, so 276px is the narrowest a
+    // dragged right rail gets: the whole band a drag can reach sat ABOVE the
+    // breakpoint and never folded. Measured at 276px, the three buttons wanted
+    // 261px of 243px and "Floor" painted past the right edge of the window.
+    //
+    // It looked alive because `--rail-right-tight` (248px, the compact step) does
+    // clear 268px — so the fold fired for the width nobody drags to and not for
+    // the width they do. A test naming a viewport would have agreed with it.
+    //
+    // Necessary, not sufficient: nothing here can measure a button's min-content,
+    // so this cannot say the folded layout FITS. It says the fold is reachable,
+    // which is the half that was false.
+    const blocks = [...CSS.matchAll(/@container rail \(max-width: (\d+)px\)\s*\{([\s\S]*?)\n\}/g)];
+    expect(blocks.length, 'no @container rail blocks parsed').toBeGreaterThan(0);
+
+    // Why `rail-right` is the token to measure against, asserted rather than
+    // assumed. Both classes are markup in `Inspector.tsx` and nowhere else, and
+    // `shell-parts`' `RightRailBody` is the only thing that renders an Inspector —
+    // so the right rail's floor is the narrowest either class ever sees. Mutating
+    // the line below to `rail-left` leaves the check green (228px is under any
+    // plausible breakpoint), which is exactly why the premise is pinned here: move
+    // one of these classes into the piece tree and this goes red rather than
+    // quietly measuring the wrong rail.
+    const sources = walk(root('components')).filter((f) => /\.tsx$/.test(f));
+    for (const cls of ['rail-triple', 'rail-swatches']) {
+      // A word match, not `"${cls}"` — `className="rail-triple something"` is a
+      // perfectly ordinary thing to write and an exact-attribute match reads it as
+      // nobody rendering the class at all. Both readings go red rather than green,
+      // but only one of them names the real change.
+      const users = sources.filter((f) => new RegExp(`\\b${cls}\\b`).test(readFileSync(f, 'utf8')));
+      expect(users.map((f) => f.split(/[\\/]/).pop()), `who renders .${cls}`).toEqual(['Inspector.tsx']);
+    }
+    expect(readSrc('components', 'studio', 'shells', 'shell-parts.tsx')).toMatch(
+      /export function RightRailBody[\s\S]*?<Inspector\s*\/>/,
+    );
+
+    const floor = railFloor('rail-right');
+    for (const cls of ['.rail-triple', '.rail-swatches']) {
+      const owning = blocks.filter((b) => codeOnly(b[2]).includes(cls));
+      expect(owning.length, `${cls} is not reflowed by any container query`).toBeGreaterThan(0);
+      // The WIDEST such block is the one that decides: a narrower one below it can
+      // only add relief that the wider has already begun.
+      const at = Math.max(...owning.map((b) => Number(b[1])));
+      expect(
+        at,
+        `${cls} folds at ${at}px, but the right rail's floor is ${floor}px — every width a drag can reach is above the fold`,
+      ).toBeGreaterThanOrEqual(floor);
+    }
+  });
+
   it('only goes tighter than the shipping floor where the contents reflow', () => {
     // The tight tokens are the `compact` step (1024–1279px), not a lower version of
     // the wide widths — a 1920px window has no reason to lose 94px of Inspector.

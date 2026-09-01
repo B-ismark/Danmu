@@ -187,7 +187,11 @@
      structurally unable to see the sentence still naming it.) Both are derived, not chosen:
        left  = two 88px lighting segments + the section's 32px of padding;
        right = two dimension fields on a row + their gap + the same padding,
-               which is what the 3-up row folds to below 268px.
+               which is what the 3-up row folds to below the `@container rail`
+               breakpoint. That number lives in the block itself and deliberately
+               not here as well: it moved from 268px to 304px once somebody
+               measured what the 3-up row needs, and a copy in this sentence would
+               now be the stale one.
      They are separate tokens from `--rail-*-min` on purpose: those are the floors
      for a rail whose contents do NOT reflow, and lowering them would quietly
      change the layout that ships. */
@@ -547,7 +551,32 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
    two if this turns out to bite. Open a Select and the room report and look; it
    is a ten-second check and it is in `docs/visual-check.md`. */
 
-@container rail (max-width: 268px) {
+/* 304px, and the number is measured rather than judged. This block was at 268px,
+   which is BELOW `--rail-right-min` — so for the one width band a user can reach
+   by dragging the sash, the fold could never fire.
+
+   The right rail is the only place either of these classes is used, and it takes
+   three kinds of width: `--rail-right`'s clamp (276–320px), `--rail-right-tight`
+   (248px, the `compact` step), and whatever the sash was dragged to, which
+   `DockedShell` renders as `clamp(--rail-right-min, Npx, --rail-max)` — so 276px
+   is the narrowest a DRAGGED rail can be. 248px cleared the old 268px breakpoint,
+   which is exactly why this looked alive: the compact step folded, and only the
+   drag did not.
+
+   Measured in a browser at a rail dragged to 276px, where 33px goes to padding and
+   the border: `.rail-triple`'s three buttons want 261px of the 243px they get, so
+   “Floor” painted 1.8px PAST the right edge of a 1400px window — `.rail` is
+   `overflow: visible`, so nothing clipped, nothing scrolled and nothing errored.
+   `.rail-swatches` wanted 252px in the same 243px. The two need the rail at 294px
+   and 285px respectively; 304px clears the larger with room, and still leaves the
+   narrowest rail that ships un-dragged three-up (307px, at a 1280px viewport,
+   which has 13px to spare).
+
+   Note what the failure was NOT: `1fr` is `minmax(auto, 1fr)`, so the columns could
+   not shrink below their own content and the GRID overflowed instead. There is no
+   clipping and no ellipsis to notice — the row keeps its width and hangs off the
+   end of the rail. */
+@container rail (max-width: 304px) {
   /* Three 11px buttons with icons stop fitting first. Two rows of two reads
      better than three clipped labels — and better than what a too-narrow flex
      row does, which is print each label over the button beside it. */

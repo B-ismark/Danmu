@@ -64,6 +64,14 @@ over "PR #42 deletes every test #39 added".)*
 That is add/add, not a silent revert. Read the part where the tool says *how* it reached
 its answer; the absent line carries the meaning.
 
+**And the same trap from the other side: stages 1, 2 AND 3 are an ORDINARY conflict.**
+Stage 1 is the common ancestor, so a file carrying all three was edited on both sides since
+they diverged — a normal three-way conflict, not an add/add and not a redeclaration waiting
+to break the build. `fix/pointer-cancel-note` was described in one session as an add/add that
+would redeclare `gestureFor`; it is 19 files with stages 1/2/3 throughout. Both readings of
+this tool have now been got wrong here, in opposite directions, which is the argument for
+counting the stage numbers rather than skimming the file list.
+
 **Symptom: a branch list, a PR list or an "ahead by N" table disagrees with reality.**
 Every such list is a hand-off document: true when written, rotting since.
 → Derive per line — `git rev-list --count origin/main..origin/BRANCH`,
@@ -101,6 +109,16 @@ PowerShell 5.1's `Get-Content` decodes UTF-8 as the ANSI codepage. `-Encoding ut
 write does not save you — the damage is on the read.
 → Never round-trip source through `Get-Content`/`Set-Content`. Editing tools, or node.
 
+**Symptom: the script says it patched the file, and the file is unchanged.**
+`str.replace` returns the string unmodified when the needle is absent, and a script that
+ends `print('patched')` says so either way. Cost two round trips in one session — once on a
+multi-line needle whose surrounding lines had been rewritten by an earlier edit in the same
+script, once on a CRLF/LF mismatch — and in both cases the *next* command's output was read
+as evidence about a change that had never been applied.
+→ `assert needle in s` before replacing, and print what actually matched. In a repo with
+mixed endings, have the helper try the needle as written, then CRLF, then LF; a doc with
+heredoc-appended regions has both.
+
 **Symptom: `grep -c` returns `0` and the rest of your `&&` chain silently never runs.**
 `grep` exits 1 when it matches nothing, and `0` is a legitimate answer you were asking
 for.
@@ -124,8 +142,18 @@ surfaced only when `git status` listed three modified files where four were expe
 restore that eats prose is invisible to every gate in the repo.
 → So: **read the file list, not just the exit code**, after any restore — and prefer
 mutating a copy, or committing first, whenever the same file also holds work of yours.
-*(Cost: three times — `lib/footprint.ts`, then `lib/layout-score.ts`, then
-`lib/drag-resolve.ts`'s comment. All recovered, all avoidable.)*
+*(Cost: five times — `lib/footprint.ts`, `lib/layout-score.ts`, `lib/drag-resolve.ts`'s
+comment, and then `app/globals.css` TWICE in one battery. All recovered, all avoidable.)*
+
+**The fifth occurrence adds a consequence the first four did not name: it silently
+invalidates the rest of the battery.** A `@container` breakpoint fix was uncommitted when
+mutation 1 ran; the restore reverted the file to the shipped defect, so mutations 2 and 3
+ran against code that was *already* red for the reason under test. Both were recorded as
+kills. They were not kills of anything — a red from a tree that was already red is worth
+nothing, which is the same asymmetry as a green from a hollow `node_modules`.
+→ **Re-run the whole battery after any restore that touched the file under test**, and put
+a baseline run at the top of every battery so a pre-existing red is visible before the
+first mutation.
 
 **Symptom: a mutation you are testing in a BUILT artifact comes back green, and the
 assertion looks like decoration.**
