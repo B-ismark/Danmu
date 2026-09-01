@@ -76,31 +76,32 @@ function clashes(parts: ReturnType<typeof defaultScene>): string[] {
 
 /** The top of every ceiling-anchored piece each preset seeds, measured at HEIGHT = 2.8.
  *
- *  **A defect written down, not a specification.** `t` and `open` seed a 400 mm pendant
- *  and its top is 2.850 in a 2.8 m room — 50 mm through the slab. `groundY`'s `ceiling`
- *  branch is `max(roomHeight - 0.15, h)`, which hangs the CENTRE 150 mm below the
- *  ceiling, so anything taller than 300 mm passes through it.
+ *  **This was a defect written down, and the defect is fixed.** `t` and `open` seed a
+ *  400 mm pendant whose top came to 2.850 in a 2.8 m room — 50 mm through the slab —
+ *  because `groundY`'s `ceiling` branch hung the CENTRE a flat 150 mm below the
+ *  ceiling, so anything taller than 300 mm passed through it. The branch takes the
+ *  lower of that nominal drop and the piece's own half-height now, which leaves a
+ *  shallow fixture exactly where it was and stops a deep one crossing the slab.
  *
- *  Same defect `ANCHOR_BY_CATEGORY` already records for curtains — a 2.6 m curtain's
- *  centre at 2.55 m put most of the cloth through the ceiling, which is why a curtain is
- *  `wall-high` and not `ceiling`. A 400 mm pendant is a smaller instance, 50 mm rather
- *  than most of it.
+ *  Kept as a per-preset table rather than collapsed to `every top <= HEIGHT`, and the
+ *  reason is the whole value of the file: a bar cannot tell a preset that seeds a
+ *  compliant pendant from one that seeds NO pendant at all. Both give an empty
+ *  violation list. Naming `t` and `open` and their exact tops means deleting the
+ *  pendant from a preset turns this red too.
  *
- *  Invisible until the mount flag was derived: the seeder set the pendant
- *  `wallMounted: false` by hand, so nothing measured it as centred geometry at all.
- *  `buildSceneFromRoom` does not have this problem — it ends on `settleHeights`, whose
- *  ceiling clamp catches exactly this — so it is `defaultScene` alone.
+ *  The sibling scar, still true and still the reason a curtain is `wall-high` rather
+ *  than `ceiling`: a 2.6 m curtain centred at 2.55 m put most of the cloth through the
+ *  ceiling. A 400 mm pendant was the same defect at 50 mm.
  *
- *  Not fixed with the flag: `groundY` is read by the add path, the detection builder,
- *  the Inspector and `heightForNewCeiling`, and `tests/scene-build.test.ts` pins two of
- *  those against each other on a fan's height. That is a change with its own
- *  measurements. */
+ *  `tests/shape-contract.test.ts` now asks this of the whole catalogue at once — no
+ *  Library piece may reach through the ceiling at its shipped size — so this file's job
+ *  narrowed to the SEEDED rooms, which that sweep does not build. */
 const CEILING_TOPS: Record<string, string[]> = {
   rect: [],
   l: [],
-  t: ['Pendant=2.850'],
+  t: ['Pendant=2.800'],
   u: [],
-  open: ['Pendant=2.850'],
+  open: ['Pendant=2.800'],
 };
 
 describe.each(PRESETS)('starter scene · $id', ({ id, w, d }) => {
@@ -152,38 +153,12 @@ describe.each(PRESETS)('starter scene · $id', ({ id, w, d }) => {
 
   // FOUND BY THE ASSERTION BELOW, WHICH IS PARKED RATHER THAN WEAKENED.
   //
-  // The starter scene's pendant pokes **50 mm through the ceiling**: `groundY`'s
-  // `ceiling` branch is `max(roomHeight - 0.15, h)`, which hangs the piece's CENTRE
-  // 150 mm below the slab, so anything taller than 300 mm has its top above it. The
-  // pendant is 400 mm, giving `[2.45, 2.85]` in a 2.8 m room.
-  //
-  // It is the same defect `ANCHOR_BY_CATEGORY` already records for curtains — "that
-  // branch hangs a small thing just under the slab, which for a 2.6 m curtain put its
-  // CENTRE at 2.55 m and most of the cloth through the ceiling" — which is why a
-  // curtain is `wall-high` and not `ceiling`. A 400 mm pendant is a smaller instance of
-  // it, 50 mm rather than most of the cloth.
-  //
-  // Invisible until now because the seeder set the pendant `wallMounted: false` by
-  // hand, so nothing measured it as centred geometry at all; deriving the flag is what
-  // exposed it. `buildSceneFromRoom` does NOT have this problem — it ends on
-  // `settleHeights`, whose ceiling clamp catches exactly this — so it is `defaultScene`
-  // alone, and the fix is either `groundY`'s ceiling branch or a settle pass on the
-  // preset path.
-  //
-  // NOT fixed here on purpose: `groundY` is read by the add path, the detection
-  // builder, the Inspector and `heightForNewCeiling`, and `tests/scene-build.test.ts`
-  // pins two paths against each other on a fan's height. That is a change with its own
-  // measurements, not a line to slip into this one. `it.fails` so it retires itself the
-  // moment someone fixes it.
-  it('records the ceiling overhang each preset has TODAY — baseline, not a specification', () => {
-    // Pinned exactly and in BOTH directions rather than as a `<=` bar, so fixing
-    // `groundY` turns this red and whoever does it comes back and deletes the baseline.
-    // A bar would sit green through the fix and nobody would re-derive.
-    //
-    // Not `it.fails`: only `t` and `open` seed a pendant, so on the other three presets
-    // the strict assertion PASSES and `it.fails` then reports a failure of its own. A
-    // per-preset literal says which presets have the defect, which is more than the
-    // strict form could.
+  // Was a baseline recording a 50 mm overhang; it went red the moment `groundY` was
+  // fixed, which is exactly what it was pinned in both directions to do. A `<=` bar
+  // would have sat green through the fix and nobody would have come back.
+  it('hangs every ceiling piece inside the room, and says which presets have one', () => {
+    // Still exact literals rather than a bound, for the reason in CEILING_TOPS: an
+    // empty violation list cannot distinguish a fixed pendant from a deleted one.
     const tops = parts
       .filter((x) => anchorFor(x.category, x.shape) === 'ceiling')
       .map((p) => `${p.name}=${verticalExtent(p.category, p.shape, p.dimMM, p.pos[1])[1].toFixed(3)}`);

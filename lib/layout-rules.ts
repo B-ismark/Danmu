@@ -150,6 +150,16 @@ const ROLE_BY_SHAPE: Partial<Record<Shape, Role>> = {
   curtain: 'other',
   fan: 'other',
   'ac-unit': 'other',
+  // A ceiling fan is 'other' because nothing on the floor has to make room for it.
+  // A pedestal fan is an obstacle standing in the room, so it gets a real role: 'other'
+  // means no access zone and nothing it belongs beside, which for a floor-standing
+  // piece is not a description, it is a gap. `tests/shape-contract.test.ts` refuses
+  // 'other' for anything `isObstacle` accepts.
+  //
+  // `chest-freezer` and `tv-console` are deliberately absent: their categories
+  // (`fridge`, `shelf`) already answer, and a row here that merely restates the
+  // category is a second place for the same fact to drift from.
+  'fan-standing': 'appliance',
 };
 
 const ROLE_BY_CATEGORY: Partial<Record<Category, Role>> = {

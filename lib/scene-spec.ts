@@ -1911,14 +1911,21 @@ export const CATALOG_SHAPES_ORDERED: readonly Shape[] = [
 const CATALOG_SHAPES = new Set<Shape>(CATALOG_SHAPES_ORDERED);
 
 /** Refine the default shape based on label keywords — turns a generic chair into
- *  an office chair if the AI detected it as such. */
-function refineShape(category: Category, label: string): Shape {
+ *  an office chair if the AI detected it as such.
+ *
+ *  Exported for `tests/shape-contract.test.ts` and for no other caller. This is the
+ *  function that decides WHICH MODEL a photograph produces, and it was unreachable
+ *  from a test while every label table feeding it was unguarded too — which is how a
+ *  detected pedestal fan came out as a ceiling fan. A shape nothing here can name is
+ *  a shape the detector can never produce, however good its geometry. */
+export function refineShape(category: Category, label: string): Shape {
   const l = label.toLowerCase();
   switch (category) {
     case 'chair':
       if (/ottoman|footstool|pouf/.test(l)) return 'ottoman';
       if (/office|swivel|desk chair|computer chair|gaming/.test(l)) return 'chair-office';
       if (/arm|lounge|accent|recliner|wingback|easy/.test(l)) return 'chair-armchair';
+      if (/stool/.test(l)) return 'stool';
       return 'chair-dining';
     case 'bed':
       if (/double|queen|king|matrimonial/.test(l)) return 'bed-double';
@@ -1937,9 +1944,35 @@ function refineShape(category: Category, label: string): Shape {
       if (/table|desk|bedside|nightstand/.test(l)) return 'lamp-table';
       return 'lamp-floor';
     case 'shelf':
-      if (/wardrobe|closet|cabinet|cupboard/.test(l)) return 'wardrobe';
+      if (/wardrobe|closet|cupboard/.test(l)) return 'wardrobe';
       if (/shoe|footwear/.test(l)) return 'shoe-rack';
+      if (/tv (console|stand|unit|bench|cabinet)|media (console|unit)|entertainment/.test(l)) return 'tv-console';
+      // After the tv-console test: "TV cabinet" is a TV console, not a wardrobe.
+      if (/cabinet/.test(l)) return 'wardrobe';
       return 'bookshelf';
+    // A fan's category means the CEILING one, so without this case every fan a photo
+    // finds arrived on the ceiling — including `electric fan`, which is what OIV7 and
+    // the YOLO-World prompts call a pedestal fan.
+    //
+    // BOTH directions are spelled out and the bare label keeps the old default. The
+    // tempting version — "ceiling if it says ceiling, else standing" — reads better and
+    // silently re-answers every unlabelled fan, which is a behaviour change no
+    // measurement here supports.
+    case 'fan':
+      if (/ceiling|hanging|hugger|paddle/.test(l)) return 'fan';
+      if (/stand|pedestal|tower|electric|floor|desk|table|box fan/.test(l)) return 'fan-standing';
+      return 'fan';
+    case 'fridge':
+      // "chest freezer", not bare "chest": a chest of drawers is a wardrobe, and it
+      // only avoids this branch because its category is `wardrobe`. Relying on that
+      // is one re-categorisation away from turning a dresser into a freezer.
+      if (/chest freez|deep freez|freezer box/.test(l)) return 'chest-freezer';
+      if (/washing|washer|laundry/.test(l)) return 'washing-machine';
+      if (/microwave/.test(l)) return 'microwave';
+      if (/dispenser|water cooler/.test(l)) return 'water-dispenser';
+      if (/purifier|air cleaner/.test(l)) return 'air-purifier';
+      if (/radiator|heater/.test(l)) return 'radiator';
+      return 'fridge';
     case 'monitor':
       if (/laptop|notebook|macbook|ultrabook|chromebook/.test(l)) return 'laptop';
       return 'monitor';
@@ -2128,7 +2161,7 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
     // Logical placement: certain items only make sense against walls (door, fridge,
     // wardrobe, TV) or in the middle (rugs, coffee tables). Nudge accordingly.
     // snapToWall is footprint-edge exact, so L/T/U inner walls count too.
-    const aff = wallAffinity(cat);
+    const aff = wallAffinity(cat, refined);
     // Named `bounds`, not `room` — that shadowed this function's own `room`
     // parameter for the rest of the block.
     const bounds = { width: rw, depth: rd };
@@ -2530,7 +2563,7 @@ export function placeNewPart(
   // clamp, at the angle the piece is actually getting. Both agree on the wall for any
   // drop that was inside to begin with, which is every drop the UI can produce except
   // a drag released past the wall.
-  const affinity = wallAffinity(cat);
+  const affinity = wallAffinity(cat, shape);
   const wantsWall = affinity === 'must-wall' || affinity === 'prefers-wall';
   const [nameWallFromX, nameWallFromZ] = intoRoom(ax, az, 0);
   const rot =
