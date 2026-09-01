@@ -805,23 +805,31 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
 
 ### Adding a shape — the contract
 
-Ten places, and knowing which of them the compiler holds is the whole point. This
-list is the answer to "what rules does a new model have to follow"; the executable
-half is `tests/shape-contract.test.ts`, whose sixteen clauses are named for the
-rules below, so a failure says which one was broken.
+Eleven places — five you add the shape to and six tables it otherwise inherits from
+its category — and knowing which of them the compiler holds is the whole point. It
+holds **one**. This list is the answer to "what rules does a new model have to
+follow"; the executable half is `tests/shape-contract.test.ts`, whose clauses are
+named for the rules below, so a failure says which one was broken. Not every rule
+here has a clause yet, and where it does not this says so.
 
-**The five the compiler holds.** Add the id to `SHAPES` (`lib/scene-spec.ts`) — an
-`as const` array with `Shape` derived from it, never a union beside a hand-kept
-`Set`. Then `CATALOG_SHAPES_ORDERED` if a person may add it; `PART_LIBRARY` for the
-row the picker draws; `BY_SHAPE` in `lib/scene-palette.ts`, an exhaustive
-`Record<Shape, string>`; and a `case` in `ShapeDispatch`. Miss one of the first four
-and it will not build. Miss the renderer and **it builds**, drawing a plain box at
-the right size — which reads as deliberately blocky furniture, not as a missing
-arm. That is the contract's first clause.
+**What the compiler holds, and it is less than you would hope.** Add the id to `SHAPES`
+(`lib/scene-spec.ts`) — an `as const` array with `Shape` derived from it, never a union
+beside a hand-kept `Set`. Then `CATALOG_SHAPES_ORDERED` if a person may add it;
+`PART_LIBRARY` for the row the picker draws; `BY_SHAPE` in `lib/scene-palette.ts`; and a
+`case` in `ShapeDispatch`.
 
-**The five that are `Partial<Record<Shape, …>>`, which is where shapes go wrong.**
-A partial table is how a shape inherits behaviour from its category, and inheriting
-is silent — you get an answer, just not yours.
+Exactly **one** of those five fails to build if you miss it: `scene-palette`'s `BY_SHAPE`
+is the only exhaustive `Record<Shape, …>` in the tree. `CATALOG_SHAPES_ORDERED` is a
+`readonly Shape[]` and `PART_LIBRARY` a `LibraryItem[]` — both non-exhaustive, so omitting
+a shape from either compiles cleanly and simply means nobody can add the thing. And
+missing the renderer case is quietest of all: it **builds**, drawing a plain box at the
+right size, which reads as deliberately blocky furniture rather than as a missing arm.
+Those four are the first clauses of the contract, and they exist because the compiler
+does not cover them.
+
+**The six `Partial<Record<Shape, …>>` tables, which is where shapes go wrong.** A partial
+table is how a shape inherits behaviour from its category, and inheriting is silent — you
+get an answer, just not yours.
 
 | table | file | what a wrong inherited answer looks like |
 |---|---|---|
@@ -829,7 +837,14 @@ is silent — you get an answer, just not yours.
 | `ANCHOR_BY_SHAPE` | `physics.ts` | **the scar below** |
 | `ROLE_BY_SHAPE` | `layout-rules.ts` | role `other`: no access zone, nothing it belongs beside, and no `RULE_HANDLING` term that can move it |
 | `LIGHT_BY_SHAPE` | `scene-spec.ts` | a fixture that looks lit and emits nothing |
-| access / belongs-with zones | `layout-rules.ts` | the solver parks a bed across it |
+| `LIGHT_ANCHORS` | `three/PartLight.tsx` | the bulb sits on the floor and lights the inside of its own shade |
+| `MODULE_RANGE` | `scene-spec.ts` | a parametric piece tiles at the wrong module count |
+
+The room-layout rules are **not** in that list and it matters: `ACCESS_BY_ROLE` and the
+belongs-together relations are keyed on **`Role`**, not on `Shape`. A shape never joins
+them directly — it reaches them through `ROLE_BY_SHAPE`, which is why that row is the one
+to get right. Only the first four have a contract clause today; `LIGHT_BY_SHAPE`,
+`LIGHT_ANCHORS` and `MODULE_RANGE` do not, and that is a gap rather than a decision.
 
 **The scar.** `fan-standing` shipped with no `ANCHOR_BY_SHAPE` row, so it took its
 category's — and `fan` means the *ceiling* one. A 1300 mm pedestal fan hung from the

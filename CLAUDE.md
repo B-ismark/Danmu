@@ -88,9 +88,11 @@ backend, no account. The 3D studio *is* the product.
    `lib/parts-catalog.ts`). 3D scene, 2D plan, inspector, catalog and decor all
    read from it. Add a shape / behaviour flag there, not ad-hoc in a component.
    **Adding a shape has a written contract** — `Design.md` § Adding a shape for the
-   ten places and why, `tests/shape-contract.test.ts` for the executable half. Read
-   it before adding one; the five `Partial<Record<Shape, …>>` tables are the half
-   the compiler does not hold, and a shape absent from one does not fail, it
+   eleven places and why, `tests/shape-contract.test.ts` for the executable half. Read
+   it before adding one; the SIX `Partial<Record<Shape, …>>` tables are the half
+   the compiler does not hold (the layout zones are not among them — they are keyed
+   on `Role`, reached through `ROLE_BY_SHAPE`), and a shape absent from one does not
+   fail, it
    **inherits its category's answer**. `fan-standing` inherited `fan`'s and hung a
    1300 mm pedestal fan from the ceiling, half a metre through the slab, with every
    catalogue sweep green — because each one asked whether the shape was *present* in
