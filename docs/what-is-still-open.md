@@ -30,7 +30,7 @@ them. Where two items are the same defect one layer apart, they are listed as on
 |---|---|---|---|---|
 | 1 | **§ 12** rider keeps the size the room was BUILT at | Confirmed by eye, and the user has already chosen the repair — derive at read time, write nothing (§ B.16). An attempt at the OTHER option was built and reverted; read § 12 before starting | M | **blocked on § 33.3** — B.16's stated cost is "the derivation runs on every read" and the render budget is unmeasured |
 | ~~2~~ | ~~**§ 32** everything added from the Library is square-footed~~ | **FIXED** — `isRoundPart` + `ROUND_SHAPES`, derived at all four doors, `CATEGORY_DEFAULTS.circle` deleted | — | — |
-| 3 | **§ 14** a merged group's member cannot be clicked | User-reported, no cause yet. `PartTree` selects it fine, so it is the canvas hit path | M — unknown | do not guess a cause; sits beside § 17 (both are canvas-pointer) |
+| ~~3~~ | ~~**§ 14** a merged group's member cannot be clicked~~ | **FIXED** — the gizmo's invisible translate plane took the press, so `Pickable`'s `selDown` was stale and the drill-in always read "outside". `lib/press-selection.ts` records in the capture phase | — | — |
 | 4 | **§ 17** a drag refused by a wall TV names nothing | Same surface as § 14 and `refusalCause` is already half of it | S | do with § 14, one pointer-path session |
 | 5 | **§ 18** Shuffle leaves a nightstand through the bed | User-reported. A clash the solver should price and does not | M | overlaps § 31 — both are "what the cost function is allowed to trade" |
 | 6 | **§ 31** containment now outranks a blocked door by a hair | A decision only the user can make, and the third option (veto rather than price) is the largest change. Nothing a user sees today is wrong | M–L | **blocked on the user**; § 18 may make the answer obvious, so do § 18 first |
@@ -2149,20 +2149,57 @@ lesson is narrower than the rule, though: the stylesheet was read carefully, the
 self-consistent, and it took one measurement to find that the block under suspicion could
 not fire and the one that mattered was a different one.
 
-### 14. A merged group's member cannot be selected by clicking it on the canvas
+### 14. A merged group's member cannot be selected by clicking it on the canvas — FIXED
 
 *"Selecting a member of a group individually by clicking on it doesn't seem to work again.
 Though it works when you individually click on it in the layer."*
 
-**Read that against § H.8**, which recorded the drill-in working from a nightstand and never
-from the bed. This report is broader and worse: not one member, by canvas click, on a bed
-plus two nightstands. `PartTree` selects the same member fine, which is the finding that
-narrows it — **the selection store is not the broken half.** Whatever `PartTree` calls, the
-canvas path is not reaching.
+**The cause, and it took instrumenting the running app to find — reading the code produced
+two confident wrong answers first.** The drill-in asks `selectionForPick` whether the pick
+came from INSIDE the group, using the selection **as the press landed**. That value was a
+ref on `Pickable`, stamped in that component's own `onPointerDown`. And that handler does
+not always run: once a piece is selected the gizmo appears, R3F cannot see the gizmo —
+drei's `TransformControls` is a `<primitive>` with no handlers — so its invisible translate
+plane takes the press and R3F dispatches nothing to the mesh underneath. The DOM click
+still arrives. So `onClick` ran with a value left over from the last press that DID reach
+it, `[]` from before anything was selected, and the predicate concluded the pick came from
+OUTSIDE the group and handed back the whole group. Every time, unconditionally, because
+drilling in requires the set to be selected first and selecting it is what raises the
+gizmo.
 
-The drill-in has three mutations watched failing (never fire, count an empty selection as
-inside, accept overlap where it asks for containment), so the *predicate* is gated. The gap
-is between the pointer and the predicate. No cause yet; do not guess one.
+That is why `PartTree` worked — it calls `setSelected` directly and never consults the
+press. And why the 2D plan worked: no gizmo, so its own press always lands. § H.8's older
+note that the drill-in worked "from a nightstand and never from the bed" is the same thing
+seen through a gizmo that sat over the bed.
+
+The instrumented run, which is the whole diagnosis:
+
+```
+[DBG] onClick ns-l selDown= []                  ← stale, the group IS selected
+[DBG] drilling ns-l ["bed","ns-l","ns-r"]       ← so it returns the whole group
+[DBG] return: consumeGizmoClick                 ← and sometimes eats the click outright
+```
+
+**The fix is `lib/press-selection.ts`**: one window listener in the CAPTURE phase, which
+runs before any React or R3F handler and before the gizmo's own `mousedown`, so the press
+is recorded on the way down whoever ends up claiming it. Outside the store for the same
+reason as `lib/drag-click.ts` — so it can be tested without zustand's `persist` and a
+localStorage shim.
+
+Verified in a browser on the production build, which is where it was reproduced: click the
+bed, all three light up; click a nightstand, the right panel says **Nightstand left** with
+its own size fields and only that row is lit in the rail; click the other one and it moves.
+
+Five assertions, all five mutation-killed at the intended clause. The load-bearing one is
+not "it records the selection" but **that it records even when a handler swallows the
+press** — a bubble-phase listener stands in for the gizmo, and moving the recorder out of
+capture turns it red.
+
+**A readout trap worth keeping.** The first three verification runs all reported the fix as
+not working, because the probe read the right panel's heading — which says
+"Group · 3 · Ungroup" whenever the selected piece BELONGS to a group. It is a group
+affordance, not a count, so a working drill-in and a broken one print the same string. The
+fix was nearly reverted on that evidence. What settled it was a screenshot.
 
 ### 15. The rotate gizmo moves whatever its ring passes over, not the piece you selected — FIXED, see § 27
 
