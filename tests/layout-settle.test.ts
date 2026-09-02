@@ -144,7 +144,7 @@ describe('settleParts · out of each other', () => {
 // The user's report, in one sentence: put a nightstand on an armchair, press Suggest,
 // and the armchair moves out from under it while the nightstand keeps the armchair's
 // height and hangs in the air. `Placement` is `{x, z, yaw}` — the solver has no
-// vertical axis and no concept of one piece riding another — so nothing in the search
+// vertical axis and — until `carryRiders` — no concept of one piece riding another — so nothing in the search
 // could have noticed, and from directly above in the plan it looks correct.
 describe('settleHeights · a rider whose support has moved', () => {
   const armchair = (pos: [number, number, number]) =>

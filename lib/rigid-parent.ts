@@ -41,7 +41,7 @@
 
 import type { ScenePart } from './scene-spec';
 import { footArea, footFromPart, footIntersectionArea, localToWorld, worldToLocal } from './geometry';
-import { MIN_SUPPORT_SHARE, SUPPORT_Y_EPS, verticalExtent } from './physics';
+import { findSupportDetailed, isFloorStanding, MIN_SUPPORT_SHARE, SUPPORT_Y_EPS, verticalExtent } from './physics';
 
 export type DescendantOffset = {
   id: string;
@@ -202,6 +202,74 @@ export function livingParents(
   const out: Record<string, string> = {};
   for (const [child, parent] of Object.entries(parentIds)) {
     if (alive.has(child) && alive.has(parent)) out[child] = parent;
+  }
+  return out;
+}
+
+/** Which pieces are standing ON another piece, read off live geometry alone.
+ *
+ *  **The map above cannot answer this and that is not a gap in it.** `parentIds` is
+ *  written by a drag — `Draggable` records the support it landed on — so it says
+ *  what a person has done, and it is empty for a room nobody has dragged in. A
+ *  `defaultScene` bedroom seeds a bedside lamp at exactly the nightstand's top and
+ *  records nothing, because no drag put it there. Anything that needs "is this
+ *  piece riding something" for a room in general has to derive it, and deriving it
+ *  is cheap because the answer is already a predicate over live geometry
+ *  (`isPhysicallySupported`) rather than a stored fact.
+ *
+ *  Written as `findSupportDetailed` plus the Y-adjacency test rather than as a
+ *  second copy of `isPhysicallySupported`, and the difference is the whole reason
+ *  this is safe. That function's refusals are the ones that matter here: nothing
+ *  rests on a rug, and nothing rests on a piece whose anchor is not the floor. A
+ *  rug's top is 5 mm and `SUPPORT_Y_EPS` is 50 mm, so a bare adjacency test makes
+ *  every sofa in the app a rider of the rug it stands on — `isPhysicallySupported`
+ *  has exactly that hole and is protected from it only because `findSupportDetailed`
+ *  refuses to hand a rug out as a support in the first place, which its own comment
+ *  calls "correct by luck at one remove". A new caller of the bare predicate would
+ *  not be lucky.
+ *
+ *  The two extra conditions are the ones `findSupportDetailed` genuinely does not
+ *  have, and each has a defect behind it:
+ *
+ *  · **A below-test.** It returns the highest top whose footprint covers the mover,
+ *    ABOVE OR BELOW, so asking it about a sofa returns the wardrobe the sofa is
+ *    standing in front of. `Math.abs(p.pos[1] - s.y) < SUPPORT_Y_EPS` is what makes
+ *    the answer "resting on" rather than "overlapping".
+ *  · **`p.pos[1] > 0`** — a piece on the floor is riding the floor, and the floor is
+ *    not furniture. Without it a chair standing over a 40 mm mat passes the
+ *    adjacency test and becomes the mat's rider, which is not a harmless
+ *    misfiling: `carryRiders` would then drag that chair around behind the
+ *    search's back and strike it out of `moves`, so it moves for a reason nothing
+ *    will say. Zero rather than `SUPPORT_Y_EPS`, and the difference is a real
+ *    decision: at the tolerance, a chair standing ON that mat — bottom at 40 mm,
+ *    genuinely carried by it — was ALSO refused, so moving the mat left the chair
+ *    behind. Zero is the question the clause means ("is this on the floor"), and it
+ *    is the only value of it that no measurement is needed to defend.
+ *
+ *  Restricted to floor-standing children so `pos[1]` IS the child's bottom; a
+ *  mounted piece rides its wall, which is not this relation, and reading `pos[1]` as
+ *  a bottom for one would be the centre/bottom confusion `verticalExtent` exists to
+ *  end. **The ANCHOR is the whole of that test and `wallMounted` is not consulted**,
+ *  which is `findSupportDetailed`'s rule one line down rather than a separate
+ *  judgement: the flag is a stored copy of the anchor's answer, and the copy is the
+ *  half that can arrive wrong. A `if (p.wallMounted) continue;` sat here first and
+ *  mutation testing could not kill it — every fixture that reached it was refused by
+ *  the anchor a line later, because for a real piece the two say the same thing.
+ *  Two clauses answering one question is how a reader comes to believe the flag is
+ *  load-bearing here.
+ *
+ *  Cycles are impossible rather than guarded against: an edge requires the child's
+ *  bottom to equal the parent's top, so `y` strictly increases from parent to child
+ *  and no loop can close. */
+export function ridingParents(parts: ScenePart[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const p of parts) {
+    if (!isFloorStanding(p.category, p.shape)) continue;
+    if (p.pos[1] <= 0) continue;
+    const s = findSupportDetailed(parts, p.id, p.pos[0], p.pos[2], p.dimMM, p.rot, p.circle);
+    if (!s) continue;
+    if (Math.abs(p.pos[1] - s.y) >= SUPPORT_Y_EPS) continue;
+    out[p.id] = s.id;
   }
   return out;
 }

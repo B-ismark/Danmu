@@ -58,6 +58,7 @@ import {
   movableFor,
   solveLayout,
   type MoveReason,
+  withRiders,
 } from '@/lib/layout-solve';
 import {
   HISTORY_DEPTH,
@@ -533,7 +534,17 @@ function useSuggest(effParts: ScenePart[], footprint: Footprint, appPlaced: AppP
   return useCallback(
     (mode: 'arrange' | 'refit', seed: number, only?: string[]) => {
       const t = useStudio.getState();
-      const confined = only && only.length > 0 ? new Set(only) : null;
+      // …and whatever is STANDING ON one of them travels with it, or the fix strands
+      // it. `lib/clearance.ts` skips anything above the floor, so a rider can never
+      // appear in a finding's `partIds` — which means without this line EVERY
+      // confined fix that moves a support leaves its lamp hanging in mid-air, and
+      // `carryRiders` cannot rescue it because a confine locks the rest of the room
+      // and a lock is a lock there. The confinement is the right place: this is the
+      // press deciding what it is allowed to touch, not the solver overruling it.
+      // Riders of riders come too — `ridingParents` is one flat map, so the walk is
+      // to a fixed point, bounded by the fact that `y` strictly increases along an
+      // edge.
+      const confined = only && only.length > 0 ? withRiders(new Set(only), effParts) : null;
       // Which pieces the user put where they are, rather than the app. An override in
       // `positions` exists only for a piece that has been moved by hand, so this is the
       // store already answering the question — and it is what stops a suggestion
