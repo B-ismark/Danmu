@@ -101,8 +101,10 @@ export type SolveOptions = {
    *  app guessed at — see `LayoutContext.placed`. */
   placed?: Set<string>;
   /** Which finalist becomes the suggestion. Returns an index into the candidates it
-   *  is handed; omit it and the argmin on `total` is used, which is what this has
-   *  always done.
+   *  is handed; omit it and `bestCandidate` is used — least impossible first, then
+   *  cheapest on `total`. On a pool where no candidate has a piece through a wall or
+   *  inside another piece, which is most of them, that is the plain argmin on `total`
+   *  this has always taken.
    *
    *  The seam exists because **variety is a property of the set of suggestions**, and
    *  no single solve can see that set — only the caller knows what it has already
@@ -214,7 +216,7 @@ export function impossibility(b: CostBreakdown): number {
  *  Impossibility is compared with the same `1e-6` slack `anyWorse` uses, because these
  *  are sums of areas and two arrangements that are equally legal can differ in the
  *  last bit — a bare `<` would let a rounding error outrank a real cost difference. */
-function lowestTotal(candidates: readonly Candidate[]): number {
+export function bestCandidate(candidates: readonly Candidate[]): number {
   let bestIdx = 0;
   let bestImp = impossibility(candidates[0].breakdown);
   for (let i = 1; i < candidates.length; i++) {
@@ -972,12 +974,12 @@ export function solveLayout(
     return { placements: c.placements, cost: c.cost, navCost, total: c.cost + navCost, breakdown };
   });
 
-  // Which finalist becomes the suggestion. The default is the argmin this has always
-  // taken; a caller may substitute its own — see `SolveOptions.pick`. An out-of-range
-  // answer falls back to the argmin rather than throwing: a ranker is a preference,
+  // Which finalist becomes the suggestion. The default is `bestCandidate`; a caller
+  // may substitute its own — see `SolveOptions.pick`. An out-of-range answer falls
+  // back to the same default rather than throwing: a ranker is a preference,
   // and a room with no suggestion in it is a worse failure than an unheeded one.
-  const chosen = opts.pick ? opts.pick(rated) : lowestTotal(rated);
-  const picked = rated[chosen] ?? rated[lowestTotal(rated)];
+  const chosen = opts.pick ? opts.pick(rated) : bestCandidate(rated);
+  const picked = rated[chosen] ?? rated[bestCandidate(rated)];
 
   // Copied before anything mutates it. `winner` is normalised in place on the next
   // line and `pool` is handed back as `SolveResult.finalists`, so without this a
