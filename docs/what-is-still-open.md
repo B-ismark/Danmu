@@ -38,6 +38,7 @@ them. Where two items are the same defect one layer apart, they are listed as on
 | ~~7~~ | ~~**§ 33.1** the four newest shapes have never been seen in 3D~~ | **ALREADY DONE, and this row was stale** — `visual-check.md` has recorded the look since 2026-09-01 and deleted its own item; the queue was never updated. Re-confirmed 2026-09-02 alongside § 34 | — | — |
 | 7 | **§ 35** a hung fixture stops 50 mm short of the ceiling | Found by § 34's review and uncovered by its fix; every Library ceiling fan ships into it. One decision — what `dimMM[2]` means for a hung fixture — then the code follows | S once decided | wants eyes; `visual-check.md` item |
 | 7 | **§ 36** a non-uniform resize walks through both geometry caps | Same review. Bigger class than the two shapes: every absolute constant in a non-parametric shape does this | M | none |
+| 7 | **§ 37** the Inspector's placement banner contradicts the room report | Reviewed 2026-09-02 and held out of PR #87. The idea is wanted; two of its three states are already computed elsewhere and it recomputes them with a different bar | M | none — it is on a branch, in no PR |
 | 8 | **G.1** a brand-new room seals its own routes at the size the app ships | Measured, real, and a first-run defect — the worst kind to leave | M | related to § 31: both are the solver's idea of "navigable" |
 | 9 | **A.7** `snapYaws` leaves the piece crooked in 197 of 240 solves | Measured, visible, nobody has decided whether it matters | M | after § 31, which may change what a finalist is |
 | 10 | **§ 33.3** the render budget is unmeasured | Blocks any answer to "how detailed may a shape be", which was asked directly | M — needs a throttled device | blocks nothing shipping; blocks a decision |
@@ -2599,6 +2600,93 @@ rebuild from the current dim instead of group-scaling — which is what that set
 and costs a re-render per resize frame. Or express every cap as a ratio, which is not
 possible for `FAN_HUB_R`, since a hub is a real object with a real size. The first is
 probably right and it is not a one-line change.
+
+### § 37 — the Inspector's placement banner answers a question two other surfaces
+already answer, and disagrees with both — REVIEWED, NOT MERGED
+
+Reviewed 2026-09-02. The subject is `0202eaa fix(spatial): surface floating placement state`
+— one file, 69 insertions in `components/studio/Inspector.tsx` — which arrived here as
+`98a614a`, a **local, unpushed** merge of `agents/project-overview-and-understanding` into
+`fix/ceiling-fixtures-declared-size`. It adds a `role="status"` banner above the decorating
+controls reading `Outside room` / `Blocked` / `Floating` / `Wall-mounted` / `On <piece>` /
+`On floor`, in danger or success colours, with a sentence of advice under it.
+
+**Where it exists.** On `agents/project-overview-and-understanding` and in that branch's own
+worktree. Not on `main`, not in any pull request. The merge was undone with
+`git reset --keep` rather than kept — PR #87 is § 34's, and an unrelated Inspector change
+riding it is the "does this commit contain only your hunks" failure — and the commit itself
+was not touched.
+
+**Every gate is green, which is the finding rather than a mitigation.** On the merge result:
+`pnpm typecheck` clean, `pnpm lint --max-warnings 0` clean, and the full suite at 114 files /
+2087 passed + 5 expected-fail. `tests/mount-height-refusal.test.tsx` mounts the **real**
+Inspector through the page its own rail renders, so the banner was constructed, rendered and
+asserted around under jsdom, and nothing noticed any of the three findings below. They are
+about which number the banner reads, not about whether it renders, and no gate in this repo
+compares one surface's answer to another's.
+
+**1. A red danger banner on furniture that is correctly composed.** The blocked state is
+`collidesAt(effParts, id, …)`, and `collidesAt` (`lib/scene-spec.ts`) deliberately has **no
+`sharesFloor` exemption**, while the room report's rule 2 charges a tucked pair against
+`TUCKED_CLASH_SHARE` instead of `CLASH_SHARE` (`lib/clearance.ts`, `clashBar`). This is not
+inferred: `clearance.ts` states the divergence in its own words — *"a dining chair under its
+table is refused by the drag and silent in the report BY DESIGN — twenty seeded pairs"* —
+and files it under § 17. The drag may refuse a tuck, because a drag is a live gesture the user
+can abandon; a **standing label on a selected piece is not the same act.**
+*Fails when:* fresh install, any seeded room, click a dining chair — red banner, *"Blocked —
+Move it away from the overlapping piece"*, while Room check says nothing is wrong. The advice
+is to break a deliberate arrangement, and it is the app's own seeded content.
+
+**2. The floating check is defeated by the function it asks.** `supportBelow()` calls
+`findSupportDetailed` (`lib/physics.ts`), which takes **`x` and `z` only** and returns the
+highest floor-standing top whose footprint the mover overlaps. It never compares the mover's
+own `y` to that top — correctly, because its job is "what is under here", not "is this
+resting". The banner treats a non-null answer as proof of contact, so a piece hovering at any
+height above a table reads green, *"On Table — Supported by Table."*
+*Fails when:* a lamp placed on a desk and then resized. `settleHeights` settles riders against
+the **authored** `dimMM` (see § 12), so the lamp hangs about 350 mm in the air — and the
+banner names the desk it is not touching. The state it does catch is a piece floating over
+bare floor, which is the half the user is least likely to reach by accident. The commit
+message says *"so floating furniture is not reported as clear"*; over furniture, it is.
+
+**3. A third source of truth for "is this placement legal".** The room report answers it
+(`lib/clearance.ts`, rules `outside` / `clash` / `clash-mounted`), the live drag answers it
+(`blockedIds` / `blockedBy` on the drag channel, painted in the size tag and a live region),
+and this adds a third — with a **different bar** from the first, a different lifetime from the
+second, and a fourth containment test of its own (`partInsideRoom`, which is box-and-centre,
+where the report ranks by the corner-exact `outsideDeficit`). Rule 3 of `CLAUDE.md` names this
+exact scar: two consumers carrying their own copies of a placement rule is how Suggest came to
+park a bed across a doorway and have Room check report it.
+
+**Smaller things, none of them the reason it was held.** `role="status"` with
+`aria-live="polite"` re-announces on every selection change and every position write, so a
+drag commits a stream of announcements; the tone glyphs are literal `✓` / `!` rather than
+the `Icon` wrapper every other control uses; and there is a second
+`import … from '@/lib/scene-spec'` beside the one already at the top of the file.
+
+**What holds, so it is not re-derived.** All four tokens exist (`--danger-tint`,
+`--danger-text`, `--success-text`, `--paper-0`). Reading the raw `part.wallMounted` is safe
+**here** — `normalizeStoredParts` re-derives it on load, and the file already reads the flag
+that way in two places. `collidesAt` is passed the part inside its own list, which is the
+documented-correct call and not the "filter the mover out and detection is silently off"
+trap. `partInsideRoom` and `verticalExtent` get their arguments in the right order, and both
+`part` and `effParts` are resolved rather than authored. `minWidth: 0` is present, so the
+label ellipsises rather than spilling its rail.
+
+**What it would take.** The idea is wanted — a selected piece saying where it stands is a
+real gap, and two of the three states it invents are already computed elsewhere for the same
+piece. The shape of the fix is to **read** those answers rather than recompute them: take
+blocked and outside from the room report's findings for this part id, which makes the banner
+agree with Room check by construction and inherits every exemption; and give "is it resting"
+a real answer in `lib/physics.ts` — a support the mover is actually *on*, which is
+`findSupportDetailed`'s top compared against `verticalExtent`'s bottom within a tolerance that
+lives beside `MOUNT_PAD` rather than as a `0.005` in a component. That last one is worth
+having on its own: nothing in the repo can currently answer "is this piece resting on
+anything", which is why § 12's floating rider has no gate either.
+
+**Not verified:** nobody has looked at the banner. The contrast of `--success-text` on
+`--paper-0` was not checked, and the announcement behaviour was not tried with a screen
+reader.
 
 ### 19. Library search: `stand` does not reach `Nightstand` — FIXED
 
