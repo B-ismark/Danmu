@@ -1100,9 +1100,15 @@ export function defaultScene(
     //
     // Every piece here is **wall- or ceiling-mounted**, which is what makes it safe to
     // add late: `isObstacle` is false for all of them, so none of it takes floor, blocks
-    // a route, narrows a walkway or enters anybody's access zone. It costs nothing in
-    // the room report and it is most of the difference in the scene. The catalog already
-    // carries every one of them.
+    // a route, narrows a walkway or enters anybody's access zone. It is most of the
+    // difference in the scene, and the catalog already carries every one of them.
+    //
+    // **It no longer costs nothing in the room report, and that sentence used to be
+    // here.** `clash-mounted` (rule 2b) gates on `wallMounted`, not on `isObstacle`, so
+    // the whole of this pass IS its mounted side: a dressing piece hung where a wardrobe
+    // stands is a reported error. The presets are quiet today and
+    // `tests/mounted-clash.test.ts` sweeps all twelve to keep them that way — but
+    // anything added here has to fit around the furniture, not merely avoid the floor.
     dress(parts, poly, height, counters);
 
     // Belt and braces. Everything above is gated on fitting, so this normally has

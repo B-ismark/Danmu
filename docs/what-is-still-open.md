@@ -2284,8 +2284,9 @@ gradient, and a button would spin and report nothing.
 ### …and the fault found while looking for the pairs that would fire
 
 **Nothing could be dragged in front of a curtain.** `collidesAt` exempted only rugs, and
-a curtain is modelled with about 110 mm of depth standing off the wall, so anything with
-its back to that wall is inside it. Measured against the shipped presets rather than
+a curtain's own geometry puts it in the room: 80 mm of depth in the catalogue (a
+40–200 mm range) plus `CURTAIN_STANDOFF = 0.09`, so its inner face stands roughly 200 mm
+off the plaster and anything with its back to that wall is inside it. Measured against the shipped presets rather than
 reasoned about — four pairs the seeder itself creates were in that state:
 
 | preset | pair | share of the smaller |
@@ -2319,6 +2320,80 @@ refuse it". The nightstand had climbed onto the wardrobe: y = 2.10. From directl
 a nightstand ON a wardrobe and one INSIDE it draw the same rectangle — the same blind
 spot as the vase left hanging at table height in `CLAUDE.md`, one piece over. A drag
 probe that does not read y cannot tell stacking from penetration.
+
+### What the five review lenses found, and what was done about each
+
+Nineteen findings across the five classes. **Ten were acted on in the same PR** — the six
+Class-3 survivors below are the ones worth remembering, because thirteen of my own
+mutations had already passed.
+
+**Class 3 · six mutations survived a green file.** The sharpest is the sweep whose whole
+purpose was to *measure* the `RULE_HANDLING` claim rather than repeat it. It scored ONE
+pair, `[tv, wardrobe]`, and `prepare` gives that `obstacle = [false, true]` — with two
+parts and the non-obstacle at index 0, the pair loop body **never executes at all**:
+`i = 0` is skipped by the i-gate and `i = 1` has no `j`. So every reading was 0 by *array
+arity*, not by gating, and three mutations lived through the whole file: deleting the
+j-gate, deleting the accumulation outright, and setting `DEFAULT_WEIGHTS.overlap` to 0
+(the weight is applied inside `costBreakdown` before it returns, so a zero weight
+satisfies `r === 0` too). Two changes fix it and neither is optional: **a positive
+control** — an ordinary floor pair through the same call, measured at exactly 1000 — and
+**both part orders**, because which gate is exercised is an accident of array order and
+no single ordering can verify both. The other three: `rooms >= 8` where the real number
+is 12 (an early return emptying `t` and `u` kept it green), a door fixture carrying
+`category` AND `shape` so neither exclusion clause was pinned, and the floor side's soft
+exemption with no fixture at all. **The fixture written for that last one still could not
+express it** — it set `wallMounted: true` on a `box`, and `verticalExtent` reads
+`anchorFor`, not the flag, so the piece sat at [0.15, 0.45] and never met the rug. Two
+questions, one flag, again.
+
+**Class 5 · two consumers of `analyzeRoom` were not considered, and both are fixed.**
+`checkFit` seats a probe and then runs the report over the seat it chose — but
+`overlapsSomething` skipped every `wallMounted` piece, so **"Will it fit?" answered *No
+room for it* about a bookshelf and a wardrobe that plainly fit** a 6×5 m room with four
+wall TVs. Measured before and after. `isMountedObstruction` is the shared predicate now,
+which makes this the third reader and the reason it is a named export rather than an
+inline filter. The second consumer is `newRoomFindings`, whose `serious` gate now admits
+this rule while the solver cannot price it: **measured at 8 seeds, Shuffle returned null
+once with the rule at `error` and never with it suppressed.** That is the gate working —
+refusing a candidate that parks a wardrobe inside a TV is the point — and the review's
+claim that the "press Shuffle again" toast is therefore false is **refuted**: seven
+presses in eight still succeed.
+
+### Three findings recorded and NOT fixed
+
+**1. The claim "the pair the drag refuses is the pair the report names" is false in two
+places, and both are the app's own presets.** It is narrowed where it is asserted.
+
+- **Mounted ↔ mounted.** `floorSolids` requires `!wallMounted`, so neither ordering of
+  such a pair reaches rule 2b, and `floorBlockers` excludes both from rule 2. The seeder
+  puts a **framed print inside a window** in `rect 4.5×4`, `rect 7×3.5`, `rect 3×6`,
+  `u 4.5×4` and three `custom` sizes — and `resolvePlacement` on the print *at the
+  position it already occupies* returns `valid=false refusal='blocked'`. That is § 17's
+  own symptom surviving in the commit that closes § 17.
+- **A tucked pair.** `collidesAt` has no `sharesFloor` exemption while rule 2 and the
+  seeder's `seats()` both do, so a dining chair under its table is refused by the drag
+  and silent in the report **by design** — 20 seeded pairs across `open` and `t`.
+
+Both want the same decision — does `collidesAt` grow the report's exemptions, or does the
+report grow the drag's strictness — and it is the same shape as § 31: a question about
+which of two consumers is right, not a defect in either.
+
+**2. `lib/physics.ts:216` states the opposite of what the code does.** It says
+`isWallMountedPart` "answers yes for a ceiling fan and a pendant, which `ridesWall` and
+the `wallMounted` flag both answer no for". Measured false: `normalizeStoredParts`
+derives the flag *from* `isWallMountedPart`, so a fan normalises to `wallMounted: true`,
+and a bookshelf under one is correctly reported. The danger is the direction of the
+repair — reconciling the two comments the wrong way would silently empty every ceiling
+anchor out of `mountedSolids`.
+
+**3. The vertical-overlap test and the `-0.01` pad are written out in four and six places
+respectively** (`clearance.ts` rules 2 and 2b, `collidesAt`, `fit-check`, plus
+`layout-settle` and `seats()` for the pad). Nothing compares the implementations; only
+fixtures where they happen to agree. A Class-1 sweep brute-forced 400 000 boundary pairs
+and found 90 disagreements between rule 2b's `mTop <= fBottom + 0.005` and `collidesAt`'s
+`myBottom >= oyTop - 0.005` — algebraically identical, not the same float operation.
+Sub-nanometre, no user consequence, recorded because it is the literal answer to "are
+these one predicate": they are not.
 
 **Whether a 550 mm nightstand should climb a 2.1 m wardrobe at all is open**, and is not
 this item — nothing reported it, and the resolve is doing exactly what its support step

@@ -17,8 +17,14 @@
 //
 // ── And it is structural, not luck ────────────────────────────────────────────
 //
-// Three rules in `lib/clearance.ts` reach the severity `newRoomFindings` filters on
-// (`severity === 'error' || rule === 'clash'`): `door`, `clash` and `tall`.
+// FOUR rules in `lib/clearance.ts` reach the severity `newRoomFindings` filters on
+// (`severity === 'error' || rule === 'clash'`): `door`, `clash`, `tall` and, since § 17,
+// `clash-mounted`. The fourth is the first that is position-dependent, error-severity
+// AND invisible to the cost function, so the structural argument below does not cover
+// it: it is caught by luck rather than by construction, and the "816 candidates,
+// rejected nothing" measurement further down predates it. Measured at 8 seeds in a room
+// with a TV on each wall: Shuffle returns null once with it live and never with it
+// suppressed — the gate working, at the cost of one press in eight.
 //
 //   · `door` is in `HARD_TERMS`, so `isCleanShuffle` has already refused it.
 //   · `tall` is a fact about a piece's SIZE. A shuffle moves and turns, so it

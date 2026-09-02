@@ -137,6 +137,11 @@ a 550 mm nightstand should be able to climb a 2.1 m wardrobe at all, which is a 
 about what the app should do. **Nobody has reported it**; it was found while building the
 control for § 17's curtain drag.
 
+**Where it rides.** Nowhere — no commit changes this. It was found while building the
+control for § 17's curtain drag, on `fix/mounted-clash-and-soft-furnishings`, and the
+behaviour it describes is `lib/drag-resolve.ts`'s support step doing what it has always
+done. This item is here to be *decided*, not to verify a fix.
+
 *Not verified: what this looks like in the 3D tab. Only the committed transform was read.*
 
 ### A refusal that names the wall instead of an obstruction that is not there
