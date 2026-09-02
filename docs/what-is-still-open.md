@@ -33,7 +33,7 @@ them. Where two items are the same defect one layer apart, they are listed as on
 | ~~3~~ | ~~**§ 14** a merged group's member cannot be clicked~~ | **FIXED** — the gizmo's invisible translate plane took the press, so `Pickable`'s `selDown` was stale and the drill-in always read "outside". `lib/press-selection.ts` records in the capture phase | — | — |
 | ~~4~~ | ~~**§ 17** a drag refused by a wall TV names nothing~~ | **FIXED** — `clash-mounted` in the room report, and `isSoftFurnishing` shared with the drag, which also unblocked dragging anything in front of a curtain | — | — |
 | ~~5~~ | ~~**§ 18** Shuffle leaves a nightstand through the bed~~ | **FIXED** — not a floor clash at all: a rider (a lamp on a nightstand) was moved independently of its support and left in mid-air inside the bed, invisible to all five `HARD_TERMS`, to the room report and to the plan. `carryRiders` | — | — |
-| 6 | **§ 31** containment now outranks a blocked door by a hair | A decision only the user can make, and the third option (veto rather than price) is the largest change. Nothing a user sees today is wrong | M–L | **blocked on the user**. § 18 was expected to settle this and does not: it turned out not to be a cost-function question at all, so § 31 is unchanged and still needs an answer |
+| 6 | **§ 31** containment must outrank a blocked door, categorically | **ANSWERED 2026-09-02** — the user chose the veto: nothing physically impossible should be encouraged, and a blocked door is recoverable through Fix. Not built. The case it outlaws is a small overhang beating a door block, which is what the solver does today | M–L | unblocked; A.7 waits on it |
 | ~~7~~ | ~~**§ 34** the pendant and the ceiling fan draw outside their declared size~~ | **FIXED** — `fanColumn` + `pendantDrop` in `scene-spec.ts`, swept at 10 mm across both catalogue bands against `verticalExtent`. The stated blocker (what a pendant's declared height means) was already answered by `isMountedObstruction` + `clearance.ts` rule 2b | — | — |
 | ~~7~~ | ~~**§ 33.1** the four newest shapes have never been seen in 3D~~ | **ALREADY DONE, and this row was stale** — `visual-check.md` has recorded the look since 2026-09-01 and deleted its own item; the queue was never updated. Re-confirmed 2026-09-02 alongside § 34 | — | — |
 | 7 | **§ 36** a non-uniform resize walks through both geometry caps | Same review. Bigger class than the two shapes: every absolute constant in a non-parametric shape does this | M | none |
@@ -3649,11 +3649,59 @@ files moved, and each was checked for direction rather than re-pinned:
 The shipped bed rung still keeps the door clear, and that assertion is now named in capitals in
 `tests/bed-rung-safety.test.ts` so the next person cannot re-baseline it by accident.
 
-### § 31 — containment now outranks a blocked door by a hair, and nobody decided that — OPEN
+### § 31 — containment now outranks a blocked door by a hair — ANSWERED 2026-09-02, NOT YET BUILT
 
 Surfaced by § H.16c above, and it is a **decision, not a defect**: two hard terms now price
 within a few units of each other on one room, and which one wins is currently an accident of
 their weights rather than anything anyone chose.
+
+**ANSWERED by the user, 2026-09-02.** Their words, because the reasoning is the part that
+generalises:
+
+> *"door being blocked (avoid if possible) is objectively better than a model going through
+> walls. nothing physically impossible should be encouraged. door being blocked can be
+> prompted and fix with the fix feature."*
+
+That is the **third option** — a veto rather than a price — and it is stronger than any of
+the three framings below anticipated, because it does not order the two terms by how bad
+they are. It splits them by KIND. A piece through a wall is *physically impossible*; a
+blocked door is a room that is merely bad, and the app already has a way to say so and a
+button to act on it. So the two are not comparable quantities at all, and the 200-unit gap
+between `outside: 1000` and `door: 800` is the wrong shape of answer even when it happens to
+give the right one.
+
+**What the decision forbids, and it is the opposite direction from the incident below.** The
+recorded case had the solver *blocking the door* to avoid 190 mm of bed through a wall —
+which is what the user wants, arrived at by ten units out of a thousand. The case the
+decision actually outlaws is the cheap one: `outsideDeficit` is corner-exact and continuous
+from zero, so a 20 mm overhang costs almost nothing and is bought by any door cost at all.
+Today the solver will prefer a piece slightly through the plaster over a blocked door, every
+time, and that is now wrong by decision rather than by taste. **Measure it before building
+anything** — the claim is about the cost function and can be settled without the annealer,
+by scoring two arrangements of one room.
+
+**Where it goes, and where it must not.** `costBreakdown`'s own comment argues against a
+cliff in as many words — *"a cost function is read as a gradient and a cliff gives the
+annealer nothing to walk down"* — and that reasoning still holds for the descent. A step
+penalty on `outside` would contradict the file's own design. The decision belongs at the
+points where an arrangement is CHOSEN rather than searched:
+
+  · `lowestTotal` in `lib/layout-solve.ts`, which picks which finalist becomes the
+    suggestion. `SolveOptions.pick` already exists as the seam for substituting a ranker, so
+    a lexicographic default costs one function and no landscape change.
+  · `anyWorse` over `HARD_TERMS` already keeps the hard terms apart in the finish passes —
+    the veto's shape is there, it is just unordered.
+
+**The honest limit of that**, to be written down rather than discovered later: ranking
+finalists can only choose among what the search kept. If every finalist has a piece outside,
+nothing changes. Whether the pool ever holds both kinds is a measurement nobody has taken.
+
+**Do not re-tune `DEFAULT_WEIGHTS`** to implement this. A weight cannot express it: the door
+term is a sum over doors and the outside term is continuous from zero, so no finite weight
+makes *any* overhang dearer than *any* door block. That is precisely why the answer is a
+veto and not a number.
+
+
 
 `DEFAULT_WEIGHTS` has `outside: 1000` and `door: 800`, both against terms normalised to 0..1.
 Until `outsideDeficit` landed, containment could not see an overhang below roughly 160 mm on a
