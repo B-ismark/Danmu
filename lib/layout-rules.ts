@@ -242,6 +242,20 @@ export const RULE_KINDS = [
   'door',
   'entry',
   'clash',
+  // The same fault one layer up: a floor piece standing INSIDE something that is not
+  // on the floor — a wardrobe through a mounted TV, a bookshelf through a ceiling fan.
+  //
+  // Its own kind rather than more `clash`, because the two answer "can the solver fix
+  // this" differently and `RULE_HANDLING` is read to decide whether a **Try a fix**
+  // button appears. `c.overlap` accumulates inside `if (!obstacle[i]) continue`, and
+  // `isObstacle` is false for anything wall-mounted, so the term is identically zero
+  // for these pairs however deep the overlap. Filing them under `clash` would put a
+  // button there that spins and reports nothing.
+  //
+  // Doors and windows are deliberately not reported here — `door`, `entry` and
+  // `window` already speak for them, and in better words than "two pieces in the same
+  // place" ("you cannot open this door" is the fault; the overlap is the mechanism).
+  'clash-mounted',
   'walk',
   'zone',
   'window',
@@ -1041,6 +1055,45 @@ export function doorPath(
   const w = Math.max(width, door.dimMM[0] / 1000);
   const [dx, dz] = localToWorld(door.rot, 0, depth / 2);
   return { cx: door.pos[0] + dx, cz: door.pos[2] + dz, hw: w / 2, hd: depth / 2, rot: door.rot };
+}
+
+/** Shapes nothing is damaged by standing inside: a rug you walk over, a curtain you
+ *  push a nightstand against. **Not** "small" and not "thin" — a soundbar is both and
+ *  is emphatically solid. The test is whether the two pieces occupying one patch of
+ *  floor is an ordinary arrangement somebody would choose on purpose.
+ *
+ *  A `Set<Shape>` rather than a `Partial<Record<Shape, boolean>>`, and that is the
+ *  shape-contract lesson rather than a style choice: a partial table lets a new shape
+ *  inherit its category's answer in silence, and the silent answer here would be the
+ *  dangerous one — a new soft furnishing would come out solid, which reads as the app
+ *  refusing an ordinary drag. Membership is explicit; absence means solid, which is
+ *  the direction that fails loudly.
+ *
+ *  ── Why a curtain is in it ──────────────────────────────────────────────────
+ *
+ *  It was not, and `collidesAt` exempted only rugs, so **the drag refused to put
+ *  anything in front of a curtain**. Measured against the shipped presets rather than
+ *  reasoned about: four pairs the seeder itself creates are inside a curtain — the
+ *  `l` room's bookshelf, and the `u` room's wardrobe, nightstand and bedside lamp.
+ *  Every one of them is a state the app loads and the user cannot re-create by
+ *  dragging, which is the same class `visual-check.md` keeps recording. The curtain
+ *  is modelled with about 110 mm of depth standing off the wall, so anything with its
+ *  back to that wall is inside it by construction.
+ *
+ *  Read by BOTH the drag (`collidesAt`) and the room report's mounted-clash rule, so
+ *  the two cannot come to different answers about the same pair — which is the fault
+ *  § 17 was filed for, one layer down. */
+const SOFT_SHAPES: ReadonlySet<Shape> = new Set<Shape>(['rug', 'curtain']);
+
+/** Whether a piece is soft — see `SOFT_SHAPES`.
+ *
+ *  Takes the CATEGORY too, because `rug` was a category test everywhere it appeared
+ *  and a room saved before the shape existed can carry `category: 'rug'` with some
+ *  other shape on it. Widening a "does this obstruct" answer toward *not* obstructing
+ *  is the forgiving direction: the failure is a drag that goes through a rug, not one
+ *  that is refused for no visible reason. */
+export function isSoftFurnishing(part: { category: Category; shape: Shape }): boolean {
+  return part.category === 'rug' || SOFT_SHAPES.has(part.shape);
 }
 
 /** The pieces that get in a walker's way — floor-standing, solid, tall enough to

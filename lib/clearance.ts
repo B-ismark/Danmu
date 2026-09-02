@@ -23,6 +23,7 @@ import {
   footArea,
   footFromPart,
   footIntersectionArea,
+  footOverlap,
   type Foot,
   type Poly,
 } from './geometry';
@@ -46,6 +47,7 @@ import {
   doorPath,
   formsRoute,
   isObstacle,
+  isSoftFurnishing,
   routeWidth,
   roleOf,
   sharesFloor,
@@ -372,6 +374,60 @@ export function analyzeRoom(
         title: 'Two pieces in the same place',
         detail: `“${a.name}” and “${b.name}” overlap on the floor — one of them has to move before this arrangement is real.`,
         partIds: [a.id, b.id],
+      });
+    }
+  }
+
+  // ── 2b. A floor piece standing inside something that is not on the floor ──
+  //
+  // § 17. The drag has refused these since PR #42 — `collidesAt` compares full
+  // vertical extents and skips only soft furnishings — and the room report said
+  // nothing, because rule 2 above runs over `floorBlockers`, which excludes anything
+  // wall-mounted by definition. Same question, two answers: a wardrobe through a
+  // mounted TV could not be created by dragging and could not be reported once it
+  // was there, so a room detected or imported into that state stayed silent about it.
+  //
+  // The two sets are deliberately NOT `floorBlockers` on either side:
+  //
+  //   · the floor side admits a piece standing on a surface — a bedside lamp at
+  //     y = 0.55 is inside a TV mounted at 1.4 m just as a wardrobe is, and
+  //     `floorBlockers`' `pos[1] < 0.05` would drop it;
+  //   · the mounted side admits the CEILING anchors too, so a tall bookshelf under a
+  //     fan is the same finding rather than a shape nobody thought of.
+  //
+  // Any overlap at all, rather than rule 2's `CLASH_SHARE`. That bar exists to forgive
+  // deliberate composition — a chair tucked under its table — and there is no
+  // arrangement in which a piece of furniture is meant to be partly inside a
+  // television. It is also the bar `collidesAt` uses, which is the point: the pair the
+  // drag refuses is the pair the report names.
+  //
+  // Doors and windows are excluded because `door`, `entry` and `window` already speak
+  // for them, and they name the fault rather than the mechanism.
+  const mountedSolids = parts.filter(
+    (p) =>
+      p.wallMounted &&
+      !isSoftFurnishing(p) &&
+      p.category !== 'door' &&
+      p.shape !== 'door' &&
+      p.shape !== 'window',
+  );
+  const floorSolids = parts.filter((p) => !p.wallMounted && !isSoftFurnishing(p));
+  for (const m of mountedSolids) {
+    const [mBottom, mTop] = verticalExtent(m.category, m.shape, m.dimMM, m.pos[1]);
+    const mFoot = footFromPart(m.pos, m.rot, m.dimMM, m.circle);
+    for (const f of floorSolids) {
+      const [fBottom, fTop] = verticalExtent(f.category, f.shape, f.dimMM, f.pos[1]);
+      if (fTop <= mBottom + 0.005 || mTop <= fBottom + 0.005) continue;
+      // The same pad `collidesAt` passes, so flush-against reads as touching rather
+      // than as a collision, on both surfaces.
+      if (!footOverlap(mFoot, footFromPart(f.pos, f.rot, f.dimMM, f.circle), -0.01)) continue;
+      issues.push({
+        id: `clash-mounted-${f.id}-${m.id}`,
+        rule: 'clash-mounted',
+        severity: 'error',
+        title: 'A piece is inside something on the wall',
+        detail: `“${f.name}” is standing where “${m.name}” hangs — they share the same space between ${Math.max(fBottom, mBottom).toFixed(2)} m and ${Math.min(fTop, mTop).toFixed(2)} m up. Slide one of them along its wall.`,
+        partIds: [f.id, m.id],
       });
     }
   }

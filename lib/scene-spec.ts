@@ -49,6 +49,7 @@ import {
   fixedBand,
   formsRoute,
   isObstacle,
+  isSoftFurnishing,
   roleOf,
   routeWidth,
   sharesFloor,
@@ -2616,9 +2617,15 @@ export function placeNewPart(
   return { pos: [fx, y, fz], rot, wallMounted };
 }
 
-/** Y-aware collision. Used for placement clamping. Rugs/mats exempt.
+/** Y-aware collision. Used for placement clamping. Soft furnishings exempt.
  *  Allows stacking — if one part's vertical extent doesn't overlap the other's, no collision.
- *  This lets users put a lamp on a desk, monitor on a desk, etc. */
+ *  This lets users put a lamp on a desk, monitor on a desk, etc.
+ *
+ *  "Soft" was "rug", and a curtain is not a rug: the exemption read `category === 'rug'`
+ *  on both sides, so a nightstand could not be dragged in front of the curtains — in a
+ *  room this app seeds that way. `isSoftFurnishing` is the shared answer, and
+ *  `lib/clearance.ts`'s mounted-clash rule asks it the same question, so a pair the drag
+ *  refuses is a pair the room report names. */
 export function collidesAt(
   parts: ScenePart[],
   movingId: string,
@@ -2628,7 +2635,7 @@ export function collidesAt(
 ): boolean {
   const mover = parts.find((p) => p.id === movingId);
   if (!mover) return false;
-  if (mover.category === 'rug') return false;
+  if (isSoftFurnishing(mover)) return false;
   // `pos[1]` is a BOTTOM for a floor-anchored part and a mesh CENTRE for every
   // other anchor, so the extent is `verticalExtent`'s answer and not `[y, y + h]`.
   // This function spelled the floor version out for both sides, which put a
@@ -2640,7 +2647,7 @@ export function collidesAt(
   const me = footFromPart(pos, rot, dimMM, mover.circle);
   for (const o of parts) {
     if (o.id === movingId) continue;
-    if (o.category === 'rug') continue;
+    if (isSoftFurnishing(o)) continue;
     const [oyBottom, oyTop] = verticalExtent(o.category, o.shape, o.dimMM, o.pos[1]);
 
     // Vertical separation → no collision (stacking allowed).

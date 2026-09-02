@@ -31,7 +31,7 @@ them. Where two items are the same defect one layer apart, they are listed as on
 | 1 | **§ 12** rider keeps the size the room was BUILT at | Confirmed by eye, and the user has already chosen the repair — derive at read time, write nothing (§ B.16). An attempt at the OTHER option was built and reverted; read § 12 before starting | M | **blocked on § 33.3** — B.16's stated cost is "the derivation runs on every read" and the render budget is unmeasured |
 | ~~2~~ | ~~**§ 32** everything added from the Library is square-footed~~ | **FIXED** — `isRoundPart` + `ROUND_SHAPES`, derived at all four doors, `CATEGORY_DEFAULTS.circle` deleted | — | — |
 | ~~3~~ | ~~**§ 14** a merged group's member cannot be clicked~~ | **FIXED** — the gizmo's invisible translate plane took the press, so `Pickable`'s `selDown` was stale and the drill-in always read "outside". `lib/press-selection.ts` records in the capture phase | — | — |
-| 4 | **§ 17** a drag refused by a wall TV names nothing | Same surface as § 14 and `refusalCause` is already half of it | S | do with § 14, one pointer-path session |
+| ~~4~~ | ~~**§ 17** a drag refused by a wall TV names nothing~~ | **FIXED** — `clash-mounted` in the room report, and `isSoftFurnishing` shared with the drag, which also unblocked dragging anything in front of a curtain | — | — |
 | 5 | **§ 18** Shuffle leaves a nightstand through the bed | User-reported. A clash the solver should price and does not | M | overlaps § 31 — both are "what the cost function is allowed to trade" |
 | 6 | **§ 31** containment now outranks a blocked door by a hair | A decision only the user can make, and the third option (veto rather than price) is the largest change. Nothing a user sees today is wrong | M–L | **blocked on the user**; § 18 may make the answer obvious, so do § 18 first |
 | 7 | **§ 34** the pendant and the ceiling fan draw outside their declared size | `fanBlade`'s own defect in two more shapes, and NO gate can see it — every clause reads `dimMM` and so does the renderer's disagreement | S once the meaning of a pendant's height is decided | pairs with § 33.1 — both want the same pair of eyes on the 3D tab |
@@ -2247,7 +2247,86 @@ turned out to be cheaper as a sweep than as a click path, because the piece that
 whichever one is wider than the shortest wall of the room it is in: a property of the pair,
 which is exactly the kind of thing choosing an example misses.
 
-### 17. A drag refused by a wall-mounted TV says nothing and names nothing
+### 17. A drag refused by a wall-mounted TV says nothing and names nothing — FIXED, and it was two faults
+
+**Both halves shipped.** The size tag names the blocking piece (`blockedBy` rides the
+live drag channel and lands in `MeasureGuides`), and the room report now has a rule of
+its own for the case the `solid` filter could not reach.
+
+`clash-mounted` (`lib/clearance.ts`, rule 2b) reports a floor piece standing inside
+anything that is not on the floor. Seen in a browser on the production build: *"A piece
+is inside something on the wall — “Wardrobe” is standing where “TV” hangs — they share
+the same space between 0.98 m and 1.81 m up. Slide one of them along its wall."* With
+**Show me** and no **Try a fix**, which is `RULE_HANDLING`'s `movable: false` doing its
+job.
+
+Three things about it are decisions rather than mechanics:
+
+- **The two sets are not `floorBlockers` on either side.** The floor side admits a piece
+  standing on a surface — a bedside lamp at y = 0.9 is inside a TV mounted at 1.4 m
+  exactly as a wardrobe is, and `pos[1] < 0.05` would drop it. The mounted side admits
+  the CEILING anchors, so a tall bookshelf under a fan is the same finding rather than a
+  shape nobody thought of.
+- **Any overlap at all, not rule 2's `CLASH_SHARE`.** That bar forgives deliberate
+  composition — a chair tucked under its table — and nothing is meant to be partly
+  inside a television. It is also the bar `collidesAt` uses, which is the point: the
+  pair the drag refuses is the pair the report names.
+- **Doors and windows are excluded**, because `door`, `entry` and `window` already speak
+  for them and name the fault rather than the mechanism.
+
+The `RULE_HANDLING` row says `costTerm: null, movable: false`, and
+`tests/mounted-clash.test.ts` **measures** that claim rather than repeating it: it drives
+a wardrobe from clear of the TV to fully inside it and watches `c.overlap` stay at 0 the
+whole way. It is gated on `isObstacle` at both indices and `isObstacle` is false for
+anything wall-mounted, so the term is identically zero at every depth — there is no
+gradient, and a button would spin and report nothing.
+
+### …and the fault found while looking for the pairs that would fire
+
+**Nothing could be dragged in front of a curtain.** `collidesAt` exempted only rugs, and
+a curtain is modelled with about 110 mm of depth standing off the wall, so anything with
+its back to that wall is inside it. Measured against the shipped presets rather than
+reasoned about — four pairs the seeder itself creates were in that state:
+
+| preset | pair | share of the smaller |
+|---|---|---|
+| `l` 6×5 | Bookshelf ∩ Curtains | 0.056 |
+| `u` 6×5 | Wardrobe ∩ Curtains | 0.125 |
+| `u` 6×5 | Nightstand ∩ Curtains | 0.281 |
+| `u` 6×5 | Bedside lamp ∩ Curtains | 0.320 |
+
+Every one is a state the app loads and the user could not re-create, which is the class
+`visual-check.md` keeps recording — and adding the report rule without this would have
+opened four of the app's own presets onto an error.
+
+`isSoftFurnishing` (`lib/layout-rules.ts`) is the shared answer, read by the drag and by
+the report, so the two cannot diverge again. A `Set<Shape>` rather than a
+`Partial<Record<Shape, …>>`, deliberately: a partial table lets a new shape inherit its
+category's answer in silence, and the silent answer here switches collision OFF, which
+is the direction nothing complains about. Membership is `rug` and `curtain`, pinned in
+both directions.
+
+Verified in a browser, same wall, two drags:
+
+| aimed at | committed | |
+|---|---|---|
+| the curtains | `x=1.60 y=0.00 z=−2.30` | arrived at the wall, on the floor |
+| the wardrobe | `x=−1.60 y=2.10 z=−2.30` | climbed it — collision is still on |
+
+**The second run is the control, and the first version of it was not evidence.** It read
+only x and z, both drags ended at z = −2.30, and that read as "the wardrobe does not
+refuse it". The nightstand had climbed onto the wardrobe: y = 2.10. From directly above,
+a nightstand ON a wardrobe and one INSIDE it draw the same rectangle — the same blind
+spot as the vase left hanging at table height in `CLAUDE.md`, one piece over. A drag
+probe that does not read y cannot tell stacking from penetration.
+
+**Whether a 550 mm nightstand should climb a 2.1 m wardrobe at all is open**, and is not
+this item — nothing reported it, and the resolve is doing exactly what its support step
+says. Recorded so the next probe in this area does not read it as a collision bug.
+
+---
+
+The original entry follows, for the reasoning it carries.
 
 The collision half of PR #42 **holds** — the user got *"a little space between wardrobe and
 tv. It's not clipping through"*, which is the 90 mm standoff behaving. The fan case holds
