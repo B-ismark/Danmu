@@ -130,15 +130,99 @@ export type Candidate = {
   cost: number;
   navCost: number;
   total: number;
+  /** Every term, priced at `NAV_CELL` — what `total` is a summary of.
+   *
+   *  Here so a ranker can ask what KIND of cost a candidate carries rather than only
+   *  how much, which is what § 31's veto needs: an arrangement with a piece through a
+   *  wall is not a dearer version of one without, it is a different kind of answer.
+   *  `breakdown.total` and `total` are the same number by construction — pinned in
+   *  `tests/layout-pick.test.ts`, because "by construction" is how two fields that
+   *  ought to agree stop agreeing. */
+  breakdown: CostBreakdown;
 };
 
-/** Index of the cheapest candidate on `total`, ties to the earliest. The behaviour
- *  `solveLayout` has always had, named so the default and the fallback are one thing
- *  rather than two copies of an argmin. */
+/** The hard terms that describe something that CANNOT EXIST, as opposed to a room
+ *  that is merely bad to live in.
+ *
+ *  The user settled this on 2026-09-02, and the wording is worth keeping because the
+ *  reasoning is what generalises: *"door being blocked (avoid if possible) is
+ *  objectively better than a model going through walls. nothing physically impossible
+ *  should be encouraged. door being blocked can be prompted and fix with the fix
+ *  feature."*
+ *
+ *  So the split is by KIND and not by severity. Two solids in the same place, and a
+ *  solid through a wall, are things the room cannot contain. A blocked door, an
+ *  unreachable corner, a wardrobe whose doors will not open are all rooms that exist
+ *  and are bad — the room report names each of them and **Try a fix** acts on them.
+ *  The remaining three of `HARD_TERMS` are therefore deliberately absent here.
+ *
+ *  ── Why this cannot be a weight, which is the thing to read before re-tuning ──
+ *
+ *  `DEFAULT_WEIGHTS` prices `outside` at 1000 against `door`'s 800, and that 200-unit
+ *  gap looks like the same decision expressed as a number. It is not, because **both
+ *  terms are continuous from zero**. Measured on a 6 × 4 room with a door in the south
+ *  wall and one 1200 mm wardrobe, at `DEFAULT_WEIGHTS`:
+ *
+ *      wardrobe 0.5 mm through the north wall   outside   0.75
+ *      wardrobe   5 mm through the north wall   outside   7.45
+ *      wardrobe  20 mm through the north wall   outside  29.81
+ *      wardrobe barely clipping the door path   door     50.00
+ *      wardrobe squarely across the doorway     door    900.00
+ *
+ *  A 20 mm overhang is bought by the lightest touch of a door path, and no finite
+ *  weight changes that: the outside term can always be made smaller than any fixed
+ *  door cost by moving the piece a millimetre back. Ordering two continuous
+ *  quantities is not something a ratio between them can do, which is precisely why
+ *  the answer is a veto and not a number. **Do not "fix" this by re-tuning
+ *  `DEFAULT_WEIGHTS`.**
+ *
+ *  ── …and why it is not a step in the cost function either ────────────────────
+ *
+ *  The obvious alternative is a cliff on `outside`, and `layout-score.ts` argues
+ *  against exactly that in its own words — *"a cost function is read as a gradient and
+ *  a cliff gives the annealer nothing to walk down"* — and it is right. The descent
+ *  keeps its gradient. This term list is read only where an arrangement is **chosen**:
+ *  which finalist wins, and whether the answer is handed back at all. */
+export const IMPOSSIBLE_TERMS: Array<keyof ScoreWeights> = ['overlap', 'outside'];
+
+/** How much of this arrangement cannot physically exist, in weighted cost units.
+ *
+ *  A SUM, where `anyWorse` keeps the hard terms apart, and the difference is not an
+ *  oversight. `anyWorse` refuses a trade in which any hard term gets worse, so keeping
+ *  them apart there is what stops one buying another across the kinds. Here every term
+ *  in the list is already on the same side of the veto — both are impossible — so
+ *  there is nothing to protect from being bought, and "which arrangement is least
+ *  impossible" is a single question with a single answer. */
+export function impossibility(b: CostBreakdown): number {
+  let sum = 0;
+  for (const k of IMPOSSIBLE_TERMS) sum += b[k];
+  return sum;
+}
+
+/** Index of the best candidate: least impossible first, then cheapest on `total`.
+ *  Ties to the earliest, which is the behaviour `solveLayout` has always had.
+ *
+ *  The lexicographic half is § 31's veto at the point where a finalist becomes the
+ *  suggestion. Its reach is honestly small and was measured rather than assumed —
+ *  over five presets x eight seeds of a scrambled room, 40 pools held more than one
+ *  finalist, **2** of those held both a possible and an impossible arrangement, and
+ *  **1** changed hands. That is not the interesting number, and saying so here is the
+ *  point: a ranker can only choose among what the search kept, so the veto that
+ *  actually does the work is the one on the accept in `solveLayout`, where an answer
+ *  more impossible than the room it was given is refused outright.
+ *
+ *  Impossibility is compared with the same `1e-6` slack `anyWorse` uses, because these
+ *  are sums of areas and two arrangements that are equally legal can differ in the
+ *  last bit — a bare `<` would let a rounding error outrank a real cost difference. */
 function lowestTotal(candidates: readonly Candidate[]): number {
   let bestIdx = 0;
+  let bestImp = impossibility(candidates[0].breakdown);
   for (let i = 1; i < candidates.length; i++) {
-    if (candidates[i].total < candidates[bestIdx].total) bestIdx = i;
+    const imp = impossibility(candidates[i].breakdown);
+    if (imp < bestImp - 1e-6 || (imp <= bestImp + 1e-6 && candidates[i].total < candidates[bestIdx].total)) {
+      bestIdx = i;
+      bestImp = Math.min(imp, bestImp);
+    }
   }
   return bestIdx;
 }
@@ -878,9 +962,14 @@ export function solveLayout(
   remember(pool, best, bestCost);
   const rated: Candidate[] = pool.map((c) => {
     // The expensive term the pool's own sort does not price — a raster and a distance
-    // transform each, which is why only the finalists ever get it.
-    const navCost = weights.navigation * navigabilityCost(model, c.placements, NAV_CELL);
-    return { placements: c.placements, cost: c.cost, navCost, total: c.cost + navCost };
+    // transform each, which is why only the finalists ever get it. Taken off a full
+    // breakdown rather than from a bare `navigabilityCost` call, because a ranker has
+    // to be able to ask which KIND of cost a candidate carries (see
+    // `IMPOSSIBLE_TERMS`) and re-deriving that per candidate downstream would pay for
+    // a second distance transform. Same number of transforms as before: one.
+    const breakdown = costBreakdown(model, c.placements, weights, NAV_CELL);
+    const navCost = breakdown.navigation;
+    return { placements: c.placements, cost: c.cost, navCost, total: c.cost + navCost, breakdown };
   });
 
   // Which finalist becomes the suggestion. The default is the argmin this has always
@@ -974,7 +1063,42 @@ export function solveLayout(
   // working feature.) What keeps a shuffle honest is `isCleanShuffle`'s per-term
   // `HARD_TERMS` check in `lib/layout-shuffle.ts`, which is about faults rather
   // than about totals, and refuses the things a person would actually call broken.
-  if (!shuffle && breakdownAfter.total >= before) {
+  //
+  // ── …and never hand back something that cannot EXIST, in any mode ───────────
+  //
+  // § 31, and the half of the invariant above that `total` cannot express. The test
+  // above compares one number, so an answer is free to put a wardrobe through a wall
+  // as long as it buys back more than 1000 units of taste elsewhere — and it does.
+  // Measured over five presets x two modes x scrambled-and-seeded x eight seeds =
+  // 160 solves, counting answers whose `overlap + outside` was higher than the
+  // layout they were HANDED:
+  //
+  //      18 of 160, and every one of them started from a perfectly legal room.
+  //      The L preset's worst reached `outside` 371.6 from 0 — roughly 200 mm of a
+  //      wardrobe inside the plaster — while its total improved 811 → 400, so the
+  //      old test welcomed it.
+  //
+  // Those are the SEEDED presets, which is what makes this a first-run defect rather
+  // than an edge case: a brand-new L-shaped room, one press of Suggest, furniture in
+  // the wall. `RoomTools` writes the answer straight to the store and its only gate
+  // is `isWorthOffering`, which reads the same two totals; **Try a fix** is exempt
+  // from even that. So the guard belongs here, where no caller can forget it.
+  //
+  // Reverting to the origin rather than to the best legal finalist, deliberately: the
+  // picker has already preferred a possible arrangement if the pool held one, so
+  // reaching this line means every finalist was impossible, and the honest answer to
+  // "arrange this room" when the search only found illegal answers is that it found
+  // none. `moved` comes back empty and the caller reports exactly that.
+  //
+  // Applies in `shuffle` too, where the total invariant deliberately does not. The
+  // exemption above exists because a shuffle is asked for a DIFFERENT arrangement and
+  // a different one is usually dearer — that reasoning is about taste and says nothing
+  // about legality. `isCleanShuffle` already demands every hard term be zero, so this
+  // cannot cost shuffle an offer it would have shown; it refuses the same answers one
+  // stage earlier.
+  const impossibleBefore = impossibility(breakdownBefore);
+  const impossibleAfter = impossibility(breakdownAfter);
+  if ((!shuffle && breakdownAfter.total >= before) || impossibleAfter > impossibleBefore + 1e-6) {
     winner = origin.map((p) => ({ ...p }));
     breakdownAfter = breakdownBefore;
   }
@@ -1107,8 +1231,18 @@ export function openRoutes(
   // the USER had, not against the good answer this pass was given. So a repair could
   // quietly spend the search's work and return something worse, and the doc said it
   // couldn't.
-  const fine = (p: Placement[]) => costBreakdown(m, p, weights, NAV_CELL).total;
-  return fine(best) < fine(placements) ? best : placements;
+  //
+  // Two questions, not one, and § 31 is why the second exists. This pass moves
+  // obstacles to open a route, so "push the wardrobe into the wall" is a move
+  // squarely inside its own proposal space and one that scores well: the wall it
+  // goes through is not floor the navigation term was counting. `total` alone would
+  // buy that, exactly as the accept in `solveLayout` did — a repair may make the room
+  // better to walk through, and it may not make it a room that cannot exist.
+  const fine = (p: Placement[]) => costBreakdown(m, p, weights, NAV_CELL);
+  const given = fine(placements);
+  const found = fine(best);
+  if (impossibility(found) > impossibility(given) + 1e-6) return placements;
+  return found.total < given.total ? best : placements;
 }
 
 /** Square up anything that is nearly square.
