@@ -373,7 +373,7 @@ describe('a hung fixture reaches the ceiling it hangs from', () => {
     }
   });
 
-  it('leaves the wall-high anchor exactly where it was', () => {
+  it('leaves every other anchor exactly where it was', () => {
     // The guard against fixing this one anchor too widely. `wall-high` has its own two
     // pads (0.05 and 0.1) and its own reason — a curtain rod is mounted below the slab,
     // not against it — so it is NOT the same defect and must not follow.
@@ -385,5 +385,20 @@ describe('a hung fixture reaches the ceiling it hangs from', () => {
       .toBeCloseTo(2.6, 9);
     // And the floor anchor, which has no business changing either.
     expect(groundY('sofa', 'sofa', [2000, 900, 800], H), 'a sofa still stands at 0').toBe(0);
+
+    // `wall-mid`'s eye level was UNPINNED anywhere in this repo, which the § 35 mutation
+    // round found by moving it 1.4 -> 1.5 m and watching every suite stay green. It is
+    // a decision — how high a television hangs — not an arithmetic consequence, so it
+    // gets a literal. The second clause is the one that matters: in a room low enough,
+    // eye level is not reachable and the piece drops to clear the ceiling instead, and
+    // the constant alone cannot see which arm bound.
+    expect(groundY('tv', 'tv', [1200, 80, 700], H), 'a television hangs at eye level')
+      .toBeCloseTo(1.4, 9);
+    expect(groundY('mirror', 'mirror', [600, 20, 900], H), 'so does a mirror')
+      .toBeCloseTo(1.4, 9);
+    expect(groundY('tv', 'tv', [1200, 80, 700], 1.8), 'in a 1.8 m room the ceiling binds')
+      .toBeCloseTo(1.8 - 0.35 - 0.1, 9);
+    expect(groundY('painting', 'painting', [500, 30, 400], H), 'a small painting, same level')
+      .toBeCloseTo(1.4, 9);
   });
 });
