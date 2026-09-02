@@ -2483,6 +2483,29 @@ with the piece under the hand; the solver was the one mover in this app that sep
   a 40 mm mat as well as one standing beside it, so moving the mat left the chair behind. The
   test asserts both ends; a one-ended version passed against the wrong value.
 
+**Two the review found and this does NOT fix.** Both are real, both are recorded rather than
+repaired, and each says what the repair would cost.
+
+- **`ridingParents` is DERIVED and `parentIds` is STORED, and the drag reads the stored one.**
+  After a Shuffle every lamp rides its nightstand; hand-drag that same nightstand and the
+  lamp stays behind — because `lib/drag-convoy.ts` reads `parentIds`, which a `defaultScene`
+  bedroom never writes. So the two answers are opposite for exactly the room § 18 was filed
+  against, and a user who presses Shuffle and then drags sees the app change its mind. Not
+  fixed here because the repair is a **choice between two behaviour changes**, not a bug fix:
+  either the drag derives too — and a lamp merely set down NEAR a table starts following it,
+  which nobody asked for — or a load-time pass writes `parentIds` from `ridingParents`, which
+  then has to re-run after every re-detect and makes a derivation into persisted state. Both
+  are bigger than § 18 and neither is obviously right.
+- **Three thresholds on one axis, over one `findSupportDetailed`.** `ridingParents` asks
+  `p.pos[1] > 0`, `settleHeights` asks `support.y > 0.3`, `isObstacle` asks `pos[1] < 0.05`.
+  They disagree on a **named pair**: a table lamp at y = 0.30 standing on a 300 mm ottoman —
+  the catalogue's minimum ottoman height — is a rider `carryRiders` carries and a piece
+  `settleHeights` drops to the floor. Wiring those two together as they stand would make the
+  lamp travel with the ottoman and then fall through it. The bar in `lib/layout-settle.ts`
+  now names this pair in a comment so the next person meets it before the room does;
+  unifying the three is its own change, and the third (`isObstacle`) is a *search* boundary
+  rather than a *physics* one, so they may be right to differ.
+
 **What is still not verified:** the 3D tab. Everything above is measured in the suite, and a
 lamp in mid-air is invisible in the plan by construction — see `visual-check.md`.
 
