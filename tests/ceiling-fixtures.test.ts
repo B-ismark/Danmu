@@ -55,11 +55,27 @@ describe('the ceiling fan is drawn at the height it declares', () => {
   it('keeps the housing at full thickness once there is room, and caps it when there is not', () => {
     // Both sides of the cap, which is the only branch in the function. A one-ended
     // sweep would leave `Math.min` free to be either argument alone.
-    expect(fanColumn(450).hubH, 'a tall fan keeps the full housing').toBeCloseTo(FAN_HUB_H, 9);
-    expect(fanColumn(450).rodH, '…and spends the rest on downrod').toBeCloseTo(0.45 - FAN_HUB_H, 9);
+    //
+    // **Against LITERALS, not against `FAN_HUB_H`.** The first version of this test
+    // asserted `fanColumn(450).hubH` equalled the constant it is computed from, which
+    // is an assertion measuring its own subject: moving the constant 80 -> 120 mm left
+    // this file green, because `Math.min` still picked the same arm at both ends of the
+    // band. Measured, not reasoned - it survived the mutation.
+    expect(FAN_HUB_H, 'the housing is 80 mm, and that is a decision').toBeCloseTo(0.08, 9);
+    expect(fanColumn(450).hubH, 'a tall fan keeps the full housing').toBeCloseTo(0.08, 9);
+    expect(fanColumn(450).rodH, '…and spends the rest on downrod').toBeCloseTo(0.37, 9);
     expect(fanColumn(150).hubH, 'a 150 mm fan cannot spare 80 mm for its motor').toBeCloseTo(0.06, 9);
     expect(fanColumn(150).rodH).toBeCloseTo(0.09, 9);
     expect(fanColumn(150).hubH, 'the cap really is below the nominal').toBeLessThan(FAN_HUB_H);
+  });
+
+  it('changes hands at exactly the height where the two arms meet', () => {
+    // The crossover is `FAN_HUB_H / 0.4` = 200 mm, and pinning it is what actually
+    // holds the constant's VALUE: either arm alone is satisfied by the band's ends.
+    expect(fanColumn(200).hubH, 'at 200 mm the two arms are equal').toBeCloseTo(0.08, 9);
+    expect(fanColumn(210).hubH, 'above it, the nominal thickness wins').toBeCloseTo(0.08, 9);
+    expect(fanColumn(190).hubH, 'below it, the height wins').toBeCloseTo(0.076, 9);
+    expect(fanColumn(190).hubH, '…which is strictly thinner').toBeLessThan(0.08);
   });
 
   it('never draws a blade thicker than the housing that carries it', () => {
