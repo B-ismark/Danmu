@@ -32,8 +32,8 @@ them. Where two items are the same defect one layer apart, they are listed as on
 | ~~2~~ | ~~**§ 32** everything added from the Library is square-footed~~ | **FIXED** — `isRoundPart` + `ROUND_SHAPES`, derived at all four doors, `CATEGORY_DEFAULTS.circle` deleted | — | — |
 | ~~3~~ | ~~**§ 14** a merged group's member cannot be clicked~~ | **FIXED** — the gizmo's invisible translate plane took the press, so `Pickable`'s `selDown` was stale and the drill-in always read "outside". `lib/press-selection.ts` records in the capture phase | — | — |
 | ~~4~~ | ~~**§ 17** a drag refused by a wall TV names nothing~~ | **FIXED** — `clash-mounted` in the room report, and `isSoftFurnishing` shared with the drag, which also unblocked dragging anything in front of a curtain | — | — |
-| 5 | **§ 18** Shuffle leaves a nightstand through the bed | User-reported. A clash the solver should price and does not | M | overlaps § 31 — both are "what the cost function is allowed to trade" |
-| 6 | **§ 31** containment now outranks a blocked door by a hair | A decision only the user can make, and the third option (veto rather than price) is the largest change. Nothing a user sees today is wrong | M–L | **blocked on the user**; § 18 may make the answer obvious, so do § 18 first |
+| ~~5~~ | ~~**§ 18** Shuffle leaves a nightstand through the bed~~ | **FIXED** — not a floor clash at all: a rider (a lamp on a nightstand) was moved independently of its support and left in mid-air inside the bed, invisible to all five `HARD_TERMS`, to the room report and to the plan. `carryRiders` | — | — |
+| 6 | **§ 31** containment now outranks a blocked door by a hair | A decision only the user can make, and the third option (veto rather than price) is the largest change. Nothing a user sees today is wrong | M–L | **blocked on the user**. § 18 was expected to settle this and does not: it turned out not to be a cost-function question at all, so § 31 is unchanged and still needs an answer |
 | 7 | **§ 34** the pendant and the ceiling fan draw outside their declared size | `fanBlade`'s own defect in two more shapes, and NO gate can see it — every clause reads `dimMM` and so does the renderer's disagreement | S once the meaning of a pendant's height is decided | pairs with § 33.1 — both want the same pair of eyes on the 3D tab |
 | 7 | **§ 33.1** the four newest shapes have never been seen in 3D | Cheap, and it is the honest limit of the shape contract — no test renders geometry | S | none. `visual-check.md` item |
 | 8 | **G.1** a brand-new room seals its own routes at the size the app ships | Measured, real, and a first-run defect — the worst kind to leave | M | related to § 31: both are the solver's idea of "navigable" |
@@ -2418,22 +2418,73 @@ refuses to create one. Same question, two answers. That filter is load-bearing �
 makes four other copies of the same height arithmetic safe — so this wants a `RULE_HANDLING`
 row rather than a change to the filter.
 
-### 18. Shuffle leaves a nightstand through the bed
+### 18. Shuffle leaves a nightstand through the bed — FIXED
 
 *"Shuffle didn't close gap, nightstand passes through bed."*
 
 The first half **confirms** the measured diagnosis in § A.2 — at 300 mm out of place all ten
 furniture relations cost less than `isWorthOffering`'s threshold, so Shuffle finds the fix
-and stays quiet. That is not new.
+and stays quiet. That is not new and is still open there.
 
 The second half is, and it is worse than a gap: the solver **produced an overlap**.
 `visual-check.md` already recorded that *the solver does not call `collidesAt`*, filed as a
 state that "still loads but cannot be re-created by dragging". A user pressing Shuffle and
 getting one is a different claim — it is the app creating that state on request.
 
-**Do not fix this by giving the solver `collidesAt`** without measuring it: the last repair
-aimed at this area was written, measured and reverted because it gave the solver four runs
-in 48 with a piece through a wall.
+**FIXED in `b16cd34` + `b6d2cdd`.** The paragraphs above are the diagnosis as filed; what
+the measurement found, and the two things the filing had wrong, are below.
+
+**It is not a floor collision, and the solver was never producing one.** Measured over five
+presets × eight shuffle presses, classifying every geometric overlap in the ACCEPTED offer
+rather than trusting the cost function: every one is either a rug (which is meant to be
+under things) or a `sharesFloor` tucked pair inside its tolerance. Zero floor↔floor
+collisions, before the fix and after it. That is what `overlap` weighted 1000 plus
+`isCleanShuffle`'s per-term `HARD_TERMS` check is for, and it works. **So the note's advice
+to reach for `collidesAt` was aimed at the wrong layer** — and the warning it carried is
+still right for a different reason: nothing here needed it.
+
+**What passes through the bed is a RIDER — a lamp standing on a nightstand.** The solver
+moved it independently of the piece it stood on, so a shuffle could hand back a bedside lamp
+floating at 550 mm in the middle of the mattress with nothing under it. On the `u` preset
+over eight presses: inside the bed twice, inside the wardrobe once, and on the other five
+merely somewhere else in the room, still in mid-air. After the fix all eight leave both
+lamps on their own nightstands.
+
+**Nothing in the app could see it, and that is the transferable part.** Every hard term in
+`costBreakdown` accumulates inside `if (!obstacle[i]) continue`, and `isObstacle` requires
+`pos[1] < 0.05` — so a piece standing on furniture is invisible to `overlap`, `outside`,
+`door`, `access` and `navigation` alike. That is the whole of `HARD_TERMS`, which is the
+entire list `isCleanShuffle` reads, so the gate passed it. `lib/clearance.ts` is silent for
+the same reason. And from directly above, the 2D plan draws a lamp ON a nightstand and a
+lamp INSIDE a bed as the same rectangle. Three independent checks, one blind spot, and it is
+the same one that made the § 17 browser probe report the wrong answer until it started
+reading `y`.
+
+**It is also the rule the drag has always had.** `lib/drag-convoy.ts` carries rigid children
+with the piece under the hand; the solver was the one mover in this app that separated them.
+
+`ridingParents` (`lib/rigid-parent.ts`) derives the relation from live geometry, because
+`parentIds` is written by a drag and is empty for a room nobody has dragged in — a
+`defaultScene` bedroom seeds the lamp on the nightstand and records nothing.
+
+**Two things decided here, both measured, so nobody re-opens them cheaply:**
+
+- **A rider is NOT excluded from `movableFor`**, which is the obvious one-line version and
+  was built first. `randomizeStart` draws from the RNG once per movable piece, so taking two
+  lamps out of that set reseeds every piece after them and every seeded arrangement at `u`
+  becomes a different room: four baselines moved by hundreds of cost units, and
+  `bed-rung-safety`'s tidiness-spread bar — a real assertion, not a record — went from inside
+  0.25 to 0.819. Making that green means widening a bar to fit a number. And a pinned rider
+  is a *ghost*: `randomizeStart` leaves an immovable piece at its REAL position, which is the
+  seeded nightstand's spot, so it scores soft terms from coordinates its support left in the
+  first step. As a finish pass beside `snapYaws` the entire cost is **one baseline moving
+  0.18**, all of it soft.
+- **`p.pos[1] <= 0`, not `<= SUPPORT_Y_EPS`.** The first version refused a chair standing ON
+  a 40 mm mat as well as one standing beside it, so moving the mat left the chair behind. The
+  test asserts both ends; a one-ended version passed against the wrong value.
+
+**What is still not verified:** the 3D tab. Everything above is measured in the suite, and a
+lamp in mid-air is invisible in the plan by construction — see `visual-check.md`.
 
 ### 19. Library search: `stand` does not reach `Nightstand` — FIXED
 

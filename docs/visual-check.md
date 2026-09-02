@@ -221,6 +221,12 @@ matched the room, and it did, so it is gone. Two things came out of that same lo
 is an eyes-item: a nightstand passing **through** the bed after a Shuffle (§ H.18), and the
 Library search failing to match `stand` → `Nightstand` (§ H.19).*
 
+*— and the first of those two has since been measured and is NOT what it was filed as. The
+solver produces no floor collisions at all; what goes through the bed is the LAMP standing on
+the nightstand, carried nowhere while the nightstand moved. That fix does want eyes, and it
+is the item below, because it is the one defect in this file that the 2D plan is
+constitutionally unable to show.*
+
 ### Fix and Shuffle are two buttons now — merged to `main` in `9ecce9f` (PR #67)
 
 **Where to click.** Left rail, top: the health chip now has **two** buttons under it,
@@ -255,6 +261,27 @@ point of the change, and no test can tell you it reads that way on screen.
 The tab-switch repeat was fixed on this branch — the attempt counter and the offer history
 are module-scope maps keyed by room id now, not per-mount refs. The freeze is the item
 below, which covers all four solve buttons rather than only this one.
+
+### A bedside lamp should ride its nightstand through a Shuffle
+
+**Where to click.** Open the **U** preset room (it seeds a bed, a wardrobe, two nightstands
+and a lamp on each), go to **3D Model**, and press **Shuffle** half a dozen times. After each
+press, find both bedside lamps.
+
+**What wrong looks like.** A lamp standing anywhere except on top of a nightstand — hanging
+in the air at about knee height, sunk into the mattress, or inside the wardrobe. Orbit down
+to eye level rather than looking from above: at 550 mm a floating lamp is the thing this
+whole item is about, and **from directly overhead it is indistinguishable from a lamp sitting
+correctly on its nightstand**, which is why no amount of clicking in the 2D Plan can check
+this. Turn the camera so you are looking along the floor.
+
+**Also worth one press in 2D.** The plan cannot show the fault, but it can show the
+side-effect: after a Shuffle the lamps should sit exactly on their nightstands' outlines and
+turn with them, not trail behind at an angle.
+
+**Where it rides.** `fix/solver-carries-riders`, PR pending — `b16cd34` (the fix) and
+`b6d2cdd` (the mutations). Gates on `b6d2cdd`: `pnpm typecheck` clean, `pnpm lint` clean,
+`pnpm test` 113 files, 2054 passed + 5 expected-fail, 0 failures.
 
 ### Does Shuffle keep the bedside table by the bed? — a known defect, `main`
 
