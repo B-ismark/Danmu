@@ -15,9 +15,10 @@ import { SwapModelModal } from './RegenerateModal';
 import { RailSection } from './RailSection';
 import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { isWallMountedPart, supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, DECOR_KINDS, type LibraryItem, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
-import { findSupportDetailed, groundY, heightForNewCeiling, MOUNT_PAD, snapToWall as snapToWallPhys, wallStandoff } from '@/lib/physics';
-import { wallSegments } from '@/lib/footprint';
+import { findSupportDetailed, groundY, heightForNewCeiling, MOUNT_PAD, snapToWall as snapToWallPhys, verticalExtent, wallStandoff } from '@/lib/physics';
+import { partInsideRoom, wallSegments } from '@/lib/footprint';
 import { moveWallCarrying } from '@/lib/wall-actions';
+import { collidesAt } from '@/lib/scene-spec';
 
 // The right rail is a DECORATING panel, not a properties palette — and it now
 // practises the disclosure the left rail has always had. Every decorating
@@ -183,6 +184,34 @@ export function Inspector() {
   }
 
   const isGeneric = part.shape === 'box';
+  const [partX, partY, partZ] = currentXYZ();
+  const insideRoom = partInsideRoom(
+    [partX, partY, partZ],
+    part.rot,
+    part.dimMM,
+    room.footprint,
+    part.circle,
+  );
+  const blockedByFurniture = collidesAt(effParts, id, [partX, partY, partZ], part.rot, part.dimMM);
+  const support = !part.wallMounted ? supportBelow() : null;
+  const supportName = support ? (effParts.find((p) => p.id === support.id)?.name ?? 'another piece') : null;
+  const [bottom] = verticalExtent(part.category, part.shape, part.dimMM, partY);
+  const floating = !part.wallMounted && !support && bottom > 0.005;
+  const placementTone = !insideRoom || blockedByFurniture || floating ? 'danger' : 'success';
+  const placementBorder = placementTone === 'danger' ? 'var(--danger)' : 'var(--success)';
+  const placementBackground = placementTone === 'danger' ? 'var(--danger-tint)' : 'var(--paper-0)';
+  const placementText = placementTone === 'danger' ? 'var(--danger-text)' : 'var(--success-text)';
+  const placementLabel = !insideRoom
+    ? 'Outside room'
+    : blockedByFurniture
+      ? 'Blocked'
+    : floating
+      ? 'Floating'
+    : part.wallMounted
+        ? 'Wall-mounted'
+        : supportName
+          ? `On ${supportName}`
+          : 'On floor';
 
   // `rail-scroll` carries nothing but `container-type` — it is what makes THIS box
   // the one `@container rail` measures, rather than the rail outside the scrollbar.
@@ -209,6 +238,44 @@ export function Inspector() {
           {/* shape ids are hyphenated internally ("chair-armchair") — say it in words */}
           {part.category} · {part.shape.replace(/-/g, ' ')}
         </div>
+      </div>
+
+      <div
+        role="status"
+        aria-live="polite"
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 8,
+          margin: '10px 16px 2px',
+          padding: '9px 10px',
+          border: `1px solid ${placementBorder}`,
+          borderRadius: 'var(--r-2)',
+          background: placementBackground,
+          color: placementText,
+          fontSize: 12,
+          lineHeight: 1.35,
+        }}
+      >
+        <span aria-hidden="true" style={{ fontSize: 14, lineHeight: 1 }}>
+          {placementTone === 'success' ? '✓' : '!'}
+        </span>
+        <span style={{ minWidth: 0 }}>
+          <strong style={{ display: 'block' }}>{placementLabel}</strong>
+          <span style={{ color: 'var(--ink-3)' }}>
+            {placementTone === 'success'
+              ? part.wallMounted
+                ? 'Attached to the room shell.'
+                : supportName
+                  ? `Supported by ${supportName}.`
+                  : 'Clear of the room boundary and other furniture.'
+              : !insideRoom
+                ? 'Move it back inside the room to place it legally.'
+                : floating
+                  ? 'Drop it onto the floor or a supporting surface.'
+                : 'Move it away from the overlapping piece.'}
+          </span>
+        </span>
       </div>
 
       {/* ── The decorating decisions, folded to a line each ────────────────── */}
