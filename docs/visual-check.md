@@ -113,11 +113,36 @@ room looks like, and nobody has had eyes on these two. Recorded as
 ## Drag and selection
 
 *Owner: `drag`. All seven of the previous items were looked at on 2026-08-30 and are gone.
-The two below are new, and each is here for a specific reason rather than by default. The
+The three below are new, and each is here for a specific reason rather than by default. The
 rotate ring, because drei's `TransformControls` is a three.js object with **no DOM**, so
 nothing in Playwright can aim a press at its ring — the 2D half of that defect **is**
 browser-checked and is not in this list. The refusal sentence, because the question it
 raises is a judgement about what the app should do, not a fact a test can settle.*
+
+### A short piece climbs a tall one, and the plan cannot show it
+
+**Where to click.** 3D Model, any room with a wardrobe. Drag a nightstand hard into the
+wardrobe's wall and let go. Then look at it in **2D Plan**.
+
+**What to look for.** In 3D, is the nightstand standing on top of the wardrobe at 2.1 m?
+In the plan it draws as an ordinary rectangle inside the wardrobe's outline, because the
+plan has no y — measured, not guessed: the same drag commits `x=−1.60 y=2.10 z=−2.30`,
+and a probe reading only x and z reported it as a collision the app had failed to refuse.
+
+**Why it is here rather than in a test.** Nothing is wrong by the app's own rules — the
+resolve's support step is doing exactly what it says, collision refused every frame on
+the way up (`valid=false, refusal="blocked"` at raw z = −1.9), and the room report is
+right to be quiet because the two no longer share vertical space. The question is whether
+a 550 mm nightstand should be able to climb a 2.1 m wardrobe at all, which is a judgement
+about what the app should do. **Nobody has reported it**; it was found while building the
+control for § 17's curtain drag.
+
+**Where it rides.** Nowhere — no commit changes this. It was found while building the
+control for § 17's curtain drag, on `fix/mounted-clash-and-soft-furnishings`, and the
+behaviour it describes is `lib/drag-resolve.ts`'s support step doing what it has always
+done. This item is here to be *decided*, not to verify a fix.
+
+*Not verified: what this looks like in the 3D tab. Only the committed transform was read.*
 
 ### A refusal that names the wall instead of an obstruction that is not there
 

@@ -185,6 +185,21 @@ export const RULE_HANDLING: Record<
   door: { costTerm: 'door', movable: true },
   entry: { costTerm: 'door', movable: true },
   clash: { costTerm: 'overlap', movable: true },
+  'clash-mounted': {
+    costTerm: null,
+    movable: false,
+    why:
+      'the solver cannot see this pair at all. `c.overlap` accumulates inside ' +
+      '`if (!obstacle[i]) continue` on BOTH indices, and `isObstacle` is ' +
+      '`!wallMounted && … && pos[1] < 0.05`, so a mounted TV and a ceiling fan are ' +
+      'excluded from the term whatever a wardrobe is doing inside them — it is ' +
+      'identically zero at every depth, so there is no gradient to descend and a ' +
+      '**Try a fix** button would spin and report nothing. `movableFor` also refuses ' +
+      'to move the mounted piece itself, so only one of the two could ever travel. ' +
+      'Sliding the piece along its wall, or the fixture along its own, is the user’s ' +
+      'move. Giving the term a third dimension is the fix, and it is a measured ' +
+      'change to the cost function rather than a row edit — see § 17.',
+  },
   walk: { costTerm: 'walkway', movable: true },
   zone: { costTerm: 'access', movable: true },
   window: { costTerm: 'window', movable: true },

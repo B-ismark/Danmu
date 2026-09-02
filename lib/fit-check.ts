@@ -28,7 +28,7 @@ import { dimRangeFor } from './dimension-ranges';
 import { footprintBounds, type Footprint } from './footprint';
 import { footFromPart, footInsidePoly, footIntersectionArea, type Foot } from './geometry';
 import { baySides, roomBays } from './room-bays';
-import { roleOf, sharesFloor } from './layout-rules';
+import { isMountedObstruction, roleOf, sharesFloor } from './layout-rules';
 import { verticalExtent } from './physics';
 import { solveLayout } from './layout-solve';
 import { settleParts } from './layout-settle';
@@ -286,12 +286,20 @@ const TOUCH_AREA_M2 = 1e-4;
 function overlapsSomething(foot: Foot, seated: ScenePart, parts: ScenePart[]): boolean {
   const mine = roleOf(seated);
   for (const other of parts) {
-    if (other.wallMounted) continue;
+    // Mounted pieces are NOT skipped — `isMountedObstruction` is the same predicate the
+    // room report's `clash-mounted` rule reads, and it has to be, because `explain`
+    // below runs that report over the seat this search chose. Skipping them here while
+    // reporting them there is a verdict growing a term its own search cannot see: with
+    // four wall TVs in a 6×5 m room, a bookshelf and a wardrobe that both plainly fit
+    // came back **No room for it**, because every seat the search ranked was under one
+    // and it had no way to know. Soft furnishings and doors/windows are still skipped —
+    // the predicate says why.
+    if (other.wallMounted && !isMountedObstruction(other)) continue;
     // Vertical clearance: a monitor over a desk is a stack, not a clash — the same
     // test the room report makes before comparing two footprints at all, and now
-    // literally the same arithmetic. `seated` is the CANDIDATE, which is the half that
-    // was reachable: a mounted piece can be the thing being fit-checked even though
-    // `other.wallMounted` skips mounted obstacles, and its `pos[1]` is a centre.
+    // literally the same arithmetic. Both sides need it: `seated` is the CANDIDATE and
+    // may itself be mounted, and `other` may now be a mounted obstruction, so `pos[1]`
+    // is a centre on either side.
     const [myBottom, myTop] = verticalExtent(seated.category, seated.shape, seated.dimMM, seated.pos[1]);
     const [itsBottom, itsTop] = verticalExtent(other.category, other.shape, other.dimMM, other.pos[1]);
     if (myTop <= itsBottom + 0.005 || itsTop <= myBottom + 0.005) continue;

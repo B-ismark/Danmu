@@ -23,6 +23,7 @@ import {
   footArea,
   footFromPart,
   footIntersectionArea,
+  footOverlap,
   type Foot,
   type Poly,
 } from './geometry';
@@ -46,6 +47,8 @@ import {
   doorPath,
   formsRoute,
   isObstacle,
+  isMountedObstruction,
+  isSoftFurnishing,
   routeWidth,
   roleOf,
   sharesFloor,
@@ -321,16 +324,17 @@ export function analyzeRoom(
       // the floor — and written correctly anyway, because the set this rule reads is
       // itself an open question. `floorBlockers` answers "who gets in a WALKER's
       // way", which is the right set for the walkway, navigation and window rules and
-      // is not obviously the right one for "are these two pieces inside each other":
-      // PR #42 taught the drag that a wardrobe CAN collide with a mounted TV, so that
-      // refusal exists while this report stays silent about one already in the room.
-      // Widening it is a decision with `RULE_HANDLING` in it, not a patch, and this line
-      // is what widening it needs first. Stated here rather than pointed at: the
-      // reference used to read "see `docs/what-is-still-open.md`" and that document has
-      // no item for it, so the pointer resolved to a 400-line file and cost a search.
-      // What widening needs is a `RuleKind` and a `RULE_HANDLING` row saying whether the
-      // solver can move a piece out of the way, or `tests/layout-conformance.test.ts`
-      // fails - which is that test working, not an obstacle.
+      // is not obviously the right one for "are these two pieces inside each other".
+      //
+      // **That widening happened, and it is rule 2b below rather than a change here.**
+      // This paragraph used to say the report "stays silent" about a wardrobe inside a
+      // mounted TV and that what it needed was "a `RuleKind` and a `RULE_HANDLING` row";
+      // both were delivered by the commit that closed § 17, seventy lines down, and
+      // leaving the old wording standing is exactly the rot `docs/traps.md` describes —
+      // the next reader greps "stays silent", finds this first because it is the more
+      // prominent of the two, and re-implements 2b in here. Rule 2 stays as it is: this
+      // loop is about walkers, 2b is about vertical containment, and they need different
+      // sets on both sides.
       const [aBottom, aTop] = verticalExtent(a.category, a.shape, a.dimMM, a.pos[1]);
       const [bBottom, bTop] = verticalExtent(b.category, b.shape, b.dimMM, b.pos[1]);
       if (aTop <= bBottom + 0.005 || bTop <= aBottom + 0.005) continue;
@@ -372,6 +376,90 @@ export function analyzeRoom(
         title: 'Two pieces in the same place',
         detail: `“${a.name}” and “${b.name}” overlap on the floor — one of them has to move before this arrangement is real.`,
         partIds: [a.id, b.id],
+      });
+    }
+  }
+
+  // ── 2b. A floor piece standing inside something that is not on the floor ──
+  //
+  // § 17. The drag has refused these since PR #42 — `collidesAt` compares full
+  // vertical extents and skips only soft furnishings — and the room report said
+  // nothing, because rule 2 above runs over `floorBlockers`, which excludes anything
+  // wall-mounted by definition. Same question, two answers: a wardrobe through a
+  // mounted TV could not be created by dragging and could not be reported once it
+  // was there, so a room detected or imported into that state stayed silent about it.
+  //
+  // The two sets are deliberately NOT `floorBlockers` on either side:
+  //
+  //   · the floor side admits a piece standing on a surface — a bedside lamp at
+  //     y = 0.55 is inside a TV mounted at 1.4 m just as a wardrobe is, and
+  //     `floorBlockers`' `pos[1] < 0.05` would drop it;
+  //   · the mounted side admits the CEILING anchors too, so a tall bookshelf under a
+  //     fan is the same finding rather than a shape nobody thought of.
+  //
+  // Any overlap at all, rather than rule 2's `CLASH_SHARE`. That bar exists to forgive
+  // deliberate composition — a chair tucked under its table — and there is no
+  // arrangement in which a piece of furniture is meant to be partly inside a
+  // television. It is also the bar `collidesAt` uses, so for a floor↔mounted pair the
+  // two agree exactly.
+  //
+  // **They do not agree everywhere, and the earlier version of this note claimed they
+  // did.** Two classes are still refused by the drag and unreported, both measured:
+  //   · MOUNTED ↔ MOUNTED. `floorSolids` requires `!wallMounted`, so neither ordering of
+  //     such a pair is reachable here and `floorBlockers` excludes both from rule 2. The
+  //     seeder ships seven rooms with a framed print inside a window.
+  //   · A TUCKED pair. `collidesAt` has no `sharesFloor` exemption while rule 2 and the
+  //     seeder's own `seats()` both do, so a dining chair under its table is refused by
+  //     the drag and silent in the report BY DESIGN — twenty seeded pairs.
+  // Both are recorded in `docs/what-is-still-open.md` § 17. Neither is this rule's job;
+  // saying so here is, because the next reader will otherwise read the sentence above
+  // as a general guarantee and build on it.
+  //
+  // Doors and windows are excluded because `door`, `entry` and `window` already speak
+  // for them, and they name the fault rather than the mechanism.
+  const mountedSolids = parts.filter(isMountedObstruction);
+  // Both sides hoisted out of their loops, the way rule 2 reads a precomputed `obbs`
+  // Map. The floor side was rebuilt once per mounted piece, which for a room with four
+  // wall fixtures did the same `verticalExtent` and `footFromPart` work four times.
+  const floorSolids = parts
+    .filter((p) => !p.wallMounted && !isSoftFurnishing(p))
+    .map((p) => ({
+      p,
+      y: verticalExtent(p.category, p.shape, p.dimMM, p.pos[1]),
+      foot: footFromPart(p.pos, p.rot, p.dimMM, p.circle),
+    }));
+  for (const m of mountedSolids) {
+    const [mBottom, mTop] = verticalExtent(m.category, m.shape, m.dimMM, m.pos[1]);
+    const mFoot = footFromPart(m.pos, m.rot, m.dimMM, m.circle);
+    for (const { p: f, y: [fBottom, fTop], foot } of floorSolids) {
+      if (fTop <= mBottom + 0.005 || mTop <= fBottom + 0.005) continue;
+      // The same pad `collidesAt` passes, so flush-against reads as touching rather
+      // than as a collision, on both surfaces.
+      if (!footOverlap(mFoot, foot, -0.01)) continue;
+      // Centimetres, and rounded OUTWARD, for two reasons that pull the same way.
+      //
+      // Metres at `toFixed(2)` is 1 cm of resolution, and the rule fires on a band as
+      // narrow as 5 mm — so a real pair (a 688 mm TV at 1.4 m and a 1063 mm bookshelf,
+      // both legal sizes) printed "between 1.06 m and 1.06 m up": a sentence whose
+      // whole job is to say WHERE they meet, saying nothing. Heights are not on the
+      // 10 mm drag grid — that grid is x/z — and `groundY`'s `wall-mid` answer is
+      // `min(1.4, H - h/2 - 0.1)`, an arbitrary real, so sub-centimetre bands are
+      // ordinary rather than contrived.
+      //
+      // Rounding outward (floor the bottom, ceil the top) keeps the printed interval a
+      // superset of the real one, so it can never read as empty or inverted — the same
+      // reason `boundsToUnit` rounds toward the interior for the opposite kind of
+      // bound. And cm is what every other HEIGHT in this file speaks (`tall` says
+      // "190 cm tall and the ceiling is 240 cm"); the metres here were the odd one out.
+      const lowCm = Math.floor(Math.max(fBottom, mBottom) * 100);
+      const highCm = Math.ceil(Math.min(fTop, mTop) * 100);
+      issues.push({
+        id: `clash-mounted-${f.id}-${m.id}`,
+        rule: 'clash-mounted',
+        severity: 'error',
+        title: 'A piece is inside something on the wall',
+        detail: `“${f.name}” is standing where “${m.name}” hangs — they share the same space between ${lowCm} cm and ${highCm} cm up. Slide one of them along its wall.`,
+        partIds: [f.id, m.id],
       });
     }
   }
