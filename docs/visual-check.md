@@ -80,35 +80,27 @@ every Library click still drops at room centre, so five added pieces land in one
 (§ H.3); and the plan draws the standing fan and the stool as SQUARES, which is § 32 seen
 rather than inferred.
 
-The item below is what replaced them, and it is the opposite case — a defect that
-`verticalExtent` cannot express, so no gate will ever go red on it.*
+**And the item that replaced them — the pendant and the ceiling fan drawn bigger than
+they declare, § 34 — was FIXED and LOOKED AT on 2026-09-02, so it is gone too.** What
+was seen: six ceiling fixtures seeded at both ends of both catalogue bands in one 6 x 5
+room — pendants at 150 / 400 / 900 mm and fans at 150 / 200 / 450 mm — drawing at six
+visibly different sizes. Before the fix all three pendants drew the same 800 mm and all
+three fans the same 260 mm, because neither renderer read `dimMM` on any axis. A second
+shot with the 400 mm pendant selected shows its geometry sitting INSIDE the selection
+box, which is drawn from `dimMM`: 400 mm of cord used to stick out of the top of that
+box, and the Inspector's derived "Height off the floor 2.38 m" now matches what is on
+screen under a 2.80 m ceiling.
 
-### The pendant lamp and the ceiling fan are drawn bigger than they declare
+**That look was not optional and it is worth saying why.** A deliberate control mutation
+— `FanGeo` passing a literal `200` instead of `part.dimMM[2]` — survives the whole of
+`tests/ceiling-fixtures.test.ts`, because nothing in this repo renders geometry. The
+band shot is the only thing that can distinguish "the helpers are right" from "the
+renderer calls them". Thirteen other mutations were killed.
 
-**Where to click.** Any room, **3D Model** tab. Add a **Pendant lamp** from the Library
-(Lighting) and look at the ceiling. Then a **Ceiling fan** (Appliances).
+**Not seen:** a real GPU. All of this is headless Chromium on SwiftShader, so nothing
+here speaks to how the shapes look with real lighting on a real device.*
 
-**What wrong looks like.** The pendant's cord going *into* or *through* the ceiling
-rather than stopping at it, and the fan's downrod doing the same. Look from a low camera
-angle with the dollhouse cut away, because from above the ceiling hides it.
-
-**The arithmetic, so you know what you are looking for.** `PendantLampGeo` draws a 600 mm
-cord at `y = +0.3` and a dome reaching `y = -0.2` — **800 mm of geometry for a shape whose
-`dimMM[2]` is 400 mm**, and asymmetric about its own origin. `groundY` hangs it by the
-model `verticalExtent` believes, so the app thinks its top is at 2.80 in a 2.8 m room and
-it is drawn to **3.20**. The ceiling fan is the same defect at 70 mm.
-
-**Why no test sees it.** Every clause that measures this — including the new
-`tests/shape-contract.test.ts` ones — asks `verticalExtent`, which computes from `dimMM`.
-The renderer disagrees with `dimMM`, so the model and the drawing are both self-consistent
-and wrong together. This is `CLAUDE.md` rule 2's `fanBlade` corollary in two more shapes,
-and it is the reason that corollary exists.
-
-**Not fixed on sight**, deliberately: moving authored geometry changes what every existing
-room looks like, and nobody has had eyes on these two. Recorded as
-`what-is-still-open.md` § 34.
-
-**Gates.** Nothing. No test can express it — that is the finding.
+## Sizes and fit — nothing outstanding
 
 ## Drag and selection
 

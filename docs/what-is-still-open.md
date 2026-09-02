@@ -34,8 +34,8 @@ them. Where two items are the same defect one layer apart, they are listed as on
 | ~~4~~ | ~~**§ 17** a drag refused by a wall TV names nothing~~ | **FIXED** — `clash-mounted` in the room report, and `isSoftFurnishing` shared with the drag, which also unblocked dragging anything in front of a curtain | — | — |
 | ~~5~~ | ~~**§ 18** Shuffle leaves a nightstand through the bed~~ | **FIXED** — not a floor clash at all: a rider (a lamp on a nightstand) was moved independently of its support and left in mid-air inside the bed, invisible to all five `HARD_TERMS`, to the room report and to the plan. `carryRiders` | — | — |
 | 6 | **§ 31** containment now outranks a blocked door by a hair | A decision only the user can make, and the third option (veto rather than price) is the largest change. Nothing a user sees today is wrong | M–L | **blocked on the user**. § 18 was expected to settle this and does not: it turned out not to be a cost-function question at all, so § 31 is unchanged and still needs an answer |
-| 7 | **§ 34** the pendant and the ceiling fan draw outside their declared size | `fanBlade`'s own defect in two more shapes, and NO gate can see it — every clause reads `dimMM` and so does the renderer's disagreement | S once the meaning of a pendant's height is decided | pairs with § 33.1 — both want the same pair of eyes on the 3D tab |
-| 7 | **§ 33.1** the four newest shapes have never been seen in 3D | Cheap, and it is the honest limit of the shape contract — no test renders geometry | S | none. `visual-check.md` item |
+| ~~7~~ | ~~**§ 34** the pendant and the ceiling fan draw outside their declared size~~ | **FIXED** — `fanColumn` + `pendantDrop` in `scene-spec.ts`, swept at 10 mm across both catalogue bands against `verticalExtent`. The stated blocker (what a pendant's declared height means) was already answered by `isMountedObstruction` + `clearance.ts` rule 2b | — | — |
+| ~~7~~ | ~~**§ 33.1** the four newest shapes have never been seen in 3D~~ | **ALREADY DONE, and this row was stale** — `visual-check.md` has recorded the look since 2026-09-01 and deleted its own item; the queue was never updated. Re-confirmed 2026-09-02 alongside § 34 | — | — |
 | 8 | **G.1** a brand-new room seals its own routes at the size the app ships | Measured, real, and a first-run defect — the worst kind to leave | M | related to § 31: both are the solver's idea of "navigable" |
 | 9 | **A.7** `snapYaws` leaves the piece crooked in 197 of 240 solves | Measured, visible, nobody has decided whether it matters | M | after § 31, which may change what a finalist is |
 | 10 | **§ 33.3** the render budget is unmeasured | Blocks any answer to "how detailed may a shape be", which was asked directly | M — needs a throttled device | blocks nothing shipping; blocks a decision |
@@ -3563,7 +3563,7 @@ and adding detail on the strength of a guess is how a phone-first app stops runn
 phones.
 
 
-### § 34 — two ceiling shapes are drawn bigger than they declare, and no test can see it — OPEN
+### § 34 — two ceiling shapes are drawn bigger than they declare — FIXED
 
 `CLAUDE.md` rule 2's first corollary, in two more shapes, and `fanBlade` was supposed to be
 the end of it. Found by a review lens pointed at units and frames, not by any gate.
@@ -3588,15 +3588,37 @@ than an artefact of a resize. **This is exactly the class the `fanBlade` extract
 supposed to close** — the arithmetic is back inside a TSX renderer, where no test reaches
 it.
 
-**Not fixed on sight.** Moving authored geometry changes how every existing room looks,
-and nobody has had eyes on these two. It is a `visual-check.md` item first.
+**FIXED**, with the repair this entry called for: `fanColumn` and `pendantDrop` in
+`scene-spec.ts`, read by `FanGeo` and `PendantLampGeo`, swept by
+`tests/ceiling-fixtures.test.ts`.
 
-**What would unblock it:** deciding what the declared height of a pendant *means* — the
-fixture alone, or the fixture plus its drop. The catalogue's 150–900 mm band
-(`dimension-ranges.ts`) reads like the fixture, but a pendant is bought by its drop, and
-`lamp-pendant` is the one shape where the two differ by more than the piece itself. Answer
-that and the geometry follows; guess at it and the next person re-opens this.
+**The blocker turned out to be answerable from the code, not from taste.** This entry said
+the fix needed someone to decide what a pendant's declared height *means* — the fixture
+alone, or the fixture plus its drop. It does not: `lamp-pendant` is `wallMounted`, is not
+soft furnishing, and is neither door nor window, so `isMountedObstruction` admits it and
+`clearance.ts` rule 2b reports a pendant intersecting a wardrobe out of
+`verticalExtent(dimMM[2])`. Under the fixture-only reading the app would under-report the
+pendant's reach by the entire cord and stay silent about a clash the user can see.
+`groundY`, `settleHeights` and `verticalExtent` read it the same way. **Six consumers had
+already agreed; the renderer was the lone dissenter**, which makes this rule 3 rather than a
+product decision. Worth remembering as a shape: an entry can record a blocker that the rest
+of the codebase has since answered, and re-deriving it was cheaper than asking.
 
-**The general repair, if it is wanted:** the same one `fanBlade` got. Pull the span out of
-the renderer into `scene-spec.ts` as a function of `dimMM`, so a test can assert that the
-drawn extent equals the declared one. That is the only version of this that stays fixed.
+**Also found on the way, and not in the entry above:** `PendantLampGeo` read `dimMM` on
+*no* axis. The shade was a literal `0.15` radius — 300 mm wide on a piece declaring 350,
+and the same 300 mm on one declaring 800. Only the height half had been noticed.
+
+**And the centring half is separate from the total.** Both are ceiling anchors, so `pos[1]`
+is the mesh CENTRE (`verticalExtent`), and a drawing can have the right total height and
+still be wrong: the fan's `[-0.04, +0.22]` is 260 mm *and* off-centre by 90 mm. The sweep
+asserts `top` and `bottom` individually rather than their difference.
+
+**What the tests can and cannot reach.** They pin both helpers across the whole catalogue
+band at 10 mm, against `verticalExtent` — the function the consumers call — rather than
+against a re-derivation, which would pin each helper only to itself. Thirteen mutations,
+thirteen killed, including the constant's value in **both** directions after the first
+version of that assertion compared `FAN_HUB_H` to a value computed from `FAN_HUB_H` and
+survived an 80 → 120 mm move. What no test reaches is **the renderer actually calling
+them**: a deliberate control mutation that makes `FanGeo` pass a literal `200` instead of
+`part.dimMM[2]` survives the whole file. That is the standing limit — nothing here renders
+geometry — and it is why this was a `visual-check.md` item as well as a test.

@@ -345,7 +345,15 @@ export function lockedForSolve(
  *  one line at the call site whose absence is invisible there.
  *
  *  The walk is to a fixed point so a rider of a rider comes too; it terminates
- *  because `y` strictly increases along an edge, so `ridingParents` is a forest. */
+ *  because `y` strictly increases along an edge, so `ridingParents` is a forest.
+ *
+ *  **`grew` and the guard are one thing, and separating them hangs the tab.** The loop
+ *  ends because `out` strictly grows, which is true only while `out.add(child)` is
+ *  reached exclusively when `!out.has(child)`. Flip the guard and keep the body — the
+ *  obvious way to write "widen the other way" — and `grew` is set true forever on an
+ *  unchanged set. Found by mutation, where it did not report a failure: it blocked the
+ *  runner with no verdict, which reads as a slow test. In the app it is a **Try a fix**
+ *  press that never returns. */
 export function withRiders(ids: Set<string>, parts: ScenePart[]): Set<string> {
   const edges = ridingParents(parts);
   const out = new Set(ids);
