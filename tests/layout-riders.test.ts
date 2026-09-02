@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { defaultScene, type ScenePart } from '@/lib/scene-spec';
 import { footprintForLayout } from '@/lib/footprint';
-import { lockedForSolve, makeRng, movableFor, randomizeStart, solveLayout } from '@/lib/layout-solve';
+import { lockedForSolve, makeRng, movableFor, randomizeStart, solveLayout, withRiders } from '@/lib/layout-solve';
 import { applyPlacements } from '@/lib/layout-shuffle';
 import { ridingParents } from '@/lib/rigid-parent';
 import { footArea, footFromPart, footIntersectionArea, localToWorld } from '@/lib/geometry';
 import { MIN_SUPPORT_SHARE, verticalExtent } from '@/lib/physics';
+import { isObstacle } from '@/lib/layout-rules';
 
 // A piece standing ON another piece is not a place the search gets to choose.
 //
@@ -50,7 +51,7 @@ function restsOn(child: ScenePart, parent: ScenePart): boolean {
 function orphans(parts: ScenePart[]): string[] {
   const rides = ridingParents(parts);
   return parts
-    .filter((p) => !p.wallMounted && p.pos[1] > 0.05 && !(p.id in rides))
+    .filter((p) => !p.wallMounted && p.pos[1] > 0 && !(p.id in rides))
     .map((p) => `${p.name} at y=${p.pos[1].toFixed(2)}`);
 }
 
@@ -284,14 +285,26 @@ describe('a shuffle carries the lamp with the nightstand', () => {
 // up over the middle of the desk, or off it entirely, while still passing a share
 // test against a desk that is much bigger than it is.
 describe('an off-centre rider swings around its support', () => {
+  // ALREADY TURNED, and that is the whole point of the number.
+  //
+  // `snapshotDescendants` takes the rider's offset with `worldToLocal(parent.rot, …)`
+  // and `cascadeTransform` puts it back with `localToWorld(newRot, …)` — an inverse
+  // pair. At parent yaw 0 both are the identity, so replacing the first with the
+  // second is a sign flip that changes nothing: measured, that mutation leaves
+  // `rigid-parent`, `drag-convoy` and this file green, 114 assertions, every one of
+  // whose fixtures snapshots at zero. A user who angles a desk before pressing
+  // Suggest gets the monitor on the mirrored side of it.
+  const DESK_ROT = 0.6;
   const desk = part({
-    id: 'desk', name: 'Desk', category: 'desk', shape: 'desk-standard', dimMM: [1400, 700, 750], pos: [-1.2, 0, -1.6],
+    id: 'desk', name: 'Desk', category: 'desk', shape: 'desk-standard', dimMM: [1400, 700, 750],
+    pos: [-1.2, 0, -1.6], rot: DESK_ROT,
   });
   // Against the desk's back edge: 250 mm behind its centre, in the desk's own frame.
   const OFFSET: [number, number] = [0, -0.25];
+  const seat = localToWorld(DESK_ROT, OFFSET[0], OFFSET[1]);
   const monitor = part({
     id: 'mon', name: 'Monitor', category: 'monitor', shape: 'monitor', dimMM: [600, 200, 450],
-    pos: [desk.pos[0] + OFFSET[0], 0.75, desk.pos[2] + OFFSET[1]],
+    pos: [desk.pos[0] + seat[0], 0.75, desk.pos[2] + seat[1]], rot: DESK_ROT,
   });
   const room = footprintForLayout('rect', 6, 4);
 
@@ -305,6 +318,9 @@ describe('an off-centre rider swings around its support', () => {
       expect(Math.hypot(c.pos[0] - s.pos[0], c.pos[2] - s.pos[2])).toBeLessThan(1e-9);
     }
     expect(Math.hypot(OFFSET[0], OFFSET[1])).toBeGreaterThan(0.2);
+    // …and the support must START turned, or the world→local leg is the identity and
+    // a sign flip in it is invisible.
+    expect(Math.abs(desk.rot)).toBeGreaterThan(0.1);
     expect(ridingParents([desk, monitor])).toEqual({ mon: 'desk' });
   });
 
@@ -313,7 +329,7 @@ describe('an off-centre rider swings around its support', () => {
     const locked = lockedForSolve(parts, {}, null);
     const movable = movableFor(parts, locked);
     let turned = 0;
-    for (let seed = 0; seed < 6; seed++) {
+    for (let seed = 0; seed < 12; seed++) {
       const start = randomizeStart(parts, room, movable, makeRng(seed));
       const result = solveLayout(parts, room, locked, { seed, mode: 'shuffle', start });
       const after = applyPlacements(parts, result);
@@ -329,6 +345,140 @@ describe('an off-centre rider swings around its support', () => {
       // assertion above a translation test.
       if (Math.abs(d.rot) > 0.1) turned++;
     }
+    console.log(`off-centre rider: desk ended turned on ${turned} of 12 seeds`);
     expect(turned, 'the desk must actually be ending up turned').toBeGreaterThan(2);
   }, 60000);
+});
+
+// ── What the review found, and none of the above could ──────────────────────
+//
+// Every fixture above hands `lockedForSolve` an empty `pinned` and a null `confined`,
+// so not one of them could see that the pass was moving pieces the user had locked.
+// Three independent reviewers measured it; it moved a pinned lamp up to 5.3 m.
+describe('carryRiders is not a second authority on what may move', () => {
+  const DESK_ROT = 0.6;
+  const desk = part({
+    id: 'desk', name: 'Desk', category: 'desk', shape: 'desk-standard', dimMM: [1400, 700, 750],
+    pos: [-1.2, 0, -1.6], rot: DESK_ROT,
+  });
+  const seat = localToWorld(DESK_ROT, 0, -0.25);
+  const monitor = part({
+    id: 'mon', name: 'Monitor', category: 'monitor', shape: 'monitor', dimMM: [600, 200, 450],
+    pos: [desk.pos[0] + seat[0], 0.75, desk.pos[2] + seat[1]], rot: DESK_ROT,
+  });
+  const sofa = part({ id: 'sofa', name: 'Sofa', category: 'sofa', shape: 'sofa', dimMM: [2000, 900, 880] });
+  const parts = [desk, monitor, sofa];
+  const room = footprintForLayout('rect', 6, 4);
+
+  it('leaves a LOCKED rider exactly where the user pinned it', () => {
+    const locked = lockedForSolve(parts, { mon: true }, null);
+    expect(locked, 'the fixture pins the monitor and nothing else').toEqual([false, true, false]);
+    const movable = movableFor(parts, locked);
+    let deskMoved = 0;
+    for (let seed = 0; seed < 8; seed++) {
+      const start = randomizeStart(parts, room, movable, makeRng(seed));
+      const result = solveLayout(parts, room, locked, { seed, mode: 'shuffle', start });
+      const after = applyPlacements(parts, result);
+      expect(after[1].pos[0], `seed ${seed} x`).toBeCloseTo(monitor.pos[0], 9);
+      expect(after[1].pos[2], `seed ${seed} z`).toBeCloseTo(monitor.pos[2], 9);
+      expect(after[1].rot, `seed ${seed} yaw`).toBeCloseTo(monitor.rot, 9);
+      expect(result.moved, `seed ${seed}: a pinned piece is not a moved piece`).not.toContain(1);
+      // THE CONTROL. A solve that moved nothing satisfies every line above.
+      if (result.moved.includes(0)) deskMoved++;
+    }
+    expect(deskMoved, 'the desk under it must actually be getting moved').toBeGreaterThan(4);
+  }, 60000);
+
+  // The same hole one lock along. A **Try a fix** locks the whole room outside its
+  // own finding, and `lib/clearance.ts` can never name a rider in `partIds` (it
+  // skips anything above the floor), so EVERY confined fix on a support was carrying
+  // a piece the user's press had excluded. Fixed at the confinement, in `RoomTools`,
+  // which is why what this asserts is only that the lock itself holds.
+  it('honours a confine that names the support but not the rider', () => {
+    const locked = lockedForSolve(parts, {}, new Set(['desk']));
+    expect(locked, 'everything outside the confine is locked').toEqual([false, true, true]);
+    const result = solveLayout(parts, room, locked, { seed: 3, mode: 'arrange' });
+    const after = applyPlacements(parts, result);
+    expect(after[1].pos[0]).toBeCloseTo(monitor.pos[0], 9);
+    expect(after[1].pos[2]).toBeCloseTo(monitor.pos[2], 9);
+  }, 60000);
+});
+
+// A rider that the SEARCH is scoring as a floor obstacle is not the search's to
+// second-guess. `ridingParents` admits anything off the floor (`pos[1] > 0`) and
+// `isObstacle` counts anything under 50 mm up, so the two overlap on (0, 0.05) — a
+// chair on a 40 mm platform is both. Carried after `openRoutes` and `snapYaws`, the
+// last passes that could repair it, that chair was measured at `overlap` 361 on one
+// seed and `outside` 647 on another: carried straight through the wall.
+describe('a rider the search is pricing as an obstacle is left to the search', () => {
+  const mat = part({ id: 'mat', name: 'Platform', category: 'other', shape: 'box', dimMM: [2400, 2400, 40] });
+  const chair = part({
+    id: 'chair', name: 'Chair', category: 'chair', shape: 'chair-dining', dimMM: [450, 450, 850],
+    pos: [1.0, 0.04, 1.0],
+  });
+  const wardrobe = part({
+    id: 'ward', name: 'Wardrobe', category: 'wardrobe', shape: 'wardrobe', dimMM: [1200, 600, 2100],
+    pos: [-2.0, 0, -1.5],
+  });
+  const parts = [mat, chair, wardrobe];
+  const room = footprintForLayout('rect', 6, 4);
+
+  it('the fixture really is in the band where the two bars disagree', () => {
+    expect(ridingParents(parts), 'geometrically it IS riding the platform').toEqual({ chair: 'mat' });
+    expect(isObstacle(chair), 'and the search IS pricing it as floor').toBe(true);
+  });
+
+  it('does not carry it, and does not strike it out of the reasons either', () => {
+    const locked = lockedForSolve(parts, {}, null);
+    const movable = movableFor(parts, locked);
+    let seen = 0;
+    for (let seed = 0; seed < 6; seed++) {
+      const start = randomizeStart(parts, room, movable, makeRng(seed));
+      const result = solveLayout(parts, room, locked, { seed, mode: 'shuffle', start });
+      if (!result.moved.includes(1)) continue;
+      seen++;
+      // In `moved` AND in `moves`: the search moved it, so the search can say why.
+      // Filtering `moves` on the geometric rider map struck it out anyway — a piece
+      // moved with nothing on screen naming it, the same silence as the lock.
+      expect(result.moves.map((m) => m.index), `seed ${seed}`).toContain(1);
+    }
+    expect(seen, 'the chair must actually be getting moved on some seed').toBeGreaterThan(2);
+  }, 60000);
+});
+
+// The other half of the confine fix. `carryRiders` refuses to move a locked piece,
+// so a **Try a fix** naming only the nightstand would strand its lamp — the widening
+// has to happen where the confinement is decided.
+describe('withRiders widens a confine to what is standing on it', () => {
+  const stand = part({ id: 'stand', category: 'nightstand', shape: 'nightstand', dimMM: [450, 400, 550] });
+  const lamp = part({
+    id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [0, 0.55, 0],
+  });
+  const other = part({ id: 'other', category: 'sofa', shape: 'sofa', dimMM: [2000, 900, 880], pos: [3, 0, 3] });
+
+  it('adds the lamp when the nightstand is named', () => {
+    expect([...withRiders(new Set(['stand']), [stand, lamp, other])].sort()).toEqual(['lamp', 'stand']);
+  });
+
+  it('does not add the nightstand when only the lamp is named', () => {
+    // The relation is one-way. Naming the lamp is not a claim on the furniture it
+    // happens to be resting on, and widening both ways would let one finding about a
+    // lamp move the whole bedside.
+    expect([...withRiders(new Set(['lamp']), [stand, lamp, other])]).toEqual(['lamp']);
+  });
+
+  it('follows a chain to a fixed point', () => {
+    const desk = part({ id: 'desk', category: 'desk', shape: 'desk-standard', dimMM: [1400, 700, 750] });
+    const tray = part({ id: 'tray', category: 'other', shape: 'box', dimMM: [400, 400, 60], pos: [0, 0.75, 0] });
+    const top = part({
+      id: 'top', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [0, 0.81, 0],
+    });
+    // The fixture must BE a chain, or a single pass would satisfy this too.
+    expect(ridingParents([desk, tray, top])).toEqual({ tray: 'desk', top: 'tray' });
+    expect([...withRiders(new Set(['desk']), [desk, tray, top])].sort()).toEqual(['desk', 'top', 'tray']);
+  });
+
+  it('leaves a set with no riders in it alone', () => {
+    expect([...withRiders(new Set(['other']), [stand, lamp, other])]).toEqual(['other']);
+  });
 });

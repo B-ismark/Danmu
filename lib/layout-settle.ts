@@ -259,10 +259,25 @@ export type HeightFix = {
  *  false claim survives every gate in this repo.
  *
  *  What the user saw: put a nightstand on an armchair, press Suggest, and the solver moves the
- *  armchair — `Placement` is `{x, z, yaw}`, there is no vertical axis in the search
- *  and no concept of one piece riding another — so the nightstand keeps the armchair's
- *  height with nothing under it and hangs in the air. From directly above, in the
- *  plan, it looks correct.
+ *  armchair — `Placement` is `{x, z, yaw}`, so there is no vertical axis in the search —
+ *  so the nightstand keeps the armchair's height with nothing under it and hangs in
+ *  the air. From directly above, in the plan, it looks correct.
+ *
+ *  **"…and no concept of one piece riding another" used to be the second half of that
+ *  sentence, and it is no longer true.** `lib/layout-solve.ts`'s `carryRiders` derives
+ *  the relation (`ridingParents`) and cascades the rider with its support, so the
+ *  ordinary case — a lamp on a nightstand, a nightstand on an armchair — no longer
+ *  reaches this pass at all. What still does is everything the carry declines: a piece
+ *  the USER has locked while its support moves, and a piece the search was scoring as
+ *  a floor obstacle. Both are deliberate refusals rather than gaps, and both leave a
+ *  piece in the air, which is what keeps this function's reason for existing intact.
+ *
+ *  **Do not wire it into Suggest without reading the bar below.** `support.y > 0.3`
+ *  here and `p.pos[1] > 0` in `ridingParents` are two thresholds on one axis over one
+ *  `findSupportDetailed`, and they disagree on a named pair: a table lamp at y = 0.30
+ *  on a 300 mm ottoman — the catalogue's minimum — is a rider that `carryRiders`
+ *  carries and a piece this pass drops to the floor. Wiring the two together as they
+ *  stand makes the lamp travel with the ottoman and then fall through it.
  *
  *  The fix is not a vertical axis in the annealer. The solver's job is where things
  *  stand in plan; a rider's height is a CONSEQUENCE of that, so it is answered
