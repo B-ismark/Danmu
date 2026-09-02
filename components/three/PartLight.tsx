@@ -16,14 +16,15 @@
 //    bake. A spot light is one. So only shaded downward fixtures cast, only on
 //    'High', and only the two brightest in the room (see useCastsShadow).
 //  · **Where the bulb is.** A light at the part's origin sits on the floor and
-//    lights the underside of its own shade. LIGHT_ANCHORS puts it where the
-//    geometry in DynamicPart actually draws the bulb.
+//    lights the underside of its own shade. `lightAnchor` puts it where the
+//    geometry in DynamicPart actually draws the bulb — by CALLING the same
+//    function that draws it, for any shape whose bulb moves with its size.
 
 import { useLayoutEffect, useRef } from 'react';
 import type { Object3D, SpotLight as ThreeSpotLight } from 'three';
 import { useStudio } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
-import { lightFor, type ScenePart, type Shape } from '@/lib/scene-spec';
+import { lightAnchor, lightFor, type ScenePart } from '@/lib/scene-spec';
 import { candelaFromLumens, candelaFromLumensInCone, hexFromKelvin } from '@/lib/light-units';
 
 /**
@@ -51,17 +52,6 @@ const LIGHT_SCALE = 0.02;
 /** How many lights may cast a shadow at once, on High. Each one is a full extra
  *  depth pass over the scene. */
 const MAX_SHADOW_CASTERS = 2;
-
-/** Where the bulb sits inside each fixture, in the part's local metres. These
- *  track the geometry in DynamicPart — a light at the origin would sit on the
- *  floor and illuminate the inside of its own shade. */
-const LIGHT_ANCHORS: Partial<Record<Shape, [number, number, number]>> = {
-  'lamp-table': [0, 0.4, 0],
-  'lamp-floor': [0, 1.66, 0],
-  // The pendant's geometry hangs from a mount at +0.6 and swings; the bulb ends
-  // up just below the part origin.
-  'lamp-pendant': [0, -0.05, 0],
-};
 
 /** Whether this fixture is one of the brightest few, and so allowed a shadow.
  *
@@ -95,7 +85,7 @@ export function PartLight({ part }: { part: ScenePart }) {
   const spec = lightFor(part);
   if (!spec) return null;
 
-  const at = LIGHT_ANCHORS[part.shape] ?? [0, 0, 0];
+  const at = lightAnchor(part.shape, part.dimMM);
   const color = hexFromKelvin(spec.kelvin);
   const hi = quality === 'high';
 

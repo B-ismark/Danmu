@@ -130,8 +130,11 @@ describe('a shape lands somewhere the room can hold it', () => {
       // falsifiable and is what killed the deleted-anchor mutation.
       //
       // It measures `verticalExtent`, which computes from `dimMM`, so it is blind to a
-      // renderer drawing outside its own declared size — and two of them do
-      // (`what-is-still-open.md` § 34).
+      // renderer drawing outside its own declared size. Two of them used to — the
+      // pendant and the ceiling fan, `what-is-still-open.md` § 34, now fixed and swept
+      // by `tests/ceiling-fixtures.test.ts`. The blindness is unchanged and is still
+      // worth stating: this clause would not have caught them, and it would not catch
+      // the next one.
       expect(lo, `"${i.label}" (${anchorFor(i.category, i.shape)}) starts ${lo.toFixed(2)} m — below the floor`).toBeGreaterThanOrEqual(-0.001);
       expect(
         hi,

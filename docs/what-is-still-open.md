@@ -36,6 +36,8 @@ them. Where two items are the same defect one layer apart, they are listed as on
 | 6 | **§ 31** containment now outranks a blocked door by a hair | A decision only the user can make, and the third option (veto rather than price) is the largest change. Nothing a user sees today is wrong | M–L | **blocked on the user**. § 18 was expected to settle this and does not: it turned out not to be a cost-function question at all, so § 31 is unchanged and still needs an answer |
 | ~~7~~ | ~~**§ 34** the pendant and the ceiling fan draw outside their declared size~~ | **FIXED** — `fanColumn` + `pendantDrop` in `scene-spec.ts`, swept at 10 mm across both catalogue bands against `verticalExtent`. The stated blocker (what a pendant's declared height means) was already answered by `isMountedObstruction` + `clearance.ts` rule 2b | — | — |
 | ~~7~~ | ~~**§ 33.1** the four newest shapes have never been seen in 3D~~ | **ALREADY DONE, and this row was stale** — `visual-check.md` has recorded the look since 2026-09-01 and deleted its own item; the queue was never updated. Re-confirmed 2026-09-02 alongside § 34 | — | — |
+| 7 | **§ 35** a hung fixture stops 50 mm short of the ceiling | Found by § 34's review and uncovered by its fix; every Library ceiling fan ships into it. One decision — what `dimMM[2]` means for a hung fixture — then the code follows | S once decided | wants eyes; `visual-check.md` item |
+| 7 | **§ 36** a non-uniform resize walks through both geometry caps | Same review. Bigger class than the two shapes: every absolute constant in a non-parametric shape does this | M | none |
 | 8 | **G.1** a brand-new room seals its own routes at the size the app ships | Measured, real, and a first-run defect — the worst kind to leave | M | related to § 31: both are the solver's idea of "navigable" |
 | 9 | **A.7** `snapYaws` leaves the piece crooked in 197 of 240 solves | Measured, visible, nobody has decided whether it matters | M | after § 31, which may change what a finalist is |
 | 10 | **§ 33.3** the render budget is unmeasured | Blocks any answer to "how detailed may a shape be", which was asked directly | M — needs a throttled device | blocks nothing shipping; blocks a decision |
@@ -2506,8 +2508,97 @@ repaired, and each says what the repair would cost.
   unifying the three is its own change, and the third (`isObstacle`) is a *search* boundary
   rather than a *physics* one, so they may be right to differ.
 
-**What is still not verified:** the 3D tab. Everything above is measured in the suite, and a
-lamp in mid-air is invisible in the plan by construction — see `visual-check.md`.
+**The blocker had TWO halves and the first draft of this note retired only one.** It read
+*"Moving authored geometry changes how every existing room looks, and nobody has had eyes
+on these two"* — and the fix answered the eyes and said nothing about the rooms, which
+reads as settled. So, derived rather than assumed: the diff touches no function on any
+load path, and `groundY`, `verticalExtent`, `settleHeights`, `heightForNewCeiling` and
+`clearance.ts` all read `dimMM` rather than the renderer, so **no saved pendant or fan
+moves, resizes or re-settles**. What changes in every room already in IndexedDB is the
+picture — a catalogue pendant drawn 800 mm now draws 400. The case worth a human eye is
+someone who sized one *by eye* under the old renderer: `renderBaseDim` returns `p.dimMM`,
+so dragging the gizmo until it *looked* 400 mm wrote about half that, and the room now
+opens at half again. `visual-check.md` carries it, because the § 34 look was on a seeded
+room and a warm load is a different program.
+
+**Three things the review found that § 34 does NOT fix**, each with its own home rather
+than a sentence here: the fixture-to-ceiling gap (§ 35), the non-uniform resize walking
+through both caps (§ 36), and — fixed, but worth naming because it was introduced by the
+same commit — `LIGHT_ANCHORS`' copy of the pendant's bulb position, which three of four
+review lenses found independently and no gate in the repo could have.
+
+**What is still not verified:** a real GPU. The 3D tab was looked at headless — see
+`visual-check.md` for what was seen and what was not.
+
+### § 35 — a hung fixture stops short of the ceiling, and `min()` is why — OPEN
+
+Found by the § 34 review, and **caused by § 34** in the sense that matters: the gap was
+always in the model and the old renderer covered it with geometry that should not have
+existed.
+
+`groundY`'s ceiling arm is `Math.max(Math.min(H - 0.15, H - MOUNT_PAD - h/2), h)`. The two
+arms cross at h = 260 mm; below that the flat 150 mm nominal drop binds, and the fixture's
+top lands at `H - 0.15 + h/2` instead of at `H - MOUNT_PAD`. In a 2.80 m room:
+
+| piece | h | y | drawn top | gap |
+|---|---|---|---|---|
+| **ceiling fan, as it ships** | 0.20 | 2.650 | 2.750 | **50 mm** |
+| fan, smallest legal | 0.15 | 2.650 | 2.725 | **75 mm** |
+| fan, largest legal | 0.45 | 2.555 | 2.780 | 20 mm — `MOUNT_PAD`, intended |
+| pendant, smallest legal | 0.15 | 2.650 | 2.725 | **75 mm** |
+| pendant, as it ships | 0.40 | 2.580 | 2.780 | 20 mm |
+
+So every ceiling fan added from the Library ends its downrod 50 mm below the slab. Before
+§ 34 the same fan drew to 2.87 — 70 mm *through* a 2.80 m ceiling — so the gap was
+hidden by an error in the other direction.
+
+**Why it is not fixed with § 34.** The repair is in `lib/physics.ts`, not in either
+renderer, and it is § 34's own question one layer out: does a hung fixture's `dimMM[2]`
+mean the body, or the body plus its drop? The two arms of that `min` answer differently —
+`H - 0.15` says "a fan hangs 150 mm below the slab on a rod that is not part of it",
+`H - MOUNT_PAD - h/2` says "the declared height is everything and its top goes at the
+ceiling" — and `min` picks whichever is lower rather than deciding. `fanColumn` already
+draws the downrod *inside* `dimMM[2]`, which commits to the second reading, so the two
+disagree. Dropping the `H - 0.15` arm moves where every shallow fixture hangs, including
+in rooms already saved, so it wants eyes and its own change.
+
+**What no gate can see:** `verticalExtent` and all of `tests/ceiling-fixtures.test.ts`
+measure a fixture against its own `dimMM`. This gap is between the fixture and the *room*,
+and nothing in the repo compares `y + top` to `roomHeight`. That comparison is probably the
+test worth having whatever the answer is.
+
+### § 36 — a non-uniform resize walks through both geometry caps — OPEN
+
+Also from the § 34 review, and a bigger class than the two shapes it was found in.
+
+`ShapeDispatch` hands a **non-parametric** shape its *authored* `dimMM`
+(`components/three/DynamicPart.tsx`), and `Draggable` then scales the whole group by
+`groupScaleForDim(part.dimMM, storedDim)` — per axis, with the scale gizmo exposing all
+three independently. Anything inside the geometry that is a **proportion of the declared
+size** survives that. Anything that is an **absolute metre constant** does not, because it
+is chosen before the scale is applied and never sees it.
+
+Both new helpers have exactly one such constant each, and both are the cap that stops the
+shape becoming a spike:
+
+- Add the catalogue Pendant lamp (`[350, 350, 400]`) and resize it to 150 × 900, both
+  inside its band. Scale becomes `(0.4286, 2.25, 0.4286)`; the drawn shade is 150 mm wide
+  and **360 mm tall**, where `domeH ≤ 1.2r` demands 90 mm — four times over the cap, and
+  exactly the outcome `pendantDrop`'s own header says it prevents.
+- Resize the catalogue fan's height to 450 mm and the housing draws **180 mm** thick,
+  where `fanColumn(450)` says 80. `FAN_HUB_R = 0.1` is the same class and predates this.
+
+**The extent invariant is NOT affected** — `top - bottom` of the drawn geometry still
+equals the stored height, because it is a pure proportion. So § 34's claim holds and this
+is a proportion defect, not a size one. The tests that pin the caps
+(`tests/ceiling-fixtures.test.ts`) are green and honest: the app simply never calls either
+helper with the resized numbers.
+
+**The options, so nobody re-derives them.** Add both shapes to `PARAMETRIC_SHAPES` so they
+rebuild from the current dim instead of group-scaling — which is what that set is *for*,
+and costs a re-render per resize frame. Or express every cap as a ratio, which is not
+possible for `FAN_HUB_R`, since a hub is a real object with a real size. The first is
+probably right and it is not a one-line change.
 
 ### 19. Library search: `stand` does not reach `Nightstand` — FIXED
 
@@ -3516,18 +3607,25 @@ uses `defaultScene`, and `buildSceneFromRoom` short-circuits an empty detection 
 it, so the DETECTION path — the one that already worked — had no guard at all until a
 fixture with a real detection was added.
 
-### § 33 — three things the shape contract left open — OPEN
+### § 33 — three things the shape contract left open — 1 DONE, 2 OPEN
 
 From the same session that added `tests/shape-contract.test.ts`. All three are
 **measurements or capabilities that do not exist**, not defects.
 
-**1. The four newest shapes have never been looked at in 3D.** `fan-standing`,
-`chest-freezer`, `tv-console` and `stool` typecheck, lint, and satisfy all sixteen
-contract clauses — and **no test renders geometry**, so nothing in this repo has an
-opinion about whether the standing fan reads as a fan or as a lollipop. The contract
-can prove a shape is authored at `dimMM` and that its widest element matches; it
-cannot prove it looks like the thing it is named after. This is a `visual-check.md`
-item, and it is the honest limit of the whole contract.
+**1. The four newest shapes had never been looked at in 3D — DONE, 2026-09-01.**
+`fan-standing`, `chest-freezer`, `tv-console` and `stool` typecheck, lint, and satisfy
+all sixteen contract clauses — and **no test renders geometry**, so nothing in this repo
+had an opinion about whether the standing fan reads as a fan or as a lollipop. The
+contract can prove a shape is authored at `dimMM` and that its widest element matches; it
+cannot prove it looks like the thing it is named after. That remains the honest limit of
+the whole contract.
+
+`visual-check.md` recorded the look on 2026-09-01 and deleted its own item: the fan reads
+as a pedestal fan, the freezer has its lid seam, the console two open bays, the stool a
+round seat on splayed legs. **This paragraph went on saying "never" for a day**, and the
+queue row above it did too, which is the rot `CLAUDE.md`'s rule 20 describes — a
+hand-off note is a claim, not a fact. Re-confirmed 2026-09-02 alongside § 34, in the
+same browser session.
 
 **2. The on-device detector cannot name any of the four, and TypeScript cannot fix
 it.** `WORLD_PROMPTS` mirrors `WORLD_VOCAB` in `scripts/export-detector.py`, whose key

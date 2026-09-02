@@ -1,16 +1,42 @@
 import { describe, expect, it } from 'vitest';
-import { FAN_HUB_H, FAN_HUB_R, fanBlade, fanColumn, pendantDrop } from '@/lib/scene-spec';
+import { FAN_HUB_H, FAN_HUB_R, fanBlade, fanColumn, lightAnchor, pendantDrop } from '@/lib/scene-spec';
 import { dimRangeFor } from '@/lib/dimension-ranges';
 import { verticalExtent } from '@/lib/physics';
 
 /** Every height in a shape's legal band, at 10 mm — the band is the assertion,
- *  because picking examples is how the first version of `fanBlade` was missed. */
+ *  because picking examples is how the first version of `fanBlade` was missed.
+ *
+ *  Tested in its own right below rather than trusted. A sweep is worth exactly what
+ *  its generator is, and this one's start, step and end were all free: `let v = min`
+ *  -> `min + 10` survived every caller and silently stopped exercising 150 mm, which
+ *  is the bottom of BOTH bands and the only place either helper's cap branch binds. */
 function band(min: number, max: number): number[] {
+  if (max < min) throw new RangeError(`band(${min}, ${max}) is inverted`);
   const out: number[] = [];
   for (let v = min; v <= max; v += 10) out.push(v);
-  if (out[out.length - 1] !== max) out.push(max);
+  // `!==` on floats would either duplicate `max` or leave a tail gap on a
+  // non-integer range. Every range here is whole millimetres, so this is hardening
+  // against a future caller rather than a fix.
+  if (Math.abs(out[out.length - 1] - max) > 1e-9) out.push(max);
   return out;
 }
+
+describe('the sweep generator, which four tests iterate and none of them held', () => {
+  it('starts at the minimum, steps by 10 mm, and ends at the maximum', () => {
+    const b = band(150, 450);
+    expect(b.length, 'a 300 mm span at 10 mm').toBe(31);
+    expect(b[0], 'it must START at the minimum — that is where both caps bind').toBe(150);
+    expect(b[b.length - 1], '…and end at the maximum').toBe(450);
+    expect(b[1] - b[0], 'in 10 mm steps').toBe(10);
+    expect(new Set(b).size, 'no duplicates').toBe(31);
+  });
+
+  it('reaches the maximum of a ragged span, and refuses an inverted one', () => {
+    expect(band(150, 455).at(-1), 'a span that is not a whole number of steps').toBe(455);
+    expect(band(150, 455).length, '…gains one short final step').toBe(32);
+    expect(() => band(450, 150), 'inverted throws rather than degrading to one value').toThrow();
+  });
+});
 
 const FAN = dimRangeFor('fan', 'fan');
 const PENDANT = dimRangeFor('lamp', 'lamp-pendant');
@@ -29,9 +55,12 @@ describe('the ceiling fan is drawn at the height it declares', () => {
     }
   });
 
-  it('agrees with the extent every consumer computes — not with a re-derivation', () => {
-    // `verticalExtent` is what `clearance.ts`, `settleHeights` and `groundY` read.
-    // Asserting against `hMM / 2000` alone would only pin this function to itself.
+  it('is anchored the way every consumer assumes — centred, not standing on a floor', () => {
+    // `verticalExtent`'s non-floor branch IS `[y - h/2, y + h/2]`, so this is not
+    // independent evidence about the arithmetic, and calling it that overstated the
+    // case. What it pins, and nothing else does, is that `anchorFor` still answers
+    // something other than 'floor' for this shape: flip that and a ceiling fan is
+    // measured from its own base while the sweep above stays green.
     for (const hMM of band(FAN.min[2], FAN.max[2])) {
       const y = 2.6;
       const c = fanColumn(hMM);
@@ -79,9 +108,18 @@ describe('the ceiling fan is drawn at the height it declares', () => {
   });
 
   it('never draws a blade thicker than the housing that carries it', () => {
-    // The blade box is 0.012 tall in `FanGeo`; the housing must be able to hold it
-    // at the narrowest legal fan, or the blades stick out of the motor.
-    expect(fanColumn(FAN.min[2]).hubH).toBeGreaterThan(0.012);
+    // Against `fanBlade`'s own `thickness`, not a copy of it. This read a re-typed
+    // `0.012`, so moving the renderer's literal to 200 mm - a blade three times its
+    // own motor, exactly the condition named - left the assertion green. Measured.
+    for (const wMM of [FAN.min[0], 1000, FAN.max[0]]) {
+      expect(fanColumn(FAN.min[2]).hubH, `${wMM} mm wide`)
+        .toBeGreaterThan(fanBlade(wMM).thickness);
+    }
+    expect(fanBlade(1000).thickness, 'the blade is 12 mm thick, and that is a decision')
+      .toBeCloseTo(0.012, 9);
+    expect(fanBlade(1000).chord, 'and 160 mm deep').toBeCloseTo(0.16, 9);
+    expect(fanBlade(900).thickness, 'neither is a function of the fan’s width')
+      .toBeCloseTo(fanBlade(1500).thickness, 9);
   });
 
   it('leaves the swept circle to `fanBlade` and does not touch it', () => {
@@ -89,6 +127,64 @@ describe('the ceiling fan is drawn at the height it declares', () => {
     // one has not started having opinions about the horizontal one.
     expect(fanBlade(1000).tip).toBeCloseTo(0.5, 9);
     expect(FAN_HUB_R).toBeCloseTo(0.1, 9);
+  });
+});
+
+describe('the pendant emits its light from where it draws its bulb', () => {
+  // There was no test of `lightAnchor` — or of the `LIGHT_ANCHORS` table it grew
+  // out of — anywhere in the repo, which is why a hand-typed copy of the bulb's
+  // position could go stale the moment the bulb started deriving from `dimMM`. The
+  // table's own docblock had said "these track the geometry in DynamicPart" the
+  // whole time. A contract written down and never gated is the shape this repo
+  // keeps finding.
+  it('is the same number the mesh is drawn from, at every size in the band', () => {
+    const sizes = band(PENDANT.min[2], PENDANT.max[2]);
+    expect(sizes.length, 'the sweep has something in it').toBeGreaterThan(20);
+    for (const hMM of sizes) {
+      for (const wMM of [PENDANT.min[0], 350, PENDANT.max[0]]) {
+        const [x, y, z] = lightAnchor('lamp-pendant', [wMM, wMM, hMM]);
+        expect(y, `${wMM}x${hMM}`).toBeCloseTo(pendantDrop(wMM, hMM).bulbY, 9);
+        expect([x, z], `${wMM}x${hMM}: on the axis`).toEqual([0, 0]);
+      }
+    }
+  });
+
+  it('moves when the size moves — which the old constant did not', () => {
+    // The mutation that matters is "put the literal back": every size collapsing to
+    // one answer is exactly the defect, so the assertion has to be that two sizes
+    // DISAGREE, not merely that each matches.
+    const small = lightAnchor('lamp-pendant', [350, 350, 150])[1];
+    const large = lightAnchor('lamp-pendant', [350, 350, 900])[1];
+    expect(small, 'a 150 mm pendant').toBeCloseTo(-0.042, 3);
+    expect(large, 'a 900 mm one hangs its bulb far lower').toBeCloseTo(-0.3345, 4);
+    expect(large, 'and the two are nowhere near each other').toBeLessThan(small - 0.25);
+  });
+
+  it('keeps the source inside the shade, never on the bare cord above it', () => {
+    // The user-visible half. At 350x900 the old constant sat 190 mm ABOVE the
+    // shade's rim: a 110-degree spot emitting from a point on the cord, with its
+    // own shade underneath it as an occluder.
+    for (const hMM of band(PENDANT.min[2], PENDANT.max[2])) {
+      for (const wMM of [PENDANT.min[0], 350, PENDANT.max[0]]) {
+        const g = pendantDrop(wMM, hMM);
+        const y = lightAnchor('lamp-pendant', [wMM, wMM, hMM])[1];
+        const rim = g.domeY + g.domeH / 2;
+        expect(y, `${wMM}x${hMM}: below the shade's rim`).toBeLessThan(rim);
+        expect(y, `${wMM}x${hMM}: and above the shade's mouth`).toBeGreaterThan(g.bottom);
+      }
+    }
+  });
+
+  it('leaves the two fixtures whose bulbs really are constants alone', () => {
+    // `lamp-table` and `lamp-floor` draw their bulbs at literals, so a constant is
+    // the honest answer for them and the table is the right home. Pinned so that
+    // "derive everything" does not silently move them too.
+    expect(lightAnchor('lamp-table', [400, 400, 500])).toEqual([0, 0.4, 0]);
+    expect(lightAnchor('lamp-table', [250, 250, 900]), 'and does not vary with size')
+      .toEqual([0, 0.4, 0]);
+    expect(lightAnchor('lamp-floor', [400, 400, 1500])).toEqual([0, 1.66, 0]);
+    expect(lightAnchor('sofa', [2000, 900, 800]), 'anything else sits at its origin')
+      .toEqual([0, 0, 0]);
   });
 });
 
@@ -104,7 +200,8 @@ describe('the pendant lamp is drawn at the size it declares', () => {
     }
   });
 
-  it('agrees with the extent `clearance.ts` reports a clash from', () => {
+  it('is anchored the way `clearance.ts` assumes when it reports a clash', () => {
+    // Same as the fan's above: what this holds is the ANCHOR, not the arithmetic.
     for (const hMM of band(PENDANT.min[2], PENDANT.max[2])) {
       const y = 2.5;
       const g = pendantDrop(350, hMM);
@@ -139,7 +236,38 @@ describe('the pendant lamp is drawn at the size it declares', () => {
         expect(g.bulbY - g.bulbR, `${wMM}x${hMM}: bulb bottom`).toBeGreaterThan(g.bottom);
         expect(g.bulbY + g.bulbR, `${wMM}x${hMM}: bulb top`).toBeLessThan(g.domeY + g.domeH / 2);
         expect(g.bulbR, `${wMM}x${hMM}: bulb fits the shade mouth`).toBeLessThan(g.domeR);
+        // …and a FLOOR, which the three above are not. Every one of them is an upper
+        // bound, so all three are satisfied by a smaller bulb and by NO bulb: `bulbR`
+        // -> `domeH * 0` survived this sweep and deleted the light from the scene,
+        // because `PendantLampGeo` renders `sphereGeometry args={[g.bulbR, …]}`.
+        expect(g.bulbR, `${wMM}x${hMM}: there IS a bulb`).toBeGreaterThan(g.domeH * 0.2);
       }
+    }
+  });
+
+  it('pins the bulb at the two sizes where each arm of its cap binds', () => {
+    // A sweep cannot pin a `Math.min` - it holds wherever the answer is small enough.
+    // These are the sizes where the binding arm is known, so each coefficient is held
+    // from both sides by a number that changes when it moves.
+    const tall = pendantDrop(800, 900);
+    expect(tall.domeH, 'the biggest legal pendant: 0.4h binds the shade').toBeCloseTo(0.36, 9);
+    expect(tall.bulbR, '0.3r = 0.12 is under 0.35 x 0.36 = 0.126, so WIDTH binds the bulb')
+      .toBeCloseTo(0.12, 9);
+    const squat = pendantDrop(800, 150);
+    expect(squat.domeH, 'the widest, shortest one: 0.4h again').toBeCloseTo(0.06, 9);
+    expect(squat.bulbR, '0.35 x 0.06 is far under 0.3r, so the SHADE binds')
+      .toBeCloseTo(0.021, 9);
+  });
+
+  it('hangs the bulb in the lower half of the shade, not against either end', () => {
+    // The `0.55` was free across roughly (0.35, 0.65). Substitute the coefficients
+    // into the containment sweep above and it reduces to `0.35 < 0.55` - a comparison
+    // between two literals, run 152 times, depending on neither `w` nor `h`. This is
+    // what actually holds the placement.
+    for (const [wMM, hMM] of [[350, 400], [150, 900], [800, 150]] as const) {
+      const g = pendantDrop(wMM, hMM);
+      const intoShade = (g.bulbY - g.bottom) / g.domeH;
+      expect(intoShade, `${wMM}x${hMM}: how far up the shade the bulb sits`).toBeCloseTo(0.55, 9);
     }
   });
 

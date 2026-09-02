@@ -487,8 +487,16 @@ function PendantLampGeo({ part }: { part: ScenePart }) {
         <group position={[0, -g.top, 0]}>
           {/* cord */}
           <Box size={[0.01, g.cordH, 0.01]} position={[0, g.cordY, 0]} color={DETAIL.hardware} edgeOpacity={0.2} />
-          {/* shade */}
-          <mesh position={[0, g.domeY, 0]} rotation={[Math.PI, 0, 0]}>
+          {/* Shade, mouth DOWN. There was a `rotation={[Math.PI, 0, 0]}` here, and it
+              was upside down: `ConeGeometry(r, h)` is `CylinderGeometry(0, r, h)`, so
+              the apex is already at +Y and the wide mouth at -Y — a lampshade before
+              anything rotates it. `FloorLampGeo` and `TableLampGeo` use the same cone
+              with no rotation, and this was the one lamp in the catalogue whose shade
+              faced the slab. Deriving `domeR` from the declared width made it louder
+              rather than causing it: at the band's top it is an 800 mm funnel aimed at
+              the ceiling instead of a fixed 300 mm one. The Y extent is unchanged
+              either way, which is why no size assertion could see it. */}
+          <mesh position={[0, g.domeY, 0]}>
             <coneGeometry args={[g.domeR, g.domeH, 16, 1, true]} />
             <meshStandardMaterial color={dome} side={2} {...SURFACE.ceramic} />
           </mesh>
@@ -735,7 +743,7 @@ function FanGeo({ part }: { part: ScenePart }) {
   // The blade's span is `fanBlade`'s, not this file's. It was `size: [r * 1.6]` at
   // `position: [r * 0.6]` here — a tip at 1.4r, so a 1000 mm fan swept 1.40 m while
   // the plan drew the 1.00 m circle its `dimMM` asks for. See `fanBlade`.
-  const { hub, length, centre } = fanBlade(part.dimMM[0]);
+  const { hub, length, centre, thickness, chord } = fanBlade(part.dimMM[0]);
   // …and the OTHER axis is `fanColumn`'s, for the same reason: the hub and downrod
   // were `0.08` at y = 0 and `0.18` at y = 0.13, an extent of [-0.04, +0.22] for a
   // declared 200 mm, off-centre, and identical for every fan in a 150–450 mm band.
@@ -758,7 +766,7 @@ function FanGeo({ part }: { part: ScenePart }) {
           return (
             <group key={i} rotation={[0, angle, 0]} position={[0, col.hubY, 0]}>
               <Box
-                size={[length, 0.012, 0.16]}
+                size={[length, thickness, chord]}
                 position={[centre, 0, 0]}
                 color={blade}
                 edgeOpacity={0.4}
