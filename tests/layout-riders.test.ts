@@ -7,6 +7,7 @@ import { ridingParents } from '@/lib/rigid-parent';
 import { footArea, footFromPart, footIntersectionArea, localToWorld } from '@/lib/geometry';
 import { MIN_SUPPORT_SHARE, verticalExtent } from '@/lib/physics';
 import { isObstacle } from '@/lib/layout-rules';
+import { costBreakdown, DEFAULT_WEIGHTS, NAV_CELL, prepare, type LayoutContext } from '@/lib/layout-score';
 
 // A piece standing ON another piece is not a place the search gets to choose.
 //
@@ -72,7 +73,12 @@ describe('ridingParents — who is standing on what', () => {
   // stops it is `findSupportDetailed` refusing to hand a rug out as a support.
   it('does not make a sofa the rider of the rug it stands on', () => {
     const rug = part({ id: 'rug', category: 'rug', shape: 'rug', dimMM: [2000, 3000, 5] });
-    const sofa = part({ id: 'sofa', category: 'sofa', shape: 'sofa', dimMM: [2000, 900, 880] });
+    // ON the rug, not beside it: at `pos[1] = 0` the floor clause one line earlier
+    // refuses the sofa and `findSupportDetailed` is never called, so the rug refusal
+    // this test is named for is not reached and deleting it stays green. Measured.
+    const sofa = part({
+      id: 'sofa', category: 'sofa', shape: 'sofa', dimMM: [2000, 900, 880], pos: [0, 0.005, 0],
+    });
     // The fixture has to be able to FAIL: the sofa must genuinely sit over the rug,
     // and the rug's top must be inside the adjacency tolerance of the sofa's y.
     expect(footIntersectionArea(foot(sofa), foot(rug)) / footArea(foot(sofa))).toBeGreaterThan(MIN_SUPPORT_SHARE);
@@ -86,9 +92,18 @@ describe('ridingParents — who is standing on what', () => {
   // nightstand becomes a rider that no solve may move.
   it('does not make a piece the rider of the tall thing it is standing in front of', () => {
     const wardrobe = part({ id: 'ward', category: 'wardrobe', shape: 'wardrobe', dimMM: [1200, 600, 2100] });
-    const near = part({ id: 'near', category: 'nightstand', shape: 'nightstand', dimMM: [450, 400, 550] });
+    // OFF THE FLOOR, which is what makes this reach the clause it is named for. With
+    // the lamp at `pos[1] = 0` the floor clause refuses it first and the below-test
+    // is never asked: measured, dropping the `Math.abs` — so the comparison becomes
+    // one-sided and everything BELOW a support counts as riding it — left all
+    // seventeen assertions in this file green. What that lets through is not
+    // hypothetical: a bedside lamp standing in front of a wardrobe becomes the
+    // wardrobe's rider, and `carryRiders` teleports it to wherever the wardrobe went.
+    const near = part({
+      id: 'near', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [0, 0.55, 0],
+    });
     expect(footIntersectionArea(foot(near), foot(wardrobe)) / footArea(foot(near))).toBeGreaterThan(MIN_SUPPORT_SHARE);
-    expect(topOf(wardrobe)).toBeGreaterThan(1);
+    expect(topOf(wardrobe), 'the wardrobe top is far ABOVE it, not below').toBeGreaterThan(near.pos[1] + 1);
     expect(ridingParents([wardrobe, near])).toEqual({});
   });
 
@@ -99,11 +114,36 @@ describe('ridingParents — who is standing on what', () => {
     expect(ridingParents([stand, lamp])).toEqual({});
   });
 
+  // …and the band PINNED, not merely exercised. The 200 mm gap above is four times
+  // `SUPPORT_Y_EPS`, so widening the tolerance to 0.19 left every assertion in this
+  // file green and a lamp floating 150 mm over its nightstand would have been
+  // declared a rider and carried. A pair either side of the bar is what holds it:
+  // a one-ended test on a tolerance is a tolerance free at one end.
+  it('holds the adjacency band from both sides', () => {
+    const at = (y: number) =>
+      ridingParents([stand, part({
+        id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [0, y, 0],
+      })]);
+    expect(topOf(stand), 'the fixture straddles the real top').toBeCloseTo(0.55, 9);
+    expect(at(0.599), '49 mm proud — settle noise, still resting on it').toEqual({ lamp: 'stand' });
+    expect(at(0.601), '51 mm proud — in the air').toEqual({});
+  });
+
   it('never makes a wall-mounted piece a rider', () => {
-    const tv = part({
-      id: 'tv', category: 'tv', shape: 'tv', dimMM: [1450, 90, 830], pos: [0, 0.55, 0], wallMounted: true,
+    // A MIRROR, not the 1450 mm television this used to use. That television does not
+    // fit on a 450 mm nightstand, so the test was refused on footprint and never
+    // reached the clause it is named for — decoration with a note beside it, which is
+    // still decoration.
+    const mirror = part({
+      id: 'mirror', category: 'mirror', shape: 'mirror', dimMM: [300, 30, 900], pos: [0, 0.55, 0],
+      wallMounted: true,
     });
-    expect(ridingParents([stand, tv])).toEqual({});
+    expect(
+      footIntersectionArea(foot(mirror), foot(stand)) / footArea(foot(mirror)),
+      'it does sit over the nightstand',
+    ).toBeGreaterThan(MIN_SUPPORT_SHARE);
+    expect(mirror.pos[1]).toBeCloseTo(topOf(stand), 9);
+    expect(ridingParents([stand, mirror])).toEqual({});
   });
 
   // …and the one that actually reaches the anchor test. A 1450 mm television does
@@ -175,6 +215,35 @@ describe('ridingParents — who is standing on what', () => {
     expect(ridingParents([mat, chair])).toEqual({ chair: 'mat' });
   });
 
+  // The same clause from ABOVE. A 40 mm mat only pins `p.pos[1] <= 0` down to 40 mm,
+  // so widening it to 0.03 stayed green and a rider on a 20 mm platform silently
+  // stopped being one. Zero is the value the comment argues for; this is what makes
+  // the argument checkable.
+  it('a rider on a 20 mm platform is still a rider', () => {
+    const shim = part({ id: 'shim', category: 'other', shape: 'box', dimMM: [1200, 1200, 20] });
+    const chair = part({
+      id: 'chair', category: 'chair', shape: 'chair-dining', dimMM: [450, 450, 850], pos: [0, 0.02, 0],
+    });
+    expect(ridingParents([shim, chair])).toEqual({ chair: 'shim' });
+  });
+
+  // A round rider is measured as an ellipse, not the square around it. Nothing else
+  // here is round, so dropping `p.circle` from the support probe was free: the
+  // bounding square overstates a circle's area by ~27%, and a share computed against
+  // the wrong denominator denies a lamp a support it genuinely rides.
+  it('measures a round rider as the circle it draws', () => {
+    const small = part({ id: 'small', category: 'nightstand', shape: 'nightstand', dimMM: [360, 360, 550] });
+    const round = part({
+      id: 'round', category: 'lamp', shape: 'cylinder', dimMM: [460, 460, 400], pos: [0.12, 0.55, 0],
+      circle: true,
+    });
+    const boxy = part({ ...round, id: 'boxy', circle: undefined });
+    // The fixture's whole point: the same footprint, round and square, land on
+    // opposite sides of MIN_SUPPORT_SHARE against this nightstand.
+    expect(ridingParents([small, round]), 'the circle is mostly over it').toEqual({ round: 'small' });
+    expect(ridingParents([small, boxy]), 'its bounding square is not').toEqual({});
+  });
+
   it('follows a chain: a lamp on a tray on a desk', () => {
     const desk = part({ id: 'desk', category: 'desk', shape: 'desk-standard', dimMM: [1400, 700, 750] });
     const tray = part({ id: 'tray', category: 'other', shape: 'box', dimMM: [400, 400, 60], pos: [0, 0.75, 0] });
@@ -236,6 +305,7 @@ describe('a shuffle carries the lamp with the nightstand', () => {
       const after = applyPlacements(parts, result);
       const byId = new Map(after.map((p) => [p.id, p]));
 
+      expect(Object.keys(rides).length, `seed ${seed}: two riders, or this loop is vacuous`).toBe(2);
       expect(orphans(after), `seed ${seed}`).toEqual([]);
       for (const [childId, parentId] of Object.entries(rides)) {
         expect(restsOn(byId.get(childId)!, byId.get(parentId)!), `seed ${seed}: ${childId} on ${parentId}`).toBe(true);
@@ -247,6 +317,7 @@ describe('a shuffle carries the lamp with the nightstand', () => {
       // would pass just as happily against a solver that had been turned off.
       if (supportIdx.some((i) => result.moved.includes(i))) supportsMoved++;
     }
+    console.log(`riders: nightstands moved on ${supportsMoved} of 8 seeds`);
     expect(supportsMoved, 'the nightstands must actually be getting moved').toBeGreaterThan(4);
   }, 60000);
 
@@ -481,4 +552,39 @@ describe('withRiders widens a confine to what is standing on it', () => {
   it('leaves a set with no riders in it alone', () => {
     expect([...withRiders(new Set(['other']), [stand, lamp, other])]).toEqual(['other']);
   });
+});
+
+// The pass runs BEFORE the answer is measured, and that ordering was pinned by
+// nothing: moving `carryRiders` to after `breakdownAfter` left `layout-riders`,
+// `layout-solve`, `bed-rung-safety` AND `layout-shuffle` green. Neither re-recorded
+// baseline can see it — both re-score `.placements` themselves and never read
+// `.after` — so the 0.18 shift is evidence the PLACEMENTS changed, not that the
+// number describes them.
+//
+// The invariant is the honest form and it is not about riders at all: what a solve
+// reports as its cost must be the cost of what it returns. `isCleanShuffle` reads
+// `breakdownAfter` and `RoomTools` reads `after`, so if those describe a room with
+// the lamp still where the search left it, the gate is judging an arrangement the
+// user will never see.
+describe('the reported cost describes the returned placements', () => {
+  const parts = defaultScene('u', 6, 5);
+  const footprint = footprintForLayout('u', 6, 5);
+  const locked = lockedForSolve(parts, {}, null);
+  const movable = movableFor(parts, locked);
+  const model = prepare({ parts, movable, footprint } as LayoutContext);
+
+  it('re-scoring the answer reproduces `after`, over eight seeds', () => {
+    let riderMoved = 0;
+    for (let seed = 0; seed < 8; seed++) {
+      const start = randomizeStart(parts, footprint, movable, makeRng(seed));
+      const r = solveLayout(parts, footprint, locked, { seed, mode: 'shuffle', start });
+      const rescored = costBreakdown(model, r.placements, DEFAULT_WEIGHTS, NAV_CELL);
+      expect(rescored.total, `seed ${seed}`).toBeCloseTo(r.after, 9);
+      // THE CONTROL. If no rider ever moved, `after` would match whether the carry
+      // ran before or after the measurement and this asserts nothing about ordering.
+      const rides = ridingParents(parts);
+      if (r.moved.some((i) => parts[i].id in rides)) riderMoved++;
+    }
+    expect(riderMoved, 'a rider must actually be moving on most seeds').toBeGreaterThan(4);
+  }, 60000);
 });
