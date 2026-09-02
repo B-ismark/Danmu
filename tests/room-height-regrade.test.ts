@@ -12,18 +12,22 @@ function part(over: Partial<ScenePart> & Pick<ScenePart, 'category' | 'shape' | 
 }
 
 describe('a piece whose height comes from the ceiling follows the ceiling', () => {
-  // The reported bug, with the reported numbers. A fan dropped into a 1.75 m room
-  // hangs at 1.60 (groundY: 0.15 below the ceiling, mesh centre). The room is then
-  // corrected to 2.80 and the fan has to arrive at 2.65, which is where a fan
-  // dropped into a 2.80 m room hangs — the same answer by both routes.
+  // The reported bug, with the reported numbers — **re-derived, because the numbers
+  // moved.** They were 1.60 and 2.65, which is `roomHeight - 0.15`: the flat nominal
+  // drop `groundY` took for anything shallower than 260 mm, and which left this 200 mm
+  // fan's downrod 50 mm below the slab (`what-is-still-open.md` § 35). The ceiling arm
+  // hangs a fixture by its own top now, so the same fan sits 30 mm higher at both ends.
+  // The BUG this test is about is unchanged and so is its shape: a fan dropped into a
+  // 1.75 m room and then corrected to 2.80 must arrive where a fan dropped into a
+  // 2.80 m room hangs — the same answer by both routes.
   it('puts the fan back at the ceiling when the room is corrected upwards', () => {
     const hung = groundY('fan', 'fan', FAN, 1.75);
-    expect(hung).toBeCloseTo(1.6, 6);
+    expect(hung).toBeCloseTo(1.63, 6);
     const after = heightForNewCeiling('fan', 'fan', FAN, hung, 1.75, 2.8);
-    expect(after).toBeCloseTo(2.65, 6);
+    expect(after).toBeCloseTo(2.68, 6);
     expect(after).toBeCloseTo(groundY('fan', 'fan', FAN, 2.8), 6);
     // And what the Inspector prints off it — the number the user read as 1.50.
-    expect(after - FAN[2] / 2000).toBeCloseTo(2.55, 6);
+    expect(after - FAN[2] / 2000).toBeCloseTo(2.58, 6);
   });
 
   it('follows the ceiling down too, and the two directions round-trip', () => {

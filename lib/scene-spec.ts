@@ -1575,9 +1575,15 @@ function dress(
     // anchored — writing 0 here left every pair of curtains lying on the floor.
     // Floor to just under the ceiling, and positioned at its MESH CENTRE — which is
     // what `placementForSlot` does for a curtain and what `groundY` does not: its
-    // `ceiling` branch is for a pendant or a fan, small things hung just below the
-    // slab, and using it put a 2.6 m curtain's centre at 2.65 m, i.e. most of it
-    // through the ceiling.
+    // `ceiling` branch is for a pendant or a fan, and using it put a 2.6 m curtain's
+    // centre at 2.65 m, i.e. most of it through the ceiling.
+    //
+    // **That number is history, and the reason is not.** § 35 replaced the flat drop
+    // that produced it, so the ceiling branch would now centre the same curtain at
+    // 1.48 and pass. The branch is still the wrong one to ask: a curtain is
+    // `wall-high`, which hangs a rod BELOW the slab on purpose, and the two arms differ
+    // by their pads rather than by accident. Written out because the old sentence
+    // reads as a live justification and would fail the first reader who checked it.
     const drop = Math.max(1.2, height - 0.2);
     const dim: [number, number, number] = [width * 1000, 80, drop * 1000];
     // In FRONT of the glass, along the window's own facing direction — `w.rot` is

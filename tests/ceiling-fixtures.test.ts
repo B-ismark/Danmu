@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { FAN_HUB_H, FAN_HUB_R, fanBlade, fanColumn, lightAnchor, pendantDrop } from '@/lib/scene-spec';
 import { dimRangeFor } from '@/lib/dimension-ranges';
-import { verticalExtent } from '@/lib/physics';
+import { groundY, heightForNewCeiling, MOUNT_PAD, verticalExtent } from '@/lib/physics';
+import { ROOM_HEIGHT_M } from '@/lib/dimension-ranges';
 
 /** Every height in a shape's legal band, at 10 mm — the band is the assertion,
  *  because picking examples is how the first version of `fanBlade` was missed.
@@ -281,5 +282,123 @@ describe('the pendant lamp is drawn at the size it declares', () => {
     expect(narrow.cordH, '…and the rest is cord').toBeCloseTo(0.81, 9);
     const squat = pendantDrop(800, 150);
     expect(squat.domeH, 'height binds on a wide, short one').toBeCloseTo(0.06, 9);
+  });
+});
+
+describe('a hung fixture reaches the ceiling it hangs from', () => {
+  // **The comparison nothing in this repo made.** Every clause above measures a fixture
+  // against its own `dimMM`, and so does `verticalExtent`, `clearance.ts` and the whole
+  // shape contract — which is exactly why a 50 mm gap under the slab could sit in the
+  // shipping catalogue with every gate green. This is between the fixture and the ROOM.
+  //
+  // It was `Math.min(roomHeight - 0.15, roomHeight - MOUNT_PAD - h / 2)`. The arms cross
+  // at h = 260 mm, so the sweep alone cannot hold it — above the crossover both the old
+  // and the new code give the same answer, and a test that only walked the band would
+  // have been green against the defect. The pins below sit where the flat arm bound.
+  const H = 2.8;
+  const shapes: Array<{ label: string; cat: 'fan' | 'lamp'; shape: 'fan' | 'lamp-pendant';
+                        range: ReturnType<typeof dimRangeFor> }> = [
+    { label: 'ceiling fan', cat: 'fan', shape: 'fan', range: FAN },
+    { label: 'pendant', cat: 'lamp', shape: 'lamp-pendant', range: PENDANT },
+  ];
+
+  it('hangs its TOP exactly MOUNT_PAD below the slab, at every size in both bands', () => {
+    for (const { label, cat, shape, range } of shapes) {
+      const sizes = band(range.min[2], range.max[2]);
+      expect(sizes.length, `${label}: the sweep has something in it`).toBeGreaterThan(10);
+      for (const hMM of sizes) {
+        const dim: [number, number, number] = [range.min[0], range.min[1], hMM];
+        const y = groundY(cat, shape, dim, H);
+        const [bottom, top] = verticalExtent(cat, shape, dim, y);
+        expect(top, `${label} ${hMM} mm: top against the slab`).toBeCloseTo(H - MOUNT_PAD, 9);
+        expect(top, `${label} ${hMM} mm: and never THROUGH it`).toBeLessThan(H);
+        expect(top - bottom, `${label} ${hMM} mm: it still declares its own height`)
+          .toBeCloseTo(hMM / 1000, 9);
+      }
+    }
+  });
+
+  it('does the same at every legal ceiling height, not only at 2.8 m', () => {
+    // A room is 1.8–12 m; the old flat arm was written for one of those.
+    const heights = [ROOM_HEIGHT_M.min, 2.2, 2.4, 2.8, 3.5, 6, ROOM_HEIGHT_M.max];
+    for (const rh of heights) {
+      for (const { label, cat, shape, range } of shapes) {
+        for (const hMM of [range.min[2], 200, 260, range.max[2]]) {
+          const dim: [number, number, number] = [range.min[0], range.min[1], hMM];
+          const top = verticalExtent(cat, shape, dim, groundY(cat, shape, dim, rh))[1];
+          expect(top, `${label} ${hMM} mm in a ${rh} m room`).toBeCloseTo(rh - MOUNT_PAD, 9);
+        }
+      }
+    }
+  });
+
+  it('closes the gap the flat 150 mm arm left — pinned where that arm bound', () => {
+    // Values, not shape. Each of these was the OLD answer, and each is what a user saw.
+    const fanShips: [number, number, number] = [1000, 1000, 200];
+    expect(groundY('fan', 'fan', fanShips, H), 'the Library ceiling fan, as it ships')
+      .toBeCloseTo(2.68, 9);
+    expect(groundY('fan', 'fan', fanShips, H), '…and NOT the old 2.65').not.toBeCloseTo(2.65, 9);
+    expect(verticalExtent('fan', 'fan', fanShips, groundY('fan', 'fan', fanShips, H))[1],
+      'its downrod used to stop 50 mm short').toBeCloseTo(2.78, 9);
+
+    const small: [number, number, number] = [900, 900, 150];
+    expect(verticalExtent('fan', 'fan', small, groundY('fan', 'fan', small, H))[1],
+      'the smallest legal fan used to stop 75 mm short').toBeCloseTo(2.78, 9);
+
+    // The crossover itself: at h = 260 mm the two old arms agreed, so this size is the
+    // one a regression would keep green. Above it nothing moved at all.
+    const at260: [number, number, number] = [1000, 1000, 260];
+    expect(groundY('fan', 'fan', at260, H), 'where the old arms crossed').toBeCloseTo(2.65, 9);
+    const tall: [number, number, number] = [800, 800, 900];
+    expect(groundY('lamp', 'lamp-pendant', tall, H), 'the biggest pendant never moved')
+      .toBeCloseTo(2.33, 9);
+  });
+
+  it('is a FIXED POINT of the clamp that runs on every ceiling change', () => {
+    // The reason `MOUNT_PAD` is in the expression rather than zero. A bare
+    // `roomHeight - h / 2` sits 20 mm over `heightForNewCeiling`'s own cap, so each pass
+    // would pull the fixture down again and a room would creep on every load.
+    for (const { label, cat, shape, range } of shapes) {
+      for (const hMM of band(range.min[2], range.max[2])) {
+        const dim: [number, number, number] = [range.min[0], range.min[1], hMM];
+        const y = groundY(cat, shape, dim, H);
+        expect(heightForNewCeiling(cat, shape, dim, y, H, H),
+          `${label} ${hMM} mm: a re-settle at the same height must not move it`)
+          .toBeCloseTo(y, 9);
+        // …and after a real ceiling change it lands where a fresh placement would.
+        expect(heightForNewCeiling(cat, shape, dim, y, H, 3.2),
+          `${label} ${hMM} mm: raising the ceiling agrees with groundY`)
+          .toBeCloseTo(groundY(cat, shape, dim, 3.2), 9);
+      }
+    }
+  });
+
+  it('leaves every other anchor exactly where it was', () => {
+    // The guard against fixing this one anchor too widely. `wall-high` has its own two
+    // pads (0.05 and 0.1) and its own reason — a curtain rod is mounted below the slab,
+    // not against it — so it is NOT the same defect and must not follow.
+    expect(groundY('curtain', 'curtain', [1400, 80, 2200], H), 'a curtain')
+      .toBeCloseTo(Math.min(H - 1.1 - 0.05, H - 0.1), 9);
+    expect(groundY('ac', 'ac-unit', [800, 200, 300], H), 'an AC unit')
+      .toBeCloseTo(Math.min(H - 0.15 - 0.05, H - 0.1), 9);
+    expect(groundY('ac', 'ac-unit', [800, 200, 300], H), '…which is 0.1 below the slab')
+      .toBeCloseTo(2.6, 9);
+    // And the floor anchor, which has no business changing either.
+    expect(groundY('sofa', 'sofa', [2000, 900, 800], H), 'a sofa still stands at 0').toBe(0);
+
+    // `wall-mid`'s eye level was UNPINNED anywhere in this repo, which the § 35 mutation
+    // round found by moving it 1.4 -> 1.5 m and watching every suite stay green. It is
+    // a decision — how high a television hangs — not an arithmetic consequence, so it
+    // gets a literal. The second clause is the one that matters: in a room low enough,
+    // eye level is not reachable and the piece drops to clear the ceiling instead, and
+    // the constant alone cannot see which arm bound.
+    expect(groundY('tv', 'tv', [1200, 80, 700], H), 'a television hangs at eye level')
+      .toBeCloseTo(1.4, 9);
+    expect(groundY('mirror', 'mirror', [600, 20, 900], H), 'so does a mirror')
+      .toBeCloseTo(1.4, 9);
+    expect(groundY('tv', 'tv', [1200, 80, 700], 1.8), 'in a 1.8 m room the ceiling binds')
+      .toBeCloseTo(1.8 - 0.35 - 0.1, 9);
+    expect(groundY('painting', 'painting', [500, 30, 400], H), 'a small painting, same level')
+      .toBeCloseTo(1.4, 9);
   });
 });

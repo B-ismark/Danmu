@@ -100,43 +100,33 @@ renderer calls them". Thirteen other mutations were killed.
 **Not seen:** a real GPU. All of this is headless Chromium on SwiftShader, so nothing
 here speaks to how the shapes look with real lighting on a real device.*
 
-### A ceiling fan's downrod stops 50 mm short of the ceiling
+### A ceiling fan hangs flush against the slab — and an OLD room's fan still does not
 
 **Where to click.** Any room, **3D Model** tab, Library → Appliances → **Ceiling fan**,
-which ships at 200 mm. Look up.
+which ships at 200 mm. Look up. Then open a room that was already in this browser before
+today and look at a fan or pendant in that one.
 
-**What wrong looks like.** A gap between the top of the downrod and the slab, with the
-fan hanging on nothing. A **Pendant lamp** resized down to 150 mm should show 75 mm of
-the same gap, and its cord — which now swings from the piece's own top rather than a
-fixed 0.6 — swings unattached.
+**What changed.** § 35 removed the flat 150 mm drop from `groundY`'s ceiling arm, so a hung
+fixture's top now lands at `roomHeight - MOUNT_PAD` at every size instead of only above
+260 mm. A newly added fan moves up 30 mm and its downrod meets the ceiling.
 
-**The arithmetic.** `groundY`'s ceiling arm is `max(min(H - 0.15, H - MOUNT_PAD - h/2), h)`
-and the two arms cross at h = 260 mm. Below that the flat 150 mm nominal drop binds, so
-the fixture's top lands at `H - 0.15 + h/2` rather than at `H - MOUNT_PAD`:
+**What wrong looks like, in a NEW room.** Any daylight between the top of the downrod and
+the slab, or a rod that visibly penetrates it. Neither should be there: the top is 20 mm
+below the ceiling by design, which is the same pad every other clamp uses and is meant to
+read as flush rather than as a gap.
 
-| piece | h | y | drawn top | gap under a 2.80 m ceiling |
-|---|---|---|---|---|
-| **fan, as it ships** | 0.20 | 2.650 | 2.750 | **50 mm** |
-| fan, smallest legal | 0.15 | 2.650 | 2.725 | **75 mm** |
-| fan, largest legal | 0.45 | 2.555 | 2.780 | 20 mm (`MOUNT_PAD`, intended) |
-| pendant, smallest legal | 0.15 | 2.650 | 2.725 | **75 mm** |
-| pendant, as it ships | 0.40 | 2.580 | 2.780 | 20 mm |
+**What is EXPECTED to look wrong, in an old one.** A room already saved keeps its fixture
+where it was, because `pos` is stored and nothing re-places on load — `settleHeights`' cap
+is a maximum and a fixture under it is left alone. So an old fan still hangs 30–55 mm short,
+and a room where someone adds a second fan today shows **one flush and one short, side by
+side**. That is the thing to judge: whether the difference reads as a bug to a user, which
+is not a question the arithmetic can answer. Changing the ceiling height by 1 cm and back
+re-runs `heightForNewCeiling` over the whole room and lifts them all, which is the cheapest
+way to see both states.
 
-**This is not new, and it is newly VISIBLE, which is why it is here.** The model always
-said a 200 mm fan's top was at 2.75; before § 34 the renderer drew to 2.87 — 70 mm
-*through* the slab — so the gap was covered by geometry that should not have existed.
-Making the drawing obey `dimMM` uncovered it. Both states are wrong and they are wrong
-differently; nothing penetrates the ceiling now.
-
-**Not fixed here, deliberately.** The repair is in `groundY`, not in either renderer, and
-it is the same question one layer out: does a hung fixture's `dimMM[2]` mean the body, or
-the body plus its drop? `min()` conflates two arms that answer differently, and dropping
-the `H - 0.15` arm moves where every shallow fixture hangs. Recorded as
-`what-is-still-open.md` § 35.
-
-**Gates.** None. `verticalExtent` and all of `tests/ceiling-fixtures.test.ts` measure a
-fixture against its own `dimMM`; this gap is between the fixture and the *room*, and
-nothing compares `y + top` to `roomHeight`.
+**Gates.** `tests/ceiling-fixtures.test.ts` compares each fixture's top to the ROOM across
+both bands and seven ceiling heights — the comparison nothing in this repo made before. It
+cannot see the old-room case, because no test loads a room saved by an older build.
 
 ### A room saved BEFORE § 34 draws its pendant half the size
 

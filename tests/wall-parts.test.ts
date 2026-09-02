@@ -200,8 +200,15 @@ describe('placeNewPart keeps a drop inside the room', () => {
       const r = placeNewPart('fan', 'fan', FAN, room6x4, [], at);
       expect(r.pos[0], `dropped at ${at}`).toBeCloseTo(3, 6);
       expect(r.pos[2], `dropped at ${at}`).toBeCloseTo(2, 6);
-      // …and hung at the ceiling, which is the half that was always right.
-      expect(r.pos[1]).toBeCloseTo(2.35, 6);
+      // …and hung at the ceiling. Both halves of this: the literal, which pins the
+      // policy (it was 2.35 — `roomHeight - 0.15`, the flat drop § 35 removed — and a
+      // 200 mm fan's rod stopped 50 mm short of a 2.5 m slab), and the agreement with
+      // `groundY`, which pins the wiring. Either alone is half a test: the literal
+      // cannot see `placeNewPart` stop calling `groundY`, and the agreement cannot see
+      // both of them move together.
+      expect(r.pos[1]).toBeCloseTo(2.38, 6);
+      expect(r.pos[1], 'the drop path and the physics path are one answer')
+        .toBeCloseTo(groundY('fan', 'fan', FAN, room6x4.height), 9);
       expect(r.rot).toBe(0);
     }
   });

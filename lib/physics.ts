@@ -42,8 +42,10 @@ const ANCHOR_BY_SHAPE: Partial<Record<Shape, Anchor>> = {
   // says otherwise: `fan` means the ceiling one, so the shape has to overrule it.
   //
   // It shipped without this row and hung a 1300 mm fan from the slab. Worse than it
-  // sounds, because 'ceiling' is the mesh-CENTRE model: `groundY` returned 2.65 and
-  // the fan spanned 2.00–3.30 m, half a metre through a 2.8 m ceiling. And nothing
+  // sounds, because 'ceiling' is the mesh-CENTRE model: `groundY` returned 2.65 at the
+  // time — it would return 2.13 today, § 35 having removed the flat drop, and the fan
+  // would span 1.48–2.78 m: still a floor fan in mid-air, no longer one through the
+  // slab — and the fan spanned 2.00–3.30 m, half a metre through a 2.8 m ceiling. And nothing
   // said so — `isObstacle` gates on `pos[1] < 0.05`, so the room report could not see
   // it, the solver never priced it, and every catalogue-wide sweep stayed green.
   //
@@ -79,23 +81,45 @@ export function groundY(
     case 'floor':
       return 0;
     case 'ceiling':
-      // mesh-center model (fan, pendant) hung just below ceiling.
+      // The mesh-CENTRE model (fan, pendant), hung so that its own top meets the slab.
       //
-      // The 150 mm drop is a shallow fixture's, and taking it unconditionally put a
-      // fixture's own TOP through the slab as soon as it was taller than 300 mm: the
-      // catalogue's 400 mm pendant centred at 2.65 m reached 2.85 m in a 2.8 m room.
-      // So hang it by whichever is lower — the nominal drop, or its own half-height —
-      // which leaves the shallow case (a 200 mm fan at 2.65 m) exactly where it was.
+      // `roomHeight - MOUNT_PAD` is this app's single answer to "how close to the ceiling
+      // may a hung fixture's top get", and three places already give it: `settleHeights`'
+      // `cap`, `lib/drag-resolve.ts`'s vertical clamp, and `heightForNewCeiling` below.
+      // This line used to give a fourth. It was `Math.min(roomHeight - 0.15, roomHeight -
+      // MOUNT_PAD - h / 2)`, whose arms cross at h = 260 mm, so for anything shallower the
+      // flat 150 mm nominal drop bound and left the fixture hanging on nothing: the 200 mm
+      // ceiling fan the Library ships ended its downrod **50 mm below the slab**, and the
+      // smallest legal fan or pendant 75 mm below it (`what-is-still-open.md` § 35).
       //
-      // `MOUNT_PAD`, not zero, and that is why this is not a one-character change.
-      // `settleHeights` clamps the same quantity at `roomHeight - MOUNT_PAD`, so a bare
-      // `roomHeight - h / 2` puts the top EXACTLY on the slab, the settle pass then finds
-      // it 20 mm over its own cap, and every ceiling fixture taller than 300 mm creeps
-      // down 20 mm on each load. Two clearances for one quantity is the scar
-      // `settleHeights`' own header describes: "a fan placed by detection and a fan
-      // placed by a drag drifted apart the first time anyone changed it. Nothing would
-      // have said so: both look right, 10 mm apart, in a picture."
-      return Math.max(Math.min(roomHeight - 0.15, roomHeight - MOUNT_PAD - h / 2), h);
+      // **The two arms were answering different questions and `min` does not decide
+      // between them — it takes whichever hangs lower.** `roomHeight - 0.15` says a fan
+      // hangs 150 mm under the slab on a rod that is not part of it; `roomHeight -
+      // MOUNT_PAD - h / 2` says the declared height is everything and its top goes at the
+      // ceiling. The second is the one the rest of the app means: `fanColumn` and
+      // `pendantDrop` (`lib/scene-spec.ts`) draw the downrod and the cord INSIDE
+      // `dimMM[2]`, and `verticalExtent`, `clearance.ts` rule 2b, `settleHeights` and
+      // `heightForNewCeiling` all read that height as the whole extent. So the flat arm
+      // was not a second policy, it was the last reader of a meaning nothing else held.
+      //
+      // Nothing drew through the ceiling before this and nothing does now — the gap only
+      // ever ran the safe way — and no saved room moves, because a placed part's `pos`
+      // is stored and only these callers compute a fresh one.
+      //
+      // `MOUNT_PAD` rather than zero, unchanged, and still why this is not a
+      // one-character change: a bare `roomHeight - h / 2` puts the top EXACTLY on the
+      // slab, the settle pass then finds it 20 mm over its own cap, and every ceiling
+      // fixture creeps down 20 mm on each load. With the pad this answer is a FIXED POINT
+      // of all three clamps above rather than merely underneath them, which is the
+      // property `tests/ceiling-fixtures.test.ts` pins.
+      //
+      // The low guard stays `h`, and it is deliberately not touched here: the other three
+      // clamps floor the same quantity at `h / 2 + MOUNT_PAD` or `h / 2`, so there are
+      // four answers for a fixture too tall for its room. It binds only above
+      // h = 2(roomHeight - MOUNT_PAD)/3 — 1.85 m in a 2.8 m room, against a 900 mm
+      // tallest ceiling fixture — so no catalogue size can reach it, and changing it
+      // would be an unmeasured change to a case nobody has seen.
+      return Math.max(roomHeight - MOUNT_PAD - h / 2, h);
     case 'wall-high':
       // AC unit, curtain rod — top edge near ceiling
       return Math.min(roomHeight - h / 2 - 0.05, roomHeight - 0.1);
