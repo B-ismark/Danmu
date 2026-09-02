@@ -288,7 +288,10 @@ describe('a ceiling piece is not a wall rider', () => {
     // reach for it — this is the half `isWallMountedPart` was right about, and it
     // must not regress with the half it was wrong about.
     const r = resolve(fan(), 1, 1);
-    expect(r.pos[1]).toBeCloseTo(2.35, 6);
+    // 2.38, not the 2.35 this pinned before § 35: `groundY`'s ceiling arm hung a
+    // shallow fixture a flat 150 mm below the slab, which for this 200 mm fan left
+    // 50 mm of nothing above its downrod.
+    expect(r.pos[1]).toBeCloseTo(2.38, 6);
     expect(r.supportId).toBeUndefined();
   });
 

@@ -79,10 +79,15 @@ function clashes(parts: ReturnType<typeof defaultScene>): string[] {
  *  **This was a defect written down, and the defect is fixed.** `t` and `open` seed a
  *  400 mm pendant whose top came to 2.850 in a 2.8 m room — 50 mm through the slab —
  *  because `groundY`'s `ceiling` branch hung the CENTRE a flat 150 mm below the
- *  ceiling, so anything taller than 300 mm passed through it. The branch takes the
- *  lower of that nominal drop and the piece's own half-height LESS `MOUNT_PAD` now,
- *  which leaves a shallow fixture exactly where it was and stops a deep one crossing the
- *  slab. The pad is not decoration: without it the top lands EXACTLY on the ceiling,
+ *  ceiling, so anything taller than 300 mm passed through it. That was first fixed by
+ *  taking the lower of the nominal drop and the piece's own half-height less
+ *  `MOUNT_PAD`, and § 35 then removed the nominal drop altogether: it was the only
+ *  reader left of "the rod is not part of the fixture", and it left every fixture
+ *  shallower than 260 mm hanging short of the slab. The branch is
+ *  `roomHeight - MOUNT_PAD - h / 2` now, so every ceiling piece's top is at 2.780 —
+ *  the numbers in this table did not move, because every pendant a preset seeds is
+ *  deeper than the crossover. The pad is not decoration: without it the top lands
+ *  EXACTLY on the ceiling,
  *  which is 20 mm over `settleHeights`' own cap, and every fixture over 300 mm would
  *  creep down 20 mm on each load. Hence 2.780 rather than 2.800 — `roomHeight` minus the
  *  same pad every other clamp of this quantity uses.

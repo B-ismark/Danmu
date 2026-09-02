@@ -36,7 +36,6 @@ them. Where two items are the same defect one layer apart, they are listed as on
 | 6 | **§ 31** containment now outranks a blocked door by a hair | A decision only the user can make, and the third option (veto rather than price) is the largest change. Nothing a user sees today is wrong | M–L | **blocked on the user**. § 18 was expected to settle this and does not: it turned out not to be a cost-function question at all, so § 31 is unchanged and still needs an answer |
 | ~~7~~ | ~~**§ 34** the pendant and the ceiling fan draw outside their declared size~~ | **FIXED** — `fanColumn` + `pendantDrop` in `scene-spec.ts`, swept at 10 mm across both catalogue bands against `verticalExtent`. The stated blocker (what a pendant's declared height means) was already answered by `isMountedObstruction` + `clearance.ts` rule 2b | — | — |
 | ~~7~~ | ~~**§ 33.1** the four newest shapes have never been seen in 3D~~ | **ALREADY DONE, and this row was stale** — `visual-check.md` has recorded the look since 2026-09-01 and deleted its own item; the queue was never updated. Re-confirmed 2026-09-02 alongside § 34 | — | — |
-| 7 | **§ 35** a hung fixture stops 50 mm short of the ceiling | Found by § 34's review and uncovered by its fix; every Library ceiling fan ships into it. One decision — what `dimMM[2]` means for a hung fixture — then the code follows | S once decided | wants eyes; `visual-check.md` item |
 | 7 | **§ 36** a non-uniform resize walks through both geometry caps | Same review. Bigger class than the two shapes: every absolute constant in a non-parametric shape does this | M | none |
 | 7 | **§ 37** the Inspector's placement banner contradicts the room report | Reviewed 2026-09-02 and held out of PR #87. The idea is wanted; two of its three states are already computed elsewhere and it recomputes them with a different bar | M | none — it is on a branch, in no PR |
 | 8 | **G.1** a brand-new room seals its own routes at the size the app ships | Measured, real, and a first-run defect — the worst kind to leave | M | related to § 31: both are the solver's idea of "navigable" |
@@ -2544,7 +2543,7 @@ fresh profile, so a room seeded by an earlier script is gone.
 NOT among what was seen: the camera looks down into the room and the ceiling is a
 shadow-only plane, so nothing in these shots speaks to it.
 
-### § 35 — a hung fixture stops short of the ceiling, and `min()` is why — OPEN
+### § 35 — a hung fixture stops short of the ceiling, and `min()` is why — FIXED
 
 Found by the § 34 review, and **caused by § 34** in the sense that matters: the gap was
 always in the model and the old renderer covered it with geometry that should not have
@@ -2566,20 +2565,50 @@ So every ceiling fan added from the Library ends its downrod 50 mm below the sla
 § 34 the same fan drew to 2.87 — 70 mm *through* a 2.80 m ceiling — so the gap was
 hidden by an error in the other direction.
 
-**Why it is not fixed with § 34.** The repair is in `lib/physics.ts`, not in either
-renderer, and it is § 34's own question one layer out: does a hung fixture's `dimMM[2]`
-mean the body, or the body plus its drop? The two arms of that `min` answer differently —
-`H - 0.15` says "a fan hangs 150 mm below the slab on a rod that is not part of it",
-`H - MOUNT_PAD - h/2` says "the declared height is everything and its top goes at the
-ceiling" — and `min` picks whichever is lower rather than deciding. `fanColumn` already
-draws the downrod *inside* `dimMM[2]`, which commits to the second reading, so the two
-disagree. Dropping the `H - 0.15` arm moves where every shallow fixture hangs, including
-in rooms already saved, so it wants eyes and its own change.
+**The decision, and why it did not need asking.** It is § 34's own question one layer out:
+does a hung fixture's `dimMM[2]` mean the body, or the body plus its drop? The two arms of
+that `min` answer differently — `H - 0.15` says "a fan hangs 150 mm below the slab on a rod
+that is not part of it", `H - MOUNT_PAD - h/2` says "the declared height is everything and
+its top goes at the ceiling" — and **`min` does not choose between them, it takes whichever
+hangs lower.** The rest of the app had already chosen: `fanColumn` and `pendantDrop` draw
+the rod and the cord *inside* `dimMM[2]`, and `verticalExtent`, `clearance.ts` rule 2b,
+`settleHeights`, `heightForNewCeiling` and `lib/drag-resolve.ts` all read that height as the
+whole extent. Three of those clamp the same quantity at `roomHeight - MOUNT_PAD` and this
+line gave a fourth answer. So the flat arm was not a second policy — it was the last reader
+of a meaning nothing else held, and removing it is the smaller change.
 
-**What no gate can see:** `verticalExtent` and all of `tests/ceiling-fixtures.test.ts`
-measure a fixture against its own `dimMM`. This gap is between the fixture and the *room*,
-and nothing in the repo compares `y + top` to `roomHeight`. That comparison is probably the
-test worth having whatever the answer is.
+The arm is `Math.max(roomHeight - MOUNT_PAD - h / 2, h)` now, which makes `groundY` a **fixed
+point** of `heightForNewCeiling` rather than merely under its cap — the property that stops a
+fixture creeping down 20 mm per load, and the reason `MOUNT_PAD` is in the expression at all.
+
+**What moved.** Only fixtures shallower than the old crossover: up by `0.13 - h/2`, so 55 mm
+for the smallest legal fan or pendant, 30 mm for the 200 mm fan the Library ships, nothing at
+260 mm and nothing above it. Every top is now `roomHeight - MOUNT_PAD`. Nothing drew through
+the ceiling before and nothing does now; the gap only ever ran the safe way.
+
+**What a saved room does — the part that wants eyes.** A placed part's `pos` is stored, and
+nothing re-places on load: `settleHeights`' cap is a maximum, so a fixture 50 mm *under* it is
+left alone. So a room already in this browser keeps its gap until its ceiling is changed, and
+a room where the user adds a second fan today gets one fan flush and one hanging 30 mm short.
+That is the same way every other placement decision here behaves — the app does not re-place
+what it has already placed — but it is the first time two of the same piece can differ, so it
+is a `visual-check.md` item rather than a footnote.
+
+**The gates, and the comparison this repo had never made.** `verticalExtent` and all of
+§ 34's clauses measure a fixture against its own `dimMM`; the whole shape contract does too.
+This gap is between the fixture and the *room*, and nothing compared `y + top` to
+`roomHeight`. `tests/ceiling-fixtures.test.ts` does now, across both bands at 10 mm and
+across seven ceiling heights from 1.8 m to 12 m, plus pins at the sizes where the flat arm
+bound and a pin at the crossover — where the old and new code agree, which is exactly where a
+sweep alone would have stayed green against the defect.
+
+**What this does NOT change, deliberately.** The `wall-high` anchor keeps its own two pads
+(0.05 and 0.1): a curtain rod is mounted below the slab rather than against it, so it is not
+the same defect, and a test pins it against following along. And the low guard here stays `h`
+while the other three clamps use `h / 2 + MOUNT_PAD` or `h / 2` — four answers for a fixture
+too tall for its room, reachable only above 2(H - MOUNT_PAD)/3, which is 1.85 m in a 2.8 m
+room against a 900 mm tallest ceiling fixture. Unreachable from the catalogue, so changing it
+would be an unmeasured change to a case nobody has seen.
 
 ### § 36 — a non-uniform resize walks through both geometry caps — OPEN
 

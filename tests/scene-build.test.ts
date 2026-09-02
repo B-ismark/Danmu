@@ -82,8 +82,12 @@ describe('one ceiling clearance, not one per path', () => {
   it('clamps a ceiling fan to the same height the physics path would', () => {
     const H = 2.8;
     const fan = ceilingFan(H);
-    // `groundY` hangs a fan 0.15 below the slab, so a 0.4 m one reaches 2.85 in a
-    // 2.8 m room — over the cap, which is the whole point of the fixture.
+    // This existed because the two paths gave different answers: `groundY` hung a fan a
+    // flat 0.15 below the slab, so a 0.4 m one reached 2.85 in a 2.8 m room, over the
+    // cap. Since § 35 the ceiling arm IS `roomHeight - MOUNT_PAD - h / 2`, so the two
+    // agree by construction — which is a reason to keep this test rather than to
+    // retire it: agreement that holds by construction is exactly the kind that stops
+    // holding silently when one side is edited.
     const expected = heightForNewCeiling('fan', 'fan', [1200, 1200, FAN_H_MM], 99, 2.0, H);
     expect(expected).toBeCloseTo(H - MOUNT_PAD - FAN_H_MM / 2000, 9);
     expect(fan.pos[1]).toBeCloseTo(expected, 9);
