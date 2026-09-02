@@ -122,7 +122,10 @@ export type Finish = (typeof FINISHES)[number];
 //
 // Units are real (see lib/light-units.ts) so two lamps relate correctly to each
 // other. Where the bulb physically sits inside each shape belongs with that
-// shape's geometry, not here — see LIGHT_ANCHORS in components/three/PartLight.tsx.
+// shape's geometry, not here — see `lightAnchor` in components/three/PartLight.tsx.
+// For the pendant that IS this file now (`pendantDrop().bulbY`), which is the point:
+// the emitter reads the function the mesh is drawn from rather than a copy of last
+// year's answer to it.
 
 export type PartLight = {
   /** Luminous flux off the box. 800 lm is the usual "60 W equivalent". */
@@ -169,13 +172,170 @@ export const FAN_HUB_R = 0.1;
  *
  *  Returns metres. `tip` is the invariant worth testing: it is the fan's own
  *  radius, so the swept circle is the declared width and nothing else. */
-export function fanBlade(widthMM: number): { hub: number; length: number; centre: number; tip: number } {
+export function fanBlade(widthMM: number): {
+  hub: number;
+  length: number;
+  centre: number;
+  tip: number;
+  thickness: number;
+  chord: number;
+} {
   const r = widthMM / 2000;
   // A fan narrower than its own hub is not reachable through `clampDims` (the
   // range starts at 900 mm) but the floor keeps this total rather than returning a
   // negative box, which three.js renders inside-out rather than refusing.
   const length = Math.max(0.05, r - FAN_HUB_R);
-  return { hub: FAN_HUB_R, length, centre: FAN_HUB_R + length / 2, tip: FAN_HUB_R + length };
+  return {
+    hub: FAN_HUB_R,
+    length,
+    centre: FAN_HUB_R + length / 2,
+    tip: FAN_HUB_R + length,
+    // The blade's other two sides, and they are CONSTANTS rather than functions of
+    // `widthMM` on purpose: a fan declares one dimension that means anything - the
+    // swept circle, which is `tip` - and a blade's depth is a style choice like a
+    // cord's diameter. They live here anyway, because `thickness` interacts with
+    // `fanColumn`'s housing (a blade thicker than the hub sticks out of the motor)
+    // and the test saying so had to re-type `0.012` out of the TSX to reach it.
+    // Two sources of truth, and measured: with the copy in place, moving the
+    // renderer's literal to 200 mm - a blade three times its own motor - left that
+    // assertion green.
+    thickness: 0.012,
+    chord: 0.16,
+  };
+}
+
+/** A ceiling fan's motor housing, in metres — how THICK it is, where `FAN_HUB_R`
+ *  is how wide. Capped against the fan's own height by `fanColumn`. */
+export const FAN_HUB_H = 0.08;
+
+/** The ceiling fan's VERTICAL geometry — `fanBlade` for the other axis, and here
+ *  for the same reason.
+ *
+ *  `FanGeo` drew a 0.08 hub at y = 0 and a 0.18 downrod at y = 0.13, so its extent
+ *  was `[-0.04, +0.22]` — **260 mm of geometry for a shape whose `dimMM[2]` is
+ *  200 mm**, and off-centre besides. A ceiling anchor's `pos[1]` is the mesh
+ *  CENTRE (`verticalExtent`), so the drawing has to be symmetric about zero or the
+ *  app and the picture disagree about where the fan ends. Worse, none of it read
+ *  `dimMM[2]` at all: the catalogue band is 150–450 mm and every fan in it drew the
+ *  same 260 mm.
+ *
+ *  What the declared height MEANS here is the downrod plus the housing, which is
+ *  what makes a taller fan hang lower — so the housing keeps its thickness and the
+ *  rod takes the rest. The cap matters at the bottom of the band: a 150 mm fan
+ *  cannot spare 80 mm for its motor.
+ *
+ *  Returns metres, centred on the part's origin. `top`/`bottom` are the invariant
+ *  worth testing — they must equal `verticalExtent`'s answer for the same `dimMM`. */
+export function fanColumn(heightMM: number): {
+  hubH: number;
+  hubY: number;
+  rodH: number;
+  rodY: number;
+  bottom: number;
+  top: number;
+} {
+  const h = heightMM / 1000;
+  const hubH = Math.min(FAN_HUB_H, h * 0.4);
+  const rodH = h - hubH;
+  return {
+    hubH,
+    hubY: -h / 2 + hubH / 2,
+    rodH,
+    rodY: h / 2 - rodH / 2,
+    bottom: -h / 2,
+    top: h / 2,
+  };
+}
+
+/** The pendant lamp's whole geometry, both axes, for the same reason again — and
+ *  this one ignored `dimMM` completely.
+ *
+ *  `PendantLampGeo` drew a 600 mm cord at y = +0.3 and a 200 mm shade reaching
+ *  y = -0.2: **800 mm for a declared 400 mm**, asymmetric about its own origin, and
+ *  a 300 mm-wide shade for a declared 350 mm width. Every literal, on every axis.
+ *
+ *  **What the declared height means is the DROP — cord plus shade — and that is not
+ *  a taste call.** `lamp-pendant` is `wallMounted`, is not soft furnishing and is
+ *  neither door nor window, so `isMountedObstruction` admits it and `clearance.ts`
+ *  rule 2b reports a pendant intersecting a wardrobe out of
+ *  `verticalExtent(dimMM[2])`. Under the other reading — the shade alone — the app
+ *  would under-report the pendant's reach by the entire cord and stay silent about a
+ *  clash the user can see. `groundY`, `settleHeights` and `verticalExtent` all read
+ *  it the same way. Six consumers agree; the renderer was the lone dissenter.
+ *
+ *  The shade is capped against its own width so a long drop does not turn into a
+ *  cone as tall as it is wide, and the bulb is sized off the shade so it stays
+ *  inside it at every point of the band.
+ *
+ *  Returns metres, centred on the part's origin. */
+export function pendantDrop(widthMM: number, heightMM: number): {
+  cordH: number;
+  cordY: number;
+  domeH: number;
+  domeY: number;
+  domeR: number;
+  bulbR: number;
+  bulbY: number;
+  bottom: number;
+  top: number;
+} {
+  const h = heightMM / 1000;
+  const r = widthMM / 2000;
+  const domeH = Math.min(h * 0.4, r * 1.2);
+  const cordH = h - domeH;
+  // Both arms bind somewhere inside the catalogue band, so a sweep cannot hold
+  // either: it passes wherever the answer is small enough. Measured -
+  // `Math.min(domeH * 0.35, r * 0.3)` -> `domeH * 0` survived a sweep of three
+  // upper bounds, and a pendant rendered with no bulb at all.
+  const bulbR = Math.min(domeH * 0.35, r * 0.3);
+  return {
+    cordH,
+    cordY: h / 2 - cordH / 2,
+    domeH,
+    domeY: -h / 2 + domeH / 2,
+    domeR: r,
+    bulbR,
+    bulbY: -h / 2 + domeH * 0.55,
+    bottom: -h / 2,
+    top: h / 2,
+  };
+}
+
+/** Where the bulb sits inside each fixture, in the part's local metres. These
+ *  track the geometry in DynamicPart — a light at the origin would sit on the
+ *  floor and illuminate the inside of its own shade.
+ *
+ *  **A shape whose bulb moves with its size cannot live in this table**, and the
+ *  pendant is the one that does. Its row used to read `[0, -0.05, 0]`, which was a
+ *  hand-typed copy of the `sphereGeometry` position in `PendantLampGeo`; correct
+ *  while that position was a literal, and silently wrong the moment it became a
+ *  function of `dimMM`. Measured before it was fixed: at the catalogue 350x400 the
+ *  emitter sat 62 mm above its own glowing sphere, and at 350x900 it sat 285 mm
+ *  above it and **190 mm above the shade's own rim** — a 110-degree spot, the
+ *  brightest fixture in the catalogue and a shadow-caster candidate, emitting from a
+ *  point on the bare cord with its shade underneath it as an occluder.
+ *
+ *  So it is `lightAnchor`, not a lookup: a shape that derives comes from the same
+ *  function the renderer draws from, and one that does not keeps its constant. */
+const LIGHT_ANCHORS: Partial<Record<Shape, [number, number, number]>> = {
+  'lamp-table': [0, 0.4, 0],
+  'lamp-floor': [0, 1.66, 0],
+};
+
+/** The bulb's local position for a part, derived where the geometry derives.
+ *
+ *  `lamp-pendant` reads `pendantDrop` — the same call `PendantLampGeo` makes for
+ *  the mesh — so the emitter and the sphere are one number by construction rather
+ *  than by two people remembering. Everything else falls back to `LIGHT_ANCHORS`,
+ *  whose entries are constants because those shapes draw their bulbs at constants.
+ *  (`lamp-table` and `lamp-floor` are the same class of hazard waiting to happen:
+ *  the day either renderer starts reading `dimMM`, its row has to move here too.) */
+export function lightAnchor(
+  shape: Shape,
+  dimMM: [number, number, number],
+): [number, number, number] {
+  if (shape === 'lamp-pendant') return [0, pendantDrop(dimMM[0], dimMM[2]).bulbY, 0];
+  return LIGHT_ANCHORS[shape] ?? [0, 0, 0];
 }
 
 /** True for shapes that are fixtures — the Inspector shows lighting controls for

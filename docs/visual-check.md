@@ -80,35 +80,81 @@ every Library click still drops at room centre, so five added pieces land in one
 (§ H.3); and the plan draws the standing fan and the stool as SQUARES, which is § 32 seen
 rather than inferred.
 
-The item below is what replaced them, and it is the opposite case — a defect that
-`verticalExtent` cannot express, so no gate will ever go red on it.*
+**And the item that replaced them — the pendant and the ceiling fan drawn bigger than
+they declare, § 34 — was FIXED and LOOKED AT on 2026-09-02, so it is gone too.** What
+was seen: six ceiling fixtures seeded at both ends of both catalogue bands in one 6 x 5
+room — pendants at 150 / 400 / 900 mm and fans at 150 / 200 / 450 mm — drawing at six
+visibly different sizes. Before the fix all three pendants drew the same 800 mm and all
+three fans the same 260 mm, because neither renderer read `dimMM` on any axis. A second
+shot with the 400 mm pendant selected shows its geometry sitting INSIDE the selection
+box, which is drawn from `dimMM`: 400 mm of cord used to stick out of the top of that
+box, and the Inspector's derived "Height off the floor 2.38 m" now matches what is on
+screen under a 2.80 m ceiling.
 
-### The pendant lamp and the ceiling fan are drawn bigger than they declare
+**That look was not optional and it is worth saying why.** A deliberate control mutation
+— `FanGeo` passing a literal `200` instead of `part.dimMM[2]` — survives the whole of
+`tests/ceiling-fixtures.test.ts`, because nothing in this repo renders geometry. The
+band shot is the only thing that can distinguish "the helpers are right" from "the
+renderer calls them". Thirteen other mutations were killed.
 
-**Where to click.** Any room, **3D Model** tab. Add a **Pendant lamp** from the Library
-(Lighting) and look at the ceiling. Then a **Ceiling fan** (Appliances).
+**Not seen:** a real GPU. All of this is headless Chromium on SwiftShader, so nothing
+here speaks to how the shapes look with real lighting on a real device.*
 
-**What wrong looks like.** The pendant's cord going *into* or *through* the ceiling
-rather than stopping at it, and the fan's downrod doing the same. Look from a low camera
-angle with the dollhouse cut away, because from above the ceiling hides it.
+### A ceiling fan's downrod stops 50 mm short of the ceiling
 
-**The arithmetic, so you know what you are looking for.** `PendantLampGeo` draws a 600 mm
-cord at `y = +0.3` and a dome reaching `y = -0.2` — **800 mm of geometry for a shape whose
-`dimMM[2]` is 400 mm**, and asymmetric about its own origin. `groundY` hangs it by the
-model `verticalExtent` believes, so the app thinks its top is at 2.80 in a 2.8 m room and
-it is drawn to **3.20**. The ceiling fan is the same defect at 70 mm.
+**Where to click.** Any room, **3D Model** tab, Library → Appliances → **Ceiling fan**,
+which ships at 200 mm. Look up.
 
-**Why no test sees it.** Every clause that measures this — including the new
-`tests/shape-contract.test.ts` ones — asks `verticalExtent`, which computes from `dimMM`.
-The renderer disagrees with `dimMM`, so the model and the drawing are both self-consistent
-and wrong together. This is `CLAUDE.md` rule 2's `fanBlade` corollary in two more shapes,
-and it is the reason that corollary exists.
+**What wrong looks like.** A gap between the top of the downrod and the slab, with the
+fan hanging on nothing. A **Pendant lamp** resized down to 150 mm should show 75 mm of
+the same gap, and its cord — which now swings from the piece's own top rather than a
+fixed 0.6 — swings unattached.
 
-**Not fixed on sight**, deliberately: moving authored geometry changes what every existing
-room looks like, and nobody has had eyes on these two. Recorded as
-`what-is-still-open.md` § 34.
+**The arithmetic.** `groundY`'s ceiling arm is `max(min(H - 0.15, H - MOUNT_PAD - h/2), h)`
+and the two arms cross at h = 260 mm. Below that the flat 150 mm nominal drop binds, so
+the fixture's top lands at `H - 0.15 + h/2` rather than at `H - MOUNT_PAD`:
 
-**Gates.** Nothing. No test can express it — that is the finding.
+| piece | h | y | drawn top | gap under a 2.80 m ceiling |
+|---|---|---|---|---|
+| **fan, as it ships** | 0.20 | 2.650 | 2.750 | **50 mm** |
+| fan, smallest legal | 0.15 | 2.650 | 2.725 | **75 mm** |
+| fan, largest legal | 0.45 | 2.555 | 2.780 | 20 mm (`MOUNT_PAD`, intended) |
+| pendant, smallest legal | 0.15 | 2.650 | 2.725 | **75 mm** |
+| pendant, as it ships | 0.40 | 2.580 | 2.780 | 20 mm |
+
+**This is not new, and it is newly VISIBLE, which is why it is here.** The model always
+said a 200 mm fan's top was at 2.75; before § 34 the renderer drew to 2.87 — 70 mm
+*through* the slab — so the gap was covered by geometry that should not have existed.
+Making the drawing obey `dimMM` uncovered it. Both states are wrong and they are wrong
+differently; nothing penetrates the ceiling now.
+
+**Not fixed here, deliberately.** The repair is in `groundY`, not in either renderer, and
+it is the same question one layer out: does a hung fixture's `dimMM[2]` mean the body, or
+the body plus its drop? `min()` conflates two arms that answer differently, and dropping
+the `H - 0.15` arm moves where every shallow fixture hangs. Recorded as
+`what-is-still-open.md` § 35.
+
+**Gates.** None. `verticalExtent` and all of `tests/ceiling-fixtures.test.ts` measure a
+fixture against its own `dimMM`; this gap is between the fixture and the *room*, and
+nothing compares `y + top` to `roomHeight`.
+
+### A room saved BEFORE § 34 draws its pendant half the size
+
+**Where to click.** A room already in this browser holding a pendant or a ceiling fan —
+not a fresh one. The § 34 look was on a seeded room, which is a different program.
+
+**What wrong looks like.** Nothing moves, resizes or re-settles — that was derived, and
+every load-path consumer reads `dimMM` rather than the renderer. What changes is the
+picture: a catalogue pendant drawn 800 mm now draws 400, a 150 mm one shrinks 5.3x, and
+the shade's width goes from a constant 300 mm to whatever the piece declares.
+
+**The case worth looking for.** Someone who sized a pendant *by eye* under the old
+renderer — dragging the scale gizmo until it looked right — wrote a stored dim of about
+half what they were seeing, because `renderBaseDim` returns `p.dimMM` while the drawing
+ignored it. That room now opens with the pendant at half again.
+
+**Gates.** None possible: the old and new drawings are both self-consistent, and no test
+in this repo renders geometry.
 
 ## Drag and selection
 
