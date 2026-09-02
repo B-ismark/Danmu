@@ -2528,8 +2528,21 @@ through both caps (§ 36), and — fixed, but worth naming because it was introd
 same commit — `LIGHT_ANCHORS`' copy of the pendant's bulb position, which three of four
 review lenses found independently and no gate in the repo could have.
 
+**Looked at again on 2026-09-02, after the review's two changes**, because the first look
+predated both: the shade was still upside down and the emitter still sat on the cord when
+that screenshot was taken, so it was evidence for the sizes and for nothing else. The
+re-look made the actual invariant visible rather than inferred — the selection box is drawn
+from `dimMM`, so *"the drawn geometry sits inside its own box"* IS the claim, and a piece
+was selected at both ends of both bands: a 150 mm pendant draws a 150 mm pendant inside a
+0.15 box, an 800 × 900 one fills its own, and the 1.00 m fan's blades stop exactly at the
+box edge rather than 400 mm past it. The shade opens downward and the light now comes from
+inside it. Probe: `pw/box34.mjs`, which seeds its own room — a Playwright launch gets a
+fresh profile, so a room seeded by an earlier script is gone.
+
 **What is still not verified:** a real GPU. The 3D tab was looked at headless — see
-`visual-check.md` for what was seen and what was not.
+`visual-check.md` for what was seen and what was not. The fixture-to-ceiling gap (§ 35) was
+NOT among what was seen: the camera looks down into the room and the ceiling is a
+shadow-only plane, so nothing in these shots speaks to it.
 
 ### § 35 — a hung fixture stops short of the ceiling, and `min()` is why — OPEN
 
