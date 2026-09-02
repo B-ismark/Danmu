@@ -105,9 +105,82 @@ describe('ridingParents — who is standing on what', () => {
     expect(ridingParents([stand, tv])).toEqual({});
   });
 
+  // …and the one that actually reaches the anchor test. A 1450 mm television does
+  // not fit on a 450 mm nightstand, so the test above is refused on FOOTPRINT and
+  // deleting `isFloorStanding` survived it. A pendant is the case that matters
+  // anyway: it hangs, so `pos[1]` is its mesh CENTRE rather than its bottom, and
+  // reading a centre as a bottom is the confusion `verticalExtent` exists to end.
+  // Hung at 550 mm over a nightstand whose top is 550 mm, the arithmetic agrees
+  // exactly and the anchor is the only thing that says no.
+  it('never makes a hanging pendant the rider of what is under it', () => {
+    const pendant = part({
+      id: 'pend', category: 'lamp', shape: 'lamp-pendant', dimMM: [300, 300, 400], pos: [0, 0.55, 0],
+    });
+    // The fixture has to be able to fail on every other clause.
+    expect(footIntersectionArea(foot(pendant), foot(stand)) / footArea(foot(pendant))).toBeGreaterThan(
+      MIN_SUPPORT_SHARE,
+    );
+    expect(pendant.pos[1]).toBeCloseTo(topOf(stand), 6);
+    expect(ridingParents([stand, pendant])).toEqual({});
+  });
+
+  // ASYMMETRY. Every other fixture here is at yaw 0, where a rotated footprint and
+  // an unrotated one are the same rectangle — so dropping the child's own angle
+  // from the support probe is invisible in all of them. This nightstand is narrow
+  // and this rider is long: end-on it covers two thirds of its own footprint and
+  // rides; turned across, barely a quarter, and it does not.
+  it('measures the rider footprint at the angle the rider is actually at', () => {
+    const narrow = part({ id: 'narrow', category: 'nightstand', shape: 'nightstand', dimMM: [450, 200, 550] });
+    const along = part({
+      id: 'bar', category: 'other', shape: 'box', dimMM: [700, 150, 100], pos: [0, 0.55, 0],
+    });
+    const across = part({ ...along, rot: Math.PI / 2 });
+    expect(ridingParents([narrow, along]), 'end-on it rides').toEqual({ bar: 'narrow' });
+    expect(ridingParents([narrow, across]), 'turned across it does not').toEqual({});
+  });
+
   it('a piece on the floor rides nothing', () => {
     const chair = part({ id: 'chair', category: 'chair', shape: 'chair-dining', dimMM: [450, 450, 850] });
     expect(ridingParents([stand, chair])).toEqual({});
+  });
+
+  // THE ON-THE-FLOOR TEST, reached — and BOTH directions of it, which is the half
+  // that took a second pass. The two tests above are refused by the below-test long
+  // before this clause is asked, so deleting it survived them both. The case it
+  // guards needs a support SHORT enough that a piece standing on the FLOOR is inside
+  // the 50 mm adjacency band of its top, and not a rug (which `findSupportDetailed`
+  // refuses for its own reasons). A 40 mm mat is that case.
+  //
+  // The pair is the point. A chair whose bottom is at 0 is standing on the floor,
+  // 40 mm inside the mat, and is not riding it. Lift the same chair onto the mat and
+  // it is, and moving the mat has to take it along. A one-ended version of this
+  // passed against `p.pos[1] <= SUPPORT_Y_EPS`, which refused both.
+  it('does not make a piece on the floor the rider of the 40 mm mat it stands inside', () => {
+    const mat = part({ id: 'mat', category: 'other', shape: 'box', dimMM: [1200, 1200, 40] });
+    const chair = part({ id: 'chair', category: 'chair', shape: 'chair-dining', dimMM: [450, 450, 850] });
+    // The fixture has to be able to fail: the mat must be a legal support that the
+    // chair sits inside the adjacency band of.
+    expect(topOf(mat)).toBeCloseTo(0.04, 6);
+    expect(Math.abs(chair.pos[1] - topOf(mat))).toBeLessThan(0.05);
+    expect(footIntersectionArea(foot(chair), foot(mat)) / footArea(foot(chair))).toBeGreaterThan(MIN_SUPPORT_SHARE);
+    expect(ridingParents([mat, chair])).toEqual({});
+  });
+
+  it('does make it a rider once it is standing ON the mat', () => {
+    const mat = part({ id: 'mat', category: 'other', shape: 'box', dimMM: [1200, 1200, 40] });
+    const chair = part({
+      id: 'chair', category: 'chair', shape: 'chair-dining', dimMM: [450, 450, 850], pos: [0, 0.04, 0],
+    });
+    expect(ridingParents([mat, chair])).toEqual({ chair: 'mat' });
+  });
+
+  it('follows a chain: a lamp on a tray on a desk', () => {
+    const desk = part({ id: 'desk', category: 'desk', shape: 'desk-standard', dimMM: [1400, 700, 750] });
+    const tray = part({ id: 'tray', category: 'other', shape: 'box', dimMM: [400, 400, 60], pos: [0, 0.75, 0] });
+    const lamp = part({
+      id: 'lamp', category: 'lamp', shape: 'lamp-table', dimMM: [250, 250, 500], pos: [0, 0.81, 0],
+    });
+    expect(ridingParents([desk, tray, lamp])).toEqual({ tray: 'desk', lamp: 'tray' });
   });
 });
 

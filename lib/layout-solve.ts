@@ -402,6 +402,15 @@ export function movableFor(parts: ScenePart[], locked: boolean[]): boolean[] {
  *  support's top does not change and the rider's own height is already right. */
 function carryRiders(parts: ScenePart[], winner: Placement[]): void {
   const edges = ridingParents(parts);
+  // The filter drops a support that is itself riding something, so a chain is
+  // cascaded once from its bottom rather than once per level. **Labelled as an
+  // optimisation rather than left to look load-bearing**, because it is not: a
+  // root's cascade rewrites its ENTIRE subtree from offsets taken out of `parts`,
+  // so processing the levels in any order converges on the same answer — a middle
+  // piece cascaded early is corrected when its own support is reached, and one
+  // cascaded late reads a `winner` its support has already fixed. Deleting the
+  // filter is a mutation `tests/layout-riders.test.ts` does not kill, and that is
+  // said here rather than covered up with an assertion restating it.
   const rootIds = new Set(Object.values(edges).filter((id) => !(id in edges)));
   if (rootIds.size === 0) return;
   const indexOf = new Map(parts.map((p, i) => [p.id, i]));
