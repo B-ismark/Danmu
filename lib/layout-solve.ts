@@ -42,6 +42,7 @@ import { footprintBounds } from './footprint';
 import { snapToWall } from './physics';
 import { distanceToFootprintEdge, ON_WALL_M, pointInFootprint } from './footprint';
 import { localToWorld, nearestEdge } from './geometry';
+import { cascadeTransform, ridingParents, snapshotDescendants } from './rigid-parent';
 import {
   angleDelta,
   bandCost,
@@ -332,9 +333,105 @@ export function lockedForSolve(
  *  — building a `shuffle` `start`, or scoring `layoutSimilarity` — computes it
  *  once, here, rather than re-deriving `!p.wallMounted` a second place. (That
  *  second place is exactly what `tests/plan-surfaces.test.ts` polices for the
- *  plan-drawing surfaces, over a different flag with the same shape of bug.) */
+ *  plan-drawing surfaces, over a different flag with the same shape of bug.)
+ *
+ *  **A piece standing on another piece is deliberately NOT a third reason here.**
+ *  That version was built and measured before this sentence was written; the rule,
+ *  and the numbers that decided against it, live in `carryRiders`. */
 export function movableFor(parts: ScenePart[], locked: boolean[]): boolean[] {
   return parts.map((p, i) => !locked[i] && !p.wallMounted);
+}
+
+/** Put every rider back on the piece it was standing on, once the search has
+ *  decided where that piece goes.
+ *
+ *  ── The defect ──────────────────────────────────────────────────────────────
+ *
+ *  A bedside lamp is an ordinary movable piece to the annealer, so a shuffle moved
+ *  it independently of the nightstand it stood on and handed back a lamp floating at
+ *  550 mm in the middle of the bed with nothing under it. **Nothing in the app could
+ *  see that.** Every hard term in `costBreakdown` accumulates inside
+ *  `if (!obstacle[i]) continue`, and `isObstacle` requires `pos[1] < 0.05`, so a
+ *  piece standing on furniture is invisible to `overlap`, `outside`, `door`,
+ *  `access` and `navigation` alike — which is the whole of `HARD_TERMS`, the entire
+ *  list `isCleanShuffle` reads. `lib/clearance.ts` is silent for the same reason,
+ *  and from directly above the plan draws a lamp ON a nightstand and a lamp INSIDE
+ *  a bed as the same rectangle. Measured on the `u` preset over eight shuffles: a
+ *  lamp ended inside the bed twice and inside the wardrobe once, and on the other
+ *  five it was merely somewhere else in the room, still in mid-air.
+ *
+ *  It is also the rule the DRAG has always had — `lib/drag-convoy.ts` carries rigid
+ *  children with the piece under the hand. The solver was the one mover in this app
+ *  that separated them, which is the "two code paths for one feature" shape
+ *  `CLAUDE.md` names.
+ *
+ *  ── Why a finish pass, and not a locked degree of freedom ────────────────────
+ *
+ *  The obvious repair is to say a rider is not a variable at all: add it to
+ *  `movableFor` beside `locked` and `wallMounted`, and let `randomizeStart` leave it
+ *  where it is. That was built first, and it is worse for two measured reasons.
+ *
+ *  · **`randomizeStart` draws from the RNG once per MOVABLE piece**, so taking two
+ *    lamps out of that set reseeds every piece after them. Every seeded arrangement
+ *    at `u` becomes a different room: four baselines there moved by hundreds of cost
+ *    units, and `bed-rung-safety`'s tidiness-spread bar — a real assertion, not a
+ *    record — went from inside 0.25 to 0.819. Making that green means widening a bar
+ *    to fit a number, which is the move this repo refuses.
+ *  · **A pinned rider is a ghost.** `randomizeStart` leaves an immovable piece at its
+ *    REAL position, which is the SEEDED nightstand's spot — so for the whole search
+ *    two lamps sit at coordinates their support left in the first step, scoring
+ *    `balance` and `alignment` from there. That is not more accurate than letting
+ *    them wander. It is a different phantom, standing still.
+ *
+ *  As a finish pass the whole cost is one number: the `u` worst-total baseline moves
+ *  0.18, because the lamp is now scored where it will actually be. Riders are
+ *  invisible to every hard term, so nothing about safety moves at all — which is
+ *  what makes the approximation affordable, and is why it is stated here rather than
+ *  assumed.
+ *
+ *  ── Mechanics ───────────────────────────────────────────────────────────────
+ *
+ *  Runs on the ANSWER, like `snapYaws` and `pruneMoves`, and BEFORE
+ *  `breakdownAfter` is measured — the number handed back has to describe the
+ *  arrangement the user will actually see, including the lamp.
+ *  `snapshotDescendants` re-validates every edge physically against `parts`, so the
+ *  offsets are taken from the room as it stands, and `cascadeTransform` is the same
+ *  function a drag uses: a rider whose support TURNED swings around the support's
+ *  own pivot rather than being carried flat, and a lamp on a book on a desk is
+ *  handled by the same BFS. Y is untouched — a solve moves and turns, so a
+ *  support's top does not change and the rider's own height is already right. */
+function carryRiders(parts: ScenePart[], winner: Placement[]): void {
+  const edges = ridingParents(parts);
+  const rootIds = new Set(Object.values(edges).filter((id) => !(id in edges)));
+  if (rootIds.size === 0) return;
+  const indexOf = new Map(parts.map((p, i) => [p.id, i]));
+  for (const rootId of rootIds) {
+    const root = indexOf.get(rootId);
+    if (root === undefined) continue;
+    const moves = cascadeTransform(
+      rootId,
+      [winner[root].x, parts[root].pos[1], winner[root].z],
+      winner[root].yaw,
+      snapshotDescendants(rootId, parts, edges),
+      // EVERY child gets an explicit angle, and the alternative is a silent bug that
+      // only shows on a rider standing off its support's pivot. `cascadeTransform`
+      // omits `rot` when the recomputed angle equals the one in the snapshot, which
+      // is right for a live drag — there the child has not moved, so "unchanged"
+      // means "leave it alone" and writing it would pin a needless override. Here
+      // the child HAS moved: the search is allowed to search over a rider, so
+      // `winner[i].yaw` holds an angle the annealer picked and this pass is
+      // discarding. Falling back to it put a monitor square on a desk it had
+      // followed round a 90° turn. `convoyRestore` passes a predicate for the
+      // mirror-image reason; this one is unconditional because no rider's angle
+      // here is the user's.
+      () => true,
+    );
+    for (const mv of moves) {
+      const i = indexOf.get(mv.id);
+      if (i === undefined) continue;
+      winner[i] = { x: mv.pos[0], z: mv.pos[2], yaw: mv.rot ?? winner[i].yaw };
+    }
+  }
 }
 
 /**
@@ -390,7 +487,10 @@ export function randomizeStart(
  * `locked` is index-aligned with `parts`. Wall-mounted pieces are never moved
  * either: their position is a property of the wall they are on, and sliding a
  * window along it is not a layout decision. Doors and windows are still SCORED —
- * that is the whole point — they are just not moved.
+ * that is the whole point — they are just not moved. A piece standing on another
+ * piece IS searched over, and then overwritten: `carryRiders` puts it back on its
+ * support before the answer is measured. See that function for why the search is
+ * allowed to waste the moves.
  */
 export function solveLayout(
   parts: ScenePart[],
@@ -730,6 +830,12 @@ export function solveLayout(
   // by construction. A piece the prune restored is the user's again.
   winner = snapYaws(model, winner, weights, true, origin);
 
+  // Riders come along BEFORE the answer is measured — see `carryRiders`. It has to
+  // sit after the last pass that can move a support (`snapYaws` above) and before
+  // `breakdownAfter`, or the number handed back describes an arrangement with the
+  // lamp still standing where the search left it.
+  carryRiders(parts, winner);
+
   let breakdownAfter = costBreakdown(model, winner, weights, NAV_CELL);
   // …and never hand back something worse than what we were given. The prune spends a
   // small slack budget to buy back pointless moves, and on a layout that was already
@@ -760,6 +866,16 @@ export function solveLayout(
   for (let i = 0; i < winner.length; i++) {
     if (displaced(origin[i], winner[i])) moved.push(i);
   }
+  // A rider IS in `moved` — the caller has to write its new position, and
+  // `applyPlacements` reads exactly this list to decide what to apply — and it is
+  // deliberately not in `moves`. `explain` credits a piece's move to whichever term
+  // gains most when that ONE piece is put back, and a rider gains nothing on any
+  // term because it is invisible to all of them: reverting the lamp alone moves no
+  // number, so the loop falls through to `inertia` and writes a confident sentence
+  // about a piece that had no say. It moved because the nightstand did, which is
+  // not one of the terms and does not need to be a sentence of its own.
+  const carried = ridingParents(parts);
+  const decided = moved.filter((i) => !(parts[i].id in carried));
   return {
     placements: winner,
     before,
@@ -770,7 +886,7 @@ export function solveLayout(
     // A cell only when the layout we were handed actually had floor cut off from the
     // door. If it did not, no move can be credited to opening a route, and the
     // distance transforms would be paid for an answer that is known in advance.
-    moves: explain(model, origin, winner, weights, moved, breakdownBefore.navigation > 0 ? NAV_CELL : null),
+    moves: explain(model, origin, winner, weights, decided, breakdownBefore.navigation > 0 ? NAV_CELL : null),
     finalists: pool,
   };
 }

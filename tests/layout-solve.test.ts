@@ -1091,7 +1091,14 @@ describe('the room’s anchor is settled first', () => {
     //     preferring "inside and awkward" to "through the wall" is the ordering working
     //     rather than a regression — but ~3.4 m² of stranded floor on one seed in twelve
     //     is a real cost of this change and is recorded here rather than absorbed.
-    expect(Math.max(...rows.map((r) => r.total)), 'worst total').toBeCloseTo(412.85033373443853, 6);
+    //
+    // 412.85033373443853 → 412.66986201255656 when `carryRiders` landed. The whole
+    // 0.18 is soft: the two bedside lamps are now scored where the nightstands
+    // actually took them instead of where the annealer had left them hanging, and
+    // `alignment` / `balance` read a slightly tidier room for it. Nothing hard moved
+    // — `clean` is still 9 and `outside` is still 0.00 on all twelve — which is the
+    // whole reason a rider can be carried after the search rather than inside it.
+    expect(Math.max(...rows.map((r) => r.total)), 'worst total').toBeCloseTo(412.66986201255656, 6);
     expect(
       rows.map((r) => r.outside),
       'the solver leaves nothing outside the room on any seed',

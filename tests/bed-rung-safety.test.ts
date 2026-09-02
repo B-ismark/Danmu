@@ -260,7 +260,13 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
     // lift it into a shared constant: that asserts they must always be equal, which no
     // measurement supports, and couples the two files the first time one legitimately
     // moves.
-    expect(single.worst, 'worst total of the 12').toBeCloseTo(412.8503337344385, 6);
+    //
+    // 412.8503337344385 → 412.66986201255656 with `carryRiders`, and `single.danger`
+    // above did NOT move — which is the useful half. The lamps this room seeds on its
+    // nightstands are now carried to wherever the nightstands went, so a soft term
+    // reads a marginally tidier room; riders are invisible to every hard term, so
+    // nothing about safety could have moved and nothing did.
+    expect(single.worst, 'worst total of the 12').toBeCloseTo(412.66986201255656, 6);
   }, 180_000);
 
   // The assertion is not "the wider bed scores worse" but "the wider bed produces the
