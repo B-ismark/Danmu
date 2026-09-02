@@ -10,6 +10,8 @@ import { SURFACE } from './materials';
 import { Spin, Sway } from './Motion';
 import {
   fanBlade,
+  fanColumn,
+  pendantDrop,
   isParametric,
   moduleCount,
   moduleRangeFor,
@@ -474,21 +476,25 @@ function TableLampGeo({ part }: { part: ScenePart }) {
 
 function PendantLampGeo({ part }: { part: ScenePart }) {
   const dome = tint(part);
-  // Swing from the ceiling mount (top of the cord at y≈0.6).
+  // Every number here was a literal, on both axes: a 600 mm cord and a 200 mm shade
+  // for a declared 400 mm, 300 mm wide for a declared 350. See `pendantDrop`.
+  const g = pendantDrop(part.dimMM[0], part.dimMM[2]);
+  // Swing from the ceiling mount — the pivot is the top of the drop, which is the
+  // part's own top rather than a number that happened to match one catalogue size.
   return (
-    <group position={[0, 0.6, 0]}>
+    <group position={[0, g.top, 0]}>
       <Sway amp={0.05} speed={0.7} axis="x">
-        <group position={[0, -0.6, 0]}>
+        <group position={[0, -g.top, 0]}>
           {/* cord */}
-          <Box size={[0.01, 0.6, 0.01]} position={[0, 0.3, 0]} color={DETAIL.hardware} edgeOpacity={0.2} />
-          {/* dome */}
-          <mesh position={[0, -0.1, 0]} rotation={[Math.PI, 0, 0]}>
-            <coneGeometry args={[0.15, 0.2, 16, 1, true]} />
+          <Box size={[0.01, g.cordH, 0.01]} position={[0, g.cordY, 0]} color={DETAIL.hardware} edgeOpacity={0.2} />
+          {/* shade */}
+          <mesh position={[0, g.domeY, 0]} rotation={[Math.PI, 0, 0]}>
+            <coneGeometry args={[g.domeR, g.domeH, 16, 1, true]} />
             <meshStandardMaterial color={dome} side={2} {...SURFACE.ceramic} />
           </mesh>
           {/* bulb */}
-          <mesh position={[0, -0.05, 0]}>
-            <sphereGeometry args={[0.05, 12, 12]} />
+          <mesh position={[0, g.bulbY, 0]}>
+            <sphereGeometry args={[g.bulbR, 12, 12]} />
             <meshStandardMaterial color="#FFE4A0" emissive="#FFD060" emissiveIntensity={0.4} />
           </mesh>
         </group>
@@ -730,21 +736,27 @@ function FanGeo({ part }: { part: ScenePart }) {
   // `position: [r * 0.6]` here — a tip at 1.4r, so a 1000 mm fan swept 1.40 m while
   // the plan drew the 1.00 m circle its `dimMM` asks for. See `fanBlade`.
   const { hub, length, centre } = fanBlade(part.dimMM[0]);
+  // …and the OTHER axis is `fanColumn`'s, for the same reason: the hub and downrod
+  // were `0.08` at y = 0 and `0.18` at y = 0.13, an extent of [-0.04, +0.22] for a
+  // declared 200 mm, off-centre, and identical for every fan in a 150–450 mm band.
+  const col = fanColumn(part.dimMM[2]);
   // Blades follow the part's colour; the motor housing stays metal. The blades
   // were a literal, so recolouring a ceiling fan did nothing.
   const blade = tint(part);
   return (
     <>
-      <mesh position={[0, 0, 0]}>
-        <cylinderGeometry args={[hub, hub, 0.08, 16]} />
+      <mesh position={[0, col.hubY, 0]}>
+        <cylinderGeometry args={[hub, hub, col.hubH, 16]} />
         <meshStandardMaterial color="#888" />
       </mesh>
-      <Box size={[0.025, 0.18, 0.025]} position={[0, 0.13, 0]} color="#666" />
+      <Box size={[0.025, col.rodH, 0.025]} position={[0, col.rodY, 0]} color="#666" />
+      {/* The blades ride the hub, so they follow it when a taller fan lengthens the
+          downrod instead of staying at the origin the hub has left. */}
       <Spin speed={2.4}>
         {[0, 1, 2].map((i) => {
           const angle = (i * 2 * Math.PI) / 3;
           return (
-            <group key={i} rotation={[0, angle, 0]}>
+            <group key={i} rotation={[0, angle, 0]} position={[0, col.hubY, 0]}>
               <Box
                 size={[length, 0.012, 0.16]}
                 position={[centre, 0, 0]}

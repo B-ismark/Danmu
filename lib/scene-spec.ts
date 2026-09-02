@@ -178,6 +178,99 @@ export function fanBlade(widthMM: number): { hub: number; length: number; centre
   return { hub: FAN_HUB_R, length, centre: FAN_HUB_R + length / 2, tip: FAN_HUB_R + length };
 }
 
+/** A ceiling fan's motor housing, in metres — how THICK it is, where `FAN_HUB_R`
+ *  is how wide. Capped against the fan's own height by `fanColumn`. */
+export const FAN_HUB_H = 0.08;
+
+/** The ceiling fan's VERTICAL geometry — `fanBlade` for the other axis, and here
+ *  for the same reason.
+ *
+ *  `FanGeo` drew a 0.08 hub at y = 0 and a 0.18 downrod at y = 0.13, so its extent
+ *  was `[-0.04, +0.22]` — **260 mm of geometry for a shape whose `dimMM[2]` is
+ *  200 mm**, and off-centre besides. A ceiling anchor's `pos[1]` is the mesh
+ *  CENTRE (`verticalExtent`), so the drawing has to be symmetric about zero or the
+ *  app and the picture disagree about where the fan ends. Worse, none of it read
+ *  `dimMM[2]` at all: the catalogue band is 150–450 mm and every fan in it drew the
+ *  same 260 mm.
+ *
+ *  What the declared height MEANS here is the downrod plus the housing, which is
+ *  what makes a taller fan hang lower — so the housing keeps its thickness and the
+ *  rod takes the rest. The cap matters at the bottom of the band: a 150 mm fan
+ *  cannot spare 80 mm for its motor.
+ *
+ *  Returns metres, centred on the part's origin. `top`/`bottom` are the invariant
+ *  worth testing — they must equal `verticalExtent`'s answer for the same `dimMM`. */
+export function fanColumn(heightMM: number): {
+  hubH: number;
+  hubY: number;
+  rodH: number;
+  rodY: number;
+  bottom: number;
+  top: number;
+} {
+  const h = heightMM / 1000;
+  const hubH = Math.min(FAN_HUB_H, h * 0.4);
+  const rodH = h - hubH;
+  return {
+    hubH,
+    hubY: -h / 2 + hubH / 2,
+    rodH,
+    rodY: h / 2 - rodH / 2,
+    bottom: -h / 2,
+    top: h / 2,
+  };
+}
+
+/** The pendant lamp's whole geometry, both axes, for the same reason again — and
+ *  this one ignored `dimMM` completely.
+ *
+ *  `PendantLampGeo` drew a 600 mm cord at y = +0.3 and a 200 mm shade reaching
+ *  y = -0.2: **800 mm for a declared 400 mm**, asymmetric about its own origin, and
+ *  a 300 mm-wide shade for a declared 350 mm width. Every literal, on every axis.
+ *
+ *  **What the declared height means is the DROP — cord plus shade — and that is not
+ *  a taste call.** `lamp-pendant` is `wallMounted`, is not soft furnishing and is
+ *  neither door nor window, so `isMountedObstruction` admits it and `clearance.ts`
+ *  rule 2b reports a pendant intersecting a wardrobe out of
+ *  `verticalExtent(dimMM[2])`. Under the other reading — the shade alone — the app
+ *  would under-report the pendant's reach by the entire cord and stay silent about a
+ *  clash the user can see. `groundY`, `settleHeights` and `verticalExtent` all read
+ *  it the same way. Six consumers agree; the renderer was the lone dissenter.
+ *
+ *  The shade is capped against its own width so a long drop does not turn into a
+ *  cone as tall as it is wide, and the bulb is sized off the shade so it stays
+ *  inside it at every point of the band.
+ *
+ *  Returns metres, centred on the part's origin. */
+export function pendantDrop(widthMM: number, heightMM: number): {
+  cordH: number;
+  cordY: number;
+  domeH: number;
+  domeY: number;
+  domeR: number;
+  bulbR: number;
+  bulbY: number;
+  bottom: number;
+  top: number;
+} {
+  const h = heightMM / 1000;
+  const r = widthMM / 2000;
+  const domeH = Math.min(h * 0.4, r * 1.2);
+  const cordH = h - domeH;
+  const bulbR = Math.min(domeH * 0.35, r * 0.3);
+  return {
+    cordH,
+    cordY: h / 2 - cordH / 2,
+    domeH,
+    domeY: -h / 2 + domeH / 2,
+    domeR: r,
+    bulbR,
+    bulbY: -h / 2 + domeH * 0.55,
+    bottom: -h / 2,
+    top: h / 2,
+  };
+}
+
 /** True for shapes that are fixtures — the Inspector shows lighting controls for
  *  these and nothing else. */
 export function isLightFixture(shape: Shape): boolean {
