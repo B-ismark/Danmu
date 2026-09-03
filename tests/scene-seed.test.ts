@@ -18,6 +18,7 @@ import {
   type Placement,
 } from '../lib/layout-score';
 import type { ScenePart } from '../lib/scene-spec';
+import { offeredHeight, offeredSizes } from './helpers/offered-sizes';
 
 /** Where a part already is, as a placement. */
 const here = (p: ScenePart): Placement => ({ x: p.pos[0], z: p.pos[2], yaw: p.rot });
@@ -32,15 +33,16 @@ const here = (p: ScenePart): Placement => ({ x: p.pos[0], z: p.pos[2], yaw: p.ro
 //
 // The presets are the ones app/onboarding/layout-pick offers, dimensions included: a
 // seed that is only correct at ROOM's default size is not correct.
-const PRESETS: Array<{ id: LayoutId; w: number; d: number }> = [
-  { id: 'rect', w: 6.0, d: 4.0 },
-  { id: 'l', w: 6.0, d: 4.7 },
-  { id: 't', w: 5.5, d: 4.7 },
-  { id: 'u', w: 6.0, d: 5.0 },
-  { id: 'open', w: 7.5, d: 5.6 },
-];
+//
+// PARSED from that page rather than copied off it, and the copy is why. This list was
+// hand-typed while `tests/starter-navigability.test.ts` derived the same five sizes,
+// so resizing a preset would have turned one file red and left this one measuring a
+// room the app no longer offers — two gates over one property, disagreeing about which
+// room they were gating, with the silent one being this one. The ceiling comes from
+// the same place for the same reason.
+const PRESETS = offeredSizes().map((o) => ({ id: o.id, w: o.width, d: o.depth }));
 
-const HEIGHT = 2.8;
+const HEIGHT = offeredHeight();
 
 /** Every part whose footprint is not wholly inside the room, named.
  *

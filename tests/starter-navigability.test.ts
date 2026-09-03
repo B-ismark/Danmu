@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
 import { describe, expect, it } from 'vitest';
 
 import { analyzeRoom } from '@/lib/clearance';
@@ -9,6 +6,7 @@ import {
   DEFAULT_WEIGHTS,
   NAV_CELL,
   costBreakdown,
+  navigabilityCost,
   prepare,
   type LayoutContext,
   type Placement,
@@ -16,60 +14,88 @@ import {
 import { ROOM } from '@/lib/parts-catalog';
 import { defaultScene } from '@/lib/scene-spec';
 
-/** § G.1 — does a brand-new room seal its own routes?
- *
- *  **The answer is no, and the way § G.1 came to say yes is the point of this file.**
- *  It measured `defaultScene('t', ROOM.width, ROOM.depth)` and found `navigation`
- *  232.20 on the T and 472.20 on the U, both reproduced here. But `ROOM`'s
- *  5.6 x 4.2 is **`DEFAULT_ROOM`'s size, and `DEFAULT_ROOM.layoutId` is `'rect'`**
- *  (`lib/scene-store.ts`) — so that pairing is a T built at the rectangle's
- *  dimensions, which no path in the app constructs. Onboarding is the only screen
- *  that picks a layout and it offers its own five sizes; a saved room carries its
- *  own; and `loadFromRoom(null)` falls back to the rect.
- *
- *  § G.1's own headline was that every solver fixture used 6 x 5 while the app
- *  shipped 5.6 x 4.2, so "the fixture differs from the shipping default by 40 cm".
- *  The fixture that found *that* had the same fault one level up: it combined a
- *  layout id with another layout's dimensions. **A fixture is a claim about a
- *  reachable state, and neither sweep checked that its own state was reachable.**
- *
- *  So the assertion here is the property nobody had: every size onboarding OFFERS
- *  seeds a room that strands no floor. The two tables that follow it are printed,
- *  not asserted, because they measure where the cliff is rather than deciding
- *  anything — and the cliff is real: a T or U taken down to ~4.2 m deep does strand
- *  floor, which a user can reach by dragging a wall, and which the room report is
- *  right to report.
- *
- *  No solver runs in any of these numbers. It is `defaultScene` scored by
- *  `costBreakdown`, which is what makes them a statement about the SEEDER.
- *
- *  **Mutation ledger — eight tried, six killed, and the two survivors are why the
- *  file looks like this.** Killed: `PLAN_RANKS` 4 → 1 (the U strands 750.60, which
- *  is the exact figure `BED_LADDER`'s docblock cites, so the plan search really is
- *  what prevents it); the seeder's rule (A) stage deleted (749.40); the `u` preset
- *  re-sized to 4.2 on the picker page itself (619.20 — and the failure message read
- *  `u 6x4.2`, which is the proof the list is parsed and not copied); `defaultScene`
- *  forced to return `[]`; the `tall` guard inverted; and a preset row deleted from
- *  the page. Survived: `CLASH_SHARE` 0.5 → 0.0, because a starter room has no
- *  overlapping pair for any clash bar to catch; and `settleParts` bypassed, which is
- *  what retired the `outside` assertion below.
- *
- *  The `parts > 0` assertion earns its place from that pass rather than from
- *  caution: with the seeder returning nothing, `navigation`, `outside` and the
- *  report are ALL clean, because an empty room strands no floor. It is the only
- *  thing standing between this gate and a vacuous green. */
+import { offeredHeight, offeredSizes } from './helpers/offered-sizes';
 
-const HEIGHT = 2.8;
-const PRESETS: LayoutId[] = ['rect', 'l', 't', 'u', 'open'];
+/** § G.1 — where a SEEDED room strands floor, and what the room § G.1 measured was.
+ *
+ *  § G.1 measured `defaultScene('t', ROOM.width, ROOM.depth)` and found `navigation`
+ *  232.20 on the T and 472.20 on the U. Both reproduce. What does not hold is what
+ *  room they are about: `ROOM`'s 5.6 x 4.2 is **`DEFAULT_ROOM`'s size, and
+ *  `DEFAULT_ROOM.layoutId` is `'rect'`** (`lib/scene-store.ts`), so that pairing is a
+ *  T built at the rectangle's dimensions. § G.1's own headline was that every solver
+ *  fixture used 6 x 5 while the app shipped 5.6 x 4.2 — *"a fixture that cannot
+ *  express the defect"*. The fixture that found **that** had the same fault one level
+ *  up. **A fixture is a claim about a reachable state.**
+ *
+ *  **That is where the first version of this file stopped, and it was wrong to.** Two
+ *  claims it made are retracted here rather than quietly dropped, because both were
+ *  reasoned rather than measured and one is contradicted by this file's own output:
+ *
+ *  · *"The T and U come clean at depth >= 4.6"* — **false.** The grid below strands
+ *    `t` at d = 4.6 for the four widest columns, and `l` at 4.0 x 5.0 costs ~592 while
+ *    being clean at 4.0 x 3.4. Depth is not the variable, area is not the variable and
+ *    part count is not the variable; the surface is not monotonic in any of them. The
+ *    prose read the left half of a table it printed itself. Hence the pins below: the
+ *    findings that used to sit in a paragraph are assertions now, and the ones that
+ *    were wrong could not have survived being written as assertions in the first place.
+ *  · *"Not a first-run defect, because no path constructs that pairing"* — **too
+ *    strong.** `buildSceneFromRoom` re-seeds through `defaultScene` on EVERY open when
+ *    a room has no detections and no saved scene, and `moveWallCarrying` never writes
+ *    one — so a picker T plus one wall nudge plus a revisit seeds a stranded room with
+ *    the user having moved no furniture at all. What survives is only the narrow fact
+ *    below: the five sizes the picker OFFERS are clean as seeded.
+ *
+ *  **What this file asserts that nothing else does, and what it deliberately does
+ *  not.** `tests/scene-seed.test.ts` already asserts, per preset, that the seeded room
+ *  is walkable (`:280`), that the report is quiet (`:183`) and that it is furnished
+ *  (`:121`). Repeating that here would be two gates over one property — and worse,
+ *  they would be gating different rooms, since that file hand-typed its five sizes
+ *  while this one parses them. So the duplication is resolved the other way: both read
+ *  `tests/helpers/offered-sizes.ts`, this file keeps the parse and its pins, and the
+ *  per-preset assertions stay where the per-preset fixture is.
+ *
+ *  What is left here is three things nothing else has: that the picker's list is
+ *  **derived** and not remembered; that `rect` at `ROOM`'s own 5.6 x 4.2 — the one
+ *  row of § G.1's table a user reaches without editing a room — is clean, which no
+ *  other file builds; and the grid, which is the measurement.
+ *
+ *  No solver runs in any of these numbers. It is `defaultScene` read by
+ *  `navigabilityCost`, which is what makes them a statement about the SEEDER.
+ *
+ *  **Why the assertion reads `navigabilityCost` and the table prints `costBreakdown`.**
+ *  `costBreakdown`'s `navCell` is a fourth optional positional defaulting to `null`,
+ *  and with it null the navigation term is never written and stays 0 — so every
+ *  `navigation === 0` would pass vacuously if a call ever lost its argument. Its
+ *  `navigation` is also the WEIGHTED term, so `DEFAULT_WEIGHTS.navigation = 0` is a
+ *  second way to a silent green. `navigabilityCost` has neither property. It has one
+ *  of its own — it returns 0 when the room has no door — which is why every row
+ *  asserts its door count.
+ *
+ *  **Mutation ledger.** From the first pass, still standing: `PLAN_RANKS` 4 -> 1 (the
+ *  U strands 750.60, the exact figure `BED_LADDER`'s docblock cites, so the plan
+ *  search really is what prevents it); the seeder's rule (A) stage deleted (749.40);
+ *  the `u` preset re-sized to 4.2 on the picker page itself, whose failure message read
+ *  `u 6x4.2` and so proved the list is parsed and not copied; a preset row deleted from
+ *  the page; `defaultScene` forced to return `[]`; the `tall` guard inverted. Survived:
+ *  `CLASH_SHARE` 0.5 -> 0.0 (a starter room has no overlapping pair at all) and
+ *  `settleParts` bypassed, which is what retired an `outside === 0` assertion that
+ *  nothing could make fail. The pins added since are exercised in the same way; see
+ *  the PR. */
+
+const PRESET_ORDER: LayoutId[] = ['rect', 'l', 't', 'u', 'open'];
+const HEIGHT = offeredHeight();
 
 type Row = {
   layout: LayoutId;
   w: number;
   d: number;
   parts: number;
+  doors: number;
+  /** Unweighted, on the room report's own grid. THE measured quantity. */
   navigation: number;
-  outside: number;
-  total: number;
+  /** Weighted, printed only — and not the seeder's own figure either: its chooser
+   *  compares `bd.total + missing`, charging a plan for the pieces it did not place. */
+  weightedTotal: number;
   findings: string[];
 };
 
@@ -77,153 +103,141 @@ function score(layout: LayoutId, w: number, d: number): Row {
   const poly = footprintForLayout(layout, w, d);
   const parts = defaultScene(layout, w, d, { footprint: poly, height: HEIGHT });
   const at: Placement[] = parts.map((p) => ({ x: p.pos[0], z: p.pos[2], yaw: p.rot }));
-  const model = prepare({
-    parts,
-    movable: parts.map((p) => !p.wallMounted),
-    footprint: poly,
-  } as LayoutContext);
-  const b = costBreakdown(model, at, DEFAULT_WEIGHTS, NAV_CELL) as unknown as Record<string, number>;
+  // `movable` all-true, which is the seeder's own chooser (`scene-spec.ts:1398`).
+  // It cannot change these numbers today — `layout-score.ts` reads it only inside
+  // `if (origin)` and neither caller passes an origin — so this is alignment against
+  // the day a term starts reading it, not a correction.
+  const ctx: LayoutContext = { parts, movable: parts.map(() => true), footprint: poly };
+  const model = prepare(ctx);
   const report = analyzeRoom(parts, { footprint: poly, height: HEIGHT });
   return {
     layout,
     w,
     d,
     parts: parts.length,
-    navigation: b.navigation,
-    outside: b.outside,
-    total: b.total,
-    findings: report.issues.map((i) => i.rule),
+    doors: model.doors.length,
+    navigation: navigabilityCost(model, at, NAV_CELL),
+    weightedTotal: costBreakdown(model, at, DEFAULT_WEIGHTS, NAV_CELL).total,
+    // `severity: detail` rather than `rule`, so a failure names the piece the way
+    // `scene-seed.test.ts` does. A bare rule kind says a room is wrong without
+    // saying which corner of it.
+    findings: report.issues.map((i) => `${i.severity}: ${i.detail}`),
   };
 }
 
-const tally = (kinds: string[]) =>
-  kinds.length === 0
-    ? '—'
-    : [...new Set(kinds)].map((k) => `${k}x${kinds.filter((q) => q === k).length}`).join(' ');
+const tally = (kinds: string[]) => (kinds.length === 0 ? '—' : `${kinds.length} finding(s)`);
 
-/** The sizes onboarding offers, DERIVED from the only screen that offers them.
- *
- *  Hand-copying this list is the defect this file exists to describe: a fixture
- *  that names its own numbers cannot notice a preset being resized. Parsed the way
- *  `tests/shape-contract.test.ts` parses `scripts/export-detector.py`, and the count
- *  is asserted before the loop so a regex that matches nothing cannot pass. */
-function offeredSizes(): Array<{ id: LayoutId; width: number; depth: number }> {
-  const src = readFileSync(join(process.cwd(), 'app/onboarding/layout-pick/page.tsx'), 'utf8');
-  const block = src.slice(src.indexOf('const PRESETS = ['), src.indexOf('const HEIGHT'));
-  const out: Array<{ id: LayoutId; width: number; depth: number }> = [];
-  const row = /id:\s*'([a-z]+)'\s*as\s*const\s*,\s*name:\s*'[^']*'\s*,\s*width:\s*([\d.]+)\s*,\s*depth:\s*([\d.]+)/g;
-  for (let m = row.exec(block); m !== null; m = row.exec(block)) {
-    out.push({ id: m[1] as LayoutId, width: Number(m[2]), depth: Number(m[3]) });
-  }
-  return out;
-}
-
-describe('§ G.1 · a starter room does not seal its own routes', () => {
+describe('§ G.1 · where a seeded room strands floor', () => {
   const offered = offeredSizes();
 
-  it('parsed every preset the layout picker offers', () => {
-    // Five today. If the picker grows a sixth this fails rather than skipping it,
-    // which is the whole reason the list is derived instead of typed.
+  it('derives the picker\'s five presets rather than remembering them', () => {
+    // Five is a DECISION and is pinned as one. The helper already fails loudly on a
+    // regex that understands fewer rows than the block contains, so this is not that
+    // check repeated: it is the separate claim that the picker offers five shapes, in
+    // this order, and that a sixth is a change somebody should have to come here for.
     expect(offered).toHaveLength(5);
-    expect(offered.map((o) => o.id)).toEqual(PRESETS);
-    for (const o of offered) {
-      expect(o.width, `${o.id} width parsed`).toBeGreaterThan(0);
-      expect(o.depth, `${o.id} depth parsed`).toBeGreaterThan(0);
-    }
+    expect(offered.map((o) => o.id)).toEqual(PRESET_ORDER);
+    expect(HEIGHT).toBe(2.8);
   });
 
-  it('every size onboarding offers seeds a room that strands no floor', () => {
-    const rows = offered.map((o) => score(o.id, o.width, o.depth));
+  it('the room § G.1 measured is a layout at another layout\'s dimensions', () => {
+    const rows = PRESET_ORDER.map((layout) => score(layout, ROOM.width, ROOM.depth));
 
-    console.log('\n§ G.1 · the sizes onboarding OFFERS (layout-pick PRESETS)\n');
-    console.log('preset     w x d    parts   navigation        total   analyzeRoom');
-    for (const r of rows) {
-      console.log(
-        `${r.layout.padEnd(6)}  ${r.w.toFixed(1)} x ${r.d.toFixed(1)}  ${String(r.parts).padStart(5)}  ` +
-          `${r.navigation.toFixed(2).padStart(11)}  ${r.total.toFixed(2).padStart(11)}   ${tally(r.findings)}`,
-      );
-    }
-
-    for (const r of rows) {
-      // `navigation === 0` is not a threshold — it is the definition of "this room
-      // strands no floor", and it is the same quantity the seeder's own rule (A)
-      // requires of a bed-bearing plan.
-      expect(r.navigation, `${r.layout} ${r.w}x${r.d} strands floor`).toBe(0);
-      // There was an `outside === 0` assertion here and it is DELETED, because the
-      // mutation pass could not make it fail: bypassing the seeder's own
-      // `settleParts` call changes nothing at any of these five sizes, so every
-      // starter piece is already inside its bay and that settle is insurance rather
-      // than load-bearing here. An assertion nobody can see failing is decoration,
-      // and its green is worse than no assertion. `outside` is still PRINTED by the
-      // table below, where it costs nothing and claims nothing.
-      //
-      // And the user-visible half: Room check must be quiet on a room nobody has
-      // touched. A `navigation` of 0 with a finding still standing would mean the
-      // two consumers disagree, which is what tests/layout-conformance.test.ts is for.
-      expect(r.findings, `${r.layout} ${r.w}x${r.d} reports a finding on first open`).toEqual([]);
-      expect(r.parts, `${r.layout} ${r.w}x${r.d} seeded an empty room`).toBeGreaterThan(0);
-    }
-  });
-
-  it('prints the pairing § G.1 measured, which no path in the app constructs', () => {
     console.log(
       `\n§ G.1 · defaultScene(<layout>, ROOM.width, ROOM.depth) = ${ROOM.width} x ${ROOM.depth}` +
-        ` — the size of DEFAULT_ROOM, whose layoutId is 'rect'\n`,
+        " — the size of DEFAULT_ROOM, whose layoutId is 'rect'\n",
     );
-    console.log('preset  parts   navigation      outside        total   analyzeRoom');
-    for (const layout of PRESETS) {
-      const r = score(layout, ROOM.width, ROOM.depth);
+    console.log('preset  parts   navigation   weighted tot   analyzeRoom');
+    for (const r of rows) {
       console.log(
         `${r.layout.padEnd(6)}  ${String(r.parts).padStart(5)}  ` +
-          `${r.navigation.toFixed(2).padStart(11)}  ${r.outside.toFixed(2).padStart(11)}  ` +
-          `${r.total.toFixed(2).padStart(11)}   ${tally(r.findings)}`,
+          `${r.navigation.toFixed(2).padStart(11)}  ${r.weightedTotal.toFixed(2).padStart(13)}   ${tally(r.findings)}`,
       );
     }
-    console.log(
-      "  the rect — which is what DEFAULT_ROOM actually is at this size — is the clean one,\n" +
-        '  and it is the only row of the five a user can reach without resizing a room by hand.',
-    );
+
+    const by = (id: LayoutId) => rows.find((r) => r.layout === id)!;
 
     // The one row that IS reachable: DEFAULT_ROOM, used by the store's initial state
-    // and by loadFromRoom(null). If this ever strands floor, a user with no saved
-    // room sees a finding before touching anything.
-    const fallback = score('rect', ROOM.width, ROOM.depth);
-    expect(fallback.navigation, 'DEFAULT_ROOM strands floor').toBe(0);
-    expect(fallback.findings, 'DEFAULT_ROOM reports a finding').toEqual([]);
+    // and by `loadFromRoom(null)`. No other file builds a rect at this size —
+    // `scene-seed.test.ts` builds the picker's 6.0 x 4.0 — so if this ever strands,
+    // a user with no saved room sees a finding before touching anything.
+    expect(by('rect').navigation, 'DEFAULT_ROOM strands floor').toBe(0);
+    expect(by('rect').findings, 'DEFAULT_ROOM reports a finding').toEqual([]);
+    expect(by('rect').parts, 'DEFAULT_ROOM seeded an empty room').toBeGreaterThan(3);
+
+    // …and the negative control, which is the same two figures § G.1 reported. A file
+    // whose every assertion is `=== 0` cannot tell a clean room from a measurement
+    // that has stopped measuring: with `navCell` lost, a weight zeroed or a room with
+    // no door, everything above passes and nothing here does.
+    expect(by('t').navigation, 'the T at ROOM size no longer strands').toBeGreaterThan(0);
+    expect(by('u').navigation, 'the U at ROOM size no longer strands').toBeGreaterThan(0);
+    for (const r of rows) expect(r.doors, `${r.layout} seeded no door`).toBeGreaterThan(0);
   });
 
-  it('prints where the depth cliff is, per preset', () => {
+  it('strands by no rule of thumb — not depth, not area, not part count', () => {
     const WIDTHS = [4.0, 4.5, 5.0, 5.6, 6.0, 6.5, 7.0, 7.5];
     const DEPTHS = [3.0, 3.4, 3.8, 4.2, 4.6, 5.0, 5.6];
-    let cells = 0;
+    const grid = new Map<string, Row>();
+    const cell = (layout: LayoutId, w: number, d: number) => grid.get(`${layout} ${w}x${d}`)!;
 
-    for (const layout of PRESETS) {
-      console.log(`\n§ G.1 · ${layout} · navigation term by room size (parts in brackets)\n`);
+    for (const layout of PRESET_ORDER) {
+      console.log(`\n§ G.1 · ${layout} · stranded floor by room size (parts in brackets)\n`);
       console.log(`  d\\w  ${WIDTHS.map((w) => w.toFixed(1).padStart(13)).join('')}`);
       for (const d of DEPTHS) {
         const out: string[] = [];
         for (const w of WIDTHS) {
           const r = score(layout, w, d);
-          cells += 1;
-          out.push(`${r.navigation === 0 ? '.' : r.navigation.toFixed(0)}(${r.parts})`.padStart(13));
+          grid.set(`${layout} ${w}x${d}`, r);
+          // Two decimals, not none. This quantity is UNWEIGHTED now — the weighted
+          // table showed it multiplied by `DEFAULT_WEIGHTS.navigation` — so
+          // `toFixed(0)` printed a bare `0` for every room stranding less than half a
+          // unit, and a reader would have counted those among the clean ones. A grid
+          // whose two states render identically is the whole reason this file was
+          // wrong the first time.
+          out.push(`${r.navigation === 0 ? '.' : r.navigation.toFixed(2)}(${r.parts})`.padStart(13));
         }
         console.log(`${d.toFixed(1).padStart(5)}  ${out.join('')}`);
       }
     }
     console.log(
-      '\n  A dot is a room that strands nothing. The grid is NOT monotonic in area — the L is\n' +
-        '  clean at 4.0 x 3.4 and costs ~592 at 4.0 x 5.0 — so "too small for its furniture" is\n' +
-        '  the wrong reading. Part count is not the driver either: the U at 5.6 x 4.2 and at\n' +
-        '  5.6 x 4.6 both seed 12 pieces, and only the shallower one strands floor.',
+      '\n  A dot is a room that strands nothing. Every other cell is stranded floor in the\n' +
+        "  room report's own units, before DEFAULT_WEIGHTS.navigation multiplies it by " +
+        `${DEFAULT_WEIGHTS.navigation}.\n`,
     );
 
-    expect(cells).toBe(PRESETS.length * WIDTHS.length * DEPTHS.length);
-    // 280 cells, each a full build + clearance field, so this is ~5 s of real work
-    // and it does not fit vitest's DEFAULT 5 s `testTimeout` — which is a bound
-    // nobody chose, since `vitest.config.ts` sets no `testTimeout` at all. This test
-    // hit it on its first green run, which is § A.4 of `what-is-still-open.md`
-    // happening to the file that measured § A.4. The budget is stated here rather
-    // than raised globally: a grid is allowed to be slow, and the other 117 files
-    // should not silently inherit a longer leash because this one is.
+    // Every cell has a door, or `navigabilityCost` is answering 0 for a reason that
+    // has nothing to do with the floor and the whole grid is decoration.
+    for (const r of grid.values()) expect(r.doors, `${r.layout} ${r.w}x${r.d} seeded no door`).toBeGreaterThan(0);
+
+    // **The rectangle never strands, at any of the 56 sizes.** The one clean statement
+    // in the whole grid, and the reason the prose's depth threshold looked plausible:
+    // it is true of the preset anybody checks first.
+    const rectStranded = [...grid.values()].filter((r) => r.layout === 'rect' && r.navigation > 0);
+    expect(rectStranded.map((r) => `${r.w}x${r.d}`), 'the rect stranded floor').toEqual([]);
+
+    // **Not monotonic in area.** A BIGGER L strands where a smaller one does not, so
+    // "too small for its furniture" — § G.1's stated hypothesis, and the reason its
+    // suggested fix was "place fewer pieces" — is the wrong reading of the surface.
+    expect(cell('l', 4.0, 3.4).navigation, 'the small L stranded').toBe(0);
+    expect(cell('l', 4.0, 5.0).navigation, 'the larger L stopped stranding').toBeGreaterThan(0);
+
+    // **Not part count either.** Two U's with the SAME furniture in them, one
+    // stranding and one not — so nothing is being over-furnished.
+    expect(cell('u', 5.6, 4.2).parts).toBe(cell('u', 5.6, 4.6).parts);
+    expect(cell('u', 5.6, 4.2).navigation, 'the shallow U stopped stranding').toBeGreaterThan(0);
+    expect(cell('u', 5.6, 4.6).navigation, 'the deeper U started stranding').toBe(0);
+
+    // **And not depth, which is what the first version of this file claimed.** One
+    // depth, two widths, opposite answers — and the stranded one is the WIDER room.
+    // This is the assertion the retracted sentence would have had to survive.
+    expect(cell('t', 4.0, 4.6).navigation, 'the narrow T at 4.6 stranded').toBe(0);
+    expect(cell('t', 7.5, 4.6).navigation, 'the wide T at 4.6 stopped stranding').toBeGreaterThan(0);
+
+    // 280 cells, each a full build plus a clearance field, so this is ~5 s of real
+    // work and it does not fit vitest's DEFAULT 5 s `testTimeout` — a bound nobody
+    // chose, since `vitest.config.ts` sets none at all. This test hit it on its first
+    // green run, which is § A.4 of `what-is-still-open.md` happening to the file that
+    // measured § A.4. Budgeted here rather than raised globally: a grid is allowed to
+    // be slow, and the other 117 files should not inherit a longer leash for it.
   }, 40000);
 });
