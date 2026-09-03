@@ -21,23 +21,7 @@ import { footprintForLayout } from '@/lib/footprint';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 
-// See tests/library-click-through.test.tsx for why these shims are needed.
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: (query: string) => ({
-    matches: false, media: query, onchange: null,
-    addEventListener: () => {}, removeEventListener: () => {},
-    addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false,
-  }),
-});
-Element.prototype.scrollIntoView = function scrollIntoView() {};
-
-vi.mock('next/navigation', () => ({
-  useParams: () => ({ roomId: 'spawn-spread-room' }),
-  usePathname: () => '/room/spawn-spread-room/plan',
-  useRouter: () => ({ push: () => {}, replace: () => {}, back: () => {}, prefetch: () => {} }),
-  useSearchParams: () => new URLSearchParams(),
-}));
+vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('spawn-spread-room'));
 
 const { default: PlanPage } = await import('@/app/room/[roomId]/plan/page');
 

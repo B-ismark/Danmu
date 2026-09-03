@@ -297,6 +297,61 @@ describe('vitest is configured so a component test can exist', () => {
     expect((await config()).esbuild.jsx).toBe('automatic');
   });
 
+  // ── The jsdom shims, which are one thing and were ten ──────────────────────
+  //
+  // Ten `.test.tsx` files each carried their own `next/navigation` module object and
+  // seven of them their own `matchMedia` and `scrollIntoView`. They had already drifted
+  // into three formattings of the same object and two different comments claiming to
+  // explain it. The subject is a THIRD-PARTY interface, so the copies fail in the one
+  // direction nothing catches: `next/navigation` grows a hook a page calls, one file
+  // learns it, and the other nine throw from inside a render as an undefined function
+  // rather than as a missing mock.
+  //
+  // Both halves are pinned, because the extraction is undone by one paste.
+
+  it('shims the two missing browser globals once, in setupFiles', async () => {
+    expect((await config()).test.setupFiles).toEqual(['tests/helpers/setup.ts']);
+  });
+
+  it('leaves no component test rolling its own copy of them', () => {
+    const tsx = readdirSync(join(ROOT, 'tests')).filter((f) => f.endsWith('.test.tsx'));
+    // The iterate-over-whatever-you-found guard, same as the collection test above: with
+    // no files this loop is a green that means nothing.
+    expect(tsx.length, 'no .test.tsx files found, so the sweep below proves nothing').toBeGreaterThan(0);
+
+    const offenders: string[] = [];
+    for (const f of tsx) {
+      const src = readFileSync(join(ROOT, 'tests', f), 'utf8');
+      const lines = src.split(/\r?\n/);
+      lines.forEach((line, i) => {
+        // `matchMedia` and `scrollIntoView` belong to `setup.ts` and nowhere else;
+        // `useRouter:` is the tell for a hand-written `next/navigation` object, and it
+        // is the property a partial copy is most likely to omit.
+        if (/\bmatchMedia\b|Element\.prototype\.scrollIntoView\s*=|^\s*useRouter:/.test(line)) {
+          offenders.push(`tests/${f}:${i + 1}  ${line.trim()}`);
+        }
+        // And the call sites themselves: a `vi.mock('next/navigation', …)` whose factory
+        // does not reach the helper is a copy by another route.
+        if (line.includes("vi.mock('next/navigation'") && !line.includes('helpers/mount')) {
+          offenders.push(`tests/${f}:${i + 1}  mocks next/navigation without tests/helpers/mount`);
+        }
+      });
+    }
+    expect(offenders, 'these belong in tests/helpers/setup.ts or tests/helpers/mount.ts').toEqual([]);
+  });
+
+  it('and that sweep can actually say no', () => {
+    // The three patterns, exercised against the exact lines they were written to catch
+    // and against lines that must NOT trip them — the mutation this file cannot perform
+    // on itself, since the offending code is what was just deleted.
+    const re = /\bmatchMedia\b|Element\.prototype\.scrollIntoView\s*=|^\s*useRouter:/;
+    expect(re.test("Object.defineProperty(window, 'matchMedia', {")).toBe(true);
+    expect(re.test('Element.prototype.scrollIntoView = function scrollIntoView() {};')).toBe(true);
+    expect(re.test('  useRouter: () => ({ push: () => {} }),')).toBe(true);
+    expect(re.test("const { useRouter } = await import('next/navigation');")).toBe(false);
+    expect(re.test('// the router is mocked, not wrapped')).toBe(false);
+  });
+
   // ── The timeout, which is here for the same reason as the three above ──────
   //
   // Leaving it unset is not neutral. vitest resolves it to 5000 ms

@@ -52,12 +52,7 @@ vi.mock('@/components/ui/Confirm', () => ({
   ConfirmHost: () => null,
 }));
 
-vi.mock('next/navigation', () => ({
-  useParams: () => ({ roomId: 'group-delete-room' }),
-  usePathname: () => '/room/group-delete-room/model',
-  useRouter: () => ({ push: () => {}, replace: () => {}, back: () => {}, prefetch: () => {} }),
-  useSearchParams: () => new URLSearchParams(),
-}));
+vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('group-delete-room', 'model'));
 
 // The footer's other button opens the Library, which pulls the whole catalog
 // panel. Nothing here presses it and it is not what this file is about.

@@ -30,40 +30,9 @@ import { useStudio } from '@/lib/store';
 
 const ROOT = join(__dirname, '..');
 
-// jsdom has no `matchMedia`, and `lib/use-media-query.ts` calls it in a layout effect,
-// so every rail in the shell needs it before anything mounts. Shimmed rather than
-// mocked away: the rails read it to decide whether they are stacked, and `matches:
-// false` is the desktop answer, which is the arrangement the trigger under test lives
-// in. A stacked-rail run would be a different test, and it would need a real browser to
-// mean anything.
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: (query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    addListener: () => {},
-    removeListener: () => {},
-    dispatchEvent: () => false,
-  }),
-});
-
-// jsdom implements no scrolling at all, so `scrollIntoView` is simply absent.
-// `AddPiecesButton` calls it on the canvas after opening — on a stacked layout the
-// panel would otherwise open off-screen — and an absent method throws inside the
-// click handler, which reads as the trigger being broken.
-Element.prototype.scrollIntoView = function scrollIntoView() {};
-
 // The route is mocked rather than wrapped in a router: the page reads `roomId` to load
 // a saved room, and which room it is is not what is under test.
-vi.mock('next/navigation', () => ({
-  useParams: () => ({ roomId: 'click-through-room' }),
-  usePathname: () => '/room/click-through-room/plan',
-  useRouter: () => ({ push: () => {}, replace: () => {}, back: () => {}, prefetch: () => {} }),
-  useSearchParams: () => new URLSearchParams(),
-}));
+vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('click-through-room'));
 
 const { default: PlanPage } = await import('@/app/room/[roomId]/plan/page');
 const { openSceneMenu } = await import('@/components/studio/SceneContextMenu');
@@ -158,4 +127,3 @@ describe('the third signpost is not a control, and that is worth writing down', 
     expect(around).not.toContain('onClick');
   });
 });
-
