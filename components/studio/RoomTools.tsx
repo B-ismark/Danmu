@@ -185,10 +185,15 @@ function cachedReport(
   footprint: Footprint,
   height: number,
   stepFree: boolean,
+  dimUnit: DimUnit,
 ): RoomReport {
-  const key = [effParts, footprint, height, stepFree] as const;
+  // `dimUnit` is in the key because every finding SENTENCE is written in it (§ B.12).
+  // An input that changes the value and not the key is a cache that serves the last
+  // user's answer — here, switching Settings to feet and having Room check go on
+  // saying centimetres until something else in the room happened to move.
+  const key = [effParts, footprint, height, stepFree, dimUnit] as const;
   if (reportCache && key.every((k, i) => Object.is(k, reportCache!.key[i]))) return reportCache.value;
-  const value = analyzeRoom(effParts, { footprint, height }, { accessibility: stepFree });
+  const value = analyzeRoom(effParts, { footprint, height }, { accessibility: stepFree, dimUnit });
   reportCache = { key, value };
   return value;
 }
@@ -201,12 +206,13 @@ function cachedReport(
 export function useRoomReport() {
   const room = useScene((s) => s.room);
   const stepFree = useSettings((s) => s.stepFree);
+  const dimUnit = useSettings((s) => s.dimUnit);
   // `useRoomScene` is memoised on the same four store slices this used to merge by
   // hand, so sharing it costs nothing and is one fewer copy of the fallback.
   const effParts = useRoomScene();
   const report = useMemo(
-    () => cachedReport(effParts, room.footprint, room.height, stepFree),
-    [effParts, room.footprint, room.height, stepFree],
+    () => cachedReport(effParts, room.footprint, room.height, stepFree, dimUnit),
+    [effParts, room.footprint, room.height, stepFree, dimUnit],
   );
   const problems = report.issues.filter((i) => i.severity !== 'info').length;
   return { report, problems, effParts };

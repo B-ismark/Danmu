@@ -28,6 +28,8 @@ import { accessRules } from '@/lib/layout-rules';
 import { costBreakdown, prepare, type LayoutContext } from '@/lib/layout-score';
 import type { ScenePart } from '@/lib/scene-spec';
 import type { Footprint } from '@/lib/footprint';
+import { precisionFor, toMM } from '@/lib/units';
+import type { DimUnit } from '@/lib/store';
 
 const RECT: Footprint = [
   [-3, -2],
@@ -111,11 +113,40 @@ describe('every access rule states its own headline', () => {
     expect(zone!.title).toBe('No room to get out of the sofa');
   });
 
-  it('says the measurement it actually took', () => {
-    // 40 mm, derived — not a number typed next to the thing it describes.
-    const zone = analyzeRoom([sofa([0, 0, 1.485])], ROOM).issues.find((i) => i.rule === 'zone');
-    expect(zone!.detail).toMatch(/has 4 cm in front/);
-    expect(zone!.detail).toMatch(/needs 35 cm/);
+  it('says the measurement it actually took, in the unit it was asked for', () => {
+    // This asserted `has 4 cm in front` over a comment claiming "40 mm, derived". Both
+    // were slightly untrue: 4 was typed, and it was `Math.round` over a gap that is
+    // 39.x mm — the sofa's front face does not land on a whole centimetre. § B.12's
+    // conversion prints one more decimal for cm and the difference showed.
+    //
+    // So this asserts the PROPERTY instead, and it is a stronger one than either string:
+    // every unit describes ONE length. A wrong scale factor, a conversion applied twice,
+    // or a unit label that does not match the number it follows all fail here, and none
+    // of them needs this file to know what the gap is.
+    const said = (u: DimUnit) => {
+      const d = analyzeRoom([sofa([0, 0, 1.485])], ROOM, { dimUnit: u }).issues
+        .find((i) => i.rule === 'zone')!.detail;
+      const m = d.match(new RegExp(`has ([\\d.]+) ${u} in front`));
+      expect(m, `the sentence must state the gap in ${u}: ${d}`).not.toBeNull();
+      return toMM(Number(m![1]), u);
+    };
+
+    // Half a display step of the coarser unit, in mm — derived from `precisionFor`, so
+    // widening a unit's precision cannot leave this comparing against a stale tolerance.
+    const tol = (u: DimUnit) => toMM(10 ** -precisionFor(u), u) / 2;
+
+    const mm = said('mm');
+    expect(mm, 'the fixture is a sofa about 40 mm off the wall it faces').toBeGreaterThan(30);
+    expect(mm).toBeLessThan(50);
+    for (const u of ['cm', 'm', 'in', 'ft'] as DimUnit[]) {
+      expect(Math.abs(said(u) - mm), `${u} disagrees with mm about the same gap`).toBeLessThanOrEqual(tol(u));
+    }
+
+    // What it NEEDS is the rule's own depth, and the default unit is still centimetres
+    // for a caller that does not ask — which is what keeps the two solver-side callers
+    // on the sentences they have always produced.
+    expect(analyzeRoom([sofa([0, 0, 1.485])], ROOM).issues.find((i) => i.rule === 'zone')!.detail)
+      .toMatch(/needs 35 cm/);
   });
 });
 

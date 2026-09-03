@@ -203,6 +203,65 @@ export function steppedValue(
   return out;
 }
 
+/** Which way to round a length that does not land on the display unit's step.
+ *
+ *  `nearest` for a measurement. `down` / `up` for the two ends of a BAND, where
+ *  rounding must widen what is reported rather than narrow it — saying two pieces
+ *  share the space between 63 and 112 cm when they share 62.6 to 112.4 understates a
+ *  clash, and a finding that understates is worse than one that is coarse. */
+export type RoundDir = 'nearest' | 'down' | 'up';
+
+function atDecimals(v: number, dp: number, dir: RoundDir): string {
+  if (dir === 'nearest') return v.toFixed(dp);
+  const f = 10 ** dp;
+  return ((dir === 'down' ? Math.floor(v * f) : Math.ceil(v * f)) / f).toFixed(dp);
+}
+
+/** A length as it belongs in a SENTENCE — the number and its unit, in the unit the
+ *  user chose.
+ *
+ *  `formatDim` is the field's formatter and gives the number alone; a finding is prose
+ *  and has to carry the unit with it. § B.12 was one panel speaking two units, with the
+ *  room's own field saying `1.9 m` and the finding beside it saying `190 cm`.
+ *
+ *  `precisionFor` CAPS the decimals and trailing zeros are then trimmed, which is the
+ *  one place this deliberately parts company with `formatDim`. A field is a column of
+ *  numbers and wants a fixed width; a sentence is not, and *"the ceiling is 240.0 cm"*
+ *  reads as a machine talking. Trimming is also what keeps the two surfaces agreeing in
+ *  fact rather than only in unit: `RoomDimsEditor` fills its inputs with
+ *  `String(fromMM(...))`, so the field shows `198`, and a finding saying `198.0 cm`
+ *  beside it would have been a new disagreement introduced by the fix for the old one.
+ *
+ *  ── It refuses to print a zero that is not one ───────────────────────────────
+ *
+ *  This is `boundsToUnit`'s scar in prose. A 40 mm gap at `precisionFor('m')` is
+ *  `0.04`; a 4 mm gap is `0.00`, and *"Only 0.00 m between the sofa and the table"* is
+ *  a false statement about a real clash — the sort of thing a user reads as the app
+ *  being broken rather than the number being rounded. So where the value is non-zero
+ *  and the rendering is not, the decimals grow until it says something true.
+ *
+ *  The cap is DERIVED from the unit rather than typed: enough extra places to resolve
+ *  one millimetre, which is the resolution everything here is stored at. For `mm`
+ *  itself that is zero extra places, and the loop never runs.
+ *
+ *  Lengths in findings are non-negative, so `down` and `up` are also "narrower" and
+ *  "wider"; on a negative value they would be floor and ceil, which is not what a band
+ *  end would want. No caller has one. */
+export function formatLength(valueMM: number, unit: DimUnit, dir: RoundDir = 'nearest'): string {
+  const v = fromMM(valueMM, unit);
+  const base = precisionFor(unit);
+  const max = base + Math.max(0, Math.round(Math.log10(MM_PER[unit])));
+  let dp = base;
+  let s = atDecimals(v, dp, dir);
+  while (valueMM !== 0 && Number(s) === 0 && dp < max) s = atDecimals(v, ++dp, dir);
+  return `${trimZeros(s)} ${unit}`;
+}
+
+/** `1.90` → `1.9`, `198.0` → `198`, `0.004` → `0.004`, `240` → `240`. */
+function trimZeros(s: string): string {
+  return s.includes('.') ? s.replace(/0+$/, '').replace(/\.$/, '') : s;
+}
+
 export const UNIT_OPTIONS: { id: DimUnit; label: string }[] = [
   { id: 'm', label: 'Meters (m)' },
   { id: 'cm', label: 'Centimeters (cm)' },
