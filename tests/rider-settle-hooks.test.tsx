@@ -114,6 +114,27 @@ describe('useSettledY — the per-part half the hot paths read', () => {
     act(() => useStudio.setState({ dims: { [DESK]: [2600, 700, 950] } }));
     expect(result.current).toBe(0.95);
   });
+
+  it('is woken by a parentIds write of its own', () => {
+    // Its OWN subscription, not `useRoomScene`'s. This is the hook `Draggable` reads,
+    // so it is the 3D scene's only route to the corrected height — and it has a
+    // separate copy of every subscription, which is a separate chance to write one as
+    // a `getState()` read. Nothing in the three transform maps moves here.
+    setUp([desk(), lamp(0)]);
+    useStudio.setState({ positions: { [LAMP]: [0, 0.75, 0] }, dims: { [DESK]: [1400, 700, 900] } });
+    const { result } = renderHook(() => useSettledY(LAMP));
+    expect(result.current).toBeNull();
+    act(() => useStudio.setState({ parentIds: { [LAMP]: DESK } }));
+    expect(result.current).toBe(0.9);
+  });
+
+  it('is woken by a room-height write of its own', () => {
+    useStudio.setState({ dims: { [DESK]: [1400, 700, 2000] } });
+    const { result } = renderHook(() => useSettledY(LAMP));
+    expect(result.current).toBe(2);
+    act(() => useScene.setState({ room: { ...useScene.getState().room, height: 2.2 } }));
+    expect(result.current).toBeCloseTo(2.2 - MOUNT_PAD - 0.4, 10);
+  });
 });
 
 describe('usePartTransform composes the correction into the position it returns', () => {

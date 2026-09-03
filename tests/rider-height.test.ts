@@ -68,6 +68,18 @@ describe('deriveRiderYs — the thing it is for', () => {
     expect(deriveRiderYs(parts, { dims: { desk: [2000, 900, 750] } }, {}, ROOM_H)).toEqual({});
   });
 
+  it('omits a rider a cascade has ALREADY put at the answer', () => {
+    // The support's top genuinely moved — so the pass runs — and the rider is already
+    // there, because the drag that resized it cascaded. The previous case never
+    // reaches this line: a width-only resize fails the gate first, so removing the
+    // "unchanged is omitted" check passed it. The consequence is not cosmetic: a
+    // consumer turning this map into overrides would stamp one on a piece the user
+    // never moved, which pins it against a re-detect and is then persisted.
+    const parts = [desk(), lamp(0.75)];
+    const o: Partial<TransformOverrides> = { positions: { lamp: [0, 0.9, 0] }, dims: { desk: [1400, 700, 900] } };
+    expect(deriveRiderYs(parts, o, {}, ROOM_H)).toEqual({});
+  });
+
   it('does not fire on a width-only resize', () => {
     // The gate is "the support's TOP moved", not "the support carries a dims
     // override". Gating on the override's existence passes the two tests above and
@@ -151,6 +163,18 @@ describe('the ceiling clamp, and it agrees with settleHeights rather than a lite
     expect(ys.lamp).toBeLessThan(2.3);
   });
 
+  it('puts a rider too tall for the room ON the floor rather than under it', () => {
+    // The low guard, `Math.max(0, ...)`, which `settleHeights` also carries. A 2.4 m
+    // wardrobe in a 1.8 m room — both legal, both at a `clampDims` extreme — gives a
+    // cap of 1.78 and `cap - h` of −0.62. Without the guard the piece is placed
+    // BELOW the floor, where `lib/apertures.ts` cuts light holes into the ground.
+    // A piece too tall for the room keeps its height and pokes through the top;
+    // `lib/clearance.ts` reports `tall`. It is not shrunk to fit.
+    const tall = part({ id: 'lamp', category: 'wardrobe', shape: 'wardrobe', pos: [0, 0.75, 0], dimMM: [1200, 600, 2400] });
+    const ys = deriveRiderYs([desk(), tall], { dims: { desk: [1400, 700, 900] } }, { lamp: 'desk' }, 1.8);
+    expect(ys.lamp).toBe(0);
+  });
+
   it('does not clamp a rider that still fits', () => {
     const parts = [desk(), lamp(0.75, 400)];
     // Top → 2.00; 2.00 + 0.40 = 2.40, under the 2.48 cap. Untouched.
@@ -185,6 +209,23 @@ describe('a chain resolves from the root down', () => {
     expect(Object.keys(ys).sort()).toEqual(['lamp', 'nightstand']);
     expect(ys.nightstand).toBeCloseTo(0.9, 10);
     expect(ys.lamp).toBeCloseTo(1.45, 10); // 0.90 + 0.55, and NOT 1.30 + 0.55
+  });
+
+  it('carries a grandchild when the child’s two changes CANCEL at its top', () => {
+    // The `out[supportId] !== undefined` half of the gate, and the only case that can
+    // reach it. The nightstand is corrected — it moves 0.75 → 0.85 — and is
+    // simultaneously 100 mm shorter, so its top lands back on 1.30, exactly its
+    // authored value. "Has the top moved" is false for it, and only "was it corrected
+    // by this pass" keeps the lamp attached. The lamp is at a stale 1.50 (the state
+    // defect 1 describes, a resolved Y written back by some other consumer), so
+    // dropping the disjunct leaves it 200 mm in the air with the whole suite green.
+    const o: Partial<TransformOverrides> = {
+      positions: { lamp: [0, 1.5, 0] },
+      dims: { desk: [1400, 700, 850], nightstand: [450, 400, 450] },
+    };
+    const ys = deriveRiderYs(chain(), o, {}, ROOM_H);
+    expect(ys.nightstand).toBeCloseTo(0.85, 10);
+    expect(ys.lamp).toBeCloseTo(1.3, 10); // 0.85 + 0.45, and NOT left at 1.50
   });
 
   it('moves only the part of the chain above the piece that changed', () => {
