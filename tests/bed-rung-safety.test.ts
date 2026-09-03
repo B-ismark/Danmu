@@ -75,9 +75,11 @@ const solveAll = (
  *  to read that as timidity — a 6x5 m room sounds big enough for a double — so
  *  this file is the evidence that it is not. At U 6x5 the room's usable bays are cut by
  *  the U's notch, and anything wider than a single leaves floor a person cannot reach.
- *  Not "or parks itself across the door": total door cost is 0.00 on all three rungs
- *  here, and the reason that phrase is worth correcting rather than deleting is below,
- *  in the door test.
+ *  Not "or parks itself across the door" — for the rung this app SHIPS, which is the
+ *  single, and whose door cost is 0.00. The Double is a different sentence since § 31
+ *  was decided: it now blocks the door deliberately rather than stand in a wall, and
+ *  scores 181.78. The reason that phrase is worth correcting rather than deleting is
+ *  below, in the door test.
  *
  *  It prints the table on every green run (the `detect-pipeline` precedent), because
  *  the interesting thing is the SHAPE of the trade and not the pass. Two rounds have
@@ -92,12 +94,22 @@ const solveAll = (
  *      proposal-generator fix in `lib/layout-solve.ts`.
  *    · Then: medians 15.91 / 15.12 / 10.46, so the narrowest rung was the tidiest AND
  *      the safest, and no trade existed at this room at all.
- *    · Now, after the winding fix: medians 16.75 / 20.78 / 16.74, Σdanger
+ *    · After the winding fix: medians 16.75 / 20.78 / 16.74, Σdanger
  *      174.90 / 443.92 / 118.06. The narrowest rung is still the tidiest, by 0.01, and
  *      still much the safest — but it is no longer CLEAN, so "no trade exists" has
  *      stopped being true in the way that mattered. That is a parked, measured
  *      regression in the solver and not a change of mind about the ladder: the ladder
  *      still comes down for a reason and the margin above it is wider than it was.
+ *    · **2026-09-03, and the two above are now stale in a way worth naming rather than
+ *      overwriting.** Σdanger reads **962.10 / 211.23 / 535.25** on this tree, so the
+ *      "174.90 / 443.92 / 118.06" triple above is arithmetically impossible beside the
+ *      per-seed pins further down (`single.danger` is 535.25 at the assertion, and
+ *      `dangerOf` includes `navigation`, which alone is 533.40 for the Single). It was
+ *      measured on a tree nobody named, which is the whole reason this file now
+ *      insists every figure names its own. Medians are 18.35 / 14.77 / 19.34, so the
+ *      NARROWEST rung is no longer the tidiest either — the Double is, and by a lot.
+ *      Kept above rather than deleted because the sequence is the evidence: four
+ *      readings of one sweep, each accurate when taken.
  *
  *  Read the table, not this comment. */
 describe('the bed ladder comes down a rung when the room cannot take a wider one', () => {
@@ -230,8 +242,10 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
   // notch. The annealer's weights were tuned against those wrong normals, so the
   // SOLVER's answer changed and the scorer's did not — the old placements re-scored
   // with the new scorer still give `navigation` 0.00. Nothing here is through a wall:
-  // `outside`, `door` and `walkway` read 0.00 on every seed and the whole of this
-  // number is `navigation`, floor a person cannot walk to.
+  // `outside` and `door` read 0.00 on every seed and all but 1.85 of this number is
+  // `navigation` — floor a person cannot walk to. (Σnavigation for the Single is
+  // 533.40 against this 535.25; the remainder is `walkway`, which this sentence used
+  // to list among the zeros and should not have.)
   //
   // These are measurements of a defect, so an IMPROVEMENT must go red too. That is the
   // point of pinning rather than bounding and it is why there is no `<=`. If the solver
@@ -345,8 +359,15 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
   // four commits ago, and neither reading was available to it. Every figure in this
   // file now names the tree it was taken on.
   //
-  // As of this commit door cost is 0.00 on all three rungs, and what separates them is
-  // `navigation`: 80.10 / 109.20 / 0.00.
+  // As of this commit door cost is 0.00 on the Queen and the Single and 181.78 on the
+  // Double — see the note on that row below — and what separates the three is
+  // `navigation`: 962.10 / 21.90 / 533.40, Queen / Double / Single. Read off the same
+  // twelve solves this file's table is, on this tree.
+  //
+  // Worth noticing and NOT explained here: by these numbers the Double strands the
+  // least floor of the three (21.90 against the Single's 533.40), so whatever makes
+  // the ladder come down past it is not Σnavigation over this sweep. `the ladder comes
+  // down for a reason` above owns that question; this note only reports the terms.
   //
   // `door` stays inside `dangerOf` regardless, for the reason its own comment gives:
   // it guards a ladder change that put the shipped bed across a doorway. But a term
@@ -368,11 +389,31 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
     // NARROWED, and the narrowing is the finding rather than a re-baseline.
     //
     // This loop asserted `door === 0` on ALL THREE rungs. After `outsideDeficit`, the
-    // DOUBLE (1400 mm, not a rung this app ships) scores 165.69: on U 6x5 the solver
-    // now prefers 20% of the door zone blocked to ~190 mm of bed through the wall, and
-    // with containment at 1000 against door at 800 those two price within a few units
-    // of each other. That near-tie is a weights question nobody has decided — recorded
-    // as docs/what-is-still-open.md § 31 rather than papered over here.
+    // DOUBLE (1400 mm, not a rung this app ships) started scoring on the door: on
+    // U 6x5 the solver prefers part of the door zone blocked to a bed through the
+    // wall, and with containment at 1000 against door at 800 those two priced within
+    // a few units of each other. That near-tie was a question nobody had decided —
+    // recorded as docs/what-is-still-open.md § 31 rather than papered over here.
+    //
+    // § 31 IS DECIDED NOW, and this row is where the decision is visible. The user's
+    // ruling: *"door being blocked (avoid if possible) is objectively better than a
+    // model going through walls. nothing physically impossible should be encouraged.
+    // door being blocked can be prompted and fix with the fix feature."* So the two
+    // are no longer traded on price at all — `IMPOSSIBLE_TERMS` vetoes the wall.
+    //
+    // 165.68806954937938 -> 181.7821863200519, and the shape of the change is the
+    // point rather than the size of it. Per seed, before and after:
+    //
+    //     seed  6   outside 8.5, door 165.7, nav   0.0   ->   outside 0, door 181.8
+    //     seed 11   overlap 24.6,  door  0.0, nav   8.4   ->   overlap 0, door   0.0, nav 18.0
+    //
+    // The bed no longer stands 8.5 units inside the wall while ALSO blocking the
+    // door; it blocks the door and nothing else, which is the trade the user asked
+    // for in as many words. Seed 11 gave up a 24.6-unit collision for ten more units
+    // of stranded floor. Every other seed is byte-identical.
+    //
+    // Read this number as a witness to the ruling, not as a baseline to keep green:
+    // if it moves again, find out which seed and which term, the way this note did.
     //
     // The property this file exists for is UNCHANGED and is the first assertion below:
     // the rung the app actually ships keeps the door clear. `the ladder comes down for
@@ -382,7 +423,7 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
     expect(shippedRung.width, 'the shipped rung is the narrowest').toBe(900);
     expect(shippedRung.door, 'THE SHIPPED RUNG MUST NOT BLOCK THE DOOR').toBe(0);
     expect(rows[0].door, 'Queen at U 6x5').toBe(0);
-    expect(rows[1].door, 'Double at U 6x5 — see § 31').toBeCloseTo(165.68806954937938, 6);
+    expect(rows[1].door, 'Double at U 6x5 — see § 31, now decided').toBeCloseTo(181.7821863200519, 6);
     const poly = footprintForLayout('u', 6, 5);
     const base = defaultScene('u', 6, 5, { footprint: poly, height: 2.8 });
     const door = base.findIndex((q) => q.category === 'door');

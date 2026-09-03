@@ -101,8 +101,10 @@ export type SolveOptions = {
    *  app guessed at — see `LayoutContext.placed`. */
   placed?: Set<string>;
   /** Which finalist becomes the suggestion. Returns an index into the candidates it
-   *  is handed; omit it and the argmin on `total` is used, which is what this has
-   *  always done.
+   *  is handed; omit it and `bestCandidate` is used — least impossible first, then
+   *  cheapest on `total`. On a pool where no candidate has a piece through a wall or
+   *  inside another piece, which is most of them, that is the plain argmin on `total`
+   *  this has always taken.
    *
    *  The seam exists because **variety is a property of the set of suggestions**, and
    *  no single solve can see that set — only the caller knows what it has already
@@ -130,15 +132,128 @@ export type Candidate = {
   cost: number;
   navCost: number;
   total: number;
+  /** Every term, priced at `NAV_CELL` — what `total` is a summary of.
+   *
+   *  Here so a ranker can ask what KIND of cost a candidate carries rather than only
+   *  how much, which is what § 31's veto needs: an arrangement with a piece through a
+   *  wall is not a dearer version of one without, it is a different kind of answer.
+   *  `breakdown.total` and `total` agree to within a few ulps rather than exactly, and
+   *  the difference is float associativity rather than a defect: `cost` is a 13-term
+   *  sum taken with `navigation` at zero, `breakdown.total` is the same sum with
+   *  `navigation` non-zero in fourth position, and `cost + navCost` re-associates. So
+   *  the pin is a `toBeCloseTo` and it lives in `tests/impossible-veto.test.ts` — NOT
+   *  in `tests/layout-pick.test.ts`, which pins the neighbouring identity
+   *  `total === cost + navCost` and mentions this field nowhere. */
+  breakdown: CostBreakdown;
 };
 
-/** Index of the cheapest candidate on `total`, ties to the earliest. The behaviour
- *  `solveLayout` has always had, named so the default and the fallback are one thing
- *  rather than two copies of an argmin. */
-function lowestTotal(candidates: readonly Candidate[]): number {
+/** The hard terms that describe something that CANNOT EXIST, as opposed to a room
+ *  that is merely bad to live in.
+ *
+ *  The user settled this on 2026-09-02, and the wording is worth keeping because the
+ *  reasoning is what generalises: *"door being blocked (avoid if possible) is
+ *  objectively better than a model going through walls. nothing physically impossible
+ *  should be encouraged. door being blocked can be prompted and fix with the fix
+ *  feature."*
+ *
+ *  So the split is by KIND and not by severity. Two solids in the same place, and a
+ *  solid through a wall, are things the room cannot contain. A blocked door, an
+ *  unreachable corner, a wardrobe whose doors will not open are all rooms that exist
+ *  and are bad — the room report names each of them and **Try a fix** acts on them.
+ *  The remaining three of `HARD_TERMS` are therefore deliberately absent here.
+ *
+ *  ── Why this cannot be a weight, which is the thing to read before re-tuning ──
+ *
+ *  `DEFAULT_WEIGHTS` prices `outside` at 1000 against `door`'s 800, and that 200-unit
+ *  gap looks like the same decision expressed as a number. It is not, because **both
+ *  terms are continuous from zero**. Measured on a 6 × 4 room with a door in the south
+ *  wall and one 1200 mm wardrobe, at `DEFAULT_WEIGHTS`:
+ *
+ *      wardrobe 0.5 mm through the north wall   outside   0.75
+ *      wardrobe   5 mm through the north wall   outside   7.45
+ *      wardrobe  20 mm through the north wall   outside  29.81
+ *      wardrobe barely clipping the door path   door     50.00
+ *      wardrobe squarely across the doorway     door    900.00
+ *
+ *  A 20 mm overhang is bought by the lightest touch of a door path, and no finite
+ *  weight changes that: the outside term can always be made smaller than any fixed
+ *  door cost by moving the piece a millimetre back. Ordering two continuous
+ *  quantities is not something a ratio between them can do, which is precisely why
+ *  the answer is a veto and not a number. **Do not "fix" this by re-tuning
+ *  `DEFAULT_WEIGHTS`.**
+ *
+ *  ── …and why it is not a step in the cost function either ────────────────────
+ *
+ *  The obvious alternative is a cliff on `outside`, and `layout-score.ts` argues
+ *  against exactly that in its own words — *"a cost function is read as a gradient and
+ *  a cliff gives the annealer nothing to walk down"* — and it is right. The descent
+ *  keeps its gradient. This term list is read only where an arrangement is **chosen**:
+ *  which finalist wins, and whether the answer is handed back at all. */
+export const IMPOSSIBLE_TERMS: Array<keyof ScoreWeights> = ['overlap', 'outside'];
+
+/** How much of this arrangement cannot physically exist, in weighted cost units.
+ *
+ *  A SUM, where `anyWorse` keeps the hard terms apart, and the difference is not an
+ *  oversight. `anyWorse` refuses a trade in which any hard term gets worse, so keeping
+ *  them apart there is what stops one buying another across the kinds. Here every term
+ *  in the list is already on the same side of the veto — both are impossible — so
+ *  there is nothing to protect from being bought, and "which arrangement is least
+ *  impossible" is a single question with a single answer. */
+export function impossibility(b: CostBreakdown): number {
+  let sum = 0;
+  for (const k of IMPOSSIBLE_TERMS) sum += b[k];
+  return sum;
+}
+
+/** Which refusal, if any, applies to an answer — the whole of the accept's decision,
+ *  as a pure function of five numbers.
+ *
+ *  Out here rather than inline because the ORDERING is the part worth asserting and it
+ *  cannot be observed from a `SolveResult`: both arms revert identically, so a declined
+ *  solve always ends with `after === before` and `moved: []` whichever reason fired.
+ *  A test over real solves can show that the `impossible` arm occurs; only this
+ *  signature can show that an answer which is BOTH impossible and dearer is reported as
+ *  impossible.
+ *
+ *  `shuffle` exempts only the `no-gain` arm. A shuffle is asked for a DIFFERENT
+ *  arrangement and a different one is usually dearer, which is a fact about taste; it
+ *  says nothing about legality, so the impossibility arm applies in every mode. */
+export function declineFor(
+  impossibleBefore: number,
+  impossibleAfter: number,
+  totalBefore: number,
+  totalAfter: number,
+  shuffle: boolean,
+): SolveDecline | null {
+  if (impossibleAfter > impossibleBefore + 1e-6) return 'impossible';
+  if (!shuffle && totalAfter >= totalBefore) return 'no-gain';
+  return null;
+}
+
+/** Index of the best candidate: least impossible first, then cheapest on `total`.
+ *  Ties to the earliest, which is the behaviour `solveLayout` has always had.
+ *
+ *  The lexicographic half is § 31's veto at the point where a finalist becomes the
+ *  suggestion. Its reach is honestly small and was measured rather than assumed —
+ *  over five presets x eight seeds of a scrambled room, 40 pools held more than one
+ *  finalist, **2** of those held both a possible and an impossible arrangement, and
+ *  **1** changed hands. That is not the interesting number, and saying so here is the
+ *  point: a ranker can only choose among what the search kept, so the veto that
+ *  actually does the work is the one on the accept in `solveLayout`, where an answer
+ *  more impossible than the room it was given is refused outright.
+ *
+ *  Impossibility is compared with the same `1e-6` slack `anyWorse` uses, because these
+ *  are sums of areas and two arrangements that are equally legal can differ in the
+ *  last bit — a bare `<` would let a rounding error outrank a real cost difference. */
+export function bestCandidate(candidates: readonly Candidate[]): number {
   let bestIdx = 0;
+  let bestImp = impossibility(candidates[0].breakdown);
   for (let i = 1; i < candidates.length; i++) {
-    if (candidates[i].total < candidates[bestIdx].total) bestIdx = i;
+    const imp = impossibility(candidates[i].breakdown);
+    if (imp < bestImp - 1e-6 || (imp <= bestImp + 1e-6 && candidates[i].total < candidates[bestIdx].total)) {
+      bestIdx = i;
+      bestImp = Math.min(imp, bestImp);
+    }
   }
   return bestIdx;
 }
@@ -160,8 +275,30 @@ export type MoveReason = {
   turn: number;
 };
 
+/** Why a solve handed back the layout it was given.
+ *
+ *  `null` when it did not — either it found a suggestion, or the search simply never
+ *  proposed a move. The two refusals are different facts about the room and the UI
+ *  says different things about them, which is the whole reason this is not a boolean:
+ *
+ *  · `'no-gain'` — every finalist cost more than the layout already on screen. The
+ *    room is fine, or at least this solver cannot improve it.
+ *  · `'impossible'` — the answer would have been MORE impossible than the room it was
+ *    given: a piece through a wall, or inside another piece. See `IMPOSSIBLE_TERMS`.
+ *    The room may be a mess; what the search found was worse than a mess.
+ *
+ *  Before this existed, `RoomTools` reported both as *"This is already a good
+ *  arrangement"*, which is true of the first and a lie about the second. */
+export type SolveDecline = 'no-gain' | 'impossible';
+
 export type SolveResult = {
   placements: Placement[];
+  /** Why the answer is the input layout, or `null` if it is not. See `SolveDecline`.
+   *
+   *  Reported rather than inferred: `moved.length === 0` cannot tell a room nothing
+   *  could improve from a room whose every candidate was illegal, and only the solver
+   *  is in a position to know which happened. */
+  declined: SolveDecline | null;
   /** Cost before and after, so a caller can say what it achieved — and so a
    *  suggestion that achieved nothing can be recognised and not offered. */
   before: number;
@@ -681,6 +818,9 @@ export function solveLayout(
   if (allIdx.length === 0) {
     return {
       placements: current,
+      // Nothing was movable, so there was never an answer to refuse. `no-gain` would
+      // be the wrong word for it and `impossible` a worse one.
+      declined: null,
       before,
       after: before,
       breakdownBefore,
@@ -878,17 +1018,22 @@ export function solveLayout(
   remember(pool, best, bestCost);
   const rated: Candidate[] = pool.map((c) => {
     // The expensive term the pool's own sort does not price — a raster and a distance
-    // transform each, which is why only the finalists ever get it.
-    const navCost = weights.navigation * navigabilityCost(model, c.placements, NAV_CELL);
-    return { placements: c.placements, cost: c.cost, navCost, total: c.cost + navCost };
+    // transform each, which is why only the finalists ever get it. Taken off a full
+    // breakdown rather than from a bare `navigabilityCost` call, because a ranker has
+    // to be able to ask which KIND of cost a candidate carries (see
+    // `IMPOSSIBLE_TERMS`) and re-deriving that per candidate downstream would pay for
+    // a second distance transform. Same number of transforms as before: one.
+    const breakdown = costBreakdown(model, c.placements, weights, NAV_CELL);
+    const navCost = breakdown.navigation;
+    return { placements: c.placements, cost: c.cost, navCost, total: c.cost + navCost, breakdown };
   });
 
-  // Which finalist becomes the suggestion. The default is the argmin this has always
-  // taken; a caller may substitute its own — see `SolveOptions.pick`. An out-of-range
-  // answer falls back to the argmin rather than throwing: a ranker is a preference,
+  // Which finalist becomes the suggestion. The default is `bestCandidate`; a caller
+  // may substitute its own — see `SolveOptions.pick`. An out-of-range answer falls
+  // back to the same default rather than throwing: a ranker is a preference,
   // and a room with no suggestion in it is a worse failure than an unheeded one.
-  const chosen = opts.pick ? opts.pick(rated) : lowestTotal(rated);
-  const picked = rated[chosen] ?? rated[lowestTotal(rated)];
+  const chosen = opts.pick ? opts.pick(rated) : bestCandidate(rated);
+  const picked = rated[chosen] ?? rated[bestCandidate(rated)];
 
   // Copied before anything mutates it. `winner` is normalised in place on the next
   // line and `pool` is handed back as `SolveResult.finalists`, so without this a
@@ -974,7 +1119,62 @@ export function solveLayout(
   // working feature.) What keeps a shuffle honest is `isCleanShuffle`'s per-term
   // `HARD_TERMS` check in `lib/layout-shuffle.ts`, which is about faults rather
   // than about totals, and refuses the things a person would actually call broken.
-  if (!shuffle && breakdownAfter.total >= before) {
+  //
+  // ── …and never hand back something that cannot EXIST, in any mode ───────────
+  //
+  // § 31, and the half of the invariant above that `total` cannot express. The test
+  // above compares one number, so an answer is free to put a wardrobe through a wall
+  // as long as it buys back more than 1000 units of taste elsewhere — and it does.
+  // Measured over five presets x two modes x scrambled-and-seeded x eight seeds =
+  // 160 solves, counting answers whose `overlap + outside` was higher than the
+  // layout they were HANDED:
+  //
+  //      18 of 160, and every one of them started from a perfectly legal room.
+  //      The L preset's worst reached `outside` 371.6 from 0 — roughly 200 mm of a
+  //      wardrobe inside the plaster — while its total improved 811 → 400, so the
+  //      old test welcomed it.
+  //
+  // Those are the SEEDED presets, which is what makes this a first-run defect rather
+  // than an edge case: a brand-new L-shaped room, one press of Suggest, furniture in
+  // the wall. `RoomTools` writes the answer straight to the store and its only gate
+  // is `isWorthOffering`, which reads the same two totals; **Try a fix** is exempt
+  // from even that. So the guard belongs here, where no caller can forget it.
+  //
+  // Reverting to the origin rather than to the best legal finalist, deliberately: the
+  // picker has already preferred a possible arrangement if the pool held one, so
+  // reaching this line means every finalist was impossible, and the honest answer to
+  // "arrange this room" when the search only found illegal answers is that it found
+  // none. `moved` comes back empty and the caller reports exactly that.
+  //
+  // Applies in `shuffle` too, where the total invariant deliberately does not. The
+  // exemption above exists because a shuffle is asked for a DIFFERENT arrangement and
+  // a different one is usually dearer — that reasoning is about taste and says nothing
+  // about legality. `isCleanShuffle` already demands every hard term be zero, so this
+  // cannot cost shuffle an offer it would have shown; it refuses the same answers one
+  // stage earlier.
+  const impossibleBefore = impossibility(breakdownBefore);
+  const impossibleAfter = impossibility(breakdownAfter);
+  // Impossibility is tested FIRST and reported in preference to `no-gain`, because an
+  // answer can be both and only one of the two is worth telling anyone: "everything I
+  // found put a piece through a wall" is a fact about the search, while "nothing was
+  // cheaper" is the ordinary outcome it would otherwise hide behind.
+  //
+  // Over the 80 suggest solves `tests/impossible-veto.test.ts` sweeps: 17 decline (13
+  // `no-gain`, 4 `impossible`, all four on the seeded U), 59 move something, and 4
+  // neither decline nor move — the search proposed nothing at all. That last group is
+  // why "63 applied" is the wrong way to say it.
+  //
+  // What this measures is the FINAL layout, four passes downstream of the pick, so in
+  // principle `snapYaws`, `pruneMoves` or `openRoutes` could manufacture an
+  // impossibility no finalist had, and this would then blame the search for it.
+  // Measured rather than assumed: across both modes, 9 solves declined for
+  // impossibility and in **0** of them was the picked finalist legal. `bestCandidate`
+  // returns the LEAST impossible candidate, so a picked finalist that is illegal means
+  // every finalist was — which is what makes the toast's wording honest. If that ever
+  // stops reading 0, the repair is to fall back to the picked finalist rather than to
+  // the origin; widening this comparison would only hide it.
+  const declined = declineFor(impossibleBefore, impossibleAfter, before, breakdownAfter.total, shuffle);
+  if (declined) {
     winner = origin.map((p) => ({ ...p }));
     breakdownAfter = breakdownBefore;
   }
@@ -1009,6 +1209,7 @@ export function solveLayout(
   const decided = moved.filter((i) => !carried.has(i));
   return {
     placements: winner,
+    declined,
     before,
     after: breakdownAfter.total,
     breakdownBefore,
@@ -1072,10 +1273,19 @@ export function openRoutes(
   }
   if (pool.length === 0) return placements;
 
-  const cost = (p: Placement[]) => costBreakdown(m, p, weights, REPAIR_CELL).total;
+  // The breakdown rather than the total, because two different questions are asked of
+  // it below and the second one is § 31's: the annealer walks down `total`, and what
+  // it is allowed to REMEMBER as the best answer is gated on impossibility. Reading
+  // both off one call costs nothing over the old `.total`.
+  const cost = (p: Placement[]) => costBreakdown(m, p, weights, REPAIR_CELL);
   const current = placements.map((p) => ({ ...p }));
   let best = current.map((p) => ({ ...p }));
-  let bestCost = cost(current);
+  const startBreakdown = cost(current);
+  // What this pass may not exceed. Measured against what it was HANDED rather than
+  // against zero: a repair run on an already-broken room must still be able to answer,
+  // and its job is to open a route, not to fix a collision it did not cause.
+  const impossibleCeiling = impossibility(startBreakdown) + 1e-6;
+  let bestCost = startBreakdown.total;
   let now = bestCost;
   const span = Math.max(b.maxX - b.minX, b.maxZ - b.minZ);
 
@@ -1086,10 +1296,15 @@ export function openRoutes(
     const i = pool[Math.floor(rng() * pool.length) % pool.length];
     const prev = current[i];
     current[i] = propose(m, current, i, reach, rng, b);
-    const trial = cost(current);
+    const priced = cost(current);
+    const trial = priced.total;
+    // Acceptance is on the total and nothing else — a cliff here would give the
+    // annealer nothing to walk down, which is the argument `layout-score.ts` makes
+    // against exactly that and it still holds. The veto lives one line lower, where
+    // an arrangement stops being a step and becomes an ANSWER.
     if (trial - now <= 0 || rng() < Math.exp(-(trial - now) / temp)) {
       now = trial;
-      if (now < bestCost) {
+      if (now < bestCost && impossibility(priced) <= impossibleCeiling) {
         bestCost = now;
         best = current.map((p) => ({ ...p }));
       }
@@ -1107,6 +1322,34 @@ export function openRoutes(
   // the USER had, not against the good answer this pass was given. So a repair could
   // quietly spend the search's work and return something worse, and the doc said it
   // couldn't.
+  //
+  // § 31 is gated on `best` above and NOT again here, which is a deletion rather than
+  // an omission. A line reading `if (impossibility(found) > impossibility(given) +
+  // 1e-6) return placements;` stood here for one commit, described as a backstop
+  // against the coarse grid and the fine one disagreeing about impossibility. **It
+  // could never fire**, and two independent reviews reached that by the same route:
+  // `navCell` is read at exactly one place in `costBreakdown` and it sets `navigation`
+  // alone, so `overlap` and `outside` are bit-identical at `REPAIR_CELL` and
+  // `NAV_CELL` for the same placements. The two grids cannot disagree about
+  // impossibility. `best` is only ever assigned the initial copy of `placements` or a
+  // candidate that passed `impossibleCeiling`, so the condition is unconditionally
+  // false.
+  //
+  // A dead branch no test can cover, under a comment asserting a mechanism that does
+  // not exist, is worse than no guard — and it had already made a neighbour false:
+  // `tests/suggest-tidiness.test.ts` promises the fine-grid re-check is "the only path
+  // that returns the input after the search has run", which stopped being true the
+  // moment a second identity-return appeared one line above it.
+  //
+  // Why the gate is on `best` at all, which is the part worth keeping: this pass moves
+  // obstacles to open a route, so "push the wardrobe into the wall" is squarely inside
+  // its own proposal space and scores WELL — the wall it goes through is not floor the
+  // navigation term was counting. Refusing that only at the END throws away the whole
+  // repair; refusing it as an ANSWER while still letting the search walk through
+  // illegal ground keeps every legal arrangement the same search already visited.
+  // Measured on the Double rung at U 6x5, twelve seeds: refusing at the end left seeds
+  // 6 and 11 stranding 748.2 and 560.1 of floor, and gating `best` instead brings both
+  // back to a room with nothing in a wall and nothing inside anything.
   const fine = (p: Placement[]) => costBreakdown(m, p, weights, NAV_CELL).total;
   return fine(best) < fine(placements) ? best : placements;
 }

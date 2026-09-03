@@ -263,6 +263,62 @@ the nightstand, carried nowhere while the nightstand moved. That fix does want e
 is the item below, because it is the one defect in this file that the 2D plan is
 constitutionally unable to show.*
 
+### The two decline toasts — the halves nobody has pressed, branch `fix/impossible-outranks-inconvenient`, PR #89
+
+**Half of this item has been looked at and is deleted rather than struck through.**
+Seen in a real browser on 2026-09-03, seeded U at 6 x 4, production build: presses 1
+and 2 give *"No safe arrangement found — Every layout tried put a piece through a wall
+or inside another one, so nothing was moved. Press Fix again for a different try, or
+unlock a piece to give it more room."*, press 3 applies and says *"Moved 4 pieces"* with
+the room visibly rearranging. The long message **wraps to four lines and does not clip**,
+which was the open question about it. Presses 1, 2 and 5/7 declining matches the
+measurement exactly.
+
+What is left is the part that probe could not reach.
+
+**Where to click.**
+
+- **`Try a fix`, on a single finding.** Room check → any finding → its own button. Its
+  impossible copy is *"No safe way to move those"* with a different second sentence
+  depending on whether the finding named pieces (*"Fix can rearrange the whole
+  room…"*) or not (*"Try unlocking a piece…"*). **Neither string has ever rendered.**
+  **Measured, and the answer is uncomfortable: 212 confined solves over every finding
+  of every preset, scrambled and seeded, declined _zero_ times — for either reason.**
+  So the new sentence is unreachable on any fixture that can be built from the
+  presets, and so is the one that has shipped beside it for months. A confine locks
+  all but the finding's own pieces, which leaves the search almost no room to exceed
+  the impossibility it was handed. Kept because it guards against a wrong message
+  rather than adding a feature, and because refusing it would leave the older sentence
+  covering a case it describes falsely — but if someone can reach this path in a real
+  room, that is the thing to find out.
+- **The re-fit offer.** Resize a wardrobe well past what the room takes, wait for the
+  offer toast, press **Re-fit**. Its impossible copy is *"No safe way to fit that"*.
+  Also never rendered, and this is the path most likely to reach it — a resize is the
+  state most likely to leave the search with nothing but legal-free answers.
+
+**What wrong looks like.**
+
+- **A narrow window.** The long messages are ~170 characters at `ttl: 14000`. The toast
+  host is `min(360px, calc(100vw - 32px))` with no `overflow`, so it should grow
+  downward; at ~400px wide it will be tall. Check it does not push its own dismiss
+  button off, and that 14 s is actually enough to read it.
+- **Toast pile-up.** Pressing `Fix` repeatedly stacks identical *"No safe arrangement
+  found"* cards — three were on screen at once in the probe. Pre-existing behaviour of
+  the toast host rather than anything this branch did, but it reads badly precisely
+  when the copy is telling you to press again.
+- **Furniture in a wall after a press.** The thing the change exists to prevent. The 2D
+  plan is where a small overhang is actually visible — the 3D camera cannot frame a
+  wall line and a piece edge together. Nothing crossed a wall in the 3D shots, which is
+  weaker evidence than it sounds.
+- **A screen reader.** The toast host is `role="status"` / `aria-live="polite"`, so the
+  new message should be announced. Not tried.
+
+**What does not need re-deriving.** 18 of 160 solves used to hand back a room more
+impossible than the one they were given; 0 do now, with 130 of 160 still moving
+something. 10 of 10 mutants killed on the second battery, 13 of 14 on the first.
+`checkFit` changed 5 of 100 verdicts, every one `no-room` → `tight`. Chained `Fix`
+presses re-introduce findings on the T preset — identical on `main`, so not this branch.
+
 ### Fix and Shuffle are two buttons now — merged to `main` in `9ecce9f` (PR #67)
 
 **Where to click.** Left rail, top: the health chip now has **two** buttons under it,
