@@ -24,6 +24,7 @@ import { v4 as uuid } from 'uuid';
 import { useStudio, useSettings } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
+import { riderRelation } from '@/lib/rider-height';
 import { useHistory, applySnapshot, startHistoryRecording } from '@/lib/history';
 import { collidesAt, type ScenePart } from '@/lib/scene-spec';
 import { clampIntoFootprint } from '@/lib/footprint';
@@ -331,6 +332,16 @@ export function duplicateSelection(explicit?: string[]) {
       groupId: undefined,
     };
     useScene.getState().addPart(copy);
+    // A copy of a rider is a rider. `pos` above came from `currentRoomScene()`, so it
+    // carries the height its support was CORRECTED to — an authored Y that
+    // `resetTransforms` cannot reach and `RoomSync` persists. Without the relation the
+    // copy is severed from the piece it was cloned from: shrink the desk back and the
+    // original returns while the copy stays where it was, two identical lamps 450 mm
+    // apart on one desk. `riderRelation` answers for a seeded rider as well as a
+    // dragged one, and if the copy landed clear of the support `stillOver` drops the
+    // edge on the next read.
+    const on = riderRelation(sc.parts, useStudio.getState().parentIds)[id];
+    if (on) useStudio.getState().setParent(copy.id, on);
     created.push(copy.id);
   }
 

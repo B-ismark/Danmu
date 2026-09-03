@@ -286,9 +286,15 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
    *  collision + support see the world as it currently looks.
    *
    *  Read through getState() rather than a subscription: the override maps are
-   *  replaced wholesale by their setters, so subscribing to them re-rendered
+   *  replaced wholesale by their setters, so subscribing to them would re-render
    *  EVERY Draggable on every commit — and they are never read during render,
-   *  only inside these handlers. */
+   *  only inside these handlers.
+   *
+   *  `useSettledY` above does subscribe to those same maps, and does not cost that,
+   *  because its SELECTOR returns a number: zustand compares the result with
+   *  `Object.is`, so this component re-renders only when its own piece's settled Y
+   *  changes. Reading the whole map after subscribing is the version that would make
+   *  this paragraph false again. */
   function buildEffSnapshot(): ScenePart[] {
     return currentRoomScene();
   }

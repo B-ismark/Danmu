@@ -76,7 +76,7 @@ export function resolveScene(
   o: Partial<TransformOverrides>,
   ctx: SceneContext,
 ): ScenePart[] {
-  const ys = deriveRiderYs(parts, o, ctx.parentIds, ctx.roomHeight);
+  const ys = riderYs(parts, o.positions, o.rotations, o.dims, ctx.parentIds, ctx.roomHeight);
   const resolved = resolveParts(parts, o);
   // The untouched majority keeps referential equality with `resolveParts`' answer,
   // which is what `resolvePart` returns the part itself for and what makes memoising
@@ -126,20 +126,68 @@ function stillOver(rider: ScenePart, support: ScenePart): boolean {
  * `useStudio` slice of the same name, which is a separate slice from
  * `TransformOverrides` and so is passed separately rather than folded in.
  *
+ * ── Which riders may be moved, and it is TWO rules rather than one ────────────
+ *
+ * The first version asked one question — *has this support's top moved since it was
+ * authored* — and used it for both halves of the relation. That is a proxy, and it is
+ * wrong in both directions:
+ *
+ *   · **Too weak for a recorded edge.** Every consumer that moves a piece in x/z off
+ *     the RESOLVED scene writes this pass's own answer back into `positions`
+ *     (`RoomTools`' Suggest and Shuffle, `carryAttached`, `PlanView.moveTo`,
+ *     `Draggable.commit`). Set the support's height back to exactly its authored
+ *     value afterwards and the proxy says "nothing moved" while the rider is left
+ *     standing at the baked Y — measured at 450 mm in the air, persisted. It followed
+ *     every height except the one it started at.
+ *   · **Too strong for an inferred edge.** `clearParent` deletes a key; it cannot
+ *     record *"this rides nothing"*. So an authored-geometry edge is re-inferred even
+ *     after the user has explicitly grounded the piece, and with the proxy satisfied
+ *     — resize the nightstand first — pressing the Inspector's **Floor** button puts
+ *     the lamp on the floor and this pass puts it straight back. Two clicks.
+ *
+ * So:
+ *
+ *   1. `rider.pos[1] <= 0` — **a piece standing on the floor rides nothing**,
+ *      whatever the relation still says. The same bar `ridingParents` uses on the
+ *      authored side, and it is what makes **Floor** (and any drag that grounds a
+ *      piece) stick, because both write a Y of exactly 0.
+ *   2. A relation `parentIds` RECORDED is honoured unconditionally; one merely
+ *      INFERRED from authored geometry is gated on the support's top having moved.
+ *      A recorded edge is a decision — a drag landed the piece there and
+ *      `Draggable.commit` wrote it down — so the rider belongs on that support's top,
+ *      full stop. An inferred one is a guess about a room nobody has touched, and the
+ *      gate is what stops the guess overruling a placement.
+ *
+ * **A piece deliberately left floating over a table keeps floating**, which is the
+ * behaviour `tests/placement-banner.test.tsx` pins and which the first attempt broke.
+ * It is safe under rule 2 because those pieces have no relation at all: an inferred
+ * edge needs the rider within `SUPPORT_Y_EPS` of the top, and nothing in the app can
+ * record an edge for a piece that is not resting — `Draggable.commit` only calls
+ * `setParent` from a support the drop actually found.
+ *
  * ── What is deliberately NOT here ─────────────────────────────────────────────
  *
  * **No `> 0.3` support bar.** `settleHeights` has one, to decide which of the
- * surfaces it FINDS counts as a table rather than a rug. This function finds nothing
- * — it follows a support the user or the seeder already chose — so filtering that
- * choice by height would overrule a decision rather than make one. Wiring the two
- * bars together is what drops a lamp through a 300 mm ottoman, and
- * `lib/layout-settle.ts` carries the standing warning about it.
+ * surfaces it FINDS counts as a table rather than a rug. Wiring the two together is
+ * what drops a lamp through a 300 mm ottoman, and `lib/layout-settle.ts` carries the
+ * standing warning about it.
+ *
+ * The first wording of that said *"this function finds nothing"*, and **half of it
+ * does**: `parentIds` is a record, but `ridingParents` is a search, with a
+ * `findSupportDetailed` and a `pos[1] > 0` bar of its own. The honest reason is
+ * narrower and survives that correction — the search has ALREADY happened by the time
+ * this function runs, against the authored scene, and re-filtering its answer by
+ * height would drop a rider this pass is not entitled to re-seat. It is
+ * `ridingParents`' bar that decides which surfaces count, in one place.
  *
  * **The ceiling clamp IS here**, and matches `settleHeights`' floor-anchored branch
  * exactly, because a rider whose support grew can otherwise be pushed through the
  * slab by this pass. A piece too tall for the room keeps its real height and pokes
  * through; `lib/clearance.ts` reports `tall`. Silently shrinking it is the thing this
- * repo does not do.
+ * repo does not do. **A clamped rider is left off its support's top**, which is a real
+ * consequence rather than a rounding one: `ridingParents` can no longer infer the
+ * edge, so `buildSceneFile` writes the relation explicitly (see `riderRelation`'s
+ * callers) or a save loses it for good.
  *
  * `roomHeight` in metres.
  */
@@ -172,10 +220,20 @@ export function deriveRiderYs(
   // every chain fixture anyone writes by hand, which is exactly why sorting by Y
   // passed a suite that could not express the case.
   //
-  // A cycle (which `wouldCreateCycle` prevents on the `parentIds` side and `y`
-  // strictly increasing prevents on the `ridingParents` side, but which the UNION
-  // could still contain) is simply never reached from a root, and `seen` bounds the
-  // walk regardless.
+  // **`seen` cannot fire, and it stays anyway — said plainly rather than pinned.**
+  // `relation` is child -> parent, so each child sits in exactly ONE parent's list and
+  // nothing can be enqueued twice; a cycle is unreachable from a root by construction,
+  // because every member of one has a parent and so is filtered out of the root set.
+  // Mutation confirms it: deleting both the test and the `add` leaves 647 tests green,
+  // and the case named "terminates on a cycle" never enters this loop at all — it
+  // measures the root filter. Writing a test for it would mean writing a test that
+  // cannot fail, which is the thing this repo keeps finding.
+  //
+  // It is kept because the failure it guards against is not a wrong answer but a HUNG
+  // TAB, and `withRiders` in `lib/layout-solve.ts` carries the story of that exact
+  // outcome arriving through a one-character change to a loop with this shape. A guard
+  // whose absence is invisible until someone changes an invariant two files away is
+  // the cheap half of that bargain.
   const queue = [...childrenOf.keys()].filter((id) => relation[id] === undefined);
   const seen = new Set<string>(queue);
 
@@ -189,17 +247,35 @@ export function deriveRiderYs(
     // got one — which is the second half of walking from the roots.
     let currentTop: number | null = null;
     let moved = false;
-    if (authoredSupport && liveSupport) {
+    // Nothing rests on a television, a curtain or a rug, and a `parentId` out of an
+    // imported file is the one door that can name one — `lib/scene-file.ts` checks it
+    // for cycles and id-remapping, not for whether the piece can hold anything up.
+    // Measured through that door: a rug thickened from 20 mm to 60 mm lifted its rider.
+    // These are `findSupportDetailed`'s own two skips, so the answer to "may this hold
+    // something up" is the same wherever it is asked.
+    if (
+      authoredSupport && liveSupport
+      && isFloorStanding(liveSupport.category, liveSupport.shape)
+      && liveSupport.category !== 'rug'
+    ) {
+      // Using this pass's own correction for the support if it got one — the second
+      // half of walking from the roots. `??` and NOT `||`: a support this pass put on
+      // the floor is corrected to exactly 0, which `||` would discard in favour of its
+      // uncorrected live Y, carrying its riders to a height it is no longer at.
       currentTop = verticalExtent(
         liveSupport.category, liveSupport.shape, liveSupport.dimMM, out[supportId] ?? liveSupport.pos[1],
       )[1];
+      // The AUTHORED pos, not the live one: this term is the whole memory of where the
+      // support started. Reading `liveSupport.pos[1]` here makes the comparison
+      // `x !== x`, so a support that was MOVED vertically without being resized reports
+      // "nothing changed" and drops every rider it carries.
       const authoredTop = verticalExtent(
         authoredSupport.category, authoredSupport.shape, authoredSupport.dimMM, authoredSupport.pos[1],
       )[1];
-      // The gate: has this support's top actually MOVED? Not "does it carry a `dims`
-      // override" — a width-only resize carries one and moves no rider. `out` is
-      // consulted as well, so a support this pass has just lowered carries its own
-      // riders down even if that landed it back on its authored top.
+      // Has this support's top actually MOVED? Not "does it carry a `dims` override" —
+      // a width-only resize carries one and moves no rider. `out` is consulted as well,
+      // so a support this pass has just lowered carries its own riders down even if
+      // that landed it back on its authored top.
       moved = currentTop !== authoredTop || out[supportId] !== undefined;
     }
 
@@ -207,7 +283,7 @@ export function deriveRiderYs(
       if (seen.has(childId)) continue;
       seen.add(childId);
       queue.push(childId); // its own riders may still need it, resized or not
-      if (!moved || currentTop === null || !liveSupport) continue;
+      if (currentTop === null || !liveSupport) continue;
 
       const rider = live.get(childId);
       if (!rider) continue;
@@ -215,8 +291,18 @@ export function deriveRiderYs(
       // `pos[1]` is a CENTRE, so "put its bottom on the top" is not even the right
       // arithmetic for one.
       if (!isFloorStanding(rider.category, rider.shape)) continue;
+      // Rule 1: on the floor is on the floor. `groundToFloor` and a drag that finds no
+      // support both write exactly 0, and neither can leave a tombstone in `parentIds`
+      // for a relation that was only ever inferred.
+      if (rider.pos[1] <= 0) continue;
+      // Rule 2: a RECORDED edge is honoured whatever the support has done; an INFERRED
+      // one waits for the support to have moved.
+      if (!moved && parentIds[childId] !== supportId) continue;
       if (!stillOver(rider, liveSupport)) continue;
 
+      // The rider's EFFECTIVE height — a rider the user has also resized is a legal
+      // combination, and reading the authored `dimMM` here would clamp it by the size
+      // it shipped as.
       const h = rider.dimMM[2] / 1000;
       const y = currentTop + h > cap ? Math.max(0, cap - h) : currentTop;
       // Unchanged is OMITTED rather than returned, for the reason
@@ -227,4 +313,56 @@ export function deriveRiderYs(
   }
 
   return out;
+}
+
+/** One derivation per store change, rather than one per subscriber.
+ *
+ * **This is not an optimisation, it is the difference between the feature being
+ * affordable and not.** `components/three/Room.tsx` mounts a `Draggable` per part AND
+ * a `Dressing` per part, both of which read `useSettledY`, on top of eight
+ * `useRoomScene` subscribers — so an uncached derivation runs `2N + 8` times per store
+ * write. `Draggable`'s `liveUpdate` calls `setTransformsFor` on **every rAF** whenever
+ * the dragged piece carries company, which is exactly the § 12 case, so that multiple
+ * lands on the frame budget. Measured over the pure functions in node, per drag frame:
+ *
+ *     parts/riders   one call    x (2N + 8)
+ *        12 / 1      0.012 ms      0.38 ms
+ *        30 / 4      0.029 ms      1.97 ms
+ *        60 / 10     0.11  ms     14.3  ms
+ *        80 / 14     0.19  ms     31.9  ms
+ *
+ * The 16.7 ms budget is gone at ~60 parts before React reconciles anything. Cached,
+ * the same frame costs one call.
+ *
+ * The cache is size ONE and keyed on REFERENCE identity, which is what makes it
+ * correct here rather than a guess: every subscriber reads the same store slices, so
+ * within a render pass they all arrive with identical references and collapse onto one
+ * computation, and any store write replaces a slice and misses. The six arguments are
+ * separate rather than an options object for the same reason — an object literal built
+ * at the call site is a new reference every time and would never hit.
+ *
+ * `deriveRiderYs` stays pure and uncached: the tests measure that one, so no assertion
+ * is ever answered by a cache. The map handed back here is SHARED between callers and
+ * must not be mutated; `resolveScene` and `useSettledY` only read it. */
+let lastKey: [unknown, unknown, unknown, unknown, unknown, number] | null = null;
+let lastValue: Record<string, number> = {};
+
+export function riderYs(
+  authored: ScenePart[],
+  positions: TransformOverrides['positions'] | undefined,
+  rotations: TransformOverrides['rotations'] | undefined,
+  dims: TransformOverrides['dims'] | undefined,
+  parentIds: Record<string, string>,
+  roomHeight: number,
+): Record<string, number> {
+  if (
+    lastKey !== null
+    && lastKey[0] === authored && lastKey[1] === positions && lastKey[2] === rotations
+    && lastKey[3] === dims && lastKey[4] === parentIds && lastKey[5] === roomHeight
+  ) {
+    return lastValue;
+  }
+  lastValue = deriveRiderYs(authored, { positions, rotations, dims }, parentIds, roomHeight);
+  lastKey = [authored, positions, rotations, dims, parentIds, roomHeight];
+  return lastValue;
 }

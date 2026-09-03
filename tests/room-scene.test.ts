@@ -196,10 +196,14 @@ describe('the transform fallback is written once', () => {
 // `tests/scene-build.test.ts`: a new one arrives as a decision rather than as a diff
 // nobody reads.
 
-/** Where `resolveParts` may be called, and why each is not `resolveScene`. */
+/** Where `resolveParts` may be called, and why each is not `resolveScene`.
+ *
+ *  `lib/room-scene.ts` is NOT here, and its absence is the assertion: it only
+ *  re-exports the name (`export { resolveParts } from …`, no parenthesis), so it never
+ *  appears in the sweep at all. Listing it would have been a dead entry that made the
+ *  set look one longer than the thing it describes. */
 const PLAIN_MERGE_IS_RIGHT = new Set([
-  'lib/transforms.ts', // defines it
-  'lib/room-scene.ts', // re-exports it
+  'lib/transforms.ts', // declares it — matched by the declaration, not by a call
   'lib/rider-height.ts', // `resolveScene` IS this call plus the correction
   // A saved layout's thumbnail is drawn from directly above, where a footprint is all
   // there is and no Y reaches the picture. The row also has no room height of its own
@@ -219,8 +223,11 @@ describe('resolveScene is what a consumer of the whole room calls', () => {
         if (/\bresolveParts\s*\(/.test(line) && !callers.includes(rel)) callers.push(rel);
       }
     }
-    // The sweep must find something, or an empty list would satisfy the check below.
-    expect(callers.length).toBeGreaterThan(2);
+    // The sweep must find the allow-list itself, or an empty result would satisfy the
+    // check below. Compared against the SET rather than against a hand-typed number:
+    // `toBeGreaterThan(2)` sat exactly on the floor of a three-entry list, so it was a
+    // bound and a census at once and neither of them was checked.
+    expect([...callers].sort()).toEqual([...PLAIN_MERGE_IS_RIGHT].sort());
     expect(
       callers.filter((c) => !PLAIN_MERGE_IS_RIGHT.has(c)),
       `these call resolveParts where they probably want resolveScene — a rider whose ` +

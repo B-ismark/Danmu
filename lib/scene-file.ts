@@ -57,7 +57,7 @@ import {
 } from './scene-spec';
 import { clampDims, roomAxisRange, ROOM_SIDE_EPS, ROOM_SIDE_M } from './dimension-ranges';
 import { anchorFor, heightForNewCeiling } from './physics';
-import { resolveScene } from './rider-height';
+import { resolveScene, riderRelation } from './rider-height';
 import { fileSlug } from './exports';
 import { wouldCreateCycle } from './rigid-parent';
 import { LAYOUT_IDS, type LayoutId, type RoomData, type Site, type Transforms } from './storage';
@@ -154,8 +154,17 @@ export type SceneFile = {
  *  rider's height after its support was resized is held in neither layer, so baking
  *  the two layers alone wrote a lamp into the file at the height its desk used to be
  *  — a file that then opens with the lamp in mid-air on a machine that never saw the
- *  resize, with nothing left to derive the right answer from. `parentIds` rides along
- *  as `parentId` per part, so the reader gets the relation too. */
+ *  resize, with nothing left to derive the right answer from.
+ *
+ *  **The relation written per part is `riderRelation`'s, not `parentIds`'.** Those
+ *  differ for every rider the app placed itself: `parentIds` records a drag, and a
+ *  seeded lamp on a seeded nightstand was never dragged. Writing only the recorded
+ *  half meant the file's reader had to re-INFER the rest, which works exactly while
+ *  the rider is within `SUPPORT_Y_EPS` of its support's top — and the one rider that
+ *  is not is the one the ceiling clamp moved, which is to say the one case where the
+ *  relation is the only thing that can put it right. Measured: a desk grown to 2300 mm
+ *  in a 2.5 m room leaves its lamp 220 mm below the top, and after a save/reopen
+ *  `riderRelation` came back empty and shrinking the desk again moved nothing. */
 export function buildSceneFile(
   room: RoomData,
   parts: ScenePart[],
@@ -163,6 +172,7 @@ export function buildSceneFile(
   exportedAt: number,
 ): SceneFile {
   const { positions, rotations, dims, hidden, parentIds } = transforms;
+  const relation = riderRelation(parts, parentIds ?? {});
   return {
     format: SCENE_FILE_FORMAT,
     version: SCENE_FILE_VERSION,
@@ -194,7 +204,7 @@ export function buildSceneFile(
       // would be a reference into nothing.
       const { fromDetection: _drop, ...part } = resolved;
       if (hidden?.[part.id]) (part as SceneFilePart).hidden = true;
-      if (parentIds?.[part.id]) (part as SceneFilePart).parentId = parentIds[part.id];
+      if (relation[part.id]) (part as SceneFilePart).parentId = relation[part.id];
       return part as SceneFilePart;
     }),
   };

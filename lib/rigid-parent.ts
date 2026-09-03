@@ -19,25 +19,35 @@
 // stored fact. `parentIds` only records that a pair is worth asking about; the
 // answer is recomputed at every read.
 //
-//   · A RESIZE is covered for free, without appearing in the list above. It moves
-//     neither part — it changes the SUPPORT's size under a child that has not gone
-//     anywhere — and nothing re-asks `parentIds` when a dim changes
-//     (`DimensionEditor` calls `setDim` and nothing else). It does not need to: the
-//     parts these reads see come from `resolveParts`, so the `dims` override is
-//     already applied and the support's NEW size is what gets asked. Shrink a desk
-//     out from under a lamp and dragging the desk carries nobody.
+//   · A RESIZE is covered, without appearing in the list above. It moves neither
+//     part — it changes the SUPPORT's size under a child that has not gone anywhere —
+//     and nothing re-asks `parentIds` when a dim changes (`DimensionEditor` calls
+//     `setDim` and nothing else). It does not need to: the parts these reads see are
+//     already at their effective transform, so the support's NEW size is what gets
+//     asked.
 //   · REVIVAL. A failed read drops the edge for that read only; nothing is ever
-//     pruned from the map. Grow the desk back and the lamp is a rigid child again,
-//     with no drop having happened. The same property that makes staleness harmless
-//     is what makes the relationship restorable — a reader who assumes the map is
-//     the truth finds the first bullet surprising, and one who assumes a stale edge
-//     gets cleaned up finds this one surprising.
+//     pruned from the map. The same property that makes staleness harmless is what
+//     makes the relationship restorable — a reader who assumes the map is the truth
+//     finds the first bullet surprising, and one who assumes a stale edge gets
+//     cleaned up finds this one surprising.
 //
-// Both are pinned in `tests/rigid-parent.test.ts`. One thing that follows and is
-// deliberately NOT this module's to fix: shrinking a support's height drops the
-// edge correctly and leaves the child hanging where it was. Dropping the edge is
-// the whole job here; re-grounding that child, or reporting that it is in the air,
-// belongs to the physics and clearance layers.
+// **Which of the two a HEIGHT resize lands in changed with § 12, and this paragraph
+// said the opposite for one commit.** It used to read "shrink a desk out from under a
+// lamp and dragging the desk carries nobody", with revival as the way back. That was
+// true while a shrunk desk left its lamp hanging at the old height, 50 mm or more
+// above the new top, so `isPhysicallySupported`'s Y test failed. `lib/rider-height.ts`
+// now re-seats that lamp on the desk before these reads ever see it — every caller
+// hands in `currentRoomScene()` or `useRoomScene()` — so the edge holds and the desk
+// DOES carry the lamp. A height resize therefore reaches neither bullet: there is
+// nothing to drop and nothing to revive.
+//
+// What still drops an edge is a resize in PLAN — shrink the desk's footprint out from
+// under the lamp and the share test fails, which is the half `rider-height` does not
+// touch and `stillOver` asks the same question about. Both remaining cases are pinned
+// in `tests/rigid-parent.test.ts`. One thing that follows and is deliberately NOT this
+// module's to fix: a child left hanging by a dropped edge stays where it was.
+// Dropping the edge is the whole job here; re-grounding that child, or reporting that
+// it is in the air, belongs to the physics and clearance layers.
 
 import type { ScenePart } from './scene-spec';
 import { footArea, footFromPart, localToWorld, worldToLocal } from './geometry';

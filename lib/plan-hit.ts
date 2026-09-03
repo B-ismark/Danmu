@@ -23,7 +23,8 @@
 //
 // EVERY function here reads `part.pos` / `part.rot` / `part.dimMM` straight, so the
 // parts handed in must already be at their EFFECTIVE transform — `useRoomScene()`
-// or `resolveParts`, never `useScene.getState().parts`. A part's authored transform
+// or `resolveScene`, never `useScene.getState().parts` and no longer `resolveParts`,
+// which merges the two layers and stops short of a rider whose support was resized. A part's authored transform
 // and the user's override live in two layers (see CLAUDE.md), and hit-testing the
 // authored one is wrong the instant anything has been dragged: the outline gets
 // drawn where the piece is and the click lands where it was born. `ResolveInput`

@@ -23,10 +23,11 @@
 
 import { describe, expect, it, beforeEach } from 'vitest';
 import { act, cleanup, renderHook } from '@testing-library/react';
-import { useRoomScene, usePartTransform, useSettledY } from '@/lib/room-scene';
+import { currentRoomScene, useRoomScene, usePartTransform, useSettledY } from '@/lib/room-scene';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 import { footprintForLayout } from '@/lib/footprint';
+import { duplicateSelection } from '@/components/studio/KeyboardShortcuts';
 import { MOUNT_PAD } from '@/lib/physics';
 import type { ScenePart } from '@/lib/scene-spec';
 
@@ -134,6 +135,61 @@ describe('useSettledY — the per-part half the hot paths read', () => {
     expect(result.current).toBe(2);
     act(() => useScene.setState({ room: { ...useScene.getState().room, height: 2.2 } }));
     expect(result.current).toBeCloseTo(2.2 - MOUNT_PAD - 0.4, 10);
+  });
+});
+
+describe('currentRoomScene — the non-hook twin every pointer handler reads', () => {
+  it('carries the correction, and reads BOTH halves of the context from the stores', () => {
+    // `currentSceneContext()` had no test at all, and replacing its body with
+    // `{ parentIds: {}, roomHeight: 99 }` left 647 tests green — while it is the only
+    // thing feeding `currentRoomScene()`, which `Draggable`'s world snapshot,
+    // `duplicateSelection`, `spinSelection`, `wall-actions` and `plan-export` all use.
+    setUp([desk(), lamp(0)]);
+    useStudio.setState({ positions: { [LAMP]: [0, 0.75, 0] }, dims: { [DESK]: [1400, 700, 900] } });
+    // parentIds half: without it the authored lamp is on the floor and nothing infers.
+    expect(yOf(currentRoomScene(), LAMP)).toBe(0.75);
+    act(() => useStudio.setState({ parentIds: { [LAMP]: DESK } }));
+    expect(yOf(currentRoomScene(), LAMP)).toBe(0.9);
+
+    // roomHeight half: the clamp is a function of the ceiling, so a shorter room
+    // gives a different answer for the same parts and the same overrides.
+    act(() => useStudio.setState({ dims: { [DESK]: [1400, 700, 2000] } }));
+    expect(yOf(currentRoomScene(), LAMP)).toBe(2);
+    act(() => useScene.setState({ room: { ...useScene.getState().room, height: 2.2 } }));
+    expect(yOf(currentRoomScene(), LAMP)).toBeCloseTo(2.2 - MOUNT_PAD - 0.4, 10);
+  });
+});
+
+describe('a copy of a rider is a rider', () => {
+  it('gives the duplicate the relation, so it does not sever from the piece it was cloned from', () => {
+    // `duplicateSelection` copies `pos` out of `currentRoomScene()`, which now carries
+    // the CORRECTED height, into the new part's AUTHORED position — where
+    // `resetTransforms` cannot reach it and `RoomSync` persists it. Without the
+    // relation the copy is authored at 0.9 while the desk's authored top is 0.75, so
+    // `ridingParents` rejects it: shrink the desk back and the original returns while
+    // the copy stays put — two identical lamps on one desk, 150 mm apart.
+    //
+    // The whole scene is read after each step rather than the map, because the defect
+    // is about which LAYER the height came from.
+    // A WIDE desk on purpose: `COPY_OFFSETS` puts the first copy 350 mm away on both
+    // axes, and on the standard 1400 x 700 desk that leaves 49.7% of the lamp over the
+    // edge — just under `MIN_SUPPORT_SHARE`, so `stillOver` correctly declines it and
+    // the copy is not a rider at all. Measured, after this case first failed on it.
+    const wide = { ...desk(), dimMM: [2400, 2000, 750] } as ScenePart;
+    setUp([wide, lamp(0.75)]);
+    act(() => useStudio.setState({ dims: { [DESK]: [2400, 2000, 900] }, selection: [LAMP], selectedPartId: LAMP }));
+    expect(yOf(currentRoomScene(), LAMP)).toBe(0.9);
+
+    act(() => duplicateSelection());
+    const copyId = useScene.getState().parts.map((p) => p.id).find((id) => id !== DESK && id !== LAMP);
+    expect(copyId, 'the duplicate was not created, so nothing below is measuring anything').toBeDefined();
+    expect(useStudio.getState().parentIds[copyId!], 'the copy rides what the original rides').toBe(DESK);
+
+    // And it behaves like one: put the desk back and BOTH lamps come down together.
+    act(() => useStudio.setState({ dims: {} }));
+    const back = currentRoomScene();
+    expect(yOf(back, LAMP)).toBe(0.75);
+    expect(yOf(back, copyId!)).toBe(0.75);
   });
 });
 

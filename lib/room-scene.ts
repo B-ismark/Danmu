@@ -14,7 +14,7 @@ import { useMemo } from 'react';
 import { useScene } from './scene-store';
 import { useStudio } from './store';
 import { hasOverride, type TransformOverrides } from './transforms';
-import { deriveRiderYs, resolveScene, type SceneContext } from './rider-height';
+import { riderYs, resolveScene, type SceneContext } from './rider-height';
 import type { ScenePart } from './scene-spec';
 
 export type { TransformOverrides } from './transforms';
@@ -28,7 +28,7 @@ export { resolveScene, type SceneContext } from './rider-height';
  *  rather than `getState()` reads on purpose: the in-session half of § 12 — resize a
  *  desk with the studio open and watch the lamp follow — is a re-render this hook
  *  must be woken for, and a `getState()` read is woken by nothing.
- *  `tests/rider-height.test.tsx` mounts the hook and moves each of them. */
+ *  `tests/rider-settle-hooks.test.tsx` mounts the hook and moves each of them. */
 export function useRoomScene(): ScenePart[] {
   const parts = useScene((s) => s.parts);
   const roomHeight = useScene((s) => s.room.height);
@@ -79,28 +79,31 @@ export function usePartTransform(part: ScenePart): {
  *  rides nothing that moved — the per-part half of § 12, for the two hot paths that
  *  read one part rather than the list.
  *
- *  **It costs a whole-room derivation per subscriber and that is deliberate.** A
- *  rider's height is a fact about a PAIR, so a per-part hook cannot answer it from
- *  its own slice; the alternative is passing the resolved list down, which is what
- *  `usePartTransform` exists to avoid. The derivation returns early on the ordinary
- *  room — nothing riding anything, or nothing resized — so the cost lands only where
- *  a room actually has riders.
+ *  A rider's height is a fact about a PAIR, so a per-part hook cannot answer it from
+ *  its own slice, and the two things that makes expensive are both handled here
+ *  rather than accepted:
  *
- *  Every dependency here is a SUBSCRIPTION. Replacing any of them with a
- *  `getState()` read leaves the value correct on the next render for some other
- *  reason and stale until then, which is the in-session bug wearing a fix's clothes. */
+ *   · **The derivation is shared, not repeated.** `riderYs` caches on reference
+ *     identity, so the `2N + 8` subscribers in a studio collapse onto one computation
+ *     per store change. Uncached this cost 14.3 ms per drag frame at 60 parts — the
+ *     numbers are in `lib/rider-height.ts`, and an earlier version of this docblock
+ *     claimed an early return made it free, which was measured and is false: 94% of
+ *     the cost is spent before that return is reached.
+ *   · **The selector returns a NUMBER.** zustand compares a selector's result with
+ *     `Object.is`, so a part re-renders only when ITS OWN settled Y changes rather
+ *     than whenever anything in `positions` moves. Reading the map after subscribing
+ *     to the slices — which is what this did first — re-rendered every `Draggable`
+ *     and every `Dressing` on every frame of a convoy drag, and made the comments in
+ *     both of those files false.
+ *
+ *  The two `useScene` reads stay subscriptions: a `getState()` read leaves the value
+ *  correct on the next render for some other reason and stale until then, which is
+ *  the in-session bug wearing a fix's clothes. `tests/rider-settle-hooks.test.tsx`
+ *  moves each of them on its own. */
 export function useSettledY(id: string): number | null {
   const parts = useScene((s) => s.parts);
   const roomHeight = useScene((s) => s.room.height);
-  const positions = useStudio((s) => s.positions);
-  const rotations = useStudio((s) => s.rotations);
-  const dims = useStudio((s) => s.dims);
-  const parentIds = useStudio((s) => s.parentIds);
-  const ys = useMemo(
-    () => deriveRiderYs(parts, { positions, rotations, dims }, parentIds, roomHeight),
-    [parts, positions, rotations, dims, parentIds, roomHeight],
-  );
-  return ys[id] ?? null;
+  return useStudio((s) => riderYs(parts, s.positions, s.rotations, s.dims, s.parentIds, roomHeight)[id] ?? null);
 }
 
 /** Has the user moved, turned or resized this piece? What the Inspector's and the
