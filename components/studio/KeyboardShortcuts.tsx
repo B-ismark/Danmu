@@ -355,6 +355,28 @@ export function duplicateSelection(explicit?: string[]) {
   announce(created.length === 1 ? 'Copy added and selected.' : `${created.length} copies added and selected.`);
 }
 
+/** Live handle for the outline timer, so a second turn replaces the first's countdown
+ *  rather than letting the earlier one clear the later one's outline early. */
+let refusalPaintTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Outline these pieces red for `REFUSAL_HOLD_MS`, on whichever tab is mounted.
+ *
+ *  A gesture with no pointer under it has nothing the user could have watched, so the
+ *  refusal has to be drawn afterwards or it is not shown at all. `REFUSAL_HOLD_MS` is
+ *  `lib/refusal.ts`'s number, not a fresh one — the two drag paths already hold their
+ *  outlines for exactly that long and a turn that flashed for a different duration would
+ *  read as a different kind of event. */
+function paintRefusal(ids: string[]) {
+  if (refusalPaintTimer) clearTimeout(refusalPaintTimer);
+  refusalPaintTimer = null;
+  useDragLive.getState().setRefusedIds(ids);
+  if (ids.length === 0) return;
+  refusalPaintTimer = setTimeout(() => {
+    refusalPaintTimer = null;
+    useDragLive.getState().setRefusedIds([]);
+  }, REFUSAL_HOLD_MS);
+}
+
 /** A quarter turn on every selected piece, about its own centre.
  *
  *  **The angle is always taken; that is what "keep and report" means here** (§ B.14,
@@ -379,29 +401,14 @@ export function duplicateSelection(explicit?: string[]) {
  *  Each selected piece is an INDEPENDENT turn about its own centre — a set does not
  *  pivot about one of its members, which is the rule `resolveConvoy` states for
  *  'turn' — so the scene is re-read per piece and the second piece sees where the
- *  first one ended up. */
-/** Live handle for the outline timer, so a second turn replaces the first's countdown
- *  rather than letting the earlier one clear the later one's outline early. */
-let refusalPaintTimer: ReturnType<typeof setTimeout> | null = null;
-
-/** Outline these pieces red for `REFUSAL_HOLD_MS`, on whichever tab is mounted.
+ *  first one ended up.
  *
- *  A gesture with no pointer under it has nothing the user could have watched, so the
- *  refusal has to be drawn afterwards or it is not shown at all. `REFUSAL_HOLD_MS` is
- *  `lib/refusal.ts`'s number, not a fresh one — the two drag paths already hold their
- *  outlines for exactly that long and a turn that flashed for a different duration would
- *  read as a different kind of event. */
-function paintRefusal(ids: string[]) {
-  if (refusalPaintTimer) clearTimeout(refusalPaintTimer);
-  refusalPaintTimer = null;
-  useDragLive.getState().setRefusedIds(ids);
-  if (ids.length === 0) return;
-  refusalPaintTimer = setTimeout(() => {
-    refusalPaintTimer = null;
-    useDragLive.getState().setRefusedIds([]);
-  }, REFUSAL_HOLD_MS);
-}
-
+ *  This block sat 22 lines up, above `refusalPaintTimer`, from the commit that
+ *  inserted `paintRefusal` between it and its function — so the longest explanation
+ *  in this file documented a one-line `let`. `tests/docblock-adjacency.test.ts` saw
+ *  only the symptom it can see, two doc comments in a row, and the cheap way to
+ *  green it is to demote the neighbour to `//` and leave this one where it was
+ *  wrong. Moving it is the fix; the sweep going quiet is a side effect. */
 export function spinSelection(quarterTurns = 1) {
   const ids = selectedIds();
   if (ids.length === 0) return;
