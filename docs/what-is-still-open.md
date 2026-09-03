@@ -28,6 +28,10 @@ keeps its own history stops being readable as a queue.
 #87-#91 on 2026-09-02/03. Three of those five **want eyes and have not had them in full** —
 that is [`visual-check.md`](visual-check.md)'s list, not this one.
 
+**And branch hygiene, which was row 14 of this table until 2026-09-03, is done.** Every stale
+ref is gone, `fix/pointer-cancel-note` included, after the per-line pass it had been waiting
+five sessions for. § 38.2 carries the verdicts and § 38.4 the method.
+
 Ranked by three things together, not by any one of them: **criticality** (does a user
 hit it), **ease** (is it an afternoon or a measurement campaign), and **dependence** —
 which is what moves several of these off the position their severity alone would give
@@ -48,7 +52,6 @@ them. Where two items are the same defect one layer apart, they are listed as on
 | 11 | **§ H.10** undo / redo should cover selection | The user asked for it. The consequence worth stating before building it is that one press per click on the way back is why most tools do not do this — a separate history, or coalesced runs, is their call | M | needs the user |
 | 12 | **A.2 / G.2 / G.3** variety in Shuffle, the anchor-first trade, the two help cards | Real, but none is a defect a user has reported, and the first two are § H.6's symptoms | varies | after § H.6 decides whether they still exist |
 | 13 | **E** the jsdom component bucket | The harness is in and the bucket is not. Infrastructure, so it pays off across every item above — but it has paid off least when done first. § 37's `tests/placement-banner.test.tsx` is the newest file to use it and mounts a whole page | L | none |
-| 14 | **§ 38.2** branch hygiene — four refs carry commits `main` has never seen, one for the fourth session running | Not engineering, but it is what keeps costing sessions their first half-hour. Deleting a remote ref is outward-facing and needs the user | S to derive, needs the user to act | nothing |
 
 **Three that are deliberately not on this list**, so nobody adds them back: the seeder
 putting a 1450 mm TV on a 1.2 m wall in the small L and T (`placeNewPart` has no
@@ -140,12 +143,16 @@ the note there on why the file count has to travel with the assertion count.
   `drag-convoy`, `drag-resolve`, `physics`, `rigid-parent`, `scene-file`, `dimension-ranges`
   and nine test files.
 
-  This is the third different account of that branch in this document's history, which is
-  the actual finding: **it is neither deletable nor mergeable on any evidence gathered so
-  far**, and every session that has looked at it has produced a confident summary from a
-  cheaper instrument than the question deserved. The next person to touch it should do a
-  per-line pass or leave it alone — and, per CLAUDE.md, read the stage numbers rather than
-  the conflict list.
+  This was the third different account of that branch in this document's history, and the
+  finding recorded here was that **every session had produced a confident summary from a
+  cheaper instrument than the question deserved**. That still stands as the lesson.
+
+  **The per-line pass was done on 2026-09-03 and the answer is that nothing on it is missing
+  from `main`.** The branch is deleted and tagged `archive/pointer-cancel-note`. Full method
+  and counts in § 38.4 — the short version is that the merge-tree conflict count everyone
+  kept re-deriving was answering a question nobody needed: whether the branch would MERGE,
+  when what mattered was whether it CARRIED anything, and 291 commits of `main` had long
+  since absorbed all of it by other routes.
 - **`C:/Users/bisma/danmu-rescue/`** holds two patches lifted out of dead sessions'
   `%TEMP%` worktrees. **Both turned out to be superseded drafts of work already on `main`** —
   kept only because checking cost nothing. Safe to delete; check first.
@@ -4223,7 +4230,7 @@ so two do** — which is itself the point about how fast a branch table rots:
 | ref | ahead | verdict, and what the per-line pass found |
 |---|---|---|
 | `fix/derive-mounted-and-vertical-extent` | 1 | PR #54, merged; the extra commit is docs-only across two files, and **one half of it never landed**. The `what-is-still-open.md` half did — it is § B item 15, since fixed as § 32. The `visual-check.md` half did not, and `main` has no mention of plan export at all. Rescued to `visual-check.md` before deletion; see the note there. **Deletable now that it is** |
-| `fix/pointer-cancel-note` | 10 | **neither deletable nor mergeable on any evidence gathered so far.** 33 files, 2,316 insertions against its merge base; 19 conflicted files, every one carrying stages 1, 2 **and** 3. Read the account in "Picking this up cold" first — this is the fourth session it has outlived |
+| `fix/pointer-cancel-note` | 10 | **SETTLED 2026-09-03 by the per-line pass it had been waiting five sessions for: nothing on it is missing from `main`.** Deleted, and tagged `archive/pointer-cancel-note` first so the commits outlive the ref. The evidence is § 38.4 |
 
 **The five that are gone, and why each was cleared**, so the verdicts survive the refs:
 `fix/ceiling-fixtures-declared-size` (#87), `fix/solver-carries-riders` (#86) and
@@ -4258,7 +4265,54 @@ this file for it:
 - the § 35 fan in a room saved before it, which stays 30–55 mm short of the slab by design,
   and reads as one flush fixture beside one short one.
 
-**4. The standing limit this round kept hitting, and no amount of testing closes it.**
+**4. `fix/pointer-cancel-note`, settled — and the instrument is the whole finding.** Five
+sessions produced four accounts of this branch and every one of them measured the wrong
+thing. `git rev-list --count` says 10. `git diff --stat` against its merge base says 33 files
+and 2,316 insertions. `git merge-tree` says 19 conflicted files carrying stages 1, 2 and 3.
+**All three are true, and all three answer "would this MERGE", when the question is "does
+this CARRY anything".** Those come apart completely once `main` moves: the merge base is 291
+commits back, so the conflict count measures how much `main` has changed, not how much the
+branch holds.
+
+The pass that settles it asks the second question directly, four ways, and each one is cheap:
+
+| what was compared | result |
+|---|---|
+| every symbol the branch declares (`export function/const/type`, 12 of them: `applyRoomEdits`, `gestureFor`, `steppedValue`, `SUPPORT_Y_EPS`, `ROOM_AXES`, `RoomDims`, …) | **12 of 12 in `main`** |
+| every test title it adds (`it`/`describe`, 90 distinct) | **89 of 90 verbatim in `main`'s `tests/`** |
+| every added source line of 50 characters or more in `lib/` + `components/` (714 distinct, whitespace-normalised) against every line of `main`'s `lib/` + `components/` | **697 of 714 verbatim; 17 absent** |
+| every distinctive prose passage it adds to `CLAUDE.md`, `Design.md`, `docs/visual-check.md` (9) | **8 of 9 verbatim in `main`** |
+
+**The four exceptions were each read, and every one is `main` being AHEAD rather than behind.**
+That is the part worth keeping, because "absent" and "lost" are not the same word:
+
+- The missing test is `scene-spec.ts declares no pad constant of its own`. `main` has that
+  describe block and rewrote the assertion inside it, with a note saying the branch's version
+  **rotted the moment the clamp moved** out of `scene-spec.ts` into `settleHeights`. A check
+  naming one file cannot tell "the clamp went away" from "the clamp moved".
+- Of the 17 absent source lines, six are comments about the turn cascade that `main` carries
+  reworded and **more correctly** — the branch cascades from `part.pos`, `main` from the pivot
+  the piece *actually landed on* after the clamp. Four are import lines whose sets have grown.
+  One is a refusal string that now lives in `lib/refusal.ts` so the two tabs cannot drift. One
+  is `applyRoomEdits`' signature, evolved. One is a style object. And one is the rug
+  containment clause, where `main` has the branch's condition **plus** a `pointInFootprint`
+  conjunct it did not have — strictly narrower, with the reason written beside it.
+- The missing prose is `visual-check.md`'s *"the 2D plan's rotate has no containment clamp; 3D's
+  has"*. **That defect is fixed**: `PlanView.turnTo` routes through `turnInPlace`, which is
+  `resolvePlacement` with `snapMode: 'off'`, so the plan's rotate contains exactly as 3D's does.
+  The rest of that file's diff is the retired branch-status table from the PR #18 era, whose
+  every ref is gone.
+
+**Deleted, after tagging `archive/pointer-cancel-note` at `811b6f3`** — the tag costs nothing,
+keeps all ten commits reachable, and makes the one irreversible step in this whole exercise
+reversible. If a fifth account of this branch is ever wanted, it is `git log
+archive/pointer-cancel-note`.
+
+The transferable part: **when a base has moved, every three-way instrument silently changes
+subject.** `merge-tree` stopped being a question about the branch a long time before anyone
+noticed, and it kept returning a big, alarming, perfectly accurate number about `main`.
+
+**5. The standing limit this round kept hitting, and no amount of testing closes it.**
 **Nothing in this repo renders geometry.** § 34 records the proof — a deliberate control
 mutation making `FanGeo` pass a literal `200` instead of `part.dimMM[2]` survives the whole
 of `tests/ceiling-fixtures.test.ts`. § 36 hit the same wall from the other side twice: its
@@ -4268,7 +4322,7 @@ both functions under test. Every fix in this class needs a browser, which is why
 `visual-check.md` is not overhead — it is the only instrument that exists for a whole class
 of defect this repo keeps producing.
 
-**5. Method, recorded because it paid three times out of three.** A review-lens fan-out found
+**6. Method, recorded because it paid three times out of three.** A review-lens fan-out found
 defects in **the fix** in every one of the three items, each of which had already passed
 typecheck, lint and the full suite:
 
