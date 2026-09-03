@@ -329,12 +329,16 @@ of them, selected through the rail the way a user selects. What was seen, verbat
 | chair half under it | ✓ **On floor** — *not* "Blocked", which is the whole item |
 | lamp on the table | ✓ **On Dining table** · "Resting on Dining table." |
 | the same lamp 350 mm up | **Floating** · "Nothing is holding it up…" |
-| wall TV | ✓ **Wall-mounted** · "Attached to the room shell." |
+| wall TV | ✓ **Wall-mounted** · "Fixed to a wall." |
+| ceiling fan | ✓ **Hanging** · "Hanging from the ceiling." |
 | sofa through a wall | **Sticks out of the room** · *the report's own sentence* |
 
 The long one wraps to three lines and does not clip, and the left rail's chip read
 "1 issue" throughout — the sofa's, and only the sofa's — so the two surfaces agree on
-screen and not merely in a test.
+screen and not merely in a test. **Floating renders in the amber warn tone, visibly
+different from the red danger one**, which is the review's point: the report says
+nothing at all about a floating piece, so a red banner beside a green chip would be the
+very contradiction this item is about.
 
 **What is left is below**, and it is what a screenshot cannot answer.
 

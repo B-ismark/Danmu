@@ -2853,9 +2853,33 @@ nothing.
 Mutation: reverting the banner to `collidesAt` goes red, collapsing `restingOn` into
 `findSupportDetailed` goes red across both files, and restoring `aria-live` goes red.
 
-**Not verified:** nobody has looked at the banner. The contrast of `--success-text` on
-`--paper-0` is still unchecked, and the announcement behaviour has not been tried with a
-screen reader.
+**Then a review found six more things, and the first is the one worth carrying: the fix
+for § 37 committed § 37's own defect.** `RESTING_TOL = 0.005` sat forty-six lines below
+`SUPPORT_Y_EPS = 0.05`, whose docblock names this exact consumer and then describes the
+failure a second literal would cause — which is the failure that existed. Writing a
+second tolerance for a placement question, inside the fix for a banner that had a second
+opinion about placement, is the same defect one layer down. The others: a taller piece
+overlapping a rider hid the surface it was on (`findSupportDetailed` maximises `top`, so
+it takes a ceiling now); three severities were painted as a boolean, so a `warn` that
+Room check calls "A bit tight" in amber was red here; any finding ERASED the floating
+state; a pendant was told it is fixed to a wall (`wallMounted` is `anchorFor !== 'floor'`
+— `lib/scene-file.ts` had already solved that sentence); and `useRoomReport` is a plain
+hook, so a third caller mounted alongside the other two doubled a ~3 ms floor raster per
+render, which on the 2D tab is per frame of every drag.
+
+Four assertions could not fail, and the tucked-chair fixture is the one to remember: it
+sat **two ulps below `CLASH_SHARE`**, so nothing was being forgiven, and deleting the
+`sharesFloor` exemption left all eight tests green. The file's headline claim was
+decoration. A fixture on the inert side of a bar by rounding noise is a fixture that
+tests the opposite of what its name says.
+
+**Verified on 2026-09-03:** all seven banner states were seen in a production build —
+including "Hanging from the ceiling" for a fan, "Fixed to a wall" for a TV, the report's
+own sentence for a piece through a wall, and Floating in the amber tone rather than the
+red one.
+
+**Not verified:** the contrast of `--success-text` on `--paper-0` (measured 4.66:1 from
+the tokens, never seen), and the announcement behaviour with a screen reader.
 
 ---
 
