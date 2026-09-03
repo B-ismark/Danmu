@@ -248,6 +248,50 @@ This is the only defect in the whole item that a mouse cannot produce.
 `components/three/Room.tsx`. Merged to `main` in **`d2ef257`** (PR #73).
 
 
+### Six shapes stopped stretching their details — branch `fix/parametric-caps-survive-a-resize`, PR pending
+
+**Where to click.** Add each piece below from the **Library**, select it, press `S` for
+Scale, and pull it to the end of its band. Then compare against the same piece at its
+catalogue size. Every one of these now REBUILDS instead of stretching, so the detail
+named should stay the size it is while the piece around it grows.
+
+| add this | drag this axis to | watch |
+|---|---|---|
+| Ceiling fan | 450 mm tall | the motor housing stays ~80 mm; only the downrod lengthens |
+| Pendant lamp | 150 mm wide × 900 mm long | the shade stays a shade; only the cord lengthens |
+| TV console | 800 mm tall | the top slab stays ~30 mm and the plinth ~60 mm |
+| Stool | 700 mm tall | the seat pad stays ~50 mm; only the legs lengthen |
+| Nightstand | 600 mm deep, then double-click to open the drawers | the drawers slide ~180 mm, not 270 |
+| Door | 2400 mm tall | the handle stays at ~1 m from the FLOOR, not 1.08 m |
+
+**What wrong looks like, and it is the reason this cannot be left to the tests.**
+
+- **A piece that changes size when merely dragged.** This is the scar
+  `tests/part-scale.test.ts` was written for and the failure mode this whole set has:
+  `renderBaseDim` returns the RESOLVED dim for a parametric shape, so if a piece is
+  drawn at its authored size while the store holds a resize, `commit()` writes the
+  authored size straight back through `setDim` and the resize is silently thrown away.
+  Resize one of the six, then MOVE it, and check the Inspector's dimensions did not
+  jump back.
+- **A detail that has stopped scaling when it should.** The opposite error. A fan's
+  BLADES are a proportion (`fanBlade`) and must still grow with the fan; only the motor
+  is capped. Same for a console's carcass against its top slab, and a stool's legs
+  against its seat. If the whole piece looks rigid, the effective dim is not reaching
+  the renderer.
+- **A pendant that looks wrong at the bottom of its band.** The cap runs the other way
+  too: at 150 mm wide the shade is capped by WIDTH, and at a short drop by height. Try
+  800 × 150 as well as 150 × 900.
+- **A door handle on the wrong side of its own panel.** `doorHandleY` is measured from
+  the panel's bottom edge (`-h / 2 + doorHandleY(...)`), so a mistake here puts it in
+  the floor or above the frame. Doors are the one member of this set the user does not
+  usually resize, which is exactly why nobody would notice.
+
+**What does not need re-deriving.** The arithmetic is gated and printed: the class table
+runs on every green suite and names each shape, its authored and stored size, what was
+drawn, and its own cap. Both directions are mutation-checked. `top - bottom` still
+equals the stored height for every shape — the extent was never the defect, which is
+why no size assertion could see this.
+
 ## Layout and Shuffle
 
 *Owner: `layout`. The Shuffle item was a look rather than a check, and the look was taken on
