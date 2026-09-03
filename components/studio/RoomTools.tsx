@@ -51,7 +51,7 @@ const STEP_FREE_DESC = `Report the ${TURN_CM} cm of turning space a wheelchair n
 import { useScene, type RoomShape } from '@/lib/scene-store';
 import { resolveParts, useRoomScene } from '@/lib/room-scene';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
-import { analyzeRoom, type ClearanceIssue, type ClearanceSeverity } from '@/lib/clearance';
+import { analyzeRoom, type ClearanceIssue, type ClearanceSeverity, type RoomReport } from '@/lib/clearance';
 import {
   isWorthOffering,
   lockedForSolve,
@@ -160,11 +160,43 @@ function stillTheApps(
  *  because it also has to know the width to keep the panel on screen. */
 const PANEL_W = 324;
 
+/** One report per (parts, footprint, height, accessibility), across every component
+ *  that asks for it in the same render pass.
+ *
+ *  A `useMemo` is per hook INSTANCE, so it does not do this: the docblock below used to
+ *  say "only one of the two is mounted at a time, so this runs once either way", which
+ *  was true while the two were the rail's health chip and the collapsed rail's dot.
+ *  § 37 added a third caller — the Inspector's placement banner — which is mounted
+ *  ALONGSIDE the rail rather than instead of it, so the same room was being analysed
+ *  twice per render at ~3 ms a time. And `PlanView.moveTo` writes `setPosition` on every
+ *  `onPointermove`, which the Inspector subscribes to, so on the 2D tab that was a
+ *  second full floor raster and BFS per frame of every drag.
+ *
+ *  A one-entry cache rather than a context, because the sharing wanted here is within a
+ *  single render pass and every caller already derives the same four inputs from the
+ *  same store: a provider would add a tree-shaped dependency to express something that
+ *  is really just "do not compute this twice in a row with the same arguments". Keyed
+ *  by identity on all four — `useRoomScene` is itself memoised, so `effParts` is
+ *  reference-stable while the scene is, which is what makes identity the right test. */
+let reportCache: { key: readonly unknown[]; value: RoomReport } | null = null;
+
+function cachedReport(
+  effParts: ScenePart[],
+  footprint: Footprint,
+  height: number,
+  stepFree: boolean,
+): RoomReport {
+  const key = [effParts, footprint, height, stepFree] as const;
+  if (reportCache && key.every((k, i) => Object.is(k, reportCache!.key[i]))) return reportCache.value;
+  const value = analyzeRoom(effParts, { footprint, height }, { accessibility: stepFree });
+  reportCache = { key, value };
+  return value;
+}
+
 /**
- * The room's report, derived. Shared by the rail's health chip and by the compact
- * dot the rail shows while it is COLLAPSED — the point of surfacing this state was
- * that it is never behind a press, and a closed rail would have put it back there.
- * Only one of the two is mounted at a time, so this runs once either way.
+ * The room's report, derived. Read by the rail's health chip, by the compact dot the
+ * rail shows while it is COLLAPSED, and by the Inspector's placement banner — see
+ * `cachedReport` above for why that third caller made the memo insufficient.
  */
 export function useRoomReport() {
   const room = useScene((s) => s.room);
@@ -173,7 +205,7 @@ export function useRoomReport() {
   // hand, so sharing it costs nothing and is one fewer copy of the fallback.
   const effParts = useRoomScene();
   const report = useMemo(
-    () => analyzeRoom(effParts, { footprint: room.footprint, height: room.height }, { accessibility: stepFree }),
+    () => cachedReport(effParts, room.footprint, room.height, stepFree),
     [effParts, room.footprint, room.height, stepFree],
   );
   const problems = report.issues.filter((i) => i.severity !== 'info').length;

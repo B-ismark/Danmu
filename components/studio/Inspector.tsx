@@ -15,7 +15,7 @@ import { SwapModelModal } from './RegenerateModal';
 import { RailSection } from './RailSection';
 import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { isWallMountedPart, supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, DECOR_KINDS, type LibraryItem, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
-import { findSupportDetailed, groundY, heightForNewCeiling, MOUNT_PAD, restingOn, snapToWall as snapToWallPhys, wallStandoff } from '@/lib/physics';
+import { anchorFor, findSupportDetailed, groundY, heightForNewCeiling, MOUNT_PAD, restingOn, snapToWall as snapToWallPhys, wallStandoff } from '@/lib/physics';
 import { useRoomReport } from './RoomTools';
 import { wallSegments } from '@/lib/footprint';
 import { moveWallCarrying } from '@/lib/wall-actions';
@@ -227,25 +227,64 @@ export function Inspector() {
 
   const restingName =
     rest?.on === 'part' ? (effParts.find((p) => p.id === rest.id)?.name ?? 'another piece') : null;
-  const placementOk = !worst && !floating;
+
+  // Where the piece is ANCHORED, in the app's own three-way wording. Not "wall-mounted":
+  // `part.wallMounted` is `anchorFor(...) !== 'floor'`, so it is true for a ceiling fan
+  // and a pendant lamp, and calling those fixed to a wall is simply false.
+  // `lib/scene-file.ts` already solved this exact sentence for its `dropped` messages,
+  // with a comment saying the file "two lines up knows better" — so this reads the same
+  // three-way answer rather than inventing a fourth.
+  const anchor = anchorFor(part.category, part.shape);
+  const anchorSentence =
+    anchor === 'ceiling' ? 'Hanging from the ceiling.' : 'Fixed to a wall.';
+  const anchorLabel = anchor === 'ceiling' ? 'Hanging' : 'Wall-mounted';
+
+  // Three severities, not a boolean. `warn` is "A bit tight" in amber in the room
+  // report (`SEVERITY` in `RoomTools`), and painting it `--danger` here would make one
+  // finding two colours on two surfaces — the same two-sources-of-truth defect this
+  // banner exists to end, one layer down in the presentation.
+  const placementTone: 'danger' | 'warn' | 'ok' = worst
+    ? worst.severity === 'error'
+      ? 'danger'
+      : 'warn'
+    // Floating is a WARN and not a danger, deliberately: `clearance.ts` skips anything
+    // above the floor, so a floating rider produces no finding and the health chip
+    // reads "Room checks out". A red banner beside a green chip is the contradiction
+    // this whole item is about, so the one state the report cannot see is reported in
+    // the quieter tone.
+    : floating
+      ? 'warn'
+      : 'ok';
+
+  // …and `floating` is not SUPPRESSED by an unrelated warn. A lamp in mid-air that also
+  // happens to sit in a tight walkway used to read "Tight walkway" and nothing else —
+  // the one state this feature was built for, erased by a finding about the floor.
   const placementLabel = worst
     ? worst.title
     : floating
       ? 'Floating'
       : part.wallMounted
-        ? 'Wall-mounted'
+        ? anchorLabel
         : restingName
           ? `On ${restingName}`
           : 'On floor';
-  const placementDetail = worst
-    ? worst.detail
+  const restingSentence = part.wallMounted
+    ? anchorSentence
     : floating
       ? 'Nothing is holding it up. Drop it to the surface below, or move it onto something.'
-      : part.wallMounted
-        ? 'Attached to the room shell.'
-        : restingName
-          ? `Resting on ${restingName}.`
-          : 'Standing on the floor.';
+      : restingName
+        ? `Resting on ${restingName}.`
+        : 'Standing on the floor.';
+  // Both halves when both have something to say. A finding is about the floor plan and
+  // the resting state is about the vertical; they are different facts and the report
+  // cannot see the second, so a piece that is BOTH in a tight walkway and floating says
+  // so rather than picking one.
+  const placementDetail = worst
+    ? floating
+      ? `${worst.detail} It is also not resting on anything.`
+      : worst.detail
+    : restingSentence;
+  const placementOk = placementTone === 'ok';
 
   // `rail-scroll` carries nothing but `container-type` — it is what makes THIS box
   // the one `@container rail` measures, rather than the rail outside the scrollbar.
@@ -289,16 +328,35 @@ export function Inspector() {
       */}
       <div
         role="status"
+        // Named, so a test can find it by IDENTITY rather than by the text it is about
+        // to assert. The first version of `tests/placement-banner.test.tsx` located it
+        // with a regex of expected words over every `role="status"` on the page — of
+        // which there are five once the real layout is mounted — so it selected the
+        // element by the answer and, on a wall selection where this banner does not
+        // render at all, matched the keyboard-shortcut announcer instead.
+        aria-label="Placement"
         style={{
           display: 'flex',
           alignItems: 'flex-start',
           gap: 8,
           margin: '10px 16px 2px',
           padding: '9px 10px',
-          border: `1px solid ${placementOk ? 'var(--edge)' : 'var(--danger)'}`,
+          border: `1px solid ${
+            placementTone === 'danger' ? 'var(--danger)' : placementTone === 'warn' ? 'var(--warn)' : 'var(--edge)'
+          }`,
           borderRadius: 'var(--r-2)',
-          background: placementOk ? 'var(--paper-0)' : 'var(--danger-tint)',
-          color: placementOk ? 'var(--success-text)' : 'var(--danger-text)',
+          background:
+            placementTone === 'danger'
+              ? 'var(--danger-tint)'
+              : placementTone === 'warn'
+                ? 'var(--paper-3)'
+                : 'var(--paper-0)',
+          color:
+            placementTone === 'danger'
+              ? 'var(--danger-text)'
+              : placementTone === 'warn'
+                ? 'var(--warn-text)'
+                : 'var(--success-text)',
           fontSize: 12,
           lineHeight: 1.35,
           // The tell is the ICON and the words; the colour is the third signal, not the

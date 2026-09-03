@@ -135,12 +135,21 @@ const SWING_CLASH_SHARE = 0.02;
  *  this is a collision rather than two pieces meeting untidily. Half of a piece
  *  buried in another is unambiguous; a few centimetres of clip is a nudge.
  *
- *  Stays local, unlike `TUCKED_CLASH_SHARE`: this one is about what is worth
- *  *telling the user*, and the solver deliberately charges every overlap of an
- *  ordinary pair however small, because a cost is a gradient and a report is a
- *  sentence. Those are different questions and a shared constant would assert they
- *  are the same one. */
-const CLASH_SHARE = 0.5;
+ *  **Not shared with the SOLVER**, unlike `TUCKED_CLASH_SHARE`: this one is about
+ *  what is worth *telling the user*, and the solver deliberately charges every
+ *  overlap of an ordinary pair however small, because a cost is a gradient and a
+ *  report is a sentence. Those are different questions and a shared constant would
+ *  assert they are the same one. Nothing in `lib/layout-score.ts` may read it.
+ *
+ *  It IS exported, and that is a narrower thing than the paragraph above forbids: a
+ *  TEST asserting that a fixture sits above this bar is not a second consumer of the
+ *  rule, it is a check that the fixture exercises the rule at all.
+ *  `tests/placement-banner.test.tsx` needs a chair the `sharesFloor` exemption
+ *  genuinely forgives, and its first fixture sat **two ulps below this number** — so
+ *  nothing was being forgiven, deleting the exemption left all eight assertions green,
+ *  and the file's headline claim was decoration. A test that has to know a bar should
+ *  read the bar. */
+export const CLASH_SHARE = 0.5;
 
 /** Issue-id prefix per zone rule, so a finding keeps the id the UI and the tests
  *  already know it by. Anything not listed keys off the rule's own id. */

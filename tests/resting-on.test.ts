@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findSupportDetailed, restingOn, verticalExtent, RESTING_TOL } from '@/lib/physics';
+import { findSupportDetailed, restingOn, verticalExtent, SUPPORT_Y_EPS } from '@/lib/physics';
 import type { ScenePart } from '@/lib/scene-spec';
 
 // § 37 — "is this piece resting on anything" was a question nothing in this repo could
@@ -31,14 +31,20 @@ const ask = (p: ScenePart, world: ScenePart[]) =>
   restingOn(world, p.id, p.pos, p.rot, p.dimMM, p.category, p.shape, p.circle);
 
 describe('restingOn — the question findSupportDetailed does not answer', () => {
-  it('the desk really is under the lamp at every height, which is the premise', () => {
-    // Asserted rather than assumed: if the footprints stopped overlapping, every
-    // "floating" clause below would pass for the wrong reason.
-    for (const y of [DESK_TOP, DESK_TOP + 0.35, DESK_TOP + 1]) {
-      const under = findSupportDetailed([desk], 'lamp', 0, 0, lampAt(y).dimMM, 0, undefined);
-      expect(under?.id, `at y=${y}`).toBe('desk');
-      expect(under?.y).toBeCloseTo(DESK_TOP, 9);
-    }
+  it('the desk really is under the lamp, and the old question cannot tell how high', () => {
+    // The premise AND the point, in one clause. The first version looped over three
+    // heights — which could not vary, because `y` only ever reached `dimMM` and
+    // `findSupportDetailed` takes no height at all. Three byte-identical calls under a
+    // title claiming "at every height", against a function with no height parameter.
+    //
+    // Written the honest way, that absence IS the finding: one call, no `y` anywhere in
+    // it, and the answer is the desk regardless of where the lamp is.
+    const under = findSupportDetailed([desk], 'lamp', 0, 0, [250, 250, 500], 0, undefined);
+    expect(under?.id).toBe('desk');
+    expect(under?.y).toBeCloseTo(DESK_TOP, 9);
+    // …so if the footprints ever stopped overlapping, every "floating" clause below
+    // would pass for the wrong reason. This is what stops that.
+    expect(findSupportDetailed([], 'lamp', 0, 0, [250, 250, 500], 0, undefined)).toBeNull();
   });
 
   it('says a lamp ON the desk is on the desk', () => {
@@ -75,30 +81,63 @@ describe('restingOn — the question findSupportDetailed does not answer', () =>
     expect(ask(chair, [desk, chair])).toBeNull();
   });
 
-  it('holds at the tolerance and lets go one step past it', () => {
-    // The band itself, from both sides. `RESTING_TOL` is under the 10 mm grid snap, so
-    // a piece deliberately lifted by one step reads as floating rather than resting.
-    const just = ask(lampAt(DESK_TOP + RESTING_TOL * 0.99), [desk]);
-    expect(just?.id, `${RESTING_TOL * 1000} mm above the desk`).toBe('desk');
-    const past = ask(lampAt(DESK_TOP + RESTING_TOL * 1.01), [desk]);
-    expect(past, 'a hair past the tolerance is not resting').toBeNull();
-    expect(RESTING_TOL, 'and the tolerance stays under one grid step').toBeLessThan(0.01);
+  it('is the SHARED tolerance, at an absolute height rather than a multiple of itself', () => {
+    // The first version probed at `TOL * 0.99` and `TOL * 1.01`, which scale with the
+    // constant — so every positive value passed both, and `RESTING_TOL = 5e-12` kept
+    // the file green while making a legitimately-placed rider read "Floating" in the
+    // app. An assertion that measures its own subject, which is the `module-tiling`
+    // shape CLAUDE.md names.
+    //
+    // Absolute heights now, and they are chosen against the two things that actually
+    // land here: `isPhysicallySupported` carries a rigid child at 30 mm, so 30 mm must
+    // be RESTING or the drag code and this report disagree about the same piece; and
+    // § 12's rider floats 350 mm, which must not be.
+    expect(SUPPORT_Y_EPS, 'the one tolerance, not a second literal').toBe(0.05);
+    expect(ask(lampAt(DESK_TOP + 0.03), [desk])?.id, '30 mm is settle noise, and the drag code says supported').toBe('desk');
+    expect(ask(lampAt(DESK_TOP + 0.35), [desk]), '350 mm is § 12 and is not resting').toBeNull();
+    expect(ask(lampAt(DESK_TOP + 0.06), [desk]), 'just past the shared tolerance').toBeNull();
+  });
+
+  it('agrees with the rigid-parent edge test, which is why it shares that constant', () => {
+    // The failure `SUPPORT_Y_EPS`'s own docblock predicted, asserted so it cannot come
+    // back: "a report using a threshold of its own could call something airborne while
+    // the drag code is still carrying it as a rigid child". Any gap the drag code
+    // forgives, this must forgive.
+    // Strictly inside and strictly outside, and the exact boundary is deliberately not
+    // sampled: `0.75 + 0.05` is 0.8000000000000001, so `|bottom - top|` at the nominal
+    // tolerance is 0.05000000000000004 and which side of `<=` it lands on is float
+    // noise rather than behaviour. `isPhysicallySupported` compares the same two
+    // numbers with the same operator and inherits the same noise, so pinning the
+    // boundary would pin the noise and call it agreement.
+    for (const gap of [-0.03, 0, 0.01, 0.03, 0.049]) {
+      expect(ask(lampAt(DESK_TOP + gap), [desk])?.id, `${gap * 1000} mm is settle noise`).toBe('desk');
+    }
+    for (const gap of [0.051, 0.1, 0.35]) {
+      expect(ask(lampAt(DESK_TOP + gap), [desk]), `${gap * 1000} mm is a real gap`).toBeNull();
+    }
   });
 
   it('holds from BELOW the surface too, which a one-sided test would miss', () => {
     // A piece slightly INSIDE its support is still resting on it — and a `bottom - top`
     // comparison without an absolute value calls that a float, in the direction nobody
     // looks. The asymmetric case, per CLAUDE.md.
-    const sunk = ask(lampAt(DESK_TOP - RESTING_TOL * 0.99), [desk]);
+    const sunk = ask(lampAt(DESK_TOP - 0.03), [desk]);
     expect(sunk?.id).toBe('desk');
     expect(sunk!.gap).toBeLessThan(0);
   });
 
-  it('reads a wall-mounted piece as resting on nothing, and that is truthful', () => {
-    // A TV rests on nothing. Whether that is worth SAYING is the caller's judgement —
-    // `Inspector` reports "Wall-mounted" from the flag rather than from this null.
-    const tv = part({ id: 'tv', category: 'tv', shape: 'tv', dimMM: [1450, 60, 820], pos: [0, 1.4, -2], wallMounted: true });
-    expect(ask(tv, [desk, tv])).toBeNull();
+  it('has no opinion about wall-mounting, which is why the caller must have one', () => {
+    // `restingOn` takes no `wallMounted` and reads none: a TV on a wall returns null
+    // for exactly the same reason a chair in mid-air does — nothing is under it. The
+    // first version of this clause set `wallMounted: true` on the fixture and asserted
+    // null, which passes identically with the flag REMOVED and so tested nothing.
+    //
+    // Stated as the property it actually is: the flag makes no difference here, and
+    // `Inspector` is where the difference gets made.
+    const at = (extra: Partial<ScenePart>) =>
+      part({ id: 'tv', category: 'tv', shape: 'tv', dimMM: [1450, 60, 820], pos: [0, 1.4, -2], ...extra });
+    expect(ask(at({ wallMounted: true }), [desk])).toBeNull();
+    expect(ask(at({}), [desk]), 'the flag changes nothing in this function').toBeNull();
   });
 
   it('measures the piece’s own underside, not its origin', () => {
@@ -111,13 +150,23 @@ describe('restingOn — the question findSupportDetailed does not answer', () =>
     expect(ask(tv, [tv])?.on, 'so it IS on the floor').toBe('floor');
   });
 
-  it('prefers the thing it is touching over the thing that is merely under it', () => {
-    // A lamp on a desk that is itself standing on the floor: both are below, and only
-    // one is in contact. Without the height test the answer is whichever the old
-    // function ranks highest, which is why that function's answer alone cannot serve.
-    const r = ask(lampAt(DESK_TOP), [desk]);
-    expect(r!.on).toBe('part');
-    expect(r!.id).toBe('desk');
+  it('is not fooled by a TALLER piece overlapping the one it is actually on', () => {
+    // The first version of this clause passed ONE candidate, so there was no preference
+    // to express and it was input-identical to the clause four above it. With two, it
+    // is the real finding: `findSupportDetailed` maximises `top`, so a monitor standing
+    // over the same patch of desk answers "monitor" and a caller comparing the lamp's
+    // underside against 1.25 concludes the lamp is airborne — without the lamp moving.
+    const monitor = part({
+      id: 'monitor', category: 'monitor', shape: 'monitor', dimMM: [600, 200, 500], pos: [0, DESK_TOP, 0],
+    });
+    const lamp = lampAt(DESK_TOP);
+    // The old question, and it is the wrong answer for this purpose:
+    const naive = findSupportDetailed([desk, monitor], 'lamp', 0, 0, lamp.dimMM, 0, undefined);
+    expect(naive?.id, 'the highest top wins, which is the monitor').toBe('monitor');
+    // …and the new one, which asks for a support the piece could be resting ON.
+    const r = ask(lamp, [desk, monitor]);
+    expect(r?.on).toBe('part');
+    expect(r?.id, 'the lamp is on the desk, and still is').toBe('desk');
   });
 
   it('ignores a support whose footprint the piece barely overlaps', () => {
