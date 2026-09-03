@@ -26,6 +26,7 @@ import { footprintForLayout } from '@/lib/footprint';
 import { dimRangeFor } from '@/lib/dimension-ranges';
 import { formatLength } from '@/lib/units';
 import { analyzeRoom } from '@/lib/clearance';
+import { TURNING_DIAMETER } from '@/lib/clearance-field';
 import { useScene } from '@/lib/scene-store';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
 import type { ScenePart } from '@/lib/scene-spec';
@@ -172,6 +173,32 @@ describe('the room panel renders the finding lib/clearance.ts computed', () => {
     expect(doorFloor(u), 'the fixture is the formatter, not a hand-typed string').toBe(shown);
     expect(screen.getByText(new RegExp(`does not go any shorter than ${shown.replace('.', '\\.')}`))).toBeTruthy();
   });
+
+  // The Step-free control names the same turning circle the `turning` finding does, three
+  // rows above it, and it is the last label in this panel that was still hard-coded: a
+  // module-scope `const TURN_CM = Math.round(TURNING_DIAMETER * 100)` rendered as
+  // `{TURN_CM} cm`. § B.12 converted the findings and not the label, so a user on feet
+  // read "Step-free · 150 cm" above "A wheelchair needs 4.92 ft to turn on the spot" —
+  // the very defect § B.12 was opened for, reintroduced three rows from where it was fixed.
+  //
+  // This is MOUNTED rather than grepped, and that distinction was measured: a source gate
+  // asserting `const turnLabel = (unit: DimUnit)` survived a body rewritten to
+  // `` `${Math.round(TURNING_DIAMETER * 100)} cm` `` — the right shape around the wrong
+  // value. A gate on a signature cannot see what the function returns.
+  it.each(['m', 'cm', 'ft', 'in'] as DimUnit[])(
+    'names the turning circle in %s beside the findings, not in centimetres',
+    (u) => {
+      render(<RoomTools />);
+      fireEvent.click(screen.getByRole('button', { name: /issue/ }));
+      act(() => useSettings.setState({ dimUnit: u }));
+      const expected = formatLength(TURNING_DIAMETER * 1000, u);
+      // Reached through the checkbox and its own `<label>`, which is how a screen reader
+      // reaches it: the label's text content IS the control's accessible name, so this
+      // asserts the name a user hears as well as the glyphs a user sees.
+      const box = screen.getByRole('checkbox', { name: /Step-free/ });
+      expect(box.closest('label')?.textContent, `Step-free label at ${u}`).toBe(`Step-free · ${expected}`);
+    },
+  );
 
   it('counts the problems on the trigger before anything is opened', () => {
     render(<RoomTools />);

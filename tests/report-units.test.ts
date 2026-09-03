@@ -299,6 +299,34 @@ describe('a measured number renders the same physical quantity at every unit', (
       expect(s.mm, `${s.unit} renders a seat distance of ${s.mm} mm`).toBeLessThan(2000);
     }
   });
+
+  it('the OTHER TV finding — sitting too far — states three numbers of its own', () => {
+    // Two branches, `warn` for too close and `info` for too far, and they are separate
+    // sentences with separate `len()` calls. A fixture for one covers neither the other's
+    // seat distance nor its ideal range: mutating `sits ${len(nd)} away` to
+    // `len(nd * 1000)` survived the whole suite with only the too-close fixture present.
+    // Two branches of one rule are two sites, and "the rule is covered" is not the same
+    // claim as "the sentence is covered".
+    const wMM = 700;
+    const hMM = 400;
+    const parts = () => [
+      part({ category: 'tv', shape: 'tv', dimMM: [wMM, 70, hMM], pos: [-2.9, 1.0, 0], name: 'TV', wallMounted: true, rot: Math.PI / 2 }),
+      part({ category: 'sofa', shape: 'sofa', dimMM: [1800, 900, 880], pos: [2.4, 0, 0], name: 'Sofa', rot: -Math.PI / 2 }),
+    ];
+    const diagMM = Math.hypot(wMM, hMM);
+    for (const unit of UNITS) {
+      const detail = one(parts(), 'tv', unit).detail;
+      expect(detail, `far-TV @ ${unit}: ${detail}`).toContain('ideal range');
+      expect(detail, `the low end of the ideal range @ ${unit}`).toContain(formatLength(diagMM * 1.2, unit));
+      expect(detail, `the high end of the ideal range @ ${unit}`).toContain(formatLength(diagMM * 2.5, unit));
+    }
+    const seen = backToMM(parts, 'tv');
+    for (const s of seen) {
+      // ~5.3 m apart by construction.
+      expect(s.mm, `${s.unit} renders a seat distance of ${s.mm} mm`).toBeGreaterThan(3000);
+      expect(s.mm, `${s.unit} renders a seat distance of ${s.mm} mm`).toBeLessThan(8000);
+    }
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────────
