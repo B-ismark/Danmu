@@ -37,7 +37,7 @@ them. Where two items are the same defect one layer apart, they are listed as on
 | ~~7~~ | ~~**§ 34** the pendant and the ceiling fan draw outside their declared size~~ | **FIXED** — `fanColumn` + `pendantDrop` in `scene-spec.ts`, swept at 10 mm across both catalogue bands against `verticalExtent`. The stated blocker (what a pendant's declared height means) was already answered by `isMountedObstruction` + `clearance.ts` rule 2b | — | — |
 | ~~7~~ | ~~**§ 33.1** the four newest shapes have never been seen in 3D~~ | **ALREADY DONE, and this row was stale** — `visual-check.md` has recorded the look since 2026-09-01 and deleted its own item; the queue was never updated. Re-confirmed 2026-09-02 alongside § 34 | — | — |
 | — | ~~**§ 36** a non-uniform resize walks through both geometry caps~~ | **FIXED 2026-09-03.** Six shapes, not two — the four extra found by grepping for the shape of the bug rather than its symptom. Worst was 2.25× (a fan's motor) and 4× (a pendant's shade) | done | wants eyes |
-| 7 | **§ 37** the Inspector's placement banner contradicts the room report | Reviewed 2026-09-02 and held out of PR #87. The idea is wanted; two of its three states are already computed elsewhere and it recomputes them with a different bar | M | none — it is on a branch, in no PR |
+| — | ~~**§ 37** the Inspector's placement banner contradicts the room report~~ | **BUILT 2026-09-03.** It reads `useRoomReport` and shows the finding's own words; `restingOn` in `lib/physics.ts` answers the half the report cannot, and gives § 12's floating rider its first gate | done | wants eyes |
 | 8 | **G.1** a brand-new room seals its own routes at the size the app ships | Measured, real, and a first-run defect — the worst kind to leave | M | related to § 31: both are the solver's idea of "navigable" |
 | 9 | **A.7** `snapYaws` leaves the piece crooked in 197 of 240 solves | Measured, visible, nobody has decided whether it matters | M | after § 31, which may change what a finalist is |
 | 10 | **§ 33.3** the render budget is unmeasured | Blocks any answer to "how detailed may a shape be", which was asked directly | M — needs a throttled device | blocks nothing shipping; blocks a decision |
@@ -2709,7 +2709,7 @@ assertion saying the table's rows are genuinely caps and not proportions wearing
 
 
 ### § 37 — the Inspector's placement banner answers a question two other surfaces
-already answer, and disagrees with both — REVIEWED, NOT MERGED
+already answer, and disagrees with both — **BUILT 2026-09-03**
 
 Reviewed 2026-09-02. The subject is `0202eaa fix(spatial): surface floating placement state`
 — one file, 69 insertions in `components/studio/Inspector.tsx` — which arrived here as
@@ -2794,6 +2794,95 @@ anything", which is why § 12's floating rider has no gate either.
 **Not verified:** nobody has looked at the banner. The contrast of `--success-text` on
 `--paper-0` was not checked, and the announcement behaviour was not tried with a screen
 reader.
+
+---
+
+**BUILT 2026-09-03**, and the shape the review prescribed is the shape that shipped:
+**read those answers rather than recompute them.** `0202eaa` itself was not merged — the
+banner was rewritten against the findings rather than patched.
+
+**Finding 1, the red banner on correctly-composed furniture.** Fixed by deletion: there
+is no `collidesAt` and no `partInsideRoom` in the Inspector. It reads
+`useRoomReport()` — the same memoised report the health chip uses — filters
+`issues` to this part id, and shows the worst one's **own `title` and `detail`** rather
+than a sentence of its own. So it agrees with Room check by construction and inherits
+every exemption, including ones nobody has written yet.
+
+**Finding 2, the floating check defeated by the function it asked.** `lib/physics.ts`
+gains `restingOn`, which is the answer the note said nothing in the repo could give.
+`findSupportDetailed` takes **x and z only** and never compares the mover's own `y`;
+that is right for a drop and wrong for this. `restingOn` asks both halves — something
+under the footprint AND the underside within `RESTING_TOL` of its top — and returns the
+floor as a `null` id, because *on the floor* and *on nothing* are different answers.
+
+`RESTING_TOL` is beside `MOUNT_PAD`, not a bare `0.005` in a component, and is chosen
+against what actually lands there: the app's own placement paths put a rider exactly on
+its support (0), float error through `verticalExtent` and a rotation is ~1e-9, and
+§ 12's defect is **350 mm** and must read as floating because it is. 5 mm is under the
+10 mm grid snap, so a deliberate one-step lift is not forgiven.
+
+**This also gives § 12's floating rider its first gate.** The note said that was worth
+having on its own and it is: `clearance.ts` skips anything above the floor, so a rider
+has no finding of its own however far it hangs.
+
+**Finding 3, a third source of truth.** Retired by finding 1's fix. The banner has no
+placement opinion of its own — the report owns "is this legal", `restingOn` owns "is
+this resting", and those are different questions rather than the same one asked twice.
+
+**The smaller things, all taken.** `role="status"` WITHOUT `aria-live` — the pair
+re-announces on every selection change and every position write, so a drag committed a
+stream of announcements; the role already carries an implicit live region and what it
+does not carry is a promise to interrupt. The literal `✓` / `!` glyphs are `Icon`
+now, and the pair is `check` / `info`, which is what the room health chip itself uses
+for the same two states. The duplicate `scene-spec` import is gone with the code that
+needed it.
+
+**The gate is the one thing nothing had.** `tests/placement-banner.test.tsx` mounts the
+real plan page and **compares one surface's answer to the other's** — every gate in the
+repo stayed green through the original defect, including `mount-height-refusal`, which
+mounts this very component. The findings were about which number the banner reads, and
+nothing in the repo compared two surfaces.
+
+Both of its fixtures were wrong on the first run and **both premise assertions caught
+them**, which is the argument for writing premises down: a chair fully under a table is
+a clash BY DESIGN past `TUCKED_CLASH_SHARE` 0.85 (the exemption is for a chair *pushed
+under*, not one standing where the table is), and a TV centred on z = -2 in a 4 m room
+hangs 30 mm outside it. Either would have made the whole file pass while measuring
+nothing.
+
+Mutation: reverting the banner to `collidesAt` goes red, collapsing `restingOn` into
+`findSupportDetailed` goes red across both files, and restoring `aria-live` goes red.
+
+**Then a review found six more things, and the first is the one worth carrying: the fix
+for § 37 committed § 37's own defect.** `RESTING_TOL = 0.005` sat forty-six lines below
+`SUPPORT_Y_EPS = 0.05`, whose docblock names this exact consumer and then describes the
+failure a second literal would cause — which is the failure that existed. Writing a
+second tolerance for a placement question, inside the fix for a banner that had a second
+opinion about placement, is the same defect one layer down. The others: a taller piece
+overlapping a rider hid the surface it was on (`findSupportDetailed` maximises `top`, so
+it takes a ceiling now); three severities were painted as a boolean, so a `warn` that
+Room check calls "A bit tight" in amber was red here; any finding ERASED the floating
+state; a pendant was told it is fixed to a wall (`wallMounted` is `anchorFor !== 'floor'`
+— `lib/scene-file.ts` had already solved that sentence); and `useRoomReport` is a plain
+hook, so a third caller mounted alongside the other two doubled a ~3 ms floor raster per
+render, which on the 2D tab is per frame of every drag.
+
+Four assertions could not fail, and the tucked-chair fixture is the one to remember: it
+sat **two ulps below `CLASH_SHARE`**, so nothing was being forgiven, and deleting the
+`sharesFloor` exemption left all eight tests green. The file's headline claim was
+decoration. A fixture on the inert side of a bar by rounding noise is a fixture that
+tests the opposite of what its name says.
+
+**Verified on 2026-09-03:** all seven banner states were seen in a production build —
+including "Hanging from the ceiling" for a fan, "Fixed to a wall" for a TV, the report's
+own sentence for a piece through a wall, and Floating in the amber tone rather than the
+red one.
+
+**Not verified:** the contrast of `--success-text` on `--paper-0` (measured 4.66:1 from
+the tokens, never seen), and the announcement behaviour with a screen reader.
+
+---
+
 
 ### 19. Library search: `stand` does not reach `Nightstand` — FIXED
 

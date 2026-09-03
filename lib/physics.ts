@@ -507,6 +507,70 @@ export function findSupportUnder(
   return findSupportDetailed(parts, selfId, x, z, selfDim, selfRot, selfCircle)?.y ?? null;
 }
 
+/** Is this piece actually resting on something, and on what?
+ *
+ *  ── Why this is not `findSupportDetailed` ────────────────────────────────────
+ *
+ *  That function takes **x and z only**. It answers *"what is under here"* — the
+ *  question a DROP asks, where the mover is about to be moved to whatever it finds —
+ *  and it never compares the mover's own `y` to the top it returns, which is correct
+ *  for its callers and wrong for this one.
+ *
+ *  Read as "is this resting", it says yes to a lamp hovering a metre above a desk, and
+ *  then NAMES the desk. That is not a near-miss: it is confidently wrong in the one
+ *  case a person would most want reported, and it was shipped in an Inspector banner
+ *  reading *"On Table — Supported by Table"* about a piece plainly in mid-air (§ 37).
+ *
+ *  So this asks both halves — something under the footprint, AND the piece's own
+ *  underside within `SUPPORT_Y_EPS` of that something's top. The probe is given a
+ *  CEILING for the same reason: `findSupportDetailed` maximises `top`, so without one
+ *  a taller overlapping piece hides the surface the piece is genuinely on and the
+ *  answer flips to "floating" without the piece moving.
+ *
+ *  Returns the floor as a `null` id, because "on the floor" and "on nothing" are
+ *  different answers and a caller that cannot tell them apart is the defect this
+ *  exists to fix.
+ *
+ *  ── The tolerance is `SUPPORT_Y_EPS`, and that is not a detail ───────────────
+ *
+ *  The first version of this function carried its own `RESTING_TOL = 0.005`, ten times
+ *  tighter, forty-six lines below a constant whose docblock names **this exact
+ *  consumer**: *"anything asking 'is this piece resting on that one' — the
+ *  rigid-parent edge test, and any report of a piece left hanging in the air — has to
+ *  agree on the answer, and a second literal is how two callers come to disagree about
+ *  the same piece."* It then describes the failure it would cause, which is the one
+ *  that existed: a lamp on a desk whose height moved 30 mm is still carried as a rigid
+ *  child by `isPhysicallySupported` (0.03 < 0.05) while this reported it airborne.
+ *
+ *  Writing a second tolerance for a placement question, inside the fix for a banner
+ *  that had a second opinion about placement, is the same defect one layer down.
+ *
+ *  `wallMounted` is not consulted: a wall fixture rests on nothing and this returns
+ *  `null` for one, which is truthful. Whether that is worth SAYING is the caller's
+ *  judgement — `Inspector` reports how the piece is anchored instead. */
+export function restingOn(
+  parts: SupportCandidate[],
+  selfId: string,
+  pos: [number, number, number],
+  rot: number,
+  dim: [number, number, number],
+  category: Category,
+  shape: Shape,
+  circle?: boolean,
+): { on: 'floor' | 'part'; id: string | null; gap: number } | null {
+  const bottom = verticalExtent(category, shape, dim, pos[1])[0];
+  // The highest thing under the footprint whose top the piece could actually be
+  // sitting on — anything higher is something it is INSIDE, not something it rests on.
+  const under = findSupportDetailed(
+    parts, selfId, pos[0], pos[2], dim, rot, circle, bottom + SUPPORT_Y_EPS,
+  );
+  if (under && Math.abs(bottom - under.y) <= SUPPORT_Y_EPS) {
+    return { on: 'part', id: under.id, gap: bottom - under.y };
+  }
+    if (Math.abs(bottom) <= SUPPORT_Y_EPS) return { on: 'floor', id: null, gap: bottom };
+  return null;
+}
+
 /** Same test as `findSupportUnder`, but also names which part won — the signal
  *  a rigid-parenting relationship is established from (see `lib/rigid-parent.ts`). */
 export function findSupportDetailed(
@@ -517,6 +581,15 @@ export function findSupportDetailed(
   selfDim: [number, number, number],
   selfRot = 0,
   selfCircle?: boolean,
+  /** Ignore anything whose top is above this. Absent means "no ceiling", which is
+   *  the drop question and every existing caller's.
+   *
+   *  `restingOn` is the caller that needs it, and the reason is that this function
+   *  maximises `top`: a lamp sitting on a desk while a taller piece overlaps its
+   *  footprint gets the TALLER piece back, and a caller comparing the lamp's
+   *  underside against that answer concludes the lamp is floating. Drag a monitor
+   *  over a desk lamp and the lamp is suddenly reported airborne without moving. */
+  maxTop = Infinity,
 ): { id: string; y: number } | null {
   const mover = footFromPart([x, 0, z], selfRot, selfDim, selfCircle);
   const moverArea = footArea(mover);
@@ -549,6 +622,7 @@ export function findSupportDetailed(
     // items have a non-floor anchor and `pos[1] + h` overstates their top by up to
     // 1.10 m.
     const top = verticalExtent(o.category, o.shape, o.dimMM, o.pos[1])[1];
+    if (top > maxTop) continue;
     // Nothing lower than the best candidate can win — skip the area maths.
     if (best !== null && top <= best.y) continue;
     const shared = footIntersectionArea(mover, footFromPart(o.pos, o.rot ?? 0, o.dimMM, o.circle));

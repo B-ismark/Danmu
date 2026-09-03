@@ -15,7 +15,8 @@ import { SwapModelModal } from './RegenerateModal';
 import { RailSection } from './RailSection';
 import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { isWallMountedPart, supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, DECOR_KINDS, type LibraryItem, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
-import { findSupportDetailed, groundY, heightForNewCeiling, MOUNT_PAD, snapToWall as snapToWallPhys, wallStandoff } from '@/lib/physics';
+import { anchorFor, findSupportDetailed, groundY, heightForNewCeiling, MOUNT_PAD, restingOn, snapToWall as snapToWallPhys, wallStandoff } from '@/lib/physics';
+import { useRoomReport } from './RoomTools';
 import { wallSegments } from '@/lib/footprint';
 import { moveWallCarrying } from '@/lib/wall-actions';
 
@@ -52,6 +53,10 @@ export function Inspector() {
   // both need the world as it stands, not as it was authored.
   const effParts = useRoomScene();
   const room = useScene((s) => s.room);
+  // Above the early returns below, because it is a HOOK — the same memoised report the
+  // health chip reads. What it is FOR is § 37, and the reasoning lives beside the
+  // derivation further down rather than here.
+  const { report } = useRoomReport();
 
   const [swapOpen, setSwapOpen] = useState(false);
 
@@ -184,6 +189,103 @@ export function Inspector() {
 
   const isGeneric = part.shape === 'box';
 
+  // ─── Where this piece stands ─────────────────────────────────────────────
+  //
+  // § 37. A selected piece saying where it is standing is a real gap, and the first
+  // attempt at it was held out of a PR for one reason: it ANSWERED the question itself.
+  // It ran `collidesAt` and `partInsideRoom` beside the room report, which asks the
+  // same two questions with different bars, and it was wrong on both.
+  //
+  // `collidesAt` deliberately has no `sharesFloor` exemption while the report's rule 2
+  // charges a tucked pair against `TUCKED_CLASH_SHARE` — that divergence is written
+  // down in `lib/clearance.ts` in as many words, with twenty seeded pairs behind it.
+  // So a dining chair pushed under its table got a red *"Blocked — move it away from
+  // the overlapping piece"* while Room check said the room was fine. The advice was to
+  // break the app's own seeded arrangement.
+  //
+  // So it reads the report instead. Not "computes the same thing carefully": READS it,
+  // via the same memoised `useRoomReport` the health chip uses. The banner agrees with
+  // Room check by construction and inherits every exemption automatically, including
+  // the ones nobody has written yet. CLAUDE.md rule 3 names this exact scar — two
+  // consumers carrying their own copies of a placement rule is how Suggest came to park
+  // a bed across a doorway and have Room check report it.
+  const mine = report.issues.filter((i) => i.partIds.includes(id!) && i.severity !== 'info');
+  // Worst first. `severity` is the report's own ordering and re-ranking it here would
+  // be the same mistake one level down.
+  const worst = mine.find((i) => i.severity === 'error') ?? mine[0] ?? null;
+
+  // …and the half the report cannot answer. `lib/clearance.ts` skips anything above
+  // the floor, so a rider has no finding of its own however far it is floating — which
+  // is why § 12's floating rider has never had a gate. `restingOn` is that answer, and
+  // it is NOT `findSupportDetailed`: see its docblock for why "what is under here" and
+  // "is this resting" are different questions, and why asking the first one produced a
+  // green banner reading "On Table — Supported by Table" about a lamp in mid-air.
+  const rest = part.wallMounted
+    ? null
+    : restingOn(partSnapshot(), id!, currentXYZ(), part.rot, part.dimMM, part.category, part.shape, part.circle);
+  const floating = !part.wallMounted && rest === null;
+
+  const restingName =
+    rest?.on === 'part' ? (effParts.find((p) => p.id === rest.id)?.name ?? 'another piece') : null;
+
+  // Where the piece is ANCHORED, in the app's own three-way wording. Not "wall-mounted":
+  // `part.wallMounted` is `anchorFor(...) !== 'floor'`, so it is true for a ceiling fan
+  // and a pendant lamp, and calling those fixed to a wall is simply false.
+  // `lib/scene-file.ts` already solved this exact sentence for its `dropped` messages,
+  // with a comment saying the file "two lines up knows better" — so this reads the same
+  // three-way answer rather than inventing a fourth.
+  const anchor = anchorFor(part.category, part.shape);
+  const anchorSentence =
+    anchor === 'ceiling' ? 'Hanging from the ceiling.' : 'Fixed to a wall.';
+  const anchorLabel = anchor === 'ceiling' ? 'Hanging' : 'Wall-mounted';
+
+  // Three severities, not a boolean. `warn` is "A bit tight" in amber in the room
+  // report (`SEVERITY` in `RoomTools`), and painting it `--danger` here would make one
+  // finding two colours on two surfaces — the same two-sources-of-truth defect this
+  // banner exists to end, one layer down in the presentation.
+  const placementTone: 'danger' | 'warn' | 'ok' = worst
+    ? worst.severity === 'error'
+      ? 'danger'
+      : 'warn'
+    // Floating is a WARN and not a danger, deliberately: `clearance.ts` skips anything
+    // above the floor, so a floating rider produces no finding and the health chip
+    // reads "Room checks out". A red banner beside a green chip is the contradiction
+    // this whole item is about, so the one state the report cannot see is reported in
+    // the quieter tone.
+    : floating
+      ? 'warn'
+      : 'ok';
+
+  // …and `floating` is not SUPPRESSED by an unrelated warn. A lamp in mid-air that also
+  // happens to sit in a tight walkway used to read "Tight walkway" and nothing else —
+  // the one state this feature was built for, erased by a finding about the floor.
+  const placementLabel = worst
+    ? worst.title
+    : floating
+      ? 'Floating'
+      : part.wallMounted
+        ? anchorLabel
+        : restingName
+          ? `On ${restingName}`
+          : 'On floor';
+  const restingSentence = part.wallMounted
+    ? anchorSentence
+    : floating
+      ? 'Nothing is holding it up. Drop it to the surface below, or move it onto something.'
+      : restingName
+        ? `Resting on ${restingName}.`
+        : 'Standing on the floor.';
+  // Both halves when both have something to say. A finding is about the floor plan and
+  // the resting state is about the vertical; they are different facts and the report
+  // cannot see the second, so a piece that is BOTH in a tight walkway and floating says
+  // so rather than picking one.
+  const placementDetail = worst
+    ? floating
+      ? `${worst.detail} It is also not resting on anything.`
+      : worst.detail
+    : restingSentence;
+  const placementOk = placementTone === 'ok';
+
   // `rail-scroll` carries nothing but `container-type` — it is what makes THIS box
   // the one `@container rail` measures, rather than the rail outside the scrollbar.
   // Both Inspector panes are scroll boxes and both take it; see globals.css for why
@@ -209,6 +311,70 @@ export function Inspector() {
           {/* shape ids are hyphenated internally ("chair-armchair") — say it in words */}
           {part.category} · {part.shape.replace(/-/g, ' ')}
         </div>
+      </div>
+
+      {/* ── Where this piece stands ────────────────────────────────────────── */}
+      {/*
+          `role="status"` WITHOUT `aria-live`. The first version had both, and the
+          combination re-announces on every selection change and every position write —
+          so a drag committed a stream of announcements into a polite queue that then
+          read them all out. `role="status"` already carries an implicit live region;
+          what it does not carry is a promise to interrupt, which is right for a label
+          that describes whatever happens to be selected.
+
+          `--danger-tint` / `--danger-text` and `--paper-0` / `--success-text` rather
+          than the fill tokens: `--danger` and `--success` are FILLS and do not clear
+          4.5:1 as type. The `-text` variants are the ones that do.
+      */}
+      <div
+        role="status"
+        // Named, so a test can find it by IDENTITY rather than by the text it is about
+        // to assert. The first version of `tests/placement-banner.test.tsx` located it
+        // with a regex of expected words over every `role="status"` on the page — of
+        // which there are five once the real layout is mounted — so it selected the
+        // element by the answer and, on a wall selection where this banner does not
+        // render at all, matched the keyboard-shortcut announcer instead.
+        aria-label="Placement"
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 8,
+          margin: '10px 16px 2px',
+          padding: '9px 10px',
+          border: `1px solid ${
+            placementTone === 'danger' ? 'var(--danger)' : placementTone === 'warn' ? 'var(--warn)' : 'var(--edge)'
+          }`,
+          borderRadius: 'var(--r-2)',
+          background:
+            placementTone === 'danger'
+              ? 'var(--danger-tint)'
+              : placementTone === 'warn'
+                ? 'var(--paper-3)'
+                : 'var(--paper-0)',
+          color:
+            placementTone === 'danger'
+              ? 'var(--danger-text)'
+              : placementTone === 'warn'
+                ? 'var(--warn-text)'
+                : 'var(--success-text)',
+          fontSize: 12,
+          lineHeight: 1.35,
+          // The tell is the ICON and the words; the colour is the third signal, not the
+          // only one. And `minWidth: 0` on the text so a long piece name ellipsises
+          // rather than pushing the rail out — the rail is `overflow: hidden`, so a
+          // spill here is silent.
+        }}
+      >
+        {/* `check` / `info`, which is the pair the room health chip itself uses for
+            the same two states (`RoomTools`). Matching it rather than reaching for a
+            warning triangle keeps one visual vocabulary for "this room is fine" and
+            "this room has something to say", and avoids adding an `IconName` for a
+            single call site. */}
+        <Icon name={placementOk ? 'check' : 'info'} size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+        <span style={{ minWidth: 0 }}>
+          <strong style={{ display: 'block', overflowWrap: 'anywhere' }}>{placementLabel}</strong>
+          <span style={{ color: 'var(--ink-3)', overflowWrap: 'anywhere' }}>{placementDetail}</span>
+        </span>
       </div>
 
       {/* ── The decorating decisions, folded to a line each ────────────────── */}

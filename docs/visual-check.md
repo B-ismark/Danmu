@@ -318,6 +318,62 @@ one dim to both functions); three round shapes drew a circle where the plan draw
 ellipse; and `window` and `radiator` were members of the class nobody had listed. The
 gate itself was per-row, so an empty table passed every assertion in it.
 
+### The Inspector now says where the selected piece stands — branch `fix/inspector-placement-agrees-with-the-report`, PR pending
+
+**All six states were LOOKED AT on 2026-09-03**, production build, one room holding all
+of them, selected through the rail the way a user selects. What was seen, verbatim:
+
+| piece | banner |
+|---|---|
+| dining table | ✓ **On floor** · "Standing on the floor." |
+| chair half under it | ✓ **On floor** — *not* "Blocked", which is the whole item |
+| lamp on the table | ✓ **On Dining table** · "Resting on Dining table." |
+| the same lamp 350 mm up | **Floating** · "Nothing is holding it up…" |
+| wall TV | ✓ **Wall-mounted** · "Fixed to a wall." |
+| ceiling fan | ✓ **Hanging** · "Hanging from the ceiling." |
+| sofa through a wall | **Sticks out of the room** · *the report's own sentence* |
+
+The long one wraps to three lines and does not clip, and the left rail's chip read
+"1 issue" throughout — the sofa's, and only the sofa's — so the two surfaces agree on
+screen and not merely in a test. **Floating renders in the amber warn tone, visibly
+different from the red danger one**, which is the review's point: the report says
+nothing at all about a floating piece, so a red banner beside a green chip would be the
+very contradiction this item is about.
+
+**What is left is below**, and it is what a screenshot cannot answer.
+
+**Where to click.** Select any piece. The banner sits above the decorating controls,
+between the name and the Colour row.
+
+**The last row is the whole point.** `collidesAt` calls a tucked chair a collision and
+the room report does not, deliberately — twenty seeded pairs behind that. The banner
+sides with the report, so a seeded dining set must not light up red.
+
+**What wrong looks like.**
+
+- **A red banner on the app's own seeded furniture.** Open a fresh room from the layout
+  picker and click each piece in turn. Anything red on an arrangement the app just made
+  is either the defect back or a genuine finding Room check is also making — check the
+  left rail's chip agrees. If the chip says the room is fine and the banner is red, that
+  is exactly § 37.
+- **Contrast.** The success state is `--success-text` on `--paper-0`, and that pair has
+  never been checked by eye or by `tests/color-tokens.test.ts`, which cannot see this
+  element. The danger state is `--danger-text` on `--danger-tint`.
+- **A long finding title spilling the rail.** The banner shows the report's own `title`
+  and `detail`, which are written for a wider panel. `minWidth: 0` and
+  `overflowWrap: anywhere` are on the text, and the rail is `overflow: hidden`, so a
+  spill here would be silent. Drag the right rail to its narrowest with a piece that has
+  a finding selected.
+- **A screen reader narrating a drag.** `role="status"` with no `aria-live` is
+  deliberate; the pair re-announced on every position write. Worth one pass with a
+  reader to confirm selecting a piece announces once and dragging does not chatter.
+
+**What does not need re-deriving.** The agreement with Room check is gated by
+`tests/placement-banner.test.tsx`, which mounts the real plan page and compares the two
+surfaces — including the tucked-chair case, with the premise asserted. `restingOn` has
+eleven clauses of its own. Reverting the banner to `collidesAt`, collapsing `restingOn`
+into `findSupportDetailed`, and restoring `aria-live` each go red.
+
 ## Layout and Shuffle
 
 *Owner: `layout`. The Shuffle item was a look rather than a check, and the look was taken on
