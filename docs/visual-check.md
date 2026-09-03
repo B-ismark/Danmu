@@ -623,30 +623,31 @@ person. The three signposts and the click-through are gated by `tests/studio-cop
 and `tests/library-click-through.test.tsx`. The one item below is new, and it is here
 because what a test can check about it and what a person can see are different halves.*
 
-### The placement row now folds to two rows on a narrow rail — does it look folded, or broken?
+### The placement row is two buttons now — does it still read as a row, at every rail width?
 
-**Where to click.** Open any room, select a piece with **something under it** — a lamp
-standing on a desk — so the placement row shows three buttons (**Wall · Surface · Floor**)
-rather than two. Then **drag the right rail's sash as far left as it goes**.
+**Where to click.** Open any room, select a floor-standing piece, and look at the two
+buttons under the Inspector's colour section: **Wall · Floor**. Try it with something
+under the piece (a lamp on a desk) and with nothing under it — the row must look the same
+both ways now, where it used to grow a third button. Then **drag the right rail's sash as
+far left as it goes**.
 
-**What was wrong.** The fold to two columns was written at `max-width: 268px` while a
-dragged right rail floors at `--rail-right-min: 276px`, so the fold could never fire for any
-width a drag can reach. Measured at 276px: the three buttons wanted 261px of the 243px they
-had, and “Floor” painted at **x = 1401.8 in a 1400px window**. The swatch grid in the same
-rail wanted 252px in the same 243px, and nobody had reported that one at all.
+**What changed.** § B.17 removed **Surface**, because a drag reproduces it exactly:
+measured against `resolvePlacement`, dragging a lamp clear of a desk lands it at y = 0 and
+dragging it back over lands it on the desk with `supportId` set. Wall and Floor stay
+because a drag reaches neither — the wall snap is gated on `ridesWall` so a lamp is never
+moved to a wall or turned, and Floor drops the piece **in place** where a drag carries it
+sideways.
 
-**What to look for now.** Three buttons should become **two on the first row and one on the
-second**, with the section's padding intact on both sides and nothing touching the window
-edge. The colour swatches in the same rail should be **six across and square**, not eight
-narrow rectangles. Both are measured — `tests/reflow.test.ts` holds the breakpoint above the
-rail's own floor and below the narrowest rail that ships un-dragged, and a browser probe
-confirms nothing overflows at 276px.
+**What to look for.** Two buttons at 50% each, both words legible, the section's padding
+intact on both sides and nothing touching the window edge — at the widest rail and at the
+narrowest a drag can reach (276px). The old three-button case folded to two rows there and
+that fold no longer has anything to fold; what needs an eye is whether two buttons at the
+narrowest width still fit their words rather than ellipsising or overflowing. The colour
+swatches in the same rail should be **six across and square**, not eight narrow rectangles.
 
-**What a test cannot settle, and why this is here.** Nothing in a test can measure a
-button's min-content, so the assertion is only that the fold is *reachable*, not that the
-folded layout *reads well*. A lone “Floor” sitting under two buttons may look like a
-mistake rather than a row that wrapped — and if it does, the answer is a different
-arrangement of that row, not a different breakpoint.
+**What a test cannot settle.** Nothing in a test can measure a button's min-content, so
+`tests/reflow.test.ts` holds the breakpoints and `tests/where-it-sits.test.tsx` holds which
+buttons exist; neither can see a rendered glyph or a clipped word.
 
 **The second half, and it needs a REAL browser rather than a headless one.** The first fix
 was derived against `.rail`, which is outside the Inspector's scrollbar, so the breakpoint
@@ -657,12 +658,68 @@ dropped from 304 to 293. **Headless Chromium renders no scrollbar at all here** 
 scrolling), so what a browser probe can show is a 12px/15px transparent border standing in
 for one — never the real thing. On a Windows machine with classic scrollbars, at a **1280px
 window**, the un-dragged right rail is 307.2px and the row has about a pixel to spare: look
-at whether the three buttons are three, and whether anything is touching the rail's right
-edge. That single width is the whole question.
+at whether **both buttons are on one line** and whether anything is touching the rail's
+right edge. That single width is the whole question — and it is a *different* question
+since § B.17, because the row that had about a pixel to spare had three buttons in it and
+now has two. Whether that makes this item easy or moot is the thing to find out.
 
-**Where it rides.** `dcfe1af` (the 268 → 304 fix) and `e4a9f25` (the container move and
-304 → 293). **Both merged with nobody having looked at either**, which is why this item is
-still here and why its gate counts are gone.
+**Where it rides.** `dcfe1af` (the 268 → 304 fix), `e4a9f25` (the container move and
+304 → 293) and `fix/rider-height-and-report-units` (three buttons → two). **The first two
+merged with nobody having looked at either**, which is why this item is still here and why
+its gate counts are gone.
+
+### Room check now speaks the unit you set — read a few findings in feet
+
+**Where to click.** Settings → **Feet (ft)**, then open a room with problems in it and open
+**Room check**. Then switch to **Meters** and read the same findings again without touching
+the room.
+
+**What changed.** § B.12. Every finding used to hard-code centimetres while `dimUnit`
+defaults to metres, so the panel said `190 cm` beside a room field reading `1.9 m`. Every
+length in a finding now renders through `formatLength` in the user's unit.
+
+**What to look for, and it is a copy judgement rather than a bug hunt.** Whether the
+sentences still *read* well in a coarse unit. `"needs 0.6 ft of clear floor"` is correct and
+may be worse prose than `"needs 35 cm"`. Two specific things to check: a very small gap
+must never print as zero — the formatter grows its decimals rather than saying `0.00 m`, so
+you should see something like `0.004 m` — and the mounted-clash sentence must name **two
+different** heights (`between 1.05 m and 1.07 m up`), never the same number twice.
+
+**What a test cannot settle.** Whether the wording is worth reading. The arithmetic is
+gated in `tests/units.test.ts`, the wiring in `tests/room-tools-findings.test.tsx`, and the
+band's two-different-numbers property across all five units in `tests/mounted-clash.test.ts`.
+
+**Where it rides.** `fix/rider-height-and-report-units`.
+
+### A lamp on a desk you have resized — does it sit on the desk, in BOTH tabs?
+
+**Where to click.** Open a room with a piece standing on another (the bedroom preset seeds
+a bedside lamp on a nightstand). Select the **nightstand** and change its **height** in the
+Inspector — down 300 mm, then up 300 mm. Watch the lamp in the **3D tab**, from eye level
+rather than from above. Then switch to the **2D plan** and back.
+
+**What changed.** § 12. `settleHeights` seats riders once at build time against the
+authored sizes, and a resize writes an override nothing settles again — so the lamp hung in
+the air above a shrunk nightstand and sank inside a grown one. The height is derived on
+every read now.
+
+**What to look for.** The lamp's base should stay on the nightstand's top through both
+changes, with no lag — it must move on the same edit, not on the next unrelated one. And
+**the two tabs must agree**: this is the failure mode the fix was shaped to avoid, since
+`Draggable` writes its own position and does not go through the list the plan reads. From
+directly above, a floating lamp is indistinguishable from a seated one, which is why the
+3D check has to be from eye level.
+
+**Also worth one look while you are there:** drag a piece into mid-air over a table — the
+Inspector should still say **Floating**. The derivation deliberately does not seat a piece
+that was never resting on anything, and three assertions in
+`tests/placement-banner.test.tsx` broke when an earlier version of it did.
+
+**What a test cannot settle.** `Draggable` renders `<mesh>` and there is no R3F shim in
+this repo, so its half is gated only at source in `tests/room-scene.test.ts` — that the
+call is there, not that the value arrives on screen.
+
+**Where it rides.** `fix/rider-height-and-report-units`.
 
 ---
 
