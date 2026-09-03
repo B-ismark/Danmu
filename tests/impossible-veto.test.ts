@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   bestCandidate,
+  declineFor,
   HARD_TERMS,
   impossibility,
   IMPOSSIBLE_TERMS,
@@ -19,7 +20,6 @@ import {
   type CostBreakdown,
   type LayoutContext,
   type Placement,
-  type ScoreWeights,
 } from '@/lib/layout-score';
 import { defaultScene, type ScenePart } from '@/lib/scene-spec';
 import { footprintBounds, footprintForLayout, type Footprint } from '@/lib/footprint';
@@ -61,17 +61,35 @@ describe('IMPOSSIBLE_TERMS — the split is by kind, not by severity', () => {
 
   it('leaves every recoverable hard term priced rather than vetoed', () => {
     // The user's words: a blocked door "can be prompted and fix with the fix
-    // feature". Anything in this list is a room the report names and Try a fix acts
+    // feature". Anything on this side is a room the report names and Try a fix acts
     // on, so putting it behind the veto would refuse arrangements the app is meant to
     // offer and then repair.
-    for (const term of ['door', 'access', 'navigation'] as Array<keyof ScoreWeights>) {
+    //
+    // DERIVED from `HARD_TERMS`, not typed out. A hand-written
+    // `['door', 'access', 'navigation']` was a third copy of the same partition, and
+    // it made this test blind in the one direction that matters: a NEW hard term is
+    // absent from every list, so it silently becomes recoverable and `Fix` writes it
+    // to the store. That is CLAUDE.md rule 3's shape exactly — absence inherits a
+    // default, and absence is never the defect.
+    const recoverable = HARD_TERMS.filter((t) => !IMPOSSIBLE_TERMS.includes(t));
+    expect(recoverable, 'a hard term is either impossible or priced, and door is priced')
+      .toContain('door');
+    for (const term of recoverable) {
       expect(IMPOSSIBLE_TERMS, term + ' is recoverable and must stay a price').not.toContain(term);
     }
   });
 
-  it('is a subset of HARD_TERMS, so the veto can never outrank the sum it lives in', () => {
+  it('partitions HARD_TERMS — every hard term is on exactly one side', () => {
+    // The assertion a new hard term goes red on. `isCleanShuffle` and `snapYaws` both
+    // read `HARD_TERMS` and pick a new entry up for free; the § 31 veto reads
+    // `IMPOSSIBLE_TERMS` and cannot. This is the line that makes someone decide.
+    const recoverable = HARD_TERMS.filter((t) => !IMPOSSIBLE_TERMS.includes(t));
+    expect([...IMPOSSIBLE_TERMS, ...recoverable].sort()).toEqual([...HARD_TERMS].sort());
     for (const term of IMPOSSIBLE_TERMS) expect(HARD_TERMS).toContain(term);
-    expect(IMPOSSIBLE_TERMS.length).toBeLessThan(HARD_TERMS.length);
+    // Non-empty in both directions: an emptied `IMPOSSIBLE_TERMS` makes the `for` above
+    // run zero times and the subset claim vacuously true.
+    expect(IMPOSSIBLE_TERMS.length, 'an empty veto is no veto').toBeGreaterThan(0);
+    expect(recoverable.length, 'a veto over every hard term is not a veto either').toBeGreaterThan(0);
   });
 
   it('sums exactly those terms and no others', () => {
@@ -118,6 +136,24 @@ describe('bestCandidate — least impossible first, then cheapest', () => {
     // Both are sums of areas. Without the slack, 1e-9 of float noise would outrank a
     // 50-unit real difference in taste.
     expect(bestCandidate([cand(90, { outside: 1 }), cand(40, { outside: 1 + 1e-9 })])).toBe(1);
+  });
+
+  it('anchors the tie band to the running MINIMUM, not to the incumbent', () => {
+    // `bestImp = Math.min(imp, bestImp)` rather than `bestImp = imp`, and every other
+    // test here uses two candidates, where the two are identical. It takes three to
+    // tell them apart, and the difference is an epsilon ratchet: anchored to the
+    // incumbent, each near-tie drags the band up by its own slack, so a pool walks
+    // from legal to illegal one 1e-6 at a time.
+    //
+    // Candidate 1 wins the tie arm at imp 1e-7 while `bestImp` stays 0. Candidate 2 at
+    // 1.05e-6 is then measured against 0 and rejected — with `bestImp = imp` it would
+    // be measured against 1e-7, pass, and win on its far cheaper total.
+    const pool = [
+      cand(100, { outside: 0 }),
+      cand(50, { outside: 1e-7 }),
+      cand(1, { outside: 1.05e-6 }),
+    ];
+    expect(bestCandidate(pool)).toBe(1);
   });
 });
 
@@ -168,16 +204,28 @@ describe('solveLayout never hands back a room more impossible than the one it wa
     }, 600_000);
   }
 
-  it('leaves a legal room legal when it declines to answer', () => {
-    // The revert path: `breakdownAfter` is restored to `breakdownBefore`, so a caller
-    // reading `after` sees the room it already has rather than the illegal one the
-    // search proposed.
-    const parts = defaultScene('l', 6, 4);
-    const r = solveLayout(parts, footprintForLayout('l', 6, 4), lockedForSolve(parts, {}, null), { seed: 7 });
+  it('leaves a legal room legal when it declines for impossibility', () => {
+    // The revert path, on a seed that actually takes it FOR THIS REASON. It used to
+    // read `l` seed 7, which declines for `no-gain` — and on that arm every assertion
+    // below is true by definition, so the test survived deleting the revert itself.
+    // The seeded U at 6 x 4 declines `impossible` at seeds 1, 2, 5 and 7.
+    const parts = defaultScene('u', 6, 4);
+    const r = solveLayout(parts, footprintForLayout('u', 6, 4), lockedForSolve(parts, {}, null), { seed: 1 });
+    expect(r.declined, 'the fixture must still take the impossibility arm').toBe('impossible');
+    expect(r.moved, 'a declined solve moves nothing').toEqual([]);
+    // The room the caller is handed back is the legal one it came in with, NOT the
+    // illegal arrangement the search proposed.
     expect(impossibility(r.breakdownBefore)).toBe(0);
     expect(impossibility(r.breakdownAfter)).toBe(0);
-    if (r.moved.length === 0) expect(r.after).toBeCloseTo(r.before, 10);
-  });
+    expect(r.after).toBeCloseTo(r.before, 10);
+    // …and the placements really are the originals, which is the part `breakdownAfter`
+    // alone cannot show: it is restored by assignment, so it would read clean even if
+    // the winner had not been put back.
+    for (let i = 0; i < parts.length; i++) {
+      expect(r.placements[i].x, parts[i].id + ' x').toBeCloseTo(parts[i].pos[0], 9);
+      expect(r.placements[i].z, parts[i].id + ' z').toBeCloseTo(parts[i].pos[2], 9);
+    }
+  }, 300_000);
 });
 
 describe('SolveResult.declined — a refusal that can say which refusal it is', () => {
@@ -228,27 +276,42 @@ describe('SolveResult.declined — a refusal that can say which refusal it is', 
   }, 600_000);
 
   it('reports impossibility in preference to no-gain when an answer is both', () => {
-    // The ordering in the ternary, and it is the whole reason this is not a boolean.
-    // An answer that is more impossible AND dearer is both, and "nothing was cheaper"
-    // is the ordinary outcome that would hide the interesting one behind it.
+    // Asserted on `declineFor` rather than through a solve, because it CANNOT be seen
+    // through one: both arms revert identically, so every declined solve ends with
+    // `after === before` whichever reason fired. A test over real solves that filters
+    // on `declined === 'impossible'` and then asserts `after ≈ before` is restating
+    // its own filter.
     //
-    // Found by sweeping for the case rather than constructing one. Over the same 80
-    // suggest solves as the test above: 63 applied, 13 `no-gain`, and 4 `impossible`
-    // — all four on the SEEDED U at 6 x 4, seeds 1, 2, 5 and 7. Which preset it is
-    // matters less than that the arm occurs at all; if it stops occurring here, sweep
-    // for it again rather than deleting the test.
+    // More impossible AND dearer — both arms qualify, and the answer must be the one
+    // that says something.
+    expect(declineFor(0, 5, 1, 9999, false)).toBe('impossible');
+    // Each arm on its own, so the test above is not the only thing holding either.
+    expect(declineFor(0, 5, 9999, 1, false), 'impossible but cheaper').toBe('impossible');
+    expect(declineFor(0, 0, 1, 9999, false), 'legal but dearer').toBe('no-gain');
+    expect(declineFor(0, 0, 9999, 1, false), 'legal and cheaper is not a refusal').toBeNull();
+    // Equal cost is not an improvement. The real accept reads `>=`.
+    expect(declineFor(0, 0, 42, 42, false), 'no cheaper is no gain').toBe('no-gain');
+    // Shuffle exempts the taste arm and only the taste arm.
+    expect(declineFor(0, 0, 1, 9999, true), 'a shuffle may be dearer').toBeNull();
+    expect(declineFor(0, 5, 9999, 1, true), 'a shuffle may not be illegal').toBe('impossible');
+    // The slack, in the same weighted units `anyWorse` uses.
+    expect(declineFor(1, 1 + 1e-9, 9999, 1, false), 'float noise is not impossibility').toBeNull();
+    // …and a repair of an already-illegal room is not refused for the illegality it
+    // was handed. This is the relative ceiling, at the accept rather than in openRoutes.
+    expect(declineFor(500, 500, 9999, 1, false), 'no worse than it was given').toBeNull();
+  });
+
+  it('and the impossibility arm is reached by real solves, not only by unit inputs', () => {
+    // The other half: `declineFor` above proves the ordering, this proves the arm is
+    // live. Over the same 80 suggest solves, 4 take it — all on the seeded U at 6 x 4,
+    // seeds 1, 2, 5 and 7. If this stops firing, sweep for the case again rather than
+    // deleting the test.
     const parts = defaultScene('u', 6, 4);
     const poly = footprintForLayout('u', 6, 4);
-    const both = SEEDS.map((seed) =>
-      solveLayout(parts, poly, lockedForSolve(parts, {}, null), { seed }),
-    ).filter((r) => r.declined === 'impossible');
-    expect(both.length, 'the seeded U must still produce an impossibility decline').toBeGreaterThan(0);
-    for (const r of both) {
-      // Each of these WOULD have read `no-gain` under the other ordering, because a
-      // reverted solve always ends with `after === before`.
-      expect(r.after).toBeCloseTo(r.before, 10);
-      expect(r.declined).toBe('impossible');
-    }
+    const seen = SEEDS.map(
+      (seed) => solveLayout(parts, poly, lockedForSolve(parts, {}, null), { seed }).declined,
+    );
+    expect(seen.filter((d) => d === 'impossible').length).toBeGreaterThan(0);
   }, 600_000);
 });
 
@@ -333,30 +396,65 @@ describe('Candidate.breakdown', () => {
     // pair stops agreeing. `total` is `cost + navCost`, and the breakdown prices the
     // same layout at the same weights with the same grid.
     const parts = defaultScene('u', 6, 4);
+    const poly = footprintForLayout('u', 6, 4);
+    // The solver's own model, rebuilt here so the re-derivation below is genuinely
+    // independent of anything the candidate carries.
+    const model = prepare({ parts, movable: parts.map(() => true), footprint: poly });
     let seen: readonly Candidate[] = [];
-    solveLayout(parts, footprintForLayout('u', 6, 4), lockedForSolve(parts, {}, null), {
+    solveLayout(parts, poly, lockedForSolve(parts, {}, null), {
       seed: 3,
       pick: (c) => ((seen = c), 0),
     });
     expect(seen.length).toBeGreaterThan(0);
     for (const c of seen) {
       expect(c.breakdown.total).toBeCloseTo(c.total, 6);
-      expect(c.breakdown.navigation).toBeCloseTo(c.navCost, 10);
+      // Against a FRESH `navigabilityCost`, not against `breakdown.navigation`.
+      // `navCost` is assigned from that field, so comparing the two was `x ≈ x` and
+      // would have stayed green through `costBreakdown` pricing navigation unweighted
+      // or on the wrong grid — both fields move together.
+      expect(c.navCost).toBeCloseTo(
+        DEFAULT_WEIGHTS.navigation * navigabilityCost(model, c.placements, NAV_CELL),
+        9,
+      );
     }
   });
 
-  it('is priced at the solve weights, so a caller reading it reads the same currency', () => {
-    const parts = defaultScene('rect', 6, 4);
+  it('is priced at the solve WEIGHTS rather than as a raw share', () => {
+    // The old version of this asserted `outside <= weights.outside * parts.length` on
+    // `rect` seed 2, which produces one finalist whose `outside` is 0 — a bound of
+    // 12000 over a zero. Worse, an upper bound is the wrong direction entirely: an
+    // UNWEIGHTED reading (at most `parts.length`) also satisfies it, so the assertion
+    // could not detect the thing its comment named.
+    //
+    // A bound in either direction is the wrong instrument, because the weighted and
+    // unweighted readings of a small overhang are both small numbers — the finalists
+    // here carry `outside` 2.0796, which is 0.00208 of a share times 1000. What
+    // separates them is the RATIO, so the same layout is priced twice at two weight
+    // settings and the answer has to move by exactly the weight.
+    //
+    // The seeded U at 6 x 4 seed 3 keeps four finalists, three carrying a non-zero
+    // `outside`.
+    const parts = defaultScene('u', 6, 4);
+    const poly = footprintForLayout('u', 6, 4);
+    const model = prepare({ parts, movable: parts.map(() => true), footprint: poly });
     let seen: readonly Candidate[] = [];
-    solveLayout(parts, footprintForLayout('rect', 6, 4), lockedForSolve(parts, {}, null), {
-      seed: 2,
+    solveLayout(parts, poly, lockedForSolve(parts, {}, null), {
+      seed: 3,
       pick: (c) => ((seen = c), 0),
     });
-    expect(seen.length).toBeGreaterThan(0);
-    for (const c of seen) {
-      // A weighted term, not a raw share: `outside` tops out at `weights.outside` per
-      // piece, so a bare 0..1 reading here would mean the breakdown was unweighted.
-      expect(c.breakdown.outside).toBeLessThanOrEqual(DEFAULT_WEIGHTS.outside * parts.length);
+    expect(seen.length, 'this fixture must keep more than one finalist').toBeGreaterThan(1);
+    const dirty = seen.filter((c) => c.breakdown.outside > 0);
+    expect(dirty.length, 'and at least one of them must be outside the room').toBeGreaterThan(0);
+    for (const c of dirty) {
+      const raw = costBreakdown(
+        model,
+        c.placements,
+        { ...DEFAULT_WEIGHTS, outside: 1 },
+        NAV_CELL,
+      ).outside;
+      expect(raw, 'the unweighted reading must not itself be zero').toBeGreaterThan(0);
+      expect(c.breakdown.outside / raw, 'the candidate carries the WEIGHTED term')
+        .toBeCloseTo(DEFAULT_WEIGHTS.outside, 6);
     }
-  });
+  }, 300_000);
 });

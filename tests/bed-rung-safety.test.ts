@@ -94,12 +94,22 @@ const solveAll = (
  *      proposal-generator fix in `lib/layout-solve.ts`.
  *    · Then: medians 15.91 / 15.12 / 10.46, so the narrowest rung was the tidiest AND
  *      the safest, and no trade existed at this room at all.
- *    · Now, after the winding fix: medians 16.75 / 20.78 / 16.74, Σdanger
+ *    · After the winding fix: medians 16.75 / 20.78 / 16.74, Σdanger
  *      174.90 / 443.92 / 118.06. The narrowest rung is still the tidiest, by 0.01, and
  *      still much the safest — but it is no longer CLEAN, so "no trade exists" has
  *      stopped being true in the way that mattered. That is a parked, measured
  *      regression in the solver and not a change of mind about the ladder: the ladder
  *      still comes down for a reason and the margin above it is wider than it was.
+ *    · **2026-09-03, and the two above are now stale in a way worth naming rather than
+ *      overwriting.** Σdanger reads **962.10 / 211.23 / 535.25** on this tree, so the
+ *      "174.90 / 443.92 / 118.06" triple above is arithmetically impossible beside the
+ *      per-seed pins further down (`single.danger` is 535.25 at the assertion, and
+ *      `dangerOf` includes `navigation`, which alone is 533.40 for the Single). It was
+ *      measured on a tree nobody named, which is the whole reason this file now
+ *      insists every figure names its own. Medians are 18.35 / 14.77 / 19.34, so the
+ *      NARROWEST rung is no longer the tidiest either — the Double is, and by a lot.
+ *      Kept above rather than deleted because the sequence is the evidence: four
+ *      readings of one sweep, each accurate when taken.
  *
  *  Read the table, not this comment. */
 describe('the bed ladder comes down a rung when the room cannot take a wider one', () => {
@@ -232,8 +242,10 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
   // notch. The annealer's weights were tuned against those wrong normals, so the
   // SOLVER's answer changed and the scorer's did not — the old placements re-scored
   // with the new scorer still give `navigation` 0.00. Nothing here is through a wall:
-  // `outside`, `door` and `walkway` read 0.00 on every seed and the whole of this
-  // number is `navigation`, floor a person cannot walk to.
+  // `outside` and `door` read 0.00 on every seed and all but 1.85 of this number is
+  // `navigation` — floor a person cannot walk to. (Σnavigation for the Single is
+  // 533.40 against this 535.25; the remainder is `walkway`, which this sentence used
+  // to list among the zeros and should not have.)
   //
   // These are measurements of a defect, so an IMPROVEMENT must go red too. That is the
   // point of pinning rather than bounding and it is why there is no `<=`. If the solver

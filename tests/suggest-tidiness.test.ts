@@ -794,6 +794,14 @@ describe('the repair pass is re-checked on the grid the room report reads', () =
     // identity, and the only path that does so after the search has run is the
     // fine-grid re-check. Delete that re-check and this is the assertion that goes
     // red — the whole reason the search was run.
+    //
+    // Still one path as of § 31 (2026-09-03), and that took a deletion to keep true.
+    // The veto added a second identity-return one line above this one; it could never
+    // fire — `impossibility` reads no navCell-dependent term, so the coarse and fine
+    // grids cannot disagree about it — and it was removed rather than left standing
+    // under a comment that promised otherwise. What the veto DOES have in that
+    // function is a gate on which candidates the anneal may remember as `best`, which
+    // changes what the re-check is handed but not how many ways it can answer.
     const at = scattered();
     const out = openRoutes(model, at, DEFAULT_WEIGHTS, bounds, lcg(REPAIR_SEED));
     expect(out, 'the proxy’s answer must be the one being refused here').toBe(at);

@@ -597,7 +597,7 @@ function useSuggest(effParts: ScenePart[], footprint: Footprint, appPlaced: AppP
       // suggestion that resized the furniture would be the one thing this app
       // refuses to do.
       loadTransforms({ positions, rotations, dims: t.dims });
-      return { applied: true as const, result };
+      return { applied: true as const, result };  // …and only this path writes.
     },
     [effParts, footprint, loadTransforms, appPlaced],
   );
@@ -633,6 +633,15 @@ function FixAllButton({
       // "this is already a good arrangement" there is not a rounding of the truth, it
       // is the opposite of it — the room may be a mess, and the honest report is that
       // nothing safe was found rather than that nothing was needed.
+      // `ttl` is 14000 rather than the 9000 default, matching the re-fit offer below.
+      // This is the longest message in the app, and a solve freezes the window for a
+      // second or two first, so the read starts late: 34 words at an ordinary reading
+      // rate is most of nine seconds on its own.
+      //
+      // The remedies are ordered by what costs the user least. Pressing again is free
+      // and genuinely different — `attempt` increments per press, so the next press is
+      // a different search — and it was missing from the first version of this copy
+      // while two expensive remedies were in it.
       toast(
         result.declined === 'impossible'
           ? {
@@ -641,7 +650,8 @@ function FixAllButton({
               // file are untoned for the same reason.
               title: 'No safe arrangement found',
               message:
-                'Every layout tried put a piece through a wall or inside another one, so nothing was moved. Unlocking a piece, or making the room a little bigger, gives it more room to work with.',
+                'Every layout tried put a piece through a wall or inside another one, so nothing was moved. Press Fix again for a different try, or unlock a piece to give it more room.',
+              ttl: 14000,
             }
           : {
               title: 'This is already a good arrangement',
@@ -926,16 +936,27 @@ function useRefitOffer(
         label: 'Re-fit',
         onClick: () => {
           const { applied, result } = suggest('refit', 1);
+          // The third of the three sentences, and it was missed on the first pass: this
+          // path is reached straight after a RESIZE, which is the state most likely to
+          // leave the search with nothing but illegal answers. Saying "nothing to move"
+          // there is the same category of lie the other two branches exist to stop.
           toast(
             applied
               ? {
                   title: `Re-fitted ${result.moved.length} ${result.moved.length === 1 ? 'piece' : 'pieces'}`,
                   message: whatChanged(result.breakdownBefore, result.breakdownAfter),
                 }
-              : {
-                  title: 'Nothing to move',
-                  message: 'No arrangement of the unlocked pieces clears this — try a different size, or unlock more.',
-                },
+              : result.declined === 'impossible'
+                ? {
+                    title: 'No safe way to fit that',
+                    message:
+                      'Every arrangement tried put a piece through a wall or inside another one. A smaller size, or unlocking a piece, gives it more room.',
+                    ttl: 14000,
+                  }
+                : {
+                    title: 'Nothing to move',
+                    message: 'No arrangement of the unlocked pieces clears this — try a different size, or unlock more.',
+                  },
           );
         },
       },
@@ -1030,14 +1051,21 @@ function FixButton({
     if (!applied) {
       // Already honest about finding nothing, and now able to say WHY when the reason
       // is the § 31 veto rather than an absent improvement.
+      // Both arms keep the scoped/unscoped split, because the escape hatch differs and
+      // the more serious refusal must not give LESS guidance than the milder one. The
+      // first version of the impossible arm was a single sentence for both and named no
+      // next step at all.
       toast({
         title: result.declined === 'impossible' ? 'No safe way to move those' : 'Moving those didn’t clear it',
         message:
           result.declined === 'impossible'
-            ? 'Every arrangement tried put a piece through a wall or inside another one.'
+            ? scope
+              ? 'Every arrangement of those put a piece through a wall or inside another one. Fix can rearrange the whole room, which gives it more to work with.'
+              : 'Every arrangement tried put a piece through a wall or inside another one. Try unlocking a piece, or making some space.'
             : scope
               ? 'Nothing better was found without touching the rest of the room. Fix can rearrange everything.'
               : 'Nothing better was found. Try unlocking a piece, or making some space.',
+        ...(result.declined === 'impossible' ? { ttl: 14000 } : null),
       });
       return;
     }

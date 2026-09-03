@@ -137,9 +137,13 @@ export type Candidate = {
    *  Here so a ranker can ask what KIND of cost a candidate carries rather than only
    *  how much, which is what § 31's veto needs: an arrangement with a piece through a
    *  wall is not a dearer version of one without, it is a different kind of answer.
-   *  `breakdown.total` and `total` are the same number by construction — pinned in
-   *  `tests/layout-pick.test.ts`, because "by construction" is how two fields that
-   *  ought to agree stop agreeing. */
+   *  `breakdown.total` and `total` agree to within a few ulps rather than exactly, and
+   *  the difference is float associativity rather than a defect: `cost` is a 13-term
+   *  sum taken with `navigation` at zero, `breakdown.total` is the same sum with
+   *  `navigation` non-zero in fourth position, and `cost + navCost` re-associates. So
+   *  the pin is a `toBeCloseTo` and it lives in `tests/impossible-veto.test.ts` — NOT
+   *  in `tests/layout-pick.test.ts`, which pins the neighbouring identity
+   *  `total === cost + navCost` and mentions this field nowhere. */
   breakdown: CostBreakdown;
 };
 
@@ -199,6 +203,31 @@ export function impossibility(b: CostBreakdown): number {
   let sum = 0;
   for (const k of IMPOSSIBLE_TERMS) sum += b[k];
   return sum;
+}
+
+/** Which refusal, if any, applies to an answer — the whole of the accept's decision,
+ *  as a pure function of five numbers.
+ *
+ *  Out here rather than inline because the ORDERING is the part worth asserting and it
+ *  cannot be observed from a `SolveResult`: both arms revert identically, so a declined
+ *  solve always ends with `after === before` and `moved: []` whichever reason fired.
+ *  A test over real solves can show that the `impossible` arm occurs; only this
+ *  signature can show that an answer which is BOTH impossible and dearer is reported as
+ *  impossible.
+ *
+ *  `shuffle` exempts only the `no-gain` arm. A shuffle is asked for a DIFFERENT
+ *  arrangement and a different one is usually dearer, which is a fact about taste; it
+ *  says nothing about legality, so the impossibility arm applies in every mode. */
+export function declineFor(
+  impossibleBefore: number,
+  impossibleAfter: number,
+  totalBefore: number,
+  totalAfter: number,
+  shuffle: boolean,
+): SolveDecline | null {
+  if (impossibleAfter > impossibleBefore + 1e-6) return 'impossible';
+  if (!shuffle && totalAfter >= totalBefore) return 'no-gain';
+  return null;
 }
 
 /** Index of the best candidate: least impossible first, then cheapest on `total`.
@@ -1129,12 +1158,22 @@ export function solveLayout(
   // answer can be both and only one of the two is worth telling anyone: "everything I
   // found put a piece through a wall" is a fact about the search, while "nothing was
   // cheaper" is the ordinary outcome it would otherwise hide behind.
-  const declined: SolveDecline | null =
-    impossibleAfter > impossibleBefore + 1e-6
-      ? 'impossible'
-      : !shuffle && breakdownAfter.total >= before
-        ? 'no-gain'
-        : null;
+  //
+  // Over the 80 suggest solves `tests/impossible-veto.test.ts` sweeps: 17 decline (13
+  // `no-gain`, 4 `impossible`, all four on the seeded U), 59 move something, and 4
+  // neither decline nor move — the search proposed nothing at all. That last group is
+  // why "63 applied" is the wrong way to say it.
+  //
+  // What this measures is the FINAL layout, four passes downstream of the pick, so in
+  // principle `snapYaws`, `pruneMoves` or `openRoutes` could manufacture an
+  // impossibility no finalist had, and this would then blame the search for it.
+  // Measured rather than assumed: across both modes, 9 solves declined for
+  // impossibility and in **0** of them was the picked finalist legal. `bestCandidate`
+  // returns the LEAST impossible candidate, so a picked finalist that is illegal means
+  // every finalist was — which is what makes the toast's wording honest. If that ever
+  // stops reading 0, the repair is to fall back to the picked finalist rather than to
+  // the origin; widening this comparison would only hide it.
+  const declined = declineFor(impossibleBefore, impossibleAfter, before, breakdownAfter.total, shuffle);
   if (declined) {
     winner = origin.map((p) => ({ ...p }));
     breakdownAfter = breakdownBefore;
@@ -1284,24 +1323,35 @@ export function openRoutes(
   // quietly spend the search's work and return something worse, and the doc said it
   // couldn't.
   //
-  // § 31's backstop. `best` is already gated on impossibility above, so this can only
-  // fire when the COARSE grid and the fine one disagree about it — the same terms, but
-  // `openRoutes` is the one caller that prices on a proxy.
+  // § 31 is gated on `best` above and NOT again here, which is a deletion rather than
+  // an omission. A line reading `if (impossibility(found) > impossibility(given) +
+  // 1e-6) return placements;` stood here for one commit, described as a backstop
+  // against the coarse grid and the fine one disagreeing about impossibility. **It
+  // could never fire**, and two independent reviews reached that by the same route:
+  // `navCell` is read at exactly one place in `costBreakdown` and it sets `navigation`
+  // alone, so `overlap` and `outside` are bit-identical at `REPAIR_CELL` and
+  // `NAV_CELL` for the same placements. The two grids cannot disagree about
+  // impossibility. `best` is only ever assigned the initial copy of `placements` or a
+  // candidate that passed `impossibleCeiling`, so the condition is unconditionally
+  // false.
   //
-  // Why the gate is on `best` and not only here, which is the part worth reading:
-  // this pass moves obstacles to open a route, so "push the wardrobe into the wall" is
-  // squarely inside its own proposal space and scores WELL — the wall it goes through
-  // is not floor the navigation term was counting. Refusing that only at the end
-  // throws away the whole repair; refusing it as an ANSWER while still letting the
-  // search walk through it keeps every legal arrangement the same search already
-  // visited. Measured on the Double rung at U 6x5, twelve seeds: refusing at the end
-  // left seeds 6 and 11 stranding 748.2 and 560.1 of floor, and gating `best` instead
-  // brings both back to a room with nothing in a wall and nothing inside anything.
-  const fine = (p: Placement[]) => costBreakdown(m, p, weights, NAV_CELL);
-  const given = fine(placements);
-  const found = fine(best);
-  if (impossibility(found) > impossibility(given) + 1e-6) return placements;
-  return found.total < given.total ? best : placements;
+  // A dead branch no test can cover, under a comment asserting a mechanism that does
+  // not exist, is worse than no guard — and it had already made a neighbour false:
+  // `tests/suggest-tidiness.test.ts` promises the fine-grid re-check is "the only path
+  // that returns the input after the search has run", which stopped being true the
+  // moment a second identity-return appeared one line above it.
+  //
+  // Why the gate is on `best` at all, which is the part worth keeping: this pass moves
+  // obstacles to open a route, so "push the wardrobe into the wall" is squarely inside
+  // its own proposal space and scores WELL — the wall it goes through is not floor the
+  // navigation term was counting. Refusing that only at the END throws away the whole
+  // repair; refusing it as an ANSWER while still letting the search walk through
+  // illegal ground keeps every legal arrangement the same search already visited.
+  // Measured on the Double rung at U 6x5, twelve seeds: refusing at the end left seeds
+  // 6 and 11 stranding 748.2 and 560.1 of floor, and gating `best` instead brings both
+  // back to a room with nothing in a wall and nothing inside anything.
+  const fine = (p: Placement[]) => costBreakdown(m, p, weights, NAV_CELL).total;
+  return fine(best) < fine(placements) ? best : placements;
 }
 
 /** Square up anything that is nearly square.
