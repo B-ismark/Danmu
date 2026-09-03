@@ -152,14 +152,18 @@ describe("solveLayout mode: 'shuffle'", () => {
       // `MAX_CANDIDATES` allows — rather than a single seed that must not be
       // unlucky. Seed 42 on `rect` is one of the decliners, which is how this was
       // found.
-      const movers = SHUFFLE_SEEDS.filter((seed) => {
+      // Stops at the first mover rather than scoring all twelve. One solve is seconds
+      // and four presets x twelve was over this test's own budget under a full-suite
+      // run — which is the honest reason, not a flake.
+      let tried = 0;
+      let moved = 0;
+      for (const seed of SHUFFLE_SEEDS) {
+        tried++;
         const start = randomizeStart(parts, footprint, movable, makeRng(seed));
-        return solveLayout(parts, footprint, locked, { seed, mode: 'shuffle', start }).moved.length > 0;
-      });
-      expect(
-        movers.length,
-        `${id} shuffled — no scatter in ${SHUFFLE_SEEDS.length} produced a move`,
-      ).toBeGreaterThan(0);
+        moved = solveLayout(parts, footprint, locked, { seed, mode: 'shuffle', start }).moved.length;
+        if (moved > 0) break;
+      }
+      expect(moved, `${id} shuffled — no scatter in ${tried} produced a move`).toBeGreaterThan(0);
     }
   });
 
