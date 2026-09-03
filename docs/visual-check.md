@@ -213,6 +213,39 @@ not the answer. **This needs a person's opinion, not a test.**
 
 **Where it rides.** Merged to `main` in `20654e5` (PR #74).
 
+### The turn report and the Library fan-out — PROBED, and four of eleven still want an eye
+
+**Where it rides.** `fix/turn-report-and-spawn-spread` (PR #102). Probed headlessly at
+`99a66c7` against a production build; the script is
+`C:\Users\bisma\AppData\Local\Temp\claude\danmu-probe\pr102.mjs`.
+
+**What the probe answered, so nobody re-derives it.** Eleven assertions, all green:
+
+| what | measured |
+|---|---|
+| four Library clicks fan out | `(0.00, 0.00) (0.70, 0.40) (0.00, 0.81) (-0.70, 0.40)` — four distinct spots, all inside |
+| four floor lamps in a 2.5 m room | all at `y = 0`, tallest top **1.70 m**. No tower |
+| a painting on a wall, turned | *"Nothing turned. Painting is held square to its wall."* |
+| a free-standing chair, same room, same gesture | *"Turned a quarter turn."* — the internal control |
+| a sofa refused at 90° | spoken *and* outlined red *and* the outline clears again |
+
+**What a probe cannot answer here, and what to look at.** All four are about how it *reads*,
+not whether it fires:
+
+1. **The sentence is a paragraph now.** The painting's full announcement is *"Painting
+   selected, 0.00 across and -2.46 back, in m. Snap on, fine steps. Nothing turned. Painting
+   is held square to its wall. Painting moved 0.02 m to stay in the room."* That is three
+   clauses about one keypress, and the 0.02 m nudge is arguably noise the user did not ask
+   about. Read it aloud with a screen reader before deciding it is right.
+2. **500 ms of red.** `REFUSAL_HOLD_MS` is long enough to sample 84 frames and short enough
+   that a probe reading once at 600 ms sees nothing. Whether a person's eye catches it —
+   especially away from the piece they were looking at — is not something frames can settle.
+3. **"Nothing turned."** is what a wall rider gets. It is accurate and it may read as a
+   fault. The alternative wording would be about the wall, not about the turn.
+4. **The fan-out ring is hexagonal and starts at the piece's own diagonal.** Four chairs
+   look deliberate; whether twelve look like a spiral rather than a scatter has not been
+   looked at.
+
 ### The rotate ring no longer drags the piece behind it — 3D only
 
 **Where to click.** 3D tab. Put a nightstand hard against the head of a bed, select the
