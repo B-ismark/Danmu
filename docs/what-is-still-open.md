@@ -4202,9 +4202,11 @@ the thing to report.
 **2. Branch state, derived 2026-09-03 — and the instrument matters more than the answer.**
 Every merge in this repo is a **squash**, so `git rev-list --count origin/main..<branch>`
 reports the four PR branches that landed this week as 3, 5, 6 and 14 commits ahead. **That
-count is not evidence of unlanded work**, and reading it as such is exactly how the branch
-list in "Picking this up cold" came to name ten real commits as deletable. `gh pr view` is
-the instrument for "did this land"; the count is only a prompt to go and ask.
+count is not evidence of unlanded work**, and it errs in the direction that keeps dead
+branches alive. The branch-list disaster recorded in "Picking this up cold" was the MIRROR
+image — a hand-typed list that called ten live commits contained — and the two share one
+lesson rather than one cause: neither a commit count nor a recollection answers "did this
+land". `gh pr view` does, and the count is only a prompt to go and ask it.
 
 | ref | naive count ahead | what it actually is |
 |---|---|---|
