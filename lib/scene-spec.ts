@@ -2894,6 +2894,85 @@ export function placeNewPart(
   return { pos: [fx, y, fz], rot, wallMounted };
 }
 
+/** Clear air left between a fanned-out piece and whatever it stepped around. */
+const SPAWN_GAP = 0.1;
+/** How many rings the search walks before giving up. Six rings of a bed-sized step
+ *  reaches roughly 6 m from the middle, which is past the far wall of every room the
+ *  picker offers. */
+const SPAWN_RINGS = 6;
+
+/**
+ * Where an ADDED piece should aim when the user did not aim it — a Library click
+ * rather than a drag onto the canvas.
+ *
+ * **§ H.3, decided 2026-09-03: fan out from the drop point, with a legality gate.**
+ * The complaint was three beds at `pos [0,0,0] rot 0`, stacked inside one another and
+ * all facing the same way. Both halves come from the same cause and this fixes both:
+ * with no aim point `placeNewPart` reads `ax = az = 0`, so every piece is placed at the
+ * middle of the room AND asks `snapToWall` which wall is nearest to the middle — which
+ * is the same wall every time. Move the aim and the heading follows for free.
+ *
+ * Returns `undefined` when the middle is free, so the FIRST piece into an empty room is
+ * placed exactly as before. Also `undefined` when nothing in range works, because a
+ * piece that will not fit is added anyway at its real size and `lib/clearance.ts`
+ * reports it — silently refusing to add what the user asked for is the same rule as
+ * silently resizing it.
+ *
+ * **Gated with `footInsidePoly`, not `outsideShare`.** The latter samples, and its
+ * samples sit 10% in from the edges, so it forgives a piece 20 mm through the plaster.
+ *
+ * **The ceiling family is deliberately barely affected**, and that is worth saying
+ * rather than leaving as a surprise: `ceilingSpot` returns the middle of the room
+ * whatever the aim, so a candidate only moves a fan or a pendant once the middle is
+ * occupied — which is exactly when it should. A fan belongs in the middle of a ceiling
+ * far more often than it belongs wherever a list happened to be clicked.
+ */
+export function openSpotForNewPart(
+  cat: Category,
+  shape: Shape,
+  dimMM: [number, number, number],
+  room: { width: number; depth: number; height: number; footprint?: Footprint },
+  existing: ScenePart[],
+): [number, number] | undefined {
+  const PROBE = '__spawn-probe__';
+  const poly = room.footprint;
+
+  /** Would a piece added with this aim stand clear, and inside the room? */
+  function clear(aim?: [number, number]): boolean {
+    const p = placeNewPart(cat, shape, dimMM, room, existing, aim);
+    // No `circle` — this function is not told whether the piece is round, exactly as
+    // `intoRoom` above is not. A box's extent along any normal is at least a circle's,
+    // so the answer errs toward pulling a round piece a little further in.
+    if (poly && !footInsidePoly(footFromPart(p.pos, p.rot, dimMM, undefined), poly as Poly)) return false;
+    const probe: ScenePart = {
+      id: PROBE, category: cat, shape, name: '', locked: false,
+      dimMM, pos: p.pos, rot: p.rot, wallMounted: p.wallMounted,
+    };
+    // The probe has to be IN the list it is tested against: `collidesAt` looks the
+    // mover up and returns `false` when it is absent, so passing `existing` alone
+    // would turn collision detection off and report every spot clear.
+    return !collidesAt([...existing, probe], PROBE, p.pos, p.rot, dimMM);
+  }
+
+  if (clear(undefined)) return undefined;
+
+  // Sized by the piece, so a nightstand takes small steps and a wardrobe large ones —
+  // a fixed step would either overlap beds or scatter lamps across the room.
+  const step = Math.hypot(dimMM[0], dimMM[1]) / 1000 + SPAWN_GAP;
+  for (let ring = 1; ring <= SPAWN_RINGS; ring++) {
+    const r = ring * step;
+    const n = ring * 6;
+    for (let i = 0; i < n; i++) {
+      // The half-ring twist stops successive rings sharing spokes, so a piece that
+      // could not fit at due north does not try due north again one step further out.
+      const a = ((i + ring / 2) / n) * Math.PI * 2;
+      const aim: [number, number] = [r * Math.cos(a), r * Math.sin(a)];
+      if (clear(aim)) return aim;
+    }
+  }
+  return undefined;
+}
+
 /** Y-aware collision. Used for placement clamping. Soft furnishings exempt.
  *  Allows stacking — if one part's vertical extent doesn't overlap the other's, no collision.
  *  This lets users put a lamp on a desk, monitor on a desk, etc.

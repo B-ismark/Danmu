@@ -81,11 +81,11 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 3 | **§ A.4** ~~the timing bounds may simply be too tight~~ → **ANSWERED 2026-09-03: it was the runner, not the bounds** | Reproduced on demand under deliberate CPU load rather than waited for: the same four-red `layout-solve` set, and **three of the four died as `Test timed out in 5000ms`** — a default nobody chose, applied to a suite whose honest worst case is a ~6.3 s solve. Two of those three assert nothing about a clock and the third asserts a *ratio*, the shape that was supposed to survive load; the harness kills the body before the ratio is evaluated. Fixed: an explicit 30 s `testTimeout`, and the two real wall-clock bars scaled by a measured machine factor rather than padded. See § A.4 | done | **no longer blocks the rows below** |
 | 4 | **§ 12** a rider keeps the size the room was BUILT at — **BUILT on the THIRD attempt, PR #100 (2026-09-03).** | Two attempts reached a PR and came out again; the third landed after a second five-lens round found **twenty-five more**, fifteen of them code. Three lenses independently found the same top one: `SceneFile.tsx` passed four of the five transform slices, so the export half was inert and its own gate was green on a *seeded* rider — the one case that survives the omission. **§ 12's section below carries both defect tables and the three findings that changed the design**: the gate's proxy question was wrong in both directions, it cost `2N + 8` derivations per store write (14.3 ms per drag frame at 60 parts), and a clamped rider lost its relation across a save. **The drawn scene has since been measured** (+0.200 m in the graph, red on the commit before), and the probe route is in `docs/visual-check.md`; eight cases still want a person | M — the derivation is small; the RELATION is the work | free |
 | 5 | **§ B.12** ~~Room check speaks centimetres~~ → **FIXED 2026-09-03** | Decided by the user: convert through `dimUnit`. `formatLength` (`lib/units.ts`) is the one formatter; `analyzeRoom` gains a `dimUnit` option defaulting to `'cm'`, so `fit-check` and `layout-shuffle` — which read `rule`, never `detail` — keep the sentences they always produced and no solver comparison starts depending on Settings. Two things a straight `fromMM` would have got wrong: a 4 mm gap renders `0.00 m` (the decimals grow until the number is true, capped at 1 mm of resolution, derived per unit), and the mounted-clash band still rounds OUTWARD so a 7 mm band cannot collapse in metres. `cachedReport`'s key gained `dimUnit`. **The first pass was right in fourteen sentences and wrong in two**, and the way that happened is the keeper: the sweep was verified by grepping the OLD spelling (`} cm`), which found none left — and the two TV sentences never said `cm`, they said `m`, so the grep that confirmed the sweep was structurally blind to the only sites still wrong. Six of thirteen converted sites were also asserted nowhere; multiplying their arguments by 1000 passed the whole suite. `tests/report-units.test.ts` is the gate now — every finding that states a number, provoked and read in all five units, with expectations derived from `lib/layout-rules.ts` rather than from `lib/clearance.ts` — plus a sweep for an `analyzeRoom(` in `components/` or `app/` that omits `dimUnit`. `formatArea` pairs the cut-off floor area with the length beside it (ft² for imperial, m², never in²). 27/28 mutations killed | done | — |
-| 6 | **§ 38.1** the confined "Try a fix" refusal is unreachable | A decision rather than a defect: 212 confined solves over every finding of every preset declined **zero** times, so neither the copy added by § 31 nor the one shipping beside it for months has ever rendered | S — mostly a judgement | nothing |
+| 6 | **§ 38.1** the confined "Try a fix" refusal is unreachable — **ANSWERED 2026-09-03: leave it, and the measurement stays beside the branch** | A decision rather than a defect: 212 confined solves over every finding of every preset declined **zero** times. **No code change, and that was checked rather than assumed** — `RoomTools.tsx`'s decline branch already carries both the 212-solve measurement and the reason for keeping both sentences, so the recommendation was already implemented in the only place that matters. Widening the confine is the one answer that would have been a product change, and it was declined | S — mostly a judgement | done |
 | 7 | **§ B.17** ~~the placement row — dragging a piece off a surface should DROP it~~ → **RESOLVED 2026-09-03, and the premise had expired** | The recorded answer — *"dragging would work"*, keep the operations and drop the row — rested on "neither Floor-off-a-table nor Surface-back-onto-it is reachable by dragging", which stopped being true when the drag pipeline moved into `lib/drag-resolve.ts` and nobody re-derived it. Measured against `resolvePlacement`: clear of a desk → y = 0, back over it → 0.75 with `supportId` set. Put back to the user with that measurement; they chose **drop Surface only**. Wall (nearest wall + face the room, gated on `ridesWall` so no drag reaches it) and Floor (drops IN PLACE where a drag carries it sideways) stay. `supportBelow`, `snapToSurface` and the `snap-surface` glyph went with the button — and so, after a browser measurement, did the `.rail-triple` class and the container-query rule that folded it, which a two-button row no longer needs. Confirmed on screen: the row is `Wall | Floor`, and Room check reads correctly in all five units with no clipping and 0px of document overflow | done | — |
 | 8 | **§ H.3** every Library click drops its piece at the room centre, facing the same way | A product decision with at least three defensible answers, and picking one quietly inside a defect fix is how the last one got here. The false comment beside it is already fixed | S once decided | needs the user |
 | 9 | **§ H.8** two reports that need a real repro | A group drag bounded by the lead's rules rather than the set's, and a merged set that drills in from a nightstand but never from the bed. Both are DOM-reachable on the 2D plan, which is the cheap way in | M | wants row 15's shims |
-| 10 | **§ B.14** a turn that puts a corner through the wall — keep and report, or refuse? | **Omitted until 2026-09-03.** Two documents in this repo call the same outcome the contract and the defect, and the two paths really do differ: `spinSelection` writes `setRotation` with no containment resolve, the R gizmo goes through `resolveDrag`, which contains | S once decided | **must be settled before its own eyes-item is looked at** — verifying against the wrong expectation is worse than not verifying |
+| 10 | **§ B.14** a turn that puts a corner through the wall — **ANSWERED AND BUILT 2026-09-03: keep and report, both paths** | The angle is always taken; what may not happen is a turn succeeding in silence. Two findings changed the shape of it: the second document said to contradict the first **no longer exists**, and `valid` is computed on the ALREADY-CLAMPED position, so a turn that slid a piece across the floor reports success. `turnNudge` is the sentence; `spinSelection` joins `turnInPlace` and stops being the one turn gesture with no pipeline, no cascade and no report | S once decided | done |
 | 11 | **§ H.6** Suggest, from the ground up — the user's explicit ask | The largest open thing here. It **subsumes** A.2, A.3's `:555`, A.7 and G.2, and the 5 parked `it.fails` retire here too. **It is NOT un-researched** — `docs/research/suggest-and-collision.md` is a three-layer design whose four questions to the user are all ANSWERED, including the feasibility split being in scope. Of the three things this section calls missing, **only one is** (support); facing is priced by `relationCost`, and groups move rigidly already | XL — refresh the research against `main`, then execute its rows | wants row 1 measured first, since it is a symptom |
 | 12 | **§ H.7** collision, properly — the user is open to replacing the engine | Every piece is one box or one ellipse, so a sofa's L, a table's legs and a plant's canopy are all the same rectangle. Same research doc, rows 4a/4b — and 4b is **half done** (`verticalExtent` makes ONE extent right; more than one still needs 4a). Carries a duplication the doc found and nobody retired: **six hand-written copies** of the vertical-extent rule in five files | XL | independent of row 11, but they meet |
 | 13 | **A.7** `snapYaws`' residual — 40 crooked pieces in 240 solves | **The 197 was BEFORE the fix**, which shipped in `fa12f1a`; this row said 197 for weeks and § A.7's own heading said it too. What is left is the residual, and § A.7 already says what it needs: a search that can move the piece **and** its neighbour, which a finish pass cannot do | M | **a symptom of row 11 and only closable there** |
@@ -1001,12 +1001,56 @@ the user went and looked.
     not verifying, because it produces a confident wrong answer. Whoever settles this
     should also say whether *Turn a quarter* and the gizmo are allowed to differ.
 
-    **Committed:** nothing but this paragraph. What is measured: `spinSelection` calls
-    `setRotation` with no resolve, `resolveDrag` contains, and the two docs say what is
-    quoted above. What is NOT measured: what either path actually does to a merged set at
-    a wall — the gizmo could not be driven headless (drei's `TransformControls` is a
-    three.js object with no DOM, so a drag cannot be aimed at it), and the menu path needs
-    a right-click that lands on a piece in the selection with nothing over it.
+    **ANSWERED AND BUILT, 2026-09-03: keep and report, on both paths.** And the answer is
+    narrower than the question sounded, because working out how to implement it moved the
+    defect.
+
+    **First: half the contradiction had already evaporated, and this paragraph did not
+    know.** The `docs/visual-check.md` item quoted above — *Rotate and scale on a merged
+    set, in 3D* — **does not exist any more.** Grepping `visual-check.md` for
+    "allowed to be reported", "the turn itself is allowed" and the item's own title finds
+    nothing; it was deleted or folded into another item at some point after this was
+    written, so the sentence "two documents in this repo call the same outcome the
+    contract and the defect" was true when written and had quietly stopped being true.
+    *A hand-off document is a claim, not a fact* — including this one.
+
+    **Second: the paths did not differ in the direction stated.** `PlanView`'s turn handle
+    and the 3D gizmo BOTH clamp the position, take the angle, and report through
+    `refusalAfterGesture`. `spinSelection` was the only one of the four turn gestures that
+    ran through no pipeline at all: no containment, no legality answer, and **no cascade**,
+    so a quarter turn on a nightstand left the lamp standing on it facing the old way. Its
+    docblock defended that as rule 2's "never silently nudge furniture to make an action
+    succeed", which is the right rule quoted for the wrong half. It routes through
+    `turnInPlace` now, which is where the three decisions about a turn already lived.
+
+    **Third, and this is the finding the item is actually worth:** `valid` cannot express
+    the thing rule 2 forbids. `resolvePlacement` computes `valid = inRoom && !collides`
+    **against the position it has already clamped**, so a turn whose new footprint crossed
+    a wall comes back perfectly valid, with the piece slid somewhere the user never asked
+    for and nothing anywhere saying so. For a drag that is right — the pointer chose a
+    spot, the clamp is visible, and `shovedIntoRoom` covers the rest. For a turn the
+    request was an ANGLE and the position was not part of it. `turnNudge`
+    (`lib/refusal.ts`) is the sentence: how far the turn slid the piece, in the floor
+    plane only, zero below a 1 mm epsilon.
+
+    **Where it is said, and why not everywhere.** The two paths a user cannot watch — the
+    context menu / keyboard `spinSelection`, and `PlanView`'s rotate-handle arrow keys.
+    The pointer paths show the slide happening under the hand, so a sentence there would
+    narrate what is already on screen; that is the same reason the refusal is *spoken* on
+    the keyboard path and only *drawn in colour* on the pointer path, which was
+    `turnByKey`'s own rule before this.
+
+    **Gated by** `tests/spin-selection.test.tsx` (13), `tests/turn-nudge-said.test.tsx`
+    (3, which mounts the plan page and presses the handle, because a gate on `turnNudge`
+    says nothing about whether a caller passes it the pre-turn position) and four cases in
+    `tests/refusal.test.ts`, one of which pins that a turn CAN come back `valid: true`
+    having been slid — if that ever reads false the sentence has become a duplicate of the
+    refusal and should go.
+
+    **Still NOT measured:** what either path does to a merged set at a wall on screen. The
+    gizmo cannot be driven headless (drei's `TransformControls` is a three.js object with
+    no DOM, so a drag cannot be aimed at it), and the menu path needs a right-click landing
+    on a piece in the selection with nothing over it.
 
 15. **The same piece is round or square depending on how it got into the room, and
     `circle` has three sources of truth.** Found by a fixture that could not reach the
@@ -4901,13 +4945,20 @@ leaves the search almost no room to *exceed* the impossibility it was handed —
 fires on `impossibleAfter > impossibleBefore`, not on the room being bad. A two-piece search
 rarely gets the chance.
 
-Three answers, and the choice is the user's: **leave it** (it guards against a wrong message
-rather than adding a feature, and deleting it would leave the older sentence covering a case
-it describes falsely); **delete both** and let the button do nothing visible when it cannot
+Three answers were put to the user: **leave it** (it guards against a wrong message rather
+than adding a feature, and deleting it would leave the older sentence covering a case it
+describes falsely); **delete both** and let the button do nothing visible when it cannot
 help; or **widen the confine** so a finding's fix may move a neighbour, which changes what
-"Try a fix" means and is the only one of the three that is a product change. It exists in
-`main`, in `RoomTools`' decline branch. If someone reaches this path in a real room, that is
-the thing to report.
+"Try a fix" means and is the only one of the three that is a product change.
+
+**ANSWERED 2026-09-03: leave it, and keep the measurement beside the branch.** Widening the
+confine is declined — do not re-propose it as a fix for an unreachable message.
+
+**And the diff for that is empty, which was checked rather than assumed.** `RoomTools`'
+decline branch already carries the 212-solve measurement and the reason both sentences are
+kept, written when § 31 landed. So the recommendation was already implemented in the one
+place a future reader will look, and the only thing that was stale was this queue.
+If someone reaches this path in a real room, that is the thing to report.
 
 **2. Branch state, derived 2026-09-03 — and the instrument matters more than the answer.**
 **This entry's first version said "every merge in this repo is a squash". It is not, and the

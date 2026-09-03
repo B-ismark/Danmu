@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { refusalAfterGesture, REFUSAL_HOLD_MS } from '@/lib/refusal';
+import { refusalAfterGesture, turnNudge, REFUSAL_HOLD_MS, TURN_NUDGE_EPS } from '@/lib/refusal';
 import { turnInPlace } from '@/lib/drag-resolve';
 import { footprintForLayout } from '@/lib/footprint';
 import type { ScenePart } from '@/lib/scene-spec';
@@ -118,5 +118,49 @@ describe('the placement that made this a defect', () => {
     });
     expect(turned.valid).toBe(true);
     expect(refusalAfterGesture({ draggedId: sofa.id, placementValid: turned.valid, convoyValid: true })).toBeNull();
+  });
+});
+
+// ─── § B.14: what `valid` structurally cannot say ────────────────────────────
+
+describe('turnNudge — a turn that was slid to make it fit', () => {
+  it('is zero for a turn that happened where it stood', () => {
+    expect(turnNudge([1, 0, 2], [1, 0, 2])).toBe(0);
+  });
+
+  it('measures the floor plane and ignores y', () => {
+    // A turn may legitimately change y — a wall rider re-aimed by the wall it lands
+    // on — and that is the wall's answer, not a nudge.
+    expect(turnNudge([1, 0, 2], [1, 0.9, 2])).toBe(0);
+    expect(turnNudge([0, 0, 0], [0.3, 5, 0.4])).toBeCloseTo(0.5, 12);
+  });
+
+  it('swallows float noise but not a real slide', () => {
+    // Both ends pinned. Asserted only from below, the epsilon would be free to grow
+    // until it ate the smallest slide anyone can make: the finest translate snap in
+    // the app is 10 mm, ten times this.
+    expect(turnNudge([0, 0, 0], [TURN_NUDGE_EPS / 2, 0, 0])).toBe(0);
+    expect(turnNudge([0, 0, 0], [TURN_NUDGE_EPS * 2, 0, 0])).toBeCloseTo(TURN_NUDGE_EPS * 2, 12);
+    expect(TURN_NUDGE_EPS).toBeLessThan(0.01);
+    expect(TURN_NUDGE_EPS).toBeGreaterThan(0);
+  });
+
+  it('fires on exactly the case a valid resolve cannot report', () => {
+    // The finding § B.14 turned on. `resolvePlacement` computes
+    // `valid = inRoom && !collides` against the position it has ALREADY clamped, so a
+    // turn whose new footprint crossed a wall comes back `valid: true` with the piece
+    // moved somewhere nobody asked for. If this assertion ever reads `false`, the
+    // sentence has become a duplicate of the refusal and should go.
+    const desk = {
+      id: 'desk-1', name: 'Desk', category: 'desk', shape: 'desk-standard', locked: false,
+      dimMM: [1400, 700, 750], pos: [0, 0, -1.65], rot: 0, wallMounted: false,
+    } as ScenePart;
+    const fp = footprintForLayout('rect', 4, 4);
+    const turned = turnInPlace({
+      part: desk, at: desk.pos, rot: Math.PI / 2, dim: desk.dimMM,
+      parts: [desk], footprint: fp, roomHeight: 2.6,
+    });
+    expect(turned.valid).toBe(true);
+    expect(turnNudge(desk.pos, turned.pos)).toBeGreaterThan(0.3);
   });
 });

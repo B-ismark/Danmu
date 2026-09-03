@@ -25,10 +25,14 @@ import { useStudio, useSettings } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { riderRelation } from '@/lib/rider-height';
+import { turnInPlace, refusalCause } from '@/lib/drag-resolve';
+import { planConvoy, travellingWorld } from '@/lib/drag-convoy';
+import { cascadeTransform } from '@/lib/rigid-parent';
+import { turnNudge } from '@/lib/refusal';
 import { useHistory, applySnapshot, startHistoryRecording } from '@/lib/history';
 import { collidesAt, type ScenePart } from '@/lib/scene-spec';
 import { clampIntoFootprint } from '@/lib/footprint';
-import { formatDim } from '@/lib/units';
+import { formatDim, formatLength } from '@/lib/units';
 import { ANNOUNCE_EVENT, announce } from '@/lib/announce';
 import { toast } from '@/components/ui/StorageToast';
 import { confirmDialog } from '@/components/ui/Confirm';
@@ -352,21 +356,104 @@ export function duplicateSelection(explicit?: string[]) {
 
 /** A quarter turn on every selected piece, about its own centre.
  *
- *  It deliberately does NOT shuffle anything to make room. If the turn puts a
- *  wardrobe corner through the plaster, the piece keeps its real rotation and
- *  Room check reports it — silently nudging furniture to make an action succeed
- *  is the one thing this app must never do. */
+ *  **The angle is always taken; that is what "keep and report" means here** (§ B.14,
+ *  decided 2026-09-03). Refusing a turn would make a piece in a tight corner
+ *  unturnable, which no report has ever asked for. What the turn does NOT do is
+ *  succeed in silence: the resolve says whether the piece still fits at the new
+ *  angle, and this says so out loud.
+ *
+ *  It used to do neither. `spinSelection` wrote `setRotation` raw — the fourth turn
+ *  gesture in the app and the only one that ran through no pipeline at all, so it
+ *  had no containment, no legality answer, and left a piece's rigid children behind
+ *  when it turned: a quarter turn on a nightstand spun the nightstand and left the
+ *  lamp facing the old way, beside it. Its docblock defended that as rule 2's "never
+ *  silently nudge furniture", which reads well and was the wrong half of the rule —
+ *  the plan's turn handle, its two keyboard paths and the 3D gizmo all clamp AND
+ *  report, and one gesture reached four ways must not be four answers. `turnInPlace`
+ *  is where those three decisions live; this is now the fourth caller rather than
+ *  the exception. Two documents in this repo had drifted into calling the same
+ *  outcome the contract and the defect, which is what a rule with no single owner
+ *  does.
+ *
+ *  Each selected piece is an INDEPENDENT turn about its own centre — a set does not
+ *  pivot about one of its members, which is the rule `resolveConvoy` states for
+ *  'turn' — so the scene is re-read per piece and the second piece sees where the
+ *  first one ended up. */
 export function spinSelection(quarterTurns = 1) {
   const ids = selectedIds();
   if (ids.length === 0) return;
-  const setRotation = useStudio.getState().setRotation;
-  // From where each piece effectively faces — off `base.rot` alone, a second quarter
-  // turn would start over from the authored heading and undo the first.
-  for (const p of currentRoomScene()) {
-    if (!ids.includes(p.id)) continue;
-    setRotation(p.id, p.rot + (quarterTurns * Math.PI) / 2);
+  const { setRotation, setPosition, setTransformsFor } = useStudio.getState();
+  const room = useScene.getState().room;
+  const dimUnit = useSettings.getState().dimUnit;
+
+  /** Pieces the room would not take at the new angle, in selection order. */
+  const refused: Array<{ name: string; why: string }> = [];
+  /** Pieces the containment clamp had to SLIDE to keep the turn inside the room.
+   *  Not a refusal — the turn is taken — but not silence either. */
+  const nudged: Array<{ name: string; by: number }> = [];
+
+  for (const id of ids) {
+    const scene = currentRoomScene();
+    const part = scene.find((p) => p.id === id);
+    if (!part) continue;
+    const parentIds = useStudio.getState().parentIds;
+    const convoy = planConvoy({
+      draggedId: id,
+      parts: scene,
+      // `[id]`, not the live selection: every selected piece turns on its own axis,
+      // so none of the others is company — they stay in the world as obstacles,
+      // which is exactly what they are.
+      selection: [id],
+      parentIds,
+      footprint: room.footprint,
+      roomHeight: room.height,
+    });
+    const turned = turnInPlace({
+      part,
+      at: part.pos,
+      // From where the piece effectively faces — off the AUTHORED `rot` alone, a
+      // second quarter turn would start over from the authored heading and undo
+      // the first.
+      rot: part.rot + (quarterTurns * Math.PI) / 2,
+      dim: part.dimMM,
+      // Delta zero — a turn moves nobody sideways — so this is the world with the
+      // piece's own rigid children taken out, which is what the pipeline asks for:
+      // a lamp riding a nightstand must not be able to obstruct the nightstand.
+      parts: convoy.travelling.size > 1 ? travellingWorld(convoy, scene, 0, 0, convoy.own) : scene,
+      footprint: room.footprint,
+      roomHeight: room.height,
+    });
+
+    const pos = turned.pos;
+    if (pos[0] !== part.pos[0] || pos[1] !== part.pos[1] || pos[2] !== part.pos[2]) setPosition(id, pos);
+    setRotation(id, turned.rot);
+    // …and everything standing on it turns with it, about the pivot it ACTUALLY
+    // ended on: cascading from `part.pos` while the clamp had moved the piece
+    // elsewhere would leave the lamp orbiting where the nightstand used to be.
+    if (convoy.own.length > 0) setTransformsFor(cascadeTransform(id, pos, turned.rot, convoy.own));
+    if (!turned.valid) refused.push({ name: part.name, why: refusalCause(turned) });
+    else {
+      // Only when it FITS. A piece that is refused already has a sentence, and two
+      // sentences about one piece is worse than one.
+      const by = turnNudge(part.pos, pos);
+      if (by > 0) nudged.push({ name: part.name, by });
+    }
   }
-  announce(ids.length === 1 ? 'Turned a quarter turn.' : `${ids.length} pieces turned a quarter turn.`);
+
+  const said = ids.length === 1 ? 'Turned a quarter turn.' : `${ids.length} pieces turned a quarter turn.`;
+  // Named rather than counted: "one of them does not fit" sends the user hunting.
+  // The wording matches `PlanView`'s `turnByKey`, which is the same sentence about
+  // the same outcome on the other surface.
+  const parts: string[] = [said];
+  if (refused.length > 0) {
+    parts.push(`${refused[0].name} does not fit at that angle — ${refused[0].why}`);
+    if (refused.length > 1) parts.push(`${refused.length - 1} more do not fit either.`);
+  }
+  if (nudged.length > 0) {
+    parts.push(`${nudged[0].name} moved ${formatLength(nudged[0].by * 1000, dimUnit)} to stay in the room.`);
+    if (nudged.length > 1) parts.push(`${nudged.length - 1} more moved too.`);
+  }
+  announce(parts.join(' '));
 }
 
 export function selectAllParts() {

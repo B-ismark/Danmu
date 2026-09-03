@@ -34,11 +34,11 @@ import {
   refusalCause,
   type Refusal,
 } from '@/lib/drag-resolve';
-import { refusalAfterGesture, REFUSAL_HOLD_MS } from '@/lib/refusal';
+import { refusalAfterGesture, turnNudge, REFUSAL_HOLD_MS } from '@/lib/refusal';
 import { snapGuideEnds, type SnapLine } from '@/lib/item-snap';
 import { convoyRestore, planConvoy, resolveConvoy, travellingWorld, type Convoy } from '@/lib/drag-convoy';
 import { cascadeTransform } from '@/lib/rigid-parent';
-import { formatDim } from '@/lib/units';
+import { formatDim, formatLength } from '@/lib/units';
 import { clientDeltaToViewBox, clientToViewBox } from '@/lib/plan-view-transform';
 import { v4 as uuid } from 'uuid';
 import { removeParts, studioSurfaceFocused } from './KeyboardShortcuts';
@@ -1268,9 +1268,19 @@ export const PlanView = forwardRef<PlanViewHandle, {
     const dir = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1;
     const turned = turnTo(part, part.rot + dir * spin);
     const said = `${part.name} turned to ${Math.round((turned.rot * 180) / Math.PI)} degrees.`;
-    announce(
-      turned.valid ? said : `${said} It does not fit at that angle — ${refusalCause(turned)}`,
-    );
+    if (!turned.valid) {
+      announce(`${said} It does not fit at that angle — ${refusalCause(turned)}`);
+      return;
+    }
+    // …and a turn that FITS may still have been slid to make it fit, which `valid`
+    // cannot say: it is computed on the position the clamp has already produced. The
+    // user asked for an angle and never asked for the piece to move (§ B.14). Said
+    // only on the keyboard path, and that is not the two surfaces diverging — the
+    // pointer paths show the slide happening under the hand, while someone driving
+    // this from the keyboard has nothing to watch. Same reason the refusal above is
+    // spoken here and only drawn in colour on the pointer path.
+    const by = turnNudge(part.pos, turned.pos);
+    announce(by > 0 ? `${said} It moved ${formatLength(by * 1000, dimUnit)} to stay in the room.` : said);
   }
 
   function onRotateKeyDown(e: React.KeyboardEvent, part: ScenePart) {

@@ -67,3 +67,40 @@ export function refusalAfterGesture(input: {
   const ids = [draggedId, ...blockedIds.filter((id) => id !== draggedId)];
   return { ids, by: placementValid ? blockedByName : undefined };
 }
+
+/** Below this, in metres, the difference is float noise from the resolve rather than
+ *  a nudge anybody could see. One millimetre — the finest translate snap in the app
+ *  is ten. */
+export const TURN_NUDGE_EPS = 0.001;
+
+/**
+ * How far a TURN slid the piece, in metres across the floor. Zero for a turn that
+ * happened where it stood.
+ *
+ * **This exists because `valid` cannot answer it, and § B.14 turns on the
+ * difference.** `resolvePlacement` computes `valid = inRoom && !collides` against the
+ * position it has already CLAMPED, so a turn whose new footprint would have crossed a
+ * wall — and which the clamp then pulled back inside — comes back perfectly valid,
+ * with nothing anywhere saying the piece moved. For a drag that is right: the pointer
+ * chose a spot, the clamp is visible, and `shovedIntoRoom` covers the case that is
+ * not. For a turn it is the thing this app must never do. The user asked for an
+ * ANGLE. The position was not part of the request, and moving it silently to make the
+ * action succeed is rule 2's "say so, never silently resize it to fit" with the size
+ * left alone — which is, word for word, what `spinSelection`'s docblock claimed the
+ * app already did while `spinSelection` was the one turn path with no clamp at all.
+ *
+ * The move is still TAKEN. Refusing it would make a piece in a tight corner
+ * unturnable, which no report has asked for (§ B.14, decided 2026-09-03: keep and
+ * report). So this is not a veto, it is the sentence.
+ *
+ * **Only the y-less plane.** A turn can legitimately change `y` — a wall rider
+ * re-aimed by the wall it lands on — and that is the wall's answer rather than a
+ * nudge.
+ */
+export function turnNudge(
+  from: readonly [number, number, number],
+  to: readonly [number, number, number],
+): number {
+  const d = Math.hypot(to[0] - from[0], to[2] - from[2]);
+  return d > TURN_NUDGE_EPS ? d : 0;
+}
