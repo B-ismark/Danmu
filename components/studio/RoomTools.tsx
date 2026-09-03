@@ -788,9 +788,25 @@ function FixAllButton({
 // pieces, with the history that would have suppressed it gone in the same
 // breath. Two refs, one bug, both invisible to every test in the suite.
 //
-// Keyed by room id, because these are facts about one room's session and the
-// user can open another; an unkeyed pair would carry one room's history into
-// the next and suppress an arrangement nobody had been shown.
+// Keyed by room id — deliberately NOT by tab, though this component unmounts on
+// a tab switch and both keys are re-derived fresh on the other one. The ROOM is
+// what persists across the switch (the stores are shared; only the routes
+// differ), so:
+//
+//   · The attempt counter must survive it. `shuffleRoom` is deterministic per
+//     `(room, attempt)`, and a counter that restarts on the other tab re-runs
+//     the seed behind the arrangement already on screen — the identical-
+//     arrangement bug the module scope above exists to prevent, back again.
+//   · The history is a skip-list of "what the user has just been shown"
+//     (`layout-shuffle.ts` passes over offers similar to the recorded one), and
+//     what they have been shown is a fact about the room, not about a viewport:
+//     the arrangement applied on the 3D tab is the one the plan is drawing.
+//     Tab-scoping the skip-list forgets a genuinely-seen arrangement, which
+//     reads as a fix and is the bug.
+//
+// Room-only is still right across ROOMS: the user can open another, and an
+// unkeyed pair would carry one room's history into the next and suppress an
+// arrangement nobody had been shown.
 const SHUFFLE_ATTEMPT = new Map<string, number>();
 const SHUFFLE_HISTORY = new Map<string, ShuffleOffer[]>();
 
@@ -865,7 +881,9 @@ function ShuffleButton({
   function work() {
       // Module scope, keyed by room — NOT a `useRef`. See `SHUFFLE_ATTEMPT`: this
       // component unmounts on a tab switch, so a per-mount counter restarted at 0
-      // and re-served the identical arrangement.
+      // and re-served the identical arrangement. The key is room-only, not
+      // room-plus-tab — see the map declarations above for why the tab must not
+      // be in it either.
       const next = (SHUFFLE_ATTEMPT.get(attemptKey) ?? 0) + 1;
       SHUFFLE_ATTEMPT.set(attemptKey, next);
       const outcome = shuffle(next);

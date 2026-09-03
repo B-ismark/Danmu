@@ -1437,7 +1437,7 @@ items should be written against pages, not harnesses.
   `noRoom` branch being dead.
 - **`tests/library-click-through.test.tsx`** — the half of the Library item no copy test
   could reach: pressing a signpost **opens** the panel. Mounts the real plan page and
-  presses the rail's `Add`, the panel's own `X`, and the context menu's *Add from library…*
+  presses the rail's `Add`, the panel's own `X`, and the context menu's *Add from the Library…*
   row; also holds the panel shut before anything is pressed, so the rest cannot pass
   against a panel nobody opened. **Eight mutations, eight reds**, including the page's gate
   deleted in *both* directions (never render / always render), the trigger made a no-op,

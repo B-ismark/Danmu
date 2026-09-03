@@ -380,8 +380,8 @@ export function duplicateSelection(explicit?: string[]) {
  *  pivot about one of its members, which is the rule `resolveConvoy` states for
  *  'turn' — so the scene is re-read per piece and the second piece sees where the
  *  first one ended up. */
-/** Live handle for the outline timer, so a second turn replaces the first's countdown
- *  rather than letting the earlier one clear the later one's outline early. */
+// Live handle for the outline timer, so a second turn replaces the first's countdown
+// rather than letting the earlier one clear the later one's outline early.
 let refusalPaintTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Outline these pieces red for `REFUSAL_HOLD_MS`, on whichever tab is mounted.

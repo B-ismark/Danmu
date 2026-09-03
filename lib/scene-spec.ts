@@ -2713,7 +2713,7 @@ export function placeNewPart(
    *  Both drop handlers used to do this themselves, and both did it only
    *  `if (!wallMounted)` — which is `isWallMountedPart`, true for a ceiling fan.
    *  A fan rides no wall, so nothing above put it on one, and that guard meant
-   *  nothing below pulled it in either: a fan dragged from the library landed
+   *  nothing below pulled it in either: a fan dragged from the Library landed
    *  exactly where the pointer was released, outside the walls included. One
    *  clamp, here, for everything that is not placed BY a wall.
    *

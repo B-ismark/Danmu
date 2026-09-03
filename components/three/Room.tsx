@@ -20,6 +20,7 @@ import { LIGHTING, moodSunDirection, KEY_DIR, DEFAULT_BEARING_DEG } from '@/lib/
 import { shadowFit } from '@/lib/shadow-fit';
 import { hexFromKelvin } from '@/lib/light-units';
 import { useSnapshot, downloadBlob } from '@/lib/snapshot';
+import { snapshotFileName } from '@/lib/exports';
 import { pickIdsFrom } from '@/lib/pick-through';
 import { openSceneMenu } from '@/components/studio/SceneContextMenu';
 import { RoomShell } from './RoomShell';
@@ -576,7 +577,7 @@ function DropConnector({ apiRef }: { apiRef: React.MutableRefObject<SceneApi | n
   return null;
 }
 
-// On-demand scene snapshot — the TopBar Snapshot button bumps useSnapshot's
+// On-demand scene snapshot — the Export menu's 3D-view item bumps useSnapshot's
 // token; we capture the next frame (helpers hidden) and download it as a PNG.
 function SceneCapture() {
   const { gl, scene, camera, invalidate } = useThree();
@@ -621,7 +622,7 @@ function SceneCapture() {
       if (!ctx) return;
       ctx.drawImage(src, 0, 0);
       snap.toBlob((blob) => {
-        if (blob) downloadBlob(blob, 'room-snapshot.png');
+        if (blob) downloadBlob(blob, snapshotFileName(useSnapshot.getState().name));
       }, 'image/png');
     } catch {
       /* canvas not ready / context lost — skip this snapshot */

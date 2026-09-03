@@ -258,7 +258,7 @@ export function CatalogPanel({
             strings name this panel the Library — the help card's
             "Catalog is what is in this room; Library is what you can add", the sun
             note in the left rail's Look section ("Add a window or a door from the
-            Library"), and the right-click menu's "Add from library…". Every one of
+            Library"), and the right-click menu's "Add from the Library…". Every one of
             them pointed at a panel whose own heading used a different word.
 
             So the fix is one heading rather than three strings, and the direction

@@ -42,3 +42,13 @@ export function fileSlug(name: string): string {
   // name ending in a hyphen, which reads like the filename was truncated by accident.
   return slug.slice(0, MAX_SLUG).replace(/-+$/, '') || 'room';
 }
+
+/** `Front Room` → `front-room-snapshot.png`. The last of the three downloads to
+ *  join the agreement the header above describes: the 3D PNG shipped as a fixed
+ *  `room-snapshot.png`, indistinguishable across rooms — the header's own claim
+ *  that the three names agree was false until this function existed. An unnamed
+ *  room slugs to `room`, which lands on the old fixed name, so the fallback
+ *  changes nothing. */
+export function snapshotFileName(roomName: string): string {
+  return `${fileSlug(roomName)}-snapshot.png`;
+}

@@ -77,11 +77,29 @@ export function ExportMenu() {
     fn();
   }
 
-  function planPng() {
-    // `currentRoomScene` reads the stores at call time and applies the user's
-    // overrides — an export built from `useScene.parts` alone would ship the room as
-    // it was before anyone arranged it. See lib/transforms.
-    exportPlanPng(currentRoomScene(), useScene.getState().room, dimUnit, roomName);
+  // One fresh read of the room's name for both PNGs. `roomName` state was loaded
+  // once on mount, and a rename in the top bar after that would name the file —
+  // and, for the plan, the sheet's own title — for the room's old name. The
+  // catch falls back to the mount-loaded name: a failed meta read must not
+  // swallow an export. (`saveSceneFile` re-reads the room itself.)
+  async function freshRoomName(): Promise<string> {
+    if (!roomId) return roomName;
+    try {
+      const r = await roomStore.loadRoom(roomId);
+      return r?.name ?? roomName;
+    } catch {
+      return roomName;
+    }
+  }
+
+  async function planPng() {
+    // The scene is read at CLICK time, not after the name's await: it must be
+    // the room as the user saw it when they pressed the item. `currentRoomScene`
+    // applies the user's overrides — an export built from `useScene.parts` alone
+    // would ship the room as it was before anyone arranged it. See lib/transforms.
+    const scene = currentRoomScene();
+    const room = useScene.getState().room;
+    exportPlanPng(scene, room, dimUnit, await freshRoomName());
   }
 
   const items: Array<{ icon: IconName; label: string; hint: string; onClick: () => void }> = [
@@ -91,7 +109,11 @@ export function ExportMenu() {
             icon: 'image' as IconName,
             label: 'This 3D view',
             hint: 'PNG of the room as you are looking at it',
-            onClick: () => useSnapshot.getState().request(),
+            onClick: () => {
+              // The name rides the same request that bumps the token, because
+              // the capture inside the canvas cannot load the room itself.
+              void freshRoomName().then((n) => useSnapshot.getState().request(n));
+            },
           },
         ]
       : []),

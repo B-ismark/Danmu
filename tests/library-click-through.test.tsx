@@ -135,7 +135,7 @@ describe('the Library opens when a signpost is pressed', () => {
     act(() => {
       openSceneMenu(40, 40, null);
     });
-    const row = screen.getByText('Add from library…');
+    const row = screen.getByText('Add from the Library…');
     fireEvent.click(row);
     expect(screen.getByText('Library')).toBeTruthy();
   });

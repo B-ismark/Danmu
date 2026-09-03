@@ -27,7 +27,7 @@ const TIPS = [
   'Press W / R / S to Move, Rotate, or Scale the selected piece.',
   'One-tap a style theme to redecorate the whole room at once.',
   'Toggle day or evening light to see your room in a different mood.',
-  'Drag new furniture in from the library to fill out the space.',
+  'Drag new furniture in from the Library to fill out the space.',
 ];
 
 // Only ever added to the rotation when the caller passes `local` — see note 1.

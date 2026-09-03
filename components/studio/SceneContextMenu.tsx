@@ -431,7 +431,7 @@ function roomEntries(): MenuEntry[] {
     // And the LIBRARY rather than the catalog, because the rail's list of what is
     // already in the room is the Catalog now — one screen may not hold two lists
     // with one name.
-    { kind: 'item', id: 'add', label: 'Add from library…', icon: 'plus', run: () => s.setCatalogOpen(true) },
+    { kind: 'item', id: 'add', label: 'Add from the Library…', icon: 'plus', run: () => s.setCatalogOpen(true) },
     { kind: 'item', id: 'all', label: 'Select everything', icon: 'layers', hint: 'Ctrl A', run: selectAllParts },
     { kind: 'separator', id: 'sep-view' },
     { kind: 'item', id: 'view', label: 'Reset the view', icon: 'fit', run: () => s.setView('iso') },
