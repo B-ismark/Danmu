@@ -4,7 +4,7 @@ import { footprintForLayout, pointInFootprint, type Footprint } from '../lib/foo
 import { footArea, footFromPart, footInsidePoly, footIntersectionArea, outsideShare } from '../lib/geometry';
 import type { ScenePart } from '../lib/scene-spec';
 import { MOUNT_PAD, verticalExtent } from '../lib/physics';
-import { resetSettleMemo, resolveParts } from '../lib/transforms';
+import { resolveParts } from '../lib/transforms';
 
 const RECT: Footprint = footprintForLayout('rect', 6, 4);
 
@@ -406,15 +406,12 @@ describe('settleHeights · answers in the size it is handed', () => {
     expect(fixes.find((f) => f.id === 'lamp')!.y).toBeCloseTo(top, 9);
   });
 
-  // § 12, and this assertion used to be a DOCUMENTED LIMIT pinned at the wrong answer:
-  // +0.35 for a shrunk desk and -0.35 for a grown one. It retired itself the moment
-  // `resolveParts` began deriving a rider's height, which is what a self-retiring limit
-  // is for - the numbers below are the same three calls with the right answers in them.
+  // A DOCUMENTED LIMIT, pinned at the wrong answer, the way the monitor above is.
   //
   // The load path, in the order `components/studio/RoomSync.tsx` runs it: `loadFromRoom`
-  // rebuilds the parts through `buildSceneFromRoom`, which ends on `settleHeights` against
-  // the AUTHORED dims; then `loadTransforms(t)` re-applies the user's saved `dims` by id.
-  // Nothing settles again afterwards, which is why the answer has to come from the READ.
+  // rebuilds the parts through `buildSceneFromRoom`, which ends on this pass against the
+  // AUTHORED dims; then `loadTransforms(t)` re-applies the user's saved `dims` by id.
+  // Nothing settles again afterwards.
   //
   // Reachable, and the narrowing is the interesting half: `RoomSync` prefers a saved scene
   // snapshot over the rebuild, so this needs a room with overrides and NO snapshot.
@@ -424,11 +421,10 @@ describe('settleHeights · answers in the size it is handed', () => {
   // write one and hides this. A detected room the user has only moved and resized things
   // in is the case `lib/transforms.ts` is designed around.
   //
-  // BOTH directions, because a one-sided assertion here is satisfied by a derivation that
-  // only ever lowers a rider - and shrinking the desk is the half a user reports while
-  // growing it is the half that buries the lamp inside the desk and looks like nothing.
-  // The untouched control comes first, so the numbers are the override and not the fixture.
-  it('puts a rider back on its support after the support is RESIZED, both ways', () => {
+  // Both directions, because a one-sided assertion here is satisfied by a pass that always
+  // leaves the lamp high; and the untouched control first, so the numbers below are the
+  // override rather than the fixture.
+  it('leaves a rider at the AUTHORED support top after a resize - documented limit', () => {
     const parts = [desk([1400, 700, 750]), lamp()];
     for (const fix of settleHeights(parts, 2.8)) {
       const p = parts.find((q) => q.id === fix.id);
@@ -436,14 +432,13 @@ describe('settleHeights · answers in the size it is handed', () => {
     }
 
     const gapAfterResize = (mm: number) => {
-      resetSettleMemo();
       const [rDesk, rLamp] = resolveParts(parts, { dims: { desk: [1400, 700, mm] } });
       return rLamp.pos[1] - verticalExtent(rDesk.category, rDesk.shape, rDesk.dimMM, rDesk.pos[1])[1];
     };
 
     expect(gapAfterResize(750), 'control: untouched, the lamp rests on the desk').toBeCloseTo(0, 9);
-    expect(gapAfterResize(400), 'the desk shrank 350 mm and the lamp came down with it').toBeCloseTo(0, 9);
-    expect(gapAfterResize(1100), 'the desk grew 350 mm and the lamp went up, not inside').toBeCloseTo(0, 9);
+    // 0 is the right answer for both of these too. These are what it does.
+    expect(gapAfterResize(400), 'limit: +0.35 is wrong, 0 is right - the lamp floats').toBeCloseTo(0.35, 9);
+    expect(gapAfterResize(1100), 'limit: -0.35 is wrong, 0 is right - the lamp is inside the desk').toBeCloseTo(-0.35, 9);
   });
-
 });

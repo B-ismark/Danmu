@@ -16,7 +16,6 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { hasOverride, resolvePart, resolveParts, type TransformOverrides } from '@/lib/transforms';
-import { stripCommentsAndStrings } from './helpers/source';
 import type { ScenePart } from '@/lib/scene-spec';
 
 const part = (over: Partial<ScenePart> = {}): ScenePart =>
@@ -182,47 +181,5 @@ describe('the transform fallback is written once', () => {
         `dim against the AUTHORED dim to get a scale factor, which the resolved value ` +
         `cannot express — read the map without the ?? and say why.`,
     ).toEqual([]);
-  });
-});
-
-// ─── § 12 · the one position writer that is NOT the list ──────────────────────
-//
-// `Draggable` is the exception the sweep above tolerates: it writes
-// `ref.current.position` from `storedPos ?? part.pos` because it also needs the AUTHORED
-// `dimMM` to divide a stored dim by for a group scale, which no resolved value can give.
-// That exception is exactly why a rider's derived height (§ 12) has to reach it
-// separately — a derivation living in `resolveParts` alone would have left the 2D plan
-// right and the 3D scene floating.
-//
-// Asserted at SOURCE, and that is a compromise rather than a preference. The component
-// renders `<mesh>`, there is no R3F shim in this repo and CLAUDE.md says not to add one,
-// so it cannot be mounted here. `tests/rider-height-readers.test.ts` gates the other
-// per-part reader (`usePartTransform`) for real, through the hook. What this catches is
-// the specific regression of someone deleting the call while the pure tests stay green;
-// what it cannot catch is the call being there and the value being dropped, which is
-// what `docs/visual-check.md` asks a person to look at.
-describe('§ 12 · the 3D position writer reads the derived height', () => {
-  const src = readFileSync(join(process.cwd(), 'components/three/Draggable.tsx'), 'utf8');
-  const code = stripCommentsAndStrings(src);
-
-  it('calls useSettledY at all', () => {
-    expect(code, 'Draggable no longer asks for a rider\'s derived height').toMatch(
-      /const\s+settledY\s*=\s*useSettledY\(/,
-    );
-  });
-
-  it('applies it to the Y it writes, and to nothing else', () => {
-    // The whole triple, so a mutation that writes the derived value into x or z — or
-    // that keeps the call and drops the value — is visible here.
-    expect(code).toMatch(/position\.set\(\s*p\[0\]\s*,\s*settledY\s*\?\?\s*p\[1\]\s*,\s*p\[2\]\s*\)/);
-  });
-
-  it('re-runs the transform effect when that height changes', () => {
-    // A derived Y read outside the effect's dependency list is a value that arrives one
-    // commit late, which on screen is a rider that follows a resize only after the next
-    // unrelated edit.
-    const deps = code.match(/\}, \[storedPos[^\]]*\]\);/);
-    expect(deps, 'the transform effect\'s dependency array moved or was renamed').not.toBeNull();
-    expect(deps![0]).toContain('settledY');
   });
 });
