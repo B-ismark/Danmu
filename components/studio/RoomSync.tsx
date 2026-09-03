@@ -142,6 +142,9 @@ export function RoomSync() {
       if (state.room === prev.room) return;
       if (roomTimer.current) clearTimeout(roomTimer.current);
       const r = state.room;
+      // A wall MOVE is not a wall repaint, and only one of them changes what the
+      // seeder would build. See below.
+      const reshaped = state.room.footprint !== prev.room.footprint;
       roomTimer.current = setTimeout(async () => {
         const existing = await roomStore.loadRoom(roomId);
         if (!existing) return;
@@ -154,6 +157,39 @@ export function RoomSync() {
           footprint: r.footprint,
           site: r.site,
         });
+        // ── A wall move has to pin the scene, for a room that was SEEDED ──────
+        //
+        // This effect writes the outline and `moveWallCarrying` writes the transform
+        // overrides for whatever rode the wall, and until now nothing wrote a scene
+        // snapshot at all — `RoomSync`'s scene subscriber below fires on
+        // `state.parts`, and a wall move does not touch `parts`. So the next open
+        // ran `buildSceneFromRoom`, which for a room with no detections re-seeds
+        // through `defaultScene` **against the new polygon**, and the saved
+        // overrides landed on whatever came back, by id.
+        //
+        // Measured in `tests/custom-footprint-seed.test.ts`: over 300 wall moves of
+        // the picker's own five presets, the re-seed loses ids, gains ids, and keeps
+        // ids whose piece is now a different size. The worst single move loses **9 of
+        // 16 pieces**. Watched happening in a browser too — 8 of 8 T edges wrote no
+        // scene key, and four of them handed back a room that disagreed with the one
+        // on screen before leaving, in both directions.
+        //
+        // **Only for a room with no detections, and that is the whole scope.** A
+        // detected room does not re-seed: `buildSceneFromRoom` builds from the
+        // detections and the footprint only clamps pieces back inside, so its part
+        // ids are already stable across a wall move and it needs no pin. Leaving it
+        // unpinned is what keeps `CLAUDE.md`'s re-scan path working — a detected room
+        // the user has only MOVED things in still rebuilds `parts` from a new scan
+        // while the moves re-apply by id.
+        //
+        // `reshaped` rather than any room change: repainting a wall cannot change
+        // what the seeder builds, and pinning the scene on a colour change would take
+        // a re-scan away from a detected room for no reason. It compares object
+        // identity because `moveWall` writes a fresh polygon array every time and
+        // nothing else in the store replaces that reference.
+        if (reshaped && !existing.detectedObjects?.length) {
+          await roomStore.saveSceneParts(roomId, useScene.getState().parts);
+        }
       }, DEBOUNCE_MS);
     });
     return () => {

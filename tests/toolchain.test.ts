@@ -225,7 +225,13 @@ describe('vitest is configured so a component test can exist', () => {
   async function config() {
     const mod = (await import('../vitest.config')) as { default: Record<string, unknown> };
     return mod.default as {
-      test: { include: string[]; environment: string; testTimeout?: number; hookTimeout?: number };
+      test: {
+        include: string[];
+        environment: string;
+        setupFiles?: string[];
+        testTimeout?: number;
+        hookTimeout?: number;
+      };
       esbuild: { jsx: string };
     };
   }
