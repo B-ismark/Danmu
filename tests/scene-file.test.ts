@@ -35,12 +35,19 @@ const ROOM: RoomData = {
   height: 2.6,
 };
 
+// `pos[1] = 0`, and it was `0.44` — half the sofa's 880 mm height, i.e. someone read
+// `pos[1]` as a CENTRE. A sofa's anchor is `floor`, so it is a BOTTOM (`verticalExtent`
+// returns `[y, y + h]` for one), and 0.44 is a sofa hanging 44 cm in the air. Nothing
+// noticed for as long as no assertion in this file read the Y back; § 12's read-time
+// derivation drops it to the floor, which is the truthful answer and made the fixture's
+// own error visible. `rawPart` below deliberately KEEPS 0.44 — that one exercises the
+// parser, which must hand back exactly the bytes it was given and settle nothing.
 const SOFA: ScenePart = {
   id: 'sofa-1',
   category: 'sofa',
   name: 'Sofa',
   shape: 'sofa',
-  pos: [0, 0.44, -1.5],
+  pos: [0, 0, -1.5],
   rot: 0,
   dimMM: [2200, 950, 880],
   locked: false,
@@ -143,13 +150,52 @@ describe('scene file · round trip', () => {
     // The live app keeps a part's transform in two places and lets the override win.
     // A file resolves that instead of reproducing it.
     const { file } = roundTrip(ROOM, [SOFA], {
-      positions: { 'sofa-1': [1, 0.44, 2] },
+      positions: { 'sofa-1': [1, 0, 2] },
       rotations: { 'sofa-1': Math.PI / 2 },
       dims: { 'sofa-1': [1800, 900, 800] },
     });
-    expect(file.parts[0].pos).toEqual([1, 0.44, 2]);
+    expect(file.parts[0].pos).toEqual([1, 0, 2]);
     expect(file.parts[0].rot).toBeCloseTo(Math.PI / 2);
     expect(file.parts[0].dimMM).toEqual([1800, 900, 800]);
+  });
+
+  // § 12 at the file boundary. `buildSceneFile` bakes through `resolveParts`, so a
+  // rider leaves at the height it is DERIVED to sit at rather than the one it was
+  // seated at before its support was resized. Shrink the desk 350 mm and the lamp
+  // comes down with it, in the file as well as on screen.
+  //
+  // Mutation-checked by making `resolveParts` ignore its `settledYs` map: this returns
+  // 0.75 and goes red, while every other assertion in the file stays green.
+  it('bakes a rider at the DERIVED height after its support is resized', () => {
+    const desk: ScenePart = {
+      id: 'desk-1', category: 'desk', name: 'Desk', shape: 'desk-standard',
+      pos: [0, 0, 0], rot: 0, dimMM: [1400, 700, 750], locked: false,
+    };
+    const lamp: ScenePart = {
+      id: 'lamp-1', category: 'lamp', name: 'Lamp', shape: 'lamp-table',
+      pos: [0, 0.75, 0], rot: 0, dimMM: [300, 300, 400], locked: false,
+    };
+    const { file } = roundTrip(ROOM, [desk, lamp], {
+      positions: {}, rotations: {}, dims: { 'desk-1': [1400, 700, 400] },
+    });
+    const out = file.parts.find((p) => p.id === 'lamp-1')!;
+    expect(out.pos[1], 'the lamp sits on the shrunk desk, not where the old top was').toBeCloseTo(0.4, 9);
+  });
+
+  // The other side of that scope, and it is § 37's: a piece resting on NOTHING is left
+  // exactly where it is, because the placement banner reports it as floating and a
+  // derivation that seated it would delete that report. `ridingParents` finds no edge
+  // for this sofa, so nothing corrects it — the 0.44 is deliberate here.
+  //
+  // Mutation-checked by dropping the `wasRiding` gate in `deriveRiderYs` and settling
+  // whatever floats: this becomes 0 and goes red.
+  it('leaves a piece that rests on nothing exactly where it is', () => {
+    const { file } = roundTrip(ROOM, [SOFA], {
+      positions: { 'sofa-1': [1, 0.44, 2] },
+      rotations: {},
+      dims: { 'sofa-1': [1800, 900, 800] },
+    });
+    expect(file.parts[0].pos, 'nothing was under it, so nothing moved it').toEqual([1, 0.44, 2]);
   });
 
   it('keeps a hidden piece hidden, and puts it back in the transforms on the way in', () => {
@@ -164,10 +210,10 @@ describe('scene file · round trip', () => {
   });
 
   it('returns empty override maps, because the parts already carry the final values', () => {
-    const { file } = roundTrip(ROOM, [SOFA], { positions: { 'sofa-1': [1, 0.44, 2] }, rotations: {}, dims: {} });
+    const { file } = roundTrip(ROOM, [SOFA], { positions: { 'sofa-1': [1, 0, 2] }, rotations: {}, dims: {} });
     const { parts, transforms } = sceneFileToRoom(file);
     expect(transforms.positions).toEqual({});
-    expect(parts[0].pos).toEqual([1, 0.44, 2]);
+    expect(parts[0].pos).toEqual([1, 0, 2]);
   });
 
   it('carries a resting-on-top relationship, split back into transforms on the way in', () => {

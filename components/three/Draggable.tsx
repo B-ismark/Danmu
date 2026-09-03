@@ -39,7 +39,7 @@ import { gestureOwnedByOther, useStudio } from '@/lib/store';
 import { clearDragClick, suppressClickAfterDrag } from '@/lib/drag-click';
 import { claimPressForGizmo, clearGizmoClick, holdPress, releasePress } from '@/lib/gizmo-press';
 import { useScene } from '@/lib/scene-store';
-import { currentRoomScene } from '@/lib/room-scene';
+import { currentRoomScene, useSettledY } from '@/lib/room-scene';
 import { renderBaseDim, resolvePart } from '@/lib/transforms';
 import { useDragLive } from '@/lib/drag-live';
 import { refusalAfterGesture, REFUSAL_HOLD_MS } from '@/lib/refusal';
@@ -256,11 +256,21 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     [],
   );
 
+  /** § 12 — the height a rider is derived to sit at when the thing under it has been
+   *  resized or moved. `undefined` for every piece nothing has happened under, which
+   *  is nearly all of them, and then the stored/authored Y stands.
+   *
+   *  This component renders position straight to its own object3D from
+   *  `storedPos ?? part.pos`, so it does NOT go through `resolveParts` — which means
+   *  putting the derivation there alone would have left the 2D plan right and the 3D
+   *  scene floating. One derivation, two readers. */
+  const settledY = useSettledY(partId);
+
   // Apply transforms whenever stored values change.
   useEffect(() => {
     if (!ref.current || !part) return;
     const p = storedPos ?? part.pos;
-    ref.current.position.set(p[0], p[1], p[2]);
+    ref.current.position.set(p[0], settledY ?? p[1], p[2]);
     ref.current.rotation.y = storedRot ?? part.rot;
     // Parametric parts — whatever `isParametric` says — rebuild
     // their geometry from the effective dim — the mesh must NOT be group-scaled
@@ -275,7 +285,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     }
     lastValidPos.current = [ref.current.position.x, ref.current.position.y, ref.current.position.z];
     invalidate(); // transform written straight to the object3D, not via props
-  }, [storedPos, storedRot, storedDim, part, invalidate]);
+  }, [storedPos, storedRot, storedDim, settledY, part, invalidate]);
 
   /** Snapshot every part at its effective (user-overridden) transform so
    *  collision + support see the world as it currently looks.
