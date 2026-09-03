@@ -710,16 +710,17 @@ and every finding that states a number in `tests/report-units.test.ts`.
 
 **Where it rides.** `fix/rider-height-and-report-units`.
 
-### A lamp on a desk you have resized — STILL BROKEN. Nothing to look at yet.
+### A lamp on a desk you have resized — READY, and it is the item that most needs eyes
 
-**This item is not ready for eyes and should not be looked at.** A fix was built, reviewed
-and reverted in `94d11c1`. Five review lenses found nine defects in it — three of which
-restore the exact behaviour it was written to fix — and CI was green over every one. The
-design that answers them is written up in `docs/what-is-still-open.md` § 12.
+**Where it rides.** `fix/rider-follows-its-support` (PR #100). The two earlier attempts
+were reverted; this is the third.
 
-Kept here rather than deleted because **the prediction is unchanged and it is what the
-third attempt has to be checked against**, and because a reader finding the two docs
-disagreeing is exactly the rot this file exists to prevent.
+**Why it needs a person more than anything else in this file.** `Draggable` writes a
+part's transform straight to its `Object3D`, and there is no R3F under jsdom, so **no
+test in this repo can see the 3D scene paint the corrected height** —
+`tests/rider-settle-hooks.test.tsx` proves only that the store hands one out. The
+headless probe reads the three.js graph through `__r3f`, which answers the number and
+not the picture.
 
 **The repro, for when there is something to check.** Open a room with a piece standing on
 another (the bedroom preset seeds a bedside lamp on a nightstand). Select the **nightstand**
@@ -732,11 +733,24 @@ writes an override nothing settles again — so the lamp hangs in the air above 
 nightstand and sinks inside a grown one. `setDim` settles nothing either, so it is wrong
 in-session as well as after a reload.
 
-**Three things the third attempt has to be watched for, because they are what the second
-one got wrong.** The lamp must still follow after you have **dragged it once** (a consumer
-writing the derived Y back is what killed the derivation permanently). It must **never
-climb** onto something above it. And a lamp on a **300 mm** support — an ottoman, a low
-chest — must not fall through it, which is the `> 0.3` bar in `lib/layout-settle.ts:275-280`.
+**Six things to try, and the first three are what the earlier attempts got wrong.** The
+lamp must still follow after you have **dragged it once** (a consumer writing the derived
+Y back is what killed the derivation permanently). It must **never climb** onto something
+above it. And a lamp on a **300 mm** support — an ottoman, a low chest — must not fall
+through it, which is the `> 0.3` bar in `lib/layout-settle.ts:275-280`.
+
+Then the three the second review round added:
+
+· **Press Floor on the lamp after resizing the nightstand.** It must stay on the floor.
+  Before this branch's second round it dropped and popped straight back — two clicks, and
+  no review lens found it.
+· **Resize the nightstand, press Suggest, then type the nightstand's height back to
+  exactly what it was.** The lamp must come back down with it. Every writer that moves a
+  piece in x/z copies `pos[1]` out of the resolved scene, so this is the state where a
+  baked Y gets stranded — measured at 450 mm in the air, persisted.
+· **Drag a piece with something on it, in a busy room**, and watch for dropped frames.
+  Uncached the derivation cost 14.3 ms of a 16.7 ms budget per frame at 60 parts;
+  `riderYs` collapses that to one call, and only a real GPU can say whether it is enough.
 
 **Also worth one look whenever this does land:** drag a piece into mid-air over a table —
 the Inspector must still say **Floating**. The derivation must not seat a piece that was
