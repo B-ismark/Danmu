@@ -76,9 +76,11 @@ seat on splayed legs. Nothing draws outside its own footprint. That is the one q
 test in this repo can answer, and it is answered.
 
 Two things were seen while looking that are NOT shape defects and are filed elsewhere:
-every Library click still drops at room centre, so five added pieces land in one heap
-(§ H.3); and the plan draws the standing fan and the stool as SQUARES, which is § 32 seen
-rather than inferred.
+every Library click dropped at room centre, so five added pieces landed in one heap
+(§ H.3 — **fixed 2026-09-03**, they fan out to the first clear spot now; the ceiling
+family is the documented residue and still heaps, because `ceilingSpot` discards the aim);
+and the plan draws the standing fan and the stool as SQUARES, which is § 32 seen rather
+than inferred.
 
 **And the item that replaced them — the pendant and the ceiling fan drawn bigger than
 they declare, § 34 — was FIXED and LOOKED AT on 2026-09-02, so it is gone too.** What

@@ -83,7 +83,7 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 5 | **§ B.12** ~~Room check speaks centimetres~~ → **FIXED 2026-09-03** | Decided by the user: convert through `dimUnit`. `formatLength` (`lib/units.ts`) is the one formatter; `analyzeRoom` gains a `dimUnit` option defaulting to `'cm'`, so `fit-check` and `layout-shuffle` — which read `rule`, never `detail` — keep the sentences they always produced and no solver comparison starts depending on Settings. Two things a straight `fromMM` would have got wrong: a 4 mm gap renders `0.00 m` (the decimals grow until the number is true, capped at 1 mm of resolution, derived per unit), and the mounted-clash band still rounds OUTWARD so a 7 mm band cannot collapse in metres. `cachedReport`'s key gained `dimUnit`. **The first pass was right in fourteen sentences and wrong in two**, and the way that happened is the keeper: the sweep was verified by grepping the OLD spelling (`} cm`), which found none left — and the two TV sentences never said `cm`, they said `m`, so the grep that confirmed the sweep was structurally blind to the only sites still wrong. Six of thirteen converted sites were also asserted nowhere; multiplying their arguments by 1000 passed the whole suite. `tests/report-units.test.ts` is the gate now — every finding that states a number, provoked and read in all five units, with expectations derived from `lib/layout-rules.ts` rather than from `lib/clearance.ts` — plus a sweep for an `analyzeRoom(` in `components/` or `app/` that omits `dimUnit`. `formatArea` pairs the cut-off floor area with the length beside it (ft² for imperial, m², never in²). 27/28 mutations killed | done | — |
 | 6 | **§ 38.1** the confined "Try a fix" refusal is unreachable — **ANSWERED 2026-09-03: leave it, and the measurement stays beside the branch** | A decision rather than a defect: 212 confined solves over every finding of every preset declined **zero** times. **No code change, and that was checked rather than assumed** — `RoomTools.tsx`'s decline branch already carries both the 212-solve measurement and the reason for keeping both sentences, so the recommendation was already implemented in the only place that matters. Widening the confine is the one answer that would have been a product change, and it was declined | S — mostly a judgement | done |
 | 7 | **§ B.17** ~~the placement row — dragging a piece off a surface should DROP it~~ → **RESOLVED 2026-09-03, and the premise had expired** | The recorded answer — *"dragging would work"*, keep the operations and drop the row — rested on "neither Floor-off-a-table nor Surface-back-onto-it is reachable by dragging", which stopped being true when the drag pipeline moved into `lib/drag-resolve.ts` and nobody re-derived it. Measured against `resolvePlacement`: clear of a desk → y = 0, back over it → 0.75 with `supportId` set. Put back to the user with that measurement; they chose **drop Surface only**. Wall (nearest wall + face the room, gated on `ridesWall` so no drag reaches it) and Floor (drops IN PLACE where a drag carries it sideways) stay. `supportBelow`, `snapToSurface` and the `snap-surface` glyph went with the button — and so, after a browser measurement, did the `.rail-triple` class and the container-query rule that folded it, which a two-button row no longer needs. Confirmed on screen: the row is `Wall | Floor`, and Room check reads correctly in all five units with no clipping and 0px of document overflow | done | — |
-| 8 | **§ H.3** every Library click drops its piece at the room centre, facing the same way | A product decision with at least three defensible answers, and picking one quietly inside a defect fix is how the last one got here. The false comment beside it is already fixed | S once decided | needs the user |
+| 8 | ~~**§ H.3** every Library click drops its piece at the room centre, facing the same way~~ **ANSWERED AND BUILT** — fan out from the drop point with a legality gate (`openSpotForNewPart`, 2026-09-03) | Two residues remain and are named in § H.3's section below: the ceiling family cannot be fanned at all, and a click may still stack one piece on another | — | **done, with two filed residues** |
 | 9 | **§ H.8** two reports that need a real repro | A group drag bounded by the lead's rules rather than the set's, and a merged set that drills in from a nightstand but never from the bed. Both are DOM-reachable on the 2D plan, which is the cheap way in | M | wants row 15's shims |
 | 10 | **§ B.14** a turn that puts a corner through the wall — **ANSWERED AND BUILT 2026-09-03: keep and report, both paths** | The angle is always taken; what may not happen is a turn succeeding in silence. Two findings changed the shape of it: the second document said to contradict the first **no longer exists**, and `valid` is computed on the ALREADY-CLAMPED position, so a turn that slid a piece across the floor reports success. `turnNudge` is the sentence; `spinSelection` joins `turnInPlace` and stops being the one turn gesture with no pipeline, no cascade and no report | S once decided | done |
 | 11 | **§ H.6** Suggest, from the ground up — the user's explicit ask | The largest open thing here. It **subsumes** A.2, A.3's `:555`, A.7 and G.2, and the 5 parked `it.fails` retire here too. **It is NOT un-researched** — `docs/research/suggest-and-collision.md` is a three-layer design whose four questions to the user are all ANSWERED, including the feasibility split being in scope. Of the three things this section calls missing, **only one is** (support); facing is priced by `relationCost`, and groups move rigidly already | XL — refresh the research against `main`, then execute its rows | wants row 1 measured first, since it is a symptom |
@@ -5119,3 +5119,62 @@ tucked-chair fixture sat **two ulps below `CLASH_SHARE`**, so nothing was being 
 deleting the exemption the file existed to pin left all eight of its tests green. The fixture
 is at 0.40 now, with both bars asserted live. That is the shape to look for in your own new
 tests, not only in someone else's.
+
+---
+
+## § H.3 · the Library fan-out, and its two residues
+
+**Answered 2026-09-03 (fan out from the drop point, with a legality gate) and built:
+`openSpotForNewPart` in `lib/scene-spec.ts`, called by `CatalogPanel.spawn`.** Both halves
+of the original complaint — three beds at `pos [0,0,0] rot 0`, stacked and all facing the
+same way — had one cause: with no aim `placeNewPart` reads `ax = az = 0`, so the piece went
+to the middle AND asked which wall was nearest the middle, which is the same wall every
+time. Moving the aim fixed the heading for free.
+
+The review of that fix found four defects in it, all now closed and all listed in the
+commit: the ring was centred on the **world origin** rather than the room (four chairs on
+one point in a room whose walls had been dragged — the same defect inside the function
+written to close it); the probe **dropped roundness**, reopening § 32 one function over;
+repeated clicks built a **tower** (four floor lamps at y = 0.00, 1.50, 3.00 and 4.50 in a
+2.5 m room, because `collidesAt` permits stacking by design); and the search ran 127 futile
+probes for the ceiling family.
+
+**Residue 1 — the ceiling family cannot be fanned out, and this is a product question.**
+`ceilingSpot` returns the bounds midpoint whenever that point is inside the footprint and
+reads the aim ONLY when it is not, so in any rectangular room every candidate resolves to
+the same place. A second ceiling fan is still placed exactly inside the first. The search
+is skipped for them rather than run pointlessly.
+
+Fixing it means reversing a written decision — *"not under the pointer; a fan belongs in the
+middle of a ceiling far more often than wherever the cursor happened to be"* (`ceilingSpot`'s
+own docblock). **The question for the user: should an EXPLICIT aim override that default?**
+Answering it inside a defect fix is what row 8 of the queue warned against, so it is here
+instead.
+
+- **Leave it.** Two fans stack; the user drags the second one. Costs nothing, and the
+  default is right for the overwhelmingly common single-fan case.
+- **Honour an explicit aim** — a drag onto the ceiling lands where you dropped it, and the
+  fan-out then works for this family too. Changes drag-drop behaviour, not only the click.
+- **Honour an aim only once the midpoint is occupied.** Makes the docblock's original claim
+  true, and needs occupancy knowledge inside `placeNewPart`, which currently reads
+  `existing` in exactly one place.
+
+**Recommend the third**, because it changes nothing for anyone adding one fan and fixes the
+case that is actually broken.
+
+**Residue 2 — a click can still stack one piece on another.** `placeNewPart` rests a
+tabletop-prone piece on whatever is under the aim, which is right for a lamp and a desk and
+wrong for a plant on a plant. Only the physically impossible half is gated (§ 31: nothing
+may be based where its top passes the ceiling). Whether an UNAIMED click should stack at all
+is the open half — gating it entirely would put a table lamp on the floor beside the desk it
+belongs on, so it is not obviously an improvement.
+
+**What is pinned and what is not.** `tests/spawn-spread.test.ts` (17) and
+`tests/spawn-spread-wired.test.tsx` (2). A mutation pass over 25 mutants killed 21. Three
+survivors are recorded in the test file itself rather than papered over: `SPAWN_GAP`'s value
+(the ring step is the piece's own diagonal, so the separation survives without it, and
+tightening the bound until the mutant died would be choosing a threshold to match its own
+measurement); the roundness of the two gates (byte-identical placements across eighteen
+shape × layout × size combinations — correct by § 32's rule, unfalsifiable here); and the
+ceiling skip (deleting it returns the same answer 127 probes later, so it is a saving and
+not a behaviour). **Nothing here has been looked at in a browser.**

@@ -123,16 +123,18 @@ describe('three of the same piece are three pieces, not one piece three times', 
     expect(far).toBeLessThan(3);
   });
 
-  it('leaves real air between them, which is what SPAWN_GAP buys', () => {
-    // `SPAWN_GAP`'s VALUE was free: setting it to 0 left every assertion in this file
-    // green, because `collidesAt` accepts flush contact (`footOverlap(..., -0.01)` —
-    // "lets flush side-by-side placement read as touching, not colliding") and every
-    // other assertion here only asks whether pieces overlap.
+  it('leaves real air between them', () => {
+    // **This does NOT pin `SPAWN_GAP`, and that is stated rather than implied.** Setting
+    // it to 0 leaves this green: the ring step is the piece's own diagonal, so even
+    // without the gap two pieces a step apart are not usually corner-to-corner, and the
+    // separation that survives is comfortably over any bound this could honestly assert.
+    // Tightening the number until the mutation went red would be choosing a threshold to
+    // match the measurement it is supposed to be testing.
     //
-    // So the subject is the GAP, measured between footprints rather than centres — a
-    // centre distance would be the step's own formula asserted against itself. With
-    // GAP = 0 the closest chairs sit 0.673 m apart, exactly their diagonal, footprints
-    // touching; with it they sit 0.773 m apart.
+    // What it does gate is real and worth keeping: `collidesAt` accepts FLUSH contact by
+    // design (`footOverlap(..., -0.01)` — "lets flush side-by-side placement read as
+    // touching, not colliding"), so every other assertion in this file would pass with
+    // pieces jammed edge to edge. This one says there is air.
     for (const kit of [CHAIR, STOOL, BED]) {
       const set = addMany(4, kit, ROOM());
       let closest = Infinity;
