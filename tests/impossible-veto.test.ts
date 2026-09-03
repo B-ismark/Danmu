@@ -79,10 +79,21 @@ describe('IMPOSSIBLE_TERMS — the split is by kind, not by severity', () => {
     }
   });
 
-  it('partitions HARD_TERMS — every hard term is on exactly one side', () => {
-    // The assertion a new hard term goes red on. `isCleanShuffle` and `snapYaws` both
-    // read `HARD_TERMS` and pick a new entry up for free; the § 31 veto reads
-    // `IMPOSSIBLE_TERMS` and cannot. This is the line that makes someone decide.
+  it('partitions HARD_TERMS — and a NEW hard term has to be assigned a side by hand', () => {
+    // **This is a pinned list and that is the whole point.** Deriving `recoverable` as
+    // `HARD_TERMS.filter(t => !IMPOSSIBLE_TERMS.includes(t))` fixed the drift between
+    // two hand-kept copies, and then quietly made the union assertion a TAUTOLOGY —
+    // measured: adding `'walkway'` to `HARD_TERMS` left every assertion in this file
+    // green. A derived partition is always a partition; what it cannot do is notice
+    // that nobody decided which side the new member belongs on.
+    //
+    // So the alerting assertion is on `HARD_TERMS` itself. `isCleanShuffle` and
+    // `snapYaws` both read it and pick a new entry up for free; the § 31 veto reads
+    // `IMPOSSIBLE_TERMS` and cannot, so a new term silently becomes RECOVERABLE and
+    // `Fix` writes it to the store. Adding one here is a red test and a two-line
+    // decision: is it a room that cannot exist, or a room that is merely bad?
+    expect([...HARD_TERMS].sort()).toEqual(['access', 'door', 'navigation', 'outside', 'overlap']);
+
     const recoverable = HARD_TERMS.filter((t) => !IMPOSSIBLE_TERMS.includes(t));
     expect([...IMPOSSIBLE_TERMS, ...recoverable].sort()).toEqual([...HARD_TERMS].sort());
     for (const term of IMPOSSIBLE_TERMS) expect(HARD_TERMS).toContain(term);
