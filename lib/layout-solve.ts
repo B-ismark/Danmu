@@ -1198,10 +1198,19 @@ export function openRoutes(
   }
   if (pool.length === 0) return placements;
 
-  const cost = (p: Placement[]) => costBreakdown(m, p, weights, REPAIR_CELL).total;
+  // The breakdown rather than the total, because two different questions are asked of
+  // it below and the second one is § 31's: the annealer walks down `total`, and what
+  // it is allowed to REMEMBER as the best answer is gated on impossibility. Reading
+  // both off one call costs nothing over the old `.total`.
+  const cost = (p: Placement[]) => costBreakdown(m, p, weights, REPAIR_CELL);
   const current = placements.map((p) => ({ ...p }));
   let best = current.map((p) => ({ ...p }));
-  let bestCost = cost(current);
+  const startBreakdown = cost(current);
+  // What this pass may not exceed. Measured against what it was HANDED rather than
+  // against zero: a repair run on an already-broken room must still be able to answer,
+  // and its job is to open a route, not to fix a collision it did not cause.
+  const impossibleCeiling = impossibility(startBreakdown) + 1e-6;
+  let bestCost = startBreakdown.total;
   let now = bestCost;
   const span = Math.max(b.maxX - b.minX, b.maxZ - b.minZ);
 
@@ -1212,10 +1221,15 @@ export function openRoutes(
     const i = pool[Math.floor(rng() * pool.length) % pool.length];
     const prev = current[i];
     current[i] = propose(m, current, i, reach, rng, b);
-    const trial = cost(current);
+    const priced = cost(current);
+    const trial = priced.total;
+    // Acceptance is on the total and nothing else — a cliff here would give the
+    // annealer nothing to walk down, which is the argument `layout-score.ts` makes
+    // against exactly that and it still holds. The veto lives one line lower, where
+    // an arrangement stops being a step and becomes an ANSWER.
     if (trial - now <= 0 || rng() < Math.exp(-(trial - now) / temp)) {
       now = trial;
-      if (now < bestCost) {
+      if (now < bestCost && impossibility(priced) <= impossibleCeiling) {
         bestCost = now;
         best = current.map((p) => ({ ...p }));
       }
@@ -1234,12 +1248,19 @@ export function openRoutes(
   // quietly spend the search's work and return something worse, and the doc said it
   // couldn't.
   //
-  // Two questions, not one, and § 31 is why the second exists. This pass moves
-  // obstacles to open a route, so "push the wardrobe into the wall" is a move
-  // squarely inside its own proposal space and one that scores well: the wall it
-  // goes through is not floor the navigation term was counting. `total` alone would
-  // buy that, exactly as the accept in `solveLayout` did — a repair may make the room
-  // better to walk through, and it may not make it a room that cannot exist.
+  // § 31's backstop. `best` is already gated on impossibility above, so this can only
+  // fire when the COARSE grid and the fine one disagree about it — the same terms, but
+  // `openRoutes` is the one caller that prices on a proxy.
+  //
+  // Why the gate is on `best` and not only here, which is the part worth reading:
+  // this pass moves obstacles to open a route, so "push the wardrobe into the wall" is
+  // squarely inside its own proposal space and scores WELL — the wall it goes through
+  // is not floor the navigation term was counting. Refusing that only at the end
+  // throws away the whole repair; refusing it as an ANSWER while still letting the
+  // search walk through it keeps every legal arrangement the same search already
+  // visited. Measured on the Double rung at U 6x5, twelve seeds: refusing at the end
+  // left seeds 6 and 11 stranding 748.2 and 560.1 of floor, and gating `best` instead
+  // brings both back to a room with nothing in a wall and nothing inside anything.
   const fine = (p: Placement[]) => costBreakdown(m, p, weights, NAV_CELL);
   const given = fine(placements);
   const found = fine(best);

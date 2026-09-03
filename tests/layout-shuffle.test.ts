@@ -121,6 +121,11 @@ describe('randomizeStart', () => {
   });
 });
 
+/** As many scatters as `shuffleRoom` itself is allowed — see `MAX_CANDIDATES`. A
+ *  single seed is not a fair test of a solver that may decline; the production
+ *  pipeline never asks one. */
+const SHUFFLE_SEEDS = [42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53];
+
 describe("solveLayout mode: 'shuffle'", () => {
   it('moves a room that mode "arrange" leaves completely untouched', SOLVE_TIMEOUT, () => {
     for (const [id, w, d] of SETTLED) {
@@ -130,9 +135,31 @@ describe("solveLayout mode: 'shuffle'", () => {
       const arranged = solveLayout(parts, footprint, locked, { seed: 1, mode: 'arrange' });
       expect(arranged.moved, `${id} must be an already-good room`).toEqual([]);
 
-      const start = randomizeStart(parts, footprint, movable, makeRng(42));
-      const shuffled = solveLayout(parts, footprint, locked, { seed: 42, mode: 'shuffle', start });
-      expect(shuffled.moved.length, `${id} shuffled`).toBeGreaterThan(0);
+      // Over a sweep of scatters rather than one, because since § 31 a shuffle solve
+      // DECLINES rather than hand back an arrangement more impossible than the room
+      // it was given, and roughly half of them would be.
+      //
+      // That is not a loss, and the numbers are why. On `rect` 6 x 4, ten seeds,
+      // before the veto: **moved 10, clean 4**. The six that moved and were not clean
+      // carried 520 to 1390 weighted units of `overlap + outside` — furniture well
+      // inside the walls — and `isCleanShuffle` discarded every one. After the veto:
+      // **moved 4, clean 4**, the same four. The search stopped producing answers
+      // that were only ever going to be thrown away, and the button is unchanged:
+      // over five presets x eight presses, `shuffleRoom` offers on 25 of 40 either
+      // way.
+      //
+      // So the honest form of the property is the pipeline's own — twelve tries, as
+      // `MAX_CANDIDATES` allows — rather than a single seed that must not be
+      // unlucky. Seed 42 on `rect` is one of the decliners, which is how this was
+      // found.
+      const movers = SHUFFLE_SEEDS.filter((seed) => {
+        const start = randomizeStart(parts, footprint, movable, makeRng(seed));
+        return solveLayout(parts, footprint, locked, { seed, mode: 'shuffle', start }).moved.length > 0;
+      });
+      expect(
+        movers.length,
+        `${id} shuffled — no scatter in ${SHUFFLE_SEEDS.length} produced a move`,
+      ).toBeGreaterThan(0);
     }
   });
 
@@ -142,11 +169,11 @@ describe("solveLayout mode: 'shuffle'", () => {
     const locked = lockedForSolve(parts, { [parts[free].id]: true }, null);
     const movable = movableFor(parts, locked);
 
+    let everMoved = 0;
     for (const seed of [1, 2, 3, 4, 5]) {
       const start = randomizeStart(parts, footprint, movable, makeRng(seed));
       const result = solveLayout(parts, footprint, locked, { seed, mode: 'shuffle', start });
-      // A floor first: both assertions below pass vacuously on an empty `moved`.
-      expect(result.moved.length, `seed ${seed} moved nothing`).toBeGreaterThan(0);
+      if (result.moved.length > 0) everMoved++;
       for (const i of result.moved) {
         expect(movable[i], `${parts[i].id} moved but is locked or wall-mounted`).toBe(true);
       }
@@ -154,6 +181,11 @@ describe("solveLayout mode: 'shuffle'", () => {
       // sofa the solver would otherwise love to move staying put.
       expect(result.moved).not.toContain(free);
     }
+    // The floor, and it has to be over the SET rather than per seed: since § 31 a
+    // shuffle solve declines rather than hand back an arrangement more impossible
+    // than the room it was given, so an individual seed legitimately moves nothing.
+    // Without this line every assertion above passes vacuously on five empty lists.
+    expect(everMoved, 'no seed moved anything — the assertions above proved nothing').toBeGreaterThan(0);
   });
 
   it('is deterministic: same room, same seed, same suggestion', () => {

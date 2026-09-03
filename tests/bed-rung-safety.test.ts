@@ -368,11 +368,31 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
     // NARROWED, and the narrowing is the finding rather than a re-baseline.
     //
     // This loop asserted `door === 0` on ALL THREE rungs. After `outsideDeficit`, the
-    // DOUBLE (1400 mm, not a rung this app ships) scores 165.69: on U 6x5 the solver
-    // now prefers 20% of the door zone blocked to ~190 mm of bed through the wall, and
-    // with containment at 1000 against door at 800 those two price within a few units
-    // of each other. That near-tie is a weights question nobody has decided — recorded
-    // as docs/what-is-still-open.md § 31 rather than papered over here.
+    // DOUBLE (1400 mm, not a rung this app ships) started scoring on the door: on
+    // U 6x5 the solver prefers part of the door zone blocked to a bed through the
+    // wall, and with containment at 1000 against door at 800 those two priced within
+    // a few units of each other. That near-tie was a question nobody had decided —
+    // recorded as docs/what-is-still-open.md § 31 rather than papered over here.
+    //
+    // § 31 IS DECIDED NOW, and this row is where the decision is visible. The user's
+    // ruling: *"door being blocked (avoid if possible) is objectively better than a
+    // model going through walls. nothing physically impossible should be encouraged.
+    // door being blocked can be prompted and fix with the fix feature."* So the two
+    // are no longer traded on price at all — `IMPOSSIBLE_TERMS` vetoes the wall.
+    //
+    // 165.68806954937938 -> 181.7821863200519, and the shape of the change is the
+    // point rather than the size of it. Per seed, before and after:
+    //
+    //     seed  6   outside 8.5, door 165.7, nav   0.0   ->   outside 0, door 181.8
+    //     seed 11   overlap 24.6,  door  0.0, nav   8.4   ->   overlap 0, door   0.0, nav 18.0
+    //
+    // The bed no longer stands 8.5 units inside the wall while ALSO blocking the
+    // door; it blocks the door and nothing else, which is the trade the user asked
+    // for in as many words. Seed 11 gave up a 24.6-unit collision for ten more units
+    // of stranded floor. Every other seed is byte-identical.
+    //
+    // Read this number as a witness to the ruling, not as a baseline to keep green:
+    // if it moves again, find out which seed and which term, the way this note did.
     //
     // The property this file exists for is UNCHANGED and is the first assertion below:
     // the rung the app actually ships keeps the door clear. `the ladder comes down for
@@ -382,7 +402,7 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
     expect(shippedRung.width, 'the shipped rung is the narrowest').toBe(900);
     expect(shippedRung.door, 'THE SHIPPED RUNG MUST NOT BLOCK THE DOOR').toBe(0);
     expect(rows[0].door, 'Queen at U 6x5').toBe(0);
-    expect(rows[1].door, 'Double at U 6x5 — see § 31').toBeCloseTo(165.68806954937938, 6);
+    expect(rows[1].door, 'Double at U 6x5 — see § 31, now decided').toBeCloseTo(181.7821863200519, 6);
     const poly = footprintForLayout('u', 6, 5);
     const base = defaultScene('u', 6, 5, { footprint: poly, height: 2.8 });
     const door = base.findIndex((q) => q.category === 'door');
