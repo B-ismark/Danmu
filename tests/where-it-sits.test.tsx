@@ -3,18 +3,28 @@
 // The Inspector's placement row, after the user looked at it in a browser and said the
 // section was redundant and took too much horizontal space.
 //
-// The redundancy is provable rather than a matter of taste: with nothing under a piece,
-// `snapToSurface` and `groundToFloor` are the same three lines — y = 0, clear the rigid
-// parent. So two of the three buttons did one thing for most pieces, and the third only
-// earns its place when something IS below and you want the piece on the floor rather
-// than on it, which no drag can express (dragging it clear moves it in x/z).
+// **The row is TWO buttons now, always — § B.17, and the premise that shaped it expired.**
 //
-// Hence what these assert: **two** buttons on bare floor, **three** when there is a
-// surface under the piece, and the third one is the one that appears. That is the whole
-// rule, and it is a rule about a predicate matching an action — the button is shown by
-// `supportBelow()` and driven by `snapToSurface`, which make the same call with the same
-// arguments, because a control shown by one predicate and driven by another is how a
-// button comes to appear when it does nothing.
+// This file used to assert two buttons on bare floor and three when something was below,
+// because `snapToSurface` and `groundToFloor` are the same three lines with nothing
+// underneath. The user then said they did not think the row was needed at all, and the
+// answer recorded from that was "keep the operations, drop the row", on the grounds that
+// neither Floor-off-a-table nor Surface-back-onto-it was reachable by dragging.
+//
+// That last part stopped being true when the drag pipeline moved into
+// `lib/drag-resolve.ts`. Measured against `resolvePlacement` — and asserted below, so it
+// cannot quietly stop being true again — dragging a piece clear of a surface lands it at
+// y = 0, and dragging it back over lands it on the surface with `supportId` set. Surface
+// is a drag, exactly, so it is gone.
+//
+// The two that remain are the two a drag cannot express, which is why the row survived
+// rather than being deleted as the original answer's letter would have had it:
+//
+//   · **Wall** moves the piece to the nearest wall AND turns it to face the room.
+//     `drag-resolve`'s wall snap is gated on `ridesWall` — the TV/mirror/painting/AC/
+//     curtain family — so a sofa is never slid onto plaster and never rotated.
+//   · **Floor** puts it on the floor WITHOUT moving it in x/z. Dragging it clear also
+//     drops it, but somewhere else; "on the floor, under the desk" is only this.
 //
 // Mounted through the real plan page, like tests/mount-height-refusal.test.tsx, so the
 // Inspector is reached the way a user reaches it rather than through a harness that
@@ -28,6 +38,7 @@ import 'fake-indexeddb/auto';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { footprintForLayout } from '@/lib/footprint';
+import { resolvePlacement } from '@/lib/drag-resolve';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 import type { ScenePart } from '@/lib/scene-spec';
@@ -105,7 +116,7 @@ function placementButtons(): string[] {
 beforeEach(() => cleanup());
 
 describe('the Inspector placement row shows the buttons that do something', () => {
-  it('offers two on bare floor — and Surface is the one missing', () => {
+  it('offers two on bare floor — and Surface is not one of them', () => {
     setUp([lamp(0)]);
     render(<PlanPage />);
     const shown = placementButtons();
@@ -117,15 +128,41 @@ describe('the Inspector placement row shows the buttons that do something', () =
     expect(screen.queryAllByRole('button', { name: 'Floor' })).toHaveLength(1);
   });
 
-  it('offers three when the piece is standing on something', () => {
-    // The lamp sits at the table's top, so the probe finds the table beneath it.
+  it('offers the SAME two when the piece is standing on something', () => {
+    // The case that used to grow a third button. The lamp sits at the table's top, so
+    // a probe would find the table beneath it — and the row no longer cares, because
+    // dragging the lamp back onto the table is what Surface was for. Asserted at the
+    // state that used to differ, so re-adding the button anywhere would show up here.
     setUp([table(), lamp(0.45)]);
     render(<PlanPage />);
-    expect(placementButtons()).toEqual(['Wall', 'Surface', 'Floor']);
-    // And the surface it would drop onto is named, rather than described as "the
-    // surface below" — the id comes back from `findSupportDetailed` and the name from
-    // the same resolved list the probe ran against.
-    expect(screen.getByRole('button', { name: 'Surface' }).getAttribute('title')).toBe('Drop onto Coffee table');
+    expect(placementButtons()).toEqual(['Wall', 'Floor']);
+  });
+
+  // Why Surface could go, asserted rather than asserted-in-a-comment. `resolvePlacement`
+  // is the one resolve both tabs run, so this is the real path a user's drag takes.
+  //
+  // Mutation-checked: making `drag-resolve`'s gravity step keep `input.currentY` for a
+  // floor-standing piece — which is what it did before the pipeline was extracted, and
+  // the state the § B.17 note was written in — turns the first number into 0.45 and this
+  // goes red. That is the assertion that stops the button being removable on a stale
+  // premise a second time.
+  it('a drag reproduces both halves of what Surface did', () => {
+    const world = [table()];
+    const move = (from: [number, number, number], toX: number, toZ: number) =>
+      resolvePlacement({
+        part: { ...lamp(0), pos: from } as ScenePart,
+        rawX: toX, rawZ: toZ, rot: 0, dim: [220, 220, 450],
+        parts: world, footprint: footprintForLayout('rect', 5, 4),
+        roomHeight: 2.6, snapMode: 'off', currentY: from[1],
+      });
+
+    const off = move([0, 0.45, 0], 1.9, 1.4);
+    expect(off.pos[1], 'dragged clear of the table, it drops to the floor').toBe(0);
+    expect(off.supportId, 'and rests on nothing').toBeUndefined();
+
+    const back = move([1.9, 0, 1.4], 0, 0);
+    expect(back.pos[1], 'dragged back over it, it climbs onto the top').toBeCloseTo(0.45, 6);
+    expect(back.supportId, 'and names what it is standing on').toBe(TABLE);
   });
 
   it('drops the heading, and the buttons still say where the piece will sit', () => {
@@ -142,30 +179,36 @@ describe('the Inspector placement row shows the buttons that do something', () =
     }
   });
 
-  it('Floor puts the piece on the floor and lets go of what it was on', () => {
-    // The capability the third button exists for, and the reason it is not simply
-    // deleted: with a table underneath, this is the only way to say "on the floor".
+  it('Floor puts the piece on the floor IN PLACE, and lets go of what it was on', () => {
+    // The capability this button exists for, and the reason it survived § B.17: with a
+    // table underneath, this is the only way to say "on the floor". The x and z
+    // assertions are the whole distinction from a drag, which also drops the piece but
+    // carries it somewhere else — without them this passes against a button wired to
+    // anything that happens to zero the Y.
+    const before = lamp(0.45).pos;
     setUp([table(), lamp(0.45)]);
     render(<PlanPage />);
     fireEvent.click(screen.getByRole('button', { name: 'Floor' }));
     const s = useStudio.getState();
     expect(s.positions[LAMP]?.[1]).toBe(0);
+    expect(s.positions[LAMP]?.[0], 'x is untouched — that is what "in place" means').toBe(before[0]);
+    expect(s.positions[LAMP]?.[2], 'and so is z').toBe(before[2]);
     expect(s.parentIds[LAMP]).toBeUndefined();
   });
 
-  it('Surface puts it back on the table, and records what it is standing on', () => {
-    // The negative control for the test above: without it, both buttons could be
-    // wired to `groundToFloor` and every assertion here would still pass.
-    setUp([table(), lamp(0)]);
+  it('Wall is the other one a drag cannot reach, and it turns the piece to face the room', () => {
+    // The negative control the deleted Surface test used to be: without a second button
+    // doing something DIFFERENT, every assertion above would pass with both wired to
+    // `groundToFloor`. This is also the operation whose absence from `drag-resolve` is
+    // the reason the row was not deleted outright — the wall snap there is gated on
+    // `ridesWall`, and a lamp is not in that family.
+    setUp([lamp(0)]);
     render(<PlanPage />);
-    fireEvent.click(screen.getByRole('button', { name: 'Floor' }));
-    expect(useStudio.getState().positions[LAMP]?.[1]).toBe(0);
-    // The row re-reads the effective position, so Surface is back once it is grounded
-    // — the probe looks at what is under the centre, not at what it is parented to.
-    fireEvent.click(screen.getByRole('button', { name: 'Surface' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Wall' }));
     const s = useStudio.getState();
-    expect(s.positions[LAMP]?.[1]).toBeCloseTo(0.45, 6);
-    expect(s.parentIds[LAMP]).toBe(TABLE);
+    const moved = s.positions[LAMP]!;
+    expect(Math.abs(moved[0]) > 1.5 || Math.abs(moved[2]) > 1.2, `moved to a wall: ${moved.join(', ')}`).toBe(true);
+    expect(s.rotations[LAMP], 'and turned to face the room').toBeDefined();
   });
 
   it('gives a wall-mounted piece none of them', () => {

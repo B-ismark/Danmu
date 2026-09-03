@@ -164,28 +164,12 @@ export function Inspector() {
     clearParent(id!);
   }
 
-  /** What this piece would come to rest ON — the highest surface under its centre,
-   *  or null for bare floor.
-   *
-   *  Pulled out of `snapToSurface` because it answers a second question: whether a
-   *  separate **Floor** button means anything at all. With nothing underneath,
-   *  `snapToSurface` and `groundToFloor` are the same three lines — y = 0, clear the
-   *  parent — so two buttons were doing one thing, which is what the user saw as the
-   *  row being redundant. It is the SAME call with the SAME arguments the action
-   *  makes, deliberately: a button shown by one predicate and driven by another is
-   *  how a control comes to appear when it does nothing. */
-  function supportBelow() {
-    const [x, , z] = currentXYZ();
-    return findSupportDetailed(partSnapshot(), id!, x, z, part!.dimMM, part!.rot);
-  }
-
-  function snapToSurface() {
-    const [x, , z] = currentXYZ();
-    const support = supportBelow();
-    setPosition(id!, [x, support?.y ?? 0, z]);
-    if (support) setParent(id!, support.id);
-    else clearParent(id!);
-  }
+  // `supportBelow` and `snapToSurface` lived here and are gone with the Surface button
+  // (§ B.17). `supportBelow` existed only to decide whether Surface was worth showing,
+  // and both were exactly reproduced by a drag once `lib/drag-resolve.ts` owned gravity
+  // — `resolvePlacement` returns the support's top and names it in `supportId`. A
+  // helper kept alive for a control that no longer exists is the dead-plumbing shape
+  // CLAUDE.md rule 1 describes, so it went in the same commit rather than a later sweep.
 
   const isGeneric = part.shape === 'box';
 
@@ -411,62 +395,55 @@ export function Inspector() {
           says where the piece will sit, in a word, and each one's `title` says it
           again in a sentence. The horizontal half is answered below. */}
       <div className="section section--flush">
-        {/* Two buttons for a piece that stands on the floor, THREE only when there is
-            something under it to stand on instead, and none for a piece fixed to the
-            building.
+        {/* Two buttons for a piece that stands on the floor, and none for a piece fixed
+            to the building.
 
-            The third button was unconditional, and for most pieces it was the second
-            button again: with nothing underneath, `snapToSurface` is `groundToFloor`
-            line for line — y = 0, clear the parent. They differ in exactly one case,
-            which is real but rare: something IS below and you want the piece on the
-            floor rather than on it, which no drag can express, since dragging it clear
-            moves it in x/z. So Floor appears exactly when it has that to offer, and
-            `supportBelow()` is the same call the action makes.
+            **It was three, and Surface is gone — § B.17.** The user said outright that
+            they did not think the row was needed, and the answer taken from that was
+            "keep the operations, drop the row", on the stated grounds that neither
+            Floor-off-a-table nor Surface-back-onto-it was reachable by dragging. That
+            premise expired when the drag pipeline moved into `lib/drag-resolve.ts`:
+            measured against `resolvePlacement`, dragging a lamp clear of a desk lands
+            it at y = 0, and dragging it back over lands it at the desk's top with
+            `supportId` set. Surface is a drag, exactly, so it goes.
 
-            Not icons-only — the other way out the user offered. Three icon+word
-            buttons at 33% is what does not fit; two at 50% does, and stripping the
-            words to keep a button that should not be there would fix the symptom,
-            keep the cause, and take on an accessible-name obligation for nothing.
+            The other two are not, which is why the row survives at all rather than
+            being deleted as the original answer's letter would have had it:
 
-            A wall-mounted part gets none of them: it has nowhere else to be put —
-            "Wall" moves it along the wall it is already on, which reads as an action
-            and is barely one — and for the ceiling family it is worse than useless,
-            since `snapToWallPhys` would slide a ceiling fan sideways onto a wall.
-            What those parts get instead is the one number that does mean something
-            about where they sit, below.
+            · **Wall** moves the piece to the NEAREST wall and turns it to face the
+              room. No drag does this — `drag-resolve`'s wall snap is gated on
+              `ridesWall`, which is the TV/mirror/painting/AC/curtain family, so a sofa
+              is never slid onto plaster and never rotated. Measured: a sofa dragged to
+              z = 1.4 with snap on keeps its 0.9 rad yaw and stops 0.84 m short.
+            · **Floor** puts the piece on the floor WITHOUT moving it in x/z. Dragging
+              it clear of what it stands on also drops it, but somewhere else — and
+              "on the floor, under the desk" is a placement only this expresses.
 
-            `rail-triple` stays on the wrapper either way: it is the hook the elastic
-            rail's container query reflows, and the three-button case still needs it. */}
-        {!part.wallMounted && (() => {
-          const standingOn = supportBelow();
-          // The piece it would land on, by name. `findSupportDetailed` returns only
-          // { id, y }, so the name comes from the resolved world the probe was run
-          // against — the same list, so the two cannot disagree about which piece
-          // that id is.
-          const ontoName = standingOn
-            ? (effParts.find((q) => q.id === standingOn.id)?.name ?? 'the surface below')
-            : null;
-          const cols = standingOn ? 3 : 2;
-          return (
-            <div className="rail-triple" style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 6 }}>
-              <button onClick={snapToNearestWall} className="ds-btn" title="Move to the nearest wall and face the room" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
-                <Icon name="snap-wall" size={13} /> Wall
-              </button>
-              {standingOn ? (
-                <button onClick={snapToSurface} className="ds-btn" title={`Drop onto ${ontoName}`} style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
-                  <Icon name="snap-surface" size={13} /> Surface
-                </button>
-              ) : null}
-              {/* `groundToFloor` in both cases, and it is the honest one: when there is
-                  nothing below, "put this on the floor" is the whole of what the other
-                  button did too, so labelling it Surface described a surface that is
-                  not there. */}
-              <button onClick={groundToFloor} className="ds-btn" title="Put this piece on the floor" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
-                <Icon name="snap-floor" size={13} /> Floor
-              </button>
-            </div>
-          );
-        })()}
+            Not icons-only — the other way out the user offered. Three icon+word buttons
+            at 33% is what did not fit; two at 50% does, and stripping the words to keep
+            a button that should not be there would have fixed the symptom, kept the
+            cause, and taken on an accessible-name obligation for nothing.
+
+            A wall-mounted part gets neither: it has nowhere else to be put — "Wall"
+            moves it along the wall it is already on, which reads as an action and is
+            barely one — and for the ceiling family it is worse than useless, since
+            `snapToWallPhys` would slide a ceiling fan sideways onto a wall. What those
+            parts get instead is the one number that does mean something about where
+            they sit, below.
+
+            `rail-triple` stays on the wrapper: it is the hook the elastic rail's
+            container query reflows, and the name is about that hook rather than about a
+            count — renaming it would touch the stylesheet for nothing. */}
+        {!part.wallMounted && (
+          <div className="rail-triple" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
+            <button onClick={snapToNearestWall} className="ds-btn" title="Move to the nearest wall and face the room" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
+              <Icon name="snap-wall" size={13} /> Wall
+            </button>
+            <button onClick={groundToFloor} className="ds-btn" title="Put this piece on the floor, without moving it sideways" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
+              <Icon name="snap-floor" size={13} /> Floor
+            </button>
+          </div>
+        )}
         {part.wallMounted && (
           <MountHeightRow
             key={`${id}-${currentXYZ()[1]}`}

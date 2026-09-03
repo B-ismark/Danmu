@@ -34,9 +34,9 @@ export type IconName =
   | 'rotate-ccw' | 'rotate-cw' | 'fit'
   | 'sun' | 'sunrise' | 'sunset'
   | 'moon' | 'cloud' | 'compass'
-  | 'swap' | 'shuffle' | 'snap-wall' | 'snap-floor' | 'snap-surface';
+  | 'swap' | 'shuffle' | 'snap-wall' | 'snap-floor';
 
-const MAP: Record<Exclude<IconName, 'whatsapp' | 'snap-wall' | 'snap-floor' | 'snap-surface'>, LucideIcon> = {
+const MAP: Record<Exclude<IconName, 'whatsapp' | 'snap-wall' | 'snap-floor'>, LucideIcon> = {
   'arrow-right': ArrowRight, 'arrow-left': ArrowLeft, 'arrow-up-right': ArrowUpRight,
   check: Check, x: X, plus: Plus, minus: Minus,
   camera: Camera, lock: Lock, unlock: Unlock,
@@ -73,14 +73,16 @@ export function Icon({ name, size = 16, color = 'currentColor', strokeWidth = 1.
     );
   }
   // Custom: domain-specific placement cues (no good Lucide equivalent).
-  if (name === 'snap-wall' || name === 'snap-floor' || name === 'snap-surface') {
+  if (name === 'snap-wall' || name === 'snap-floor') {
     const common = {
       width: size, height: size, viewBox: '0 0 24 24', fill: 'none' as const,
       stroke: color, strokeWidth, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, style: base,
     };
+    // `snap-surface` was the third of these — an arrow onto a shelf line — and went
+    // with the Surface button (§ B.17). A glyph with no caller is dead plumbing wearing
+    // a feature's name, and this file is exactly where that goes unnoticed.
     if (name === 'snap-wall') return <svg {...common}><path d="M5 4v16M21 12H10M13 8l-3 4 3 4" /></svg>;
-    if (name === 'snap-floor') return <svg {...common}><path d="M12 3v10M8 11l4 4 4-4M4 20h16" /></svg>;
-    return <svg {...common}><path d="M12 3v7M9 8l3 3 3-3M5 14h14" /></svg>;
+    return <svg {...common}><path d="M12 3v10M8 11l4 4 4-4M4 20h16" /></svg>;
   }
 
   const Cmp = MAP[name] ?? Circle;
