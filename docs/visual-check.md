@@ -318,6 +318,50 @@ one dim to both functions); three round shapes drew a circle where the plan draw
 ellipse; and `window` and `radiator` were members of the class nobody had listed. The
 gate itself was per-row, so an empty table passed every assertion in it.
 
+### The Inspector now says where the selected piece stands — branch `fix/inspector-placement-agrees-with-the-report`, PR pending
+
+**Where to click.** Select any piece. A banner sits above the decorating controls,
+between the name and the Colour row. Then work through the states, because each is a
+different sentence and only one of them is common:
+
+| do this | it should say |
+|---|---|
+| select a chair standing on the floor | **On floor** · "Standing on the floor." |
+| select a lamp on a table | **On ‹table›** · "Resting on ‹table›." |
+| drag that lamp up off the table | **Floating** · "Nothing is holding it up…" |
+| select a TV or a curtain | **Wall-mounted** · "Attached to the room shell." |
+| push a piece through a wall | the ROOM REPORT's own words for that finding |
+| push a dining chair under its table | **On floor** — NOT "Blocked" |
+
+**The last row is the whole point.** `collidesAt` calls a tucked chair a collision and
+the room report does not, deliberately — twenty seeded pairs behind that. The banner
+sides with the report, so a seeded dining set must not light up red.
+
+**What wrong looks like.**
+
+- **A red banner on the app's own seeded furniture.** Open a fresh room from the layout
+  picker and click each piece in turn. Anything red on an arrangement the app just made
+  is either the defect back or a genuine finding Room check is also making — check the
+  left rail's chip agrees. If the chip says the room is fine and the banner is red, that
+  is exactly § 37.
+- **Contrast.** The success state is `--success-text` on `--paper-0`, and that pair has
+  never been checked by eye or by `tests/color-tokens.test.ts`, which cannot see this
+  element. The danger state is `--danger-text` on `--danger-tint`.
+- **A long finding title spilling the rail.** The banner shows the report's own `title`
+  and `detail`, which are written for a wider panel. `minWidth: 0` and
+  `overflowWrap: anywhere` are on the text, and the rail is `overflow: hidden`, so a
+  spill here would be silent. Drag the right rail to its narrowest with a piece that has
+  a finding selected.
+- **A screen reader narrating a drag.** `role="status"` with no `aria-live` is
+  deliberate; the pair re-announced on every position write. Worth one pass with a
+  reader to confirm selecting a piece announces once and dragging does not chatter.
+
+**What does not need re-deriving.** The agreement with Room check is gated by
+`tests/placement-banner.test.tsx`, which mounts the real plan page and compares the two
+surfaces — including the tucked-chair case, with the premise asserted. `restingOn` has
+eleven clauses of its own. Reverting the banner to `collidesAt`, collapsing `restingOn`
+into `findSupportDetailed`, and restoring `aria-live` each go red.
+
 ## Layout and Shuffle
 
 *Owner: `layout`. The Shuffle item was a look rather than a check, and the look was taken on
