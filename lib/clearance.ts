@@ -20,7 +20,7 @@ import type { ScenePart } from './scene-spec';
 // Type-only, so a pure module does not gain a runtime dependency on the store —
 // `lib/units.ts` takes `DimUnit` from there the same way.
 import type { DimUnit } from './store';
-import { formatLength, type RoundDir } from './units';
+import { formatArea, formatLength, type RoundDir } from './units';
 import { roomContainment, type Footprint } from './footprint';
 import {
   faceClearance,
@@ -107,8 +107,16 @@ export type AnalyzeOptions = {
    *  the two callers who never show a finding to anyone — `lib/fit-check.ts` and
    *  `lib/layout-shuffle.ts`, which read `rule` and the issue key — on the sentences
    *  they have always produced, so a solver comparison cannot start depending on what
-   *  the user has selected in Settings. `components/studio/RoomTools.tsx` is the one
-   *  caller that renders `detail`, and it passes the real unit. */
+   *  the user has selected in Settings.
+   *
+   *  `components/studio/RoomTools.tsx` is the one caller that CALLS this with a unit,
+   *  and it passes the real one. It is not the one place a `detail` is rendered —
+   *  `Inspector.tsx`'s placement banner renders `worst.detail` too. That is correct as
+   *  it stands, because the banner reads the same memoised `useRoomReport()` rather
+   *  than analysing again, but the distinction is the whole point: **the invariant is
+   *  one ANALYSIS per unit, not one renderer.** A second component that renders a
+   *  finding is fine; a second component that calls `analyzeRoom` without `dimUnit` is
+   *  the defect, and `tests/report-unit-callers.test.ts` is what sweeps for it. */
   dimUnit?: DimUnit;
 };
 
@@ -268,8 +276,24 @@ export function analyzeRoom(
    *  Everything in this file measures in metres and every finding used to render
    *  `Math.round(x * 100)` followed by a literal `cm`, in fifteen places. One helper
    *  instead, so the unit cannot be right in fourteen sentences and wrong in the
-   *  fifteenth, and so `precisionFor` decides the decimals rather than each site. */
+   *  fifteenth, and so `precisionFor` decides the decimals rather than each site.
+   *
+   *  **It was right in fourteen and wrong in two on the first pass, and the way that
+   *  happened is worth more than the fix.** The sweep was verified by grepping `} cm`
+   *  and finding none left — but the two TV sentences never said `cm`. They said
+   *  `${x.toFixed(1)} m`, because a viewing distance is naturally metres, so the grep
+   *  that confirmed the sweep was structurally blind to the sites that were wrong.
+   *  A search for the OLD spelling only finds the sites that used it; the question
+   *  "which sentences state a length" is a different question, and the answer is every
+   *  `detail:` in this function. Read them, do not grep them. */
   const len = (metres: number, dir?: RoundDir) => formatLength(metres * 1000, opts.dimUnit ?? 'cm', dir);
+
+  /** A floor area for a sentence, paired with whatever `len` is speaking.
+   *
+   *  Exactly one finding states one (`cut-off`), and before this it said `m²` beside a
+   *  length in feet. `formatArea` decides the pairing — ft² for the imperial units, m²
+   *  for the rest — rather than squaring the unit, which would give `in²`. */
+  const area = (m2: number) => formatArea(m2, opts.dimUnit ?? 'cm');
 
   const solid = floorBlockers(parts);
   const obbs = new Map<string, Foot>();
@@ -654,7 +678,10 @@ export function analyzeRoom(
         rule: 'tv',
         severity: 'warn',
         title: 'Sitting too close to the TV',
-        detail: `“${nearest.name}” is ${nd.toFixed(1)} m from the ${Math.round((diag / 0.0254) * 10) / 10}″-class screen — comfortable viewing starts around ${(diag * 1.2).toFixed(1)} m.`,
+        // The ″ stays. A screen diagonal is quoted in inches worldwide — "a 55-inch
+        // TV" is the product's name, not a measurement the user chose a unit for —
+        // while the two DISTANCES are room measurements and convert like every other.
+        detail: `“${nearest.name}” is ${len(nd)} from the ${Math.round((diag / 0.0254) * 10) / 10}″-class screen — comfortable viewing starts around ${len(diag * 1.2)}.`,
         partIds: [tv.id, nearest.id],
       });
     } else if (nd > diag * 3.2) {
@@ -663,7 +690,7 @@ export function analyzeRoom(
         rule: 'tv',
         severity: 'info',
         title: 'TV may feel small from the seat',
-        detail: `“${nearest.name}” sits ${nd.toFixed(1)} m away — ideal range for this screen is ${(diag * 1.2).toFixed(1)}–${(diag * 2.5).toFixed(1)} m.`,
+        detail: `“${nearest.name}” sits ${len(nd)} away — ideal range for this screen is ${len(diag * 1.2)}–${len(diag * 2.5)}.`,
         partIds: [tv.id, nearest.id],
       });
     }
@@ -865,7 +892,7 @@ export function analyzeRoom(
         rule: 'cut-off',
         severity: 'info',
         title: 'Part of the floor is cut off',
-        detail: `About ${cutOff.toFixed(1)} m² of floor has no route to the door wider than ${len(MIN_WALKWAY)}.`,
+        detail: `About ${area(cutOff)} of floor has no route to the door wider than ${len(MIN_WALKWAY)}.`,
         partIds: [],
       });
     }

@@ -206,13 +206,29 @@ describe('the Inspector placement row shows the buttons that do something', () =
     // `groundToFloor`. This is also the operation whose absence from `drag-resolve` is
     // the reason the row was not deleted outright — the wall snap there is gated on
     // `ridesWall`, and a lamp is not in that family.
-    setUp([lamp(0)]);
+    // A deliberately crooked starting angle, and it is the whole assertion below.
+    //
+    // The lamp used to start at `rot: 0` under an `expect(…).toBeDefined()`, which
+    // cannot fail for a WRONG rotation: `setRotation(id, part.rot)` writes 0, the
+    // override exists, and the check is green. Mutating `Inspector.tsx`'s
+    // `setRotation(id!, snapped.rot)` to `setRotation(id!, part!.rot)` passed — so the
+    // half of Wall this file's header argues it survived § B.17 *for* was the half
+    // nothing guarded. 0.7 rad is not a multiple of π/2, so no wall can legitimately
+    // produce it and writing the start value back is now red.
+    const crooked = 0.7;
+    setUp([{ ...lamp(0), rot: crooked }]);
     render(<PlanPage />);
     fireEvent.click(screen.getByRole('button', { name: 'Wall' }));
     const s = useStudio.getState();
     const moved = s.positions[LAMP]!;
     expect(Math.abs(moved[0]) > 1.5 || Math.abs(moved[2]) > 1.2, `moved to a wall: ${moved.join(', ')}`).toBe(true);
-    expect(s.rotations[LAMP], 'and turned to face the room').toBeDefined();
+    const turned = s.rotations[LAMP];
+    expect(turned, 'and turned to face the room').toBeDefined();
+    expect(turned, 'the start angle was written back rather than the wall’s').not.toBeCloseTo(crooked, 3);
+    // A wall in a rectangular room faces one of four ways, so the snapped angle is a
+    // quarter turn. This is what "faces the room" means in a number.
+    const quarters = Math.abs(turned! / (Math.PI / 2));
+    expect(quarters, `${turned} is not a quarter turn`).toBeCloseTo(Math.round(quarters), 5);
   });
 
   it('gives a wall-mounted piece none of them', () => {

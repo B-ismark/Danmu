@@ -418,7 +418,27 @@ describe('formatLength', () => {
   // decimals. `mm` itself never grows at all, which is the cap being derived working.
   it('stops at one millimetre of resolution', () => {
     expect(formatLength(0.4, 'mm'), 'mm has no room to grow, and should not').toBe('0 mm');
-    expect(formatLength(0.0004, 'm').split(' ')[0].length).toBeLessThanOrEqual(6);
+    // The cap is `precisionFor(unit)` plus enough places to resolve one millimetre, and
+    // this pins the ARRIVAL rather than a bound the arrival is comfortably inside.
+    // It used to read `.length).toBeLessThanOrEqual(6)` against a real value of `"0"` —
+    // length 1 against a ceiling of 6, which only fires if the cap grows by five places
+    // and is killed by the line above for every mutation anyone would actually make.
+    // A bound with four decades of slack is decoration wearing an assertion's shape.
+    expect(formatLength(0.0004, 'm'), 'four decades below a metre is below the cap').toBe('0 m');
+    expect(formatLength(1, 'm'), 'one millimetre is exactly what the cap funds').toBe('0.001 m');
+    expect(formatLength(0.9, 'm'), 'and one place further is not').toBe('0.001 m');
+    // …the same threshold, one unit over, to show the cap is derived and not typed:
+    // a foot is 304.8 mm, so `ft` funds three extra places where `m` funds one.
+    expect(formatLength(1, 'ft')).toBe('0.003 ft');
+    // The cap is `round(log10(mmPerUnit))`, so it lands on whole decades and OVER-funds
+    // a unit whose size is not one: a foot is 304.8 mm and gets three extra places where
+    // two would resolve a millimetre. Pinned as what it is rather than as what the
+    // sentence above it would suggest — 0.03 mm in feet still renders, and it takes a
+    // hundredth of that to reach the floor. Over-funding is harmless (the loop stops the
+    // moment the number is non-zero) and pretending otherwise here would be a claim the
+    // code does not make.
+    expect(formatLength(0.03, 'ft'), 'the ft cap funds three places, not two').toBe('0.0001 ft');
+    expect(formatLength(0.01, 'ft'), 'and this is where even ft gives up').toBe('0 ft');
   });
 
   // The band ends. `down` and `up` widen the reported interval, which is what stops a

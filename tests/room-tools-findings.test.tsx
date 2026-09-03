@@ -159,8 +159,15 @@ describe('the room panel renders the finding lib/clearance.ts computed', () => {
   ] as [DimUnit, string][])('writes the finding in %s, and re-renders when the unit changes', (u, shown) => {
     render(<RoomTools />);
     fireEvent.click(screen.getByRole('button', { name: /issue/ }));
-    // Starts in metres (the `beforeEach`), then switches — so a cached sentence in the
-    // old unit is what fails, not a fresh render that never had to change its mind.
+    // Switch AWAY first, then to the unit under test — so every row exercises a real
+    // change of unit against a warm cache.
+    //
+    // It used to switch straight from the `beforeEach`'s metres, which made the `'m'`
+    // row a no-op: `setState({ dimUnit: 'm' })` over `'m'` changes nothing, so that row
+    // never touched the cache key and passed on the first render's sentence. Removing
+    // `dimUnit` from `cachedReport`'s key reddened cm, ft and in — and left m green.
+    // One vacuous row in four reads as a covered case and is not one.
+    act(() => useSettings.setState({ dimUnit: u === 'cm' ? 'm' : 'cm' }));
     act(() => useSettings.setState({ dimUnit: u }));
     expect(doorFloor(u), 'the fixture is the formatter, not a hand-typed string').toBe(shown);
     expect(screen.getByText(new RegExp(`does not go any shorter than ${shown.replace('.', '\\.')}`))).toBeTruthy();

@@ -244,9 +244,23 @@ function atDecimals(v: number, dp: number, dir: RoundDir): string {
  *  one millimetre, which is the resolution everything here is stored at. For `mm`
  *  itself that is zero extra places, and the loop never runs.
  *
+ *  **The guarantee is exactly that wide and no wider**, which matters because the
+ *  sentence above it is the kind that gets quoted back as though it were absolute.
+ *  A value at or above one millimetre, rounded to `nearest`, always renders non-zero.
+ *  Below one millimetre it does not, and cannot: at `mm` the cap is the base precision,
+ *  so `formatLength(0.4, 'mm')` is `0 mm` — sub-millimetre is under the resolution
+ *  everything here is stored at, and inventing a decimal would be claiming a precision
+ *  nothing measured. A directional round is narrower still, because flooring costs a
+ *  place: 0.2 mm at `in`/`down` needs three decimals and the cap allows two, so it is
+ *  `0 in`. No caller reaches either — `lib/clearance.ts` measures gaps and depths in
+ *  metres and never asks for a sub-millimetre one — and the cap is deliberately not
+ *  widened to cover a caller that does not exist.
+ *
  *  Lengths in findings are non-negative, so `down` and `up` are also "narrower" and
  *  "wider"; on a negative value they would be floor and ceil, which is not what a band
- *  end would want. No caller has one. */
+ *  end would want. No caller has one. What a negative value must never do is print
+ *  `-0`: `(-0.4).toFixed(0)` is `"-0"`, and a minus sign on a zero reads as a direction
+ *  the number does not have. */
 export function formatLength(valueMM: number, unit: DimUnit, dir: RoundDir = 'nearest'): string {
   const v = fromMM(valueMM, unit);
   const base = precisionFor(unit);
@@ -254,12 +268,36 @@ export function formatLength(valueMM: number, unit: DimUnit, dir: RoundDir = 'ne
   let dp = base;
   let s = atDecimals(v, dp, dir);
   while (valueMM !== 0 && Number(s) === 0 && dp < max) s = atDecimals(v, ++dp, dir);
+  // A rendering that rounded to zero carries no sign, whatever the input's was.
+  if (Number(s) === 0) s = s.replace('-', '');
   return `${trimZeros(s)} ${unit}`;
 }
 
 /** `1.90` → `1.9`, `198.0` → `198`, `0.004` → `0.004`, `240` → `240`. */
 function trimZeros(s: string): string {
   return s.includes('.') ? s.replace(/0+$/, '').replace(/\.$/, '') : s;
+}
+
+const SQ_FT_PER_SQ_M = 1 / 0.09290304;
+
+/** A FLOOR AREA as it belongs in a sentence, paired with the length unit beside it.
+ *
+ *  It exists because `formatLength` created a new disagreement one sentence over while
+ *  fixing the old one: *"About 1.5 m² of floor has no route to the door wider than
+ *  2.95 ft"* — the length converted and the area did not.
+ *
+ *  **An area unit is not the length unit squared, and that is the whole decision.**
+ *  Squaring mechanically gives `in²` and `mm²` for a room floor, and *"about 2323 in²
+ *  of floor"* is a true statement nobody can picture. Floors are quoted in **square
+ *  feet or square metres** and in nothing else, so the five length units collapse onto
+ *  two: `ft` and `in` read ft², everything else reads m². Someone who set inches did so
+ *  to size a shelf, not to be told their floor in square inches.
+ *
+ *  One decimal, then trimmed like `formatLength`, for the same reason: this is prose. */
+export function formatArea(valueM2: number, unit: DimUnit): string {
+  const imperial = unit === 'ft' || unit === 'in';
+  const v = imperial ? valueM2 * SQ_FT_PER_SQ_M : valueM2;
+  return `${trimZeros(v.toFixed(1))} ${imperial ? 'ft²' : 'm²'}`;
 }
 
 export const UNIT_OPTIONS: { id: DimUnit; label: string }[] = [
