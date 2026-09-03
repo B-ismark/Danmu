@@ -3689,8 +3689,11 @@ points where an arrangement is CHOSEN rather than searched:
   · `lowestTotal` in `lib/layout-solve.ts`, which picks which finalist becomes the
     suggestion. `SolveOptions.pick` already exists as the seam for substituting a ranker, so
     a lexicographic default costs one function and no landscape change.
+    *(It is called `bestCandidate` now, and it does do this — see BUILT below.)*
   · `anyWorse` over `HARD_TERMS` already keeps the hard terms apart in the finish passes —
     the veto's shape is there, it is just unordered.
+    *(Wrong, and left standing as the plan's own error: both its call sites are in
+    `snapYaws`, a cosmetic tidy. Nothing was changed there — see BUILT below.)*
 
 **The honest limit of that**, to be written down rather than discovered later: ranking
 finalists can only choose among what the search kept. If every finalist has a piece outside,
