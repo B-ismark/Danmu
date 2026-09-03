@@ -9,10 +9,14 @@ import { PartLight } from './PartLight';
 import { SURFACE } from './materials';
 import { Spin, Sway } from './Motion';
 import {
+  consoleSlabs,
+  doorHandleY,
+  drawerSlide,
   fanBlade,
   fanColumn,
   pendantDrop,
   isParametric,
+  stoolSeat,
   moduleCount,
   moduleRangeFor,
   type ModuleRange,
@@ -135,7 +139,7 @@ function ShapeDispatch({ part, locked }: { part: ScenePart; locked: boolean }) {
     case 'side-table':
       return <SideTableGeo part={part} locked={locked} />;
     case 'nightstand':
-      return <NightstandGeo part={part} locked={locked} />;
+      return <NightstandGeo part={p} locked={locked} />;
     case 'ottoman':
       return <OttomanGeo part={part} locked={locked} />;
     case 'mirror':
@@ -151,7 +155,7 @@ function ShapeDispatch({ part, locked }: { part: ScenePart; locked: boolean }) {
     case 'ac-unit':
       return <ACUnitGeo part={part} locked={locked} />;
     case 'door':
-      return <DoorGeo part={part} />;
+      return <DoorGeo part={p} />;
     case 'monitor':
       return <MonitorGeo part={part} />;
     case 'fan':
@@ -177,9 +181,9 @@ function ShapeDispatch({ part, locked }: { part: ScenePart; locked: boolean }) {
     case 'chest-freezer':
       return <ChestFreezerGeo part={part} locked={locked} />;
     case 'tv-console':
-      return <TvConsoleGeo part={part} locked={locked} />;
+      return <TvConsoleGeo part={p} locked={locked} />;
     case 'stool':
-      return <StoolGeo part={part} locked={locked} />;
+      return <StoolGeo part={p} locked={locked} />;
     case 'box':
       return <BoxGeo part={part} locked={locked} />;
     case 'cylinder':
@@ -894,7 +898,7 @@ function NightstandGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   // Double-click toggles drawers open; slide the faces (+ pulls + a shallow
   // drawer box) forward along +z.
   const open = useStudio((s) => s.openState[part.id] ?? 0);
-  const slide = open * Math.min(0.18, d * 0.6);
+  const slide = open * drawerSlide(part.dimMM[1]);
   return (
     <>
       {/* carcass */}
@@ -1110,7 +1114,7 @@ function DoorGeo({ part }: { part: ScenePart }) {
     <>
       <Box size={[w, h, 0.04]} position={[0, 0, 0]} color={tint(part)} />
       {/* handle at ~1 m from the floor, i.e. 1 m up from the panel's bottom edge */}
-      <mesh position={[w / 2 - 0.06, -h / 2 + Math.min(1.0, h * 0.45), 0.025]}>
+      <mesh position={[w / 2 - 0.06, -h / 2 + doorHandleY(part.dimMM[2]), 0.025]}>
         <sphereGeometry args={[0.025, 12, 12]} />
         <meshStandardMaterial color="#B89060" />
       </mesh>
@@ -1323,8 +1327,7 @@ function TvConsoleGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
   const c = body(part, locked);
-  const t = Math.min(0.03, h * 0.08);
-  const foot = Math.min(0.06, h * 0.14);
+  const { top: t, foot } = consoleSlabs(part.dimMM[2]);
   return (
     <>
       <Box size={[w, t, d]} position={[0, h - t / 2, 0]} color={c} roughness={0.45} />
@@ -1344,7 +1347,7 @@ function StoolGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const h = part.dimMM[2] / 1000;
   const r = w / 2;
   const c = body(part, locked);
-  const seat = Math.min(0.05, h * 0.12);
+  const seat = stoolSeat(part.dimMM[2]);
   return (
     <>
       <mesh position={[0, h - seat / 2, 0]}>

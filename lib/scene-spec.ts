@@ -301,6 +301,54 @@ export function pendantDrop(widthMM: number, heightMM: number): {
   };
 }
 
+// ─── § 36's remaining caps ──────────────────────────────────────────────
+//
+// In one place, for the reason `fanBlade` established: arithmetic that lives only
+// inside a TSX renderer is arithmetic no test can reach.
+//
+// Each of these is a `min(absolute, proportion)` — a real-world size that must not
+// grow with the piece, floored by a proportion so a short piece does not get a detail
+// thicker than itself. That shape is exactly what a group scale destroys, so every
+// shape below is in `PARAMETRIC_SHAPES` and `tests/parametric-caps.test.ts` says why.
+//
+// These are smaller violations than the fan and the pendant — 1.5x to 1.6x rather
+// than 4x, and cosmetic where those two were structural. They are here because the
+// class is the finding: an absolute constant in a non-parametric renderer is the
+// defect, and choosing which instances to fix by how ugly they look is how the next
+// one gets missed.
+//
+// A `//` header rather than a docblock, because a docblock immediately above another
+// docblock documents nothing — `tests/docblock-adjacency.test.ts` gates exactly that,
+// and caught this one.
+
+/** A TV console's top slab and its plinth, in metres. 30 mm and 60 mm are joinery,
+ *  not proportions of the piece. */
+export function consoleSlabs(heightMM: number): { top: number; foot: number } {
+  const h = heightMM / 1000;
+  return { top: Math.min(0.03, h * 0.08), foot: Math.min(0.06, h * 0.14) };
+}
+
+/** A stool's seat thickness, in metres. 50 mm is a seat pad. */
+export function stoolSeat(heightMM: number): number {
+  return Math.min(0.05, (heightMM / 1000) * 0.12);
+}
+
+/** How far a nightstand's drawer slides when fully open, in metres. 180 mm is a
+ *  drawer runner; the proportion is what stops a shallow cabinet's drawer sliding
+ *  further than the cabinet is deep. */
+export function drawerSlide(depthMM: number): number {
+  return Math.min(0.18, (depthMM / 1000) * 0.6);
+}
+
+/** A door handle's height above the floor, in metres. A handle is at a hand's
+ *  height, which is a fact about people rather than about the door — so a taller
+ *  door does not get a higher handle, it gets the same handle further from its top.
+ *  The proportion catches a door short enough that 1 m would be above its own
+ *  midpoint. */
+export function doorHandleY(heightMM: number): number {
+  return Math.min(1.0, (heightMM / 1000) * 0.45);
+}
+
 /** Where the bulb sits inside each fixture, in the part's local metres. These
  *  track the geometry in DynamicPart — a light at the origin would sit on the
  *  floor and illuminate the inside of its own shade.
@@ -1760,6 +1808,12 @@ export const DND_MIME = 'application/x-danmu-item';
 const PARAMETRIC_SHAPES = new Set<Shape>([
   'sofa', 'curtain', 'wardrobe', 'closet', 'bookshelf', 'shoe-rack',
   'fan', 'lamp-pendant',
+  // …and the rest of § 36's class: `consoleSlabs`, `stoolSeat`, `drawerSlide` and
+  // `doorHandleY` are all `min(absolute, proportion)`, which is the shape a group
+  // scale destroys. Smaller violations than the two above — 1.5x to 1.6x, and
+  // cosmetic — but the same defect, and picking which to fix by how ugly they look is
+  // how the next one gets missed.
+  'tv-console', 'stool', 'nightstand', 'door',
 ]);
 export function isParametric(shape: Shape): boolean {
   return PARAMETRIC_SHAPES.has(shape);
