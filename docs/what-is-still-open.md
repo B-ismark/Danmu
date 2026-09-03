@@ -18,10 +18,27 @@ point of writing this down.
 ## The queue — what is open, in the order it should be done
 
 **Re-derive before trusting this.** It is an ordering of the sections below, rewritten
-**2026-09-03** against `origin/main` @ `e0c484a`; the sections themselves are the source and
+**2026-09-03** against `origin/main` @ `35b702f`; the sections themselves are the source and
 they say whether each item exists in a commit. An item disappears from here when its section
 says FIXED — the struck-through rows this table used to carry are gone, because a queue that
 keeps its own history stops being readable as a queue.
+
+**This rewrite added five rows that were open the whole time and this table did not list**
+— § B.12, § B.14, § B.17, § A.3's script and § A.4 — which is the failure mode a queue has:
+it is read as the inventory, so an item absent from it is not deferred, it is *forgotten*.
+One of the five (§ B.17) is a decision the **user already answered** and nobody built. The
+lesson is narrower than "re-derive": a table built by ranking the sections someone
+remembered will omit exactly the sections they did not, and § B — the decisions — is the
+section least likely to be re-read, because nothing in it looks like work.
+
+**Two rows also said something false rather than nothing:** A.7's *197 in 240* was the
+figure from before its own fix shipped, and § E's *"the bucket is not [in]"* predates six of
+the nine component test files that now exist. Both were quoted forward for weeks.
+
+**The baseline every row's numbers should be compared against**, measured at `35b702f` on
+2026-09-03: `typecheck` and `lint --max-warnings 0` clean, `build` clean in 118 s with no
+`Invalid Options` tell, and the suite **3 failed / 2146 passed / 5 expected-fail** over 118
+files in 265 s — where all three reds pass in isolation. See row 3.
 
 **Closed since the last rewrite, so nobody re-opens them:** § 14, § 17, § 18, § 31, § 32,
 § 33.1, § 34, § 35, § 36 and § 37. All ten are in `main`; the last five landed as PRs
@@ -29,37 +46,50 @@ keeps its own history stops being readable as a queue.
 that is [`visual-check.md`](visual-check.md)'s list, not this one.
 
 **And branch hygiene, which was row 14 of this table until 2026-09-03, is done.** Every stale
-ref is gone, `fix/pointer-cancel-note` included, after the per-line pass it had been waiting
-five sessions for. § 38.2 carries the verdicts and § 38.4 the method.
+*remote* ref is gone, `fix/pointer-cancel-note` included, after the per-line pass it had been
+waiting five sessions for. § 38.2 carries the verdicts and § 38.4 the method. What is left is
+local-only litter and not a thinking item: dead `gate*` / `pr*` / `zz-*` branch pointers in
+this checkout, and § D's eight stale gate worktrees in temp directories. Check file mtimes
+before touching any worktree — absence from a session listing is not a dead session.
 
 Ranked by three things together, not by any one of them: **criticality** (does a user
 hit it), **ease** (is it an afternoon or a measurement campaign), and **dependence** —
 which is what moves several of these off the position their severity alone would give
 them. Where two items are the same defect one layer apart, they are listed as one.
+**This ordering is the agreed execution order**, not merely a ranking: rows 1–3 are the
+unblockers (one first-run defect and the two measurements everything downstream quotes),
+rows 4–10 are the small user-visible items, rows 11–14 are the solver and collision work,
+and rows 15–18 are infrastructure and completeness. The eyes list is
+[`visual-check.md`](visual-check.md) and runs alongside, not after.
 
 | # | item | why here | cost | blocks / blocked by |
 |---|---|---|---|---|
 | 1 | **G.1** a brand-new room seals its own routes at the size the app ships | Measured, real, and a **first-run** defect — the worst kind to leave. § 31 unblocked it, and also changed what the solver may return, so re-measure rather than trusting G.1's numbers | M | was blocked by § 31 — free now |
-| 2 | **§ 12** a rider keeps the size the room was BUILT at, after a reload | Confirmed by eye, and the user has already chosen the repair — derive at read time, write nothing (§ B.16). An attempt at the OTHER option was built and reverted, so read § 12 before starting. § 37's `restingOn` is the first gate it has ever had | M | **blocked on § 33.3** — B.16's stated cost is that the derivation runs on every read, and the render budget is unmeasured |
-| 3 | **§ 38.1** the confined "Try a fix" refusal is unreachable | New, and a decision rather than a defect: 212 confined solves over every finding of every preset declined **zero** times, so neither the copy added by § 31 nor the one shipping beside it for months has ever rendered | S — mostly a judgement | nothing |
-| 4 | **A.7** `snapYaws` leaves the piece crooked in 197 of 240 solves | Measured, visible, and nobody has decided whether it matters | M | a symptom of § H.6; fixable alone, but check § 31 did not change what a finalist is |
-| 5 | **§ 33.3** the render budget is unmeasured | Blocks any answer to "how detailed may a shape be", which was asked directly, and blocks § 12's chosen repair | M — needs a throttled device | blocks nothing shipping; blocks § 12 and a decision |
-| 6 | **§ H.8** two reports that need a real repro | A group drag bounded by the lead's rules rather than the set's, and a merged set that drills in from a nightstand but never from the bed. Both are DOM-reachable on the 2D plan, which is the cheap way in | M | nothing |
-| 7 | **§ H.6** Suggest, from the ground up — the user's explicit ask | The largest open thing here, and it **subsumes** A.2, A.3, A.7 and G.2. Three things are missing and each maps to one of the user's four observations: nothing prices support, nothing prices a relation between two pieces, and a group is not a unit | XL — research first | wants G.1 and A.7 measured first, since both are its symptoms |
-| 8 | **§ H.7** collision, properly — the user is open to replacing the engine | Every piece is one box or one ellipse, so a sofa's L, a table's legs and a plant's canopy are all the same rectangle. The research scope is the user's own words | XL — research first | independent of § H.6, but they meet |
-| 9 | **§ 33.2** the on-device detector cannot name the four newest shapes | Needs a 50 MB re-export and a digest re-pin on a Python toolchain | L, and mostly not code | the cloud path already handles them, so this is a completeness item |
-| 10 | **§ H.3** every Library click drops its piece at the room centre, facing the same way | A product decision with at least three defensible answers, and picking one quietly inside a defect fix is how the last one got here. The false comment beside it is already fixed | S once decided | needs the user |
-| 11 | **§ H.10** undo / redo should cover selection | The user asked for it. The consequence worth stating before building it is that one press per click on the way back is why most tools do not do this — a separate history, or coalesced runs, is their call | M | needs the user |
-| 12 | **A.2 / G.2 / G.3** variety in Shuffle, the anchor-first trade, the two help cards | Real, but none is a defect a user has reported, and the first two are § H.6's symptoms | varies | after § H.6 decides whether they still exist |
-| 13 | **E** the jsdom component bucket | The harness is in and the bucket is not. Infrastructure, so it pays off across every item above — but it has paid off least when done first. § 37's `tests/placement-banner.test.tsx` is the newest file to use it and mounts a whole page | L | none |
+| 2 | **§ 33.3** the render budget is unmeasured | Blocks any answer to "how detailed may a shape be", which was asked directly, and blocks § 12's chosen repair. Nothing in the repo reads `renderer.info`, so this is new instrumentation and it lives in the browser probe — jsdom has no WebGL | M — needs a throttled device | blocks nothing shipping; **blocks row 4** and a decision |
+| 3 | **§ A.4** the timing bounds may simply be too tight | Promoted out of § A, where it sat unranked. **Measured 2026-09-03 at `35b702f`:** the full suite is 3 failed / 2146 passed / 5 expected-fail, and **all three reds pass alone** — `layout-solve.test.ts:671` (`< 2000 ms`), `shuffle-gate.test.ts:248` and `where-it-sits.test.tsx:108` (both default 5 s). Nothing else was running, so this is vitest's **own** parallelism, not another session: the local suite is unreliable against itself here, which is a stronger claim than "trust CI" | M | **blocks trust in every local gate**, which is every row below |
+| 4 | **§ 12** a rider keeps the size the room was BUILT at, after a reload | Confirmed by eye, and the user has already chosen the repair — derive at read time, write nothing (§ B.16). An attempt at the OTHER option was built and reverted, so read § 12 before starting. § 37's `restingOn` is the first gate it has ever had. Also floats **in-session**: `setDim` settles nothing, ever | M | **blocked on row 2** — B.16's stated cost is that the derivation runs on every read |
+| 5 | **§ B.12** Room check speaks centimetres to a user who set metres, feet or inches | **This table omitted it until 2026-09-03.** 15 hard-coded `Math.round(x*100)` sites in `lib/clearance.ts`, rendered verbatim at `RoomTools.tsx:968`, while `dimUnit` defaults to `'m'` — so the shipping default disagrees with itself: the field says `1.9 m`, the finding beside it says `190 cm` | S once decided | needs the user |
+| 6 | **§ 38.1** the confined "Try a fix" refusal is unreachable | A decision rather than a defect: 212 confined solves over every finding of every preset declined **zero** times, so neither the copy added by § 31 nor the one shipping beside it for months has ever rendered | S — mostly a judgement | nothing |
+| 7 | **§ B.17** the placement row — dragging a piece off a surface should DROP it | **Omitted until 2026-09-03, and it is the one the user has already ANSWERED**: *"dragging would work"*, the middle option, keep the operations and drop the row. NOT BUILT. Today dragging a lamp off a table moves it sideways, which is the whole reason the row exists | M | nothing — the decision is made |
+| 8 | **§ H.3** every Library click drops its piece at the room centre, facing the same way | A product decision with at least three defensible answers, and picking one quietly inside a defect fix is how the last one got here. The false comment beside it is already fixed | S once decided | needs the user |
+| 9 | **§ H.8** two reports that need a real repro | A group drag bounded by the lead's rules rather than the set's, and a merged set that drills in from a nightstand but never from the bed. Both are DOM-reachable on the 2D plan, which is the cheap way in | M | wants row 15's shims |
+| 10 | **§ B.14** a turn that puts a corner through the wall — keep and report, or refuse? | **Omitted until 2026-09-03.** Two documents in this repo call the same outcome the contract and the defect, and the two paths really do differ: `spinSelection` writes `setRotation` with no containment resolve, the R gizmo goes through `resolveDrag`, which contains | S once decided | **must be settled before its own eyes-item is looked at** — verifying against the wrong expectation is worse than not verifying |
+| 11 | **§ H.6** Suggest, from the ground up — the user's explicit ask | The largest open thing here. It **subsumes** A.2, A.3's `:555`, A.7 and G.2, and the 5 parked `it.fails` retire here too. **It is NOT un-researched** — `docs/research/suggest-and-collision.md` is a three-layer design whose four questions to the user are all ANSWERED, including the feasibility split being in scope. Of the three things this section calls missing, **only one is** (support); facing is priced by `relationCost`, and groups move rigidly already | XL — refresh the research against `main`, then execute its rows | wants row 1 measured first, since it is a symptom |
+| 12 | **§ H.7** collision, properly — the user is open to replacing the engine | Every piece is one box or one ellipse, so a sofa's L, a table's legs and a plant's canopy are all the same rectangle. Same research doc, rows 4a/4b — and 4b is **half done** (`verticalExtent` makes ONE extent right; more than one still needs 4a). Carries a duplication the doc found and nobody retired: **six hand-written copies** of the vertical-extent rule in five files | XL | independent of row 11, but they meet |
+| 13 | **A.7** `snapYaws`' residual — 40 crooked pieces in 240 solves | **The 197 was BEFORE the fix**, which shipped in `fa12f1a`; this row said 197 for weeks and § A.7's own heading said it too. What is left is the residual, and § A.7 already says what it needs: a search that can move the piece **and** its neighbour, which a finish pass cannot do | M | **a symptom of row 11 and only closable there** |
+| 14 | **A.2 / G.2 / G.3** variety in Shuffle, the anchor-first trade, the two help cards | Real, but none is a defect a user has reported. A.2's number is measured (penalty 4, range 2–8, in cost units) and **nothing pins it** — a test that fails at `diversityPenalty: 0` is still owed. G.2 stays a decision: gating a pass on room shape trades one preset's tail for another's | varies | after row 11 decides whether they still exist |
+| 15 | **E** the jsdom component bucket — **further along than this section says** | Derived 2026-09-03: **9 `.test.tsx` files exist**, four mounting the whole plan page; § E's prose still describes the two-file state. What is actually left is narrower — five files hand-roll the identical `next/navigation` + `matchMedia` + `scrollIntoView` shims and `vitest.config.ts` has **no `setupFiles` at all**, so the shims want extracting; then the wiring rows above want covering | M | none — and it is how row 9 gets written |
+| 16 | **§ A.3** the standalone re-search script | **Omitted until 2026-09-03.** `:555` is 1 failing case in 1512 and needs the search, not a bar; `:327` is a cut-guard correctly reporting its fixture stopped being cut — **the fix is a genuinely cut fixture, never a relaxed guard.** An earlier attempt as a Vitest file timed out at ten minutes; it wants to be a plain Node script. **Nothing is written**, so this is the item most likely to evaporate | M | nothing |
+| 17 | **§ H.10** undo / redo should cover selection | The user asked for it. The consequence worth stating before building it is that one press per click on the way back is why most tools do not do this — a separate history, or coalesced runs, is their call | M | needs the user |
+| 18 | **§ 33.2** the on-device detector cannot name the four newest shapes | Needs a 50 MB re-export and a digest re-pin on a Python toolchain. Two things found while mapping it: **no test asserts `MODEL_DIGESTS` at all**, so a re-pin has no gate but the manual `pnpm hash:models --verify`; and nothing exercises `detectLocalAcrossImages`, `load()`, `tilesFor` or `toTensor` | L, and mostly not code | the cloud path already handles them, so this is a completeness item |
 
 **Three that are deliberately not on this list**, so nobody adds them back: the seeder
 putting a 1450 mm TV on a 1.2 m wall in the small L and T (`placeNewPart` has no
 legality test — real, but it is the *seeder*, and § C says do not grow the presets);
 anything in § C at all; and § A.5, the Vercel alias question, which is not engineering.
 
-**And one class that is not here because it is not a thinking item.** Rows 1-14 are things
-to work out or measure. What is left to *look at* — the § 36 resize rows nobody has clicked,
+**And one class that is not here because it is not a thinking item.** Every row above is a
+thing to work out or measure. What is left to *look at* — the § 36 resize rows nobody has clicked,
 the placement banner's contrast and its screen-reader pass, an old room's pendant, a fan
 flush against the slab — lives in [`visual-check.md`](visual-check.md), and an agent picking
 this up cold should read both. Neither file is a subset of the other, and § 38 below says
@@ -410,6 +440,29 @@ four sessions sharing one CPU can never trust a local suite. **Nobody has asked 
 bounds are simply too tight for a loaded machine.** Measuring the distribution and deciding
 between loosening them and marking them CI-only would retire a recurring false alarm.
 
+**First measurement taken, 2026-09-03 at `35b702f`, and it moves the diagnosis.** A full
+`pnpm test` on an otherwise idle machine — no other session, no agent running — came back
+**3 failed / 2146 passed / 5 expected-fail** over 118 files in 265 s wall, against 926 s of
+test time, so vitest was running roughly 3.5 files at once. The three:
+
+| red | bound | alone |
+|---|---|---|
+| `tests/layout-solve.test.ts:671` | `performance.now() - t0 < 2000` | passes, file in 24.8 s |
+| `tests/shuffle-gate.test.ts:248` | none of its own — the **default 5 s** `testTimeout` | passes, file in 13.3 s |
+| `tests/where-it-sits.test.tsx:108` | default 5 s, and a whole Next page mounts inside it | passes, file in 9.3 s |
+
+**So the contention is vitest's own, not another session's**, which is a different problem
+from the one this section was written about and has a different fix. Two things follow.
+`vitest.config.ts` sets **no `testTimeout`, no `pool` and no `poolOptions`**, so two of the
+three reds are the 5 s default being applied to a page mount that costs ~4 s alone — a bound
+nobody chose. And the third has a sibling worth copying rather than loosening:
+`layout-solve.test.ts:679` asserts a **ratio** (`time(30)/time(10) < 12`) instead of an
+absolute, which is exactly the shape that survives a loaded machine.
+
+**What would unblock it:** the distribution under both conditions, then per test a choice
+between a ratio, a raised timeout with the reason written beside it, and CI-only. Do not
+simply raise the numbers — a bound that cannot fail is the thing this repo keeps finding.
+
 One instance from this round is unrecoverable and is recorded as a gap rather than as a
 result: gating PR #21's merge produced `1 failed | 1482 passed`, the failing test's identity
 was lost to a follow-up run that matched nothing, and it was **never reproduced**. Two greens
@@ -471,7 +524,7 @@ is the wrong instrument for guarding a solver whose weights are still moving. A 
 safe seeds is a better instrument for exactly that reason, and it is what shipped. **Owner:
 `sizes`** — `layout` was offered it and declined.
 
-### 7. `snapYaws` gives up and leaves the piece crooked — 197 in 240 solves
+### 7. `snapYaws` left the piece crooked — FIXED in `fa12f1a`; the residual is 40 in 240
 
 Found by `layout` while chasing something else, and it is the third instance this round of
 the same shape. `snapYaws` squares a piece and asks the hard terms; when refused it **gave
@@ -1000,14 +1053,29 @@ the user went and looked.
 
 ---
 
-## E · Component tests under jsdom — STARTED. The harness is in; the bucket is not.
+## E · Component tests under jsdom — the harness is in, and so is most of the bucket.
+
+**Re-derived 2026-09-03 at `35b702f`, because the sentence below had gone stale in the
+direction that understates what exists.** There are **nine** `.test.tsx` files now, not two:
+`library-click-through`, `mount-height-refusal`, `placement-banner` and `where-it-sits` each
+mount the whole `/room/[roomId]/plan` **page**; `room-tools-findings`, `studio-copy`,
+`plan-thumb-shape` and `group-delete` mount a single component; `busy-action` mounts a local
+probe around the hook. 118 test files in total, 109 `.ts` + 9 `.tsx`.
+
+**What is actually left is narrower than "the bucket".** Five of those files hand-roll the
+identical `next/navigation` mock plus `matchMedia` and `scrollIntoView` shims, and
+`vitest.config.ts` declares **no `setupFiles` at all** — so the shims want extracting into
+`tests/helpers/` (which is never collected, since `include` is `tests/**/*.test.{ts,tsx}`).
+There is deliberately **no R3F shim anywhere** and the 3D page is never mounted; do not add
+one to chase an r3f component, because that is what `visual-check.md` is for.
 
 **Steps 1–4 of the plan below are in a commit.** `@testing-library/react` is a
 devDependency, `include` is widened, the config comment is corrected, four assertions in
-`tests/toolchain.test.ts` pin the settings, and two component test files exist. Three
+`tests/toolchain.test.ts` pin the settings. Three
 `visual-check.md` items are deleted and a fourth is narrowed to the one question a test
-cannot answer. What remains is the rest of the bucket — the plan is kept verbatim below,
-because the reasoning in it survived contact.
+cannot answer. The plan is kept verbatim below, because the reasoning in it survived
+contact — read it as the record of how this was scoped, not as a description of what is
+left, which is the paragraphs above.
 
 ### Why this was the next thing
 
@@ -1720,7 +1788,8 @@ Four observations, all the user's, all landing in the same place:
 
 Their instruction: *"we really need to work on that research and look at the algorithm from
 ground up."* This is now the largest open thing in the repo, and it **subsumes** § A.2
-(nothing prices variety), § A.3, § A.7 (`snapYaws` leaves 197 of 240 solves crooked) and
+(nothing prices variety), § A.3, § A.7 (`snapYaws`' residual — 40 of 240 solves crooked
+after its own fix; the 197 this sentence used to quote was the figure from before it) and
 § G.2 (the anchor pass helps two presets and hurts one). Those are four symptoms of one
 design that was never designed.
 
@@ -1733,11 +1802,25 @@ above:
 1. **Nothing prices support.** A chair needs floor, or a seat, under it. The solver scores
    an `(x, z, yaw)` and `findSupportDetailed` is not in that loop — hence the chair in the
    air, which is not a near-miss but a placement the cost function cannot see.
-2. **Nothing prices a relation between two pieces** beyond wall affinity. Couch↔TV,
-   table↔chairs, bed↔nightstand. `lib/layout-rules.ts` has `zone`s that describe what a
-   piece needs *around* itself; there is no term for what it needs to *face*.
-3. **A group is not a unit.** N members are placed as N pieces, so a merged set can be
-   solved into a shape it was merged specifically to prevent.
+2. ~~**Nothing prices a relation between two pieces** beyond wall affinity.~~ **FALSE, and
+   checked: `relationCost` (`lib/layout-score.ts`) prices facing** — `'faces'` adds
+   `2 × toward()`, `'in-front'` adds `1.5 × offAxis(…) + 1.5 × toward()`, and its own comment
+   names the exact case (*"A sofa with its back to the television is at a perfect viewing
+   distance and useless."*). `relationDistance` and `inRelationBand` are on `main` too. The
+   couch facing away is therefore **not a missing term** — it is the scalarisation problem in
+   layer 2, where a stronger `relation` simply buys `access`. Kept struck through rather than
+   deleted, because a redesign that starts by rebuilding this would be rebuilding what exists.
+3. **A group is not a unit** — *half* true. `proposeGroup` already slides, quarter-turns
+   and swaps groups **rigidly**, and one pass moves only groups; the gap is *which* groups
+   are seeded as one, and that a group turn pivots on the centroid rather than the anchor.
+
+**And the design for all of this already exists:**
+[`docs/research/suggest-and-collision.md`](research/suggest-and-collision.md) — three layers
+(representation, feasibility-vs-preference, selection), a migration table, and **all four of
+its questions to the user answered**, including the feasibility split being in scope and the
+build order being selection first, the split third. This section is the *report*; that file
+is the *plan*, and it should be re-derived against `main` before its rows are executed —
+several of its statuses have moved (row 0 landed, row 3b's dependency is on `main` now).
 
 ### 7. Research: collision, properly — and the user is open to replacing the engine
 
@@ -4251,6 +4334,32 @@ four non-zero branches were docs-only, which is exactly the shape that reads as 
 without looking. One of them was — and the other was carrying an unmeasured defect that exists
 in no commit on `main`. **A docs-only diff is not a safe diff**; it is the one nothing else in
 the toolchain will ever tell you about.
+
+**And the pass was not finished, which the 2026-09-03 sweep found.** § 38.2 only ever looked
+at *remote* refs. This checkout also holds **18 local branches ahead of `origin/main`** and,
+before pruning, **23 worktrees** against § D's "eight" — every one of them clean, and all but
+one last written to between 27 and 30 August. Six worktree entries were administrative
+corpses (their directories were already gone) and are pruned. Two local refs had never been
+looked at by anyone and are tagged rather than trusted: `fix/multi-select-drag` (19 commits,
+`archive/multi-select-drag`) and `agents/project-overview-and-understanding` (1 commit,
+`archive/project-overview-floating-banner`).
+
+**The second of those two was read per-line, and it is the most useful thing in this
+paragraph.** `0202eaa`, *"fix(spatial): surface floating placement state"*, dated the evening
+of 2026-09-02, is a **parallel implementation of § 37's placement banner** — 69 added lines in
+`Inspector.tsx`, written against the same problem while § 37 was in flight. `main` is ahead,
+and it is ahead in exactly the two places § 37's review lens caught:
+
+- it declares `role="status"` **with** `aria-live="polite"`. `main` carries the pair's removal
+  and the comment explaining it — *the first version had both, and it read them all out.*
+- it derives floating from `bottom > 0.005`, a **second tolerance**, ten times smaller than
+  `SUPPORT_Y_EPS = 0.05`, whose docblock predicts this precise failure: *"a second literal is
+  how two callers come to disagree about the same piece."* `main` derives `floating` from
+  `restingOn(...) === null` instead, so there is one answer.
+
+So a branch whose name promises an unlanded fix in fact holds the pre-review draft of a
+shipped one. **A branch name is a claim about intent, never about content** — and the cost of
+checking it was one diff, against a rev-list count that would have said "1 ahead" forever.
 
 **3. What went to [`visual-check.md`](visual-check.md) instead of here**, so nobody searches
 this file for it:
