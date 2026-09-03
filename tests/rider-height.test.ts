@@ -310,7 +310,27 @@ describe('a RECORDED edge is honoured whatever the support has done', () => {
     expect(deriveRiderYs(parts, o, { lamp: 'desk' }, ROOM_H)).toEqual({ lamp: 0.75 });
   });
 
-  it('leaves an INFERRED edge gated, so a piece left floating over a table keeps floating', () => {
+  it('leaves an INFERRED edge gated when the support has not moved', () => {
+    // The case that actually reaches the gate, and the only one that can: the lamp is
+    // authored ON the desk, so authored geometry infers the edge, and something has
+    // since put it at 1.10 while the desk is untouched. Every other fixture here is
+    // omitted by `y !== rider.pos[1]` instead, which is why deleting the gate left the
+    // whole suite green.
+    //
+    // The asymmetry with a RECORDED edge is deliberate. A drag that lands a piece
+    // writes the relation down, so "on that thing's top" is a decision to be honoured.
+    // Authored adjacency is an inference about a room nobody has touched, and letting
+    // it re-seat a piece some other pass has moved is the inference overruling a
+    // placement.
+    const parts = [desk(), lamp(0.75)];
+    const o: Partial<TransformOverrides> = { positions: { lamp: [0, 1.1, 0] } };
+    expect(riderRelation(parts, {}), 'the premise: the edge exists').toEqual({ lamp: 'desk' });
+    expect(deriveRiderYs(parts, o, {}, ROOM_H)).toEqual({});
+    // …and the same lamp with the edge RECORDED is pulled down to the desk.
+    expect(deriveRiderYs(parts, o, { lamp: 'desk' }, ROOM_H)).toEqual({ lamp: 0.75 });
+  });
+
+  it('has no relation at all for a piece that was never resting on anything', () => {
     // The other direction, and the one that broke three `placement-banner` assertions
     // in the first attempt. Nothing in the app can RECORD an edge for a piece that is
     // not resting — `Draggable.commit` only calls `setParent` from a support the drop
