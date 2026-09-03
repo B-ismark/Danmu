@@ -1302,7 +1302,7 @@ document asks of every measurement in it, applied to the one place it is temptin
 Both are in a commit only as prose. Neither is caused by PR #38 — the first is pure
 geometry with no solver in it, and the second is a pass that predates the branch.
 
-### 1. A brand-new room seals its own routes, at the size the app ships
+### 1. A brand-new room seals its own routes, at the size the app ships — RETIRED as a first-run defect, 2026-09-03
 
 **This is the one to look at first.** `defaultScene` at the app's own default room —
 `ROOM.width` 5.6 × `ROOM.depth` 4.2 in `lib/parts-catalog.ts` — builds starter
@@ -1343,6 +1343,69 @@ sweep the starter arrangement across a grid of room sizes per preset and find wh
 preset crosses from 0.00 into a finding — the answer is probably an area threshold below
 which the starter set has too many pieces for the shape, in which case the fix may be to
 place fewer.
+
+#### The sweep was run on 2026-09-03, and it retires this item as a first-run defect
+
+`tests/starter-navigability.test.ts` holds all of the below. Every number above
+reproduced — T 232.20, U 472.20, the L's 2.40, `outside` 0.00 everywhere — so nothing
+here is a correction of the arithmetic. It is a correction of **what room those numbers
+are about.**
+
+**1. `defaultScene('t', ROOM.width, ROOM.depth)` is a room no path in the app builds.**
+`ROOM`'s 5.6 × 4.2 is `DEFAULT_ROOM`'s size and **`DEFAULT_ROOM.layoutId` is `'rect'`**
+(`lib/scene-store.ts`). The rect at that size is clean (2.40, no findings) and is the one
+row of the five a user reaches without resizing by hand. The T and U at 4.2 m deep were a
+layout id combined with a *different* layout's dimensions.
+
+**2. Every size onboarding actually offers is clean** — `layout-pick`'s own `PRESETS`,
+which is the only screen that picks a layout:
+
+| offered | parts | navigation | total | Room check |
+|---|---|---|---|---|
+| rect 6.0 × 4.0 | 12 | 0.00 | 2.20 | — |
+| l 6.0 × 4.7 | 14 | 0.00 | 1.51 | — |
+| t 5.5 × 4.7 | 16 | 0.00 | 2.31 | — |
+| u 6.0 × 5.0 | 12 | 0.00 | 3.57 | — |
+| open 7.5 × 5.6 | 17 | 0.00 | 8.80 | — |
+
+So *"a brand-new room seals its own routes"* is **false**: a brand-new room is clean at
+every size a new room can be. **This item was row 1 of the queue on the strength of being
+a first-run defect, and it is not one.**
+
+**3. The irony is the whole lesson.** This item's own headline was that every solver
+fixture used 6 × 5 while the app shipped 5.6 × 4.2 — *"a fixture that cannot express the
+defect, and here the fixture differs from the shipping default by 40 cm."* The fixture that
+found **that** had the same fault one level up: it paired a layout with another layout's
+size and never asked whether the state was reachable. **A fixture is a claim about a
+reachable state, and neither sweep checked its own.**
+
+**4. What the grid actually shows, which is not an area threshold.** 280 cells, 5 presets ×
+8 widths × 7 depths, printed on every green run. It is **not monotonic in area** — the L is
+clean at 4.0 × 3.4 and costs ~592 at 4.0 × 5.0, a *bigger* room scoring worse — and **part
+count is not the driver**: the U at 5.6 × 4.2 and at 5.6 × 4.6 both seed **12** pieces and
+only the shallower one strands floor. So "too many pieces for the shape" was wrong in both
+of its halves, and "place fewer" would have been a fix for a cause that is not there.
+
+What the grid does show is a **depth cliff**: the T and U strand floor at nearly every
+width for depth ≤ 4.2 and come clean at ≥ 4.6. Both onboarding presets sit above it.
+
+**5. And the seeder is not blind about it — it is choosing.** `defaultScene`'s chooser
+scores every plan with `costBreakdown` including `navigation`, then picks by a predicate:
+rule **(A)** takes the widest bed rung whose best plan strands nothing, and rule **(B)** —
+*"failing that, the widest rung that places a bed AT ALL, and `clearance.ts` reports the
+route"* — deliberately prefers a reported stranding to a missing bed, citing rule 2. So a
+shallow T or U hands back a stranded room **on purpose**, and Room check reporting it is
+the design working.
+
+**What is left, and it is much smaller than this item was.** A user can still reach a
+shallow T or U by dragging a wall, and rule (B) will hand them a stranded starter. Whether
+that is right is a **product question about rule (B)**, not a defect: the alternatives are a
+bedless room or a silently smaller bed, and both are worse by this repo's own rules. Nobody
+has reported it. **Do not re-file this as a first-run defect.**
+
+**Committed:** `tests/starter-navigability.test.ts`, whose gate is that every size
+onboarding offers seeds `navigation` 0 with an empty report — the property nobody had — with
+the preset list parsed from the picker rather than copied, so a resized preset fails it.
 
 ### 2. The anchor-first pass helps two presets and hurts one
 

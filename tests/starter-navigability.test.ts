@@ -41,7 +41,23 @@ import { defaultScene } from '@/lib/scene-spec';
  *  right to report.
  *
  *  No solver runs in any of these numbers. It is `defaultScene` scored by
- *  `costBreakdown`, which is what makes them a statement about the SEEDER. */
+ *  `costBreakdown`, which is what makes them a statement about the SEEDER.
+ *
+ *  **Mutation ledger — eight tried, six killed, and the two survivors are why the
+ *  file looks like this.** Killed: `PLAN_RANKS` 4 → 1 (the U strands 750.60, which
+ *  is the exact figure `BED_LADDER`'s docblock cites, so the plan search really is
+ *  what prevents it); the seeder's rule (A) stage deleted (749.40); the `u` preset
+ *  re-sized to 4.2 on the picker page itself (619.20 — and the failure message read
+ *  `u 6x4.2`, which is the proof the list is parsed and not copied); `defaultScene`
+ *  forced to return `[]`; the `tall` guard inverted; and a preset row deleted from
+ *  the page. Survived: `CLASH_SHARE` 0.5 → 0.0, because a starter room has no
+ *  overlapping pair for any clash bar to catch; and `settleParts` bypassed, which is
+ *  what retired the `outside` assertion below.
+ *
+ *  The `parts > 0` assertion earns its place from that pass rather than from
+ *  caution: with the seeder returning nothing, `navigation`, `outside` and the
+ *  report are ALL clean, because an empty room strands no floor. It is the only
+ *  thing standing between this gate and a vacuous green. */
 
 const HEIGHT = 2.8;
 const PRESETS: LayoutId[] = ['rect', 'l', 't', 'u', 'open'];
@@ -133,7 +149,14 @@ describe('§ G.1 · a starter room does not seal its own routes', () => {
       // strands no floor", and it is the same quantity the seeder's own rule (A)
       // requires of a bed-bearing plan.
       expect(r.navigation, `${r.layout} ${r.w}x${r.d} strands floor`).toBe(0);
-      expect(r.outside, `${r.layout} ${r.w}x${r.d} puts a piece through a wall`).toBe(0);
+      // There was an `outside === 0` assertion here and it is DELETED, because the
+      // mutation pass could not make it fail: bypassing the seeder's own
+      // `settleParts` call changes nothing at any of these five sizes, so every
+      // starter piece is already inside its bay and that settle is insurance rather
+      // than load-bearing here. An assertion nobody can see failing is decoration,
+      // and its green is worse than no assertion. `outside` is still PRINTED by the
+      // table below, where it costs nothing and claims nothing.
+      //
       // And the user-visible half: Room check must be quiet on a room nobody has
       // touched. A `navigation` of 0 with a finding still standing would mean the
       // two consumers disagree, which is what tests/layout-conformance.test.ts is for.
@@ -195,5 +218,12 @@ describe('§ G.1 · a starter room does not seal its own routes', () => {
     );
 
     expect(cells).toBe(PRESETS.length * WIDTHS.length * DEPTHS.length);
-  });
+    // 280 cells, each a full build + clearance field, so this is ~5 s of real work
+    // and it does not fit vitest's DEFAULT 5 s `testTimeout` — which is a bound
+    // nobody chose, since `vitest.config.ts` sets no `testTimeout` at all. This test
+    // hit it on its first green run, which is § A.4 of `what-is-still-open.md`
+    // happening to the file that measured § A.4. The budget is stated here rather
+    // than raised globally: a grid is allowed to be slow, and the other 117 files
+    // should not silently inherit a longer leash because this one is.
+  }, 40000);
 });
