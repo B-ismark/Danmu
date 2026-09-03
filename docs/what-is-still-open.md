@@ -4200,28 +4200,44 @@ help; or **widen the confine** so a finding's fix may move a neighbour, which ch
 the thing to report.
 
 **2. Branch state, derived 2026-09-03 — and the instrument matters more than the answer.**
-Every merge in this repo is a **squash**, so `git rev-list --count origin/main..<branch>`
-reports the four PR branches that landed this week as 3, 5, 6 and 14 commits ahead. **That
-count is not evidence of unlanded work**, and it errs in the direction that keeps dead
-branches alive. The branch-list disaster recorded in "Picking this up cold" was the MIRROR
-image — a hand-typed list that called ten live commits contained — and the two share one
-lesson rather than one cause: neither a commit count nor a recollection answers "did this
-land". `gh pr view` does, and the count is only a prompt to go and ask it.
+**This entry's first version said "every merge in this repo is a squash". It is not, and the
+correction is the useful part.** `main` carries real merge commits up to and including #87
+(`Merge pull request #87 from …`) and squashes from #88 onward (`… (#88)`). So the two
+instruments disagree by ERA, not by branch: a merge-commit PR leaves its branch a genuine
+ancestor and `git rev-list --count origin/main..<branch>` reads 0, while a squashed one
+leaves the branch permanently ahead however completely its content landed. A rule that
+covers only half the history is worse than none, because it is right often enough to be
+believed.
 
-| ref | naive count ahead | what it actually is |
+That count errs in the direction that keeps **dead branches alive**. The branch-list disaster
+recorded in "Picking this up cold" was the MIRROR image — a hand-typed list that called ten
+live commits contained — and the two share one lesson rather than one cause: neither a commit
+count nor a recollection answers "did this land". Only a per-line pass does, and `gh pr view`
+tells you whether one is needed.
+
+**The four branches this table first listed — #88's through #91's — no longer exist.** GitHub
+auto-deleted them on merge, which is why the squash count could not be checked against them
+for long. Seven refs remain, re-derived 2026-09-03 after the fact:
+
+| ref | ahead | verdict, and what the per-line pass found |
 |---|---|---|
-| `fix/hung-fixture-reaches-the-ceiling` | 3 | **#88, merged** as `1d16087` |
-| `fix/impossible-outranks-inconvenient` | 14 | **#89, merged** as `4cc663b` |
-| `fix/parametric-caps-survive-a-resize` | 6 | **#90, merged** as `6912849` |
-| `fix/inspector-placement-agrees-with-the-report` | 5 | **#91, merged** as `e0c484a` — its two-dot diff against `main` is *empty*, which is the clearest possible statement of the trap |
-| `feat/expose-finalists-and-relation-distance` | 1 | no PR was ever opened. One docs-only commit on `layout-score.ts` + `layout-solve.ts`, against a merge base far behind; `main`'s copies of both files are further along than the branch's |
-| `fix/derive-mounted-and-vertical-extent` | 1 | PR #54, merged. The extra commit is docs-only, two files |
-| `research/inward-normals` | 2 | no PR, and the code landed by another route — `polygonSignedArea` is in `lib/footprint.ts` and `lib/geometry.ts` on `main`, and `tests/inward-normals.test.ts` is there too (§ 11) |
-| `fix/pointer-cancel-note` | 10 | **the one that is neither deletable nor mergeable on any evidence gathered so far.** 33 files, 2,316 insertions against its merge base; 19 conflicted files, every one carrying stages 1, 2 **and** 3. Read the account in "Picking this up cold" before touching it — this is the fourth session it has outlived |
+| `fix/ceiling-fixtures-declared-size` | 0 | **#87, merged as a merge commit** — a true ancestor of `main`. Deletable |
+| `fix/solver-carries-riders` | 0 | **#86**, same. Deletable |
+| `fix/search-suffix-match` | 0 | **#76**, same. Deletable |
+| `feat/expose-finalists-and-relation-distance` | 1 | no PR was ever opened. Its one commit is a docblock snapshot of `layout-score.ts` + `layout-solve.ts` taken **before** `'shuffle'` was a mode — the branch still declares `mode?: 'arrange' \| 'refit'`. `main` is strictly further along on both files. **Superseded, deletable** |
+| `research/inward-normals` | 2 | no PR, and both commits landed by another route. `polygonSignedArea` is in `lib/footprint.ts` and `lib/geometry.ts`, `tests/inward-normals.test.ts` is in the tree, and the docs commit's branch-list paragraph is the one "Picking this up cold" carries today (§ 11). **Deletable** |
+| `fix/derive-mounted-and-vertical-extent` | 1 | PR #54, merged; the extra commit is docs-only across two files, and **one half of it never landed**. The `what-is-still-open.md` half did — it is § B item 15, since fixed as § 32. The `visual-check.md` half did not, and `main` has no mention of plan export at all. Rescued to `visual-check.md` before deletion; see the note there. **Deletable now that it is** |
+| `fix/pointer-cancel-note` | 10 | **neither deletable nor mergeable on any evidence gathered so far.** 33 files, 2,316 insertions against its merge base; 19 conflicted files, every one carrying stages 1, 2 **and** 3. Read the account in "Picking this up cold" first — this is the fourth session it has outlived |
 
 Deleting a remote ref is outward-facing and is **not** covered by a grant to commit, push and
-open PRs. The first four rows are safe to delete on the user's word. The middle three want a
-per-line pass first, and the last wants a decision rather than a command.
+open PRs. Six of the seven are clear on the user's word; the last wants a decision rather than
+a command.
+
+**The one thing worth taking from this pass**, because it nearly cost a finding: two of the
+four non-zero branches were docs-only, which is exactly the shape that reads as safe to delete
+without looking. One of them was — and the other was carrying an unmeasured defect that exists
+in no commit on `main`. **A docs-only diff is not a safe diff**; it is the one nothing else in
+the toolchain will ever tell you about.
 
 **3. What went to [`visual-check.md`](visual-check.md) instead of here**, so nobody searches
 this file for it:
