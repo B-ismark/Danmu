@@ -578,8 +578,13 @@ function useSuggest(effParts: ScenePart[], footprint: Footprint, appPlaced: AppP
       // found a real improvement and is still not an answer to "give me an idea".
       // Confined fixes are exempt — someone who pressed "Try a fix" on one finding
       // has asked for that finding cleared, however small the room-wide number moves.
-      if (result.moved.length === 0) return null;
-      if (!confined && !isWorthOffering(result.before, result.after)) return null;
+      // Three ways to end up applying nothing, and they are three different
+      // sentences. `null` used to be all of them, so the toast that fires on the
+      // commonest one spoke for the other two as well — see `SolveDecline`.
+      if (result.moved.length === 0) return { applied: false as const, result };
+      if (!confined && !isWorthOffering(result.before, result.after)) {
+        return { applied: false as const, result };
+      }
       const positions = { ...t.positions };
       const rotations = { ...t.rotations };
       for (const i of result.moved) {
@@ -592,7 +597,7 @@ function useSuggest(effParts: ScenePart[], footprint: Footprint, appPlaced: AppP
       // suggestion that resized the furniture would be the one thing this app
       // refuses to do.
       loadTransforms({ positions, rotations, dims: t.dims });
-      return result;
+      return { applied: true as const, result };
     },
     [effParts, footprint, loadTransforms, appPlaced],
   );
@@ -621,12 +626,28 @@ function FixAllButton({
   const attempt = useRef(0);
 
   function solve() {
-    const result = suggest('arrange', ++attempt.current);
-    if (!result) {
-      toast({
-        title: 'This is already a good arrangement',
-        message: 'Nothing was moved — the pieces are where the guidelines want them.',
-      });
+    const { applied, result } = suggest('arrange', ++attempt.current);
+    if (!applied) {
+      // `declined === 'impossible'` means the search DID find arrangements and every
+      // one of them put a piece through a wall or inside another piece (§ 31). Saying
+      // "this is already a good arrangement" there is not a rounding of the truth, it
+      // is the opposite of it — the room may be a mess, and the honest report is that
+      // nothing safe was found rather than that nothing was needed.
+      toast(
+        result.declined === 'impossible'
+          ? {
+              // No tone: the toast tones here are neutral / danger / success, and this
+              // is a refusal rather than a failure. The other two decline paths in this
+              // file are untoned for the same reason.
+              title: 'No safe arrangement found',
+              message:
+                'Every layout tried put a piece through a wall or inside another one, so nothing was moved. Unlocking a piece, or making the room a little bigger, gives it more room to work with.',
+            }
+          : {
+              title: 'This is already a good arrangement',
+              message: 'Nothing was moved — the pieces are where the guidelines want them.',
+            },
+      );
       return;
     }
     // One piece named beats a count. A single move says exactly what happened; a
@@ -904,9 +925,9 @@ function useRefitOffer(
       action: {
         label: 'Re-fit',
         onClick: () => {
-          const result = suggest('refit', 1);
+          const { applied, result } = suggest('refit', 1);
           toast(
-            result
+            applied
               ? {
                   title: `Re-fitted ${result.moved.length} ${result.moved.length === 1 ? 'piece' : 'pieces'}`,
                   message: whatChanged(result.breakdownBefore, result.breakdownAfter),
@@ -1005,13 +1026,18 @@ function FixButton({
   const scope = issue.partIds.length > 0 ? issue.partIds : undefined;
 
   function solve() {
-    const result = suggest('refit', ++attempt.current, scope);
-    if (!result) {
+    const { applied, result } = suggest('refit', ++attempt.current, scope);
+    if (!applied) {
+      // Already honest about finding nothing, and now able to say WHY when the reason
+      // is the § 31 veto rather than an absent improvement.
       toast({
-        title: 'Moving those didn’t clear it',
-        message: scope
-          ? 'Nothing better was found without touching the rest of the room. Fix can rearrange everything.'
-          : 'Nothing better was found. Try unlocking a piece, or making some space.',
+        title: result.declined === 'impossible' ? 'No safe way to move those' : 'Moving those didn’t clear it',
+        message:
+          result.declined === 'impossible'
+            ? 'Every arrangement tried put a piece through a wall or inside another one.'
+            : scope
+              ? 'Nothing better was found without touching the rest of the room. Fix can rearrange everything.'
+              : 'Nothing better was found. Try unlocking a piece, or making some space.',
       });
       return;
     }

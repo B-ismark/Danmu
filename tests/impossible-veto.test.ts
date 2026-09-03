@@ -180,6 +180,78 @@ describe('solveLayout never hands back a room more impossible than the one it wa
   });
 });
 
+describe('SolveResult.declined — a refusal that can say which refusal it is', () => {
+  // `moved.length === 0` is three different facts about a room wearing one shape, and
+  // the UI said the friendliest of the three about all of them: *"This is already a
+  // good arrangement"*. After § 31 that sentence also covered "every layout I found
+  // put a piece through a wall", which is not a softening of the truth but its
+  // opposite — the room may be a mess, and the app was calling it good.
+  //
+  // Only the solver can tell them apart, so it reports rather than letting the caller
+  // infer. `RoomTools` branches on this for both `Fix` and `Try a fix`.
+  const PRESETS = ['rect', 'l', 't', 'u', 'open'] as const;
+  const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8];
+
+  const scramble = (parts: ReturnType<typeof defaultScene>) =>
+    parts.map((p, i) => ({
+      ...p,
+      pos: [-1 + (i % 3) * 0.4, p.pos[1], -1 + Math.floor(i / 3) * 0.4] as [number, number, number],
+    }));
+
+  it('is null exactly when the answer is not the layout it was given', () => {
+    let declines = 0;
+    let impossible = 0;
+    for (const id of PRESETS) {
+      for (const scrambled of [true, false]) {
+        for (const seed of SEEDS) {
+          const base = defaultScene(id, 6, 4);
+          const parts = scrambled ? scramble(base) : base;
+          const r = solveLayout(parts, footprintForLayout(id, 6, 4), lockedForSolve(parts, {}, null), { seed });
+          // The invariant that makes the field trustworthy: a declined solve moved
+          // nothing, and a solve that moved something did not decline. Without this
+          // the field could drift into decoration and no other test would notice.
+          if (r.declined) {
+            declines++;
+            if (r.declined === 'impossible') impossible++;
+            expect(r.moved, id + ' seed ' + seed + ' declined but moved something').toEqual([]);
+            expect(r.after, 'a declined solve reports the cost it was given').toBeCloseTo(r.before, 10);
+          } else if (r.moved.length > 0) {
+            expect(r.after, 'an applied solve is not dearer than what it replaced').toBeLessThan(r.before + 1e-9);
+          }
+        }
+      }
+    }
+    // Both arms have to occur, or the loop above proves nothing about either.
+    expect(declines, 'no solve declined — the assertions above never ran').toBeGreaterThan(0);
+    expect(impossible, 'no solve declined for IMPOSSIBILITY, which is the arm § 31 added')
+      .toBeGreaterThan(0);
+  }, 600_000);
+
+  it('reports impossibility in preference to no-gain when an answer is both', () => {
+    // The ordering in the ternary, and it is the whole reason this is not a boolean.
+    // An answer that is more impossible AND dearer is both, and "nothing was cheaper"
+    // is the ordinary outcome that would hide the interesting one behind it.
+    //
+    // Found by sweeping for the case rather than constructing one. Over the same 80
+    // suggest solves as the test above: 63 applied, 13 `no-gain`, and 4 `impossible`
+    // — all four on the SEEDED U at 6 x 4, seeds 1, 2, 5 and 7. Which preset it is
+    // matters less than that the arm occurs at all; if it stops occurring here, sweep
+    // for it again rather than deleting the test.
+    const parts = defaultScene('u', 6, 4);
+    const poly = footprintForLayout('u', 6, 4);
+    const both = SEEDS.map((seed) =>
+      solveLayout(parts, poly, lockedForSolve(parts, {}, null), { seed }),
+    ).filter((r) => r.declined === 'impossible');
+    expect(both.length, 'the seeded U must still produce an impossibility decline').toBeGreaterThan(0);
+    for (const r of both) {
+      // Each of these WOULD have read `no-gain` under the other ordering, because a
+      // reverted solve always ends with `after === before`.
+      expect(r.after).toBeCloseTo(r.before, 10);
+      expect(r.declined).toBe('impossible');
+    }
+  }, 600_000);
+});
+
 describe('openRoutes measures legality against what it was HANDED, not against zero', () => {
   // The repair pass may not CREATE impossibility — that is the gate on `best` above.
   // What it must still be able to do is repair a room that is already illegal for a

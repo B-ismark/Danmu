@@ -105,6 +105,8 @@ function resultFor(from: ScenePart[], to: ScenePart[]): SolveResult {
   const after = costBreakdown(model, placementsOf(to), DEFAULT_WEIGHTS);
   return {
     placements: placementsOf(to),
+    // Hand-built, so it never went through the accept that sets this.
+    declined: null,
     before: before.total,
     after: after.total,
     breakdownBefore: before,

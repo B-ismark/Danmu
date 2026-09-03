@@ -246,8 +246,30 @@ export type MoveReason = {
   turn: number;
 };
 
+/** Why a solve handed back the layout it was given.
+ *
+ *  `null` when it did not — either it found a suggestion, or the search simply never
+ *  proposed a move. The two refusals are different facts about the room and the UI
+ *  says different things about them, which is the whole reason this is not a boolean:
+ *
+ *  · `'no-gain'` — every finalist cost more than the layout already on screen. The
+ *    room is fine, or at least this solver cannot improve it.
+ *  · `'impossible'` — the answer would have been MORE impossible than the room it was
+ *    given: a piece through a wall, or inside another piece. See `IMPOSSIBLE_TERMS`.
+ *    The room may be a mess; what the search found was worse than a mess.
+ *
+ *  Before this existed, `RoomTools` reported both as *"This is already a good
+ *  arrangement"*, which is true of the first and a lie about the second. */
+export type SolveDecline = 'no-gain' | 'impossible';
+
 export type SolveResult = {
   placements: Placement[];
+  /** Why the answer is the input layout, or `null` if it is not. See `SolveDecline`.
+   *
+   *  Reported rather than inferred: `moved.length === 0` cannot tell a room nothing
+   *  could improve from a room whose every candidate was illegal, and only the solver
+   *  is in a position to know which happened. */
+  declined: SolveDecline | null;
   /** Cost before and after, so a caller can say what it achieved — and so a
    *  suggestion that achieved nothing can be recognised and not offered. */
   before: number;
@@ -767,6 +789,9 @@ export function solveLayout(
   if (allIdx.length === 0) {
     return {
       placements: current,
+      // Nothing was movable, so there was never an answer to refuse. `no-gain` would
+      // be the wrong word for it and `impossible` a worse one.
+      declined: null,
       before,
       after: before,
       breakdownBefore,
@@ -1100,7 +1125,17 @@ export function solveLayout(
   // stage earlier.
   const impossibleBefore = impossibility(breakdownBefore);
   const impossibleAfter = impossibility(breakdownAfter);
-  if ((!shuffle && breakdownAfter.total >= before) || impossibleAfter > impossibleBefore + 1e-6) {
+  // Impossibility is tested FIRST and reported in preference to `no-gain`, because an
+  // answer can be both and only one of the two is worth telling anyone: "everything I
+  // found put a piece through a wall" is a fact about the search, while "nothing was
+  // cheaper" is the ordinary outcome it would otherwise hide behind.
+  const declined: SolveDecline | null =
+    impossibleAfter > impossibleBefore + 1e-6
+      ? 'impossible'
+      : !shuffle && breakdownAfter.total >= before
+        ? 'no-gain'
+        : null;
+  if (declined) {
     winner = origin.map((p) => ({ ...p }));
     breakdownAfter = breakdownBefore;
   }
@@ -1135,6 +1170,7 @@ export function solveLayout(
   const decided = moved.filter((i) => !carried.has(i));
   return {
     placements: winner,
+    declined,
     before,
     after: breakdownAfter.total,
     breakdownBefore,
