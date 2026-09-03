@@ -4217,21 +4217,27 @@ tells you whether one is needed.
 
 **The four branches this table first listed — #88's through #91's — no longer exist.** GitHub
 auto-deleted them on merge, which is why the squash count could not be checked against them
-for long. Seven refs remain, re-derived 2026-09-03 after the fact:
+for long. Seven remained when this entry was written; **five were deleted within the hour,
+so two do** — which is itself the point about how fast a branch table rots:
 
 | ref | ahead | verdict, and what the per-line pass found |
 |---|---|---|
-| `fix/ceiling-fixtures-declared-size` | 0 | **#87, merged as a merge commit** — a true ancestor of `main`. Deletable |
-| `fix/solver-carries-riders` | 0 | **#86**, same. Deletable |
-| `fix/search-suffix-match` | 0 | **#76**, same. Deletable |
-| `feat/expose-finalists-and-relation-distance` | 1 | no PR was ever opened. Its one commit is a docblock snapshot of `layout-score.ts` + `layout-solve.ts` taken **before** `'shuffle'` was a mode — the branch still declares `mode?: 'arrange' \| 'refit'`. `main` is strictly further along on both files. **Superseded, deletable** |
-| `research/inward-normals` | 2 | no PR, and both commits landed by another route. `polygonSignedArea` is in `lib/footprint.ts` and `lib/geometry.ts`, `tests/inward-normals.test.ts` is in the tree, and the docs commit's branch-list paragraph is the one "Picking this up cold" carries today (§ 11). **Deletable** |
 | `fix/derive-mounted-and-vertical-extent` | 1 | PR #54, merged; the extra commit is docs-only across two files, and **one half of it never landed**. The `what-is-still-open.md` half did — it is § B item 15, since fixed as § 32. The `visual-check.md` half did not, and `main` has no mention of plan export at all. Rescued to `visual-check.md` before deletion; see the note there. **Deletable now that it is** |
 | `fix/pointer-cancel-note` | 10 | **neither deletable nor mergeable on any evidence gathered so far.** 33 files, 2,316 insertions against its merge base; 19 conflicted files, every one carrying stages 1, 2 **and** 3. Read the account in "Picking this up cold" first — this is the fourth session it has outlived |
 
+**The five that are gone, and why each was cleared**, so the verdicts survive the refs:
+`fix/ceiling-fixtures-declared-size` (#87), `fix/solver-carries-riders` (#86) and
+`fix/search-suffix-match` (#76) were all merge-commit PRs and therefore true ancestors, 0
+ahead. `feat/expose-finalists-and-relation-distance` had no PR at all and its one commit was a
+docblock snapshot taken before `'shuffle'` was a mode — it still declared
+`mode?: 'arrange' | 'refit'`, so `main` was strictly further along on both files.
+`research/inward-normals` had no PR either, but both its commits had landed by another route
+(§ 11): `polygonSignedArea`, `tests/inward-normals.test.ts`, and the branch-list paragraph
+"Picking this up cold" carries today.
+
 Deleting a remote ref is outward-facing and is **not** covered by a grant to commit, push and
-open PRs. Six of the seven are clear on the user's word; the last wants a decision rather than
-a command.
+open PRs. Of the two left, the first is clear now that its finding is rescued; the second wants
+a decision rather than a command.
 
 **The one thing worth taking from this pass**, because it nearly cost a finding: two of the
 four non-zero branches were docs-only, which is exactly the shape that reads as safe to delete
