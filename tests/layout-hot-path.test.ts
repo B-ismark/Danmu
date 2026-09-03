@@ -19,14 +19,20 @@
 // seeded 20-piece room, isolated, alternating between the two trees over three reps
 // each, `solveLayout` went **453 ms → 961 ms median, 2.1×**.
 //
-// The suite did not catch it. `stays inside a second for a room of twenty pieces`
-// has a 2000 ms ceiling, set well above the machine it was written on so a slow CI
-// box does not fail it, and 961 ms sits comfortably under. That ceiling is the right
-// shape for the regression it was written for — the 8.4 s one — and it cannot see a
-// doubling. Nor should it be tightened to try: an absolute wall-clock assertion tight
-// enough to catch 2× fails on a loaded machine every other run, which is how a suite
-// learns to be ignored. (This repo already knows that: three of `layout-solve`'s
-// assertions go 50/50 under contention.)
+// The suite did not catch it. `stays inside two seconds for a room of twenty pieces`
+// has a 2000 ms ceiling — stated for an idle machine and scaled by `ceilingMs` — and
+// 961 ms sits comfortably under it. That ceiling is the right shape for the
+// regression it was written for, the 8.4 s one, and it cannot see a doubling. Nor
+// should it be tightened to try: a wall-clock assertion tight enough to catch 2×
+// fails on a loaded machine every other run, which is how a suite learns to be
+// ignored, and the calibration buys robustness against the machine rather than
+// resolution against the code.
+//
+// (The parenthesis here used to say three of `layout-solve`'s assertions go 50/50
+// under contention. Measured 2026-09-03: they do go red, and only ONE of the three
+// is an assertion. The other two are the default 5000 ms `testTimeout` killing
+// bodies that assert nothing about a clock — see `vitest.config.ts`, which now sets
+// that number on purpose.)
 //
 // So this asserts the CONTRACT rather than the clock — every `nearestEdge` call on
 // the hot path is handed its winding. Exact, no timing, deterministic, and red on

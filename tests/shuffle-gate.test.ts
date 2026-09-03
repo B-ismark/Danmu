@@ -241,8 +241,10 @@ describe('the shuffle gate and the two findings § H.16b added', () => {
       expect(offered, `${id} ${w}x${d}: Shuffle offered nothing at all in six presses`).toBeGreaterThan(0);
     }
     // Twelve real shuffle presses at ~0.5 s each. The budget is explicit rather than
-    // the measurement being thinned to fit the 5 s default: a sweep cut down until it
-    // is fast is a sweep that has stopped answering the question.
+    // the measurement being thinned to fit it: a sweep cut down until it is fast is a
+    // sweep that has stopped answering the question. It used to say "the 5 s default";
+    // the global is 30 s since § A.4, and ~6 s of presses reaches ~24 s under a full
+    // suite, so this override is still doing something rather than sitting there.
   }, 40000);
 
   it('and the pre-existing overhang is never blamed on the shuffle', () => {

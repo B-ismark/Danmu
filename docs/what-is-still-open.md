@@ -45,12 +45,23 @@ files in 265 s — where all three reds pass in isolation. See row 3.
 #87-#91 on 2026-09-02/03. Three of those five **want eyes and have not had them in full** —
 that is [`visual-check.md`](visual-check.md)'s list, not this one.
 
-**And branch hygiene, which was row 14 of this table until 2026-09-03, is done.** Every stale
-*remote* ref is gone, `fix/pointer-cancel-note` included, after the per-line pass it had been
-waiting five sessions for. § 38.2 carries the verdicts and § 38.4 the method. What is left is
-local-only litter and not a thinking item: dead `gate*` / `pr*` / `zz-*` branch pointers in
-this checkout, and § D's eight stale gate worktrees in temp directories. Check file mtimes
-before touching any worktree — absence from a session listing is not a dead session.
+**And branch hygiene, which was row 14 of this table until 2026-09-03, is done — both ends
+of it now.** Every stale *remote* ref went first; § 38.2 carries the verdicts and § 38.4 the
+method. The local half was cleared on **2026-09-03**: **36 local branches → 7**, and **14
+worktrees → 2**. The `gate*` / `pr*` / `zz-*` pointers this paragraph named **did not exist**
+by then, which is the ordinary fate of a written inventory; what was actually there was 30
+branches fully merged into `origin/main`, deleted with `git branch -d` so git re-checked
+each one itself rather than trusting the list. Two worktrees held commits and **both were
+also held by a branch and an `archive/*` tag**, which is the fact that made removal safe —
+not their age. Mtimes were read first anyway (nothing outside the primary touched since
+2026-08-30, bar one at 2026-09-02, which was **kept**: absence from a session listing is not
+a dead session).
+
+*Residue, and it is a permission wall rather than a decision:* eleven now-deregistered
+worktree **directories** remain on disk at drive roots (`D:\g4`, `C:\Users\bisma\dm16`, …).
+`git worktree list` is clean and git no longer knows about them; they are inert folders
+holding a checkout and a `node_modules`. A drive-root recursive delete is refused here, so
+they want removing by hand.
 
 Ranked by three things together, not by any one of them: **criticality** (does a user
 hit it), **ease** (is it an afternoon or a measurement campaign), and **dependence** —
@@ -66,8 +77,8 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | # | item | why here | cost | blocks / blocked by |
 |---|---|---|---|---|
 | 1 | **G.1** ~~a brand-new room seals its own routes at the size the app ships~~ → **nothing scores a custom footprint** | **Re-scoped 2026-09-03, not closed.** The sweep ran: all five picker sizes seed clean, and the T/U rooms the item named paired a layout with `DEFAULT_ROOM`'s (rect) dimensions. But the room re-seeds on **every** open, `moveWallCarrying` writes no scene snapshot, and a T + one wall nudge + a revisit strands floor with no furniture touched. Several such nudges leave the bounding box **identical**, so no `(layoutId, width, depth)` sweep can see them — **including the one that just ran.** Every wall move makes a custom polygon, both loaders prefer it, nothing scores one | M — a sweep over `moveWallCarrying` output, not over sizes | free; **do not close it with a size sweep** |
-| 2 | **§ 33.3** the render budget is unmeasured | Blocks any answer to "how detailed may a shape be", which was asked directly, and blocks § 12's chosen repair. Nothing in the repo reads `renderer.info`, so this is new instrumentation and it lives in the browser probe — jsdom has no WebGL | M — needs a throttled device | blocks nothing shipping; **blocks row 4** and a decision |
-| 3 | **§ A.4** the timing bounds may simply be too tight | Promoted out of § A, where it sat unranked. **Measured 2026-09-03 at `35b702f`:** the full suite is 3 failed / 2146 passed / 5 expected-fail, and **all three reds pass alone** — `layout-solve.test.ts:671` (`< 2000 ms`), `shuffle-gate.test.ts:248` and `where-it-sits.test.tsx:108` (both default 5 s). Nothing else was running, so this is vitest's **own** parallelism, not another session: the local suite is unreliable against itself here, which is a stronger claim than "trust CI" | M | **blocks trust in every local gate**, which is every row below |
+| 2 | **§ 33.3** ~~the render budget is unmeasured~~ → **MEASURED 2026-09-03; the GPU verdict still wants a device** | A furnished room issues **198–390 draw calls per rendered frame** across the five presets, ~37 calls and ~10 600 triangles per extra piece, 16–24 calls per piece. So subdivision per shape is cheap and **part count is what spends the budget** — and the U vs Rectangle pair (both 12 pieces, 226 vs 198 calls, and the U with *fewer* triangles) says the knob that matters is how many draw units a shape decomposes into, not how many segments. `frameloop="demand"` confirmed: 2–21 frames for a 2.5 s drag. Frame times are SwiftShader and carry no GPU information | done, bar a real device | **row 4 is unblocked** |
+| 3 | **§ A.4** ~~the timing bounds may simply be too tight~~ → **ANSWERED 2026-09-03: it was the runner, not the bounds** | Reproduced on demand under deliberate CPU load rather than waited for: the same four-red `layout-solve` set, and **three of the four died as `Test timed out in 5000ms`** — a default nobody chose, applied to a suite whose honest worst case is a ~6.3 s solve. Two of those three assert nothing about a clock and the third asserts a *ratio*, the shape that was supposed to survive load; the harness kills the body before the ratio is evaluated. Fixed: an explicit 30 s `testTimeout`, and the two real wall-clock bars scaled by a measured machine factor rather than padded. See § A.4 | done | **no longer blocks the rows below** |
 | 4 | **§ 12** a rider keeps the size the room was BUILT at, after a reload | Confirmed by eye, and the user has already chosen the repair — derive at read time, write nothing (§ B.16). An attempt at the OTHER option was built and reverted, so read § 12 before starting. § 37's `restingOn` is the first gate it has ever had. Also floats **in-session**: `setDim` settles nothing, ever | M | **blocked on row 2** — B.16's stated cost is that the derivation runs on every read |
 | 5 | **§ B.12** Room check speaks centimetres to a user who set metres, feet or inches | **This table omitted it until 2026-09-03.** 15 hard-coded `Math.round(x*100)` sites in `lib/clearance.ts`, rendered verbatim at `RoomTools.tsx:968`, while `dimUnit` defaults to `'m'` — so the shipping default disagrees with itself: the field says `1.9 m`, the finding beside it says `190 cm` | S once decided | needs the user |
 | 6 | **§ 38.1** the confined "Try a fix" refusal is unreachable | A decision rather than a defect: 212 confined solves over every finding of every preset declined **zero** times, so neither the copy added by § 31 nor the one shipping beside it for months has ever rendered | S — mostly a judgement | nothing |
@@ -433,7 +444,7 @@ machine, deterministically.
 script. An earlier attempt as a Vitest file timed out at ten minutes; it wants to be a plain
 Node script that can run for minutes and print a table. **Nothing is written.**
 
-### 4. The contention pattern itself
+### 4. The contention pattern itself — ANSWERED 2026-09-03, and it was the runner
 
 Every round, a different timing-sensitive test goes red under load and green in isolation.
 The standing advice is "trust CI, not the local run" — which works, and which also means
@@ -446,19 +457,30 @@ between loosening them and marking them CI-only would retire a recurring false a
 **3 failed / 2146 passed / 5 expected-fail** over 118 files in 265 s wall, against 926 s of
 test time, so vitest was running roughly 3.5 files at once. The three:
 
-| red | bound | alone |
+| red | bound *(as it was then)* | alone |
 |---|---|---|
-| `tests/layout-solve.test.ts:671` | `performance.now() - t0 < 2000` | passes, file in 24.8 s |
-| `tests/shuffle-gate.test.ts:248` | none of its own — the **default 5 s** `testTimeout` | passes, file in 13.3 s |
-| `tests/where-it-sits.test.tsx:108` | default 5 s, and a whole Next page mounts inside it | passes, file in 9.3 s |
+| `layout-solve` › `stays inside a second…` | `performance.now() - t0 < 2000` | passes, file in 24.8 s |
+| `shuffle-gate` › `…overhang is never blamed` | none of its own — the **then-default 5 s** `testTimeout` | passes, file in 13.3 s |
+| `tests/where-it-sits.test.tsx:108` | then-default 5 s, and a whole Next page mounts inside it | passes, file in 9.3 s |
+
+**Every cell in that table is superseded by the answer below** and is kept only as the
+observation it was. Line numbers are gone from two of the three rows because the fix
+moved them and a line citation is the first thing to rot; the first test is called
+`stays inside its calibrated ceiling…` now, and the bare `performance.now() - t0 < 2000`
+it quotes no longer exists anywhere.
 
 **So the contention is vitest's own, not another session's**, which is a different problem
 from the one this section was written about and has a different fix. Two things follow.
-`vitest.config.ts` sets **no `testTimeout`, no `pool` and no `poolOptions`**, so two of the
-three reds are the 5 s default being applied to a page mount that costs ~4 s alone — a bound
-nobody chose. And the third has a sibling worth copying rather than loosening:
-`layout-solve.test.ts:679` asserts a **ratio** (`time(30)/time(10) < 12`) instead of an
-absolute, which is exactly the shape that survives a loaded machine.
+`vitest.config.ts` set **no `testTimeout`, no `pool` and no `poolOptions`** *(it sets the
+first two now — see the answer below)*, so two of the three reds are the 5 s default being
+applied to a page mount that costs ~4 s alone — a bound nobody chose. And the third has a
+sibling worth copying rather than loosening: `layout-solve.test.ts` asserts a **ratio**
+(`time(30)/time(10) < 12`) instead of an absolute, ~~which is exactly the shape that survives
+a loaded machine~~ — **which it is not, and that sentence is the single most costly thing
+this section ever said.** The ratio test is one of the three that died. A ratio protects an
+*assertion* from machine speed and does nothing about a *timeout*: the body is killed at
+10 023 ms before the ratio is ever evaluated. Copying it, as this paragraph recommended,
+would have moved the other bars into the same trap.
 
 **Second measurement, 2026-09-03, and it is the stronger evidence: the failing SET changes
 run to run on one unchanged tree.** Three consecutive `pnpm test` runs over the same commit,
@@ -478,12 +500,99 @@ above and `layout-solve`'s two non-timing failures are not bound by a clock at a
 means "loosen the timing bounds" would not have fixed run 2. Wall-clock is the covariate to
 watch: 163 s clean, 291 s with five reds.
 
-**What would unblock it:** the distribution under both conditions, then per test a choice
-between a ratio, a raised timeout with the reason written beside it, and CI-only. Do not
-simply raise the numbers — a bound that cannot fail is the thing this repo keeps finding —
-and note that the two non-timing failures in run 2 mean at least part of this is not a bound
-at all but a solver test observing a different result under a starved scheduler. That half
-needs finding before anything is loosened.
+**ANSWERED 2026-09-03, and the answer is that this section had the wrong subject.** The
+missing measurement was never a distribution — it was the **error text**, which two rounds of
+observation never captured because a red under load was written down as a red under load and
+not opened. The condition was reproduced deliberately instead of waited for: spinners on all
+eight cores, then eighteen of them, one file, `--reporter=verbose`, at `a23b50b`.
+
+| test | idle | 8-way | 18-way | how it died |
+|---|---|---|---|---|
+| `the solver can open a route › opens it, at every seed` | 830 ms | 3295 ms | 7936 ms | **timed out in 5000 ms** |
+| `the solver and the room report agree › …no two pieces in the same place` | 732 ms | 3248 ms | 7392 ms | **timed out in 5000 ms** |
+| `cost of a solve › scales with the room rather than exploding` | 963 ms | 4414 ms | 10023 ms | **timed out in 5000 ms** |
+| `cost of a solve › stays inside a second…` (`< 2000`) | 394 ms | 1731 ms | **4061 ms** | assertion |
+| `clearance-field › frame budget` (`< 1500`, best-of-3) | — | *1476* | *3384* | **passed** |
+
+Four rows are single samples of the body; **the `clearance-field` row is in a different
+quantity and is italicised for it** — those are whole-test durations covering three runs,
+so the number the bar actually saw is roughly a third of each, and 3384 against a 1500 bar
+is a pass rather than the contradiction it reads as. Its `idle` cell is empty because this
+campaign never measured it, which is why the finding below about that bar's sensitivity
+went unnoticed for as long as it did. (The 18-way solve figure is **4061 ms**, the number
+the assertion printed; an earlier draft of this table said 4063 and no artifact says that.)
+
+That is the same four-red set observed in run 2, on demand, with every result identical
+throughout. **Three of the four are the harness.** `vitest.config.ts` set no `testTimeout`,
+so vitest's 5000 ms default (`resolved.testTimeout ??= resolved.browser.enabled ? 15e3 :
+5e3`) governed a suite whose slowest honest test is a twenty-piece group solve at ~6.3 s in a
+warm process on an **idle** machine. Two of the three assert nothing about a clock at all.
+
+**The sharpest correction is to this section's own advice.** It named
+`layout-solve.test.ts:679`'s ratio as "exactly the shape that survives a loaded machine". It
+does not survive, and it is the third row above: a ratio protects an *assertion* from machine
+speed and does nothing about a *timeout*, so the body is killed before the ratio is ever
+evaluated. Recommending it would have moved the other bars into the same trap.
+
+**What shipped** (`fix/test-timeout-is-a-hang-catcher`), per test, as this section asked:
+
+- **`testTimeout` / `hookTimeout` = 30 s, as a decision.** ~3× the worst body observed at
+  2.3× oversubscription, still short enough to catch a hang. A timeout is a hang-catcher; the
+  performance budget belongs in assertions that say so. Pinned at **both** ends in
+  `tests/toolchain.test.ts`, because a number free at the top is not pinned.
+- **The two real bars are calibrated, not loosened.** `tests/helpers/perf.ts` measures a fixed
+  reference workload in the same process and scales the ceiling by how slow the machine
+  currently is, clamped to `[1, 4]`. Both bars keep their idle figures — 2000 ms and 1500 ms —
+  so a slower box moves the bar and the code's own margin does not. 2000 against the 8400 ms
+  the regression produced is a 4.2× separation, and both scale together.
+- **Best-of-N is generalised from `clearance-field`**, which is the one bar here that has
+  never gone red under load, and the table above says why. One mechanism, two callers: a
+  second hand-rolled timing loop is exactly the drift `tests/helpers/` exists to prevent.
+
+**Mutation-tested twice, and the first round is the lesson.** Round one reported **17/17
+killed** and was honest about every mutation it ran; four review lenses then found **five
+survivors it had never thought to try**, which is the difference between a kill rate and a
+mutation set. The sharpest: `machineFactor()` hard-wired to `MAX_FACTOR` passed 13 of 13,
+pinning every bar at the clamp forever — the exact silent inflation the helper says it
+exists to prevent. `bestMs` returning the *mean* passed the test named for not returning
+the mean, because that test's own comment did the arithmetic wrong (the mean of 40/5/40 is
+28.34, under its 30 ms bar). And `ceilingMs` dropping the factor entirely survived three
+runs in four, because on a machine reading exactly 1.00 the identity and the correct answer
+are the same number.
+
+Round two, against the rebuilt guards: **21 of 23 killed.** The two survivors are
+deliberate and are written into the test file rather than hidden — growing the reference
+workload, or deflating its constant, both make the machine *read* as slower, which no test
+can distinguish from a machine that genuinely is. What is asserted instead is that the
+damage is **bounded**: both pin the factor at the clamp, so the worst bar either can produce
+is `1200 × 3` = 3600 ms. Verified end to end rather than argued — worst-case calibration
+**plus** a 30× slower `solveLayout`, together, and the bar still went red at
+`expected 5157.97 to be less than 3600`.
+
+Two numbers moved as a result: `MAX_FACTOR` 4 → **3**, and the twenty-piece bar 2000 →
+**1200**. A flaky bar being *tightened* is the opposite of the usual repair, and the reason
+is arithmetic the first version asserted without doing: at the old clamp the worst-case bar
+was 8000 ms against a regression that measured 8400 — a five per cent margin, described in
+the file as "four times".
+
+**What is NOT claimed, and one of these is a new open item:**
+
+- The two non-`layout-solve` files seen red in run 3 (`library-click-through`,
+  `mounted-clash`) were not in this reproduction and their error text is still uncaptured.
+  If they too are timeouts the 30 s covers them; if not, they are a separate finding.
+- **`clearance-field`'s bar has an unknown separation.** Nothing in this repo records what
+  an O(cells × parts) regression in `buildClearanceField` costs. The healthy body is ~40 ms
+  and the bar is 1500, so it is 37× the body — but 37× *what defect* is unanswered, and a
+  per-part rescan at `MAX_CELLS` with 30 parts is plausibly ~1.2 s, which would sit under
+  even the unscaled bar. Unlike the solve bar, whose 8400 ms is measured, this one has no
+  evidence it still fires. Closing it means writing the regression and timing it. Recorded
+  beside the constant in `tests/helpers/perf.ts` and in `tests/clearance-field.test.ts`.
+- **The calibration was inert on CI** — it printed `factor 1.00`, so both bars sat at
+  exactly their stated values and the scaling path was never exercised by that green. What
+  CI did verify is the 30 s timeout and best-of-N sampling.
+- The factor is measured once per **test file**, not per worker process: vitest 4 defaults
+  to `pool: 'forks'` with `isolate: true`. So the figure `perf-calibration` prints is that
+  file's, and the two bars each take their own.
 
 One instance from this round is unrecoverable and is recorded as a gap rather than as a
 result: gating PR #21's merge produced `1 failed | 1482 passed`, the failing test's identity
@@ -1022,8 +1131,14 @@ the user went and looked.
   not deleted, and its content is in #29. **A ref listing tells you where a branch points,
   never what it contains** — the second time in this round that a listing was read as a claim
   about content.
-- **Eight stale gate worktrees** in temp directories belonging to sessions that have ended,
-  plus two live worktrees on branches that have merged.
+- ~~**Eight stale gate worktrees** in temp directories belonging to sessions that have ended,
+  plus two live worktrees on branches that have merged.~~ **Cleared 2026-09-03** — and there
+  were thirteen, not eight, which is the same lesson this list keeps teaching: a count in
+  prose is a claim, and the ones that rot are the ones nobody re-derives. `git worktree
+  list` → 2, `git branch` → 7 from 36. Two of the thirteen held commits and both were also
+  reachable from a branch **and** an `archive/*` tag; that, not their age, is what made
+  removing them safe. Eleven deregistered directories are still on disk — see the queue's
+  branch-hygiene note.
 - ~~**`tests/layout-rules.test.ts:238`.**~~ **Fixed in `aaf2888`**, and the sweep that
   replaced it is the lesson. The fixture was harmless — an anchor picked by *rank*, and
   1900 × 1000 and 1000 × 1900 are the same 1.90 m² — so the **comment** was the defect.
@@ -4398,11 +4513,52 @@ is the frame cost of a furnished room on a mid-range phone, which is the machine
 is for, and `frameloop="demand"` means the interesting number is cost-per-interaction
 rather than steady-state FPS.
 
-**What would unblock it:** a scene with a known part count, `renderer.info` read after
-a drag, on a throttled device — the same shape of measurement `tests/detect-pipeline`
-prints for detection. Until that exists, "how many segments is too many" is a guess,
-and adding detail on the strength of a guess is how a phone-first app stops running on
-phones.
+**MEASURED 2026-09-03.** Production build, headless Chromium + SwiftShader, each of the
+five picker presets opened through the real onboarding flow, then a 2.5 s camera drag on
+the 3D tab. No app instrumentation: the probe patches `drawElements` / `drawArrays` /
+their instanced forms on both WebGL context prototypes before any app code runs, which
+counts the same calls `renderer.info` counts. Part counts are the seeder's own, printed
+by `tests/starter-navigability.test.ts`.
+
+| preset | parts | draw calls / frame | triangles / frame | calls per part |
+|---|---|---|---|---|
+| Rectangle | 12 | **198** | 51 000 | 16.5 |
+| U-Shape | 12 | **226** | 36 306 | 18.8 |
+| L-Shape | 14 | **252** | 69 666 | 18.0 |
+| T-Shape | 16 | **386–389** | 94 634 | 24.2 |
+| Open Plan | 17 | **385** | 103 802 | 22.6 |
+
+**Three things this answers.**
+
+1. **A furnished room issues 200–390 draw calls per rendered frame**, and the marginal
+   cost across the range is ~37 calls and ~10 600 triangles per piece of furniture. So
+   the budget is spent by the *number of pieces*, not by any one shape's subdivision: a
+   piece averages 16–24 draw calls, and adding a primitive to a shape adds roughly one
+   call per instance of it. Detail per shape is cheap; the room's part count is not.
+2. **Part count is not the whole story, and the counter-example is in the table.** The U
+   and the Rectangle both seed **12** pieces, and the U costs 226 calls against 198 —
+   while carrying *fewer* triangles (36 306 vs 51 000). More calls for less geometry is
+   the signature of more distinct materials/meshes rather than more surface, so "how
+   many segments" is the wrong knob to worry about first; how many separate draw units a
+   shape decomposes into is the right one.
+3. **`frameloop="demand"` is doing its job**, confirmed rather than assumed: a 2.5 s
+   continuous drag produced between 2 and 21 rendered frames, and an idle tab produces
+   none. Cost per interaction is the correct unit, as this item said.
+
+**What is still NOT answered, and it is the half that needed a device.** Frame times
+are software rasterisation — SwiftShader — so they carry no information about a phone
+GPU and are deliberately not tabulated above. Fill rate, shader cost and whether 390
+draw calls is comfortable on a mid-range phone are all untouched. The transferable
+numbers are the exact ones (calls, triangles); the *verdict* still wants a real device,
+and that is now a much smaller question than the one this item opened with.
+
+Two probe bugs worth recording, because both are the shape this repo keeps finding.
+`drawArrays(mode, first, count)` puts `count` at argument **2** while
+`drawElements(mode, count, …)` puts it at **1**; reading `[1]` for both printed `NaN`
+triangles for all ten rows. And the first run's "nothing was measured" gate keyed off a
+secondary part-count read rather than off draw calls, so it discarded a table of real
+measurements — a probe throwing away its own result on a technicality.
+`C:\Users\bisma\AppData\Local\Temp\claude\danmu-probe\render-budget.mjs`.
 
 
 ### § 34 — two ceiling shapes are drawn bigger than they declare — FIXED

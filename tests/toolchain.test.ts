@@ -33,11 +33,15 @@ const ROOT = join(__dirname, '..');
 const CONFIG = 'eslint.config.mjs';
 
 /** Loading ESLint and resolving `eslint-config-next` through `FlatCompat` is real
- *  work — a cold call measured 5.8 s on Windows, which overran vitest's 5 s default
+ *  work — a cold call measured 5.8 s on Windows, which overran the harness's own bound
  *  and failed the FIRST of these tests while the others passed on the warm module
  *  cache. The instance is reused (`calculateConfigForFile` only reads) and the three
  *  tests that resolve get a budget that is not a stopwatch: none of them is asserting
- *  how fast the toolchain is. */
+ *  how fast the toolchain is.
+ *
+ *  That bound was vitest's 5 s default, which this file now pins at 30 s further down.
+ *  60 s stays because 5.8 s was the COLD figure on a warm-enough day, and a cold
+ *  `node_modules` on a slower box is the case this budget is actually for. */
 const RESOLVE_TIMEOUT = 60_000;
 
 type LintMessage = { ruleId: string | null };
@@ -221,7 +225,7 @@ describe('vitest is configured so a component test can exist', () => {
   async function config() {
     const mod = (await import('../vitest.config')) as { default: Record<string, unknown> };
     return mod.default as {
-      test: { include: string[]; environment: string };
+      test: { include: string[]; environment: string; testTimeout?: number; hookTimeout?: number };
       esbuild: { jsx: string };
     };
   }
@@ -291,5 +295,34 @@ describe('vitest is configured so a component test can exist', () => {
 
   it('names the automatic JSX runtime, which tsconfig deliberately does not', async () => {
     expect((await config()).esbuild.jsx).toBe('automatic');
+  });
+
+  // ── The timeout, which is here for the same reason as the three above ──────
+  //
+  // Leaving it unset is not neutral. vitest resolves it to 5000 ms
+  // (`resolved.testTimeout ??= resolved.browser.enabled ? 15e3 : 5e3`), and this
+  // suite's honest worst case is a twenty-piece group solve at ~6.3 s in a warm
+  // process on an IDLE machine. Measured 2026-09-03 under deliberate load, three
+  // `layout-solve` tests died as `Test timed out in 5000ms` — and only one of the
+  // three asserts anything about a clock. For months that read as a solver returning
+  // different answers under a starved scheduler. It was the runner.
+  //
+  // So the number is pinned as a decision. The floor is what makes it a decision at
+  // all; the ceiling is because a timeout that never fires is not a hang-catcher, and
+  // a hung test that stalls the suite for a minute is its own defect.
+  it('sets a testTimeout on purpose, rather than inheriting 5 s from vitest', async () => {
+    const t = (await config()).test.testTimeout;
+    expect(t, 'vitest.config.ts declares no testTimeout, so the 5 s default applies').toBeDefined();
+    expect(t!).toBeGreaterThanOrEqual(20_000);
+    expect(t!).toBeLessThanOrEqual(60_000);
+  });
+
+  it('gives hooks the same allowance, since they build fixtures with the same solver', async () => {
+    const c = (await config()).test;
+    // `toBe` alone is satisfied by BOTH being absent, which is the vacuous route: it
+    // passes on a config that declares neither, and the sibling above is the only
+    // thing catching that. Assert the subject exists before comparing it.
+    expect(c.hookTimeout, 'vitest.config.ts declares no hookTimeout').toBeDefined();
+    expect(c.hookTimeout).toBe(c.testTimeout);
   });
 });

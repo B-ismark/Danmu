@@ -19,6 +19,7 @@ import { analyzeRoom, freeFloorFraction } from '@/lib/clearance';
 import { obbGap, type OBB, type Poly } from '@/lib/geometry';
 import type { ScenePart } from '@/lib/scene-spec';
 import type { Footprint } from '@/lib/footprint';
+import { CLEARANCE_FIELD_BAR_MS, bestMs, ceilingMs } from './helpers/perf';
 
 const RECT: Footprint = [
   [-3, -2],
@@ -367,6 +368,27 @@ describe('cost', () => {
     // margin. Taking the best sample measures what the machine CAN do, which is
     // the question a ceiling is asking. A real O(cells x parts) regression is
     // slow in all three.
+    //
+    // The bar goes through `ceilingMs` for the same reason the twenty-piece solve
+    // in `layout-solve.test.ts` does, and this file is the reason that helper takes
+    // the best of N: of the suite's wall-clock bars, this is the one that has never
+    // gone red under load, and best-of-three is why. Two bars, one mechanism —
+    // hand-rolling the loop here and calling the helper there is how the two would
+    // drift into disagreeing about what a ceiling means.
+    //
+    // TWO THINGS THIS BAR DOES NOT KNOW, and they are worth more than the two it does.
+    // The paragraph above says the 1500 is "deliberately loose enough not to flake on
+    // a busy machine" — but `ceilingMs`'s whole contract is to state the IDLE number
+    // and let the factor pad it, so this bar is now padded twice and the file argues
+    // both sides. It is left at 1500 rather than tightened because of the second
+    // thing: **nothing in this repo records what an O(cells x parts) regression
+    // actually costs.** The healthy body is ~40 ms and the bar is 37x that, and with
+    // no figure for the defect there is no way to say whether 37x separates anything.
+    // A per-part rescan at `MAX_CELLS` with 30 parts is plausibly ~1.2 s, which would
+    // sit under even the un-scaled bar. Tightening on that guess would be a number
+    // chosen by feel; measuring it means writing the regression and timing it, and
+    // until someone does, this is a canary of unknown sensitivity. Recorded in
+    // `tests/helpers/perf.ts` beside the constant and in § A.4.
     const big: Footprint = [
       [-20, -20],
       [20, -20],
@@ -377,15 +399,16 @@ describe('cost', () => {
     for (let i = 0; i < 30; i++) {
       parts.push(box(-18 + (i % 6) * 7, -18 + Math.floor(i / 6) * 8, 1.8, 0.9, i * 0.31));
     }
-    let best = Infinity;
     let f!: ReturnType<typeof buildClearanceField>;
-    for (let run = 0; run < 3; run++) {
-      const t0 = performance.now();
+    // The bar BEFORE the work, not inside the assertion: `machineFactor` measures on
+    // first use, so reading it afterwards calibrates against the heap three field
+    // builds just left behind, and an allocation regression would buy its own ceiling.
+    const bar = ceilingMs(CLEARANCE_FIELD_BAR_MS);
+    const best = bestMs(() => {
       f = buildClearanceField(parts, big)!;
       pairGaps(f!);
-      best = Math.min(best, performance.now() - t0);
-    }
+    });
     expect(f!.componentCount).toBeGreaterThanOrEqual(1);
-    expect(best).toBeLessThan(1500);
+    expect(best).toBeLessThan(bar);
   });
 });
