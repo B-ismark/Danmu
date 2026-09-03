@@ -36,7 +36,7 @@ them. Where two items are the same defect one layer apart, they are listed as on
 | — | ~~**§ 31** containment must outrank a blocked door, categorically~~ | **BUILT 2026-09-03.** `IMPOSSIBLE_TERMS` plus a veto at three choice points. The defect was not the near-tie it was filed as: 18 of 160 solves handed back a room MORE impossible than the one they were given, all of them from legal seeded rooms. Now 0 of 160 | done | A.7 and G.1 unblocked |
 | ~~7~~ | ~~**§ 34** the pendant and the ceiling fan draw outside their declared size~~ | **FIXED** — `fanColumn` + `pendantDrop` in `scene-spec.ts`, swept at 10 mm across both catalogue bands against `verticalExtent`. The stated blocker (what a pendant's declared height means) was already answered by `isMountedObstruction` + `clearance.ts` rule 2b | — | — |
 | ~~7~~ | ~~**§ 33.1** the four newest shapes have never been seen in 3D~~ | **ALREADY DONE, and this row was stale** — `visual-check.md` has recorded the look since 2026-09-01 and deleted its own item; the queue was never updated. Re-confirmed 2026-09-02 alongside § 34 | — | — |
-| 7 | **§ 36** a non-uniform resize walks through both geometry caps | Same review. Bigger class than the two shapes: every absolute constant in a non-parametric shape does this | M | none |
+| — | ~~**§ 36** a non-uniform resize walks through both geometry caps~~ | **FIXED 2026-09-03.** Six shapes, not two — the four extra found by grepping for the shape of the bug rather than its symptom. Worst was 2.25× (a fan's motor) and 4× (a pendant's shade) | done | wants eyes |
 | 7 | **§ 37** the Inspector's placement banner contradicts the room report | Reviewed 2026-09-02 and held out of PR #87. The idea is wanted; two of its three states are already computed elsewhere and it recomputes them with a different bar | M | none — it is on a branch, in no PR |
 | 8 | **G.1** a brand-new room seals its own routes at the size the app ships | Measured, real, and a first-run defect — the worst kind to leave | M | related to § 31: both are the solver's idea of "navigable" |
 | 9 | **A.7** `snapYaws` leaves the piece crooked in 197 of 240 solves | Measured, visible, nobody has decided whether it matters | M | after § 31, which may change what a finalist is |
@@ -2610,7 +2610,7 @@ too tall for its room, reachable only above 2(H - MOUNT_PAD)/3, which is 1.85 m 
 room against a 900 mm tallest ceiling fixture. Unreachable from the catalogue, so changing it
 would be an unmeasured change to a case nobody has seen.
 
-### § 36 — a non-uniform resize walks through both geometry caps — OPEN
+### § 36 — a non-uniform resize walks through both geometry caps — **FIXED 2026-09-03**
 
 Also from the § 34 review, and a bigger class than the two shapes it was found in.
 
@@ -2642,6 +2642,71 @@ rebuild from the current dim instead of group-scaling — which is what that set
 and costs a re-render per resize frame. Or express every cap as a ratio, which is not
 possible for `FAN_HUB_R`, since a hub is a real object with a real size. The first is
 probably right and it is not a one-line change.
+
+---
+
+**FIXED 2026-09-03**, and the note above understated it: the class has **six** members,
+not two.
+
+**What shipped.** `fan` and `lamp-pendant` join `PARAMETRIC_SHAPES`, which is what that
+set is for — the geometry rebuilds from the current dim and `Draggable` leaves the group
+at scale 1. So do `tv-console`, `stool`, `nightstand` and `door`, whose caps were
+literals inside `DynamicPart.tsx` and are now `consoleSlabs`, `stoolSeat`,
+`drawerSlide` and `doorHandleY` in `lib/scene-spec.ts` — the `fanBlade` scar again:
+arithmetic that lives only in a TSX renderer is arithmetic no test can reach.
+
+**The whole class, at the top of each band.** `tests/parametric-caps.test.ts` prints
+this on every green run, the `detect-pipeline` precedent:
+
+| shape · detail | authored → stored | drawn | its own cap | |
+|---|---|---|---|---|
+| fan · motor housing | 200 → 450 mm | 180.0 | 80.0 | **2.25×** |
+| lamp-pendant · shade | 400 → 900 mm | 360.0 | 210.0 | 1.71× |
+| tv-console · top slab | 500 → 800 mm | 48.0 | 30.0 | 1.60× |
+| tv-console · plinth | 500 → 800 mm | 96.0 | 60.0 | 1.60× |
+| stool · seat pad | 450 → 700 mm | 77.8 | 50.0 | 1.56× |
+| nightstand · drawer slide | 400 → 600 mm | 270.0 | 180.0 | 1.50× |
+| door · handle height | 2100 → 2400 mm | 1080.0 | 1000.0 | 1.08× |
+
+Read the ratios as a **lower bound**: the sweep moves one axis at a time. The pendant is
+1.71× there and **4×** in its own test, and both are right — its shade is capped against
+its own WIDTH, so the worst case needs two axes moving in opposite directions
+(narrowest × longest, 150 × 900), which a per-axis sweep cannot express.
+
+**The test is about the class, not the shapes**, and that is the part worth keeping:
+
+> `helper(storedDim) ≠ helper(authoredDim) × (storedDim / authoredDim)` ⇒ the shape
+> must be parametric.
+
+It was observed failing before the fix, and it failed on exactly the `isParametric`
+line with every arithmetic assertion before it already green — which is the whole
+character of this defect: **the extent invariant is untouched**, so `top - bottom` still
+equals the stored height and every assertion about a piece's SIZE stayed green. A
+proportion defect living inside a correct extent is why a catalogue sweep could not see
+it.
+
+**Why the four small ones are in.** They are cosmetic where the fan and the pendant were
+structural — a 48 mm console top instead of 30, against a motor thicker than the fan is
+tall. They are fixed anyway because the class is the finding, and choosing which
+instances of a class to fix by how ugly they look is how the next one gets missed. Two
+of the six were found by review and four only by grepping for the SHAPE of the bug.
+
+**What was considered and not done.** Expressing every cap as a ratio, the other option
+the note above records. It is not available for `FAN_HUB_R`, and it is the wrong answer
+for the rest on inspection: a drawer runner, a seat pad, a plinth and a door handle are
+real objects at real sizes, and the honest statement is "this does not grow with the
+piece" rather than a fraction chosen to look right at one size. Each helper is named for
+the object rather than the number for that reason.
+
+**Both directions are mutation-checked.** Dropping the four new shapes from
+`PARAMETRIC_SHAPES` goes red; so does turning a cap into a pure proportion, which is the
+assertion saying the table's rows are genuinely caps and not proportions wearing a
+`min()`.
+
+**Not verified:** nobody has resized one of these on screen. See `docs/visual-check.md`.
+
+---
+
 
 ### § 37 — the Inspector's placement banner answers a question two other surfaces
 already answer, and disagrees with both — REVIEWED, NOT MERGED

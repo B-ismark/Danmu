@@ -248,6 +248,76 @@ This is the only defect in the whole item that a mouse cannot produce.
 `components/three/Room.tsx`. Merged to `main` in **`d2ef257`** (PR #73).
 
 
+### Eight shapes stopped stretching their details — branch `fix/parametric-caps-survive-a-resize`, PR #90
+
+**Partly looked at on 2026-09-03**, production build, every pair rendered side by side
+at its catalogue size and at the end of its band. What was seen and is therefore NOT in
+the list below: the fan puts its extra height into the DOWNROD with the motor unchanged;
+the pendant at 150 × 900 is a narrow shade on a long cord rather than a funnel, **and it
+casts a clean pool of light on the floor beneath it** — which is the review's blocker
+confirmed, since an emitter left at the authored anchor would have been sitting on the
+bare cord above the shade with the shade occluding it; the console, stool and nightstand
+pairs differ in the right axis only; and a fan given 1500 × 900 reads as an oval in both
+tabs. The 2D plan agrees with `dimMM` throughout, which matters because the plan never
+group-scaled and is therefore the control.
+
+What is left is below.
+
+**Where to click.** Add each piece below from the **Library**, select it, press `S` for
+Scale, and pull it to the end of its band. Then compare against the same piece at its
+catalogue size. Every one of these now REBUILDS instead of stretching, so the detail
+named should stay the size it is while the piece around it grows.
+
+| add this | drag this axis to | watch |
+|---|---|---|
+| Ceiling fan | 450 mm tall | the motor housing stays ~80 mm; only the downrod lengthens |
+| Pendant lamp | 150 mm wide × 900 mm long | the shade stays a shade; only the cord lengthens |
+| TV console | 800 mm tall | the top slab stays ~30 mm and the plinth ~60 mm |
+| Stool | 700 mm tall | the seat pad stays ~50 mm; only the legs lengthen |
+| Nightstand | 600 mm deep, then double-click to open the drawers | the drawers slide ~180 mm, not 270 |
+| Door | 2400 mm tall | the handle stays at ~1 m from the FLOOR, not 1.08 m |
+| Door | 35 mm deep (the band's floor) | the panel gets THINNER; it used to freeze at 40 mm, thicker than the door |
+| Window | 3200 mm wide | five panes and four mullions, not two panes stretched to 1.6 m each |
+| Radiator | 2000 mm wide | 33 fins, not 13 fat ones |
+| Fan or Stool | width and depth to DIFFERENT values | it must read as an oval from above, matching the 2D plan — these three round shapes drew a circle over an elliptical footprint |
+
+**What wrong looks like, and it is the reason this cannot be left to the tests.**
+
+- **A piece that changes size when merely dragged.** This is the scar
+  `tests/part-scale.test.ts` was written for and the failure mode this whole set has:
+  `renderBaseDim` returns the RESOLVED dim for a parametric shape, so if a piece is
+  drawn at its authored size while the store holds a resize, `commit()` writes the
+  authored size straight back through `setDim` and the resize is silently thrown away.
+  Resize one of the six, then MOVE it, and check the Inspector's dimensions did not
+  jump back.
+- **A detail that has stopped scaling when it should.** The opposite error. A fan's
+  BLADES are a proportion (`fanBlade`) and must still grow with the fan; only the motor
+  is capped. Same for a console's carcass against its top slab, and a stool's legs
+  against its seat. If the whole piece looks rigid, the effective dim is not reaching
+  the renderer.
+- **A pendant that looks wrong at the bottom of its band.** The cap runs the other way
+  too: at 150 mm wide the shade is capped by WIDTH, and at a short drop by height. Try
+  800 × 150 as well as 150 × 900.
+- **A door handle on the wrong side of its own panel.** `doorHandleY` is measured from
+  the panel's bottom edge (`-h / 2 + doorHandleY(...)`), so a mistake here puts it in
+  the floor or above the frame. Doors are the one member of this set the user does not
+  usually resize, which is exactly why nobody would notice.
+
+**What does not need re-deriving.** The class table runs on every green suite and names
+each shape, its authored and stored size, what was drawn, and its own cap — nine rows
+across eight shapes, `authored` read from `PART_LIBRARY` rather than typed. The extent
+(`top - bottom` = the stored height) is swept over the fan's and the pendant's whole
+bands; it is NOT checked for the other six, and the first version of this paragraph
+claimed it for "every shape" off a single assertion at a single size.
+
+**What was found by REVIEW rather than by these tests, so treat the green with
+proportion.** Three things this file's gate could not see, all now fixed: the pendant's
+light was left at the authored anchor while its mesh moved (§ 34's defect re-entered,
+and `ceiling-fixtures.test.ts` asserts that property and stayed green because it hands
+one dim to both functions); three round shapes drew a circle where the plan draws an
+ellipse; and `window` and `radiator` were members of the class nobody had listed. The
+gate itself was per-row, so an empty table passed every assertion in it.
+
 ## Layout and Shuffle
 
 *Owner: `layout`. The Shuffle item was a look rather than a check, and the look was taken on

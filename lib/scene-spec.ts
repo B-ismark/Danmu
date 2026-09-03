@@ -301,6 +301,73 @@ export function pendantDrop(widthMM: number, heightMM: number): {
   };
 }
 
+// ─── § 36's remaining caps ──────────────────────────────────────────────
+//
+// In one place, for the reason `fanBlade` established: arithmetic that lives only
+// inside a TSX renderer is arithmetic no test can reach.
+//
+// Each of these is a `min(absolute, proportion)` — a real-world size that must not
+// grow with the piece, floored by a proportion so a short piece does not get a detail
+// thicker than itself. That shape is exactly what a group scale destroys, so every
+// shape below is in `PARAMETRIC_SHAPES` and `tests/parametric-caps.test.ts` says why.
+//
+// These are smaller violations than the fan and the pendant — 1.5x to 1.6x rather
+// than 4x, and cosmetic where those two were structural. They are here because the
+// class is the finding: an absolute constant in a non-parametric renderer is the
+// defect, and choosing which instances to fix by how ugly they look is how the next
+// one gets missed.
+//
+// A `//` header rather than a docblock, because a docblock immediately above another
+// docblock documents nothing — `tests/docblock-adjacency.test.ts` gates exactly that,
+// and caught this one.
+
+/** How many panes a window of this width is divided into.
+ *
+ *  A MODULE COUNT off an absolute pitch, which is the same class as a capped detail
+ *  and arrives at it from the other side: the count is an integer chosen at one width,
+ *  and stretching the mesh afterwards stretches the panes instead of adding any. A
+ *  catalogue 1200 mm window widened to 3.2 m drew TWO 1.6 m panes with one mullion,
+ *  where its own arithmetic says five panes and four mullions. */
+export function windowPanes(widthMM: number): number {
+  return Math.max(1, Math.round(widthMM / 1000 / 0.7));
+}
+
+/** How many fins a radiator of this width has. The same shape as `windowPanes`, and
+ *  the renderer's own comment — "33 fins on a 2m radiator" — was describing a
+ *  radiator that drew 13, because a stretched one keeps the count it was authored
+ *  with and widens each fin instead. */
+export function radiatorFins(widthMM: number): number {
+  return Math.max(6, Math.round(widthMM / 1000 / 0.06));
+}
+
+/** A TV console's top slab and its plinth, in metres. 30 mm and 60 mm are joinery,
+ *  not proportions of the piece. */
+export function consoleSlabs(heightMM: number): { top: number; foot: number } {
+  const h = heightMM / 1000;
+  return { top: Math.min(0.03, h * 0.08), foot: Math.min(0.06, h * 0.14) };
+}
+
+/** A stool's seat thickness, in metres. 50 mm is a seat pad. */
+export function stoolSeat(heightMM: number): number {
+  return Math.min(0.05, (heightMM / 1000) * 0.12);
+}
+
+/** How far a nightstand's drawer slides when fully open, in metres. 180 mm is a
+ *  drawer runner; the proportion is what stops a shallow cabinet's drawer sliding
+ *  further than the cabinet is deep. */
+export function drawerSlide(depthMM: number): number {
+  return Math.min(0.18, (depthMM / 1000) * 0.6);
+}
+
+/** A door handle's height above the floor, in metres. A handle is at a hand's
+ *  height, which is a fact about people rather than about the door — so a taller
+ *  door does not get a higher handle, it gets the same handle further from its top.
+ *  The proportion catches a door short enough that 1 m would be above its own
+ *  midpoint. */
+export function doorHandleY(heightMM: number): number {
+  return Math.min(1.0, (heightMM / 1000) * 0.45);
+}
+
 /** Where the bulb sits inside each fixture, in the part's local metres. These
  *  track the geometry in DynamicPart — a light at the origin would sit on the
  *  floor and illuminate the inside of its own shade.
@@ -1732,12 +1799,47 @@ export type LibraryItem = {
 /** drag-and-drop MIME for dragging catalog items onto the 3D canvas. */
 export const DND_MIME = 'application/x-danmu-item';
 
-// Parametric shapes rebuild their geometry from the CURRENT dimensions (adding
-// modules — pleats, shelves, bays, seats — rather than stretching one mesh). For
-// these, Draggable does NOT group-scale the mesh: the geometry owns its size, so
-// resizing reads correct + never distorts. All other shapes still group-scale.
+// Parametric shapes rebuild their geometry from the CURRENT dimensions rather than
+// being stretched. For these, Draggable does NOT group-scale the mesh: the geometry
+// owns its size, so resizing reads correct + never distorts. All other shapes still
+// group-scale.
+//
+// **Two reasons to be in this set, and only the first one tiles.** The original six
+// add MODULES as they grow — pleats, shelves, bays, seats — and each has a
+// `MODULE_RANGE` row; `tests/module-tiling.test.ts` holds that direction.
+//
+// `fan` and `lamp-pendant` are here for the second reason (§ 36): their geometry
+// contains a CAP against an absolute, and a cap is not a proportion, so a group scale
+// walks straight through it. `fanColumn`'s `min(FAN_HUB_H, h * 0.4)` is a motor
+// housing, which is a real object with a real thickness; `pendantDrop`'s
+// `min(h * 0.4, r * 1.2)` is what stops a shade becoming a funnel. Both are chosen at
+// the AUTHORED size and never see the scale, so the catalogue fan resized to 450 mm
+// drew a 180 mm motor where its own helper says 80, and the catalogue pendant resized
+// to 150 x 900 drew a 360 mm shade where the cap asks for 90 — four times over, and
+// exactly the outcome `pendantDrop`'s header says it prevents.
+//
+// Neither tiles, so neither has a `MODULE_RANGE` row, and that is legal:
+// `moduleRangeFor` returns `null` rather than `undefined` precisely so a member with
+// no range is something a renderer must handle rather than spread into NaN.
+// `tests/parametric-caps.test.ts` is the gate, and it is written about the CLASS
+// rather than these two shapes — if drawing at the authored size and scaling
+// disagrees with drawing at the stored size, the shape belongs here.
 const PARAMETRIC_SHAPES = new Set<Shape>([
   'sofa', 'curtain', 'wardrobe', 'closet', 'bookshelf', 'shoe-rack',
+  'fan', 'lamp-pendant',
+  // …and the rest of § 36's class: `consoleSlabs`, `stoolSeat`, `drawerSlide` and
+  // `doorHandleY` are all `min(absolute, proportion)`, which is the shape a group
+  // scale destroys. Smaller violations than the two above — 1.5x to 1.6x, and
+  // cosmetic — but the same defect, and picking which to fix by how ugly they look is
+  // how the next one gets missed.
+  'tv-console', 'stool', 'nightstand', 'door',
+  // …and two the first sweep missed, because they reach the class from the other
+  // side: `window` and `radiator` divide their width into a MODULE COUNT off an
+  // absolute pitch (`windowPanes`, `radiatorFins`). An integer chosen at one width and
+  // then stretched is the same defect as a cap chosen at one height and then stretched
+  // — 2.50x and 2.54x respectively, worse than four of the six above. Found by asking
+  // what else has this SHAPE rather than by looking for things that looked wrong.
+  'window', 'radiator',
 ]);
 export function isParametric(shape: Shape): boolean {
   return PARAMETRIC_SHAPES.has(shape);

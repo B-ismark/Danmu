@@ -9,10 +9,16 @@ import { PartLight } from './PartLight';
 import { SURFACE } from './materials';
 import { Spin, Sway } from './Motion';
 import {
+  consoleSlabs,
+  doorHandleY,
+  drawerSlide,
   fanBlade,
   fanColumn,
   pendantDrop,
   isParametric,
+  radiatorFins,
+  stoolSeat,
+  windowPanes,
   moduleCount,
   moduleRangeFor,
   type ModuleRange,
@@ -21,7 +27,7 @@ import {
 import { useStudio } from '@/lib/store';
 import { DECOR, DETAIL, SCENE, defaultBodyColor } from '@/lib/scene-palette';
 
-/** The module ranges the five parametric shapes tile by, resolved once at module
+/** The module ranges the TILING parametric shapes are divided by, resolved once at module
  *  scope so a renderer reads a value rather than doing a table lookup per frame.
  *
  *  `lib/` owns the numbers and the arithmetic (`moduleCount`, `MODULE_RANGE`); this
@@ -29,10 +35,13 @@ import { DECOR, DETAIL, SCENE, defaultBodyColor } from '@/lib/scene-palette';
  *  reason for it is that a blade drawn `1.6r` long from inside a renderer swept 40%
  *  wider than the piece said for months, because no test could reach the expression.
  *
- *  `ONE` never fires for these five — each is a `PARAMETRIC_SHAPES` member with a
- *  `MODULE_RANGE` row. It exists so that adding a shape to that set without a range
- *  draws it as a single module rather than spreading `undefined` into NaN and
- *  rendering nothing at all. */
+ *  `ONE` never fires for these five — each has a `MODULE_RANGE` row. It exists so that
+ *  a shape reaching one of these lookups without a range draws as a single module
+ *  rather than spreading `undefined` into NaN and rendering nothing at all.
+ *
+ *  Being parametric and TILING are two different things since § 36: eight of the
+ *  fourteen members are there because their geometry holds an absolute, not because
+ *  they are divided into modules, and none of those eight reaches these five lookups. */
 const ONE: ModuleRange = { min: 1e-6, nominal: Infinity, max: Infinity };
 const BAY = moduleRangeFor('wardrobe') ?? ONE;
 const SEAT = moduleRangeFor('sofa') ?? ONE;
@@ -75,37 +84,69 @@ function tint(part: ScenePart): string {
 }
 
 export function PartGeometry({ part, locked }: { part: ScenePart; locked: boolean }) {
-  // PartLight rides alongside the shape: a lamp emits because it is a lamp, not
-  // because of which mesh happens to represent it. It renders nothing for the
-  // overwhelming majority of parts, which are not fixtures.
+  // Parametric parts rebuild from the CURRENT (overridden) dim, so both the mesh AND
+  // the light have to be handed the effective part. `PartLight` rides alongside the
+  // shape — a lamp emits because it is a lamp, not because of which mesh happens to
+  // represent it — and it renders nothing for the overwhelming majority of parts.
+  //
+  // ── Why this resolution is HERE and not one component down ──────────────────
+  //
+  // It used to live inside `ShapeDispatch`, "so the effective-dim hook sits in a
+  // component of its own rather than in one that also renders the light". That split
+  // is exactly what broke: the light was the thing excluded from it.
+  //
+  // `lightAnchor('lamp-pendant', dimMM)` returns `pendantDrop(dimMM[0], dimMM[2]).bulbY`
+  // — the same function the renderer draws the shade from — and while both read the
+  // AUTHORED dim and both were group-scaled by the same factor, they were coincident by
+  // construction. Making the shape parametric pinned the mesh at scale 1 and left the
+  // light at the authored anchor: a catalogue pendant dragged to 900 mm put its emitter
+  // 222 mm from its own bulb and 128 mm above the shade's top rim, on the bare cord,
+  // with the shade underneath it as an occluder. That is § 34's defect exactly — 190 mm
+  // above the rim, measured and fixed there — re-entered by a different route one
+  // commit later.
+  //
+  // `tests/ceiling-fixtures.test.ts` asserts that property and stayed GREEN, because it
+  // hands ONE dim to both `lightAnchor` and `pendantDrop`. Production was handing them
+  // two. A fixture that cannot express its defect, which is why the gate for this is
+  // `tests/parametric-caps.test.ts`'s "one dim reaches both" clause instead.
+  const p = useEffectivePart(part);
   return (
     <>
-      <ShapeDispatch part={part} locked={locked} />
-      <PartLight part={part} />
+      <ShapeDispatch part={p} locked={locked} />
+      <PartLight part={p} />
     </>
   );
 }
 
-// Split from PartGeometry so the effective-dim hook below sits in a component of
-// its own rather than in one that also renders the light.
-function ShapeDispatch({ part, locked }: { part: ScenePart; locked: boolean }) {
-  // Parametric parts rebuild from the CURRENT (overridden) dim. Feed them an
-  // effective part whose dimMM reflects the user's resize, so module counts
-  // (pleats / shelves / bays / seats) recompute instead of the mesh stretching.
+/** The part as the user has resized it, for a shape whose geometry owns its size.
+ *
+ *  Non-parametric shapes come back untouched: their mesh is authored-size and wears
+ *  the resize as a group scale, so handing them a stored dim would apply it twice. */
+function useEffectivePart(part: ScenePart): ScenePart {
   const storedDim = useStudio((s) => s.dims[part.id]);
-  const p = storedDim && isParametric(part.shape) ? { ...part, dimMM: storedDim } : part;
+  return storedDim && isParametric(part.shape) ? { ...part, dimMM: storedDim } : part;
+}
+
+function ShapeDispatch({ part, locked }: { part: ScenePart; locked: boolean }) {
+  // `part` is ALREADY the effective one — see `PartGeometry`. It used to be resolved
+  // here into a second binding `p`, and every case arm then had to remember to pass
+  // `p` rather than `part`; four of the twelve parametric shapes were added in one
+  // commit and each needed that edit by hand. An arm that forgot is the worst outcome
+  // available: `Draggable` stops group-scaling the shape while its geometry keeps
+  // drawing the authored size, so the piece silently stops growing at all. There is
+  // one binding now and nothing to forget.
   switch (part.shape) {
     case 'sofa':
-      return <SofaGeo part={p} locked={locked} />;
+      return <SofaGeo part={part} locked={locked} />;
     case 'tv':
       return <TVGeo part={part} locked={locked} />;
     case 'closet':
     case 'wardrobe':
-      return <WardrobeGeo part={p} locked={locked} />;
+      return <WardrobeGeo part={part} locked={locked} />;
     case 'bookshelf':
-      return <BookshelfGeo part={p} locked={locked} />;
+      return <BookshelfGeo part={part} locked={locked} />;
     case 'shoe-rack':
-      return <ShoeRackGeo part={p} locked={locked} />;
+      return <ShoeRackGeo part={part} locked={locked} />;
     case 'chair-dining':
       return <DiningChairGeo part={part} locked={locked} />;
     case 'chair-office':
@@ -159,7 +200,7 @@ function ShapeDispatch({ part, locked }: { part: ScenePart; locked: boolean }) {
     case 'fridge':
       return <FridgeGeo part={part} locked={locked} />;
     case 'curtain':
-      return <CurtainGeo part={p} />;
+      return <CurtainGeo part={part} />;
     case 'soundbar':
       return <SoundbarGeo part={part} />;
     case 'radiator':
@@ -479,10 +520,14 @@ function PendantLampGeo({ part }: { part: ScenePart }) {
   // Every number here was a literal, on both axes: a 600 mm cord and a 200 mm shade
   // for a declared 400 mm, 300 mm wide for a declared 350. See `pendantDrop`.
   const g = pendantDrop(part.dimMM[0], part.dimMM[2]);
+  // …and the ellipse again. `lamp-pendant` is ROUND, so a shade on a piece whose depth
+  // has been edited away from its width is an oval from above, which is what the plan
+  // and `collidesAt` are both already using.
+  const oval = part.dimMM[1] / part.dimMM[0];
   // Swing from the ceiling mount — the pivot is the top of the drop, which is the
   // part's own top rather than a number that happened to match one catalogue size.
   return (
-    <group position={[0, g.top, 0]}>
+    <group position={[0, g.top, 0]} scale={[1, 1, oval]}>
       <Sway amp={0.05} speed={0.7} axis="x">
         <group position={[0, -g.top, 0]}>
           {/* cord */}
@@ -751,8 +796,14 @@ function FanGeo({ part }: { part: ScenePart }) {
   // Blades follow the part's colour; the motor housing stays metal. The blades
   // were a literal, so recolouring a ceiling fan did nothing.
   const blade = tint(part);
+  // An ELLIPSE, not a circle of radius W/2. `fan` is a `ROUND_SHAPES` member, so
+  // `footFromPart` models the inscribed ellipse and `PlanView` draws it — W and D are
+  // separately editable and a stretched fan has to be the shape the collision maths is
+  // using. The group scale used to supply this for free; a parametric shape sits at
+  // scale 1, so the depth axis is the renderer's job now.
+  const oval = part.dimMM[1] / part.dimMM[0];
   return (
-    <>
+    <group scale={[1, 1, oval]}>
       <mesh position={[0, col.hubY, 0]}>
         <cylinderGeometry args={[hub, hub, col.hubH, 16]} />
         <meshStandardMaterial color="#888" />
@@ -775,7 +826,7 @@ function FanGeo({ part }: { part: ScenePart }) {
           );
         })}
       </Spin>
-    </>
+    </group>
   );
 }
 
@@ -894,7 +945,7 @@ function NightstandGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   // Double-click toggles drawers open; slide the faces (+ pulls + a shallow
   // drawer box) forward along +z.
   const open = useStudio((s) => s.openState[part.id] ?? 0);
-  const slide = open * Math.min(0.18, d * 0.6);
+  const slide = open * drawerSlide(part.dimMM[1]);
   return (
     <>
       {/* carcass */}
@@ -985,8 +1036,10 @@ function WindowGeo({ part }: { part: ScenePart }) {
   const w = part.dimMM[0] / 1000;
   const h = part.dimMM[2] / 1000;
   const frame = tint(part);
-  // One pane per ~0.7m of width, separated by slim mullions.
-  const panes = Math.max(1, Math.round(w / 0.7));
+  // One pane per ~0.7m of width, separated by slim mullions. `windowPanes` rather than
+  // the expression, because a count off an absolute pitch is § 36's class and the
+  // arithmetic has to sit where a test can reach it.
+  const panes = windowPanes(part.dimMM[0]);
   const paneW = w / panes;
   return (
     <>
@@ -1108,9 +1161,14 @@ function DoorGeo({ part }: { part: ScenePart }) {
   // mesh centre while this drew upwards from it, and the two disagreed by h/2.
   return (
     <>
-      <Box size={[w, h, 0.04]} position={[0, 0, 0]} color={tint(part)} />
+      {/* The panel is its DECLARED depth. It was a flat 0.04 here, which while the
+          shape group-scaled at least tracked `dimMM[1]` through the scale; parametric
+          pins the group at 1, so a literal would freeze the panel at 40 mm while the
+          Inspector's depth field went on editing a number nothing drew — and at the
+          band's 35 mm floor the drawn panel would be THICKER than the piece it is in. */}
+      <Box size={[w, h, part.dimMM[1] / 1000]} position={[0, 0, 0]} color={tint(part)} />
       {/* handle at ~1 m from the floor, i.e. 1 m up from the panel's bottom edge */}
-      <mesh position={[w / 2 - 0.06, -h / 2 + Math.min(1.0, h * 0.45), 0.025]}>
+      <mesh position={[w / 2 - 0.06, -h / 2 + doorHandleY(part.dimMM[2]), 0.025]}>
         <sphereGeometry args={[0.025, 12, 12]} />
         <meshStandardMaterial color="#B89060" />
       </mesh>
@@ -1141,9 +1199,11 @@ function RadiatorGeo({ part }: { part: ScenePart }) {
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
   const bodyC = tint(part);
-  const fins = Math.max(6, Math.round(w / 0.06));
+  const fins = radiatorFins(part.dimMM[0]);
   const fw = w / fins;
-  // 33 fins on a 2m radiator, all the same colour — a textbook instanced set.
+  // 33 fins on a 2 m radiator, all the same colour — a textbook instanced set. That
+  // number is `radiatorFins(2000)` and is now true of a RESIZED radiator too; before
+  // § 36 a stretched one kept the count it was authored with and drew 13.
   const finItems: InstanceItem[] = Array.from({ length: fins }, (_, i) => ({
     pos: [-w / 2 + (i + 0.5) * fw, h / 2, 0] as [number, number, number],
     size: [fw * 0.6, h * 0.9, d] as [number, number, number],
@@ -1323,8 +1383,7 @@ function TvConsoleGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
   const c = body(part, locked);
-  const t = Math.min(0.03, h * 0.08);
-  const foot = Math.min(0.06, h * 0.14);
+  const { top: t, foot } = consoleSlabs(part.dimMM[2]);
   return (
     <>
       <Box size={[w, t, d]} position={[0, h - t / 2, 0]} color={c} roughness={0.45} />
@@ -1344,9 +1403,12 @@ function StoolGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const h = part.dimMM[2] / 1000;
   const r = w / 2;
   const c = body(part, locked);
-  const seat = Math.min(0.05, h * 0.12);
+  const seat = stoolSeat(part.dimMM[2]);
+  // The ellipse, for the same reason as `FanGeo` — `stool` is a ROUND shape whose W
+  // and D are separately editable, and the plan draws what `footFromPart` models.
+  const oval = part.dimMM[1] / part.dimMM[0];
   return (
-    <>
+    <group scale={[1, 1, oval]}>
       <mesh position={[0, h - seat / 2, 0]}>
         <cylinderGeometry args={[r, r, seat, 24]} />
         <meshStandardMaterial color={c} roughness={0.55} />
@@ -1363,7 +1425,7 @@ function StoolGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
           </mesh>
         );
       })}
-    </>
+    </group>
   );
 }
 

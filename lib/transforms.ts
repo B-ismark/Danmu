@@ -61,14 +61,17 @@ export function resolveParts(parts: ScenePart[], o: Partial<TransformOverrides>)
  * The size a part's group is DRAWN at when its scale is 1 — which is not always the
  * authored `dimMM`, and the difference cost a user their resize.
  *
- * A parametric shape (`isParametric`: sofa, curtain, WARDROBE, closet, bookshelf,
- * shoe-rack) rebuilds its geometry from the effective dim, so `Draggable` leaves its
+ * A parametric shape — whatever `isParametric` says, and the list is deliberately NOT
+ * repeated here, because it was and it went stale the moment the set grew from six to
+ * fourteen — rebuilds its geometry from the effective dim, so `Draggable` leaves its
  * group at scale 1 and the mesh carries the resize. Every other shape keeps authored
  * geometry and wears the resize as a group scale. So "authored dim x live scale" is
  * the current size for the second kind and returns the AUTHORED size for the first,
  * whatever the user did to it — and `commit()` wrote that back through `setDim` on
- * every drop. Resize a wardrobe, then merely MOVE it, and the width went home; in
- * those six shapes and nowhere else, which is why it reported as "sometimes".
+ * every drop. Resize a wardrobe, then merely MOVE it, and the width went home; in the
+ * parametric shapes and nowhere else, which is why it reported as "sometimes". (It was
+ * six of them when that was written and is fourteen now — § 36 — so the failure has a
+ * wider surface than the sentence originally described.)
  *
  * It takes the part and the overrides rather than two dims, and that is the fix
  * being made unrepeatable rather than a convenience: the two-dim version's whole
