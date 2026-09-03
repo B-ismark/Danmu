@@ -5,12 +5,24 @@ import {
   impossibility,
   IMPOSSIBLE_TERMS,
   lockedForSolve,
+  makeRng,
+  openRoutes,
   solveLayout,
   type Candidate,
 } from '@/lib/layout-solve';
-import { DEFAULT_WEIGHTS, type CostBreakdown, type ScoreWeights } from '@/lib/layout-score';
-import { defaultScene } from '@/lib/scene-spec';
-import { footprintForLayout } from '@/lib/footprint';
+import {
+  costBreakdown,
+  navigabilityCost,
+  prepare,
+  DEFAULT_WEIGHTS,
+  NAV_CELL,
+  type CostBreakdown,
+  type LayoutContext,
+  type Placement,
+  type ScoreWeights,
+} from '@/lib/layout-score';
+import { defaultScene, type ScenePart } from '@/lib/scene-spec';
+import { footprintBounds, footprintForLayout, type Footprint } from '@/lib/footprint';
 
 // § 31 — "nothing physically impossible should be encouraged".
 //
@@ -166,6 +178,81 @@ describe('solveLayout never hands back a room more impossible than the one it wa
     expect(impossibility(r.breakdownAfter)).toBe(0);
     if (r.moved.length === 0) expect(r.after).toBeCloseTo(r.before, 10);
   });
+});
+
+describe('openRoutes measures legality against what it was HANDED, not against zero', () => {
+  // The repair pass may not CREATE impossibility — that is the gate on `best` above.
+  // What it must still be able to do is repair a room that is already illegal for a
+  // reason it cannot fix, and those are the same line of code read in two directions.
+  //
+  // The case is ordinary rather than exotic: a piece the user has LOCKED, standing
+  // through a wall. Nothing the repair may move can bring the room's impossibility to
+  // zero, so a ceiling of zero would refuse every candidate it ever visits — `best`
+  // stays as the layout it was handed and the pass silently does nothing.
+  //
+  // Measured on the fixture below, which is the whole reason it exists: with the
+  // relative ceiling the stranded floor goes from 7.5 m2 to none; with an absolute
+  // one the pass returns its input untouched and 7.5 m2 of the room stays cut off
+  // from the door. In both cases the locked sofa stays exactly where it is.
+  const POLY: Footprint = [
+    [-2, -3],
+    [2, -3],
+    [2, 3],
+    [-2, 3],
+  ];
+
+  /** A 4 x 6 room with the only door in the south wall, a wardrobe sealing it across
+   *  the middle, and a LOCKED sofa 375 mm through the north wall.
+   *
+   *  `pos[1]` is 0 on both movable pieces and that is load-bearing: `isObstacle`
+   *  requires `pos[1] < 0.05`, and a floor-standing piece's `pos[1]` is its BASE
+   *  rather than its centre. Written at the centre instead, every hard term reads
+   *  zero and this whole fixture passes while measuring nothing. */
+  const room = () => {
+    const parts: ScenePart[] = [
+      {
+        id: 'door', name: 'door', category: 'door', shape: 'door',
+        dimMM: [900, 50, 2100], pos: [0, 1.05, -3], rot: 0, locked: false, wallMounted: true,
+      } as ScenePart,
+      {
+        id: 'seal', name: 'wardrobe', category: 'wardrobe', shape: 'wardrobe',
+        dimMM: [4000, 600, 2000], pos: [0, 0, 0], rot: 0, locked: false,
+      } as ScenePart,
+      {
+        id: 'stuck', name: 'sofa', category: 'sofa', shape: 'sofa',
+        dimMM: [2200, 950, 880], pos: [0, 0, 2.9], rot: 0, locked: true,
+      } as ScenePart,
+    ];
+    // The sofa is not movable, so no repair can take it out of the wall.
+    const ctx: LayoutContext = { parts, movable: [false, true, false], footprint: POLY };
+    const at: Placement[] = parts.map((q) => ({ x: q.pos[0], z: q.pos[2], yaw: q.rot }));
+    return { parts, model: prepare(ctx), at };
+  };
+
+  it('opens the route it can open, and leaves the illegal piece alone', () => {
+    const { model, at } = room();
+    const before = costBreakdown(model, at, DEFAULT_WEIGHTS, NAV_CELL);
+
+    // The premises, asserted rather than assumed — all three have silently stopped
+    // holding once already while this fixture was being written.
+    expect(model.doors.length, 'the room has a door to be cut off FROM').toBe(1);
+    expect(model.obstacle, 'the wardrobe and the sofa must both be obstacles')
+      .toEqual([false, true, true]);
+    expect(navigabilityCost(model, at, NAV_CELL), 'floor is cut off from the door')
+      .toBeGreaterThan(0);
+    expect(impossibility(before), 'and the room is ALREADY illegal').toBeGreaterThan(0);
+
+    const after = costBreakdown(
+      model,
+      openRoutes(model, at, DEFAULT_WEIGHTS, footprintBounds(POLY), makeRng(3)),
+      DEFAULT_WEIGHTS,
+      NAV_CELL,
+    );
+    expect(after.navigation, 'the route was opened').toBeLessThan(before.navigation);
+    // …and it did not buy that by making the room any more impossible than it found
+    // it. Equal, not merely no-greater: the locked sofa is exactly where it was.
+    expect(impossibility(after)).toBeCloseTo(impossibility(before), 9);
+  }, 300_000);
 });
 
 describe('Candidate.breakdown', () => {
