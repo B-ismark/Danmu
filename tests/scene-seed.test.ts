@@ -42,6 +42,16 @@ const here = (p: ScenePart): Placement => ({ x: p.pos[0], z: p.pos[2], yaw: p.ro
 // the same place for the same reason.
 const PRESETS = offeredSizes().map((o) => ({ id: o.id, w: o.width, d: o.depth }));
 
+/** One preset's offered size, by id.
+ *
+ *  The blocks further down name a preset explicitly — "an L gets its reading nook",
+ *  "a U is a bedroom" — and every one of them hand-typed its dimensions, so deriving
+ *  only the `describe.each` list above would have left eleven copies inside the file
+ *  that had just been de-duplicated. They are size-SPECIFIC assertions ("the T's bar
+ *  is 2.1 m deep and cannot seat anyone 2 m from a 65-inch panel"), which is exactly
+ *  the kind that goes quietly false when the room it reasons about stops existing. */
+const SIZE = Object.fromEntries(PRESETS.map((p) => [p.id, p])) as Record<LayoutId, (typeof PRESETS)[number]>;
+
 const HEIGHT = offeredHeight();
 
 /** Every part whose footprint is not wholly inside the room, named.
@@ -114,6 +124,17 @@ const CEILING_TOPS: Record<string, string[]> = {
   u: [],
   open: ['Pendant=2.780'],
 };
+
+// A `describe.each` over a PARSED list can narrow silently where the hand-typed one
+// could not, and the helper's own count guard cannot see the way it does it: that guard
+// counts rows with `\bid:\s*'` and matches them with a regex that also assumes `id: '`,
+// so a row written `id: "u" as const` is invisible to both and the two counts agree.
+// Every one of the thirteen `u` tests below would then simply not exist, and the file
+// would report green with a preset missing. This is the pin that cannot be fooled that
+// way, because it names what it expects rather than counting what it found.
+it('sweeps every preset the picker offers, and no fewer', () => {
+  expect(PRESETS.map((p) => p.id)).toEqual(['rect', 'l', 't', 'u', 'open']);
+});
 
 describe.each(PRESETS)('starter scene · $id', ({ id, w, d }) => {
   const poly = footprintForLayout(id, w, d);
@@ -317,14 +338,14 @@ describe('starter scene keeps the preset’s promise', () => {
     defaultScene(id, w, d, { footprint: footprintForLayout(id, w, d), height: HEIGHT });
 
   it('a rectangle is a living room', () => {
-    const cats = seed('rect', 6, 4).map((p) => p.category);
+    const cats = seed('rect', SIZE.rect.w, SIZE.rect.d).map((p) => p.category);
     expect(cats).toContain('sofa');
     expect(cats).toContain('tv');
     expect(cats).toContain('table');
   });
 
   it('an L gets its reading nook in the wing', () => {
-    const parts = seed('l', 6, 4.7);
+    const parts = seed('l', SIZE.l.w, SIZE.l.d);
     const nook = parts.find((p) => p.shape === 'chair-armchair');
     expect(nook).toBeDefined();
     // The wing is the south-west of this footprint; the living group is the north
@@ -338,7 +359,7 @@ describe('starter scene keeps the preset’s promise', () => {
     // and the armchair landed 250 mm behind the sofa's back — across the only way
     // from one half of the room to the other. It was invisible because the pinch rule
     // exempted every RELATED pair, and an armchair facing a sofa is a relation.
-    const parts = seed('l', 6, 4.7);
+    const parts = seed('l', SIZE.l.w, SIZE.l.d);
     const sofa = parts.find((p) => p.category === 'sofa')!;
     const chair = parts.find((p) => p.shape === 'chair-armchair')!;
     const gap = obbGap(
@@ -349,10 +370,7 @@ describe('starter scene keeps the preset’s promise', () => {
   });
 
   it('a T and an open plan both get a dining set', () => {
-    for (const [id, w, d] of [
-      ['t', 5.5, 4.7],
-      ['open', 7.5, 5.6],
-    ] as const) {
+    for (const { id, w, d } of [SIZE.t, SIZE.open]) {
       const parts = seed(id, w, d);
       expect(parts.filter((p) => p.shape === 'chair-dining').length).toBeGreaterThanOrEqual(2);
       expect(parts.some((p) => p.shape === 'sofa')).toBe(true);
@@ -376,8 +394,8 @@ describe('starter scene keeps the preset’s promise', () => {
   });
 
   it('chooses a smaller catalog screen for a shallow room, never a scaled one', () => {
-    const shallow = seed('t', 5.5, 4.7).find((p) => p.category === 'tv')!;
-    const roomy = seed('rect', 6, 4).find((p) => p.category === 'tv')!;
+    const shallow = seed('t', SIZE.t.w, SIZE.t.d).find((p) => p.category === 'tv')!;
+    const roomy = seed('rect', SIZE.rect.w, SIZE.rect.d).find((p) => p.category === 'tv')!;
     // The T's living bay is 2.6 m deep and cannot seat anyone 2 m from a 65″ panel.
     expect(shallow.dimMM[0]).toBeLessThan(roomy.dimMM[0]);
     // Both are real products the catalog offers — the whole distinction between
@@ -392,7 +410,7 @@ describe('starter scene keeps the preset’s promise', () => {
     // (2.1 m against 2.6). Assigning by area put the sofa 1.6 m from the screen while
     // the deeper stem — which needs no viewing distance to seat people at a table —
     // got the dining set. The bar is north of the origin's z, the stem south.
-    const parts = seed('t', 5.5, 4.7);
+    const parts = seed('t', SIZE.t.w, SIZE.t.d);
     expect(parts.find((p) => p.category === 'sofa')!.pos[2]).toBeGreaterThan(0);
     expect(parts.filter((p) => p.shape === 'chair-dining').every((c) => c.pos[2] < 0)).toBe(true);
   });
@@ -412,7 +430,7 @@ describe('starter scene keeps the preset’s promise', () => {
     // the three-chair one's 5.5, with a sixteenth piece placed and no clearance
     // finding. Four chairs was the right answer all along; the way to get there was a
     // better plan, never a laxer fit test.
-    const parts = seed('t', 5.5, 4.7);
+    const parts = seed('t', SIZE.t.w, SIZE.t.d);
     expect(parts.filter((p) => p.shape === 'chair-dining')).toHaveLength(4);
     // …and all four sit AT it — one per side, which is what four chairs means.
     const table = parts.find((p) => p.name === 'Dining table')!;
@@ -422,7 +440,7 @@ describe('starter scene keeps the preset’s promise', () => {
   });
 
   it('a U is a bedroom', () => {
-    const parts = seed('u', 6, 5);
+    const parts = seed('u', SIZE.u.w, SIZE.u.d);
     expect(parts.some((p) => p.category === 'bed')).toBe(true);
     expect(parts.filter((p) => p.category === 'nightstand')).toHaveLength(2);
     expect(parts.some((p) => p.category === 'wardrobe')).toBe(true);
@@ -561,8 +579,7 @@ describe('the open plan keeps the route it was seeded with', () => {
   //
   // Two consumers of one rule, each with its own copy — CLAUDE.md rule 3 — so the
   // number moved to `wallDebt` in `layout-rules` and both read it.
-  const W = 7.5;
-  const D = 5.6;
+  const { w: W, d: D } = SIZE.open;
   const poly = footprintForLayout('open', W, D);
   const parts = defaultScene('open', W, D);
 
@@ -608,8 +625,7 @@ describe('a seeded seat is turned toward the group it belongs to', () => {
   // Asserted as GEOMETRY, not by recomputing the cost here. A test carrying its own
   // copy of `relationCost` is the second consumer CLAUDE.md rule 3 is about, and it
   // would pass a seeder that had drifted in exactly the same direction.
-  const W = 6.0;
-  const D = 4.7;
+  const { w: W, d: D } = SIZE.l;
   const poly = footprintForLayout('l', W, D);
   const parts = defaultScene('l', W, D, { footprint: poly, height: HEIGHT });
   const chairIdx = parts.findIndex((p) => roleOf(p) === 'armchair');

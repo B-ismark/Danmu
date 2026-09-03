@@ -45,18 +45,15 @@ import {
   wallOutwardNormal,
   wallSegments,
   type Footprint,
-  type LayoutId,
 } from '@/lib/footprint';
 import { edgeProjection, nearestEdge, polygonSignedArea, polygonWinding, type Poly } from '@/lib/geometry';
+import { offeredSizes } from './helpers/offered-sizes';
 
-/** The presets `app/onboarding/layout-pick` offers, at the sizes it offers them. */
-const PRESETS: Array<{ id: LayoutId; w: number; d: number }> = [
-  { id: 'rect', w: 6.0, d: 4.0 },
-  { id: 'l', w: 6.0, d: 4.7 },
-  { id: 't', w: 5.5, d: 4.7 },
-  { id: 'u', w: 6.0, d: 5.0 },
-  { id: 'open', w: 7.5, d: 5.6 },
-];
+/** The presets `app/onboarding/layout-pick` offers, at the sizes it offers them —
+ *  PARSED from that page, not copied off it. This was the third hand-typed copy of
+ *  the same five rows; a resized preset would have left this sweep checking wall
+ *  normals of a room the app no longer builds, green. */
+const PRESETS = offeredSizes().map((o) => ({ id: o.id, w: o.width, d: o.depth }));
 
 /** A room whose walls have been dragged: off-centre on both axes, and non-convex, so
  *  it is not covered by any preset's proportions. `custom` is what `layoutId` becomes
