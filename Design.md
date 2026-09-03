@@ -759,7 +759,8 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
   reach it — `tip` is the fan's own radius across the whole clamp range, and the
   inner end is the hub, because a tip-only assertion passes for a blade of the right
   length in the wrong place.
-- **Parametric shapes** (sofa, curtain, wardrobe, closet, bookshelf, shoe-rack)
+- **Parametric shapes** (`isParametric` — fourteen of them, and the list is not
+  restated here because every prose copy of it has gone stale at least once)
   rebuild from effective dimensions instead of stretching: sofa tiles seat
   modules from width, bookshelf derives shelves from height, wardrobe derives
   door bays from width, etc. The scale gizmo live-stretches; commit converts

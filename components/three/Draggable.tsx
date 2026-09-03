@@ -262,7 +262,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     const p = storedPos ?? part.pos;
     ref.current.position.set(p[0], p[1], p[2]);
     ref.current.rotation.y = storedRot ?? part.rot;
-    // Parametric parts (sofa, curtain, wardrobe, bookshelf, shoe-rack) rebuild
+    // Parametric parts — whatever `isParametric` says — rebuild
     // their geometry from the effective dim — the mesh must NOT be group-scaled
     // or it would stretch on top of the rebuild. The scale-gizmo still scales
     // live during a drag; commit() converts that to a dim and this effect resets
@@ -404,14 +404,14 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     if (!ref.current || !part) return part?.dimMM ?? [100, 100, 100];
     // What this group renders at scale 1 — which is NOT always the authored size.
     //
-    // A parametric shape (sofa, curtain, WARDROBE, bookshelf, shoe-rack) rebuilds
+    // A parametric shape — `isParametric` is the list, deliberately not repeated — rebuilds
     // its geometry from the effective dim, so the effect above deliberately leaves
     // its group at scale 1 and the mesh carries the resize. Everything else keeps
     // authored geometry and wears the resize as a group scale. Multiplying the
     // AUTHORED dim by the live scale is only right for the second kind: for the
     // first it returns the authored size no matter how the piece was resized, and
     // `commit()` writes that straight back through `setDim` — so resizing a
-    // wardrobe and then merely MOVING it threw the resize away, in exactly the five
+    // wardrobe and then merely MOVING it threw the resize away, in exactly the
     // shapes `isParametric` names and nowhere else, which is why it reported as
     // "sometimes".
     //

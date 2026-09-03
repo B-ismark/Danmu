@@ -27,7 +27,7 @@ import {
 import { useStudio } from '@/lib/store';
 import { DECOR, DETAIL, SCENE, defaultBodyColor } from '@/lib/scene-palette';
 
-/** The module ranges the five parametric shapes tile by, resolved once at module
+/** The module ranges the TILING parametric shapes are divided by, resolved once at module
  *  scope so a renderer reads a value rather than doing a table lookup per frame.
  *
  *  `lib/` owns the numbers and the arithmetic (`moduleCount`, `MODULE_RANGE`); this
@@ -35,10 +35,13 @@ import { DECOR, DETAIL, SCENE, defaultBodyColor } from '@/lib/scene-palette';
  *  reason for it is that a blade drawn `1.6r` long from inside a renderer swept 40%
  *  wider than the piece said for months, because no test could reach the expression.
  *
- *  `ONE` never fires for these five — each is a `PARAMETRIC_SHAPES` member with a
- *  `MODULE_RANGE` row. It exists so that adding a shape to that set without a range
- *  draws it as a single module rather than spreading `undefined` into NaN and
- *  rendering nothing at all. */
+ *  `ONE` never fires for these five — each has a `MODULE_RANGE` row. It exists so that
+ *  a shape reaching one of these lookups without a range draws as a single module
+ *  rather than spreading `undefined` into NaN and rendering nothing at all.
+ *
+ *  Being parametric and TILING are two different things since § 36: eight of the
+ *  fourteen members are there because their geometry holds an absolute, not because
+ *  they are divided into modules, and none of those eight reaches these five lookups. */
 const ONE: ModuleRange = { min: 1e-6, nominal: Infinity, max: Infinity };
 const BAY = moduleRangeFor('wardrobe') ?? ONE;
 const SEAT = moduleRangeFor('sofa') ?? ONE;

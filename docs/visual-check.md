@@ -263,6 +263,10 @@ named should stay the size it is while the piece around it grows.
 | Stool | 700 mm tall | the seat pad stays ~50 mm; only the legs lengthen |
 | Nightstand | 600 mm deep, then double-click to open the drawers | the drawers slide ~180 mm, not 270 |
 | Door | 2400 mm tall | the handle stays at ~1 m from the FLOOR, not 1.08 m |
+| Door | 35 mm deep (the band's floor) | the panel gets THINNER; it used to freeze at 40 mm, thicker than the door |
+| Window | 3200 mm wide | five panes and four mullions, not two panes stretched to 1.6 m each |
+| Radiator | 2000 mm wide | 33 fins, not 13 fat ones |
+| Fan or Stool | width and depth to DIFFERENT values | it must read as an oval from above, matching the 2D plan — these three round shapes drew a circle over an elliptical footprint |
 
 **What wrong looks like, and it is the reason this cannot be left to the tests.**
 
@@ -286,11 +290,20 @@ named should stay the size it is while the piece around it grows.
   the floor or above the frame. Doors are the one member of this set the user does not
   usually resize, which is exactly why nobody would notice.
 
-**What does not need re-deriving.** The arithmetic is gated and printed: the class table
-runs on every green suite and names each shape, its authored and stored size, what was
-drawn, and its own cap. Both directions are mutation-checked. `top - bottom` still
-equals the stored height for every shape — the extent was never the defect, which is
-why no size assertion could see this.
+**What does not need re-deriving.** The class table runs on every green suite and names
+each shape, its authored and stored size, what was drawn, and its own cap — nine rows
+across eight shapes, `authored` read from `PART_LIBRARY` rather than typed. The extent
+(`top - bottom` = the stored height) is swept over the fan's and the pendant's whole
+bands; it is NOT checked for the other six, and the first version of this paragraph
+claimed it for "every shape" off a single assertion at a single size.
+
+**What was found by REVIEW rather than by these tests, so treat the green with
+proportion.** Three things this file's gate could not see, all now fixed: the pendant's
+light was left at the authored anchor while its mesh moved (§ 34's defect re-entered,
+and `ceiling-fixtures.test.ts` asserts that property and stayed green because it hands
+one dim to both functions); three round shapes drew a circle where the plan draws an
+ellipse; and `window` and `radiator` were members of the class nobody had listed. The
+gate itself was per-row, so an empty table passed every assertion in it.
 
 ## Layout and Shuffle
 
