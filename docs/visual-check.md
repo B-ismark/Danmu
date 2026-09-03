@@ -279,12 +279,18 @@ broken" is not a question any assertion in this repo can answer.
 
 **What wrong looks like.**
 
-- **A press that reports nothing at all.** `RoomTools` returns `null` when
-  `result.moved.length === 0`, and the copy that fires on that path was written for a room
-  that was already good. On a scrambled room it is now also the copy for "every idea I had
-  put something in a wall", which is a different sentence. If pressing `Fix` on an obviously
-  messy room says *"This is already a good arrangement"*, that is the defect — not the
-  refusal, the sentence.
+- **The wrong one of the two decline toasts.** This was a real defect and it is FIXED, so
+  what needs eyes is whether the fix reads right rather than whether the bug is there. A
+  press that applies nothing now says either *"This is already a good arrangement"* or,
+  when `SolveResult.declined === 'impossible'`, *"No safe arrangement found — every layout
+  tried put a piece through a wall or inside another one…"*. On the **seeded U at 6 x 4**
+  the second fires on presses 1, 2, 5 and 7 (the press number is the seed). If a visibly
+  messy room gets the cheerful sentence, the defect is back. The second message is also the
+  longest toast in the app — check it does not overflow or clip at a narrow window.
+- **`Try a fix` says the same thing in its own words.** Room check, any finding, the
+  per-finding button: *"No safe way to move those"* rather than *"Moving those didn't
+  clear it"* when the veto is the reason. Confined fixes are exempt from the
+  `isWorthOffering` gate, so this path reaches the veto more readily than `Fix` does.
 - **Furniture in a wall after a press.** The thing the change exists to prevent. Look along
   the plaster on the L's and U's notch walls in the 3D tab, and at the wall lines in the 2D
   plan, which is where a 20 mm overhang is actually visible. Any piece crossing a wall line
