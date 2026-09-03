@@ -181,6 +181,82 @@ describe('scene file · round trip', () => {
     // Like `hidden`, this is per-room state, not a property of the piece.
     expect(parts.every((p) => !('parentId' in p))).toBe(true);
   });
+
+  it('writes a rider at the height its support is NOW, not the height it was built at', () => {
+    // § 12, at the one boundary where getting it wrong is unrecoverable. The two
+    // transform layers are baked here, and neither of them holds a rider's Y after its
+    // support was resized — nothing wrote one. Baking through `resolveParts` therefore
+    // wrote the lamp at 0.45, the desk's ORIGINAL top, into a file that then opens on a
+    // machine which never saw the resize and has nothing left to derive the right
+    // answer from.
+    const DESK: ScenePart = {
+      id: 'desk-1', category: 'desk', name: 'Desk', shape: 'desk-standard',
+      pos: [0, 0, 0], rot: 0, dimMM: [1400, 700, 450], locked: false,
+    };
+    const LAMP: ScenePart = {
+      id: 'lamp-1', category: 'lamp', name: 'Lamp', shape: 'lamp-table',
+      pos: [0, 0.45, 0], rot: 0, dimMM: [300, 300, 400], locked: false,
+    };
+    const grown: Transforms = { ...NO_TRANSFORMS, dims: { 'desk-1': [1400, 700, 900] } };
+    const { file } = roundTrip(ROOM, [DESK, LAMP], grown);
+    expect(file.parts.find((p) => p.id === 'desk-1')!.dimMM).toEqual([1400, 700, 900]);
+    expect(file.parts.find((p) => p.id === 'lamp-1')!.pos).toEqual([0, 0.9, 0]);
+  });
+
+  it('does the same for a rider a DRAG put there, which authored geometry cannot see', () => {
+    // The case above is a SEEDED rider — authored at the desk's top — and it is the
+    // one half that survives with `parentIds` empty, because `ridingParents` can
+    // re-infer it. `components/studio/SceneFile.tsx` was not passing `parentIds` at
+    // all, so `buildSceneFile`'s `?? {}` defaulted and the whole export fix was inert
+    // for exactly the story its own comment tells. The fixture that could not express
+    // that is the reason this one exists.
+    const DESK: ScenePart = {
+      id: 'desk-1', category: 'desk', name: 'Desk', shape: 'desk-standard',
+      pos: [0, 0, 0], rot: 0, dimMM: [1400, 700, 450], locked: false,
+    };
+    // Authored on the floor across the room; dragged onto the desk, which is what
+    // wrote both the position override and the `parentIds` entry.
+    const LAMP: ScenePart = {
+      id: 'lamp-1', category: 'lamp', name: 'Lamp', shape: 'lamp-table',
+      pos: [1.5, 0, 1.5], rot: 0, dimMM: [300, 300, 400], locked: false,
+    };
+    const dragged: Transforms = {
+      ...NO_TRANSFORMS,
+      positions: { 'lamp-1': [0, 0.45, 0] },
+      dims: { 'desk-1': [1400, 700, 900] },
+      parentIds: { 'lamp-1': 'desk-1' },
+    };
+    const { file } = roundTrip(ROOM, [DESK, LAMP], dragged);
+    expect(file.parts.find((p) => p.id === 'lamp-1')!.pos).toEqual([0, 0.9, 0]);
+    expect(file.parts.find((p) => p.id === 'lamp-1')!.parentId).toBe('desk-1');
+  });
+
+  it('writes the relation for a SEEDED rider too, so a clamped one is not orphaned', () => {
+    // `parentId` used to be written from `parentIds` alone, which is empty for every
+    // rider the app placed itself. The reader then had to re-INFER the relation, which
+    // works only while the rider is within SUPPORT_Y_EPS of its support's top — and
+    // the one rider that is not is the one the ceiling clamp moved, which is exactly
+    // the case where the relation is the only thing that can put it right. Measured:
+    // a desk grown to 2300 mm leaves its lamp 220 mm below the top, and after a
+    // reopen `riderRelation` came back empty and shrinking the desk moved nothing.
+    const DESK: ScenePart = {
+      id: 'desk-1', category: 'desk', name: 'Desk', shape: 'desk-standard',
+      pos: [0, 0, 0], rot: 0, dimMM: [1400, 700, 750], locked: false,
+    };
+    const LAMP: ScenePart = {
+      id: 'lamp-1', category: 'lamp', name: 'Lamp', shape: 'lamp-table',
+      pos: [0, 0.75, 0], rot: 0, dimMM: [300, 300, 400], locked: false,
+    };
+    const grown: Transforms = { ...NO_TRANSFORMS, dims: { 'desk-1': [1400, 700, 2300] } };
+    const { file } = roundTrip(ROOM, [DESK, LAMP], grown);
+    // The clamp bit: the room is 2.6 m, so the cap is 2.58 and a 400 mm lamp on a
+    // 2.30 m desktop does not fit. The Y is therefore a function of ROOM HEIGHT —
+    // which is the second argument `buildSceneFile` passes and which nothing pinned.
+    const y = file.parts.find((p) => p.id === 'lamp-1')!.pos[1];
+    expect(y).toBeCloseTo(ROOM.height - 0.02 - 0.4, 10);
+    expect(y).toBeLessThan(2.3);
+    expect(file.parts.find((p) => p.id === 'lamp-1')!.parentId, 'the relation the clamp broke').toBe('desk-1');
+  });
 });
 
 describe('scene file · what never leaves', () => {

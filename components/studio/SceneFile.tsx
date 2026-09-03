@@ -45,7 +45,12 @@ export async function saveSceneFile(roomId: string) {
     // supplies only the name, which nothing in the studio holds.
     const meta = await roomStore.loadRoom(roomId);
     const { parts, room } = useScene.getState();
-    const { positions, rotations, dims, hidden } = useStudio.getState();
+    // `parentIds` too, and its absence here was a whole feature being inert. It is
+    // what tells `buildSceneFile` which piece is standing on which, and without it a
+    // lamp DRAGGED onto a desk exported at the height the desk used to be — into a
+    // file that opens on a machine with nothing left to derive the right answer from.
+    // A seeded rider survived the omission, which is why the gate for it did too.
+    const { positions, rotations, dims, hidden, parentIds } = useStudio.getState();
 
     const file = buildSceneFile(
       {
@@ -65,7 +70,7 @@ export async function saveSceneFile(roomId: string) {
         site: room.site,
       },
       parts,
-      { positions, rotations, dims, hidden },
+      { positions, rotations, dims, hidden, parentIds },
       Date.now(),
     );
 

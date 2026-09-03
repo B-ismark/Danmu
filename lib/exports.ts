@@ -19,9 +19,11 @@
 //     — which do serve "communicate a plan" — are untouched. Do not bring it back
 //     with a spreadsheet writer attached.
 //   · Applying the user's live transforms. That merge belongs to `lib/transforms.ts`
-//     (`resolveParts`), and `tests/room-scene.test.ts` fails the build if a
-//     hand-written copy of the fallback reappears anywhere — this file having briefly
-//     carried one.
+//     (`resolveParts`) and, for anything drawing or exporting the whole room, to
+//     `lib/rider-height.ts`'s `resolveScene` — which is that merge plus the height a
+//     rider takes from a support the user resized. `tests/room-scene.test.ts` fails
+//     the build if a hand-written copy of the fallback reappears anywhere, or if a
+//     new caller reaches for the plain merge — this file having briefly carried one.
 
 /** Filenames are capped well under every filesystem's limit, and the caller adds an
  *  extension on top — so the budget is for the name, not for the whole thing. */

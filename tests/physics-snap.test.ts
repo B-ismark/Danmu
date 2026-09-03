@@ -88,6 +88,18 @@ describe('findSupportUnder', () => {
     expect(findSupportUnder([DESK], 'laptop', overhangX(0.6), 0, LAPTOP)).toBeCloseTo(0.75, 6);
   });
 
+  it('holds a part sitting on EXACTLY the minimum share', () => {
+    // The bar is `>= MIN_SUPPORT_SHARE`, and the boundary itself was asserted
+    // nowhere: 0.45 and 0.55 are pinned below, 0.50 is computed on the next test's
+    // first line and its verdict never read. Flipping the comparison to `>` passed
+    // the whole suite. That comparison is now one function —
+    // `coversEnoughToSupport` — read by `findSupportDetailed`, the rigid-parent edge
+    // test and `lib/rider-height.ts`, so this one boundary answers for all three.
+    const x = overhangX(0.5);
+    expect(supportShare(x, 0, 0)).toBeCloseTo(0.5, 9);
+    expect(findSupportUnder([DESK], 'laptop', x, 0, LAPTOP)).toBeCloseTo(0.75, 6);
+  });
+
   it('honours the support rotation', () => {
     // Desk turned a quarter turn is 0.7 m across, not 1.4. A point 0.5 m out is
     // beyond it — the rotation-blind version counted it as over the desk.

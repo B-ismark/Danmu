@@ -57,6 +57,12 @@ export function resolveParts(parts: ScenePart[], o: Partial<TransformOverrides>)
   return parts.map((p) => resolvePart(p, o));
 }
 
+// **`resolveParts` is not the whole answer for a consumer that RENDERS the room.** A
+// piece standing on a piece the user resized has a stale Y in both layers, because
+// nothing wrote one — see `resolveScene` in `lib/rider-height.ts`, which is this merge
+// plus that correction, and which lives there rather than here so the dependency runs
+// one way. `lib/room-scene.ts` re-exports it beside these.
+
 /**
  * The size a part's group is DRAWN at when its scale is 1 — which is not always the
  * authored `dimMM`, and the difference cost a user their resize.

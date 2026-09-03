@@ -147,6 +147,9 @@ function SurfaceDecor({ items, topY }: { items: DecorItem[]; topY: number }) {
 export function Dressing({ part }: { part: ScenePart }) {
   // Narrow on purpose: decor renders as a SIBLING of its part, so it has to follow
   // that part's transform without re-rendering every time some other piece moves.
+  // Still true through `useSettledY`, which subscribes to the whole override maps but
+  // selects a NUMBER out of them — see its docblock. A `Dressing` per part times a
+  // whole-room derivation per render is what that shape is guarding against.
   const { pos: p, rot: r, dimMM: dm } = usePartTransform(part);
 
   const content = useMemo<ReactNode | null>(() => {
