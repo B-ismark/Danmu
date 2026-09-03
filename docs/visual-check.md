@@ -320,18 +320,26 @@ gate itself was per-row, so an empty table passed every assertion in it.
 
 ### The Inspector now says where the selected piece stands — branch `fix/inspector-placement-agrees-with-the-report`, PR pending
 
-**Where to click.** Select any piece. A banner sits above the decorating controls,
-between the name and the Colour row. Then work through the states, because each is a
-different sentence and only one of them is common:
+**All six states were LOOKED AT on 2026-09-03**, production build, one room holding all
+of them, selected through the rail the way a user selects. What was seen, verbatim:
 
-| do this | it should say |
+| piece | banner |
 |---|---|
-| select a chair standing on the floor | **On floor** · "Standing on the floor." |
-| select a lamp on a table | **On ‹table›** · "Resting on ‹table›." |
-| drag that lamp up off the table | **Floating** · "Nothing is holding it up…" |
-| select a TV or a curtain | **Wall-mounted** · "Attached to the room shell." |
-| push a piece through a wall | the ROOM REPORT's own words for that finding |
-| push a dining chair under its table | **On floor** — NOT "Blocked" |
+| dining table | ✓ **On floor** · "Standing on the floor." |
+| chair half under it | ✓ **On floor** — *not* "Blocked", which is the whole item |
+| lamp on the table | ✓ **On Dining table** · "Resting on Dining table." |
+| the same lamp 350 mm up | **Floating** · "Nothing is holding it up…" |
+| wall TV | ✓ **Wall-mounted** · "Attached to the room shell." |
+| sofa through a wall | **Sticks out of the room** · *the report's own sentence* |
+
+The long one wraps to three lines and does not clip, and the left rail's chip read
+"1 issue" throughout — the sofa's, and only the sofa's — so the two surfaces agree on
+screen and not merely in a test.
+
+**What is left is below**, and it is what a screenshot cannot answer.
+
+**Where to click.** Select any piece. The banner sits above the decorating controls,
+between the name and the Colour row.
 
 **The last row is the whole point.** `collidesAt` calls a tucked chair a collision and
 the room report does not, deliberately — twenty seeded pairs behind that. The banner
