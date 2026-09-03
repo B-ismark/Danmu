@@ -321,6 +321,25 @@ export function pendantDrop(widthMM: number, heightMM: number): {
 // docblock documents nothing — `tests/docblock-adjacency.test.ts` gates exactly that,
 // and caught this one.
 
+/** How many panes a window of this width is divided into.
+ *
+ *  A MODULE COUNT off an absolute pitch, which is the same class as a capped detail
+ *  and arrives at it from the other side: the count is an integer chosen at one width,
+ *  and stretching the mesh afterwards stretches the panes instead of adding any. A
+ *  catalogue 1200 mm window widened to 3.2 m drew TWO 1.6 m panes with one mullion,
+ *  where its own arithmetic says five panes and four mullions. */
+export function windowPanes(widthMM: number): number {
+  return Math.max(1, Math.round(widthMM / 1000 / 0.7));
+}
+
+/** How many fins a radiator of this width has. The same shape as `windowPanes`, and
+ *  the renderer's own comment — "33 fins on a 2m radiator" — was describing a
+ *  radiator that drew 13, because a stretched one keeps the count it was authored
+ *  with and widens each fin instead. */
+export function radiatorFins(widthMM: number): number {
+  return Math.max(6, Math.round(widthMM / 1000 / 0.06));
+}
+
 /** A TV console's top slab and its plinth, in metres. 30 mm and 60 mm are joinery,
  *  not proportions of the piece. */
 export function consoleSlabs(heightMM: number): { top: number; foot: number } {
@@ -1814,6 +1833,13 @@ const PARAMETRIC_SHAPES = new Set<Shape>([
   // cosmetic — but the same defect, and picking which to fix by how ugly they look is
   // how the next one gets missed.
   'tv-console', 'stool', 'nightstand', 'door',
+  // …and two the first sweep missed, because they reach the class from the other
+  // side: `window` and `radiator` divide their width into a MODULE COUNT off an
+  // absolute pitch (`windowPanes`, `radiatorFins`). An integer chosen at one width and
+  // then stretched is the same defect as a cap chosen at one height and then stretched
+  // — 2.50x and 2.54x respectively, worse than four of the six above. Found by asking
+  // what else has this SHAPE rather than by looking for things that looked wrong.
+  'window', 'radiator',
 ]);
 export function isParametric(shape: Shape): boolean {
   return PARAMETRIC_SHAPES.has(shape);
