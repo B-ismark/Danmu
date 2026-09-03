@@ -181,6 +181,27 @@ describe('scene file · round trip', () => {
     // Like `hidden`, this is per-room state, not a property of the piece.
     expect(parts.every((p) => !('parentId' in p))).toBe(true);
   });
+
+  it('writes a rider at the height its support is NOW, not the height it was built at', () => {
+    // § 12, at the one boundary where getting it wrong is unrecoverable. The two
+    // transform layers are baked here, and neither of them holds a rider's Y after its
+    // support was resized — nothing wrote one. Baking through `resolveParts` therefore
+    // wrote the lamp at 0.45, the desk's ORIGINAL top, into a file that then opens on a
+    // machine which never saw the resize and has nothing left to derive the right
+    // answer from.
+    const DESK: ScenePart = {
+      id: 'desk-1', category: 'desk', name: 'Desk', shape: 'desk-standard',
+      pos: [0, 0, 0], rot: 0, dimMM: [1400, 700, 450], locked: false,
+    };
+    const LAMP: ScenePart = {
+      id: 'lamp-1', category: 'lamp', name: 'Lamp', shape: 'lamp-table',
+      pos: [0, 0.45, 0], rot: 0, dimMM: [300, 300, 400], locked: false,
+    };
+    const grown: Transforms = { ...NO_TRANSFORMS, dims: { 'desk-1': [1400, 700, 900] } };
+    const { file } = roundTrip(ROOM, [DESK, LAMP], grown);
+    expect(file.parts.find((p) => p.id === 'desk-1')!.dimMM).toEqual([1400, 700, 900]);
+    expect(file.parts.find((p) => p.id === 'lamp-1')!.pos).toEqual([0, 0.9, 0]);
+  });
 });
 
 describe('scene file · what never leaves', () => {
