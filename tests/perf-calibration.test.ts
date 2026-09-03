@@ -50,6 +50,20 @@ describe('the reference workload', () => {
     expect(REFERENCE_IDLE_MS).toBeGreaterThanOrEqual(10);
     expect(REFERENCE_IDLE_MS).toBeLessThanOrEqual(100);
   });
+
+  it('and the workload itself still costs that, not just the constant naming it', () => {
+    // The assertion above pins a NUMBER, which a mutation that shrinks the loop
+    // leaves untouched: the constant would then describe a workload that no longer
+    // exists, every machine would read as fast, and both bars would quietly sit at
+    // their idle figures forever. So the body is timed too.
+    //
+    // A floor, never a band around REFERENCE_IDLE_MS: this runs on CI hardware
+    // nobody here has measured, and the only direction that breaks the calibration
+    // is the workload becoming too SHORT to outlast a scheduler quantum. 5 ms leaves
+    // room for a machine four times faster than the one this was written on.
+    referenceWorkload();
+    expect(bestMs(referenceWorkload, 3)).toBeGreaterThan(5);
+  });
 });
 
 describe('bestMs', () => {
