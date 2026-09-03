@@ -26,7 +26,7 @@ import { v4 as uuid } from 'uuid';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 
-import { placeNewPart, type LibraryItem, type ScenePart } from '@/lib/scene-spec';
+import { placeNewPart, openSpotForNewPart, type LibraryItem, type ScenePart } from '@/lib/scene-spec';
 import { Icon } from '@/components/ui/Icon';
 import { IconButton } from '@/components/ui/primitives';
 import { LibraryPicker } from './LibraryPicker';
@@ -110,7 +110,7 @@ export function CatalogToggle() {
       onClick={() => setOpen(!open)}
       aria-expanded={open}
       className="ds-btn"
-      title="Add a piece — drag it into the room, click to drop it in the centre, or Shift-click to mark several"
+      title="Add a piece — drag it into the room, click to drop it in the first clear spot, or Shift-click to mark several"
       style={{
         height: 30,
         fontSize: 12,
@@ -133,10 +133,17 @@ export function CatalogToggle() {
 
 /** Gravity-aware spawn: wall-hung items mount at height, everything else rests on
  *  the floor or on whatever surface is under it. Shared by both tabs — the piece
- *  you picked and the piece you described land the same way. */
+ *  you picked and the piece you described land the same way.
+ *
+ *  A CLICK has no aim point, so `openSpotForNewPart` finds one (§ H.3). It returns
+ *  `undefined` for the first piece into an empty room, which is `placeNewPart`'s own
+ *  no-aim behaviour unchanged; the drag-and-drop paths in `PlanView` and `Room` do not
+ *  call it at all, because there the user aimed and being placed where you aimed is a
+ *  promise. */
 function spawn(category: ScenePart['category'], shape: ScenePart['shape'], dimMM: [number, number, number], name: string) {
   const { room, parts, addPart } = useScene.getState();
-  const { pos, rot, wallMounted } = placeNewPart(category, shape, dimMM, room, parts);
+  const aim = openSpotForNewPart(category, shape, dimMM, room, parts);
+  const { pos, rot, wallMounted } = placeNewPart(category, shape, dimMM, room, parts, aim);
   const id = `${category}-${uuid().slice(0, 6)}`;
   addPart({ id, category, name, shape, pos, rot, dimMM, locked: false, wallMounted });
   useStudio.getState().setSelected(id);
@@ -148,14 +155,14 @@ function spawn(category: ScenePart['category'], shape: ScenePart['shape'], dimMM
  *  Placed one after another rather than in parallel, and nothing already in the room
  *  moves — "add three of these" is not permission to rearrange what is there.
  *
- *  This comment used to claim the sequencing bought something it does not: that
- *  `placeNewPart` reads the parts already in the room, "so each piece avoids the one
- *  before it and four chairs land as four chairs instead of one chair four times."
- *  It reads `existing` in exactly ONE place — `findSupportUnder`, and only when
- *  `isTabletopProne(cat)`. A chair is not, so four chairs land at one point, all
- *  four facing the same way. Whether adding several should spread them out is a
- *  product decision and is written up in docs/what-is-still-open.md; what is not a
- *  decision is a comment asserting the behaviour we would like. */
+ *  The sequencing now buys what an older version of this comment wrongly claimed it
+ *  already did. That version said `placeNewPart` reads the parts in the room "so each
+ *  piece avoids the one before it"; it reads `existing` in exactly ONE place —
+ *  `findSupportUnder`, and only when `isTabletopProne(cat)` — so a chair is not one,
+ *  and four chairs landed at one point all facing the same way. **§ H.3, answered
+ *  2026-09-03: fan out from the drop point with a legality gate.** `spawn` asks
+ *  `openSpotForNewPart` first, and because each piece is added before the next one is
+ *  placed, the loop really does step around what it has already put down. */
 function spawnMany(items: LibraryItem[]) {
   const ids: string[] = [];
   for (const item of items) ids.push(spawn(item.category, item.shape, [...item.dimMM], item.label));
@@ -166,8 +173,8 @@ function spawnMany(items: LibraryItem[]) {
 
 /** Floating, non-blocking model catalog docked on the RIGHT edge of the canvas.
  *  Items can be DRAGGED onto the 3D room (Room's onDrop raycasts the drop point)
- *  or CLICKED to drop at room centre. Deliberately a narrow strip so the rest of
- *  the canvas stays a valid drop target.
+ *  or CLICKED to drop at the first clear spot (§ H.3 — `openSpotForNewPart`).
+ *  Deliberately a narrow strip so the rest of the canvas stays a valid drop target.
  *
  *  Right, not left, because both of its triggers are now on the right: the rail's
  *  `AddPiecesButton` moved to the right rail's footer, and pressing a control on
@@ -272,8 +279,8 @@ export function CatalogPanel({
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '0 12px 12px' }}>
         <div style={{ fontSize: 11, color: 'var(--ink-3)', margin: '0 0 8px', lineHeight: 1.4 }}>
           {canDrag
-            ? 'Drag a piece in, click to drop it in the centre, or Shift-click to mark several.'
-            : 'Click a piece to drop it into the middle of the room. Shift-click to mark several.'}
+            ? 'Drag a piece in, click to drop it in the first clear spot, or Shift-click to mark several.'
+            : 'Click a piece to drop it in the first clear spot. Shift-click to mark several.'}
         </div>
         <LibraryPicker onPick={addItem} onPickMany={spawnMany} columns={1} draggable={canDrag} maxHeight={null} />
       </div>

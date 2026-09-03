@@ -43,6 +43,30 @@ export type DragLiveInfo = {
 // travels on it: what counts as one, which pieces it names and how long it stays up all
 // live in lib/refusal.ts. This file only carries it.
 
-export const useDragLive = create<{ live: DragLiveInfo; setLive: (l: DragLiveInfo) => void }>(
-  (set) => ({ live: null, setLive: (live) => set({ live }) }),
-);
+export const useDragLive = create<{
+  live: DragLiveInfo;
+  setLive: (l: DragLiveInfo) => void;
+  /** Pieces to outline red for a gesture that is NOT a drag — a turn from the context
+   *  menu or an accelerator, which has no `live` frame to ride on and no pointer under
+   *  which the user could have watched the refusal happen.
+   *
+   *  It is here, and not in either tab's own state, because it is the one channel both
+   *  tabs already read. `PlanView` holds its own `blockedIds` in component state and the
+   *  3D `Draggable` reads `live.blockedIds`; `spinSelection` is mounted on BOTH and can
+   *  reach neither, so the same wardrobe in the same corner outlined red when refused by
+   *  Shift+Arrow and did nothing at all when refused by the context menu. Same tab, same
+   *  piece, same outcome, two answers — which is the thing `spinSelection`'s own docblock
+   *  says a gesture reached four ways must never be. It was said in the live region, so
+   *  a screen-reader user heard it and everyone else got silence.
+   *
+   *  Kept flat rather than folded into `live` so a per-part selector still re-renders
+   *  only the pieces whose state changed, which is the whole reason this store exists
+   *  outside `useStudio`. */
+  refusedIds: string[];
+  setRefusedIds: (ids: string[]) => void;
+}>((set) => ({
+  live: null,
+  setLive: (live) => set({ live }),
+  refusedIds: [],
+  setRefusedIds: (refusedIds) => set({ refusedIds }),
+}));
