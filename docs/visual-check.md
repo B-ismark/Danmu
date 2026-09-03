@@ -263,47 +263,56 @@ the nightstand, carried nowhere while the nightstand moved. That fix does want e
 is the item below, because it is the one defect in this file that the 2D plan is
 constitutionally unable to show.*
 
-### Suggest declines more often than it used to, and that has to read as an answer — branch `fix/impossible-outranks-inconvenient`, PR pending
+### The two decline toasts — the halves nobody has pressed, branch `fix/impossible-outranks-inconvenient`, PR #89
 
-**Where to click.** Left rail, `Fix`. Make a **new** L-shaped or U-shaped room from the
-layout picker — seeded, untouched — and press it. Then do the same on a `rect`. Press it
-several times on each: it is deterministic per press, and the presses differ.
+**Half of this item has been looked at and is deleted rather than struck through.**
+Seen in a real browser on 2026-09-03, seeded U at 6 x 4, production build: presses 1
+and 2 give *"No safe arrangement found — Every layout tried put a piece through a wall
+or inside another one, so nothing was moved. Press Fix again for a different try, or
+unlock a piece to give it more room."*, press 3 applies and says *"Moved 4 pieces"* with
+the room visibly rearranging. The long message **wraps to four lines and does not clip**,
+which was the open question about it. Presses 1, 2 and 5/7 declining matches the
+measurement exactly.
 
-**Why this needs eyes rather than a test.** § 31's veto refuses an arrangement more
-impossible than the one it was given, and on the sweep that measured it, **17 of 160 solves
-that used to answer now decline**. What they used to answer with was a room containing
-furniture inside a wall — on the L preset, about 200 mm of wardrobe — so declining is
-right. But the user does not see the arrangement that was refused. They see a button that
-did nothing, and whether *that* reads as "your room is already fine" or as "this button is
-broken" is not a question any assertion in this repo can answer.
+What is left is the part that probe could not reach.
+
+**Where to click.**
+
+- **`Try a fix`, on a single finding.** Room check → any finding → its own button. Its
+  impossible copy is *"No safe way to move those"* with a different second sentence
+  depending on whether the finding named pieces (*"Fix can rearrange the whole
+  room…"*) or not (*"Try unlocking a piece…"*). **Neither string has ever rendered.**
+  This path is exempt from the `isWorthOffering` gate, so it reaches the veto more
+  readily than `Fix` does — and it is also the branch nothing measures: the sweep that
+  found the `impossible` arm is whole-room and unconfined, so it is possible this
+  branch is dead. If it will not fire, that is worth knowing.
+- **The re-fit offer.** Resize a wardrobe well past what the room takes, wait for the
+  offer toast, press **Re-fit**. Its impossible copy is *"No safe way to fit that"*.
+  Also never rendered, and this is the path most likely to reach it — a resize is the
+  state most likely to leave the search with nothing but legal-free answers.
 
 **What wrong looks like.**
 
-- **The wrong one of the two decline toasts.** This was a real defect and it is FIXED, so
-  what needs eyes is whether the fix reads right rather than whether the bug is there. A
-  press that applies nothing now says either *"This is already a good arrangement"* or,
-  when `SolveResult.declined === 'impossible'`, *"No safe arrangement found — every layout
-  tried put a piece through a wall or inside another one…"*. On the **seeded U at 6 x 4**
-  the second fires on presses 1, 2, 5 and 7 (the press number is the seed). If a visibly
-  messy room gets the cheerful sentence, the defect is back. The second message is also the
-  longest toast in the app — check it does not overflow or clip at a narrow window.
-- **`Try a fix` says the same thing in its own words.** Room check, any finding, the
-  per-finding button: *"No safe way to move those"* rather than *"Moving those didn't
-  clear it"* when the veto is the reason. Confined fixes are exempt from the
-  `isWorthOffering` gate, so this path reaches the veto more readily than `Fix` does.
-- **Furniture in a wall after a press.** The thing the change exists to prevent. Look along
-  the plaster on the L's and U's notch walls in the 3D tab, and at the wall lines in the 2D
-  plan, which is where a 20 mm overhang is actually visible. Any piece crossing a wall line
-  after pressing `Fix` is a straight regression.
-- **`Shuffle` gone quiet.** It should be unchanged — measured at 25 of 40 presses over five
-  presets, before and after — but that was measured through `shuffleRoom`, not through the
-  button. If `Shuffle` starts saying "couldn't find another arrangement" on rooms where it
-  used to work, the veto has reached further than the measurement says.
+- **A narrow window.** The long messages are ~170 characters at `ttl: 14000`. The toast
+  host is `min(360px, calc(100vw - 32px))` with no `overflow`, so it should grow
+  downward; at ~400px wide it will be tall. Check it does not push its own dismiss
+  button off, and that 14 s is actually enough to read it.
+- **Toast pile-up.** Pressing `Fix` repeatedly stacks identical *"No safe arrangement
+  found"* cards — three were on screen at once in the probe. Pre-existing behaviour of
+  the toast host rather than anything this branch did, but it reads badly precisely
+  when the copy is telling you to press again.
+- **Furniture in a wall after a press.** The thing the change exists to prevent. The 2D
+  plan is where a small overhang is actually visible — the 3D camera cannot frame a
+  wall line and a piece edge together. Nothing crossed a wall in the 3D shots, which is
+  weaker evidence than it sounds.
+- **A screen reader.** The toast host is `role="status"` / `aria-live="polite"`, so the
+  new message should be announced. Not tried.
 
-**What is already known and does not need re-deriving.** The arithmetic is gated: 18 of 160
-solves used to hand back a room more impossible than the one they were given, and 0 do now,
-with 130 of 160 still moving something. 13 of 14 mutants killed. What none of that touches
-is the copy on the decline path, and that is this item.
+**What does not need re-deriving.** 18 of 160 solves used to hand back a room more
+impossible than the one they were given; 0 do now, with 130 of 160 still moving
+something. 10 of 10 mutants killed on the second battery, 13 of 14 on the first.
+`checkFit` changed 5 of 100 verdicts, every one `no-room` → `tight`. Chained `Fix`
+presses re-introduce findings on the T preset — identical on `main`, so not this branch.
 
 ### Fix and Shuffle are two buttons now — merged to `main` in `9ecce9f` (PR #67)
 
