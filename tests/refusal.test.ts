@@ -152,6 +152,9 @@ describe('turnNudge — a turn that was slid to make it fit', () => {
     // "moved 0.0004 m to stay in the room" after a turn nobody can see move.
     expect(turnNudge([0, 0, 0], [0.0001, 0, 0])).toBe(0);
     expect(turnNudge([0, 0, 0], [0.004, 0, 0])).toBeCloseTo(0.004, 12);
+    // Exactly ON the epsilon, which decides `>` against `>=`. Without this probe the
+    // comparison is free — neither of the two above sits on the boundary.
+    expect(turnNudge([0, 0, 0], [TURN_NUDGE_EPS, 0, 0])).toBe(0);
     expect(TURN_NUDGE_EPS).toBeGreaterThanOrEqual(0.0005);
     expect(TURN_NUDGE_EPS).toBeLessThanOrEqual(0.002);
   });
@@ -188,6 +191,12 @@ describe('turnAngleHeld — the angle the piece ended at was not the one asked f
     expect(turnAngleHeld((3 * Math.PI) / 2, -Math.PI / 2)).toBe(false);
     expect(turnAngleHeld(0, Math.PI * 2)).toBe(false);
     expect(turnAngleHeld(0, -Math.PI * 2)).toBe(false);
+    // …and the one that needs the WRAP rather than the modulo alone. The three above
+    // land on a difference of ~0 after `% TAU` and pass with the wrap deleted; only a
+    // difference just SHORT of a full circle reaches `> Math.PI`. Without this probe
+    // the two wrap lines are decoration.
+    expect(turnAngleHeld(0, Math.PI * 2 - 1e-9)).toBe(false);
+    expect(turnAngleHeld(0, -(Math.PI * 2) + 1e-9)).toBe(false);
   });
 
   it('is true when something else chose the angle', () => {
