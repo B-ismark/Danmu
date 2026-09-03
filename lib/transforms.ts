@@ -92,7 +92,9 @@ let slot: {
  *  suite catching a scope error rather than a bug. So the gate is narrow:
  *
  *    · nothing happens at all unless some piece carries a `dims` override, so a room
- *      nobody has resized pays one `Object.keys` and no geometry;
+ *      nobody has resized pays one `Object.keys` and no geometry. That early exit is a
+ *      COST guard and not a behaviour one — deleting it changes no answer, and the
+ *      mutation set says so rather than claiming a kill it did not get;
  *    · a piece is corrected only if it WAS riding another piece, read off live
  *      geometry by `ridingParents` at the AUTHORED sizes — the state `settleHeights`
  *      left everything in — and that support is one of the resized ones;

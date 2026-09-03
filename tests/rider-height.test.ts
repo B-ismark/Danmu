@@ -138,10 +138,34 @@ describe('what the derivation deliberately does NOT touch', () => {
 
   // A resize somewhere else in the room must not become a licence to settle everything.
   // The lamp rides the desk; the WARDROBE is what was resized; the lamp does not move.
+  //
+  // **This assertion alone is decoration, and the mutation said so.** Deleting the
+  // `supportId in resized` gate leaves it green, because for a rider whose support did
+  // not move the derived height EQUALS the current one and the pass exits on
+  // `y === p.pos[1]` without the gate's help. A fixture that cannot express the defect
+  // it guards is the shape this repo keeps finding; the case below is the one that can.
   it('ignores a rider whose own support was not the piece resized', () => {
     const wardrobe = part({ id: 'wardrobe', category: 'wardrobe', shape: 'wardrobe', dimMM: [1200, 600, 2100], pos: [3, 0, 3] });
     const parts = [desk(), lamp(), wardrobe];
     expect(settledY(parts, { dims: { wardrobe: [1200, 600, 1800] } }, 'lamp')).toBeUndefined();
+  });
+
+  // The gate earning its place. `findSupportDetailed` MAXIMISES the top under a
+  // footprint, so growing an unrelated piece up through a rider makes that piece the
+  // highest thing under it — and without the gate the rider climbs onto something it
+  // was never on. Here a lamp rides a 550 mm nightstand and the desk beside them is
+  // made 900 mm tall; the lamp must stay on the nightstand, and the pieces now
+  // interpenetrating is `lib/clearance.ts`'s finding to report rather than this pass's
+  // to tidy away.
+  //
+  // Mutation-checked: dropping `if (!(supportId in resized) && !ys.has(supportId))`
+  // moves the lamp to 0.90 and this goes red. Every other assertion in the file stays
+  // green through that mutation, which is why this case exists.
+  it('does not lift a rider onto an unrelated piece that grew up through it', () => {
+    const stand = part({ id: 'stand', category: 'nightstand', shape: 'nightstand', dimMM: [450, 400, 550], pos: [0, 0, 0] });
+    const wide = part({ id: 'wide', category: 'desk', shape: 'desk-standard', dimMM: [1400, 700, 400], pos: [0.5, 0, 0] });
+    const parts = [stand, wide, lamp(0.55)];
+    expect(settledY(parts, { dims: { wide: [1400, 700, 900] } }, 'lamp')).toBeUndefined();
   });
 
   // The ceiling belongs to `regradeForNewCeiling` in the WRITE layer. A read-time clamp
