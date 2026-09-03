@@ -221,7 +221,7 @@ describe('vitest is configured so a component test can exist', () => {
   async function config() {
     const mod = (await import('../vitest.config')) as { default: Record<string, unknown> };
     return mod.default as {
-      test: { include: string[]; environment: string };
+      test: { include: string[]; environment: string; testTimeout?: number; hookTimeout?: number };
       esbuild: { jsx: string };
     };
   }
@@ -291,5 +291,30 @@ describe('vitest is configured so a component test can exist', () => {
 
   it('names the automatic JSX runtime, which tsconfig deliberately does not', async () => {
     expect((await config()).esbuild.jsx).toBe('automatic');
+  });
+
+  // ── The timeout, which is here for the same reason as the three above ──────
+  //
+  // Leaving it unset is not neutral. vitest resolves it to 5000 ms
+  // (`resolved.testTimeout ??= resolved.browser.enabled ? 15e3 : 5e3`), and this
+  // suite's honest worst case is a twenty-piece group solve at ~6.3 s in a warm
+  // process on an IDLE machine. Measured 2026-09-03 under deliberate load, three
+  // `layout-solve` tests died as `Test timed out in 5000ms` — and only one of the
+  // three asserts anything about a clock. For months that read as a solver returning
+  // different answers under a starved scheduler. It was the runner.
+  //
+  // So the number is pinned as a decision. The floor is what makes it a decision at
+  // all; the ceiling is because a timeout that never fires is not a hang-catcher, and
+  // a hung test that stalls the suite for a minute is its own defect.
+  it('sets a testTimeout on purpose, rather than inheriting 5 s from vitest', async () => {
+    const t = (await config()).test.testTimeout;
+    expect(t, 'vitest.config.ts declares no testTimeout, so the 5 s default applies').toBeDefined();
+    expect(t!).toBeGreaterThanOrEqual(20_000);
+    expect(t!).toBeLessThanOrEqual(60_000);
+  });
+
+  it('gives hooks the same allowance, since they build fixtures with the same solver', async () => {
+    const c = (await config()).test;
+    expect(c.hookTimeout).toBe(c.testTimeout);
   });
 });

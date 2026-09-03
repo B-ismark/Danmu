@@ -536,10 +536,16 @@ not insertion order, so an assertion over `keys()` proves nothing about write
 order.
 
 Support code a test needs but the app does not goes in `tests/helpers/` — vitest's
-`include` is `tests/**/*.test.ts`, so a helper there is never collected as a suite.
-`tests/helpers/color.ts` (OKLab / WCAG contrast, read by `color-tokens.test.ts`) is
-the one that exists. Keep that boundary honest in both directions: a module only
-tests import does not belong in `lib/`, where it reads as shipped code.
+`include` is `tests/**/*.test.{ts,tsx}`, so a helper there is never collected as a
+suite. **Read the directory for what is in it, rather than any list here:** this
+paragraph named `color.ts` as "the one that exists" and was four files behind, while
+also quoting an `include` glob that had grown `.tsx` — a stale claim about the
+boundary, sitting inside the sentence that defines it. Two are worth knowing before
+writing a third: `source.ts` parses app source where a fact has no importable home,
+and `perf.ts` owns the machine-speed calibration that **both** wall-clock bars read,
+so a third hand-rolled timing loop is exactly the drift this directory prevents. Keep
+the boundary honest in both directions: a module only tests import does not belong in
+`lib/`, where it reads as shipped code.
 
 ## Layout
 

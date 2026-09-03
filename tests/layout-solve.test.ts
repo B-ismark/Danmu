@@ -18,6 +18,7 @@ import { analyzeRoom } from '@/lib/clearance';
 import { footFromPart, footInsidePoly } from '@/lib/geometry';
 import { footprintBounds } from '@/lib/footprint';
 import { footprintForLayout } from '@/lib/footprint';
+import { bestMs, ceilingMs } from './helpers/perf';
 import { defaultScene } from '@/lib/scene-spec';
 import type { ScenePart } from '@/lib/scene-spec';
 import type { Footprint } from '@/lib/footprint';
@@ -661,14 +662,26 @@ describe('cost of a solve', () => {
   // This runs on the main thread while somebody waits for a button, so its cost is
   // a feature and not an implementation detail. It was 8.4 SECONDS for twenty
   // pieces before the model hoisted the static work out of the annealer's loop;
-  // measured at ~270 ms after, on the machine this was written on. The bar is set
-  // well above that so a slower CI box does not fail it, and far below the old
-  // number so a regression that reinstates per-proposal rule-table rebuilding does.
-  it('stays inside a second for a room of twenty pieces', () => {
+  // measured at ~270 ms after, on the machine this was written on.
+  //
+  // The 2000 ms is stated for an IDLE machine and scaled by `ceilingMs`, rather than
+  // being padded for a bad day. It used to be a single sample against a bare 2000,
+  // and it went red on a loaded machine with nothing wrong: 394 ms idle, 1731 ms with
+  // eight spinners, **4061 ms with eighteen** — a healthy solve failing by 2x. Both
+  // halves of the repair matter. Best-of-three asks what the machine CAN do, and the
+  // calibration means a slower box moves the bar and the code's own margin does not.
+  // What is deliberately NOT done here is loosening the number: 2000 against the
+  // 8400 the regression produced is a 4.2x separation, and both figures scale with
+  // the machine together, so the gap survives at any load the clamp admits.
+  //
+  // The sibling below asserts a ratio, and it is not this assertion in another form:
+  // rebuilding rule tables per proposal slows a ten-piece solve and a thirty-piece
+  // solve by the same factor, so a ratio cannot see a constant-factor regression at
+  // all. One test for the complexity claim, one for the constant.
+  it('stays inside two seconds for a room of twenty pieces', () => {
     const parts = furnished(20);
-    const t0 = performance.now();
-    solveLayout(parts, RECT, parts.map(() => false), { seed: 1 });
-    expect(performance.now() - t0).toBeLessThan(2000);
+    const ms = bestMs(() => solveLayout(parts, RECT, parts.map(() => false), { seed: 1 }));
+    expect(ms).toBeLessThan(ceilingMs(2000));
   });
 
   it('scales with the room rather than exploding', () => {

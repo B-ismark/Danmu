@@ -19,6 +19,7 @@ import { analyzeRoom, freeFloorFraction } from '@/lib/clearance';
 import { obbGap, type OBB, type Poly } from '@/lib/geometry';
 import type { ScenePart } from '@/lib/scene-spec';
 import type { Footprint } from '@/lib/footprint';
+import { bestMs, ceilingMs } from './helpers/perf';
 
 const RECT: Footprint = [
   [-3, -2],
@@ -367,6 +368,13 @@ describe('cost', () => {
     // margin. Taking the best sample measures what the machine CAN do, which is
     // the question a ceiling is asking. A real O(cells x parts) regression is
     // slow in all three.
+    //
+    // The bar goes through `ceilingMs` for the same reason the twenty-piece solve
+    // in `layout-solve.test.ts` does, and this file is the reason that helper takes
+    // the best of N: of the suite's wall-clock bars, this is the one that has never
+    // gone red under load, and best-of-three is why. Two bars, one mechanism —
+    // hand-rolling the loop here and calling the helper there is how the two would
+    // drift into disagreeing about what a ceiling means.
     const big: Footprint = [
       [-20, -20],
       [20, -20],
@@ -377,15 +385,12 @@ describe('cost', () => {
     for (let i = 0; i < 30; i++) {
       parts.push(box(-18 + (i % 6) * 7, -18 + Math.floor(i / 6) * 8, 1.8, 0.9, i * 0.31));
     }
-    let best = Infinity;
     let f!: ReturnType<typeof buildClearanceField>;
-    for (let run = 0; run < 3; run++) {
-      const t0 = performance.now();
+    const best = bestMs(() => {
       f = buildClearanceField(parts, big)!;
       pairGaps(f!);
-      best = Math.min(best, performance.now() - t0);
-    }
+    });
     expect(f!.componentCount).toBeGreaterThanOrEqual(1);
-    expect(best).toBeLessThan(1500);
+    expect(best).toBeLessThan(ceilingMs(1500));
   });
 });
