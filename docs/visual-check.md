@@ -248,7 +248,20 @@ This is the only defect in the whole item that a mouse cannot produce.
 `components/three/Room.tsx`. Merged to `main` in **`d2ef257`** (PR #73).
 
 
-### Six shapes stopped stretching their details — branch `fix/parametric-caps-survive-a-resize`, PR pending
+### Eight shapes stopped stretching their details — branch `fix/parametric-caps-survive-a-resize`, PR #90
+
+**Partly looked at on 2026-09-03**, production build, every pair rendered side by side
+at its catalogue size and at the end of its band. What was seen and is therefore NOT in
+the list below: the fan puts its extra height into the DOWNROD with the motor unchanged;
+the pendant at 150 × 900 is a narrow shade on a long cord rather than a funnel, **and it
+casts a clean pool of light on the floor beneath it** — which is the review's blocker
+confirmed, since an emitter left at the authored anchor would have been sitting on the
+bare cord above the shade with the shade occluding it; the console, stool and nightstand
+pairs differ in the right axis only; and a fan given 1500 × 900 reads as an oval in both
+tabs. The 2D plan agrees with `dimMM` throughout, which matters because the plan never
+group-scaled and is therefore the control.
+
+What is left is below.
 
 **Where to click.** Add each piece below from the **Library**, select it, press `S` for
 Scale, and pull it to the end of its band. Then compare against the same piece at its
