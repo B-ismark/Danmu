@@ -45,12 +45,23 @@ files in 265 s — where all three reds pass in isolation. See row 3.
 #87-#91 on 2026-09-02/03. Three of those five **want eyes and have not had them in full** —
 that is [`visual-check.md`](visual-check.md)'s list, not this one.
 
-**And branch hygiene, which was row 14 of this table until 2026-09-03, is done.** Every stale
-*remote* ref is gone, `fix/pointer-cancel-note` included, after the per-line pass it had been
-waiting five sessions for. § 38.2 carries the verdicts and § 38.4 the method. What is left is
-local-only litter and not a thinking item: dead `gate*` / `pr*` / `zz-*` branch pointers in
-this checkout, and § D's eight stale gate worktrees in temp directories. Check file mtimes
-before touching any worktree — absence from a session listing is not a dead session.
+**And branch hygiene, which was row 14 of this table until 2026-09-03, is done — both ends
+of it now.** Every stale *remote* ref went first; § 38.2 carries the verdicts and § 38.4 the
+method. The local half was cleared on **2026-09-03**: **36 local branches → 7**, and **14
+worktrees → 2**. The `gate*` / `pr*` / `zz-*` pointers this paragraph named **did not exist**
+by then, which is the ordinary fate of a written inventory; what was actually there was 30
+branches fully merged into `origin/main`, deleted with `git branch -d` so git re-checked
+each one itself rather than trusting the list. Two worktrees held commits and **both were
+also held by a branch and an `archive/*` tag**, which is the fact that made removal safe —
+not their age. Mtimes were read first anyway (nothing outside the primary touched since
+2026-08-30, bar one at 2026-09-02, which was **kept**: absence from a session listing is not
+a dead session).
+
+*Residue, and it is a permission wall rather than a decision:* eleven now-deregistered
+worktree **directories** remain on disk at drive roots (`D:\g4`, `C:\Users\bisma\dm16`, …).
+`git worktree list` is clean and git no longer knows about them; they are inert folders
+holding a checkout and a `node_modules`. A drive-root recursive delete is refused here, so
+they want removing by hand.
 
 Ranked by three things together, not by any one of them: **criticality** (does a user
 hit it), **ease** (is it an afternoon or a measurement campaign), and **dependence** —
@@ -67,7 +78,7 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 |---|---|---|---|---|
 | 1 | **G.1** ~~a brand-new room seals its own routes at the size the app ships~~ → **nothing scores a custom footprint** | **Re-scoped 2026-09-03, not closed.** The sweep ran: all five picker sizes seed clean, and the T/U rooms the item named paired a layout with `DEFAULT_ROOM`'s (rect) dimensions. But the room re-seeds on **every** open, `moveWallCarrying` writes no scene snapshot, and a T + one wall nudge + a revisit strands floor with no furniture touched. Several such nudges leave the bounding box **identical**, so no `(layoutId, width, depth)` sweep can see them — **including the one that just ran.** Every wall move makes a custom polygon, both loaders prefer it, nothing scores one | M — a sweep over `moveWallCarrying` output, not over sizes | free; **do not close it with a size sweep** |
 | 2 | **§ 33.3** the render budget is unmeasured | Blocks any answer to "how detailed may a shape be", which was asked directly, and blocks § 12's chosen repair. Nothing in the repo reads `renderer.info`, so this is new instrumentation and it lives in the browser probe — jsdom has no WebGL | M — needs a throttled device | blocks nothing shipping; **blocks row 4** and a decision |
-| 3 | **§ A.4** the timing bounds may simply be too tight | Promoted out of § A, where it sat unranked. **Measured 2026-09-03 at `35b702f`:** the full suite is 3 failed / 2146 passed / 5 expected-fail, and **all three reds pass alone** — `layout-solve.test.ts:671` (`< 2000 ms`), `shuffle-gate.test.ts:248` and `where-it-sits.test.tsx:108` (both default 5 s). Nothing else was running, so this is vitest's **own** parallelism, not another session: the local suite is unreliable against itself here, which is a stronger claim than "trust CI" | M | **blocks trust in every local gate**, which is every row below |
+| 3 | **§ A.4** ~~the timing bounds may simply be too tight~~ → **ANSWERED 2026-09-03: it was the runner, not the bounds** | Reproduced on demand under deliberate CPU load rather than waited for: the same four-red `layout-solve` set, and **three of the four died as `Test timed out in 5000ms`** — a default nobody chose, applied to a suite whose honest worst case is a ~6.3 s solve. Two of those three assert nothing about a clock and the third asserts a *ratio*, the shape that was supposed to survive load; the harness kills the body before the ratio is evaluated. Fixed: an explicit 30 s `testTimeout`, and the two real wall-clock bars scaled by a measured machine factor rather than padded. See § A.4 | done | **no longer blocks the rows below** |
 | 4 | **§ 12** a rider keeps the size the room was BUILT at, after a reload | Confirmed by eye, and the user has already chosen the repair — derive at read time, write nothing (§ B.16). An attempt at the OTHER option was built and reverted, so read § 12 before starting. § 37's `restingOn` is the first gate it has ever had. Also floats **in-session**: `setDim` settles nothing, ever | M | **blocked on row 2** — B.16's stated cost is that the derivation runs on every read |
 | 5 | **§ B.12** Room check speaks centimetres to a user who set metres, feet or inches | **This table omitted it until 2026-09-03.** 15 hard-coded `Math.round(x*100)` sites in `lib/clearance.ts`, rendered verbatim at `RoomTools.tsx:968`, while `dimUnit` defaults to `'m'` — so the shipping default disagrees with itself: the field says `1.9 m`, the finding beside it says `190 cm` | S once decided | needs the user |
 | 6 | **§ 38.1** the confined "Try a fix" refusal is unreachable | A decision rather than a defect: 212 confined solves over every finding of every preset declined **zero** times, so neither the copy added by § 31 nor the one shipping beside it for months has ever rendered | S — mostly a judgement | nothing |
@@ -433,7 +444,7 @@ machine, deterministically.
 script. An earlier attempt as a Vitest file timed out at ten minutes; it wants to be a plain
 Node script that can run for minutes and print a table. **Nothing is written.**
 
-### 4. The contention pattern itself
+### 4. The contention pattern itself — ANSWERED 2026-09-03, and it was the runner
 
 Every round, a different timing-sensitive test goes red under load and green in isolation.
 The standing advice is "trust CI, not the local run" — which works, and which also means
@@ -478,12 +489,57 @@ above and `layout-solve`'s two non-timing failures are not bound by a clock at a
 means "loosen the timing bounds" would not have fixed run 2. Wall-clock is the covariate to
 watch: 163 s clean, 291 s with five reds.
 
-**What would unblock it:** the distribution under both conditions, then per test a choice
-between a ratio, a raised timeout with the reason written beside it, and CI-only. Do not
-simply raise the numbers — a bound that cannot fail is the thing this repo keeps finding —
-and note that the two non-timing failures in run 2 mean at least part of this is not a bound
-at all but a solver test observing a different result under a starved scheduler. That half
-needs finding before anything is loosened.
+**ANSWERED 2026-09-03, and the answer is that this section had the wrong subject.** The
+missing measurement was never a distribution — it was the **error text**, which two rounds of
+observation never captured because a red under load was written down as a red under load and
+not opened. The condition was reproduced deliberately instead of waited for: spinners on all
+eight cores, then eighteen of them, one file, `--reporter=verbose`, at `a23b50b`.
+
+| test | idle | 8-way | 18-way | how it died |
+|---|---|---|---|---|
+| `the solver can open a route › opens it, at every seed` | 830 ms | 3295 ms | 7936 ms | **timed out in 5000 ms** |
+| `the solver and the room report agree › …no two pieces in the same place` | 732 ms | 3248 ms | 7392 ms | **timed out in 5000 ms** |
+| `cost of a solve › scales with the room rather than exploding` | 963 ms | 4414 ms | 10023 ms | **timed out in 5000 ms** |
+| `cost of a solve › stays inside a second…` (`< 2000`) | 394 ms | 1731 ms | 4063 ms | assertion |
+| `clearance-field › frame budget` (`< 1500`, best-of-3) | — | 1476 ms | 3384 ms | **passed** |
+
+That is the same four-red set observed in run 2, on demand, with every result identical
+throughout. **Three of the four are the harness.** `vitest.config.ts` set no `testTimeout`,
+so vitest's 5000 ms default (`resolved.testTimeout ??= resolved.browser.enabled ? 15e3 :
+5e3`) governed a suite whose slowest honest test is a twenty-piece group solve at ~6.3 s in a
+warm process on an **idle** machine. Two of the three assert nothing about a clock at all.
+
+**The sharpest correction is to this section's own advice.** It named
+`layout-solve.test.ts:679`'s ratio as "exactly the shape that survives a loaded machine". It
+does not survive, and it is the third row above: a ratio protects an *assertion* from machine
+speed and does nothing about a *timeout*, so the body is killed before the ratio is ever
+evaluated. Recommending it would have moved the other bars into the same trap.
+
+**What shipped** (`fix/test-timeout-is-a-hang-catcher`), per test, as this section asked:
+
+- **`testTimeout` / `hookTimeout` = 30 s, as a decision.** ~3× the worst body observed at
+  2.3× oversubscription, still short enough to catch a hang. A timeout is a hang-catcher; the
+  performance budget belongs in assertions that say so. Pinned at **both** ends in
+  `tests/toolchain.test.ts`, because a number free at the top is not pinned.
+- **The two real bars are calibrated, not loosened.** `tests/helpers/perf.ts` measures a fixed
+  reference workload in the same process and scales the ceiling by how slow the machine
+  currently is, clamped to `[1, 4]`. Both bars keep their idle figures — 2000 ms and 1500 ms —
+  so a slower box moves the bar and the code's own margin does not. 2000 against the 8400 ms
+  the regression produced is a 4.2× separation, and both scale together.
+- **Best-of-N is generalised from `clearance-field`**, which is the one bar here that has
+  never gone red under load, and the table above says why. One mechanism, two callers: a
+  second hand-rolled timing loop is exactly the drift `tests/helpers/` exists to prevent.
+
+**Mutation-tested 17/17**, each restored and the restore verified — both clamp ends, the
+best-of-N minimum and its run count, the reference constant in both directions, the workload
+itself (shrinking the loop leaves the constant true, which no assertion caught until one was
+added for it), the config value in three ways, and — the one that matters — a solver made 30×
+slower, which the calibrated bar still fails on.
+
+**What is NOT claimed:** the two non-`layout-solve` files seen red in run 3
+(`library-click-through`, `mounted-clash`) were not in this reproduction and their error text
+is still uncaptured. If they too are timeouts the 30 s covers them; if not, they are a
+separate finding and this section did not look at them.
 
 One instance from this round is unrecoverable and is recorded as a gap rather than as a
 result: gating PR #21's merge produced `1 failed | 1482 passed`, the failing test's identity
@@ -1022,8 +1078,14 @@ the user went and looked.
   not deleted, and its content is in #29. **A ref listing tells you where a branch points,
   never what it contains** — the second time in this round that a listing was read as a claim
   about content.
-- **Eight stale gate worktrees** in temp directories belonging to sessions that have ended,
-  plus two live worktrees on branches that have merged.
+- ~~**Eight stale gate worktrees** in temp directories belonging to sessions that have ended,
+  plus two live worktrees on branches that have merged.~~ **Cleared 2026-09-03** — and there
+  were thirteen, not eight, which is the same lesson this list keeps teaching: a count in
+  prose is a claim, and the ones that rot are the ones nobody re-derives. `git worktree
+  list` → 2, `git branch` → 7 from 36. Two of the thirteen held commits and both were also
+  reachable from a branch **and** an `archive/*` tag; that, not their age, is what made
+  removing them safe. Eleven deregistered directories are still on disk — see the queue's
+  branch-hygiene note.
 - ~~**`tests/layout-rules.test.ts:238`.**~~ **Fixed in `aaf2888`**, and the sweep that
   replaced it is the lesson. The fixture was harmless — an anchor picked by *rank*, and
   1900 × 1000 and 1000 × 1900 are the same 1.90 m² — so the **comment** was the defect.
