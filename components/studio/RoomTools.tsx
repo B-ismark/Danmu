@@ -40,14 +40,27 @@ import {
 import { useParams } from 'next/navigation';
 import { TURNING_DIAMETER } from '@/lib/clearance-field';
 
-/** The turning circle, in centimetres, for the two places the Step-free control
- *  names it. Derived — `lib/clearance.ts` writes the same number into the finding
- *  it produces, so a hand-typed "150 cm" here could disagree with the sentence
- *  underneath it and nothing would fail. */
-const TURN_CM = Math.round(TURNING_DIAMETER * 100);
+/** The turning circle for the two places the Step-free control names it, in the unit
+ *  the user set.
+ *
+ *  Derived twice over, and the second derivation was owed. The NUMBER already came
+ *  from `TURNING_DIAMETER`, because `lib/clearance.ts` writes the same one into the
+ *  finding it produces and a hand-typed "150 cm" here could disagree with the sentence
+ *  underneath it while nothing failed. The UNIT was still typed, and § B.12 made that
+ *  a live disagreement rather than a latent one: the findings below started speaking
+ *  the user's unit and this label did not, so a user on feet read *"Step-free · 150
+ *  cm"* three rows above *"A wheelchair needs 4.92 ft to turn on the spot."* Same
+ *  quantity, same panel, two units — the exact defect § B.12 was opened for, three
+ *  rows up from where it was fixed.
+ *
+ *  These are functions rather than constants for that reason alone: a module-scope
+ *  const cannot see the store, and that is what made the label the last thing in the
+ *  panel still hard-coded. */
+const turnLabel = (unit: DimUnit) => formatLength(TURNING_DIAMETER * 1000, unit);
 
 const STEP_FREE_DESC_ID = 'step-free-desc';
-const STEP_FREE_DESC = `Report the ${TURN_CM} cm of turning space a wheelchair needs, and flag steps and thresholds`;
+const stepFreeDesc = (unit: DimUnit) =>
+  `Report the ${turnLabel(unit)} of turning space a wheelchair needs, and flag steps and thresholds`;
 import { useScene, type RoomShape } from '@/lib/scene-store';
 import { resolveParts, useRoomScene } from '@/lib/room-scene';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
@@ -70,7 +83,7 @@ import {
 import { RULE_HANDLING, type CostBreakdown } from '@/lib/layout-score';
 import { roomStore, type LayoutVariant, type Transforms } from '@/lib/storage';
 import { footprintBounds, type Footprint } from '@/lib/footprint';
-import { formatDim, fromMM, stepFor, toMM } from '@/lib/units';
+import { formatDim, formatLength, fromMM, stepFor, toMM } from '@/lib/units';
 import { checkFit, PROBE_ID, type FitCandidate, type FitResult, type FitStatus } from '@/lib/fit-check';
 import { clampDims } from '@/lib/dimension-ranges';
 import { groundY, ridesWall } from '@/lib/physics';
@@ -185,10 +198,15 @@ function cachedReport(
   footprint: Footprint,
   height: number,
   stepFree: boolean,
+  dimUnit: DimUnit,
 ): RoomReport {
-  const key = [effParts, footprint, height, stepFree] as const;
+  // `dimUnit` is in the key because every finding SENTENCE is written in it (§ B.12).
+  // An input that changes the value and not the key is a cache that serves the last
+  // user's answer — here, switching Settings to feet and having Room check go on
+  // saying centimetres until something else in the room happened to move.
+  const key = [effParts, footprint, height, stepFree, dimUnit] as const;
   if (reportCache && key.every((k, i) => Object.is(k, reportCache!.key[i]))) return reportCache.value;
-  const value = analyzeRoom(effParts, { footprint, height }, { accessibility: stepFree });
+  const value = analyzeRoom(effParts, { footprint, height }, { accessibility: stepFree, dimUnit });
   reportCache = { key, value };
   return value;
 }
@@ -201,12 +219,13 @@ function cachedReport(
 export function useRoomReport() {
   const room = useScene((s) => s.room);
   const stepFree = useSettings((s) => s.stepFree);
+  const dimUnit = useSettings((s) => s.dimUnit);
   // `useRoomScene` is memoised on the same four store slices this used to merge by
   // hand, so sharing it costs nothing and is one fewer copy of the fallback.
   const effParts = useRoomScene();
   const report = useMemo(
-    () => cachedReport(effParts, room.footprint, room.height, stepFree),
-    [effParts, room.footprint, room.height, stepFree],
+    () => cachedReport(effParts, room.footprint, room.height, stepFree, dimUnit),
+    [effParts, room.footprint, room.height, stepFree, dimUnit],
   );
   const problems = report.issues.filter((i) => i.severity !== 'info').length;
   return { report, problems, effParts };
@@ -1160,6 +1179,9 @@ function CheckSummary({
   stepFree: boolean;
   onStepFree: (on: boolean) => void;
 }) {
+  const dimUnit = useSettings((s) => s.dimUnit);
+  const turn = turnLabel(dimUnit);
+  const desc = stepFreeDesc(dimUnit);
   return (
     <div
       style={{
@@ -1184,7 +1206,7 @@ function CheckSummary({
           that changes what the panel reports, and it has to be reachable by Tab and
           announce its own state. */}
       <label
-        title={STEP_FREE_DESC}
+        title={desc}
         style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', color: 'var(--ink-2)' }}
       >
         <input
@@ -1199,16 +1221,21 @@ function CheckSummary({
           aria-describedby={STEP_FREE_DESC_ID}
           style={{ accentColor: 'var(--accent)', width: 14, height: 14, flexShrink: 0, cursor: 'pointer' }}
         />
-        Step-free <span style={{ color: 'var(--ink-3)' }}>· {TURN_CM} cm</span>
+        Step-free <span style={{ color: 'var(--ink-3)' }}>· {turn}</span>
       </label>
       {/* OUTSIDE the label, and that is the whole point. A `<label>`'s text content
           is the checkbox's accessible NAME, so a description nested inside it became
           part of the name — and then `aria-describedby` pointed at the same node, so
           a screen reader read the sentence twice: once as what the control is called
-          and again as what it does. The name is "Step-free · 90 cm"; the sentence is
-          the description, and the two must not be the same string. */}
+          and again as what it does. The name is "Step-free · <the turning circle>";
+          the sentence is the description, and the two must not be the same string.
+          The name is written that way here on purpose: it used to read "90 cm", a
+          number `TURNING_DIAMETER` has not produced for as long as this comment has
+          existed — the label was derived and the COMMENT ABOUT the label was not, so
+          the stale copy simply moved one line up. A comment quoting a derived value
+          is a second source of truth wearing a comment's clothes. */}
       <span id={STEP_FREE_DESC_ID} className="sr-only">
-        {STEP_FREE_DESC}
+        {desc}
       </span>
     </div>
   );

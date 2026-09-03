@@ -2646,9 +2646,12 @@ export function isWallMountedPart(cat: Category, shape: Shape): boolean {
  *  own anchor — a `lamp-pendant` at `false`, a `sofa` at `true` — then loaded from a
  *  production build. The tell needs no instrumentation, because `Inspector.tsx` branches
  *  on this flag into two MUTUALLY EXCLUSIVE rows: `{!part.wallMounted && …}` renders the
- *  Wall / Surface / Floor buttons, `{part.wallMounted && …}` renders "Height off the
- *  floor". The pendant showed the height row and no Wall button; the sofa showed Wall and
- *  Floor and no height row. Both wrong on disk, both right on screen.
+ *  placement buttons, `{part.wallMounted && …}` renders "Height off the floor". The
+ *  pendant showed the height row and no Wall button; the sofa showed Wall and Floor and
+ *  no height row. Both wrong on disk, both right on screen. (That observation was made
+ *  when the row held Wall / Surface / Floor. § B.17 dropped Surface, because a drag
+ *  reproduces it exactly; the branch this paragraph is about is unchanged, and the two
+ *  buttons named above are the two that remain.)
  *
  *  Seeding both directions wrong is the whole design and not thoroughness: any single
  *  default gets one of the two right, so only a derivation gets both. And the Inspector's

@@ -18,6 +18,7 @@
 // repair `lib/layout-rules.ts` and `lib/drag-resolve.ts` already are.
 
 import { describe, expect, it } from 'vitest';
+import type { DimUnit } from '@/lib/store';
 import { analyzeRoom } from '@/lib/clearance';
 import { collidesAt, defaultScene, SHAPES, type ScenePart, type Shape } from '@/lib/scene-spec';
 import { isSoftFurnishing, isObstacle, RULE_KINDS } from '@/lib/layout-rules';
@@ -198,25 +199,40 @@ describe('§ 17 · the drag and the report agree about a mounted piece', () => {
     expect(rules(parts), 'so the report must too').toContain('clash-mounted');
   });
 
-  it('prints a band with two DIFFERENT numbers, even when it is 7 mm wide', () => {
+  it('prints a band with two DIFFERENT numbers, even when it is 7 mm wide, in every unit', () => {
     // The rule fires on a band as narrow as 5 mm and the sentence used to print metres
     // at `toFixed(2)` — 1 cm of resolution — so a real pair printed "between 1.06 m and
     // 1.06 m up": a sentence whose whole job is to say where they meet, saying nothing.
     // These two sizes are legal (`clampDims` passes both unchanged) and the band between
     // them is 7 mm, which is what an arbitrary `groundY` answer ordinarily produces —
     // heights are not on the 10 mm drag grid, that grid is x/z only.
+    //
+    // § B.12 made the unit the user's, which put that collapse back within reach: metres
+    // at two decimals is the exact case above. Rounding OUTWARD is what forecloses it —
+    // floor the low, ceil the high, so two ends of a non-empty band cannot land on one
+    // number — and the sweep is over EVERY unit because picking one is how the first
+    // version of this only ever tested the unit it was written in.
+    //
+    // The capture is `[\d.]+`, not `\d+`: against "105.6 cm" the old pattern matched the
+    // "6" and the assertion then compared two fragments of two different numbers. It
+    // reported as the band being inverted, which is the finding this test exists to
+    // raise — a regex that mis-parses a passing sentence looks exactly like the defect.
     const narrowTv = part({
       category: 'tv', shape: 'tv', name: 'TV', dimMM: [1450, 90, 688], pos: [0, 1.4, -2.45], wallMounted: true,
     });
     const shelf = part({
       category: 'shelf', shape: 'bookshelf', name: 'Bookshelf', dimMM: [1200, 600, 1063], pos: [0, 0, -2.2],
     });
-    const found = analyzeRoom([narrowTv, shelf], ROOM).issues.filter((i) => i.rule === 'clash-mounted');
-    expect(found.length, 'the fixture must produce the finding, or this asserts nothing').toBe(1);
-    const nums = [...found[0].detail.matchAll(/(\d+) cm/g)].map((m) => Number(m[1]));
-    console.log(`[§17] 7 mm band renders as ${nums.join(' cm .. ')} cm`);
-    expect(nums.length, 'two numbers, a low and a high').toBe(2);
-    expect(nums[1], 'the high must exceed the low — rounding OUTWARD is what guarantees it').toBeGreaterThan(nums[0]);
+    for (const unit of ['cm', 'm', 'mm', 'ft', 'in'] as DimUnit[]) {
+      const found = analyzeRoom([narrowTv, shelf], ROOM, { dimUnit: unit })
+        .issues.filter((i) => i.rule === 'clash-mounted');
+      expect(found.length, `the fixture must produce the finding in ${unit}, or this asserts nothing`).toBe(1);
+      const nums = [...found[0].detail.matchAll(new RegExp(`([\\d.]+) ${unit}`, 'g'))].map((m) => Number(m[1]));
+      console.log(`[§17] 7 mm band in ${unit}: ${nums.join(' .. ')}`);
+      expect(nums.length, `two numbers in ${unit}, a low and a high`).toBe(2);
+      expect(nums[1], `the high must exceed the low in ${unit} — outward rounding guarantees it`)
+        .toBeGreaterThan(nums[0]);
+    }
   });
 
   it('exempts a soft piece on the FLOOR, not only a soft one on the wall', () => {

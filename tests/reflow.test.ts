@@ -803,11 +803,37 @@ describe('the rail asks about itself', () => {
     expect(blocks.length, 'a container with no queries is a declaration, not a behaviour').toBeGreaterThan(0);
     // Inline `grid-template-columns` outranks any author rule, query or not —
     // same reason `.row-grid` carries one.
-    expect(CSS).toMatch(/\.rail-triple \{ grid-template-columns: 1fr 1fr !important; \}/);
+    expect(CSS).toMatch(/\.rail-swatches \{ grid-template-columns: repeat\(6, 1fr\) !important; \}/);
   });
 
   it('has a hook in the rail to reflow', () => {
-    expect(readFileSync(root('components', 'studio', 'Inspector.tsx'), 'utf8')).toMatch(/className="rail-triple"/);
+    expect(readFileSync(root('components', 'studio', 'Inspector.tsx'), 'utf8')).toMatch(/className="rail-swatches"/);
+  });
+
+  it('does not still fold a row that no longer needs folding', () => {
+    // `.rail-triple` was the placement row's hook while that row held three buttons.
+    // § B.17 dropped "Surface", and the query's `1fr 1fr` then said exactly what the
+    // Inspector's own inline `repeat(2, 1fr)` already said — a rule that computed to
+    // the same `118.5px 118.5px` with it and without it, guarded by three assertions.
+    //
+    // Measured in a browser before deleting it, because "it probably fits" is the kind
+    // of reasoning this block exists to replace: two buttons want 234px of the 243px a
+    // rail dragged to its 276px floor gives them, and 206px of 215px at the 248px
+    // compact step, with nothing overflowing and nothing painting past the rail's right
+    // edge at 420 / 293 / 276 / 248px alike.
+    //
+    // Asserted from BOTH sides, because deleting the rule and leaving the class behind
+    // is the failure this repo keeps finding — plumbing wearing a rule's name.
+    expect(codeOnly(CSS), 'the rule is gone').not.toMatch(/\.rail-triple\s*\{/);
+    // `codeOnly` and not `stripCommentsAndStrings`: this needs comments gone and STRINGS
+    // KEPT, because the thing being looked for is a string — `className="rail-triple"`.
+    // The helper that strips both would erase the evidence along with the noise, and
+    // the check would then pass over any file at all. (The comment in `Inspector.tsx`
+    // explaining why the class went is itself why comments have to go first: without
+    // that step this assertion fails on its own explanation.)
+    const sources = walk(root('components')).filter((f) => /\.tsx$/.test(f));
+    const users = sources.filter((f) => /\brail-triple\b/.test(codeOnly(readFileSync(f, 'utf8'))));
+    expect(users, 'nothing renders a class with no CSS reader').toEqual([]);
   });
 
   it('and the Inspector measures its own scroll box, not the rail around it', () => {
@@ -836,13 +862,15 @@ describe('the rail asks about itself', () => {
 
   it('and the reflow fires at a width the rail can actually reach', () => {
     // The one that was missing, and the defect it would have caught shipped for
-    // months. `.rail-triple` and `.rail-swatches` live only in the Inspector — the
-    // RIGHT rail — and their fold was written at `max-width: 268px`, below that
-    // rail's own `--rail-right-min` of 276px. `DockedShell` renders a dragged sash
-    // as `clamp(--rail-right-min, Npx, --rail-max)`, so 276px is the narrowest a
-    // dragged right rail gets: the whole band a drag can reach sat ABOVE the
-    // breakpoint and never folded. Measured at 276px, the three buttons wanted
-    // 261px of 243px and "Floor" painted past the right edge of the window.
+    // months. `.rail-swatches` lives only in the Inspector — the RIGHT rail — and its
+    // fold was written at `max-width: 268px`, below that rail's own `--rail-right-min`
+    // of 276px. `DockedShell` renders a dragged sash as
+    // `clamp(--rail-right-min, Npx, --rail-max)`, so 276px is the narrowest a dragged
+    // right rail gets: the whole band a drag can reach sat ABOVE the breakpoint and
+    // never folded. Measured at 276px, the swatches wanted 252px of 243px, and the
+    // placement row — three buttons then — wanted 261px, with "Floor" painting past the
+    // right edge of the window. The placement row has two buttons since § B.17 and no
+    // longer needs a fold at all; see the test above, which asserts it has none.
     //
     // It looked alive because `--rail-right-tight` (248px, the compact step) does
     // clear 268px — so the fold fired for the width nobody drags to and not for
@@ -881,8 +909,8 @@ describe('the rail asks about itself', () => {
     // one of these classes into the piece tree and this goes red rather than
     // quietly measuring the wrong rail.
     const sources = walk(root('components')).filter((f) => /\.tsx$/.test(f));
-    for (const cls of ['rail-triple', 'rail-swatches']) {
-      // A word match, not `"${cls}"` — `className="rail-triple something"` is a
+    for (const cls of ['rail-swatches']) {
+      // A word match, not `"${cls}"` — `className="rail-swatches something"` is a
       // perfectly ordinary thing to write and an exact-attribute match reads it as
       // nobody rendering the class at all. Both readings go red rather than green,
       // but only one of them names the real change.
@@ -913,7 +941,7 @@ describe('the rail asks about itself', () => {
     expect(widestQueryBox, 'the ceiling did not resolve to a width').toBeGreaterThan(200);
 
     const floor = railFloor('rail-right');
-    for (const cls of ['.rail-triple', '.rail-swatches']) {
+    for (const cls of ['.rail-swatches']) {
       const owning = blocks.filter((b) => b.body.includes(cls));
       expect(owning.length, `${cls} is not reflowed by any container query`).toBeGreaterThan(0);
       // The WIDEST such block is the one that decides: a narrower one below it can

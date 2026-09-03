@@ -17,6 +17,10 @@
 // "Everything fits" over an arrangement that plainly did not.
 
 import type { ScenePart } from './scene-spec';
+// Type-only, so a pure module does not gain a runtime dependency on the store —
+// `lib/units.ts` takes `DimUnit` from there the same way.
+import type { DimUnit } from './store';
+import { formatArea, formatLength, type RoundDir } from './units';
 import { roomContainment, type Footprint } from './footprint';
 import {
   faceClearance,
@@ -91,6 +95,29 @@ export type AnalyzeOptions = {
    *  meet it, and everyone whose does needs it stated plainly rather than mixed
    *  into the ordinary findings. */
   accessibility?: boolean;
+  /** The unit every length in a finding is written in — § B.12.
+   *
+   *  Every sentence here used to hard-code centimetres while `useSettings.dimUnit`
+   *  defaults to metres, so the shipping default disagreed with itself: the room's own
+   *  field said `1.90 m` and the finding beside it said `190 cm`. The user's answer was
+   *  to convert, on the grounds that one panel speaking two units is the actual defect.
+   *
+   *  It defaults to `'cm'` rather than to the store's `'m'`, and that is not a
+   *  half-measure. This module is pure and must not import a store; the default keeps
+   *  the two callers who never show a finding to anyone — `lib/fit-check.ts` and
+   *  `lib/layout-shuffle.ts`, which read `rule` and the issue key — on the sentences
+   *  they have always produced, so a solver comparison cannot start depending on what
+   *  the user has selected in Settings.
+   *
+   *  `components/studio/RoomTools.tsx` is the one caller that CALLS this with a unit,
+   *  and it passes the real one. It is not the one place a `detail` is rendered —
+   *  `Inspector.tsx`'s placement banner renders `worst.detail` too. That is correct as
+   *  it stands, because the banner reads the same memoised `useRoomReport()` rather
+   *  than analysing again, but the distinction is the whole point: **the invariant is
+   *  one ANALYSIS per unit, not one renderer.** A second component that renders a
+   *  finding is fine; a second component that calls `analyzeRoom` without `dimUnit` is
+   *  the defect, and `tests/report-unit-callers.test.ts` is what sweeps for it. */
+  dimUnit?: DimUnit;
 };
 
 // Which pieces' pairwise gaps form walkways people actually use now lives in
@@ -191,13 +218,14 @@ function zoneDetail(
   blocked: number,
   clear: number,
   narrowest: number,
+  len: (metres: number, dir?: RoundDir) => string,
 ): string {
-  const cm = Math.round(rule.depth * 100);
+  const need_ = len(rule.depth);
   if (rule.sides.length === 1) {
-    return `“${part.name}” has ${Math.round(narrowest * 100)} cm ${rule.sides[0] === 'front' ? 'in front' : `on its ${rule.sides[0]}`} — needs ${cm} cm ${rule.reason}.`;
+    return `“${part.name}” has ${len(narrowest)} ${rule.sides[0] === 'front' ? 'in front' : `on its ${rule.sides[0]}`} — needs ${need_} ${rule.reason}.`;
   }
   const need = rule.atLeast === rule.sides.length ? `all ${rule.sides.length}` : `${rule.atLeast} of its ${rule.sides.length}`;
-  return `“${part.name}” wants ${cm} cm clear on ${need} sides ${rule.reason} — ${clear === 0 ? 'none of them is' : `only ${clear} ${clear === 1 ? 'is' : 'are'}`} (${blocked} blocked).`;
+  return `“${part.name}” wants ${need_} clear on ${need} sides ${rule.reason} — ${clear === 0 ? 'none of them is' : `only ${clear} ${clear === 1 ? 'is' : 'are'}`} (${blocked} blocked).`;
 }
 
 function clashShare(a: ScenePart, b: ScenePart): number {
@@ -243,6 +271,30 @@ export function analyzeRoom(
   const issues: ClearanceIssue[] = [];
   const poly = room.footprint as Poly;
 
+  /** A length, in metres, written for a sentence in the user's unit.
+   *
+   *  Everything in this file measures in metres and every finding used to render
+   *  `Math.round(x * 100)` followed by a literal `cm`, in fifteen places. One helper
+   *  instead, so the unit cannot be right in fourteen sentences and wrong in the
+   *  fifteenth, and so `precisionFor` decides the decimals rather than each site.
+   *
+   *  **It was right in fourteen and wrong in two on the first pass, and the way that
+   *  happened is worth more than the fix.** The sweep was verified by grepping `} cm`
+   *  and finding none left — but the two TV sentences never said `cm`. They said
+   *  `${x.toFixed(1)} m`, because a viewing distance is naturally metres, so the grep
+   *  that confirmed the sweep was structurally blind to the sites that were wrong.
+   *  A search for the OLD spelling only finds the sites that used it; the question
+   *  "which sentences state a length" is a different question, and the answer is every
+   *  `detail:` in this function. Read them, do not grep them. */
+  const len = (metres: number, dir?: RoundDir) => formatLength(metres * 1000, opts.dimUnit ?? 'cm', dir);
+
+  /** A floor area for a sentence, paired with whatever `len` is speaking.
+   *
+   *  Exactly one finding states one (`cut-off`), and before this it said `m²` beside a
+   *  length in feet. `formatArea` decides the pairing — ft² for the imperial units, m²
+   *  for the rest — rather than squaring the unit, which would give `in²`. */
+  const area = (m2: number) => formatArea(m2, opts.dimUnit ?? 'cm');
+
   const solid = floorBlockers(parts);
   const obbs = new Map<string, Foot>();
   for (const p of solid) obbs.set(p.id, footFromPart(p.pos, p.rot, p.dimMM, p.circle));
@@ -281,7 +333,7 @@ export function analyzeRoom(
           // left the rule's title unreachable and this string free to drift from it.
           // That is the failure `ZONE_TITLE` was deleted for, one consumer along.
           title: swing.rule.title,
-          detail: `${blockers.map((b) => b.name).join(', ')} ${blockers.length === 1 ? 'sits' : 'sit'} inside the ${Math.round(swing.rule.depth * 100)} cm swing of “${door.name}”.`,
+          detail: `${blockers.map((b) => b.name).join(', ')} ${blockers.length === 1 ? 'sits' : 'sit'} inside the ${len(swing.rule.depth)} swing of “${door.name}”.`,
           partIds: [door.id, ...blockers.map((b) => b.id)],
         });
       }
@@ -302,7 +354,7 @@ export function analyzeRoom(
         rule: 'entry',
         severity: 'warn',
         title: 'The way in is blocked',
-        detail: `${inTheWay.map((b) => b.name).join(', ')} ${inTheWay.length === 1 ? 'stands' : 'stand'} in the ${Math.round(route * 100)} cm route in from “${door.name}”.`,
+        detail: `${inTheWay.map((b) => b.name).join(', ')} ${inTheWay.length === 1 ? 'stands' : 'stand'} in the ${len(route)} route in from “${door.name}”.`,
         partIds: [door.id, ...inTheWay.map((b) => b.id)],
       });
     }
@@ -445,29 +497,34 @@ export function analyzeRoom(
       // The same pad `collidesAt` passes, so flush-against reads as touching rather
       // than as a collision, on both surfaces.
       if (!footOverlap(mFoot, foot, -0.01)) continue;
-      // Centimetres, and rounded OUTWARD, for two reasons that pull the same way.
+      // Rounded OUTWARD — floor the bottom, ceil the top — which keeps the printed
+      // interval a SUPERSET of the real one, so it can never read as empty or
+      // inverted. Same reason `boundsToUnit` rounds toward the interior for the
+      // opposite kind of bound.
       //
-      // Metres at `toFixed(2)` is 1 cm of resolution, and the rule fires on a band as
-      // narrow as 5 mm — so a real pair (a 688 mm TV at 1.4 m and a 1063 mm bookshelf,
-      // both legal sizes) printed "between 1.06 m and 1.06 m up": a sentence whose
-      // whole job is to say WHERE they meet, saying nothing. Heights are not on the
-      // 10 mm drag grid — that grid is x/z — and `groundY`'s `wall-mid` answer is
-      // `min(1.4, H - h/2 - 0.1)`, an arbitrary real, so sub-centimetre bands are
-      // ordinary rather than contrived.
+      // It matters here more than anywhere else in this file, because the rule fires on
+      // a band as narrow as 5 mm. A real pair — a 688 mm TV at 1.4 m and a 1063 mm
+      // bookshelf, both legal sizes — printed "between 1.06 m and 1.06 m up" when this
+      // rendered metres at two decimals: a sentence whose whole job is to say WHERE two
+      // pieces meet, saying nothing. Heights are not on the 10 mm drag grid (that grid
+      // is x/z) and `groundY`'s `wall-mid` answer is `min(1.4, H - h/2 - 0.1)`, an
+      // arbitrary real, so sub-millimetre bands are ordinary rather than contrived.
       //
-      // Rounding outward (floor the bottom, ceil the top) keeps the printed interval a
-      // superset of the real one, so it can never read as empty or inverted — the same
-      // reason `boundsToUnit` rounds toward the interior for the opposite kind of
-      // bound. And cm is what every other HEIGHT in this file speaks (`tall` says
-      // "190 cm tall and the ceiling is 240 cm"); the metres here were the odd one out.
-      const lowCm = Math.floor(Math.max(fBottom, mBottom) * 100);
-      const highCm = Math.ceil(Math.min(fTop, mTop) * 100);
+      // The unit is the user's now (§ B.12), and the outward rounding is what keeps that
+      // reading fixed in metres: the same pair overlaps [1.056, 1.063], which floors and
+      // ceils to "between 1.05 m and 1.07 m up" rather than collapsing. Outward rounding
+      // cannot collapse a band the rule has already required to be at least 5 mm wide,
+      // whatever the unit — the two ends land in different buckets or on opposite sides
+      // of one. `formatLength`'s refusal to print a zero it does not mean is a second,
+      // independent guard, and it is not the one doing the work here.
+      const low = Math.max(fBottom, mBottom);
+      const high = Math.min(fTop, mTop);
       issues.push({
         id: `clash-mounted-${f.id}-${m.id}`,
         rule: 'clash-mounted',
         severity: 'error',
         title: 'A piece is inside something on the wall',
-        detail: `“${f.name}” is standing where “${m.name}” hangs — they share the same space between ${lowCm} cm and ${highCm} cm up. Slide one of them along its wall.`,
+        detail: `“${f.name}” is standing where “${m.name}” hangs — they share the same space between ${len(low, 'down')} and ${len(high, 'up')} up. Slide one of them along its wall.`,
         partIds: [f.id, m.id],
       });
     }
@@ -510,7 +567,7 @@ export function analyzeRoom(
         rule: 'walk',
         severity: 'warn',
         title: 'Tight walkway',
-        detail: `Only ${Math.round(gap * 100)} cm between “${a.name}” and “${b.name}” — comfortable passage needs ${MIN_WALKWAY * 100} cm.`,
+        detail: `Only ${len(gap)} between “${a.name}” and “${b.name}” — comfortable passage needs ${len(MIN_WALKWAY)}.`,
         partIds: [a.id, b.id],
       });
     }
@@ -564,7 +621,7 @@ export function analyzeRoom(
         rule: 'zone',
         severity: 'warn',
         title: access.title,
-        detail: zoneDetail(p, access, blocked.length, clear.length, narrowest),
+        detail: zoneDetail(p, access, blocked.length, clear.length, narrowest, len),
         partIds: [p.id],
       });
     }
@@ -594,7 +651,7 @@ export function analyzeRoom(
         severity: 'warn',
         // See the door above: read the rule, never restate it.
         title: zn.rule.title,
-        detail: `${blockers.map((b) => b.name).join(', ')} ${blockers.length === 1 ? 'stands' : 'stand'} in front of “${win.name}” and ${blockers.length === 1 ? 'rises' : 'rise'} above its ${Math.round(zn.rule.aboveY * 100)} cm sill.`,
+        detail: `${blockers.map((b) => b.name).join(', ')} ${blockers.length === 1 ? 'stands' : 'stand'} in front of “${win.name}” and ${blockers.length === 1 ? 'rises' : 'rise'} above its ${len(zn.rule.aboveY)} sill.`,
         partIds: [win.id, ...blockers.map((b) => b.id)],
       });
     }
@@ -621,7 +678,10 @@ export function analyzeRoom(
         rule: 'tv',
         severity: 'warn',
         title: 'Sitting too close to the TV',
-        detail: `“${nearest.name}” is ${nd.toFixed(1)} m from the ${Math.round((diag / 0.0254) * 10) / 10}″-class screen — comfortable viewing starts around ${(diag * 1.2).toFixed(1)} m.`,
+        // The ″ stays. A screen diagonal is quoted in inches worldwide — "a 55-inch
+        // TV" is the product's name, not a measurement the user chose a unit for —
+        // while the two DISTANCES are room measurements and convert like every other.
+        detail: `“${nearest.name}” is ${len(nd)} from the ${Math.round((diag / 0.0254) * 10) / 10}″-class screen — comfortable viewing starts around ${len(diag * 1.2)}.`,
         partIds: [tv.id, nearest.id],
       });
     } else if (nd > diag * 3.2) {
@@ -630,7 +690,7 @@ export function analyzeRoom(
         rule: 'tv',
         severity: 'info',
         title: 'TV may feel small from the seat',
-        detail: `“${nearest.name}” sits ${nd.toFixed(1)} m away — ideal range for this screen is ${(diag * 1.2).toFixed(1)}–${(diag * 2.5).toFixed(1)} m.`,
+        detail: `“${nearest.name}” sits ${len(nd)} away — ideal range for this screen is ${len(diag * 1.2)}–${len(diag * 2.5)}.`,
         partIds: [tv.id, nearest.id],
       });
     }
@@ -691,14 +751,14 @@ export function analyzeRoom(
       : 'it will not stand up in here';
     const tail =
       floor > room.height
-        ? `It does not go any shorter than ${Math.round(floor * 100)} cm, so nothing you type will fit it in here — the ceiling has to reach ${Math.round(floor * 100)} cm, or the piece has to go.`
-        : `Danmu keeps the real size rather than shrinking it for you; ${Math.round(floor * 100)} cm is as short as this piece goes, and that would fit.`;
+        ? `It does not go any shorter than ${len(floor)}, so nothing you type will fit it in here — the ceiling has to reach ${len(floor)}, or the piece has to go.`
+        : `Danmu keeps the real size rather than shrinking it for you; ${len(floor)} is as short as this piece goes, and that would fit.`;
     issues.push({
       id: `tall-${p.id}`,
       rule: 'tall',
       severity: 'error',
       title: 'Taller than the room',
-      detail: `“${p.name}” is ${Math.round(h * 100)} cm tall and the ceiling is ${Math.round(room.height * 100)} cm — ${lead}. ${tail}`,
+      detail: `“${p.name}” is ${len(h)} tall and the ceiling is ${len(room.height)} — ${lead}. ${tail}`,
       partIds: [p.id],
     });
   }
@@ -821,7 +881,7 @@ export function analyzeRoom(
         rule: 'reach',
         severity: 'warn',
         title: 'You can’t walk to everything',
-        detail: `${stranded.map((p) => `“${p.name}”`).join(', ')} ${stranded.length === 1 ? 'sits' : 'sit'} in part of the room that nothing connects to the door — every route in is under ${MIN_WALKWAY * 100} cm wide.`,
+        detail: `${stranded.map((p) => `“${p.name}”`).join(', ')} ${stranded.length === 1 ? 'sits' : 'sit'} in part of the room that nothing connects to the door — every route in is under ${len(MIN_WALKWAY)} wide.`,
         partIds: stranded.map((p) => p.id),
       });
     }
@@ -832,7 +892,7 @@ export function analyzeRoom(
         rule: 'cut-off',
         severity: 'info',
         title: 'Part of the floor is cut off',
-        detail: `About ${cutOff.toFixed(1)} m² of floor has no route to the door wider than ${MIN_WALKWAY * 100} cm.`,
+        detail: `About ${area(cutOff)} of floor has no route to the door wider than ${len(MIN_WALKWAY)}.`,
         partIds: [],
       });
     }
@@ -851,7 +911,7 @@ export function analyzeRoom(
         rule: 'turning',
         severity: 'warn',
         title: 'No room to turn a wheelchair',
-        detail: `The largest clear circle in this room is about ${Math.round(diameter * 100)} cm across. A wheelchair needs ${TURNING_DIAMETER * 100} cm to turn on the spot.`,
+        detail: `The largest clear circle in this room is about ${len(diameter)} across. A wheelchair needs ${len(TURNING_DIAMETER)} to turn on the spot.`,
         partIds: [],
       });
     }

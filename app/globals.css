@@ -592,18 +592,30 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
    which is exactly why this looked alive: the compact step folded, and only the
    drag did not.
 
-   Measured in a browser at a rail dragged to 276px: `.rail-triple`'s three buttons
-   want 261px of the 243px they get, so “Floor” painted 1.8px PAST the right edge of
-   a 1400px window — `.rail` is `overflow: visible`, so nothing clipped, nothing
-   scrolled and nothing errored. `.rail-swatches` wanted 252px in the same 243px.
+   Measured in a browser at a rail dragged to 276px, when the placement row still held
+   THREE buttons: `.rail-triple`'s three wanted 261px of the 243px they get, so “Floor”
+   painted 1.8px PAST the right edge of a 1400px window — `.rail` is `overflow:
+   visible`, so nothing clipped, nothing scrolled and nothing errored.
+   `.rail-swatches` wanted 252px in the same 243px.
+
+   **§ B.17 dropped the third button and the `.rail-triple` half of this block went
+   with it, measured rather than reasoned.** Two buttons at the same 276px rail want
+   234px of 243px, and at the 248px compact step 206px of 215px — no child overflowing,
+   nothing painting past the rail's right edge, at 420 / 293 / 276 / 248px alike. The
+   Inspector's own inline `repeat(2, 1fr)` was already what this block would have set,
+   so the rule computed to `118.5px 118.5px` with it and without it: a no-op guarded by
+   three assertions. `.rail-triple` is gone from the markup too, because a class named
+   for three that holds two is a name that lies, and a class with no CSS reader is
+   plumbing wearing a rule's name.
 
    The container is `.rail-scroll`, not `.rail` (see that rule for why), so the
    query box IS the box the section's padding is taken out of and the arithmetic has
-   no third term: the grid gets `queryWidth − 32px`. 261 + 32 = 293, so 293px is the
-   widest query box that cannot hold the row, and `max-width` is inclusive. The
-   swatches need 284 by the same subtraction, so one block serves both — folding
-   them from 293 rather than 284 costs two columns over a 9px band nobody can stop
-   inside on purpose.
+   no third term: the grid gets `queryWidth − 32px`. 261 + 32 = 293 is where the number
+   came from — the widest query box that could not hold the three-button row, and
+   `max-width` is inclusive. The swatches need 284 by the same subtraction, which is
+   what keeps 293 the right breakpoint now that they are the only tenant: folding them
+   from 293 rather than 284 costs two columns over a 9px band nobody can stop inside on
+   purpose.
 
    This was 304px for one commit, and the 11px was not headroom: it was an omitted
    scrollbar. Deriving the number against `.rail` meant estimating a width that is
@@ -618,10 +630,6 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
    clipping and no ellipsis to notice — the row keeps its width and hangs off the
    end of the rail. */
 @container rail (max-width: 293px) {
-  /* Three 11px buttons with icons stop fitting first. Two rows of two reads
-     better than three clipped labels — and better than what a too-narrow flex
-     row does, which is print each label over the button beside it. */
-  .rail-triple { grid-template-columns: 1fr 1fr !important; }
   /* A swatch is `aspect-ratio: 1` with a 28px floor, so eight columns in a rail
      this narrow draw eight tall rectangles rather than eight squares. Six keeps
      them square. Deliberately NOT `auto-fit`: that would also re-count the row on
