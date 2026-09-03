@@ -187,13 +187,17 @@ describe('the Inspector placement row shows the buttons that do something', () =
     // anything that happens to zero the Y.
     const before = lamp(0.45).pos;
     setUp([table(), lamp(0.45)]);
+    // The rigid-parent link a drop onto the table would have written. Without it the
+    // last assertion is decoration — mutation-checked: deleting `clearParent` from
+    // `groundToFloor` left this green, because the fixture had no parent to clear.
+    useStudio.setState({ parentIds: { [LAMP]: TABLE } });
     render(<PlanPage />);
     fireEvent.click(screen.getByRole('button', { name: 'Floor' }));
     const s = useStudio.getState();
     expect(s.positions[LAMP]?.[1]).toBe(0);
     expect(s.positions[LAMP]?.[0], 'x is untouched — that is what "in place" means').toBe(before[0]);
     expect(s.positions[LAMP]?.[2], 'and so is z').toBe(before[2]);
-    expect(s.parentIds[LAMP]).toBeUndefined();
+    expect(s.parentIds[LAMP], 'it stopped riding the table').toBeUndefined();
   });
 
   it('Wall is the other one a drag cannot reach, and it turns the piece to face the room', () => {

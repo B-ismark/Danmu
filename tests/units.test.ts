@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { boundsToUnit, decimalsOf, fromMM, stepFor, steppedValue, toMM, formatDim, precisionFor } from '@/lib/units';
+import { boundsToUnit, decimalsOf, fromMM, stepFor, steppedValue, toMM, formatDim, formatLength, precisionFor } from '@/lib/units';
 import { dimRangeFor, roomAxisRange, roomAxisWithin, type RoomAxis } from '@/lib/dimension-ranges';
 import { CATEGORIES, SHAPES } from '@/lib/scene-spec';
 
@@ -359,5 +359,76 @@ describe('a chevron never lands outside the range either', () => {
     }
     expect(checked).toBeGreaterThan(1000);
     expect(bad, `presses landing out of range — ${bad.slice(0, 6).join(' | ')}`).toEqual([]);
+  });
+});
+
+// ─── formatLength · a length as it belongs in a SENTENCE ─────────────────────
+//
+// § B.12. Room check's findings used to hard-code centimetres while `dimUnit` defaults
+// to metres, so the panel disagreed with the room's own fields. `formatLength` is the
+// one formatter every finding now goes through.
+//
+// The interesting half is not the conversion — `fromMM` already had that — it is the
+// two things a sentence needs that a FIELD does not.
+describe('formatLength', () => {
+  it('writes the number and its unit, at the unit’s own precision', () => {
+    expect(formatLength(1980, 'mm')).toBe('1980 mm');
+    expect(formatLength(1980, 'cm')).toBe('198 cm');
+    expect(formatLength(1980, 'm')).toBe('1.98 m');
+    expect(formatLength(1980, 'ft')).toBe('6.5 ft');
+    expect(formatLength(1980, 'in')).toBe('78 in');
+  });
+
+  // Trailing zeros go, which is where this parts company with `formatDim`. A field is a
+  // column and wants fixed width; "the ceiling is 240.0 cm" reads as a machine talking,
+  // and `RoomDimsEditor` fills its inputs with `String(fromMM(...))` — so the field
+  // shows `198` and a finding saying `198.0 cm` would be a NEW disagreement introduced
+  // by the fix for the old one.
+  it('trims trailing zeros, unlike the field formatter it sits beside', () => {
+    expect(formatDim(1900, 'm'), 'the field pads to a fixed width').toBe('1.90');
+    expect(formatLength(1900, 'm'), 'the sentence does not').toBe('1.9 m');
+    expect(formatLength(2400, 'cm')).toBe('240 cm');
+    expect(formatLength(0, 'm'), 'and zero is still zero').toBe('0 m');
+  });
+
+  // **The one a coarse unit makes reachable.** A 4 mm gap at `precisionFor('m')` is
+  // `0.00`, and "Only 0.00 m between the sofa and the table" is a false statement about
+  // a real clash — read as the app being broken rather than the number being rounded.
+  // So the decimals grow until the number is true, capped at one millimetre of
+  // resolution, DERIVED from the unit rather than typed.
+  it('never prints a zero it does not mean', () => {
+    for (const unit of UNITS) {
+      for (const mm of [1, 2, 4, 9, 12]) {
+        const s = formatLength(mm, unit);
+        expect(Number(s.split(' ')[0]), `${mm} mm rendered as "${s}"`).not.toBe(0);
+      }
+    }
+    // The exact renderings, so "not zero" cannot be satisfied by something absurd.
+    expect(formatLength(4, 'm'), 'metres grow a decimal: 0.00 is not true').toBe('0.004 m');
+    expect(formatLength(4, 'ft'), 'feet do not need to — 0.01 is already true').toBe('0.01 ft');
+    expect(formatLength(4, 'cm'), 'nor do centimetres').toBe('0.4 cm');
+    // The growth threshold is per unit, and metres is the only one of the five coarse
+    // enough to hit it at this size. A single-unit version of this test would have been
+    // green against a formatter that never grew at all.
+    expect(formatLength(1, 'ft'), 'a millimetre in feet DOES need it').toBe('0.003 ft');
+  });
+
+  // And it stops growing: one millimetre is the storage resolution, so a sub-millimetre
+  // value is allowed to render as its unit's nearest zero rather than sprouting six
+  // decimals. `mm` itself never grows at all, which is the cap being derived working.
+  it('stops at one millimetre of resolution', () => {
+    expect(formatLength(0.4, 'mm'), 'mm has no room to grow, and should not').toBe('0 mm');
+    expect(formatLength(0.0004, 'm').split(' ')[0].length).toBeLessThanOrEqual(6);
+  });
+
+  // The band ends. `down` and `up` widen the reported interval, which is what stops a
+  // 7 mm mounted-clash band collapsing to one number in metres — see
+  // `tests/mounted-clash.test.ts`, which asserts that end to end in all five units.
+  it('rounds a band OUTWARD when asked, in both directions', () => {
+    expect(formatLength(1056, 'm', 'down')).toBe('1.05 m');
+    expect(formatLength(1063, 'm', 'up')).toBe('1.07 m');
+    // Nearest would collapse them onto the same number, which is the defect.
+    expect(formatLength(1056, 'm')).toBe('1.06 m');
+    expect(formatLength(1063, 'm')).toBe('1.06 m');
   });
 });
