@@ -149,10 +149,10 @@ export function LibraryPicker({
       {/* A placeholder is not a label — it disappears the moment you type. */}
       <input
         className="field"
-        aria-label="Search the library"
+        aria-label="Search the Library"
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Search the library…"
+        placeholder="Search the Library…"
         autoFocus={autoFocus}
         style={{ marginBottom: 10, flexShrink: 0 }}
       />

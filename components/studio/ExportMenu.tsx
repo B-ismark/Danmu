@@ -27,6 +27,7 @@ import { useSnapshot } from '@/lib/snapshot';
 import { exportPlanPng } from '@/lib/plan-export';
 import { roomStore } from '@/lib/storage';
 import { saveSceneFile } from './SceneFile';
+import { toast } from '@/components/ui/StorageToast';
 import { Icon, type IconName } from '@/components/ui/Icon';
 
 export function ExportMenu() {
@@ -92,6 +93,22 @@ export function ExportMenu() {
     }
   }
 
+  /** Both PNG items are async now, and `run` takes a `() => void`, so a rejection
+   *  here is dropped on the floor rather than reaching the React handler a
+   *  synchronous throw used to reach. That is a silent failed export: the menu
+   *  closes, no file arrives, and the only trace is a console warning nobody is
+   *  looking at. Every export path goes through here and says so instead. */
+  function reportExportFailure(what: string) {
+    return (err: unknown) => {
+      console.error(`[export] ${what} failed`, err);
+      toast({
+        tone: 'danger',
+        title: `Could not export ${what}`,
+        message: 'Nothing was saved. Try again, and if it keeps happening reload the page.',
+      });
+    };
+  }
+
   async function planPng() {
     // The scene is read at CLICK time, not after the name's await: it must be
     // the room as the user saw it when they pressed the item. `currentRoomScene`
@@ -112,12 +129,21 @@ export function ExportMenu() {
             onClick: () => {
               // The name rides the same request that bumps the token, because
               // the capture inside the canvas cannot load the room itself.
-              void freshRoomName().then((n) => useSnapshot.getState().request(n));
+              void freshRoomName()
+                .then((n) => useSnapshot.getState().request(n))
+                .catch(reportExportFailure('this 3D view'));
             },
           },
         ]
       : []),
-    { icon: 'grid', label: 'Floor plan', hint: 'To-scale PNG, measured in ' + dimUnit, onClick: planPng },
+    {
+      icon: 'grid',
+      label: 'Floor plan',
+      hint: 'To-scale PNG, measured in ' + dimUnit,
+      // `run` discards what `onClick` returns, so the promise is caught HERE. Handing
+      // `planPng` over bare made a throw an unhandled rejection.
+      onClick: () => void planPng().catch(reportExportFailure('the floor plan')),
+    },
     {
       icon: 'download',
       label: 'The room itself',
@@ -125,7 +151,7 @@ export function ExportMenu() {
       // does not distinguish it from the PNGs above it.
       hint: 'A file you can reopen here, or send to someone',
       onClick: () => {
-        if (roomId) void saveSceneFile(roomId);
+        if (roomId) void saveSceneFile(roomId).catch(reportExportFailure('the room file'));
       },
     },
   ];

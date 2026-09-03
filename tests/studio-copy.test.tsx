@@ -71,6 +71,18 @@ describe('the comment stripper this file depends on', () => {
   });
 });
 
+/** Every `.tsx` under a UI directory, derived from disk. Module scope because TWO
+ *  sweeps read it now, and the second one exists precisely because a sweep that names
+ *  its own subjects cannot see the file nobody added to the list. */
+function surfaces(rel: string, out: string[] = []): string[] {
+  for (const entry of readdirSync(join(ROOT, rel), { withFileTypes: true })) {
+    const next = `${rel}/${entry.name}`;
+    if (entry.isDirectory()) surfaces(next, out);
+    else if (entry.name.endsWith('.tsx')) out.push(next);
+  }
+  return out;
+}
+
 /** The stripper, separated from the file read so the test above can drive it. */
 function code0(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
@@ -95,6 +107,43 @@ describe('the Library has a sign on it', () => {
     expect(code('components/studio/PartTree.tsx')).toContain('from the Library');
     expect(code('components/studio/SceneContextMenu.tsx')).toContain('Add from the Library');
     // The third is the help card, and it renders below rather than being grepped.
+  });
+
+  // The assertion above names two files by hand, which is the defect this repo keeps
+  // finding: a sweep that lists its own subjects cannot see the file nobody added to
+  // the list. It passed while THREE more live strings said "library" in lower case —
+  // two of them the search box INSIDE the Library panel, sitting directly under the
+  // heading the first test in this file pins, and the third a toast. `PartTree.tsx`
+  // carried one of each, so the positive assertion above was satisfied by a different
+  // line in the very file it was failing to police.
+  //
+  // Derived from disk, comments stripped, so a paragraph ABOUT the old lowercase
+  // spelling cannot fail this. `RoomShell.tsx` has a real lowercase one ("no CSG
+  // library") and it stays legal by being a comment rather than by being excepted.
+  it('and no live string anywhere else says it in lower case', () => {
+    // A genuine software library named in USER-FACING copy would go here with its
+    // reason. Empty is a decision rather than an oversight: an exception list is how
+    // the next lowercase one gets in.
+    const ALLOWED: Array<[string, RegExp]> = [];
+
+    const files = [...surfaces('app'), ...surfaces('components')];
+    expect(files.length, 'no surfaces found, so this sweep proves nothing').toBeGreaterThan(50);
+    const offenders: string[] = [];
+    for (const file of files) {
+      const lines = code(file).split(String.fromCharCode(10));
+      for (let n = 0; n < lines.length; n++) {
+        const line = lines[n];
+        if (!/\blibrary\b/.test(line)) continue;
+        if (ALLOWED.some(([f, re]) => f === file && re.test(line))) continue;
+        offenders.push(file + ":" + (n + 1) + ": " + line.trim());
+      }
+    }
+    expect(offenders, 'the Library is a proper noun — docs/history/PlanUX.md §3b-0').toEqual([]);
+    // The positive half. A stripper that ate every string, or a walk that returned the
+    // wrong paths, would satisfy the assertion above by finding nothing — the same
+    // shape as the hand-listed sweep it replaces.
+    const named = files.filter((f) => /\bLibrary\b/.test(code(f)));
+    expect(named.length, 'the sweep must find the proper noun in use').toBeGreaterThan(2);
   });
 });
 
@@ -150,14 +199,6 @@ describe('no copy offers a feature this app deleted', () => {
   // sweep stays green while the string ships. It also missed `RoomTools.tsx`, `PlanView`
   // and the whole of `app/`, which are user-facing too. Rule 1 is about every string a
   // user can read, so the subject is every `.tsx` under `app/` and `components/`.
-  function surfaces(rel: string, out: string[] = []): string[] {
-    for (const entry of readdirSync(join(ROOT, rel), { withFileTypes: true })) {
-      const next = `${rel}/${entry.name}`;
-      if (entry.isDirectory()) surfaces(next, out);
-      else if (entry.name.endsWith('.tsx')) out.push(next);
-    }
-    return out;
-  }
 
   it('on any .tsx surface under app/ or components/', () => {
     const files = [...surfaces('app'), ...surfaces('components')];

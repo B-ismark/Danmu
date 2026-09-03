@@ -793,10 +793,23 @@ function FixAllButton({
 // what persists across the switch (the stores are shared; only the routes
 // differ), so:
 //
-//   · The attempt counter must survive it. `shuffleRoom` is deterministic per
-//     `(room, attempt)`, and a counter that restarts on the other tab re-runs
-//     the seed behind the arrangement already on screen — the identical-
-//     arrangement bug the module scope above exists to prevent, back again.
+//   · The history is the half that actually defends this, and it is load-bearing
+//     for a reason worth stating exactly, because the obvious reason is WRONG.
+//     Measured on `rect` / `l` / `open`: press, press, switch tab, press — with
+//     both maps tab-scoped, the third press hands back the arrangement from the
+//     FIRST press byte for byte (layout similarity 1.000, 3 of 3 presets). With
+//     the history kept and only the counter restarted, 0.000 / 0.000 / 0.100.
+//   · What it is NOT is a re-serve of the arrangement ALREADY ON SCREEN. This
+//     comment used to say that, and `isCleanShuffle` makes it impossible: it opens
+//     `if (result.moved.length === 0) return false`, so the candidate reproducing
+//     what is on screen is filtered as "changed nothing". Same parts, same locked,
+//     byte-identical `randomizeStart` scatter at the same seed, and the outcome
+//     still diverged (clean 4/6 vs 4/9, similarity 0.000). The repeat a restarted
+//     counter serves is one shown a press or more AGO — which the user has seen,
+//     which is exactly why the skip-list has to outlive the tab.
+//   · The counter still must survive, for a smaller reason: restarting it re-walks
+//     the same twelve seeds, so the candidate POOL repeats and only the skip-list
+//     separates the offers. It buys exploration, not the fix.
 //   · The history is a skip-list of "what the user has just been shown"
 //     (`layout-shuffle.ts` passes over offers similar to the recorded one), and
 //     what they have been shown is a fact about the room, not about a viewport:

@@ -405,6 +405,45 @@ CI builds the **branch**, not the merge result. A branch off an older `main` is 
 against an older program.
 → Merge `main` in, then read the green.
 
+**Symptom: a task notification says `exit code 0` and you never opened the log.**
+A wrapper's status is not the wrapped command's. A backgrounded `npx vitest run` was
+reported as "completed (exit code 0)" while its log held `'vitest' is not recognized as
+an internal or external command` — the suite never started.
+→ Read the log, not the notification. The cheapest tell is that a real run always prints
+a `Test Files` line; grep for that rather than for a failure.
+*(Cost: a "full suite green" claim made about a suite that never ran. Second occasion,
+same evening and a different tool: `gh run watch <id> --exit-status` exited 0 while
+`gh pr checks` on the same run reported one test file red.)*
+
+**Symptom: `Test Files N passed (N)` — and N is smaller than it was yesterday.**
+The sharpest of this family, because nothing in the output is false. Vitest prints the
+files it RAN, so workers that died before collecting a file are not in the denominator.
+A half-installed `node_modules` gave `Test Files 108 passed (108) · Tests 2148 passed`
+with no failure line anywhere; twenty jsdom files had never run, their workers dead on
+`Cannot find module 'is-potential-custom-element-name'`, reported separately as
+`Errors 20 errors`. The real number is 128.
+→ **A pass rate is a fraction and the summary only shows you the top half.** Pin the
+denominator against CI's, and read the `Errors` line — it sits ABOVE the green summary
+and is not part of the verdict.
+*(Cost: a repair believed complete, and a second suite run to find out it was not.
+Second occasion: the same install printing `Done in 5.2s` and restoring `.bin` to 102
+entries — both counts correct, both worthless. `--force` took 5m48s and was the real one.)*
+
+**Symptom: `npx <anything>` says "is not recognized", and `node_modules` looks full.**
+Something deleted `node_modules/.bin` while leaving the 449 package directories alone.
+The cause here was a **junction**: a review worktree whose `node_modules` was linked to
+the main tree's, and `git worktree remove --force` walked the worktree to delete it and
+followed the reparse point into the real one.
+→ **Never junction `node_modules` into a git worktree.** Give the worktree its own
+install. This is a directory-walk problem and NOT a store problem — pnpm's store is
+content-addressed and hard-linked, and a sibling worktree with its own real install was
+measured unaffected — so it is not a reason to distrust worktree installs generally,
+which are the one recipe here that works.
+→ Repairing needs `pnpm install --force`; a plain install re-links the hollow directory
+and reports success in seconds (see the entry above).
+*(Cost: a gutted shared checkout, a false green, and a 5m48s reinstall. One occasion so
+far, recorded early because the failure is silent in three separate places.)*
+
 ---
 
 ## Numbers
