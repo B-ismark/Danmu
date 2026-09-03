@@ -431,11 +431,17 @@ export function Inspector() {
             parts get instead is the one number that does mean something about where
             they sit, below.
 
-            `rail-triple` stays on the wrapper: it is the hook the elastic rail's
-            container query reflows, and the name is about that hook rather than about a
-            count — renaming it would touch the stylesheet for nothing. */}
+            The row carried a `rail-triple` class, the hook a container query in
+            `globals.css` folded from three columns to two under 293px. Both are gone,
+            measured rather than assumed: two buttons want 234px of the 243px a rail
+            dragged to its 276px floor gives them, and 206px of 215px at the 248px
+            compact step — nothing overflowing and nothing painting past the rail's
+            edge at any width. The query set `1fr 1fr`, which is what the inline style
+            below already says, so it computed to the same `118.5px 118.5px` with and
+            without it. A class named for three that holds two is a name that lies, and
+            one with no CSS reader left is plumbing wearing a rule's name. */}
         {!part.wallMounted && (
-          <div className="rail-triple" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
             <button onClick={snapToNearestWall} className="ds-btn" title="Move to the nearest wall and face the room" style={{ height: 32, fontSize: 11, gap: 6, justifyContent: 'center' }}>
               <Icon name="snap-wall" size={13} /> Wall
             </button>
