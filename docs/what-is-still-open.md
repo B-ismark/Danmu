@@ -57,14 +57,15 @@ hit it), **ease** (is it an afternoon or a measurement campaign), and **dependen
 which is what moves several of these off the position their severity alone would give
 them. Where two items are the same defect one layer apart, they are listed as one.
 **This ordering is the agreed execution order**, not merely a ranking: rows 1–3 are the
-unblockers (one first-run defect and the two measurements everything downstream quotes),
+unblockers (row 1 was filed as a first-run defect, is not one, and turned out to be a
+larger unmeasured gap instead — plus the two measurements everything downstream quotes),
 rows 4–10 are the small user-visible items, rows 11–14 are the solver and collision work,
 and rows 15–18 are infrastructure and completeness. The eyes list is
 [`visual-check.md`](visual-check.md) and runs alongside, not after.
 
 | # | item | why here | cost | blocks / blocked by |
 |---|---|---|---|---|
-| 1 | **G.1** a brand-new room seals its own routes at the size the app ships | Measured, real, and a **first-run** defect — the worst kind to leave. § 31 unblocked it, and also changed what the solver may return, so re-measure rather than trusting G.1's numbers | M | was blocked by § 31 — free now |
+| 1 | **G.1** ~~a brand-new room seals its own routes at the size the app ships~~ → **nothing scores a custom footprint** | **Re-scoped 2026-09-03, not closed.** The sweep ran: all five picker sizes seed clean, and the T/U rooms the item named paired a layout with `DEFAULT_ROOM`'s (rect) dimensions. But the room re-seeds on **every** open, `moveWallCarrying` writes no scene snapshot, and a T + one wall nudge + a revisit strands floor with no furniture touched. Several such nudges leave the bounding box **identical**, so no `(layoutId, width, depth)` sweep can see them — **including the one that just ran.** Every wall move makes a custom polygon, both loaders prefer it, nothing scores one | M — a sweep over `moveWallCarrying` output, not over sizes | free; **do not close it with a size sweep** |
 | 2 | **§ 33.3** the render budget is unmeasured | Blocks any answer to "how detailed may a shape be", which was asked directly, and blocks § 12's chosen repair. Nothing in the repo reads `renderer.info`, so this is new instrumentation and it lives in the browser probe — jsdom has no WebGL | M — needs a throttled device | blocks nothing shipping; **blocks row 4** and a decision |
 | 3 | **§ A.4** the timing bounds may simply be too tight | Promoted out of § A, where it sat unranked. **Measured 2026-09-03 at `35b702f`:** the full suite is 3 failed / 2146 passed / 5 expected-fail, and **all three reds pass alone** — `layout-solve.test.ts:671` (`< 2000 ms`), `shuffle-gate.test.ts:248` and `where-it-sits.test.tsx:108` (both default 5 s). Nothing else was running, so this is vitest's **own** parallelism, not another session: the local suite is unreliable against itself here, which is a stronger claim than "trust CI" | M | **blocks trust in every local gate**, which is every row below |
 | 4 | **§ 12** a rider keeps the size the room was BUILT at, after a reload | Confirmed by eye, and the user has already chosen the repair — derive at read time, write nothing (§ B.16). An attempt at the OTHER option was built and reverted, so read § 12 before starting. § 37's `restingOn` is the first gate it has ever had. Also floats **in-session**: `setDim` settles nothing, ever | M | **blocked on row 2** — B.16's stated cost is that the derivation runs on every read |
@@ -459,9 +460,30 @@ nobody chose. And the third has a sibling worth copying rather than loosening:
 `layout-solve.test.ts:679` asserts a **ratio** (`time(30)/time(10) < 12`) instead of an
 absolute, which is exactly the shape that survives a loaded machine.
 
+**Second measurement, 2026-09-03, and it is the stronger evidence: the failing SET changes
+run to run on one unchanged tree.** Three consecutive `pnpm test` runs over the same commit,
+same machine, differing only in what else was running:
+
+| run | wall | reds |
+|---|---|---|
+| 1 | 163 s | **none** |
+| 2 | 249 s | `layout-solve` ×4 (two of them `opens it, at every seed` and `agree`, which are **not** timing assertions at all) |
+| 3 | 291 s | `layout-solve` ×1, `library-click-through` ×1, `mounted-clash` ×1, `shuffle-gate` ×2 |
+
+Every one of the eight passed in isolation immediately afterwards — 4 files, 98 passed, 33 s.
+**A defect in content cannot change which file it lives in between runs**, so this settles
+what one red on a loaded machine is worth: nothing, on its own. It also widens the
+population, since `mounted-clash` and `library-click-through` are not in the three-test list
+above and `layout-solve`'s two non-timing failures are not bound by a clock at all — which
+means "loosen the timing bounds" would not have fixed run 2. Wall-clock is the covariate to
+watch: 163 s clean, 291 s with five reds.
+
 **What would unblock it:** the distribution under both conditions, then per test a choice
 between a ratio, a raised timeout with the reason written beside it, and CI-only. Do not
-simply raise the numbers — a bound that cannot fail is the thing this repo keeps finding.
+simply raise the numbers — a bound that cannot fail is the thing this repo keeps finding —
+and note that the two non-timing failures in run 2 mean at least part of this is not a bound
+at all but a solver test observing a different result under a starved scheduler. That half
+needs finding before anything is loosened.
 
 One instance from this round is unrecoverable and is recorded as a gap rather than as a
 result: gating PR #21's merge produced `1 failed | 1482 passed`, the failing test's identity
@@ -1370,7 +1392,7 @@ document asks of every measurement in it, applied to the one place it is temptin
 Both are in a commit only as prose. Neither is caused by PR #38 — the first is pure
 geometry with no solver in it, and the second is a pass that predates the branch.
 
-### 1. A brand-new room seals its own routes, at the size the app ships
+### 1. A brand-new room seals its own routes, at the size the app ships — RE-SCOPED to custom footprints, 2026-09-03
 
 **This is the one to look at first.** `defaultScene` at the app's own default room —
 `ROOM.width` 5.6 × `ROOM.depth` 4.2 in `lib/parts-catalog.ts` — builds starter
@@ -1381,13 +1403,20 @@ solver runs in these numbers: it is `defaultScene` scored by `costBreakdown`.
 |---|---|---|---|---|
 | rect | 23.52 m² | 0.00 | 2.40 | — |
 | l | 19.37 m² | 2.40 | 55.24 | `zone` ×1 |
-| **t** | 16.28 m² | **232.20** | 246.41 | **`reach` ×1, `cut-off` ×1** |
-| **u** | 18.35 m² | **474.60** | 476.94 | **`reach` ×1, `cut-off` ×1** |
-| open | 23.52 m² | 0.00 | 1.99 | — |
+| **t** | 16.28 m² | **232.20** | 246.41 → **246.45** | **`reach` ×1, `cut-off` ×1** |
+| **u** | 18.35 m² | ~~474.60~~ → **472.20** | ~~476.94~~ → **474.23** | **`reach` ×1, `cut-off` ×1** |
+| open | 23.52 m² | 0.00 | 1.99 → **2.03** | — |
 
-Divide by the weight of 120: the U's raw quantity is **3.955** and the T's is **1.935**.
-`STRANDED_PIECE` is 2, so the T's cannot contain a stranded piece at all — that is 1.94 m²
-of unreachable floor out of 16.28 — while the U's is at most one stranded piece plus 1.96 m².
+**Re-measured 2026-09-03, and three of the five rows had moved.** The arrows are what
+`defaultScene` produces today. The first version of the sweep below said *"every number
+above reproduced"*; it had checked the T's `navigation` and generalised. `navigation` is
+the WEIGHTED term here (`DEFAULT_WEIGHTS.navigation` = 120) and the sweep prints the raw
+quantity, which is what made the two easy to compare loosely and hard to compare exactly.
+
+Divide by 120: the T's raw quantity is **1.935** and the U's is **3.935** — not the 3.955
+this paragraph used to derive from the stale row. `STRANDED_PIECE` is 2, so the T's cannot
+contain a stranded piece at all — that is 1.94 m² of unreachable floor out of 16.28 —
+while the U's is at most one stranded piece plus **1.94 m²**.
 
 **The user-visible half is the last column.** Open a fresh T or U room at the default size
 and Room check reports two findings immediately. `outside` is 0.00 in every row, so nothing
@@ -1411,6 +1440,181 @@ sweep the starter arrangement across a grid of room sizes per preset and find wh
 preset crosses from 0.00 into a finding — the answer is probably an area threshold below
 which the starter set has too many pieces for the shape, in which case the fix may be to
 place fewer.
+
+#### The sweep was run on 2026-09-03. It ran twice, and the first reading of it was wrong.
+
+**Read this heading before the five points under it.** The sweep's first conclusion was
+that this item retires as a first-run defect. Two reviews broke that, and both halves of
+the break are more useful than the conclusion was:
+
+- The *"depth cliff at 4.6"* in point 4 below was **false and contradicted by the sweep's
+  own printed grid** — the `t` row at d = 4.6 strands in its four widest columns, and the
+  `l` at 4.0 × 5.0 strands where the same L at 4.0 × 3.4 does not. Depth is not the
+  variable; nothing is. The prose read the left half of a table and compressed it into a
+  threshold the table's own footnote forbids. The four findings in point 4 are
+  **assertions** in `tests/starter-navigability.test.ts` now, precisely because the one
+  that was wrong could not have survived being written as one.
+- *"No path in the app constructs that pairing"* is **too strong.**
+  `buildSceneFromRoom` re-seeds through `defaultScene` on **every open** when a room has
+  no detections and no saved scene, and `moveWallCarrying` (`lib/wall-actions.ts`)
+  **never calls `setParts`**, so a wall move writes no scene snapshot. `RoomSync`
+  persists width/depth/footprint and **not `layoutId`**. So: pick T-Shape, nudge a wall
+  +10 cm, go to `/workspace` and come back — the room is re-seeded, Room check reports a
+  finding, and the user has moved no furniture at all.
+
+##### Watched happening, in a real browser, 2026-09-03 — and it is worse than the claim
+
+Production build, headless Chromium, driven through the actual picker: **T-Shape → Start
+decorating → 2D Plan → focus one wall edge → two ArrowRights (`WALL_STEP` is 0.05 m, so
++10 cm) → `/workspace` → back into the room.** Repeated for each of the T's eight edges,
+each nudge undone before the next, reading `RoomTools`' own health control rather than
+pixels. The fresh room reads **"Room checks out"** first, which is the positive control
+that makes every absence below mean something.
+
+| after +10 cm on | IndexedDB keys | in-session | after leaving and returning |
+|---|---|---|---|
+| Wall 1 | meta, touched | Room checks out | Room checks out |
+| Wall 2 | meta, touched, **transforms** | Room checks out | Room checks out |
+| Wall 3 | meta, touched, transforms | Room checks out | Room checks out |
+| **Wall 4** | meta, touched, transforms | **Room checks out** | **1 issue** |
+| **Wall 5** | meta, touched, transforms | **1 issue** | **2 issues** |
+| **Wall 6** | meta, touched, transforms | **2 issues** | **Room checks out** |
+| Wall 7 | meta, touched, transforms | 1 issue | 1 issue |
+| **Wall 8** | meta, touched, transforms | **1 issue** | **Room checks out** |
+
+**`room:<id>:scene` was never written — 8 of 8 edges.** That is the mechanism, confirmed
+rather than inferred: a wall move persists the room outline and the transform overrides
+and no snapshot, so the next open re-seeds from `defaultScene` and the overrides land on
+whatever it produces, by id.
+
+**Three of eight edges hand back a room with a finding after a revisit, and the user has
+touched no furniture.** That is the claim, and it holds.
+
+**But four of eight DISAGREE with what was on screen before leaving — in both
+directions.** Wall 4 was clean and comes back with a finding; Wall 6 showed two issues and
+comes back clean. **The room you leave is not the room you get back**, which is a larger
+and more concrete statement than "a wall nudge can strand floor", and no part of it was
+in the code-reading version of this item. It is not covered by any test in the repo.
+
+**And the gap that is actually open.** Several of those nudges leave the bounding box
+**identical**, because a T has interior edges — so **no `(layoutId, width, depth)` sweep
+can see any of it, including the one below.** Custom footprints are created by every wall
+move, both `loadFromRoom` and `buildSceneFromRoom` *prefer* them over the preset shape,
+and **nothing in this repo scores one.** That is this item now. It is bigger and more
+concrete than the version above it, and it is not a first-run defect: it takes one
+deliberate wall drag.
+
+The five points below stand as the sweep's findings, with point 4's threshold struck.
+
+`tests/starter-navigability.test.ts` holds points 1 and 4 below and prints point 2's
+table; points 3 and 5 are prose about the seeder that no assertion carries.
+
+**Of the numbers in the table above, two of five reproduce exactly and three had moved** —
+see the arrows there. The first version of this section said *"every number above
+reproduced"*, having checked the T's `navigation` (232.20, correct) and generalised from
+it. That is the same move as the depth cliff one paragraph up: one row read, five claimed.
+The corrections are small — the U is 472.20 rather than 474.60 — and that is exactly why
+they survived: a figure wrong in the third significant digit reads as right.
+
+**1. `defaultScene('t', ROOM.width, ROOM.depth)` is a room no path in the app builds.**
+`ROOM`'s 5.6 × 4.2 is `DEFAULT_ROOM`'s size and **`DEFAULT_ROOM.layoutId` is `'rect'`**
+(`lib/scene-store.ts`). The rect at that size is clean — `navigation` 0.00, no findings,
+and a *total* of 2.40, which is a different quantity from the L's `navigation` of 2.40 two
+rows up in the same table — and it is the one row of the five a user reaches without
+resizing by hand. The T and U at 4.2 m deep were a layout id combined with a *different*
+layout's dimensions.
+
+**2. Every size onboarding actually offers is clean** — `layout-pick`'s own `PRESETS`,
+which is the only screen that picks a layout:
+
+| offered | parts | navigation | total | Room check |
+|---|---|---|---|---|
+| rect 6.0 × 4.0 | 12 | 0.00 | 2.20 | — |
+| l 6.0 × 4.7 | 14 | 0.00 | 1.51 | — |
+| t 5.5 × 4.7 | 16 | 0.00 | 2.31 | — |
+| u 6.0 × 5.0 | 12 | 0.00 | 3.57 | — |
+| open 7.5 × 5.6 | 17 | 0.00 | 8.80 | — |
+
+So *"a brand-new room seals its own routes"* is **false as stated**: a brand-new room is
+clean at every size a new room can be. **This item was row 1 of the queue on the strength
+of being a first-run defect, and it is not one** — but see the heading above for what one
+wall drag does, which is not a first *run* and is still the first thing a user does.
+
+`navigation` and the Room-check column are asserted per preset by
+`tests/scene-seed.test.ts`, which reads the same derived list. The **part counts** and
+**totals** are printed rather than pinned — that file's only bounds on them are `> 3` and
+`< 10` — so those eight figures are a measurement to read, not a gate.
+`tests/helpers/offered-sizes.ts` owns the derivation, and four test files read it.
+
+**3. The irony is the whole lesson.** This item's own headline was that every solver
+fixture used 6 × 5 while the app shipped 5.6 × 4.2 — *"a fixture that cannot express the
+defect, and here the fixture differs from the shipping default by 40 cm."* The fixture that
+found **that** had the same fault one level up: it paired a layout with another layout's
+size and never asked whether the state was reachable. **A fixture is a claim about a
+reachable state, and neither sweep checked its own.**
+
+**4. What the grid actually shows, which is not an area threshold.** 280 cells, 5 presets ×
+8 widths × 7 depths, printed on every green run. **The grid prints the RAW quantity** — the
+figures in this section's tables are that times `DEFAULT_WEIGHTS.navigation` (120), and a
+cell is not purely an area either, since `navigabilityCost` adds `STRANDED_PIECE` for each
+piece nobody can reach. It is **not monotonic in area** — the L is clean at 4.0 × 3.4 and
+strands **4.93** at 4.0 × 5.0, a *bigger* room scoring worse — and **part count is not the
+driver**: the U at 5.6 × 4.2 and at 5.6 × 4.6 both seed **12** pieces and only the shallower
+one strands. So "too many pieces for the shape" was wrong in both of its halves, and "place
+fewer" would have been a fix for a cause that is not there.
+
+~~What the grid does show is a **depth cliff**: the T and U strand floor at nearly every
+width for depth ≤ 4.2 and come clean at ≥ 4.6.~~ **Struck — this was false, and the grid
+printed the counter-example three columns to the right of where it was read.** The `t` row
+at d = 4.6 ends `0.08(18) 0.42(18) 0.74(18) 1.20(18)`; at one fixed depth, *widening* the
+room strands it. Above 4.2 m there is stranding in `t`, `l`, `u` and `open`. **The rect is
+the only preset clean in all 56 cells**, which is why a threshold looked plausible: it is
+true of the preset anybody checks first. All four of these — the rect sweep, the
+non-monotonic L pair, the equal-part-count U pair, and the fixed-depth T pair that kills
+the threshold — are assertions now rather than prose.
+
+Worth keeping about that quote: it was first written down in the **weighted** rendering at
+`toFixed(0)`, as `9(18) 50(18) 89(18) 144(18)`. Under the raw rendering three of those four
+cells round to a bare `0`, which is precisely the failure the grid's own two-decimal format
+was introduced to prevent — so the sentence disproving the depth cliff was quoting the
+rendering in which the counter-example is invisible.
+
+**5. And the seeder is not blind about it — it is choosing.** `defaultScene`'s chooser
+scores every plan with `costBreakdown` including `navigation`, then picks by a predicate:
+rule **(A)** takes the widest bed rung whose best plan strands nothing, and rule **(B)** —
+*"failing that, the widest rung that places a bed AT ALL, and `clearance.ts` reports the
+route"* — deliberately prefers a reported stranding to a missing bed, citing rule 2. So a
+shallow T or U hands back a stranded room **on purpose**, and Room check reporting it is
+the design working.
+
+**What is left, in two parts that must not be merged into one.**
+
+1. **A product question about rule (B).** A user reaching a shallow T or U is handed a
+   stranded starter *on purpose*, and the alternatives are a bedless room or a silently
+   smaller bed — both worse by this repo's own rules. Nobody has reported it. Not a defect.
+2. **A gap with no owner: nothing scores a custom footprint.** Every wall move makes one,
+   both loaders prefer it, and no test, sweep or fixture in this repo builds one and asks
+   what the seeder does with it. The wall-nudge repro in the heading above is one instance;
+   the class is unmeasured. **This is the item.** What would move it: a sweep over
+   *polygons produced by `moveWallCarrying`* rather than over `(layoutId, width, depth)`,
+   which cannot see an interior edge move at all. Whether the fix is then in the seeder or
+   in making a wall move write a scene snapshot is a second question, and the snapshot
+   half is a persistence change with its own review.
+
+**Do not re-file part 1 as a first-run defect.** Do not close part 2 with a size sweep.
+
+**Committed:** `tests/helpers/offered-sizes.ts` parses the picker's five presets and its
+ceiling, and **four** test files read it — `scene-seed`, `starter-navigability`,
+`inward-normals` and `wall-parts`. Three of those four hand-typed the same five rows and
+the fourth parsed them, which is four gates over one property that could disagree about
+which room they gate; `wall-parts`' copy cited `scene-seed`'s, so the one pointer to the
+duplication led to a list that had already gone. `starter-navigability` holds the parse,
+the measurement table for the offered sizes, the one room nothing else builds (`rect` at
+`ROOM`'s 5.6 × 4.2, at `ROOM`'s own ceiling), and the grid with its four findings pinned.
+
+**Not committed, and this is the part with no gate:** the browser table above. Nothing in
+the repo builds a wall-moved footprint, so the re-seed, the missing snapshot and the
+leave-and-return disagreement are all measured and none of them is guarded.
 
 ### 2. The anchor-first pass helps two presets and hurts one
 

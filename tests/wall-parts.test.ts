@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { wallApertures } from '@/lib/apertures';
 import { clampIntoFootprint, footprintForLayout, pointInFootprint, polygonCentroid, wallSegments, type Footprint } from '@/lib/footprint';
 import { footExtentAlong, footFromPart, footInsidePoly, obbExtentAlong, type Poly } from '@/lib/geometry';
-import type { LayoutId } from '@/lib/storage';
 import { openingsForRoom } from '@/lib/room-openings';
 import { anchorFor, groundY, ridesWall, snapToWall, wallStandoff, CURTAIN_STANDOFF } from '@/lib/physics';
 import { defaultScene, isWallMountedPart, placeNewPart, type ScenePart } from '@/lib/scene-spec';
@@ -22,21 +21,22 @@ function seat(dimMM: [number, number, number], rot: number, x: number, z: number
   return containedXZ({ rot, dimMM }, x, z, p, interiorPoint(p) ?? polygonCentroid(poly), polygonWinding(p));
 }
 import { aabbExtents, localToWorld, nearestEdge, obbFromPart, obbInsidePoly } from '@/lib/geometry';
+import { offeredSizes } from './helpers/offered-sizes';
 
 
 const RECT: Footprint = footprintForLayout('rect', ROOM.width, ROOM.depth);
 const H = ROOM.height;
 
 // The presets app/onboarding/layout-pick offers, at the sizes it offers them —
-// the same list `tests/scene-seed.test.ts` sweeps. 'custom' is in `LAYOUT_IDS`
-// but is not a preset anyone can pick.
-const PRESETS: Array<{ id: LayoutId; w: number; d: number }> = [
-  { id: 'rect', w: 6.0, d: 4.0 },
-  { id: 'l', w: 6.0, d: 4.7 },
-  { id: 't', w: 5.5, d: 4.7 },
-  { id: 'u', w: 6.0, d: 5.0 },
-  { id: 'open', w: 7.5, d: 5.6 },
-];
+// PARSED from that page, which is also the list `tests/scene-seed.test.ts` and
+// `tests/starter-navigability.test.ts` read. 'custom' is in `LAYOUT_IDS` but is
+// not a preset anyone can pick.
+//
+// This was hand-typed, and its comment cited scene-seed's copy — which no longer
+// exists, so the one pointer a reader could follow to find the duplication led
+// nowhere. Four files claiming to hold "the picker's list" is four chances to be
+// gating a room the picker has stopped offering.
+const PRESETS = offeredSizes().map((o) => ({ id: o.id, w: o.width, d: o.depth }));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // A door is drawn by one file, positioned by three others and cut out of the
