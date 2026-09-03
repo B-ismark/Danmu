@@ -71,16 +71,39 @@ import { offeredHeight, offeredSizes } from './helpers/offered-sizes';
  *  of its own — it returns 0 when the room has no door — which is why every row
  *  asserts its door count.
  *
- *  **Mutation ledger.** From the first pass, still standing: `PLAN_RANKS` 4 -> 1 (the
- *  U strands 750.60, the exact figure `BED_LADDER`'s docblock cites, so the plan
- *  search really is what prevents it); the seeder's rule (A) stage deleted (749.40);
- *  the `u` preset re-sized to 4.2 on the picker page itself, whose failure message read
- *  `u 6x4.2` and so proved the list is parsed and not copied; a preset row deleted from
- *  the page; `defaultScene` forced to return `[]`; the `tall` guard inverted. Survived:
- *  `CLASH_SHARE` 0.5 -> 0.0 (a starter room has no overlapping pair at all) and
- *  `settleParts` bypassed, which is what retired an `outside === 0` assertion that
- *  nothing could make fail. The pins added since are exercised in the same way; see
- *  the PR. */
+ *  **Mutation ledger — every assertion below has been watched failing but one, and
+ *  the exception is named rather than left for a reader to discover.**
+ *
+ *    · `prepare`'s door list emptied — the T and U negative controls, and every door
+ *      count. This is the vacuity route the whole redesign is about.
+ *    · the door-reach radius 1.2 -> 50, and separately -> 0.02 — all five "this room
+ *      does strand" pins. The second is worth its own line: at 0.02 nothing is
+ *      walkable near a door and `navigabilityCost` RETURNS 0 by design
+ *      (`layout-score.ts:1015`), so a room too full to analyse scores exactly like a
+ *      perfect one. That is a third vacuity route, and only a negative control sees it.
+ *    · `PLAN_RANKS` 4 -> 1; the seeder's rule (A) stage deleted; `BED_LADDER` cut to
+ *      its widest rung — the deeper U's clean cell, each time.
+ *    · `LOVESEAT` widened to the three-seater's 2200 — both "small room is clean"
+ *      pins, which is the defect that constant's own docblock was written about.
+ *    · `SOFA` 950 -> 1600 deep, and -> 3200 x 1900 — the rect sweep, naming its cells.
+ *    · the `wardrobe` widened to 2900 — the U part-count pin, 11 against 12.
+ *    · `SEED_WALL_GAP` + 550 mm and + 1150 mm — five pins between them.
+ *    · `defaultScene` forced to return `[]` — the part count and the door counts.
+ *    · the `tall` guard inverted — DEFAULT_ROOM's report, with twelve findings.
+ *    · the picker's `HEIGHT` 2.8 -> 3.1, its `PRESETS` renamed, and the row regex
+ *      narrowed to four-letter ids — the parse, the two slice markers and the
+ *      short-parse guard, which reported `5 preset rows, 2 parsed`.
+ *
+ *  **The exception: `DEFAULT_ROOM strands floor` has never been seen failing.** Four
+ *  mutations that strand a rect at other sizes leave 5.6 x 4.2 clean — a rectangle has
+ *  no pocket to cut off, which is also why the rect row of the grid is clean in all 56
+ *  cells. It is kept rather than deleted because the assertion over that whole row IS
+ *  killable and has been killed twice, and 5.6 x 4.2 is one of its cells; this line
+ *  adds only the name of the room, which is the part a reader needs.
+ *
+ *  From the first pass and still true: `CLASH_SHARE` 0.5 -> 0.0 survives, because a
+ *  starter room has no overlapping pair at all; and bypassing `settleParts` survives,
+ *  which is what retired an `outside === 0` assertion nothing could make fail. */
 
 const PRESET_ORDER: LayoutId[] = ['rect', 'l', 't', 'u', 'open'];
 const HEIGHT = offeredHeight();
@@ -161,16 +184,24 @@ describe('§ G.1 · where a seeded room strands floor', () => {
     // and by `loadFromRoom(null)`. No other file builds a rect at this size —
     // `scene-seed.test.ts` builds the picker's 6.0 x 4.0 — so if this ever strands,
     // a user with no saved room sees a finding before touching anything.
-    expect(by('rect').navigation, 'DEFAULT_ROOM strands floor').toBe(0);
-    expect(by('rect').findings, 'DEFAULT_ROOM reports a finding').toEqual([]);
-    expect(by('rect').parts, 'DEFAULT_ROOM seeded an empty room').toBeGreaterThan(3);
+    //
+    // `5.6 x 4.2` is also a cell of the grid below, and the rect sweep there is what
+    // actually gates it: that assertion covers all 56 cells and mutation has taken it
+    // red twice, while nothing tried has reached this cell on its own. See the ledger.
+    // `expect.soft` for the same reason as the grid below: one hard failure would hide
+    // the negative control two lines under it, and the negative control is the only
+    // thing here that can tell a clean room from a measurement that has stopped
+    // measuring.
+    expect.soft(by('rect').navigation, 'DEFAULT_ROOM strands floor').toBe(0);
+    expect.soft(by('rect').findings, 'DEFAULT_ROOM reports a finding').toEqual([]);
+    expect.soft(by('rect').parts, 'DEFAULT_ROOM seeded an empty room').toBeGreaterThan(3);
 
     // …and the negative control, which is the same two figures § G.1 reported. A file
     // whose every assertion is `=== 0` cannot tell a clean room from a measurement
     // that has stopped measuring: with `navCell` lost, a weight zeroed or a room with
     // no door, everything above passes and nothing here does.
-    expect(by('t').navigation, 'the T at ROOM size no longer strands').toBeGreaterThan(0);
-    expect(by('u').navigation, 'the U at ROOM size no longer strands').toBeGreaterThan(0);
+    expect.soft(by('t').navigation, 'the T at ROOM size no longer strands').toBeGreaterThan(0);
+    expect.soft(by('u').navigation, 'the U at ROOM size no longer strands').toBeGreaterThan(0);
     for (const r of rows) expect(r.doors, `${r.layout} seeded no door`).toBeGreaterThan(0);
   });
 
@@ -209,29 +240,39 @@ describe('§ G.1 · where a seeded room strands floor', () => {
     // has nothing to do with the floor and the whole grid is decoration.
     for (const r of grid.values()) expect(r.doors, `${r.layout} ${r.w}x${r.d} seeded no door`).toBeGreaterThan(0);
 
+    // **`expect.soft` from here down, and it is not a style choice.** A hard `expect`
+    // ends its test at the first failure, so these eight would be reported one per
+    // run — and a mutation pass that can only see its first kill cannot tell an
+    // assertion that is load-bearing from one that was merely masked by the assertion
+    // above it. That is how a decorative assertion survives a mutation ledger: never
+    // by passing, but by never being reached. The door loop above stays hard, because
+    // a room with no door makes every line below it meaningless rather than false.
+
     // **The rectangle never strands, at any of the 56 sizes.** The one clean statement
     // in the whole grid, and the reason the prose's depth threshold looked plausible:
     // it is true of the preset anybody checks first.
     const rectStranded = [...grid.values()].filter((r) => r.layout === 'rect' && r.navigation > 0);
-    expect(rectStranded.map((r) => `${r.w}x${r.d}`), 'the rect stranded floor').toEqual([]);
+    expect.soft(rectStranded.map((r) => `${r.w}x${r.d}`), 'the rect stranded floor').toEqual([]);
 
     // **Not monotonic in area.** A BIGGER L strands where a smaller one does not, so
     // "too small for its furniture" — § G.1's stated hypothesis, and the reason its
     // suggested fix was "place fewer pieces" — is the wrong reading of the surface.
-    expect(cell('l', 4.0, 3.4).navigation, 'the small L stranded').toBe(0);
-    expect(cell('l', 4.0, 5.0).navigation, 'the larger L stopped stranding').toBeGreaterThan(0);
+    expect.soft(cell('l', 4.0, 3.4).navigation, 'the small L stranded').toBe(0);
+    expect.soft(cell('l', 4.0, 5.0).navigation, 'the larger L stopped stranding').toBeGreaterThan(0);
 
     // **Not part count either.** Two U's with the SAME furniture in them, one
     // stranding and one not — so nothing is being over-furnished.
-    expect(cell('u', 5.6, 4.2).parts).toBe(cell('u', 5.6, 4.6).parts);
-    expect(cell('u', 5.6, 4.2).navigation, 'the shallow U stopped stranding').toBeGreaterThan(0);
-    expect(cell('u', 5.6, 4.6).navigation, 'the deeper U started stranding').toBe(0);
+    expect.soft(cell('u', 5.6, 4.2).parts, 'the two U rows stopped seeding the same room').toBe(
+      cell('u', 5.6, 4.6).parts,
+    );
+    expect.soft(cell('u', 5.6, 4.2).navigation, 'the shallow U stopped stranding').toBeGreaterThan(0);
+    expect.soft(cell('u', 5.6, 4.6).navigation, 'the deeper U started stranding').toBe(0);
 
     // **And not depth, which is what the first version of this file claimed.** One
     // depth, two widths, opposite answers — and the stranded one is the WIDER room.
     // This is the assertion the retracted sentence would have had to survive.
-    expect(cell('t', 4.0, 4.6).navigation, 'the narrow T at 4.6 stranded').toBe(0);
-    expect(cell('t', 7.5, 4.6).navigation, 'the wide T at 4.6 stopped stranding').toBeGreaterThan(0);
+    expect.soft(cell('t', 4.0, 4.6).navigation, 'the narrow T at 4.6 stranded').toBe(0);
+    expect.soft(cell('t', 7.5, 4.6).navigation, 'the wide T at 4.6 stopped stranding').toBeGreaterThan(0);
 
     // 280 cells, each a full build plus a clearance field, so this is ~5 s of real
     // work and it does not fit vitest's DEFAULT 5 s `testTimeout` — a bound nobody

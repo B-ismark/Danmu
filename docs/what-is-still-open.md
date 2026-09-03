@@ -1302,7 +1302,7 @@ document asks of every measurement in it, applied to the one place it is temptin
 Both are in a commit only as prose. Neither is caused by PR #38 — the first is pure
 geometry with no solver in it, and the second is a pass that predates the branch.
 
-### 1. A brand-new room seals its own routes, at the size the app ships — RETIRED as a first-run defect, 2026-09-03
+### 1. A brand-new room seals its own routes, at the size the app ships — RE-SCOPED to custom footprints, 2026-09-03
 
 **This is the one to look at first.** `defaultScene` at the app's own default room —
 `ROOM.width` 5.6 × `ROOM.depth` 4.2 in `lib/parts-catalog.ts` — builds starter
@@ -1344,7 +1344,38 @@ preset crosses from 0.00 into a finding — the answer is probably an area thres
 which the starter set has too many pieces for the shape, in which case the fix may be to
 place fewer.
 
-#### The sweep was run on 2026-09-03, and it retires this item as a first-run defect
+#### The sweep was run on 2026-09-03. It ran twice, and the first reading of it was wrong.
+
+**Read this heading before the five points under it.** The sweep's first conclusion was
+that this item retires as a first-run defect. Two reviews broke that, and both halves of
+the break are more useful than the conclusion was:
+
+- The *"depth cliff at 4.6"* in point 4 below was **false and contradicted by the sweep's
+  own printed grid** — the `t` row at d = 4.6 strands in its four widest columns, and the
+  `l` at 4.0 × 5.0 costs ~592. Depth is not the variable; nothing is. The prose read the
+  left half of a table and compressed it into a threshold the table's own footnote
+  forbids. The four findings in point 4 are **assertions** in
+  `tests/starter-navigability.test.ts` now, precisely because the one that was wrong
+  could not have survived being written as one.
+- *"No path in the app constructs that pairing"* is **too strong.**
+  `buildSceneFromRoom` re-seeds through `defaultScene` on **every open** when a room has
+  no detections and no saved scene, and `moveWallCarrying` (`lib/wall-actions.ts`)
+  **never calls `setParts`**, so a wall move writes no scene snapshot. `RoomSync`
+  persists width/depth/footprint and **not `layoutId`**. So: pick T-Shape, nudge the
+  notch wall +10 cm, go to `/workspace` and come back — the room is re-seeded, Room check
+  reports `reach`, and the user has moved no furniture at all. Measured: `t 5.5 × 4.7`
+  edge 3 +0.10 → navigation **114**, edge 5 +0.10 → **132**; `u 6.0 × 5.0` edge 2 −0.50 →
+  **539**; `l 6.0 × 4.7` edge 3 −1.00 → **218**.
+
+**And the gap that is actually open.** Several of those nudges leave the bounding box
+**identical**, because a T has interior edges — so **no `(layoutId, width, depth)` sweep
+can see any of it, including the one below.** Custom footprints are created by every wall
+move, both `loadFromRoom` and `buildSceneFromRoom` *prefer* them over the preset shape,
+and **nothing in this repo scores one.** That is this item now. It is bigger and more
+concrete than the version above it, and it is not a first-run defect: it takes one
+deliberate wall drag.
+
+The five points below stand as the sweep's findings, with point 4's threshold struck.
 
 `tests/starter-navigability.test.ts` holds all of the below. Every number above
 reproduced — T 232.20, U 472.20, the L's 2.40, `outside` 0.00 everywhere — so nothing
@@ -1368,9 +1399,13 @@ which is the only screen that picks a layout:
 | u 6.0 × 5.0 | 12 | 0.00 | 3.57 | — |
 | open 7.5 × 5.6 | 17 | 0.00 | 8.80 | — |
 
-So *"a brand-new room seals its own routes"* is **false**: a brand-new room is clean at
-every size a new room can be. **This item was row 1 of the queue on the strength of being
-a first-run defect, and it is not one.**
+So *"a brand-new room seals its own routes"* is **false as stated**: a brand-new room is
+clean at every size a new room can be. **This item was row 1 of the queue on the strength
+of being a first-run defect, and it is not one** — but see the heading above for what one
+wall drag does, which is not a first *run* and is still the first thing a user does.
+
+These five rows are asserted per preset by `tests/scene-seed.test.ts`, which reads the
+same derived list; `tests/starter-navigability.test.ts` owns the derivation and the grid.
 
 **3. The irony is the whole lesson.** This item's own headline was that every solver
 fixture used 6 × 5 while the app shipped 5.6 × 4.2 — *"a fixture that cannot express the
@@ -1386,8 +1421,15 @@ count is not the driver**: the U at 5.6 × 4.2 and at 5.6 × 4.6 both seed **12*
 only the shallower one strands floor. So "too many pieces for the shape" was wrong in both
 of its halves, and "place fewer" would have been a fix for a cause that is not there.
 
-What the grid does show is a **depth cliff**: the T and U strand floor at nearly every
-width for depth ≤ 4.2 and come clean at ≥ 4.6. Both onboarding presets sit above it.
+~~What the grid does show is a **depth cliff**: the T and U strand floor at nearly every
+width for depth ≤ 4.2 and come clean at ≥ 4.6.~~ **Struck — this was false, and the grid
+printed the counter-example three columns to the right of where it was read.** The `t` row
+at d = 4.6 ends `9(18) 50(18) 89(18) 144(18)`; at one fixed depth, *widening* the room
+strands it. Above 4.2 m there is stranding in `t`, `l`, `u` and `open`. **The rect is the
+only preset clean in all 56 cells**, which is why a threshold looked plausible: it is true
+of the preset anybody checks first. All four of these — the rect sweep, the non-monotonic
+L pair, the equal-part-count U pair, and the fixed-depth T pair that kills the threshold —
+are assertions now rather than prose.
 
 **5. And the seeder is not blind about it — it is choosing.** `defaultScene`'s chooser
 scores every plan with `costBreakdown` including `navigation`, then picks by a predicate:
@@ -1397,15 +1439,28 @@ route"* — deliberately prefers a reported stranding to a missing bed, citing r
 shallow T or U hands back a stranded room **on purpose**, and Room check reporting it is
 the design working.
 
-**What is left, and it is much smaller than this item was.** A user can still reach a
-shallow T or U by dragging a wall, and rule (B) will hand them a stranded starter. Whether
-that is right is a **product question about rule (B)**, not a defect: the alternatives are a
-bedless room or a silently smaller bed, and both are worse by this repo's own rules. Nobody
-has reported it. **Do not re-file this as a first-run defect.**
+**What is left, in two parts that must not be merged into one.**
 
-**Committed:** `tests/starter-navigability.test.ts`, whose gate is that every size
-onboarding offers seeds `navigation` 0 with an empty report — the property nobody had — with
-the preset list parsed from the picker rather than copied, so a resized preset fails it.
+1. **A product question about rule (B).** A user reaching a shallow T or U is handed a
+   stranded starter *on purpose*, and the alternatives are a bedless room or a silently
+   smaller bed — both worse by this repo's own rules. Nobody has reported it. Not a defect.
+2. **A gap with no owner: nothing scores a custom footprint.** Every wall move makes one,
+   both loaders prefer it, and no test, sweep or fixture in this repo builds one and asks
+   what the seeder does with it. The wall-nudge repro in the heading above is one instance;
+   the class is unmeasured. **This is the item.** What would move it: a sweep over
+   *polygons produced by `moveWallCarrying`* rather than over `(layoutId, width, depth)`,
+   which cannot see an interior edge move at all. Whether the fix is then in the seeder or
+   in making a wall move write a scene snapshot is a second question, and the snapshot
+   half is a persistence change with its own review.
+
+**Do not re-file part 1 as a first-run defect.** Do not close part 2 with a size sweep.
+
+**Committed:** `tests/helpers/offered-sizes.ts` parses the picker's five presets and its
+ceiling, and both `tests/scene-seed.test.ts` and `tests/starter-navigability.test.ts` read
+it — the first hand-typed that list while the second parsed it, which is two gates over one
+property disagreeing about which room they gate. The second file owns the derivation, the
+one room nothing else builds (`rect` at `ROOM`'s 5.6 × 4.2), and the grid with its four
+findings pinned.
 
 ### 2. The anchor-first pass helps two presets and hurts one
 
