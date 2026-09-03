@@ -77,7 +77,7 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | # | item | why here | cost | blocks / blocked by |
 |---|---|---|---|---|
 | 1 | **G.1** ~~a brand-new room seals its own routes at the size the app ships~~ → **nothing scores a custom footprint** | **Re-scoped 2026-09-03, not closed.** The sweep ran: all five picker sizes seed clean, and the T/U rooms the item named paired a layout with `DEFAULT_ROOM`'s (rect) dimensions. But the room re-seeds on **every** open, `moveWallCarrying` writes no scene snapshot, and a T + one wall nudge + a revisit strands floor with no furniture touched. Several such nudges leave the bounding box **identical**, so no `(layoutId, width, depth)` sweep can see them — **including the one that just ran.** Every wall move makes a custom polygon, both loaders prefer it, nothing scores one | M — a sweep over `moveWallCarrying` output, not over sizes | free; **do not close it with a size sweep** |
-| 2 | **§ 33.3** the render budget is unmeasured | Blocks any answer to "how detailed may a shape be", which was asked directly, and blocks § 12's chosen repair. Nothing in the repo reads `renderer.info`, so this is new instrumentation and it lives in the browser probe — jsdom has no WebGL | M — needs a throttled device | blocks nothing shipping; **blocks row 4** and a decision |
+| 2 | **§ 33.3** ~~the render budget is unmeasured~~ → **MEASURED 2026-09-03; the GPU verdict still wants a device** | A furnished room issues **198–390 draw calls per rendered frame** across the five presets, ~37 calls and ~10 600 triangles per extra piece, 16–24 calls per piece. So subdivision per shape is cheap and **part count is what spends the budget** — and the U vs Rectangle pair (both 12 pieces, 226 vs 198 calls, and the U with *fewer* triangles) says the knob that matters is how many draw units a shape decomposes into, not how many segments. `frameloop="demand"` confirmed: 2–21 frames for a 2.5 s drag. Frame times are SwiftShader and carry no GPU information | done, bar a real device | **row 4 is unblocked** |
 | 3 | **§ A.4** ~~the timing bounds may simply be too tight~~ → **ANSWERED 2026-09-03: it was the runner, not the bounds** | Reproduced on demand under deliberate CPU load rather than waited for: the same four-red `layout-solve` set, and **three of the four died as `Test timed out in 5000ms`** — a default nobody chose, applied to a suite whose honest worst case is a ~6.3 s solve. Two of those three assert nothing about a clock and the third asserts a *ratio*, the shape that was supposed to survive load; the harness kills the body before the ratio is evaluated. Fixed: an explicit 30 s `testTimeout`, and the two real wall-clock bars scaled by a measured machine factor rather than padded. See § A.4 | done | **no longer blocks the rows below** |
 | 4 | **§ 12** a rider keeps the size the room was BUILT at, after a reload | Confirmed by eye, and the user has already chosen the repair — derive at read time, write nothing (§ B.16). An attempt at the OTHER option was built and reverted, so read § 12 before starting. § 37's `restingOn` is the first gate it has ever had. Also floats **in-session**: `setDim` settles nothing, ever | M | **blocked on row 2** — B.16's stated cost is that the derivation runs on every read |
 | 5 | **§ B.12** Room check speaks centimetres to a user who set metres, feet or inches | **This table omitted it until 2026-09-03.** 15 hard-coded `Math.round(x*100)` sites in `lib/clearance.ts`, rendered verbatim at `RoomTools.tsx:968`, while `dimUnit` defaults to `'m'` — so the shipping default disagrees with itself: the field says `1.9 m`, the finding beside it says `190 cm` | S once decided | needs the user |
@@ -4513,11 +4513,52 @@ is the frame cost of a furnished room on a mid-range phone, which is the machine
 is for, and `frameloop="demand"` means the interesting number is cost-per-interaction
 rather than steady-state FPS.
 
-**What would unblock it:** a scene with a known part count, `renderer.info` read after
-a drag, on a throttled device — the same shape of measurement `tests/detect-pipeline`
-prints for detection. Until that exists, "how many segments is too many" is a guess,
-and adding detail on the strength of a guess is how a phone-first app stops running on
-phones.
+**MEASURED 2026-09-03.** Production build, headless Chromium + SwiftShader, each of the
+five picker presets opened through the real onboarding flow, then a 2.5 s camera drag on
+the 3D tab. No app instrumentation: the probe patches `drawElements` / `drawArrays` /
+their instanced forms on both WebGL context prototypes before any app code runs, which
+counts the same calls `renderer.info` counts. Part counts are the seeder's own, printed
+by `tests/starter-navigability.test.ts`.
+
+| preset | parts | draw calls / frame | triangles / frame | calls per part |
+|---|---|---|---|---|
+| Rectangle | 12 | **198** | 51 000 | 16.5 |
+| U-Shape | 12 | **226** | 36 306 | 18.8 |
+| L-Shape | 14 | **252** | 69 666 | 18.0 |
+| T-Shape | 16 | **386–389** | 94 634 | 24.2 |
+| Open Plan | 17 | **385** | 103 802 | 22.6 |
+
+**Three things this answers.**
+
+1. **A furnished room issues 200–390 draw calls per rendered frame**, and the marginal
+   cost across the range is ~37 calls and ~10 600 triangles per piece of furniture. So
+   the budget is spent by the *number of pieces*, not by any one shape's subdivision: a
+   piece averages 16–24 draw calls, and adding a primitive to a shape adds roughly one
+   call per instance of it. Detail per shape is cheap; the room's part count is not.
+2. **Part count is not the whole story, and the counter-example is in the table.** The U
+   and the Rectangle both seed **12** pieces, and the U costs 226 calls against 198 —
+   while carrying *fewer* triangles (36 306 vs 51 000). More calls for less geometry is
+   the signature of more distinct materials/meshes rather than more surface, so "how
+   many segments" is the wrong knob to worry about first; how many separate draw units a
+   shape decomposes into is the right one.
+3. **`frameloop="demand"` is doing its job**, confirmed rather than assumed: a 2.5 s
+   continuous drag produced between 2 and 21 rendered frames, and an idle tab produces
+   none. Cost per interaction is the correct unit, as this item said.
+
+**What is still NOT answered, and it is the half that needed a device.** Frame times
+are software rasterisation — SwiftShader — so they carry no information about a phone
+GPU and are deliberately not tabulated above. Fill rate, shader cost and whether 390
+draw calls is comfortable on a mid-range phone are all untouched. The transferable
+numbers are the exact ones (calls, triangles); the *verdict* still wants a real device,
+and that is now a much smaller question than the one this item opened with.
+
+Two probe bugs worth recording, because both are the shape this repo keeps finding.
+`drawArrays(mode, first, count)` puts `count` at argument **2** while
+`drawElements(mode, count, …)` puts it at **1**; reading `[1]` for both printed `NaN`
+triangles for all ten rows. And the first run's "nothing was measured" gate keyed off a
+secondary part-count read rather than off draw calls, so it discarded a table of real
+measurements — a probe throwing away its own result on a technicality.
+`C:\Users\bisma\AppData\Local\Temp\claude\danmu-probe\render-budget.mjs`.
 
 
 ### § 34 — two ceiling shapes are drawn bigger than they declare — FIXED
