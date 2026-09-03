@@ -2994,10 +2994,14 @@ export function openSpotForNewPart(
     // desk is still allowed, because that one fits under the ceiling and is what the
     // user meant. Whether an unaimed click should stack AT ALL is a product question and
     // is filed, not answered inside a defect fix.
-    // Floor-anchored only: `pos[1]` is a BASE for these and a CENTRE for a mounted
-    // piece, and `placeNewPart` has already clamped a mounted one into `[h/2, height -
-    // h/2]`, so there is nothing left here to catch.
-    if (!p.wallMounted && p.pos[1] + dimMM[2] / 1000 > room.height + 1e-6) return false;
+    // `verticalExtent` owns the base-versus-centre question for both anchors, which is
+    // why there is no `pos[1] + dimMM[2] / 1000` here. The first version of this line
+    // wrote exactly that and gated it on `!p.wallMounted` to cover the difference — a
+    // seventh hand-written copy of a rule with one owner, and `tests/scene-build.test.ts`
+    // sweeps `lib/` for precisely that spelling. A mounted piece is already clamped by
+    // `placeNewPart` into `[h/2, height - h/2]`, so asking it costs nothing and the
+    // special case disappears with the copy.
+    if (verticalExtent(cat, shape, dimMM, p.pos[1])[1] > room.height + 1e-6) return false;
     const probe: ScenePart = {
       id: PROBE, category: cat, shape, name: '', locked: false,
       dimMM, pos: p.pos, rot: p.rot, wallMounted: p.wallMounted, circle: round,
