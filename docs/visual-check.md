@@ -710,58 +710,58 @@ and every finding that states a number in `tests/report-units.test.ts`.
 
 **Where it rides.** `fix/rider-height-and-report-units`.
 
-### A lamp on a desk you have resized — READY, and it is the item that most needs eyes
+### A lamp on a nightstand you have resized — the CORE case is MEASURED, the rest still wants a person
 
-**Where it rides.** `fix/rider-follows-its-support` (PR #100). The two earlier attempts
-were reverted; this is the third.
+**Where it rides.** `main`, `04ce6e0` (PR #100). The two earlier attempts were reverted;
+this is the third.
 
-**Why it needs a person more than anything else in this file.** `Draggable` writes a
-part's transform straight to its `Object3D`, and there is no R3F under jsdom, so **no
-test in this repo can see the 3D scene paint the corrected height** —
-`tests/rider-settle-hooks.test.tsx` proves only that the store hands one out. The
-headless probe reads the three.js graph through `__r3f`, which answers the number and
-not the picture.
+**What no test in this repo can see, and why.** `Draggable` writes a part's transform
+straight to its `Object3D`, and there is no R3F under jsdom, so
+`tests/rider-settle-hooks.test.tsx` proves only that the **store** hands out a corrected
+Y. The headless probe closes that gap and is worth keeping:
+`…/danmu-probe/rider-height.mjs`, route recorded below.
 
-**The repro, for when there is something to check.** Open a room with a piece standing on
-another (the bedroom preset seeds a bedside lamp on a nightstand). Select the **nightstand**
-and change its **height** — down 300 mm, then up 300 mm. Watch the lamp in the **3D tab**,
-from eye level rather than from above; a floating lamp is indistinguishable from a seated
-one when seen from directly overhead. Then switch to the **2D plan** and back.
+**MEASURED, 2026-09-03, headless Chromium against a production build of `04ce6e0`.**
+U-Shape preset (the only one `enumeratePlans` gives a bed rung, so the only one that
+seeds nightstands and bedside lamps). Select a nightstand, type its height `0.55 → 0.75`:
 
-`settleHeights` seats riders once at build time against the authored sizes, and a resize
-writes an override nothing settles again — so the lamp hangs in the air above a shrunk
-nightstand and sinks inside a grown one. `setDim` settles nothing either, so it is wrong
-in-session as well as after a reload.
+| part | before y | after y | delta |
+|---|---|---|---|
+| `lamp-1` (on the resized nightstand) | 0.55 | **0.75** | **+0.200** |
+| `lamp-2` (on the other nightstand) | 0.55 | 0.55 | 0.000 |
+| every other part in the room | — | — | 0.000 |
 
-**Six things to try, and the first three are what the earlier attempts got wrong.** The
-lamp must still follow after you have **dragged it once** (a consumer writing the derived
-Y back is what killed the derivation permanently). It must **never climb** onto something
-above it. And a lamp on a **300 mm** support — an ottoman, a low chest — must not fall
-through it, which is the `> 0.3` bar in `lib/layout-settle.ts:275-280`.
+Typing `0.75 → 0.55` puts `lamp-1` back at 0.55. So the 3D scene **paints** the corrected
+height, in-session, with no reload — which is the half that was in doubt.
 
-Then the three the second review round added:
+**And the probe was watched failing.** The identical run against a production build of
+`2f3d0dd` — `main` immediately before this landed — grows the nightstand to 0.75 and
+leaves `lamp-1` at **0.55**, 200 mm inside it. A browser probe that has only ever been
+green is the same decoration as an assertion never seen fail.
 
+**What that run does NOT settle, and it is most of the list.** A number is not a picture:
+the SwiftShader screenshot times out, so **nobody has seen this**. Still open —
+
+· **The picture, from eye level.** From directly overhead a floating lamp is
+  indistinguishable from a seated one, which is why the 2D plan cannot check this at all.
+· **After dragging the lamp once** (a *recorded* edge, not the seeded one the probe used).
+  A consumer writing the derived Y back is what killed the first derivation permanently.
 · **Press Floor on the lamp after resizing the nightstand.** It must stay on the floor.
   Before this branch's second round it dropped and popped straight back — two clicks, and
   no review lens found it.
-· **Resize the nightstand, press Suggest, then type the nightstand's height back to
-  exactly what it was.** The lamp must come back down with it. Every writer that moves a
-  piece in x/z copies `pos[1]` out of the resolved scene, so this is the state where a
-  baked Y gets stranded — measured at 450 mm in the air, persisted.
+· **Resize the nightstand, press Suggest, then type the height back to exactly what it
+  was.** The lamp must come back down. Every writer that moves a piece in x/z copies
+  `pos[1]` out of the resolved scene, so this is where a baked Y gets stranded — measured
+  at 450 mm in the air, persisted.
+· **A lamp on a 300 mm support** — an ottoman, a low chest — must not fall through it.
+  That is the `> 0.3` bar in `lib/layout-settle.ts:275-280`.
+· **It must never climb** onto something above it.
 · **Drag a piece with something on it, in a busy room**, and watch for dropped frames.
   Uncached the derivation cost 14.3 ms of a 16.7 ms budget per frame at 60 parts;
   `riderYs` collapses that to one call, and only a real GPU can say whether it is enough.
-
-**Also worth one look whenever this does land:** drag a piece into mid-air over a table —
-the Inspector must still say **Floating**. The derivation must not seat a piece that was
-never resting on anything, and three assertions in `tests/placement-banner.test.tsx` broke
-when the first version did.
-
-**What a test cannot settle.** `Draggable` renders `<mesh>` and there is no R3F shim in
-this repo, so its half can only be gated at source — that the call is there, not that the
-value arrives on screen.
-
-**Where it rides.** Nowhere. `main` does not have it and neither does any open branch.
+· **Drag a piece into mid-air over a table** — the Inspector must still say **Floating**.
+  Three assertions in `tests/placement-banner.test.tsx` broke when the first version
+  seated a piece that was never resting on anything.
 
 ---
 
@@ -815,6 +815,30 @@ repo's `package.json` puts a browser download in everyone's install.
   serving a mixture of two commits. That happened here and only failed because the
   canvas timed out — it could as easily have produced a plausible screenshot of nothing
   real. Check the port is free with `netstat`, and `taskkill //PID n //F` if it is not.
+
+**Reading the 3D scene itself, which is the only way to check a drawn position.** Two
+routes look obvious and both are wrong; each cost a run of the § 12 probe.
+
+· **`canvas.__r3f` does not exist.** In `@react-three/fiber` 9.6.1 the `__r3f` descriptor
+  is stamped on three.js **objects**, never on the canvas DOM element — `getRootState(obj)`
+  reads `obj.__r3f.root.getState()`. Reach the scene through three's own devtools hook
+  instead: `Scene`'s constructor dispatches an `observe` event on `__THREE_DEVTOOLS__` if
+  that global exists (three 0.184.0, `src/scenes/Scene.js:115`), so a
+  `page.addInitScript` installing an `EventTarget` there catches every scene the app
+  builds. The § 12 run saw seven.
+· **Nothing in the scene graph has a `name`.** Parts are found by
+  `userData[PART_ID_KEY]` — `danmuPartId`, stamped by `Pickable`, the same stamp
+  `lib/pick-through.ts` reads to turn a raycast hit back into a piece. `getWorldPosition`
+  on that object is what is drawn. Twelve stamped objects in a seeded U-Shape room.
+
+Two DOM traps in the same file, both of which produce a **plausible wrong answer** rather
+than an error: `page.mouse.click()` at a `boundingBox()` coordinate lands on nothing when
+the row is scrolled out of the viewport (use `locator.click({position})`, which scrolls
+first, and assert `aria-selected` after); and a bare `input[type=number]` query returns
+the **left rail's room fields** before the Inspector's, so the probe grew the room by
+300 mm and correctly reported the lamp had not moved. Filter by
+`DOCUMENT_POSITION_FOLLOWING` from the Inspector's own "Exact size" button — which is
+already open on a fresh selection, so clicking it unconditionally closes it.
 
 ## Nothing else here has been in a browser
 
