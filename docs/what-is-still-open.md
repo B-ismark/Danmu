@@ -33,7 +33,7 @@ them. Where two items are the same defect one layer apart, they are listed as on
 | ~~3~~ | ~~**§ 14** a merged group's member cannot be clicked~~ | **FIXED** — the gizmo's invisible translate plane took the press, so `Pickable`'s `selDown` was stale and the drill-in always read "outside". `lib/press-selection.ts` records in the capture phase | — | — |
 | ~~4~~ | ~~**§ 17** a drag refused by a wall TV names nothing~~ | **FIXED** — `clash-mounted` in the room report, and `isSoftFurnishing` shared with the drag, which also unblocked dragging anything in front of a curtain | — | — |
 | ~~5~~ | ~~**§ 18** Shuffle leaves a nightstand through the bed~~ | **FIXED** — not a floor clash at all: a rider (a lamp on a nightstand) was moved independently of its support and left in mid-air inside the bed, invisible to all five `HARD_TERMS`, to the room report and to the plan. `carryRiders` | — | — |
-| 6 | **§ 31** containment must outrank a blocked door, categorically | **ANSWERED 2026-09-02** — the user chose the veto: nothing physically impossible should be encouraged, and a blocked door is recoverable through Fix. Not built. The case it outlaws is a small overhang beating a door block, which is what the solver does today | M–L | unblocked; A.7 waits on it |
+| — | ~~**§ 31** containment must outrank a blocked door, categorically~~ | **BUILT 2026-09-03.** `IMPOSSIBLE_TERMS` plus a veto at three choice points. The defect was not the near-tie it was filed as: 18 of 160 solves handed back a room MORE impossible than the one they were given, all of them from legal seeded rooms. Now 0 of 160 | done | A.7 and G.1 unblocked |
 | ~~7~~ | ~~**§ 34** the pendant and the ceiling fan draw outside their declared size~~ | **FIXED** — `fanColumn` + `pendantDrop` in `scene-spec.ts`, swept at 10 mm across both catalogue bands against `verticalExtent`. The stated blocker (what a pendant's declared height means) was already answered by `isMountedObstruction` + `clearance.ts` rule 2b | — | — |
 | ~~7~~ | ~~**§ 33.1** the four newest shapes have never been seen in 3D~~ | **ALREADY DONE, and this row was stale** — `visual-check.md` has recorded the look since 2026-09-01 and deleted its own item; the queue was never updated. Re-confirmed 2026-09-02 alongside § 34 | — | — |
 | 7 | **§ 36** a non-uniform resize walks through both geometry caps | Same review. Bigger class than the two shapes: every absolute constant in a non-parametric shape does this | M | none |
@@ -3649,7 +3649,7 @@ files moved, and each was checked for direction rather than re-pinned:
 The shipped bed rung still keeps the door clear, and that assertion is now named in capitals in
 `tests/bed-rung-safety.test.ts` so the next person cannot re-baseline it by accident.
 
-### § 31 — containment now outranks a blocked door by a hair — ANSWERED 2026-09-02, NOT YET BUILT
+### § 31 — containment now outranks a blocked door by a hair — ANSWERED 2026-09-02, **BUILT 2026-09-03**
 
 Surfaced by § H.16c above, and it is a **decision, not a defect**: two hard terms now price
 within a few units of each other on one room, and which one wins is currently an accident of
@@ -3701,14 +3701,117 @@ term is a sum over doors and the outside term is continuous from zero, so no fin
 makes *any* overhang dearer than *any* door block. That is precisely why the answer is a
 veto and not a number.
 
+---
+
+**BUILT 2026-09-03.** What the plan above got right, what it got wrong, and every number that
+came out of building it. `IMPOSSIBLE_TERMS` in `lib/layout-solve.ts` is the split,
+`impossibility(breakdown)` is the reading, and three choice points act on it.
+
+**The measurement the plan asked for, taken first.** A 6 x 4 room, a door in the south wall,
+one 1200 mm wardrobe, at `DEFAULT_WEIGHTS`:
+
+| arrangement | `outside` | `door` |
+|---|---|---|
+| 0.5 mm through the north wall | 0.75 | 0 |
+| 5 mm through | 7.45 | 0 |
+| 20 mm through | 29.81 | 0 |
+| barely clipping the door path | 0 | 50.00 |
+| squarely across the doorway | 0 | 900.00 |
+
+The claim held exactly: a 20 mm overhang was bought by the lightest touch of a door path. And
+the reason a weight cannot fix it is visible in the same table — **both terms are continuous
+from zero**, so the overhang can always be made smaller than any fixed door cost.
+
+**The plan named the wrong place, and that is the finding.** It put the veto in `lowestTotal`
+and in `anyWorse`. Ranking finalists turned out to be the *small* lever, and `anyWorse` turned
+out to be the wrong lever entirely.
+
+  · **`lowestTotal` → `bestCandidate`**, ranking least-impossible then cheapest. Measured
+    over five presets x eight seeds of a scrambled room: 40 pools held more than one finalist,
+    **2** held both kinds, **1** changed hands. Over a wider sweep including seeded rooms the
+    old picker chose an impossible finalist 23 times, and the new one finds a legal finalist in
+    **6** of those. Real, and small.
+
+  · **`anyWorse` was left alone**, and the plan's line about it — *"the veto's shape is
+    there, it is just unordered"* — does not survive reading its call sites. Both are in
+    `snapYaws`, a cosmetic tidy that squares a crooked piece, and its own comment already says
+    *"better crooked than through a wall"*, which is the ruling. Ordering it there would let a
+    tidy block a door in order to straighten a sofa.
+
+  · **`solveLayout`'s accept is where the defect actually lived.** The invariant was
+    `after.total >= before` — one number — so an answer could put a wardrobe through a wall
+    provided it bought back more than 1000 units of taste elsewhere. Over 160 solves (five
+    presets x two modes x scrambled-and-seeded x eight seeds), **18 handed back a room MORE
+    impossible than the one they were given, and every one started from a legal seeded room.**
+    The L preset's worst went `outside` 0 → 371.6 — about 200 mm of wardrobe inside the
+    plaster — while its total improved 811 → 400. That is a **first-run defect**: a brand-new
+    L-shaped room, one press of Suggest. `RoomTools` writes a solve straight to the store and
+    gates only on `isWorthOffering`, which reads those same totals; **Try a fix** is exempt
+    from even that. 18 of 160 → **0 of 160**, with 130 of 160 answers still moving something.
+
+  · **`openRoutes` was a third site nobody had listed.** The repair pass moves obstacles to
+    clear a path, so pushing a piece through the plaster is inside its own proposal space and
+    scores well — the wall it goes through is not floor the navigation term was counting. The
+    gate is on what the anneal may **remember** as its best answer, not on its acceptance
+    (that stays on the total, because a cliff there is what `layout-score.ts` argues against)
+    and not on its return. Refusing at the return was tried first and is worse: it throws the
+    whole repair away, leaving two seeds of one fixture stranding 748.2 and 560.1 of floor.
+
+**Seed 6 of the Double rung at U 6x5 is the ruling in one row**, and it is pinned in
+`tests/bed-rung-safety.test.ts`:
+
+| | before | after |
+|---|---|---|
+| seed 6 | `outside` 8.5, `door` 165.7, `nav` 0 | `outside` **0**, `door` 181.8 |
+| seed 11 | `overlap` 24.6, `nav` 8.4 | `overlap` **0**, `nav` 18.0 |
+
+The bed stops standing inside the wall *and* across the door, and blocks only the door — the
+trade the user asked for in as many words. Seed 11 gave up a 24.6-unit collision for ten more
+units of stranded floor.
+
+**Shuffle is unaffected where it counts, and this was measured rather than argued.** The veto
+applies in every mode, including `shuffle`, whose *total* invariant is deliberately exempt.
+That exemption's reason does not transfer: it exists because a shuffle is asked for a
+DIFFERENT arrangement and a different one is usually dearer, which is about taste and says
+nothing about legality. On `rect` 6 x 4 over ten seeds, **before: moved 10, clean 4** — the
+six that moved and were not clean carried 520 to 1390 units of `overlap + outside`, and
+`isCleanShuffle` discarded every one. **After: moved 4, clean 4**, the same four. Over five
+presets x eight presses the button offers an arrangement on **25 of 40 either way**. The
+search stopped producing answers that were only ever going to be thrown away.
+
+**What it cost.** Of the 23 solves where the old picker chose an impossible finalist, 6 are
+rescued by the new picker and **17 now decline** — the answer is "nothing worth moving" where
+it used to be an illegal room. That is the intended trade, and it is the number to revisit if
+Suggest turns out to be too quiet.
+
+**Mutation: 14 mutants, 13 killed.** The survivor is the coarse/fine backstop at the end of
+`openRoutes`, redundant while `best` is gated and kept because it is two lines. One survivor
+was *not* expected and became a test: nothing held the repair's legality ceiling being
+**relative** to its input rather than absolute. An absolute ceiling silently disables the
+repair in any room already illegal for a reason the pass cannot fix — the ordinary case being
+a piece the user has LOCKED standing through a wall — and left every suite green.
+
+**Still open, and deliberately not built.** Ranking finalists can only choose among what the
+search kept, and the descent is untouched: the annealer still walks down a total in which a
+small overhang is cheap. Nothing measures how often the search never proposes a legal
+arrangement at all. `A.7` and `G.1` both sit downstream of this.
+
+---
+
+
 
 
 `DEFAULT_WEIGHTS` has `outside: 1000` and `door: 800`, both against terms normalised to 0..1.
 Until `outsideDeficit` landed, containment could not see an overhang below roughly 160 mm on a
 sofa-sized piece, so the two never competed and the ordering was never exercised. They compete
-now. On the **U 6 × 5** with a 1400 mm Double bed, the solver ends up blocking about 20% of the
+now. On the **U 6 × 5** with a 1400 mm Double bed, the solver ended up blocking about 20% of the
 door zone — `door` 165.69 — because the containment alternative was around 190 mm of bed through
 the wall, which prices at roughly 175. It picked the door by about ten units out of a thousand.
+
+> **Past tense as of 2026-09-03, and the number moved.** That reading was taken before the veto
+> below was built. It is now `door` **181.78** with `outside` **0** — the same choice, but arrived
+> at categorically rather than by ten units, and the bed is no longer *also* 8.5 units inside the
+> wall while it blocks the door. See the BUILT section above.
 
 **Neither answer is good, and that is the point.** The room genuinely has no arrangement that is
 both fully inside and clear of the door at that bed width, which is exactly what the bed ladder

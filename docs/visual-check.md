@@ -263,6 +263,42 @@ the nightstand, carried nowhere while the nightstand moved. That fix does want e
 is the item below, because it is the one defect in this file that the 2D plan is
 constitutionally unable to show.*
 
+### Suggest declines more often than it used to, and that has to read as an answer — branch `fix/impossible-outranks-inconvenient`, PR pending
+
+**Where to click.** Left rail, `Fix`. Make a **new** L-shaped or U-shaped room from the
+layout picker — seeded, untouched — and press it. Then do the same on a `rect`. Press it
+several times on each: it is deterministic per press, and the presses differ.
+
+**Why this needs eyes rather than a test.** § 31's veto refuses an arrangement more
+impossible than the one it was given, and on the sweep that measured it, **17 of 160 solves
+that used to answer now decline**. What they used to answer with was a room containing
+furniture inside a wall — on the L preset, about 200 mm of wardrobe — so declining is
+right. But the user does not see the arrangement that was refused. They see a button that
+did nothing, and whether *that* reads as "your room is already fine" or as "this button is
+broken" is not a question any assertion in this repo can answer.
+
+**What wrong looks like.**
+
+- **A press that reports nothing at all.** `RoomTools` returns `null` when
+  `result.moved.length === 0`, and the copy that fires on that path was written for a room
+  that was already good. On a scrambled room it is now also the copy for "every idea I had
+  put something in a wall", which is a different sentence. If pressing `Fix` on an obviously
+  messy room says *"This is already a good arrangement"*, that is the defect — not the
+  refusal, the sentence.
+- **Furniture in a wall after a press.** The thing the change exists to prevent. Look along
+  the plaster on the L's and U's notch walls in the 3D tab, and at the wall lines in the 2D
+  plan, which is where a 20 mm overhang is actually visible. Any piece crossing a wall line
+  after pressing `Fix` is a straight regression.
+- **`Shuffle` gone quiet.** It should be unchanged — measured at 25 of 40 presses over five
+  presets, before and after — but that was measured through `shuffleRoom`, not through the
+  button. If `Shuffle` starts saying "couldn't find another arrangement" on rooms where it
+  used to work, the veto has reached further than the measurement says.
+
+**What is already known and does not need re-deriving.** The arithmetic is gated: 18 of 160
+solves used to hand back a room more impossible than the one they were given, and 0 do now,
+with 130 of 160 still moving something. 13 of 14 mutants killed. What none of that touches
+is the copy on the decline path, and that is this item.
+
 ### Fix and Shuffle are two buttons now — merged to `main` in `9ecce9f` (PR #67)
 
 **Where to click.** Left rail, top: the health chip now has **two** buttons under it,
