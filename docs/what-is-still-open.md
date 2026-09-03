@@ -79,10 +79,10 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 1 | **G.1** ~~a brand-new room seals its own routes at the size the app ships~~ → **nothing scores a custom footprint** | **Re-scoped 2026-09-03, not closed.** The sweep ran: all five picker sizes seed clean, and the T/U rooms the item named paired a layout with `DEFAULT_ROOM`'s (rect) dimensions. But the room re-seeds on **every** open, `moveWallCarrying` writes no scene snapshot, and a T + one wall nudge + a revisit strands floor with no furniture touched. Several such nudges leave the bounding box **identical**, so no `(layoutId, width, depth)` sweep can see them — **including the one that just ran.** Every wall move makes a custom polygon, both loaders prefer it, nothing scores one | M — a sweep over `moveWallCarrying` output, not over sizes | free; **do not close it with a size sweep** |
 | 2 | **§ 33.3** ~~the render budget is unmeasured~~ → **MEASURED 2026-09-03; the GPU verdict still wants a device** | A furnished room issues **198–390 draw calls per rendered frame** across the five presets, ~37 calls and ~10 600 triangles per extra piece, 16–24 calls per piece. So subdivision per shape is cheap and **part count is what spends the budget** — and the U vs Rectangle pair (both 12 pieces, 226 vs 198 calls, and the U with *fewer* triangles) says the knob that matters is how many draw units a shape decomposes into, not how many segments. `frameloop="demand"` confirmed: 2–21 frames for a 2.5 s drag. Frame times are SwiftShader and carry no GPU information | done, bar a real device | **row 4 is unblocked** |
 | 3 | **§ A.4** ~~the timing bounds may simply be too tight~~ → **ANSWERED 2026-09-03: it was the runner, not the bounds** | Reproduced on demand under deliberate CPU load rather than waited for: the same four-red `layout-solve` set, and **three of the four died as `Test timed out in 5000ms`** — a default nobody chose, applied to a suite whose honest worst case is a ~6.3 s solve. Two of those three assert nothing about a clock and the third asserts a *ratio*, the shape that was supposed to survive load; the harness kills the body before the ratio is evaluated. Fixed: an explicit 30 s `testTimeout`, and the two real wall-clock bars scaled by a measured machine factor rather than padded. See § A.4 | done | **no longer blocks the rows below** |
-| 4 | **§ 12** ~~a rider keeps the size the room was BUILT at~~ → **FIXED 2026-09-03** | Built as § B.16 chose: derived on read, nothing written. `deriveRiderYs` (`lib/transforms.ts`) corrects a piece that WAS riding another — read off live geometry by `ridingParents` at the authored sizes — whose support carries a `dims` override, and `resolveParts` applies it. **Scope is narrow on purpose:** a first version settled everything that floated, which deleted § 37's *Floating* report; three assertions in `tests/placement-banner.test.tsx` said so. The 3D path needed it SEPARATELY — `Draggable` writes its own position and never touches the list — so `useSettledY` feeds both. 14/15 mutations killed, the survivor being an empty-`dims` early exit that is a cost guard rather than a behaviour one | done | — |
-| 5 | **§ B.12** ~~Room check speaks centimetres~~ → **FIXED 2026-09-03** | Decided by the user: convert through `dimUnit`. `formatLength` (`lib/units.ts`) is the one formatter; `analyzeRoom` gains a `dimUnit` option defaulting to `'cm'`, so `fit-check` and `layout-shuffle` — which read `rule`, never `detail` — keep the sentences they always produced and no solver comparison starts depending on Settings. Two things a straight `fromMM` would have got wrong: a 4 mm gap renders `0.00 m` (the decimals grow until the number is true, capped at 1 mm of resolution, derived per unit), and the mounted-clash band still rounds OUTWARD so a 7 mm band cannot collapse in metres. `cachedReport`'s key gained `dimUnit`. 16/16 mutations killed | done | — |
+| 4 | **§ 12** a rider keeps the size the room was BUILT at — **BUILT, REVIEWED, REVERTED 2026-09-03. Still open, and the design is now written.** | An attempt shipped to a PR and came out of it again: five review lenses found **nine** independent defects and CI was green over every one. Three of them restore the exact defect the change was written to fix. **§ 12's own section below now carries the design and all nine defects — read it before rebuilding, and do not rebuild the reverted shape.** The short version: the riding relation must be REMEMBERED (`parentIds`), not re-derived from geometry that goes stale exactly when the derivation is needed. Reverted in `94d11c1`, every file byte-identical to `228e0d6` | M — the derivation is small; the RELATION is the work | free |
+| 5 | **§ B.12** ~~Room check speaks centimetres~~ → **FIXED 2026-09-03** | Decided by the user: convert through `dimUnit`. `formatLength` (`lib/units.ts`) is the one formatter; `analyzeRoom` gains a `dimUnit` option defaulting to `'cm'`, so `fit-check` and `layout-shuffle` — which read `rule`, never `detail` — keep the sentences they always produced and no solver comparison starts depending on Settings. Two things a straight `fromMM` would have got wrong: a 4 mm gap renders `0.00 m` (the decimals grow until the number is true, capped at 1 mm of resolution, derived per unit), and the mounted-clash band still rounds OUTWARD so a 7 mm band cannot collapse in metres. `cachedReport`'s key gained `dimUnit`. **The first pass was right in fourteen sentences and wrong in two**, and the way that happened is the keeper: the sweep was verified by grepping the OLD spelling (`} cm`), which found none left — and the two TV sentences never said `cm`, they said `m`, so the grep that confirmed the sweep was structurally blind to the only sites still wrong. Six of thirteen converted sites were also asserted nowhere; multiplying their arguments by 1000 passed the whole suite. `tests/report-units.test.ts` is the gate now — every finding that states a number, provoked and read in all five units, with expectations derived from `lib/layout-rules.ts` rather than from `lib/clearance.ts` — plus a sweep for an `analyzeRoom(` in `components/` or `app/` that omits `dimUnit`. `formatArea` pairs the cut-off floor area with the length beside it (ft² for imperial, m², never in²). 27/28 mutations killed | done | — |
 | 6 | **§ 38.1** the confined "Try a fix" refusal is unreachable | A decision rather than a defect: 212 confined solves over every finding of every preset declined **zero** times, so neither the copy added by § 31 nor the one shipping beside it for months has ever rendered | S — mostly a judgement | nothing |
-| 7 | **§ B.17** ~~the placement row — dragging a piece off a surface should DROP it~~ → **RESOLVED 2026-09-03, and the premise had expired** | The recorded answer — *"dragging would work"*, keep the operations and drop the row — rested on "neither Floor-off-a-table nor Surface-back-onto-it is reachable by dragging", which stopped being true when the drag pipeline moved into `lib/drag-resolve.ts` and nobody re-derived it. Measured against `resolvePlacement`: clear of a desk → y = 0, back over it → 0.75 with `supportId` set. Put back to the user with that measurement; they chose **drop Surface only**. Wall (nearest wall + face the room, gated on `ridesWall` so no drag reaches it) and Floor (drops IN PLACE where a drag carries it sideways) stay. `supportBelow`, `snapToSurface` and the `snap-surface` glyph went with the button | done | — |
+| 7 | **§ B.17** ~~the placement row — dragging a piece off a surface should DROP it~~ → **RESOLVED 2026-09-03, and the premise had expired** | The recorded answer — *"dragging would work"*, keep the operations and drop the row — rested on "neither Floor-off-a-table nor Surface-back-onto-it is reachable by dragging", which stopped being true when the drag pipeline moved into `lib/drag-resolve.ts` and nobody re-derived it. Measured against `resolvePlacement`: clear of a desk → y = 0, back over it → 0.75 with `supportId` set. Put back to the user with that measurement; they chose **drop Surface only**. Wall (nearest wall + face the room, gated on `ridesWall` so no drag reaches it) and Floor (drops IN PLACE where a drag carries it sideways) stay. `supportBelow`, `snapToSurface` and the `snap-surface` glyph went with the button — and so, after a browser measurement, did the `.rail-triple` class and the container-query rule that folded it, which a two-button row no longer needs. Confirmed on screen: the row is `Wall | Floor`, and Room check reads correctly in all five units with no clipping and 0px of document overflow | done | — |
 | 8 | **§ H.3** every Library click drops its piece at the room centre, facing the same way | A product decision with at least three defensible answers, and picking one quietly inside a defect fix is how the last one got here. The false comment beside it is already fixed | S once decided | needs the user |
 | 9 | **§ H.8** two reports that need a real repro | A group drag bounded by the lead's rules rather than the set's, and a merged set that drills in from a nightstand but never from the bed. Both are DOM-reachable on the 2D plan, which is the cheap way in | M | wants row 15's shims |
 | 10 | **§ B.14** a turn that puts a corner through the wall — keep and report, or refuse? | **Omitted until 2026-09-03.** Two documents in this repo call the same outcome the contract and the defect, and the two paths really do differ: `spinSelection` writes `setRotation` with no containment resolve, the R gizmo goes through `resolveDrag`, which contains | S once decided | **must be settled before its own eyes-item is looked at** — verifying against the wrong expectation is worse than not verifying |
@@ -1940,6 +1940,17 @@ says more than the heading does. Keep the `.section .section--flush` wrapper for
 spacing rhythm, and keep `rail-triple` — `app/globals.css:533` reflows it to `1fr 1fr`
 on a narrow rail, which is a second reason not to hand-roll the columns.
 
+> **Both halves of that last sentence are dead as of § B.17 (2026-09-03), and the reason
+> is measured.** Once the row held two buttons, the query's `1fr 1fr` said exactly what the
+> Inspector's inline `repeat(2, 1fr)` already said — computed to the same
+> `118.5px 118.5px` with the rule and without it. Two buttons want 234px of the 243px a
+> rail dragged to its 276px floor gives them, and 206px of 215px at the 248px compact
+> step, with nothing overflowing at 420 / 293 / 276 / 248px. So the rule went, and the
+> class with it: `rail-triple` named a count it no longer had, and a class with no CSS
+> reader is plumbing wearing a rule's name. `tests/reflow.test.ts` now fails from **both**
+> sides — rule gone from the stylesheet, class gone from the markup — because deleting one
+> and leaving the other is the shape this repo keeps finding.
+
 **Not icons-only.** Three icon+word buttons at 33% each is what does not fit; two at 50%
 does. Stripping the words to fit a third button that should not be there solves the
 symptom and keeps the cause — and an icon-only control then owes an accessible name on
@@ -2514,15 +2525,69 @@ argument for eyes: the four that held were the four a test could most nearly hav
 its axis is not a check, and the person following it reports the wall they hit rather than
 the thing you meant. Nobody was wrong here except the note.
 
-### 12. A rider stays at the size the room was BUILT at — FIXED 2026-09-03, on the second try and in a narrower scope than the first
+### 12. A rider stays at the size the room was BUILT at — STILL OPEN. Built twice, reverted twice, and the second revert is where the design finally came from.
 
-**Built as § B.16 chose: derived on read, nothing written.** `deriveRiderYs` in
-`lib/transforms.ts` is the rule and `resolveParts` applies it, memoised on the identity of
-the four store slices. `tests/rider-height.test.ts` and `tests/rider-height-readers.test.ts`
-are the gates; `tests/layout-settle.test.ts`'s documented limit retired itself, which is
-what a self-retiring limit is for.
+**The second attempt reached a PR (#99) with CI green — typecheck, lint, 2205 tests, build —
+and came back out of it in `94d11c1`, byte-identical to `228e0d6`.** Five review lenses
+found **nine** independent defects. Three of them restore the exact defect the change was
+written to fix, and none of the nine was reachable by any test in the branch.
 
-**Three things worth keeping, none of which is about riders.**
+**Do not rebuild the reverted shape.** What follows is the design that answers the nine,
+and then the nine themselves.
+
+#### The design, in three parts
+
+1. **The relation must be REMEMBERED, not re-derived.** The reverted version recovered
+   "this piece was riding that one" from geometry — adjacency between the rider's `pos[1]`
+   and the support's **authored** top. That works until any consumer writes the rider's
+   position back, at which point its stored Y is the DERIVED value, the adjacency test
+   compares it against the AUTHORED top, the two diverge past `SUPPORT_Y_EPS`, and the
+   relation vanishes permanently and persisted. Use `parentIds` ∪ `ridingParents(authored)`:
+   `parentIds` is durable, every drag that lands on something writes it, and a seeded rider
+   with no position override still has its authored Y. `deriveRiderYs` would need
+   `parentIds` passed in — it is a separate `useStudio` slice, not part of
+   `TransformOverrides`.
+2. **Land on the NAMED support, not on whatever is highest.** Compute the named support's
+   current top and probe with `maxTop = namedTop + SUPPORT_Y_EPS`. `findSupportDetailed`
+   maximises `top` and has **no below-test**, which is why `restingOn` passes a `maxTop` and
+   why the reverted version could lift a lamp from 0.75 m onto a 1.8 m wardrobe.
+3. **Gate on the support's top having actually MOVED** — authored top ≠ current top, or the
+   support was itself corrected by this pass — not on it merely carrying a `dims` override.
+
+And one rule that is statable on its own, which is the transferable half: **a consumer that
+moves a piece in x/z must not write a Y it did not compute.** `recarryForResize` already
+gets this right — it writes `p.pos[1]` from the authored layer and `ov[1]` from the override
+layer. `moveWallCarrying`, `duplicateSelection` and Suggest/Shuffle do not. Same shape as
+`ConvoyMove.rot` being optional so an unchanged rotation is never written.
+
+Still open after that: the `> 0.3` support bar and the ceiling clamp are both "the read path
+and the build path must agree", and the honest answer is probably **one function shared with
+`settleHeights`** rather than two that mirror each other. That is what the FIRST attempt
+tried; it was reverted for scope, not because sharing was wrong.
+
+#### The nine, so none of them has to be found again
+
+| # | what | why it is not theoretical |
+|---|---|---|
+| 1 | The riding relation is read in the AUTHORED-dims frame while the rider's `pos[1]` is LIVE | One drag of the rider commits the derived Y and kills the derivation permanently. `moveWallCarrying`, `duplicateSelection` and Suggest reach the same state with **no gesture on the rider at all** — and `duplicateSelection` bakes it into the new part's *authored* pos, where `resetTransforms` cannot reach it |
+| 2 | The landing probe passes no `maxTop` | Measured: a lamp jumps 0.75 m → 1.8 m, onto a piece it was never on |
+| 3 | The `> 0.3` bar and `ridingParents`' `> 0` were wired together for the first time | A lamp on a 300 mm ottoman falls THROUGH it on any resize of that ottoman, including a width change. `lib/layout-settle.ts:275-280` is the standing written warning that this wiring does this, and that file was untouched by the diff. The branch's own test pinned 280 mm — below the legal minimum, so unreachable — instead of exactly 300 |
+| 4 | The ceiling clamp, `settleHeights`' third step, is not replicated | The two paths disagree by up to 1.22 m, silently and unreported, while the docblock claimed they could not disagree |
+| 5 | A mid-drag convoy write can yank the dragged piece back to its pre-drag x/z | — |
+| 6 | Both `useSettledY` subscriptions can be replaced with plain `getState()` reads | The whole 2205-test suite passes. So does deleting `settled` from `usePartTransform`'s memo deps. **The in-session half of § 12 — resize a desk with the studio open — is exactly what those subscriptions are for, and nothing observed them** |
+| 7 | Three of the four memo identity checks can be deleted | 2205/2205. Only `slot.dims` was pinned. Resize a desk, then drag the lamp 3 m onto bare floor: `positions` is replaced, `parts` and `dims` keep identity, memo hits, and the lamp is reported at 0.40 over nothing — in the plan, the 3D scene, and a saved scene file |
+| 8 | The ascending-Y sort can be deleted | 2205/2205. The only chain fixture is already in ascending order, so array order and sorted order coincide — a fixture that cannot express its defect. `useScene.parts` is insertion-ordered |
+| 9 | `resolveParts`' `if (ys.size === 0)` fast path is behaviourally a no-op and the test named for it does not guard it | `resolvePart`'s own early return satisfies the assertion either way |
+
+**What that costs, stated plainly: 30 of the author's own 30 mutations killed, and not one
+of them wrote a position back first.** The mutations probe the places the author was already
+thinking about. See [[kill-rate-is-not-a-mutation-set]].
+
+**The history below is kept because both retracted attempts are the useful part.**
+
+### 12 (history). The second attempt, and the three things it got right
+
+These survive the revert and should be carried into the rebuild.
 
 **The scope was wrong first, and the SUITE caught it rather than a review.** The first
 version called `settleHeights` minus its ceiling clamp on every read — a general read-time
@@ -2531,50 +2596,39 @@ earlier**: § 37's placement banner reports a piece resting on nothing as *Float
 once every read seats every piece that state is unreachable. Three assertions in
 `tests/placement-banner.test.tsx` went red saying exactly that. § B.16's own words are
 narrower than what was built from them — *"derived from its support's **current dims**"* —
-so the gate is now: some piece carries a `dims` override, the piece WAS riding another
-(`ridingParents` at the authored sizes, which is where `settleHeights` left everything),
+so the gate has to be: some piece carries a `dims` override, the piece WAS riding another,
 and that support is one of the resized ones. A piece dropped in mid-air was never riding
 anything and is left alone, truthfully.
 
-**The 3D render path needed it separately, and a `resolveParts`-only fix would have
-shipped the two-sources-of-truth defect this repo keeps finding.** `Draggable` writes
+**The 3D render path needs it separately, and a `resolveParts`-only fix would ship the
+two-sources-of-truth defect this repo keeps finding.** `Draggable` writes
 `ref.current.position` from `storedPos ?? part.pos` — a per-part subscription that never
 touches the list — and `Dressing` follows one owner through `usePartTransform`. So the
-derivation would have been right in the 2D plan and absent in the 3D scene. `useSettledY`
-feeds both from the same memo; its selector returns a NUMBER, so a piece re-renders only
-when its own height moves. This also corrected a stale claim in `usePartTransform`'s own
-docblock, which named `Draggable` as a caller it had not had for some time.
+derivation would be right in the 2D plan and absent in the 3D scene. A `useSettledY` feeding
+both from one memo is the shape; its selector returns a NUMBER, so a piece re-renders only
+when its own height moves. **But it must genuinely SUBSCRIBE** — see defect 6 above, where
+it did not and nothing said so.
 
-**Two `tests/scene-file.ts` fixtures were wrong before this change and only said so once
-the Y was read back.** `SOFA` was authored at `pos[1] = 0.44` — half its 880 mm height,
-i.e. `pos[1]` read as a CENTRE when a sofa's anchor is floor. `rawPart` keeps 0.44 on
-purpose: that one exercises the parser, which must hand back the bytes it was given and
-settle nothing.
+**One incidental finding to leave alone.** The attempt also changed a `tests/scene-file.ts`
+fixture, `SOFA` authored at `pos[1] = 0.44` — half its 880 mm height, i.e. `pos[1]` read as
+a CENTRE when a sofa's anchor is floor. The review found that change **unforced**, and its
+comment described the rejected first version rather than the shipped one. `rawPart` keeps
+0.44 on purpose: that one exercises the parser, which must hand back the bytes it was given
+and settle nothing.
 
-**Mutation-verified 14/15.** The survivor is the empty-`dims` early exit, which is a cost
-guard rather than a behaviour one — deleting it changes no answer, and saying so beats
-implying a kill the set did not get. One of the fifteen was a real find rather than a
-formality: the `supportId in resized` gate survived the first pass because for a rider
-whose support did not move the derived height EQUALS the current one, so the pass exits
-before the gate matters. The case that expresses it is a piece growing UP through an
-unrelated rider — `findSupportDetailed` maximises the top under a footprint, so without the
-gate the rider climbs onto something it was never on.
+**The prediction that started it all is unchanged and still exact**, and the third attempt
+inherits it as its own check: resize a surface, reopen the room, the piece standing on it
+hangs in the air above the shrunk top. `settleHeights` answers entirely in `dimMM`, and a
+resize never touches `dimMM` — it writes a `dims` override. So the load is:
+`buildSceneFromRoom` settles against the **authored** sizes, `loadTransforms` applies the
+saved ones over the top, and nothing settles again. `setDim` settles nothing either, ever,
+which is the in-session half.
 
-**Not verified:** nobody has looked at it in a browser. `Draggable` renders `<mesh>` and
-there is no R3F shim here, so its half is gated at source in `tests/room-scene.test.ts` —
-that the call is there, not that the value arrives on screen. `docs/visual-check.md` has
-the item.
+**Not verified either time:** nobody has looked at this in a browser. `Draggable` renders
+`<mesh>` and there is no R3F shim here, so its half can only be gated at source — that the
+call is there, not that the value arrives on screen. `docs/visual-check.md` has the item.
 
-**The history below is kept because the retracted first attempt is the useful part.**
-
-### 12 (history). The reverted attempt, and why it was the wrong one of three
-
-The prediction in `visual-check.md` was exact and the user saw exactly it: resize a surface,
-reopen the room, the piece standing on it hangs in the air above the shrunk top.
-
-`settleHeights` answers entirely in `dimMM`, and a resize never touches `dimMM` — it writes
-a `dims` override. So the load is: `buildSceneFromRoom` settles against the **authored**
-sizes, `loadTransforms` applies the saved ones over the top, and nothing settles again.
+### 12 (history). The FIRST reverted attempt, and why it was the wrong one of three
 
 **A fix was built on `feat/shape-contract` and taken back out before the PR merged. It was
 the wrong one of the three, and § B.16 already said so.** It re-settled on load and wrote
@@ -2637,8 +2691,11 @@ the narrow rail the **Floor button touches the edge of the window with no paddin
 because the way it was wrong is the point: it was a reading of the stylesheet that nobody
 had put a browser in front of.
 
-**What it actually was.** `.rail-triple` and `.rail-swatches` are markup in `Inspector.tsx`
-and nowhere else — the RIGHT rail. That rail takes three kinds of width: `--rail-right`'s
+**What it actually was.** `.rail-triple` and `.rail-swatches` were markup in `Inspector.tsx`
+and nowhere else — the RIGHT rail. (`.rail-triple` is gone entirely since § B.17 left the
+placement row with two buttons; `.rail-swatches` is the block's only tenant now, and 293px
+is still its number — the swatches need 284px by the same subtraction. Everything below is
+about the widths, which have not moved.) That rail takes three kinds of width: `--rail-right`'s
 clamp (276–320px), `--rail-right-tight` (248px, the `compact` step), and whatever the sash
 was dragged to, which `DockedShell` renders as `clamp(--rail-right-min, Npx, --rail-max)`.
 So **276px is the narrowest a dragged right rail can be, and the fold was written at 268px**

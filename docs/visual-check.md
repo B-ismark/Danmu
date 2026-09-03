@@ -639,34 +639,37 @@ moved to a wall or turned, and Floor drops the piece **in place** where a drag c
 sideways.
 
 **What to look for.** Two buttons at 50% each, both words legible, the section's padding
-intact on both sides and nothing touching the window edge — at the widest rail and at the
-narrowest a drag can reach (276px). The old three-button case folded to two rows there and
-that fold no longer has anything to fold; what needs an eye is whether two buttons at the
-narrowest width still fit their words rather than ellipsising or overflowing. The colour
-swatches in the same rail should be **six across and square**, not eight narrow rectangles.
+intact on both sides and nothing touching the window edge. The colour swatches in the same
+rail should be **six across and square**, not eight narrow rectangles. And, since the
+heading above the row went with the third button: whether the row reads as **deliberate**
+rather than as something with a piece missing.
+
+**The WIDTH half is measured and settled — it is the LOOK that is left.** A headless probe
+walked the rail through 420 / 293 / 276 / 248px: two buttons want 234px of the 243px a rail
+dragged to its 276px floor gives them and 206px of 215px at the 248px compact step, with no
+child overflowing and nothing painting past the rail's right edge at any of the four. So
+`.rail-triple`'s container-query fold is deleted (it set `1fr 1fr`, which is what the
+Inspector's inline `repeat(2, 1fr)` already said) and so is the class. `tests/reflow.test.ts`
+asserts both are gone.
+
+**What is still owed a REAL browser, and only this.** Headless Chromium renders **no
+scrollbar at all** here — measured, `offsetWidth - clientWidth` is 0 in four launch
+configurations with the box genuinely scrolling — so every number above is a rail 12–15px
+wider than a Windows machine with classic scrollbars would give it. At a **1280px window**
+the un-dragged right rail is 307.2px. With three buttons the row had about a pixel to spare
+there; with two it has ~120px of slack by the same arithmetic, so this is very likely moot.
+Confirming that is one look: **both buttons on one line, nothing touching the rail's right
+edge.**
 
 **What a test cannot settle.** Nothing in a test can measure a button's min-content, so
 `tests/reflow.test.ts` holds the breakpoints and `tests/where-it-sits.test.tsx` holds which
-buttons exist; neither can see a rendered glyph or a clipped word.
-
-**The second half, and it needs a REAL browser rather than a headless one.** The first fix
-was derived against `.rail`, which is outside the Inspector's scrollbar, so the breakpoint
-was short by whatever that scrollbar is wide. The container is `.rail-scroll` now — the
-scroll box itself — so the scrollbar cancels instead of being estimated, and the number
-dropped from 304 to 293. **Headless Chromium renders no scrollbar at all here** (measured:
-`offsetWidth - clientWidth` is 0 in four launch configurations, with the box genuinely
-scrolling), so what a browser probe can show is a 12px/15px transparent border standing in
-for one — never the real thing. On a Windows machine with classic scrollbars, at a **1280px
-window**, the un-dragged right rail is 307.2px and the row has about a pixel to spare: look
-at whether **both buttons are on one line** and whether anything is touching the rail's
-right edge. That single width is the whole question — and it is a *different* question
-since § B.17, because the row that had about a pixel to spare had three buttons in it and
-now has two. Whether that makes this item easy or moot is the thing to find out.
+buttons exist and that Wall genuinely turns the piece; none of them can see a rendered
+glyph, a clipped word, or a row that looks unfinished.
 
 **Where it rides.** `dcfe1af` (the 268 → 304 fix), `e4a9f25` (the container move and
-304 → 293) and `fix/rider-height-and-report-units` (three buttons → two). **The first two
-merged with nobody having looked at either**, which is why this item is still here and why
-its gate counts are gone.
+304 → 293) and `fix/rider-height-and-report-units` (three buttons → two, then the fold
+deleted). **The first two merged with nobody having looked at either**, which is why this
+item is still here and why its gate counts are gone.
 
 ### Room check now speaks the unit you set — read a few findings in feet
 
@@ -678,48 +681,73 @@ the room.
 defaults to metres, so the panel said `190 cm` beside a room field reading `1.9 m`. Every
 length in a finding now renders through `formatLength` in the user's unit.
 
-**What to look for, and it is a copy judgement rather than a bug hunt.** Whether the
-sentences still *read* well in a coarse unit. `"needs 0.6 ft of clear floor"` is correct and
-may be worse prose than `"needs 35 cm"`. Two specific things to check: a very small gap
-must never print as zero — the formatter grows its decimals rather than saying `0.00 m`, so
-you should see something like `0.004 m` — and the mounted-clash sentence must name **two
-different** heights (`between 1.05 m and 1.07 m up`), never the same number twice.
+**The LAYOUT half is measured and clean; what is left is a COPY judgement.** A headless
+probe read a room with seven findings in it at all five units: every finding sentence
+rendered at its full width with no clipping, and the document's own horizontal overflow was
+**0px** in every unit. So this is not a bug hunt. What needs a person is whether the
+sentences still *read* well in a coarse unit — `"needs 0.6 ft of clear floor"` is correct
+and may be worse prose than `"needs 35 cm"`, and `"About 16.1 ft² of floor has no route to
+the door"` is a new sentence nobody has judged.
+
+**Three specific things to check.** A very small gap must never print as zero — the
+formatter grows its decimals rather than saying `0.00 m`, so you should see something like
+`0.004 m`. The mounted-clash sentence must name **two different** heights (`between 1.05 m
+and 1.07 m up`), never the same number twice. And the TV sentence must keep its screen in
+**inches** while both distances convert: on feet it should read *"…is 5.4 ft from the
+65.6″-class screen — comfortable viewing starts around 6.6 ft."* A screen diagonal is the
+product's name worldwide, not a room measurement.
+
+**Already confirmed on screen, so do not re-derive it:** the door swing reads `0.9 m` /
+`90 cm` / `2.95 ft` / `35.4 in` / `900 mm`, the route in reads `60 cm` / `23.6 in`, and the
+**Step-free** control three rows above the findings says `150 cm` / `59.1 in` — it used to
+say `150 cm` whatever the unit, which is the § B.12 defect three rows from where § B.12
+fixed it.
 
 **What a test cannot settle.** Whether the wording is worth reading. The arithmetic is
-gated in `tests/units.test.ts`, the wiring in `tests/room-tools-findings.test.tsx`, and the
-band's two-different-numbers property across all five units in `tests/mounted-clash.test.ts`.
+gated in `tests/units.test.ts`, the wiring in `tests/room-tools-findings.test.tsx`, the
+band's two-different-numbers property across all five units in `tests/mounted-clash.test.ts`,
+and every finding that states a number in `tests/report-units.test.ts`.
 
 **Where it rides.** `fix/rider-height-and-report-units`.
 
-### A lamp on a desk you have resized — does it sit on the desk, in BOTH tabs?
+### A lamp on a desk you have resized — STILL BROKEN. Nothing to look at yet.
 
-**Where to click.** Open a room with a piece standing on another (the bedroom preset seeds
-a bedside lamp on a nightstand). Select the **nightstand** and change its **height** in the
-Inspector — down 300 mm, then up 300 mm. Watch the lamp in the **3D tab**, from eye level
-rather than from above. Then switch to the **2D plan** and back.
+**This item is not ready for eyes and should not be looked at.** A fix was built, reviewed
+and reverted in `94d11c1`. Five review lenses found nine defects in it — three of which
+restore the exact behaviour it was written to fix — and CI was green over every one. The
+design that answers them is written up in `docs/what-is-still-open.md` § 12.
 
-**What changed.** § 12. `settleHeights` seats riders once at build time against the
-authored sizes, and a resize writes an override nothing settles again — so the lamp hung in
-the air above a shrunk nightstand and sank inside a grown one. The height is derived on
-every read now.
+Kept here rather than deleted because **the prediction is unchanged and it is what the
+third attempt has to be checked against**, and because a reader finding the two docs
+disagreeing is exactly the rot this file exists to prevent.
 
-**What to look for.** The lamp's base should stay on the nightstand's top through both
-changes, with no lag — it must move on the same edit, not on the next unrelated one. And
-**the two tabs must agree**: this is the failure mode the fix was shaped to avoid, since
-`Draggable` writes its own position and does not go through the list the plan reads. From
-directly above, a floating lamp is indistinguishable from a seated one, which is why the
-3D check has to be from eye level.
+**The repro, for when there is something to check.** Open a room with a piece standing on
+another (the bedroom preset seeds a bedside lamp on a nightstand). Select the **nightstand**
+and change its **height** — down 300 mm, then up 300 mm. Watch the lamp in the **3D tab**,
+from eye level rather than from above; a floating lamp is indistinguishable from a seated
+one when seen from directly overhead. Then switch to the **2D plan** and back.
 
-**Also worth one look while you are there:** drag a piece into mid-air over a table — the
-Inspector should still say **Floating**. The derivation deliberately does not seat a piece
-that was never resting on anything, and three assertions in
-`tests/placement-banner.test.tsx` broke when an earlier version of it did.
+`settleHeights` seats riders once at build time against the authored sizes, and a resize
+writes an override nothing settles again — so the lamp hangs in the air above a shrunk
+nightstand and sinks inside a grown one. `setDim` settles nothing either, so it is wrong
+in-session as well as after a reload.
+
+**Three things the third attempt has to be watched for, because they are what the second
+one got wrong.** The lamp must still follow after you have **dragged it once** (a consumer
+writing the derived Y back is what killed the derivation permanently). It must **never
+climb** onto something above it. And a lamp on a **300 mm** support — an ottoman, a low
+chest — must not fall through it, which is the `> 0.3` bar in `lib/layout-settle.ts:275-280`.
+
+**Also worth one look whenever this does land:** drag a piece into mid-air over a table —
+the Inspector must still say **Floating**. The derivation must not seat a piece that was
+never resting on anything, and three assertions in `tests/placement-banner.test.tsx` broke
+when the first version did.
 
 **What a test cannot settle.** `Draggable` renders `<mesh>` and there is no R3F shim in
-this repo, so its half is gated only at source in `tests/room-scene.test.ts` — that the
-call is there, not that the value arrives on screen.
+this repo, so its half can only be gated at source — that the call is there, not that the
+value arrives on screen.
 
-**Where it rides.** `fix/rider-height-and-report-units`.
+**Where it rides.** Nowhere. `main` does not have it and neither does any open branch.
 
 ---
 
