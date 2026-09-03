@@ -1,38 +1,36 @@
-/**
- * Machine-speed calibration for the two wall-clock bars in this suite.
- *
- * The problem this solves, measured 2026-09-03 at `a23b50b` rather than assumed.
- * `tests/layout-solve.test.ts`'s twenty-piece solve costs ~394 ms idle and **4061 ms**
- * with eighteen spinners on eight cores — a healthy solve failing a 2000 ms bar by
- * 2x, with nothing wrong with the code. Both of the obvious repairs are worse than
- * they look:
- *
- * · **Raising the number** turns the bar into decoration. The thing it guards is a
- *   regression that reinstated per-proposal rule-table rebuilding, worth 8.4 SECONDS
- *   for twenty pieces against ~270 ms after the hoist. A bar loose enough never to
- *   fire under load is close enough to 8400 ms to stop separating the two.
- * · **A ratio against another solve** — the shape `scales with the room rather than
- *   exploding` already uses — cannot see that regression at all, because rebuilding
- *   per proposal slows the small solve and the large one by the same factor. The
- *   ratio is the right tool for a complexity claim and the wrong one for a constant
- *   factor. Both bars are worth having; they are not the same assertion.
- *
- * So the bound is scaled by what the machine can do *right now*, measured against a
- * fixed reference workload in the same process. Under contention the reference is
- * slowed by the same scheduler that slows the solve, so the ratio between them holds
- * and the bar keeps meaning "this code is fast" instead of "this machine is idle".
- *
- * Two things keep it from becoming a bound that cannot fail:
- *
- * · The factor is **clamped to `MAX_FACTOR`**. A calibration that goes wrong — a
- *   pathological JIT deopt, a reference loop that got optimised into nothing and
- *   reads as an infinitely fast machine, a future edit — cannot inflate a bar without
- *   limit. It can at worst quadruple it, which is still four times under the number
- *   the regression it guards produced.
- * · The factor is **never below 1**. A machine faster than the one this was written
- *   on does not get to tighten a bar it was not calibrated for; it just runs
- *   comfortably inside it.
- */
+// Machine-speed calibration for the two wall-clock bars in this suite.
+//
+// The problem this solves, measured 2026-09-03 at `a23b50b` rather than assumed.
+// `tests/layout-solve.test.ts`'s twenty-piece solve costs ~394 ms idle and **4061 ms**
+// with eighteen spinners on eight cores — a healthy solve failing a 2000 ms bar by
+// 2x, with nothing wrong with the code. Both of the obvious repairs are worse than
+// they look:
+//
+// · **Raising the number** turns the bar into decoration. The thing it guards is a
+//   regression that reinstated per-proposal rule-table rebuilding, worth 8.4 SECONDS
+//   for twenty pieces against ~270 ms after the hoist. A bar loose enough never to
+//   fire under load is close enough to 8400 ms to stop separating the two.
+// · **A ratio against another solve** — the shape `scales with the room rather than
+//   exploding` already uses — cannot see that regression at all, because rebuilding
+//   per proposal slows the small solve and the large one by the same factor. The
+//   ratio is the right tool for a complexity claim and the wrong one for a constant
+//   factor. Both bars are worth having; they are not the same assertion.
+//
+// So the bound is scaled by what the machine can do *right now*, measured against a
+// fixed reference workload in the same process. Under contention the reference is
+// slowed by the same scheduler that slows the solve, so the ratio between them holds
+// and the bar keeps meaning "this code is fast" instead of "this machine is idle".
+//
+// Two things keep it from becoming a bound that cannot fail:
+//
+// · The factor is **clamped to `MAX_FACTOR`**. A calibration that goes wrong — a
+//   pathological JIT deopt, a reference loop that got optimised into nothing and
+//   reads as an infinitely fast machine, a future edit — cannot inflate a bar without
+//   limit. It can at worst quadruple it, which is still four times under the number
+//   the regression it guards produced.
+// · The factor is **never below 1**. A machine faster than the one this was written
+//   on does not get to tighten a bar it was not calibrated for; it just runs
+//   comfortably inside it.
 
 /**
  * The reference workload's cost on the machine these bars were calibrated on
