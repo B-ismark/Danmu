@@ -507,6 +507,73 @@ export function findSupportUnder(
   return findSupportDetailed(parts, selfId, x, z, selfDim, selfRot, selfCircle)?.y ?? null;
 }
 
+/** How close a piece's underside has to be to a surface before it is RESTING on it,
+ *  in metres.
+ *
+ *  Beside `MOUNT_PAD` rather than inside a component, because it is the same kind of
+ *  number — a tolerance about contact between two authored solids — and the first
+ *  version of this test carried a bare `0.005` in `Inspector.tsx`, where nothing could
+ *  reach it and nothing recorded why five millimetres.
+ *
+ *  Five is chosen against what actually lands here rather than against a feeling.
+ *  `settleHeights` and `drag-resolve` both put a rider exactly on its support's top, so
+ *  a piece the app placed reads 0. What produces a small non-zero gap is float error
+ *  through `verticalExtent` and a rotation, which is ~1e-9. What produces a large one
+ *  is § 12's defect — a rider settled against the AUTHORED size of a support the user
+ *  has since resized, measured there at 350 mm — and that must read as floating,
+ *  because it is. Anything between the two is a piece somebody dragged and let go of at
+ *  a height they chose, and 5 mm is under the 10 mm grid snap, so it cannot forgive a
+ *  deliberate one-step lift. */
+export const RESTING_TOL = 0.005;
+
+/** Is this piece actually resting on something, and on what?
+ *
+ *  ── Why this is not `findSupportDetailed` ────────────────────────────────────
+ *
+ *  That function takes **x and z only**. It answers *"what is under here"* — the
+ *  question a DROP asks, where the mover is about to be moved to whatever it finds —
+ *  and it never compares the mover's own `y` to the top it returns, which is correct
+ *  for its callers and wrong for this one.
+ *
+ *  Read as "is this resting", it says yes to a lamp hovering a metre above a desk, and
+ *  then NAMES the desk. That is not a near-miss: it is confidently wrong in the one
+ *  case a person would most want reported, and it was shipped in an Inspector banner
+ *  reading *"On Table — Supported by Table"* about a piece plainly in mid-air (§ 37).
+ *  The state it did catch — floating over bare floor — is the half a user is least
+ *  likely to reach by accident.
+ *
+ *  So this one asks both halves: something is under the footprint, AND the piece's own
+ *  underside is within `RESTING_TOL` of that something's top. Returns the floor as a
+ *  `null` id, because "on the floor" and "on nothing" are different answers and a
+ *  caller that cannot tell them apart is the defect this exists to fix.
+ *
+ *  `wallMounted` is not consulted: a wall fixture rests on nothing and this returns
+ *  `null` for one, which is the truthful answer. Whether that is worth SAYING is the
+ *  caller's judgement — `Inspector` reports "Wall-mounted" instead, and does so from
+ *  the flag rather than from the absence of a support here. */
+export function restingOn(
+  parts: SupportCandidate[],
+  selfId: string,
+  pos: [number, number, number],
+  rot: number,
+  dim: [number, number, number],
+  category: Category,
+  shape: Shape,
+  circle?: boolean,
+): { on: 'floor' | 'part'; id: string | null; gap: number } | null {
+  const bottom = verticalExtent(category, shape, dim, pos[1])[0];
+  const under = findSupportDetailed(parts, selfId, pos[0], pos[2], dim, rot, circle);
+  // The nearest thing below, whichever it is. A support lower than the floor cannot
+  // happen (`findSupportDetailed` reads tops of floor-standing pieces, and a floor
+  // anchor's top is `y + h >= 0`), so the comparison is which of the two is CLOSER to
+  // the underside rather than which is higher.
+  if (under && Math.abs(bottom - under.y) <= RESTING_TOL) {
+    return { on: 'part', id: under.id, gap: bottom - under.y };
+  }
+  if (Math.abs(bottom) <= RESTING_TOL) return { on: 'floor', id: null, gap: bottom };
+  return null;
+}
+
 /** Same test as `findSupportUnder`, but also names which part won — the signal
  *  a rigid-parenting relationship is established from (see `lib/rigid-parent.ts`). */
 export function findSupportDetailed(
