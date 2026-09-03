@@ -75,9 +75,11 @@ const solveAll = (
  *  to read that as timidity — a 6x5 m room sounds big enough for a double — so
  *  this file is the evidence that it is not. At U 6x5 the room's usable bays are cut by
  *  the U's notch, and anything wider than a single leaves floor a person cannot reach.
- *  Not "or parks itself across the door": total door cost is 0.00 on all three rungs
- *  here, and the reason that phrase is worth correcting rather than deleting is below,
- *  in the door test.
+ *  Not "or parks itself across the door" — for the rung this app SHIPS, which is the
+ *  single, and whose door cost is 0.00. The Double is a different sentence since § 31
+ *  was decided: it now blocks the door deliberately rather than stand in a wall, and
+ *  scores 181.78. The reason that phrase is worth correcting rather than deleting is
+ *  below, in the door test.
  *
  *  It prints the table on every green run (the `detect-pipeline` precedent), because
  *  the interesting thing is the SHAPE of the trade and not the pass. Two rounds have
@@ -345,8 +347,15 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
   // four commits ago, and neither reading was available to it. Every figure in this
   // file now names the tree it was taken on.
   //
-  // As of this commit door cost is 0.00 on all three rungs, and what separates them is
-  // `navigation`: 80.10 / 109.20 / 0.00.
+  // As of this commit door cost is 0.00 on the Queen and the Single and 181.78 on the
+  // Double — see the note on that row below — and what separates the three is
+  // `navigation`: 962.10 / 21.90 / 533.40, Queen / Double / Single. Read off the same
+  // twelve solves this file's table is, on this tree.
+  //
+  // Worth noticing and NOT explained here: by these numbers the Double strands the
+  // least floor of the three (21.90 against the Single's 533.40), so whatever makes
+  // the ladder come down past it is not Σnavigation over this sweep. `the ladder comes
+  // down for a reason` above owns that question; this note only reports the terms.
   //
   // `door` stays inside `dangerOf` regardless, for the reason its own comment gives:
   // it guards a ladder change that put the shipped bed across a doorway. But a term
