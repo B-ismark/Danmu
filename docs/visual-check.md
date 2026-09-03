@@ -570,10 +570,26 @@ the rail grows a horizontal scrollbar, the wrap is not doing its job.
 
 ### A numbered piece can vanish under the piece drawn after it — the exported floor plan
 
-**Rescued 2026-09-03 from `fix/derive-mounted-and-vertical-extent` before that branch is
-deleted.** It is the one finding on any of the seven stale refs that exists in no commit on
-`main`, and it was found by exporting a sheet rather than by any test — `lib/plan-export.ts`
-draws to a canvas, so nothing in this repo can see its output.
+**Half of this was already fixed on `main` when it was rescued, and the rescue said the
+opposite.** Rescued 2026-09-03 from `fix/derive-mounted-and-vertical-extent` on the grounds
+that it "exists in no commit on `main`" — derived later the same day, that is **false**.
+`0e60478`, *"fix(export): a number badge could be buried by the next piece's footprint"*, is
+on `main`; `lib/plan-export.ts` draws in **two passes** with a comment describing this exact
+defect (*"piece `i + 1`'s fill and outline landed on top of piece `i`'s NUMBER"*); and
+`tests/plan-export-order.test.ts` gates it with three assertions, the first being that every
+footprint is drawn before the first badge.
+
+**Why the rescue got it wrong is the part worth keeping.** Its author searched `main` and
+reported *"no mention of plan export at all"* — about a repo containing `lib/plan-export.ts`
+and `tests/plan-export-order.test.ts`. That is § D's trap arriving from the other side: a
+search that returns nothing is evidence about the search, not about the tree, and "no mention
+anywhere" is the single easiest claim to make and the hardest to notice being wrong. It cost
+a rescue of work that was already home, and it would have cost a re-fix.
+
+**What is actually left**, and it is the second of the two causes that item named: the badge
+could still be placed at a centroid sitting under a **neighbour's badge**. The gate's own
+words are that *"a number can now only be crossed by another number"* — so the draw-order
+half is closed and the collision-between-badges half has never been looked at.
 
 **What was seen.** A production build, a room holding a **Ceiling fan** and a **Sofa**,
 **Export → Floor plan**. The legend is right — `1 Ceiling fan — 1.00 × 1.00 × 0.20 m (W×D×H)`
@@ -582,20 +598,22 @@ and `2 Sofa — 2.20 × 0.95 × 0.88 m`, both numbered, no bare tick anywhere �
 **not** right: the fan's number badge never appeared in the sheet. It is drawn UNDER the
 sofa's footprint.
 
-**The question, and it is a measurement nobody has taken.** Is that a z-order defect in
-`plan-export`'s draw order — every piece's footprint painted, then every badge, versus one
-piece fully painted at a time — or is it the badge being placed at a centroid that happens to
-sit under a neighbour? The two have different fixes and the sheet cannot tell you which,
-because the legend still lists the piece by number while the plan has no number to match it
-to. **That is the failure worth naming: a legend that references a label the drawing does not
-carry**, which is worse than omitting both.
+**The question that framed it, and which half of it survives.** It named two possible
+causes — a z-order defect in the draw order (every footprint painted, then every badge,
+versus one piece fully painted at a time) or a badge placed at a centroid that happens to sit
+under a neighbour. **The first is fixed and gated**; the second is what to look for now. The
+failure worth naming is unchanged and is why this still wants eyes: *a legend that references
+a label the drawing does not carry* is worse than omitting both.
 
 **Where to click.** Any room. Add a large piece — a sofa — then add a small one and drag it
 so its footprint sits **inside** the sofa's. Export the floor plan. Both numbers must appear
-on the drawing, or neither piece may be numbered in the legend.
+on the drawing, or neither piece may be numbered in the legend. **The shot that matters now
+is two badges close enough to touch**, since a number can still be crossed by another number.
 
-**Where it rides.** Nowhere. No commit on `main` changes this or mentions it; the branch it
-came from is being deleted, which is why it is written out here in full rather than cited.
+**Where it rides.** `0e60478` on `main` — `lib/plan-export.ts`'s two-pass split, gated by
+`tests/plan-export-order.test.ts`. **Merged with nobody having looked at the sheet**, which
+is why it is here rather than deleted: the gate proves the draw order, and only a picture
+proves the page.
 
 ## Shell and flow
 
