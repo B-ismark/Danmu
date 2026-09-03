@@ -57,7 +57,7 @@ import {
 } from './scene-spec';
 import { clampDims, roomAxisRange, ROOM_SIDE_EPS, ROOM_SIDE_M } from './dimension-ranges';
 import { anchorFor, heightForNewCeiling } from './physics';
-import { resolveParts } from './transforms';
+import { resolveScene } from './rider-height';
 import { fileSlug } from './exports';
 import { wouldCreateCycle } from './rigid-parent';
 import { LAYOUT_IDS, type LayoutId, type RoomData, type Site, type Transforms } from './storage';
@@ -143,12 +143,19 @@ export type SceneFile = {
 
 /** Collapse a room, its parts and the studio's transform overrides into one file.
  *
- *  The overrides are BAKED, through the same `resolveParts` the renderer uses. The
+ *  The overrides are BAKED, through the same `resolveScene` the renderer uses. The
  *  running app keeps a piece's authored transform and the user's edit to it in two
  *  layers on purpose (see `lib/transforms.ts`), and a file is one of the places that
  *  distinction stops mattering: whoever opens it has made no edits, so the two would
  *  collapse on the next save anyway. Whatever the user is looking at is what gets
- *  written. */
+ *  written.
+ *
+ *  **`resolveScene` and not `resolveParts`, and the difference is a whole bug.** A
+ *  rider's height after its support was resized is held in neither layer, so baking
+ *  the two layers alone wrote a lamp into the file at the height its desk used to be
+ *  — a file that then opens with the lamp in mid-air on a machine that never saw the
+ *  resize, with nothing left to derive the right answer from. `parentIds` rides along
+ *  as `parentId` per part, so the reader gets the relation too. */
 export function buildSceneFile(
   room: RoomData,
   parts: ScenePart[],
@@ -177,7 +184,11 @@ export function buildSceneFile(
       // leaks every key a future record grows.
       ...(room.site ? { site: { bearingDeg: room.site.bearingDeg } } : {}),
     },
-    parts: resolveParts(parts, { positions, rotations, dims }).map((resolved) => {
+    parts: resolveScene(
+      parts,
+      { positions, rotations, dims },
+      { parentIds: parentIds ?? {}, roomHeight: room.height },
+    ).map((resolved) => {
       // fromDetection is dropped on the way out, not just refused on the way in: it
       // points at a bounding box in a photo the file does not carry, so keeping it
       // would be a reference into nothing.

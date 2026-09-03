@@ -5,7 +5,7 @@
 
 import type { Category, Shape } from './scene-spec';
 import type { Footprint } from './footprint';
-import { edgeProjection, nearestEdge, footArea, footFromPart, footIntersectionArea, obbExtentAlong } from './geometry';
+import { edgeProjection, nearestEdge, footArea, footFromPart, footIntersectionArea, obbExtentAlong, type Foot } from './geometry';
 import { WALL_GAP } from './layout-rules';
 
 export type Anchor = 'floor' | 'ceiling' | 'wall-high' | 'wall-mid' | 'wall-low' | 'wall-floor';
@@ -483,6 +483,30 @@ export type SupportCandidate = {
   circle?: boolean;
 };
 
+/** Does enough of `moverFoot` sit over `surface`'s footprint for the surface to hold
+ *  it up?
+ *
+ *  **The bar itself is `MIN_SUPPORT_SHARE` and the arithmetic around it was written
+ *  out three times** — here, in `findSupportDetailed` below, and in
+ *  `lib/rigid-parent.ts`'s `isPhysicallySupported` — with a fourth about to be added
+ *  by `lib/rider-height.ts`. Three spellings of one rule is the shape CLAUDE.md names:
+ *  the constant was shared and the *comparison* was not, so a reader checking one of
+ *  them learns nothing about the other two. `>=`, once: a share exactly at the bar is
+ *  supported, which is what all three said and is easy to invert by accident when the
+ *  original is written as an early `continue` on `<`.
+ *
+ *  Takes a prebuilt foot and its area rather than the mover part, because
+ *  `findSupportDetailed` builds both once and asks this per candidate. */
+export function coversEnoughToSupport(
+  moverFoot: Foot,
+  moverArea: number,
+  surface: { pos: [number, number, number]; rot?: number; dimMM: [number, number, number]; circle?: boolean },
+): boolean {
+  if (!(moverArea > 0)) return false;
+  const shared = footIntersectionArea(moverFoot, footFromPart(surface.pos, surface.rot ?? 0, surface.dimMM, surface.circle));
+  return shared / moverArea >= MIN_SUPPORT_SHARE;
+}
+
 /** Highest world-Y where a part at (x,z) with given XZ footprint would land on
  *  another part's top surface. Wall-mounted + rugs are ignored as supports.
  *  Returns null if nothing holds it up.
@@ -625,8 +649,7 @@ export function findSupportDetailed(
     if (top > maxTop) continue;
     // Nothing lower than the best candidate can win — skip the area maths.
     if (best !== null && top <= best.y) continue;
-    const shared = footIntersectionArea(mover, footFromPart(o.pos, o.rot ?? 0, o.dimMM, o.circle));
-    if (shared / moverArea < MIN_SUPPORT_SHARE) continue;
+    if (!coversEnoughToSupport(mover, moverArea, o)) continue;
     best = { id: o.id, y: top };
   }
   return best;

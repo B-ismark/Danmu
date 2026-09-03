@@ -40,8 +40,8 @@
 // belongs to the physics and clearance layers.
 
 import type { ScenePart } from './scene-spec';
-import { footArea, footFromPart, footIntersectionArea, localToWorld, worldToLocal } from './geometry';
-import { findSupportDetailed, isFloorStanding, MIN_SUPPORT_SHARE, SUPPORT_Y_EPS, verticalExtent } from './physics';
+import { footArea, footFromPart, localToWorld, worldToLocal } from './geometry';
+import { coversEnoughToSupport, findSupportDetailed, isFloorStanding, SUPPORT_Y_EPS, verticalExtent } from './physics';
 
 export type DescendantOffset = {
   id: string;
@@ -62,11 +62,7 @@ export type DescendantOffset = {
 
 function isPhysicallySupported(child: ScenePart, parent: ScenePart): boolean {
   const childFoot = footFromPart(child.pos, child.rot, child.dimMM, child.circle);
-  const childArea = footArea(childFoot);
-  if (!(childArea > 0)) return false;
-  const parentFoot = footFromPart(parent.pos, parent.rot, parent.dimMM, parent.circle);
-  const shared = footIntersectionArea(childFoot, parentFoot);
-  if (shared / childArea < MIN_SUPPORT_SHARE) return false;
+  if (!coversEnoughToSupport(childFoot, footArea(childFoot), parent)) return false;
   // `verticalExtent`, because `pos[1]` is a bottom for a floor anchor and the mesh
   // CENTRE for every other one. This function has no wall-mounted skip in front of it
   // at all — unlike the two in `lib/clearance.ts` and `lib/fit-check.ts` — so it is

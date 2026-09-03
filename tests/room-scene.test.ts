@@ -183,3 +183,50 @@ describe('the transform fallback is written once', () => {
     ).toEqual([]);
   });
 });
+
+// ─── …and the merge is not the whole answer ─────────────────────────────────
+//
+// `resolveParts` answers *"what did the user override"*. A piece standing on a piece
+// whose height changed has a stale Y in BOTH layers, because nothing wrote one, so a
+// consumer that renders or exports the room wants `resolveScene` (§ 12). The two are
+// one character apart and the wrong one is silently wrong — the lamp is simply at the
+// height the desk used to be, and from directly above in the plan it looks correct.
+//
+// So the callers are pinned by name, the way the ceiling clampers are in
+// `tests/scene-build.test.ts`: a new one arrives as a decision rather than as a diff
+// nobody reads.
+
+/** Where `resolveParts` may be called, and why each is not `resolveScene`. */
+const PLAIN_MERGE_IS_RIGHT = new Set([
+  'lib/transforms.ts', // defines it
+  'lib/room-scene.ts', // re-exports it
+  'lib/rider-height.ts', // `resolveScene` IS this call plus the correction
+  // A saved layout's thumbnail is drawn from directly above, where a footprint is all
+  // there is and no Y reaches the picture. The row also has no room height of its own
+  // to clamp against — a saved layout stores the two transform layers, not a ceiling.
+  'components/studio/RoomTools.tsx',
+]);
+
+describe('resolveScene is what a consumer of the whole room calls', () => {
+  it('lists every caller of the plain merge, and each one is allowed on purpose', () => {
+    const callers: string[] = [];
+    for (const file of sources()) {
+      const rel = relative(process.cwd(), file).replace(/\\/g, '/');
+      const src = readFileSync(file, 'utf8');
+      for (const line of src.split('\n')) {
+        const code = line.trim();
+        if (code.startsWith('//') || code.startsWith('*')) continue;
+        if (/\bresolveParts\s*\(/.test(line) && !callers.includes(rel)) callers.push(rel);
+      }
+    }
+    // The sweep must find something, or an empty list would satisfy the check below.
+    expect(callers.length).toBeGreaterThan(2);
+    expect(
+      callers.filter((c) => !PLAIN_MERGE_IS_RIGHT.has(c)),
+      `these call resolveParts where they probably want resolveScene — a rider whose ` +
+        `support was resized has a stale Y in both layers. If the plain merge really is ` +
+        `right here (a top-down drawing, or a caller with no room height), add the file ` +
+        `to PLAIN_MERGE_IS_RIGHT with the reason.`,
+    ).toEqual([]);
+  });
+});

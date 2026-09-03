@@ -39,7 +39,7 @@ import { gestureOwnedByOther, useStudio } from '@/lib/store';
 import { clearDragClick, suppressClickAfterDrag } from '@/lib/drag-click';
 import { claimPressForGizmo, clearGizmoClick, holdPress, releasePress } from '@/lib/gizmo-press';
 import { useScene } from '@/lib/scene-store';
-import { currentRoomScene } from '@/lib/room-scene';
+import { currentRoomScene, useSettledY } from '@/lib/room-scene';
 import { renderBaseDim, resolvePart } from '@/lib/transforms';
 import { useDragLive } from '@/lib/drag-live';
 import { refusalAfterGesture, REFUSAL_HOLD_MS } from '@/lib/refusal';
@@ -192,6 +192,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   const storedPos = useStudio((s) => s.positions[partId]);
   const storedRot = useStudio((s) => s.rotations[partId]);
   const storedDim = useStudio((s) => s.dims[partId]);
+  const settledY = useSettledY(partId);
 
   const isSelected = useStudio((s) => s.selectedPartId === partId);
   const inSelection = useStudio((s) => s.selection.includes(partId));
@@ -260,7 +261,11 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   useEffect(() => {
     if (!ref.current || !part) return;
     const p = storedPos ?? part.pos;
-    ref.current.position.set(p[0], p[1], p[2]);
+    // `settledY`, when this piece rides something whose height changed: neither
+    // transform layer holds that Y, because nothing wrote one. Resizing a desk moves
+    // its top and nothing else, so without this the lamp on it renders at the height
+    // the desk used to be — and from overhead in the plan it looks right (§ 12).
+    ref.current.position.set(p[0], settledY ?? p[1], p[2]);
     ref.current.rotation.y = storedRot ?? part.rot;
     // Parametric parts — whatever `isParametric` says — rebuild
     // their geometry from the effective dim — the mesh must NOT be group-scaled
@@ -275,7 +280,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     }
     lastValidPos.current = [ref.current.position.x, ref.current.position.y, ref.current.position.z];
     invalidate(); // transform written straight to the object3D, not via props
-  }, [storedPos, storedRot, storedDim, part, invalidate]);
+  }, [storedPos, storedRot, storedDim, settledY, part, invalidate]);
 
   /** Snapshot every part at its effective (user-overridden) transform so
    *  collision + support see the world as it currently looks.

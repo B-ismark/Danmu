@@ -555,16 +555,22 @@ describe('one ceiling clearance: the duplication itself, not just its drift', ()
     // DELETED rather than moved — unless the deleted one happened to be the single file
     // it named.
     //
-    // Three is correct and is not a smell: they answer three different questions — a
-    // piece under a live pointer, a whole room after a solve, and a ceiling the user has
-    // just changed. What matters is that none of them declares its own pad, which is the
-    // assertion above. This one pins WHO, so a fourth reader arrives as a decision
-    // rather than as a diff nobody reads.
+    // Four is correct and is not a smell: they answer four different questions — a
+    // piece under a live pointer, a whole room after a solve, a ceiling the user has
+    // just changed, and a piece riding a support that grew (§ 12). What matters is that
+    // none of them declares its own pad, which is the assertion above. This one pins
+    // WHO, so a fifth reader arrives as a decision rather than as a diff nobody reads.
+    //
+    // `rider-height.ts` is the newest, and it is the one whose ABSENCE from this list
+    // would have been the defect: the reverted § 12 attempt derived a rider's new
+    // height and did not clamp it, so the two paths disagreed by up to 1.22 m —
+    // silently, unreported, and with the docblock claiming they could not disagree.
     const clampers = modules.filter((m) => /-\s*MOUNT_PAD/.test(m.src)).map((m) => m.file).sort();
     expect(clampers, 'the sweep must actually find the clampers').toEqual([
       'drag-resolve.ts',
       'layout-settle.ts',
       'physics.ts',
+      'rider-height.ts',
     ]);
   });
 });
