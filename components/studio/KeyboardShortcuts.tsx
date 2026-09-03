@@ -28,7 +28,8 @@ import { riderRelation } from '@/lib/rider-height';
 import { turnInPlace, refusalCause } from '@/lib/drag-resolve';
 import { planConvoy, travellingWorld } from '@/lib/drag-convoy';
 import { cascadeTransform } from '@/lib/rigid-parent';
-import { turnNudge } from '@/lib/refusal';
+import { turnNudge, turnAngleHeld, turnDrop, REFUSAL_HOLD_MS } from '@/lib/refusal';
+import { useDragLive } from '@/lib/drag-live';
 import { useHistory, applySnapshot, startHistoryRecording } from '@/lib/history';
 import { collidesAt, type ScenePart } from '@/lib/scene-spec';
 import { clampIntoFootprint } from '@/lib/footprint';
@@ -379,6 +380,28 @@ export function duplicateSelection(explicit?: string[]) {
  *  pivot about one of its members, which is the rule `resolveConvoy` states for
  *  'turn' — so the scene is re-read per piece and the second piece sees where the
  *  first one ended up. */
+/** Live handle for the outline timer, so a second turn replaces the first's countdown
+ *  rather than letting the earlier one clear the later one's outline early. */
+let refusalPaintTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Outline these pieces red for `REFUSAL_HOLD_MS`, on whichever tab is mounted.
+ *
+ *  A gesture with no pointer under it has nothing the user could have watched, so the
+ *  refusal has to be drawn afterwards or it is not shown at all. `REFUSAL_HOLD_MS` is
+ *  `lib/refusal.ts`'s number, not a fresh one — the two drag paths already hold their
+ *  outlines for exactly that long and a turn that flashed for a different duration would
+ *  read as a different kind of event. */
+function paintRefusal(ids: string[]) {
+  if (refusalPaintTimer) clearTimeout(refusalPaintTimer);
+  refusalPaintTimer = null;
+  useDragLive.getState().setRefusedIds(ids);
+  if (ids.length === 0) return;
+  refusalPaintTimer = setTimeout(() => {
+    refusalPaintTimer = null;
+    useDragLive.getState().setRefusedIds([]);
+  }, REFUSAL_HOLD_MS);
+}
+
 export function spinSelection(quarterTurns = 1) {
   const ids = selectedIds();
   if (ids.length === 0) return;
@@ -386,13 +409,46 @@ export function spinSelection(quarterTurns = 1) {
   const room = useScene.getState().room;
   const dimUnit = useSettings.getState().dimUnit;
 
-  /** Pieces the room would not take at the new angle, in selection order. */
-  const refused: Array<{ name: string; why: string }> = [];
+  /** Pieces the room would not take at the new angle, in selection order. The `id` is
+   *  for the DRAWING and the `name` for the sentence — the same split `refusal.ts`
+   *  makes between `blockedIds` and `blockedBy`, and for the same reason. */
+  const refused: Array<{ id: string; name: string; why: string }> = [];
   /** Pieces the containment clamp had to SLIDE to keep the turn inside the room.
    *  Not a refusal — the turn is taken — but not silence either. */
   const nudged: Array<{ name: string; by: number }> = [];
+  /** Pieces whose final angle was decided by their WALL rather than by the request. */
+  const held: string[] = [];
+  /** Pieces the turn moved vertically, positive down. A piece that turned off the
+   *  table it was standing on falls, and nothing else in the sentence can say so. */
+  const dropped: Array<{ name: string; by: number }> = [];
+  /** How many actually took the angle they were asked for. */
+  let took = 0;
 
-  for (const id of ids) {
+  // A piece that RIDES another piece in the same selection is carried by that piece's
+  // cascade, and must not also be turned on its own account — that is two turns, not
+  // one. Select a nightstand AND the lamp standing on it (Ctrl+A reaches it in one
+  // press): iteration one turns the nightstand and `cascadeTransform` writes the lamp
+  // to +90°; iteration two re-reads the scene, sees the override the cascade just
+  // wrote, and takes the lamp to +180° — every rigid child in the set ends a quarter
+  // turn out of step with the thing it stands on.
+  //
+  // `lib/drag-convoy.ts` already owns this rule for a drag (`if (!wanted.has(p.id) ||
+  // travelling.has(p.id)) continue`) and a turn is the same rule for the same reason.
+  // Filtered UP FRONT rather than as the loop goes, so the answer does not depend on
+  // whether the rider or its support came first in the selection.
+  const startParents = useStudio.getState().parentIds;
+  const chosen = new Set(ids);
+  const carriedByAnother = (id: string): boolean => {
+    const seen = new Set<string>([id]);
+    for (let p = startParents[id]; p && !seen.has(p); p = startParents[p]) {
+      if (chosen.has(p)) return true;
+      seen.add(p);
+    }
+    return false;
+  };
+  const turning = ids.filter((id) => !carriedByAnother(id));
+
+  for (const id of turning) {
     const scene = currentRoomScene();
     const part = scene.find((p) => p.id === id);
     if (!part) continue;
@@ -408,13 +464,16 @@ export function spinSelection(quarterTurns = 1) {
       footprint: room.footprint,
       roomHeight: room.height,
     });
+    // From where the piece effectively faces — off the AUTHORED `rot` alone, a
+    // second quarter turn would start over from the authored heading and undo the
+    // first. Named because the REPORT needs it too: what was asked for and what came
+    // back are different numbers for every wall rider, and only one of them is in
+    // `turned`.
+    const wanted = part.rot + (quarterTurns * Math.PI) / 2;
     const turned = turnInPlace({
       part,
       at: part.pos,
-      // From where the piece effectively faces — off the AUTHORED `rot` alone, a
-      // second quarter turn would start over from the authored heading and undo
-      // the first.
-      rot: part.rot + (quarterTurns * Math.PI) / 2,
+      rot: wanted,
       dim: part.dimMM,
       // Delta zero — a turn moves nobody sideways — so this is the world with the
       // piece's own rigid children taken out, which is what the pipeline asks for:
@@ -431,27 +490,75 @@ export function spinSelection(quarterTurns = 1) {
     // ended on: cascading from `part.pos` while the clamp had moved the piece
     // elsewhere would leave the lamp orbiting where the nightstand used to be.
     if (convoy.own.length > 0) setTransformsFor(cascadeTransform(id, pos, turned.rot, convoy.own));
-    if (!turned.valid) refused.push({ name: part.name, why: refusalCause(turned) });
+
+    // Four outcomes, and a piece can be more than one of them. They are collected
+    // separately rather than as one "it went wrong" flag because they have different
+    // causes and the user can only act on the one that happened.
+    if (turnAngleHeld(wanted, turned.rot)) held.push(part.name);
+    else took++;
+    if (!turned.valid) refused.push({ id, name: part.name, why: refusalCause(turned) });
     else {
-      // Only when it FITS. A piece that is refused already has a sentence, and two
-      // sentences about one piece is worse than one.
+      // Only when it FITS. A refused piece already has a sentence about the angle, and
+      // two sentences about one piece is worse than one.
       const by = turnNudge(part.pos, pos);
       if (by > 0) nudged.push({ name: part.name, by });
     }
+    // The height is reported whether or not the frame was legal, and that is the one
+    // place this deliberately differs from the nudge above. A refused turn that also
+    // dropped the piece 750 mm onto the floor was announced as "does not fit at that
+    // angle" — a sentence about the angle, while the piece had been written to the
+    // floor and persisted. The refusal does not cover it, so it needs its own words.
+    const fell = turnDrop(part.pos, pos);
+    if (fell !== 0) dropped.push({ name: part.name, by: fell });
   }
 
-  const said = ids.length === 1 ? 'Turned a quarter turn.' : `${ids.length} pieces turned a quarter turn.`;
+  // Derived from the argument rather than typed beside it: `spinSelection(2)` used to
+  // announce "a quarter turn" for a half one.
+  const q = (((quarterTurns % 4) + 4) % 4);
+  const turnLabel = q === 0 ? 'a full turn' : q === 2 ? 'a half turn' : q === 3 ? 'three quarters of a turn' : 'a quarter turn';
+  // `took`, not `ids.length`. Every wall rider in the catalogue comes back at the angle
+  // it started at — `turnInPlace` passes `wallEdge: null`, so the wall re-aims it — and
+  // saying "Turned a quarter turn." over a piece that did not move sends the user
+  // looking for what they broke. Measured: 11 of 11 `ridesWall` items.
+  const said =
+    took === 0 ? 'Nothing turned.'
+    : took === 1 ? `Turned ${turnLabel}.`
+    : `${took} pieces turned ${turnLabel}.`;
   // Named rather than counted: "one of them does not fit" sends the user hunting.
   // The wording matches `PlanView`'s `turnByKey`, which is the same sentence about
   // the same outcome on the other surface.
   const parts: string[] = [said];
+  if (held.length > 0) {
+    parts.push(
+      held.length === 1
+        ? `${held[0]} is held square to its wall.`
+        : `${held.length} pieces are held square to their walls.`,
+    );
+  }
   if (refused.length > 0) {
     parts.push(`${refused[0].name} does not fit at that angle — ${refused[0].why}`);
-    if (refused.length > 1) parts.push(`${refused.length - 1} more do not fit either.`);
+    // "1 more do not fit" is what an unconditional plural verb reads like for a set
+    // of exactly two, which is the commonest multi-select there is.
+    const rest = refused.length - 1;
+    if (rest > 0) parts.push(`${rest} more ${rest === 1 ? 'does' : 'do'} not fit either.`);
   }
   if (nudged.length > 0) {
     parts.push(`${nudged[0].name} moved ${formatLength(nudged[0].by * 1000, dimUnit)} to stay in the room.`);
     if (nudged.length > 1) parts.push(`${nudged.length - 1} more moved too.`);
+  }
+  // …and DRAWN, not only spoken. `refusalAfterGesture` decides what counts as one so
+  // this cannot drift from the two drag paths that already paint; the ids ride the one
+  // channel both tabs read. Cleared on a timer rather than on the next gesture, because
+  // "the next gesture" may never come and a permanently red piece stops meaning refused.
+  paintRefusal(refused.map((r) => r.id));
+  if (dropped.length > 0) {
+    const d = dropped[0];
+    parts.push(
+      d.by > 0
+        ? `${d.name} dropped ${formatLength(d.by * 1000, dimUnit)} — it is no longer standing on anything.`
+        : `${d.name} rose ${formatLength(-d.by * 1000, dimUnit)} onto what is under it.`,
+    );
+    if (dropped.length > 1) parts.push(`${dropped.length - 1} more changed height.`);
   }
   announce(parts.join(' '));
 }

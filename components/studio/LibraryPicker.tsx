@@ -230,7 +230,7 @@ export function LibraryPicker({
                   className="ds-btn"
                   title={
                     (draggable
-                      ? `${added.label} — drag into the room, or click to add it in the centre · ${added.dimMM[0]} × ${added.dimMM[1]} × ${added.dimMM[2]} mm`
+                      ? `${added.label} — drag into the room, or click to add it in the first clear spot · ${added.dimMM[0]} × ${added.dimMM[1]} × ${added.dimMM[2]} mm`
                       : `${added.dimMM[0]} × ${added.dimMM[1]} × ${added.dimMM[2]} mm`) + (refused ? ` · ${refused}` : '')
                   }
                   // A refusal that only a `title` carries is a refusal for mouse

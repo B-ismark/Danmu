@@ -22,6 +22,7 @@ import {
   type Category,
   type ScenePart,
   type Shape,
+  isRoundPart,
 } from '@/lib/scene-spec';
 
 const ROOM = (w = 6, d = 5) => ({
@@ -30,6 +31,11 @@ const ROOM = (w = 6, d = 5) => ({
 
 const BED: [Category, Shape, [number, number, number]] = ['bed', 'bed-double', [1600, 2000, 500]];
 const CHAIR: [Category, Shape, [number, number, number]] = ['chair', 'chair-dining', [450, 500, 900]];
+/** Round, and NOT tabletop-prone — so it exercises the circle gate without also
+ *  exercising the stacking one, which is a different test below. */
+const STOOL: [Category, Shape, [number, number, number]] = ['chair', 'stool', [350, 350, 450]];
+/** Round AND tabletop-prone: the family that built the tower. */
+const LAMP_FLOOR: [Category, Shape, [number, number, number]] = ['lamp', 'lamp-floor', [350, 350, 1500]];
 
 /** Add `n` of the same thing the way `CatalogPanel.spawn` does — one at a time, each
  *  seeing the ones before it, which is the whole reason the loop is sequential. */
@@ -44,7 +50,7 @@ function addMany(
     const { pos, rot, wallMounted } = placeNewPart(cat, shape, dim, room, parts, aim);
     parts.push({
       id: `${cat}-${i}`, name: `${cat} ${i}`, category: cat, shape,
-      dimMM: dim, pos, rot, locked: false, wallMounted,
+      dimMM: dim, pos, rot, locked: false, wallMounted, circle: isRoundPart(shape) || undefined,
     } as ScenePart);
   }
   return parts;
@@ -129,6 +135,133 @@ describe('nothing already in the room moves to make space', () => {
     const chair = { ...sofa, id: 'chair-1', shape: CHAIR[1], category: CHAIR[0], dimMM: CHAIR[2], pos: placed.pos, rot: placed.rot } as ScenePart;
     expect(obbOverlap(foot(chair), foot(sofa))).toBe(false);
     expect(sofa.pos).toEqual([0, 0, 0]);
+  });
+});
+
+describe('a room that is not centred on the origin', () => {
+  /** The same 6 x 5 rectangle, translated. Every `footprintForLayout` room is centred on
+   *  the origin by construction, which is why no fixture in this file could see the
+   *  defect below — but `footprintBounds`' own docblock says a footprint "is no longer
+   *  guaranteed centred on the origin (walls can be dragged independently)". */
+  const OFFSET = (dx: number, dz: number) => ({
+    width: 6, depth: 5, height: 2.5,
+    footprint: footprintForLayout('rect', 6, 5).map(([x, z]) => [x + dx, z + dz] as [number, number]),
+  });
+
+  it('fans out around the ROOM, not around the world origin', () => {
+    // Measured on the original: with the room at x ∈ [4, 10], z ∈ [4.5, 9.5] every one
+    // of the 126 candidates fell outside it, `intoRoom` clamped each of them back to the
+    // same wall inset, and four dining chairs landed on one point — the § H.3 defect
+    // verbatim, inside the function written to close it.
+    const chairs = addMany(4, CHAIR, OFFSET(7, 7));
+    const spots = new Set(chairs.map((c) => `${c.pos[0].toFixed(3)},${c.pos[2].toFixed(3)}`));
+    expect(spots.size, `four chairs landed on ${spots.size} spot(s)`).toBe(4);
+    for (let i = 0; i < chairs.length; i++) {
+      for (let j = i + 1; j < chairs.length; j++) {
+        expect(obbOverlap(foot(chairs[i]), foot(chairs[j]))).toBe(false);
+      }
+    }
+  });
+
+  it('keeps them inside that room, not inside where the room would have been', () => {
+    const room = OFFSET(7, 7);
+    for (const c of addMany(4, CHAIR, room)) {
+      expect(footInsidePoly(foot(c), room.footprint), `${c.id} is not in the room`).toBe(true);
+    }
+  });
+});
+
+describe('a footprint with a notch — the gate the rectangles could not exercise', () => {
+  const L = { width: 6, depth: 5, height: 2.5, footprint: footprintForLayout('l', 6, 5) };
+
+  it('never puts a piece in the part of the bounding box the room cuts away', () => {
+    // `footInsidePoly` is the reason this function does not simply trust `intoRoom`,
+    // whose inset is a BOUNDING BOX inset and cannot see an L's notch. Every other
+    // fixture in this file is a rectangle, where the two answers are identical and the
+    // gate could be deleted with the suite still green — the `wallOutwardNormal` scar
+    // exactly: real assertions, a fixture unable to express the defect.
+    const beds = addMany(3, BED, L);
+    for (const bed of beds) {
+      expect(footInsidePoly(foot(bed), L.footprint), `${bed.id} is in the notch`).toBe(true);
+    }
+  });
+
+  it('seats a ROUND piece by its circle, not by the box it is drawn inside', () => {
+    // § 32: roundness is a property of the shape and the add path had it nowhere. The
+    // gate here is the same rule one function over — a square foot on a round piece is
+    // rejected where the circle fits, so the notch turns away a piece that every other
+    // gate in the app seats, and enough such rejections run the search out of rings.
+    const stools = addMany(4, STOOL, L);
+    const spots = new Set(stools.map((p) => `${p.pos[0].toFixed(3)},${p.pos[2].toFixed(3)}`));
+    expect(spots.size).toBe(4);
+    for (const p of stools) {
+      // `circle` really is set on the placed part — if it were not, this assertion
+      // would be measuring a box and agreeing with the defect.
+      expect(p.circle, 'the fixture is not testing a circle at all').toBe(true);
+      expect(footInsidePoly(foot(p), L.footprint), `${p.id} is in the notch`).toBe(true);
+    }
+  });
+});
+
+describe('repeated clicks do not build a tower', () => {
+  // Found by instrumenting the search rather than by reading it, and it is the § H.3
+  // complaint in its worst form. `collidesAt` permits stacking ON PURPOSE — a lamp
+  // belongs on a desk — so two pieces at one x/z with non-overlapping vertical extents
+  // read as clear. For a tabletop-prone family that is a ladder: `placeNewPart` rests
+  // each new piece on the one before it, `clear(undefined)` says yes every time, and an
+  // aim is never asked for. Four clicks of one Library row measured, before the gate:
+  //
+  //    potted plant   y = 0.00, 0.90, 1.80, 2.70   (ceiling 2.50)
+  //    floor lamp     y = 0.00, 1.50, 3.00, 4.50   (ceiling 2.50)
+  //
+  // A 1.5 m floor lamp based at 4.50 m in a 2.5 m room is § 31's "nothing physically
+  // impossible should be encouraged", so that is the gate — not a rule against stacking,
+  // which would put a table lamp on the floor beside the desk it should be standing on.
+
+  it('never bases a piece where its top would pass the ceiling', () => {
+    const room = ROOM();
+    for (const kit of [LAMP_FLOOR, STOOL, BED]) {
+      for (const p of addMany(4, kit, room)) {
+        const top = p.pos[1] + p.dimMM[2] / 1000;
+        expect(top, `${kit[1]} ${p.id} tops out at ${top.toFixed(2)} m`).toBeLessThanOrEqual(room.height + 1e-6);
+      }
+    }
+  });
+
+  it('spreads the ones that were towering across the floor instead', () => {
+    // The other half. A gate that merely REFUSED the fourth lamp would satisfy the
+    // assertion above while leaving three of them in a stack.
+    const lamps = addMany(4, LAMP_FLOOR);
+    const onFloor = lamps.filter((l) => l.pos[1] === 0);
+    expect(onFloor, 'the lamps are still standing on each other').toHaveLength(4);
+    const spots = new Set(lamps.map((l) => `${l.pos[0].toFixed(3)},${l.pos[2].toFixed(3)}`));
+    expect(spots.size).toBe(4);
+  });
+});
+
+describe('the ceiling family, which this search cannot help', () => {
+  const FAN: [Category, Shape, [number, number, number]] = ['fan', 'fan', [1000, 1000, 300]];
+
+  it('asks for no aim, because ceilingSpot would discard one', () => {
+    // Not an oversight and not a fix: `placeNewPart` sends a fan through `ceilingSpot`,
+    // which returns the bounds midpoint and reads the aim ONLY when that point is
+    // outside the footprint. In a rectangle every candidate resolves to the same place,
+    // so running the ring search is 127 probes to return what ring zero already said.
+    // An earlier docblock claimed the fan-out covered this family; it never could.
+    const room = ROOM();
+    const fan: ScenePart = {
+      id: 'fan-1', name: 'Fan', category: 'fan', shape: 'fan', dimMM: [1000, 1000, 300],
+      pos: [0, 2.2, 0], rot: 0, locked: false, wallMounted: true,
+    } as ScenePart;
+    expect(openSpotForNewPart(...FAN, room, [fan])).toBeUndefined();
+  });
+
+  it('and the aim really is discarded, which is why', () => {
+    // The evidence for the claim above, in this file rather than in a comment. If
+    // `ceilingSpot` ever starts honouring an aim, this goes red and the skip should go.
+    const room = ROOM();
+    expect(placeNewPart(...FAN, room, [], [2.5, 1.7]).pos)
+      .toEqual(placeNewPart(...FAN, room, [], undefined).pos);
   });
 });
 

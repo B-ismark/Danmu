@@ -218,7 +218,12 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
    *  boolean, so React re-renders this part only when its own answer flips. That is
    *  what keeps the channel's promise — per-frame updates re-render the few light
    *  consumers, never the whole part tree. */
-  const blockedHere = useDragLive((s) => !!s.live?.blockedIds?.includes(partId));
+  // `refusedIds` is the same answer for a gesture with no drag frame — a turn from the
+  // context menu or an accelerator. Unioned here rather than read as a second boolean so
+  // the selector still returns a primitive and the per-part re-render promise holds.
+  const blockedHere = useDragLive(
+    (s) => !!s.live?.blockedIds?.includes(partId) || s.refusedIds.includes(partId),
+  );
 
   // Red tint while the live drag spot is invalid. Only flips at boundary
   // crossings, so it never causes per-frame React churn.

@@ -173,8 +173,8 @@ function spawnMany(items: LibraryItem[]) {
 
 /** Floating, non-blocking model catalog docked on the RIGHT edge of the canvas.
  *  Items can be DRAGGED onto the 3D room (Room's onDrop raycasts the drop point)
- *  or CLICKED to drop at room centre. Deliberately a narrow strip so the rest of
- *  the canvas stays a valid drop target.
+ *  or CLICKED to drop at the first clear spot (§ H.3 — `openSpotForNewPart`).
+ *  Deliberately a narrow strip so the rest of the canvas stays a valid drop target.
  *
  *  Right, not left, because both of its triggers are now on the right: the rail's
  *  `AddPiecesButton` moved to the right rail's footer, and pressing a control on
@@ -279,8 +279,8 @@ export function CatalogPanel({
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: '0 12px 12px' }}>
         <div style={{ fontSize: 11, color: 'var(--ink-3)', margin: '0 0 8px', lineHeight: 1.4 }}>
           {canDrag
-            ? 'Drag a piece in, click to drop it in the centre, or Shift-click to mark several.'
-            : 'Click a piece to drop it into the middle of the room. Shift-click to mark several.'}
+            ? 'Drag a piece in, click to drop it in the first clear spot, or Shift-click to mark several.'
+            : 'Click a piece to drop it in the first clear spot. Shift-click to mark several.'}
         </div>
         <LibraryPicker onPick={addItem} onPickMany={spawnMany} columns={1} draggable={canDrag} maxHeight={null} />
       </div>

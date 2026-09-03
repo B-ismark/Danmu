@@ -2681,7 +2681,9 @@ export function normalizeStoredParts(parts: ScenePart[]): ScenePart[] {
   });
 }
 
-/** Compute a sane spawn transform for a NEW part added at the room centre.
+/** Compute a sane spawn transform for a NEW part added at `at` — or, with no `at`,
+ *  at the room centre. A Library CLICK has no aim, so `openSpotForNewPart` supplies
+ *  one rather than letting every click land on the same spot (§ H.3).
  *  Mirrors the gravity rules used by the detection builder so added items never
  *  spawn buried in the floor (wall-mounted) or floating in mid-air.
  *    • wall/ceiling-mounted → canonical mounting height (groundY)
@@ -2896,9 +2898,18 @@ export function placeNewPart(
 
 /** Clear air left between a fanned-out piece and whatever it stepped around. */
 const SPAWN_GAP = 0.1;
-/** How many rings the search walks before giving up. Six rings of a bed-sized step
- *  reaches roughly 6 m from the middle, which is past the far wall of every room the
- *  picker offers. */
+/** How many rings the search walks before giving up.
+ *
+ *  **The reach is a function of the PIECE, not a fixed distance**, because `step` below
+ *  is the piece's own diagonal. So this cannot be described as "n metres" — an earlier
+ *  version of this comment said six rings reach "roughly 6 m, past the far wall of every
+ *  room the picker offers", which was worked out for a bed and is wrong by a factor of
+ *  six for a table lamp in the direction that matters (short, not long).
+ *
+ *  The asymmetry is the right way round: a big piece has to get clear of what it stepped
+ *  around, a small one wants to stay near where the list was clicked. What bounds the
+ *  search in practice is `clear()` — every candidate outside the footprint is rejected —
+ *  so the ring count only decides when to give up, not how far the piece may go. */
 const SPAWN_RINGS = 6;
 
 /**
@@ -2921,11 +2932,23 @@ const SPAWN_RINGS = 6;
  * **Gated with `footInsidePoly`, not `outsideShare`.** The latter samples, and its
  * samples sit 10% in from the edges, so it forgives a piece 20 mm through the plaster.
  *
- * **The ceiling family is deliberately barely affected**, and that is worth saying
- * rather than leaving as a surprise: `ceilingSpot` returns the middle of the room
- * whatever the aim, so a candidate only moves a fan or a pendant once the middle is
- * occupied — which is exactly when it should. A fan belongs in the middle of a ceiling
- * far more often than it belongs wherever a list happened to be clicked.
+ * **The ceiling family cannot be fanned out from here, and an earlier version of this
+ * comment claimed the opposite.** It said a candidate "only moves a fan or a pendant
+ * once the middle is occupied — which is exactly when it should", which reads as the
+ * feature working in that family. It does not work there at all: `ceilingSpot` returns
+ * the bounds midpoint whenever that point is inside the footprint and reads `ax`/`az`
+ * ONLY in the branch where it is not, so in any rectangular room every one of the 127
+ * candidates resolves to the identical point. A second ceiling fan is therefore still
+ * placed exactly inside the first — the original § H.3 complaint, in the one family the
+ * comment said was covered. The search is skipped for them rather than run 127 times to
+ * return what it already knew.
+ *
+ * The residue is real and is NOT fixed here, because fixing it means reversing a
+ * written decision — "not under the pointer; a fan belongs in the middle of a ceiling
+ * far more often than wherever the cursor happened to be" (`ceilingSpot`'s own
+ * docblock). Whether an EXPLICIT aim should override that default is a product
+ * question, filed in `docs/what-is-still-open.md` § H.3 rather than answered inside a
+ * defect fix, which is the mistake that item's own row warns about.
  */
 export function openSpotForNewPart(
   cat: Category,
@@ -2937,16 +2960,47 @@ export function openSpotForNewPart(
   const PROBE = '__spawn-probe__';
   const poly = room.footprint;
 
+  // The ceiling family — centred geometry that rides no wall — is exactly the set
+  // `placeNewPart` sends through `ceilingSpot`, which discards the aim. Running the ring
+  // search for one of these is 127 probes that all resolve to the same point; the
+  // honest answer is the one it would reach anyway, without pretending to search.
+  if (isWallMountedPart(cat, shape) && !ridesWall(cat, shape)) return undefined;
+
+  // Roundness is a property of the SHAPE (`isRoundPart`), and this is a GATE, not a
+  // clamp. `intoRoom` above declines to read it and errs by pulling a round piece a
+  // little further in, which is safe. The same omission HERE errs the other way: a
+  // square foot on a round piece is rejected where the circle would have fitted, so an
+  // L's notch turns away a plant every other gate in the app seats — `lib/footprint.ts`
+  // has the measured case, a 400 mm pot whose box corner sits 135 mm into the notch.
+  // Rejecting enough legal spots is how the search runs out of rings and drops the
+  // piece back on the heap it exists to avoid. That was § 32 and it stays closed.
+  const round = isRoundPart(shape) || undefined;
+
   /** Would a piece added with this aim stand clear, and inside the room? */
   function clear(aim?: [number, number]): boolean {
     const p = placeNewPart(cat, shape, dimMM, room, existing, aim);
-    // No `circle` — this function is not told whether the piece is round, exactly as
-    // `intoRoom` above is not. A box's extent along any normal is at least a circle's,
-    // so the answer errs toward pulling a round piece a little further in.
-    if (poly && !footInsidePoly(footFromPart(p.pos, p.rot, dimMM, undefined), poly as Poly)) return false;
+    if (poly && !footInsidePoly(footFromPart(p.pos, p.rot, dimMM, round), poly as Poly)) return false;
+    // **Inside the room is a THREE-dimensional question, and `collidesAt` cannot ask
+    // it.** That function permits stacking on purpose — a lamp belongs on a desk — so
+    // two pieces at one x/z with non-overlapping vertical extents read as clear. For a
+    // tabletop-prone family that is a ladder: `placeNewPart` rests each new piece on the
+    // one before it, `clear(undefined)` says yes every time, and no aim is ever asked
+    // for. Measured on an L before this line existed: four potted plants at y = 0.00,
+    // 0.90, 1.80 and **2.70 — a 900 mm plant based 200 mm above a 2.5 m ceiling**, in a
+    // tower, from four clicks of one Library row.
+    //
+    // Rule 2's "nothing physically impossible should be encouraged" (§ 31) is the gate,
+    // and it is deliberately the only vertical rule here: a click that lands a lamp on a
+    // desk is still allowed, because that one fits under the ceiling and is what the
+    // user meant. Whether an unaimed click should stack AT ALL is a product question and
+    // is filed, not answered inside a defect fix.
+    // Floor-anchored only: `pos[1]` is a BASE for these and a CENTRE for a mounted
+    // piece, and `placeNewPart` has already clamped a mounted one into `[h/2, height -
+    // h/2]`, so there is nothing left here to catch.
+    if (!p.wallMounted && p.pos[1] + dimMM[2] / 1000 > room.height + 1e-6) return false;
     const probe: ScenePart = {
       id: PROBE, category: cat, shape, name: '', locked: false,
-      dimMM, pos: p.pos, rot: p.rot, wallMounted: p.wallMounted,
+      dimMM, pos: p.pos, rot: p.rot, wallMounted: p.wallMounted, circle: round,
     };
     // The probe has to be IN the list it is tested against: `collidesAt` looks the
     // mover up and returns `false` when it is absent, so passing `existing` alone
@@ -2955,6 +3009,19 @@ export function openSpotForNewPart(
   }
 
   if (clear(undefined)) return undefined;
+
+  // **The ring is centred on where this piece would have gone with NO aim, not on the
+  // world origin.** Those are the same point only while the room is centred there, and
+  // `footprintBounds` says in as many words that it is not guaranteed to be — walls
+  // move independently, so a room can sit anywhere. Measured on a 6 × 5 rect whose
+  // walls had been dragged to x ∈ [4, 10], z ∈ [4.5, 9.5]: every one of the 126
+  // candidates fell outside the room, `intoRoom` clamped each of them back to the SAME
+  // wall inset, and four dining chairs landed on one point — the § H.3 defect verbatim,
+  // in the function written to close it. Every fixture missed it because
+  // `footprintForLayout` builds a room centred on the origin by construction.
+  const home = placeNewPart(cat, shape, dimMM, room, existing, undefined);
+  const hx = home.pos[0];
+  const hz = home.pos[2];
 
   // Sized by the piece, so a nightstand takes small steps and a wardrobe large ones —
   // a fixed step would either overlap beds or scatter lamps across the room.
@@ -2966,7 +3033,7 @@ export function openSpotForNewPart(
       // The half-ring twist stops successive rings sharing spokes, so a piece that
       // could not fit at due north does not try due north again one step further out.
       const a = ((i + ring / 2) / n) * Math.PI * 2;
-      const aim: [number, number] = [r * Math.cos(a), r * Math.sin(a)];
+      const aim: [number, number] = [hx + r * Math.cos(a), hz + r * Math.sin(a)];
       if (clear(aim)) return aim;
     }
   }

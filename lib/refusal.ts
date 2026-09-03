@@ -93,9 +93,13 @@ export const TURN_NUDGE_EPS = 0.001;
  * unturnable, which no report has asked for (§ B.14, decided 2026-09-03: keep and
  * report). So this is not a veto, it is the sentence.
  *
- * **Only the y-less plane.** A turn can legitimately change `y` — a wall rider
- * re-aimed by the wall it lands on — and that is the wall's answer rather than a
- * nudge.
+ * **Only the y-less plane, and `turnDrop` below is the other axis.** An earlier version
+ * of this paragraph justified dropping `y` on the grounds that "a wall rider re-aimed by
+ * the wall it lands on" legitimately changes height — which names a case that cannot
+ * happen: `turnInPlace` passes `currentY` and `resolvePlacement` preserves it for every
+ * centred piece, so a wall rider's height is fixed. Splitting the plane from the height
+ * is still right, because they are different sentences about different causes, but the
+ * height is NOT exempt from being reported. See `turnDrop`.
  */
 export function turnNudge(
   from: readonly [number, number, number],
@@ -103,4 +107,58 @@ export function turnNudge(
 ): number {
   const d = Math.hypot(to[0] - from[0], to[2] - from[2]);
   return d > TURN_NUDGE_EPS ? d : 0;
+}
+
+/** Half a degree, in radians. Anything under this is the resolve's own float noise. */
+export const TURN_HELD_EPS = 0.0087;
+
+/**
+ * Did something OTHER than the request decide the piece's final angle?
+ *
+ * **This is the case the first version of the turn report could not see, and it is not
+ * rare — it is every wall rider in the catalogue.** `turnInPlace` passes
+ * `wallEdge: null` on purpose ("a wall rider is re-aimed by the wall it lands on, in
+ * both tabs or in neither"), so `snapToWall` returns the WALL's yaw and the requested
+ * quarter turn is discarded. Measured across `PART_LIBRARY` on the north wall of a
+ * 6 × 5 room: **11 of 11 `ridesWall` items come back with the angle they started with**
+ * — mirror, oval mirror, painting, curtain, window, three TVs, soundbar, AC unit, door.
+ *
+ * The piece does not move, and before this existed the app said "Turned a quarter
+ * turn." anyway. A sentence asserting a change that did not happen is worse than
+ * silence, because the user goes looking for what they broke.
+ *
+ * The angle difference is taken modulo a full circle, so a piece re-aimed to the same
+ * heading by a different route does not read as held.
+ */
+export function turnAngleHeld(requested: number, accepted: number): boolean {
+  const TAU = Math.PI * 2;
+  let d = (accepted - requested) % TAU;
+  if (d > Math.PI) d -= TAU;
+  if (d < -Math.PI) d += TAU;
+  return Math.abs(d) > TURN_HELD_EPS;
+}
+
+/**
+ * The VERTICAL move a turn caused, in metres, positive downward.
+ *
+ * **`turnNudge` deliberately drops `y`, and the reason it gives is wrong.** It says a
+ * turn can legitimately change `y` because "a wall rider [is] re-aimed by the wall it
+ * lands on" — but `turnInPlace` passes `currentY`, and `resolvePlacement` preserves it
+ * for every centred piece, so a wall rider's `y` never moves at all (measured: all 11,
+ * `Δy = 0`). What `y` really moves on is a FLOOR piece whose support the turn rotated
+ * out from under it: a TV console standing on a dining table, turned a quarter, no
+ * longer covers enough of the table, `findSupportDetailed` finds nothing and it is
+ * written to the floor. Swept over the catalogue from legal starts: **187 silent
+ * vertical moves of 420–1800 mm**, every one of them with a horizontal nudge of zero,
+ * so the sentence `turnNudge` produces is exactly the sentence that stays silent.
+ *
+ * It is the same argument § B.14 makes for `turnNudge`, one axis over. The user asked
+ * for an angle; the height was not part of the request.
+ */
+export function turnDrop(
+  from: readonly [number, number, number],
+  to: readonly [number, number, number],
+): number {
+  const d = from[1] - to[1];
+  return Math.abs(d) > TURN_NUDGE_EPS ? d : 0;
 }

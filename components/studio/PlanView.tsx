@@ -34,7 +34,8 @@ import {
   refusalCause,
   type Refusal,
 } from '@/lib/drag-resolve';
-import { refusalAfterGesture, turnNudge, REFUSAL_HOLD_MS } from '@/lib/refusal';
+import { refusalAfterGesture, turnNudge, turnAngleHeld, turnDrop, REFUSAL_HOLD_MS } from '@/lib/refusal';
+import { useDragLive } from '@/lib/drag-live';
 import { snapGuideEnds, type SnapLine } from '@/lib/item-snap';
 import { convoyRestore, planConvoy, resolveConvoy, travellingWorld, type Convoy } from '@/lib/drag-convoy';
 import { cascadeTransform } from '@/lib/rigid-parent';
@@ -285,6 +286,16 @@ export const PlanView = forwardRef<PlanViewHandle, {
    *  and the two tabs must not answer "which piece is wrong" differently. */
   const [blockedIds, setBlockedIds] = useState<string[]>([]);
   const blockedRef = useRef(false);
+  /** The same answer for a gesture this component did not run — `spinSelection` from the
+   *  context menu or an accelerator, which is mounted on both tabs and can reach neither
+   *  tab's own state. Without this the identical refusal on the identical piece outlined
+   *  red from Shift+Arrow and drew nothing at all from the menu. */
+  const refusedElsewhere = useDragLive((s) => s.refusedIds);
+  /** One set, so the two places that draw a refusal cannot answer differently. */
+  const isBlocked = useCallback(
+    (id: string) => blockedIds.includes(id) || refusedElsewhere.includes(id),
+    [blockedIds, refusedElsewhere],
+  );
   /** What the last refusal SAID, so a streak that changes its mind says so.
    *
    *  `blockedRef` alone gated the announcement, and it is a boolean: once a drag was
@@ -1266,10 +1277,28 @@ export const PlanView = forwardRef<PlanViewHandle, {
    */
   function turnByKey(e: React.KeyboardEvent, part: ScenePart) {
     const dir = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1;
-    const turned = turnTo(part, part.rot + dir * spin);
-    const said = `${part.name} turned to ${Math.round((turned.rot * 180) / Math.PI)} degrees.`;
+    const wanted = part.rot + dir * spin;
+    const turned = turnTo(part, wanted);
+    // A turn can move the piece DOWN as well as sideways, and neither the refusal nor
+    // the nudge below can say so: a piece standing on a table that no longer covers
+    // enough of it after the turn is written to the floor by the gravity branch of the
+    // same resolve. Measured across the catalogue: 187 such moves of 420–1800 mm, every
+    // one with a horizontal nudge of zero. Appended to whichever sentence follows,
+    // because it is true in the refused case as well as the accepted one.
+    const fell = turnDrop(part.pos, turned.pos);
+    const alsoFell =
+      fell === 0 ? ''
+      : fell > 0 ? ` It dropped ${formatLength(fell * 1000, dimUnit)} — it is no longer standing on anything.`
+      : ` It rose ${formatLength(-fell * 1000, dimUnit)} onto what is under it.`;
+    const said =
+      turnAngleHeld(wanted, turned.rot)
+        // The angle it ended at is the one it started at, because `turnInPlace` passes
+        // `wallEdge: null` and the wall re-aims its riders. Saying "turned to 0 degrees"
+        // about a piece that did not turn is true and reads as a failure to act.
+        ? `${part.name} is held square to its wall, at ${Math.round((turned.rot * 180) / Math.PI)} degrees.`
+        : `${part.name} turned to ${Math.round((turned.rot * 180) / Math.PI)} degrees.`;
     if (!turned.valid) {
-      announce(`${said} It does not fit at that angle — ${refusalCause(turned)}`);
+      announce(`${said} It does not fit at that angle — ${refusalCause(turned)}${alsoFell}`);
       return;
     }
     // …and a turn that FITS may still have been slid to make it fit, which `valid`
@@ -1280,7 +1309,9 @@ export const PlanView = forwardRef<PlanViewHandle, {
     // this from the keyboard has nothing to watch. Same reason the refusal above is
     // spoken here and only drawn in colour on the pointer path.
     const by = turnNudge(part.pos, turned.pos);
-    announce(by > 0 ? `${said} It moved ${formatLength(by * 1000, dimUnit)} to stay in the room.` : said);
+    announce(
+      (by > 0 ? `${said} It moved ${formatLength(by * 1000, dimUnit)} to stay in the room.` : said) + alsoFell,
+    );
   }
 
   function onRotateKeyDown(e: React.KeyboardEvent, part: ScenePart) {
@@ -1604,7 +1635,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
             const center = toLocal(pos[0], pos[2]);
             const wpx = fpW * SCALE;
             const hpx = fpD * SCALE;
-            const blocked = blockedIds.includes(part.id);
+            const blocked = isBlocked(part.id);
             // Stroke tokens are boundaries (≥3:1); the label uses the *-text pair
             // because 9px type has to clear 4.5:1.
             const color = blocked ? 'var(--danger)' : part.locked ? 'var(--locked)' : 'var(--accent)';
@@ -1759,7 +1790,7 @@ export const PlanView = forwardRef<PlanViewHandle, {
             if (!part) return null;
             const c = toLocal(part.pos[0], part.pos[2]);
             const hpx = (part.dimMM[1] / 1000) * SCALE;
-            const color = blockedIds.includes(part.id)
+            const color = isBlocked(part.id)
               ? 'var(--danger)'
               : part.locked
                 ? 'var(--locked)'

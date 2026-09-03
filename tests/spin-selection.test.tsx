@@ -21,7 +21,7 @@
 
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { useScene } from '@/lib/scene-store';
-import { useStudio } from '@/lib/store';
+import { useStudio, useSettings } from '@/lib/store';
 import { footprintForLayout } from '@/lib/footprint';
 import { currentRoomScene } from '@/lib/room-scene';
 import { ANNOUNCE_EVENT } from '@/lib/announce';
@@ -69,6 +69,9 @@ const at = (id: string) => currentRoomScene().find((p) => p.id === id)!;
 
 beforeEach(() => {
   spoken = [];
+  // Restored per test, because two of them set it and a leaked `cm` would make every
+  // later assertion in this file read a unit it did not choose.
+  useSettings.setState({ dimUnit: 'm' });
   window.addEventListener(ANNOUNCE_EVENT, listen);
 });
 afterEach(() => window.removeEventListener(ANNOUNCE_EVENT, listen));
@@ -127,7 +130,27 @@ describe('spinSelection says when the piece no longer fits', () => {
     spinSelection(1);
     expect(spoken[0]).toContain('2 pieces turned a quarter turn.');
     expect(spoken[0]).toContain('Wardrobe 1 does not fit at that angle');
-    expect(spoken[0]).toContain('1 more do not fit either.');
+    // SINGULAR. An unconditional plural verb reads "1 more do not fit either" for a set
+    // of exactly two, which is the commonest multi-select there is — and the first
+    // version of this assertion pinned that exact wrong string, so it was green by
+    // agreeing with the defect.
+    expect(spoken[0]).toContain('1 more does not fit either.');
+  });
+
+  it('uses the plural verb once there is more than one of them', () => {
+    // The other end of the same branch. Without this the singular fix could have been
+    // an unconditional 'does' and nothing would have gone red.
+    room([
+      { ...wardrobe([-1.5, 0, 1.0]), id: 'wardrobe-1', name: 'Wardrobe 1' },
+      { ...wardrobe([0, 0, 1.0]), id: 'wardrobe-2', name: 'Wardrobe 2' },
+      { ...wardrobe([1.5, 0, 1.0]), id: 'wardrobe-3', name: 'Wardrobe 3' },
+      { ...nightstand([-1.5, 0, 0]), id: 'nightstand-1' },
+      { ...nightstand([0, 0, 0]), id: 'nightstand-2' },
+      { ...nightstand([1.5, 0, 0]), id: 'nightstand-3' },
+    ]);
+    select('wardrobe-1', 'wardrobe-2', 'wardrobe-3');
+    spinSelection(1);
+    expect(spoken[0]).toContain('2 more do not fit either.');
   });
 });
 
@@ -139,12 +162,25 @@ describe('a turn that had to SLIDE the piece says so — § B.14', () => {
   // with nothing saying so. `valid` cannot express it; `turnNudge` is what does.
 
   it('reports the slide, in the unit the user set', () => {
+    // The unit is SET here, and that is the point of the test rather than decoration:
+    // an earlier version asserted `0.7 m` while never touching `useSettings`, so it was
+    // agreeing with the store's default and `dimUnit` → `'m'` was a free mutation.
+    useSettings.setState({ dimUnit: 'cm' });
     room([wardrobe([0, 0, -2.2])]);
     select('wardrobe-1');
     spinSelection(1);
     expect(spoken).toHaveLength(1);
     // Turned, the wardrobe's depth half-extent is 1.0 m, so it may stand no further
     // north than z = -1.5 in a 5 m room: 0.7 m of slide.
+    expect(spoken[0]).toContain('Wardrobe moved 70 cm to stay in the room.');
+  });
+
+  it('reports the same slide in metres when that is what the user set', () => {
+    // The pair. One unit alone cannot tell a hard-coded unit from a read one.
+    useSettings.setState({ dimUnit: 'm' });
+    room([wardrobe([0, 0, -2.2])]);
+    select('wardrobe-1');
+    spinSelection(1);
     expect(spoken[0]).toContain('Wardrobe moved 0.7 m to stay in the room.');
   });
 
@@ -184,6 +220,28 @@ describe('spinSelection is a placement, not a bare rotation write', () => {
     select('nightstand-1');
     spinSelection(1);
     expect(at('nightstand-1').pos).toEqual([1, 0, 1]);
+  });
+
+  it('writes NO position override for a turn that did not move the piece', () => {
+    // The assertion above reads the RESOLVED transform, which is `[1,0,1]` whether or
+    // not an override was created — so making `setPosition` unconditional left it
+    // green. This reads the override map itself, which is the only place the
+    // difference exists. CLAUDE.md: "a transform write is never free — writing back an
+    // unchanged rotation still CREATES an override, which `lib/transforms.ts` then pins
+    // against a re-detect and persists."
+    room([nightstand([1, 0, 1])]);
+    select('nightstand-1');
+    spinSelection(1);
+    expect(useStudio.getState().positions['nightstand-1']).toBeUndefined();
+  });
+
+  it('writes one for a turn that DID move it, so the guard is not simply off', () => {
+    // The negative control for the assertion above: without this, deleting the
+    // `setPosition` call entirely would satisfy it.
+    room([wardrobe([0, 0, -2.2])]);
+    select('wardrobe-1');
+    spinSelection(1);
+    expect(useStudio.getState().positions['wardrobe-1']).toBeDefined();
   });
 });
 
@@ -237,6 +295,102 @@ describe('spinSelection carries what is standing on the piece', () => {
     expect(Math.hypot(l.pos[0] - w.pos[0], l.pos[2] - w.pos[2])).toBeCloseTo(0.15, 6);
     // …and it turned with it rather than merely being carried.
     expect(l.rot - w.rot).toBeCloseTo(0, 6);
+  });
+});
+
+describe('a rider that is ALSO selected is turned once, not twice', () => {
+  it('does not turn a selected rider on its own account as well', () => {
+    // Ctrl+A reaches this in one press, so it is not an exotic selection. Iteration one
+    // turns the nightstand and `cascadeTransform` writes the lamp to +90°; iteration two
+    // re-read the scene, saw the override the cascade had just written, and took the
+    // lamp to +180° — every rigid child in the set ending a quarter turn out of step
+    // with the thing it stands on.
+    room([nightstand([0, 0, 0]), lamp([0, 0.55, 0.15])]);
+    useStudio.setState({ parentIds: { 'lamp-1': 'nightstand-1' } });
+    select('nightstand-1', 'lamp-1');
+    spinSelection(1);
+
+    const n = at('nightstand-1');
+    const l = at('lamp-1');
+    expect(n.rot).toBeCloseTo(QUARTER, 6);
+    // ONE quarter, and the rigid relation intact. Two turns would put it at 2·QUARTER.
+    expect(l.rot).toBeCloseTo(QUARTER, 6);
+    expect(l.rot - n.rot).toBeCloseTo(0, 6);
+    expect(Math.hypot(l.pos[0] - n.pos[0], l.pos[2] - n.pos[2])).toBeCloseTo(0.15, 6);
+  });
+
+  it('is not order-dependent — the rider first gives the same answer', () => {
+    // The filter runs UP FRONT for exactly this reason. Skipping as the loop went would
+    // turn the lamp on its own account whenever it happened to come first.
+    room([nightstand([0, 0, 0]), lamp([0, 0.55, 0.15])]);
+    useStudio.setState({ parentIds: { 'lamp-1': 'nightstand-1' } });
+    select('lamp-1', 'nightstand-1');
+    spinSelection(1);
+    const n = at('nightstand-1');
+    const l = at('lamp-1');
+    expect(l.rot).toBeCloseTo(QUARTER, 6);
+    expect(l.rot - n.rot).toBeCloseTo(0, 6);
+  });
+
+  it('still turns a piece that rides something OUTSIDE the selection', () => {
+    // The negative control. Without it, `carriedByAnother` returning `true` for every
+    // piece with any parent at all would pass every assertion above.
+    room([nightstand([0, 0, 0]), lamp([0, 0.55, 0.15])]);
+    useStudio.setState({ parentIds: { 'lamp-1': 'nightstand-1' } });
+    select('lamp-1');
+    spinSelection(1);
+    expect(at('lamp-1').rot).toBeCloseTo(QUARTER, 6);
+    expect(at('nightstand-1').rot).toBeCloseTo(0, 6);
+  });
+});
+
+describe('a turn the wall would not take says so, rather than claiming it happened', () => {
+  const tv = (pos: [number, number, number]): ScenePart =>
+    part({ id: 'tv-1', name: 'TV', category: 'tv', shape: 'tv', dimMM: [1450, 60, 820], pos, wallMounted: true });
+
+  it('names the wall instead of announcing a turn that did not occur', () => {
+    // Measured across `PART_LIBRARY`: 11 of 11 `ridesWall` items come back at the angle
+    // they started at, because `turnInPlace` passes `wallEdge: null` and `snapToWall`
+    // returns the WALL's yaw. The app said "Turned a quarter turn." over a piece that
+    // had not moved, which sends the user looking for what they broke.
+    room([tv([0, 1.2, -2.4])]);
+    select('tv-1');
+    spinSelection(1);
+    expect(spoken[0]).not.toContain('Turned a quarter turn.');
+    expect(spoken[0]).toContain('held square to its wall');
+  });
+
+  it('still says a free-standing piece turned', () => {
+    // The negative control: reporting EVERY piece as wall-held would pass the above.
+    room([nightstand([0, 0, 0])]);
+    select('nightstand-1');
+    spinSelection(1);
+    expect(spoken[0]).toContain('Turned a quarter turn.');
+    expect(spoken[0]).not.toContain('held square');
+  });
+});
+
+describe('a turn that drops the piece off its support says so', () => {
+  it('reports the fall, which no other sentence can', () => {
+    // A long piece resting on a smaller one: turned a quarter it no longer covers
+    // enough of its support, `findSupportDetailed` finds nothing and the gravity branch
+    // of the same resolve writes it to the floor. Swept over the catalogue this happens
+    // 187 times, with a horizontal nudge of ZERO every time — so `turnNudge`'s sentence
+    // is silent precisely where this one is needed.
+    room([nightstand([0, 0, 0]), desk([0, 0.55, 0])]);
+    select('desk-1');
+    spinSelection(1);
+    const d = at('desk-1');
+    expect(d.pos[1]).toBeLessThan(0.55);
+    expect(spoken[0]).toMatch(/dropped .* no longer standing on anything/);
+  });
+
+  it('says nothing of the sort for a turn that stayed at its height', () => {
+    room([nightstand([1, 0, 1])]);
+    select('nightstand-1');
+    spinSelection(1);
+    expect(spoken[0]).not.toContain('dropped');
+    expect(spoken[0]).not.toContain('rose');
   });
 });
 
