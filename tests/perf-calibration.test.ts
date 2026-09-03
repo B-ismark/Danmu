@@ -17,6 +17,26 @@
  * It is deliberately NOT asserted against 1.0: CI runs on a box nobody here has
  * measured, and an assertion that this machine is as fast as the calibration machine
  * is an assertion about the wrong subject.
+ *
+ * ── TWO MUTATIONS SURVIVE THIS FILE, ON PURPOSE, AND HERE IS THE PROOF THEY MAY ──
+ *
+ * Growing `referenceWorkload` fourfold, and setting `REFERENCE_IDLE_MS` to 10, both
+ * pass all fifteen tests here. Neither is detectable in principle: each makes the
+ * machine read as slower than it is, and a test cannot tell that from a machine that
+ * genuinely is slower — the whole point of running on CI hardware nobody has measured.
+ * An assertion that tried would fire on a slow runner and get loosened until it did
+ * not, which is a worse outcome than a survivor that is written down.
+ *
+ * What is asserted instead is that the DAMAGE is bounded. Both mutations pin the
+ * factor at `MAX_FACTOR`, so the worst bar either can produce is
+ * `TWENTY_PIECE_BAR_MS × MAX_FACTOR` = 3600 ms, and `keeps a clamped bar a clear
+ * factor below the regression it guards` asserts that stays under half the 8400 ms
+ * the regression measured. Verified end to end rather than reasoned: with
+ * `REFERENCE_IDLE_MS = 10` AND a 30x-slower `solveLayout` applied together, the
+ * twenty-piece bar still went red — `expected 5157.97 to be less than 3600`.
+ *
+ * So the design here is not "the calibration cannot be wrong". It is "a wrong
+ * calibration cannot cost more than one clamp", which is a claim a test can hold.
  */
 import { describe, it, expect } from 'vitest';
 import {

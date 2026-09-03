@@ -457,19 +457,30 @@ between loosening them and marking them CI-only would retire a recurring false a
 **3 failed / 2146 passed / 5 expected-fail** over 118 files in 265 s wall, against 926 s of
 test time, so vitest was running roughly 3.5 files at once. The three:
 
-| red | bound | alone |
+| red | bound *(as it was then)* | alone |
 |---|---|---|
-| `tests/layout-solve.test.ts:671` | `performance.now() - t0 < 2000` | passes, file in 24.8 s |
-| `tests/shuffle-gate.test.ts:248` | none of its own — the **default 5 s** `testTimeout` | passes, file in 13.3 s |
-| `tests/where-it-sits.test.tsx:108` | default 5 s, and a whole Next page mounts inside it | passes, file in 9.3 s |
+| `layout-solve` › `stays inside a second…` | `performance.now() - t0 < 2000` | passes, file in 24.8 s |
+| `shuffle-gate` › `…overhang is never blamed` | none of its own — the **then-default 5 s** `testTimeout` | passes, file in 13.3 s |
+| `tests/where-it-sits.test.tsx:108` | then-default 5 s, and a whole Next page mounts inside it | passes, file in 9.3 s |
+
+**Every cell in that table is superseded by the answer below** and is kept only as the
+observation it was. Line numbers are gone from two of the three rows because the fix
+moved them and a line citation is the first thing to rot; the first test is called
+`stays inside its calibrated ceiling…` now, and the bare `performance.now() - t0 < 2000`
+it quotes no longer exists anywhere.
 
 **So the contention is vitest's own, not another session's**, which is a different problem
 from the one this section was written about and has a different fix. Two things follow.
-`vitest.config.ts` sets **no `testTimeout`, no `pool` and no `poolOptions`**, so two of the
-three reds are the 5 s default being applied to a page mount that costs ~4 s alone — a bound
-nobody chose. And the third has a sibling worth copying rather than loosening:
-`layout-solve.test.ts:679` asserts a **ratio** (`time(30)/time(10) < 12`) instead of an
-absolute, which is exactly the shape that survives a loaded machine.
+`vitest.config.ts` set **no `testTimeout`, no `pool` and no `poolOptions`** *(it sets the
+first two now — see the answer below)*, so two of the three reds are the 5 s default being
+applied to a page mount that costs ~4 s alone — a bound nobody chose. And the third has a
+sibling worth copying rather than loosening: `layout-solve.test.ts` asserts a **ratio**
+(`time(30)/time(10) < 12`) instead of an absolute, ~~which is exactly the shape that survives
+a loaded machine~~ — **which it is not, and that sentence is the single most costly thing
+this section ever said.** The ratio test is one of the three that died. A ratio protects an
+*assertion* from machine speed and does nothing about a *timeout*: the body is killed at
+10 023 ms before the ratio is ever evaluated. Copying it, as this paragraph recommended,
+would have moved the other bars into the same trap.
 
 **Second measurement, 2026-09-03, and it is the stronger evidence: the failing SET changes
 run to run on one unchanged tree.** Three consecutive `pnpm test` runs over the same commit,
@@ -500,8 +511,16 @@ eight cores, then eighteen of them, one file, `--reporter=verbose`, at `a23b50b`
 | `the solver can open a route › opens it, at every seed` | 830 ms | 3295 ms | 7936 ms | **timed out in 5000 ms** |
 | `the solver and the room report agree › …no two pieces in the same place` | 732 ms | 3248 ms | 7392 ms | **timed out in 5000 ms** |
 | `cost of a solve › scales with the room rather than exploding` | 963 ms | 4414 ms | 10023 ms | **timed out in 5000 ms** |
-| `cost of a solve › stays inside a second…` (`< 2000`) | 394 ms | 1731 ms | 4063 ms | assertion |
-| `clearance-field › frame budget` (`< 1500`, best-of-3) | — | 1476 ms | 3384 ms | **passed** |
+| `cost of a solve › stays inside a second…` (`< 2000`) | 394 ms | 1731 ms | **4061 ms** | assertion |
+| `clearance-field › frame budget` (`< 1500`, best-of-3) | — | *1476* | *3384* | **passed** |
+
+Four rows are single samples of the body; **the `clearance-field` row is in a different
+quantity and is italicised for it** — those are whole-test durations covering three runs,
+so the number the bar actually saw is roughly a third of each, and 3384 against a 1500 bar
+is a pass rather than the contradiction it reads as. Its `idle` cell is empty because this
+campaign never measured it, which is why the finding below about that bar's sensitivity
+went unnoticed for as long as it did. (The 18-way solve figure is **4061 ms**, the number
+the assertion printed; an earlier draft of this table said 4063 and no artifact says that.)
 
 That is the same four-red set observed in run 2, on demand, with every result identical
 throughout. **Three of the four are the harness.** `vitest.config.ts` set no `testTimeout`,
@@ -530,16 +549,50 @@ evaluated. Recommending it would have moved the other bars into the same trap.
   never gone red under load, and the table above says why. One mechanism, two callers: a
   second hand-rolled timing loop is exactly the drift `tests/helpers/` exists to prevent.
 
-**Mutation-tested 17/17**, each restored and the restore verified — both clamp ends, the
-best-of-N minimum and its run count, the reference constant in both directions, the workload
-itself (shrinking the loop leaves the constant true, which no assertion caught until one was
-added for it), the config value in three ways, and — the one that matters — a solver made 30×
-slower, which the calibrated bar still fails on.
+**Mutation-tested twice, and the first round is the lesson.** Round one reported **17/17
+killed** and was honest about every mutation it ran; four review lenses then found **five
+survivors it had never thought to try**, which is the difference between a kill rate and a
+mutation set. The sharpest: `machineFactor()` hard-wired to `MAX_FACTOR` passed 13 of 13,
+pinning every bar at the clamp forever — the exact silent inflation the helper says it
+exists to prevent. `bestMs` returning the *mean* passed the test named for not returning
+the mean, because that test's own comment did the arithmetic wrong (the mean of 40/5/40 is
+28.34, under its 30 ms bar). And `ceilingMs` dropping the factor entirely survived three
+runs in four, because on a machine reading exactly 1.00 the identity and the correct answer
+are the same number.
 
-**What is NOT claimed:** the two non-`layout-solve` files seen red in run 3
-(`library-click-through`, `mounted-clash`) were not in this reproduction and their error text
-is still uncaptured. If they too are timeouts the 30 s covers them; if not, they are a
-separate finding and this section did not look at them.
+Round two, against the rebuilt guards: **21 of 23 killed.** The two survivors are
+deliberate and are written into the test file rather than hidden — growing the reference
+workload, or deflating its constant, both make the machine *read* as slower, which no test
+can distinguish from a machine that genuinely is. What is asserted instead is that the
+damage is **bounded**: both pin the factor at the clamp, so the worst bar either can produce
+is `1200 × 3` = 3600 ms. Verified end to end rather than argued — worst-case calibration
+**plus** a 30× slower `solveLayout`, together, and the bar still went red at
+`expected 5157.97 to be less than 3600`.
+
+Two numbers moved as a result: `MAX_FACTOR` 4 → **3**, and the twenty-piece bar 2000 →
+**1200**. A flaky bar being *tightened* is the opposite of the usual repair, and the reason
+is arithmetic the first version asserted without doing: at the old clamp the worst-case bar
+was 8000 ms against a regression that measured 8400 — a five per cent margin, described in
+the file as "four times".
+
+**What is NOT claimed, and one of these is a new open item:**
+
+- The two non-`layout-solve` files seen red in run 3 (`library-click-through`,
+  `mounted-clash`) were not in this reproduction and their error text is still uncaptured.
+  If they too are timeouts the 30 s covers them; if not, they are a separate finding.
+- **`clearance-field`'s bar has an unknown separation.** Nothing in this repo records what
+  an O(cells × parts) regression in `buildClearanceField` costs. The healthy body is ~40 ms
+  and the bar is 1500, so it is 37× the body — but 37× *what defect* is unanswered, and a
+  per-part rescan at `MAX_CELLS` with 30 parts is plausibly ~1.2 s, which would sit under
+  even the unscaled bar. Unlike the solve bar, whose 8400 ms is measured, this one has no
+  evidence it still fires. Closing it means writing the regression and timing it. Recorded
+  beside the constant in `tests/helpers/perf.ts` and in `tests/clearance-field.test.ts`.
+- **The calibration was inert on CI** — it printed `factor 1.00`, so both bars sat at
+  exactly their stated values and the scaling path was never exercised by that green. What
+  CI did verify is the 30 s timeout and best-of-N sampling.
+- The factor is measured once per **test file**, not per worker process: vitest 4 defaults
+  to `pool: 'forks'` with `isolate: true`. So the figure `perf-calibration` prints is that
+  file's, and the two bars each take their own.
 
 One instance from this round is unrecoverable and is recorded as a gap rather than as a
 result: gating PR #21's merge produced `1 failed | 1482 passed`, the failing test's identity
