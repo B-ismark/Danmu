@@ -124,6 +124,8 @@ is not a question the arithmetic can answer. Changing the ceiling height by 1 cm
 re-runs `heightForNewCeiling` over the whole room and lifts them all, which is the cheapest
 way to see both states.
 
+**Where it rides.** Merged to `main` in `1d16087` (PR #88).
+
 **Gates.** `tests/ceiling-fixtures.test.ts` compares each fixture's top to the ROOM across
 both bands and seven ceiling heights — the comparison nothing in this repo made before. It
 cannot see the old-room case, because no test loads a room saved by an older build.
@@ -248,7 +250,7 @@ This is the only defect in the whole item that a mouse cannot produce.
 `components/three/Room.tsx`. Merged to `main` in **`d2ef257`** (PR #73).
 
 
-### Eight shapes stopped stretching their details — branch `fix/parametric-caps-survive-a-resize`, PR #90
+### Eight shapes stopped stretching their details — merged to `main` in `6912849` (PR #90)
 
 **Partly looked at on 2026-09-03**, production build, every pair rendered side by side
 at its catalogue size and at the end of its band. What was seen and is therefore NOT in
@@ -318,7 +320,7 @@ one dim to both functions); three round shapes drew a circle where the plan draw
 ellipse; and `window` and `radiator` were members of the class nobody had listed. The
 gate itself was per-row, so an empty table passed every assertion in it.
 
-### The Inspector now says where the selected piece stands — branch `fix/inspector-placement-agrees-with-the-report`, PR pending
+### The Inspector now says where the selected piece stands — merged to `main` in `e0c484a` (PR #91)
 
 **All six states were LOOKED AT on 2026-09-03**, production build, one room holding all
 of them, selected through the rail the way a user selects. What was seen, verbatim:
@@ -389,7 +391,7 @@ the nightstand, carried nowhere while the nightstand moved. That fix does want e
 is the item below, because it is the one defect in this file that the 2D plan is
 constitutionally unable to show.*
 
-### The two decline toasts — the halves nobody has pressed, branch `fix/impossible-outranks-inconvenient`, PR #89
+### The two decline toasts — the halves nobody has pressed, merged to `main` in `4cc663b` (PR #89)
 
 **Half of this item has been looked at and is deleted rather than struck through.**
 Seen in a real browser on 2026-09-03, seeded U at 6 x 4, production build: presses 1
@@ -497,9 +499,9 @@ this. Turn the camera so you are looking along the floor.
 side-effect: after a Shuffle the lamps should sit exactly on their nightstands' outlines and
 turn with them, not trail behind at an angle.
 
-**Where it rides.** `fix/solver-carries-riders`, PR pending — `b16cd34` (the fix) and
-`b6d2cdd` (the mutations). Gates on `b6d2cdd`: `pnpm typecheck` clean, `pnpm lint` clean,
-`pnpm test` 113 files, 2054 passed + 5 expected-fail, 0 failures.
+**Where it rides.** Merged to `main` in `73c7048` (PR #86). The gate counts this line
+used to carry are gone with the merge: they measured a branch tip that `main` has since
+moved five PRs past, and quoting them here would be quoting the wrong artifact.
 
 ### Does Shuffle keep the bedside table by the bed? — a known defect, `main`
 
@@ -562,7 +564,7 @@ but it has only been seen at a 1400px viewport with short names. **Rename a piec
 ~45-character unbroken string, drag the left rail to its narrowest, and refuse a width** — if
 the rail grows a horizontal scrollbar, the wrap is not doing its job.
 
-**Where it rides.** `fix/room-shrink-stops-at-the-furniture`, PR #72.
+**Where it rides.** Merged to `main` in `270455f` (PR #72).
 
 
 

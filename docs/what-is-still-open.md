@@ -17,9 +17,16 @@ point of writing this down.
 
 ## The queue — what is open, in the order it should be done
 
-**Re-derive before trusting this.** It is an ordering of the sections below, written
-2026-09-01; the sections themselves are the source and they say whether each item
-exists in a commit. An item disappears from here when its section says FIXED.
+**Re-derive before trusting this.** It is an ordering of the sections below, rewritten
+**2026-09-03** against `origin/main` @ `e0c484a`; the sections themselves are the source and
+they say whether each item exists in a commit. An item disappears from here when its section
+says FIXED — the struck-through rows this table used to carry are gone, because a queue that
+keeps its own history stops being readable as a queue.
+
+**Closed since the last rewrite, so nobody re-opens them:** § 14, § 17, § 18, § 31, § 32,
+§ 33.1, § 34, § 35, § 36 and § 37. All ten are in `main`; the last five landed as PRs
+#87-#91 on 2026-09-02/03. Three of those five **want eyes and have not had them in full** —
+that is [`visual-check.md`](visual-check.md)'s list, not this one.
 
 Ranked by three things together, not by any one of them: **criticality** (does a user
 hit it), **ease** (is it an afternoon or a measurement campaign), and **dependence** —
@@ -28,27 +35,32 @@ them. Where two items are the same defect one layer apart, they are listed as on
 
 | # | item | why here | cost | blocks / blocked by |
 |---|---|---|---|---|
-| 1 | **§ 12** rider keeps the size the room was BUILT at | Confirmed by eye, and the user has already chosen the repair — derive at read time, write nothing (§ B.16). An attempt at the OTHER option was built and reverted; read § 12 before starting | M | **blocked on § 33.3** — B.16's stated cost is "the derivation runs on every read" and the render budget is unmeasured |
-| ~~2~~ | ~~**§ 32** everything added from the Library is square-footed~~ | **FIXED** — `isRoundPart` + `ROUND_SHAPES`, derived at all four doors, `CATEGORY_DEFAULTS.circle` deleted | — | — |
-| ~~3~~ | ~~**§ 14** a merged group's member cannot be clicked~~ | **FIXED** — the gizmo's invisible translate plane took the press, so `Pickable`'s `selDown` was stale and the drill-in always read "outside". `lib/press-selection.ts` records in the capture phase | — | — |
-| ~~4~~ | ~~**§ 17** a drag refused by a wall TV names nothing~~ | **FIXED** — `clash-mounted` in the room report, and `isSoftFurnishing` shared with the drag, which also unblocked dragging anything in front of a curtain | — | — |
-| ~~5~~ | ~~**§ 18** Shuffle leaves a nightstand through the bed~~ | **FIXED** — not a floor clash at all: a rider (a lamp on a nightstand) was moved independently of its support and left in mid-air inside the bed, invisible to all five `HARD_TERMS`, to the room report and to the plan. `carryRiders` | — | — |
-| — | ~~**§ 31** containment must outrank a blocked door, categorically~~ | **BUILT 2026-09-03.** `IMPOSSIBLE_TERMS` plus a veto at three choice points. The defect was not the near-tie it was filed as: 18 of 160 solves handed back a room MORE impossible than the one they were given, all of them from legal seeded rooms. Now 0 of 160 | done | A.7 and G.1 unblocked |
-| ~~7~~ | ~~**§ 34** the pendant and the ceiling fan draw outside their declared size~~ | **FIXED** — `fanColumn` + `pendantDrop` in `scene-spec.ts`, swept at 10 mm across both catalogue bands against `verticalExtent`. The stated blocker (what a pendant's declared height means) was already answered by `isMountedObstruction` + `clearance.ts` rule 2b | — | — |
-| ~~7~~ | ~~**§ 33.1** the four newest shapes have never been seen in 3D~~ | **ALREADY DONE, and this row was stale** — `visual-check.md` has recorded the look since 2026-09-01 and deleted its own item; the queue was never updated. Re-confirmed 2026-09-02 alongside § 34 | — | — |
-| — | ~~**§ 36** a non-uniform resize walks through both geometry caps~~ | **FIXED 2026-09-03.** Six shapes, not two — the four extra found by grepping for the shape of the bug rather than its symptom. Worst was 2.25× (a fan's motor) and 4× (a pendant's shade) | done | wants eyes |
-| — | ~~**§ 37** the Inspector's placement banner contradicts the room report~~ | **BUILT 2026-09-03.** It reads `useRoomReport` and shows the finding's own words; `restingOn` in `lib/physics.ts` answers the half the report cannot, and gives § 12's floating rider its first gate | done | wants eyes |
-| 8 | **G.1** a brand-new room seals its own routes at the size the app ships | Measured, real, and a first-run defect — the worst kind to leave | M | related to § 31: both are the solver's idea of "navigable" |
-| 9 | **A.7** `snapYaws` leaves the piece crooked in 197 of 240 solves | Measured, visible, nobody has decided whether it matters | M | after § 31, which may change what a finalist is |
-| 10 | **§ 33.3** the render budget is unmeasured | Blocks any answer to "how detailed may a shape be", which was asked directly | M — needs a throttled device | blocks nothing shipping; blocks a decision |
-| 11 | **§ 33.2** the on-device detector cannot name the four new shapes | Needs a 50 MB re-export and a digest re-pin on a Python toolchain | L, and mostly not code | the cloud path already handles them, so this is a completeness item |
-| 12 | **A.2 / G.2 / G.3** variety in Shuffle, the anchor-first trade, the two help cards | Real but none of them is a defect a user has reported | varies | after everything above |
-| 13 | **E** the jsdom component bucket | The harness is in and the bucket is not. Infrastructure, so it pays off across every item above — but it has paid off least when done first | L | none |
+| 1 | **G.1** a brand-new room seals its own routes at the size the app ships | Measured, real, and a **first-run** defect — the worst kind to leave. § 31 unblocked it, and also changed what the solver may return, so re-measure rather than trusting G.1's numbers | M | was blocked by § 31 — free now |
+| 2 | **§ 12** a rider keeps the size the room was BUILT at, after a reload | Confirmed by eye, and the user has already chosen the repair — derive at read time, write nothing (§ B.16). An attempt at the OTHER option was built and reverted, so read § 12 before starting. § 37's `restingOn` is the first gate it has ever had | M | **blocked on § 33.3** — B.16's stated cost is that the derivation runs on every read, and the render budget is unmeasured |
+| 3 | **§ 38.1** the confined "Try a fix" refusal is unreachable | New, and a decision rather than a defect: 212 confined solves over every finding of every preset declined **zero** times, so neither the copy added by § 31 nor the one shipping beside it for months has ever rendered | S — mostly a judgement | nothing |
+| 4 | **A.7** `snapYaws` leaves the piece crooked in 197 of 240 solves | Measured, visible, and nobody has decided whether it matters | M | a symptom of § H.6; fixable alone, but check § 31 did not change what a finalist is |
+| 5 | **§ 33.3** the render budget is unmeasured | Blocks any answer to "how detailed may a shape be", which was asked directly, and blocks § 12's chosen repair | M — needs a throttled device | blocks nothing shipping; blocks § 12 and a decision |
+| 6 | **§ H.8** two reports that need a real repro | A group drag bounded by the lead's rules rather than the set's, and a merged set that drills in from a nightstand but never from the bed. Both are DOM-reachable on the 2D plan, which is the cheap way in | M | nothing |
+| 7 | **§ H.6** Suggest, from the ground up — the user's explicit ask | The largest open thing here, and it **subsumes** A.2, A.3, A.7 and G.2. Three things are missing and each maps to one of the user's four observations: nothing prices support, nothing prices a relation between two pieces, and a group is not a unit | XL — research first | wants G.1 and A.7 measured first, since both are its symptoms |
+| 8 | **§ H.7** collision, properly — the user is open to replacing the engine | Every piece is one box or one ellipse, so a sofa's L, a table's legs and a plant's canopy are all the same rectangle. The research scope is the user's own words | XL — research first | independent of § H.6, but they meet |
+| 9 | **§ 33.2** the on-device detector cannot name the four newest shapes | Needs a 50 MB re-export and a digest re-pin on a Python toolchain | L, and mostly not code | the cloud path already handles them, so this is a completeness item |
+| 10 | **§ H.3** every Library click drops its piece at the room centre, facing the same way | A product decision with at least three defensible answers, and picking one quietly inside a defect fix is how the last one got here. The false comment beside it is already fixed | S once decided | needs the user |
+| 11 | **§ H.10** undo / redo should cover selection | The user asked for it. The consequence worth stating before building it is that one press per click on the way back is why most tools do not do this — a separate history, or coalesced runs, is their call | M | needs the user |
+| 12 | **A.2 / G.2 / G.3** variety in Shuffle, the anchor-first trade, the two help cards | Real, but none is a defect a user has reported, and the first two are § H.6's symptoms | varies | after § H.6 decides whether they still exist |
+| 13 | **E** the jsdom component bucket | The harness is in and the bucket is not. Infrastructure, so it pays off across every item above — but it has paid off least when done first. § 37's `tests/placement-banner.test.tsx` is the newest file to use it and mounts a whole page | L | none |
+| 14 | **§ 38.2** branch hygiene — four refs carry commits `main` has never seen, one for the fourth session running | Not engineering, but it is what keeps costing sessions their first half-hour. Deleting a remote ref is outward-facing and needs the user | S to derive, needs the user to act | nothing |
 
 **Three that are deliberately not on this list**, so nobody adds them back: the seeder
 putting a 1450 mm TV on a 1.2 m wall in the small L and T (`placeNewPart` has no
 legality test — real, but it is the *seeder*, and § C says do not grow the presets);
 anything in § C at all; and § A.5, the Vercel alias question, which is not engineering.
+
+**And one class that is not here because it is not a thinking item.** Rows 1-14 are things
+to work out or measure. What is left to *look at* — the § 36 resize rows nobody has clicked,
+the placement banner's contrast and its screen-reader pass, an old room's pendant, a fan
+flush against the slab — lives in [`visual-check.md`](visual-check.md), and an agent picking
+this up cold should read both. Neither file is a subset of the other, and § 38 below says
+which of the two each loose end from the last round went to.
 
 ---
 
@@ -4158,3 +4170,94 @@ survived an 80 → 120 mm move. What no test reaches is **the renderer actually 
 them**: a deliberate control mutation that makes `FanGeo` pass a literal `200` instead of
 `part.dimMM[2]` survives the whole file. That is the standing limit — nothing here renders
 geometry — and it is why this was a `visual-check.md` item as well as a test.
+
+
+### § 38 — what the § 31 / § 36 / § 37 round left open — 2026-09-03
+
+Five PRs landed in two days: #87 (§ 34) `f80a6ef`, #88 (§ 35) `1d16087`, #89 (§ 31)
+`4cc663b`, #90 (§ 36) `6912849`, #91 (§ 37) `e0c484a`. `main` is gated green on that tip —
+118 files, 2149 passed + 5 expected-fail, typecheck and lint clean. Each item's own section
+above records what it turned out to be, and in all three chosen cases that was materially
+different from how it was filed. What is below is what did **not** close.
+
+**1. The confined "Try a fix" refusal is unreachable, and it is a decision rather than a
+defect.** Measured while building § 31: **212 confined solves**, over every finding of every
+preset, scrambled and seeded, declined **zero** times — for either reason. So two sentences
+now cover a case nothing can enter: the one § 31 added (*"No safe way to move those"*) and
+the one that has shipped beside it for months.
+
+The mechanism is not mysterious. A confine locks every piece except the finding's own, which
+leaves the search almost no room to *exceed* the impossibility it was handed — and the veto
+fires on `impossibleAfter > impossibleBefore`, not on the room being bad. A two-piece search
+rarely gets the chance.
+
+Three answers, and the choice is the user's: **leave it** (it guards against a wrong message
+rather than adding a feature, and deleting it would leave the older sentence covering a case
+it describes falsely); **delete both** and let the button do nothing visible when it cannot
+help; or **widen the confine** so a finding's fix may move a neighbour, which changes what
+"Try a fix" means and is the only one of the three that is a product change. It exists in
+`main`, in `RoomTools`' decline branch. If someone reaches this path in a real room, that is
+the thing to report.
+
+**2. Branch state, derived 2026-09-03 — and the instrument matters more than the answer.**
+Every merge in this repo is a **squash**, so `git rev-list --count origin/main..<branch>`
+reports the four PR branches that landed this week as 3, 5, 6 and 14 commits ahead. **That
+count is not evidence of unlanded work**, and reading it as such is exactly how the branch
+list in "Picking this up cold" came to name ten real commits as deletable. `gh pr view` is
+the instrument for "did this land"; the count is only a prompt to go and ask.
+
+| ref | naive count ahead | what it actually is |
+|---|---|---|
+| `fix/hung-fixture-reaches-the-ceiling` | 3 | **#88, merged** as `1d16087` |
+| `fix/impossible-outranks-inconvenient` | 14 | **#89, merged** as `4cc663b` |
+| `fix/parametric-caps-survive-a-resize` | 6 | **#90, merged** as `6912849` |
+| `fix/inspector-placement-agrees-with-the-report` | 5 | **#91, merged** as `e0c484a` — its two-dot diff against `main` is *empty*, which is the clearest possible statement of the trap |
+| `feat/expose-finalists-and-relation-distance` | 1 | no PR was ever opened. One docs-only commit on `layout-score.ts` + `layout-solve.ts`, against a merge base far behind; `main`'s copies of both files are further along than the branch's |
+| `fix/derive-mounted-and-vertical-extent` | 1 | PR #54, merged. The extra commit is docs-only, two files |
+| `research/inward-normals` | 2 | no PR, and the code landed by another route — `polygonSignedArea` is in `lib/footprint.ts` and `lib/geometry.ts` on `main`, and `tests/inward-normals.test.ts` is there too (§ 11) |
+| `fix/pointer-cancel-note` | 10 | **the one that is neither deletable nor mergeable on any evidence gathered so far.** 33 files, 2,316 insertions against its merge base; 19 conflicted files, every one carrying stages 1, 2 **and** 3. Read the account in "Picking this up cold" before touching it — this is the fourth session it has outlived |
+
+Deleting a remote ref is outward-facing and is **not** covered by a grant to commit, push and
+open PRs. The first four rows are safe to delete on the user's word. The middle three want a
+per-line pass first, and the last wants a decision rather than a command.
+
+**3. What went to [`visual-check.md`](visual-check.md) instead of here**, so nobody searches
+this file for it:
+
+- the § 36 resize rows nobody has clicked — the window at 3200 mm, the radiator at 2000 mm,
+  the door at 35 mm deep *and* at 2400 mm tall, and the nightstand's drawer slide;
+- the placement banner's `--success-text` on `--paper-0`, **4.66:1 by calculation from the
+  tokens and never seen** — `tests/color-tokens.test.ts` cannot reach that element;
+- a screen-reader pass on the banner. `role="status"` with **no** `aria-live` is deliberate,
+  because the pair re-announced on every position write; what wants confirming is that
+  selecting a piece announces once and dragging does not chatter;
+- the § 35 fan in a room saved before it, which stays 30–55 mm short of the slab by design,
+  and reads as one flush fixture beside one short one.
+
+**4. The standing limit this round kept hitting, and no amount of testing closes it.**
+**Nothing in this repo renders geometry.** § 34 records the proof — a deliberate control
+mutation making `FanGeo` pass a literal `200` instead of `part.dimMM[2]` survives the whole
+of `tests/ceiling-fixtures.test.ts`. § 36 hit the same wall from the other side twice: its
+class table is per-row, so an **empty table passed every assertion in it**, and the pendant's
+*light* being left at the authored anchor was invisible to a file that hands one `dimMM` to
+both functions under test. Every fix in this class needs a browser, which is why
+`visual-check.md` is not overhead — it is the only instrument that exists for a whole class
+of defect this repo keeps producing.
+
+**5. Method, recorded because it paid three times out of three.** A review-lens fan-out found
+defects in **the fix** in every one of the three items, each of which had already passed
+typecheck, lint and the full suite:
+
+- **§ 31** — a branch that could never fire, under a comment asserting a mechanism that does
+  not exist; and five assertions that could not fail, in the file whose whole job was pinning
+  the veto.
+- **§ 36** — the pendant's light emitter left behind when its mesh became parametric. That is
+  § 34's defect, re-entered one commit later by a different route.
+- **§ 37** — a second tolerance for a placement question, 46 lines below the constant whose
+  docblock names that exact consumer and predicts the failure.
+
+And the sharpest finding of the three was about a test rather than the code: § 37's
+tucked-chair fixture sat **two ulps below `CLASH_SHARE`**, so nothing was being forgiven, and
+deleting the exemption the file existed to pin left all eight of its tests green. The fixture
+is at 0.40 now, with both bars asserted live. That is the shape to look for in your own new
+tests, not only in someone else's.
