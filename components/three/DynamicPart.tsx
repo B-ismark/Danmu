@@ -121,7 +121,7 @@ function ShapeDispatch({ part, locked }: { part: ScenePart; locked: boolean }) {
     case 'lamp-table':
       return <TableLampGeo part={part} />;
     case 'lamp-pendant':
-      return <PendantLampGeo part={part} />;
+      return <PendantLampGeo part={p} />;
     case 'bed-single':
       return <BedGeo part={part} locked={locked} double={false} />;
     case 'bed-double':
@@ -155,7 +155,7 @@ function ShapeDispatch({ part, locked }: { part: ScenePart; locked: boolean }) {
     case 'monitor':
       return <MonitorGeo part={part} />;
     case 'fan':
-      return <FanGeo part={part} />;
+      return <FanGeo part={p} />;
     case 'fridge':
       return <FridgeGeo part={part} locked={locked} />;
     case 'curtain':

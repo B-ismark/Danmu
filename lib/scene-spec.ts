@@ -1732,12 +1732,34 @@ export type LibraryItem = {
 /** drag-and-drop MIME for dragging catalog items onto the 3D canvas. */
 export const DND_MIME = 'application/x-danmu-item';
 
-// Parametric shapes rebuild their geometry from the CURRENT dimensions (adding
-// modules — pleats, shelves, bays, seats — rather than stretching one mesh). For
-// these, Draggable does NOT group-scale the mesh: the geometry owns its size, so
-// resizing reads correct + never distorts. All other shapes still group-scale.
+// Parametric shapes rebuild their geometry from the CURRENT dimensions rather than
+// being stretched. For these, Draggable does NOT group-scale the mesh: the geometry
+// owns its size, so resizing reads correct + never distorts. All other shapes still
+// group-scale.
+//
+// **Two reasons to be in this set, and only the first one tiles.** The original six
+// add MODULES as they grow — pleats, shelves, bays, seats — and each has a
+// `MODULE_RANGE` row; `tests/module-tiling.test.ts` holds that direction.
+//
+// `fan` and `lamp-pendant` are here for the second reason (§ 36): their geometry
+// contains a CAP against an absolute, and a cap is not a proportion, so a group scale
+// walks straight through it. `fanColumn`'s `min(FAN_HUB_H, h * 0.4)` is a motor
+// housing, which is a real object with a real thickness; `pendantDrop`'s
+// `min(h * 0.4, r * 1.2)` is what stops a shade becoming a funnel. Both are chosen at
+// the AUTHORED size and never see the scale, so the catalogue fan resized to 450 mm
+// drew a 180 mm motor where its own helper says 80, and the catalogue pendant resized
+// to 150 x 900 drew a 360 mm shade where the cap asks for 90 — four times over, and
+// exactly the outcome `pendantDrop`'s header says it prevents.
+//
+// Neither tiles, so neither has a `MODULE_RANGE` row, and that is legal:
+// `moduleRangeFor` returns `null` rather than `undefined` precisely so a member with
+// no range is something a renderer must handle rather than spread into NaN.
+// `tests/parametric-caps.test.ts` is the gate, and it is written about the CLASS
+// rather than these two shapes — if drawing at the authored size and scaling
+// disagrees with drawing at the stored size, the shape belongs here.
 const PARAMETRIC_SHAPES = new Set<Shape>([
   'sofa', 'curtain', 'wardrobe', 'closet', 'bookshelf', 'shoe-rack',
+  'fan', 'lamp-pendant',
 ]);
 export function isParametric(shape: Shape): boolean {
   return PARAMETRIC_SHAPES.has(shape);
