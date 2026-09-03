@@ -25,9 +25,17 @@ export default defineConfig({
     // A timeout is a HANG-CATCHER, not a performance budget. The distinction is the
     // whole reason this line exists, because leaving it unset made the harness the
     // de-facto budget and it was a number nobody chose: vitest defaults to 5000 ms,
-    // and the slowest honest test in this suite is a 20-piece group solve that takes
-    // ~6.3 s in a warm process on an idle machine before anything is competing for a
-    // core. Measured 2026-09-03 at `a23b50b`, one file, `--reporter=verbose`, against
+    // while the slowest test in this suite that does NOT carry its own timeout —
+    // `layout-solve › the solver moves groups › carries two exchanged groups back
+    // where they belong` — takes **6306 ms** in a warm process on an idle machine,
+    // before anything is competing for a core. That qualifier is the whole claim: CI
+    // has bodies far longer (`layout-shuffle › never offers a room that ROOM CHECK
+    // would report` logged 37.8 s on an idle runner), and every one of them already
+    // carries an explicit 40 s-900 s budget, which is what this number is chosen
+    // AGAINST rather than for. An earlier draft said "~6.3 s" with no test named and
+    // no such qualifier, which read as a claim about the whole suite and is false.
+    //
+    // Measured 2026-09-03 at `a23b50b`, one file, `--reporter=verbose`, against
     // deliberate CPU load (spinners on all 8 cores, then 18 of them):
     //
     //   test                                     idle    8-way   18-way  died as
@@ -42,13 +50,23 @@ export default defineConfig({
     // returning different results under a starved scheduler, and it is not; the
     // results are identical and the runner shot them.
     //
-    // 30 s is ~3x the worst body observed at 2.3x oversubscription, which leaves room
-    // for a slower CI box, and is still short enough that a genuine hang is caught
-    // rather than stalling the run. It is not a licence to be slow: the two real
-    // performance bars live in `tests/layout-solve.test.ts` and
-    // `tests/clearance-field.test.ts` as explicit assertions, and both take the best
-    // of several samples so they measure what the machine CAN do rather than what it
-    // happened to be doing. Raising this number can never make either of those pass.
+    // 30 s is ~3x the worst SINGLE body observed at 2.3x oversubscription, which
+    // leaves room for a slower CI box and is still short enough that a genuine hang is
+    // caught rather than stalling the run. Anything whose body is not single — the
+    // twenty-piece bar now runs three solves, ~12 s at that oversubscription — states
+    // its own budget beside itself, which is the point of a global that is deliberately
+    // modest.
+    //
+    // It is not a licence to be slow: the two real performance bars live in
+    // `tests/layout-solve.test.ts` and `tests/clearance-field.test.ts` as explicit
+    // assertions, and both take the best of several samples so they measure what the
+    // machine CAN do rather than what it happened to be doing.
+    //
+    // What this number CAN do, stated plainly because the first draft claimed the
+    // opposite: raising it turns a timeout into a verdict. At 18-way the twenty-piece
+    // bar dies at 5 s having asserted nothing, and completes at 30 s. So a longer
+    // leash does not make a failing bar pass, but it does let a bar reach its own
+    // assertion — which is the entire fault this section was written about.
     testTimeout: 30_000,
     // Same argument, and the same default. `beforeAll` here builds fixtures with the
     // same solver the tests call.

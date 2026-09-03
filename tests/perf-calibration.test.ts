@@ -20,14 +20,19 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
+  CLEARANCE_FIELD_BAR_MS,
+  HOIST_REGRESSION_MS,
   MAX_FACTOR,
   REFERENCE_IDLE_MS,
+  TWENTY_PIECE_BAR_MS,
   bestMs,
   ceilingMs,
   clampFactor,
   machineFactor,
+  measureReferenceMs,
   referenceWorkload,
   resetMachineFactor,
+  scaleMs,
 } from './helpers/perf';
 
 describe('the reference workload', () => {
@@ -62,7 +67,26 @@ describe('the reference workload', () => {
     // is the workload becoming too SHORT to outlast a scheduler quantum. 5 ms leaves
     // room for a machine four times faster than the one this was written on.
     referenceWorkload();
-    expect(bestMs(referenceWorkload, 3)).toBeGreaterThan(5);
+    const measured = bestMs(referenceWorkload, 3);
+    expect(measured).toBeGreaterThan(5);
+
+    // And the pair, which is the half that was missing. The constant and the workload
+    // were each pinned alone — a band for one, a floor for the other — and nothing
+    // tied them together, so `REFERENCE_IDLE_MS = 90` (inside its own band) or a
+    // workload grown fourfold both sailed through: the first pins every machine at
+    // the FLOOR and switches the calibration off, the second pins every machine at
+    // the CLAMP and inflates both bars. Two opposite failures, one missing assertion.
+    //
+    // One-sided on purpose, and it is the safe side: a slower machine measures
+    // HIGHER, so no CI box can trip this. Only a shrunken workload or an inflated
+    // constant can. If it does fire on a genuinely much faster machine, the fix is to
+    // re-measure `REFERENCE_IDLE_MS` there, which is the right thing to be told.
+    expect(
+      measured,
+      `the workload costs far less than REFERENCE_IDLE_MS (${REFERENCE_IDLE_MS} ms) claims — ` +
+        `either the loop shrank, the constant was inflated, or this machine is >2.5x the ` +
+        `calibration box and the constant needs re-measuring here`,
+    ).toBeGreaterThan(REFERENCE_IDLE_MS * 0.4);
   });
 });
 
@@ -80,9 +104,14 @@ describe('bestMs', () => {
     // Three calls, so a `runs` that silently became 1 is red rather than merely
     // less accurate.
     expect(calls).toBe(3);
-    // The mean of 40/5/40 is ~28 and the first is ~40; only the minimum is under 30.
+    // The first version of this bar was 30, and its own comment did the arithmetic
+    // wrong: "the mean of 40/5/40 is ~28 … only the minimum is under 30". 28.34 IS
+    // under 30, so a `bestMs` returning the mean passed the test named for not
+    // returning the mean — measured at 28.34 against the real spin bodies. Best-of-N
+    // is the mechanism BOTH wall-clock bars now rest on, so the assertion guarding it
+    // being decoration was the most expensive kind of green here. 15 separates them.
     expect(ms).toBeGreaterThanOrEqual(4);
-    expect(ms).toBeLessThan(30);
+    expect(ms).toBeLessThan(15);
   });
 
   it('honours an explicit run count', () => {
@@ -106,8 +135,15 @@ describe('the clamp', () => {
   it('passes a genuine middle reading through untouched', () => {
     // The half that makes the two ends above mean something: a clamp that returned a
     // constant would satisfy both of them.
-    expect(clampFactor(2)).toBe(2);
-    expect(clampFactor(3.5)).toBe(3.5);
+    //
+    // Derived from MAX_FACTOR rather than typed. The first version used a literal 3.5
+    // as "the middle" and went red the moment MAX_FACTOR came down to 3 — a test
+    // asserting a pass-through against a value that had become an edge, which is the
+    // same hand-typed-copy defect this change is otherwise about.
+    const mid = 1 + (MAX_FACTOR - 1) / 2;
+    expect(mid).toBeGreaterThan(1);
+    expect(mid).toBeLessThan(MAX_FACTOR);
+    expect(clampFactor(mid)).toBe(mid);
   });
 
   it('refuses a reading that is not a number', () => {
@@ -119,13 +155,33 @@ describe('the clamp', () => {
     expect(clampFactor(Infinity)).toBe(1);
   });
 
-  it('keeps MAX_FACTOR far below the regression the bars guard', () => {
-    // The twenty-piece bar is 2000 ms against a regression that measured 8400 ms.
-    // If MAX_FACTOR ever reached 4.2 the inflated bar would swallow the regression
-    // on a machine slow enough to hit the ceiling. Both ends of this are the point:
-    // above 1 it is doing something, below 4.2 it is still a gate.
+  it('keeps a clamped bar a clear factor below the regression it guards', () => {
+    // The reason first written here was wrong, and it is worth keeping because the
+    // right reason is a different hazard. It said a MAX_FACTOR of 4.2 would let the
+    // inflated bar "swallow the regression on a machine slow enough to hit the
+    // ceiling". It would not: on a machine `s` times slower the regression costs
+    // 8400·s while the bar is only 2000·min(s, MAX_FACTOR), so the slow machine is
+    // the SAFE case and no value of MAX_FACTOR breaks it.
+    //
+    // The real hazard is a BROKEN CALIBRATION on a normal machine, and review proved
+    // it reachable: growing `referenceWorkload` fourfold, or moving REFERENCE_IDLE_MS
+    // anywhere inside the band asserted above, pins the factor at the clamp with the
+    // whole suite green. There the regression still costs its own 8400 ms while the
+    // bar has been multiplied for no reason — so this is the one assertion standing
+    // between a mis-calibration and a dead gate, and it must read the bar and the
+    // regression rather than restating them.
     expect(MAX_FACTOR).toBeGreaterThan(1);
-    expect(MAX_FACTOR).toBeLessThan(8400 / 2000);
+    expect(TWENTY_PIECE_BAR_MS * MAX_FACTOR).toBeLessThan(HOIST_REGRESSION_MS / 2);
+  });
+
+  it('leaves the un-clamped bar comfortably clear of it too', () => {
+    // The floor end of the same claim: on the calibration machine the bar is the
+    // stated number, and it has to separate there as well or the scaling is covering
+    // for a bar that was never right.
+    expect(TWENTY_PIECE_BAR_MS * 4).toBeLessThan(HOIST_REGRESSION_MS);
+    // And a bar that had collapsed toward the healthy ~300 ms solve would flake on
+    // every run, so it is pinned from below too.
+    expect(TWENTY_PIECE_BAR_MS).toBeGreaterThan(600);
   });
 });
 
@@ -138,12 +194,41 @@ describe('machineFactor', () => {
     expect(first).toBeLessThanOrEqual(MAX_FACTOR);
   });
 
-  it('scales a ceiling by exactly that factor', () => {
+  it('is the measurement it claims to take, not a constant', () => {
+    // Without this the factor can be hard-wired to MAX_FACTOR and every other
+    // assertion here still passes — measured: 13 of 13 green with every bar pinned at
+    // the clamp forever, which is precisely the silent inflation this file exists to
+    // stop. The bounds a test can put on a machine reading are `[1, MAX_FACTOR]`, and
+    // a constant satisfies both, so the composition has to be checked instead.
+    resetMachineFactor();
     const f = machineFactor();
-    expect(ceilingMs(1000)).toBeCloseTo(1000 * f, 6);
-    // A ceiling is never below the number it was stated as, which is the property
-    // that lets the two bars keep writing their idle figure and nothing else.
+    const independent = clampFactor(measureReferenceMs() / REFERENCE_IDLE_MS);
+    // A generous relative band: two best-of-five readings of the same workload differ
+    // by a couple of per cent idle, and by more on a machine whose load is moving. It
+    // does not need to be tight to separate a real measurement from `MAX_FACTOR`.
+    expect(f).toBeGreaterThan(independent * 0.6);
+    expect(f).toBeLessThan(independent * 1.7);
+  });
+
+  it('scales a ceiling by the factor, fed a factor it did not measure', () => {
+    // `scaleMs` is separated from `machineFactor` for exactly this: an assertion that
+    // compares `ceilingMs(x)` against `x * machineFactor()` restates the
+    // implementation, and on any machine at the floor both sides are `x`, so dropping
+    // the multiply survives. It did — three runs in four.
+    expect(scaleMs(1000, 3)).toBe(3000);
+    expect(scaleMs(1000, 1)).toBe(1000);
+    expect(scaleMs(1500, 2.5)).toBe(3750);
+    // And the composition: a ceiling is never below the number it was stated as,
+    // which is what lets both bars keep writing their idle figure and nothing else.
     expect(ceilingMs(2000)).toBeGreaterThanOrEqual(2000);
+    expect(ceilingMs(2000)).toBeLessThanOrEqual(2000 * MAX_FACTOR);
+    // `ceilingMs` is `scaleMs(idle, machineFactor())` and both halves are pinned above
+    // on their own; this is the two-line glue between them. **It can only be OBSERVED
+    // on a machine reading above the floor** — where the factor is exactly 1, an
+    // identity `ceilingMs` is indistinguishable from a correct one, and that is not
+    // fixable from inside a test that cannot make the machine slow. Stated rather than
+    // papered over: CI read 1.00, so on CI this particular line proves nothing.
+    expect(ceilingMs(1000)).toBe(scaleMs(1000, machineFactor()));
   });
 
   it('reports what it measured, so drift in REFERENCE_IDLE_MS is visible', () => {
@@ -154,8 +239,8 @@ describe('machineFactor', () => {
       `\n  perf calibration — reference ${REFERENCE_IDLE_MS} ms on the calibration box, ` +
         `~${observed.toFixed(1)} ms here → factor ${f.toFixed(2)}` +
         (f >= MAX_FACTOR ? '  (AT THE CLAMP — bars are no longer scaling)' : '') +
-        `\n  ceilings this run: layout-solve ${ceilingMs(2000).toFixed(0)} ms, ` +
-        `clearance-field ${ceilingMs(1500).toFixed(0)} ms\n`,
+        `\n  ceilings this run: layout-solve ${ceilingMs(TWENTY_PIECE_BAR_MS).toFixed(0)} ms, ` +
+        `clearance-field ${ceilingMs(CLEARANCE_FIELD_BAR_MS).toFixed(0)} ms\n`,
     );
     expect(f).toBeGreaterThan(0);
   });

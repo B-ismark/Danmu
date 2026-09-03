@@ -33,11 +33,15 @@ const ROOT = join(__dirname, '..');
 const CONFIG = 'eslint.config.mjs';
 
 /** Loading ESLint and resolving `eslint-config-next` through `FlatCompat` is real
- *  work — a cold call measured 5.8 s on Windows, which overran vitest's 5 s default
+ *  work — a cold call measured 5.8 s on Windows, which overran the harness's own bound
  *  and failed the FIRST of these tests while the others passed on the warm module
  *  cache. The instance is reused (`calculateConfigForFile` only reads) and the three
  *  tests that resolve get a budget that is not a stopwatch: none of them is asserting
- *  how fast the toolchain is. */
+ *  how fast the toolchain is.
+ *
+ *  That bound was vitest's 5 s default, which this file now pins at 30 s further down.
+ *  60 s stays because 5.8 s was the COLD figure on a warm-enough day, and a cold
+ *  `node_modules` on a slower box is the case this budget is actually for. */
 const RESOLVE_TIMEOUT = 60_000;
 
 type LintMessage = { ruleId: string | null };
@@ -315,6 +319,10 @@ describe('vitest is configured so a component test can exist', () => {
 
   it('gives hooks the same allowance, since they build fixtures with the same solver', async () => {
     const c = (await config()).test;
+    // `toBe` alone is satisfied by BOTH being absent, which is the vacuous route: it
+    // passes on a config that declares neither, and the sibling above is the only
+    // thing catching that. Assert the subject exists before comparing it.
+    expect(c.hookTimeout, 'vitest.config.ts declares no hookTimeout').toBeDefined();
     expect(c.hookTimeout).toBe(c.testTimeout);
   });
 });

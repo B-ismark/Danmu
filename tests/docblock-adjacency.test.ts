@@ -120,10 +120,17 @@ describe('a docblock documents the thing under it', () => {
     }
     expect(offenders, `a docblock here is followed by another, so it documents nothing`).toEqual([]);
     // An explicit timeout because this reads every first-party source file — ~400 of
-    // them — and vitest's 5 s default is not a budget anyone chose for a filesystem
-    // sweep. It runs in ~0.4 s alone and blew the default under a full-suite run on
-    // Windows, which reads as a failure of the thing being gated rather than of the
-    // clock. A generous ceiling is honest here: this test has no timing claim to make.
+    // them — and the harness's own bound was not a budget anyone chose for a
+    // filesystem sweep. It runs in ~0.4 s alone and blew that bound under a full-suite
+    // run on Windows, which reads as a failure of the thing being gated rather than of
+    // the clock. A generous ceiling is honest here: this test has no timing claim to
+    // make.
+    //
+    // The bound it blew was vitest's 5 s default; `vitest.config.ts` sets 30 s since
+    // § A.4, which covers a 0.4 s sweep seventy times over. So this 120 s is now
+    // decoration and is kept only because a filesystem sweep is the one thing here
+    // whose cost is not this repo's to predict — a checkout on a cold network drive is
+    // a different machine. If that stops being true, delete it rather than trim it.
   }, 120_000);
 
   // The detector itself, against the two shapes that actually occurred and the three

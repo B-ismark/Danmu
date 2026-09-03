@@ -18,7 +18,7 @@ import { analyzeRoom } from '@/lib/clearance';
 import { footFromPart, footInsidePoly } from '@/lib/geometry';
 import { footprintBounds } from '@/lib/footprint';
 import { footprintForLayout } from '@/lib/footprint';
-import { bestMs, ceilingMs } from './helpers/perf';
+import { TWENTY_PIECE_BAR_MS, bestMs, ceilingMs } from './helpers/perf';
 import { defaultScene } from '@/lib/scene-spec';
 import type { ScenePart } from '@/lib/scene-spec';
 import type { Footprint } from '@/lib/footprint';
@@ -664,25 +664,40 @@ describe('cost of a solve', () => {
   // pieces before the model hoisted the static work out of the annealer's loop;
   // measured at ~270 ms after, on the machine this was written on.
   //
-  // The 2000 ms is stated for an IDLE machine and scaled by `ceilingMs`, rather than
-  // being padded for a bad day. It used to be a single sample against a bare 2000,
-  // and it went red on a loaded machine with nothing wrong: 394 ms idle, 1731 ms with
-  // eight spinners, **4061 ms with eighteen** — a healthy solve failing by 2x. Both
-  // halves of the repair matter. Best-of-three asks what the machine CAN do, and the
-  // calibration means a slower box moves the bar and the code's own margin does not.
-  // What is deliberately NOT done here is loosening the number: 2000 against the
-  // 8400 the regression produced is a 4.2x separation, and both figures scale with
-  // the machine together, so the gap survives at any load the clamp admits.
+  // `TWENTY_PIECE_BAR_MS` is stated for an IDLE machine and scaled by `ceilingMs`,
+  // rather than being padded for a bad day. It used to be a single sample against a
+  // bare 2000, and it went red on a loaded machine with nothing wrong: 394 ms idle,
+  // 1731 ms with eight spinners, **4061 ms with eighteen** — a healthy solve failing
+  // by 2x. Best-of-three asks what the machine CAN do; the calibration means a slower
+  // box moves the bar and the code's own margin does not.
+  //
+  // The bar is taken BEFORE the solves, not inside the assertion, and that ordering is
+  // load-bearing: `machineFactor` measures on first use, so reading it after three
+  // twenty-piece solves calibrates against the heap they left behind — an allocation
+  // regression would slow the calibration and buy itself a higher ceiling.
+  //
+  // The number came DOWN from 2000, which is the opposite of what a flaky bar usually
+  // gets. A review did the arithmetic the first version asserted without doing: at the
+  // old clamp the worst-case bar was 2000x4 = 8000 against the 8400 ms the regression
+  // measured, a 5% margin rather than the "four times" the helper claimed. The bar is
+  // ~4x the healthy ~300 ms best-of-three and the clamp is 3, so the worst case is
+  // 3600 and `tests/perf-calibration.test.ts` asserts that separation from both ends.
+  //
+  // Its own timeout, because this body is three solves. At the 18-way oversubscription
+  // above that is ~12 s, and the global 30 s hang-catcher is chosen against SINGLE
+  // bodies; a tripled one is exactly the case that deserves to say so locally rather
+  // than push everybody else's leash out.
   //
   // The sibling below asserts a ratio, and it is not this assertion in another form:
   // rebuilding rule tables per proposal slows a ten-piece solve and a thirty-piece
   // solve by the same factor, so a ratio cannot see a constant-factor regression at
   // all. One test for the complexity claim, one for the constant.
-  it('stays inside two seconds for a room of twenty pieces', () => {
+  it('stays inside its calibrated ceiling for a room of twenty pieces', () => {
     const parts = furnished(20);
+    const bar = ceilingMs(TWENTY_PIECE_BAR_MS);
     const ms = bestMs(() => solveLayout(parts, RECT, parts.map(() => false), { seed: 1 }));
-    expect(ms).toBeLessThan(ceilingMs(2000));
-  });
+    expect(ms).toBeLessThan(bar);
+  }, 90_000);
 
   it('scales with the room rather than exploding', () => {
     // Every term is pairwise, so the honest expectation is quadratic. Anything much
@@ -874,10 +889,14 @@ describe('the solver moves groups, not only pieces', () => {
     // without the pass: the flat search's best of nine is 11.8 against a 5.5 target.
     expect(costs[0]).toBeLessThan(target);
     // Nine anneals on a sixteen-piece room. Nothing here is a timing assertion — the
-    // explicit budget exists because vitest's 5 s default is not one either, and this
-    // test sat just under it: green run after run, then red the first time the whole
-    // suite ran on a busier machine. A test whose result depends on what else is using
-    // the CPU is a flaky test even when every number it checks is deterministic.
+    // explicit budget exists because the harness's own bound was not one either, and
+    // this test sat just under it: green run after run, then red the first time the
+    // whole suite ran on a busier machine. A test whose result depends on what else is
+    // using the CPU is a flaky test even when every number it checks is deterministic.
+    // (That bound was vitest's 5 s default when this was written. § A.4 measured what
+    // the default was doing across the suite and `vitest.config.ts` sets 30 s on
+    // purpose now; 60 s here is still a decision, because nine anneals is not one
+    // body.)
   }, 60_000);
 
   it('finds the swap in an open plan the flat search sits still in', () => {

@@ -54,21 +54,21 @@ const room = (id: LayoutId, w: number, d: number) => {
   };
 };
 
-// ── The three tests below carry an explicit timeout ─────────────────────
+// ── Three tests below USED to carry an explicit 30 s timeout ────────────
 //
 // Measured on an idle machine at 3429 ms, 2129 ms and 3548 ms — 1.4–2.3× inside
-// vitest's default 5000 ms, which is not headroom, it is a coin toss. Under a
+// vitest's then-default 5000 ms, which is not headroom, it is a coin toss. Under a
 // full-suite run they went red and in isolation they went green, which is the
 // most expensive shape of failure there is: it reads as a regression in whatever
 // was changed that day, and the debugging happens somewhere else entirely.
 //
-// Each one runs `shuffleRoom`, which is a loop of whole solves — the work is real
-// and the number is not going to come down. 30 s is ~8.5× the worst of the three,
-// so it survives contention while still failing on a genuine order-of-magnitude
-// regression. It is NOT the 60 s / 300 s of the two sweeps below, deliberately:
-// those iterate presets × attempts and this one does not, and a timeout that
-// cannot distinguish the two sizes of test tells nobody anything.
-const SOLVE_TIMEOUT = { timeout: 30_000 };
+// § A.4 then found that same default doing the same thing to three `layout-solve`
+// tests, and `vitest.config.ts` now sets 30 s globally with the measurement beside
+// it. That made this constant byte-identical to the global and deleting it changes
+// nothing — which is the shape this repo calls an unpinned constant: it could not go
+// red, and its comment still claimed a deliberate three-way 30/60/300 distinction
+// that had collapsed to two. The 60 s and 300 s budgets on the sweeps below are real
+// and stay, because those iterate presets × attempts and these do not.
 
 describe('randomizeStart', () => {
   it('leaves locked and wall-mounted pieces exactly where they are', () => {
@@ -127,7 +127,7 @@ describe('randomizeStart', () => {
 const SHUFFLE_SEEDS = [42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53];
 
 describe("solveLayout mode: 'shuffle'", () => {
-  it('moves a room that mode "arrange" leaves completely untouched', SOLVE_TIMEOUT, () => {
+  it('moves a room that mode "arrange" leaves completely untouched', () => {
     for (const [id, w, d] of SETTLED) {
       const { parts, footprint, locked, movable } = room(id, w, d);
       // The premise, asserted rather than assumed: this room is already settled, so
@@ -265,7 +265,7 @@ describe('shuffleRoom — the offer, not the search', () => {
     expect(shuffleRoom(parts, rm, locked, { attempt: 1 })).toBeNull();
   });
 
-  it('avoids repeating an arrangement it has just offered', SOLVE_TIMEOUT, () => {
+  it('avoids repeating an arrangement it has just offered', () => {
     const { parts, room: rm, locked } = room('rect', 6, 4);
     const first = shuffleRoom(parts, rm, locked, { attempt: 1 });
     expect(first).not.toBeNull();
@@ -278,7 +278,7 @@ describe('shuffleRoom — the offer, not the search', () => {
     expect(second!.result.placements).not.toEqual(first!.result.placements);
   });
 
-  it('is deterministic per (room, attempt), and a new attempt is a new question', SOLVE_TIMEOUT, () => {
+  it('is deterministic per (room, attempt), and a new attempt is a new question', () => {
     const { parts, room: rm, locked } = room('rect', 6, 4);
     const a = shuffleRoom(parts, rm, locked, { attempt: 1 });
     const b = shuffleRoom(parts, rm, locked, { attempt: 1 });

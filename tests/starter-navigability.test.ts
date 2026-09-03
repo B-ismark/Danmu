@@ -357,10 +357,15 @@ describe('§ G.1 · where a seeded room strands floor', () => {
     expect.soft(cell('t', 7.5, 4.6).stranded, 'the wide T at 4.6 stopped stranding').toBeGreaterThan(0);
 
     // 280 cells, each a full build plus a clearance field, so this is ~5 s of real
-    // work and it does not fit vitest's DEFAULT 5 s `testTimeout` — a bound nobody
-    // chose, since `vitest.config.ts` sets none at all. This test hit it on its first
-    // green run, which is § A.4 of `what-is-still-open.md` happening to the file that
-    // measured § A.4. Budgeted here rather than raised globally: a grid is allowed to
-    // be slow, and the other 117 files should not inherit a longer leash for it.
+    // work — and ~20 s on a machine running the rest of the suite beside it, which is
+    // what this override is still for. It is no longer for the reason first written
+    // here. That reason was "vitest's DEFAULT 5 s `testTimeout`, a bound nobody chose,
+    // since `vitest.config.ts` sets none at all", and it argued *against* raising the
+    // global on the grounds that the other 117 files should not inherit a longer
+    // leash. § A.4 then measured what that default was actually doing and the argument
+    // lost: three `layout-solve` tests were dying on it with nothing wrong, two of them
+    // asserting nothing about a clock. The global is 30 s now and is a hang-catcher
+    // rather than a budget. This test keeps its own number because 40 s is a *grid's*
+    // allowance and not everyone's.
   }, 40000);
 });
