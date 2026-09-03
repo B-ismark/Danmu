@@ -1055,6 +1055,14 @@ function FixButton({
       // the more serious refusal must not give LESS guidance than the milder one. The
       // first version of the impossible arm was a single sentence for both and named no
       // next step at all.
+      //
+      // Reachability, measured rather than assumed: over 212 confined solves — every
+      // finding of every preset, scrambled and seeded, four seeds each — this branch
+      // declined **zero** times, and so did the `no-gain` sentence that has shipped
+      // beside it for months. A confine locks all but the finding's own pieces, so the
+      // search has almost no room to exceed the impossibility it was handed. Both are
+      // kept: this one guards against a wrong message rather than adding a feature, and
+      // deleting it would leave the older sentence covering a case it describes falsely.
       toast({
         title: result.declined === 'impossible' ? 'No safe way to move those' : 'Moving those didn’t clear it',
         message:

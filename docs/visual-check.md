@@ -282,10 +282,15 @@ What is left is the part that probe could not reach.
   impossible copy is *"No safe way to move those"* with a different second sentence
   depending on whether the finding named pieces (*"Fix can rearrange the whole
   room…"*) or not (*"Try unlocking a piece…"*). **Neither string has ever rendered.**
-  This path is exempt from the `isWorthOffering` gate, so it reaches the veto more
-  readily than `Fix` does — and it is also the branch nothing measures: the sweep that
-  found the `impossible` arm is whole-room and unconfined, so it is possible this
-  branch is dead. If it will not fire, that is worth knowing.
+  **Measured, and the answer is uncomfortable: 212 confined solves over every finding
+  of every preset, scrambled and seeded, declined _zero_ times — for either reason.**
+  So the new sentence is unreachable on any fixture that can be built from the
+  presets, and so is the one that has shipped beside it for months. A confine locks
+  all but the finding's own pieces, which leaves the search almost no room to exceed
+  the impossibility it was handed. Kept because it guards against a wrong message
+  rather than adding a feature, and because refusing it would leave the older sentence
+  covering a case it describes falsely — but if someone can reach this path in a real
+  room, that is the thing to find out.
 - **The re-fit offer.** Resize a wardrobe well past what the room takes, wait for the
   offer toast, press **Re-fit**. Its impossible copy is *"No safe way to fit that"*.
   Also never rendered, and this is the path most likely to reach it — a resize is the
