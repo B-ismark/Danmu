@@ -4335,6 +4335,32 @@ without looking. One of them was — and the other was carrying an unmeasured de
 in no commit on `main`. **A docs-only diff is not a safe diff**; it is the one nothing else in
 the toolchain will ever tell you about.
 
+**And the pass was not finished, which the 2026-09-03 sweep found.** § 38.2 only ever looked
+at *remote* refs. This checkout also holds **18 local branches ahead of `origin/main`** and,
+before pruning, **23 worktrees** against § D's "eight" — every one of them clean, and all but
+one last written to between 27 and 30 August. Six worktree entries were administrative
+corpses (their directories were already gone) and are pruned. Two local refs had never been
+looked at by anyone and are tagged rather than trusted: `fix/multi-select-drag` (19 commits,
+`archive/multi-select-drag`) and `agents/project-overview-and-understanding` (1 commit,
+`archive/project-overview-floating-banner`).
+
+**The second of those two was read per-line, and it is the most useful thing in this
+paragraph.** `0202eaa`, *"fix(spatial): surface floating placement state"*, dated the evening
+of 2026-09-02, is a **parallel implementation of § 37's placement banner** — 69 added lines in
+`Inspector.tsx`, written against the same problem while § 37 was in flight. `main` is ahead,
+and it is ahead in exactly the two places § 37's review lens caught:
+
+- it declares `role="status"` **with** `aria-live="polite"`. `main` carries the pair's removal
+  and the comment explaining it — *the first version had both, and it read them all out.*
+- it derives floating from `bottom > 0.005`, a **second tolerance**, ten times smaller than
+  `SUPPORT_Y_EPS = 0.05`, whose docblock predicts this precise failure: *"a second literal is
+  how two callers come to disagree about the same piece."* `main` derives `floating` from
+  `restingOn(...) === null` instead, so there is one answer.
+
+So a branch whose name promises an unlanded fix in fact holds the pre-review draft of a
+shipped one. **A branch name is a claim about intent, never about content** — and the cost of
+checking it was one diff, against a rev-list count that would have said "1 ahead" forever.
+
 **3. What went to [`visual-check.md`](visual-check.md) instead of here**, so nobody searches
 this file for it:
 
