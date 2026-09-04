@@ -18,32 +18,58 @@ point of writing this down.
 ## The queue — what is open, in the order it should be done
 
 **Re-derive before trusting this.** It is an ordering of the sections below, rewritten
-**2026-09-03** against `origin/main` @ `35b702f`; the sections themselves are the source and
+**2026-09-04** against `origin/main` @ `7bba831`; the sections themselves are the source and
 they say whether each item exists in a commit. An item disappears from here when its section
 says FIXED — the struck-through rows this table used to carry are gone, because a queue that
 keeps its own history stops being readable as a queue.
 
-**This rewrite added five rows that were open the whole time and this table did not list**
-— § B.12, § B.14, § B.17, § A.3's script and § A.4 — which is the failure mode a queue has:
-it is read as the inventory, so an item absent from it is not deferred, it is *forgotten*.
-One of the five (§ B.17) is a decision the **user already answered** and nobody built. The
-lesson is narrower than "re-derive": a table built by ranking the sections someone
-remembered will omit exactly the sections they did not, and § B — the decisions — is the
-section least likely to be re-read, because nothing in it looks like work.
+**What is OPEN, which is the only list this header keeps.** Rows **9, 11, 12, 13, 17 and
+18**; the **A.2 / G.2** half of row 14, whose G.3 half shipped in #106; the **device**
+half of row 2, where the draw-call count is measured and only a real GPU can finish the
+verdict; and § E's remaining coverage gap, which has no row because it was found after the
+table was built — one test now renders the `stacked` shell and **nothing renders `compact`**.
+Everything else in the table below is marked done in its own row.
 
-**Two rows also said something false rather than nothing:** A.7's *197 in 240* was the
-figure from before its own fix shipped, and § E's *"the bucket is not [in]"* predates six of
-the nine component test files that now exist. Both were quoted forward for weeks.
+**This is an open list because the previous header kept a closed one, and a closed list
+rots by omission in the direction nobody checks.** Its "Closed since the last rewrite"
+paragraph named ten sections and was already missing rows 1, 5, 6, 7 and 10 by the time
+anyone read it, and would have owed 8, 14 and 16 within a day. Nothing about that is
+visible from the paragraph itself: a closed list that is short reads exactly like a
+project with little finished. An open list has the opposite failure — it grows stale by
+listing something already done — and *that* failure is loud, because the next person opens
+the section, finds FIXED, and deletes the line. **Prefer the staleness that announces
+itself.** The rewrite before this one made the same point about the table and then wrote
+the header the other way round.
 
-**The baseline every row's numbers should be compared against**, measured at `35b702f` on
-2026-09-03: `typecheck` and `lint --max-warnings 0` clean, `build` clean in 118 s with no
-`Invalid Options` tell, and the suite **3 failed / 2146 passed / 5 expected-fail** over 118
-files in 265 s — where all three reds pass in isolation. See row 3.
+**The baseline every row's numbers should be compared against**, re-measured at `7bba831`
+on **2026-09-04**: `typecheck` clean in 21 s, `lint --max-warnings 0` clean in 17 s,
+`build` clean in 89 s with **no `Invalid Options` tell**, and the suite **132 files, 2401
+passed / 5 expected-fail / 0 failed** in 238 s.
 
-**Closed since the last rewrite, so nobody re-opens them:** § 14, § 17, § 18, § 31, § 32,
-§ 33.1, § 34, § 35, § 36 and § 37. All ten are in `main`; the last five landed as PRs
-#87-#91 on 2026-09-02/03. Three of those five **want eyes and have not had them in full** —
-that is [`visual-check.md`](visual-check.md)'s list, not this one.
+**Read the zero carefully — it is not the same claim as "the flakes are fixed".** The
+`35b702f` baseline recorded *3 failed / 2146 passed over 118 files*, and all three of those
+reds passed in isolation then. This run was taken on an idle machine and they did not
+appear; the same suite run on this tip **while a second session was working produced three
+reds, then one, then none**, the survivor being `shuffle-gate.test.ts` timing out at 40 s
+having taken 52.9 s. So the honest reading is that the suite is green *when nothing
+competes with it*, which is what row 3 already concluded — see § A.4. A green from a loaded
+machine and a green from an idle one are different measurements, and only one of them is
+this number.
+
+**Two corrections that make rows 11 and 12 SMALLER than the table says**, which is the
+unusual direction and the reason they are in the header rather than only in the rows.
+Row 12's *"six hand-written copies of the vertical-extent rule"* is **fully retired** — all
+six call `verticalExtent`, plus a seventh the original list never named
+(`layout-settle.ts:380`), and `layout-score.ts:487` says so in the code itself. The only
+raw `pos[1] +` arithmetic left in `lib/` is `rigid-parent.ts:184`'s rigid-child offset,
+which was never an instance of the rule. In the research doc feeding row 11, **row 2's
+feasibility split is half shipped** by § 31's veto (`bestCandidate` is already lexicographic,
+`layout-solve.ts:233`) and **row 3b was filed as blocked on a PR whose helpers are both on
+`main`** (`relationDistance` / `inRelationBand`). The seventh copy is the part worth keeping:
+a sweep that enumerates by the term the old list used cannot see a site that never used it,
+so "six" was never going to become "seven" by grepping. All three were re-derived against
+`origin/main` before being written here, not taken from the hand-off that reported them;
+the research doc is [`research/suggest-and-collision.md`](research/suggest-and-collision.md).
 
 **And branch hygiene, which was row 14 of this table until 2026-09-03, is done — both ends
 of it now.** Every stale *remote* ref went first; § 38.2 carries the verdicts and § 38.4 the
@@ -87,9 +113,9 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 9 | **§ H.8** two reports that need a real repro | A group drag bounded by the lead's rules rather than the set's, and a merged set that drills in from a nightstand but never from the bed. Both are DOM-reachable on the 2D plan, which is the cheap way in | M | wants row 15's shims |
 | 10 | **§ B.14** a turn that puts a corner through the wall — **ANSWERED AND BUILT 2026-09-03: keep and report, both paths** | The angle is always taken; what may not happen is a turn succeeding in silence. Two findings changed the shape of it: the second document said to contradict the first **no longer exists**, and `valid` is computed on the ALREADY-CLAMPED position, so a turn that slid a piece across the floor reports success. `turnNudge` is the sentence; `spinSelection` joins `turnInPlace` and stops being the one turn gesture with no pipeline, no cascade and no report | S once decided | done |
 | 11 | **§ H.6** Suggest, from the ground up — the user's explicit ask | The largest open thing here. It **subsumes** A.2, A.7 and G.2, and the 5 parked `it.fails` retire here too. (It used to name "A.3's `:555`" as a fourth; that line number stopped existing when the assertion was fixed, and § A.3 is closed — the surviving question there is not Suggest's to answer, it is whether ONE refusal in 532 is enough evidence for the re-check.) **It is NOT un-researched** — `docs/research/suggest-and-collision.md` is a three-layer design whose four questions to the user are all ANSWERED, including the feasibility split being in scope. Of the three things this section calls missing, **only one is** (support); facing is priced by `relationCost`, and groups move rigidly already | XL — refresh the research against `main`, then execute its rows | wants row 1 measured first, since it is a symptom |
-| 12 | **§ H.7** collision, properly — the user is open to replacing the engine | Every piece is one box or one ellipse, so a sofa's L, a table's legs and a plant's canopy are all the same rectangle. Same research doc, rows 4a/4b — and 4b is **half done** (`verticalExtent` makes ONE extent right; more than one still needs 4a). Carries a duplication the doc found and nobody retired: **six hand-written copies** of the vertical-extent rule in five files | XL | independent of row 11, but they meet |
+| 12 | **§ H.7** collision, properly — the user is open to replacing the engine | Every piece is one box or one ellipse, so a sofa's L, a table's legs and a plant's canopy are all the same rectangle. Same research doc, rows 4a/4b — and 4b is **half done** (`verticalExtent` makes ONE extent right; more than one still needs 4a). The duplication this row used to carry — *"six hand-written copies of the vertical-extent rule in five files"* — is **RETIRED (2026-09-04)**: all six call `verticalExtent`, plus a **seventh** the original list never named (`layout-settle.ts:380`), and `layout-score.ts:487` records it in the code. The only raw `pos[1] +` left in `lib/` is `rigid-parent.ts:184`'s rigid-child offset, never an instance of the rule. **This row is smaller than it was**, and the seventh copy is why a grep for the old wording could not have closed it | XL | independent of row 11, but they meet |
 | 13 | **A.7** `snapYaws`' residual — 40 crooked pieces in 240 solves | **The 197 was BEFORE the fix**, which shipped in `fa12f1a`; this row said 197 for weeks and § A.7's own heading said it too. What is left is the residual, and § A.7 already says what it needs: a search that can move the piece **and** its neighbour, which a finish pass cannot do | M | **a symptom of row 11 and only closable there** |
-| 14 | **A.2 / G.2** variety in Shuffle, the anchor-first trade — **G.3 is DONE (2026-09-04)** | Real, but none is a defect a user has reported. A.2's number is measured (penalty 4, range 2–8, in cost units) and **nothing pins it** — a test that fails at `diversityPenalty: 0` is still owed. G.2 stays a decision: gating a pass on room shape trades one preset's tail for another's. **G.3 turned out not to be a decision at all**: it was filed as "shorter card or signpost gap", and both tabs render the same two lists out of the same shell, so the copy was already true on the plan and simply unsaid there | varies | after row 11 decides whether they still exist |
+| 14 | **A.2 / G.2** variety in Shuffle, the anchor-first trade. *(G.3 was a third item carried in this row's header rather than in a row of its own, which is how a done thing hides inside an open one — it shipped in #106 and is recorded in § G.3.)* | Real, but none is a defect a user has reported. A.2's number is measured (penalty 4, range 2–8, in cost units) and **nothing pins it** — a test that fails at `diversityPenalty: 0` is still owed. G.2 stays a decision: gating a pass on room shape trades one preset's tail for another's. **G.3 turned out not to be a decision at all**: it was filed as "shorter card or signpost gap", and both tabs render the same two lists out of the same shell, so the copy was already true on the plan and simply unsaid there | varies | after row 11 decides whether they still exist |
 | 15 | **E** the jsdom component bucket — **the shim half is DONE 2026-09-03; the coverage half is row 9's** | The count in this row was already stale when it was written: **14 `.test.tsx` files**, not 9, and **ten** hand-rolled the `next/navigation` object rather than five. They had drifted into three formattings of the same object and two different comments explaining it. `vitest.config.ts` now names `setupFiles: ['tests/helpers/setup.ts']` for the two globals — jsdom implements neither, and `lib/use-media-query.ts` calls `window.matchMedia` **unguarded** while every other reader uses `?.`, so `matches: false` changes nothing for the optional readers and unblocks the one that needs it; the `typeof window` guard is what keeps ~115 node-environment files from paying for it. `tests/helpers/mount.ts` owns `navigationMock`, called per file because the room id differs — `vi.mock`'s factory is `async` and `await import()`s it, since vitest hoists the call above every `import` and a static one throws *before initialization*. Both halves gated in `tests/toolchain.test.ts`, because an extraction is undone by one paste | done | **row 9 is what is left of § E** |
 | 16 | **§ A.3** the standalone re-search script — **WRITTEN 2026-09-04** | `scripts/openroutes-sweep.mjs`, plain Node through vite's SSR pipeline, not a Vitest file — a measurement campaign that takes minutes is not a gate. Both reds it was filed to serve had been **green since `4be144c`** and this table's own red list said so while § A.3 still described them reproducing. What the script buys is the part that was never rot: the fixture has been re-hunted by hand FOUR times, each time because a cost-function change moved the space. Run in full: **19 of 54 cut, 532 trials, 1 refusal** — the first two exactly as recorded, the third down from 3, which the test file predicted and refused to quote unmeasured. **The live finding is that one trial**: the fine-grid re-check has a single piece of evidence across the whole grid | done | nothing |
 | 17 | **§ H.10** undo / redo should cover selection | The user asked for it. The consequence worth stating before building it is that one press per click on the way back is why most tools do not do this — a separate history, or coalesced runs, is their call | M | needs the user |
@@ -1392,7 +1418,9 @@ the user went and looked.
 `35b702f` on 2026-09-03 and was **fourteen** `.test.tsx` files by the time the shims were
 pulled out the same day — which is the shape of every stale claim in this file: a number
 correct when written, quoted forward, and read as current. Derive it from `tests/` before
-using it. The extraction is described under *The shim extraction* further down.
+using it — it was **sixteen** at `7bba831` on 2026-09-04, which is a third value for the
+same sentence in two days and is the argument for the instruction rather than for the
+number. The extraction is described under *The shim extraction* further down.
 
 There were **nine** `.test.tsx` files at `35b702f`, not two:
 `library-click-through`, `mount-height-refusal`, `placement-banner` and `where-it-sits` each
