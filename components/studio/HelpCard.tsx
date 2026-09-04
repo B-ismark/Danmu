@@ -21,6 +21,13 @@ export function HelpCard({ title, onClose, children }: { title: string; onClose:
     <div
       className="ds-card"
       role="note"
+      // A scroll box needs to be focusable or a keyboard-only user cannot scroll it.
+      // Firefox focuses an overflow container on its own; Chrome and Edge do not, so
+      // without this the card is simply unreachable below its own fold in the two
+      // browsers most people use — and a Firefox check would pass and call it done.
+      // Measured on the plan card: 950px of content in a 420px box, ONE focusable
+      // descendant, and it is the Close button in the sticky header.
+      tabIndex={0}
       style={{
         padding: 0,
         boxShadow: 'var(--shadow-lift)',

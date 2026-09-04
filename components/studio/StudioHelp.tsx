@@ -312,6 +312,8 @@ function PlanHelp() {
         <HelpLine>Click a wall to paint it, or drag it to make the room bigger or smaller.</HelpLine>
       </HelpGroup>
 
+      <TwoLists />
+
       <HelpGroup title="Choosing pieces">
         <HelpLine>
           Drag across empty floor to lasso several. Hold <Kb>Shift</Kb> to add to what is already chosen — by
@@ -330,8 +332,6 @@ function PlanHelp() {
         </HelpLine>
         <HelpLine>Right-click a piece — or the plan — for what you can do to it, including that same list.</HelpLine>
       </HelpGroup>
-
-      <TwoLists />
 
       <HelpGroup title="Getting around">
         <HelpLine>
