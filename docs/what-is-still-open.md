@@ -5482,9 +5482,10 @@ may be based where its top passes the ceiling). Whether an UNAIMED click should 
 is the open half — gating it entirely would put a table lamp on the floor beside the desk it
 belongs on, so it is not obviously an improvement.
 
-**Six things the 2026-09-04 review found and did NOT fix**, all reachable, none a
-regression from that change except where marked. They are here rather than in a commit
-message because each needs a decision:
+**Six things the 2026-09-04 review found. FOUR are still open; 5 and 6 were fixed the
+same day** — see the two struck rows below and § H.3's own entry in the queue. All are
+reachable, none a regression from that change except where marked. The four that remain
+are here rather than in a commit message because each needs a decision:
 
 1. **The drop path has no collision gate; the click path does.** A fan dropped onto a
    2.4 m bookshelf is accepted at `(1.50, 2.33, 1.00)` — inside it — and then one
@@ -5505,13 +5506,42 @@ message because each needs a decision:
    `bound − 0.02`; `lib/drag-resolve.ts` clamps to a bare bounding box, so the first nudge
    jumps the fan 20 mm outward. This is the item at § A.2's neighbour below, whose
    inventory says *"a floor-standing piece"* — the ceiling family is newly enrolled in it.
-5. **`openSpotForNewPart` reads the authored `parts`, not resolved positions.** Drag the
-   first fan into a corner and the search still believes the middle is occupied, so the
-   second is aimed off-centre while the middle is empty. Pre-existing since § H.3 landed,
-   for every family.
-6. **The 3D drop announces nothing.** `grep announce components/three/Room.tsx` is empty,
-   while `PlanView` says *"&lt;label&gt; added."* — so for a screen-reader user a successful
-   3D drop and the silent `intersectPlane` early return are indistinguishable.
+5. ~~**`openSpotForNewPart` reads the authored `parts`, not resolved positions.**~~
+   **FIXED 2026-09-04, and it was WIDER than filed.** The note blamed one function and
+   named an off-centre ring as the symptom. Tracing the callers rather than trusting it:
+   **all three** placement paths passed `useScene.getState().parts`, and `placeNewPart`
+   reads that array too — for `findSupportUnder`, not only `openSpotForNewPart` for
+   `collidesAt`. So the visible failure was never a slightly-off ring. Measured in both
+   directions: a lamp dropped where a desk **used to be** rests at **0.75 m over empty
+   floor**, and one dropped on the desk that is **really there** falls through it.
+   `PlanView` had already imported `currentRoomScene` and was using it **ninety lines
+   above its own drop handler** — the file knew the answer and the handler did not use it.
+   Fixed by making parts not a parameter at all: `addPieceToRoom` (`lib/add-piece.ts`)
+   reads `currentRoomScene()` itself.
+6. ~~**The 3D drop announces nothing.**~~ **FIXED 2026-09-04, same change and the same
+   cause** — it was the second copy missing a line the first copy had, not a decision
+   anyone made about the 3D tab. Announcing is `addPieceToRoom`'s default now. A third
+   instance turned up that this list never had: **the single Library click was silent
+   too**, so of three ways to add a piece exactly one spoke.
+   **Do not re-run this row's original verification command.** It read *"`grep announce
+   components/three/Room.tsx` is empty"*, and that grep now returns a hit — from the
+   *comment* in `Room.tsx` explaining this fix. The real call is one indirection away in
+   `addPieceToRoom`. The command gives the right answer from the wrong evidence, which is
+   worse than a stale claim because it looks like it was checked. `tests/add-piece.test.ts`
+   is the check: it is also the first test that has ever reached the 3D drop's steps, which
+   used to live inside an R3F component this repo deliberately cannot mount.
+
+**And the review that fixed them found a FOURTH place that adds a piece, which the
+extraction did not collapse.** `FitPanel.place()` (`components/studio/RoomTools.tsx`) mints
+its own id and calls `addPart` directly, from a `result.placement` frozen at **Check** time
+and invalidated on a kind change, a size edit and a fill — but **never when the room
+changes**. The panel is non-modal and the canvas stays live, so: press Check on a 2200 mm
+sofa, drag an armchair onto the spot it named, press Place, and the sofa is added
+intersecting the armchair — which is item 1 of this list, reached by a different door.
+Pre-existing, not a regression, and **not fixed here** because it is item 1's decision.
+Latent beside it: `place()` writes no `wallMounted`, harmless only because all ten
+`FIT_KINDS` are floor-anchored — the first wall or ceiling row added to a "will it fit"
+panel stores a flag that disagrees with `isWallMountedPart`, and nothing would fail.
 
 **What is pinned and what is not.** `tests/spawn-spread.test.ts`,
 `tests/spawn-spread-wired.test.tsx` and, since 2026-09-04, `tests/drop-aim.test.ts`.
