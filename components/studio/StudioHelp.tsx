@@ -21,8 +21,8 @@ import { usePathname } from 'next/navigation';
 import { useStudio } from '@/lib/store';
 import { Icon } from '@/components/ui/Icon';
 import { HelpCard, HelpGroup, HelpLine, Kb } from './HelpCard';
-import { planHelp } from './PlanChrome';
 import { isTypingOrDialog } from './KeyboardShortcuts';
+import { useStudioLayout } from './NarrowViewportBanner';
 
 type CoachId = 'drag' | 'wall';
 
@@ -179,7 +179,7 @@ export function StudioHelp() {
               btnRef.current?.focus();
             }}
           >
-            {onModel ? <ModelHelp /> : planHelp()}
+            {onModel ? <ModelHelp /> : <PlanHelp />}
           </HelpCard>
         </div>
       )}
@@ -205,24 +205,7 @@ function ModelHelp() {
         </HelpLine>
       </HelpGroup>
 
-      {/* "The lists on the left" was true of both until the Library moved to the
-          right edge of the canvas with its trigger. A help card that says where to
-          look is the one place a stale direction costs the most, and it is the
-          second of these this round — the piece list's empty state said "Add a piece
-          above" of a button that had moved to the other rail. So the heading names
-          the lists instead of a side, and the line itself now says which is where.
-          (The sun note's "from the Library" is not one of these: it names the list,
-          not a direction, so it was true before this and is true after.) */}
-      <HelpGroup title="The two lists">
-        <HelpLine>
-          <b>Catalog</b>, in the left rail, is what is in this room; <b>Library</b>, on the right of
-          the canvas, is what you can add.
-        </HelpLine>
-        <HelpLine>
-          In either list, <Kb>Shift</Kb>-click picks a run of rows at once, and <Kb>Ctrl</Kb>-click adds that
-          piece to the room.
-        </HelpLine>
-      </HelpGroup>
+      <TwoLists />
 
       <HelpGroup title="Walls and the room">
         <HelpLine>Click a wall to pick a colour for it. Drag it to make the room bigger or smaller.</HelpLine>
@@ -258,6 +241,121 @@ function ModelHelp() {
         <HelpLine>
           <Kb>Ctrl</Kb>
           <Kb>Z</Kb> undo · add <Kb>Shift</Kb> to redo
+        </HelpLine>
+      </HelpGroup>
+    </>
+  );
+}
+
+// The one group both cards render, and the reason it is a component rather than a
+// paragraph in each: it names WHERE two panels are, and a direction is the thing that
+// goes stale. It went stale once already — "the lists on the left" was true of both
+// until the Library moved to the right edge of the canvas with its trigger, and the
+// piece list's empty state was saying "Add a piece above" of a button that had moved to
+// the other rail in the same round. So the heading names the lists instead of a side,
+// the line says which is where, and there is one copy of it to keep true.
+//
+// (The sun note's "from the Library" is not one of these: it names the list, not a
+// direction, so it was true before that round and is true after.)
+//
+// Both tabs get it because both tabs HAVE both lists: `DockedShell` is the one shell,
+// so `PartTree` is in the left rail on the plan as well, and the plan page renders the
+// same `CatalogPanel` on the right. A person who opened Help on the plan used to be
+// told about pieces, panning and keys and never what the two lists were — a signpost
+// gap one tab wide, filed as § G.3.
+// Where the Catalog is depends on the shell, so the sentence reads the shell rather
+// than asserting one answer. Below `STACK_WIDTH` (1023px) `DockedShell` renders ONE
+// column with the Catalog as a full-width panel under the room and there is no left
+// rail at all — and that is not an exotic viewport: 200% zoom on an ordinary 1280px
+// laptop reports 640px, so the reader most likely to be told to look in a rail that
+// does not exist is the one least able to go hunting for it.
+//
+// The Library half needs no branch: `CatalogPanel` is `position: absolute; right: 12`
+// inside the canvas at every width, so "on the right of the canvas" is true stacked
+// or not. Deriving only the half that moves is deliberate — a second branch that
+// always picks the same answer is a second thing to keep true for nothing.
+function TwoLists() {
+  const { layout } = useStudioLayout();
+  return (
+    <HelpGroup title="The two lists">
+      <HelpLine>
+        <b>Catalog</b>, {layout === 'stacked' ? 'in the panel under the room' : 'in the left rail'}, is what
+        is in this room; <b>Library</b>, on the right of the canvas, is what you can add.
+      </HelpLine>
+      <HelpLine>
+        In either list, <Kb>Shift</Kb>-click picks a run of rows at once, and <Kb>Ctrl</Kb>-click adds that
+        piece to the room.
+      </HelpLine>
+    </HelpGroup>
+  );
+}
+
+// The plan tab's half. It lived in `PlanChrome.tsx` — beside the zoom toolbar and the
+// legend — while the 3D half lived here, which is exactly the split this file and
+// `HelpCard.tsx` both already warned about in prose: "nobody comparing them was ever
+// looking at both". Two cards describing one app belong where a reader can read them
+// together, and the drift that split produced was a whole group missing from one of
+// them for as long as anyone had been looking.
+function PlanHelp() {
+  return (
+    <>
+      <HelpGroup title="Moving furniture">
+        <HelpLine>
+          Drag a piece to move it. It stops against whatever is in the way, tints red if it cannot go there —
+          along with whichever piece of a selection ran out of room — and measures its way to the nearest walls
+          as it goes.
+        </HelpLine>
+        <HelpLine>
+          <Kb>Esc</Kb> part-way through a drag puts the piece back where it was.
+        </HelpLine>
+        <HelpLine>Drag the handle on a selected piece to turn it.</HelpLine>
+        <HelpLine>Click a wall to paint it, or drag it to make the room bigger or smaller.</HelpLine>
+      </HelpGroup>
+
+      <TwoLists />
+
+      <HelpGroup title="Choosing pieces">
+        <HelpLine>
+          Drag across empty floor to lasso several. Hold <Kb>Shift</Kb> to add to what is already chosen — by
+          lasso, or by clicking one piece at a time.
+        </HelpLine>
+        <HelpLine>
+          {/* The line break must not fall between a word and a keycap. JSX strips the
+              trailing newline and indent from a text chunk, and `Kb` has `marginRight`
+              but no left margin, so "Keep" followed by a newline and <Kb>Alt</Kb>
+              rendered as "KeepAlt". The sibling line in `ModelHelp` is safe only
+              because its break happens to fall inside one text chunk — which is why
+              this is written with the space made explicit rather than moved. */}
+          Where pieces overlap, <Kb>Alt</Kb>-click lists everything under the pointer and lets you pick.
+          Keep{' '}
+          <Kb>Alt</Kb>-clicking the same spot to step down through them one at a time.
+        </HelpLine>
+        <HelpLine>Right-click a piece — or the plan — for what you can do to it, including that same list.</HelpLine>
+      </HelpGroup>
+
+      <HelpGroup title="Getting around">
+        <HelpLine>
+          Pinch or scroll to zoom. Two fingers, a middle-drag, <Kb>Shift</Kb>-scroll, or hold <Kb>Space</Kb> and
+          drag, to pan.
+        </HelpLine>
+        <HelpLine>
+          <Kb>[</Kb>
+          <Kb>]</Kb> turn the page — the drawing, not the furniture. <Kb>0</Kb> puts the view back.
+        </HelpLine>
+      </HelpGroup>
+
+      <HelpGroup title="Keys" note="Click the drawing first — these stay quiet while you are using a panel.">
+        <HelpLine>
+          <Kb>↑</Kb>
+          <Kb>↓</Kb>
+          <Kb>←</Kb>
+          <Kb>→</Kb> nudge whatever is focused · hold <Kb>Shift</Kb> to turn it
+        </HelpLine>
+        <HelpLine>
+          <Kb>F</Kb> brings the selected piece to the middle · <Kb>H</Kb> hides it
+        </HelpLine>
+        <HelpLine>
+          <Kb>Tab</Kb> steps through the pieces and the walls · <Kb>Esc</Kb> deselects
         </HelpLine>
       </HelpGroup>
     </>

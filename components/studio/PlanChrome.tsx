@@ -4,11 +4,17 @@
 // drawing code that also owned a help card, a zoom toolbar and a legend — while
 // the 3D tab's chrome lived in its page. That split in ownership is why the two
 // tabs' chrome drifted: nobody comparing them was ever looking at both.
+//
+// The plan's half of the help card was the last of that split, and it outlived the
+// sentence above by long enough to lose a whole group: it sat here while the 3D half
+// sat in `StudioHelp.tsx`, and nobody comparing them noticed the plan card never told
+// anyone what the Catalog and the Library were. Both halves live in `StudioHelp.tsx`
+// now. What stays here is chrome you can point at on the drawing — the zoom toolbar
+// and the legend.
 
 import type { RefObject } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { IconButton } from '@/components/ui/primitives';
-import { HelpGroup, HelpLine, Kb } from './HelpCard';
 import { MAX_ZOOM, MIN_ZOOM, type PlanViewHandle } from './PlanView';
 
 /** Zoom, page rotation, fit — driven through PlanView's handle. */
@@ -161,56 +167,5 @@ function Swatch({ fill, dashed }: { fill: string; dashed?: boolean }) {
         borderRadius: 2,
       }}
     />
-  );
-}
-
-/** The plan tab's half of the shortcut card. The 3D tab's half lives with it. */
-export function planHelp() {
-  return (
-    <>
-      <HelpGroup title="Moving furniture">
-        <HelpLine>Drag a piece to move it. It stops against whatever is in the way, tints red if it cannot go there — along with whichever piece of a selection ran out of room — and measures its way to the nearest walls as it goes.</HelpLine>
-        <HelpLine>
-          <Kb>Esc</Kb> part-way through a drag puts the piece back where it was.
-        </HelpLine>
-        <HelpLine>Drag the handle on a selected piece to turn it.</HelpLine>
-        <HelpLine>Click a wall to paint it, or drag it to make the room bigger or smaller.</HelpLine>
-      </HelpGroup>
-      <HelpGroup title="Choosing pieces">
-        <HelpLine>
-          Drag across empty floor to lasso several. Hold <Kb>Shift</Kb> to add to what is already chosen — by
-          lasso, or by clicking one piece at a time.
-        </HelpLine>
-        <HelpLine>
-          Where pieces overlap, <Kb>Alt</Kb>-click lists everything under the pointer and lets you pick. Keep
-          <Kb>Alt</Kb>-clicking the same spot to step down through them one at a time.
-        </HelpLine>
-        <HelpLine>Right-click a piece — or the plan — for what you can do to it, including that same list.</HelpLine>
-      </HelpGroup>
-      <HelpGroup title="Getting around">
-        <HelpLine>
-          Pinch or scroll to zoom. Two fingers, a middle-drag, <Kb>Shift</Kb>-scroll, or hold <Kb>Space</Kb> and
-          drag, to pan.
-        </HelpLine>
-        <HelpLine>
-          <Kb>[</Kb>
-          <Kb>]</Kb> turn the page — the drawing, not the furniture. <Kb>0</Kb> puts the view back.
-        </HelpLine>
-      </HelpGroup>
-      <HelpGroup title="Keys" note="Click the drawing first — these stay quiet while you are using a panel.">
-        <HelpLine>
-          <Kb>↑</Kb>
-          <Kb>↓</Kb>
-          <Kb>←</Kb>
-          <Kb>→</Kb> nudge whatever is focused · hold <Kb>Shift</Kb> to turn it
-        </HelpLine>
-        <HelpLine>
-          <Kb>F</Kb> brings the selected piece to the middle · <Kb>H</Kb> hides it
-        </HelpLine>
-        <HelpLine>
-          <Kb>Tab</Kb> steps through the pieces and the walls · <Kb>Esc</Kb> deselects
-        </HelpLine>
-      </HelpGroup>
-    </>
   );
 }

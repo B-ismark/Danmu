@@ -24,13 +24,17 @@ import { stripComments } from './helpers/source';
 import { join } from 'node:path';
 
 const ROOT = join(__dirname, '..');
-// `StudioHelp` renders TWO different cards and picks by route: the full one on
-// `/model`, a shorter one everywhere else. Mocked to the model route because that is
-// where the group under test lives — and the difference is worth naming, because the
-// first version of this test asserted against the plan card and read as the copy being
-// missing rather than as being on the other tab. Whether the 2D plan should also carry
-// the Catalog-vs-Library line is a product question rather than a bug; it is recorded in
-// `docs/what-is-still-open.md` § G.3.
+// `StudioHelp` renders TWO different cards and picks by route, and `vi.mock` is hoisted
+// to the top of a FILE — so a test file can only ever be on one of them. This one is
+// mocked to `/model` and pins the 3D card; the plan card is pinned by
+// `help-two-lists-plan-tab.test.tsx`, which is a separate file for exactly that reason
+// and not because the claim is a different claim.
+//
+// The difference is worth naming, because the first version of the assertion below was
+// written against the plan card and its red read as the copy having been DELETED rather
+// than as being on the other tab. That misreading is also what left § G.3 open: the
+// plan card genuinely lacked the group, and every test that could have seen it was on
+// this route. The group is one shared component now, rendered by both.
 vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('test-room', 'model'));
 
 const { StudioHelp } = await import('@/components/studio/StudioHelp');
@@ -212,12 +216,33 @@ describe('the help card says which list is where, and does not say a side', () =
     fireEvent.click(screen.getByRole('button', { name: 'How this works' }));
     // Split across `<b>` elements, so the text is matched against the container's own
     // textContent rather than a single text node.
-    const line = screen
-      .getAllByText(/is what you can add/)
-      .map((n) => n.textContent ?? '')
-      .join(' ');
+    const nodes = screen.getAllByText(/is what you can add/);
+    // ONE element, and the count is the assertion — see the same note in
+    // `help-two-lists-plan-tab.test.tsx`. Two `toContain`s over a join of several nodes
+    // are satisfied by two different sentences saying the wrong thing each.
+    expect(nodes, 'the two places must be in ONE sentence, not two').toHaveLength(1);
+    const line = nodes[0].textContent ?? '';
     expect(line).toContain('in the left rail');
     expect(line).toContain('on the right of');
+  });
+
+  // THE CONTROL, and it was owed the moment the group became shared code. The two
+  // assertions above are about a group BOTH cards now render, so they no longer say
+  // anything about which card this is — collapsing the route branch so that `/model` is
+  // served the plan card left this whole describe green while breaking the 3D tab.
+  // Measured, not reasoned: that mutation survived until this test existed, and the
+  // mirror of it in `help-two-lists-plan-tab.test.tsx` was already killing the other
+  // direction. A shared component needs a control on each side of the branch or it
+  // quietly turns two gates into one.
+  it('while still being the 3D card and not the plan one', () => {
+    cleanup();
+    render(<StudioHelp />);
+    fireEvent.click(screen.getByRole('button', { name: 'How this works' }));
+    // Orbiting and a wall colour are 3D gestures; a lasso and a page rotation are not.
+    expect(screen.getByText('Walls and the room')).toBeTruthy();
+    expect(screen.getByText(/Left-drag to orbit/)).toBeTruthy();
+    expect(screen.queryByText('Choosing pieces')).toBeNull();
+    expect(screen.queryByText(/turn the page/)).toBeNull();
   });
 });
 
@@ -244,19 +269,34 @@ describe('no copy offers a feature this app deleted', () => {
 
   it('on any .tsx surface under app/ or components/', () => {
     const files = [...surfaces('app'), ...surfaces('components')];
-    // The count first. An empty list — a walk that quietly returns nothing, a directory
-    // renamed — would make the loop below vacuously true, which is the same shape as a
-    // `.tsx` test file that is never collected.
+    // Three floors, not one, and the sibling sweep 90 lines above has had all three for
+    // longer than this one has. This is rule 1's only automated gate and it was measuring
+    // the directory walk alone: `> 50` against a measured 82 lets 31 files leave the walk
+    // in silence, and NOTHING here measured that the stripper returned any text at all —
+    // a strip that returned '' for every file makes every `re.test` false for the worst
+    // possible reason.
     expect(
       files.length,
       'no .tsx surfaces found, so the sweep below proves nothing',
-    ).toBeGreaterThan(50);
+    ).toBeGreaterThan(75);
+    const kept = files.reduce((sum, f) => sum + code(f).length, 0);
+    expect(kept, 'the strip kept almost nothing — the sweep ran over air').toBeGreaterThan(400_000);
+    // And a POSITIVE: the sweep must be reading real user-facing copy, not just
+    // non-empty text. Every one of these files is JSX, so a quoted string is the shape
+    // the FORBIDDEN patterns are hunting in.
+    const quoted = files.flatMap((f) => code(f).match(/["'][^"']{12,}["']/g) ?? []);
+    expect(quoted.length, 'no quoted strings survived the strip').toBeGreaterThan(200);
+    const offenders: string[] = [];
     for (const file of files) {
       const src = code(file);
       for (const re of FORBIDDEN) {
-        expect(re.test(src), `${file} matches ${re}`).toBe(false);
+        if (re.test(src)) offenders.push(`${file} matches ${re}`);
       }
     }
+    expect(offenders, 'copy offering a deleted feature').toEqual([]);
+    // Printed on every green run, like the sibling sweep: these are the numbers whose
+    // drift is the only warning that this gate has stopped seeing the repo.
+    console.log(`[rule-1 sweep] files=${files.length} keptChars=${kept} quotedStrings=${quoted.length}`);
   });
 
   it('and the piece list points at Add by name rather than by direction', () => {
