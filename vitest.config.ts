@@ -22,6 +22,11 @@ export default defineConfig({
     // test file that is simply never collected reports as a green suite, which is
     // the failure mode this repo keeps finding one level up.
     include: ['tests/**/*.test.{ts,tsx}'],
+    // Two browser globals jsdom does not implement, which seven component files each
+    // defined for themselves. `tests/helpers/setup.ts` guards on `typeof window`, so
+    // the ~115 node-environment files pay one module import and nothing else. It is
+    // deliberately not a general prelude: a shim only one file needs stays in that file.
+    setupFiles: ['tests/helpers/setup.ts'],
     // A timeout is a HANG-CATCHER, not a performance budget. The distinction is the
     // whole reason this line exists, because leaving it unset made the harness the
     // de-facto budget and it was a number nobody chose: vitest defaults to 5000 ms,

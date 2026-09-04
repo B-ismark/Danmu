@@ -25,21 +25,7 @@ import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import { footprintForLayout } from '@/lib/footprint';
 import type { RoomData } from '@/lib/storage';
 
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: (query: string) => ({
-    matches: false, media: query, onchange: null,
-    addEventListener: () => {}, removeEventListener: () => {},
-    addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false,
-  }),
-});
-
-vi.mock('next/navigation', () => ({
-  useParams: () => ({}),
-  usePathname: () => '/workspace',
-  useRouter: () => ({ push: () => {}, replace: () => {}, back: () => {}, prefetch: () => {} }),
-  useSearchParams: () => new URLSearchParams(),
-}));
+vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock(null));
 
 const { roomStore } = await import('@/lib/storage');
 const { PlanThumb } = await import('@/components/studio/PlanThumb');

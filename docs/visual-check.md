@@ -246,6 +246,43 @@ not whether it fires:
    look deliberate; whether twelve look like a spiral rather than a scatter has not been
    looked at.
 
+### A wall drag and a revisit — PROBED on all eight T edges, and two things still want an eye
+
+**The wiring is measured and the probe goes red without the fix**, which is the part that
+makes the green worth anything. `danmu-probe/wall-pin.mjs`, production build, headless
+Chromium: seed a T from the picker (meta only — no scene key, which is the state a fresh
+room is in), open `/room/<id>/plan`, focus one wall handle, two ArrowRights (`WALL_STEP`
+0.05 m, so +10 cm), go to `/workspace`, come back, read `RoomTools`' own verdict.
+
+| | before the fix | after |
+|---|---|---|
+| edges writing `room:<id>:scene` | **0 of 8** | **8 of 8** |
+| edges disagreeing with the room on screen before leaving | 3 | **0** |
+| edges handing back a different set of pieces | 8 | **0** |
+| worst single edge | Wall 4: **1 issue → 6 issues** | Wall 4: 1 issue → 1 issue |
+
+Three edges legitimately keep a finding across the revisit (Walls 4, 5, 6 → *1 issue*).
+That is the fix working, not failing: a wall move may leave a real finding, and the claim
+is only that leaving the room does not change the answer.
+
+**Two probe traps worth keeping, because the first run produced a confident wrong FAIL on
+three edges.** `RoomTools`' health control carries an `aria-label` only on its COLLAPSED
+trigger; at 1440px the rail is open and the verdict is a bare `<span>`, so the probe waited
+fifteen seconds for a selector that only exists on a narrow window. And `RoomSync`'s load is
+one async effect with three painting writes in order — re-seed, then `setParts(savedScene)`,
+then `loadTransforms` — so reading as soon as a verdict appears catches the **intermediate
+re-seeded room** and reports it as what the user got back.
+
+**What still wants a person:**
+
+1. **Does the room LOOK like the one you left?** The probe compares the app's verdict and
+   the set of piece names. It does not compare positions, and it cannot: two rooms with the
+   same twelve names can be arranged completely differently. Drag a wall on a room you have
+   arranged by hand, leave, come back, and see whether anything moved.
+2. **A wall dragged with the MOUSE, not the arrow keys.** The probe nudges by keyboard
+   because a wall handle takes focus cleanly. A pointer drag runs a different code path into
+   the same store action and nobody has watched the snapshot land after one.
+
 ### The rotate ring no longer drags the piece behind it — 3D only
 
 **Where to click.** 3D tab. Put a nightstand hard against the head of a bed, select the

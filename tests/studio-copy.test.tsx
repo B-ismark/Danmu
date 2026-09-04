@@ -31,10 +31,7 @@ const ROOT = join(__dirname, '..');
 // missing rather than as being on the other tab. Whether the 2D plan should also carry
 // the Catalog-vs-Library line is a product question rather than a bug; it is recorded in
 // `docs/what-is-still-open.md` § G.3.
-vi.mock('next/navigation', () => ({
-  usePathname: () => '/room/test-room/model',
-  useParams: () => ({ roomId: 'test-room' }),
-}));
+vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('test-room', 'model'));
 
 const { StudioHelp } = await import('@/components/studio/StudioHelp');
 

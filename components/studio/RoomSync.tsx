@@ -16,6 +16,11 @@ import { normalizeStoredParts } from '@/lib/scene-spec';
 
 const DEBOUNCE_MS = 300;
 
+/** The room shell as `useScene` holds it — derived from the store rather than
+ *  re-declared, so a field added there cannot be silently dropped from the write
+ *  below. */
+type SceneRoom = ReturnType<typeof useScene.getState>['room'];
+
 export function RoomSync() {
   const { roomId } = useParams<{ roomId: string }>();
   const loadFromRoom = useScene((s) => s.loadFromRoom);
@@ -28,6 +33,14 @@ export function RoomSync() {
   const sceneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const roomTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ready = useRef(false);
+  /** The room shell and the part list as they were when the room last changed, held
+   *  so the debounced write and the unmount flush use the same values rather than
+   *  re-reading a store that may already hold another room. */
+  const pendingRoom = useRef<{ room: SceneRoom; parts: ScenePart[] } | null>(null);
+  /** Whether ANY event in the current debounce window reshaped the footprint. A local
+   *  in the subscriber loses this the moment a second room change replaces the
+   *  timer. */
+  const reshapedSince = useRef(false);
 
   // Initial load: room meta → scene; cached scene parts override; transforms last.
   useEffect(() => {
@@ -137,28 +150,111 @@ export function RoomSync() {
   // into the existing meta so detections / name / layout survive.
   useEffect(() => {
     if (!roomId) return;
+    const write = async () => {
+      const p = pendingRoom.current;
+      if (!p) return;
+      // Taken and cleared BEFORE the first await. Both are read again on unmount,
+      // and a flush that left them set would write the same room twice.
+      pendingRoom.current = null;
+      const wasReshaped = reshapedSince.current;
+      reshapedSince.current = false;
+
+      const existing = await roomStore.loadRoom(roomId);
+      if (!existing) return;
+      await roomStore.saveRoom({
+        ...existing,
+        width: p.room.width,
+        depth: p.room.depth,
+        height: p.room.height,
+        wallColors: p.room.wallColors,
+        footprint: p.room.footprint,
+        site: p.room.site,
+      });
+      // ── A reshaped room has to pin the scene, if it was SEEDED ───────────────
+      //
+      // This effect writes the outline and `moveWallCarrying` writes the transform
+      // overrides for whatever rode the wall, and until now nothing wrote a scene
+      // snapshot at all — `RoomSync`'s scene subscriber below fires on
+      // `state.parts`, and a wall move does not touch `parts`. So the next open ran
+      // `buildSceneFromRoom`, which for a room with no detections re-seeds through
+      // `defaultScene` **against the new polygon**, and the saved overrides landed
+      // on whatever came back, by id.
+      //
+      // Measured in `tests/custom-footprint-seed.test.ts`: over 300 wall moves of
+      // the picker's own five presets, the re-seed loses ids, gains ids, and keeps
+      // ids whose piece is now a different size — the worst single move loses **9 of
+      // 16 pieces** — and, of the ids that survive byte-identical, it TURNS 867 and
+      // RELOCATES 2336 by more than 50 mm. A rectangle churns only two cells and still
+      // relocates 282 pieces, which is what says the damage is not about notches. At a
+      // typed 3.5 x 6 a `lamp-1` comes back a ceiling pendant 2.58 m up, one arrow press
+      // on an edge that does not change the room's size. Watched in a browser too: 8 of
+      // 8 T edges wrote no scene key, and four handed back a room that disagreed with
+      // the one on screen before leaving, in both directions.
+      //
+      // **Reshaped, not merely changed.** Repainting a wall cannot alter what the
+      // seeder builds, and pinning on a colour change would take a re-scan away from
+      // a detected room for no reason. Object identity is the test because
+      // `moveWall` writes a fresh polygon array — and so does `setRoom` on any
+      // width/depth change, which is deliberate rather than incidental: typing a new
+      // width in the Room rail re-seeds exactly the same way a dragged wall does, so
+      // it wants exactly the same pin. A height-only edit preserves the reference and
+      // correctly writes nothing. `tests/wall-move-pins-scene.test.tsx` covers all
+      // three.
+      //
+      // **It is STICKY across the debounce window, and that is not tidiness.** The
+      // flag lived in the subscriber's own closure, and `roomTimer` is shared: nudge
+      // a wall and click a colour swatch 200 ms later and the second event cleared
+      // the first's timer and installed one carrying `reshaped === false`. The wall
+      // move's own outline still landed, so the room came back the new shape with the
+      // furniture re-seeded — the exact loss this write exists to prevent, reachable
+      // by two ordinary gestures in one third of a second.
+      //
+      // **Only a room the picker built, and the SECOND half of that test is the one
+      // that is easy to get wrong.** A detected room does not re-seed:
+      // `buildSceneFromRoom` builds from the detections and the footprint only clamps
+      // pieces back inside, so its ids are already stable and it needs no pin —
+      // leaving it unpinned is what keeps `CLAUDE.md`'s re-scan path working. But
+      // `detectedObjects` answers what HAS been scanned, never what is about to be:
+      // a room with four photographs and no detections is precisely the room a first
+      // scan is coming to, and `RoomSync`'s own load prefers a saved scene over
+      // `buildSceneFromRoom` forever, with nothing but `destroyRoom` ever clearing
+      // the key. Pinning one would have made *Detect furniture* — a shipped button on
+      // `/workspace`, and *Re-scan* inside the studio — silently do nothing, for good.
+      // So captures are asked about too, and the pin is for a picker room: no photos,
+      // no detections, the only room `defaultScene` re-seeds from scratch.
+      //
+      // That a saved scene disables every future re-scan is WIDER than this change
+      // and predates it — any added or deleted piece does the same — and it is filed
+      // in `docs/what-is-still-open.md` § G.1 rather than fixed here, because
+      // clearing the key on a scan would discard a user's deletions and that is a
+      // product call.
+      if (wasReshaped && !existing.detectedObjects?.length && !(await roomStore.hasCaptures(roomId))) {
+        // `p.parts` — the list as it was when the room changed — never
+        // `useScene.getState()`. Two awaits have passed; the user may have navigated
+        // to another room, whose parts the live store would now hold, and this write
+        // is keyed to THIS room. It would file room B's furniture under room A.
+        await roomStore.saveSceneParts(roomId, p.parts);
+      }
+    };
+
     const unsub = useScene.subscribe((state, prev) => {
       if (!ready.current) return;
       if (state.room === prev.room) return;
       if (roomTimer.current) clearTimeout(roomTimer.current);
-      const r = state.room;
-      roomTimer.current = setTimeout(async () => {
-        const existing = await roomStore.loadRoom(roomId);
-        if (!existing) return;
-        await roomStore.saveRoom({
-          ...existing,
-          width: r.width,
-          depth: r.depth,
-          height: r.height,
-          wallColors: r.wallColors,
-          footprint: r.footprint,
-          site: r.site,
-        });
-      }, DEBOUNCE_MS);
+      if (state.room.footprint !== prev.room.footprint) reshapedSince.current = true;
+      pendingRoom.current = { room: state.room, parts: state.parts };
+      roomTimer.current = setTimeout(() => void write(), DEBOUNCE_MS);
     });
     return () => {
       unsub();
-      if (roomTimer.current) clearTimeout(roomTimer.current);
+      // Flush, like the transform and scene effects either side of this one. It
+      // cleared the timer and wrote nothing, so a wall dragged within the debounce
+      // window of leaving the room lost BOTH the outline and the pin — the outline
+      // half predates the pin and was silent data loss on its own.
+      if (roomTimer.current) {
+        clearTimeout(roomTimer.current);
+        void write();
+      }
     };
   }, [roomId]);
 

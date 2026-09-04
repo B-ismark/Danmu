@@ -26,23 +26,7 @@ import { useStudio, useSettings } from '@/lib/store';
 import { ANNOUNCE_EVENT } from '@/lib/announce';
 import type { ScenePart } from '@/lib/scene-spec';
 
-// See tests/library-click-through.test.tsx for why these shims are needed.
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: (query: string) => ({
-    matches: false, media: query, onchange: null,
-    addEventListener: () => {}, removeEventListener: () => {},
-    addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false,
-  }),
-});
-Element.prototype.scrollIntoView = function scrollIntoView() {};
-
-vi.mock('next/navigation', () => ({
-  useParams: () => ({ roomId: 'turn-nudge-room' }),
-  usePathname: () => '/room/turn-nudge-room/plan',
-  useRouter: () => ({ push: () => {}, replace: () => {}, back: () => {}, prefetch: () => {} }),
-  useSearchParams: () => new URLSearchParams(),
-}));
+vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('turn-nudge-room'));
 
 const { default: PlanPage } = await import('@/app/room/[roomId]/plan/page');
 

@@ -76,7 +76,7 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 
 | # | item | why here | cost | blocks / blocked by |
 |---|---|---|---|---|
-| 1 | **G.1** ~~a brand-new room seals its own routes at the size the app ships~~ → **nothing scores a custom footprint** | **Re-scoped 2026-09-03, not closed.** The sweep ran: all five picker sizes seed clean, and the T/U rooms the item named paired a layout with `DEFAULT_ROOM`'s (rect) dimensions. But the room re-seeds on **every** open, `moveWallCarrying` writes no scene snapshot, and a T + one wall nudge + a revisit strands floor with no furniture touched. Several such nudges leave the bounding box **identical**, so no `(layoutId, width, depth)` sweep can see them — **including the one that just ran.** Every wall move makes a custom polygon, both loaders prefer it, nothing scores one | M — a sweep over `moveWallCarrying` output, not over sizes | free; **do not close it with a size sweep** |
+| 1 | **G.1** ~~a brand-new room seals its own routes at the size the app ships~~ → ~~nothing scores a custom footprint~~ → **MEASURED AND FIXED 2026-09-03** | Something scores one now. `tests/custom-footprint-seed.test.ts` sweeps **300 wall moves** of the picker's own five presets and **100 leave the bounding box identical** — blind edges `l` [2,3], `t` [2,3,5,6], `u` [0,1,2,3,4], five of the U's eight walls — so no `(layoutId, width, depth)` sweep could have reached them. **43 of those 100 report a finding**, the smallest gesture being ONE arrow press. The fix is the snapshot half rather than the seeder half, and **the control is what decided that**: `rect` has no interior edge, strands nothing and reports nothing across all 40 of its cells, and still **loses a piece** when pushed out 1.00 m — so the id churn is not a shape problem and no amount of teaching the seeder about notches would touch it. A wall move now pins the scene for a room with **no detections**; a detected room's ids are already stable across a footprint change, so it stays unpinned and keeps its re-scan. Worst single move before the fix: **9 of 16 pieces lost** on the way back | done | — |
 | 2 | **§ 33.3** ~~the render budget is unmeasured~~ → **MEASURED 2026-09-03; the GPU verdict still wants a device** | A furnished room issues **198–390 draw calls per rendered frame** across the five presets, ~37 calls and ~10 600 triangles per extra piece, 16–24 calls per piece. So subdivision per shape is cheap and **part count is what spends the budget** — and the U vs Rectangle pair (both 12 pieces, 226 vs 198 calls, and the U with *fewer* triangles) says the knob that matters is how many draw units a shape decomposes into, not how many segments. `frameloop="demand"` confirmed: 2–21 frames for a 2.5 s drag. Frame times are SwiftShader and carry no GPU information | done, bar a real device | **row 4 is unblocked** |
 | 3 | **§ A.4** ~~the timing bounds may simply be too tight~~ → **ANSWERED 2026-09-03: it was the runner, not the bounds** | Reproduced on demand under deliberate CPU load rather than waited for: the same four-red `layout-solve` set, and **three of the four died as `Test timed out in 5000ms`** — a default nobody chose, applied to a suite whose honest worst case is a ~6.3 s solve. Two of those three assert nothing about a clock and the third asserts a *ratio*, the shape that was supposed to survive load; the harness kills the body before the ratio is evaluated. Fixed: an explicit 30 s `testTimeout`, and the two real wall-clock bars scaled by a measured machine factor rather than padded. See § A.4 | done | **no longer blocks the rows below** |
 | 4 | **§ 12** a rider keeps the size the room was BUILT at — **BUILT on the THIRD attempt, PR #100 (2026-09-03).** | Two attempts reached a PR and came out again; the third landed after a second five-lens round found **twenty-five more**, fifteen of them code. Three lenses independently found the same top one: `SceneFile.tsx` passed four of the five transform slices, so the export half was inert and its own gate was green on a *seeded* rider — the one case that survives the omission. **§ 12's section below carries both defect tables and the three findings that changed the design**: the gate's proxy question was wrong in both directions, it cost `2N + 8` derivations per store write (14.3 ms per drag frame at 60 parts), and a clamped rider lost its relation across a save. **The drawn scene has since been measured** (+0.200 m in the graph, red on the commit before), and the probe route is in `docs/visual-check.md`; eight cases still want a person | M — the derivation is small; the RELATION is the work | free |
@@ -90,7 +90,7 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 12 | **§ H.7** collision, properly — the user is open to replacing the engine | Every piece is one box or one ellipse, so a sofa's L, a table's legs and a plant's canopy are all the same rectangle. Same research doc, rows 4a/4b — and 4b is **half done** (`verticalExtent` makes ONE extent right; more than one still needs 4a). Carries a duplication the doc found and nobody retired: **six hand-written copies** of the vertical-extent rule in five files | XL | independent of row 11, but they meet |
 | 13 | **A.7** `snapYaws`' residual — 40 crooked pieces in 240 solves | **The 197 was BEFORE the fix**, which shipped in `fa12f1a`; this row said 197 for weeks and § A.7's own heading said it too. What is left is the residual, and § A.7 already says what it needs: a search that can move the piece **and** its neighbour, which a finish pass cannot do | M | **a symptom of row 11 and only closable there** |
 | 14 | **A.2 / G.2 / G.3** variety in Shuffle, the anchor-first trade, the two help cards | Real, but none is a defect a user has reported. A.2's number is measured (penalty 4, range 2–8, in cost units) and **nothing pins it** — a test that fails at `diversityPenalty: 0` is still owed. G.2 stays a decision: gating a pass on room shape trades one preset's tail for another's | varies | after row 11 decides whether they still exist |
-| 15 | **E** the jsdom component bucket — **further along than this section says** | Derived 2026-09-03: **9 `.test.tsx` files exist**, four mounting the whole plan page; § E's prose still describes the two-file state. What is actually left is narrower — five files hand-roll the identical `next/navigation` + `matchMedia` + `scrollIntoView` shims and `vitest.config.ts` has **no `setupFiles` at all**, so the shims want extracting; then the wiring rows above want covering | M | none — and it is how row 9 gets written |
+| 15 | **E** the jsdom component bucket — **the shim half is DONE 2026-09-03; the coverage half is row 9's** | The count in this row was already stale when it was written: **14 `.test.tsx` files**, not 9, and **ten** hand-rolled the `next/navigation` object rather than five. They had drifted into three formattings of the same object and two different comments explaining it. `vitest.config.ts` now names `setupFiles: ['tests/helpers/setup.ts']` for the two globals — jsdom implements neither, and `lib/use-media-query.ts` calls `window.matchMedia` **unguarded** while every other reader uses `?.`, so `matches: false` changes nothing for the optional readers and unblocks the one that needs it; the `typeof window` guard is what keeps ~115 node-environment files from paying for it. `tests/helpers/mount.ts` owns `navigationMock`, called per file because the room id differs — `vi.mock`'s factory is `async` and `await import()`s it, since vitest hoists the call above every `import` and a static one throws *before initialization*. Both halves gated in `tests/toolchain.test.ts`, because an extraction is undone by one paste | done | **row 9 is what is left of § E** |
 | 16 | **§ A.3** the standalone re-search script | **Omitted until 2026-09-03.** `:555` is 1 failing case in 1512 and needs the search, not a bar; `:327` is a cut-guard correctly reporting its fixture stopped being cut — **the fix is a genuinely cut fixture, never a relaxed guard.** An earlier attempt as a Vitest file timed out at ten minutes; it wants to be a plain Node script. **Nothing is written**, so this is the item most likely to evaporate | M | nothing |
 | 17 | **§ H.10** undo / redo should cover selection | The user asked for it. The consequence worth stating before building it is that one press per click on the way back is why most tools do not do this — a separate history, or coalesced runs, is their call | M | needs the user |
 | 18 | **§ 33.2** the on-device detector cannot name the four newest shapes | Needs a 50 MB re-export and a digest re-pin on a Python toolchain. Two things found while mapping it: **no test asserts `MODEL_DIGESTS` at all**, so a re-pin has no gate but the manual `pnpm hash:models --verify`; and nothing exercises `detectLocalAcrossImages`, `load()`, `tilesFor` or `toTensor` | L, and mostly not code | the cloud path already handles them, so this is a completeness item |
@@ -1336,10 +1336,15 @@ the user went and looked.
 
 ---
 
-## E · Component tests under jsdom — the harness is in, and so is most of the bucket.
+## E · Component tests under jsdom — harness in, bucket in, shims extracted. Row 9 is the remainder.
 
-**Re-derived 2026-09-03 at `35b702f`, because the sentence below had gone stale in the
-direction that understates what exists.** There are **nine** `.test.tsx` files now, not two:
+**Re-derived TWICE, and it went stale between the two.** The count below was taken at
+`35b702f` on 2026-09-03 and was **fourteen** `.test.tsx` files by the time the shims were
+pulled out the same day — which is the shape of every stale claim in this file: a number
+correct when written, quoted forward, and read as current. Derive it from `tests/` before
+using it. The extraction is described under *The shim extraction* further down.
+
+There were **nine** `.test.tsx` files at `35b702f`, not two:
 `library-click-through`, `mount-height-refusal`, `placement-banner` and `where-it-sits` each
 mount the whole `/room/[roomId]/plan` **page**; `room-tools-findings`, `studio-copy`,
 `plan-thumb-shape` and `group-delete` mount a single component; `busy-action` mounts a local
@@ -1577,6 +1582,47 @@ the code, not a judgement call.
    gate.** That file's rule is that an item goes when it has been looked at; a test that
    settles it permanently is stronger than one look, and leaving the item behind would
    claim work that is done.
+
+### The shim extraction — done 2026-09-03, and it was twice the size this section said
+
+Steps 1–5 above are history; every one of them landed. What was left when the queue table
+last described this section was "five files hand-roll the identical shims". **Derived
+rather than remembered, it was ten files and fourteen `.test.tsx`**, and they had already
+drifted into three formattings of the same object with two different comments explaining
+it — which is the drift a duplication produces before it produces a bug.
+
+Two homes, because the two halves are not the same kind of thing:
+
+- **`tests/helpers/setup.ts`, via `setupFiles`,** for `matchMedia` and `scrollIntoView`.
+  They are not per-file at all. `lib/use-media-query.ts` calls `window.matchMedia(query)`
+  **unguarded** — every other reader in the app uses `?.` — so a page rendering
+  `StudioShell` throws without it, while `matches: false` is the same answer the optional
+  readers already get from `undefined`, since all of them compare `=== true`. The
+  `typeof window` guard is what makes a *global* setup file safe: ~115 of the suite's
+  files run in the node environment, and touching `Element` unconditionally would make a
+  setup file the reason a geometry test cannot start.
+- **`tests/helpers/mount.ts`** for `navigationMock`, still called per file because the
+  room id differs. **`vi.mock`'s factory must not close over a static import** — vitest
+  hoists the call above every `import`, so a factory reading the helper from one throws
+  *Cannot access before initialization*. The factory is `async` and `await import()`s the
+  helper, which resolves when the mock is applied rather than when it is hoisted.
+
+The tab is an explicit argument rather than derived from the id: `usePathname` is the only
+difference between the plan page's mock and the model page's, so deriving it would be
+silently right for the six files on `/plan` and silently wrong for the two on `/model`.
+
+`tests/toolchain.test.ts` gates both halves — `setupFiles` pinned, no `.test.tsx` may name
+`matchMedia`, `Element.prototype.scrollIntoView =` or a `useRouter:` property, and every
+`vi.mock('next/navigation', …)` must reach the helper. The sweep's own patterns are
+exercised in both directions in a separate test, because the code it guards is what was
+just deleted and it cannot be mutation-tested against the tree it now guards.
+
+**One mutation survived and is recorded rather than fixed:** removing `useSearchParams`
+from `navigationMock` kills nothing, because no page this suite mounts reads the query
+string. It stays — a partial module mock is the failure mode the extraction exists to
+prevent, and `room-tools-findings` mocking only `useParams` is what that looked like.
+
+**What is left of § E is row 9**, the two `H.8` repros the shims were wanted for.
 
 ### What this does not do
 
@@ -1853,16 +1899,137 @@ the design working.
 1. **A product question about rule (B).** A user reaching a shallow T or U is handed a
    stranded starter *on purpose*, and the alternatives are a bedless room or a silently
    smaller bed — both worse by this repo's own rules. Nobody has reported it. Not a defect.
-2. **A gap with no owner: nothing scores a custom footprint.** Every wall move makes one,
-   both loaders prefer it, and no test, sweep or fixture in this repo builds one and asks
-   what the seeder does with it. The wall-nudge repro in the heading above is one instance;
-   the class is unmeasured. **This is the item.** What would move it: a sweep over
-   *polygons produced by `moveWallCarrying`* rather than over `(layoutId, width, depth)`,
-   which cannot see an interior edge move at all. Whether the fix is then in the seeder or
-   in making a wall move write a scene snapshot is a second question, and the snapshot
-   half is a persistence change with its own review.
+2. ~~**A gap with no owner: nothing scores a custom footprint.**~~ **MEASURED AND FIXED,
+   2026-09-03 — see the next heading.** Every wall move makes one, both loaders prefer it,
+   and no test, sweep or fixture in this repo built one. `tests/custom-footprint-seed.ts`
+   does now, over polygons produced by a wall move rather than over
+   `(layoutId, width, depth)`, and the answer to "seeder or snapshot" turned out to be
+   decidable from the sweep rather than a matter of taste.
 
-**Do not re-file part 1 as a first-run defect.** Do not close part 2 with a size sweep.
+**Do not re-file part 1 as a first-run defect.** Do not close part 2 with a size sweep —
+it was not, and the reason is the paragraph below.
+
+#### The sweep over wall-moved polygons — 300 cells, and the control is what decided the fix
+
+`tests/custom-footprint-seed.test.ts`. Every wall of every offered preset, at
+±1/2/5/10/20 arrow presses, with `WALL_STEP` parsed out of `PlanView.tsx` rather than
+typed. Bounds come from `ROOM_SIDE_M` / `ROOM_SIDE_EPS`, the same two constants
+`moveWall` refuses on, so a widened range widens the sweep instead of quietly excluding
+rooms the app now accepts.
+
+**100 of the 300 cells leave the bounding box identical.** The blind edges, pinned per
+preset because they are a fact about `footprintForLayout`'s vertex order: `rect` [],
+`open` [], `l` [2,3], `t` [2,3,5,6], `u` [0,1,2,3,4]. **Five of the U's eight walls move
+without changing its size at all** — the notch is most of that room. So
+`starter-navigability`'s 280 `(preset, width, depth)` cells could have run for a century
+without reaching one of them, which is the claim this item was re-scoped on and it is an
+assertion now rather than an argument.
+
+**43 of those 100 report a finding.** The smallest gesture that reaches the gap is one
+arrow press: the T at the picker's own 5.5 × 4.7, second wall, 50 mm — 5.50 × 4.70 before
+and after, and Room check says `reach` afterwards. The worst is the U's second wall at
+−1.00 m, stranding 4.88 with three findings.
+
+**The third measurement is not about floor at all, and it is the one that named the fix.**
+A wall move writes the outline and the transform overrides and never a scene snapshot, so
+the next open re-seeds against the NEW polygon and the overrides land on whatever comes
+back, by id. Three ways that goes wrong, counted separately because they are different
+bugs wearing one symptom: an id the re-seed does not produce, an id it produces that the
+base seed did not, and **an id present in both whose piece is now a different size** —
+the sharpest, because nothing anywhere reports a problem. Worst single move: **9 of 16
+pieces lost.**
+
+**Three scope corrections a review made by measuring, all in the direction of the claim
+being narrower than it read.** *"rect and open never strand"* is a fact about **one** wall
+move — two nudges on the offered 6 × 4 rect strand it (max 2.70), and four strand and
+report in 4% of trajectories. The **100 invisible cells** are also single-move: compose
+four moves and the share collapses (`t` 53% → 3%, `u` 50% → 2%), because successive nudges
+eventually move an outer wall too. And the invisible **count** is a fact about rooms being
+big enough — below about 4.5 m an interior edge nudged a metre punches through the outer
+wall — while the blind **edge sets** are structural and held identical across **47** room
+sizes. So the sets are the robust pin and the count is pinned at the sizes the picker
+offers, which is what `tests/helpers/offered-sizes.ts` is for.
+
+**And the sharpest instance of the churn, which the metric could not rank.** `identity`
+compares `category/shape/dimMM` — a piece's own frame, and nothing about where the seeder
+puts it — so of the ids that survive byte-identical, the re-seed **turns 867** and
+**relocates 2336** by more than 50 mm, unseen. Worse, one `changed` is not like another: at
+a typed 3.5 × 6, legal in the Room rail and not offered by the picker, **one arrow press on
+a blind edge turns `lamp-1` from a floor lamp at y = 0 into a ceiling pendant at y = 2.58**,
+under the same id, in a room whose stated size does not change. 31 such flips across a
+wider grid; zero at the five offered sizes, and that zero is asserted so it cannot read as
+absence. `identity` counted each of them the same as a TV moving one size rung.
+
+**And the control failed, which is the useful part.** It asserted that a preset with no
+interior edge hands back the room it was given. `rect` pushed out 1.00 m drops a piece and
+`open` pulled in 1.00 m gains one — 2 of 40 cells each, against 39/67/38 for `l`/`t`/`u`.
+Sharper still with the two columns above: `rect` churns **two** cells and **relocates 282
+pieces**, `open` two and 495.
+So the churn is **not** a non-rectangular problem and could not have been fixed by
+teaching the seeder about notches: a re-seed is a fresh arrangement for a room of a new
+size, which is correct behaviour for a *seed* and destructive when it lands on a user's
+saved overrides. That is the whole argument for the snapshot half, and it is measured
+rather than reasoned. The surviving control is narrower and still does its job — `rect`
+and `open` strand nothing and report nothing across all 80 of their cells, so the
+stranding above is a property of the shape rather than of the sweep's arithmetic.
+
+**The fix, and its three gates.** `RoomSync`'s room-persist effect now also writes the
+scene snapshot when the footprint object changed, the room has **no detections**, and it
+holds **no photographs**.
+
+- `reshaped` rather than any room change: repainting a wall cannot alter what the seeder
+  builds, and pinning on a colour change would take a re-scan away for no reason. Object
+  identity is the right test because `moveWall` writes a fresh polygon array — **and so
+  does `setRoom` on any width/depth change**, which a review measured and the first
+  version's comment denied. That is the same defect and wants the same pin: typing a width
+  in the Room rail re-seeds exactly as a dragged wall does. A height-only edit preserves
+  the reference and correctly writes nothing; both are asserted, because the resize case
+  alone would pass against a gate that pinned on everything.
+  **The flag is also sticky across the debounce window.** It was a subscriber-local while
+  `roomTimer` is shared, so a wall nudge followed by a colour swatch 200 ms later installed
+  a timer carrying `false` — measured against that commit: zero `saveSceneParts` calls, the
+  outline saved anyway. Two ordinary gestures a third of a second apart, and the loss the
+  write exists to prevent.
+- No detections, because **a detected room does not re-seed**: `buildSceneFromRoom` builds
+  from the detections and the footprint only clamps pieces back inside, so its ids are
+  already stable across a wall move. Leaving it unpinned is what keeps `CLAUDE.md`'s
+  re-scan path working — a detected room the user has only *moved* things in still
+  rebuilds `parts` from a new scan while the moves re-apply by id.
+- **No captures, and this is the one a review had to find.** `detectedObjects` answers what
+  HAS been scanned, never what is about to be. A room with four photographs and no
+  detections is precisely the room a first scan is coming to, and a pinned scene would have
+  made *Detect furniture* — a shipped button on `/workspace`, and *Re-scan* inside the
+  studio — silently do nothing, for good. `roomStore.hasCaptures` reads the key list rather
+  than the blobs.
+
+Two more defects the review found in the same function, both fixed: the effect's cleanup
+**cleared its timer and wrote nothing** while the two either side of it flush, so a wall
+dragged within 300 ms of leaving lost the pin *and* the outline (that half predates this
+change and was silent data loss on its own); and the write read
+`useScene.getState().parts` after two awaits, so navigating A→B inside the window would
+file room B's furniture under room A, permanently.
+
+`tests/wall-move-pins-scene.test.tsx` mounts `RoomSync` itself and covers all ten cases;
+each negative one waits out the debounce rather than asserting on the next tick, the
+detected case also asserts the **outline** persisted so a subscriber that never fired
+cannot pass as a gate that declined, and the round trip is asserted through the real load
+path rather than by reading the key back. **Thirty mutations over two rounds, thirty
+killed** — the one survivor, the live `getState` read, got a gate of its own.
+
+**Filed rather than fixed, because it is wider than this change and predates it: a saved
+scene silently disables every future re-scan.** `RoomSync`'s load prefers `savedScene` over
+`buildSceneFromRoom` unconditionally, and only `destroyRoom` ever clears the key — so any
+user who has added or deleted a single piece already gets nothing from *Re-scan*, with no
+message. The narrow fix is for the detect flow to clear the key when it writes detections,
+which would also discard that user's deletions, and **that is a product call**: is a
+re-scan a fresh start or an update? Nobody has been asked. The capture gate above keeps
+this branch from widening the affected population; it does not close the item.
+
+**Who this bites, which is the part that makes it worth fixing rather than filing:** a
+user who has only MOVED furniture has transform overrides and **no scene key**, because
+`RoomSync` writes one from `state.parts` and a drag does not touch `parts`. The
+arrangement most likely to be destroyed belongs to whoever did the most arranging and the
+least adding.
 
 **Committed:** `tests/helpers/offered-sizes.ts` parses the picker's five presets and its
 ceiling, and **four** test files read it — `scene-seed`, `starter-navigability`,

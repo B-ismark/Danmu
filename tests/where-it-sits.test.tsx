@@ -43,28 +43,7 @@ import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 import type { ScenePart } from '@/lib/scene-spec';
 
-// See tests/library-click-through.test.tsx for why these shims are needed.
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: (query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    addListener: () => {},
-    removeListener: () => {},
-    dispatchEvent: () => false,
-  }),
-});
-Element.prototype.scrollIntoView = function scrollIntoView() {};
-
-vi.mock('next/navigation', () => ({
-  useParams: () => ({ roomId: 'where-it-sits-room' }),
-  usePathname: () => '/room/where-it-sits-room/plan',
-  useRouter: () => ({ push: () => {}, replace: () => {}, back: () => {}, prefetch: () => {} }),
-  useSearchParams: () => new URLSearchParams(),
-}));
+vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('where-it-sits-room'));
 
 const { default: PlanPage } = await import('@/app/room/[roomId]/plan/page');
 

@@ -34,9 +34,7 @@ import type { ScenePart } from '@/lib/scene-spec';
 // `RoomTools` calls `useParams` to key its saved layouts by room. Mocked rather than
 // wrapped in a router, because the route is not what is under test and a real router
 // would be a second thing that could fail.
-vi.mock('next/navigation', () => ({
-  useParams: () => ({ roomId: 'test-room' }),
-}));
+vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('test-room'));
 
 const { RoomTools } = await import('@/components/studio/RoomTools');
 
@@ -278,4 +276,3 @@ describe('the room panel renders the finding lib/clearance.ts computed', () => {
     expect(screen.queryByText(/it will not stand up in here/)).toBeNull();
   });
 });
-

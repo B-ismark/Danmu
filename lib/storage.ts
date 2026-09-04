@@ -324,6 +324,18 @@ export const roomStore = {
     const values = await Promise.all(matching.map((key) => get<Capture>(key)));
     return values.filter((v): v is Capture => !!v);
   },
+  /** Whether this room holds any photograph, without reading one.
+   *
+   *  `loadCaptures` above fans out over multi-megabyte blobs; the only question here
+   *  is whether a SCAN could still be coming, which the key list answers on its own.
+   *  `RoomSync` uses it to tell a room built from the picker — no photos, no
+   *  detections, the one `defaultScene` re-seeds on every open — from a room that has
+   *  been photographed and not yet scanned, where pinning the scene would make that
+   *  first scan invisible forever. */
+  async hasCaptures(roomId: string): Promise<boolean> {
+    const prefix = k(roomId, 'cap:');
+    return (await keys()).some((key) => typeof key === 'string' && key.startsWith(prefix));
+  },
   async saveLayout(roomId: string, v: LayoutVariant) {
     await set(k(roomId, `layout:${v.id}`), v);
   },
