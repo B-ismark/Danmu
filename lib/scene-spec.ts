@@ -2796,24 +2796,43 @@ export function placeNewPart(
     );
   }
 
-  /** Where a ceiling piece hangs the moment it is added: the middle of the room.
+  /** Where a ceiling piece hangs the moment it is added: where it was aimed, and
+   *  the middle of the room when it was aimed nowhere.
    *
-   *  Not under the pointer. A fan or a pendant belongs in the middle of a ceiling
-   *  far more often than it belongs wherever the cursor happened to be when the
-   *  button came up, and it is a DEFAULT rather than a rule — `ridesWall` is false
-   *  for this family, so nothing snaps it anywhere and a drag moves it freely.
+   *  **An explicit aim wins — decided by the user, 2026-09-04, § H.3 residue 1.** The
+   *  earlier rule was the other way round and this docblock argued for it: "not under
+   *  the pointer; a fan belongs in the middle of a ceiling far more often than wherever
+   *  the cursor happened to be". That is still true of the case it describes, and it is
+   *  still what happens — a Library CLICK carries no aim, so the first fan into a room
+   *  goes to the middle exactly as before. What the old rule could not survive is the
+   *  case it did not describe: an aim was read ONLY when the midpoint fell outside the
+   *  footprint, so in any rectangular room EVERY aim resolved to the same point. That
+   *  made a drag onto the ceiling land somewhere the user did not drop it, and it made
+   *  the § H.3 fan-out structurally impossible for this one family — 127 ring candidates
+   *  all collapsing onto the midpoint, so a second fan was placed exactly inside the
+   *  first. Honouring the aim fixes the drag and the fan-out with one rule instead of
+   *  two, and `openSpotForNewPart` no longer has to skip this family.
    *
-   *  The bounds midpoint, tested against the polygon instead of assumed: the middle
+   *  The midpoint is still tested against the polygon rather than assumed: the middle
    *  of an L's bounding box is the reflex corner it cuts away, and a fan hung there
-   *  hangs outside the room. When that happens the drop point is the better answer,
-   *  because at least the user aimed it. */
+   *  hangs outside the room. With no aim to fall back to, `intoRoom(0, 0, …)` brings
+   *  the origin inside instead.
+   *
+   *  `ridesWall` is false for this family, so nothing snaps it anywhere and a drag
+   *  moves it freely afterwards either way. */
   function ceilingSpot(): [number, number] {
+    // `rot: 0` throughout — a ceiling piece is returned with `rot: 0` by the branch
+    // that calls this, so 0 is the angle it will actually have rather than a stand-in.
+    //
+    // Before the footprint guard on purpose: with no footprint `intoRoom` returns the
+    // point unchanged, which is "where you aimed" and is the answer this rule asks for.
+    // The old `[0, 0]` was the origin, which in a room that does not start there is not
+    // even the middle.
+    if (at) return intoRoom(ax, az, 0);
     if (!room.footprint) return [0, 0];
     const b = footprintBounds(room.footprint);
     const mx = (b.minX + b.maxX) / 2;
     const mz = (b.minZ + b.maxZ) / 2;
-    // `rot: 0` — a ceiling piece is returned with `rot: 0` by the branch that calls
-    // this, so 0 is the angle it will actually have rather than a stand-in.
     return pointInFootprint(mx, mz, room.footprint) ? [mx, mz] : intoRoom(ax, az, 0);
   }
   if (wallMounted) {
@@ -2932,23 +2951,26 @@ const SPAWN_RINGS = 6;
  * **Gated with `footInsidePoly`, not `outsideShare`.** The latter samples, and its
  * samples sit 10% in from the edges, so it forgives a piece 20 mm through the plaster.
  *
- * **The ceiling family cannot be fanned out from here, and an earlier version of this
- * comment claimed the opposite.** It said a candidate "only moves a fan or a pendant
- * once the middle is occupied — which is exactly when it should", which reads as the
- * feature working in that family. It does not work there at all: `ceilingSpot` returns
- * the bounds midpoint whenever that point is inside the footprint and reads `ax`/`az`
- * ONLY in the branch where it is not, so in any rectangular room every one of the 127
- * candidates resolves to the identical point. A second ceiling fan is therefore still
- * placed exactly inside the first — the original § H.3 complaint, in the one family the
- * comment said was covered. The search is skipped for them rather than run 127 times to
- * return what it already knew.
+ * **The ceiling family works here now, and for one commit it provably could not.** The
+ * history is worth keeping because the shape of it recurs: this function was correct,
+ * every one of its own tests was green, and the feature was inert in that family
+ * because a function it CALLS discarded the input it was being handed. `ceilingSpot`
+ * returned the bounds midpoint whenever that point was inside the footprint and read
+ * the aim only in the branch where it was not — so in a rectangle all 127 candidates
+ * resolved to the identical point and a second fan was placed exactly inside the first,
+ * the original § H.3 complaint surviving inside the fix written to close it. There was
+ * an early return here that skipped the family rather than running 127 probes to
+ * re-derive one answer, and that skip was honest about the limitation without removing
+ * it. The user reversed the underlying default on 2026-09-04 (an explicit aim wins);
+ * `ceilingSpot` honours a candidate now, so the skip is gone and this family fans out
+ * like every other. **A saving that exists only because a callee is broken is a
+ * measurement of the bug, not an optimisation** — it has to go with the bug.
  *
- * The residue is real and is NOT fixed here, because fixing it means reversing a
- * written decision — "not under the pointer; a fan belongs in the middle of a ceiling
- * far more often than wherever the cursor happened to be" (`ceilingSpot`'s own
- * docblock). Whether an EXPLICIT aim should override that default is a product
- * question, filed in `docs/what-is-still-open.md` § H.3 rather than answered inside a
- * defect fix, which is the mistake that item's own row warns about.
+ * The other residue is untouched and still filed: a click can rest a tabletop-prone
+ * piece on another one, because `collidesAt` permits stacking by design and only the
+ * physically impossible half is gated here (§ 31 — nothing based where its top passes
+ * the ceiling). Whether an UNAIMED click should stack at all is a product question in
+ * `docs/what-is-still-open.md` § H.3, not something to settle inside a defect fix.
  */
 export function openSpotForNewPart(
   cat: Category,
@@ -2959,12 +2981,6 @@ export function openSpotForNewPart(
 ): [number, number] | undefined {
   const PROBE = '__spawn-probe__';
   const poly = room.footprint;
-
-  // The ceiling family — centred geometry that rides no wall — is exactly the set
-  // `placeNewPart` sends through `ceilingSpot`, which discards the aim. Running the ring
-  // search for one of these is 127 probes that all resolve to the same point; the
-  // honest answer is the one it would reach anyway, without pretending to search.
-  if (isWallMountedPart(cat, shape) && !ridesWall(cat, shape)) return undefined;
 
   // Roundness is a property of the SHAPE (`isRoundPart`), and this is a GATE, not a
   // clamp. `intoRoom` above declines to read it and errs by pulling a round piece a

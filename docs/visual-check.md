@@ -78,7 +78,8 @@ test in this repo can answer, and it is answered.
 Two things were seen while looking that are NOT shape defects and are filed elsewhere:
 every Library click dropped at room centre, so five added pieces landed in one heap
 (§ H.3 — **fixed 2026-09-03**, they fan out to the first clear spot now; the ceiling
-family is the documented residue and still heaps, because `ceilingSpot` discards the aim);
+family was the documented residue and heaped for one more day, because `ceilingSpot`
+discarded the aim — **fixed 2026-09-04**, and the drag half of that fix is an item below);
 and the plan draws the standing fan and the stool as SQUARES, which is § 32 seen rather
 than inferred.
 
@@ -245,6 +246,36 @@ not whether it fires:
 4. **The fan-out ring is hexagonal and starts at the piece's own diagonal.** Four chairs
    look deliberate; whether twelve look like a spiral rather than a scatter has not been
    looked at.
+
+### A ceiling fan now lands where you drop it — and the middle stopped being a promise
+
+**Where it rides.** `feat/ceiling-aim`.
+
+**What changed and why it is here.** § H.3's residue 1, answered by the user on 2026-09-04:
+an explicit aim overrides `ceilingSpot`'s midpoint default. Before it, a fan or a pendant
+dragged out of the Library hung in the middle of the room wherever the pointer was released,
+and a second one was placed exactly inside the first. The tests pin the arithmetic — four
+fans in four distinct spots, all at one height, all over real floor; a lone fan still in the
+middle. **None of it says how it FEELS**, and this is a family where the default was written
+from a claim about taste, so the reversal has to be judged the same way.
+
+**Where to click.** `/room/<id>/model`, Library open.
+
+1. **Drag** a ceiling fan onto the canvas near a corner. It should hang where you let go, not
+   spring to the middle. *Wrong looks like:* it jumps to the centre (the reversal did not
+   reach the drag path), or it hangs past the wall (containment lost).
+2. **Click** the fan row four times in a row without dragging anything. Four fans, spread on
+   one hexagonal ring, all flush to the slab. *Wrong looks like:* a heap at one point (the
+   old behaviour), or fans at different heights — a tower is the failure this family is most
+   prone to, and from directly overhead in the 2D plan it is invisible. **Look from eye
+   level**, not from above.
+3. **The judgement call, and the reason this item exists.** With one fan in the room, is the
+   middle still where it should go? That is the half of the old rule the user kept, and the
+   only evidence for it is somebody looking at a room with one fan in it.
+
+**What a probe cannot answer.** Whether a hexagonal ring of ceiling fixtures reads as
+deliberate or as a mess — the same open question item 4 above raises for chairs, now with
+pieces the eye tracks against a flat ceiling rather than against furniture.
 
 ### A wall drag and a revisit — PROBED on all eight T edges, and two things still want an eye
 

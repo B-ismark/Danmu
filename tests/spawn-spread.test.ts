@@ -9,6 +9,10 @@
 //
 // Answered 2026-09-03: fan out, with a legality gate.
 //
+// And answered a second time on 2026-09-04, for the one family the first answer could
+// not reach: an explicit aim overrides `ceilingSpot`'s midpoint default, so a fan or a
+// pendant fans out like everything else. The last describe in this file is that.
+//
 // The caller half — that `spawn` actually passes the aim it is given — is
 // `tests/spawn-spread-wired.test.tsx`. A gate on a pure function says nothing about the
 // screen that calls it, which cost a whole feature one cycle ago.
@@ -317,34 +321,88 @@ describe('repeated clicks do not build a tower', () => {
   });
 });
 
-describe('the ceiling family, which this search cannot help', () => {
+describe('the ceiling family, which this search can help now', () => {
   const FAN: [Category, Shape, [number, number, number]] = ['fan', 'fan', [1000, 1000, 300]];
 
-  // **These two pin the ANSWER, not the skip.** Deleting the early return leaves both
-  // green, and that is correct rather than a gap: the search would run 127 probes and
-  // return the same `undefined`, so the skip is a saving and not a behaviour. An
-  // assertion that claimed otherwise would be measuring something that does not exist.
+  // **This family was the one place § H.3 shipped inert**, and for a reason worth
+  // keeping: `openSpotForNewPart` was correct and its own gates were green, while
+  // `ceilingSpot` — a function it CALLS — returned the bounds midpoint whenever that
+  // point was inside the footprint and read the aim only when it was not. So in a
+  // rectangle all 127 candidates resolved to one point, a second fan was placed exactly
+  // inside the first, and there was an early return here that skipped the search rather
+  // than run it pointlessly. That skip was a measurement of the bug wearing an
+  // optimisation's clothes.
+  //
+  // The user reversed the underlying default on 2026-09-04: an explicit aim wins.
+  // These four are the inverse of the two that used to sit here, and the first is the
+  // half that must NOT change — a lone fan still hangs in the middle of the ceiling.
 
-  it('asks for no aim, because ceilingSpot would discard one', () => {
-    // Not an oversight and not a fix: `placeNewPart` sends a fan through `ceilingSpot`,
-    // which returns the bounds midpoint and reads the aim ONLY when that point is
-    // outside the footprint. In a rectangle every candidate resolves to the same place,
-    // so running the ring search is 127 probes to return what ring zero already said.
-    // An earlier docblock claimed the fan-out covered this family; it never could.
-    const room = ROOM();
-    const fan: ScenePart = {
+  const existingFan = (): ScenePart =>
+    ({
       id: 'fan-1', name: 'Fan', category: 'fan', shape: 'fan', dimMM: [1000, 1000, 300],
       pos: [0, 2.2, 0], rot: 0, locked: false, wallMounted: true,
-    } as ScenePart;
-    expect(openSpotForNewPart(...FAN, room, [fan])).toBeUndefined();
+    }) as ScenePart;
+
+  it('still asks for no aim when the middle of the ceiling is free', () => {
+    // The single-fan case the old default was written for, and it is untouched: the
+    // first fan into a room goes to the middle, because a click carries no aim and
+    // there is nothing in the way. A reversal that moved this would have been the
+    // wrong reversal.
+    expect(openSpotForNewPart(...FAN, ROOM(), [])).toBeUndefined();
   });
 
-  it('and the aim really is discarded, which is why', () => {
-    // The evidence for the claim above, in this file rather than in a comment. If
-    // `ceilingSpot` ever starts honouring an aim, this goes red and the skip should go.
+  it('asks for an aim once the middle is taken', () => {
+    const aim = openSpotForNewPart(...FAN, ROOM(), [existingFan()]);
+    expect(aim, 'the middle of the ceiling is occupied, so an aim point is owed').toBeDefined();
+    // And the aim has to be a spot the fan can actually take, not merely a spot: the
+    // search returns `undefined` when nothing in range is clear, so a defined answer
+    // is a claim about the placement it produces.
+    const placed = placeNewPart(...FAN, ROOM(), [existingFan()], aim);
+    const added = { ...existingFan(), id: 'fan-2', pos: placed.pos, rot: placed.rot } as ScenePart;
+    expect(obbOverlap(foot(added), foot(existingFan()))).toBe(false);
+  });
+
+  it('and the aim really is honoured, which is why', () => {
+    // The evidence for the claim above, in this file rather than in a comment. Before
+    // 2026-09-04 these two were `toEqual`, and that is what made the search impossible
+    // here — the ring could offer 126 different points and get one answer back.
     const room = ROOM();
     expect(placeNewPart(...FAN, room, [], [2.5, 1.7]).pos)
-      .toEqual(placeNewPart(...FAN, room, [], undefined).pos);
+      .not.toEqual(placeNewPart(...FAN, room, [], undefined).pos);
+    // Honoured, not merely different — "different" would also be satisfied by a clamp
+    // shoving the fan somewhere it did not ask for. So the aim below is well clear of
+    // every wall: a 1000 mm fan in a 6 x 5 room may reach x ±2.48 and z ±1.98 once
+    // `containedXZ` has taken its `WALL_GAP`, and (1.5, 1.0) is inside that by a metre.
+    // It has to come back untouched.
+    const aimed = placeNewPart(...FAN, room, [], [1.5, 1]);
+    expect(aimed.pos[0]).toBeCloseTo(1.5, 6);
+    expect(aimed.pos[2]).toBeCloseTo(1, 6);
+  });
+
+  it('four ceiling fans are four ceiling fans', () => {
+    // The user-visible property, and the original § H.3 complaint in the one family it
+    // outlived: four clicks of the same Library row used to produce four fans at one
+    // point. `addMany` is the click loop — each fan sees the ones before it.
+    const fans = addMany(4, FAN);
+    expect(fans).toHaveLength(4);
+    for (let i = 0; i < fans.length; i++) {
+      for (let j = i + 1; j < fans.length; j++) {
+        expect(
+          obbOverlap(foot(fans[i]), foot(fans[j])),
+          `${fans[i].id} at ${fans[i].pos} overlaps ${fans[j].id} at ${fans[j].pos}`,
+        ).toBe(false);
+      }
+    }
+    // All four still at the slab: spreading them is an XZ answer and must not have
+    // become a vertical one. A tower is the failure this family is most prone to,
+    // because two fans at one x/z with different heights read as clear to `collidesAt`.
+    const heights = new Set(fans.map((f) => f.pos[1].toFixed(6)));
+    expect(heights.size, `fans hung at ${[...heights].join(', ')}`).toBe(1);
+    // …and every one of them still over real floor.
+    const poly = footprintForLayout('rect', 6, 5);
+    for (const f of fans) {
+      expect(footInsidePoly(foot(f), poly), `${f.id} is not fully in the room`).toBe(true);
+    }
   });
 });
 
