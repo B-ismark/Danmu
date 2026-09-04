@@ -12,6 +12,37 @@ not four missing terms.
 
 ---
 
+## Re-derivation against `main` @ `0e64b72`, 2026-09-04 — READ THIS BEFORE THE REST
+
+This document was written at `origin/research/inward-normals` and its every line number is
+from that tree. **A hand-off document is a claim, not a fact**, and this one has rotted in
+four places, one of which retires a whole bullet of work. Everything below was re-derived
+with the greps named, not recalled. Where this section and the body disagree, **this section
+wins**; the body is kept because a design and the reasons it was chosen are worth more
+together than a corrected summary alone.
+
+### What moved
+
+| claim in the body | status on `main` today |
+|---|---|
+| **Question 4: "six sites in five files still spell out their own `pos[1] + h`"** | **FALSE — the duplication is fully retired.** `grep -rn 'pos\[1\] +' lib/` returns ten hits and **nine are comments naming the old spelling**; the tenth, `rigid-parent.ts:184`, is `parent.pos[1] + d.offsetY`, a rigid-child offset and a different rule. All six named sites call `verticalExtent` now — `clearance.ts:399`, `fit-check.ts:303`, `layout-score.ts:488`, `physics.ts`, `rigid-parent.ts:83`, `layout-settle.ts:380`. It went in the mount-flag work (`4db88be`, `2f14d57`) |
+| **Row 2: the feasibility split is unstarted** | **HALF SHIPPED, by § 31's hard-term veto.** `bestCandidate` ranks **least-impossible first, then cheapest on `total`** — lexicographic, not summed (`layout-solve.ts:233`); `impossibleCeiling` (`:1287`) vetoes inside the search; `declineFor` (`:228`) returns `'impossible'` when the answer would be more impossible than the room it was given. Hard terms are **already** constraints at three points |
+| **Row 3a: `lib/layout-offer.ts` is on `feat/suggest-offer-mmr`, "the wiring is not" done** | **The file is on `main`**, and it IS wired — into `layout-shuffle.ts:359` at `DIVERSITY_PENALTY = 4`. What is still true is narrower and sharper than "unwired": **no component reads `orderOffers`**, so Suggest's *offer stage* still does not rank |
+| **Row 3b: blocked, needs PR #46** | **UNBLOCKED.** `relationDistance` (`layout-score.ts:1111`) and `inRelationBand` (`:1121`) are on `main` |
+
+### What held, re-derived rather than assumed
+
+- **"Nothing prices support" is still TRUE** — as a *pricing* claim. `grep "findSupport\|support" lib/layout-score.ts` → **0 hits**. `layout-solve.ts` has 12, and **every one is a comment**: the solver now *carries* riders as a post-pass (`carryRiders`, `widenConfineToRiders`) but no cost term reads support. The distinction matters for row 1c and the body does not draw it. `layout-solve.ts:471` names the residue exactly — *"support left the lamp on it hanging in mid-air. `carryRiders` cannot rescue that case and must not try"*.
+- **Row 1a is fully open, and the body never names the field.** A user's merged set is **`ScenePart.groupId`** (`selectionForPick`, `scene-spec.ts:2574`), and `grep "groupId" lib/layout-solve.ts lib/layout-score.ts lib/layout-shuffle.ts` → **0 hits**. The solver's "groups" are `intactGroups` (`layout-solve.ts:1824`) — connected components of **satisfied relation edges**, movable members only. That is a different notion from a merge, not a partial one.
+- **Row 1b is unchanged.** `proposeGroup` swaps groups by their **centroids** (`:1863`) and turns a group about its own **centroid** (`:1867`). The anchor pivot is still unbuilt.
+- **Row 4a is unchanged.** `Foot[]` in `scene-spec.ts` appears only for opening zones (`:868`, `:1722`); no part has a compound footprint.
+
+### Line numbers, since every one in the body is stale
+
+`relationCost` 995 → **1137** · `proposeGroup` 1081 → **1874** · `navigabilityCost` 896 → **999** · `isWorthOffering` → **388** · `verticalExtent` → `physics.ts:244`.
+
+---
+
 ## The thesis
 
 > The four reported symptoms are not term-level bugs. Three of them follow from one
@@ -391,16 +422,22 @@ Layers are independently shippable and each is a merge candidate on its own.
 
 | # | change | depends on | gate risk |
 |---|---|---|---|
-| 0 | `research/inward-normals` lands — **decided: yes** | — | assertions marked on purpose, attributed, **do not loosen**. The count is re-derived on the landing branch and not carried from here: "7" was a reading of a different tree, and one of the seven turned out to need a re-derived fixture rather than a mark |
-| 1a | merged sets seed groups unconditionally | 0 | low — additive |
-| 1b | group turns pivot on the anchor, not the centroid | 1a | one measurement |
-| 1c | tier model: supported pieces sampled over their parent | 0 | fixtures that assume a flat list |
-| 2 | feasibility split, with the **"no feasible candidate" fallback that names the violated rule** | 1c | high — most of `layout-solve.test.ts` reads `cost.total` |
-| 3a | MMR over the offered set — **the two pure pieces are written** (`lib/layout-offer.ts`, `e999522`), the wiring is not | — | none to the annealer, and that is not the same as nothing to decide: see § 3.1.1 for the parameterisation and § 3.1.2 for two limits found after this row was written |
-| 3b | relation-aware floor in `isWorthOffering` (§ C's own untried direction) | `relationDistance` / `inRelationBand`, PR #46 | none; offer stage only |
-| 3c | sweep the orientation:distance ratio | **2** | meaningless before 2 |
-| 4a | `Foot[]` compound footprints, authored in `scene-spec.ts` | — | picking must move with it |
-| 4b | per-part vertical extents | 4a | — |
+**Statuses re-derived 2026-09-04 against `main` @ `0e64b72`.** The `state` column is new; the
+rest of each row is as written, so a row whose state contradicts its own text is a row the
+top section corrects.
+
+| # | change | depends on | gate risk | state |
+|---|---|---|---|---|
+| 0 | `research/inward-normals` lands — **decided: yes** | — | assertions marked on purpose, attributed, **do not loosen**. The count is re-derived on the landing branch and not carried from here: "7" was a reading of a different tree, and one of the seven turned out to need a re-derived fixture rather than a mark | **LANDED**, PR #45 |
+| 1a | merged sets seed groups unconditionally | 0 | low — additive | **open.** `groupId` has 0 hits in the three solver files |
+| 1b | group turns pivot on the anchor, not the centroid | 1a | one measurement | **open.** Still centroids, `:1863` / `:1867` |
+| 1c | tier model: supported pieces sampled over their parent | 0 | fixtures that assume a flat list | **open**, and now the *only* support work: a post-pass carries riders, nothing prices them |
+| 2 | feasibility split, with the **"no feasible candidate" fallback that names the violated rule** | 1c | high — most of `layout-solve.test.ts` reads `cost.total` | **HALF SHIPPED** by § 31. The lexicographic pick and the veto exist; **the fallback does not name the rule** — it reverts to the origin and reports that it found none (`:1143-1147`) |
+| 3a | MMR over the offered set — **the two pure pieces are written** (`lib/layout-offer.ts`, `e999522`), the wiring is not | — | none to the annealer, and that is not the same as nothing to decide: see § 3.1.1 for the parameterisation and § 3.1.2 for two limits found after this row was written | **half done.** On `main` and wired into **Shuffle**; Suggest's offer stage has no reader |
+| 3b | relation-aware floor in `isWorthOffering` (§ C's own untried direction) | `relationDistance` / `inRelationBand`, PR #46 | none; offer stage only | **UNBLOCKED** — both are on `main` |
+| 3c | sweep the orientation:distance ratio | **2** | meaningless before 2 | blocked, unchanged |
+| 4a | `Foot[]` compound footprints, authored in `scene-spec.ts` | — | picking must move with it | **open**, unchanged |
+| 4b | per-part vertical extents | 4a | — | half done, unchanged |
 
 **Row 4b is half done already**, and the half that shipped is the correction rather than the
 feature: `verticalExtent` (PR #42) makes *one* extent per part correct at every anchor. What
@@ -477,3 +514,79 @@ pipeline should be able to see that it was asked and settled, not merely absent.
    This is the "extracting a pipeline means extracting all of it" scar in `CLAUDE.md` arriving
    on schedule. Six named copies of a rule this document just proved wrong is a smaller problem
    than one unnamed copy, and it is still a problem.
+   · **RETIRED, re-derived 2026-09-04 on `0e64b72`.** All six call `verticalExtent` now —
+   `clearance.ts:399`, `fit-check.ts:303`, `layout-score.ts:488`, `physics.ts`,
+   `rigid-parent.ts:83`, plus `layout-settle.ts:380` which the original list missed. The same
+   grep returns ten hits and **nine are comments naming the old spelling beside the call that
+   replaced it**, which is the good outcome rather than a lingering one: the scar is written
+   where the next person would otherwise re-introduce it. The tenth,
+   `rigid-parent.ts:184`'s `parent.pos[1] + d.offsetY`, is a rigid-child offset and was never
+   an instance of this rule. It went in the mount-flag work (`4db88be`, `2f14d57`), and
+   **nothing told this document** — which is the paragraph's own lesson landing on the
+   paragraph. Row 4a keeps its own reasons; it no longer carries this one.
+
+---
+
+## Build scope, 2026-09-04 — for approval before any of this starts
+
+The re-derivation above makes this **smaller than the plan that quoted it**, in three places
+and for three different reasons. Written as a scope rather than a schedule: what each piece
+is, what it is worth, and what would make it not worth doing.
+
+### It shrank, and the shrinkage is the finding
+
+- **Row 4a lost its duplication bullet entirely.** "Six hand-written copies of the
+  vertical-extent rule" was the cheapest, most defensible half of the collision work and it is
+  **already done**. What is left of 4a is the expensive half only — compound `Foot[]`
+  footprints, with picking (`lib/plan-hit.ts`) moving in step or the thing you can click and
+  the thing that collides stop agreeing.
+- **Row 2 is half shipped, so "the split" is no longer one XL item.** § 31's veto already made
+  impossibility lexicographic at the three points that decide an answer. What remains is one
+  small, well-defined piece: **the fallback that names the violated rule.** Today the honest
+  answer to "every finalist was illegal" is `moved: []` and a toast — true, and it tells the
+  user nothing about *why*.
+- **Row 3b is unblocked** and was filed as blocked. It needs nothing that is not on `main`.
+
+### Recommended order, and it is not the order the old plan gives
+
+The old order was 3a/3b, then the split, on the argument that the split moves every number the
+suite pins so nothing stable would be left to measure against. **That argument is now partly
+spent** — the veto already moved those numbers and the suite was re-pinned around it.
+
+1. **3b — the relation-aware offer floor.** Unblocked, offer-stage only, no effect on the
+   annealer, both helpers already on `main`. The cheapest real improvement available.
+2. **3a's remaining half — rank Suggest's offers, and pin the diversity term.** The pure code
+   is written and proven; what is missing is a reader in a component. **This has a measured
+   blocker that must be stated before it is started, not discovered inside it:**
+   `orderOffers`' first pick has `picked = []`, so no diversity penalty can move `ranked[0]`
+   at any value — measured on `wip/a2-diversity-finding`, where penalty 4 and penalty 0
+   produce the **identical** second offer across 15 rows. Ranking a list and taking one from
+   it cannot express variety. So 3a is really *"show more than one offer"*, which is a
+   product change, not a solver change — and that is the decision to put before the work.
+3. **Row 2's remainder — name the violated rule in the fallback.** Small, self-contained, and
+   the highest user-visible value per line in this document: it converts "nothing I found
+   works" into "everything I found put a piece through a wall".
+4. **1a — seed the solver's groups from `ScenePart.groupId`.** Additive and low-risk. The
+   solver has a groups mechanism (`intactGroups`, `proposeGroup`) that already moves them
+   rigidly; it simply cannot see a merge. This is wiring an existing capability to an existing
+   fact, which is the best ratio here after 3b.
+5. **1b, 1c, 4a** — the genuinely large ones, in that order, each its own decision.
+
+### What would make each not worth doing
+
+- **3b:** if the offer floor turns out to reject offers users liked. Measurable before
+  shipping — `isWorthOffering` is pure.
+- **3a:** if the answer to "show more than one offer" is no. Then 3a is dead and
+  `lib/layout-offer.ts`'s ranking stays a Shuffle-only feature, which it already is. **Say so
+  and delete the row** rather than leaving a wired-but-inert term to be rediscovered.
+- **1a:** if merged sets in real rooms are almost always two pieces that are already adjacent,
+  the solver's relation-derived groups may cover them. Countable before building.
+- **4a:** if the compound footprints do not change any reported outcome. Unmeasured, and the
+  measurement is cheap next to the build.
+
+### Not re-derived here, and named rather than implied
+
+The body's Parts 1–4 — the design arguments themselves — were **not** re-checked line by line;
+only Part 0, the migration table and question 4 were. The claims about Merrell et al. and Yu
+et al. are untouched and unverified by this pass. Nothing in this document has been in a
+browser.
