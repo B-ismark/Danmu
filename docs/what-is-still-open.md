@@ -1638,6 +1638,41 @@ the code, not a judgement call.
    settles it permanently is stronger than one look, and leaving the item behind would
    claim work that is done.
 
+### The shim that made one layout untestable for the whole repo — found 2026-09-04
+
+`tests/helpers/setup.ts` answers `matchMedia` with `matches: false` for **every** query.
+That is right as a default and it is the reason ~115 node-environment files pay one module
+import and nothing else. It also means the WIDE shell is the only shell any component test
+in this repository has ever rendered.
+
+**Every component that branches on the viewport therefore had one branch no test could
+reach**, and none of them looked untested: the files are green, the assertions are real,
+and the missing case has no name. `useStudioLayout` alone gates three layouts — `stacked`
+below 1023px, `compact` below 1279px, `wide` above — and `DockedShell` renders a different
+tree for each. `NarrowViewportBanner`, `RoomDimsEditor`'s wrapping row and the rail sashes
+all read the same hook.
+
+**Found by a review lens on PR #106, through a copy defect rather than through the shim.**
+The help card's "**Catalog**, in the left rail" is false below 1023px — `DockedShell` puts
+the Catalog in a full-width panel *under* the room and there is no left rail — and that is
+reachable at 200% zoom on an ordinary 1280px laptop, which reports 640px. So the reader
+told to look in a rail that is not there is the one least able to go hunting for it. The
+copy is derived from the layout now, and **only the half that moves is branched**:
+`CatalogPanel` is `position: absolute; right: 12` inside the canvas at every width, so the
+Library sentence needs no branch and a branch that always picks the same answer is a second
+thing to keep true for nothing.
+
+**`stackedViewport()` is in `tests/helpers/mount.ts`** — returns a restore function, answers
+`matches: true` for `max-width` queries only, and is a helper rather than a per-file shim
+because `tests/toolchain.test.ts` sweeps every test file for a hand-rolled `matchMedia` and
+is right to. It is what made the stacked branch reachable at all.
+
+**What is still open here, and it is a real gap rather than a note.** One test now renders
+the stacked shell. Nothing renders `compact`, and nothing else in the repo renders `stacked`
+— so the finding is not "the help copy was wrong", it is that **a shared default in a setup
+file silently decided which half of every responsive component gets tested.** A sweep for
+components reading `useStudioLayout` or `useMediaQuery` with no test at the other width is
+the thing that would size it. Not run.
 ### The shim extraction — done 2026-09-03, and it was twice the size this section said
 
 Steps 1–5 above are history; every one of them landed. What was left when the queue table
