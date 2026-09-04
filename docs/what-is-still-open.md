@@ -1939,9 +1939,32 @@ base seed did not, and **an id present in both whose piece is now a different si
 the sharpest, because nothing anywhere reports a problem. Worst single move: **9 of 16
 pieces lost.**
 
+**Three scope corrections a review made by measuring, all in the direction of the claim
+being narrower than it read.** *"rect and open never strand"* is a fact about **one** wall
+move — two nudges on the offered 6 × 4 rect strand it (max 2.70), and four strand and
+report in 4% of trajectories. The **100 invisible cells** are also single-move: compose
+four moves and the share collapses (`t` 53% → 3%, `u` 50% → 2%), because successive nudges
+eventually move an outer wall too. And the invisible **count** is a fact about rooms being
+big enough — below about 4.5 m an interior edge nudged a metre punches through the outer
+wall — while the blind **edge sets** are structural and held identical across **47** room
+sizes. So the sets are the robust pin and the count is pinned at the sizes the picker
+offers, which is what `tests/helpers/offered-sizes.ts` is for.
+
+**And the sharpest instance of the churn, which the metric could not rank.** `identity`
+compares `category/shape/dimMM` — a piece's own frame, and nothing about where the seeder
+puts it — so of the ids that survive byte-identical, the re-seed **turns 867** and
+**relocates 2336** by more than 50 mm, unseen. Worse, one `changed` is not like another: at
+a typed 3.5 × 6, legal in the Room rail and not offered by the picker, **one arrow press on
+a blind edge turns `lamp-1` from a floor lamp at y = 0 into a ceiling pendant at y = 2.58**,
+under the same id, in a room whose stated size does not change. 31 such flips across a
+wider grid; zero at the five offered sizes, and that zero is asserted so it cannot read as
+absence. `identity` counted each of them the same as a TV moving one size rung.
+
 **And the control failed, which is the useful part.** It asserted that a preset with no
 interior edge hands back the room it was given. `rect` pushed out 1.00 m drops a piece and
-`open` pulled in 1.00 m gains one — 2 of 40 cells each, against 39/67/30 for `l`/`t`/`u`.
+`open` pulled in 1.00 m gains one — 2 of 40 cells each, against 39/67/38 for `l`/`t`/`u`.
+Sharper still with the two columns above: `rect` churns **two** cells and **relocates 282
+pieces**, `open` two and 495.
 So the churn is **not** a non-rectangular problem and could not have been fixed by
 teaching the seeder about notches: a re-seed is a fresh arrangement for a room of a new
 size, which is correct behaviour for a *seed* and destructive when it lands on a user's
@@ -1950,24 +1973,57 @@ rather than reasoned. The surviving control is narrower and still does its job �
 and `open` strand nothing and report nothing across all 80 of their cells, so the
 stranding above is a property of the shape rather than of the sweep's arithmetic.
 
-**The fix, and its two gates.** `RoomSync`'s room-persist effect now also writes the scene
-snapshot when the footprint object changed **and the room has no detections**.
+**The fix, and its three gates.** `RoomSync`'s room-persist effect now also writes the
+scene snapshot when the footprint object changed, the room has **no detections**, and it
+holds **no photographs**.
 
 - `reshaped` rather than any room change: repainting a wall cannot alter what the seeder
   builds, and pinning on a colour change would take a re-scan away for no reason. Object
-  identity is the right test because `moveWall` writes a fresh polygon array and nothing
-  else in the store replaces that reference.
+  identity is the right test because `moveWall` writes a fresh polygon array — **and so
+  does `setRoom` on any width/depth change**, which a review measured and the first
+  version's comment denied. That is the same defect and wants the same pin: typing a width
+  in the Room rail re-seeds exactly as a dragged wall does. A height-only edit preserves
+  the reference and correctly writes nothing; both are asserted, because the resize case
+  alone would pass against a gate that pinned on everything.
+  **The flag is also sticky across the debounce window.** It was a subscriber-local while
+  `roomTimer` is shared, so a wall nudge followed by a colour swatch 200 ms later installed
+  a timer carrying `false` — measured against that commit: zero `saveSceneParts` calls, the
+  outline saved anyway. Two ordinary gestures a third of a second apart, and the loss the
+  write exists to prevent.
 - No detections, because **a detected room does not re-seed**: `buildSceneFromRoom` builds
   from the detections and the footprint only clamps pieces back inside, so its ids are
   already stable across a wall move. Leaving it unpinned is what keeps `CLAUDE.md`'s
   re-scan path working — a detected room the user has only *moved* things in still
   rebuilds `parts` from a new scan while the moves re-apply by id.
+- **No captures, and this is the one a review had to find.** `detectedObjects` answers what
+  HAS been scanned, never what is about to be. A room with four photographs and no
+  detections is precisely the room a first scan is coming to, and a pinned scene would have
+  made *Detect furniture* — a shipped button on `/workspace`, and *Re-scan* inside the
+  studio — silently do nothing, for good. `roomStore.hasCaptures` reads the key list rather
+  than the blobs.
 
-`tests/wall-move-pins-scene.test.tsx` mounts `RoomSync` itself and covers all three cases;
-each negative one waits out the debounce rather than asserting on the next tick, and the
-detected case also asserts the **outline** persisted, so a subscriber that never fired
-cannot pass as a gate that declined. Thirteen mutations over the two files, twelve killed;
-the survivor is `navigationMock`'s `useSearchParams`, which no mounted page reads today.
+Two more defects the review found in the same function, both fixed: the effect's cleanup
+**cleared its timer and wrote nothing** while the two either side of it flush, so a wall
+dragged within 300 ms of leaving lost the pin *and* the outline (that half predates this
+change and was silent data loss on its own); and the write read
+`useScene.getState().parts` after two awaits, so navigating A→B inside the window would
+file room B's furniture under room A, permanently.
+
+`tests/wall-move-pins-scene.test.tsx` mounts `RoomSync` itself and covers all ten cases;
+each negative one waits out the debounce rather than asserting on the next tick, the
+detected case also asserts the **outline** persisted so a subscriber that never fired
+cannot pass as a gate that declined, and the round trip is asserted through the real load
+path rather than by reading the key back. **Thirty mutations over two rounds, thirty
+killed** — the one survivor, the live `getState` read, got a gate of its own.
+
+**Filed rather than fixed, because it is wider than this change and predates it: a saved
+scene silently disables every future re-scan.** `RoomSync`'s load prefers `savedScene` over
+`buildSceneFromRoom` unconditionally, and only `destroyRoom` ever clears the key — so any
+user who has added or deleted a single piece already gets nothing from *Re-scan*, with no
+message. The narrow fix is for the detect flow to clear the key when it writes detections,
+which would also discard that user's deletions, and **that is a product call**: is a
+re-scan a fresh start or an update? Nobody has been asked. The capture gate above keeps
+this branch from widening the affected population; it does not close the item.
 
 **Who this bites, which is the part that makes it worth fixing rather than filing:** a
 user who has only MOVED furniture has transform overrides and **no scene key**, because
