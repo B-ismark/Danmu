@@ -21,7 +21,7 @@ import { footprintForLayout } from '@/lib/footprint';
 import { groundY, verticalExtent } from '@/lib/physics';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
-import { addPieceToRoom } from '@/lib/add-piece';
+import { addPieceToRoom, type NewPiece } from '@/lib/add-piece';
 import * as announceModule from '@/lib/announce';
 
 const DESK_DIM: [number, number, number] = [1400, 700, 750];
@@ -139,7 +139,12 @@ describe('addPieceToRoom, the parts nobody should have to remember', () => {
     // The Library-click path. Three pieces, no aim, three distinct spots — the
     // original § H.3 complaint, asserted here on the shared function rather than
     // only through the panel that calls it.
-    const BED = { label: 'Double bed', category: 'bed', shape: 'bed-double', dimMM: [1600, 2000, 500] } as const;
+    // Annotated, NOT `as const`: `as const` makes `dimMM` a readonly tuple, which is
+    // not assignable to `NewPiece`'s mutable one. `pnpm test` cannot see that and
+    // `pnpm typecheck` can — the same split that let `shape: 'desk'` through earlier
+    // in this branch, and it reached CI because the suite was re-run after this file
+    // was added and typecheck was not.
+    const BED: NewPiece = { label: 'Double bed', category: 'bed', shape: 'bed-double', dimMM: [1600, 2000, 500] };
     addPieceToRoom(BED);
     addPieceToRoom(BED);
     addPieceToRoom(BED);
