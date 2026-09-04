@@ -5339,15 +5339,60 @@ may be based where its top passes the ceiling). Whether an UNAIMED click should 
 is the open half — gating it entirely would put a table lamp on the floor beside the desk it
 belongs on, so it is not obviously an improvement.
 
-**What is pinned and what is not.** `tests/spawn-spread.test.ts` (17) and
-`tests/spawn-spread-wired.test.tsx` (2). A mutation pass over 25 mutants killed 21. Three
-survivors are recorded in the test file itself rather than papered over: `SPAWN_GAP`'s value
-(the ring step is the piece's own diagonal, so the separation survives without it, and
-tightening the bound until the mutant died would be choosing a threshold to match its own
-measurement); the roundness of the two gates (byte-identical placements across eighteen
-shape × layout × size combinations — correct by § 32's rule, unfalsifiable here); and the
-ceiling skip (deleting it returns the same answer 127 probes later, so it is a saving and
-not a behaviour). **Nothing here has been looked at in a browser.**
+**Six things the 2026-09-04 review found and did NOT fix**, all reachable, none a
+regression from that change except where marked. They are here rather than in a commit
+message because each needs a decision:
+
+1. **The drop path has no collision gate; the click path does.** A fan dropped onto a
+   2.4 m bookshelf is accepted at `(1.50, 2.33, 1.00)` — inside it — and then one
+   arrow-key nudge is refused by `drag-resolve`'s `collidesAt`. **The app creates by drop
+   a state it will not let you leave.** Newly reachable, because the aim is honoured now.
+   Two surfaces, two answers, and rule 2 says the answer is to report rather than refuse —
+   but the two paths must first agree on which they are doing.
+2. **`clash-mounted` prescribes an impossible action for this family.** Verbatim: *"A
+   piece is inside something on the wall … **Slide one of them along its wall.**"* A
+   ceiling fan has `ridesWall === false` and a free-standing bookshelf has no wall either.
+   `RULE_HANDLING['clash-mounted'].movable` is `false`, so there is no **Try a fix** button
+   on that row and no way forward at all. Pre-existing; the sentence was written for TVs.
+3. **The plan has no ceiling tell**, and `planPaintOrder` sorts by footprint area
+   descending, so a 1 m² fan paints last over a 3.2 m² bed and `hitsAt` returns it first:
+   pressing the middle of the bed selects the fan. Partly pre-existing — a fan could always
+   land on the bed at the midpoint — but it could only happen at that one point before.
+4. **Add and drag disagree by `WALL_GAP` for a ceiling piece.** Add lands at
+   `bound − 0.02`; `lib/drag-resolve.ts` clamps to a bare bounding box, so the first nudge
+   jumps the fan 20 mm outward. This is the item at § A.2's neighbour below, whose
+   inventory says *"a floor-standing piece"* — the ceiling family is newly enrolled in it.
+5. **`openSpotForNewPart` reads the authored `parts`, not resolved positions.** Drag the
+   first fan into a corner and the search still believes the middle is occupied, so the
+   second is aimed off-centre while the middle is empty. Pre-existing since § H.3 landed,
+   for every family.
+6. **The 3D drop announces nothing.** `grep announce components/three/Room.tsx` is empty,
+   while `PlanView` says *"&lt;label&gt; added."* — so for a screen-reader user a successful
+   3D drop and the silent `intersectPlane` early return are indistinguishable.
+
+**What is pinned and what is not.** `tests/spawn-spread.test.ts`,
+`tests/spawn-spread-wired.test.tsx` and, since 2026-09-04, `tests/drop-aim.test.ts`.
+**Do not quote a mutation score from this paragraph.** It used to carry one — "25 mutants
+killed 21", with three named survivors — and one of those survivors was *the ceiling skip*,
+which no longer exists, so that figure cannot be reproduced against any commit. The two
+survivors that are still real are recorded in the test file itself rather than here, which
+is where a claim about a file belongs: `SPAWN_GAP`'s value (the ring step is the piece's own
+diagonal, so the separation survives without it, and tightening the bound until the mutant
+died would be choosing a threshold to match its own measurement), and the roundness of the
+two gates (byte-identical placements across eighteen shape × layout × size combinations —
+correct by § 32's rule, unfalsifiable here).
+
+**And the round that removed the skip is the reason to distrust any score in prose.** A
+five-lens review of it found **six new assertions that could not fail**, against a reported
+9-of-9 kill rate: a height assertion blind to the height, an L fixture that could not reach
+the notch it was added for, an origin-centred room that made the whole unaimed branch
+unobservable, and a `ceilingSpot` mutation that failed **exactly one test in the repo**. The
+counter-example for the third was already in the same file, 150 lines above the code that
+needed it. The re-run is 10 of 10 with per-test attribution, and the attribution is the part
+worth having: a kill rate says a mutation died somewhere, not that the assertion you meant
+is what killed it.
+
+**Nothing here has been looked at in a browser.**
 
 ## § I · The export naming pass, and the five things it found that are NOT fixed
 

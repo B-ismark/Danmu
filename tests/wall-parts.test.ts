@@ -6,9 +6,18 @@ import { openingsForRoom } from '@/lib/room-openings';
 import { anchorFor, groundY, ridesWall, snapToWall, wallStandoff, CURTAIN_STANDOFF } from '@/lib/physics';
 import { defaultScene, isWallMountedPart, placeNewPart, type ScenePart } from '@/lib/scene-spec';
 import { ROOM } from '@/lib/parts-catalog';
-// `WALL_GAP` is imported, never spelled. An assertion that wrote `0.02` would still
-// be green if the constant were re-tuned and the pushes stopped reaching it, which is
-// the failure mode this whole change is about.
+// `WALL_GAP` is imported rather than spelled where an assertion is about a piece's
+// clamped position: writing `0.02` there would make this file go red for a re-tune it
+// has no opinion about, and the message would be about a fan.
+//
+// **That is not a rule against pinning the constant, and reading it as one left it
+// unnamed.** The bounds in `tests/layout-rules.test.ts` admitted anything in (0, 0.05),
+// and every other assertion there measures agreement between paths, which survives a
+// tune because all the paths move together. Measured: setting the gap to 0.03 turns six
+// tests red, five of them in THIS file — so it was caught, but every message is about a
+// fan in a 6 x 4 room and none mentions the gap, which is the shape of red somebody
+// closes by editing the literal. It is pinned by name at its own home now; the
+// positional assertions here stay derived.
 import { WALL_GAP } from '@/lib/layout-rules';
 import { containedXZ } from '@/lib/layout-settle';
 import { interiorPoint } from '@/lib/footprint';
