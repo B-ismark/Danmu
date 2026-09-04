@@ -12,7 +12,7 @@ import { v4 as uuid } from 'uuid';
 import { useStudio } from '@/lib/store';
 import { consumeGizmoClick } from '@/lib/gizmo-press';
 import { useScene } from '@/lib/scene-store';
-import { useRoomScene } from '@/lib/room-scene';
+import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { placeNewPart, dropPlaneConstant, DND_MIME, type Category, type Shape } from '@/lib/scene-spec';
 import { footprintBounds } from '@/lib/footprint';
 import { daylightKelvin } from '@/lib/solar';
@@ -164,7 +164,15 @@ export function Room() {
     _ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
     _raycaster.setFromCamera(_ndc, api.camera);
 
-    const { room: r, parts: ps } = useScene.getState();
+    // `currentRoomScene()`, not `useScene.getState().parts`: a drag writes only the
+    // override map, so the authored array is the room as it was BUILT rather than as
+    // it stands, and `placeNewPart` reads it to decide what this piece rests on. The
+    // 2D tab's own `onDrop` was the same until this change, while `PlanView` had been
+    // resolving correctly ninety lines above it for a different read — the file
+    // already knew the answer and this handler did not use it.
+    // `tests/spawn-resolved-parts.test.ts` measures both directions.
+    const { room: r } = useScene.getState();
+    const ps = currentRoomScene();
     // **Which plane the pointer is resolved against is a function of where the piece
     // will LIVE.** This was the floor for every category, which was harmless only while
     // a ceiling piece discarded its aim. The moment `ceilingSpot` began honouring one, a

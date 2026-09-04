@@ -514,7 +514,13 @@ export const PlanView = forwardRef<PlanViewHandle, {
     } catch {
       return;
     }
-    const { room, parts: existing, addPart } = useScene.getState();
+    // `currentRoomScene()`, not `useScene.getState().parts`: a drag writes only the
+    // override map, so the authored array is the room as it was BUILT rather than as
+    // it stands, and `placeNewPart` reads it to decide what this piece rests on. A
+    // lamp dropped on a desk the user had moved fell to the floor through it.
+    // `tests/spawn-resolved-parts.test.ts` measures both directions.
+    const { room, addPart } = useScene.getState();
+    const existing = currentRoomScene();
     // The drop point goes IN, exactly as it does on the 3D tab: a wall-mounted piece
     // takes the wall nearest where it was aimed rather than the wall nearest the
     // room's centre. Leaving it out is what made "same contract as the 3D tab's

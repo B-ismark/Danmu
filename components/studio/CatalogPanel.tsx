@@ -27,6 +27,7 @@ import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 
 import { placeNewPart, openSpotForNewPart, type LibraryItem, type ScenePart } from '@/lib/scene-spec';
+import { currentRoomScene } from '@/lib/room-scene';
 import { Icon } from '@/components/ui/Icon';
 import { IconButton } from '@/components/ui/primitives';
 import { LibraryPicker } from './LibraryPicker';
@@ -139,9 +140,19 @@ export function CatalogToggle() {
  *  `undefined` for the first piece into an empty room, which is `placeNewPart`'s own
  *  no-aim behaviour unchanged; the drag-and-drop paths in `PlanView` and `Room` do not
  *  call it at all, because there the user aimed and being placed where you aimed is a
- *  promise. */
+ *  promise.
+ *
+ *  **`currentRoomScene()`, never `useScene.getState().parts`.** A drag writes ONLY the
+ *  override map in `useStudio`, so the authored array is the room as it was BUILT
+ *  rather than as it stands. Both consumers read it and both were wrong: `placeNewPart`
+ *  for `findSupportUnder` — a lamp resting at desk height over floor the desk had been
+ *  dragged off — and `openSpotForNewPart` for `collidesAt`, stepping around a piece
+ *  that is no longer there. `tests/spawn-resolved-parts.test.ts` measures both answers;
+ *  `tests/spawn-spread-wired.test.tsx` is the half that can see which array arrives
+ *  here, and it is the one that goes red if this line is reverted. */
 function spawn(category: ScenePart['category'], shape: ScenePart['shape'], dimMM: [number, number, number], name: string) {
-  const { room, parts, addPart } = useScene.getState();
+  const { room, addPart } = useScene.getState();
+  const parts = currentRoomScene();
   const aim = openSpotForNewPart(category, shape, dimMM, room, parts);
   const { pos, rot, wallMounted } = placeNewPart(category, shape, dimMM, room, parts, aim);
   const id = `${category}-${uuid().slice(0, 6)}`;
