@@ -25,6 +25,15 @@
 // leaves every assertion in that file green: the tokens are still declared, still sane,
 // still unreferenced by any literal a grep can find. This is the test that goes red.
 //
+// **Two mutants survive this file on purpose, named rather than tuned away.** Moving
+// `STACK_WIDTH` to 1024 or `COMPACT_WIDTH` to 1278 leaves all four tests green, because
+// the widths below are DERIVED from those constants and travel with them. That is the
+// trade this file chose: a hard-coded 1100 would kill both mutants and would, the next
+// time a breakpoint moved, quietly measure `wide` under a name that says `compact` — a
+// green that means nothing beats a red that means the wrong thing. What the constants'
+// VALUES answer to is `tests/reflow.test.ts`, which derives the container-query ceiling
+// from `COMPACT_WIDTH` and the rail's own token arithmetic.
+//
 // **What it cannot see.** jsdom has no layout and no cascade, so `var(--rail-left-tight)`
 // here is a string this shell asked for, not a width anything resolved. That the tight
 // rail's contents actually FIT at 208px is `reflow.test.ts`'s arithmetic and, past that, a
@@ -33,13 +42,14 @@ import 'fake-indexeddb/auto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { useStudio } from '@/lib/store';
 import { viewportAt } from './helpers/mount';
 
 vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('compact-rails-room'));
 
 const { StudioShell } = await import('@/components/studio/StudioShell');
+const { NarrowViewportBanner } = await import('@/components/studio/NarrowViewportBanner');
 
 // The two thresholds, read out of the module that owns them rather than typed here.
 // `STACK_WIDTH` and `COMPACT_WIDTH` are module-private, and `tests/reflow.test.ts` already
@@ -150,5 +160,18 @@ describe('the compact step, at a width that is actually in it', () => {
     // what was checked; the UNdragged rail in the SAME render still taking its tight token
     // is what says the step is alive and lost on purpose.
     expect(sash(compact, 'right')).toBe('var(--rail-right-tight)');
+  });
+
+  it('is not a touch device, which is a different question the same shim could get wrong', () => {
+    // `viewportAt` answers `false` to any query with no width feature in it, so that
+    // simulating a narrow viewport does not quietly also simulate a coarse pointer. That
+    // guard is one `return seen` and nothing above could see it: mutating it to `return
+    // true` left all three tests green, because none of them mounts anything that asks a
+    // non-width question. `NarrowViewportBanner` asks two — `(hover: none) and (pointer:
+    // coarse)` and the 400px floor — and answering the first one `true` puts a modal
+    // saying the studio will not lay out over a 1151px window that lays out fine.
+    restore = viewportAt(COMPACT_PX);
+    render(<NarrowViewportBanner />);
+    expect(screen.queryByRole('dialog'), `the studio gate is up at ${COMPACT_PX}px`).toBeNull();
   });
 });
