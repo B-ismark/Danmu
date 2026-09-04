@@ -24,13 +24,17 @@ import { stripComments } from './helpers/source';
 import { join } from 'node:path';
 
 const ROOT = join(__dirname, '..');
-// `StudioHelp` renders TWO different cards and picks by route: the full one on
-// `/model`, a shorter one everywhere else. Mocked to the model route because that is
-// where the group under test lives — and the difference is worth naming, because the
-// first version of this test asserted against the plan card and read as the copy being
-// missing rather than as being on the other tab. Whether the 2D plan should also carry
-// the Catalog-vs-Library line is a product question rather than a bug; it is recorded in
-// `docs/what-is-still-open.md` § G.3.
+// `StudioHelp` renders TWO different cards and picks by route, and `vi.mock` is hoisted
+// to the top of a FILE — so a test file can only ever be on one of them. This one is
+// mocked to `/model` and pins the 3D card; the plan card is pinned by
+// `help-two-lists-plan-tab.test.tsx`, which is a separate file for exactly that reason
+// and not because the claim is a different claim.
+//
+// The difference is worth naming, because the first version of the assertion below was
+// written against the plan card and its red read as the copy having been DELETED rather
+// than as being on the other tab. That misreading is also what left § G.3 open: the
+// plan card genuinely lacked the group, and every test that could have seen it was on
+// this route. The group is one shared component now, rendered by both.
 vi.mock('next/navigation', async () => (await import('./helpers/mount')).navigationMock('test-room', 'model'));
 
 const { StudioHelp } = await import('@/components/studio/StudioHelp');
