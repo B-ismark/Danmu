@@ -383,6 +383,25 @@ describe('WALL_GAP', () => {
     expect(WALL_GAP).toBeGreaterThan(0);
     expect(WALL_GAP).toBeLessThan(0.05);
   });
+
+  it('is 20 mm, and that is a decision rather than a range', () => {
+    // **The two bounds above are not a pin** — they admit anything in (0, 0.05) — and the
+    // three assertions before them measure AGREEMENT between paths, which survives a tune
+    // because every path moves together. That is what they are for, and it is not this.
+    //
+    // **What this adds is a NAME, not coverage, and the difference was worth measuring
+    // rather than asserting.** A review claimed the constant was free anywhere in
+    // (0, 0.05) with the whole suite green. It is not: setting it to 0.03 turns **six**
+    // tests red — this one and five in `tests/wall-parts.test.ts` that carry incidental
+    // literals (`5.48`, `1.48`, `0.52`) for a fan's clamped position. So the constant was
+    // already caught. What it was not was *named*: every one of those five fails with a
+    // message about a fan in a 6 x 4 room, and none of them mentions the gap, so a
+    // deliberate re-tune reads as five unrelated geometry regressions and an accidental
+    // one is very likely to be "fixed" by editing the literals. This assertion is the row
+    // that says what actually changed. `tests/scene-build.test.ts` pins `MOUNT_PAD` the
+    // same way and for the same reason.
+    expect(WALL_GAP).toBe(0.02);
+  });
 });
 
 describe('fixedBand', () => {

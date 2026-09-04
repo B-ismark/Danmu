@@ -6,9 +6,18 @@ import { openingsForRoom } from '@/lib/room-openings';
 import { anchorFor, groundY, ridesWall, snapToWall, wallStandoff, CURTAIN_STANDOFF } from '@/lib/physics';
 import { defaultScene, isWallMountedPart, placeNewPart, type ScenePart } from '@/lib/scene-spec';
 import { ROOM } from '@/lib/parts-catalog';
-// `WALL_GAP` is imported, never spelled. An assertion that wrote `0.02` would still
-// be green if the constant were re-tuned and the pushes stopped reaching it, which is
-// the failure mode this whole change is about.
+// `WALL_GAP` is imported rather than spelled where an assertion is about a piece's
+// clamped position: writing `0.02` there would make this file go red for a re-tune it
+// has no opinion about, and the message would be about a fan.
+//
+// **That is not a rule against pinning the constant, and reading it as one left it
+// unnamed.** The bounds in `tests/layout-rules.test.ts` admitted anything in (0, 0.05),
+// and every other assertion there measures agreement between paths, which survives a
+// tune because all the paths move together. Measured: setting the gap to 0.03 turns six
+// tests red, five of them in THIS file — so it was caught, but every message is about a
+// fan in a 6 x 4 room and none mentions the gap, which is the shape of red somebody
+// closes by editing the literal. It is pinned by name at its own home now; the
+// positional assertions here stay derived.
 import { WALL_GAP } from '@/lib/layout-rules';
 import { containedXZ } from '@/lib/layout-settle';
 import { interiorPoint } from '@/lib/footprint';
@@ -179,11 +188,13 @@ describe('placeNewPart keeps a drop inside the room', () => {
   // below pulled it in: a fan dragged out of the library landed exactly where the
   // pointer was released, outside the walls included. One clamp, in placeNewPart.
   //
-  // The ceiling family no longer reaches that clamp on a normal drop — it hangs in
-  // the middle of the room instead (`ceilingSpot`) — so the clamp's own edges are
-  // exercised by floor pieces two describes down. What is tested here is that a fan
-  // ignores the drop point, and that it stops ignoring it when the middle of the
-  // room is a place there is no room at.
+  // The ceiling family reaches that clamp on an AIMED drop and not on an unaimed one.
+  // It used to be the other way round for every drop — a fan hung in the middle of the
+  // room wherever the pointer went — and the user reversed that on 2026-09-04 (§ H.3
+  // residue 1: an explicit aim overrides the midpoint default). So what is tested here
+  // is that a fan honours the drop point, that it still hangs in the middle when there
+  // was no drop point, and that the unaimed midpoint is tested against the polygon
+  // rather than assumed.
   const RECT6x4: Footprint = [
     [0, 0],
     [6, 0],
@@ -195,25 +206,95 @@ describe('placeNewPart keeps a drop inside the room', () => {
 
   // This room spans x 0…6 and z 0…4, so the middle of it is (3, 2) and NOT the
   // origin — a centre written as [0, 0] would pass on the presets and fail here.
-  it('hangs a ceiling fan in the middle of the room, wherever it was dropped', () => {
-    for (const at of [[7.5, 2], [-1, -1], [0.2, 3.9], [3, 2]] as Array<[number, number]>) {
-      const r = placeNewPart('fan', 'fan', FAN, room6x4, [], at);
-      expect(r.pos[0], `dropped at ${at}`).toBeCloseTo(3, 6);
-      expect(r.pos[2], `dropped at ${at}`).toBeCloseTo(2, 6);
-      // …and hung at the ceiling. Both halves of this: the literal, which pins the
-      // policy (it was 2.35 — `roomHeight - 0.15`, the flat drop § 35 removed — and a
-      // 200 mm fan's rod stopped 50 mm short of a 2.5 m slab), and the agreement with
-      // `groundY`, which pins the wiring. Either alone is half a test: the literal
-      // cannot see `placeNewPart` stop calling `groundY`, and the agreement cannot see
-      // both of them move together.
-      expect(r.pos[1]).toBeCloseTo(2.38, 6);
-      expect(r.pos[1], 'the drop path and the physics path are one answer')
-        .toBeCloseTo(groundY('fan', 'fan', FAN, room6x4.height), 9);
-      expect(r.rot).toBe(0);
-    }
+  it('hangs a ceiling fan in the middle of the room when nobody aimed it', () => {
+    const r = placeNewPart('fan', 'fan', FAN, room6x4, []);
+    expect(r.pos[0]).toBeCloseTo(3, 6);
+    expect(r.pos[2]).toBeCloseTo(2, 6);
+    // …and hung at the ceiling. Both halves of this: the literal, which pins the
+    // policy (it was 2.35 — `roomHeight - 0.15`, the flat drop § 35 removed — and a
+    // 200 mm fan's rod stopped 50 mm short of a 2.5 m slab), and the agreement with
+    // `groundY`, which pins the wiring. Either alone is half a test: the literal
+    // cannot see `placeNewPart` stop calling `groundY`, and the agreement cannot see
+    // both of them move together.
+    expect(r.pos[1]).toBeCloseTo(2.38, 6);
+    expect(r.pos[1], 'the drop path and the physics path are one answer')
+      .toBeCloseTo(groundY('fan', 'fan', FAN, room6x4.height), 9);
+    expect(r.rot).toBe(0);
   });
 
-  it('falls back to the drop point when the middle of the room is not in it', () => {
+  it('hangs it where it was dropped when somebody did aim it', () => {
+    // § H.3 residue 1, answered by the user on 2026-09-04: an explicit aim overrides
+    // `ceilingSpot`'s midpoint default. Before that, all four rows below returned the
+    // midpoint (3, 2) — which is why the fourth row is here and why it is last. It IS
+    // the midpoint, so it is the one aim whose answer did not change, and a table of
+    // only that row would have passed against both behaviours. The first three are the
+    // asymmetry that can see the reversal; the fourth is the case that must NOT move.
+    //
+    // The expected points are derived from the fixture, not copied out of a run: the
+    // bounds clamp at the fan's own half-extent (500 mm in from x 0…6 and z 0…4), and
+    // then `WALL_GAP` more, because `intoRoom` finishes on `containedXZ` and that
+    // function's acceptance test counts the 20 mm as part of being inside. Reading the
+    // constant rather than typing 5.48 is the point: if `WALL_GAP` moves, these move
+    // with it and the test still says what it means.
+    const EX = 6 - 0.5 - WALL_GAP; // hard against the east wall
+    const WX = 0 + 0.5 + WALL_GAP; // …the west
+    const SZ = 4 - 0.5 - WALL_GAP; // …the south
+    const NZ = 0 + 0.5 + WALL_GAP; // …the north
+    const rows: Array<[[number, number], [number, number]]> = [
+      [[7.5, 2], [EX, 2]],
+      [[-1, -1], [WX, NZ]],
+      [[0.2, 3.9], [WX, SZ]],
+      [[3, 2], [3, 2]],
+    ];
+    for (const [at, want] of rows) {
+      const r = placeNewPart('fan', 'fan', FAN, room6x4, [], at);
+      expect(r.pos[0], `dropped at ${at}`).toBeCloseTo(want[0], 6);
+      expect(r.pos[2], `dropped at ${at}`).toBeCloseTo(want[1], 6);
+      // The height and the heading are NOT part of the reversal and must not move
+      // with it — a fan still hangs at the slab and still faces nowhere in particular.
+      expect(r.pos[1], `dropped at ${at}`).toBeCloseTo(groundY('fan', 'fan', FAN, room6x4.height), 9);
+      expect(r.rot, `dropped at ${at}`).toBe(0);
+    }
+    // The whole 1000 mm fan inside the room, not just its centre — the clamp is a
+    // clamp on the piece, and an aim past a wall is the case that proves it.
+    const past = placeNewPart('fan', 'fan', FAN, room6x4, [], [7.5, 2]);
+    expect(footInsidePoly(footFromPart(past.pos, past.rot, FAN), RECT6x4 as unknown as Poly)).toBe(true);
+  });
+
+  it('an UNAIMED fan is contained at the room MIDPOINT, on the one preset where that matters', () => {
+    // **The `u`, and it has to be the `u`.** The unaimed midpoint used to be gated with
+    // `pointInFootprint(mx, mz)` — a test on the POINT, not on the piece — and returned
+    // raw whenever that passed. On the shipped `u` at 6 x 5 the bounds midpoint is
+    // (0, 0), sitting exactly ON the notch's inner edge, so the point test answers TRUE
+    // and a 1000 mm fan centred there hangs half over the cut-away quadrant. Swept
+    // across all five presets with no aim, `u` is the only one that failed.
+    //
+    // Every other preset was structurally incapable of showing it. The shipped `l`
+    // removes only its south-east quadrant, so its midpoint is strictly INSIDE the arm
+    // and the fan fits; an earlier version of this test used a hand-built L whose
+    // midpoint was one of its own VERTICES, which made the whole case turn on the strict
+    // `<` in `pointInFootprint` rather than on any property of the room.
+    const poly = footprintForLayout('u', 6, 5);
+    const room = { width: 6, depth: 5, height: 2.5, footprint: poly };
+    // The fixture must really be the pathological one, or this test is about nothing:
+    // the midpoint reads INSIDE as a point and the fan centred there does NOT fit.
+    expect(pointInFootprint(0, 0, poly), 'the U midpoint must read inside as a point').toBe(true);
+    expect(
+      footInsidePoly(footFromPart([0, 2.38, 0], 0, FAN, true), poly as unknown as Poly),
+      'a fan centred on that midpoint must NOT fit — otherwise there is no defect here',
+    ).toBe(false);
+
+    const r = placeNewPart('fan', 'fan', FAN, room, []);
+    expect(footInsidePoly(footFromPart(r.pos, r.rot, FAN, true), poly as unknown as Poly)).toBe(true);
+    // Pinned as a number as well as a property, because "inside the U" is satisfied by
+    // most of the floor. It is the midpoint pushed clear of the notch — NOT the world
+    // origin clamped into the room, which is what the old fallback answered and which
+    // says nothing about a room whose walls have been dragged off centre.
+    expect(r.pos[0]).toBeCloseTo(0, 6);
+    expect(r.pos[2]).toBeCloseTo(0.52, 6);
+  });
+
+  it('keeps an AIMED fan inside the house, not merely inside the bounding box', () => {
     // An L's bounding-box midpoint is the reflex corner it cuts away, so "the
     // middle of the room" is outside the room. Then where the user aimed is the
     // better answer, and it goes through the same bounds clamp as a floor piece.
@@ -230,8 +311,9 @@ describe('placeNewPart keeps a drop inside the room', () => {
     const r = placeNewPart('fan', 'fan', FAN, room, [], [5.9, 3.9]);
     // Half-width in from the bounding box would be 5.5 / 3.5, and that is in the
     // notch. `intoRoom` now finishes on `containedXZ`, so the fan comes back inside
-    // the house — the drop point still decides WHICH part of the room, which is what
-    // "falls back to the drop point" means and is why this test is still about that.
+    // the house — the drop point still decides WHICH part of the room, and the
+    // containment is what keeps honouring an aim from being licence to hang a fan in
+    // the garden. That is the half of this test the § H.3 reversal did not change.
     expect(pointInFootprint(r.pos[0], r.pos[2], L), `${r.pos} must be inside the L`).toBe(true);
     // The whole 1000 mm fan, not just its centre: a centre clamp would satisfy the
     // line above with half the blades through the wall, and that distinction is the

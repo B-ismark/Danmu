@@ -2681,6 +2681,83 @@ export function normalizeStoredParts(parts: ScenePart[]): ScenePart[] {
   });
 }
 
+/** How high a wall- or ceiling-mounted piece hangs in a room of this height.
+ *
+ *  `groundY` owns the canonical height for the shape; this adds the room's own say —
+ *  the bottom edge never dips below the floor and the top never passes the ceiling.
+ *  The bound is exactly `h / 2` rather than `h / 2` plus a pad, because a door's
+ *  canonical height IS `h / 2` and padding it stood every door 2 cm off its own
+ *  threshold.
+ *
+ *  **Exported because the 3D tab needs to AIM at this height, not merely place at it.**
+ *  `components/three/Room.tsx` raycasts a drop against a plane; for anything that hangs,
+ *  that plane has to be the one the piece will hang in. It used to be the floor
+ *  unconditionally, which was harmless only while a ceiling piece discarded its aim —
+ *  the moment `ceilingSpot` began honouring one, a fan released over the middle of the
+ *  ceiling was resolved at the ray's y = 0 crossing and landed in the far corner, about
+ *  1.65 m out per metre of height at the default camera. Two readers, one answer: a
+ *  second copy of this arithmetic in the drop handler would drift the aim away from the
+ *  placement silently, and the symptom would be a piece that lands near where you
+ *  dropped it. */
+export function mountedY(
+  cat: Category,
+  shape: Shape,
+  dimMM: [number, number, number],
+  roomHeight: number,
+): number {
+  const h = dimMM[2] / 1000;
+  return Math.max(h / 2, Math.min(roomHeight - h / 2, groundY(cat, shape, dimMM, roomHeight)));
+}
+
+/** Does this piece hang from the ceiling — centred geometry that rides no wall?
+ *
+ *  The conjunction had exactly one site in the repo and it was an early return that has
+ *  since been deleted; naming it here rather than re-spelling it in a component keeps
+ *  it from becoming the kind of predicate that grows a second, subtly different copy. */
+export function hangsFromCeiling(cat: Category, shape: Shape): boolean {
+  return isWallMountedPart(cat, shape) && !ridesWall(cat, shape);
+}
+
+/** The height a DROP should be aimed at — the plane a pointer ray is resolved against.
+ *
+ *  Zero for anything that stands on the floor, and the piece's own mounting height for
+ *  anything that hangs. `components/three/Room.tsx` raycasts against this; the 2D plan
+ *  needs no equivalent because `svgToWorldAt` maps screen to world directly and is exact
+ *  at every height.
+ *
+ *  **This is a whole class of defect rather than one bug.** A pointer ray carries no
+ *  depth, so the plane you resolve it against IS the answer, and resolving a ceiling
+ *  piece against the floor puts it `height × (camera horizontal / camera elevation)`
+ *  away — about 1.65 m per metre at this app's default camera. It stayed invisible for
+ *  as long as it did because `ceilingSpot` discarded the aim, so the wrong number was
+ *  computed and then thrown away; the moment the aim began to matter, so did it. */
+export function dropPlaneY(
+  cat: Category,
+  shape: Shape,
+  dimMM: [number, number, number],
+  roomHeight: number,
+): number {
+  return hangsFromCeiling(cat, shape) ? mountedY(cat, shape, dimMM, roomHeight) : 0;
+}
+
+/** The same height as the `constant` a three `Plane` with normal `(0, 1, 0)` needs.
+ *
+ *  `Plane` is `normal · x + constant = 0`, so a plane at `y = h` carries `-h`. That one
+ *  negation is the whole of this function, and it exists because it was otherwise written
+ *  twice — once in `Room.tsx`'s drop handler and once in the test that checks it. A test
+ *  that rebuilds the arithmetic it is checking cannot see that arithmetic change: flip
+ *  the sign in the handler and a fan aims at `y = -2.38`, a plane BELOW the floor that
+ *  the ray never reaches from above, so the drop silently does nothing — and the gate
+ *  stays green because it flipped its own copy back. One owner for the sign. */
+export function dropPlaneConstant(
+  cat: Category,
+  shape: Shape,
+  dimMM: [number, number, number],
+  roomHeight: number,
+): number {
+  return -dropPlaneY(cat, shape, dimMM, roomHeight);
+}
+
 /** Compute a sane spawn transform for a NEW part added at `at` — or, with no `at`,
  *  at the room centre. A Library CLICK has no aim, so `openSpotForNewPart` supplies
  *  one rather than letting every click land on the same spot (§ H.3).
@@ -2796,34 +2873,53 @@ export function placeNewPart(
     );
   }
 
-  /** Where a ceiling piece hangs the moment it is added: the middle of the room.
+  /** Where a ceiling piece hangs the moment it is added: where it was aimed, and
+   *  the middle of the room when it was aimed nowhere.
    *
-   *  Not under the pointer. A fan or a pendant belongs in the middle of a ceiling
-   *  far more often than it belongs wherever the cursor happened to be when the
-   *  button came up, and it is a DEFAULT rather than a rule — `ridesWall` is false
-   *  for this family, so nothing snaps it anywhere and a drag moves it freely.
+   *  **An explicit aim wins — decided by the user, 2026-09-04, § H.3 residue 1.** The
+   *  earlier rule was the other way round and this docblock argued for it: "not under
+   *  the pointer; a fan belongs in the middle of a ceiling far more often than wherever
+   *  the cursor happened to be". That is still true of the case it describes, and it is
+   *  still what happens — a Library CLICK carries no aim, so the first fan into a room
+   *  goes to the middle exactly as before. What the old rule could not survive is the
+   *  case it did not describe: an aim was read ONLY when the midpoint fell outside the
+   *  footprint, so in any rectangular room EVERY aim resolved to the same point. That
+   *  made a drag onto the ceiling land somewhere the user did not drop it, and it made
+   *  the § H.3 fan-out structurally impossible for this one family — 127 ring candidates
+   *  all collapsing onto the midpoint, so a second fan was placed exactly inside the
+   *  first. Honouring the aim fixes the drag and the fan-out with one rule instead of
+   *  two, and `openSpotForNewPart` no longer has to skip this family.
    *
-   *  The bounds midpoint, tested against the polygon instead of assumed: the middle
-   *  of an L's bounding box is the reflex corner it cuts away, and a fan hung there
-   *  hangs outside the room. When that happens the drop point is the better answer,
-   *  because at least the user aimed it. */
+   *  **The unaimed midpoint goes through `intoRoom` too, and that is a fix rather than
+   *  tidying.** It used to be gated with `pointInFootprint(mx, mz)` — a test on the
+   *  POINT, not on the piece — and returned raw whenever that passed. On the `u` preset
+   *  at 6 x 5 the bounding-box midpoint is (0, 0), which sits exactly ON the notch's
+   *  inner edge: `pointInFootprint` answers true and a 1000 mm fan centred there hangs
+   *  half over the cut-away quadrant. Swept across all five presets, `u` is the only one
+   *  that fails — which is why every fixture built on a rectangle or an L missed it. An
+   *  L's bounds midpoint is strictly INSIDE its arm, so an L cannot reach this branch at
+   *  all; the comment that used to sit here named the L as the motivating case and was
+   *  wrong about the one shape it named. Containment is a question about the FOOTPRINT
+   *  and `containedXZ` answers it; a point test never could.
+   *
+   *  It fixes the frame at the same time. The old fallback was `intoRoom(ax, az, 0)`,
+   *  and with no aim `ax = az = 0`, so it clamped the WORLD ORIGIN into the room — a
+   *  point that says nothing about this room once the walls have been dragged off
+   *  centre. The midpoint is the honest seed, and `openSpotForNewPart` centres its whole
+   *  ring on this answer, so getting it wrong scattered every candidate too.
+   *
+   *  `ridesWall` is false for this family, so nothing snaps it anywhere and a drag
+   *  moves it freely afterwards either way. */
   function ceilingSpot(): [number, number] {
+    // `rot: 0` throughout — a ceiling piece is returned with `rot: 0` by the branch
+    // that calls this, so 0 is the angle it will actually have rather than a stand-in.
     if (!room.footprint) return [0, 0];
+    if (at) return intoRoom(ax, az, 0);
     const b = footprintBounds(room.footprint);
-    const mx = (b.minX + b.maxX) / 2;
-    const mz = (b.minZ + b.maxZ) / 2;
-    // `rot: 0` — a ceiling piece is returned with `rot: 0` by the branch that calls
-    // this, so 0 is the angle it will actually have rather than a stand-in.
-    return pointInFootprint(mx, mz, room.footprint) ? [mx, mz] : intoRoom(ax, az, 0);
+    return intoRoom((b.minX + b.maxX) / 2, (b.minZ + b.maxZ) / 2, 0);
   }
   if (wallMounted) {
-    const h = dimMM[2] / 1000;
-    // Centre-anchored: clamp so the bottom edge never dips below the floor and
-    // the top never passes the ceiling, regardless of the canonical height. The
-    // bound is exactly h/2 rather than h/2 + a pad, because a door's canonical
-    // height IS h/2 — padding it stood every door 2 cm off its own threshold.
-    let y = groundY(cat, shape, dimMM, room.height);
-    y = Math.max(h / 2, Math.min(room.height - h / 2, y));
+    const y = mountedY(cat, shape, dimMM, room.height);
     // Against a wall, facing into the room — not hovering in the middle of it.
     // `Draggable` already snaps these on the first drag, so spawning at the
     // centre only meant the piece jumped the moment it was touched; for a DOOR
@@ -2835,7 +2931,10 @@ export function placeNewPart(
       const snapped = snapToWall([ax, 0, az], dimMM, room.footprint, wallStandoff(shape));
       return { pos: [snapped.x, y, snapped.z], rot: snapped.rot ?? 0, wallMounted };
     }
-    // Ceiling family: hung at `y`, in the middle of the room — see `ceilingSpot`.
+    // Ceiling family: hung at `y`, where it was aimed — or in the middle of the room
+    // when it was aimed nowhere. `ceilingSpot` owns that choice; this line used to
+    // state the rule itself and said "in the middle of the room" for a commit after
+    // the rule had been reversed twenty lines above it.
     const [cx, cz] = ceilingSpot();
     return { pos: [cx, y, cz], rot: 0, wallMounted };
   }
@@ -2932,23 +3031,26 @@ const SPAWN_RINGS = 6;
  * **Gated with `footInsidePoly`, not `outsideShare`.** The latter samples, and its
  * samples sit 10% in from the edges, so it forgives a piece 20 mm through the plaster.
  *
- * **The ceiling family cannot be fanned out from here, and an earlier version of this
- * comment claimed the opposite.** It said a candidate "only moves a fan or a pendant
- * once the middle is occupied — which is exactly when it should", which reads as the
- * feature working in that family. It does not work there at all: `ceilingSpot` returns
- * the bounds midpoint whenever that point is inside the footprint and reads `ax`/`az`
- * ONLY in the branch where it is not, so in any rectangular room every one of the 127
- * candidates resolves to the identical point. A second ceiling fan is therefore still
- * placed exactly inside the first — the original § H.3 complaint, in the one family the
- * comment said was covered. The search is skipped for them rather than run 127 times to
- * return what it already knew.
+ * **The ceiling family works here now, and for one commit it provably could not.** The
+ * history is worth keeping because the shape of it recurs: this function was correct,
+ * every one of its own tests was green, and the feature was inert in that family
+ * because a function it CALLS discarded the input it was being handed. `ceilingSpot`
+ * returned the bounds midpoint whenever that point was inside the footprint and read
+ * the aim only in the branch where it was not — so in a rectangle all 127 candidates
+ * resolved to the identical point and a second fan was placed exactly inside the first,
+ * the original § H.3 complaint surviving inside the fix written to close it. There was
+ * an early return here that skipped the family rather than running 127 probes to
+ * re-derive one answer, and that skip was honest about the limitation without removing
+ * it. The user reversed the underlying default on 2026-09-04 (an explicit aim wins);
+ * `ceilingSpot` honours a candidate now, so the skip is gone and this family fans out
+ * like every other. **A saving that exists only because a callee is broken is a
+ * measurement of the bug, not an optimisation** — it has to go with the bug.
  *
- * The residue is real and is NOT fixed here, because fixing it means reversing a
- * written decision — "not under the pointer; a fan belongs in the middle of a ceiling
- * far more often than wherever the cursor happened to be" (`ceilingSpot`'s own
- * docblock). Whether an EXPLICIT aim should override that default is a product
- * question, filed in `docs/what-is-still-open.md` § H.3 rather than answered inside a
- * defect fix, which is the mistake that item's own row warns about.
+ * The other residue is untouched and still filed: a click can rest a tabletop-prone
+ * piece on another one, because `collidesAt` permits stacking by design and only the
+ * physically impossible half is gated here (§ 31 — nothing based where its top passes
+ * the ceiling). Whether an UNAIMED click should stack at all is a product question in
+ * `docs/what-is-still-open.md` § H.3, not something to settle inside a defect fix.
  */
 export function openSpotForNewPart(
   cat: Category,
@@ -2959,12 +3061,6 @@ export function openSpotForNewPart(
 ): [number, number] | undefined {
   const PROBE = '__spawn-probe__';
   const poly = room.footprint;
-
-  // The ceiling family — centred geometry that rides no wall — is exactly the set
-  // `placeNewPart` sends through `ceilingSpot`, which discards the aim. Running the ring
-  // search for one of these is 127 probes that all resolve to the same point; the
-  // honest answer is the one it would reach anyway, without pretending to search.
-  if (isWallMountedPart(cat, shape) && !ridesWall(cat, shape)) return undefined;
 
   // Roundness is a property of the SHAPE (`isRoundPart`), and this is a GATE, not a
   // clamp. `intoRoom` above declines to read it and errs by pulling a round piece a

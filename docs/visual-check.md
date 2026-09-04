@@ -78,7 +78,8 @@ test in this repo can answer, and it is answered.
 Two things were seen while looking that are NOT shape defects and are filed elsewhere:
 every Library click dropped at room centre, so five added pieces landed in one heap
 (§ H.3 — **fixed 2026-09-03**, they fan out to the first clear spot now; the ceiling
-family is the documented residue and still heaps, because `ceilingSpot` discards the aim);
+family was the documented residue and heaped for one more day, because `ceilingSpot`
+discarded the aim — **fixed 2026-09-04**, and the drag half of that fix is an item below);
 and the plan draws the standing fan and the stool as SQUARES, which is § 32 seen rather
 than inferred.
 
@@ -245,6 +246,52 @@ not whether it fires:
 4. **The fan-out ring is hexagonal and starts at the piece's own diagonal.** Four chairs
    look deliberate; whether twelve look like a spiral rather than a scatter has not been
    looked at.
+
+### A ceiling fan now lands where you drop it — and the middle stopped being a promise
+
+**Where it rides.** `feat/ceiling-aim`.
+
+**What changed and why it is here.** § H.3's residue 1, answered by the user on 2026-09-04:
+an explicit aim overrides `ceilingSpot`'s midpoint default. Before it, a fan or a pendant
+dragged out of the Library hung in the middle of the room wherever the pointer was released,
+and a second one was placed exactly inside the first.
+
+**A review then found the reversal had switched on a defect that had been dead code.** The
+3D drop resolved every pointer ray against the **floor** plane, which was harmless only for
+as long as a ceiling piece discarded its aim. The error at the point the camera looks at is
+`|camera x,z| × planeY / (camY − planeY)` — **8.3 m for a fan at 2.38 m under the default
+camera, in a room 6 m across** — and it grows toward the corners and diverges as the camera
+orbits down. Fixed, and gated by `tests/drop-aim.test.ts`, which asserts a round trip rather
+than a coordinate. The 2D plan never had it: `svgToWorldAt` maps screen to world directly.
+
+**Where to click.** `/room/<id>/model`, Library open.
+
+1. **Drag** a ceiling fan onto the canvas near a corner, then again over the middle of the
+   ceiling — above the wall tops, not over the floor. It should hang under the pointer both
+   times. *Wrong looks like:* it jumps to the centre (the reversal did not reach the drag
+   path); it hangs past the wall (containment lost); or — the case the tests were blind to
+   and the one to look hardest for — **it lands somewhere legal and plausible that is not
+   where you dropped it.** That third one has no tell at all, so drop it deliberately onto a
+   piece of furniture and see whether it lands on that piece.
+2. **The cross-tab reading, which is the sharpest check here.** Drop a fan at the same place
+   in the room on `/plan` and on `/model`. They must land in the same place. The two tabs
+   are two code paths for one gesture, and an expected coordinate typed into a test is also
+   satisfied by an error that is merely consistent — this comparison is not.
+3. **Orbit down to eye level and drop one there.** The error the fix removes diverges as the
+   camera approaches the plane, so a low camera is where a residual would be visible. Also
+   check that a drop aimed at the upper half of the frame lands at all: an upward ray meets
+   no horizontal plane and the handler returns in silence.
+4. **Click** the fan row four times without dragging. Four fans, spread on one hexagonal
+   ring, all flush to the slab. *Wrong looks like:* a heap at one point (the old behaviour),
+   or fans at different heights — a tower is invisible from directly overhead in the 2D
+   plan, so **look from eye level**.
+5. **The judgement call, and the reason this item exists.** With one fan in the room, is the
+   middle still where it should go? That is the half of the old rule the user kept, and the
+   only evidence for it is somebody looking at a room with one fan in it.
+
+**What a probe cannot answer.** Whether a hexagonal ring of ceiling fixtures reads as
+deliberate or as a mess — the same open question item 4 above raises for chairs, now with
+pieces the eye tracks against a flat ceiling rather than against furniture.
 
 ### A wall drag and a revisit — PROBED on all eight T edges, and two things still want an eye
 
