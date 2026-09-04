@@ -252,30 +252,37 @@ describe('placeNewPart keeps a drop inside the room', () => {
     expect(footInsidePoly(footFromPart(past.pos, past.rot, FAN), RECT6x4 as unknown as Poly)).toBe(true);
   });
 
-  it('an UNAIMED fan falls back to the drop point when the middle of the room is not in it', () => {
-    // An L's bounding-box midpoint is the reflex corner it cuts away, so "the middle
-    // of the room" is outside the room. With no aim there is nothing to prefer to it,
-    // so the fallback is the same bounds clamp applied to the origin — which is the
-    // branch that survived the reversal above, and the only route into it now.
-    const L: Footprint = [
-      [0, 0],
-      [6, 0],
-      [6, 2],
-      [3, 2],
-      [3, 4],
-      [0, 4],
-    ];
-    expect(pointInFootprint(3, 2, L), 'the fixture must actually have its middle cut away').toBe(false);
-    const room = { width: 6, depth: 4, height: 2.5, footprint: L };
+  it('an UNAIMED fan is contained at the room MIDPOINT, on the one preset where that matters', () => {
+    // **The `u`, and it has to be the `u`.** The unaimed midpoint used to be gated with
+    // `pointInFootprint(mx, mz)` — a test on the POINT, not on the piece — and returned
+    // raw whenever that passed. On the shipped `u` at 6 x 5 the bounds midpoint is
+    // (0, 0), sitting exactly ON the notch's inner edge, so the point test answers TRUE
+    // and a 1000 mm fan centred there hangs half over the cut-away quadrant. Swept
+    // across all five presets with no aim, `u` is the only one that failed.
+    //
+    // Every other preset was structurally incapable of showing it. The shipped `l`
+    // removes only its south-east quadrant, so its midpoint is strictly INSIDE the arm
+    // and the fan fits; an earlier version of this test used a hand-built L whose
+    // midpoint was one of its own VERTICES, which made the whole case turn on the strict
+    // `<` in `pointInFootprint` rather than on any property of the room.
+    const poly = footprintForLayout('u', 6, 5);
+    const room = { width: 6, depth: 5, height: 2.5, footprint: poly };
+    // The fixture must really be the pathological one, or this test is about nothing:
+    // the midpoint reads INSIDE as a point and the fan centred there does NOT fit.
+    expect(pointInFootprint(0, 0, poly), 'the U midpoint must read inside as a point').toBe(true);
+    expect(
+      footInsidePoly(footFromPart([0, 2.38, 0], 0, FAN, true), poly as unknown as Poly),
+      'a fan centred on that midpoint must NOT fit — otherwise there is no defect here',
+    ).toBe(false);
+
     const r = placeNewPart('fan', 'fan', FAN, room, []);
-    expect(pointInFootprint(r.pos[0], r.pos[2], L), `${r.pos} must be inside the L`).toBe(true);
-    expect(footInsidePoly(footFromPart(r.pos, r.rot, FAN), L as unknown as Poly)).toBe(true);
-    // The origin inset by the fan's own half-extent and then by `WALL_GAP`. Pinned as
-    // a number as well as a property, because "inside the L" is satisfied by most of
-    // the floor and would stay green if the fallback started answering somewhere else
-    // entirely — the north-west corner is a very particular answer.
-    expect(r.pos[0]).toBeCloseTo(0.5 + WALL_GAP, 6);
-    expect(r.pos[2]).toBeCloseTo(0.5 + WALL_GAP, 6);
+    expect(footInsidePoly(footFromPart(r.pos, r.rot, FAN, true), poly as unknown as Poly)).toBe(true);
+    // Pinned as a number as well as a property, because "inside the U" is satisfied by
+    // most of the floor. It is the midpoint pushed clear of the notch — NOT the world
+    // origin clamped into the room, which is what the old fallback answered and which
+    // says nothing about a room whose walls have been dragged off centre.
+    expect(r.pos[0]).toBeCloseTo(0, 6);
+    expect(r.pos[2]).toBeCloseTo(0.52, 6);
   });
 
   it('keeps an AIMED fan inside the house, not merely inside the bounding box', () => {

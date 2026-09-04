@@ -9,11 +9,11 @@ import { ContactShadows, Environment, Lightformer, AdaptiveDpr, PerformanceMonit
 import { EffectComposer, N8AO, SMAA } from '@react-three/postprocessing';
 import { ACESFilmicToneMapping, Raycaster, Vector2, Vector3, Plane, type Camera, type DirectionalLight, type Scene, type WebGLRenderer } from 'three';
 import { v4 as uuid } from 'uuid';
-import { useStudio } from '@/lib/store';
+import { useStudio } from '@/lib/store';
 import { consumeGizmoClick } from '@/lib/gizmo-press';
 import { useScene } from '@/lib/scene-store';
 import { useRoomScene } from '@/lib/room-scene';
-import { placeNewPart, DND_MIME, type Category, type Shape } from '@/lib/scene-spec';
+import { placeNewPart, dropPlaneConstant, DND_MIME, type Category, type Shape } from '@/lib/scene-spec';
 import { footprintBounds } from '@/lib/footprint';
 import { daylightKelvin } from '@/lib/solar';
 import { LIGHTING, moodSunDirection, KEY_DIR, DEFAULT_BEARING_DEG } from '@/lib/lighting-moods';
@@ -74,14 +74,16 @@ function HoverReset() {
 // Catalog drag-drop payload (set by CatalogPanel's draggable items).
 type DropItem = { label: string; category: Category; shape: Shape; dimMM: [number, number, number] };
 
-// Reused across drops — raycast the pointer onto the floor plane (y=0).
 /** What a DOM handler outside the R3F tree needs to raycast back into it. */
 type SceneApi = { camera: Camera; gl: WebGLRenderer; scene: Scene };
 
 const _raycaster = new Raycaster();
 const _ndc = new Vector2();
-const _floor = new Plane(new Vector3(0, 1, 0), 0);
 const _hit = new Vector3();
+const _up = new Vector3(0, 1, 0);
+/** Reused across drops. `Plane` is `normal · x + constant = 0`, so a plane at `y = h`
+ *  has constant `-h`; the floor is the `h = 0` case of that rather than a second rule. */
+const _dropPlane = new Plane(new Vector3(0, 1, 0), 0);
 
 export function Room() {
   const hidden = useStudio((s) => s.hidden);
@@ -161,9 +163,34 @@ export function Room() {
     const rect = api.gl.domElement.getBoundingClientRect();
     _ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
     _raycaster.setFromCamera(_ndc, api.camera);
-    if (!_raycaster.ray.intersectPlane(_floor, _hit)) return;
 
     const { room: r, parts: ps } = useScene.getState();
+    // **Which plane the pointer is resolved against is a function of where the piece
+    // will LIVE.** This was the floor for every category, which was harmless only while
+    // a ceiling piece discarded its aim. The moment `ceilingSpot` began honouring one, a
+    // fan released over the middle of the ceiling was resolved at the ray's y = 0
+    // crossing and landed in the FAR CORNER. The error at the point the camera looks at
+    // is `|camera x,z| × planeY / (camY − planeY)` — **8.3 m at the default camera for a
+    // fan at 2.38 m, in a room 6 m across**, and worse toward the corners. It diverges as
+    // the camera drops toward the plane, so orbiting to eye level makes it unbounded.
+    // Measured over a 9 × 9 aim grid on all five presets, mean error before was 3.0–4.0 m,
+    // because every aim resolved to the same point.
+    //
+    // The 2D tab never had this: `PlanView.onDrop` maps screen to world directly with
+    // `svgToWorldAt`, which is exact at any height. So the two tabs answered the same
+    // gesture differently — CLAUDE.md's "two features that render the same must not be
+    // two code paths". `tests/drop-aim.test.ts` holds them to EACH OTHER rather than to
+    // a coordinate typed here, because an expected constant is also satisfied by a fix
+    // that merely moves the error somewhere consistent.
+    //
+    // `mountedY` rather than `r.height`: a fan rests below the slab, and at that ratio
+    // its 120 mm of drop is still 200 mm of floor. It is the same function
+    // `placeNewPart` uses to choose the height, so the aim and the placement cannot
+    // drift apart — a second copy here would fail as a piece landing NEAR where it was
+    // dropped, which is the hardest kind of wrong to notice.
+    _dropPlane.set(_up, dropPlaneConstant(item.category, item.shape, item.dimMM, r.height));
+    if (!_raycaster.ray.intersectPlane(_dropPlane, _hit)) return;
+
     // The drop point goes in: a wall part takes the wall nearest where it was
     // aimed rather than the wall nearest the room's centre.
     const { pos, rot, wallMounted } = placeNewPart(item.category, item.shape, item.dimMM, r, ps, [

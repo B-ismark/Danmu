@@ -19,7 +19,8 @@
 
 import { describe, expect, it } from 'vitest';
 import { footprintForLayout } from '@/lib/footprint';
-import { footFromPart, footInsidePoly, obbGap, obbOverlap } from '@/lib/geometry';
+import { footFromPart, footInsidePoly, footOverlap, obbGap, obbOverlap, type Poly } from '@/lib/geometry';
+import { groundY } from '@/lib/physics';
 import {
   openSpotForNewPart,
   placeNewPart,
@@ -168,16 +169,23 @@ describe('nothing already in the room moves to make space', () => {
   });
 });
 
-describe('a room that is not centred on the origin', () => {
-  /** The same 6 x 5 rectangle, translated. Every `footprintForLayout` room is centred on
-   *  the origin by construction, which is why no fixture in this file could see the
-   *  defect below — but `footprintBounds`' own docblock says a footprint "is no longer
-   *  guaranteed centred on the origin (walls can be dragged independently)". */
-  const OFFSET = (dx: number, dz: number) => ({
-    width: 6, depth: 5, height: 2.5,
-    footprint: footprintForLayout('rect', 6, 5).map(([x, z]) => [x + dx, z + dz] as [number, number]),
-  });
+/** The same 6 x 5 rectangle, translated. Every `footprintForLayout` room is centred on
+ *  the origin by construction, which is why no fixture in this file could see the defect
+ *  the describe below was written for — but `footprintBounds`' own docblock says a
+ *  footprint "is no longer guaranteed centred on the origin (walls can be dragged
+ *  independently)".
+ *
+ *  **Module scope, not describe scope, because the ceiling block needs it too and did
+ *  not have it.** That block reached for the origin-centred `ROOM()` and its assertion
+ *  about the unaimed midpoint was consequently satisfied by a `ceilingSpot` that never
+ *  consulted the midpoint at all. The fixture that defeats that degeneracy was already
+ *  in this file, 150 lines up, in a describe that exists because of it. */
+const OFFSET = (dx: number, dz: number) => ({
+  width: 6, depth: 5, height: 2.5,
+  footprint: footprintForLayout('rect', 6, 5).map(([x, z]) => [x + dx, z + dz] as [number, number]),
+});
 
+describe('a room that is not centred on the origin', () => {
   it('fans out around the ROOM, not around the world origin', () => {
     // Measured on the original: with the room at x ∈ [4, 10], z ∈ [4.5, 9.5] every one
     // of the 126 candidates fell outside it, `intoRoom` clamped each of them back to the
@@ -343,12 +351,27 @@ describe('the ceiling family, which this search can help now', () => {
       pos: [0, 2.2, 0], rot: 0, locked: false, wallMounted: true,
     }) as ScenePart;
 
-  it('still asks for no aim when the middle of the ceiling is free', () => {
-    // The single-fan case the old default was written for, and it is untouched: the
-    // first fan into a room goes to the middle, because a click carries no aim and
-    // there is nothing in the way. A reversal that moved this would have been the
-    // wrong reversal.
-    expect(openSpotForNewPart(...FAN, ROOM(), [])).toBeUndefined();
+  it('still hangs a lone fan in the MIDDLE of a room that is not at the origin', () => {
+    // The single-fan case the old default was written for, and it must not have moved:
+    // a click carries no aim, so the first fan into a room goes to the middle.
+    //
+    // **On `OFFSET`, not on `ROOM()`, and that is the whole test.** A previous version
+    // asserted `openSpotForNewPart(...FAN, ROOM(), [])` is `undefined` and described
+    // itself as pinning the reversal. It pinned nothing: in an origin-centred room the
+    // bounds midpoint and `intoRoom(0, 0)` are the same point, so a `ceilingSpot` that
+    // NEVER consulted the midpoint passed it — and passed every other test in this file,
+    // failing exactly one assertion in the whole repo, in a different file. The
+    // counter-example was already here: `OFFSET` exists 150 lines up, in a describe that
+    // exists because of this exact degeneracy, and the ceiling block reached for `ROOM()`
+    // anyway. **Read the fixtures a file already has and ask what each one exists to
+    // defeat** — a helper named for a property rather than for a shape is a previous
+    // author naming the trap.
+    const room = OFFSET(7, 7);
+    const r = placeNewPart(...FAN, room, []);
+    expect(r.pos[0], 'the middle of THIS room, not of the world').toBeCloseTo(7, 6);
+    expect(r.pos[2]).toBeCloseTo(7, 6);
+    // …and with the middle free there is still nothing for the search to say.
+    expect(openSpotForNewPart(...FAN, room, [])).toBeUndefined();
   });
 
   it('asks for an aim once the middle is taken', () => {
@@ -357,9 +380,15 @@ describe('the ceiling family, which this search can help now', () => {
     // And the aim has to be a spot the fan can actually take, not merely a spot: the
     // search returns `undefined` when nothing in range is clear, so a defined answer
     // is a claim about the placement it produces.
+    //
+    // `footOverlap`, not `obbOverlap`. A fan is round, `collidesAt` tests the ellipse,
+    // and measuring a round piece by its bounding box invents overlaps production does
+    // not have — on the `t` preset the box test reports four collisions among four fans
+    // where the foot test reports none. A test that disagrees with the predicate the app
+    // uses is not a stricter test, it is a different one.
     const placed = placeNewPart(...FAN, ROOM(), [existingFan()], aim);
     const added = { ...existingFan(), id: 'fan-2', pos: placed.pos, rot: placed.rot } as ScenePart;
-    expect(obbOverlap(foot(added), foot(existingFan()))).toBe(false);
+    expect(footOverlap(foot(added), foot(existingFan()))).toBe(false);
   });
 
   it('and the aim really is honoured, which is why', () => {
@@ -379,44 +408,64 @@ describe('the ceiling family, which this search can help now', () => {
     expect(aimed.pos[2]).toBeCloseTo(1, 6);
   });
 
-  // Both shapes, because a rectangle cannot express half of what could go wrong here:
-  // in a box the bounds inset IS the containment, so `intoRoom` clamps every candidate
-  // to a legal point whatever the notch logic does. An L is where a candidate can be
-  // inside the bounding box and outside the house.
-  //
-  // **`footInsidePoly` is deliberately NOT asserted in this test, on either shape**, and
-  // the reason is worth writing down rather than leaving as an omission. `intoRoom`
-  // finishes on `containedXZ`, so a ceiling piece is contained before it is ever
-  // returned — every mutation that could put a fan outside kills `tests/wall-parts.ts`'s
-  // ceiling cases first and leaves an assertion here green either way. It would be an
-  // assertion that cannot fail. Containment for this family is owned there, aimed and
-  // unaimed, on an L; what is owned here is that four clicks make four fans.
+  // **The `u`, not the `l`, and the difference is the whole reason the row exists.** An
+  // earlier version of this loop used an L "because an L is where a candidate can be
+  // inside the bounding box and outside the house" — which is false of the L this app
+  // ships. `footprintForLayout('l', …)` removes only the south-east quadrant, so the
+  // bounds midpoint is strictly INSIDE the arm and a fan centred there fits; the L can
+  // never reach the notch branch at all, and both mutations that would put a fan in a
+  // notch left that row green. The `u` is the shape whose bounds midpoint sits exactly ON
+  // the notch edge. Measured across all five presets with a 1000 mm fan and no aim, `u`
+  // is the ONLY one where the whole fan is not over real floor.
   for (const [name, room] of [
     ['a rectangle', ROOM()],
-    ['an L, where the middle of the box is not in the room', { width: 6, depth: 5, height: 2.5, footprint: footprintForLayout('l', 6, 5) }],
+    ['a U, whose bounds midpoint is on the notch edge', { width: 6, depth: 5, height: 2.5, footprint: footprintForLayout('u', 6, 5) }],
   ] as const) {
     it(`four ceiling fans are four ceiling fans — ${name}`, () => {
       // The user-visible property, and the original § H.3 complaint in the one family it
       // outlived: four clicks of the same Library row used to produce four fans at one
-      // point. `addMany` is the click loop — each fan sees the ones before it.
+      // point. `addMany` is the click loop — each fan sees the ones before it. Measured
+      // before the fix, every preset: 1 distinct position, 6 of 6 pairs overlapping — and
+      // in the `u`, all four outside the room.
       const fans = addMany(4, FAN, room);
       for (let i = 0; i < fans.length; i++) {
         for (let j = i + 1; j < fans.length; j++) {
           expect(
-            obbOverlap(foot(fans[i]), foot(fans[j])),
+            footOverlap(foot(fans[i]), foot(fans[j])),
             `${fans[i].id} at ${fans[i].pos} overlaps ${fans[j].id} at ${fans[j].pos}`,
           ).toBe(false);
         }
       }
-      // Four DISTINCT points, which is stronger than four non-overlapping ones only in
-      // the degenerate direction — but that is the direction the defect was in, and a
-      // separation test alone would pass on two fans one micron apart.
-      expect(new Set(fans.map((f) => `${f.pos[0].toFixed(3)},${f.pos[2].toFixed(3)}`)).size).toBe(4);
-      // All four still at the slab: spreading them is an XZ answer and must not have
-      // become a vertical one. A tower is the failure this family is most prone to,
-      // because two fans at one x/z with different heights read as clear to `collidesAt`.
-      const heights = new Set(fans.map((f) => f.pos[1].toFixed(6)));
-      expect(heights.size, `fans hung at ${[...heights].join(', ')}`).toBe(1);
+      // **The pairwise MINIMUM distance, not a count of distinct points.** Nearly every
+      // aggregate over a degenerate set is invariant: a heap of four fans at one point
+      // has one height, one bounding box, one centroid and one distinct rounded position
+      // if the rounding is coarse enough. A minimum separation is the one reading a heap
+      // cannot satisfy, so it is the one that distinguishes the two builds.
+      let closest = Infinity;
+      for (let i = 0; i < fans.length; i++) {
+        for (let j = i + 1; j < fans.length; j++) {
+          closest = Math.min(closest, Math.hypot(fans[i].pos[0] - fans[j].pos[0], fans[i].pos[2] - fans[j].pos[2]));
+        }
+      }
+      expect(closest, `closest pair is ${closest.toFixed(3)} m apart`).toBeGreaterThan(0.5);
+      // Every one of them over real floor. This row is where that assertion belongs,
+      // because the `u` is the shape that failed it — it was dropped from an earlier
+      // version of this test as unfalsifiable, and it was unfalsifiable only against the
+      // rectangle and the L it was being run on.
+      for (const f of fans) {
+        expect(footInsidePoly(foot(f), room.footprint as unknown as Poly), `${f.id} at ${f.pos} is not fully in the room`).toBe(true);
+      }
+      // All four at the slab, asserted against `groundY` rather than against each other.
+      // `heights.size === 1` was the previous form and it is blind to the height: the
+      // wall-mounted branch computes `y` from `(cat, shape, dimMM, room.height)` alone,
+      // so four identical fans agree with each other whatever that y is. Replacing it
+      // with a flat 1.0 — a fan hanging in mid-air, 1.15 m below the slab — left that
+      // assertion green. The only mutation that reddened it invented a dependency on
+      // `existing` the function does not have, which is a mutation shaped to fit the
+      // assertion rather than a plausible edit to the code.
+      for (const f of fans) {
+        expect(f.pos[1], `${f.id} hangs at ${f.pos[1]}`).toBeCloseTo(groundY('fan', 'fan', FAN[2], room.height), 9);
+      }
     });
   }
 });
