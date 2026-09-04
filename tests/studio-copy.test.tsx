@@ -20,6 +20,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { readFileSync, readdirSync } from 'node:fs';
+import { stripComments } from './helpers/source';
 import { join } from 'node:path';
 
 const ROOT = join(__dirname, '..');
@@ -37,18 +38,44 @@ vi.mock('next/navigation', () => ({
 
 const { StudioHelp } = await import('@/components/studio/StudioHelp');
 
-/** Source with `//` and block comments removed, so an assertion about a user-facing
- *  string cannot be satisfied by a comment discussing it. Not a parser: a `//` inside a
- *  string literal would be treated as a comment. None of the files read here contains
- *  one, and the alternative is a TypeScript parse for four string checks. */
+/** Source with every comment removed and every string KEPT, so an assertion about a
+ *  user-facing string cannot be satisfied by a comment discussing it.
+ *
+ *  `stripComments` is a shared character scanner, not the regex pair this file used to
+ *  carry. That pair ran the block-comment regex first and globally, so an opening
+ *  slash-star inside a LINE comment paired with the next real closing one and deleted
+ *  everything between: in `app/onboarding/capture/page.tsx` that was fifty lines of
+ *  live code, and a forbidden string planted inside the window kept this file green
+ *  while the identical string four lines past it went red. Two tests had two copies of
+ *  the same wrong idea, which is the reason the scanner lives in one place now. */
 function code(rel: string): string {
-  return code0(readFileSync(join(ROOT, rel), 'utf8'));
+  return stripComments(readFileSync(join(ROOT, rel), 'utf8'));
 }
 
 describe('the comment stripper this file depends on', () => {
   // Written in the same hour as the assertions that use it, which `CLAUDE.md` names as
   // the most likely thing in a change to be decoration. So it is exercised in both
   // directions before anything trusts it.
+  it('does not let a slash-star inside a line comment eat the code below it', () => {
+    // The defect the regex pair had, as a fixture. Block-comments-first pairs the
+    // opener in the line comment with the closer three lines down and deletes the
+    // declaration between them — silently, and the sweep then reports green over a
+    // file it never read.
+    const src = [
+      '// an allowlist, not image/* — that also matched SVG',
+      'const live = "FINDME";',
+      '/** a docblock */',
+      'const after = 1;',
+    ].join(String.fromCharCode(10));
+    expect(code0(src), 'the line between the two must survive').toContain('FINDME');
+    expect(code0(src)).toContain('const after');
+  });
+
+  it('and is not fooled by a slash-star inside a string either', () => {
+    const src = ['const a = "/*";', 'const b = "KEEPME";', 'const c = "*/";'].join(String.fromCharCode(10));
+    expect(code0(src)).toContain('KEEPME');
+  });
+
   it('removes both comment forms and keeps the strings', () => {
     const src = ['const a = "keep me";', '// drop this line', 'const b = 1; // drop the tail', '/* drop', 'this too */', 'const c = "keep";'].join(
       '\n',
@@ -71,10 +98,21 @@ describe('the comment stripper this file depends on', () => {
   });
 });
 
-/** The stripper, separated from the file read so the test above can drive it. */
-function code0(src: string): string {
-  return src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+/** Every `.tsx` under a UI directory, derived from disk. Module scope because TWO
+ *  sweeps read it now, and the second one exists precisely because a sweep that names
+ *  its own subjects cannot see the file nobody added to the list. */
+function surfaces(rel: string, out: string[] = []): string[] {
+  for (const entry of readdirSync(join(ROOT, rel), { withFileTypes: true })) {
+    const next = `${rel}/${entry.name}`;
+    if (entry.isDirectory()) surfaces(next, out);
+    else if (entry.name.endsWith('.tsx')) out.push(next);
+  }
+  return out;
 }
+
+/** The stripper this file depends on, named locally so the tests above can drive it
+ *  and so a reader can see WHICH one they are driving. */
+const code0 = stripComments;
 
 describe('the Library has a sign on it', () => {
   // The user's report was three words: "Library isn't on there." Three strings in the
@@ -93,8 +131,64 @@ describe('the Library has a sign on it', () => {
     // agreed with each other and disagreed with the screen. The word — not a direction
     // — is what is asserted, because a direction is the thing that went stale.
     expect(code('components/studio/PartTree.tsx')).toContain('from the Library');
-    expect(code('components/studio/SceneContextMenu.tsx')).toContain('Add from library');
+    expect(code('components/studio/SceneContextMenu.tsx')).toContain('Add from the Library');
     // The third is the help card, and it renders below rather than being grepped.
+  });
+
+  // The assertion above names two files by hand, which is the defect this repo keeps
+  // finding: a sweep that lists its own subjects cannot see the file nobody added to
+  // the list. It passed while THREE more live strings said "library" in lower case —
+  // two of them the search box INSIDE the Library panel, sitting directly under the
+  // heading the first test in this file pins, and the third a toast. `PartTree.tsx`
+  // carried one of each, so the positive assertion above was satisfied by a different
+  // line in the very file it was failing to police.
+  //
+  // Derived from disk, comments stripped, so a paragraph ABOUT the old lowercase
+  // spelling cannot fail this. `RoomShell.tsx` has a real lowercase one ("no CSG
+  // library") and it stays legal by being a comment rather than by being excepted.
+  it('and no live string anywhere else says it in lower case', () => {
+    // A genuine software library named in USER-FACING copy would go here with its
+    // reason. Empty is a decision rather than an oversight: an exception list is how
+    // the next lowercase one gets in.
+    const ALLOWED: Array<[string, RegExp]> = [];
+
+    const files = [...surfaces('app'), ...surfaces('components')];
+    expect(files.length, 'no surfaces found, so this sweep proves nothing').toBeGreaterThan(50);
+    const offenders: string[] = [];
+    for (const file of files) {
+      const lines = code(file).split(String.fromCharCode(10));
+      for (let n = 0; n < lines.length; n++) {
+        const line = lines[n];
+        if (!/\blibrary\b/.test(line)) continue;
+        if (ALLOWED.some(([f, re]) => f === file && re.test(line))) continue;
+        offenders.push(file + ":" + (n + 1) + ": " + line.trim());
+      }
+    }
+    expect(offenders, 'the Library is a proper noun — docs/history/PlanUX.md §3b-0').toEqual([]);
+
+    // ── The positive half, and it took two goes to make it measure its own subject.
+    //
+    // It began as `files containing /\bLibrary\b/ > 2`, which was decoration: a
+    // stripper that blanked every STRING still leaves 3 such files, because `Library`
+    // also appears as JSX text and in identifiers. It passed by one against exactly
+    // the mutation its own comment named. So the count is of the word inside QUOTED
+    // strings — the thing the sweep above is actually reading — and the bound has
+    // margin against the measured value rather than sitting one under it.
+    const inStrings = files.flatMap((f) => code(f).match(/["'`][^"'`]*\bLibrary\b[^"'`]*["'`]/g) ?? []);
+    expect(inStrings.length, 'the proper noun must survive the strip AS COPY').toBeGreaterThan(4);
+
+    // And a floor on what the strip kept at all. `files.length` measures the directory
+    // walk; nothing measured the strip, and a strip that returned `""` for every file
+    // makes the offender list empty for the worst possible reason.
+    const kept = files.reduce((sum, f) => sum + code(f).length, 0);
+    expect(kept, 'the strip kept almost nothing — the sweep ran over air').toBeGreaterThan(400_000);
+
+    // Printed on every green run, the way tests/detect-pipeline.test.ts prints its
+    // table: these three numbers moving is how a stripper regression shows up, and
+    // none of them is in the pass/fail verdict.
+    console.log(
+      `[library sweep] files=${files.length} keptChars=${kept} namedInStrings=${inStrings.length} offenders=${offenders.length}`,
+    );
   });
 });
 
@@ -150,14 +244,6 @@ describe('no copy offers a feature this app deleted', () => {
   // sweep stays green while the string ships. It also missed `RoomTools.tsx`, `PlanView`
   // and the whole of `app/`, which are user-facing too. Rule 1 is about every string a
   // user can read, so the subject is every `.tsx` under `app/` and `components/`.
-  function surfaces(rel: string, out: string[] = []): string[] {
-    for (const entry of readdirSync(join(ROOT, rel), { withFileTypes: true })) {
-      const next = `${rel}/${entry.name}`;
-      if (entry.isDirectory()) surfaces(next, out);
-      else if (entry.name.endsWith('.tsx')) out.push(next);
-    }
-    return out;
-  }
 
   it('on any .tsx surface under app/ or components/', () => {
     const files = [...surfaces('app'), ...surfaces('components')];

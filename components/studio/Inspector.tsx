@@ -473,7 +473,7 @@ export function Inspector() {
         <button
           onClick={() => setSwapOpen(true)}
           className={isGeneric ? 'ds-btn' : 'ds-btn ds-btn--primary'}
-          title="Pick a different model from the library"
+          title="Pick a different model from the Library"
           style={{
             width: '100%',
             height: 34,

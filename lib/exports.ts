@@ -25,8 +25,13 @@
 //     the build if a hand-written copy of the fallback reappears anywhere, or if a
 //     new caller reaches for the plain merge — this file having briefly carried one.
 
-/** Filenames are capped well under every filesystem's limit, and the caller adds an
- *  extension on top — so the budget is for the name, not for the whole thing. */
+/** Filenames are capped well under every filesystem's limit, and the caller adds a
+ *  suffix and an extension on top — so the budget is for the name, not for the whole
+ *  thing. Measured worst cases from a 300-character room name: `room.danmu.json` 71
+ *  characters, `-snapshot.png` 73, `-floor-plan.png` 75. The output alphabet is
+ *  `[a-z0-9-]`, so characters are bytes and there is no unit to get wrong; 75 leaves
+ *  180 bytes under ext4's 255 and sits ~103 into Windows' 260-char MAX_PATH from a
+ *  normal Downloads folder. */
 const MAX_SLUG = 60;
 
 /** Downloads carry the room's name, so a folder of exports from three rooms is still
@@ -41,4 +46,14 @@ export function fileSlug(name: string): string {
   // Trailing separator trimmed AGAIN after the cut: slicing mid-word can leave the
   // name ending in a hyphen, which reads like the filename was truncated by accident.
   return slug.slice(0, MAX_SLUG).replace(/-+$/, '') || 'room';
+}
+
+/** `Front Room` → `front-room-snapshot.png`. The last of the three downloads to
+ *  join the agreement the header above describes: the 3D PNG shipped as a fixed
+ *  `room-snapshot.png`, indistinguishable across rooms — the header's own claim
+ *  that the three names agree was false until this function existed. An unnamed
+ *  room slugs to `room`, which lands on the old fixed name, so the fallback
+ *  changes nothing. */
+export function snapshotFileName(roomName: string): string {
+  return `${fileSlug(roomName)}-snapshot.png`;
 }

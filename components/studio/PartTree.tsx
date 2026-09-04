@@ -155,7 +155,7 @@ export function PartTree() {
     if (matched.size === 0) {
       toast({
         title: 'No matches by name',
-        message: 'None of these names look like a piece in the library. Select one and pick its model in the panel on the right.',
+        message: 'None of these names look like a piece in the Library. Select one and pick its model in the panel on the right.',
       });
       return;
     }

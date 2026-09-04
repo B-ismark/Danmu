@@ -781,16 +781,50 @@ function FixAllButton({
 //
 // Both of these were `useRef` first, which is wrong here for a reason this file
 // already records twenty lines up: **`RoomTools` unmounts on a tab switch**,
-// because `3D Model` and `2D Plan` are different ROUTES. A per-mount attempt
-// counter therefore restarts at 0, and `shuffleRoom` is deterministic per
-// `(room, attempt)` — so Shuffle, switch to the plan, Shuffle again handed back
-// the IDENTICAL arrangement while the toast cheerfully said it had moved six
-// pieces, with the history that would have suppressed it gone in the same
-// breath. Two refs, one bug, both invisible to every test in the suite.
+// because `3D Model` and `2D Plan` are different ROUTES. Both refs therefore
+// restarted — so Shuffle, switch to the plan, Shuffle again handed back an
+// arrangement the user had already been shown while the toast cheerfully said it
+// had moved six pieces. Two refs, one bug, both invisible to every test in the
+// suite.
 //
-// Keyed by room id, because these are facts about one room's session and the
-// user can open another; an unkeyed pair would carry one room's history into
-// the next and suppress an arrangement nobody had been shown.
+// It was the HISTORY that mattered, not the counter, and the measurement is below
+// with the maps. Saying "the counter restarted so the same seed re-served what was
+// on screen" is the tempting version and it is wrong: `isCleanShuffle` refuses a
+// candidate that moved nothing, so the on-screen arrangement is the one repeat that
+// cannot come back.
+//
+// Keyed by room id — deliberately NOT by tab, though this component unmounts on
+// a tab switch and both keys are re-derived fresh on the other one. The ROOM is
+// what persists across the switch (the stores are shared; only the routes
+// differ), so:
+//
+//   · The history is the half that actually defends this, and it is load-bearing
+//     for a reason worth stating exactly, because the obvious reason is WRONG.
+//     Measured on `rect` / `l` / `open`: press, press, switch tab, press — with
+//     both maps tab-scoped, the third press hands back the arrangement from the
+//     FIRST press byte for byte (layout similarity 1.000, 3 of 3 presets). With
+//     the history kept and only the counter restarted, 0.000 / 0.000 / 0.100.
+//   · What it is NOT is a re-serve of the arrangement ALREADY ON SCREEN. This
+//     comment used to say that, and `isCleanShuffle` makes it impossible: it opens
+//     `if (result.moved.length === 0) return false`, so the candidate reproducing
+//     what is on screen is filtered as "changed nothing". Same parts, same locked,
+//     byte-identical `randomizeStart` scatter at the same seed, and the outcome
+//     still diverged (clean 4/6 vs 4/9, similarity 0.000). The repeat a restarted
+//     counter serves is one shown a press or more AGO — which the user has seen,
+//     which is exactly why the skip-list has to outlive the tab.
+//   · The counter still must survive, for a smaller reason: restarting it re-walks
+//     the same twelve seeds, so the candidate POOL repeats and only the skip-list
+//     separates the offers. It buys exploration, not the fix.
+//   · The history is a skip-list of "what the user has just been shown"
+//     (`layout-shuffle.ts` passes over offers similar to the recorded one), and
+//     what they have been shown is a fact about the room, not about a viewport:
+//     the arrangement applied on the 3D tab is the one the plan is drawing.
+//     Tab-scoping the skip-list forgets a genuinely-seen arrangement, which
+//     reads as a fix and is the bug.
+//
+// Room-only is still right across ROOMS: the user can open another, and an
+// unkeyed pair would carry one room's history into the next and suppress an
+// arrangement nobody had been shown.
 const SHUFFLE_ATTEMPT = new Map<string, number>();
 const SHUFFLE_HISTORY = new Map<string, ShuffleOffer[]>();
 
@@ -864,8 +898,10 @@ function ShuffleButton({
 
   function work() {
       // Module scope, keyed by room — NOT a `useRef`. See `SHUFFLE_ATTEMPT`: this
-      // component unmounts on a tab switch, so a per-mount counter restarted at 0
-      // and re-served the identical arrangement.
+      // component unmounts on a tab switch, so a per-mount pair restarted and the
+      // user was handed an arrangement they had already been shown. The key is
+      // room-only, not room-plus-tab — the map declarations above carry the
+      // measurement, including which of the two refs actually does the work.
       const next = (SHUFFLE_ATTEMPT.get(attemptKey) ?? 0) + 1;
       SHUFFLE_ATTEMPT.set(attemptKey, next);
       const outcome = shuffle(next);
@@ -1812,7 +1848,7 @@ function ListPanel({ parts }: { parts: ScenePart[] }) {
 
       {rows.length === 0 ? (
         <div style={{ padding: '16px 14px', fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-          Nothing in the room yet. Open the catalog on the left and drop a piece in.
+          Nothing in the room yet. Open the Library on the right and drop a piece in.
         </div>
       ) : (
         rows.map(({ part: p, count }, i) => (

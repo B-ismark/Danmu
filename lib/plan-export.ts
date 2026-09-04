@@ -34,8 +34,10 @@ export function exportPlanPng(
   parts: ScenePart[],
   room: { footprint: Footprint; width: number; depth: number; height: number },
   dimUnit: DimUnit,
-  title = 'Floor plan',
-) {
+  /** The room's name. Required: it is drawn on the sheet AND slugged into the
+   *  filename, and the default it used to carry was never passed by anybody. */
+  title: string,
+): Promise<void> {
   const b = footprintBounds(room.footprint);
   const planW = b.width * PX_PER_M;
   const planH = b.depth * PX_PER_M;
@@ -207,9 +209,23 @@ export function exportPlanPng(
     ctx.fillText(ellipsise(ctx, legendRows[i], legendMaxW), MARGIN + 24, ly);
   });
 
-  c.toBlob((blob) => {
-    if (blob) downloadBlob(blob, planFileName(title));
-  }, 'image/png');
+  // Settles on the BLOB, not on the drawing. Everything above is synchronous and
+  // cannot fail in a way worth reporting; `toBlob` is where the file is written and
+  // where it goes wrong — it hands back `null` under memory pressure, and a 2x canvas
+  // over a large room with a long legend is exactly when that happens. Returning
+  // before that point meant the caller's error path was already out of scope: the
+  // menu closed, no PNG arrived, and nothing said so.
+  //
+  // The five callers in `tests/plan-export-order.test.ts` do not await it, which is
+  // fine and deliberate — they assert on the draw calls, which have all happened by
+  // the time this returns.
+  return new Promise<void>((resolve, reject) => {
+    c.toBlob((blob) => {
+      if (!blob) return reject(new Error('the floor plan could not be encoded'));
+      downloadBlob(blob, planFileName(title));
+      resolve();
+    }, 'image/png');
+  });
 }
 
 /** `Front Room` → `front-room-floor-plan.png`.
@@ -217,11 +233,19 @@ export function exportPlanPng(
  *  Named for the room, not just for the artefact: `title` is already the room's name
  *  — it is drawn at the top of the sheet — and a fixed `floor-plan.png` meant that
  *  exporting three rooms left three files the browser silently numbered `(1)` and
- *  `(2)`. The equality check is for the parameter's own default, which would otherwise
- *  slug to `floor-plan-floor-plan.png`. */
-function planFileName(title: string): string {
-  const slug = fileSlug(title);
-  return slug === 'floor-plan' ? 'floor-plan.png' : `${slug}-floor-plan.png`;
+ *  `(2)`.
+ *
+ *  There used to be a `slug === 'floor-plan'` special case here, guarding the
+ *  parameter default so it would not read `floor-plan-floor-plan.png`. It compared in
+ *  the WRONG SPACE: the test ran on the slug, not on the argument, so it could not
+ *  tell "the default arrived" from "the user named this room Floor Plan" — and that
+ *  room exported as the fixed `floor-plan.png`, the exact collision this function
+ *  exists to prevent. The default is gone with it, because it was unreachable anyway:
+ *  every caller passes a name. A room named "Floor Plan" now files as
+ *  `floor-plan-floor-plan.png`, which is ugly, distinct, and honest — the same answer
+ *  `snapshotFileName` gives a room named "Snapshot". */
+export function planFileName(title: string): string {
+  return `${fileSlug(title)}-floor-plan.png`;
 }
 
 function metaText(

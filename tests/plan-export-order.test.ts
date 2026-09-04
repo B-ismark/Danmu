@@ -117,14 +117,24 @@ describe('the exported floor plan draws every footprint before any number badge'
       configurable: true,
       value: () => rec.ctx,
     });
-    // `null`, so the module's own `if (blob)` short-circuits and nothing tries to
-    // download. jsdom's real `toBlob` throws "not implemented" without the `canvas`
-    // package, which is the throw that made this module look untestable.
+    // `null`, so nothing tries to download. jsdom's real `toBlob` throws "not
+    // implemented" without the `canvas` package, which is the throw that made this
+    // module look untestable.
+    //
+    // `exportPlanPng` REJECTS on a null blob now — that is how a plan which cannot be
+    // encoded stops failing in silence — so every call below ends `.catch(NO_FILE)`.
+    // Without it the run prints `Tests N passed` with an `Errors` line above it that
+    // is not part of the verdict.
     Object.defineProperty(HTMLCanvasElement.prototype, 'toBlob', {
       configurable: true,
       value: (cb: (b: Blob | null) => void) => cb(null),
     });
   });
+
+  /** These tests assert on the DRAW CALLS, which have all happened by the time
+   *  `exportPlanPng` returns. The download never was the subject, and with a stubbed
+   *  `toBlob` handing back null it is now an expected rejection. */
+  const NO_FILE = () => {};
 
   afterEach(() => {
     if (getContext) Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', getContext);
@@ -150,7 +160,7 @@ describe('the exported floor plan draws every footprint before any number badge'
   ];
 
   it('every footprint is drawn before the first badge, so an overlap cannot eat a number', () => {
-    exportPlanPng(OVERLAPPING, ROOM, 'm', 'Front Room');
+    void exportPlanPng(OVERLAPPING, ROOM, 'm', 'Front Room').catch(NO_FILE);
 
     const footprints = ops.flatMap((o, i) => (FOOTPRINT_OPS.has(o.op) ? [i] : []));
     // A single digit and nothing else. The legend's index for the same piece is
@@ -175,7 +185,7 @@ describe('the exported floor plan draws every footprint before any number badge'
   });
 
   it('and the badges are 1..n in the legend order, which is what joins them to their rows', () => {
-    exportPlanPng(OVERLAPPING, ROOM, 'm', 'Front Room');
+    void exportPlanPng(OVERLAPPING, ROOM, 'm', 'Front Room').catch(NO_FILE);
     const badgeText = ops
       .filter((o) => o.op === 'fillText' && typeof o.args[0] === 'string' && /^[1-9]$/.test(o.args[0] as string))
       .map((o) => o.args[0]);
@@ -196,18 +206,79 @@ describe('the exported floor plan draws every footprint before any number badge'
     // square and the branch unvisited. That is a real defect and it is somebody's
     // decision, not this file's — `docs/what-is-still-open.md` § B item 15. What is
     // asserted here is only that the module honours the flag it is given.
-    exportPlanPng([part({ id: 'r', name: 'Sofa' })], ROOM, 'm', 'Rect only');
+    void exportPlanPng([part({ id: 'r', name: 'Sofa' })], ROOM, 'm', 'Rect only').catch(NO_FILE);
     expect(ops.filter((o) => o.op === 'ellipse')).toHaveLength(0);
     expect(ops.filter((o) => o.op === 'strokeRect')).toHaveLength(1);
 
     ops.length = 0;
-    exportPlanPng(
+    void exportPlanPng(
       [part({ id: 'c', name: 'Plant', category: 'plant', shape: 'plant', circle: true, dimMM: [600, 600, 900] })],
       ROOM,
       'm',
       'Round only',
-    );
+    ).catch(NO_FILE);
     expect(ops.filter((o) => o.op === 'ellipse')).toHaveLength(1);
     expect(ops.filter((o) => o.op === 'strokeRect')).toHaveLength(0);
+  });
+});
+
+describe('a plan that cannot be encoded says so', () => {
+  const ONE_PIECE = [part({ id: 's', name: 'Sofa' })];
+  // The reason `exportPlanPng` returns a promise at all. It used to end in a
+  // fire-and-forget `toBlob` whose `if (blob)` swallowed a null: the menu closed, no
+  // PNG arrived, and nothing anywhere said so. A caller can only report that if the
+  // function settles on the BLOB rather than on the drawing.
+  //
+  // Written because a mutation survived without it — replacing the rejection with a
+  // `resolve()` left the whole suite green while restoring the silent failure. The
+  // stub above already hands back null, so the fixture for this existed and nothing
+  // was asking it the question.
+  let getContext: PropertyDescriptor | undefined;
+  let toBlob: PropertyDescriptor | undefined;
+
+  beforeEach(() => {
+    getContext = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'getContext');
+    toBlob = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'toBlob');
+    Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+      configurable: true,
+      value: () => recorder().ctx,
+    });
+  });
+
+  afterEach(() => {
+    if (getContext) Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', getContext);
+    if (toBlob) Object.defineProperty(HTMLCanvasElement.prototype, 'toBlob', toBlob);
+  });
+
+  it('rejects when toBlob hands back nothing', async () => {
+    Object.defineProperty(HTMLCanvasElement.prototype, 'toBlob', {
+      configurable: true,
+      value: (cb: (b: Blob | null) => void) => cb(null),
+    });
+    await expect(exportPlanPng(ONE_PIECE, ROOM, 'm', 'Front Room')).rejects.toThrow(/could not be encoded/);
+  });
+
+  it('and resolves when it hands back a blob', async () => {
+    // The other end, so the assertion above is not satisfied by a function that
+    // rejects unconditionally. `downloadBlob` touches the DOM, so it is stubbed to a
+    // no-op through the anchor it creates rather than mocked out of the module.
+    const createEl = document.createElement.bind(document);
+    const spy = (tag: string) => {
+      const el = createEl(tag);
+      if (tag === 'a') el.click = () => {};
+      return el;
+    };
+    document.createElement = spy as typeof document.createElement;
+    URL.createObjectURL = () => 'blob:stub';
+    URL.revokeObjectURL = () => {};
+    Object.defineProperty(HTMLCanvasElement.prototype, 'toBlob', {
+      configurable: true,
+      value: (cb: (b: Blob | null) => void) => cb(new Blob([''], { type: 'image/png' })),
+    });
+    try {
+      await expect(exportPlanPng(ONE_PIECE, ROOM, 'm', 'Front Room')).resolves.toBeUndefined();
+    } finally {
+      document.createElement = createEl as typeof document.createElement;
+    }
   });
 });

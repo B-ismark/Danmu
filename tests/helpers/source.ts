@@ -42,6 +42,30 @@
  *  from silently running over nothing at all.
  */
 export function stripCommentsAndStrings(src: string): string {
+  return scan(src, false);
+}
+
+/** Blank out every comment and KEEP every string, for the sweeps whose subject IS
+ *  the string — user-facing copy. Same scanner, one flag apart, because the state
+ *  machine is the whole value and a second copy of it is how the two drift.
+ *
+ *  `tests/studio-copy.test.tsx` and `tests/exports.test.ts` each rolled their own
+ *  regex pair for this, block-comment-first, and the docblock above already records
+ *  that BOTH regex orders are measurably wrong. The cost here was real and it was
+ *  measured rather than argued: in `app/onboarding/capture/page.tsx` the line comment
+ *  at 253 contains an opening slash-star (it is quoting an image mime wildcard), which
+ *  pairs with the closing star-slash of a docblock fifty lines later — so lines
+ *  254-303, the whole body
+ *  of `addFiles` including two live `setAnnounce` strings, were deleted before either
+ *  sweep saw them. A forbidden-vocabulary string planted inside that window kept the
+ *  suite green; the identical string four lines past it went red. */
+export function stripComments(src: string): string {
+  return scan(src, true);
+}
+
+/** The shared pass. `keepStrings` decides only what happens to a literal once the
+ *  scanner has recognised it — never how it is recognised. */
+function scan(src: string, keepStrings: boolean): string {
   let out = '';
   let i = 0;
   const n = src.length;
@@ -60,6 +84,7 @@ export function stripCommentsAndStrings(src: string): string {
     }
     if (c === '"' || c === "'" || c === '`') {
       const q = c;
+      const start = i;
       i++;
       while (i < n) {
         if (src[i] === '\\') {
@@ -72,7 +97,7 @@ export function stripCommentsAndStrings(src: string): string {
         }
         i++;
       }
-      out += "''";
+      out += keepStrings ? src.slice(start, i) : "''";
       continue;
     }
     out += c;

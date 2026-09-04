@@ -27,6 +27,7 @@ import { useSnapshot } from '@/lib/snapshot';
 import { exportPlanPng } from '@/lib/plan-export';
 import { roomStore } from '@/lib/storage';
 import { saveSceneFile } from './SceneFile';
+import { toast } from '@/components/ui/StorageToast';
 import { Icon, type IconName } from '@/components/ui/Icon';
 
 export function ExportMenu() {
@@ -77,11 +78,54 @@ export function ExportMenu() {
     fn();
   }
 
-  function planPng() {
-    // `currentRoomScene` reads the stores at call time and applies the user's
-    // overrides — an export built from `useScene.parts` alone would ship the room as
-    // it was before anyone arranged it. See lib/transforms.
-    exportPlanPng(currentRoomScene(), useScene.getState().room, dimUnit, roomName);
+  // One fresh read of the room's name for both PNGs. `roomName` state was loaded
+  // once on mount, and a rename in the top bar after that would name the file —
+  // and, for the plan, the sheet's own title — for the room's old name. The
+  // catch falls back to the mount-loaded name: a failed meta read must not
+  // swallow an export. (`saveSceneFile` re-reads the room itself.)
+  async function freshRoomName(): Promise<string> {
+    if (!roomId) return roomName;
+    try {
+      const r = await roomStore.loadRoom(roomId);
+      return r?.name ?? roomName;
+    } catch {
+      return roomName;
+    }
+  }
+
+  /** For the floor plan, and ONLY the floor plan. `run` takes a `() => void` and
+   *  discards what it gets back, so once `planPng` became async a throw stopped
+   *  reaching the React handler and became an unhandled rejection: menu closed, no
+   *  file, nothing said.
+   *
+   *  The first version of this guarded all three items and two of the three could
+   *  never fire — `freshRoomName` catches its own IndexedDB read, and `saveSceneFile`
+   *  catches and toasts for itself, so a guard there would only ever have produced a
+   *  SECOND danger toast for one failure. A catch on a promise that cannot reject is
+   *  decoration, and it made the comment above it false.
+   *
+   *  The 3D view is not here either, and that is the same lesson one step further:
+   *  its failures happen inside the canvas a frame later, long after this promise has
+   *  resolved. `SceneCapture` in components/three/Room.tsx reports for itself. */
+  function reportExportFailure(what: string) {
+    return (err: unknown) => {
+      console.error(`[export] ${what} failed`, err);
+      toast({
+        tone: 'danger',
+        title: `Could not export ${what}`,
+        message: 'Nothing was saved. Try again, and if it keeps happening reload the page.',
+      });
+    };
+  }
+
+  async function planPng() {
+    // The scene is read at CLICK time, not after the name's await: it must be
+    // the room as the user saw it when they pressed the item. `currentRoomScene`
+    // applies the user's overrides — an export built from `useScene.parts` alone
+    // would ship the room as it was before anyone arranged it. See lib/transforms.
+    const scene = currentRoomScene();
+    const room = useScene.getState().room;
+    exportPlanPng(scene, room, dimUnit, await freshRoomName());
   }
 
   const items: Array<{ icon: IconName; label: string; hint: string; onClick: () => void }> = [
@@ -91,11 +135,27 @@ export function ExportMenu() {
             icon: 'image' as IconName,
             label: 'This 3D view',
             hint: 'PNG of the room as you are looking at it',
-            onClick: () => useSnapshot.getState().request(),
+            onClick: () => {
+              // The name rides the same request that bumps the token, because
+              // the capture inside the canvas cannot load the room itself.
+              //
+              // No `.catch`: `freshRoomName` handles its own read failure and
+              // `request` is a store write, so this chain cannot reject. What CAN
+              // fail is the capture, a frame later and a component tree away, and
+              // `SceneCapture` says so there.
+              void freshRoomName().then((n) => useSnapshot.getState().request(n));
+            },
           },
         ]
       : []),
-    { icon: 'grid', label: 'Floor plan', hint: 'To-scale PNG, measured in ' + dimUnit, onClick: planPng },
+    {
+      icon: 'grid',
+      label: 'Floor plan',
+      hint: 'To-scale PNG, measured in ' + dimUnit,
+      // `run` discards what `onClick` returns, so the promise is caught HERE. Handing
+      // `planPng` over bare made a throw an unhandled rejection.
+      onClick: () => void planPng().catch(reportExportFailure('the floor plan')),
+    },
     {
       icon: 'download',
       label: 'The room itself',
@@ -103,6 +163,9 @@ export function ExportMenu() {
       // does not distinguish it from the PNGs above it.
       hint: 'A file you can reopen here, or send to someone',
       onClick: () => {
+        // No `.catch`: `saveSceneFile` catches and toasts for itself, and its own
+        // docblock says the caller does not have to. A guard here would double the
+        // toast on the one path that already reports.
         if (roomId) void saveSceneFile(roomId);
       },
     },

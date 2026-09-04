@@ -371,7 +371,14 @@ eleven errors across six test files, none of them in the change. Second occasion
 `node_modules` thinning where a package `dist` or `.bin` vanishes and a frozen install
 re-links the hollow directory and reports success — same symptom, and there the install is
 the fix that does **not** work, so check `node_modules/.bin/vitest` exists rather than
-trusting `Done in 4.6s`.)*
+trusting `Done in 4.6s`. Third occasion, with the cause finally located: a **junction**.
+A review worktree whose `node_modules` was linked to the main tree's, and `git worktree
+remove --force` walked the worktree to delete it and followed the reparse point into the
+real one — so **never junction `node_modules` into a git worktree**, give it its own
+install. That is a directory-walk problem and NOT a store problem: pnpm's store is
+content-addressed and a sibling worktree with a real install was measured unaffected, so
+it is no reason to distrust worktree installs, which are the one recipe here that works.
+Repair needs `pnpm install --force` — 5m48s against the plain install's lying 5.2s.)*
 
 **Symptom: `next build` exits 0 and you are not sure it linted.**
 It can print `ESLint: Invalid Options` and exit 0 having linted nothing.
@@ -404,6 +411,48 @@ list and reads as success.
 CI builds the **branch**, not the merge result. A branch off an older `main` is gated
 against an older program.
 → Merge `main` in, then read the green.
+
+**Symptom: a task notification says `exit code 0` and you never opened the log.**
+A wrapper's status is not the wrapped command's. A backgrounded `npx vitest run` was
+reported as "completed (exit code 0)" while its log held `'vitest' is not recognized as
+an internal or external command` — the suite never started.
+→ Read the log, not the notification. The cheapest tell is that a real run always prints
+a `Test Files` line; grep for that rather than for a failure.
+*(Cost: a "full suite green" claim made about a suite that never ran. Second occasion,
+same evening and a different tool: `gh run watch <id> --exit-status` exited 0 while
+`gh pr checks` on the same run reported one test file red.)*
+
+**Symptom: `Test Files N passed (N)` — and N is smaller than it was yesterday.**
+The sharpest of this family, because nothing in the output is false. Vitest prints the
+files it RAN, so workers that died before collecting a file are not in the denominator.
+A half-installed `node_modules` gave `Test Files 108 passed (108) · Tests 2148 passed`
+with no failure line anywhere; twenty jsdom files had never run, their workers dead on
+`Cannot find module 'is-potential-custom-element-name'`, reported separately as
+`Errors 20 errors`. The real number is 128.
+→ **A pass rate is a fraction and the summary only shows you the top half.** Pin the
+denominator against CI's, and read the `Errors` line — it sits ABOVE the green summary
+and is not part of the verdict.
+*(Cost: a repair believed complete, and a second suite run to find out it was not.
+Second occasion: the same install printing `Done in 5.2s` and restoring `.bin` to 102
+entries — both counts correct, both worthless. `--force` took 5m48s and was the real one.)*
+
+**Symptom: a file you just edited is back to its committed state, and you did not do it.**
+An agent you launched yourself. A review lens told to prove a new gate can fail IS a
+mutation runner — it plants a line, runs the suite, and restores with `git checkout --`
+or from a backup it took before your later edits. Fan five of those out over the tree
+you are editing and the result is indistinguishable from a peer trampling you.
+→ **Never run mutation agents over a tree you are still editing.** Commit first, or give
+them a worktree.
+→ The tell that it is an agent and not a peer: the planted string is *crafted to trip
+your own new gates* (here, one line holding both a lowercase `library` and a rule-1
+`photoreal`), and it appears in a file no ordinary change would touch.
+→ Before accusing anyone, enumerate your own running agents. `git status` cannot tell
+you which of the two happened, and the peer has usually already told you they are out.
+*(Cost: two files of edits lost and re-applied, plus an urgent and WRONG accusation sent
+to a peer who had said plainly they were out of the tree — retracted eight minutes later.
+Second occasion: the earlier "a mutation runner must be exclusive" note, where two
+runners racing made every verdict unattributable. Same rule, and the peer-blame is the
+part worth remembering, because it costs more than the lost edits did.)*
 
 ---
 
