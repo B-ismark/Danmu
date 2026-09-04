@@ -379,31 +379,46 @@ describe('the ceiling family, which this search can help now', () => {
     expect(aimed.pos[2]).toBeCloseTo(1, 6);
   });
 
-  it('four ceiling fans are four ceiling fans', () => {
-    // The user-visible property, and the original § H.3 complaint in the one family it
-    // outlived: four clicks of the same Library row used to produce four fans at one
-    // point. `addMany` is the click loop — each fan sees the ones before it.
-    const fans = addMany(4, FAN);
-    expect(fans).toHaveLength(4);
-    for (let i = 0; i < fans.length; i++) {
-      for (let j = i + 1; j < fans.length; j++) {
-        expect(
-          obbOverlap(foot(fans[i]), foot(fans[j])),
-          `${fans[i].id} at ${fans[i].pos} overlaps ${fans[j].id} at ${fans[j].pos}`,
-        ).toBe(false);
+  // Both shapes, because a rectangle cannot express half of what could go wrong here:
+  // in a box the bounds inset IS the containment, so `intoRoom` clamps every candidate
+  // to a legal point whatever the notch logic does. An L is where a candidate can be
+  // inside the bounding box and outside the house.
+  //
+  // **`footInsidePoly` is deliberately NOT asserted in this test, on either shape**, and
+  // the reason is worth writing down rather than leaving as an omission. `intoRoom`
+  // finishes on `containedXZ`, so a ceiling piece is contained before it is ever
+  // returned — every mutation that could put a fan outside kills `tests/wall-parts.ts`'s
+  // ceiling cases first and leaves an assertion here green either way. It would be an
+  // assertion that cannot fail. Containment for this family is owned there, aimed and
+  // unaimed, on an L; what is owned here is that four clicks make four fans.
+  for (const [name, room] of [
+    ['a rectangle', ROOM()],
+    ['an L, where the middle of the box is not in the room', { width: 6, depth: 5, height: 2.5, footprint: footprintForLayout('l', 6, 5) }],
+  ] as const) {
+    it(`four ceiling fans are four ceiling fans — ${name}`, () => {
+      // The user-visible property, and the original § H.3 complaint in the one family it
+      // outlived: four clicks of the same Library row used to produce four fans at one
+      // point. `addMany` is the click loop — each fan sees the ones before it.
+      const fans = addMany(4, FAN, room);
+      for (let i = 0; i < fans.length; i++) {
+        for (let j = i + 1; j < fans.length; j++) {
+          expect(
+            obbOverlap(foot(fans[i]), foot(fans[j])),
+            `${fans[i].id} at ${fans[i].pos} overlaps ${fans[j].id} at ${fans[j].pos}`,
+          ).toBe(false);
+        }
       }
-    }
-    // All four still at the slab: spreading them is an XZ answer and must not have
-    // become a vertical one. A tower is the failure this family is most prone to,
-    // because two fans at one x/z with different heights read as clear to `collidesAt`.
-    const heights = new Set(fans.map((f) => f.pos[1].toFixed(6)));
-    expect(heights.size, `fans hung at ${[...heights].join(', ')}`).toBe(1);
-    // …and every one of them still over real floor.
-    const poly = footprintForLayout('rect', 6, 5);
-    for (const f of fans) {
-      expect(footInsidePoly(foot(f), poly), `${f.id} is not fully in the room`).toBe(true);
-    }
-  });
+      // Four DISTINCT points, which is stronger than four non-overlapping ones only in
+      // the degenerate direction — but that is the direction the defect was in, and a
+      // separation test alone would pass on two fans one micron apart.
+      expect(new Set(fans.map((f) => `${f.pos[0].toFixed(3)},${f.pos[2].toFixed(3)}`)).size).toBe(4);
+      // All four still at the slab: spreading them is an XZ answer and must not have
+      // become a vertical one. A tower is the failure this family is most prone to,
+      // because two fans at one x/z with different heights read as clear to `collidesAt`.
+      const heights = new Set(fans.map((f) => f.pos[1].toFixed(6)));
+      expect(heights.size, `fans hung at ${[...heights].join(', ')}`).toBe(1);
+    });
+  }
 });
 
 describe('a room with no room left still takes the piece', () => {
