@@ -313,49 +313,96 @@ describe('vitest is configured so a component test can exist', () => {
   // learns it, and the other nine throw from inside a render as an undefined function
   // rather than as a missing mock.
   //
-  // Both halves are pinned, because the extraction is undone by one paste.
+  // Both halves are pinned, because the extraction is undone by one paste — and both
+  // patterns live here, read by the sweep AND by the test that proves the sweep can go
+  // red. Declaring a second copy inside that control is the same defect the sweep is
+  // about, and it was measured rather than reasoned: with a private copy in the control,
+  // tightening the sweep and pasting a real `matchMedia` shim back into a component test
+  // left every assertion in this file green.
+
+  /** A test defining one of the two globals for itself. Deliberately an ASSIGNMENT or a
+   *  `defineProperty`, never a bare `\bmatchMedia\b` — the word appears in comments that
+   *  point AT the helper and in `lib/use-media-query.ts`'s own call, and flagging those
+   *  makes the sweep something people learn to route around. */
+  const SHIM_COPY =
+    /Object\.defineProperty\(\s*(?:window|globalThis)\s*,\s*['"]matchMedia['"]|(?:window|globalThis)\.matchMedia\s*=|Element\.prototype\.scrollIntoView\s*=|^\s*useRouter:/;
+
+  /** A `vi.mock` whose first argument is `next/navigation`, across any amount of
+   *  whitespace and either quote style. Matched against the WHOLE file, so a call
+   *  spread over three lines counts. */
+  const MOCKS_NAVIGATION = /vi\.mock\(\s*['"]next\/navigation['"]/;
 
   it('shims the two missing browser globals once, in setupFiles', async () => {
     expect((await config()).test.setupFiles).toEqual(['tests/helpers/setup.ts']);
   });
 
-  it('leaves no component test rolling its own copy of them', () => {
-    const tsx = readdirSync(join(ROOT, 'tests')).filter((f) => f.endsWith('.test.tsx'));
+  it('leaves no test rolling its own copy of them', () => {
+    // Recursive, and BOTH extensions. `readdirSync(tests)` non-recursively for
+    // `.test.tsx` matched neither of the two things vitest actually collects: a file at
+    // `tests/sub/x.test.tsx` was invisible to the sweep, and a `.test.ts` can carry a
+    // `next/navigation` mock and a `matchMedia` shim perfectly well — it just cannot
+    // carry JSX. The `include` pattern is the definition of the population, so the sweep
+    // reads the same shape.
+    const files = readdirSync(join(ROOT, 'tests'), { recursive: true, encoding: 'utf8' })
+      .map((f) => f.replace(/\\/g, '/'))
+      // This file quotes all four patterns as literal example strings in the control
+      // below, so widening the sweep to `.test.ts` made it flag its own evidence. One
+      // exclusion, by exact name, rather than a pattern that could grow to cover a real
+      // offender: a sweep cannot sweep the file that defines it.
+      .filter((f) => /\.test\.tsx?$/.test(f) && f !== 'toolchain.test.ts');
     // The iterate-over-whatever-you-found guard, same as the collection test above: with
     // no files this loop is a green that means nothing.
-    expect(tsx.length, 'no .test.tsx files found, so the sweep below proves nothing').toBeGreaterThan(0);
+    expect(files.length, 'no test files found, so the sweep below proves nothing').toBeGreaterThan(0);
 
     const offenders: string[] = [];
-    for (const f of tsx) {
+    for (const f of files) {
       const src = readFileSync(join(ROOT, 'tests', f), 'utf8');
-      const lines = src.split(/\r?\n/);
-      lines.forEach((line, i) => {
-        // `matchMedia` and `scrollIntoView` belong to `setup.ts` and nowhere else;
-        // `useRouter:` is the tell for a hand-written `next/navigation` object, and it
-        // is the property a partial copy is most likely to omit.
-        if (/\bmatchMedia\b|Element\.prototype\.scrollIntoView\s*=|^\s*useRouter:/.test(line)) {
-          offenders.push(`tests/${f}:${i + 1}  ${line.trim()}`);
-        }
-        // And the call sites themselves: a `vi.mock('next/navigation', …)` whose factory
-        // does not reach the helper is a copy by another route.
-        if (line.includes("vi.mock('next/navigation'") && !line.includes('helpers/mount')) {
-          offenders.push(`tests/${f}:${i + 1}  mocks next/navigation without tests/helpers/mount`);
-        }
+      src.split(/\r?\n/).forEach((line, i) => {
+        if (SHIM_COPY.test(line)) offenders.push(`tests/${f}:${i + 1}  ${line.trim()}`);
       });
+      // Whole-file, not per-line. `vi.mock('next/navigation', () => ({ … }))` is
+      // routinely written across three lines and may use either quote style, so a
+      // single-line single-quote `includes` missed the exact regression this sweep
+      // exists to catch: a `useParams`-only mock, which is what
+      // `room-tools-findings.test.tsx` was, split over three lines with no `useRouter:`
+      // anywhere. Confirmed missed before this was widened.
+      if (MOCKS_NAVIGATION.test(src) && !src.includes('helpers/mount')) {
+        offenders.push(`tests/${f}  mocks next/navigation without tests/helpers/mount`);
+      }
     }
-    expect(offenders, 'these belong in tests/helpers/setup.ts or tests/helpers/mount.ts').toEqual([]);
+    expect(
+      offenders,
+      'matchMedia and scrollIntoView live in tests/helpers/setup.ts, and next/navigation in ' +
+        'tests/helpers/mount.ts. If a test needs a DIFFERENT answer from one of them — a ' +
+        'narrow-viewport run wants `matches: true` — widen the helper to take it rather than ' +
+        'redefining the global here, or the next file to want it will make a third copy.',
+    ).toEqual([]);
   });
 
   it('and that sweep can actually say no', () => {
-    // The three patterns, exercised against the exact lines they were written to catch
-    // and against lines that must NOT trip them — the mutation this file cannot perform
-    // on itself, since the offending code is what was just deleted.
-    const re = /\bmatchMedia\b|Element\.prototype\.scrollIntoView\s*=|^\s*useRouter:/;
-    expect(re.test("Object.defineProperty(window, 'matchMedia', {")).toBe(true);
-    expect(re.test('Element.prototype.scrollIntoView = function scrollIntoView() {};')).toBe(true);
-    expect(re.test('  useRouter: () => ({ push: () => {} }),')).toBe(true);
-    expect(re.test("const { useRouter } = await import('next/navigation');")).toBe(false);
-    expect(re.test('// the router is mocked, not wrapped')).toBe(false);
+    // Exercised against the exact lines these were written to catch and against lines
+    // that must NOT trip them. This is the mutation the file cannot perform on itself,
+    // since the offending code is what was just deleted — which is exactly why the
+    // patterns are read from the same two constants the sweep uses. An earlier version
+    // declared its own copies here, and a review proved the consequence by mutation:
+    // tightening the sweep's copy and pasting a real shim back into a component test
+    // left all eighteen assertions green. A gate against duplication, duplicated.
+    expect(SHIM_COPY.test("Object.defineProperty(window, 'matchMedia', {")).toBe(true);
+    expect(SHIM_COPY.test('window.matchMedia = () => ({ matches: true });')).toBe(true);
+    expect(SHIM_COPY.test('Element.prototype.scrollIntoView = function scrollIntoView() {};')).toBe(true);
+    expect(SHIM_COPY.test('  useRouter: () => ({ push: () => {} }),')).toBe(true);
+    // …and the mentions that must not. A comment POINTING AT the helper is the most
+    // likely false positive, and a `\bmatchMedia\b` word match flagged it.
+    expect(SHIM_COPY.test('// matchMedia comes from tests/helpers/setup.ts')).toBe(false);
+    expect(SHIM_COPY.test('  const mq = window.matchMedia(query);')).toBe(false);
+    expect(SHIM_COPY.test("const { useRouter } = await import('next/navigation');")).toBe(false);
+
+    // The second half had no control at all, so its quote style and spelling were free.
+    expect(MOCKS_NAVIGATION.test("vi.mock('next/navigation', () => ({ useParams: () => ({}) }));")).toBe(true);
+    expect(MOCKS_NAVIGATION.test('vi.mock("next/navigation", () => ({ useParams: () => ({}) }));')).toBe(true);
+    expect(MOCKS_NAVIGATION.test("vi.mock(\n  'next/navigation',\n  () => ({ useParams: () => ({}) }),\n);")).toBe(true);
+    expect(MOCKS_NAVIGATION.test("vi.mock('@/lib/storage', () => ({}));")).toBe(false);
+    expect(MOCKS_NAVIGATION.test("import { useParams } from 'next/navigation';")).toBe(false);
   });
 
   // ── The timeout, which is here for the same reason as the three above ──────
