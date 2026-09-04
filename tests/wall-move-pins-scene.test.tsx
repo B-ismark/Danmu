@@ -242,6 +242,31 @@ describe('§ G.1 · a wall move and the scene snapshot', () => {
     expect((await roomStore.loadRoom(ROOM_ID))!.depth).toBeCloseTo(4.8, 5);
   });
 
+  it('pins the parts the room HAD when it changed, not whatever the store holds later', async () => {
+    // A mutation survived every other test in this file: swapping `p.parts` back for a
+    // live `useScene.getState().parts` inside the debounced write. Two awaits pass in
+    // there — `loadRoom`, then `hasCaptures` — and the write is keyed to THIS room, so a
+    // user who navigates A -> B in that window gets room B's furniture filed under room
+    // A's id. Permanently, since the key is only cleared by `destroyRoom`.
+    //
+    // Asserted through a spy on the FIRST call rather than by reading the key back,
+    // because substituting the parts also wakes the scene subscriber, whose own
+    // debounced write lands ~50 ms later and would overwrite the evidence either way.
+    // The bug is which list this write carries, not which list survives.
+    await mountFor(room());
+    const seeded = useScene.getState().parts.map((p) => p.id);
+    const spy = vi.spyOn(roomStore, 'saveSceneParts');
+    expect(useScene.getState().moveWall(0, 0.1)).toBe(0.1);
+    // Inside DEBOUNCE_MS: stand in for the next room's scene arriving in the store.
+    await new Promise((r) => setTimeout(r, 60));
+    useScene.setState({ parts: [useScene.getState().parts[0]] });
+
+    await waitFor(() => expect(spy).toHaveBeenCalled(), { timeout: SETTLE });
+    const [, written] = spy.mock.calls[0] as [string, ScenePart[]];
+    expect(written.map((p) => p.id)).toEqual(seeded);
+    spy.mockRestore();
+  });
+
   it('hands the pinned room back on the next open, through the real load path', async () => {
     // The round trip, which nothing else here covers: the two cases above prove the
     // key is WRITTEN, and the consumer is `RoomSync`'s own load
