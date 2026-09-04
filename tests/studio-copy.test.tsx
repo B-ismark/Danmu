@@ -223,6 +223,25 @@ describe('the help card says which list is where, and does not say a side', () =
     expect(line).toContain('in the left rail');
     expect(line).toContain('on the right of');
   });
+
+  // THE CONTROL, and it was owed the moment the group became shared code. The two
+  // assertions above are about a group BOTH cards now render, so they no longer say
+  // anything about which card this is — collapsing the route branch so that `/model` is
+  // served the plan card left this whole describe green while breaking the 3D tab.
+  // Measured, not reasoned: that mutation survived until this test existed, and the
+  // mirror of it in `help-two-lists-plan-tab.test.tsx` was already killing the other
+  // direction. A shared component needs a control on each side of the branch or it
+  // quietly turns two gates into one.
+  it('while still being the 3D card and not the plan one', () => {
+    cleanup();
+    render(<StudioHelp />);
+    fireEvent.click(screen.getByRole('button', { name: 'How this works' }));
+    // Orbiting and a wall colour are 3D gestures; a lasso and a page rotation are not.
+    expect(screen.getByText('Walls and the room')).toBeTruthy();
+    expect(screen.getByText(/Left-drag to orbit/)).toBeTruthy();
+    expect(screen.queryByText('Choosing pieces')).toBeNull();
+    expect(screen.queryByText(/turn the page/)).toBeNull();
+  });
 });
 
 describe('no copy offers a feature this app deleted', () => {
