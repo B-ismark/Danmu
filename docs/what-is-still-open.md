@@ -89,9 +89,9 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 11 | **§ H.6** Suggest, from the ground up — the user's explicit ask | The largest open thing here. It **subsumes** A.2, A.3's `:555`, A.7 and G.2, and the 5 parked `it.fails` retire here too. **It is NOT un-researched** — `docs/research/suggest-and-collision.md` is a three-layer design whose four questions to the user are all ANSWERED, including the feasibility split being in scope. Of the three things this section calls missing, **only one is** (support); facing is priced by `relationCost`, and groups move rigidly already | XL — refresh the research against `main`, then execute its rows | wants row 1 measured first, since it is a symptom |
 | 12 | **§ H.7** collision, properly — the user is open to replacing the engine | Every piece is one box or one ellipse, so a sofa's L, a table's legs and a plant's canopy are all the same rectangle. Same research doc, rows 4a/4b — and 4b is **half done** (`verticalExtent` makes ONE extent right; more than one still needs 4a). Carries a duplication the doc found and nobody retired: **six hand-written copies** of the vertical-extent rule in five files | XL | independent of row 11, but they meet |
 | 13 | **A.7** `snapYaws`' residual — 40 crooked pieces in 240 solves | **The 197 was BEFORE the fix**, which shipped in `fa12f1a`; this row said 197 for weeks and § A.7's own heading said it too. What is left is the residual, and § A.7 already says what it needs: a search that can move the piece **and** its neighbour, which a finish pass cannot do | M | **a symptom of row 11 and only closable there** |
-| 14 | **A.2 / G.2 / G.3** variety in Shuffle, the anchor-first trade, the two help cards | Real, but none is a defect a user has reported. A.2's number is measured (penalty 4, range 2–8, in cost units) and **nothing pins it** — a test that fails at `diversityPenalty: 0` is still owed. G.2 stays a decision: gating a pass on room shape trades one preset's tail for another's | varies | after row 11 decides whether they still exist |
+| 14 | **A.2 / G.2** variety in Shuffle, the anchor-first trade — **G.3 is DONE (2026-09-04)** | Real, but none is a defect a user has reported. A.2's number is measured (penalty 4, range 2–8, in cost units) and **nothing pins it** — a test that fails at `diversityPenalty: 0` is still owed. G.2 stays a decision: gating a pass on room shape trades one preset's tail for another's. **G.3 turned out not to be a decision at all**: it was filed as "shorter card or signpost gap", and both tabs render the same two lists out of the same shell, so the copy was already true on the plan and simply unsaid there | varies | after row 11 decides whether they still exist |
 | 15 | **E** the jsdom component bucket — **the shim half is DONE 2026-09-03; the coverage half is row 9's** | The count in this row was already stale when it was written: **14 `.test.tsx` files**, not 9, and **ten** hand-rolled the `next/navigation` object rather than five. They had drifted into three formattings of the same object and two different comments explaining it. `vitest.config.ts` now names `setupFiles: ['tests/helpers/setup.ts']` for the two globals — jsdom implements neither, and `lib/use-media-query.ts` calls `window.matchMedia` **unguarded** while every other reader uses `?.`, so `matches: false` changes nothing for the optional readers and unblocks the one that needs it; the `typeof window` guard is what keeps ~115 node-environment files from paying for it. `tests/helpers/mount.ts` owns `navigationMock`, called per file because the room id differs — `vi.mock`'s factory is `async` and `await import()`s it, since vitest hoists the call above every `import` and a static one throws *before initialization*. Both halves gated in `tests/toolchain.test.ts`, because an extraction is undone by one paste | done | **row 9 is what is left of § E** |
-| 16 | **§ A.3** the standalone re-search script | **Omitted until 2026-09-03.** `:555` is 1 failing case in 1512 and needs the search, not a bar; `:327` is a cut-guard correctly reporting its fixture stopped being cut — **the fix is a genuinely cut fixture, never a relaxed guard.** An earlier attempt as a Vitest file timed out at ten minutes; it wants to be a plain Node script. **Nothing is written**, so this is the item most likely to evaporate | M | nothing |
+| 16 | **§ A.3** the standalone re-search script — **WRITTEN 2026-09-04** | `scripts/openroutes-sweep.mjs`, plain Node through vite's SSR pipeline, not a Vitest file — a measurement campaign that takes minutes is not a gate. Both reds it was filed to serve had been **green since `4be144c`** and this table's own red list said so while § A.3 still described them reproducing. What the script buys is the part that was never rot: the fixture has been re-hunted by hand FOUR times, each time because a cost-function change moved the space. Run in full: **19 of 54 cut, 532 trials, 1 refusal** — the first two exactly as recorded, the third down from 3, which the test file predicted and refused to quote unmeasured. **The live finding is that one trial**: the fine-grid re-check has a single piece of evidence across the whole grid | done | nothing |
 | 17 | **§ H.10** undo / redo should cover selection | The user asked for it. The consequence worth stating before building it is that one press per click on the way back is why most tools do not do this — a separate history, or coalesced runs, is their call | M | needs the user |
 | 18 | **§ 33.2** the on-device detector cannot name the four newest shapes | Needs a 50 MB re-export and a digest re-pin on a Python toolchain. Two things found while mapping it: **no test asserts `MODEL_DIGESTS` at all**, so a re-pin has no gate but the manual `pnpm hash:models --verify`; and nothing exercises `detectLocalAcrossImages`, `load()`, `tilesFor` or `toTensor` | L, and mostly not code | the cloud path already handles them, so this is a completeness item |
 
@@ -426,23 +426,54 @@ when the Shuffle button landed: `shuffleRoom` imports both `orderOffers` and
 **Layer 3b has not been started.** It needs `relationDistance` / `inRelationBand`, which are
 in PR #46 and not on `main`.
 
-### 3. `tests/suggest-tidiness.test.ts` — two reds, both real, both diagnosed
+### 3. `tests/suggest-tidiness.test.ts` — the two reds are GREEN; the script is WRITTEN 2026-09-04
 
-Neither is load-sensitive. Both reproduce running that file alone in ~20 s on an idle
-machine, deterministically.
+This section described two failures for weeks after they were fixed, which is the rot this
+document keeps producing: **the red list at the top of this file already said both were
+closed by `4be144c`, and this section — the one an agent reads for detail — still said
+they reproduced.** Re-derived rather than reasoned: `npx vitest run
+tests/suggest-tidiness.test.ts` on `ec2a7be` is **22 passed / 0 failed** in 144.78 s.
 
-- **`:327`** — *"runs the repair pass on every seed — otherwise the rest of this says
-  nothing"*. This is the cut-guard: the assertion that the fixture is genuinely a cut room.
-  The corrected bed leaves routes open, so the fixture stopped being cut on all 24 seeds and
-  the guard correctly reports that the rest of its describe has gone vacuous. **The fix is a
-  new fixture that is actually cut with a 0.9 × 2.0 bed, not a relaxed guard.** Fails in
-  14–20 ms, so it is not timing at all.
-- **`:555`** — an identity assertion, 1 failing case in 1512 (3 shapes × 3 sizes × 60
-  scrambles × 6 repair seeds). Needs the search, not a bar.
+- **The cut-guard** (*"runs the repair pass on every seed"*) was fixed the way this
+  section demanded — a genuinely cut fixture, never a relaxed guard.
+- **The identity assertion** was re-derived with it, and its denominator was corrected in
+  the process: the *"1 in 1512"* quoted above was 54 × 28, the whole grid including the 35
+  scrambles that are not cut at all. `openRoutes` returns its input by identity on every one
+  of those without searching, so they are not trials of anything.
 
-**The missing piece, and the item most likely to evaporate:** a standalone re-search
-script. An earlier attempt as a Vitest file timed out at ten minutes; it wants to be a plain
-Node script that can run for minutes and print a table. **Nothing is written.**
+**The script exists now: `scripts/openroutes-sweep.mjs`.** Plain Node — loaded through
+vite's SSR pipeline because the modules are TypeScript behind the `@/` alias, and `vite` is
+a declared devDependency. It is not a Vitest file for the reason this section always gave:
+a measurement campaign that takes minutes is not a gate, and the earlier attempt died on a
+harness timeout. The gate stays in the test file and asserts ONE scramble; the script prints
+the population that scramble was chosen out of.
+
+**What it says, run in full on `ec2a7be` (54 × 28, 413.7 s):**
+
+```
+  19 of 54 scrambles cut · 532 trials · 1 refusals
+    scramble 35: LAYOUT_SEED = 35 * 2654435761, refusing REPAIR_SEED = 35 * 31 + {21}
+```
+
+**Two of those three numbers are unchanged and the third has collapsed.** 19 of 54 and 532
+trials are exactly what the test file records. The refusal count is **1, not 3** — the test
+file predicted this in prose ("better search and thinner evidence for the guard are the same
+fact") and explicitly refused to quote the wider figure as current: *"NOT re-derived here and
+must not be quoted as current"*. It is re-derived now, and it agrees with the one-scramble
+assertion rather than softening it.
+
+**The finding that is left, and it is a real one.** Across the entire 54 × 28 grid the
+fine-grid re-check refuses the coarse proxy's answer exactly ONCE. That single trial is the
+whole live evidence that the re-check does anything — delete it and one assertion in the
+suite goes red. Not a defect, and **not** a reason to relax the gate: the honest options are
+to widen the grid until the evidence is thicker, or to accept that the search improved to
+the point where its guard is nearly never needed. Deciding that needs the row-11 Suggest
+work, not this script.
+
+**Also fixed here:** the assertion that counts them was titled *"refuses exactly three of
+the 28 repair seeds here"* while asserting `toEqual([21])` — one. The count moved when
+`outsideDeficit` joined the containment term, the assertion was updated and its own sentence
+was not, so every green run printed a number that was false.
 
 ### 4. The contention pattern itself — ANSWERED 2026-09-03, and it was the runner
 
@@ -1483,9 +1514,14 @@ items should be written against pages, not harnesses.
    outside `act()`, so the panel was still shut when the assertion looked for its content.
    It fails identically to the sentence not being rendered at all, which is the trap: the
    first reading of that red was "the component drops the finding".
-2. **`StudioHelp` renders two different cards and picks by route** — the full one on
-   `/model`, a shorter one everywhere else. Asserting against the wrong one reads as the
-   copy being missing rather than as being on the other tab. See G.3.
+2. **`StudioHelp` renders two different cards and picks by route** — one on `/model`, one
+   everywhere else. Asserting against the wrong one reads as the copy being missing rather
+   than as being on the other tab. **That misreading is also what left § G.3 open for
+   weeks**: the plan card genuinely did lack the group, and every test that rendered the
+   component was mocked to the other route, so nothing could tell the two apart. Fixed
+   2026-09-04 — see § G.3 — and the shape of the fix is worth carrying: `vi.mock` is
+   hoisted per FILE, so a card-per-route needs a test file per route, and each of them
+   needs a control saying which card it is looking at.
 
 ### The toolchain facts — as of `95b28fa`, which is after the harness landed
 
@@ -2074,25 +2110,39 @@ Deliberately not tuned. Whoever picks it up should also read A.6, which reached 
 compatible conclusion from a different fixture (4 shapes, 8 seeds, sizes unrecorded) and
 recommended moving the U test to the T.
 
-### 3. The help card has two versions and only one of them explains the two lists
+### 3. The help card has two versions and only one of them explains the two lists — FIXED 2026-09-04
 
 `StudioHelp` reads `usePathname()` and branches on `pathname.endsWith('/model')`. The
 full card — including the **The two lists** group that tells the user Catalog is in the
-left rail and Library is on the right of the canvas — renders on the 3D tab only. On the
-2D Plan tab a shorter card renders and that group is absent.
+left rail and Library is on the right of the canvas — rendered on the 3D tab only. On the
+2D Plan tab a shorter card rendered and that group was absent.
 
-Found by a component test asserting against the wrong one, which is the reason it is
+Found by a component test asserting against the wrong one, which is the reason it was
 written down at all: the red looked exactly like the copy having been deleted.
 
-**The question, and it is the user's:** the Library trigger is reachable from both tabs,
-so a person who opens Help on the plan is told about pieces, panning and keys but never
-what the two lists are. That is either a deliberately shorter card or the same
-signpost gap `visual-check.md`'s Library item was about, one tab over. Not touched here,
-because adding a group to a help card is a copy decision and the item it would serve was
-about copy pointing at things that are not there.
+**It was filed as the user's decision — "a deliberately shorter card, or a signpost gap
+one tab over" — and it was not one, because the premise it rested on is checkable and
+false.** Both tabs HAVE both lists: `DockedShell` is the one shell, so `PartTree` (the
+Catalog) is in the left rail on the plan too, and `app/room/[roomId]/plan/page.tsx`
+renders the same `CatalogPanel` on the right off the same `catalogOpen` flag. The
+sentence was therefore already true on the plan tab and simply was not being said there.
+A card that is shorter because a tab has fewer features is a decision; a card that is
+shorter because nobody was looking at both is drift.
 
-**Committed:** nothing but this paragraph and the comment in
-`tests/studio-copy.test.tsx` naming it.
+**What landed** (`c149c65`, `7bdd4d1`): the group is one component — `TwoLists` — that
+both cards render, and `planHelp` MOVED out of `PlanChrome.tsx` to sit beside `ModelHelp`
+in `StudioHelp.tsx`. Both files' headers already warned in prose about exactly this split
+("nobody comparing them was ever looking at both") while the two halves sat in different
+files, which is the part worth keeping: the comment naming a hazard is not a mechanism
+against it.
+
+**And a second gate was owed, discovered by mutation rather than by reading.** Sharing the
+group turned two gates into one: both of `studio-copy.test.tsx`'s help assertions are now
+about a group BOTH cards render, so neither says which card is on screen. Measured —
+`{false ? <ModelHelp /> : <PlanHelp />}` served the plan card on `/model` and that file
+stayed green, the one survivor of six mutations. Each file now carries a control asserting
+it is still looking at its own tab's card. `vi.mock` is hoisted per FILE, so one route per
+test file is not a style choice.
 
 ---
 

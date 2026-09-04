@@ -773,11 +773,18 @@ describe('the repair pass is re-checked on the grid the room report reads', () =
   // often now, because the anneal it runs on is no longer free to park a piece through
   // a wall. Better search and thinner evidence for the guard are the same fact.
   //
-  // The wider 54 x 28 figure the previous note quoted (three in 532) is NOT re-derived
-  // here and must not be quoted as current: it was measured on the old cost function,
-  // and this one scramble already shows it has moved. Left un-asserted rather than
-  // guessed at — see CLAUDE.md on a number with no artifact named beside it.
-  it('and the fine re-check refuses exactly three of the 28 repair seeds here', () => {
+  // The wider 54 x 28 figure is re-derived now, and the artifact is named:
+  // `scripts/openroutes-sweep.mjs`, run in full on `ec2a7be` in 413.7 s. **19 of 54
+  // scrambles cut, 532 trials, ONE refusal** — scramble 35 at repair seed 21, which is
+  // exactly the specimen frozen above. So the previous note's "three in 532" was stale in
+  // the direction it feared; the cut count and the denominator were not, and this file no
+  // longer holds a figure it forbids you to quote.
+  //
+  // Read the 1 honestly: across the entire grid the re-check refuses the proxy ONCE, so
+  // this assertion is its whole live evidence. That is a reason to widen the grid or to
+  // accept that the search outgrew its guard — never a reason to relax the gate, which is
+  // how the first two fixtures died.
+  it('and the fine re-check refuses exactly one of the 28 repair seeds here', () => {
     const at = scattered();
     const refused: number[] = [];
     for (let j = 0; j < 28; j++) {

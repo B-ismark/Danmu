@@ -1151,6 +1151,14 @@ was looking at both. `PlanView` now exposes a `PlanViewHandle`
 hasCutOff }` upward; the chrome is `PlanChrome.tsx`, rendered by the page. The
 drawing still owns its transform, because wheel, pinch and drag all write it.
 
+The help card is the exception, and it took a second round to finish: it went to
+`PlanChrome.tsx` in that move and stayed there, so the two halves of ONE card sat in
+two files — the paragraph above describing the hazard, in a codebase still shaped by
+it. The plan half went a whole release without the group naming Catalog and Library,
+because nobody comparing them was looking at both. **Both halves live in
+`StudioHelp.tsx` now**, next to each other, and the group that names where the two
+lists are is one shared component rather than a paragraph in each.
+
 ### The left rail — state first, then sections
 
 `PartTree` is now a **sectioned scroll column with a pinned footer**, which is
