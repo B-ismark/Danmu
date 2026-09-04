@@ -22,6 +22,7 @@ import { useStudio } from '@/lib/store';
 import { Icon } from '@/components/ui/Icon';
 import { HelpCard, HelpGroup, HelpLine, Kb } from './HelpCard';
 import { isTypingOrDialog } from './KeyboardShortcuts';
+import { useStudioLayout } from './NarrowViewportBanner';
 
 type CoachId = 'drag' | 'wall';
 
@@ -262,12 +263,24 @@ function ModelHelp() {
 // same `CatalogPanel` on the right. A person who opened Help on the plan used to be
 // told about pieces, panning and keys and never what the two lists were — a signpost
 // gap one tab wide, filed as § G.3.
+// Where the Catalog is depends on the shell, so the sentence reads the shell rather
+// than asserting one answer. Below `STACK_WIDTH` (1023px) `DockedShell` renders ONE
+// column with the Catalog as a full-width panel under the room and there is no left
+// rail at all — and that is not an exotic viewport: 200% zoom on an ordinary 1280px
+// laptop reports 640px, so the reader most likely to be told to look in a rail that
+// does not exist is the one least able to go hunting for it.
+//
+// The Library half needs no branch: `CatalogPanel` is `position: absolute; right: 12`
+// inside the canvas at every width, so "on the right of the canvas" is true stacked
+// or not. Deriving only the half that moves is deliberate — a second branch that
+// always picks the same answer is a second thing to keep true for nothing.
 function TwoLists() {
+  const { layout } = useStudioLayout();
   return (
     <HelpGroup title="The two lists">
       <HelpLine>
-        <b>Catalog</b>, in the left rail, is what is in this room; <b>Library</b>, on the right of the
-        canvas, is what you can add.
+        <b>Catalog</b>, {layout === 'stacked' ? 'in the panel under the room' : 'in the left rail'}, is what
+        is in this room; <b>Library</b>, on the right of the canvas, is what you can add.
       </HelpLine>
       <HelpLine>
         In either list, <Kb>Shift</Kb>-click picks a run of rows at once, and <Kb>Ctrl</Kb>-click adds that
@@ -305,7 +318,14 @@ function PlanHelp() {
           lasso, or by clicking one piece at a time.
         </HelpLine>
         <HelpLine>
-          Where pieces overlap, <Kb>Alt</Kb>-click lists everything under the pointer and lets you pick. Keep
+          {/* The line break must not fall between a word and a keycap. JSX strips the
+              trailing newline and indent from a text chunk, and `Kb` has `marginRight`
+              but no left margin, so "Keep" followed by a newline and <Kb>Alt</Kb>
+              rendered as "KeepAlt". The sibling line in `ModelHelp` is safe only
+              because its break happens to fall inside one text chunk — which is why
+              this is written with the space made explicit rather than moved. */}
+          Where pieces overlap, <Kb>Alt</Kb>-click lists everything under the pointer and lets you pick.
+          Keep{' '}
           <Kb>Alt</Kb>-clicking the same spot to step down through them one at a time.
         </HelpLine>
         <HelpLine>Right-click a piece — or the plan — for what you can do to it, including that same list.</HelpLine>

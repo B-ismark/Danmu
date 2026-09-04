@@ -216,10 +216,12 @@ describe('the help card says which list is where, and does not say a side', () =
     fireEvent.click(screen.getByRole('button', { name: 'How this works' }));
     // Split across `<b>` elements, so the text is matched against the container's own
     // textContent rather than a single text node.
-    const line = screen
-      .getAllByText(/is what you can add/)
-      .map((n) => n.textContent ?? '')
-      .join(' ');
+    const nodes = screen.getAllByText(/is what you can add/);
+    // ONE element, and the count is the assertion — see the same note in
+    // `help-two-lists-plan-tab.test.tsx`. Two `toContain`s over a join of several nodes
+    // are satisfied by two different sentences saying the wrong thing each.
+    expect(nodes, 'the two places must be in ONE sentence, not two').toHaveLength(1);
+    const line = nodes[0].textContent ?? '';
     expect(line).toContain('in the left rail');
     expect(line).toContain('on the right of');
   });
@@ -267,19 +269,34 @@ describe('no copy offers a feature this app deleted', () => {
 
   it('on any .tsx surface under app/ or components/', () => {
     const files = [...surfaces('app'), ...surfaces('components')];
-    // The count first. An empty list — a walk that quietly returns nothing, a directory
-    // renamed — would make the loop below vacuously true, which is the same shape as a
-    // `.tsx` test file that is never collected.
+    // Three floors, not one, and the sibling sweep 90 lines above has had all three for
+    // longer than this one has. This is rule 1's only automated gate and it was measuring
+    // the directory walk alone: `> 50` against a measured 82 lets 31 files leave the walk
+    // in silence, and NOTHING here measured that the stripper returned any text at all —
+    // a strip that returned '' for every file makes every `re.test` false for the worst
+    // possible reason.
     expect(
       files.length,
       'no .tsx surfaces found, so the sweep below proves nothing',
-    ).toBeGreaterThan(50);
+    ).toBeGreaterThan(75);
+    const kept = files.reduce((sum, f) => sum + code(f).length, 0);
+    expect(kept, 'the strip kept almost nothing — the sweep ran over air').toBeGreaterThan(400_000);
+    // And a POSITIVE: the sweep must be reading real user-facing copy, not just
+    // non-empty text. Every one of these files is JSX, so a quoted string is the shape
+    // the FORBIDDEN patterns are hunting in.
+    const quoted = files.flatMap((f) => code(f).match(/["'][^"']{12,}["']/g) ?? []);
+    expect(quoted.length, 'no quoted strings survived the strip').toBeGreaterThan(200);
+    const offenders: string[] = [];
     for (const file of files) {
       const src = code(file);
       for (const re of FORBIDDEN) {
-        expect(re.test(src), `${file} matches ${re}`).toBe(false);
+        if (re.test(src)) offenders.push(`${file} matches ${re}`);
       }
     }
+    expect(offenders, 'copy offering a deleted feature').toEqual([]);
+    // Printed on every green run, like the sibling sweep: these are the numbers whose
+    // drift is the only warning that this gate has stopped seeing the repo.
+    console.log(`[rule-1 sweep] files=${files.length} keptChars=${kept} quotedStrings=${quoted.length}`);
   });
 
   it('and the piece list points at Add by name rather than by direction', () => {
