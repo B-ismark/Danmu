@@ -86,7 +86,7 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 8 | ~~**§ H.3** every Library click drops its piece at the room centre, facing the same way~~ **ANSWERED AND BUILT** — fan out from the drop point with a legality gate (`openSpotForNewPart`, 2026-09-03) | Two residues remain and are named in § H.3's section below: the ceiling family cannot be fanned at all, and a click may still stack one piece on another | — | **done, with two filed residues** |
 | 9 | **§ H.8** two reports that need a real repro | A group drag bounded by the lead's rules rather than the set's, and a merged set that drills in from a nightstand but never from the bed. Both are DOM-reachable on the 2D plan, which is the cheap way in | M | wants row 15's shims |
 | 10 | **§ B.14** a turn that puts a corner through the wall — **ANSWERED AND BUILT 2026-09-03: keep and report, both paths** | The angle is always taken; what may not happen is a turn succeeding in silence. Two findings changed the shape of it: the second document said to contradict the first **no longer exists**, and `valid` is computed on the ALREADY-CLAMPED position, so a turn that slid a piece across the floor reports success. `turnNudge` is the sentence; `spinSelection` joins `turnInPlace` and stops being the one turn gesture with no pipeline, no cascade and no report | S once decided | done |
-| 11 | **§ H.6** Suggest, from the ground up — the user's explicit ask | The largest open thing here. It **subsumes** A.2, A.3's `:555`, A.7 and G.2, and the 5 parked `it.fails` retire here too. **It is NOT un-researched** — `docs/research/suggest-and-collision.md` is a three-layer design whose four questions to the user are all ANSWERED, including the feasibility split being in scope. Of the three things this section calls missing, **only one is** (support); facing is priced by `relationCost`, and groups move rigidly already | XL — refresh the research against `main`, then execute its rows | wants row 1 measured first, since it is a symptom |
+| 11 | **§ H.6** Suggest, from the ground up — the user's explicit ask | The largest open thing here. It **subsumes** A.2, A.7 and G.2, and the 5 parked `it.fails` retire here too. (It used to name "A.3's `:555`" as a fourth; that line number stopped existing when the assertion was fixed, and § A.3 is closed — the surviving question there is not Suggest's to answer, it is whether ONE refusal in 532 is enough evidence for the re-check.) **It is NOT un-researched** — `docs/research/suggest-and-collision.md` is a three-layer design whose four questions to the user are all ANSWERED, including the feasibility split being in scope. Of the three things this section calls missing, **only one is** (support); facing is priced by `relationCost`, and groups move rigidly already | XL — refresh the research against `main`, then execute its rows | wants row 1 measured first, since it is a symptom |
 | 12 | **§ H.7** collision, properly — the user is open to replacing the engine | Every piece is one box or one ellipse, so a sofa's L, a table's legs and a plant's canopy are all the same rectangle. Same research doc, rows 4a/4b — and 4b is **half done** (`verticalExtent` makes ONE extent right; more than one still needs 4a). Carries a duplication the doc found and nobody retired: **six hand-written copies** of the vertical-extent rule in five files | XL | independent of row 11, but they meet |
 | 13 | **A.7** `snapYaws`' residual — 40 crooked pieces in 240 solves | **The 197 was BEFORE the fix**, which shipped in `fa12f1a`; this row said 197 for weeks and § A.7's own heading said it too. What is left is the residual, and § A.7 already says what it needs: a search that can move the piece **and** its neighbour, which a finish pass cannot do | M | **a symptom of row 11 and only closable there** |
 | 14 | **A.2 / G.2** variety in Shuffle, the anchor-first trade — **G.3 is DONE (2026-09-04)** | Real, but none is a defect a user has reported. A.2's number is measured (penalty 4, range 2–8, in cost units) and **nothing pins it** — a test that fails at `diversityPenalty: 0` is still owed. G.2 stays a decision: gating a pass on room shape trades one preset's tail for another's. **G.3 turned out not to be a decision at all**: it was filed as "shorter card or signpost gap", and both tabs render the same two lists out of the same shell, so the copy was already true on the plan and simply unsaid there | varies | after row 11 decides whether they still exist |
@@ -451,9 +451,28 @@ the population that scramble was chosen out of.
 **What it says, run in full on `ec2a7be` (54 × 28, 413.7 s):**
 
 ```
-  19 of 54 scrambles cut · 532 trials · 1 refusals
+  scramble    navCost      input cost   trials   refused on
+        35        7.055       2594.29       28   21
+
+  19 of 54 scrambles cut · 532 trials · 1 refusals · 413.7s
     scramble 35: LAYOUT_SEED = 35 * 2654435761, refusing REPAIR_SEED = 35 * 31 + {21}
 ```
+
+**The specimen row is kept, not just the summary line, and that is not decoration.** A
+review lens on PR #106 pointed out that quoting only the totals discards the two columns
+that would catch a drifted scramble generator — and the generator was, at that moment, a
+hand copy in the script of the one in the test file. It is `tests/helpers/openroutes-grid.ts`
+now, imported by both, and `navCost 7.055 / input 2594.29` is what proves the shared
+version reproduces the same population: identical before and after the extraction.
+
+**The script distinguishes its two bad outcomes and says so in its exit code**, which the
+first version did not — it printed "no refusals, widen the grid" and exited 0 when in fact
+NOTHING HAD BEEN CUT and the sweep had not run at all. `0` a refusal was found, `1` the
+grid ran and nothing refused, `2` nothing was cut so the run measures nothing. All three
+were observed firing (`--only 35` → 0, `--only 9` → 1, `--only 0` → 2) rather than
+reasoned about. It is `pnpm sweep:routes`, beside `vendor:ort` and `hash:models`, because
+a tool the next agent cannot find by running `pnpm run` is a tool that gets rebuilt by
+hand — which is the exact cost this one exists to retire.
 
 **Two of those three numbers are unchanged and the third has collapsed.** 19 of 54 and 532
 trials are exactly what the test file records. The refusal count is **1, not 3** — the test
@@ -2718,12 +2737,23 @@ seventh was not a mark at all — see below.
   back something worse" asserts `openRoutes` returned its input by identity — that the
   fine-grid re-check *refused* the coarse proxy — and it is the only assertion guarding
   that path at all ("delete that re-check and this is the assertion that goes red"). The
-  re-swept population is **identical**: scramble 35 still cut by 7.055, input still
-  1921.50, still 19 of 54 scrambles cut, still 532 trials, **still exactly 3 refusals, all
-  three on scramble 35** — only the seeds moved, 19 / 22 / 26 → 6 / 12 / 22. So the count
-  is now asserted, all three seeds are pinned, and the specimen is seed 22 by this file's
-  own pre-existing continuity tie-break rather than a fresh one. **Nothing was selected
-  for making the assertion pass**, which is the trap the obvious fix walks into.
+  re-swept population was **identical**: scramble 35 still cut by 7.055, input 1921.50,
+  still 19 of 54 scrambles cut, still 532 trials, **still exactly 3 refusals, all three on
+  scramble 35** — only the seeds moved, 19 / 22 / 26 → 6 / 12 / 22, and the specimen was
+  seed 22 by this file's own pre-existing continuity tie-break rather than a fresh one.
+  **Nothing was selected for making the assertion pass**, which is the trap the obvious
+  fix walks into.
+
+  **That paragraph is history and has been put in the past tense, because it stopped
+  being true and said so in the present for a fortnight.** `outsideDeficit` joining the
+  containment term moved the set again, to the single seed 21. Re-derived 2026-09-04 by
+  `scripts/openroutes-sweep.mjs` on `ec2a7be`: 19 of 54 cut and 532 trials still hold,
+  the refusals are **1**, and the input cost is 2594.29 rather than 1921.50 — the number
+  that moved silently with the cost function while being quoted forward. "All three seeds
+  are pinned" was flatly false against the file's own `toEqual([21])`. Found by a review
+  lens on PR #106, which is the point worth keeping: **the commit that corrected one
+  paragraph quoting this figure left eight others quoting it**, because the sweep for it
+  was never run.
 - **Every parked bar was left where it was.** `layout-solve`'s clean-seed bar is 11
   *because two mutations survived at 7*; widening 60 to clear 92.10 would record the
   regression as the requirement. The baselines are pinned **exactly**, so an improvement

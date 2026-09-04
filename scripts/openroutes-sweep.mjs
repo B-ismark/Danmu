@@ -9,13 +9,15 @@
 // in that test file and asserts ONE scramble's worth; this prints the population that
 // scramble was chosen out of.
 //
-// WHY IT EXISTS AT ALL. The fixture has been hunted for by hand FOUR times now — each
-// time because a change to the cost function or the seed layout moved the space, never
-// because anything was wrong with the retired fixture. The test file's own note puts
-// it plainly: "the payment is scriptable and it is two minutes, not twelve". It also
-// currently carries a figure it forbids you to quote — "three in 532 … measured on the
-// old cost function … must not be quoted as current" — which is a number with no live
-// artifact behind it. This script is that artifact.
+// WHY IT EXISTS AT ALL. The refusal set has moved five times, every move paid for by a
+// change to the cost function or the seed layout and never because anything was wrong
+// with the retired fixture — the enumeration is in the docblock on LAYOUT_SEED in the
+// test file. Each move was re-hunted by hand. That file's own note put it plainly:
+// "the payment is scriptable and it is two minutes, not twelve". It also used to carry a
+// figure it forbade you to quote, measured on a superseded cost function with no live
+// artifact behind it. This script is that artifact, and no count of the hunts is stated
+// here on purpose: the sentence that did state one was wrong twice over by the time
+// anyone read it.
 //
 // WHAT A REFUSAL IS. `openRoutes` searches on the coarse navigation proxy and then
 // re-checks the winner on the fine grid; if the fine grid says the proxy's answer is
@@ -24,9 +26,14 @@
 // scrambles the fine grid says are genuinely cut are counted as trials. That is the
 // whole reason the denominator is the cut scrambles and not 54 × 28.
 //
-//   node scripts/openroutes-sweep.mjs                 # the full 54 × 28
+//   node scripts/openroutes-sweep.mjs                 # the full 54 × 28, ~7 minutes
 //   node scripts/openroutes-sweep.mjs --scrambles 8   # a shorter probe
-//   node scripts/openroutes-sweep.mjs --only 35       # one scramble, all 28 seeds
+//   node scripts/openroutes-sweep.mjs --only 35       # one scramble, all 28 seeds, ~20 s
+//
+// EXIT CODES, because the two bad outcomes are not the same outcome:
+//   0  the grid ran and at least one refusal was found
+//   1  the grid ran and NOTHING refused — the re-check has no live evidence
+//   2  nothing was cut, so nothing was searched and the run measures nothing
 //
 // Loaded through vite's SSR pipeline because the modules under test are TypeScript and
 // import through the repo's `@/` alias. `vite` is a declared devDependency; nothing
@@ -47,18 +54,6 @@ const SCRAMBLES = arg('scrambles', 54);
 const REPAIR_SEEDS = arg('seeds', 28);
 const ONLY = arg('only', NaN);
 
-// The test file's own generator and its own encodings, reproduced here rather than
-// imported: they are properties of that file, and a script that quietly used a
-// different scramble would print a table about a different population.
-function lcg(seed) {
-  let s = seed >>> 0;
-  return () => {
-    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
-    return s / 4294967296;
-  };
-}
-const layoutSeed = (i) => i * 2654435761;
-const repairSeed = (i, j) => i * 31 + j;
 
 const server = await createServer({
   configFile: false,
@@ -73,6 +68,12 @@ try {
   const score = await server.ssrLoadModule('/lib/layout-score.ts');
   const spec = await server.ssrLoadModule('/lib/scene-spec.ts');
   const fp = await server.ssrLoadModule('/lib/footprint.ts');
+  // The SAME generators the test file uses, not a copy of them. A copy here drifts in
+  // one direction and in silence: this script's table is quoted INTO that file as
+  // authority, so a drifted scramble would describe a different population and nothing
+  // would go red. See the header of `tests/helpers/openroutes-grid.ts`.
+  const grid = await server.ssrLoadModule('/tests/helpers/openroutes-grid.ts');
+  const { lcg, layoutSeed, repairSeed, scatterInto } = grid;
 
   const { openRoutes } = solve;
   const { costBreakdown, navigabilityCost, DEFAULT_WEIGHTS, NAV_CELL, prepare } = score;
@@ -84,18 +85,6 @@ try {
   const bounds = { minX: b.minX, maxX: b.maxX, minZ: b.minZ, maxZ: b.maxZ };
   const fine = (p) => costBreakdown(model, p, DEFAULT_WEIGHTS, NAV_CELL).total;
 
-  function scattered(seed) {
-    const r = lcg(seed);
-    return base.map((p) =>
-      p.wallMounted
-        ? { x: p.pos[0], z: p.pos[2], yaw: p.rot }
-        : {
-            x: b.minX + r() * (b.maxX - b.minX),
-            z: b.minZ + r() * (b.maxZ - b.minZ),
-            yaw: r() * Math.PI * 2,
-          },
-    );
-  }
 
   const indices = Number.isNaN(ONLY) ? [...Array(SCRAMBLES).keys()] : [ONLY];
   const t0 = Date.now();
@@ -110,7 +99,7 @@ try {
   const refusals = [];
 
   for (const i of indices) {
-    const at = scattered(layoutSeed(i));
+    const at = scatterInto(base, bounds, layoutSeed(i));
     const nav = navigabilityCost(model, at, NAV_CELL);
     if (nav <= 0) {
       // Not a trial of anything: `openRoutes` returns by identity without searching,
@@ -143,9 +132,22 @@ try {
     for (const [s, seeds] of byScramble) {
       console.log(`    scramble ${s}: LAYOUT_SEED = ${s} * 2654435761, refusing REPAIR_SEED = ${s} * 31 + {${seeds.join(', ')}}`);
     }
+  } else if (trials === 0) {
+    // NOT the same answer as "nothing refused", and the advice differs. Nothing was cut,
+    // so `openRoutes` returned by identity without searching on every scramble and the
+    // grid tested nothing at all. The first version of this script printed the
+    // no-refusals message here and exited 0, which is a green run reporting that a guard
+    // has no evidence when in fact the sweep never ran.
+    console.log('    NOTHING WAS CUT, so nothing was searched and this run measures NOTHING.');
+    console.log('    The fixture has stopped being cut. RE-RUN the sweep on a grid that is');
+    console.log('    cut; do NOT relax the gate. A fixture that stops being cut is a test');
+    console.log('    that stops meaning anything, which is how the first two fixtures died.');
+    process.exitCode = 2;
   } else {
-    console.log('    NO REFUSALS. The fine-grid re-check has no live evidence on this grid —');
-    console.log('    which is a finding, not a clean run. Widen the grid before relaxing the gate.');
+    console.log('    NO REFUSALS across ' + trials + ' real trials. The fine-grid re-check has no');
+    console.log('    live evidence on this grid — a finding, not a clean run. Widen the grid');
+    console.log('    before relaxing the gate.');
+    process.exitCode = 1;
   }
 } finally {
   await server.close();
