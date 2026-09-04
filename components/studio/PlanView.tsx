@@ -19,7 +19,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRe
 import { useStudio, useSettings } from '@/lib/store';
 import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { useScene } from '@/lib/scene-store';
-import { DND_MIME, placeNewPart, selectionForPick, type Category, type ScenePart, type Shape } from '@/lib/scene-spec';
+import { DND_MIME, selectionForPick, type Category, type ScenePart, type Shape } from '@/lib/scene-spec';
 import { entranceComponents, floorBlockers } from '@/lib/clearance';
 import { buildClearanceField, fieldRuns, FREE_CELL } from '@/lib/clearance-field';
 import { accessZones } from '@/lib/layout-rules';
@@ -41,7 +41,7 @@ import { convoyRestore, planConvoy, resolveConvoy, travellingWorld, type Convoy 
 import { cascadeTransform } from '@/lib/rigid-parent';
 import { formatDim, formatLength } from '@/lib/units';
 import { clientDeltaToViewBox, clientToViewBox } from '@/lib/plan-view-transform';
-import { v4 as uuid } from 'uuid';
+import { addPieceToRoom } from '@/lib/add-piece';
 import { removeParts, studioSurfaceFocused } from './KeyboardShortcuts';
 import { announce } from '@/lib/announce';
 import { openPickMenu, openSceneMenu } from './SceneContextMenu';
@@ -514,39 +514,19 @@ export const PlanView = forwardRef<PlanViewHandle, {
     } catch {
       return;
     }
-    // `currentRoomScene()`, not `useScene.getState().parts`: a drag writes only the
-    // override map, so the authored array is the room as it was BUILT rather than as
-    // it stands, and `placeNewPart` reads it to decide what this piece rests on. A
-    // lamp dropped on a desk the user had moved fell to the floor through it.
-    // `tests/spawn-resolved-parts.test.ts` measures both directions.
-    const { room, addPart } = useScene.getState();
-    const existing = currentRoomScene();
     // The drop point goes IN, exactly as it does on the 3D tab: a wall-mounted piece
     // takes the wall nearest where it was aimed rather than the wall nearest the
     // room's centre. Leaving it out is what made "same contract as the 3D tab's
     // onDrop" false above — a TV let go against the left wall landed on whichever
     // wall the default picked.
+    //
+    // Everything after the aim is `addPieceToRoom` (`lib/add-piece.ts`), shared with
+    // the 3D drop and the Library click. Placing, containment, the id, the add, the
+    // selection and the announcement were written out here and again in `Room.tsx`,
+    // and the second copy was missing the last of those. Keeping the drop inside the
+    // room is `placeNewPart`'s job — see there.
     const w = svgToWorldAt(e.clientX, e.clientY);
-    const { pos, rot, wallMounted } = placeNewPart(item.category, item.shape, item.dimMM, room, existing, [
-      w.x,
-      w.z,
-    ]);
-    // Keeping the drop inside the room is `placeNewPart`'s job now — see there.
-    const [x, y, z] = pos;
-    const id = `${item.category}-${uuid().slice(0, 6)}`;
-    addPart({
-      id,
-      category: item.category,
-      name: item.label,
-      shape: item.shape,
-      pos: [x, y, z],
-      rot,
-      dimMM: item.dimMM,
-      locked: false,
-      wallMounted,
-    });
-    setSelected(id);
-    announce(`${item.label} added.`);
+    addPieceToRoom(item, [w.x, w.z]);
   }
 
   function onWheel(e: React.WheelEvent) {

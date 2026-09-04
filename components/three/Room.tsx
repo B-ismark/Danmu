@@ -8,12 +8,11 @@ import { Suspense, useEffect, useMemo, useRef, useState, type MutableRefObject }
 import { ContactShadows, Environment, Lightformer, AdaptiveDpr, PerformanceMonitor } from '@react-three/drei';
 import { EffectComposer, N8AO, SMAA } from '@react-three/postprocessing';
 import { ACESFilmicToneMapping, Raycaster, Vector2, Vector3, Plane, type Camera, type DirectionalLight, type Scene, type WebGLRenderer } from 'three';
-import { v4 as uuid } from 'uuid';
 import { useStudio } from '@/lib/store';
 import { consumeGizmoClick } from '@/lib/gizmo-press';
 import { useScene } from '@/lib/scene-store';
-import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
-import { placeNewPart, dropPlaneConstant, DND_MIME, type Category, type Shape } from '@/lib/scene-spec';
+import { useRoomScene } from '@/lib/room-scene';
+import { dropPlaneConstant, DND_MIME, type Category, type Shape } from '@/lib/scene-spec';
 import { footprintBounds } from '@/lib/footprint';
 import { daylightKelvin } from '@/lib/solar';
 import { LIGHTING, moodSunDirection, KEY_DIR, DEFAULT_BEARING_DEG } from '@/lib/lighting-moods';
@@ -21,6 +20,7 @@ import { shadowFit } from '@/lib/shadow-fit';
 import { hexFromKelvin } from '@/lib/light-units';
 import { useSnapshot, downloadBlob } from '@/lib/snapshot';
 import { snapshotFileName } from '@/lib/exports';
+import { addPieceToRoom } from '@/lib/add-piece';
 import { toast } from '@/components/ui/StorageToast';
 import { pickIdsFrom } from '@/lib/pick-through';
 import { openSceneMenu } from '@/components/studio/SceneContextMenu';
@@ -164,15 +164,10 @@ export function Room() {
     _ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
     _raycaster.setFromCamera(_ndc, api.camera);
 
-    // `currentRoomScene()`, not `useScene.getState().parts`: a drag writes only the
-    // override map, so the authored array is the room as it was BUILT rather than as
-    // it stands, and `placeNewPart` reads it to decide what this piece rests on. The
-    // 2D tab's own `onDrop` was the same until this change, while `PlanView` had been
-    // resolving correctly ninety lines above it for a different read — the file
-    // already knew the answer and this handler did not use it.
-    // `tests/spawn-resolved-parts.test.ts` measures both directions.
+    // The room, for the drop PLANE only. Which parts the placement sees is
+    // `addPieceToRoom`'s own business and deliberately not a thing this handler can
+    // get wrong — see `lib/add-piece.ts`.
     const { room: r } = useScene.getState();
-    const ps = currentRoomScene();
     // **Which plane the pointer is resolved against is a function of where the piece
     // will LIVE.** This was the floor for every category, which was harmless only while
     // a ceiling piece discarded its aim. The moment `ceilingSpot` began honouring one, a
@@ -201,23 +196,18 @@ export function Room() {
 
     // The drop point goes in: a wall part takes the wall nearest where it was
     // aimed rather than the wall nearest the room's centre.
-    const { pos, rot, wallMounted } = placeNewPart(item.category, item.shape, item.dimMM, r, ps, [
-      _hit.x,
-      _hit.z,
-    ]);
-    // `placeNewPart` was handed the drop point and has already clamped it into the
-    // footprint. This used to re-derive x/z from `_hit` with a second, unguarded
-    // clamp, and the plan deleted its copy of exactly that this same change — so
-    // the two tabs disagreed about where an oversized piece lands: for a 2 m bed
-    // dropped into a 1.5 m-deep room, `intoRoom` centres it while `max(minZ + 1.0,
-    // min(maxZ - 1.0, hit))` lets the min beat the max and pins it at +0.25.
-    const [x, y, z] = pos;
-    const id = `${item.category}-${uuid().slice(0, 6)}`;
-    useScene.getState().addPart({
-      id, category: item.category, name: item.label, shape: item.shape,
-      pos: [x, y, z], rot, dimMM: item.dimMM, locked: false, wallMounted,
-    });
-    useStudio.getState().setSelected(id);
+    //
+    // Everything after the aim is `addPieceToRoom` (`lib/add-piece.ts`), shared with
+    // the plan's drop and the Library click. `placeNewPart` was handed the drop point
+    // and has already clamped it into the footprint. This used to re-derive x/z from
+    // `_hit` with a second, unguarded clamp, and the plan deleted its copy of exactly
+    // that in the same change — so the two tabs disagreed about where an oversized
+    // piece lands: for a 2 m bed dropped into a 1.5 m-deep room, `intoRoom` centres it
+    // while `max(minZ + 1.0, min(maxZ - 1.0, hit))` lets the min beat the max and pins
+    // it at +0.25. That is the argument for the extraction as much as for the clamp:
+    // this handler was ALSO the copy with no `announce`, so a screen-reader user could
+    // not tell a successful 3D drop from the silent `intersectPlane` early return.
+    addPieceToRoom(item, [_hit.x, _hit.z]);
   }
 
   return (
