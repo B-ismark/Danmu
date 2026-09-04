@@ -371,7 +371,14 @@ eleven errors across six test files, none of them in the change. Second occasion
 `node_modules` thinning where a package `dist` or `.bin` vanishes and a frozen install
 re-links the hollow directory and reports success — same symptom, and there the install is
 the fix that does **not** work, so check `node_modules/.bin/vitest` exists rather than
-trusting `Done in 4.6s`.)*
+trusting `Done in 4.6s`. Third occasion, with the cause finally located: a **junction**.
+A review worktree whose `node_modules` was linked to the main tree's, and `git worktree
+remove --force` walked the worktree to delete it and followed the reparse point into the
+real one — so **never junction `node_modules` into a git worktree**, give it its own
+install. That is a directory-walk problem and NOT a store problem: pnpm's store is
+content-addressed and a sibling worktree with a real install was measured unaffected, so
+it is no reason to distrust worktree installs, which are the one recipe here that works.
+Repair needs `pnpm install --force` — 5m48s against the plain install's lying 5.2s.)*
 
 **Symptom: `next build` exits 0 and you are not sure it linted.**
 It can print `ESLint: Invalid Options` and exit 0 having linted nothing.
@@ -429,20 +436,23 @@ and is not part of the verdict.
 Second occasion: the same install printing `Done in 5.2s` and restoring `.bin` to 102
 entries — both counts correct, both worthless. `--force` took 5m48s and was the real one.)*
 
-**Symptom: `npx <anything>` says "is not recognized", and `node_modules` looks full.**
-Something deleted `node_modules/.bin` while leaving the 449 package directories alone.
-The cause here was a **junction**: a review worktree whose `node_modules` was linked to
-the main tree's, and `git worktree remove --force` walked the worktree to delete it and
-followed the reparse point into the real one.
-→ **Never junction `node_modules` into a git worktree.** Give the worktree its own
-install. This is a directory-walk problem and NOT a store problem — pnpm's store is
-content-addressed and hard-linked, and a sibling worktree with its own real install was
-measured unaffected — so it is not a reason to distrust worktree installs generally,
-which are the one recipe here that works.
-→ Repairing needs `pnpm install --force`; a plain install re-links the hollow directory
-and reports success in seconds (see the entry above).
-*(Cost: a gutted shared checkout, a false green, and a 5m48s reinstall. One occasion so
-far, recorded early because the failure is silent in three separate places.)*
+**Symptom: a file you just edited is back to its committed state, and you did not do it.**
+An agent you launched yourself. A review lens told to prove a new gate can fail IS a
+mutation runner — it plants a line, runs the suite, and restores with `git checkout --`
+or from a backup it took before your later edits. Fan five of those out over the tree
+you are editing and the result is indistinguishable from a peer trampling you.
+→ **Never run mutation agents over a tree you are still editing.** Commit first, or give
+them a worktree.
+→ The tell that it is an agent and not a peer: the planted string is *crafted to trip
+your own new gates* (here, one line holding both a lowercase `library` and a rule-1
+`photoreal`), and it appears in a file no ordinary change would touch.
+→ Before accusing anyone, enumerate your own running agents. `git status` cannot tell
+you which of the two happened, and the peer has usually already told you they are out.
+*(Cost: two files of edits lost and re-applied, plus an urgent and WRONG accusation sent
+to a peer who had said plainly they were out of the tree — retracted eight minutes later.
+Second occasion: the earlier "a mutation runner must be exclusive" note, where two
+runners racing made every verdict unattributable. Same rule, and the peer-blame is the
+part worth remembering, because it costs more than the lost edits did.)*
 
 ---
 

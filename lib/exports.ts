@@ -25,8 +25,13 @@
 //     the build if a hand-written copy of the fallback reappears anywhere, or if a
 //     new caller reaches for the plain merge — this file having briefly carried one.
 
-/** Filenames are capped well under every filesystem's limit, and the caller adds an
- *  extension on top — so the budget is for the name, not for the whole thing. */
+/** Filenames are capped well under every filesystem's limit, and the caller adds a
+ *  suffix and an extension on top — so the budget is for the name, not for the whole
+ *  thing. Measured worst cases from a 300-character room name: `room.danmu.json` 71
+ *  characters, `-snapshot.png` 73, `-floor-plan.png` 75. The output alphabet is
+ *  `[a-z0-9-]`, so characters are bytes and there is no unit to get wrong; 75 leaves
+ *  180 bytes under ext4's 255 and sits ~103 into Windows' 260-char MAX_PATH from a
+ *  normal Downloads folder. */
 const MAX_SLUG = 60;
 
 /** Downloads carry the room's name, so a folder of exports from three rooms is still

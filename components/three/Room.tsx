@@ -21,6 +21,7 @@ import { shadowFit } from '@/lib/shadow-fit';
 import { hexFromKelvin } from '@/lib/light-units';
 import { useSnapshot, downloadBlob } from '@/lib/snapshot';
 import { snapshotFileName } from '@/lib/exports';
+import { toast } from '@/components/ui/StorageToast';
 import { pickIdsFrom } from '@/lib/pick-through';
 import { openSceneMenu } from '@/components/studio/SceneContextMenu';
 import { RoomShell } from './RoomShell';
@@ -579,6 +580,20 @@ function DropConnector({ apiRef }: { apiRef: React.MutableRefObject<SceneApi | n
 
 // On-demand scene snapshot — the Export menu's 3D-view item bumps useSnapshot's
 // token; we capture the next frame (helpers hidden) and download it as a PNG.
+
+/** Says so when a capture does not produce a file. Every exit below used to be
+ *  silent — two bare `return`s and an empty `catch` — which is indistinguishable
+ *  from the button doing nothing, and the menu's own error path cannot see any of
+ *  them because it resolved a frame earlier. */
+function snapshotFailed(err?: unknown) {
+  console.error('[export] the 3D snapshot failed', err);
+  toast({
+    tone: 'danger',
+    title: 'Could not export this 3D view',
+    message: 'The room is still here — try again, and if it keeps happening reload the page.',
+  });
+}
+
 function SceneCapture() {
   const { gl, scene, camera, invalidate } = useThree();
   const token = useSnapshot((s) => s.token);
@@ -592,9 +607,16 @@ function SceneCapture() {
   }, [token, invalidate]);
 
   useFrame(() => {
-    const want = useSnapshot.getState().token;
+    const { token: want, name } = useSnapshot.getState();
     if (want === done.current) return;
     done.current = want;
+    // The name is read HERE, with the token, and closed over — not inside the
+    // `toBlob` callback below. `request` writes both in one `set`, so they are one
+    // fact; reading them at two instants un-pairs them. `toBlob` encodes a 2x-DPR
+    // buffer and can take tens of milliseconds, and a rename plus a second press
+    // inside that window gave the FIRST capture the SECOND name — the older image
+    // downloading under the newer room's filename, and the newer one then numbered
+    // `(1)` by the browser.
     // Hide editor-only helpers (selection highlight + transform gizmo) so they
     // don't bake into the image. Restore after the synchronous copy.
     const hidden: Array<{ obj: { visible: boolean } }> = [];
@@ -619,13 +641,19 @@ function SceneCapture() {
       snap.width = src.width;
       snap.height = src.height;
       const ctx = snap.getContext('2d');
-      if (!ctx) return;
+      if (!ctx) return snapshotFailed();
       ctx.drawImage(src, 0, 0);
       snap.toBlob((blob) => {
-        if (blob) downloadBlob(blob, snapshotFileName(useSnapshot.getState().name));
+        if (!blob) return snapshotFailed();
+        downloadBlob(blob, snapshotFileName(name));
       }, 'image/png');
-    } catch {
-      /* canvas not ready / context lost — skip this snapshot */
+    } catch (e) {
+      // Canvas not ready, context lost, or a surface-size cap. This used to be a bare
+      // `skip this snapshot` with no console line: the menu closed, no file arrived,
+      // and there was nothing anywhere to read. The Export menu cannot report it —
+      // its own promise resolved before this frame was ever rendered — so the report
+      // has to live here, at the only place that knows the capture failed.
+      snapshotFailed(e);
     } finally {
       hidden.forEach((h) => (h.obj.visible = true));
     }

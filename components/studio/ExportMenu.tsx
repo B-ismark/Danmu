@@ -93,11 +93,20 @@ export function ExportMenu() {
     }
   }
 
-  /** Both PNG items are async now, and `run` takes a `() => void`, so a rejection
-   *  here is dropped on the floor rather than reaching the React handler a
-   *  synchronous throw used to reach. That is a silent failed export: the menu
-   *  closes, no file arrives, and the only trace is a console warning nobody is
-   *  looking at. Every export path goes through here and says so instead. */
+  /** For the floor plan, and ONLY the floor plan. `run` takes a `() => void` and
+   *  discards what it gets back, so once `planPng` became async a throw stopped
+   *  reaching the React handler and became an unhandled rejection: menu closed, no
+   *  file, nothing said.
+   *
+   *  The first version of this guarded all three items and two of the three could
+   *  never fire — `freshRoomName` catches its own IndexedDB read, and `saveSceneFile`
+   *  catches and toasts for itself, so a guard there would only ever have produced a
+   *  SECOND danger toast for one failure. A catch on a promise that cannot reject is
+   *  decoration, and it made the comment above it false.
+   *
+   *  The 3D view is not here either, and that is the same lesson one step further:
+   *  its failures happen inside the canvas a frame later, long after this promise has
+   *  resolved. `SceneCapture` in components/three/Room.tsx reports for itself. */
   function reportExportFailure(what: string) {
     return (err: unknown) => {
       console.error(`[export] ${what} failed`, err);
@@ -129,9 +138,12 @@ export function ExportMenu() {
             onClick: () => {
               // The name rides the same request that bumps the token, because
               // the capture inside the canvas cannot load the room itself.
-              void freshRoomName()
-                .then((n) => useSnapshot.getState().request(n))
-                .catch(reportExportFailure('this 3D view'));
+              //
+              // No `.catch`: `freshRoomName` handles its own read failure and
+              // `request` is a store write, so this chain cannot reject. What CAN
+              // fail is the capture, a frame later and a component tree away, and
+              // `SceneCapture` says so there.
+              void freshRoomName().then((n) => useSnapshot.getState().request(n));
             },
           },
         ]
@@ -151,7 +163,10 @@ export function ExportMenu() {
       // does not distinguish it from the PNGs above it.
       hint: 'A file you can reopen here, or send to someone',
       onClick: () => {
-        if (roomId) void saveSceneFile(roomId).catch(reportExportFailure('the room file'));
+        // No `.catch`: `saveSceneFile` catches and toasts for itself, and its own
+        // docblock says the caller does not have to. A guard here would double the
+        // toast on the one path that already reports.
+        if (roomId) void saveSceneFile(roomId);
       },
     },
   ];

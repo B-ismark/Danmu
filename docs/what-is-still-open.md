@@ -5178,3 +5178,81 @@ measurement); the roundness of the two gates (byte-identical placements across e
 shape × layout × size combinations — correct by § 32's rule, unfalsifiable here); and the
 ceiling skip (deleting it returns the same answer 127 probes later, so it is a saving and
 not a behaviour). **Nothing here has been looked at in a browser.**
+
+## § I · The export naming pass, and the five things it found that are NOT fixed
+
+All five came out of a five-lens review of `fix/library-copy-and-snapshot-naming` on
+2026-09-03. Each one **exists in a commit** — they are properties of code on `main`,
+not notes about a window that is closing. None is a blocker for that branch; each is
+recorded because fixing it is a decision rather than a repair.
+
+**I.1 · `fileSlug` folds every non-Latin script onto the literal `room`, and that is now
+three downloads wide.** Measured, not reasoned: `客厅`, `卧室`, `спальня`, `Ελληνικά`,
+`🛏️🌙` and `""` all slug to `room`, so a Chinese-speaking user with three rooms gets
+`room-snapshot.png`, `room-snapshot (1).png`, `room-snapshot (2).png` — verbatim the
+defect `lib/exports.ts` exists to remove, for everyone who does not type Latin. `寝室 2`
+is worse than a collision: it files as `2-snapshot.png`. Latin names with diacritics are
+mangled rather than lost (`Café` → `caf`, `Zimmer für Gäste` → `zimmer-f-r-g-ste`).
+**Why it is not fixed here:** the branch that found it only extended an existing fold to
+a third download; changing the fold changes the filename of every export every existing
+user has ever made, which is a product decision. **The shape of the fix**, if taken: NFKD-
+normalise and strip combining marks before the class filter, which alone rescues every
+diacritic case; then, for a name that folds to nothing, fall back to something
+room-distinguishing — the first characters of the room id — rather than the literal
+`room`. Note `tests/exports.test.ts` currently PINS `snapshotFileName("") === 
+"room-snapshot.png"`, so that assertion is part of the decision, not an obstacle to it.
+
+**I.2 · A 3D snapshot requested just before a tab switch is swallowed in silence.**
+`ExportMenu` lives in the room layout and survives the switch; `SceneCapture` lives only
+under `/model`. Since the 3D item became async (it awaits an IndexedDB read for the room
+name), the token can be bumped after the canvas has unmounted. `SceneCapture` initialises
+`done` to the CURRENT token on mount, so the pending request is consumed as already-done
+and no PNG is ever produced. Nothing rejects, so no error path fires.
+**Why it is not fixed here:** the two fixes differ in what the user experiences and only
+the user can pick. Either the store grows a `served` counter so a request outlives the
+unmount and fires on return — a PNG arriving a tab-switch later, which may surprise — or
+the name is resolved when the MENU OPENS rather than on the click, which makes the click
+synchronous again and narrows staleness to the seconds a menu is open.
+
+**I.3 · There is no busy state, no re-entry guard, and no success tell on either PNG.**
+`run()` closes the popover and then calls the handler, so between the click and the
+download the user sees nothing at all — and pressing the item twice runs two exports,
+the second silently numbered `(1)` by the browser. Every other long action in the studio
+(`RoomTools` has four) goes through `useBusyAction`, which yields a frame so the flag can
+paint and refuses a second press. Focus also falls to `document.body` when the popover
+unmounts, which the same file already handles correctly on the Esc path.
+**Why it is not fixed here:** a busy state inside a menu that closes on click is a design
+question, not a bug fix — the honest answers are a toast on success, or a menu that stays
+open with a spinner on the row, and those look very different.
+
+**I.4 · `LibraryPicker` says "Search the Library" inside the model-swap modal, where there
+is no Library.** The picker has two mount sites. Under `CatalogPanel` the heading directly
+above the field reads **Library** and the copy agrees. Inside `RegenerateModal` the dialog
+is named for the piece being replaced and swapping a model is not "what you can add", so a
+screen reader announces a panel that is not on screen. **This is a consequence of the
+proper-noun sweep**, which is now enforced with an explicitly empty `ALLOWED` list, so the
+modal cannot diverge locally. **The decision:** either the picker takes its search label
+from a prop (two sites, two labels), or "the Library" is accepted as the name of the
+catalogue itself regardless of which surface is showing it. The second reading is why it
+was left alone.
+
+**I.5 · `components/three/Room.tsx` is the only CRLF blob in the repository, and it is
+stored that way on purpose-by-accident.** Lines 12–13 hold one lone CR and one lone LF — a
+bare-LF line inserted into a CRLF file, orphaning the previous line's CR. That trips git's
+binary heuristic, so autocrlf normalisation is skipped and the blob is committed CRLF:
+`git ls-files --eol` reports `i/-text` for this file and `i/lf` for every other tracked
+file in the repo. It entered in `7a85258` and is already on `main`.
+**Consequence worth knowing:** the file arrives CRLF on Linux CI too, because the CR is in
+the object rather than in the checkout — so it is the one file where a test splitting on
+`\n` sees a trailing `\r` on every platform. It is valid UTF-8 with zero NULs, so this is
+NOT the PowerShell mojibake trap. **Why it is not fixed here:** normalising it rewrites the
+whole file as one blob, which would bury a real diff and collide with anyone holding that
+file. It wants its own commit on a quiet tree.
+
+**Also worth knowing, and already fixed rather than open:** the comment stripper both copy
+sweeps used ran the block-comment regex first and globally, so an opening slash-star inside
+a LINE comment paired with the next real closing one and deleted everything between —
+fifty lines of live code in `app/onboarding/capture/page.tsx`, including two `setAnnounce`
+strings. A forbidden-vocabulary string planted inside that window kept the suite green;
+the identical string four lines past it went red. Both sweeps now use the character
+scanner in `tests/helpers/source.ts`, which was already there.
