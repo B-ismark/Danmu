@@ -1,21 +1,25 @@
-/** The scramble grid that `tests/suggest-tidiness.test.ts` freezes a specimen out of, and
- *  that `scripts/openroutes-sweep.mjs` sweeps in full.
- *
- *  **This file exists because those two had a copy each, and the drift between them would
- *  have been one-directional and silent.** The script's output is quoted *into* the test
- *  file as authority — the cut count, the trial count, the refusal seed — so a script whose
- *  generator had drifted would not have failed anything. It would have printed a table
- *  about a different population, and that table would have been believed, because the only
- *  thing tying the two together was a comment saying they matched.
- *
- *  A helper is the right home rather than `lib/`: nothing the app ships needs a scramble
- *  generator, and a module only tests and tooling import does not belong where it reads as
- *  shipped code. `tests/helpers/` is not collected by vitest's `include`, so this is never
- *  run as a suite.
- *
- *  The two encodings are the search's own and are kept in that form deliberately — a
- *  re-run must be able to name the same point rather than a magic number that has to be
- *  trusted. */
+// The scramble grid that `tests/suggest-tidiness.test.ts` freezes a specimen out of, and
+// that `scripts/openroutes-sweep.mjs` sweeps in full.
+//
+// **This file exists because those two had a copy each, and the drift between them would
+// have been one-directional and silent.** The script's output is quoted *into* the test
+// file as authority — the cut count, the trial count, the refusal seed — so a script whose
+// generator had drifted would not have failed anything. It would have printed a table
+// about a different population, and that table would have been believed, because the only
+// thing tying the two together was a comment saying they matched.
+//
+// A helper is the right home rather than `lib/`: nothing the app ships needs a scramble
+// generator, and a module only tests and tooling import does not belong where it reads as
+// shipped code. `tests/helpers/` is not collected by vitest's `include`, so this is never
+// run as a suite.
+//
+// The two encodings are the search's own and are kept in that form deliberately — a
+// re-run must be able to name the same point rather than a magic number that has to be
+// trusted.
+//
+// `//` rather than `/** */` because a docblock documents the NEXT declaration, and the
+// next thing here is `lcg`'s own docblock — two in a row, which `docblock-adjacency`
+// catches and which would leave this header describing nothing.
 
 /** Numerical Recipes' LCG constants. A generator of this file's own, so the scramble is a
  *  property of the grid rather than of whatever `solveLayout` happens to use — its rng is

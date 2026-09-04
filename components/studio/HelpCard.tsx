@@ -21,6 +21,11 @@ export function HelpCard({ title, onClose, children }: { title: string; onClose:
     <div
       className="ds-card"
       role="note"
+      // Making the card a tab stop makes it something a keyboard user LANDS on, and a
+      // landing place with no accessible name is announced as "note" and nothing else.
+      // Same `title` prop the visible header renders, so the name and the heading cannot
+      // disagree.
+      aria-label={title}
       // A scroll box needs to be focusable or a keyboard-only user cannot scroll it.
       // Firefox focuses an overflow container on its own; Chrome and Edge do not, so
       // without this the card is simply unreachable below its own fold in the two
