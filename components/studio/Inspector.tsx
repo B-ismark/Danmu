@@ -275,8 +275,16 @@ export function Inspector() {
   // Both Inspector panes are scroll boxes and both take it; see globals.css for why
   // the outer rail is the wrong box. If the `overflow` ever moves, the class moves
   // with it, because it is the scrollbar that makes the two boxes differ.
+  //
+  // `flex: 0 1 auto` + `min-height: 0`, not `height: 100%`. This pane is no longer a
+  // direct child of `.rail`: it shares a scroll region with the View section (see
+  // `shell-parts.tsx`), and `height: 100%` inside that region would claim all of it
+  // and push its sibling out — which is the defect that region exists to fix. It
+  // keeps its own `overflow: auto` because it keeps `rail-scroll`, and the class and
+  // the overflow travel together: it is the scrollbar that makes this the box
+  // `@container rail` should measure.
   return (
-    <div className="rail-scroll" style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', height: '100%', minWidth: 0 }}>
+    <div className="rail-scroll" style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', flex: '0 1 auto', minHeight: 0, minWidth: 0 }}>
       <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--hairline)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <EditableText
@@ -759,7 +767,7 @@ function WallInspector({ index }: { index: number }) {
   const current = room.wallColors?.[index] ?? SCENE.wall;
 
   return (
-    <div className="rail-scroll" style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', height: '100%', minWidth: 0 }}>
+    <div className="rail-scroll" style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', flex: '0 1 auto', minHeight: 0, minWidth: 0 }}>
       <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--hairline)' }}>
         <div style={{ fontSize: 16, fontWeight: 500, letterSpacing: '-0.01em' }}>{name}</div>
         <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>
