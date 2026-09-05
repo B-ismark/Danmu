@@ -192,6 +192,7 @@ describe('what a shape actually occupies, against the one box every consumer rea
     const AMOUNTS = [0, 0.25, 0.5, 0.75, 1];
     const lines: string[] = [];
     const moves = new Map<Shape, number>();
+    const ramps = new Map<Shape, number[]>();
     let inward = 0;
     for (const shape of ['wardrobe', 'nightstand'] as Shape[]) {
       const dim = PART_LIBRARY.find((l) => l.shape === shape)!.dimMM as [number, number, number];
@@ -203,6 +204,7 @@ describe('what a shape actually occupies, against the one box every consumer rea
       openAmount = 0;
       const moved = Math.max(...reach) - Math.min(...reach);
       moves.set(shape, moved);
+      ramps.set(shape, reach);
       // Monotone DOWN across the whole ramp: opening the piece makes its drawn footprint
       // smaller at every step. A door or a drawer cannot do that by moving outward.
       const shrinks = reach.every((v, i) => i === 0 || v <= reach[i - 1] + 1e-9) && moved > 1;
@@ -215,10 +217,7 @@ describe('what a shape actually occupies, against the one box every consumer rea
     console.log(
       '\nOPEN vs SHUT — furthest the geometry reaches outside `dimMM`, mm, at open =' +
         ` ${AMOUNTS.join(' / ')}\n` +
-        lines.join('\n') +
-        '\n  `wardrobe` swinging INWARD is a finding, not a measurement artefact: at any' +
-        '\n  open > 0 its bounds are exactly the declared box, so the doors are inside the' +
-        '\n  carcass. See the note in this test and § 4.6.',
+        lines.join('\n'),
     );
     // PER SHAPE, not a maximum over them. Written as one `Math.max` across both rows it
     // was decoration for the nightstand: zeroing its drawer slide outright left the
@@ -227,15 +226,27 @@ describe('what a shape actually occupies, against the one box every consumer rea
     for (const shape of moves.keys()) {
       expect(moves.get(shape), `${shape} does not move at all as it opens`).toBeGreaterThan(1);
     }
-    // The finding, pinned so that fixing the renderer fails this test rather than passing
-    // it silently. `WardrobeGeo` rotates each door group by `[0, dir * swing, 0]`, and a
-    // rotation about +Y carries local +x toward -z — so a door extending along +x from a
-    // hinge on the front face swings INTO the wardrobe. Flipping the sign sends the far
-    // edge to z = 0.824 at the library size, 524 mm proud of the face, and the ramp
-    // becomes monotone upward. That is a one-line change to a renderer, it wants an eye
-    // rather than a test, and it is deliberately not made here: this PR touches no
-    // production code. Update this expectation in the same commit as the fix.
-    expect(inward, 'shapes whose footprint shrinks as they open').toBe(1);
+    // This read `.toBe(1)` and pinned a DEFECT: `WardrobeGeo` rotated each door group by
+    // `[0, dir * swing, 0]`, and a rotation about +Y carries local +x toward -z, so a door
+    // extending along +x from a hinge on the front face swung into the carcass. The ramp
+    // read 12 / 0 / 0 / 0 / 0 — at any open above zero the wardrobe's bounds were exactly
+    // its declared box, which an outward-swinging door cannot produce. It is
+    // `-dir * swing` now and the ramp is 12 / 164 / 314 / 437 / 524.
+    //
+    // The expectation is kept rather than deleted, and this is the reason: the defect was
+    // invisible for as long as nothing measured a footprint with the doors open, so the
+    // check that matters is not "is the sign right" but "does opening a piece still push
+    // its geometry outward". A monotone ramp says both, and a sign flipped back fails on
+    // the first step rather than on a value someone has to recognise.
+    expect(inward, 'shapes whose footprint shrinks as they open').toBe(0);
+    for (const [shape, ramp] of ramps) {
+      for (let i = 1; i < ramp.length; i++) {
+        expect(
+          ramp[i],
+          `${shape} reaches less far at open ${AMOUNTS[i]} than at ${AMOUNTS[i - 1]}`,
+        ).toBeGreaterThan(ramp[i - 1]);
+      }
+    }
   });
 
   it('prints the table', () => {

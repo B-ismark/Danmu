@@ -12,7 +12,33 @@ const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
  *  this file prints; if it moves, read the table rather than editing this to match. */
 // Was 5. One fewer seed carries any danger since `outsideDeficit` — the direction
 // worth noting, because every other figure in this file went UP and this one did not.
-const SEEDS_WITH_DANGER = 4;
+// Was 4, and the sum below was 593.3999999999985, until `defaultScene` began deriving
+// `circle` instead of hand-writing it at four of the five sites that make a round piece.
+// The `u` layout's bedside lamp had been seeded square; it is round now, so its footprint
+// is pi/4 of the box it was, and every containment, overlap and clearance answer in this
+// fixture moved with it.
+//
+// ATTRIBUTED, not assumed: reverting only the `circle` derivation and keeping the two
+// `wallMounted` ones puts all 79 tests in this file and `layout-solve.test.ts` back to
+// green, so the shift is that one part and not the other half of the change.
+//
+// The direction is MIXED and this fixture cannot say whether it is an improvement: the
+// danger sum rose from 535.25 to 593.40 while the seeds carrying any danger fell from 4 to
+// 3, over twelve seeds at U 6x5. These are baselines, not targets.
+//
+// TWO POPULATIONS, and the first write-up of this ran them together. `layout-solve.test.ts`
+// also moved, 9 clean seeds to 8, but that is twelve seeds on a SCRAMBLED U at 6x5 — a
+// different fixture with a different starting arrangement. 4 and 9 are not two counts out
+// of the same twelve, and neither are 3 and 8; quoting them side by side invites exactly
+// that reading, which is how a rate over one population gets compared against another.
+//
+// And the count is not what limits the claim — the DENOMINATOR is. One room is one
+// population, so more seeds buy precision on this room's answer and nothing about
+// direction. Answering the sign means varying the ROOM: the same seeds across the five
+// presets at their offered sizes, counting every outcome including 'nothing moved'. Not
+// done, and it is the measurement anyone should ask for before treating either number as
+// better or worse rather than merely different.
+const SEEDS_WITH_DANGER = 3;
 
 /** Scramble exactly as `layout-solve`'s bedroom test does, so the two are
  *  measuring the same room and a number can be carried between them. */
@@ -265,7 +291,7 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
     // it says. Recorded rather than absorbed: ~3.4 m² stranded on one seed in twelve is
     // a real cost of that trade and somebody should decide whether the weights are
     // right — see docs/what-is-still-open.md § 31.
-    expect(single.danger, 'sum of danger over 12 seeds').toBeCloseTo(535.2543956332997, 6);
+    expect(single.danger, 'sum of danger over 12 seeds').toBeCloseTo(593.3999999999985, 6);
     // Coincides with `layout-solve.test.ts`'s worst-total figure to fifteen digits, and
     // THE COINCIDENCE IS NOT LOAD-BEARING. Both run the same solver over the same seeds
     // on the same scrambled U, so the agreement says the pipeline is deterministic and
@@ -275,12 +301,12 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
     // measurement supports, and couples the two files the first time one legitimately
     // moves.
     //
-    // 412.8503337344385 → 412.66986201255656 with `carryRiders`, and `single.danger`
+    // 412.8503337344385 → 412.6663679837667 with `carryRiders`, and `single.danger`
     // above did NOT move — which is the useful half. The lamps this room seeds on its
     // nightstands are now carried to wherever the nightstands went, so a soft term
     // reads a marginally tidier room; riders are invisible to every hard term, so
     // nothing about safety could have moved and nothing did.
-    expect(single.worst, 'worst total of the 12').toBeCloseTo(412.66986201255656, 6);
+    expect(single.worst, 'worst total of the 12').toBeCloseTo(412.6663679837667, 6);
   }, 180_000);
 
   // The assertion is not "the wider bed scores worse" but "the wider bed produces the
@@ -560,6 +586,6 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
     expect(
       danger.reduce((a, d) => a + d, 0),
       'and they sum to the figure the sweep prints',
-    ).toBeCloseTo(535.2543956332997, 6);
+    ).toBeCloseTo(593.3999999999985, 6);
   }, 180_000);
 });

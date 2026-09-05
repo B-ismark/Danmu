@@ -966,7 +966,13 @@ describe('the room’s anchor is settled first', () => {
   // twelve-piece room is ~1.5 s and each test below asserts one fact about the same
   // run, so re-solving per test would be three times the wall clock for the same
   // numbers — and, worse, three separate runs to reconcile if they ever disagreed.
-  let cached: { rows: ReturnType<typeof costBreakdown>[]; unsolved: ReturnType<typeof costBreakdown> } | null = null;
+  let cached: {
+    rows: ReturnType<typeof costBreakdown>[];
+    unsolved: ReturnType<typeof costBreakdown>;
+    model: ReturnType<typeof prepare>;
+    movable: boolean[];
+    solved: Placement[];
+  } | null = null;
   function scrambledU() {
     if (cached) return cached;
     const poly = footprintForLayout('u', 6, 5);
@@ -993,7 +999,13 @@ describe('the room’s anchor is settled first', () => {
         NAV_CELL,
       ),
     );
-    cached = { rows, unsolved: costBreakdown(model, at(messy), DEFAULT_WEIGHTS, NAV_CELL) };
+    cached = {
+      rows,
+      unsolved: costBreakdown(model, at(messy), DEFAULT_WEIGHTS, NAV_CELL),
+      model,
+      movable: messy.map((q) => !q.wallMounted),
+      solved: solveLayout(messy, poly, messy.map(() => false), { seed: SEEDS[0] }).placements,
+    };
     return cached;
   }
 
@@ -1108,7 +1120,13 @@ describe('the room’s anchor is settled first', () => {
     const { rows } = scrambledU();
     const clean = rows.filter((r) => HARD_TERMS.every((k) => r[k] === 0)).length;
     expect(rows.length, 'twelve seeds, not whatever the fixture returned').toBe(12);
-    expect(clean, 'seeds ending with nothing on any hard term').toBe(9);
+    // Was 9, until `defaultScene` began deriving `circle` rather than hand-writing it:
+    // the `u` layout's bedside lamp had been seeded square and is round now, so this
+    // fixture's containment and overlap answers moved. Attributed by reverting only that
+    // half of the change, which puts this and `bed-rung-safety.test.ts` back to green.
+    // A baseline, not a target, and twelve seeds on one scrambled U cannot say whether
+    // one fewer clean seed is worse — only that it is different.
+    expect(clean, 'seeds ending with nothing on any hard term').toBe(8);
     // Was 7 clean / 92.1018827121954 worst. Both moved when `c.outside` learned to see
     // an overhang (`outsideDeficit`), and the direction of each is the point:
     //
@@ -1124,17 +1142,66 @@ describe('the room’s anchor is settled first', () => {
     //     rather than a regression — but ~3.4 m² of stranded floor on one seed in twelve
     //     is a real cost of this change and is recorded here rather than absorbed.
     //
-    // 412.85033373443853 → 412.66986201255656 when `carryRiders` landed. The whole
+    // 412.85033373443853 → 412.6663679837667 when `carryRiders` landed. The whole
     // 0.18 is soft: the two bedside lamps are now scored where the nightstands
     // actually took them instead of where the annealer had left them hanging, and
     // `alignment` / `balance` read a slightly tidier room for it. Nothing hard moved
-    // — `clean` is still 9 and `outside` is still 0.00 on all twelve — which is the
-    // whole reason a rider can be carried after the search rather than inside it.
-    expect(Math.max(...rows.map((r) => r.total)), 'worst total').toBeCloseTo(412.66986201255656, 6);
-    expect(
-      rows.map((r) => r.outside),
-      'the solver leaves nothing outside the room on any seed',
-    ).toEqual(rows.map(() => 0));
+    // — `outside` is still nothing on all twelve — which is the whole reason a rider can
+    // be carried after the search rather than inside it. (`clean` was 9 here and is 8;
+    // see the note on that assertion above.)
+    expect(Math.max(...rows.map((r) => r.total)), 'worst total').toBeCloseTo(412.6663679837667, 6);
+    // A TOLERANCE, and it is a physical one rather than a number chosen to pass. This
+    // read `toEqual(rows.map(() => 0))`, which was available only while every footprint in
+    // the fixture was an axis-aligned box. Once the `u` layout's bedside lamp became round
+    // — `defaultScene` derives `circle` now instead of hand-writing it — two of the twelve
+    // seeds came back at 2.0e-13 and 4.7e-13.
+    //
+    // WHERE THAT COMES FROM, because the first version of this comment guessed and was
+    // wrong. `c.outside` is `max(outsideShare, deficit / radius)` (`layout-score.ts:712`).
+    // `outsideShare` samples a 3x3 grid and returns `out / 9`, so the only values it can
+    // produce are 0, 1/9, 2/9 … 1 — it is arithmetically incapable of 2e-13, and its
+    // early-out returns a bare 0 or 1. The noise is the OTHER arm: `outsideDeficit`'s walk
+    // over `footCorners`, which for a round piece is the polygonised ellipse's vertices
+    // rather than four box corners. `radius[i]` is positive for every part, circle or not,
+    // so that arm was never gated on the flag — what changed is which points it is handed.
+    //
+    // And it is not an area. The raw term is a 0..1 SHARE — `outsideShare` is a count over
+    // a count, `deficit / radius` a length over a length — and what `costBreakdown` reports
+    // here is that share times `DEFAULT_WEIGHTS.outside`, which is 1000. So the noise is
+    // 2e-16 of a share and this tolerance is 1e-12 of one. Calling any of it m² was a unit
+    // slip, and it matters more than usual here because the whole question is which
+    // magnitudes are negligible.
+    //
+    // The ramp below is evidence rather than assurance, and it is worth being exact about
+    // what it does NOT show. It pushes one movable piece along +x, which is not necessarily
+    // toward the nearest wall, so it says nothing about the SENSITIVITY of the term — the
+    // piece stays inside for a metre and then reads a fully-clamped 1000. What it does show
+    // is the gap: the term is reachable from this fixture, and the smallest cost it ever
+    // reports is about fifteen orders of magnitude above both the noise and this tolerance.
+    // Establishing that a 20 mm overhang specifically is caught wants a push aimed at the
+    // nearest boundary, and that is not written yet.
+    const { model, movable, solved } = scrambledU();
+    const [probe] = movable.flatMap((m, i) => (m ? [i] : []));
+    const ramp: Array<[number, number]> = [];
+    for (const push of [0, 0.02, 0.1, 0.5, 1, 3, 8]) {
+      const moved = solved.map((pl, i) => (i === probe ? { ...pl, x: pl.x + push } : pl));
+      ramp.push([push, costBreakdown(model, moved, DEFAULT_WEIGHTS, NAV_CELL).outside]);
+    }
+    // Reported, because the number a reader wants is the gap between the noise and the
+    // smallest real overhang — not either one alone.
+    console.log(
+      `\n  outside vs a piece pushed toward the wall, m of push → cost share\n` +
+        ramp.map(([p, v]) => `    ${(p * 1000).toFixed(0).padStart(4)} mm  ${v.toExponential(2)}`).join('\n'),
+    );
+    const firstReal = ramp.find(([, v]) => v > 1e-9);
+    expect(firstReal, 'pushing a piece out must eventually cost something').toBeDefined();
+    // Orders of magnitude, not a margin: the smallest overhang this fixture can produce
+    // must sit far above the tolerance, or the tolerance is hiding real defects.
+    expect(firstReal![1], 'the smallest real overhang is barely above the noise').toBeGreaterThan(1e-6);
+
+    for (const [i, r] of rows.entries()) {
+      expect(r.outside, `seed ${i} leaves floor outside the room`).toBeLessThan(1e-9);
+    }
   }, 120_000);
 
   it('can tell the solved room from the scrambled one it started from', () => {

@@ -10,6 +10,7 @@ import {
   CATEGORIES,
   isWallMountedPart,
   lightFor,
+  normalizeStoredParts,
   type ScenePart,
 } from '../lib/scene-spec';
 import { LAYOUT_IDS, type RoomData } from '../lib/storage';
@@ -607,15 +608,31 @@ describe('every part the app builds agrees with the derived mount flag', () => {
       for (const [w, d] of SIZES) {
         for (const p of defaultScene(layoutId, w, d)) {
           swept++;
-          // `!!`, not `!==`. `wallMounted` is OPTIONAL on `ScenePart` and floor-standing
-          // furniture simply omits it, so ABSENT and `false` are the same answer — which
-          // is not a shortcut here but what every reader actually does: `floorBlockers`,
-          // `isObstacle`, `overlapsSomething` and `movable` all test `!p.wallMounted`.
-          // The first version of this assertion compared strictly and reported 165 of
-          // 323 parts as wrong, every one of them `stored=undefined derived=false`.
-          const derived = isWallMountedPart(p.category, p.shape);
-          if (!!p.wallMounted !== derived) {
-            wrong.push(`${layoutId} ${w}x${d} · ${p.name} (${p.shape}) stored=${p.wallMounted} derived=${derived}`);
+          // EVERY derived flag, asked through the function that owns the question, rather
+          // than one flag named here. `normalizeStoredParts` returns the SAME OBJECT when
+          // it has nothing to correct, so identity is the whole assertion and there is no
+          // list in this file to keep in step with that one.
+          //
+          // Written as a `wallMounted` comparison it could not see `circle`, which has the
+          // identical failure mode and had it: the seeder hand-wrote `{ circle: true }` at
+          // four of the five places it makes a round piece, and the `u` layout's bedside
+          // lamp was seeded square. This sweep swept that scene at five sizes and passed,
+          // because it was asking about the other flag. **A sweep is only as wide as the
+          // question it asks**, and naming the flags here would have made adding a third
+          // one a silent gap in exactly the same way.
+          //
+          // `!!`-style tolerance is `normalizeStoredParts`' own: it writes `|| undefined`,
+          // so ABSENT and `false` are one answer, which is what every reader does —
+          // `floorBlockers`, `isObstacle`, `overlapsSomething` and `movable` all test
+          // `!p.wallMounted`. An earlier version of this assertion compared strictly and
+          // reported 165 of 323 parts as wrong, every one `stored=undefined derived=false`.
+          if (normalizeStoredParts([p])[0] !== p) {
+            const fixed = normalizeStoredParts([p])[0];
+            wrong.push(
+              `${layoutId} ${w}x${d} · ${p.name} (${p.shape}) ` +
+                `stored wallMounted=${p.wallMounted} circle=${p.circle} → ` +
+                `derived wallMounted=${fixed.wallMounted} circle=${fixed.circle}`,
+            );
           }
         }
       }
