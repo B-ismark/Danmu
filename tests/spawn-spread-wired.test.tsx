@@ -18,6 +18,7 @@ import 'fake-indexeddb/auto';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { footprintForLayout } from '@/lib/footprint';
+import { groundY, verticalExtent } from '@/lib/physics';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 
@@ -68,6 +69,47 @@ describe('the Library gives each click its own spot', () => {
 
     // The other half of the report. Before this, all three were `rot 0`.
     expect(new Set(beds.map((b) => Math.round((b.rot * 180) / Math.PI))).size).toBeGreaterThan(1);
+  });
+
+  it('places against the room as it STANDS, not as it was authored', () => {
+    // § H.3 finding 5's caller half. `spawn` read `useScene.getState().parts` — the
+    // AUTHORED array — while a drag writes only `useStudio.positions`. So a piece was
+    // placed against a room the user had already rearranged.
+    //
+    // The fixture is the smallest thing that can tell the two apart: one desk,
+    // authored at the origin and dragged away. A table lamp is tabletop-prone, so it
+    // rests on whatever the placement path believes is under it. Reading the authored
+    // array it believes a desk is at the origin and hangs the lamp at that desk's top
+    // over empty floor; reading the resolved one it finds nothing there and uses the
+    // floor.
+    //
+    // The unit half (`tests/spawn-resolved-parts.test.ts`) proves `placeNewPart` gives
+    // two different answers for the two arrays. It structurally CANNOT see which array
+    // the Library hands it, which is this file's whole reason to exist.
+    render(<PlanPage />);
+    useScene.setState({
+      parts: [
+        {
+          id: 'desk-1', name: 'Desk', category: 'desk', shape: 'desk-standard',
+          dimMM: [1400, 700, 750], pos: [0, 0, 0], rot: 0, locked: false,
+        },
+      ],
+    });
+    // The drag. Only the override map, because that is all a drag ever writes.
+    useStudio.setState({ positions: { 'desk-1': [2, 0, 1.5] } });
+
+    addFromLibrary('Table lamp', 1);
+    const lamp = useScene.getState().parts.find((p) => p.category === 'lamp');
+    expect(lamp, 'the Library click added nothing').toBeTruthy();
+
+    const deskTop = verticalExtent('desk', 'desk-standard', [1400, 700, 750], 0)[1];
+    const floor = groundY('lamp', 'lamp-table', [250, 250, 500], useScene.getState().room.height);
+
+    // Both ends named. Asserting only "is on the floor" would also pass for a path
+    // that never consults supports at all, and asserting only "is not at desk height"
+    // would pass for a lamp put anywhere else entirely.
+    expect(lamp!.pos[1], `lamp at ${lamp!.pos[1]}, desk top ${deskTop}, floor ${floor}`).toBeCloseTo(floor, 6);
+    expect(Math.abs(lamp!.pos[1] - deskTop)).toBeGreaterThan(0.5);
   });
 
   it('leaves the first piece into an empty room where it always went', () => {

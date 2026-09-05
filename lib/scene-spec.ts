@@ -21,7 +21,7 @@ import {
   CURTAIN_STANDOFF,
   snapToWall,
   pullToward,
-  findSupportUnder,
+  findSupportDetailed,
   isTabletopProne,
   verticalExtent,
 } from './physics';
@@ -2780,7 +2780,7 @@ export function placeNewPart(
    *  part takes the wall nearest it; everything else is placed there, kept inside
    *  the room by `intoRoom` below. */
   at?: [number, number],
-): { pos: [number, number, number]; rot: number; wallMounted: boolean } {
+): { pos: [number, number, number]; rot: number; wallMounted: boolean; supportId: string | null } {
   const wallMounted = isWallMountedPart(cat, shape);
   const ax = at?.[0] ?? 0;
   const az = at?.[1] ?? 0;
@@ -2929,14 +2929,18 @@ export function placeNewPart(
     // centred-geometry test but do not ride a wall — hence `ridesWall`.
     if (room.footprint && ridesWall(cat, shape)) {
       const snapped = snapToWall([ax, 0, az], dimMM, room.footprint, wallStandoff(shape));
-      return { pos: [snapped.x, y, snapped.z], rot: snapped.rot ?? 0, wallMounted };
+      // `supportId: null` for the whole wall-mounted family, and it is a fact rather
+      // than a placeholder: a piece fixed to a wall or hung from the slab does not REST
+      // on furniture, so there is no riding edge to record. `isTabletopProne` is false
+      // for every one of them, so the probe below never ran for these branches either.
+      return { pos: [snapped.x, y, snapped.z], rot: snapped.rot ?? 0, wallMounted, supportId: null };
     }
     // Ceiling family: hung at `y`, where it was aimed — or in the middle of the room
     // when it was aimed nowhere. `ceilingSpot` owns that choice; this line used to
     // state the rule itself and said "in the middle of the room" for a commit after
     // the rule had been reversed twenty lines above it.
     const [cx, cz] = ceilingSpot();
-    return { pos: [cx, y, cz], rot: 0, wallMounted };
+    return { pos: [cx, y, cz], rot: 0, wallMounted, supportId: null };
   }
   // …facing the wall it belongs against, which used to be a flat `rot: 0` for every
   // floor-standing piece there is. Add three beds to three different walls and all
@@ -2990,9 +2994,14 @@ export function placeNewPart(
   // support probe reads the FINAL point, not the rotation-blind one above: a piece
   // asks what it can stand on where it is going to be standing.
   const [fx, fz] = intoRoom(ax, az, rot);
-  const support = isTabletopProne(cat) ? findSupportUnder(existing, '__new__', fx, fz, dimMM) : null;
-  const y = support !== null && support > 0.3 ? support : 0;
-  return { pos: [fx, y, fz], rot, wallMounted };
+  const support = isTabletopProne(cat) ? findSupportDetailed(existing, '__new__', fx, fz, dimMM) : null;
+  // The id and the height are gated on ONE condition on purpose. A piece whose
+  // support fails the 0.3 m bar floors, and recording an edge to something it is not
+  // standing on would be worse than recording none: `deriveRiderYs` rule 2 honours a
+  // recorded edge unconditionally, so a wrong one lifts the piece rather than being
+  // ignored. Two expressions reading `support` separately is exactly how they drift.
+  const seated = support !== null && support.y > 0.3;
+  return { pos: [fx, seated ? support!.y : 0, fz], rot, wallMounted, supportId: seated ? support!.id : null };
 }
 
 /** Clear air left between a fanned-out piece and whatever it stepped around. */

@@ -22,11 +22,10 @@
 // the ordinary search box inside `LibraryPicker` now. One field, not two tabs.
 
 import { useEffect } from 'react';
-import { v4 as uuid } from 'uuid';
-import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 
-import { placeNewPart, openSpotForNewPart, type LibraryItem, type ScenePart } from '@/lib/scene-spec';
+import { type LibraryItem, type ScenePart } from '@/lib/scene-spec';
+import { addPieceToRoom } from '@/lib/add-piece';
 import { Icon } from '@/components/ui/Icon';
 import { IconButton } from '@/components/ui/primitives';
 import { LibraryPicker } from './LibraryPicker';
@@ -139,15 +138,24 @@ export function CatalogToggle() {
  *  `undefined` for the first piece into an empty room, which is `placeNewPart`'s own
  *  no-aim behaviour unchanged; the drag-and-drop paths in `PlanView` and `Room` do not
  *  call it at all, because there the user aimed and being placed where you aimed is a
- *  promise. */
-function spawn(category: ScenePart['category'], shape: ScenePart['shape'], dimMM: [number, number, number], name: string) {
-  const { room, parts, addPart } = useScene.getState();
-  const aim = openSpotForNewPart(category, shape, dimMM, room, parts);
-  const { pos, rot, wallMounted } = placeNewPart(category, shape, dimMM, room, parts, aim);
-  const id = `${category}-${uuid().slice(0, 6)}`;
-  addPart({ id, category, name, shape, pos, rot, dimMM, locked: false, wallMounted });
-  useStudio.getState().setSelected(id);
-  return id;
+ *  promise.
+ *
+ *  The placing itself is `addPieceToRoom` (`lib/add-piece.ts`), shared with both
+ *  tabs' drop handlers — see there for why it reads the parts itself rather than
+ *  taking them.
+ *
+ *  `silent` is for the MANY case only. One press that adds seven pieces should say
+ *  "7 pieces added.", not name seven of them in a row; one press that adds one
+ *  should name it, which is what the 2D drop has always done and what neither this
+ *  path nor the 3D drop did. Three ways to add a piece and one of them spoke. */
+function spawn(
+  category: ScenePart['category'],
+  shape: ScenePart['shape'],
+  dimMM: [number, number, number],
+  name: string,
+  opts?: { silent?: boolean },
+) {
+  return addPieceToRoom({ label: name, category, shape, dimMM }, undefined, opts);
 }
 
 /** Several at once, from a marked set.
@@ -165,7 +173,7 @@ function spawn(category: ScenePart['category'], shape: ScenePart['shape'], dimMM
  *  placed, the loop really does step around what it has already put down. */
 function spawnMany(items: LibraryItem[]) {
   const ids: string[] = [];
-  for (const item of items) ids.push(spawn(item.category, item.shape, [...item.dimMM], item.label));
+  for (const item of items) ids.push(spawn(item.category, item.shape, [...item.dimMM], item.label, { silent: true }));
   if (ids.length === 0) return;
   useStudio.getState().setSelection(ids, ids[ids.length - 1]);
   announce(`${ids.length} ${ids.length === 1 ? 'piece' : 'pieces'} added.`);
