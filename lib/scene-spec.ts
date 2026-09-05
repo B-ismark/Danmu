@@ -859,7 +859,12 @@ export function defaultScene(
         rot: o.rot,
         dimMM: clampDims(category, shape, o.dimMM),
         locked: false,
-        wallMounted: true,
+        // Derived here too, though a door and a window are both wall-mounted and both
+        // square, so neither answer changes. The point is that the seeder now has ONE
+        // answer at every site it builds a part: this was the fourth, and a hand-set
+        // flag that happens to be right is indistinguishable from one that is not.
+        wallMounted: isWallMountedPart(category, shape) || undefined,
+        circle: isRoundPart(shape) || undefined,
       });
     }
     /** The floor an opening claims: a door's swing, and the route in from it. Nothing
@@ -902,6 +907,21 @@ export function defaultScene(
         rot: angleDelta(frame.yaw + (opt.turn ?? 0), 0),
         dimMM: dim,
         locked: false,
+        // DERIVED, for the reason the `wallMounted` comment in `dress`'s `add` gives at
+        // length: a flag hand-set at the call sites is a flag that is right at the sites
+        // someone remembered. `circle` was set that way at four of the five places this
+        // seeder makes a round piece, and the fifth — the `u` layout's bedside lamp — was
+        // seeded square. `normalizeStoredParts` re-derives both flags, but ONLY on the
+        // three paths that load a persisted snapshot; the seed path hands `defaultScene`
+        // straight to `setParts`, by design, because the seeder is supposed to author it.
+        // So that lamp had a square footprint in a fresh room and a round one after a save
+        // and a reload, in both the plan and the collision test, while the 3D tab drew a
+        // cylinder throughout.
+        //
+        // `|| undefined` matches what every reader does: the field is optional and absent
+        // is the same answer as `false`.
+        circle: isRoundPart(shape) || undefined,
+        wallMounted: isWallMountedPart(category, shape) || undefined,
         ...opt.extra,
       };
       if (!seats(candidate, parts, poly)) return null;
@@ -1005,7 +1025,7 @@ export function defaultScene(
         uTries.map((u) => ({ u, v: vSofa, turn: Math.PI })),
       );
       const uGroup = sofa ? frameU(f, sofa) : uBase;
-      place('tv', screen.name, 'tv', screen.dimMM, f, uGroup, 0.06, { extra: { wallMounted: true } });
+      place('tv', screen.name, 'tv', screen.dimMM, f, uGroup, 0.06);
 
       // 450 mm off the sofa — the middle of layout-rules' reach-from-the-seat band —
       // but never through the screen wall behind it. Pulling the sofa forward for a
@@ -1044,7 +1064,7 @@ export function defaultScene(
           { u: f.width / 2 - 0.4, v: 0.4 },
           { u: -(f.width / 2 - 0.4), v: f.depth - 0.4 },
         ],
-        { circle: true },
+        {},
         sofa,
         true,
       );
@@ -1089,7 +1109,6 @@ export function defaultScene(
           { u: f.width / 2 - 0.25, v: vSofa },
           { u: -(f.width / 2 - 0.25), v: vSofa },
         ],
-        { circle: true },
       );
     };
 
@@ -1261,7 +1280,6 @@ export function defaultScene(
           { u: 0, v: 0.4 },
           { u: 0, v: f.depth / 2 },
         ],
-        { circle: true },
       );
     };
 
@@ -1624,6 +1642,8 @@ function dress(
       // `extra` can still override for a piece that genuinely needs it, and nothing
       // does.
       wallMounted: isWallMountedPart(category, shape),
+      // Same rule, same reason, the other flag. See `place` above.
+      circle: isRoundPart(shape) || undefined,
       ...extra,
     });
   };
@@ -1689,9 +1709,7 @@ function dress(
   if (table >= 0) {
     const t = at(table);
     // Ceiling-anchored, so `groundY` decides the height rather than a number here.
-    add('lamp', 'Pendant', 'lamp-pendant', [350, 350, 400], [t.pos[0], 0, t.pos[2]], t.rot, {
-      circle: true,
-    });
+    add('lamp', 'Pendant', 'lamp-pendant', [350, 350, 400], [t.pos[0], 0, t.pos[2]], t.rot);
     const last = parts[parts.length - 1];
     last.pos[1] = groundY('lamp', 'lamp-pendant', last.dimMM, height);
   }
@@ -2587,7 +2605,9 @@ export function selectionForPick(parts: ScenePart[], id: string, current: readon
  *
  *  Roundness is a property of the SHAPE, and until this existed it was written down in
  *  two other places instead — `CATEGORY_DEFAULTS.circle`, which only the detection
- *  builder read, and four hand-written `{ circle: true }` literals in the seeder. The
+ *  builder read, and four hand-written `{ circle: true }` literals in the seeder — which
+ *  covered four of the five places that seeder makes a round piece, and the fifth seeded
+ *  the `u` layout's bedside lamp square. Every builder derives it now. The
  *  add path had it nowhere at all: `LibraryItem` has no such field and `spawn` never set
  *  one, so **every piece added from the Library was square-footed, the ceiling fan
  *  included** — the same shape drawn as a circle when a photo found it and as a square
