@@ -23,10 +23,21 @@ const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 // green, so the shift is that one part and not the other half of the change.
 //
 // The direction is MIXED and this fixture cannot say whether it is an improvement: the
-// danger sum rose while the number of seeds carrying any danger fell, over twelve seeds
-// on one scrambled U. These are baselines, not targets, and a solver descent re-routed by
-// a changed footprint is exactly the case where one fixture establishes a difference and
-// not its sign.
+// danger sum rose from 535.25 to 593.40 while the seeds carrying any danger fell from 4 to
+// 3, over twelve seeds at U 6x5. These are baselines, not targets.
+//
+// TWO POPULATIONS, and the first write-up of this ran them together. `layout-solve.test.ts`
+// also moved, 9 clean seeds to 8, but that is twelve seeds on a SCRAMBLED U at 6x5 — a
+// different fixture with a different starting arrangement. 4 and 9 are not two counts out
+// of the same twelve, and neither are 3 and 8; quoting them side by side invites exactly
+// that reading, which is how a rate over one population gets compared against another.
+//
+// And the count is not what limits the claim — the DENOMINATOR is. One room is one
+// population, so more seeds buy precision on this room's answer and nothing about
+// direction. Answering the sign means varying the ROOM: the same seeds across the five
+// presets at their offered sizes, counting every outcome including 'nothing moved'. Not
+// done, and it is the measurement anyone should ask for before treating either number as
+// better or worse rather than merely different.
 const SEEDS_WITH_DANGER = 3;
 
 /** Scramble exactly as `layout-solve`'s bedroom test does, so the two are
