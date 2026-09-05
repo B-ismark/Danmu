@@ -152,6 +152,27 @@ describe('what a shape actually occupies, against the one box every consumer rea
     }
   });
 
+  it('every shape actually draws something, so the table is not 138 rows of nothing', () => {
+    // Without this the file's only assertions were the `box` control and a row count, and
+    // EVERY OTHER RENDERER COULD RETURN null with all of it green: `prims` would be 0,
+    // `fill` 0, `overX` 0, and a shape drawing nothing reads exactly like a shape that
+    // fits its box perfectly. Both columns of `§ 4.6` would go to zero and the
+    // conclusion would flip to "the box is always right" with no test to say otherwise.
+    for (const r of rows) {
+      expect(r.prims, `${r.shape}/${r.size} draws no primitives at all`).toBeGreaterThan(0);
+    }
+    // `mirror-oval` is the one shape that draws only vertical planes, so it has no floor
+    // area by construction — and it is pinned from BOTH sides. Asserting only that the
+    // others are non-zero would let a second shape join it silently, and asserting only
+    // that this one is zero would survive it starting to draw a floor.
+    const flat = new Set(rows.filter((r) => r.fill === 0).map((r) => r.shape));
+    expect([...flat], 'shapes with no floor area at all').toEqual(['mirror-oval']);
+    for (const r of rows) {
+      if (r.shape === 'mirror-oval') expect(r.fill, `${r.shape}/${r.size}`).toBe(0);
+      else expect(r.fill, `${r.shape}/${r.size} covers none of its own box`).toBeGreaterThan(0);
+    }
+  });
+
   it('prints the table', () => {
     const f = (n: number, w: number, d = 0) => n.toFixed(d).padStart(w);
     console.log(

@@ -230,7 +230,18 @@ export function walk(node: ReactNode): WalkReport {
     }
 
     if (name === 'BoxInstances' || name === 'PlaneInstances') {
-      const items = (props.items as Array<{ pos: number[]; size: number[]; rot?: number[] }>) ?? [];
+      // MISSING and EMPTY are different answers and only one of them is legitimate.
+      // `?? []` alone made them one: rename the `items` prop and all four callers
+      // (`BookshelfGeo`'s spines, `ShoeRackGeo`'s slats, `CurtainGeo`'s folds,
+      // `RadiatorGeo`'s fins) contribute no primitives at all, every area in this
+      // instrument shrinks, and nothing anywhere says so. An absent prop is reported
+      // like any other thing the walk could not handle; a present, empty array is a
+      // renderer that legitimately drew none at this size.
+      if (!Array.isArray(props.items)) {
+        bump(rep.unhandled, `${name}.items`);
+        return;
+      }
+      const items = props.items as Array<{ pos: number[]; size: number[]; rot?: number[] }>;
       for (const it of items) {
         const child = xform(m, it.pos, it.rot);
         const [w, h, d] = it.size;
