@@ -581,19 +581,23 @@ describe('SolveResult.declinedTerms — which condition, not both conditions', (
     // that cannot fail with work the recursion does.
     //
     // **Measured rather than argued, and by someone who set out to refute it.** A peer
-    // reintroduced the hand-typed reverse fallback: it fails at the literal below and the
-    // identity two lines under it never runs. Moved ABOVE the two literals the identity
-    // becomes the first assertion to run and the same mutation then reports there instead
-    // — so the reorder only changes which of two co-firing lines speaks, and it makes the
-    // less useful one speak, since the literal names the string that was expected while
-    // the identity can only name two values that differ. It is kept below, and kept: it is
-    // entailed by the two literals above rather than tautological, and it is the line a
+    // reintroduced the hand-typed reverse fallback and found the identity could not be
+    // reddened alone: the LITERAL fired and the identity below it never ran. So the two
+    // lines co-fire and only their order decides which one speaks — which is why the
+    // identity is first. Both report the same pair of values, because the literal's
+    // expected string IS the both-terms clause; the identity additionally carries the
+    // sentence naming the invariant, and the literal carries no message at all. A first
+    // version of this note claimed the opposite and was corrected by the measurement.
+    //
+    // It stays for the same reason it cannot fail alone: it is ENTAILED by the both-terms
+    // literal further up and the empty-fallback literal below, in every position rather
+    // than only this one, so it is a witness to the intent and never a gate. The line a
     // future edit that hand-types the fallback back would have to delete on purpose.
-    expect(impossibleClause([])).toBe('inside another one or through a wall');
     expect(
       impossibleClause([]),
       'the empty fallback and the both-terms clause are one sentence, not two',
     ).toBe(impossibleClause(['overlap', 'outside']));
+    expect(impossibleClause([])).toBe('inside another one or through a wall');
   });
 
   it('is filled on real impossible declines and empty on every other outcome', () => {
