@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planConvoy, resolveConvoy, convoyRestore, gestureFor, travellingWorld, type Convoy } from '@/lib/drag-convoy';
+import { planConvoy, resolveConvoy, convoyRestore, gestureFor, settleLead, travellingWorld, type Convoy } from '@/lib/drag-convoy';
 import { resolvePlacement } from '@/lib/drag-resolve';
 import { selectionForPick, type ScenePart } from '@/lib/scene-spec';
 import type { Poly } from '@/lib/geometry';
@@ -67,6 +67,84 @@ function carry(
     roomHeight: H,
     memberHasPosOverride,
   });
+}
+
+/**
+ * What a CALLER does, which `carry` deliberately does not: resolve the lead at the
+ * pointer FIRST, then settle it against its set — `settleLead`, exactly as both
+ * `PlanView.moveTo` and `Draggable` do.
+ *
+ * **A fixture built on `carry` alone can sit in a state the app cannot reach**, and
+ * the first version of every guard below did. `carry` hands `resolveConvoy` a raw
+ * pointer position; a caller hands it a clamped one. So a 500 mm lead at x = 2 asked
+ * for +3.9 arrives at 5.9 here and at its own clamp of 5.75 in the app — and with the
+ * lead binding 110 mm before the member, `chosen.valid` never goes false and the
+ * slide limit is never entered at all. The fixtures were measuring a door the
+ * application does not walk through.
+ */
+function dragged(
+  world: ScenePart[],
+  draggedId: string,
+  selection: string[],
+  to: [number, number],
+  opts: {
+    parentIds?: Record<string, string>;
+    snapMode?: Parameters<typeof resolvePlacement>[0]['snapMode'];
+  } = {},
+) {
+  const lead = world.find((q) => q.id === draggedId)!;
+  const startPos = lead.pos;
+  const convoy = planConvoy({
+    draggedId,
+    parts: world,
+    selection,
+    parentIds: opts.parentIds ?? {},
+    footprint: ROOM,
+    roomHeight: H,
+  });
+  const at = (x: number, z: number) =>
+    resolvePlacement({
+      part: lead,
+      rawX: x,
+      rawZ: z,
+      rot: lead.rot,
+      dim: lead.dimMM,
+      // Same rule as the two callers: the travelling company is SHIFTED into place
+      // rather than filtered out, or `collidesAt` cannot see it.
+      parts:
+        convoy.travelling.size > 1
+          ? travellingWorld(convoy, world, x - startPos[0], z - startPos[2], convoy.own)
+          : world,
+      footprint: ROOM,
+      roomHeight: H,
+      snapMode: opts.snapMode ?? 'off',
+      currentY: startPos[1],
+      wallEdge: convoy.leadEdge,
+    });
+  const askConvoy = (l: ReturnType<typeof at>) =>
+    resolveConvoy({
+      gesture: 'move',
+      convoy,
+      draggedId,
+      pos: l.pos,
+      rot: l.rot,
+      startPos,
+      parts: world,
+      footprint: ROOM,
+      roomHeight: H,
+      memberHasPosOverride: () => false,
+    });
+  const asked = at(to[0], to[1]);
+  const settled = settleLead(at, askConvoy, asked);
+  return {
+    ...settled.co,
+    settled: settled.settled,
+    lead: settled.lead,
+    /** What the LEAD actually took, on each axis, relative to where it started. */
+    dx: settled.lead.pos[0] - startPos[0],
+    dz: settled.lead.pos[2] - startPos[2],
+    convoy,
+  };
 }
 
 function plan(draggedId: string, world: ScenePart[], selection: string[] = [], parentIds: Record<string, string> = {}) {
@@ -411,18 +489,29 @@ describe('resolveConvoy — where the company lands', () => {
     expect(posOf(r.moves, 'b')![0]).toBeCloseTo(3.2, 6);
   });
 
-  it('refuses as a UNIT when a member cannot follow, and names that member', () => {
-    // `c` is 0.4 m from the far wall in a 6 m room; asking the set to go 1 m right
-    // puts it through the plaster. The piece under the hand has room to spare, so
-    // the honest answer is the set's, not its.
+  it('SLIDES to the member that runs out of room, rather than refusing as a unit', () => {
+    // `far` is 0.4 m from the far wall in a 6 m room; asking the set to go 1 m right
+    // puts it through the plaster. The piece under the hand has room to spare, so the
+    // honest answer is the set's, not its.
+    //
+    // **This used to refuse and name `far`.** The user reported that as the set being
+    // "blocked" and chose sliding: a lone piece meeting a wall stops rather than
+    // refusing, and a set should not behave differently for having company.
     const world = [
       part({ id: 'a', pos: [1, 0, 1], dimMM: [800, 800, 400] }),
       part({ id: 'far', pos: [5.5, 0, 1], dimMM: [800, 800, 400] }),
     ];
     const c = plan('a', world, ['a', 'far']);
     const r = carry(c, 'a', world, [1, 0, 1], [2, 0, 1]);
-    expect(r.valid).toBe(false);
-    expect(r.blocked?.id).toBe('far');
+    expect(r.valid).toBe(true);
+    expect(r.blockedIds).toEqual([]);
+    // `far` stops exactly at its own clamp: 6 m room, 800 mm wide, so 5.6.
+    const far = r.moves.find((m) => m.id === 'far')!;
+    expect(far.pos[0]).toBeCloseTo(5.6, 9);
+    // And the LEAD comes back short by the same 0.1 m, which is the whole point. A
+    // caller that keeps its own answer puts the lead at 2.0 while `far` stops at 5.6,
+    // so the set arrives stretched; asserting only the member would pass for that.
+    expect(r.leadPos[0]).toBeCloseTo(1.1, 9);
   });
 
   it('refuses when a member would land in something that is staying put', () => {
@@ -804,12 +893,26 @@ describe('a ceiling piece is not a wall rider', () => {
     // A fan rides no wall, so it must not be pinned to one either.
     expect(c.members[0].edge).toBeNull();
 
-    // Push the set hard enough that the fan would have to leave the room. Under
-    // the old predicate the fan was excused from arriving short AND excused from
-    // the containment test, so this step was legal and the fan ended up outside.
+    // Push the set hard enough that the fan would have to leave the room. Under the
+    // old predicate the fan was excused from arriving short AND excused from the
+    // containment test, so this step was legal and the fan ended up outside.
+    //
+    // The set slides instead of refusing now, so this asserts the ORIGINAL intent
+    // directly rather than through a refusal: the fan is still held to real rigidity,
+    // and the proof is that it is inside the room. A fan excused from the containment
+    // test would sail past 5.6 here.
     const co = carry(c, 'chair', world, [1, 0, 2], [5.9, 0, 2]);
-    expect(co.valid).toBe(false);
-    expect(co.blocked?.id).toBe('fan');
+    expect(co.valid).toBe(true);
+    // Derived from the fan's own width rather than typed: 6 m room, so its clamp is
+    // 6 - FAN/2. Typing 5.6 here — the 800 mm fixtures' number — is exactly the slip
+    // this derivation removes.
+    const fanLimit = 6 - FAN[0] / 2000;
+    const mv = co.moves.find((m) => m.id === 'fan')!;
+    expect(mv.pos[0]).toBeCloseTo(fanLimit, 9);
+    // The set was limited BY the fan: the chair is 500 mm wide and could have reached
+    // 5.75 alone, so this is the fan's limit and not the lead's.
+    expect(co.leadPos[0]).toBeCloseTo(fanLimit, 9);
+    expect(fanLimit).toBeLessThan(6 - 0.5 / 2);
   });
 
   it('carries a fan member rigidly on a delta it can actually take', () => {
@@ -899,9 +1002,16 @@ describe('the world a member resolves against', () => {
     const world = [sofa, chair];
     const c = plan('sofa', world, ['sofa', 'chair']);
     // maxX - halfWidth is 5.75 for the chair, so a target of 5.79 is clipped 40 mm.
+    //
+    // That clip is a 40 mm SLIDE now rather than a refusal, and the constant is pinned
+    // just as hard the other way round: at RIGID_EPS = 50 mm the correction would be
+    // swallowed, the set would NOT be limited, and the lead would arrive at 2.79 with
+    // the chair stopped at 5.75 — deformed by 40 mm and reported valid.
     const co = carry(c, 'sofa', world, [2, 0, 3], [2.79, 0, 3]);
-    expect(co.valid).toBe(false);
-    expect(co.blocked?.id).toBe('chair');
+    expect(co.valid).toBe(true);
+    expect(co.leadPos[0]).toBeCloseTo(2.75, 9);
+    const mv = co.moves.find((m) => m.id === 'chair')!;
+    expect(mv.pos[0]).toBeCloseTo(5.75, 9);
   });
 
   it('pins a wall-riding member hard enough for the pin to matter', () => {
@@ -1080,22 +1190,35 @@ describe('a turn is not a translation, whatever the clamp did', () => {
 
 describe('every member that refused is reported, not just the first', () => {
   it('names one piece and outlines all of them', () => {
-    // Two chairs at the east end of the 6 m room, dragged 2 m further east. Both are
-    // pinned by the containment clamp, so neither arrives where the set sent it and
-    // both refuse. `blocked` is deliberately still ONE piece — a sentence naming
-    // four is a sentence nobody finishes — but the drawing has no such limit, and it
-    // used to inherit one: a set stopped by several pieces outlined one, the user
-    // moved it, tried again, and was stopped by the next.
+    // **A COLLISION, not a containment clip** — and that distinction is now the
+    // subject. A set clipped by the walls slides to the shortest member's limit and
+    // never refuses, so a wall fixture cannot reach this code at all: it would report
+    // `valid` with an empty `blockedIds` and this test would pin nothing. A member
+    // landing in something that is STAYING PUT is the case sliding cannot fix,
+    // because collision is a legality answer rather than a correction — there is no
+    // overshoot to subtract and so no shorter delta to try.
+    //
+    // `blocked` is deliberately still ONE piece: a sentence naming four is a sentence
+    // nobody finishes. The drawing has no such limit and used to inherit one, so a
+    // set stopped by several pieces outlined one, the user moved it, tried again, and
+    // was stopped by the next.
     const w = [
       part({ id: 'lead', pos: [1, 0, 1], dimMM: [800, 800, 400] }),
-      part({ id: 'east1', pos: [5, 0, 1], dimMM: [800, 800, 400] }),
-      part({ id: 'east2', pos: [5, 0, 3], dimMM: [800, 800, 400] }),
+      part({ id: 'm1', pos: [2, 0, 1], dimMM: [800, 800, 400] }),
+      part({ id: 'm2', pos: [2, 0, 3], dimMM: [800, 800, 400] }),
+      part({ id: 'col1', pos: [3.6, 0, 1], dimMM: [300, 1800, 2000], category: 'wardrobe', shape: 'wardrobe' }),
+      part({ id: 'col2', pos: [3.6, 0, 3], dimMM: [300, 1800, 2000], category: 'wardrobe', shape: 'wardrobe' }),
     ];
-    const c = plan('lead', w, ['lead', 'east1', 'east2']);
-    const co = carry(c, 'lead', w, [1, 0, 1], [3, 0, 1]);
+    const c = plan('lead', w, ['lead', 'm1', 'm2']);
+    // Both members go from 2.0 to 3.6 — exactly where a column is standing.
+    const co = carry(c, 'lead', w, [1, 0, 1], [2.6, 0, 1]);
     expect(co.valid).toBe(false);
-    expect(co.blocked?.id).toBe('east1');
-    expect([...co.blockedIds].sort()).toEqual(['east1', 'east2']);
+    expect(co.blocked?.id).toBe('m1');
+    expect([...co.blockedIds].sort()).toEqual(['m1', 'm2']);
+    // A refusal is NOT a slide: the lead keeps the delta the user asked for, so the
+    // caller reports the spot the gesture was refused at rather than a shorter one
+    // nobody requested.
+    expect(co.leadPos[0]).toBeCloseTo(2.6, 9);
   });
 
   it('is empty when the set can go', () => {
@@ -1333,11 +1456,11 @@ describe("a member's veto is for what this gesture broke", () => {
 // is the transferable part: the report arrived as a gesture and the mechanism is arithmetic,
 // so the DOM was never on the path to it. **Confirmed, with numbers**, below.
 //
-// What this does NOT settle is whether it is a defect. The set genuinely cannot go further —
-// `ns-r` would leave the room — so refusing is not wrong, it is just not what the user
-// expects from a gesture that still has room under the hand. Sliding to the limit instead of
-// refusing is a product decision and stays filed. These assertions pin the MECHANISM so that
-// decision is made against a measurement rather than against the report.
+// The decision it was measured for has since been MADE — slide to the limit — so these
+// assertions pin the behaviour and not merely the mechanism. What has not changed is why the
+// measurement came first: the set genuinely cannot go further, `ns-r` would leave the room,
+// and refusing was never wrong. It was only not what the user expects from a gesture that
+// still has room under the hand, and that is a product question a test cannot settle.
 describe('a set is bounded by its members, not by the piece under the hand (§ H.8)', () => {
   // Catalogue dims, read out of `lib/scene-spec.ts` rather than invented — `dimMM` is
   // [width, DEPTH, height], and getting that wrong is not a typo but a different fixture:
@@ -1374,12 +1497,26 @@ describe('a set is bounded by its members, not by the piece under the hand (§ H
       part: parts[0], rawX: BED_X + dx, rawZ: BED_DIM[1] / 2000, rot: 0, dim: BED_DIM,
       parts, footprint: ROOM, roomHeight: H, snapMode: 'off', currentY: 0, wallEdge: convoy.leadEdge,
     });
-    const r = resolveConvoy({
-      gesture: 'move', convoy, draggedId: 'bed', pos: lead.pos, rot: lead.rot,
-      startPos: [BED_X, 0, BED_DIM[1] / 2000], parts, footprint: ROOM, roomHeight: H,
-      memberHasPosOverride: () => false,
-    });
-    return { leadAccepted: lead.pos[0] - BED_X, ...r };
+    const askConvoy = (l: typeof lead) =>
+      resolveConvoy({
+        gesture: 'move', convoy, draggedId: 'bed', pos: l.pos, rot: l.rot,
+        startPos: [BED_X, 0, BED_DIM[1] / 2000], parts, footprint: ROOM, roomHeight: H,
+        memberHasPosOverride: () => false,
+      });
+    // Settled, because a caller settles: the lead is re-resolved at the limited
+    // delta rather than moved there. Without this the helper measures `leadPos`
+    // while both tabs commit something that has been through `resolvePlacement`
+    // one more time — a difference this file could not see.
+    const s = settleLead(
+      (x, z) =>
+        resolvePlacement({
+          part: parts[0], rawX: x, rawZ: z, rot: 0, dim: BED_DIM,
+          parts, footprint: ROOM, roomHeight: H, snapMode: 'off', currentY: 0, wallEdge: convoy.leadEdge,
+        }),
+      askConvoy,
+      lead,
+    );
+    return { leadAccepted: s.lead.pos[0] - BED_X, settled: s.settled, ...s.co };
   }
 
   it('has a member that runs out of room first, which is the premise and not the finding', () => {
@@ -1395,15 +1532,30 @@ describe('a set is bounded by its members, not by the piece under the hand (§ H
     expect(r.blockedIds).toEqual([]);
   });
 
-  it('refuses one millimetre later, and names a piece that is not under the hand', () => {
-    const r = dragEastBy(nsHeadroom + 0.001);
-    expect(r.valid).toBe(false);
-    expect(r.blocked?.id).toBe('ns-r');
-    expect(r.blockedIds).toEqual(['ns-r']);
-    // The half that makes it the reported defect rather than an ordinary wall stop: the
-    // piece the user is dragging accepted the delta in full and has headroom left. Without
-    // this the test passes in a room where everything ran out at once.
-    expect(r.leadAccepted).toBeCloseTo(nsHeadroom + 0.001, 10);
+  it('stops there instead of refusing, however much further the bed is pushed', () => {
+    // The decision, at the boundary and well past it. The set neither refuses nor
+    // deforms: it stops where `ns-r` stops and the lead comes back to match.
+    //
+    // Three overshoots, not the four this loop used to carry. `dragEastBy` resolves
+    // the lead first, so the bed is clamped at its own 2.30 before the convoy is
+    // ever asked — which makes `0.45` (exactly `bedHeadroom - nsHeadroom`) and `2`
+    // the SAME input to a pure function, and the fourth iteration could not have
+    // failed if the third passed. A loop that repeats itself reads as more coverage
+    // than it is.
+    for (const overshoot of [0.001, 0.2, 0.45]) {
+      const r = dragEastBy(nsHeadroom + overshoot);
+      expect(r.valid, `refused at +${overshoot}`).toBe(true);
+      expect(r.blockedIds, `blocked at +${overshoot}`).toEqual([]);
+      // Not just the id list. `Draggable` gates the size tag on `co.blocked` alone
+      // rather than on the combined validity, so a `blocked` surviving into a
+      // successful slide would label a legal drag with a member's name — and every
+      // other assertion in this file reads `blockedIds` and leaves this one unread.
+      expect(r.blocked, `named a blocker at +${overshoot}`).toBeUndefined();
+      expect(r.settled, `unsettled at +${overshoot}`).toBe(true);
+      expect(r.leadAccepted, `lead at +${overshoot}`).toBeCloseTo(nsHeadroom, 9);
+    }
+    // The piece under the hand still has headroom it is not allowed to use, which is
+    // what makes this the reported case rather than an ordinary wall stop.
     expect(bedHeadroom - nsHeadroom).toBeGreaterThan(0.4);
   });
 
@@ -1422,5 +1574,485 @@ describe('a set is bounded by its members, not by the piece under the hand (§ H
     });
     expect(lead.pos[0] - BED_X).toBeCloseTo(bedHeadroom, 10);
     expect(lead.valid).toBe(true);
+  });
+});
+
+// The two halves the slide limit stands on, pinned because they are true by
+// coincidence rather than by construction — found by danmu-ab reviewing the design
+// before it was written.
+//
+// The limit is analytic only because **for a member that can veto, the containment
+// clamp is the ONLY x/z correction `resolvePlacement` applies**. That holds through
+// two exemptions decided in unrelated places, in `lib/drag-resolve.ts`:
+//
+//     const ridesAWall = ridesWall(part.category, part.shape);
+//     if (ridesAWall) {  snapToWall(...)          // moves x/z, NOT gated by snapMode
+//     } else if (snapMode !== 'off') { snapToNeighbors(...) }   // a member skips this
+//
+// A wall rider is wall-snapped *and* exempt from the rigidity veto; a non-rider skips
+// the neighbour snap because a member always passes `snapMode: 'off'`. The two cover
+// each other exactly and **nothing states that they must**. Gate `snapToWall` on
+// `snapMode`, or make a wall rider vetoable, and the limit silently degrades to
+// "roughly right near walls" — which reads as a physics bug, not as a contract break.
+describe('what the slide limit is allowed to be computed from', () => {
+  it('takes no limit from a wall-riding member, however far its wall corrects it', () => {
+    // The TV rides the north wall. Dragged east far enough that `edgeProjection`
+    // clamps it to the end of its own wall segment, it is corrected by 100 mm — a
+    // correction that is NOT a containment overshoot and names a limit nothing asked
+    // for. If wall riders contributed, the chair would stop at 5.4 instead of 5.5.
+    const tv = part({ id: 'tv', category: 'tv', shape: 'tv', dimMM: [1200, 100, 700], pos: [2, 1.4, 0.07] });
+    const chair = part({ id: 'chair', category: 'chair', shape: 'chair-dining', dimMM: [500, 500, 900], pos: [2, 0, 0.5] });
+    const r = dragged([tv, chair], 'chair', ['chair', 'tv'], [5.5, 0.5]);
+
+    expect(r.valid).toBe(true);
+    expect(r.settled).toBe(true);
+    // The lead keeps the FULL delta — the TV's wall correction bought no limit.
+    expect(r.lead.pos[0]).toBeCloseTo(5.5, 9);
+    // And the TV really was corrected, so the assertion above is not vacuous: without
+    // this, a fixture where the wall happened to agree would pass just as well.
+    const mv = r.moves.find((m) => m.id === 'tv')!;
+    expect(mv.pos[0]).toBeCloseTo(6 - 1.2 / 2, 9);
+    expect(Math.abs(mv.pos[0] - 5.5)).toBeGreaterThan(0.05);
+  });
+
+  it('takes a limit from a floor member equal to its containment overshoot, exactly', () => {
+    // The other half. A non-rider's correction IS the overshoot, so the limit is that
+    // correction and nothing else — no rounding, no fudge, no search. Asserted at a
+    // size that shares no digits with the room or the delta, so an accidental
+    // agreement is not available.
+    const lead = part({ id: 'lead', pos: [1, 0, 1], dimMM: [800, 800, 400] });
+    const mate = part({ id: 'mate', pos: [4.13, 0, 1], dimMM: [740, 740, 400] });
+
+    const mateLimit = 6 - 0.74 / 2;
+    const asked = 2.0;
+    const overshoot = 4.13 + asked - mateLimit;
+    expect(overshoot, 'the fixture must actually overshoot, or this asserts nothing').toBeGreaterThan(0.1);
+    // …and the LEAD must not bind first, or the limit is never computed and this
+    // measures an ordinary wall stop. 800 mm at x = 1 clamps at 5.6, so it has 4.6.
+    expect(asked, 'the lead must still have room at the asked delta').toBeLessThan(6 - 0.8 / 2 - 1);
+
+    const r = dragged([lead, mate], 'lead', ['lead', 'mate'], [1 + asked, 1]);
+    expect(r.valid).toBe(true);
+    expect(r.lead.pos[0]).toBeCloseTo(1 + asked - overshoot, 9);
+    expect(r.moves.find((m) => m.id === 'mate')!.pos[0]).toBeCloseTo(mateLimit, 9);
+  });
+});
+
+// The guards on the slide limit, each with a fixture built to REACH it — through the
+// door a CALLER uses.
+//
+// Two rounds of mutation produced this block and each round found a different kind of
+// hole. The first: **the limit only runs when the set is invalid**, so any fixture
+// where nothing vetoes cannot exercise it at all — the wall-rider test above asserts
+// its exemption honestly and could never have caught `!wallRider` being deleted,
+// because a wall rider alone never invalidates a set. Every fixture here therefore
+// pairs the thing under test with a member that genuinely vetoes.
+//
+// The second is the reason they all now go through `dragged` rather than `carry`:
+// **a fixture may be unreachable even when every assertion in it is true.** `carry`
+// hands `resolveConvoy` a raw pointer position; both real callers hand it a clamped
+// one. With the lead resolved first, the 500 mm lead these guards used to share bound
+// 110 mm BEFORE the member did, so `chosen.valid` never went false, the limit was
+// never computed, and five guards were guarding a branch the application cannot enter.
+// The guards survived the correction — but only because the arithmetic was re-derived,
+// not because anything failed.
+describe('the slide limit, at the edges where it is decided', () => {
+  /** 500 mm at x = 1.5 → clamps at 5.75, so the lead has 4.25 m of headroom. Every
+   *  member below is chosen to run out before that, which is the whole premise. */
+  const lead = () => part({ id: 'lead', pos: [1.5, 0, 2], dimMM: [500, 500, 900], category: 'chair', shape: 'chair-dining' });
+  const LEAD_X = 1.5;
+  const LEAD_HEADROOM = 6 - 0.5 / 2 - LEAD_X;
+  /** 740 mm wide, so its own clamp is 5.63 — a number sharing no digits with the room
+   *  or with the TV's, which is what makes "whose correction won" readable. */
+  const mate = (x = 2.0) => part({ id: 'mate', pos: [x, 0, 1], dimMM: [740, 740, 400] });
+  const MATE_LIMIT = 6 - 0.74 / 2;
+  const MATE_HEADROOM = MATE_LIMIT - 2.0;
+  const TV_LIMIT = 6 - 1.2 / 2;
+  /** In range for `wardrobe` per `lib/dimension-ranges.ts` — [600,400,1600] to
+   *  [4000,800,2600]. The first version used [300,1800,2000], which is half the
+   *  minimum width and 2.25x the maximum depth: a generic obstacle no `clampDims`
+   *  path can produce, in the one file whose § H.8 block warns about exactly that. */
+  const column = (id: string, x: number, z: number) =>
+    part({ id, pos: [x, 0, z], dimMM: [600, 400, 2000], category: 'wardrobe', shape: 'wardrobe' });
+
+  it('has a member that binds before the lead does, which is the premise every guard rests on', () => {
+    // Stated once, here, rather than re-argued in each test. If the lead bound first
+    // the set would simply stop at a wall and none of the assertions below would be
+    // about the slide limit at all — which is what they were measuring before this
+    // block went through a caller.
+    expect(MATE_HEADROOM).toBeLessThan(LEAD_HEADROOM);
+    expect(TV_LIMIT - 2).toBeLessThan(MATE_HEADROOM);
+  });
+
+  it('is set by the floor member even when a wall rider was corrected further', () => {
+    // The TV overshoots the end of its wall by 0.60 m; `mate` overshoots its clamp by
+    // 0.37 m. The set must stop at 0.37 — the wall rider's correction is `snapToWall`
+    // doing its job, not a containment overshoot, and it names a limit nothing asked
+    // for. Letting it in stops the set 230 mm early, which is the § H.8 defect back
+    // again wearing the fix's clothes.
+    const tv = part({ id: 'tv', category: 'tv', shape: 'tv', dimMM: [1200, 100, 700], pos: [2, 1.4, 0.07] });
+    const asked = 4.0;
+    expect(asked, 'the lead must not bind').toBeLessThan(LEAD_HEADROOM);
+    expect(2 + asked - TV_LIMIT, 'the TV must overshoot further than mate').toBeCloseTo(0.6, 9);
+    expect(2 + asked - MATE_LIMIT, 'and mate must overshoot less').toBeCloseTo(0.37, 9);
+
+    const r = dragged([tv, mate(), lead()], 'lead', ['lead', 'tv', 'mate'], [LEAD_X + asked, 2]);
+    expect(r.valid).toBe(true);
+    expect(r.settled).toBe(true);
+    expect(r.blocked).toBeUndefined();
+    expect(r.blockedIds).toEqual([]);
+    expect(r.dx).toBeCloseTo(MATE_HEADROOM, 9);
+    expect(r.moves.find((m) => m.id === 'mate')!.pos[0]).toBeCloseTo(MATE_LIMIT, 9);
+    // The TV went where its wall put it, which is further than the set travelled —
+    // the point being that this did not become the set's limit.
+    expect(r.moves.find((m) => m.id === 'tv')!.pos[0]).toBeCloseTo(TV_LIMIT, 9);
+  });
+
+  it('is not set by a member that could not stand where it started', () => {
+    // `stuck` overlaps a column it is not supported by, so it is illegal before
+    // anybody touches anything — `startValid: false`. It gets no vote on the veto, and
+    // this asserts it gets none on the LIMIT either.
+    //
+    // **What that looks like from outside is a REFUSAL, and working out why is the
+    // whole value of this test.** `stuck` is clamped by the east wall at every delta
+    // and so fails the rigidity half of the veto — which is deliberately NOT gated on
+    // `startValid`, because a set arriving deformed is made deformed by this gesture.
+    // So it vetoes at every delta, the retry cannot come back valid, and the set
+    // correctly refuses at the delta the user asked for.
+    //
+    // Let `stuck` vote on the limit and the behaviour INVERTS: its correction is far
+    // larger than `mate`'s, so the set would be pinned at zero and a gesture that
+    // should have refused would instead report success having moved nothing.
+    const stuck = part({ id: 'stuck', pos: [5.0, 0, 3], dimMM: [800, 800, 400] });
+    const world = [mate(), stuck, column('col', 5.2, 3), lead()];
+    const asked = 4.0;
+    const r = dragged(world, 'lead', ['lead', 'mate', 'stuck'], [LEAD_X + asked, 2]);
+    expect(
+      r.convoy.members.find((m) => m.part.id === 'stuck')!.startValid,
+      'fixture must start illegal',
+    ).toBe(false);
+
+    expect(r.valid).toBe(false);
+    // The exact set, not `toContain`: a mutant that pushed every member into `ids`
+    // survives the weaker form, and `mate` is genuinely non-rigid here too.
+    expect([...r.blockedIds].sort()).toEqual(['mate', 'stuck']);
+    // The delta that was ASKED, not a shorter one derived from a piece with no vote.
+    expect(r.dx).toBeCloseTo(asked, 9);
+  });
+
+  it('never runs the set BACKWARDS, however far outside the room a member starts', () => {
+    // A member whose start is already past the bounding box is clamped by more than
+    // the whole delta, so `delta + correction` changes SIGN. Unclamped, the set would
+    // travel west while the pointer went east — the pieces sliding away from the hand.
+    // Nothing in the app places a piece there, which is exactly why it is pinned:
+    // an unreachable branch left unasserted is one nobody notices going wrong.
+    //
+    // The clamp lands the limit on zero, and a limit of zero is a refusal rather than
+    // a slide of length nothing — so what this asserts is an untouched lead, exactly.
+    const outside = part({ id: 'outside', pos: [9, 0, 1], dimMM: [800, 800, 400] });
+    const asked = 0.3;
+    const r = dragged([outside, lead()], 'lead', ['lead', 'outside'], [LEAD_X + asked, 2]);
+    expect(r.valid).toBe(false);
+    expect(r.dx).toBeCloseTo(asked, 9);
+    expect(r.dx).toBeGreaterThan(0);
+  });
+
+  it('shortens a WESTWARD drag by the same rule, and the sign is not free', () => {
+    // Every other fixture in this file drags east or south, which makes the whole
+    // `d < 0` arm of `limited` dead to the suite — replace it with `return d` and
+    // nothing goes red. A parameter set closed under the sign the code branches on
+    // cannot see a sign error.
+    const wLead = part({ id: 'lead', pos: [4.5, 0, 2], dimMM: [500, 500, 900], category: 'chair', shape: 'chair-dining' });
+    const wMate = part({ id: 'mate', pos: [4.0, 0, 1], dimMM: [740, 740, 400] });
+    const mateWest = 0.74 / 2;
+    const mateRoom = 4.0 - mateWest;
+    const leadRoom = 4.5 - 0.5 / 2;
+    expect(mateRoom, 'the member must still bind first going west').toBeLessThan(leadRoom);
+
+    const asked = -4.0;
+    const r = dragged([wMate, wLead], 'lead', ['lead', 'mate'], [4.5 + asked, 2]);
+    expect(r.valid).toBe(true);
+    expect(r.dx).toBeCloseTo(-mateRoom, 9);
+    expect(r.moves.find((m) => m.id === 'mate')!.pos[0]).toBeCloseTo(mateWest, 9);
+  });
+
+  it('shortens a SOUTHWARD drag on z, and leaves x and height alone', () => {
+    // The z half of the limit had no fixture at all: every `carry` in this file used
+    // `dz === 0`, so `limited(0, overZ)` returned 0 whatever `overZ` held, and
+    // `startPos[2] + lz` could have been `startPos[2] + lx` with the suite still
+    // green — while `Draggable` writes `leadPos[2]` straight into `position.set`.
+    const zLead = part({ id: 'lead', pos: [3, 0, 1], dimMM: [500, 500, 900], category: 'chair', shape: 'chair-dining' });
+    const zMate = part({ id: 'mate', pos: [1, 0, 1.5], dimMM: [740, 740, 400] });
+    const mateZLimit = 4 - 0.74 / 2;
+    const mateZRoom = mateZLimit - 1.5;
+    const leadZRoom = 4 - 0.5 / 2 - 1;
+    expect(mateZRoom, 'the member must bind first on z').toBeLessThan(leadZRoom);
+
+    const asked = 2.5;
+    const r = dragged([zMate, zLead], 'lead', ['lead', 'mate'], [3, 1 + asked]);
+    expect(r.valid).toBe(true);
+    expect(r.dz).toBeCloseTo(mateZRoom, 9);
+    expect(r.dx).toBeCloseTo(0, 9);
+    // The height is the caller's answer and the limit has never had an opinion about
+    // it — pinned because `leadPos[1]` is read by `position.set` and by nothing else.
+    expect(r.leadPos[1]).toBe(r.lead.pos[1]);
+    expect(r.moves.find((m) => m.id === 'mate')!.pos[2]).toBeCloseTo(mateZLimit, 9);
+  });
+
+  it('keeps refusing when the shorter delta does not fix it, at the delta that was asked', () => {
+    // `mate` is clipped, so a limit IS computed and the retry DOES run — but `hit`
+    // lands in a column that is staying put, and a collision is a legality answer with
+    // no overshoot to subtract, so the shorter delta refuses too. The set must then
+    // report the refusal at the delta the user asked for rather than at some shorter
+    // one nobody requested, or the caller draws a refusal in a place the pointer never
+    // was. This is the fixture the plain collision test cannot be: there, no limit is
+    // computed at all and the retry never happens.
+    const hit = part({ id: 'hit', pos: [1.0, 0, 3], dimMM: [800, 800, 400] });
+    const asked = 3.9;
+    expect(asked, 'the lead must not bind').toBeLessThan(LEAD_HEADROOM);
+    expect(asked, 'and mate must really be clipped, or no limit is computed').toBeGreaterThan(MATE_HEADROOM);
+
+    const world = [mate(), hit, column('col', 1.0 + asked, 3), lead()];
+    const r = dragged(world, 'lead', ['lead', 'mate', 'hit'], [LEAD_X + asked, 2]);
+    expect(r.valid).toBe(false);
+    expect([...r.blockedIds].sort()).toEqual(['hit', 'mate']);
+    expect(r.dx).toBeCloseTo(asked, 9);
+  });
+
+  it('carries the LEAD’s own rigid children to the limited position, not the asked one', () => {
+    // The lead's children follow the lead rather than the delta, so they are cascaded
+    // about its pivot — and that pivot is not final until the limit has been taken.
+    // Cascading once up front left a lamp riding the desk's UNLIMITED position: the
+    // desk stops at the wall and its lamp keeps going, which is the same set-coming-
+    // apart this whole change exists to prevent, one layer down.
+    const desk = part({ id: 'lead', pos: [1.5, 0, 2], dimMM: [1400, 700, 750], category: 'desk', shape: 'desk-standard' });
+    const lamp = part({ id: 'lamp', pos: [1.8, 0.75, 2], dimMM: [200, 200, 300], category: 'lamp', shape: 'lamp-table' });
+    const deskRoom = 6 - 1.4 / 2 - 1.5;
+    expect(MATE_HEADROOM, 'the member must bind before the desk').toBeLessThan(deskRoom);
+
+    const asked = 3.75;
+    const r = dragged([mate(), desk, lamp], 'lead', ['lead', 'mate'], [1.5 + asked, 2], { parentIds: { lamp: 'lead' } });
+    expect(r.convoy.own.map((d) => d.id)).toEqual(['lamp']);
+    expect(r.valid).toBe(true);
+    expect(r.dx).toBeCloseTo(MATE_HEADROOM, 9);
+    // The lamp keeps its 0.3 m offset from the LIMITED lead.
+    expect(r.moves.find((m) => m.id === 'lamp')!.pos[0]).toBeCloseTo(1.5 + MATE_HEADROOM + 0.3, 9);
+  });
+
+  it('refuses rather than reporting success when the limit collapses to nothing', () => {
+    // A set already flush against the wall it is being dragged towards is clamped by
+    // the WHOLE delta, so the limit is zero. Treating that as a slide is wrong twice
+    // over: the member loop emits a move for every member unconditionally, so a drag
+    // that went nowhere would stamp a position override on each of them — pinned
+    // against a re-detect and persisted, which is the write the zero-delta branch has
+    // a gate to refuse; and the caller is handed `valid: true` with nothing moved, so
+    // an arrow-key nudge into a wall becomes a key that does nothing and says nothing.
+    const flush = part({ id: 'mate', pos: [MATE_LIMIT, 0, 1], dimMM: [740, 740, 400] });
+    const r = dragged([flush, lead()], 'lead', ['lead', 'mate'], [LEAD_X + 0.05, 2]);
+    expect(r.valid).toBe(false);
+    expect(r.blockedIds).toContain('mate');
+    expect(r.dx).toBeCloseTo(0.05, 9);
+  });
+
+  it('is decided at a tenth of a millimetre, which is what RIGID_EPS buys', () => {
+    // `RIGID_EPS` is 1e-6 m and the tightest correction anything else in this file
+    // distinguishes is a millimetre, so widening it by three orders of magnitude left
+    // every assertion green — a constant pinned from below and free at the top.
+    const eps = 0.0001;
+    const tight = part({ id: 'mate', pos: [MATE_LIMIT - 3.0 + eps, 0, 1], dimMM: [740, 740, 400] });
+    const r = dragged([tight, lead()], 'lead', ['lead', 'mate'], [LEAD_X + 3.0, 2]);
+    expect(r.valid).toBe(true);
+    // Widen the epsilon past 1e-4 and `mate` counts as rigid, nothing vetoes, and the
+    // set takes the full 3.0.
+    expect(r.dx).toBeCloseTo(3.0 - eps, 9);
+    expect(r.dx).not.toBeCloseTo(3.0, 9);
+  });
+});
+
+// Three properties of `ConvoyResult` that only a RAW consumer can see, so they are
+// asserted through `carry` rather than through `dragged`.
+//
+// Settling hides them by construction: on the pass that settles, `leadPos` equals the
+// lead's own resolve, so `moves` cascaded about either one agree and the height in
+// `leadPos` has already been replaced by the re-resolve. That makes each of these a
+// contract the two callers rely on and no caller-shaped fixture can break — which is
+// exactly the kind of line that rots quietly.
+describe('what `resolveConvoy` promises its caller about the limited position', () => {
+  const lead = () => part({ id: 'lead', pos: [1.5, 0, 2], dimMM: [500, 500, 900], category: 'chair', shape: 'chair-dining' });
+  const mate = () => part({ id: 'mate', pos: [2.0, 0, 1], dimMM: [740, 740, 400] });
+  const MATE_HEADROOM = 6 - 0.74 / 2 - 2.0;
+
+  it('leaves the height exactly as the caller handed it over', () => {
+    // `leadPos[1]` is `pos[1]`, never `startPos[1]`: this function has no opinion
+    // about gravity and says so in a comment. Invisible to every other fixture here,
+    // because a drag across a flat floor has the two equal — so the fixture hands over
+    // a height that differs from the start, which is what a lead resting on something
+    // looks like.
+    const world = [mate(), lead()];
+    const c = plan('lead', world, ['lead', 'mate']);
+    const co = carry(c, 'lead', world, [1.5, 0, 2], [1.5 + 3.9, 0.75, 2]);
+    expect(co.leadPos[1]).toBe(0.75);
+  });
+
+  it('cascades the lead’s rigid children about the LIMITED pivot', () => {
+    // The lead's children follow the lead rather than the delta, so they are cascaded
+    // about its pivot — and that pivot is not final until the limit has been taken.
+    // Cascading once up front left a lamp riding the desk's UNLIMITED position: the
+    // desk stops at the wall and its lamp keeps going, which is the same set-coming-
+    // apart this whole change exists to prevent, one layer down.
+    const desk = part({ id: 'lead', pos: [1.5, 0, 2], dimMM: [1400, 700, 750], category: 'desk', shape: 'desk-standard' });
+    const lamp = part({ id: 'lamp', pos: [1.8, 0.75, 2], dimMM: [200, 200, 300], category: 'lamp', shape: 'lamp-table' });
+    const world = [mate(), desk, lamp];
+    const c = plan('lead', world, ['lead', 'mate'], { lamp: 'lead' });
+    expect(c.own.map((d) => d.id)).toEqual(['lamp']);
+
+    const asked = 3.75;
+    const co = carry(c, 'lead', world, [1.5, 0, 2], [1.5 + asked, 0, 2]);
+    expect(co.valid).toBe(true);
+    expect(co.leadPos[0]).toBeCloseTo(1.5 + MATE_HEADROOM, 9);
+    // The lamp keeps its 0.3 m offset from the LIMITED lead, not from the asked one.
+    expect(co.moves.find((m) => m.id === 'lamp')!.pos[0]).toBeCloseTo(1.5 + MATE_HEADROOM + 0.3, 9);
+  });
+
+  it('shortens a westward drag towards ZERO and never past it', () => {
+    // The mirror of "never runs the set BACKWARDS", on the other sign. A member west
+    // of the room is clamped inward by more than the whole delta, so `d + over` turns
+    // POSITIVE while the pointer went west; without `Math.min(c, 0)` the set would
+    // travel east away from the hand. The eastward fixture cannot see this — it
+    // exercises `Math.max(c, 0)` — and with every drag in this file going east or
+    // south, the whole `d < 0` arm was dead to the suite.
+    const outside = part({ id: 'outside', pos: [-3, 0, 1], dimMM: [800, 800, 400] });
+    const wLead = part({ id: 'lead', pos: [4.5, 0, 2], dimMM: [500, 500, 900], category: 'chair', shape: 'chair-dining' });
+    const world = [outside, wLead];
+    const c = plan('lead', world, ['lead', 'outside']);
+    const co = carry(c, 'lead', world, [4.5, 0, 2], [4.5 - 0.3, 0, 2]);
+    expect(co.valid).toBe(false);
+    // Unlimited, `limited(-0.3, +3.4)` returns +3.1 and the lead runs east.
+    expect(co.leadPos[0]).toBeCloseTo(4.2, 9);
+  });
+});
+
+// `settleLead` — the loop both tabs used to carry a different, shorter version of.
+//
+// It is here rather than in a component for one reason worth stating: `Draggable` is
+// R3F and cannot be mounted, and `PlanView`'s drag loop has no mount test, so while
+// this lived in the callers its three lines were the only part of the § H.8 change no
+// mutation could reach. Every case below was a surviving mutant or a review finding.
+describe('settling the lead against the set it is dragging', () => {
+  type Lead = { pos: [number, number, number]; rot: number; valid: boolean };
+  const at = (x: number, z = 0, valid = true): Lead => ({ pos: [x, 0, z], rot: 0, valid });
+  const answer = (valid: boolean, leadX: number) => ({
+    moves: [],
+    valid,
+    blockedIds: [] as string[],
+    leadPos: [leadX, 0, 0] as [number, number, number],
+  });
+
+  it('asks once when the set can take the delta the lead was resolved at', () => {
+    let resolves = 0;
+    const s = settleLead<Lead>(
+      (x) => {
+        resolves += 1;
+        return at(x);
+      },
+      (l) => answer(true, l.pos[0]),
+      at(5),
+    );
+    expect(s.settled).toBe(true);
+    expect(s.lead.pos[0]).toBe(5);
+    // The unobstructed drag is every frame of almost every drag, and it must not pay
+    // for the limited one: no re-resolve at all when the two answers already agree.
+    expect(resolves).toBe(0);
+  });
+
+  it('RE-RESOLVES at the limit rather than moving the lead there', () => {
+    // The whole reason this is not `lead.pos = co.leadPos` in each caller. A
+    // translation changes what the piece stands on, what it snaps to and which
+    // guides hold, so the shorter delta has to go back through the caller's own
+    // resolve — which is where gravity, the grid and the support live.
+    const seen: number[] = [];
+    const s = settleLead<Lead>(
+      (x) => {
+        seen.push(x);
+        return at(x);
+      },
+      (l) => answer(true, l.pos[0] > 4 ? 4 : l.pos[0]),
+      at(5),
+    );
+    expect(seen).toEqual([4]);
+    expect(s.settled).toBe(true);
+    expect(s.lead.pos[0]).toBe(4);
+  });
+
+  it('reports a refusal where the pointer asked for it, not at some shorter delta', () => {
+    // The stub answers `leadPos: 4` on a REFUSAL, which `resolveConvoy` never does —
+    // every refusing path there returns `leadPos: pos`. It is deliberate: with the
+    // two equal, deleting the `!co.valid` early return changes nothing, because the
+    // stability check one line below catches it. The mutant is only visible against a
+    // convoy whose refusal names a different position, so the fixture makes one.
+    const s = settleLead<Lead>(
+      () => {
+        throw new Error('must not re-resolve a refusal');
+      },
+      () => answer(false, 4),
+      at(5),
+    );
+    expect(s.settled).toBe(true);
+    expect(s.co.valid).toBe(false);
+    expect(s.lead.pos[0]).toBe(5);
+  });
+
+  it('refuses when the shorter delta is somewhere the SET may not go either', () => {
+    // The lead can stand at the limit; its company cannot. Distinct from the case
+    // below, where the LEAD is the one refused — and each needs its own fixture,
+    // because either half of `!next.valid || !nextCo.valid` alone passes the other's
+    // test.
+    //
+    // Two passes before it goes wrong, deliberately: on the FIRST pass the running
+    // lead is still the asked one, so returning `first` and returning `lead` are the
+    // same object and an assertion about which cannot fail. The set only refuses once
+    // the lead has actually moved on.
+    const s = settleLead<Lead>(
+      (x) => at(x),
+      (l) => (l.pos[0] === 5 ? answer(true, 4) : l.pos[0] === 4 ? answer(true, 3) : answer(false, l.pos[0])),
+      at(5),
+    );
+    expect(s.settled).toBe(false);
+    expect(s.lead.pos[0]).toBe(5);
+  });
+
+  it('refuses when the shorter delta is somewhere the LEAD may not stand', () => {
+    // The limit carried the lead into something staying put. Neither answer is
+    // committable — the first has the lead ahead of its set, the second refuses at a
+    // spot the pointer never named — so the gesture is unsettled and the callers
+    // treat that as a refusal.
+    const s = settleLead<Lead>(
+      (x) => at(x, 0, false),
+      (l) => answer(true, l.pos[0] > 4 ? 4 : l.pos[0]),
+      at(5),
+    );
+    expect(s.settled).toBe(false);
+    expect(s.lead.pos[0]).toBe(5);
+  });
+
+  it('refuses a gesture that will not converge, and answers where the pointer was', () => {
+    // The grid snap is the first step of `resolvePlacement` and the limit is a
+    // continuous correction, so feeding one back into the other need not settle: each
+    // pass rounds, the next limit shortens it again, and a comment here used to assert
+    // the second answer is always the same as the first. At coarse snap that stretches
+    // the set by up to 25 mm, silently, with `valid` saying true.
+    //
+    // The lead that comes back is the one the POINTER asked for. Returning the last
+    // one tried would draw the refusal at some intermediate spot nobody named, and
+    // this fixture drifts rather than oscillating precisely so that the two are
+    // different numbers — with a true 2-cycle they coincide and the assertion is
+    // decoration.
+    const s = settleLead<Lead>(
+      (x) => at(Math.round(x * 100) / 100),
+      (l) => answer(true, l.pos[0] - 0.006),
+      at(4.88),
+    );
+    expect(s.settled).toBe(false);
+    expect(s.lead.pos[0]).toBe(4.88);
   });
 });

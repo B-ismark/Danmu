@@ -208,9 +208,26 @@ backend, no account. The 3D studio *is* the product.
    valid because `collidesAt` could not see the desk either, cleared its rigid parent
    and persisted that. One function for the mover and the members both, because the
    asymmetry is invisible from either side of it); and a member must resolve with `snapMode: 'off'`, or its own
-   magnetism pulls it out of formation and the set arrives bent. A member that
-   cannot follow makes the whole step invalid and **names itself** — the piece that
-   refused is not the piece under the hand. Separately: **a press must not collapse
+   magnetism pulls it out of formation and the set arrives bent. **A member that
+   runs out of room SHORTENS the gesture; a member that cannot follow at all refuses
+   it, and names itself** — the piece that refused is not the piece under the hand.
+   Those are two different failures and treating them as one was § H.8: a merged bed
+   with a nightstand each side refused **450 mm before the bed's own limit**, because
+   the containment clamp corrects a nightstand and any correction fails the rigidity
+   test. The set now slides to whichever member binds first, and `settleLead` is
+   where that lives, because **`ConvoyResult.leadPos` is a rule a caller can drop.**
+   Ignore it and the lead takes the full delta while the members stop short — the set
+   arrives deformed with `valid` saying true, which is strictly worse than the refusal
+   it replaced. Write it RAW and you are wrong the other way: the limit is a
+   translation, and a translation changes what the piece is standing on, what it is
+   snapped to and which guides hold, so the lead must be RE-RESOLVED there and the
+   company re-asked until the two agree. The plan did the second, 3D did neither on
+   its fallback path, and the plan's version put a lamp at desk height over bare
+   floor while 3D dropped it — one gesture, two tabs, two answers, one layer below
+   where that scar was last closed. **A limit of zero is a refusal, not a slide of
+   length nothing**, or a drag that went nowhere stamps a position override on every
+   selected piece and an arrow key into a wall becomes a key that does nothing and
+   says nothing. Separately: **a press must not collapse
    the selection it is about to drag.** The plan's did, unconditionally, so the set
    was gone before the first `pointermove`; the 3D tab's survived the press and then
    lost it to the DOM *click* that ends every drag. Collapsing to one piece is what

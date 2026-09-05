@@ -34,8 +34,13 @@ import { nearestEdge, type Poly } from './geometry';
 
 /** How far a convoy member may be corrected sideways by its own resolve and still
  *  count as having gone where the set sent it. Metres — a micron, i.e. only
- *  floating-point noise. Anything bigger is a containment clamp or a wall snap,
- *  which means the set would arrive deformed. */
+ *  floating-point noise. Anything bigger is a containment clamp or a wall snap. For
+ *  a wall rider that is the wall doing its job and is exempt; for anyone else it is
+ *  an overshoot, and the overshoot is exactly what the slide limit subtracts — so a
+ *  correction above this epsilon either shortens the gesture or refuses it, and never
+ *  arrives as a deformed set. It is also the threshold the limit itself is tested
+ *  against, because `d + over` is floating point and a set flush against its wall
+ *  produces `5e-17` rather than `0`. */
 const RIGID_EPS = 1e-6;
 
 export type ConvoyMember = {
@@ -84,10 +89,14 @@ export type ConvoyMember = {
    * mid-gesture — and a member that answers `false` keeps travelling with the set
    * and simply does not get a vote on where it goes.
    *
-   * It gates the LEGALITY half of the veto only. The rigidity half is not gated,
-   * because a set arriving deformed is made deformed by this gesture by
-   * definition. One residue of that: a member whose start position is outside the
-   * room's bounding box is clamped every frame, never rigid, and still vetoes.
+   * It gates the LEGALITY half of the veto, and the slide limit with it — a member
+   * corrected every frame would otherwise name a limit that pins the set at zero in
+   * every direction forever, which is the inertness this flag exists to prevent,
+   * arriving through a second door. The rigidity half is NOT gated, because a set
+   * arriving deformed is made deformed by this gesture by definition. One residue of
+   * that: a member whose start position is outside the room's bounding box is clamped
+   * every frame, never rigid, and still vetoes — so a set holding one refuses rather
+   * than sliding, which is correct and is pinned.
    * Nothing in the app is known to place a piece there — the containment clamp is
    * in every write path — so it is recorded rather than coded around.
    */
@@ -239,9 +248,14 @@ export type ConvoyResult = {
   /** Returned whether or not the step is legal, so a caller can hold the set at
    *  the last legal delta without recomputing. Apply them only when `valid`. */
   moves: ConvoyMove[];
-  /** False when some member cannot go where the set is asking it to. The set then
+  /** False when some member cannot go where the set is asking it to **and a shorter
+   *  delta cannot fix it** — a collision with a piece that is staying put has no
+   *  overshoot to subtract, so sliding has nothing to offer it. A member that has
+   *  merely run out of room shortens the gesture instead; see `leadPos`. The set then
    *  refuses AS A UNIT rather than deforming to fit or pushing a piece through the
-   *  plaster — rule 2's "say so, never silently resize it to fit", for position.
+   *  plaster — rule 2's "say so, never silently resize it to fit", for position — and
+   *  it refuses at the delta the user ASKED for, never at a shorter one nobody
+   *  requested, or the caller draws a refusal where the pointer never was.
    *
    *  The dragged piece's own legality is the caller's business; this is the
    *  company's. */
@@ -260,6 +274,21 @@ export type ConvoyResult = {
    *  — the refusal looked like it was moving around the room. Empty when the step
    *  is legal. */
   blockedIds: string[];
+  /**
+   * Where the DRAGGED piece should actually go — normally the `pos` handed in, and
+   * a shorter delta when the set was limited by a member (see `SLIDE` below).
+   *
+   * **A caller must write the lead from this and not from its own
+   * `resolvePlacement`.** That is not a style preference: the limit is the whole
+   * point of this field, and a caller that keeps its own answer puts the lead at
+   * the full delta while the members stop short — the set arrives DEFORMED, with
+   * `valid` saying true. That is strictly worse than the refusal the limit
+   * replaced, because a refusal is at least visible.
+   *
+   * `y` is the caller's — the lead's gravity is the caller's business, and nothing
+   * here re-asks it.
+   */
+  leadPos: [number, number, number];
 };
 
 /**
@@ -543,17 +572,22 @@ export function resolveConvoy(input: {
   memberHasPosOverride: (id: string) => boolean;
 }): ConvoyResult {
   const { convoy, draggedId, pos, rot, startPos, parts, footprint, roomHeight, gesture, memberHasPosOverride } = input;
-  const moves: ConvoyMove[] = [];
   const blockedIds: string[] = [];
 
-  // The dragged piece's own children first, about its resolved pivot — the only
-  // company that rotates with it.
-  if (convoy.own.length > 0) moves.push(...cascadeTransform(draggedId, pos, rot, convoy.own));
+  /** The dragged piece's own children, about its resolved pivot — the only company
+   *  that rotates with it. A function rather than a value because the lead's pivot
+   *  is not final until the slide limit below has been taken: cascading once at the
+   *  top and limiting afterwards left a lamp riding the desk's UNLIMITED position
+   *  while the desk stopped short. */
+  const ownAt = (at: [number, number, number]): ConvoyMove[] =>
+    convoy.own.length > 0 ? cascadeTransform(draggedId, at, rot, convoy.own) : [];
+
+  const moves: ConvoyMove[] = ownAt(pos);
 
   // Nothing is coming, so there is no delta to take and no world to build. Every
   // ordinary single-piece drag lands here at input rate, and the shifted-world copy
   // below is O(parts) — it was being paid for a loop that runs zero times.
-  if (convoy.members.length === 0) return { moves, valid: true, blockedIds };
+  if (convoy.members.length === 0) return { moves, valid: true, blockedIds, leadPos: pos };
 
   // A turn moves nobody sideways, and it is deliberately NOT folded into the
   // zero-delta path below. That path RESTORES every member to its start position,
@@ -563,7 +597,7 @@ export function resolveConvoy(input: {
   // turn leaves every member exactly where the last move frame put it — the dragged
   // piece's own rigid children have already pivoted with it, above, which is the
   // only company a rotation has.
-  if (gesture === 'turn') return { moves, valid: true, blockedIds };
+  if (gesture === 'turn') return { moves, valid: true, blockedIds, leadPos: pos };
 
   const dx = pos[0] - startPos[0];
   const dz = pos[2] - startPos[2];
@@ -611,11 +645,8 @@ export function resolveConvoy(input: {
         );
       }
     }
-    return { moves, valid: true, blockedIds };
+    return { moves, valid: true, blockedIds, leadPos: pos };
   }
-
-  let valid = true;
-  let blocked: ScenePart | undefined;
 
   // The world a member resolves against: everything that is NOT travelling at the
   // position it is standing in, plus everything that IS travelling **at the
@@ -648,74 +679,197 @@ export function resolveConvoy(input: {
   // A member with children of its own needs its own copy, because what has to come
   // out of the list is ITS descendants and no one else's — see `travellingWorld`.
   // Rebuilding unconditionally would be O(parts x members) on a Ctrl+A drag.
-  const shared = travellingWorld(convoy, parts, dx, dz, []);
+  //
+  // Rebuilt per pass rather than once, because the slide limit below re-asks the
+  // whole question at a SHORTER delta and a world shifted by the old one would put
+  // every travelling piece where the set is no longer going.
 
-  for (const m of convoy.members) {
-    const world =
-      m.descendants.length === 0 ? shared : travellingWorld(convoy, parts, dx, dz, m.descendants);
-    const tx = m.startPos[0] + dx;
-    const tz = m.startPos[2] + dz;
-    const r = resolvePlacement({
-      part: m.part,
-      rawX: tx,
-      rawZ: tz,
-      rot: m.part.rot,
-      dim: m.part.dimMM,
-      parts: world,
-      footprint,
-      roomHeight,
-      // 'off' so the set keeps its shape: a member allowed its own magnetism would
-      // slide out of formation towards a neighbour, and the grid would re-round a
-      // delta the dragged piece has already committed to.
-      snapMode: 'off',
-      currentY: m.startPos[1],
-      // Its own wall, held for the length of the gesture — see `ConvoyMember.edge`.
-      wallEdge: m.edge,
-    });
-    // Vertically the member is NOT carried — the resolve's gravity answer wins, so
-    // a piece translated off the table it stood on lands on the floor instead of
-    // hanging at table height. That floating vase is a scar this repo already has,
-    // from the plan's old two-step drag.
-    //
-    // Which also means a member CAN ride up onto something it arrives over, and the
-    // set is then not flat. Deliberate: one dragged chair already climbs a table it
-    // is pulled across, refusing instead would make a set nearly immovable in a
-    // furnished room, and "the set stays level" is a promise no gesture here made.
-    // A wall rider cannot accept the wall-normal half of the delta — its wall
-    // discards it — so it legitimately arrives short and must not count as
-    // deformed. What bounds that exemption is `ConvoyMember.edge`: the correction
-    // can only be along one known wall now, not a jump to some other one.
-    //
-    // `ridesWall`, so a CEILING piece does not get the exemption. A fan translates
-    // freely across its ceiling, which means "it arrived where the set sent it" is a
-    // question with a real answer for it — and under the wider predicate it was
-    // excused from being asked.
-    const wallRider = ridesWall(m.part.category, m.part.shape);
-    const rigid =
-      wallRider || (Math.abs(r.pos[0] - tx) < RIGID_EPS && Math.abs(r.pos[2] - tz) < RIGID_EPS);
-    // Only a member this gesture BROKE may veto it. One that could not stand where
-    // it started refuses every delta forever and takes the whole set with it — see
-    // `ConvoyMember.startValid`, which is also where the rigidity half is explained
-    // for not being gated the same way.
-    if ((!r.valid && m.startValid) || !rigid) {
-      valid = false;
-      if (!blocked) blocked = m.part;
-      blockedIds.push(m.part.id);
+  /** One pass over the members at a given delta.
+   *
+   *  `overX` / `overZ` are the largest correction any member that may veto was
+   *  given, signed, and they are what the limit is computed from. */
+  function runMembers(ddx: number, ddz: number) {
+    const shared = travellingWorld(convoy, parts, ddx, ddz, []);
+    const out: ConvoyMove[] = [];
+    const ids: string[] = [];
+    let ok = true;
+    let first: ScenePart | undefined;
+    let overX = 0;
+    let overZ = 0;
+
+    for (const m of convoy.members) {
+      const world =
+        m.descendants.length === 0 ? shared : travellingWorld(convoy, parts, ddx, ddz, m.descendants);
+      const tx = m.startPos[0] + ddx;
+      const tz = m.startPos[2] + ddz;
+      const r = resolvePlacement({
+        part: m.part,
+        rawX: tx,
+        rawZ: tz,
+        rot: m.part.rot,
+        dim: m.part.dimMM,
+        parts: world,
+        footprint,
+        roomHeight,
+        // 'off' so the set keeps its shape: a member allowed its own magnetism would
+        // slide out of formation towards a neighbour, and the grid would re-round a
+        // delta the dragged piece has already committed to.
+        snapMode: 'off',
+        currentY: m.startPos[1],
+        // Its own wall, held for the length of the gesture — see `ConvoyMember.edge`.
+        wallEdge: m.edge,
+      });
+      // Vertically the member is NOT carried — the resolve's gravity answer wins, so
+      // a piece translated off the table it stood on lands on the floor instead of
+      // hanging at table height. That floating vase is a scar this repo already has,
+      // from the plan's old two-step drag.
+      //
+      // Which also means a member CAN ride up onto something it arrives over, and the
+      // set is then not flat. Deliberate: one dragged chair already climbs a table it
+      // is pulled across, refusing instead would make a set nearly immovable in a
+      // furnished room, and "the set stays level" is a promise no gesture here made.
+      // A wall rider cannot accept the wall-normal half of the delta — its wall
+      // discards it — so it legitimately arrives short and must not count as
+      // deformed. What bounds that exemption is `ConvoyMember.edge`: the correction
+      // can only be along one known wall now, not a jump to some other one.
+      //
+      // `ridesWall`, so a CEILING piece does not get the exemption. A fan translates
+      // freely across its ceiling, which means "it arrived where the set sent it" is a
+      // question with a real answer for it — and under the wider predicate it was
+      // excused from being asked.
+      const wallRider = ridesWall(m.part.category, m.part.shape);
+      const cx = r.pos[0] - tx;
+      const cz = r.pos[2] - tz;
+      const rigid = wallRider || (Math.abs(cx) < RIGID_EPS && Math.abs(cz) < RIGID_EPS);
+      // How far the SET may go, gathered from the members that may veto it.
+      //
+      // A wall rider is excluded because it is exempt from the veto — and because
+      // its correction is `snapToWall`, which is not a containment overshoot and
+      // would name a limit nothing asked for. **Those two exemptions are decided in
+      // unrelated places and cover each other by accident**: `drag-resolve.ts` gates
+      // `snapToNeighbors` on `snapMode` (which a member sets to 'off') and
+      // `snapToWall` on `ridesAWall` instead, so a non-rider's only x/z correction
+      // is the clamp. Both halves are asserted in `tests/drag-convoy.test.ts`,
+      // because if either moves this limit silently degrades to "roughly right near
+      // walls" and reads as a physics bug.
+      //
+      // `startValid` for the same reason it gates the veto: a member that could not
+      // stand where it started is corrected every frame, and letting it set the
+      // limit would pin the set at zero in every direction forever — the inertness
+      // `startValid` exists to prevent, arriving through a new door.
+      //
+      // A correction pointing the SAME way as the delta is not filtered out here, and
+      // that was tried: a member pushed further along the way the set is already going
+      // has not run out of room, so on the face of it it should not set a limit. It
+      // cannot matter. Any correction big enough to reach `overX` at all is bigger than
+      // `RIGID_EPS`, which means that member has already failed the rigidity veto and
+      // refuses every delta including the shorter one — so the gesture ends in a refusal
+      // whichever number `overX` holds. A filter here would be a branch nothing can
+      // observe, which is worse than the asymmetry it tidies.
+      if (!wallRider && m.startValid) {
+        if (Math.abs(cx) > Math.abs(overX)) overX = cx;
+        if (Math.abs(cz) > Math.abs(overZ)) overZ = cz;
+      }
+      // Only a member this gesture BROKE may veto it. One that could not stand where
+      // it started refuses every delta forever and takes the whole set with it — see
+      // `ConvoyMember.startValid`, which is also where the rigidity half is explained
+      // for not being gated the same way.
+      if ((!r.valid && m.startValid) || !rigid) {
+        ok = false;
+        if (!first) first = m.part;
+        ids.push(m.part.id);
+      }
+      // Only a wall-mounted member can come back turned (`snapMode: 'off'` leaves
+      // `outRot` alone for everything else), so for the rest this omits the field
+      // rather than writing back the value it already had. See `ConvoyMove`.
+      out.push(
+        r.rot === m.part.rot
+          ? { id: m.part.id, pos: r.pos }
+          : { id: m.part.id, pos: r.pos, rot: r.rot },
+      );
+      if (m.descendants.length > 0) {
+        out.push(...cascadeTransform(m.part.id, r.pos, r.rot, m.descendants));
+      }
     }
-    // Only a wall-mounted member can come back turned (`snapMode: 'off'` leaves
-    // `outRot` alone for everything else), so for the rest this omits the field
-    // rather than writing back the value it already had. See `ConvoyMove`.
-    moves.push(
-      r.rot === m.part.rot
-        ? { id: m.part.id, pos: r.pos }
-        : { id: m.part.id, pos: r.pos, rot: r.rot },
-    );
-    if (m.descendants.length > 0) {
-      moves.push(...cascadeTransform(m.part.id, r.pos, r.rot, m.descendants));
+
+
+    return { moves: out, valid: ok, blocked: first, blockedIds: ids, overX, overZ };
+  }
+
+  /**
+   * SLIDE — how far the set may go when a member runs out of room before the piece
+   * under the hand does.
+   *
+   * § H.8: dragging a merged bed with a nightstand each side, the set refused
+   * **450 mm before the bed's own limit** and named the nightstand. The user chose
+   * to slide instead: a lone piece meeting a wall stops rather than refusing, and a
+   * set should not behave differently for having company.
+   *
+   * **The limit is analytic, not a search.** A member resolves with
+   * `snapMode: 'off'` and a wall rider is exempt from rigidity, so for a member
+   * that can veto the only x/z correction `resolvePlacement` applies is the
+   * containment clamp — collision is a legality ANSWER there, never a push. The
+   * correction therefore IS the overshoot, and subtracting the largest one lands
+   * exactly on the limit. One extra pass, and only when a limit was actually hit,
+   * so an unobstructed drag still pays N resolves rather than 2N — which matters
+   * because this is per frame and Ctrl+A makes N the whole room.
+   */
+  const limited = (d: number, over: number): number => {
+    const c = d + over;
+    // Never past zero and never further than asked. A member that started OUTSIDE
+    // the bounding box is clamped every frame by more than the whole delta, so `c`
+    // flips sign; without this the set would run backwards away from the pointer.
+    return d >= 0 ? Math.min(Math.max(c, 0), d) : Math.max(Math.min(c, 0), d);
+  };
+
+  let chosen = runMembers(dx, dz);
+  let leadPos: [number, number, number] = pos;
+
+  if (!chosen.valid) {
+    const lx = limited(dx, chosen.overX);
+    const lz = limited(dz, chosen.overZ);
+    // A limit of zero on every axis that was asked for is the set saying "not one
+    // millimetre", and that is a REFUSAL rather than a slide of length nothing. Two
+    // things go wrong if it is treated as a slide. The member loop emits a move for
+    // every member unconditionally, so a drag that went nowhere would write an
+    // override for each of them — which per `lib/transforms.ts` pins it against a
+    // re-detect and persists it, the same stamp the zero-delta branch above has a
+    // gate to refuse. And the caller would be handed `valid: true` with nothing
+    // moved, so the refusal is neither drawn nor spoken: an arrow-key nudge into a
+    // member's wall becomes a key that does nothing and says nothing, which used to
+    // name the piece that was in the way.
+    // A tolerance, not `=== 0`: `limited` computes `d + over` in floating point, so a
+    // set flush against the wall it is dragged into gives `0.05 + -0.05 = 5e-17` and
+    // an equality here silently let the whole branch through. `RIGID_EPS` is the
+    // file's own definition of "did not move" — a micron — and is what the rigidity
+    // veto three dozen lines above is measured against.
+    const stuck = Math.abs(lx) < RIGID_EPS && Math.abs(lz) < RIGID_EPS;
+    if (!stuck && (lx !== dx || lz !== dz)) {
+      const retry = runMembers(lx, lz);
+      // Only if the shorter delta actually FIXES it. A set refused for a reason the
+      // clamp cannot explain — a member that collides with something not in the
+      // convoy, one that could not stand where it started — must still refuse, and
+      // must refuse at the delta the user asked for rather than at some shorter one
+      // nobody requested.
+      if (retry.valid) {
+        chosen = retry;
+        // `pos[1]` and not the lead's own re-resolve: the caller owns the lead's
+        // gravity, and this function has never had an opinion about its height.
+        leadPos = [startPos[0] + lx, pos[1], startPos[2] + lz];
+      }
     }
   }
 
-  return { moves, valid, blocked, blockedIds };
+  return {
+    // Re-cascaded about the LIMITED pivot. The lead's rigid children are the one
+    // thing that follows the lead rather than the delta, so a limit that did not
+    // reach them would leave a lamp hanging where the desk did not go.
+    moves: [...ownAt(leadPos), ...chosen.moves],
+    valid: chosen.valid,
+    blocked: chosen.blocked,
+    blockedIds: chosen.blockedIds,
+    leadPos,
+  };
 }
 
 /**
@@ -798,4 +952,81 @@ export function convoyRestore(
     moves.push(...cascadeTransform(m.part.id, m.startPos, m.part.rot, m.descendants, hasRotOverride));
   }
   return moves;
+}
+/** The shape `settleLead` needs from whatever a caller's own resolve returns.
+ *
+ *  Structural rather than an import of `Resolved`, because the two callers reach
+ *  `resolvePlacement` through different wrappers and this function has no business
+ *  knowing which. */
+export type SettleLead = { pos: [number, number, number]; rot: number; valid: boolean };
+
+/** How many times the lead may be re-resolved at a shorter delta before the
+ *  gesture is called unsettled. Four is generous: the ordinary limited frame
+ *  settles on the second pass, and the only thing that can move the answer again
+ *  is the grid snap re-rounding the shorter delta. */
+const SETTLE_PASSES = 4;
+
+export type Settled<R extends SettleLead> = {
+  /** The lead's own resolve at the position the SET can take. */
+  lead: R;
+  /** The convoy, answered at that lead. */
+  co: ConvoyResult;
+  /** False when the passes ran out, or when the shorter delta turned out to be
+   *  illegal for the lead itself. **A caller must treat this as a refusal** — the
+   *  alternative is committing a lead and a set that were resolved at different
+   *  deltas, which is the deformed-but-`valid` arrival `leadPos` exists to prevent. */
+  settled: boolean;
+};
+
+/**
+ * Resolve the lead at the delta the SET can take, and keep asking until the two
+ * answers agree.
+ *
+ * **Why this is not two lines in each caller.** `resolveConvoy` returns `leadPos`,
+ * and a caller that ignores it puts the lead at the full delta while the members
+ * stop short. But a caller that writes `leadPos` RAW is wrong in the other
+ * direction: the limit is a translation, and a translation changes what the piece
+ * is standing on, what it is snapped to, and which guides are being drawn — so the
+ * lead has to be re-resolved THERE, not merely moved there. That re-resolve can
+ * itself move the lead (the grid snap re-rounds a delta that is off-grid by
+ * construction), which changes the members' answer, which can change the limit
+ * again. Hence a loop rather than the single extra pass a comment here used to
+ * claim was provably enough.
+ *
+ * Both tabs called this differently and one of them did neither half, which is the
+ * `lib/drag-resolve.ts` scar exactly: **one rule, two consumers, each with its own
+ * copy.** It lives here so it is reachable from a test — `Draggable` is R3F and
+ * cannot be mounted, so a bug in the 3D copy could only ever be found by looking.
+ */
+export function settleLead<R extends SettleLead>(
+  /** The caller's own resolve, already closed over rotation, size and world. */
+  resolveAt: (x: number, z: number) => R,
+  /** The caller's own `resolveConvoy` call, closed over everything but the lead. */
+  askConvoy: (lead: R) => ConvoyResult,
+  /** The resolve at the delta the pointer actually asked for. */
+  first: R,
+): Settled<R> {
+  let lead = first;
+  let co = askConvoy(lead);
+  for (let pass = 0; pass < SETTLE_PASSES; pass++) {
+    // A refusal is reported where the user asked for it. `leadPos` is `pos` on
+    // every refusing path, so this is also the stable case for them.
+    if (!co.valid) return { lead, co, settled: true };
+    if (co.leadPos[0] === lead.pos[0] && co.leadPos[2] === lead.pos[2]) {
+      return { lead, co, settled: true };
+    }
+    const next = resolveAt(co.leadPos[0], co.leadPos[2]);
+    const nextCo = askConvoy(next);
+    // The shorter delta is not somewhere the lead may rest — it has been carried
+    // into something that is staying put. Refuse rather than pick one of the two
+    // answers: the first has the lead ahead of its set, the second refuses at a
+    // spot the pointer never named.
+    if (!next.valid || !nextCo.valid) return { lead: first, co, settled: false };
+    lead = next;
+    co = nextCo;
+  }
+  // `first` on this path too, and for the same reason as inside the loop: an
+  // unsettled gesture is refused, and a refusal belongs where the pointer asked for
+  // it rather than at whichever intermediate spot the last pass happened to try.
+  return { lead: first, co, settled: false };
 }
