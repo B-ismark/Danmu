@@ -6,7 +6,7 @@
 // so a substituted graph would have been accepted — at minimum a wrong-results
 // vector on the path the product presents as the trustworthy one.
 //
-// MODEL_DIGESTS in lib/local-detect.ts is now pinned, and a pin is only sound if
+// MODEL_DIGESTS in lib/model-verify.ts is now pinned, and a pin is only sound if
 // BOTH sides were checked. Pinning from the local export alone would fail closed
 // and silently disable the detector for every fresh clone — worse than the gap it
 // closes. So this script does both sides itself rather than leaving the remote
@@ -55,7 +55,7 @@ async function main() {
     process.exit(1);
   }
 
-  console.log('// Paste into MODEL_DIGESTS in lib/local-detect.ts.');
+  console.log('// Paste into MODEL_DIGESTS in lib/model-verify.ts.');
   if (!verify) console.log('// Re-run with --verify to confirm the mirror serves these same bytes.');
   const local = new Map();
   for (const f of files) {
