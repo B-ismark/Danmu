@@ -452,14 +452,29 @@ export function RoomTools() {
         <Icon name={open ? 'chevron-up' : 'chevron-right'} size={12} />
       </button>
 
-      {/* Two `.ds-btn`s in a `1fr 1fr` grid under the health chip, so Fix and
-          Shuffle each own half the width of the room-check button above and there
-          is no dead strip on the right. A grid column is the honest half: `.ds-btn`
-          is `white-space: nowrap` with fixed padding, so each label ellipsises in
-          its own span (the same opt-out `RailFooter`'s labels use) rather than
-          wraps — the rail around this row is `overflow: hidden`, so anything past
-          the edge would be eaten with no scrollbar and no error. */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
+      {/* Two `.ds-btn`s that fill the row when they fit and WRAP when they do not.
+          `.ds-btn` is `white-space: nowrap` with fixed padding, and the rail around
+          this row is `overflow: hidden`, so anything past the edge is eaten with no
+          scrollbar and no error — the "Look panel" failure CLAUDE.md names by hand.
+
+          This was briefly a `1fr 1fr` grid, for the good reason that Fix and Shuffle
+          should line up with the room-check button above rather than leave a dead
+          strip on the right. It does line them up, and it also truncates both labels
+          at every rail width that ships. The budget, from this repo's own numbers:
+          `--rail-left-tight` is 208px and this row sits inside `PartTree`'s
+          `12px 16px`, so the content box is 176px; a `1fr` column is (176 − 6) / 2 =
+          85px; `.ds-btn` spends `0 16px` of padding plus a 12px icon plus a 6px gap
+          = 50px of chrome, leaving **35px** for the word. "Shuffle" wants ~41px at
+          11px Nunito and "Shuffling…" ~59px — and the busy string is the tell that
+          has to survive `prefers-reduced-motion`, where the ring does not turn.
+
+          `flex: 1 0 auto` gets the alignment the grid was after without the cost:
+          the buttons GROW to fill a line they fit on, and because they may not
+          shrink, a line they do not fit on wraps instead of cutting a word. Wrapping
+          costs a row of height in the worst case and removes the failure mode
+          entirely; `LightingPicker` next door already does exactly this, and
+          `tests/reflow.test.ts` holds the arithmetic. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         <FixAllButton effParts={effParts} footprint={room.footprint} appPlaced={appPlaced} />
         <ShuffleButton effParts={effParts} room={room} appPlaced={appPlaced} />
       </div>
@@ -739,18 +754,24 @@ function FixAllButton({
         borderColor: 'var(--edge)',
         color: 'var(--ink-2)',
         boxShadow: 'var(--shadow-soft)',
-        // A grid child must be allowed below its own content width, or the
-        // ellipsis span inside never gets a narrower box than the words need.
-        minWidth: 0,
+        // Grow to fill the line, never shrink below the word. The no-shrink half is
+        // what makes the row wrap rather than truncate — see the note on the row.
+        flex: '1 0 auto',
+        // `.ds-btn` sets no `justify-content`, so a button that has been grown to
+        // fill its share would otherwise sit its glyph and word hard against the
+        // left edge with the slack all on the right. Every other stretched `.ds-btn`
+        // in the app centres for the same reason.
+        justifyContent: 'center',
       }}
     >
       {busy ? <Spinner size={12} /> : <Icon name="sparkles" size={12} />}
       {/* The word changes as well as the glyph. Under `prefers-reduced-motion` the
           ring does not turn, so the label is the tell that survives — and it is the
-          only one a screen reader gets from the button's own content. Ellipsised in
-          its own span, like `RailFooter`'s labels, so the word can truncate inside
-          its grid column at the narrowest rail instead of overflowing the row; the
-          full word is still in the `title`. */}
+          only one a screen reader gets from the button's own content. The span is a
+          last resort for a rail narrower than one button, not the normal path: the
+          row wraps first, so the word is not cut. It does NOT say "the full label is
+          in the `title`", because it is not — this button's title never contains the
+          word "Fix" and Shuffle's contains "Fix" and not "Shuffle". */}
       <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {busy ? 'Fixing…' : 'Fix'}
       </span>
@@ -967,16 +988,19 @@ function ShuffleButton({
         borderColor: 'var(--edge)',
         color: 'var(--ink-2)',
         boxShadow: 'var(--shadow-soft)',
-        // Same grid-child ellipsis contract as Fix; see the note there.
-        minWidth: 0,
+        // Same contract as Fix; see the note there.
+        flex: '1 0 auto',
+        justifyContent: 'center',
       }}
     >
       {busy ? <Spinner size={12} /> : <Icon name="shuffle" size={12} />}
       {/* The label carries the busy state, because the freeze it covers is up to
           two seconds long and a greyed-out button alone reads as broken rather
-          than as working. Both strings are the same width to within a character,
-          so the row does not reflow mid-press. Ellipsised in its own span for
-          the same reason Fix's is. */}
+          than as working. "Shuffling…" is about 18px wider than "Shuffle" at 11px,
+          which the wrapping row absorbs — the claim that used to sit here, that the
+          two strings are the same width to within a character, was written for a row
+          that could not reflow at all and is not true of these two words. Same
+          last-resort span as Fix's. */}
       <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {busy ? 'Shuffling…' : 'Shuffle'}
       </span>

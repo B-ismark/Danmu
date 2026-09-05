@@ -1096,3 +1096,59 @@ describe('a piece row keeps enough width to read the piece name', () => {
     ).toBeGreaterThanOrEqual(56);
   });
 });
+
+describe('the room-check actions wrap rather than cut a word', () => {
+  // Fix and Shuffle sit under the health chip in the LEFT rail, inside `PartTree`'s own
+  // `12px 16px` wrapper and OUTSIDE its scroller, so their content box is the rail width
+  // less 32 — the same figure every rail assertion above uses.
+  //
+  // They were briefly a `1fr 1fr` grid, which aligned them with the room-check button
+  // above and truncated both labels at every rail width that ships. `.ds-btn`'s own rule
+  // in `globals.css` names the two legal answers for a button with no room — its ROW
+  // wraps, or its label gets an element and ellipsises — and this row takes the first,
+  // because the second cuts `Shuffling…`, which is the tell that has to survive
+  // `prefers-reduced-motion` when the spinner does not turn.
+  const ROOM = readSrc('components', 'studio', 'RoomTools.tsx');
+
+  it('declares a wrapping row whose buttons grow but never shrink', () => {
+    const row = /\{\/\* Two `\.ds-btn`s[\s\S]*?<div style=\{\{([^}]*)\}\}>/.exec(ROOM);
+    expect(row, 'the Fix/Shuffle row is no longer where this test looks for it').toBeTruthy();
+    expect(row![1], 'the row must wrap, or a label is cut instead').toContain("flexWrap: 'wrap'");
+
+    // `1 0 auto` and not `1 1 auto`: the middle number is the whole mechanism. A shrink
+    // factor of 1 lets a button go below its content width, which is truncation again
+    // with a different declaration — and it would leave `flexWrap` in the file looking
+    // like the fix while the defect is back.
+    const grow = [...ROOM.matchAll(/flex: '1 0 auto',/g)].length;
+    expect(grow, 'both actions should be grow-but-never-shrink flex items').toBe(2);
+    const centred = [...ROOM.matchAll(/justifyContent: 'center',/g)].length;
+    expect(centred, 'a stretched .ds-btn sets no justify-content of its own').toBeGreaterThanOrEqual(2);
+  });
+
+  it('and the arithmetic is why: half the tight rail cannot hold the busy label', () => {
+    // The measurement the wrap answers to. If this ever comes out generous, the grid was
+    // fine after all and this row can go back to one — but it is not a matter of taste
+    // while the number is 35.
+    const btn = /^\.ds-btn \{[\s\S]*?^\}/m.exec(CSS);
+    expect(btn, '.ds-btn is not declared in globals.css').toBeTruthy();
+    const padX = Number(/padding: 0 (\d+)px/.exec(btn![0])![1]);
+
+    // The row's own gap, and the icon each button carries, read out of the source.
+    const rowGap = Number(/flexWrap: 'wrap', gap: (\d+) \}\}>\s*<FixAllButton/.exec(ROOM)![1]);
+    const iconPx = Number(/<Icon name="shuffle" size=\{(\d+)\}/.exec(ROOM)![1]);
+    const btnGap = Number(/height: 30,\s*fontSize: 11,\s*gap: (\d+),/.exec(ROOM)![1]);
+
+    const content = Number(/^(\d+)px$/.exec(token('rail-left-tight'))![1]) - 32;
+    const column = (content - rowGap) / 2;
+    const label = column - padX * 2 - iconPx - btnGap;
+
+    // ~5.9px per character at 11px, scaled from the 13px figure the piece-name floor
+    // above uses (~7px). Chosen rather than derived, for the reason recorded there: a
+    // derived floor moves with the thing it constrains and can never go red.
+    const needed = Math.round('Shuffling…'.length * 5.9);
+    expect(
+      label,
+      `a 1fr column at --rail-left-tight leaves ${label}px for a label that wants ~${needed}px`,
+    ).toBeLessThan(needed);
+  });
+});
