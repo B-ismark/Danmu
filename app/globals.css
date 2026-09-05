@@ -558,27 +558,47 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
    reflowed state their columns inline, and an inline declaration outranks any
    author rule, container query or not.
 
-   **THE FIRST THING TO CHECK if a rail's floating children misbehave, and it is
-   not verified.** `container-type: inline-size` applies layout containment, and a
-   layout-contained element acts as the containing block for its `position: fixed`
-   descendants. Three things inside these rails are exactly that, all positioned
-   from measured viewport coordinates: `ui/Select.tsx`'s dropdown, RoomTools'
-   room-report panel, and `ui/Tooltip.tsx`. If containment applies as the spec
-   text reads, all three resolve their coordinates against the RAIL's origin and
-   land about the top bar's height too low.
+   **STILL the first thing to check if a rail's floating children misbehave — but
+   it is MEASURED now, and the answer is that it does not bite.**
+   `container-type: inline-size` applies layout containment, and the spec text
+   says a layout-contained element is the containing block for its
+   `position: fixed` descendants. Four things inside these rails are exactly that,
+   all positioned from measured viewport coordinates: `ui/Select.tsx`'s dropdown,
+   RoomTools' room-report panel, `ui/Tooltip.tsx`, and the Inspector's
+   colour-mixer scrim (`position: fixed; inset: 0`). If containment applied as
+   written, all four would resolve against the RAIL's origin and land about the
+   top bar's height too low.
+
+   Measured 2026-09-05, engine first and app second, because a reading taken only
+   in the app cannot tell a browser's behaviour from this stylesheet's:
+
+     · a blank page, one contained box and one uncontained box at the same offset,
+       each holding `position: fixed; inset: 0`. **Chromium 153.0.8010.12 and
+       Firefox 155.0 both put BOTH children at the viewport** — 0,0,1100x900 — with
+       the uncontained one as the control, so the fixture is known to work.
+     · the app on a production build at 1100x900: open a piece's Colour section,
+       press "Mix a custom colour", and the scrim measures **1100x900 at 0,0**
+       inside a `.rail-scroll` that is at 853,130. A click in the middle of the
+       CANVAS — which only a viewport-sized scrim covers — closes the mixer.
+
+   **Not verified: WebKit**, which is not installed here; and this is two engine
+   versions on one day rather than a guarantee. So the paragraph below stands as
+   the escape hatch rather than as a plan.
 
    This comment previously asserted that the CSSWG had dropped that requirement
-   and that all three engines ship the new behaviour. **That claim is removed
-   because nobody here verified it** — and it was load-bearing for three
-   components, which is the worst combination: a confident sentence standing in
-   for a measurement. It also mattered more than it looked, because
-   `container-type` was scoped to a `.rail--elastic` modifier that production
-   never applied, so nothing shipped on this assumption until the modifier went.
+   and that all three engines ship the new behaviour. That claim was removed
+   because nobody had verified it, and removing it was right even though the
+   measurement has now landed on the same side: a confident sentence standing in
+   for a measurement is the worst thing to leave load-bearing for four components.
+   It also mattered more than it looked, because `container-type` was scoped to a
+   `.rail--elastic` modifier that production never applied, so nothing shipped on
+   this assumption until the modifier went.
 
    `ui/Tooltip.tsx` sidesteps it entirely by portalling its bubble to
    `document.body`, which is outside every container — do the same for the other
-   two if this turns out to bite. Open a Select and the room report and look; it
-   is a ten-second check and it is in `docs/visual-check.md`. */
+   three if a future engine version does bite. (This used to say the check was an
+   item in `docs/visual-check.md`. It never was one; that cross-reference was
+   wrong, which is its own small instance of the same failure.) */
 
 /* 293px, and the number is measured rather than judged. This block was at 268px,
    which is BELOW `--rail-right-min` — so for the one width band a user can reach
