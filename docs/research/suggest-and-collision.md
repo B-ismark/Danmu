@@ -277,6 +277,59 @@ decide".
   `openRoutes` can refuse the pick outright, so the wiring has to walk down the ranked list
   rather than take one.
 
+### 3.2 The offer floor — MEASURED 2026-09-05, AND THE PREMISE IS REFUTED
+
+**Do not build this. The evidence for it was a price, and the price is right; the claim
+built on top of it is not.** `scripts/offer-floor-sweep.mjs` is the artifact.
+
+`bandCost`'s docblock says *"the thing that is wrong is what gets OFFERED, not what gets
+searched — `isWorthOffering` under-values a real fix"*, and the fix proposed below is a
+relation-aware floor: offer it if any relation went from out of band to in. Swept end to
+end, **that floor would fire on nothing**:
+
+```
+whole-room solves, five presets x every in-band relation x 5 pushes x 3 directions
+  45 classified · 2 refused by the floor · 0 of those brought a relation into band
+
+one piece out of band, EVERY other piece locked — so the only move is the repair
+  11 repairs · 0 both refused and band-repairing
+```
+
+The second table is the instrument and its last two columns are the finding:
+
+```
+room         piece                before   gain  floor  offered  fixed  gap0  gap1  moved  gapF  fixedF
+rect 5.6x4.2 coffee-table +0.45     3.91   0.99   1.00       NO     no  0.90  0.60   0.30  0.51      no
+l 6x5        coffee-table +0.45     3.16   1.05   1.00      yes     no  0.90  0.58   0.32  0.50     yes
+open 6x4     coffee-table +0.45     3.82   1.02   1.00      yes     no  0.90  0.57   0.33  0.50     yes
+```
+
+**The price is exactly as recorded — a 450 mm band miss on a coffee table is worth about
+one cost unit, and `rect` is refused by 0.01 of it.** What is not true is the next clause.
+With everything else locked the solver moves the piece most of the way back and **stops
+short of its own band**: 0.90 m → 0.58 m against a 0.50 m maximum. Re-solved with
+`inertia: 0` and nothing else changed, **10 of the 11 land in band instead of 3** (`gapF` /
+`fixedF`). In `arrange` mode the origin the search is anchored to is the DISPLACED
+position, so `inertia` is charging the repair for being a change.
+
+So the fault is in what gets **searched** after all, and the term responsible is named. An
+offer floor keyed on an `inBand` transition cannot fire, because the transition does not
+happen. **The successor question is `inertia` against a relation that is out of band — not
+a weight sweep** (§ C is the record of what those do to a summed objective), and probably
+not a weight at all: the piece is being charged for undoing a displacement it did not
+choose.
+
+*Two things about the method that cost a run each and are worth inheriting.* The first
+population pushed pieces in a RANDOM direction and 32 of 35 rooms came back with a hard
+term already non-zero — the sweep had conflated "out of band" with "through the plaster",
+and a floor of one cost unit cannot bind against a term weighted 1000. The second filtered
+those rooms OUT on `HARD_TERMS`, which threw away 88 of 150 and left three to reason from;
+but `access`, `door` and `navigation` are FINDINGS, not broken rooms, and they are exactly
+the rooms a user presses Suggest in. They are recorded per row now rather than filtered.
+
+The section below is the design as it was scoped, kept because the price measurement in it
+is still correct and because the next person needs to see what was refuted.
+
 ### 3.2 The offer floor, which § C already scoped
 
 § C's untried direction — *"the fault is in what gets OFFERED, not what gets searched. A
