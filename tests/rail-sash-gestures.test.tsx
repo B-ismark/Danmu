@@ -620,9 +620,14 @@ describe('opening a rail publishes a width inside its own range', () => {
     // publishing the trio again from a measurement taken while it was closed — 37 against
     // a minimum of 208 — and a ResizeObserver closes it a frame later, in a browser that
     // has one. `open` is a dependency of the measuring effect for this reason.
+    // BEFORE the mount, and that is the whole fixture: the attribute is rendered from
+    // `metrics`, which the measuring effect writes on mount. Installed afterwards, the
+    // mount measures jsdom's real 0px, the toggle republishes 0 against a floor of 0,
+    // and `0 <= 0` passes — the guard is never reached and the mutation survives. It
+    // did, and this comment is the record of it.
     useStudio.setState({ ...OPEN, railLeftOpen: false });
-    mount(1100);
     const undo = stubTogglingLayout();
+    mount(1100);
     const el = sashEl('left');
 
     // Closed, the trio is not published at all — so the assertion below is about a value
@@ -637,8 +642,13 @@ describe('opening a rail publishes a width inside its own range', () => {
     const min = Number(el.getAttribute('aria-valuemin'));
     const max = Number(el.getAttribute('aria-valuemax'));
     expect(Number.isFinite(now) && Number.isFinite(min), 'the trio is incomplete on an open rail').toBe(true);
-    // 208 within [208, 512] on the fixed build; 37 within [208, 512] on the broken one.
-    expect(now, `aria-valuenow ${now} is below aria-valuemin ${min}`).toBeGreaterThanOrEqual(min);
+    // **The VALUE, not the ordering**, and the difference is a mutation that survived:
+    // `narrowest()` is `min(floor, width)`, so `valuemin <= valuenow` is true of the
+    // stale closed measurement too — 37 within [37, 440] is a perfectly ordered range
+    // describing a rail that is 208px wide. Asserting the width the rail is actually
+    // rendering is what catches an effect that did not re-measure.
+    expect(now, 'the open rail still publishes the width it had while SHUT').toBe(208);
+    expect(min, 'the published minimum is the closed width, not the open one').toBe(208);
     expect(now, `aria-valuenow ${now} is above aria-valuemax ${max}`).toBeLessThanOrEqual(max);
   });
 });
