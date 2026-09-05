@@ -33,6 +33,7 @@ import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 import { LIGHTING } from '@/lib/lighting-moods';
 import { Icon } from '@/components/ui/Icon';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 /** Eight points, because sixteen would be precision the sentence around it does
  *  not have. */
@@ -93,39 +94,39 @@ export function NorthDial() {
     [setSite],
   );
 
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-      <Dial bearingDeg={bearingDeg} sunAzimuthDeg={sunAzimuthDeg} onChange={onChange} />
-      {/* `minWidth: 0` on the text and `flexShrink: 0` on the dial: the dial is a
-          fixed 76px of SVG and the sentence is the part that should reflow, which
-          is the opposite of what a flex row does by default.
-          Two short sentences, not four clauses. The long version explained the
-          mechanism ("the room stays put and the compass turns around it") to
-          someone who can see the mechanism turning under their cursor — a rail is
-          not the place to narrate a control that demonstrates itself. What the
-          picture cannot say is which way the light then comes from, so that is
-          the half that stayed. */}
-      <div style={{ flex: 1, minWidth: 0, fontSize: 10.5, color: 'var(--ink-3)', lineHeight: 1.4 }}>
-        Drag to set north.
-        {/* NAMES the direction rather than saying "the dot": the dot is invisible
-            to a screen reader, and the dial's `aria-valuetext` is about the
-            bearing, which is the slider's own value and not the place to bolt
-            this on. Derived from the same azimuth the marker is drawn at, so the
-            two cannot disagree.
+  // The drag hint lives on an info tooltip beside the Facing label, not as a
+  // standing caption under the dial. It NAMES the direction rather than saying
+  // "the dot": the dot is invisible to a screen reader, and the dial's
+  // `aria-valuetext` is about the bearing, which is the slider's own value and
+  // not the place to bolt this on. Derived from the same azimuth the marker is
+  // drawn at, so the two cannot disagree.
+  //
+  // THE FRAME IS NAMED, and it has to be. This read "Light comes from the
+  // bottom-right" — a bare screen direction, with nothing saying what it was a
+  // direction *in*. In the 2D plan it is true of the drawing; in the 3D tab the
+  // camera orbits, so the same sentence is false at every heading but one and
+  // there is no way to tell from the words which. The dial is the one frame that
+  // survives both: it is 12 px away, it never rotates, and `planSide` is computed
+  // from `sunAzimuthDeg - bearingDeg`, which IS the screen angle the marker is
+  // drawn at (`sunAt` in `Dial`). So the sentence describes the picture beside
+  // it rather than the room behind it, and the room's own answer stays where it
+  // belongs — the marker for the eye, `aria-valuetext` for a screen reader.
+  const hint =
+    sunAzimuthDeg === null
+      ? 'Drag to set north.'
+      : `Drag to set north. Light comes from the dial's ${planSide(sunAzimuthDeg - bearingDeg)}.`;
 
-            THE FRAME IS NAMED, and it has to be. This read "Light comes from the
-            bottom-right" — a bare screen direction, with nothing saying what it
-            was a direction *in*. In the 2D plan it is true of the drawing; in the
-            3D tab the camera orbits, so the same sentence is false at every
-            heading but one and there is no way to tell from the words which. The
-            dial is the one frame that survives both: it is 12 px away, it never
-            rotates, and `planSide` is computed from `sunAzimuthDeg - bearingDeg`,
-            which IS the screen angle the marker is drawn at (`sunAt` in `Dial`).
-            So the sentence now describes the picture beside it rather than the
-            room behind it, and the room's own answer stays where it belongs —
-            the marker for the eye, `aria-valuetext` for a screen reader. */}
-        {sunAzimuthDeg !== null && ` Light comes from the dial's ${planSide(sunAzimuthDeg - bearingDeg)}.`}
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+        <span className="ds-label" style={{ display: 'block' }}>Facing</span>
+        <Tooltip label={hint}>
+          <button type="button" className="icon-btn" aria-label={`Facing — ${hint}`} style={{ width: 24, height: 24, color: 'var(--ink-3)' }}>
+            <Icon name="info" size={13} />
+          </button>
+        </Tooltip>
       </div>
+      <Dial bearingDeg={bearingDeg} sunAzimuthDeg={sunAzimuthDeg} onChange={onChange} />
     </div>
   );
 }
@@ -182,7 +183,7 @@ function Dial({
   const [nx, ny] = pt(northAt, R - 7);
 
   return (
-    <div style={{ flexShrink: 0, textAlign: 'center' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
       <svg
         ref={ref}
         width={C * 2}
@@ -276,8 +277,8 @@ function Dial({
             return <circle cx={sx} cy={sy} r={5} fill="var(--accent)" stroke="var(--accent-text)" strokeWidth={1.5} />;
           })()}
       </svg>
-      <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 2 }}>
-        <Icon name="compass" size={9} style={{ display: 'inline-block', verticalAlign: '-1px', marginRight: 3 }} />
+      <div style={{ fontSize: 10, color: 'var(--ink-3)', display: 'flex', alignItems: 'center', gap: 3 }}>
+        <Icon name="compass" size={9} />
         <span className="mono">{Math.round(bearingDeg)}°</span>
       </div>
     </div>

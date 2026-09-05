@@ -641,8 +641,9 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
   /* The last thing to give is padding, because it is the only thing here whose
      loss costs nothing but air.
 
-     `.rail-section-*` is in this list because `RailSection` is what the LEFT rail's
-     panels are built from — it replaced `.section` there. While its padding was
+     `.rail-section-*` is in this list because `RailSection` is what the rails'
+     panels are built from — the LEFT rail's whole section list, and the right
+     rail's View panel — and it replaced `.section` there. While its padding was
      stated inline in the component, this rule reached the Inspector and nothing
      else, so the relief the comment above describes applied to one rail of two. */
   .section, .section--flush,

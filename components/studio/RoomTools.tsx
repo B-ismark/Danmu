@@ -452,16 +452,14 @@ export function RoomTools() {
         <Icon name={open ? 'chevron-up' : 'chevron-right'} size={12} />
       </button>
 
-      {/* `wrap`, because this row is two `.ds-btn`s and a `.ds-btn` is
-          `white-space: nowrap` with fixed padding — it cannot shrink. The rail
-          around it is `overflow: hidden`, so anything past the edge is eaten with
-          no scrollbar and no error, which is the "Look panel" failure CLAUDE.md
-          names by hand. The budget is about 166px of button inside the 176px
-          `--rail-left-tight` leaves: ~10px, on labels whose width depends on a
-          font nobody has measured here. Wrapping costs a row of height in the
-          worst case and removes the whole failure mode; `LightingPicker` next
-          door already does exactly this. */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      {/* Two `.ds-btn`s in a `1fr 1fr` grid under the health chip, so Fix and
+          Shuffle each own half the width of the room-check button above and there
+          is no dead strip on the right. A grid column is the honest half: `.ds-btn`
+          is `white-space: nowrap` with fixed padding, so each label ellipsises in
+          its own span (the same opt-out `RailFooter`'s labels use) rather than
+          wraps — the rail around this row is `overflow: hidden`, so anything past
+          the edge would be eaten with no scrollbar and no error. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
         <FixAllButton effParts={effParts} footprint={room.footprint} appPlaced={appPlaced} />
         <ShuffleButton effParts={effParts} room={room} appPlaced={appPlaced} />
       </div>
@@ -741,13 +739,21 @@ function FixAllButton({
         borderColor: 'var(--edge)',
         color: 'var(--ink-2)',
         boxShadow: 'var(--shadow-soft)',
+        // A grid child must be allowed below its own content width, or the
+        // ellipsis span inside never gets a narrower box than the words need.
+        minWidth: 0,
       }}
     >
       {busy ? <Spinner size={12} /> : <Icon name="sparkles" size={12} />}
       {/* The word changes as well as the glyph. Under `prefers-reduced-motion` the
           ring does not turn, so the label is the tell that survives — and it is the
-          only one a screen reader gets from the button's own content. */}
-      {busy ? 'Fixing…' : 'Fix'}
+          only one a screen reader gets from the button's own content. Ellipsised in
+          its own span, like `RailFooter`'s labels, so the word can truncate inside
+          its grid column at the narrowest rail instead of overflowing the row; the
+          full word is still in the `title`. */}
+      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {busy ? 'Fixing…' : 'Fix'}
+      </span>
     </button>
   );
 }
@@ -961,14 +967,19 @@ function ShuffleButton({
         borderColor: 'var(--edge)',
         color: 'var(--ink-2)',
         boxShadow: 'var(--shadow-soft)',
+        // Same grid-child ellipsis contract as Fix; see the note there.
+        minWidth: 0,
       }}
     >
       {busy ? <Spinner size={12} /> : <Icon name="shuffle" size={12} />}
       {/* The label carries the busy state, because the freeze it covers is up to
           two seconds long and a greyed-out button alone reads as broken rather
           than as working. Both strings are the same width to within a character,
-          so the row does not reflow mid-press. */}
-      {busy ? 'Shuffling…' : 'Shuffle'}
+          so the row does not reflow mid-press. Ellipsised in its own span for
+          the same reason Fix's is. */}
+      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {busy ? 'Shuffling…' : 'Shuffle'}
+      </span>
     </button>
   );
 }

@@ -1174,12 +1174,17 @@ and closes when you are not using it.
   scroll box clips an absolute card, the same reason and the same fix as
   `ui/Select.tsx`'s portalled listbox. It opens to the *right* of the rail so the
   room a finding flies to stays visible.
-- **Sections**: Room (dimensions + Re-scan) · Style (themes) · View
-  (`ViewOptions`) · Pieces (search + the listbox, and it takes the leftover
-  height). `RailSection.tsx` owns the header — a real `<button>` controlling a
+- **Sections**: Room (dimensions + Re-scan) · Style (themes) · Pieces (search +
+  the listbox, and it takes the leftover height). `RailSection.tsx` owns the
+  header — a real `<button>` controlling a
   region, with the count in `.section-meta`. Open/closed is **local, not
   persisted**: which drawer you left open is not a preference worth carrying
   between rooms, and `partialize` should stay about how the room *looks*.
+  **View is in the right rail now.** It left this list because it is about how
+  the SELECTED piece renders as much as how the room does — the right rail ends
+  (above the pinned footer) with a collapsible `<RailSection title="View">`
+  holding `ViewOptions`, directly on top of Add when nothing is selected and
+  underneath Exact size when a piece is.
   **A rail section's body is inline, never a popover.** `ViewOptions` shipped for
   a while as a "Look" button opening a 300px absolute card inside a 260px rail:
   it was cut off down the left by `PartTree`'s own scroll box, and it was a
