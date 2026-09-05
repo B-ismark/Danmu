@@ -1594,7 +1594,22 @@ buys two things and costs one:
   on the floor rather than hanging at table height — and can equally ride *up* onto
   something it arrives over, exactly as a single dragged piece does. Vertical
   rigidity is not a promise a drag here makes.
-- **A member that cannot follow makes the whole step invalid**, and names itself.
+- **A member that merely runs out of room SHORTENS the gesture** (§ H.8, decided by
+  the user and built 2026-09-05). The set slides to whichever member binds first and
+  stays valid: a lone piece meeting a wall stops rather than refusing, and a set
+  should not behave differently for having company. `resolveConvoy` returns that
+  shorter delta as `ConvoyResult.leadPos`, and **`settleLead` is what a caller must
+  use to take it** — it re-resolves the lead at the shorter delta rather than merely
+  moving it there, and re-asks the company until the two agree, because a translation
+  changes what the piece is standing on. A gesture that will not settle is refused
+  rather than committed. Both tabs call the one function; they carried a shorter
+  version each, and one of them carried neither.
+- **A member that cannot follow AT ALL still makes the whole step invalid**, and names
+  itself — a collision with something staying put has no overshoot to subtract, so
+  sliding cannot explain it, and a limit that collapses to zero is one of these rather
+  than a slide of length nothing. The refusal is reported **at the delta the user
+  asked for**, never at some shorter one nobody requested, or the caller draws it
+  where the pointer never was.
   The set refuses as a unit instead of deforming or pushing a piece through the
   plaster (rule 2, for position), and the piece that refused is not the piece under
   the hand — so the spoken sentence names the member, and the red outline goes to
@@ -1640,8 +1655,13 @@ it, and a deleted travelling support is a piece resolved onto the floor and pers
 there. The fifth argument is the opposite operation and is not a contradiction of the
 first: `carried` is the mover's OWN rigid children, which ride it, so they must not be
 able to obstruct it or — the half that bit — be its floor. Callers pass `convoy.own`;
-`resolveConvoy` passes `[]` for the world every member shares. Pass the ATTEMPTED delta when resolving the dragged piece and the ACCEPTED
-one for members. And a member resolves with `snapMode: 'off'`: its own magnetism would
+`resolveConvoy` passes `[]` for the world every member shares. Resolve the dragged piece
+at the ATTEMPTED delta, ask the company, then — through `settleLead` — resolve it AGAIN
+at whatever shorter delta the company can take, until the two agree; members always
+resolve at the delta the lead accepted. (This paragraph used to read "pass the ATTEMPTED
+delta when resolving the dragged piece and the ACCEPTED one for members", which is the
+exact invariant `leadPos` breaks: the lead's own answer is no longer final until the
+company has been asked.) And a member resolves with `snapMode: 'off'`: its own magnetism would
 pull it out of formation, and the grid would re-round a delta the dragged piece has
 already committed to. `convoyRestore` is the Escape path — it replays the pure
 cascade from the start transforms rather than snapshotting a second copy of them.

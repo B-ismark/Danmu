@@ -756,6 +756,33 @@ person. The three signposts and the click-through are gated by `tests/studio-cop
 and `tests/library-click-through.test.tsx`. The one item below is new, and it is here
 because what a test can check about it and what a person can see are different halves.*
 
+### A dragged SET slides to its binding member — and only a pointer can show it
+
+*Filed by `drag` (§ H.8, built 2026-09-05, PR #113). It is here rather than in a probe
+for a reason worth keeping: a probe was built and run against both builds, it reproduced
+the old behaviour in a browser — a two-piece selection stopping **3.55 m short** of where
+the dragged piece reaches alone — and it still could **not tell the two builds apart**.
+An arrow nudge is a fixed step, and in every fixture reachable from the keyboard the
+binding member's clamp lands exactly on the lattice, where "refuse" and "slide to the
+limit" stop in the same place to six decimals. **A sub-step delta needs a pointer drag**,
+which is the one gesture that probe never made. Five versions failed five different ways
+and all five are written into `scripts/slide-probe.mjs`.*
+
+**Where to click.** Merge a bed with a nightstand on each side, or shift-click any
+multi-selection, and drag it **with the pointer** toward the wall the members are nearest.
+
+**Right.** The set slides until the nearest member is flush against the wall and stops
+there, still following the hand. Nothing goes red; nothing is announced.
+
+**Wrong.** The piece under the hand runs ahead of its company. Or the size tag and the
+wall-gap labels sit somewhere the piece is not — 3D drew the mesh at the limited position
+while publishing the live channel from the pointer's, so `MeasureGuides` built the OBB at
+a place the piece was not; that is fixed, and this is where it would show.
+
+**Unverified and named as such:** four mutants survive in that change — both `Draggable`
+call sites and the two `settled` gates — because no test in this repo reaches an R3F
+component and the probe cannot make a sub-step drag. This row is the only check they have.
+
 ### The placement row is two buttons now — does it still read as a row, at every rail width?
 
 **Where to click.** Open any room, select a floor-standing piece, and look at the two
