@@ -5,6 +5,7 @@ import {
   HARD_TERMS,
   impossibility,
   IMPOSSIBLE_TERMS,
+  declinedTermsFor,
   impossibleClause,
   impossibleTermsWorse,
   isImpossibleTerm,
@@ -516,6 +517,25 @@ describe('SolveResult.declinedTerms — which condition, not both conditions', (
     const after = B({ overlap: 1 + 9e-7, outside: 1 + 9e-7 });
     expect(declineFor(impossibility(before), impossibility(after), 10, 9, false)).toBe('impossible');
     expect(impossibleTermsWorse(before, after).length, 'a refusal with no condition to name').toBeGreaterThan(0);
+  });
+
+  it('is empty unless the refusal is ABOUT impossibility', () => {
+    // The contract, and it needed extracting before it could be asserted: inside
+    // `solveLayout` the gate on `declined === 'impossible'` was invisible, because every
+    // decline reverts identically and the only reader is one branch of one toast.
+    // Relaxing it to `declined ?` survived the whole battery.
+    //
+    // The fixture is a `no-gain` refusal in which a hard term nevertheless rose — the
+    // state the relaxed version fills and the correct one does not. It is reachable:
+    // `declineFor` forgives a rise under 1e-6 as float noise, so an answer can be
+    // fractionally more impossible and still be refused for being dearer.
+    const before = B({ overlap: 1, outside: 1 });
+    const after = B({ overlap: 1 + 5e-7, outside: 1 });
+    expect(declineFor(impossibility(before), impossibility(after), 10, 11, false)).toBe('no-gain');
+    expect(declinedTermsFor('no-gain', before, after), 'a no-gain refusal named a condition').toEqual([]);
+    expect(declinedTermsFor(null, before, after), 'an answer that was not refused named one').toEqual([]);
+    // …and the accepting half, or a function that returned `[]` for everything would pass.
+    expect(declinedTermsFor('impossible', before, after)).toEqual(['overlap']);
   });
 
   it('is a sentence fragment that reads for one condition or two', () => {

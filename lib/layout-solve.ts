@@ -232,6 +232,26 @@ export function impossibleTermsWorse(before: CostBreakdown, after: CostBreakdown
   return IMPOSSIBLE_TERMS.filter((k) => after[k] > before[k]);
 }
 
+/** The whole of the rule, as a pure function of the decision and the two breakdowns.
+ *
+ *  Out here for the same reason `declineFor` is: the part worth asserting is a
+ *  RELATIONSHIP between the refusal and the conditions, and that cannot be observed
+ *  from a `SolveResult` — every decline reverts identically, so a `no-gain` refusal and
+ *  an `impossible` one both come back with `after === before` and `moved: []`.
+ *
+ *  Inline, the gate on `declined === 'impossible'` was untestable and it survived
+ *  mutation: relaxing it to `declined ?` fills the list on a `no-gain` refusal whenever
+ *  float noise nudges a hard term up, and nothing could see it because the only reader
+ *  is the impossible branch of a toast. The contract is that the list is empty unless
+ *  the refusal is about impossibility, and a contract with no failing test is a comment. */
+export function declinedTermsFor(
+  declined: SolveDecline | null,
+  before: CostBreakdown,
+  after: CostBreakdown,
+): ImpossibleTerm[] {
+  return declined === 'impossible' ? impossibleTermsWorse(before, after) : [];
+}
+
 /** What to call those conditions, in a sentence.
  *
  *  Here rather than in the component because **four hand-typed copies of one sentence
@@ -1261,7 +1281,7 @@ export function solveLayout(
   // `breakdownAfter` to `breakdownBefore`, so after it there is no difference left to
   // read and the two breakdowns on the result agree. Computing this in the caller would
   // therefore answer "nothing rose" about every refusal there has ever been.
-  const declinedTerms = declined === 'impossible' ? impossibleTermsWorse(breakdownBefore, breakdownAfter) : [];
+  const declinedTerms = declinedTermsFor(declined, breakdownBefore, breakdownAfter);
   if (declined) {
     winner = origin.map((p) => ({ ...p }));
     breakdownAfter = breakdownBefore;
