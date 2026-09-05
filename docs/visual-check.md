@@ -103,6 +103,29 @@ renderer calls them". Thirteen other mutations were killed.
 **Not seen:** a real GPU. All of this is headless Chromium on SwiftShader, so nothing
 here speaks to how the shapes look with real lighting on a real device.*
 
+### An air purifier's intake slats stand up through it instead of banding around it
+
+**Where to click.** Any room, **3D Model** tab, Library → **Air purifier**. Look at it from
+the side, not from above.
+
+**What is wrong.** `AirPurifierGeo` (`components/three/DynamicPart.tsx:1232-1236`) draws its
+three intake slats as `<torusGeometry>` with **no rotation**. A torus lies in XY with its
+axis on Z; the purifier body is a cylinder about Y. So the three rings stand as vertical
+hoops in the `z = 0` plane, cutting edge-on through the body, where they are meant to be
+horizontal bands around it. The fix is almost certainly `rotation={[Math.PI/2, 0, 0]}` —
+the same axis confusion the washing-machine drum already carries a comment about.
+
+**Why it is filed here and not fixed.** It is a one-line rotation, which is exactly the
+class of change that ships upside-down because it was obviously right. Nothing in this repo
+renders geometry — the `FanGeo` control mutation above is the standing proof — so no gate
+can tell a corrected slat from a slat rotated the other way. Someone has to see it before
+and after.
+
+**Found by** the footprint lane, incidentally, while sweeping shapes for compound
+footprints. Never in a browser. Related, same class, also unfixed: `DeskGeo` draws the
+L-desk's return wing so the piece spans **2.86 m** where every consumer reads 1.60 m, and
+32 of 46 shapes draw outside their own `dimMM`.
+
 ### A ceiling fan hangs flush against the slab — and an OLD room's fan still does not
 
 **Where to click.** Any room, **3D Model** tab, Library → Appliances → **Ceiling fan**,
