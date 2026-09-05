@@ -32,6 +32,7 @@
 import type { Detection } from './detection';
 import type { CaptureSlot } from './storage';
 import type { Category, Shape } from './scene-spec';
+import { acceptableModel, digestMatches } from './model-verify';
 
 const MODEL_FILE = 'yolov8n-oiv7.onnx';
 const NAMES_FILE = 'yolov8n-oiv7.names.json';
@@ -221,58 +222,14 @@ const ORT_LOCAL_BASE = '/ort/';
 const ORT_CDN_BASE = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`;
 const ORT_ENTRY = 'ort.min.mjs';
 
-// ─── Weights integrity ──────────────────────────────────────────────────────
+// ─── Weights integrity ──────────────────────────────────────────
 //
-// A HEAD 200 used to be the only validation on a 14 MB and a 50 MB graph fetched
-// from a public mirror and handed straight to the wasm runtime.
-//
-// Each digest below was verified on BOTH sides before being pinned — the local
-// export in public/models/ and the bytes the mirror actually serves over
-// /resolve/main/ hash identically. That check is the whole point: a digest pinned
-// from the local copy alone would fail closed and silently disable the detector
-// for every fresh clone, which is worse than the gap it closes. `pnpm hash:models`
-// prints the local side; its header documents the remote side.
-//
-// A mismatch here means the mirror changed. That is exactly when the detector
-// SHOULD refuse: fetchVerifiedModel returns null, the app reports the detector as
-// unavailable, and the Gemini / manual-box paths carry on. Re-verify and re-pin
-// deliberately rather than deleting the entry to make it work again.
-//
-// Independent of the registry, every REMOTE file is format-checked: an ONNX file
-// is a protobuf, and the realistic failure mode here is receiving something that
-// is not one at all (an HTML error page, a redirect body, a truncated download).
-// Local files are the user's own export and are trusted as-is.
-const MODEL_DIGESTS: Record<string, string> = {
-  'yolov8n-oiv7.names.json':
-    'sha256-8126ccfbc3780e25825a1beae446edf7d663b69223b5ce796d8499ea8c3ce13d',
-  'yolov8n-oiv7.onnx':
-    'sha256-10833f3633b96c0e7554564d06be8449191ac3c36b3e9d4df7387b41b4187c33',
-  'yolov8s-worldv2-danmu.onnx':
-    'sha256-3a04741b738b1b6c756e00dfe5fe322765efba93699b331200e625f963d37f5b',
-};
-
-/** Plausible size window for a detector graph, so a 400-byte error page or a
- *  1 GB surprise is refused before it is parsed. */
-const MIN_MODEL_BYTES = 1 * 1024 * 1024;
-const MAX_MODEL_BYTES = 512 * 1024 * 1024;
-
-async function sha256Hex(buf: ArrayBuffer): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', buf);
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-/** True when `buf` looks like a serialised ONNX ModelProto. Field 1 (ir_version)
- *  is a varint, so a well-formed file starts with the tag byte 0x08. */
-function looksLikeOnnx(buf: ArrayBuffer): boolean {
-  if (buf.byteLength < MIN_MODEL_BYTES || buf.byteLength > MAX_MODEL_BYTES) return false;
-  const head = new Uint8Array(buf, 0, Math.min(16, buf.byteLength));
-  if (head[0] !== 0x08) return false;
-  // The producer_name / domain strings appear early in every graph we ship.
-  const text = new TextDecoder('latin1').decode(new Uint8Array(buf, 0, Math.min(4096, buf.byteLength)));
-  return text.includes('onnx') || text.includes('pytorch') || text.includes('ai.onnx');
-}
+// The registry, the size window, the digest and the ONNX format check now live in
+// `lib/model-verify.ts`, with the argument for pinning them in its header. They moved
+// for one reason: everything in here is private to a module whose every path goes
+// through `load()`, which dynamically imports `onnxruntime-web` — so the pin over two
+// downloads from a public mirror had no test, and a ~62 MB manual command was the only
+// way to exercise it. Nothing about the behaviour changed.
 
 /** Fetch a remote file and refuse it unless its digest matches the pinned one.
  *  Returns null when it cannot be trusted — callers treat that exactly like "not
@@ -284,16 +241,15 @@ async function fetchVerifiedBytes(base: string, file: string): Promise<ArrayBuff
   const res = await fetch(base + file);
   if (!res.ok) return null;
   const buf = await res.arrayBuffer();
-  const expected = MODEL_DIGESTS[file];
-  if (expected && `sha256-${await sha256Hex(buf)}` !== expected) return null;
-  return buf;
+  return (await digestMatches(file, buf)) ? buf : null;
 }
 
 /** …and for a graph, the format check as well. */
 async function fetchVerifiedModel(base: string, file: string): Promise<Uint8Array | null> {
-  const buf = await fetchVerifiedBytes(base, file);
-  if (!buf || !looksLikeOnnx(buf)) return null;
-  return new Uint8Array(buf);
+  const res = await fetch(base + file);
+  if (!res.ok) return null;
+  const buf = await res.arrayBuffer();
+  return (await acceptableModel(file, buf)) ? new Uint8Array(buf) : null;
 }
 
 /** The class-name table. It is not code, but it silently decides what every

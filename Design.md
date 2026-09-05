@@ -2157,7 +2157,10 @@ anything fetched from outside. Two controls exist because of it:
   first and keeps the CDN as a fallback, so a fresh clone still works.
 - **Weights** are format-checked on every remote fetch (ONNX protobuf magic plus a
   size window) and digest-checked against `MODEL_DIGESTS` in
-  `lib/local-detect.ts`. All three files are pinned, and each digest was verified
+  `lib/model-verify.ts` — the boundary is its own module now, because inside
+  `local-detect.ts` every path to it went through a dynamic `onnxruntime-web`
+  import and it therefore had no test at all. `tests/model-verify.test.ts` is that
+  test. All three files are pinned, and each digest was verified
   on both sides — the local export and the bytes the mirror actually serves —
   because a pin taken from the local copy alone would fail closed and silently
   disable the detector for every fresh clone. `pnpm hash:models --verify` does
