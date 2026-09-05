@@ -589,9 +589,18 @@ function WardrobeGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
         const leftHinged = i % 2 === 0;
         const hinge = leftHinged ? cx - bayW / 2 + 0.01 : cx + bayW / 2 - 0.01;
         const dir = leftHinged ? 1 : -1; // door extends toward bay centre from hinge
+        // NEGATED, and the sign is the whole of it. A rotation about +Y carries local +x
+        // toward -z, so a door extending along +x from a hinge on the FRONT face swung
+        // into the carcass — through the back panel, the dividers and whatever was on the
+        // shelves. It was invisible to every gate because nothing measured a footprint
+        // with the doors open: `tests/footprint-fidelity.test.tsx` took the wardrobe as a
+        // ramp at open = 0 / 0.25 / 0.5 / 0.75 / 1 and read 12 / 0 / 0 / 0 / 0 mm outside
+        // `dimMM`, i.e. at any open above zero its bounds were EXACTLY its declared box.
+        // An outward-swinging door cannot do that. The ramp is monotone now and the far
+        // edge reaches 524 mm proud of the face at the library size.
         const dw = bayW - 0.02;
         return (
-          <group key={`bay-${i}`} position={[hinge, h * 0.5, d / 2 - 0.009]} rotation={[0, dir * swing, 0]}>
+          <group key={`bay-${i}`} position={[hinge, h * 0.5, d / 2 - 0.009]} rotation={[0, -dir * swing, 0]}>
             <Box size={[dw, h * 0.94, 0.018]} position={[dir * dw / 2, 0, 0]} color={wood} roughness={0.7} />
             {/* handle near the door's free (opening) edge */}
             <mesh position={[dir * (dw - 0.05), 0, 0.014]}>
