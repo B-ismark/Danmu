@@ -117,26 +117,50 @@ describe('one box per piece, against the geometry the app draws', () => {
     let checked = 0;
     let agreed = 0;
     let collided = 0;
-    for (let x = -1.6; x <= 1.6; x += 0.1) {
-      for (let z = -1.6; z <= 1.6; z += 0.1) {
-        const m = { id: 'mover', name: 'mover', shape: 'box' as Shape, category: 'other',
-                    dimMM: [600, 600, 900] as [number, number, number],
-                    pos: [x, 0, z] as [number, number, number], rot: 0, color: '#888' } as unknown as ScenePart;
-        const mine = pairHits(m, obstacle, 'box');
-        checked++;
-        if (mine === collidesAt([m, obstacle], 'mover', m.pos, m.rot, m.dimMM)) agreed++;
-        if (mine) collided++;
+    let straddled = 0;
+    // The mover is lifted through a range of heights as well as swept across the floor.
+    // Sweeping at y = 0 only, this control could not see `collidesAt`'s VERTICAL gate at
+    // all: widening its 0.005 epsilon to 0.5 changed nothing and the mutation survived,
+    // because nothing in the fixture ever sat near the boundary. `obstacle` is 2100 mm
+    // tall, so a 900 mm mover at y = 2.09 overlaps it by 10 mm and at y = 2.11 clears it
+    // by 10 mm — either side of the epsilon, which is what makes the gate observable.
+    const [, obsTop] = verticalExtent(obstacle.category, obstacle.shape, obstacle.dimMM, obstacle.pos[1]);
+    for (let x = -1.6; x <= 1.6; x += 0.2) {
+      for (let z = -1.6; z <= 1.6; z += 0.2) {
+        for (const y of [0, obsTop - 0.01, obsTop - 0.004, obsTop + 0.004, obsTop + 0.01]) {
+          const m = { id: 'mover', name: 'mover', shape: 'box' as Shape, category: 'other',
+                      dimMM: [600, 600, 900] as [number, number, number],
+                      pos: [x, y, z] as [number, number, number], rot: 0, color: '#888' } as unknown as ScenePart;
+          const mine = pairHits(m, obstacle, 'box');
+          checked++;
+          if (mine === collidesAt([m, obstacle], 'mover', m.pos, m.rot, m.dimMM)) agreed++;
+          if (mine) collided++;
+          if (Math.abs(y - obsTop) <= 0.01) straddled++;
+        }
       }
     }
     // All three matter. A run that checked nothing agrees on nothing and would pass a bare
     // equality; a fixture that never collides agrees everywhere for the wrong reason.
     expect(checked, 'positions compared').toBeGreaterThan(500);
     expect(collided, 'the fixture must reach the colliding case').toBeGreaterThan(0);
+    expect(straddled, 'the fixture must reach the vertical gate').toBeGreaterThan(0);
     expect(agreed, 'box arm disagreed with collidesAt').toBe(checked);
   });
 
   it('the picking arm IS `hitsAt`, and the paint order IS `planPaintOrder`', () => {
-    const parts = defaultScene('rect', ROOM_W, ROOM_D).filter((p) => !isSoftFurnishing(p));
+    // Two deliberately OVERLAPPING pieces on top of the preset. Over `defaultScene`
+    // alone no two boxes share a sampled point, so "first wins" and "last wins" give
+    // the same answer everywhere and reversing the paint order survived as a mutation —
+    // a control that cannot observe the thing it is pinning. A small piece sitting
+    // inside a large one is exactly the case `planPaintOrder` exists to decide.
+    const mk = (id: string, dim: [number, number, number], pos: [number, number, number]) =>
+      ({ id, name: id, shape: 'box' as Shape, category: 'other', dimMM: dim, pos, rot: 0,
+         color: '#888' }) as unknown as ScenePart;
+    const parts = [
+      ...defaultScene('rect', ROOM_W, ROOM_D).filter((p) => !isSoftFurnishing(p)),
+      mk('big', [1600, 1200, 400], [-1.2, 0, 0.8]),
+      mk('small', [400, 300, 500], [-1.2, 0, 0.8]),
+    ];
     const order = planPaintOrder(parts);
     let checked = 0;
     let hits = 0;
@@ -150,6 +174,8 @@ describe('one box per piece, against the geometry the app draws', () => {
     }
     expect(checked, 'points compared').toBeGreaterThan(1000);
     expect(hits, 'the raster must actually land on furniture').toBeGreaterThan(0);
+    // The overlap must actually be sampled, or the order is still unobservable.
+    expect(hitsAt(-1.2, 0.8, parts).length, 'the raster must reach a point two pieces share').toBeGreaterThan(1);
   });
 
   const rooms = LAYOUTS.map((layout) => ({
