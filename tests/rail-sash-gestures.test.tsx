@@ -84,6 +84,43 @@ function mount(px = WIDE_PX): HTMLElement {
 const sashEl = (side: 'left' | 'right') => screen.getByLabelText(`Resize the ${side} panel`);
 const sashVar = (el: HTMLElement, side: 'left' | 'right') => el.style.getPropertyValue(`--sash-${side}`).trim();
 
+/** jsdom resolves no `var()` and lays nothing out, so every width and every token a
+ *  sash reads is 0. Three of the assertions below are about the RELATIONSHIP between
+ *  two of those numbers — the rail's measured width against `--rail-closed` — and at
+ *  0 against 0 that relationship is not expressible. This installs the numbers a real
+ *  browser has, so the test is measuring the guard rather than a pair of zeroes.
+ *
+ *  The tokens are the app's own values. `--rail-left-tight` (208) sitting BELOW
+ *  `--rail-left-min` (228) is not a mistake in the fixture: it is the compact step,
+ *  and it is the reason the guard cannot be written against the floor. */
+function stubLayout({ railPx }: { railPx: number }): () => void {
+  const realCS = window.getComputedStyle.bind(window);
+  const realRect = Element.prototype.getBoundingClientRect;
+  const TOKENS: Record<string, string> = {
+    '--rail-closed': '37px',
+    '--rail-left-min': '228px',
+    '--rail-right-min': '276px',
+    '--rail-max-share': '0.4',
+  };
+  window.getComputedStyle = ((el: Element, pe?: string | null) => {
+    const cs = realCS(el, pe ?? undefined);
+    return new Proxy(cs, {
+      get(t, k) {
+        if (k !== 'getPropertyValue') return Reflect.get(t, k);
+        return (name: string) => TOKENS[name] ?? t.getPropertyValue(name);
+      },
+    });
+  }) as typeof window.getComputedStyle;
+  Element.prototype.getBoundingClientRect = function rect(this: Element) {
+    const w = this.classList?.contains('rail') ? railPx : 0;
+    return { x: 0, y: 0, top: 0, left: 0, right: w, bottom: 0, width: w, height: 0, toJSON: () => ({}) } as DOMRect;
+  };
+  return () => {
+    window.getComputedStyle = realCS as typeof window.getComputedStyle;
+    Element.prototype.getBoundingClientRect = realRect;
+  };
+}
+
 /** One press, one release, at the same x. `pointerId` is carried because `RailSash`
  *  releases capture with it. */
 function pressAndRelease(el: HTMLElement, x = 400) {
@@ -119,6 +156,24 @@ describe('a press that moves nothing writes nothing', () => {
 
     expect(useStudio.getState().railRightW).toBeNull();
     expect(useStudio.getState().railRightOpen).toBe(true);
+  });
+
+  it('and a CLICK on an already-open sash stores none either', () => {
+    // The sibling of the closed case, and it was found in a browser rather than
+    // reasoned: `dblclick` fires two press/release pairs before `onDoubleClick`, and
+    // the probe measured the rail at 228px where it expected 208 — the two clicks had
+    // each committed the RENDERED width (208 at the compact step), which `DockedShell`
+    // then renders as `clamp(var(--rail-left-min), 208px, …)` = 228px. Same 20px jump
+    // and the same permanent loss of the compact step as the closed-rail release, one
+    // door over.
+    useStudio.setState(OPEN);
+    mount();
+    const undo = stubLayout({ railPx: 208 });
+
+    pressAndRelease(sashEl('left'));
+    undo();
+
+    expect(useStudio.getState().railLeftW, 'a click on the divider stored a width').toBeNull();
   });
 
   it('but a real drag on an open rail DOES store one', () => {
@@ -175,6 +230,9 @@ describe('the grid never loses the variable it reads its columns from', () => {
     // supposed to restore it changes nothing.
     useStudio.setState({ ...OPEN, railLeftOpen: false });
     const shell = mount();
+    // 208 is `--rail-left-tight`, what the rail measures once it has opened at the
+    // compact step — above `--rail-closed`, so the first move promotes the gesture.
+    const undo = stubLayout({ railPx: 208 });
 
     const el = sashEl('left');
     fireEvent.pointerDown(el, { button: 0, clientX: 400, pointerId: 1 });
@@ -183,6 +241,7 @@ describe('the grid never loses the variable it reads its columns from', () => {
     fireEvent.pointerMove(el, { clientX: 399, pointerId: 1 });
     fireEvent.pointerMove(el, { clientX: 400 - 500, pointerId: 1 });
     fireEvent.pointerUp(el, { clientX: 400 - 500, pointerId: 1 });
+    undo();
 
     expect(useStudio.getState().railLeftOpen, 'the push-past-the-floor did not close it').toBe(false);
 
@@ -222,72 +281,55 @@ describe('the chevron opens and closes, and owns no width', () => {
 });
 
 describe('a move that arrives before the open has laid out is refused, not seeded from', () => {
-  // The only test here that fakes layout, and it has to: the guard reads a measured width
-  // against a measured floor, and jsdom answers 0 for both, so `m.width >= m.floor` is
-  // `0 >= 0` either way and the mutant that removes it survives untouched. Two stubs give
-  // the two numbers a real browser would have at the instant the defect fires — the rail
-  // still at its CLOSED width because React has not re-rendered yet, and the floor token
-  // resolved from the stylesheet.
-  const CLOSED_PX = 37; // --rail-closed
-  const FLOOR_PX = 228; // --rail-left-min
-  let undo: Array<() => void> = [];
-
-  beforeEach(() => {
-    const realCS = window.getComputedStyle.bind(window);
-    const realRect = Element.prototype.getBoundingClientRect;
-    undo = [
-      () => {
-        window.getComputedStyle = realCS as typeof window.getComputedStyle;
-      },
-      () => {
-        Element.prototype.getBoundingClientRect = realRect;
-      },
-    ];
-    window.getComputedStyle = ((el: Element, pe?: string | null) => {
-      const cs = realCS(el, pe ?? undefined);
-      return new Proxy(cs, {
-        get(t, k) {
-          if (k !== 'getPropertyValue') return Reflect.get(t, k);
-          return (name: string) => {
-            if (name === '--rail-left-min') return `${FLOOR_PX}px`;
-            if (name === '--rail-right-min') return '276px';
-            if (name === '--rail-max-share') return '0.4';
-            return t.getPropertyValue(name);
-          };
-        },
-      });
-    }) as typeof window.getComputedStyle;
-    Element.prototype.getBoundingClientRect = function rect(this: Element) {
-      const w = this.classList?.contains('rail') ? CLOSED_PX : 0;
-      return { x: 0, y: 0, top: 0, left: 0, right: w, bottom: 0, width: w, height: 0, toJSON: () => ({}) } as DOMRect;
-    };
-  });
-
-  afterEach(() => {
-    for (const f of undo) f();
-    undo = [];
-  });
-
+  // The only test here that fakes layout, and it has to: the guard reads the rail's
+  // measured width against `--rail-closed`, and jsdom answers 0 for both, so the
+  // comparison is 0-against-0 and the mutant that removes it survives untouched.
+  //
+  // The guard is "is this still the SHUT width", not "is this under the floor", and
+  // that distinction was found in a browser rather than here: at the compact step the
+  // rail renders `--rail-left-tight` (208px), which is legitimately BELOW
+  // `--rail-left-min` (228px), so a floor comparison refused every real measurement
+  // and the drag-a-closed-sash-open gesture stopped working across the whole band.
   it('keeps the rail open when every measurement is still the closed width', () => {
-    // The premise, asserted rather than assumed: if the stubs stopped applying, the floor
-    // would be 0, the guard would pass, and this test would be measuring nothing.
-    expect(CLOSED_PX).toBeLessThan(FLOOR_PX);
-
     useStudio.setState({ ...OPEN, railLeftOpen: false });
     mount();
+    // The rail still measures `--rail-closed` because React has not re-rendered yet.
+    const undo = stubLayout({ railPx: 37 });
 
     const el = sashEl('left');
     fireEvent.pointerDown(el, { button: 0, clientX: 400, pointerId: 1 });
-    // The move that arrives too early, and then one far enough left to arm a collapse if
-    // the first one had been believed.
+    // The move that arrives too early, and then one far enough left to arm a collapse
+    // if the first one had been believed.
     fireEvent.pointerMove(el, { clientX: 399, pointerId: 1 });
     fireEvent.pointerMove(el, { clientX: -100, pointerId: 1 });
     fireEvent.pointerUp(el, { clientX: -100, pointerId: 1 });
+    undo();
 
     expect(
       useStudio.getState().railLeftOpen,
       'the gesture closed the rail it had just opened, from a width the rail cannot have',
     ).toBe(true);
     expect(useStudio.getState().railLeftW).toBeNull();
+  });
+
+  it('and a rail at the COMPACT width, which is under its own floor, is accepted', () => {
+    // The other half, and the one a floor comparison gets wrong. 208px is a real open
+    // width; the gesture must become a sizing one and a drag must commit.
+    useStudio.setState({ ...OPEN, railLeftOpen: false });
+    mount();
+    const undo = stubLayout({ railPx: 208 });
+
+    const el = sashEl('left');
+    fireEvent.pointerDown(el, { button: 0, clientX: 400, pointerId: 1 });
+    fireEvent.pointerMove(el, { clientX: 401, pointerId: 1 });
+    fireEvent.pointerMove(el, { clientX: 461, pointerId: 1 });
+    fireEvent.pointerUp(el, { clientX: 461, pointerId: 1 });
+    undo();
+
+    expect(useStudio.getState().railLeftOpen).toBe(true);
+    expect(
+      useStudio.getState().railLeftW,
+      'a drag from the compact width committed nothing — the guard refused a legal width',
+    ).not.toBeNull();
   });
 });

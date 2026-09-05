@@ -42,8 +42,10 @@ const STEP = 16;
 
 const WIDTH_PROP: Record<RailSide, string> = { left: '--sash-left', right: '--sash-right' };
 const FLOOR_TOKEN: Record<RailSide, string> = { left: '--rail-left-min', right: '--rail-right-min' };
+/** The width a SHUT rail measures — just the reopen toggle. */
+const CLOSED_TOKEN = '--rail-closed';
 
-type Metrics = { width: number; floor: number; ceiling: number };
+type Metrics = { width: number; floor: number; ceiling: number; closed: number };
 
 function tokenPx(el: Element, name: string): number {
   const n = Number.parseFloat(getComputedStyle(el).getPropertyValue(name));
@@ -97,6 +99,9 @@ export function RailSash({
         pending: number;
         collapse: boolean;
         raf: number;
+        /** Whether any pointermove has been seen. A release that never moved is a
+         *  CLICK, and a click is not a width. */
+        moved: boolean;
       }
     | null
   >(null);
@@ -113,6 +118,13 @@ export function RailSash({
     return {
       width: rail.getBoundingClientRect().width,
       floor: tokenPx(shell, FLOOR_TOKEN[side]),
+      // What the rail measures while it is SHUT. Not the same question as the floor,
+      // and conflating the two is a defect a browser found: between 1024 and 1279px
+      // the rail renders `--rail-*-tight` (208px left), which is deliberately BELOW
+      // `--rail-left-min` (228px). A guard that refused any measurement under the
+      // floor therefore refused the real open width for the whole compact step, and
+      // the drag-a-closed-sash-open gesture never started.
+      closed: tokenPx(shell, CLOSED_TOKEN),
       ceiling: Number.isFinite(share) && share > 0 ? share * window.innerWidth : Number.POSITIVE_INFINITY,
     };
   }, [railRef, shellRef, side]);
@@ -207,6 +219,7 @@ export function RailSash({
       pending: m.width,
       collapse: false,
       raf: 0,
+      moved: false,
     };
     setDragging(true);
   }
@@ -225,10 +238,18 @@ export function RailSash({
       // number, so `if (m)` passes — and seeds `startW` at 37 against a floor of 228.
       // Every later move then computes `collapse = 37 + delta < floor - SNAP_PAST_FLOOR`,
       // which is true unless the user has already dragged the width of the rail
-      // rightward, so the release closes the rail the press just opened. A width below
-      // the floor is not a width this rail can have; refuse it and stay opening.
+      // rightward, so the release closes the rail the press just opened.
+      //
+      // The guard is "is this still the SHUT width", **not** "is this below the
+      // floor", and the difference is not pedantry: the first version compared against
+      // `m.floor`, and between 1024 and 1279px the rail renders `--rail-left-tight` at
+      // 208px against a `--rail-left-min` of 228px — legitimately below its own floor,
+      // by design. That guard refused every measurement for the whole compact step, so
+      // the gesture never became a sizing one and dragging a closed sash open stopped
+      // working at exactly the widths it was written for. A browser found that; no
+      // jsdom test could, because jsdom resolves neither token.
       const m = measure();
-      if (m && m.width >= m.floor) {
+      if (m && m.width > m.closed + 1) {
         drag.current = {
           kind: 'sizing',
           startX: e.clientX,
@@ -238,12 +259,15 @@ export function RailSash({
           pending: m.width,
           collapse: false,
           raf: d.raf,
+          // This move only re-seeded the gesture; it did not size anything.
+          moved: false,
         };
       }
       return;
     }
     // The left rail grows as the pointer moves right; the right rail is mirrored.
     const delta = side === 'left' ? e.clientX - d.startX : d.startX - e.clientX;
+    if (delta !== 0) d.moved = true;
     const raw = d.startW + delta;
     d.collapse = raw < d.floor - SNAP_PAST_FLOOR;
     d.pending = Math.max(d.floor, Math.min(d.ceiling, raw));
@@ -281,6 +305,19 @@ export function RailSash({
       // here could not be undone.
       setRailWidth(side, null);
       onToggle();
+      return;
+    }
+    if (!d.moved) {
+      // A press and a release at the same x is a CLICK, and a click is not a width.
+      // Committing `d.pending` here stores the RENDERED width, which between 1024 and
+      // 1279px is `--rail-left-tight` at 208px — and `DockedShell` renders a stored
+      // number as `clamp(var(--rail-left-min), 208px, …)` = 228px. So clicking the
+      // divider widened the rail 20px and pinned it out of the compact step for good,
+      // exactly as the closed-rail release did. Same defect, the other door: the
+      // closed one was found by reading and this one by a browser, because a
+      // double-click on the sash fires two of these before `reset()` and the probe
+      // measured 228px where it expected 208.
+      sync();
       return;
     }
     setRailWidth(side, d.pending);
