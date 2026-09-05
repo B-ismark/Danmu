@@ -1108,7 +1108,13 @@ describe('the room’s anchor is settled first', () => {
     const { rows } = scrambledU();
     const clean = rows.filter((r) => HARD_TERMS.every((k) => r[k] === 0)).length;
     expect(rows.length, 'twelve seeds, not whatever the fixture returned').toBe(12);
-    expect(clean, 'seeds ending with nothing on any hard term').toBe(9);
+    // Was 9, until `defaultScene` began deriving `circle` rather than hand-writing it:
+    // the `u` layout's bedside lamp had been seeded square and is round now, so this
+    // fixture's containment and overlap answers moved. Attributed by reverting only that
+    // half of the change, which puts this and `bed-rung-safety.test.ts` back to green.
+    // A baseline, not a target, and twelve seeds on one scrambled U cannot say whether
+    // one fewer clean seed is worse — only that it is different.
+    expect(clean, 'seeds ending with nothing on any hard term').toBe(8);
     // Was 7 clean / 92.1018827121954 worst. Both moved when `c.outside` learned to see
     // an overhang (`outsideDeficit`), and the direction of each is the point:
     //
@@ -1124,17 +1130,32 @@ describe('the room’s anchor is settled first', () => {
     //     rather than a regression — but ~3.4 m² of stranded floor on one seed in twelve
     //     is a real cost of this change and is recorded here rather than absorbed.
     //
-    // 412.85033373443853 → 412.66986201255656 when `carryRiders` landed. The whole
+    // 412.85033373443853 → 412.6663679837667 when `carryRiders` landed. The whole
     // 0.18 is soft: the two bedside lamps are now scored where the nightstands
     // actually took them instead of where the annealer had left them hanging, and
     // `alignment` / `balance` read a slightly tidier room for it. Nothing hard moved
-    // — `clean` is still 9 and `outside` is still 0.00 on all twelve — which is the
-    // whole reason a rider can be carried after the search rather than inside it.
-    expect(Math.max(...rows.map((r) => r.total)), 'worst total').toBeCloseTo(412.66986201255656, 6);
-    expect(
-      rows.map((r) => r.outside),
-      'the solver leaves nothing outside the room on any seed',
-    ).toEqual(rows.map(() => 0));
+    // — `outside` is still nothing on all twelve — which is the whole reason a rider can
+    // be carried after the search rather than inside it. (`clean` was 9 here and is 8;
+    // see the note on that assertion above.)
+    expect(Math.max(...rows.map((r) => r.total)), 'worst total').toBeCloseTo(412.6663679837667, 6);
+    // A TOLERANCE, and it is a physical one rather than a number chosen to pass. This
+    // read `toEqual(rows.map(() => 0))`, which was available only while every footprint
+    // in the fixture was a rectangle: `outsideShare` over an axis-aligned box returns
+    // exact zeros. Once the `u` layout's bedside lamp became round — `defaultScene`
+    // derives `circle` now instead of hand-writing it — its footprint is a polygonised
+    // ellipse, and two of the twelve seeds came back at 2.0e-13 and 4.7e-13 m2.
+    //
+    // That is far below the smallest thing this app can express, let alone anything a
+    // person could see. The claim is unchanged — the solver leaves nothing outside the
+    // room — but it is now stated in a unit the arithmetic can deliver. 1e-9 m2 is a
+    // square micrometre, so a real overhang cannot hide under it.
+    //
+    // Mutated to `toBeLessThan(0)`: red on seed 0, so the loop is reached and reading
+    // real values. A genuine overhang was NOT injected — that would mean breaking the
+    // solver's containment on purpose, and this assertion is not the one that guards it.
+    for (const [i, r] of rows.entries()) {
+      expect(r.outside, `seed ${i} leaves floor outside the room`).toBeLessThan(1e-9);
+    }
   }, 120_000);
 
   it('can tell the solved room from the scrambled one it started from', () => {
