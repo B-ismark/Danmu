@@ -292,9 +292,26 @@ whole-room solves, five presets x every in-band relation x 5 pushes x 3 directio
   45 classified · 2 refused by the floor · 0 of those brought a relation into band
 
 one piece out of band, EVERY other piece locked — so the only move is the repair
-  22 cases · 12 refused by the floor · 0 of those 12 repaired the band
+  22 cases · 11 refused with the solver producing NO CHANGE AT ALL
+             1 refused having actually moved the piece  <- the informative one
+            10 offered
+             0 refusals of either kind repaired the band
             12 of the 22 carry no hard term at all
 ```
+
+**The three-way split is not tidiness and collapsing it was the same defect one level
+in.** A refusal in which the solver produced no change is refused by *any* floor
+whatsoever — the floor is `max(MIN_GAIN_ABS, MIN_GAIN_SHARE × before)` and `MIN_GAIN_ABS`
+is 1.00, so a gain of 0.00 fails it in every room. Counted beside a refusal the gate
+actually decided, the line cannot tell *"the gate is too high"* from *"the search had
+nothing to offer"*, which is exactly what it gets read as answering. **The informative
+denominator is one**, and it was one before the skip was fixed too. The partition is
+total: "offered with no change" cannot exist.
+
+That relocates the finding rather than weakening it. **Eleven of twenty-two cases are a
+solver that will not move the piece at all**, and the ramp is what makes that a fact about
+the term rather than about the rooms, because those same cases start moving as it comes
+down.
 
 **The price is exactly as recorded — a 450 mm band miss on a coffee table is worth about
 one cost unit, and `rect` is refused by 0.01 of it.** What is not true is the next clause.

@@ -384,9 +384,20 @@ try {
   }
   const isoBite = iso.filter((r) => !r.worth && r.fixed).length;
   const isoClean = iso.filter((r) => r.hard === '-');
-  console.log('\n  ' + iso.length + ' isolated repairs at the published seed');
-  console.log('  refused by the floor AND repaired the band : ' + isoBite);
-  console.log('  refused by the floor at all               : ' + iso.filter((r) => !r.worth).length);
+  // **Three outcomes, not two, and collapsing the first two is the same defect one level
+  // in.** A refusal in which the solver produced NO CHANGE is refused by any floor
+  // whatsoever — the floor is `max(MIN_GAIN_ABS, MIN_GAIN_SHARE x before)` and
+  // `MIN_GAIN_ABS` is 1.00, so a gain of 0.00 fails it in every room — and counting it
+  // beside a refusal the gate actually decided leaves the line unable to tell "the gate
+  // is too high" from "the search had nothing to offer", which is exactly what it gets
+  // read as answering. The partition is total: "offered with no change" cannot exist.
+  const idle = iso.filter((r) => !r.worth && r.gain <= 1e-9);
+  const decided = iso.filter((r) => !r.worth && r.gain > 1e-9);
+  console.log('\n  ' + iso.length + ' isolated cases at the published seed');
+  console.log('  refused, and the solver produced no change: ' + idle.length);
+  console.log('  refused, having actually moved the piece   : ' + decided.length + '   <- the informative one');
+  console.log('  offered                                   : ' + iso.filter((r) => r.worth).length);
+  console.log('  refused AND repaired the band             : ' + isoBite);
   console.log('  rooms with no hard term at all            : ' + isoClean.length);
 
   console.log('\n-- band repaired, by seed and by inertia (all rooms / rooms with no hard term) --');
