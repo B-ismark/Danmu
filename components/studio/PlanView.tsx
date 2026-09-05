@@ -687,6 +687,15 @@ export const PlanView = forwardRef<PlanViewHandle, {
         // snapshot in `dragRef`.
         memberHasPosOverride: (id) => useStudio.getState().positions[id] !== undefined,
       });
+      // Where the SET can go. `resolveConvoy` returns a shorter delta when a member
+      // runs out of room before this piece does, and the candidate loop below writes
+      // the lead from `r.pos` — so without adopting it here the lead would take the
+      // full delta while the members stopped short, and `co.valid` would say true.
+      // The plan already tries axis-slide CANDIDATES; this is the continuous version
+      // of the same idea and has to win over the candidate's own answer.
+      if (co.valid && (co.leadPos[0] !== r.pos[0] || co.leadPos[2] !== r.pos[2])) {
+        r.pos = co.leadPos;
+      }
       if (!co.valid) {
         // Remembered for the message, but the slide candidates are still tried: a
         // set stopped from moving diagonally can usually still go along one axis.

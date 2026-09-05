@@ -470,12 +470,17 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
   // type is a second source of truth like any other.
   function liveUpdate(resolved: Resolved, dim: [number, number, number]) {
     if (!ref.current || !part) return;
-    ref.current.position.set(resolved.pos[0], resolved.pos[1], resolved.pos[2]);
     ref.current.rotation.y = resolved.rot;
     // The convoy has a veto: a spot this piece could take but its company cannot
     // is not a spot the gesture may rest at, so it must not be remembered as the
     // fallback `commit()` slides back to either.
     const co = carry(resolved.pos, resolved.rot);
+    // The lead goes where the SET can go — `resolved.pos` unless a member ran out of
+    // room first, in which case `leadPos` is the shorter delta the whole set takes.
+    // Set AFTER the convoy is asked, not before: writing `resolved.pos` here and the
+    // members' limited positions a frame later is the set visibly coming apart under
+    // the hand, which is the failure `leadPos` exists to prevent.
+    ref.current.position.set(co.leadPos[0], co.leadPos[1], co.leadPos[2]);
     const valid = resolved.valid && co.valid;
     // Say it, not just draw it. Design.md claimed both tabs spoke this sentence;
     // only the plan did, and there was no `announce(` anywhere under
@@ -546,6 +551,17 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     const p = ref.current.position;
     let resolved = resolvePlacement(p.x, p.z, ref.current.rotation.y, dim, travelWorld(p.x, p.z));
     let co = carry(resolved.pos, resolved.rot);
+
+    // A set limited by one of its members: take the shorter delta and RE-RESOLVE the
+    // lead there rather than just moving it. The limit is a translation, and a
+    // translation changes what the piece is standing on — committing `leadPos` raw
+    // would keep the support (and the rigid parent below) that belonged to a spot the
+    // gesture no longer rests at. Re-asked once, not looped: the second answer is the
+    // same delta, so a third pass could only find what the second already did.
+    if (co.leadPos[0] !== resolved.pos[0] || co.leadPos[2] !== resolved.pos[2]) {
+      resolved = resolvePlacement(co.leadPos[0], co.leadPos[2], resolved.rot, dim, travelWorld(co.leadPos[0], co.leadPos[2]));
+      co = carry(resolved.pos, resolved.rot);
+    }
 
     // Invalid drop → rest at the last spot of the drag where the WHOLE convoy was
     // clear (slide-up-to-the-obstacle); fall back to the pre-drag position. The
