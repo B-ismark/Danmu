@@ -1319,3 +1319,108 @@ describe("a member's veto is for what this gesture broke", () => {
     expect(r.valid).toBe(true);
   });
 });
+
+// § H.8's first report, and it is SETTLED here rather than in a browser.
+//
+// The user: *"dragging a merged bed with a nightstand on each side is blocked toward the
+// side the nightstands are on."* The document filed two candidate mechanisms. The first —
+// `travelWorld` shifting the company by the raw pointer delta while `resolvePlacement`
+// accepts a snapped one — was measured and REFUTED: zero skew at all three snap settings.
+// The second was left as *"the containment clamp bounding the LEAD by its own extent while
+// a MEMBER is the piece that runs out of room ... Not settled. Needs a real drag."*
+//
+// It needed no drag. It is a `lib/` question and it reproduces here in milliseconds, which
+// is the transferable part: the report arrived as a gesture and the mechanism is arithmetic,
+// so the DOM was never on the path to it. **Confirmed, with numbers**, below.
+//
+// What this does NOT settle is whether it is a defect. The set genuinely cannot go further —
+// `ns-r` would leave the room — so refusing is not wrong, it is just not what the user
+// expects from a gesture that still has room under the hand. Sliding to the limit instead of
+// refusing is a product decision and stays filed. These assertions pin the MECHANISM so that
+// decision is made against a measurement rather than against the report.
+describe('a set is bounded by its members, not by the piece under the hand (§ H.8)', () => {
+  // Catalogue dims, read out of `lib/scene-spec.ts` rather than invented — `dimMM` is
+  // [width, DEPTH, height], and getting that wrong is not a typo but a different fixture:
+  // a first pass here used [450, 500, 400] for the nightstand, which is 500mm DEEP, put it
+  // 50mm through the north wall, and produced a confident measurement of the containment
+  // clamp correcting a defect the fixture had invented. The clamp was right and the room
+  // was wrong.
+  const BED_DIM: [number, number, number] = [1400, 2000, 600];
+  const NS_DIM: [number, number, number] = [450, 400, 550];
+
+  const bedHalfW = BED_DIM[0] / 2000;
+  const nsHalfW = NS_DIM[0] / 2000;
+  const BED_X = 3;
+  // Flush to the north wall and flush to the bed, which is how the app's own bedroom seeds
+  // them and how the user described the room.
+  const NS_R_X = BED_X + bedHalfW + nsHalfW;
+
+  const bed = () => part({ id: 'bed', category: 'bed', shape: 'bed-double', dimMM: BED_DIM, pos: [BED_X, 0, BED_DIM[1] / 2000] });
+  const ns = (id: string, x: number) => part({ id, category: 'nightstand', shape: 'nightstand', dimMM: NS_DIM, pos: [x, 0, NS_DIM[1] / 2000] });
+  const world = () => [bed(), ns('ns-l', BED_X - bedHalfW - nsHalfW), ns('ns-r', NS_R_X)];
+
+  const MAX_X = Math.max(...ROOM.map(([x]) => x));
+  /** How far east each piece may travel before its own east edge meets the wall. Derived
+   *  from the room and the dims, so moving either moves the expectations with it. */
+  const nsHeadroom = MAX_X - (NS_R_X + nsHalfW);
+  const bedHeadroom = MAX_X - (BED_X + bedHalfW);
+
+  function dragEastBy(dx: number) {
+    const parts = world();
+    const convoy = planConvoy({
+      draggedId: 'bed', parts, selection: ['bed', 'ns-l', 'ns-r'], parentIds: {}, footprint: ROOM, roomHeight: H,
+    });
+    const lead = resolvePlacement({
+      part: parts[0], rawX: BED_X + dx, rawZ: BED_DIM[1] / 2000, rot: 0, dim: BED_DIM,
+      parts, footprint: ROOM, roomHeight: H, snapMode: 'off', currentY: 0, wallEdge: convoy.leadEdge,
+    });
+    const r = resolveConvoy({
+      gesture: 'move', convoy, draggedId: 'bed', pos: lead.pos, rot: lead.rot,
+      startPos: [BED_X, 0, BED_DIM[1] / 2000], parts, footprint: ROOM, roomHeight: H,
+      memberHasPosOverride: () => false,
+    });
+    return { leadAccepted: lead.pos[0] - BED_X, ...r };
+  }
+
+  it('has a member that runs out of room first, which is the premise and not the finding', () => {
+    // Without this the two assertions below are satisfied by a room where the BED binds, and
+    // "the set stopped" would be the ordinary correct answer rather than the report.
+    expect(nsHeadroom).toBeLessThan(bedHeadroom);
+    expect(bedHeadroom - nsHeadroom).toBeCloseTo(nsHalfW * 2, 10);
+  });
+
+  it('carries the set while the binding member still fits', () => {
+    const r = dragEastBy(nsHeadroom);
+    expect(r.valid, `blocked by ${r.blockedIds.join(',')} at the nightstand's own limit`).toBe(true);
+    expect(r.blockedIds).toEqual([]);
+  });
+
+  it('refuses one millimetre later, and names a piece that is not under the hand', () => {
+    const r = dragEastBy(nsHeadroom + 0.001);
+    expect(r.valid).toBe(false);
+    expect(r.blocked?.id).toBe('ns-r');
+    expect(r.blockedIds).toEqual(['ns-r']);
+    // The half that makes it the reported defect rather than an ordinary wall stop: the
+    // piece the user is dragging accepted the delta in full and has headroom left. Without
+    // this the test passes in a room where everything ran out at once.
+    expect(r.leadAccepted).toBeCloseTo(nsHeadroom + 0.001, 10);
+    expect(bedHeadroom - nsHeadroom).toBeGreaterThan(0.4);
+  });
+
+  it('and the piece under the hand really can go that much further alone', () => {
+    // Dragged on its own the bed reaches its own limit, so the 450mm is the set's cost and
+    // not something about the bed. Asserted through the same path — a convoy of one — so a
+    // difference here can only be the company.
+    const parts = world();
+    const convoy = planConvoy({
+      draggedId: 'bed', parts, selection: ['bed'], parentIds: {}, footprint: ROOM, roomHeight: H,
+    });
+    expect(convoy.members).toEqual([]);
+    const lead = resolvePlacement({
+      part: parts[0], rawX: BED_X + bedHeadroom, rawZ: BED_DIM[1] / 2000, rot: 0, dim: BED_DIM,
+      parts, footprint: ROOM, roomHeight: H, snapMode: 'off', currentY: 0, wallEdge: convoy.leadEdge,
+    });
+    expect(lead.pos[0] - BED_X).toBeCloseTo(bedHeadroom, 10);
+    expect(lead.valid).toBe(true);
+  });
+});
