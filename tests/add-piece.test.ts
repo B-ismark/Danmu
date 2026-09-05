@@ -19,6 +19,7 @@
 import { describe, expect, it, beforeEach, vi, afterEach } from 'vitest';
 import { footprintForLayout } from '@/lib/footprint';
 import { groundY, verticalExtent } from '@/lib/physics';
+import { riderYs } from '@/lib/rider-height';
 import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 import { addPieceToRoom, type NewPiece } from '@/lib/add-piece';
@@ -152,5 +153,73 @@ describe('addPieceToRoom, the parts nobody should have to remember', () => {
     expect(beds).toHaveLength(3);
     const spots = new Set(beds.map((b) => `${b.pos[0].toFixed(3)},${b.pos[2].toFixed(3)}`));
     expect(spots.size, `three beds on ${spots.size} spot(s): ${[...spots].join(' | ')}`).toBe(3);
+  });
+});
+
+describe('a piece dropped onto something RIDES it, and the edge is recorded', () => {
+  // § H.3 finding 5's second half, which the first version of this file could not see.
+  //
+  // `addPieceToRoom` reads `currentRoomScene()` — resolved parts PLUS the rider-height
+  // correction — and writes the resulting `pos[1]` into the AUTHORED layer, while
+  // `ridingParents` infers who rides what from the AUTHORED array within 50 mm. The two
+  // disagree the moment anything overrides the support, and nothing recorded the edge.
+  //
+  // **Why the earlier fixture could not express it:** it set only `positions`, and it
+  // built its "resolved" array with `resolveParts` — one layer short of the
+  // `resolveScene` the subject actually calls. So the whole correction layer this lives
+  // in was unexercised. These set `dims`, which is what makes authored and effective
+  // tops differ, and they read the recorded edge rather than a coordinate.
+
+  /** The desk, resized by the user through the Inspector. 900 mm is inside
+   *  `desk-standard`'s legal 600–900 range, so this is a room a user can really make. */
+  const RESIZED: [number, number, number] = [1400, 700, 900];
+
+  it('records the riding edge, so the lamp is not merely at the right height once', () => {
+    seedDesk();
+    useStudio.setState({ dims: { 'desk-1': RESIZED } });
+
+    const id = addPieceToRoom(LAMP, [0, 0]);
+
+    // The edge itself, which is the fix. Asserting the Y alone would pass on the broken
+    // build too — it was correct at the moment of the drop and only went wrong later.
+    expect(useStudio.getState().parentIds[id], 'the lamp rides nothing').toBe('desk-1');
+  });
+
+  it('and follows the desk back down when the desk is resized again', () => {
+    // The symptom a person would see, and the reason the edge matters. On the broken
+    // build the lamp is stored at 0.90 against an authored top of 0.75 and stays there.
+    seedDesk();
+    useStudio.setState({ dims: { 'desk-1': RESIZED } });
+    const id = addPieceToRoom(LAMP, [0, 0]);
+
+    // Put the desk back to its authored size.
+    useStudio.setState({ dims: {} });
+
+    const s = useStudio.getState();
+    const ys = riderYs(useScene.getState().parts, s.positions, s.rotations, s.dims, s.parentIds, 2.5);
+    const authoredTop = verticalExtent('desk', 'desk-standard', DESK_DIM, 0)[1];
+    expect(ys[id], `lamp at ${ys[id]}, desk top now ${authoredTop}`).toBeCloseTo(authoredTop, 6);
+  });
+
+  it('records NOTHING for a piece that floored, so a wrong edge cannot lift it', () => {
+    // The control, and it is not decoration: `deriveRiderYs` rule 2 honours a recorded
+    // edge UNCONDITIONALLY, so an edge written for a piece that is not standing on
+    // anything is worse than no edge — it lifts the piece instead of being ignored.
+    // An empty room has nothing to rest on, so the lamp floors.
+    const id = addPieceToRoom(LAMP, [0, 0]);
+    expect(useScene.getState().parts.find((p) => p.id === id)!.pos[1]).toBeCloseTo(
+      groundY('lamp', 'lamp-table', LAMP_DIM, 2.5),
+      6,
+    );
+    expect(useStudio.getState().parentIds[id], 'a floored piece rides nothing').toBeUndefined();
+  });
+
+  it('records nothing for a wall-mounted piece, which rests on no furniture at all', () => {
+    seedDesk();
+    const id = addPieceToRoom(
+      { label: 'Wall mirror', category: 'mirror', shape: 'mirror', dimMM: [600, 30, 900] },
+      [0, 0],
+    );
+    expect(useStudio.getState().parentIds[id]).toBeUndefined();
   });
 });

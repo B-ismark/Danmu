@@ -64,7 +64,7 @@ export function addPieceToRoom(item: NewPiece, aim?: [number, number], opts?: Ad
   const parts = currentRoomScene();
 
   const spot = aim ?? openSpotForNewPart(item.category, item.shape, item.dimMM, room, parts);
-  const { pos, rot, wallMounted } = placeNewPart(item.category, item.shape, item.dimMM, room, parts, spot);
+  const { pos, rot, wallMounted, supportId } = placeNewPart(item.category, item.shape, item.dimMM, room, parts, spot);
 
   const id = `${item.category}-${uuid().slice(0, 6)}`;
   addPart({
@@ -78,6 +78,22 @@ export function addPieceToRoom(item: NewPiece, aim?: [number, number], opts?: Ad
     locked: false,
     wallMounted,
   });
+  // RECORD THE EDGE, and this is the half a review found missing rather than the
+  // placement itself. `pos[1]` here came off `currentRoomScene()` — resolved parts
+  // PLUS the rider-height correction — and it is written into the AUTHORED layer,
+  // while `ridingParents` infers who rides what from the AUTHORED array within
+  // `SUPPORT_Y_EPS` (50 mm). The two disagree the moment anything overrides the
+  // support: resize a desk to 900 mm, drop a lamp, resize back to 750, and the lamp
+  // is stored at 0.90 against an authored top of 0.75, rides nothing, and hangs
+  // 150 mm in the air — invisible from directly above, and permanent, because
+  // `normalizeStoredParts` does not settle and `settleHeights`' only production
+  // caller is the detection builder. That is § 12's own failure shape arriving
+  // through the door § 12 warned about.
+  //
+  // `Draggable.commit` has always recorded it for a DRAGGED piece. Not doing it here
+  // is also what made a dropped lamp sit out of its desk's convoy while a dragged one
+  // travelled with it: two ways to put a lamp on a desk, two behaviours.
+  if (supportId) useStudio.getState().setParent(id, supportId);
   useStudio.getState().setSelected(id);
   if (!opts?.silent) announce(`${item.label} added.`);
   return id;
