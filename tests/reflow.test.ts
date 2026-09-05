@@ -1119,10 +1119,22 @@ describe('the room-check actions wrap rather than cut a word', () => {
     // factor of 1 lets a button go below its content width, which is truncation again
     // with a different declaration — and it would leave `flexWrap` in the file looking
     // like the fix while the defect is back.
-    const grow = [...ROOM.matchAll(/flex: '1 0 auto',/g)].length;
-    expect(grow, 'both actions should be grow-but-never-shrink flex items').toBe(2);
-    const centred = [...ROOM.matchAll(/justifyContent: 'center',/g)].length;
-    expect(centred, 'a stretched .ds-btn sets no justify-content of its own').toBeGreaterThanOrEqual(2);
+    //
+    // Asserted PER BUTTON, against that function's own slice. The first version counted
+    // both declarations across the whole file and wanted two of each — and `RoomTools`
+    // has other centred buttons, so deleting one of these two left the count at two and
+    // the mutant alive. A count over the wrong population is not a weaker assertion, it
+    // is a different one.
+    for (const fn of ['FixAllButton', 'ShuffleButton']) {
+      const from = ROOM.indexOf(`function ${fn}(`);
+      expect(from, `${fn} is not declared in RoomTools.tsx`).toBeGreaterThan(-1);
+      const next = ROOM.indexOf('\nfunction ', from + 1);
+      const body = ROOM.slice(from, next === -1 ? undefined : next);
+      expect(body, `${fn} must grow but never shrink`).toContain("flex: '1 0 auto',");
+      expect(body, `${fn} is stretched and .ds-btn sets no justify-content`).toContain(
+        "justifyContent: 'center',",
+      );
+    }
   });
 
   it('and the arithmetic is why: half the tight rail cannot hold the busy label', () => {
