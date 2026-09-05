@@ -582,24 +582,57 @@ was the open question. Presses 1, 2 and 5/7 declining matched the measurement ex
 The refusal now names WHICH impossible condition it hit rather than always saying both,
 so the same two presses should read *"No safe arrangement found — The closest it found
 put a piece **through a wall**, so nothing was moved. Press Fix again …"*. **Measured on
-this exact fixture, against a module hash-verified against its commit: 11 impossible
-refusals over `u` 6x4 at seeds 1-8 in both modes, and all 11 name `outside` alone.**
+2026-09-05 against a `lib/layout-solve.ts` whose blob hash matches its own commit, both
+before and after the run: `u`/`l`/`t` at 6x4, seeds 1-8, both modes = 48 solves, 9
+impossible, 38 applied, 1 no-gain. All 9 name `outside` alone, and all 9 are on the `u`.**
 `arrange` declines on seeds 1, 2, 5, 7 — the same four the earlier session saw — so the
 press pattern above is unchanged and only the wording moved.
+
+**This item previously said 11, and so did `Design.md` and `scripts/declined-terms-sweep.mjs`.**
+The three agreed with each other and all three were wrong; a fourth number, already sitting
+in `lib/layout-solve.ts` beside the decline itself, said 9 and was right. Three copies
+agreeing is not evidence — it is one unverified number written down three times.
 
 And the body no longer opens *"Every layout tried"*. That universal was true of the
 disjunction and false of a single named condition, because the clause comes off the
 WINNER's breakdown while `bestCandidate` ranks on the sum of both terms. The title
 already says nothing worked, so the body says the narrower true thing.
 
-**The wrap question does not need re-deriving, only re-seeing.** The old message was 167
-characters; the new one is 144 with one condition named and 166 with both — so the
-maximum is one character *shorter* than the string already observed wrapping to four
-lines without clipping. If it clips now, something other than length changed.
+**The wrap question is OPEN, and an earlier version of this item wrongly retired it.** It
+said the new message was "144 with one condition named and 166 with both — so the maximum
+is one character *shorter* than the string already observed wrapping to four lines without
+clipping". Both numbers came off a draft prefix, *"The closest found put a piece"*, three
+characters short of the shipped *"The closest it found put a piece"*. Measured from the
+literals in `components/studio/RoomTools.tsx`:
 
-`overlap` alone has never been produced by any solve measured so far, so *"inside another
-one"* as a standalone clause is still unseen — that is the arm to look for, not the one
-above.
+| site | `outside` | `overlap` | both |
+|---|---|---|---|
+| `:731` Fix (the longest) | 147 | 151 | **169** |
+| `:1207` Try a fix, scoped | 116 | 120 | 138 |
+| `:1089` re-fit offer | 106 | 110 | 128 |
+| `:1208` Try a fix, unscoped | 93 | 97 | 115 |
+
+The old sentence was **167**. So the longest form is two characters LONGER than the one
+already seen wrapping, not shorter, and the range across the four sites is **93 to 169** —
+someone checking against "144 to 166" would test neither end. The comment in `RoomTools.tsx`
+carried the same wrong claim and has been corrected too.
+
+`overlap` alone has never been produced by any solve measured so far — 48 solves across
+three room shapes, every refusal `outside` — so *"inside another one"* as a standalone
+clause is unseen, and the 169-character both-terms string has never been produced at all.
+Those are the two arms to look for; the one quoted above is the one that already exists.
+
+**Open the left rail before trying the re-fit path.** `RoomTools` is mounted only inside
+`PartTree` (`PartTree.tsx:364`), and `LeftRailBody` renders `RoomHealthDot` instead of
+`PartTree` when the rail is shut — so with it collapsed the whole Room-check surface is
+unmounted and none of these four sentences can appear. `railLeftOpen` is persisted in
+`STUDIO_PREFS`, so a rail collapsed once stays collapsed across reloads. The re-fit offer
+is the sharpest case: it is a watcher in `RoomTools`'s body, and the resize that triggers
+it is made from the *right* rail's Inspector, so with the left rail shut a resize produces
+no offer at all and reopening does not recover it (the watcher takes the first geometry
+change after remount as its baseline). That is pre-existing, not this branch's doing, and
+it is filed here because it makes the path this item names unreachable rather than merely
+awkward.
 
 What is left is the part that probe could not reach.
 
@@ -625,10 +658,11 @@ What is left is the part that probe could not reach.
 
 **What wrong looks like.**
 
-- **A narrow window.** The long messages are 144 characters with one condition named and
-  166 with both, at `ttl: 14000` — the figure here used to read ~170, which was the
-  version before the refusal started naming its condition. The toast
-  host is `min(360px, calc(100vw - 32px))` with no `overflow`, so it should grow
+- **A narrow window.** The four refusal bodies span **93 to 169** characters at
+  `ttl: 14000` — see the table in the decline-toast item above for the per-site figures,
+  and check the two ENDS rather than a middle. This bullet twice carried a wrong range
+  ("~170", then "144 … 166"); the longest, `Fix` with both conditions named, is 169. The
+  toast host is `min(360px, calc(100vw - 32px))` with no `overflow`, so it should grow
   downward; at ~400px wide it will be tall. Check it does not push its own dismiss
   button off, and that 14 s is actually enough to read it.
 - **Toast pile-up.** Pressing `Fix` repeatedly stacks identical *"No safe arrangement

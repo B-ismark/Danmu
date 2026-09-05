@@ -102,8 +102,8 @@ export type SolveOptions = {
   placed?: Set<string>;
   /** Which finalist becomes the suggestion. Returns an index into the candidates it
    *  is handed; omit it and `bestCandidate` is used — least impossible first, then
-   *  cheapest on `total`. On a pool where no candidate has a piece through a wall or
-   *  inside another piece, which is most of them, that is the plain argmin on `total`
+   *  cheapest on `total`. On a pool where no candidate has a piece inside another one
+   *  or through a wall, which is most of them, that is the plain argmin on `total`
    *  this has always taken.
    *
    *  The seam exists because **variety is a property of the set of suggestions**, and
@@ -160,7 +160,12 @@ export type Candidate = {
  *  solid through a wall, are things the room cannot contain. A blocked door, an
  *  unreachable corner, a wardrobe whose doors will not open are all rooms that exist
  *  and are bad — the room report names each of them and **Try a fix** acts on them.
- *  The remaining three of `HARD_TERMS` are therefore deliberately absent here.
+ *  The rest of `HARD_TERMS` is therefore deliberately absent here. **No count is
+ *  written in that sentence on purpose:** it used to say "the remaining three", which
+ *  is a hand-typed copy of a partition nothing reads, and a sixth hard term would go
+ *  red only at `tests/impossible-veto.test.ts`'s pinned `HARD_TERMS` list — leaving
+ *  this line saying "three" about four, with no gate anywhere near it. The test
+ *  derives the complement; this sentence names the rule.
  *
  *  ── Why this cannot be a weight, which is the thing to read before re-tuning ──
  *
@@ -227,7 +232,25 @@ export type ImpossibleTerm = (typeof IMPOSSIBLE_TERMS)[number];
  *  this is non-empty, and the sentence can never be built from nothing. An epsilon
  *  here would break exactly that: two terms each rising 1e-6 raise the sum past
  *  `declineFor`'s own 1e-6 while neither clears a per-term bar, and the caller would
- *  hold a refusal it could not name. */
+ *  hold a refusal it could not name.
+ *
+ *  **This is a DELTA and the four sentences reading it are STATIVE — they agree on
+ *  every legal origin, which is every room this app seeds, and they can part company
+ *  after the user has made one illegal.** A term is listed when it ROSE, so a fault the
+ *  rejected arrangement HAS but did not introduce is not named. `before = {overlap:
+ *  500, outside: 0}` against `after = {overlap: 400, outside: 200}` sums 500 → 600, so
+ *  the answer is refused, and only `outside` rose: the toast says *"The closest it
+ *  found put a piece through a wall"* while that same arrangement still has two pieces
+ *  well inside each other. Never false — `after[k] > before[k] >= 0` means every named
+ *  term is a real fault of the winner — but not exhaustive, and a reader who assumes it
+ *  is will infer the wrong remedy.
+ *
+ *  Left as a delta on purpose: the sentence exists to explain the REFUSAL, and what
+ *  refused the answer is what rose. Naming a fault the user's own room already had
+ *  would explain nothing. The reachable version needs `before.overlap > 0`, which on a
+ *  seeded room is zero on every term — the re-fit path after a shrink is where it would
+ *  first appear, and it has not been measured. `scripts/declined-terms-sweep.mjs`'s Arm
+ *  B is written for exactly that and has never completed a run. */
 export function impossibleTermsWorse(before: CostBreakdown, after: CostBreakdown): ImpossibleTerm[] {
   return IMPOSSIBLE_TERMS.filter((k) => after[k] > before[k]);
 }
@@ -383,8 +406,9 @@ export type MoveReason = {
  *  · `'no-gain'` — every finalist cost more than the layout already on screen. The
  *    room is fine, or at least this solver cannot improve it.
  *  · `'impossible'` — the answer would have been MORE impossible than the room it was
- *    given: a piece through a wall, or inside another piece. See `IMPOSSIBLE_TERMS`.
- *    The room may be a mess; what the search found was worse than a mess.
+ *    given: a piece inside another one, or through a wall. See `IMPOSSIBLE_TERMS`,
+ *    whose order this sentence follows because `impossibleClause` makes it
+ *    prose-visible. The room may be a mess; what the search found was worse than a mess.
  *
  *  Before this existed, `RoomTools` reported both as *"This is already a good
  *  arrangement"*, which is true of the first and a lie about the second. */

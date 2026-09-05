@@ -694,7 +694,11 @@ function FixAllButton({
     const { applied, result } = suggest('arrange', ++attempt.current);
     if (!applied) {
       // `declined === 'impossible'` means the search DID find arrangements and every
-      // one of them put a piece through a wall or inside another piece (§ 31). Saying
+      // one of them was illegal (§ 31) — `bestCandidate` returns the LEAST impossible
+      // finalist, so an illegal winner means every finalist was. It does NOT mean they
+      // all failed the same WAY, which is the distinction the body's comment below
+      // turns on; this sentence used to assert the shared way and contradicted it
+      // twenty-five lines later, in the same function. Saying
       // "this is already a good arrangement" there is not a rounding of the truth, it
       // is the opposite of it — the room may be a mess, and the honest report is that
       // nothing safe was found rather than that nothing was needed.
@@ -725,8 +729,16 @@ function FixAllButton({
               // else — false in the one direction that misdirects the remedy.
               //
               // `No safe arrangement found` already says nothing worked, so the body is
-              // free to say the narrower true thing, and comes out shorter than the
-              // sentence it replaces rather than longer.
+              // free to say the narrower true thing.
+              //
+              // **It is not shorter.** This comment claimed it "comes out shorter than
+              // the sentence it replaces", and so did `docs/visual-check.md`, off a
+              // draft that read "The closest found put a piece" — three characters
+              // less than the shipped prefix. Measured from the literal below: 147 with
+              // `outside` named, 151 with `overlap`, 169 with both, against the old
+              // sentence's 167. So the longest form is two characters LONGER than the
+              // string that was seen wrapping to four lines without clipping, and the
+              // wrap question is open rather than retired.
               message:
                 `The closest it found put a piece ${impossibleClause(result.declinedTerms)}, so nothing was moved. Press Fix again for a different try, or unlock a piece to give it more room.`,
               ttl: 14000,

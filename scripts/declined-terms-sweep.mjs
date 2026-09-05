@@ -1,10 +1,11 @@
 // Does naming the impossible condition ever say anything the old sentence did not?
 //
 // #121 gives `SolveResult.declinedTerms` so four sentences say "through a wall" OR
-// "inside another piece" instead of always saying both. That is only a change if a real
+// "inside another one" instead of always saying both. That is only a change if a real
 // refusal ever names ONE of them. `scripts/reconcile-declined.mjs` answers that for the
-// one room that refuses at all: **11 refusals on `u` 6x4 across seeds 1-8 in both modes,
-// all 11 naming `outside` alone.** `l` and `t` at the same size never refuse.
+// one room that refuses at all: **48 solves over `u`/`l`/`t` at 6x4, seeds 1-8, both
+// modes -> 9 impossible, 38 applied, 1 no-gain; all 9 name `outside` alone and all 9 are
+// on the `u`.** `l` and `t` at the same size never refuse.
 //
 // THIS FILE HAS NOT COMPLETED A RUN. It is committed as the next measurement rather than
 // as a result, and the two questions it exists to answer are still open:
@@ -17,14 +18,23 @@
 //     an entry nothing can reach is the same shape as a token with no `var()` reader: it
 //     looks live and is not.
 //
-// An earlier version of this header quoted a DIFFERENT figure -- 9 declines, zero naming
-// one term -- as established fact. That measurement was taken by a review lens reading
-// `lib/layout-solve.ts` while another lens was mutating it in the same worktree, and one
-// of those mutations turned `after[k] > before[k]` into `>=`, which names both terms on
+// SETTLED 2026-09-05, and the correction went the other way from the one this header
+// expected. An earlier version quoted "9 declines, zero naming one term" from a review
+// lens; a later version replaced BOTH halves with "11 declines, all naming one term".
+// Re-run against a `lib/layout-solve.ts` hash-verified before and after: the count was 9
+// all along and only the terms half was contaminated. So the lens was right about how
+// many and wrong about which, the replacement was right about which and wrong about how
+// many, and the 11 then propagated into `Design.md` and `docs/visual-check.md` where
+// three agreeing copies read as settled fact.
+//
+// The contamination mechanism is confirmed as the one hypothesised: another lens was
+// mutating `after[k] > before[k]` to `>=` in the same worktree, which names both terms on
 // every refusal of a legal room because `0 >= 0` is true. Restoring after each mutation
 // window protects the repo and does nothing for a concurrent reader. **Hash the module
 // against its commit before AND after any run whose number you intend to quote**; a clean
-// `git status` afterwards cannot tell you what the run actually read.
+// `git status` afterwards cannot tell you what the run actually read. And when you correct
+// a contaminated measurement, re-derive EVERY figure in it -- a contaminated run is not
+// wrong in only the place you noticed.
 //
 // Two arms, and the second is the one the remaining answer rests on:
 //

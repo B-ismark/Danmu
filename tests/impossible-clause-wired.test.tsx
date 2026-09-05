@@ -148,6 +148,18 @@ function openFindings() {
  *  different branches, so picking by index would silently test one branch twice the day
  *  the report reorders itself. */
 function tryFixFor(title: string): HTMLElement {
+  // **The fixture's shape, pinned before the walk rather than inferred from it.** The
+  // whole file rests on this mount producing exactly two fixable findings — `zone`,
+  // which names a piece and so confines the solve, and `cut-off`, which names none and
+  // so does not. If either lost `canFix`, the walk below would run past its own row to
+  // the list holding both and hand back the OTHER finding's button. The two tests would
+  // still fail, because each asserts a branch-discriminating string, but they would fail
+  // as a puzzling `toContain` mismatch rather than as "the fixture changed shape". One
+  // count says which it is.
+  expect(
+    screen.queryAllByRole('button', { name: 'Try a fix' }),
+    'this mount is supposed to offer exactly two fixable findings — the confined arm and the unconfined one',
+  ).toHaveLength(2);
   // Walk OUT from the title to the SMALLEST ancestor holding exactly one such button —
   // the finding's own row. Walking in from the buttons instead matched both findings,
   // because every button's ancestry eventually reaches the list that contains every
