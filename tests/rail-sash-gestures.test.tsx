@@ -100,6 +100,8 @@ function stubLayout({ railPx }: { railPx: number }): () => void {
     '--rail-closed': '37px',
     '--rail-left-min': '228px',
     '--rail-right-min': '276px',
+    '--rail-left-tight': '208px',
+    '--rail-right-tight': '248px',
     '--rail-max-share': '0.4',
   };
   window.getComputedStyle = ((el: Element, pe?: string | null) => {
@@ -225,9 +227,13 @@ describe('the grid never loses the variable it reads its columns from', () => {
   });
 
   it('and so does grabbing a closed sash open and pushing it shut again', () => {
-    // The other door to the same state: the collapse branch removes the property, and
-    // `toggleRail` has just guaranteed the stored width is null, so the write that was
-    // supposed to restore it changes nothing.
+    // The other door to the same state: the collapse branch removed the property, and on
+    // a fresh profile the stored width is already null, so the write that was supposed to
+    // restore it changed nothing. (An earlier version of this comment said `toggleRail`
+    // guarantees that null on every open. It does not — it opens and closes and touches
+    // no width, and `lib/store.ts` carries the reason. Two more copies of that claim sat
+    // in `RailSash` and `DockedShell`, one of them as the stated reachability argument
+    // for the fix, twenty-eight lines above the test that disproves it.)
     useStudio.setState({ ...OPEN, railLeftOpen: false });
     const shell = mount();
     // 208 is `--rail-left-tight`, what the rail measures once it has opened at the
@@ -331,5 +337,185 @@ describe('a move that arrives before the open has laid out is refused, not seede
       useStudio.getState().railLeftW,
       'a drag from the compact width committed nothing — the guard refused a legal width',
     ).not.toBeNull();
+  });
+});
+
+// ─── What a browser found that the four describes above could not ───────────────
+//
+// Five review lenses and a second independent probe measured these on a real build at
+// 1100x900. Three of the four are PRE-EXISTING on `main` and one is this branch's own,
+// and they share a single cause: `--rail-${side}-min` is answering three different
+// questions. It is the width a DRAG may be clamped to, and it was also being used as the
+// origin a collapse is measured from, as the minimum published to assistive tech, and as
+// the floor a key press clamps against — while the rail legitimately RENDERS
+// `--rail-${side}-tight`, 20px (left) and 28px (right) below it, for the whole
+// 1024–1279px band. Every assertion below is a different consequence of that one number.
+//
+// rAF is made synchronous where a test needs to see what `paint()` wrote. jsdom schedules
+// it on a timer, so a test that fires a pointermove and asserts on the next line cannot
+// observe the frame at all — which would make the paint gate untestable rather than
+// tested, the failure this file's own header warns about.
+function syncFrames(): () => void {
+  const real = globalThis.requestAnimationFrame;
+  const realCancel = globalThis.cancelAnimationFrame;
+  globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+    cb(0);
+    return 1;
+  }) as typeof globalThis.requestAnimationFrame;
+  globalThis.cancelAnimationFrame = (() => {}) as typeof globalThis.cancelAnimationFrame;
+  return () => {
+    globalThis.requestAnimationFrame = real;
+    globalThis.cancelAnimationFrame = realCancel;
+  };
+}
+
+describe('a gesture that resized nothing leaves no pixel behind either', () => {
+  it('a pointermove of ZERO pixels does not paint the clamped width over the rail', () => {
+    // The door the click guard did not close. `d.moved` stays false for a straight-down
+    // press, correctly, so the release commits nothing — but `paint()` used to be
+    // scheduled on every move regardless, and `d.pending` is clamped UP to the drag
+    // floor, so it wrote `228px` over a 208px rail. Because the release then stores
+    // nothing, no render follows, the shell's layout effect never runs, and the literal
+    // stays for the session. Measured in a browser: 208 → 228 and stuck there.
+    useStudio.setState(OPEN);
+    const shell = mount(1100);
+    const undo = stubLayout({ railPx: 208 });
+    const frames = syncFrames();
+
+    const el = sashEl('left');
+    fireEvent.pointerDown(el, { button: 0, clientX: 400, pointerId: 1 });
+    fireEvent.pointerMove(el, { clientX: 400, pointerId: 1 });
+
+    expect(sashVar(shell, 'left'), 'a move of zero pixels painted a width').not.toMatch(/^\d/);
+
+    fireEvent.pointerUp(el, { clientX: 400, pointerId: 1 });
+    frames();
+    undo();
+
+    expect(useStudio.getState().railLeftW, 'a press that moved nothing stored a width').toBe(null);
+    expect(sashVar(shell, 'left'), 'the release left a painted width standing').not.toMatch(/^\d/);
+  });
+
+  it('and a double-click puts the variable back even when the store does not change', () => {
+    // A2, and it is this branch's own. `reset()` writes `null` over a width that is
+    // ALREADY null, which zustand compares equal, so nothing renders and the layout
+    // effect never runs. On `main` the same gesture recovered — but only because the
+    // click-commit bug had stored 228 for the `null` to differ from. Two defects holding
+    // each other up: removing one exposed that the reset never worked on its own.
+    useStudio.setState(OPEN);
+    const shell = mount(1100);
+    const undo = stubLayout({ railPx: 208 });
+    const frames = syncFrames();
+    const el = sashEl('left');
+
+    // Paint a width the way a real drag does, then hand it back with a double-click.
+    fireEvent.pointerDown(el, { button: 0, clientX: 400, pointerId: 1 });
+    fireEvent.pointerMove(el, { clientX: 480, pointerId: 1 });
+    expect(sashVar(shell, 'left'), 'the drag painted nothing to recover from').toMatch(/^\d/);
+    fireEvent.pointerUp(el, { clientX: 480, pointerId: 1 });
+    fireEvent.doubleClick(el);
+    frames();
+    undo();
+
+    expect(useStudio.getState().railLeftW, 'the reset left a width stored').toBe(null);
+    expect(sashVar(shell, 'left'), 'the reset left the painted width on the element').not.toMatch(/^\d/);
+  });
+});
+
+describe('a rail born below its own floor is not a rail being closed', () => {
+  it('the RIGHT sash does not collapse on a press that travels two pixels', () => {
+    // `d.collapse = raw < d.floor - SNAP_PAST_FLOOR` was true before the pointer moved at
+    // all: the right rail renders 248px at the compact step against a floor of 276px, and
+    // 248 < 276 − 24. So the first move in ANY direction armed the close and the release
+    // shut the Inspector. Two pixels rather than zero on purpose — a zero-delta gesture is
+    // refused by the no-move guard, which would make this pass without the fix under test.
+    useStudio.setState(OPEN);
+    mount(1100);
+    const undo = stubLayout({ railPx: 248 });
+    const frames = syncFrames();
+
+    const el = sashEl('right');
+    fireEvent.pointerDown(el, { button: 0, clientX: 900, pointerId: 1 });
+    fireEvent.pointerMove(el, { clientX: 902, pointerId: 1 });
+    fireEvent.pointerUp(el, { clientX: 902, pointerId: 1 });
+    frames();
+    undo();
+
+    expect(useStudio.getState().railRightOpen, 'a two-pixel press closed the right rail').toBe(true);
+  });
+
+  it('but a real push past where it started still collapses it', () => {
+    // The other end of the pair. A guard that refused every collapse would satisfy the
+    // test above on its own, which is the failure mode this file has already had once.
+    useStudio.setState(OPEN);
+    mount(1100);
+    const undo = stubLayout({ railPx: 248 });
+    const frames = syncFrames();
+
+    const el = sashEl('right');
+    fireEvent.pointerDown(el, { button: 0, clientX: 900, pointerId: 1 });
+    fireEvent.pointerMove(el, { clientX: 1100, pointerId: 1 });
+    fireEvent.pointerUp(el, { clientX: 1100, pointerId: 1 });
+    frames();
+    undo();
+
+    expect(
+      useStudio.getState().railRightOpen,
+      'pushing the right sash well past its start did not close it',
+    ).toBe(false);
+  });
+});
+
+describe('the separator publishes a range its own value fits inside', () => {
+  it('aria-valuenow is not below aria-valuemin at the compact width', () => {
+    // Measured on both builds: now 208 / min 228 on the left and 248 / 276 on the right,
+    // for the whole compact band. The file's own comment says a closed rail publishes no
+    // value rather than an impossible one; this is the same impossibility, open.
+    useStudio.setState(OPEN);
+    mount(1100);
+    const undo = stubLayout({ railPx: 208 });
+    // `metrics` is state, and the press-release path calls `sync()`. Nothing here is
+    // asserting the gesture — it is how the component is made to measure under the stub.
+    pressAndRelease(sashEl('left'));
+    const el = sashEl('left');
+    const now = Number(el.getAttribute('aria-valuenow'));
+    const min = Number(el.getAttribute('aria-valuemin'));
+    undo();
+
+    expect(now, 'the stub did not reach the component').toBe(208);
+    expect(min, 'aria-valuemin is above the value the rail is actually at').toBeLessThanOrEqual(now);
+  });
+});
+
+describe('a key that asks for less never delivers more', () => {
+  it('ArrowLeft on a left rail already under its drag floor stores nothing', () => {
+    // The only one of the four that PERSISTS. 208 − 16 = 192, clamped up to the 228px
+    // floor, stored — so the shrink key widened the rail by 20px and pinned it out of the
+    // compact step permanently. `Home` did the same thing, which is worse, because `Home`
+    // means "smallest".
+    useStudio.setState(OPEN);
+    mount(1100);
+    const undo = stubLayout({ railPx: 208 });
+    const el = sashEl('left');
+
+    fireEvent.keyDown(el, { key: 'ArrowLeft' });
+    expect(useStudio.getState().railLeftW, 'ArrowLeft widened and stored the rail').toBe(null);
+
+    fireEvent.keyDown(el, { key: 'Home' });
+    expect(useStudio.getState().railLeftW, 'Home widened and stored the rail').toBe(null);
+    undo();
+  });
+
+  it('while ArrowRight, which asked for more, still resizes it', () => {
+    // The accept half. A guard that refused every key press would satisfy the test above,
+    // and this file has already shipped one guard that refused everything.
+    useStudio.setState(OPEN);
+    mount(1100);
+    const undo = stubLayout({ railPx: 208 });
+
+    fireEvent.keyDown(sashEl('left'), { key: 'ArrowRight' });
+    undo();
+
+    expect(useStudio.getState().railLeftW, 'ArrowRight stored no width at all').toBe(228);
   });
 });

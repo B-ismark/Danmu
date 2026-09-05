@@ -42,10 +42,15 @@ const STEP = 16;
 
 const WIDTH_PROP: Record<RailSide, string> = { left: '--sash-left', right: '--sash-right' };
 const FLOOR_TOKEN: Record<RailSide, string> = { left: '--rail-left-min', right: '--rail-right-min' };
+/** The width the rail RENDERS between 1024 and 1279px, which globals.css puts
+ *  deliberately BELOW the floor above: the floor is what a DRAG may reach, the tight
+ *  token is what the reflowed default ships at. Both numbers are real widths of this
+ *  rail, and every defect this file has had came from treating them as one. */
+const TIGHT_TOKEN: Record<RailSide, string> = { left: '--rail-left-tight', right: '--rail-right-tight' };
 /** The width a SHUT rail measures — just the reopen toggle. */
 const CLOSED_TOKEN = '--rail-closed';
 
-type Metrics = { width: number; floor: number; ceiling: number; closed: number };
+type Metrics = { width: number; floor: number; tight: number; ceiling: number; closed: number };
 
 function tokenPx(el: Element, name: string): number {
   const n = Number.parseFloat(getComputedStyle(el).getPropertyValue(name));
@@ -59,6 +64,7 @@ export function RailSash({
   railId,
   open,
   onToggle,
+  onRestoreWidths,
 }: {
   side: RailSide;
   /** Carries `--sash-left` / `--sash-right`; the grid reads them as its columns. */
@@ -69,6 +75,13 @@ export function RailSash({
   railId: string;
   open: boolean;
   onToggle: () => void;
+  /** Re-applies BOTH `--sash-*` variables from the store, the same call the shell's
+   *  layout effect makes. Needed because that effect only runs on a render, and the
+   *  gestures that must undo a painted preview are exactly the ones that write no
+   *  store — a press that resized nothing, and a double-click on a rail whose stored
+   *  width is already `null`. Writing the resolved value back is what `removeProperty`
+   *  was reaching for and could not do: React never learns a property was removed. */
+  onRestoreWidths: () => void;
 }) {
   const setRailWidth = useStudio((s) => s.setRailWidth);
   const [dragging, setDragging] = useState(false);
@@ -125,6 +138,13 @@ export function RailSash({
       // floor therefore refused the real open width for the whole compact step, and
       // the drag-a-closed-sash-open gesture never started.
       closed: tokenPx(shell, CLOSED_TOKEN),
+      // The narrowest width the rail is ever OPEN at, which is not the same as the
+      // narrowest a drag may produce. `aria-valuenow` has to sit inside the published
+      // range and the compact step renders 208px against a 228px floor, so publishing
+      // the floor as `aria-valuemin` described an impossible slider for the whole band.
+      // Falls back to the floor rather than to zero: `tokenPx` answers 0 for a token it
+      // cannot read, and a zero minimum is a wrong bound rather than a missing one.
+      tight: tokenPx(shell, TIGHT_TOKEN[side]) || tokenPx(shell, FLOOR_TOKEN[side]),
       ceiling: Number.isFinite(share) && share > 0 ? share * window.innerWidth : Number.POSITIVE_INFINITY,
     };
   }, [railRef, shellRef, side]);
@@ -191,8 +211,10 @@ export function RailSash({
     if (e.button !== 0) return;
     if (!open) {
       // A closed rail normally ignores pointer drags (the early-return below). Letting
-      // the user pull a collapsed sash open is the requested behaviour: open it to the
-      // token default — `toggleRail` clears any stored width on open — and turn this
+      // the user pull a collapsed sash open is the requested behaviour: open it to
+      // whatever width the shell resolves — `toggleRail` opens and closes and does NOT
+      // clear a stored width; three comments in this branch claimed it did, and
+      // `lib/store.ts` carries the reason it deliberately does not — and turn this
       // gesture into a drag. Once open, the grid column tracks --sash-left and paint()
       // can drive it, so the rest of this handler's logic applies. The open width
       // cannot be read synchronously (React re-renders next), so this gesture carries
@@ -269,8 +291,21 @@ export function RailSash({
     const delta = side === 'left' ? e.clientX - d.startX : d.startX - e.clientX;
     if (delta !== 0) d.moved = true;
     const raw = d.startW + delta;
-    d.collapse = raw < d.floor - SNAP_PAST_FLOOR;
+    // Measured from wherever this rail actually STARTED, not from its drag floor. At
+    // the compact step the right rail is born at `--rail-right-tight` 248px against a
+    // floor of 276px, so `raw < floor - SNAP_PAST_FLOOR` was already TRUE at zero
+    // delta: the first pointermove in any direction armed the close, and a press that
+    // moved straight down shut the Inspector. The left rail is the same shape 4px in.
+    // A collapse means the user pulled this divider meaningfully narrower than where
+    // it was, and a rail that opens below its own floor has not been pulled anywhere.
+    d.collapse = raw < Math.min(d.floor, d.startW) - SNAP_PAST_FLOOR;
     d.pending = Math.max(d.floor, Math.min(d.ceiling, raw));
+    // Nothing is painted until the pointer has actually travelled. `pending` is
+    // clamped UP to the drag floor, so a zero-delta move at the compact step painted
+    // `228px` over a 208px rail — a 20px jump on a press that resized nothing, and one
+    // the release could not take back, because a release that commits nothing writes
+    // no store and no store write means no render for the layout effect to ride.
+    if (!d.moved) return;
     if (!d.raf) d.raf = requestAnimationFrame(paint);
   }
 
@@ -295,19 +330,16 @@ export function RailSash({
       // never takes its compact arm again for that rail, the value persists through
       // `STUDIO_PREFS`, and the whole compact step is gone. A stored width is a fact
       // about a DRAG, and this gesture was not one.
+      onRestoreWidths();
       sync();
       return;
     }
-    if (d.collapse) {
-      // Hand the width back to the token, so reopening starts from the design's
-      // number rather than the sliver the drag ended on. Then close. The property
-      // itself is `DockedShell`'s to restore — see the note there on why removing it
-      // here could not be undone.
-      setRailWidth(side, null);
-      onToggle();
-      return;
-    }
     if (!d.moved) {
+      // Tested BEFORE the collapse branch, and the order is load-bearing rather than
+      // tidy: `d.collapse` can be armed by a pointermove that travelled zero pixels —
+      // see the note where it is computed — and it used to be read first, which left
+      // this guard unreachable on the one path that closed a rail by accident.
+      //
       // A press and a release at the same x is a CLICK, and a click is not a width.
       // Committing `d.pending` here stores the RENDERED width, which between 1024 and
       // 1279px is `--rail-left-tight` at 208px — and `DockedShell` renders a stored
@@ -317,7 +349,23 @@ export function RailSash({
       // closed one was found by reading and this one by a browser, because a
       // double-click on the sash fires two of these before `reset()` and the probe
       // measured 228px where it expected 208.
+      //
+      // Storing nothing is only half of it. A pointermove that moved zero pixels still
+      // used to paint, and a release that writes no store causes no render, so the
+      // preview stayed on the element for the session. The paint is gated now AND the
+      // variables are put back from the store here, because either alone leaves a door.
+      onRestoreWidths();
       sync();
+      return;
+    }
+    if (d.collapse) {
+      // Hand the width back to the token, so reopening starts from the design's
+      // number rather than the sliver the drag ended on. Then close. The property
+      // itself is restored through the shell rather than removed — see the note there
+      // on why removing it could not be undone.
+      setRailWidth(side, null);
+      onRestoreWidths();
+      onToggle();
       return;
     }
     setRailWidth(side, d.pending);
@@ -341,11 +389,24 @@ export function RailSash({
     let next: number;
     if (e.key === grow) next = m.width + step;
     else if (e.key === shrink) next = m.width - step;
-    else if (e.key === 'Home') next = m.floor;
+    // The narrowest this rail can be, which is its drag floor UNLESS it is already
+    // narrower — the compact step renders it below that floor by design, and `Home`
+    // meaning "smallest" must never be the key that makes it bigger.
+    else if (e.key === 'Home') next = Math.min(m.floor, m.width);
     else if (e.key === 'End') next = Number.isFinite(m.ceiling) ? m.ceiling : m.width;
     else return;
     e.preventDefault();
-    setRailWidth(side, Math.max(m.floor, Math.min(m.ceiling, next)));
+    const clamped = Math.max(m.floor, Math.min(m.ceiling, next));
+    // A key that asked for LESS must never deliver more. Between 1024 and 1279px the
+    // rail renders 208px against a 228px floor, so clamping a shrink up to the floor
+    // turned one ArrowLeft into a 20px WIDEN — and unlike the pointer paths, this one
+    // PERSISTS: `railLeftW` becomes 228 and the compact step never applies to that rail
+    // again. `Home` did it too. Refusing is the honest answer and it is not silent:
+    // `aria-valuenow` and `aria-valuemin` are both 208 there, so a screen reader says
+    // the rail is already at its minimum. That is only true because `aria-valuemin`
+    // reports the tight token — the two fixes are one fix.
+    if (clamped > m.width && next <= m.width) return;
+    setRailWidth(side, clamped);
   }
 
   // Double-click. Only the store is written: `DockedShell` rewrites `--sash-*` after
@@ -355,6 +416,14 @@ export function RailSash({
   // `DockedShell` for the mechanism.
   function reset() {
     setRailWidth(side, null);
+    // …and put the variables back by hand, because writing `null` over a width that
+    // is ALREADY `null` is not a change zustand publishes, so no render follows and
+    // the layout effect never runs. That is reachable: a press that resized nothing
+    // leaves a painted preview and stores nothing, and the double-click meant to undo
+    // it then had nothing to trigger. `main` appeared not to have this problem only
+    // because its click-commit bug guaranteed a stored number for the `null` to differ
+    // from — two defects holding each other up.
+    onRestoreWidths();
   }
 
   // A closed rail has no range to report. It measures `--rail-closed` (37px),
@@ -377,7 +446,12 @@ export function RailSash({
       // Only claimed once measured. A separator advertising a range it has not
       // read yet is worse than one that has no value on it for a frame.
       aria-valuenow={now ?? undefined}
-      aria-valuemin={shown ? Math.round(shown.floor) : undefined}
+      // The DRAG floor is 228px (left) and the rail renders 208px for the whole
+      // compact step, so publishing the floor here put `aria-valuenow` BELOW
+      // `aria-valuemin` on both rails across that whole band — an impossible slider,
+      // which is the thing the comment above says this file refuses to publish. What
+      // is honest is the narrowest width the rail is ever open at.
+      aria-valuemin={shown ? Math.round(Math.min(shown.floor, shown.tight)) : undefined}
       aria-valuemax={max ?? undefined}
       aria-valuetext={now != null ? `${now} pixels` : undefined}
       // The affordance a CLOSED sash offers is not the one an open sash offers, and

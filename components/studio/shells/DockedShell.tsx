@@ -65,6 +65,18 @@ export function DockedShell({ surface, layout }: { surface: ReactNode; layout: S
     return layout === 'compact' ? `var(--rail-${side}-tight)` : `var(--rail-${side})`;
   };
 
+  /** Write both variables from the store. The layout effect below is one caller and
+   *  `RailSash` is the other, because that effect runs on a RENDER and the gestures
+   *  that have to undo a painted preview are exactly the ones that change no state:
+   *  a press that resized nothing, and a double-click on a rail whose stored width is
+   *  already `null`. One function so the expression cannot be written twice. */
+  const applySashWidths = () => {
+    const el = shellRef.current;
+    if (!el || stacked) return;
+    el.style.setProperty('--sash-left', railWidth(storedLeft, 'left'));
+    el.style.setProperty('--sash-right', railWidth(storedRight, 'right'));
+  };
+
   const shell = (
     stacked
       ? {
@@ -95,7 +107,9 @@ export function DockedShell({ surface, layout }: { surface: ReactNode; layout: S
   // `setValueForStyles` writes a key only when the value it last RENDERED differs
   // from the new one, so removing a property React believes it already set is
   // invisible to that comparison and is never restored. On a rail whose stored width
-  // was already `null` — which `toggleRail` now guarantees on every open — the
+  // was already `null` — a press that resizes nothing reaches that state, and
+  // `toggleRail` does NOT clear a stored width, which three comments in this branch
+  // claimed and `lib/store.ts` explains at length that it deliberately does not — the
   // accompanying `setRailWidth(side, null)` changed nothing either, so the property
   // simply stayed gone. The next open then resolved
   // `grid-template-columns: var(--sash-left) 1fr var(--rail-right)` against a
@@ -111,10 +125,8 @@ export function DockedShell({ surface, layout }: { surface: ReactNode; layout: S
   // preview straight onto this element every frame, and a render that happened to
   // land mid-gesture would otherwise snap that preview back to the token.
   useLayoutEffect(() => {
-    const el = shellRef.current;
-    if (!el || stacked || el.dataset.sashDragging === '1') return;
-    el.style.setProperty('--sash-left', railWidth(storedLeft, 'left'));
-    el.style.setProperty('--sash-right', railWidth(storedRight, 'right'));
+    if (shellRef.current?.dataset.sashDragging === '1') return;
+    applySashWidths();
   });
 
   const railStyle: CSSProperties = stacked
@@ -147,6 +159,7 @@ export function DockedShell({ surface, layout }: { surface: ReactNode; layout: S
           railId={RAIL_ID.left}
           open={leftOpen}
           onToggle={() => toggleRail('left')}
+          onRestoreWidths={applySashWidths}
         />
       )}
     </aside>
@@ -164,6 +177,7 @@ export function DockedShell({ surface, layout }: { surface: ReactNode; layout: S
           railId={RAIL_ID.right}
           open={rightOpen}
           onToggle={() => toggleRail('right')}
+          onRestoreWidths={applySashWidths}
         />
       )}
     </aside>
