@@ -79,6 +79,11 @@ describe('hullsOverlap', () => {
     // this one wrong. Both scans are why `hullsOverlap` calls `scan` twice.
     const diamond: Array<[number, number]> = [[0, -0.5], [0.5, 0], [0, 0.5], [-0.5, 0]];
     expect(hullsOverlap(diamond, rect(0.62, 0.62, 0.5, 0.5), 0), 'corner-to-corner, bounds overlap').toBe(false);
+    // The SAME pair with the arguments swapped, which is the assertion that the second
+    // scan exists. Here the separating axis belongs to the second polygon, so a version
+    // that scanned only the first answers this one wrong while answering the line above
+    // correctly — and it survived as a mutation until this line was written.
+    expect(hullsOverlap(rect(0.62, 0.62, 0.5, 0.5), diamond, 0), 'the same pair, swapped').toBe(false);
     expect(hullsOverlap(diamond, rect(0.4, 0.4, 0.5, 0.5), 0), 'the same pair, closer').toBe(true);
   });
 

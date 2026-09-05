@@ -349,6 +349,12 @@ export function hullsOverlap(a: Array<[number, number]>, b: Array<[number, numbe
   // moves them almost entirely along the LONG axis, so the 110 mm depth barely
   // narrows. It reported 62 collisions the production test did not, and the row read
   // as a finding about the app until the cross-check below refused it.
+  //
+  // ONE decision, at the bottom. The early exit inside `scan` used to `return true` for
+  // "separated", which made the final `minOverlap > -pad` unreachable as false — it could
+  // only ever return true, so mutating it to `minOverlap > 0` changed no answer and no test
+  // could pin the pad at all. A line that cannot be wrong is a line nothing is checking.
+  // The exit is still there and still a fast path; it just stops being a second answer.
   let minOverlap = Infinity;
   const scan = (poly: Array<[number, number]>) => {
     for (let i = 0; i < poly.length; i++) {
@@ -364,11 +370,13 @@ export function hullsOverlap(a: Array<[number, number]>, b: Array<[number, numbe
       for (const [x, z] of a) { const d = x * nx + z * nz; a0 = Math.min(a0, d); a1 = Math.max(a1, d); }
       for (const [x, z] of b) { const d = x * nx + z * nz; b0 = Math.min(b0, d); b1 = Math.max(b1, d); }
       minOverlap = Math.min(minOverlap, Math.min(a1, b1) - Math.max(a0, b0));
-      if (minOverlap <= -pad) return true; // separated by more than the pad allows
+      if (minOverlap <= -pad) return; // separated by more than the pad allows; no axis undoes it
     }
-    return false;
   };
-  if (scan(a) || scan(b)) return false;
+  // BOTH polygons edge normals. Either set alone answers a rotated pair wrong, and which
+  // one is wrong depends on the order the caller happened to pass them in.
+  scan(a);
+  scan(b);
   return minOverlap > -pad;
 }
 
