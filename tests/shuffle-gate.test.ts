@@ -107,6 +107,7 @@ function resultFor(from: ScenePart[], to: ScenePart[]): SolveResult {
     placements: placementsOf(to),
     // Hand-built, so it never went through the accept that sets this.
     declined: null,
+    declinedTerms: [],
     before: before.total,
     after: after.total,
     breakdownBefore: before,

@@ -5,6 +5,9 @@ import {
   HARD_TERMS,
   impossibility,
   IMPOSSIBLE_TERMS,
+  impossibleClause,
+  impossibleTermsWorse,
+  isImpossibleTerm,
   lockedForSolve,
   makeRng,
   openRoutes,
@@ -71,7 +74,7 @@ describe('IMPOSSIBLE_TERMS — the split is by kind, not by severity', () => {
     // absent from every list, so it silently becomes recoverable and `Fix` writes it
     // to the store. That is CLAUDE.md rule 3's shape exactly — absence inherits a
     // default, and absence is never the defect.
-    const recoverable = HARD_TERMS.filter((t) => !IMPOSSIBLE_TERMS.includes(t));
+    const recoverable = HARD_TERMS.filter((t) => !isImpossibleTerm(t));
     expect(recoverable, 'a hard term is either impossible or priced, and door is priced')
       .toContain('door');
     for (const term of recoverable) {
@@ -94,7 +97,7 @@ describe('IMPOSSIBLE_TERMS — the split is by kind, not by severity', () => {
     // decision: is it a room that cannot exist, or a room that is merely bad?
     expect([...HARD_TERMS].sort()).toEqual(['access', 'door', 'navigation', 'outside', 'overlap']);
 
-    const recoverable = HARD_TERMS.filter((t) => !IMPOSSIBLE_TERMS.includes(t));
+    const recoverable = HARD_TERMS.filter((t) => !isImpossibleTerm(t));
     expect([...IMPOSSIBLE_TERMS, ...recoverable].sort()).toEqual([...HARD_TERMS].sort());
     for (const term of IMPOSSIBLE_TERMS) expect(HARD_TERMS).toContain(term);
     // Non-empty in both directions: an emptied `IMPOSSIBLE_TERMS` makes the `for` above
@@ -468,4 +471,85 @@ describe('Candidate.breakdown', () => {
         .toBeCloseTo(DEFAULT_WEIGHTS.outside, 6);
     }
   }, 300_000);
+});
+
+// ─── A refusal that names the condition, not both conditions ────────────────
+//
+// `declined === 'impossible'` told the UI that something the room cannot contain had
+// been introduced, and nothing told it WHICH. So `RoomTools` said both, in four places:
+// "put a piece through a wall or inside another one". A disjunction is true and it is
+// not an answer — half of it is always false and the user cannot tell which half, which
+// is the difference between "unlock the wardrobe" and "this room is too small".
+
+describe('SolveResult.declinedTerms — which condition, not both conditions', () => {
+  const B = (over: Partial<CostBreakdown>): CostBreakdown => ({ ...ZERO, ...over });
+  const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8];
+
+  it('names only the terms that actually rose', () => {
+    expect(impossibleTermsWorse(B({ overlap: 1, outside: 1 }), B({ overlap: 2, outside: 1 }))).toEqual(['overlap']);
+    expect(impossibleTermsWorse(B({ overlap: 1, outside: 1 }), B({ overlap: 1, outside: 2 }))).toEqual(['outside']);
+    expect(impossibleTermsWorse(B({ overlap: 1, outside: 1 }), B({ overlap: 2, outside: 2 }))).toEqual([
+      'overlap',
+      'outside',
+    ]);
+    // The negative control, and it is the one that fails if the comparison is inverted:
+    // an answer that IMPROVED both names neither. Without it, `after[k] < before[k]`
+    // passes every assertion above with the arguments swapped.
+    expect(impossibleTermsWorse(B({ overlap: 2, outside: 2 }), B({ overlap: 1, outside: 1 }))).toEqual([]);
+    expect(impossibleTermsWorse(B({ overlap: 1, outside: 1 }), B({ overlap: 1, outside: 1 }))).toEqual([]);
+  });
+
+  it('ignores a hard term that is not one of the two', () => {
+    // `door`, `access` and `navigation` are rooms that exist and are bad. A refusal is
+    // never about them — see the partition above — so a door getting worse must not put
+    // a word in a sentence about impossibility.
+    expect(impossibleTermsWorse(B({ door: 1 }), B({ door: 900 }))).toEqual([]);
+  });
+
+  it('cannot be empty when `declineFor` says impossible, and that is arithmetic', () => {
+    // The invariant the sentence rests on, and the reason `impossibleTermsWorse` uses a
+    // plain `>` with no epsilon of its own: `declineFor` fires on the SUM rising, and a
+    // sum of two terms cannot rise unless one strictly does. A per-term epsilon breaks
+    // it — the pair below raises the sum past `declineFor`'s 1e-6 while neither term
+    // moves 1e-6, so a `> before[k] + 1e-6` filter hands back a refusal nothing can name.
+    const before = B({ overlap: 1, outside: 1 });
+    const after = B({ overlap: 1 + 9e-7, outside: 1 + 9e-7 });
+    expect(declineFor(impossibility(before), impossibility(after), 10, 9, false)).toBe('impossible');
+    expect(impossibleTermsWorse(before, after).length, 'a refusal with no condition to name').toBeGreaterThan(0);
+  });
+
+  it('is a sentence fragment that reads for one condition or two', () => {
+    expect(impossibleClause(['outside'])).toBe('through a wall');
+    expect(impossibleClause(['overlap'])).toBe('inside another piece');
+    expect(impossibleClause(['overlap', 'outside'])).toBe('inside another piece or through a wall');
+    // Order in, order out: the clause is built from `IMPOSSIBLE_TERMS` rather than from
+    // the caller's array, so the same pair cannot produce two sentences.
+    expect(impossibleClause(['outside', 'overlap'])).toBe(impossibleClause(['overlap', 'outside']));
+    // The unreachable arm, kept because a sentence with a hole in it is the worse of the
+    // two failures. Naming both is exactly the honest thing to say when the condition is
+    // unknown — which is what the whole app used to say, always.
+    expect(impossibleClause([])).toBe('through a wall or inside another piece');
+  });
+
+  it('is filled on real impossible declines and empty on every other outcome', () => {
+    // The wiring, which no unit input can prove: `declinedTerms` is computed BEFORE the
+    // revert, and the revert sets `breakdownAfter = breakdownBefore`. Compute it one line
+    // later — or in the caller, from the two breakdowns on the result — and it is empty
+    // on every refusal there has ever been, silently, with the sentence falling back to
+    // the disjunction this replaces.
+    const parts = defaultScene('u', 6, 4);
+    const poly = footprintForLayout('u', 6, 4);
+    let impossible = 0;
+    for (const seed of SEEDS) {
+      const r = solveLayout(parts, poly, lockedForSolve(parts, {}, null), { seed });
+      if (r.declined === 'impossible') {
+        impossible++;
+        expect(r.declinedTerms.length, `seed ${seed} refused for impossibility and named nothing`).toBeGreaterThan(0);
+        for (const t of r.declinedTerms) expect(isImpossibleTerm(t)).toBe(true);
+      } else {
+        expect(r.declinedTerms, `seed ${seed} declined ${r.declined} and named a condition`).toEqual([]);
+      }
+    }
+    expect(impossible, 'no solve took the impossibility arm, so the filled half proved nothing').toBeGreaterThan(0);
+  }, 600_000);
 });

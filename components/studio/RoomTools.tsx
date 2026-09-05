@@ -66,6 +66,7 @@ import { resolveParts, useRoomScene } from '@/lib/room-scene';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
 import { analyzeRoom, type ClearanceIssue, type ClearanceSeverity, type RoomReport } from '@/lib/clearance';
 import {
+  impossibleClause,
   isWorthOffering,
   lockedForSolve,
   movableFor,
@@ -714,7 +715,7 @@ function FixAllButton({
               // file are untoned for the same reason.
               title: 'No safe arrangement found',
               message:
-                'Every layout tried put a piece through a wall or inside another one, so nothing was moved. Press Fix again for a different try, or unlock a piece to give it more room.',
+                `Every layout tried put a piece ${impossibleClause(result.declinedTerms)}, so nothing was moved. Press Fix again for a different try, or unlock a piece to give it more room.`,
               ttl: 14000,
             }
           : {
@@ -1072,7 +1073,7 @@ function useRefitOffer(
                 ? {
                     title: 'No safe way to fit that',
                     message:
-                      'Every arrangement tried put a piece through a wall or inside another one. A smaller size, or unlocking a piece, gives it more room.',
+                      `Every arrangement tried put a piece ${impossibleClause(result.declinedTerms)}. A smaller size, or unlocking a piece, gives it more room.`,
                     ttl: 14000,
                   }
                 : {
@@ -1190,8 +1191,8 @@ function FixButton({
         message:
           result.declined === 'impossible'
             ? scope
-              ? 'Every arrangement of those put a piece through a wall or inside another one. Fix can rearrange the whole room, which gives it more to work with.'
-              : 'Every arrangement tried put a piece through a wall or inside another one. Try unlocking a piece, or making some space.'
+              ? `Every arrangement of those put a piece ${impossibleClause(result.declinedTerms)}. Fix can rearrange the whole room, which gives it more to work with.`
+              : `Every arrangement tried put a piece ${impossibleClause(result.declinedTerms)}. Try unlocking a piece, or making some space.`
             : scope
               ? 'Nothing better was found without touching the rest of the room. Fix can rearrange everything.'
               : 'Nothing better was found. Try unlocking a piece, or making some space.',
