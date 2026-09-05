@@ -276,15 +276,24 @@ export function Inspector() {
   // the outer rail is the wrong box. If the `overflow` ever moves, the class moves
   // with it, because it is the scrollbar that makes the two boxes differ.
   //
-  // `flex: 0 1 auto` + `min-height: 0`, not `height: 100%`. This pane is no longer a
+  // `flex: 0 0 auto`, not `height: 100%` and not `0 1 auto`. This pane is no longer a
   // direct child of `.rail`: it shares a scroll region with the View section (see
-  // `shell-parts.tsx`), and `height: 100%` inside that region would claim all of it
-  // and push its sibling out — which is the defect that region exists to fix. It
-  // keeps its own `overflow: auto` because it keeps `rail-scroll`, and the class and
-  // the overflow travel together: it is the scrollbar that makes this the box
-  // `@container rail` should measure.
+  // `shell-parts.tsx`). `height: 100%` inside that region would claim all of it and
+  // push its sibling out, which is the defect that region exists to fix — and `0 1
+  // auto` is the same mistake from the other end. Inside a column that scrolls, only
+  // a child that CAN shrink does: `ViewSection` is a `RailSection` at a fixed
+  // `flex: 0 0 auto` 277px, so a shrinkable Inspector absorbed the whole shortfall.
+  // Measured at 1100 × 420 with a piece selected: the scroller was 234px holding
+  // 277px and the Inspector was **0** — and scrolling revealed nothing, because there
+  // was no Inspector height to scroll to. Neither child shrinks now; the content
+  // overflows and the region scrolls, which is what one scroll region means.
+  //
+  // It keeps its own `overflow: auto` because it keeps `rail-scroll`, and the class
+  // and the overflow travel together: it is the scrollbar that makes this the box
+  // `@container rail` should measure. With `0 0 auto` that scrollbar no longer
+  // appears, which is the point — one region, one scrollbar.
   return (
-    <div className="rail-scroll" style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', flex: '0 1 auto', minHeight: 0, minWidth: 0 }}>
+    <div className="rail-scroll" style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', flex: '0 0 auto', minWidth: 0 }}>
       <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--hairline)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <EditableText
@@ -767,7 +776,7 @@ function WallInspector({ index }: { index: number }) {
   const current = room.wallColors?.[index] ?? SCENE.wall;
 
   return (
-    <div className="rail-scroll" style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', flex: '0 1 auto', minHeight: 0, minWidth: 0 }}>
+    <div className="rail-scroll" style={{ display: 'flex', flexDirection: 'column', overflow: 'auto', flex: '0 0 auto', minWidth: 0 }}>
       <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--hairline)' }}>
         <div style={{ fontSize: 16, fontWeight: 500, letterSpacing: '-0.01em' }}>{name}</div>
         <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>

@@ -100,3 +100,48 @@ real DPI is one 1px-tolerance measurement on one machine; and the row reflowing 
 — two side-by-side buttons becoming two stacked full-width ones, so the control under a
 pointer that has not moved is no longer the one that was pressed — is printed as a
 measurement and fixed by nothing here.
+
+---
+
+# Third round — S12, written from someone else's measurement and run before the fix
+
+S12 is not a prediction in the sense the two rounds above are, and saying so is the point:
+a peer measured the Inspector at **0px** in the shared scroll region at 1100 × 420 and sent
+the numbers. What was done with them is the part that matters — **the scenario was written
+and run against the unfixed build first**, and it failed there and passed at the tall
+control in the same run:
+
+```
+S12@420  inspector pane 0px,   scroller 234px holding 277px   FAIL
+S12@900  inspector pane 437px, scroller 714px holding 714px   PASS
+```
+
+Only then was `Inspector`'s pane changed from `flex: 0 1 auto` to `0 0 auto`, and:
+
+```
+S12@420  inspector pane 521px, scroller 234px holding 797px   PASS
+S12@900  inspector pane 521px, scroller 714px holding 797px   PASS
+```
+
+The tall window is a control rather than decoration: an Inspector that is zero at every
+height satisfies "not zero at 420" by never being measured there, and 437 → 521 is the
+number that says the pane stopped being squeezed rather than the window getting bigger.
+
+**S7 still reads 0px of overhang at both heights**, which is what makes this a fix and not
+a trade: the footer stays inside the rail AND the Inspector keeps its height. The earlier
+shape had one or the other.
+
+## Two traps this round cost, both worth the next person's time
+
+1. **The probe's rooms are EMPTY.** `seed()` writes `room:<id>:scene = []`, so
+   `buildSceneFromRoom` finds a saved snapshot with no parts and the piece tree is empty —
+   nothing to select, and the Inspector has nothing to be tall about. `furnished: true`
+   OMITS the key instead, which is what lets `defaultScene` run. The first S12 run reported
+   `precondition: no part in the tree to select`, which is the failure reporting itself
+   rather than passing, and that is the only reason it was cheap.
+2. **A default click on a `.list-row` hits the LOCK button.** The row is ~163px wide, its
+   two actions sit at the right end and are pinned open by `is-on`, so
+   `elementFromPoint` at the row's centre answers `BUTTON.icon-btn row-action`. Playwright
+   clicks element centres. The click selected nothing, silently, and toggled the lock on
+   that piece instead — a state change nothing in the run would have reported. S12 clicks
+   at `x: 30` and then ASSERTS `aria-selected` before believing anything downstream of it.

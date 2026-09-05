@@ -51,8 +51,13 @@ const room = (id) => ({
   layoutId: 'rect', width: 6, depth: 5, height: 2.5,
 });
 
-async function seed(page, r) {
-  await page.evaluate(async (r) => {
+/** `furnished` OMITS the scene key rather than writing an empty array, so `RoomSync`
+ *  falls through to `defaultScene` and the room opens with the starter arrangement.
+ *  Every other scenario wants an empty room — nothing about a sash depends on
+ *  furniture, and an empty room loads faster and deterministically. S12 is the one
+ *  that needs a piece, because the Inspector has nothing to be tall about without one. */
+async function seed(page, r, { furnished = false } = {}) {
+  await page.evaluate(async ([r, furnished]) => {
     await new Promise((res, rej) => {
       const rq = indexedDB.open('keyval-store');
       rq.onupgradeneeded = () => rq.result.createObjectStore('keyval');
@@ -60,7 +65,7 @@ async function seed(page, r) {
         const tx = rq.result.transaction('keyval', 'readwrite');
         const st = tx.objectStore('keyval');
         st.put(r, `room:${r.id}:meta`);
-        st.put([], `room:${r.id}:scene`);
+        if (!furnished) st.put([], `room:${r.id}:scene`);
         st.put({}, `room:${r.id}:transforms`);
         st.put(Date.now(), `room:${r.id}:touched`);
         tx.oncomplete = () => res();
@@ -68,18 +73,18 @@ async function seed(page, r) {
       };
       rq.onerror = () => rej(rq.error);
     });
-  }, r);
+  }, [r, furnished]);
 }
 
 /** A fresh context every scenario: `railLeftW` persists through localStorage, so one
  *  scenario storing a width would decide the next one's answer. */
-async function fresh(browser, { width = COMPACT_PX, height = TALL } = {}) {
+async function fresh(browser, { width = COMPACT_PX, height = TALL, furnished = false } = {}) {
   const ctx = await browser.newContext({ viewport: { width, height } });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => log('  [pageerror]', e.message));
   const id = `rails-${Math.random().toString(36).slice(2, 8)}`;
   await page.goto(BASE, { waitUntil: 'domcontentloaded' });
-  await seed(page, room(id));
+  await seed(page, room(id), { furnished });
   await page.goto(`${BASE}/room/${id}/plan`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.split', { timeout: 20000 });
   await page.waitForTimeout(1200);
@@ -391,7 +396,14 @@ async function main() {
       note(`S9-${side}`, `${before}px → ${after}px, --sash-${side} is "${varValue}", rail present: ${open}`);
       if (after === before) ok(`S9-${side}`, `a vertical press left the rail at ${after}px`);
       else no(`S9-${side}`, `a vertical press moved the rail ${before} → ${after}px`);
-      if (!/^\d/.test(varValue)) ok(`S9-${side}-var`, `--sash-${side} is still an expression, not a painted literal`);
+      // Two ways to fail, and the empty one is the older defect: `removeProperty` left
+      // this variable UNSET on the baseline, which is what made `grid-template-columns`
+      // invalid at computed-value time and stacked the studio one row per pane. An
+      // assertion that only refuses a numeric literal accepts "" and agrees with that.
+      if (varValue && !/^\d/.test(varValue))
+        ok(`S9-${side}-var`, `--sash-${side} is still an expression: "${varValue}"`);
+      else if (!varValue)
+        no(`S9-${side}-var`, `--sash-${side} is GONE after the gesture — the grid has nothing to read`);
       else no(`S9-${side}-var`, `--sash-${side} was left as the literal "${varValue}", unclamped and stuck`);
     }
     await ctx.close();
@@ -460,6 +472,61 @@ async function main() {
     note('S11', `ArrowRight: → ${afterGrow}px, stored ${JSON.stringify(await storedW(page, 'left'))}`);
     if (afterGrow > afterHome) ok('S11-grow', `[control] the grow key still resizes (${afterHome} → ${afterGrow})`);
     else no('S11-grow', `[control] the grow key did nothing either — the guard refuses everything`);
+    await ctx.close();
+  }
+
+
+  // ── S12 · the shared scroll region must not squeeze the Inspector to nothing ─
+  //
+  // The trade the S7 fix makes, and it was a peer's finding rather than mine. Putting
+  // the Inspector and the View section in ONE scroll box stopped the pinned footer
+  // painting past the rail — and inside a column that scrolls, only a child that CAN
+  // shrink does. `ViewSection` is a `RailSection`, `flex: 0 0 auto` at a fixed 277px;
+  // the Inspector's pane was `flex: 0 1 auto`, so it absorbed every pixel of the
+  // shortfall. Measured at 1100 × 420 with a piece selected: the scroller is 234px,
+  // its content 277px, and the Inspector is **0**. Scrolling reveals nothing, because
+  // there is no Inspector height to scroll to.
+  //
+  // Inside a box that scrolls, neither child shrinks: the content overflows and the
+  // user scrolls to it. The tall window is the control — an assertion that only reads
+  // the short one is satisfied by an Inspector that is zero everywhere.
+  for (const winH of [420, 900]) {
+    const { ctx, page } = await fresh(browser, { width: COMPACT_PX, height: winH, furnished: true });
+    const part = page.locator('[data-part-id]').first();
+    if ((await part.count()) === 0) {
+      no(`S12@${winH}`, 'precondition: no part in the tree to select');
+    } else {
+      // Clicked near the LEFT edge, deliberately. A `.list-row` is ~163px wide and its
+      // two row actions sit at the right end, pinned open by `is-on` — so the element
+      // at the row's CENTRE is `BUTTON.icon-btn row-action`, and a default Playwright
+      // click selects nothing and toggles the lock on that piece instead. It reports
+      // no error either way. `elementFromPoint` at the centre is what said so.
+      await part.click({ position: { x: 30, y: 10 } });
+      await page.waitForTimeout(300);
+      if ((await part.getAttribute('aria-selected')) !== 'true') {
+        no(`S12@${winH}`, 'precondition: the row did not select, so the Inspector has nothing to show');
+        await ctx.close();
+        continue;
+      }
+      const m = await page.evaluate(() => {
+        const rail = document.querySelector('.rail--right');
+        const pane = rail?.querySelector('.rail-scroll');
+        const scroller = pane?.parentElement;
+        if (!pane || !scroller) return null;
+        return {
+          pane: Math.round(pane.getBoundingClientRect().height),
+          box: Math.round(scroller.getBoundingClientRect().height),
+          content: scroller.scrollHeight,
+        };
+      });
+      if (!m) {
+        no(`S12@${winH}`, 'precondition: no Inspector pane inside the right rail');
+      } else {
+        note(`S12@${winH}`, `inspector pane ${m.pane}px, scroller ${m.box}px holding ${m.content}px`);
+        if (m.pane > 0) ok(`S12@${winH}`, `the Inspector has height (${m.pane}px)`);
+        else no(`S12@${winH}`, 'the Inspector is squeezed to 0px and scrolling cannot reach it');
+      }
+    }
     await ctx.close();
   }
 
