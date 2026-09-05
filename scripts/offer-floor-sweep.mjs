@@ -33,14 +33,16 @@
 //   2  the sweep never produced a solve to classify, so it measures nothing
 //
 // **IT EXITS 1 TODAY, AND THAT IS THE ANSWER RATHER THAN A BREAKAGE.** 0 of 45 whole-room
-// solves and 0 of 11 isolated repairs were both refused by the floor and a band repair,
+// solves and 0 of the 12 refused isolated cases were both refused by the floor and a band repair,
 // so a relation-aware floor keyed on an out-of-band → in-band transition would fire on
 // nothing. The reason is in the last two columns of the isolated table and it is one
 // layer below the offer stage: with every other piece locked, the solver moves the piece
 // most of the way back and **stops short of the band** — 0.90 m → 0.58 m against a 0.50 m
 // maximum — because in `arrange` mode the origin it is anchored to is the DISPLACED
 // position, so `inertia` charges the repair for being a change. Re-solved with
-// `inertia: 0` and nothing else altered, **10 of the 11 land in band** instead of 3.
+// the inertia term lowered in a RAMP, the band is repaired **0 of 12 times at default
+// inertia in the rooms with no hard term, at every one of four seeds**. See the doc
+// section for the full table and for why the ramp is not a clean isolation.
 //
 // So the sentence in `bandCost` — "the thing that is wrong is what gets OFFERED, not what
 // gets searched" — is refuted on this population by its own successor measurement. The
@@ -55,6 +57,18 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+/** Seeds for the isolated arm. One seed is one sample and the first version of this
+ *  script published a three-row table off it; a reviewer re-ran the same instrument at
+ *  seeds 2-4 and the count moved 10 / 6 / 9 / 9. A direction that holds at four seeds
+ *  and a magnitude that does not are two different claims. */
+const SEEDS = [1, 2, 3, 4];
+/** Multiples of `DEFAULT_WEIGHTS.inertia`, so the control is a RAMP rather than a
+ *  switch. The switch cannot isolate the term: `weights` is built once in `solveLayout`
+ *  and the same object reaches `snapYaws` and `pruneMoves`, and the prune's own comment
+ *  says it hands a piece its origin place back for free when the room is barely worse.
+ *  A monotone response across four settings is evidence about the term; 0-versus-1 is
+ *  evidence about the object. */
+const INERTIA_SCALES = [1, 0.5, 0.25, 0];
 const PUSHES = [0.2, 0.3, 0.45, 0.6, 0.8];
 /** Radial is away from the anchor; the two tangents are along it, in both signs.
  *  `tangent+` and `tangent-` are not one case with a flag — a room is not symmetric
@@ -241,7 +255,23 @@ try {
   // pressed it has asked for that finding cleared. That exemption is why this is an
   // INSTRUMENT and not a bug report about Try-a-fix: what it measures is what the
   // UNCONFINED Suggest path would do with the same repair.)
+  //
+  // ── Four seeds and an inertia RAMP, both of them corrections ────────────────
+  //
+  // The first version of this arm published a three-row table at one seed and one
+  // `inertia: 0` control. A reviewer re-ran the same instrument at seeds 2-4 and the
+  // in-band count moved 10 / 6 / 9 / 9 — so the DIRECTION is robust and the magnitude is
+  // not, and a headline built on the single number overstated it.
+  //
+  // The switch does not isolate the term either. `weights` is built once in
+  // `solveLayout` and the same object reaches `snapYaws` and `pruneMoves`, and the
+  // prune's own comment says it hands a piece its origin place back for free when the
+  // room is barely worse. Setting `inertia: 0` therefore changes what the prune does as
+  // well. A monotone response across four settings is evidence about the TERM; zero
+  // versus default is evidence about the object.
   const iso = [];
+  const ramp = new Map();
+  for (const seed of SEEDS) for (const s of INERTIA_SCALES) ramp.set(`${seed}:${s}`, { fixed: 0, clean: 0, n: 0, cleanN: 0 });
   for (const [id, w, d] of PRESETS) {
     const poly = fp.footprintForLayout(id, w, d);
     const seeded = spec.defaultScene(id, w, d, { footprint: poly });
@@ -275,60 +305,65 @@ try {
         const b0 = bandsOf(model, origin);
         if (b0.get(e.child) !== false) continue;
         const locked = parts.map((_, i) => i !== e.child);
-        const res = solveLayout(parts, poly, locked, { seed: 1, mode: 'arrange' });
-        if (res.moved.length === 0) continue;
-        // **The inertia control, and it is the whole reason this column exists.** In
-        // `arrange` mode the origin the search is anchored to is the PUSHED position, so
-        // moving the piece back costs `inertia` — the term is charging the repair for
-        // being a change. If the gap closes with the term switched off, the piece
-        // stopping short of its band is a price the search is paying, not a limit of the
-        // search. If it does not close, the search cannot reach the band and no offer
-        // gate can rescue that.
-        const free = solveLayout(parts, poly, locked, {
-          seed: 1,
-          mode: 'arrange',
-          weights: { ...DEFAULT_WEIGHTS, inertia: 0 },
-        });
-        const eFree = free.moved.length
-          ? relationParents(model, free.placements).find((x) => x.child === e.child)
-          : null;
-        const b1 = bandsOf(model, res.placements);
-        const e0 = relationParents(model, origin).find((x) => x.child === e.child);
-        const e1 = relationParents(model, res.placements).find((x) => x.child === e.child);
-        const moveM = Math.hypot(
-          res.placements[e.child].x - origin[e.child].x,
-          res.placements[e.child].z - origin[e.child].z,
-        );
-        const gain = res.before - res.after;
-        const floor = Math.max(MIN_GAIN_ABS, MIN_GAIN_SHARE * res.before);
-        iso.push({
-          room: `${id} ${w}x${d}`,
-          piece: `${c.shape} +${push.toFixed(2)}`,
-          before: res.before,
-          gain,
-          floor,
-          worth: isWorthOffering(res.before, res.after),
-          fixed: b1.get(e.child) === true,
-          hard: hard.join('+') || '-',
-          // The band question in metres, because "did it fix it" alone cannot tell a
-          // solver that declined to move the piece from one that moved it and still
-          // missed. `specId` is carried too: the winning ANCHOR may differ between the
-          // two arrangements, and a child discharging a different obligation after the
-          // solve is a third outcome again.
-          d0: e0 ? e0.d : NaN,
-          d1: e1 ? e1.d : NaN,
-          spec0: e0 ? e0.specId : '-',
-          spec1: e1 ? e1.specId : '-',
-          moveM,
-          dFree: eFree ? eFree.d : NaN,
-          fixedFree: eFree ? eFree.inBand : false,
-        });
+
+        for (const seed of SEEDS) {
+          for (const scale of INERTIA_SCALES) {
+            const r = solveLayout(parts, poly, locked, {
+              seed,
+              mode: 'arrange',
+              weights: { ...DEFAULT_WEIGHTS, inertia: DEFAULT_WEIGHTS.inertia * scale },
+            });
+            // **A solve that moved nothing counts as NOT repaired, rather than being
+            // skipped.** Skipping it made the denominator a function of the setting —
+            // 11 cases at default inertia against 19 at zero, because a higher inertia
+            // also stops the solver moving the piece at all — and two rates over two
+            // populations are not a comparison. The case existed and the solver was
+            // asked; declining to move is an answer.
+            const hit = r.moved.length
+              ? relationParents(model, r.placements).find((x) => x.child === e.child)
+              : null;
+            const cell = ramp.get(`${seed}:${scale}`);
+            cell.n++;
+            if (hit && hit.inBand) cell.fixed++;
+            // **The clean subset is counted separately and it is the population the
+            // conclusion is about.** A one-cost-unit floor cannot bind in a room whose
+            // hard terms are already in the hundreds — that is this script's own first
+            // method note — so a ramp aggregated over every room hides the only rooms
+            // where the answer could matter.
+            if (hard.length === 0) {
+              cell.cleanN++;
+              if (hit && hit.inBand) cell.clean++;
+            }
+            // The published row stays the default-inertia solve at the first seed, so
+            // the table below and the summary above describe the same run.
+            if (scale === 1 && seed === SEEDS[0]) {
+              const e0 = relationParents(model, origin).find((x) => x.child === e.child);
+              const e1 = relationParents(model, r.placements).find((x) => x.child === e.child);
+              iso.push({
+                room: `${id} ${w}x${d}`,
+                piece: `${c.shape} +${push.toFixed(2)}`,
+                before: r.before,
+                gain: r.before - r.after,
+                floor: Math.max(MIN_GAIN_ABS, MIN_GAIN_SHARE * r.before),
+                worth: isWorthOffering(r.before, r.after),
+                fixed: !!(e1 && e1.inBand),
+                hard: hard.join('+') || '-',
+                d0: e0 ? e0.d : NaN,
+                d1: e1 ? e1.d : NaN,
+                moveM: Math.hypot(
+                  r.placements[e.child].x - origin[e.child].x,
+                  r.placements[e.child].z - origin[e.child].z,
+                ),
+              });
+            }
+          }
+        }
       }
     }
   }
-  console.log('\n── one piece out of band, every other piece LOCKED ──────────────────');
+  console.log('\n-- one piece out of band, every other piece LOCKED (seed ' + SEEDS[0] + ', default inertia) --');
   console.log(
-    'room         piece                 before     gain    floor  offered  band fixed   gap0   gap1   moved  gapF0  fixedF  hard terms',
+    'room         piece                 before     gain    floor  offered  band fixed   gap0   gap1   moved  hard terms',
   );
   for (const r of iso) {
     console.log(
@@ -343,18 +378,26 @@ try {
         r.d0.toFixed(2).padStart(6),
         r.d1.toFixed(2).padStart(6),
         r.moveM.toFixed(2).padStart(7),
-        r.dFree.toFixed(2).padStart(6),
-        (r.fixedFree ? 'yes' : 'no').padStart(7),
         '  ' + r.hard,
       ].join(' '),
     );
   }
   const isoBite = iso.filter((r) => !r.worth && r.fixed).length;
   const isoClean = iso.filter((r) => r.hard === '-');
-  console.log(`\n  ${iso.length} isolated repairs`);
-  console.log(`  refused by the floor AND repaired the band : ${isoBite}`);
-  console.log(`  …of those, in a room with NO hard term     : ${isoClean.filter((r) => !r.worth && r.fixed).length}`);
-  console.log(`  rooms with no hard term at all            : ${isoClean.length}`);
+  console.log('\n  ' + iso.length + ' isolated repairs at the published seed');
+  console.log('  refused by the floor AND repaired the band : ' + isoBite);
+  console.log('  refused by the floor at all               : ' + iso.filter((r) => !r.worth).length);
+  console.log('  rooms with no hard term at all            : ' + isoClean.length);
+
+  console.log('\n-- band repaired, by seed and by inertia (all rooms / rooms with no hard term) --');
+  console.log('  inertia   ' + SEEDS.map((s) => ('seed ' + s).padStart(14)).join(''));
+  for (const scale of INERTIA_SCALES) {
+    const cells = SEEDS.map((seed) => {
+      const c = ramp.get(`${seed}:${scale}`);
+      return `${c.fixed}/${c.n}  ${c.clean}/${c.cleanN}`.padStart(14);
+    });
+    console.log('  x' + scale.toFixed(2).padEnd(8) + cells.join(''));
+  }
 
   if (classified === 0) {
     console.log('NOTHING TO CLASSIFY — every solve moved nothing. The sweep measures nothing.');
