@@ -576,14 +576,13 @@ point of the change, and no test can tell you it reads that way on screen.
 
 **What wrong looks like.**
 
-- **The row clipping.** Two `.ds-btn`s sit in a `display: flex` row with **no
-  `flexWrap`**, inside a rail whose box is `overflow: hidden`. The derived budget is
-  ~166px of button in 176px of rail at `--rail-left-tight` — about 10px of slack, never
-  measured on a real font. Drag the left rail to its narrowest and watch for `Shuffle`
-  losing its right-hand side or its label. There is no scrollbar and no error; the
-  glyphs just stop. (`LightingPicker` next door solves the same problem with
-  `flexWrap: 'wrap'` *and* two assertions in `tests/reflow.test.ts`; this row has
-  neither yet.)
+- **The row fitting.** Two `.ds-btn`s sit in a `display: grid` row of two equal
+  columns under the health chip, each ellipsising its own label in a `min-width:
+  0` span — the same opt-out `RailFooter`'s labels use. The rail around the row is
+  `overflow: hidden`, so anything past the edge would be eaten with no scrollbar
+  and no error. Drag the left rail to its narrowest and watch that both Fix and
+  Shuffle keep their full click areas and most of their words, with the full
+  label still reachable on hover.
 - **The refusal.** On a `t` or `open` footprint roughly a sixth to a third of presses
   answer *"No new arrangement this time"* and leave the room alone. That is **correct**
   — it is refusing to show a room with something in the way — but it must not read as a

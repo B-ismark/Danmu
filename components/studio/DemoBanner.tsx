@@ -60,6 +60,8 @@ export function DemoBanner() {
         flexWrap: 'wrap',
         gap: '4px 12px',
         padding: '9px 16px',
+        // Push the toolbar down so the banner does not overlap it at narrow widths.
+        marginBottom: 8,
         // A tint, not the flat accent: white on --accent is 3.0:1, and --accent
         // is a fill token. --accent-text on --accent-tint measures 4.85:1.
         background: 'var(--accent-tint)',

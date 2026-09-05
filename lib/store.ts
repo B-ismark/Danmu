@@ -281,7 +281,19 @@ export const useStudio = create<StudioState>()(
   setSnapMode: (m) => set({ snapMode: m }),
   toggleGrid: () => set((s) => ({ showGrid: !s.showGrid })),
   toggleRail: (side) =>
-    set((s) => (side === 'left' ? { railLeftOpen: !s.railLeftOpen } : { railRightOpen: !s.railRightOpen })),
+    set((s) => {
+      const willOpen = side === 'left' ? !s.railLeftOpen : !s.railRightOpen;
+      // Opening a rail always returns it to the token default: a previously dragged
+      // width is a fact about the OPEN rail, and restoring it on every reopen is the
+      // "fills the screen" surprise. Drop it so the chevron is predictable. (The
+      // sash's own collapse path already clears the width before it toggles.)
+      if (willOpen) {
+        return side === 'left'
+          ? { railLeftOpen: true, railLeftW: null }
+          : { railRightOpen: true, railRightW: null };
+      }
+      return side === 'left' ? { railLeftOpen: false } : { railRightOpen: false };
+    }),
   setRailWidth: (side, px) => {
     // Only finiteness and a floor of zero are enforced here. The real bounds are
     // the rail token's own `clamp()`, which is where the design values live and

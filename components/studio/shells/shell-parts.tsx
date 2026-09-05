@@ -8,14 +8,16 @@
 // copies would be in the measurements too. Same argument as `StudioShell` itself
 // existing: two copies of a layout is two places for it to drift.
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useStudio } from '@/lib/store';
 import { Icon } from '@/components/ui/Icon';
 import { PartTree } from '../PartTree';
 import { Inspector } from '../Inspector';
+import { RailSection } from '../RailSection';
 import { RailFooter } from '../RailFooter';
 import { SelectionHeader } from '../SelectionHeader';
 import { RoomHealthDot } from '../RoomTools';
+import { ViewOptions } from '../ViewOptions';
 
 export type RailSide = 'left' | 'right';
 
@@ -100,7 +102,24 @@ export function RightRailBody({ open }: { open: boolean }): ReactNode {
     <>
       <SelectionHeader />
       <Inspector />
+      <ViewSection />
       <RailFooter />
     </>
+  );
+}
+
+/** The View panel (Floor grid / Decor / Quality), which used to be the LEFT
+ *  rail's own section. It lives between the Inspector and the pinned footer so
+ *  that, with nothing selected, it sits directly on top of Add, and with a piece
+ *  or a wall selected it sits underneath the panel's last section (Exact size /
+ *  the wall's height). Open by default rather than matching the left rail's old
+ *  `view: false`: the controls are the useful half of the no-selection state,
+ *  and the disclosure still exists for the tall-selection case. */
+function ViewSection() {
+  const [open, setOpen] = useState(true);
+  return (
+    <RailSection title="View" open={open} onToggle={() => setOpen((v) => !v)} divider={false}>
+      <ViewOptions />
+    </RailSection>
   );
 }

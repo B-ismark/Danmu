@@ -20,7 +20,9 @@
 // works. Nothing in this file changes what a screenshot of the room would show
 // to someone else.
 //
-// It is now the body of the rail's "View" section, and NOT a popover. That was
+// It is now the body of the RIGHT rail's "View" section, and NOT a popover. The
+// section moved out of the left rail so the decorating rail — which answers both
+// "what is selected" and "how does the room render" — holds it. That was
 // half-finished for a while: the header claimed it "no longer positions
 // anything" while the code still hung a `position: absolute; width: 300` card
 // off a "Look" button. Two things were wrong with that, and both were visible:

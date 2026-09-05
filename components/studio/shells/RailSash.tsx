@@ -84,6 +84,9 @@ export function RailSash({
     pending: number;
     collapse: boolean;
     raf: number;
+    /** True only for the drag that opened a closed rail: the first move re-seeds
+     *  the gesture from the now-open width, and a no-move release commits it. */
+    openedHere?: boolean;
   } | null>(null);
 
   /** Measured, not remembered — and read outside render, because these are all
@@ -144,7 +147,31 @@ export function RailSash({
   }
 
   function onPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
-    if (!open || e.button !== 0) return;
+    if (e.button !== 0) return;
+    if (!open) {
+      // A closed rail normally ignores pointer drags (the early-return below). Letting
+      // the user pull a collapsed sash open is the requested behaviour: open it to the
+      // token default — issue 1's toggleRail guarantees that, never a stored width —
+      // and turn this gesture into a drag. Once open, the grid column tracks
+      // --sash-left and paint() can drive it, so the rest of this handler's logic
+      // applies. The open width can't be read synchronously (React re-renders next),
+      // so the gesture is seeded from the floor and corrected on the first move.
+      e.preventDefault();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      onToggle();
+      drag.current = {
+        startX: e.clientX,
+        startW: 0,
+        floor: 0,
+        ceiling: 0,
+        pending: 0,
+        collapse: false,
+        raf: 0,
+        openedHere: true,
+      };
+      setDragging(true);
+      return;
+    }
     const m = measure();
     if (!m) return;
     e.preventDefault();
@@ -164,6 +191,22 @@ export function RailSash({
   function onPointerMove(e: ReactPointerEvent<HTMLDivElement>) {
     const d = drag.current;
     if (!d) return;
+    if (d.openedHere) {
+      // First move after opening a closed rail: the DOM now reflects the open width,
+      // so measure it and re-seed the gesture from the current pointer. Resetting
+      // startX here means the rail holds its freshly opened width until the user
+      // actually moves, rather than leaping by the travel during the open.
+      const m = measure();
+      if (m) {
+        d.startX = e.clientX;
+        d.startW = m.width;
+        d.floor = m.floor;
+        d.ceiling = m.ceiling;
+        d.pending = m.width;
+        d.openedHere = false;
+      }
+      return;
+    }
     // The left rail grows as the pointer moves right; the right rail is mirrored.
     const delta = side === 'left' ? e.clientX - d.startX : d.startX - e.clientX;
     const raw = d.startW + delta;
@@ -185,6 +228,15 @@ export function RailSash({
       shellRef.current?.style.removeProperty(WIDTH_PROP[side]);
       setRailWidth(side, null);
       onToggle();
+      return;
+    }
+    if (d.openedHere) {
+      // Opened a closed rail but released without moving: commit the width it opened
+      // to (the token default) so the open state is sticky and consistent with the
+      // open-rail drag, rather than storing the untouched `0`.
+      const m = measure();
+      setRailWidth(side, m ? m.width : null);
+      sync();
       return;
     }
     setRailWidth(side, d.pending);

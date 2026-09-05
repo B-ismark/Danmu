@@ -223,18 +223,6 @@ export function RoomDimsEditor() {
   // component that keeps its own order can put it back in a different one.
   const labels: ['Width', 'Depth', 'Height'] = ['Width', 'Depth', 'Height'];
 
-  /** One floor axis of the resting hint: its range, and the piece setting the low
-   *  end when a piece is setting it. Reads `bounds()`, so it cannot name a number
-   *  the arrows will not reach — and it names the piece for the same reason the
-   *  refusal does: a minimum that moved when the user added furniture, with nothing
-   *  on screen saying why, is a number they cannot act on. */
-  function axisRange(axis: FloorAxis): string {
-    const b = bounds(axis);
-    const { stop } = floors[axis];
-    const who = namesTheStop(stop, axis === 'width' ? room.width : room.depth) ? ` (“${stop.name}”)` : '';
-    return `${b.min}–${b.max} ${dimUnit}${who}`;
-  }
-
   // The furniture refusal, in the user's unit — and it is CARRIED from the commit
   // that made it, not re-derived at render time.
   //
@@ -259,15 +247,13 @@ export function RoomDimsEditor() {
   // a `RailSection`, and it cost a click to reach the fields plus a chevron and a
   // title that repeated what the section above already said.
   //
-  // Its collapsed summary went with it. That existed only because this was
-  // collapsed, and the Room section's own `meta` is where a collapsed state
-  // belongs — one summary, in the header that does the collapsing. (That meta was
+  // Its collapsed summary went with it, and so did the header's dimension meta:
+  // the fields themselves are the measurement now. (The old header summary was
   // also the one printing `0.0×0.0m`: it divided metres by 1000.)
   return (
     // `--hairline`, not `--edge`: a decorative divider between two groups in the
     // rail, not the boundary of anything interactive.
     <div style={{ paddingBottom: 14, marginBottom: 4, borderBottom: '1px solid var(--hairline)' }}>
-      <span className="ds-label" style={{ display: 'block', marginBottom: 8 }}>Room dimensions</span>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
           {labels.map((axis, i) => (
             <label key={axis} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -305,36 +291,21 @@ export function RoomDimsEditor() {
             of content, overflows into `PartTree`'s scroller and grows a horizontal
             scrollbar across the whole left rail: the artefact `globals.css`
             already records as having been reported three times. */}
-        <div style={{ fontSize: 11, marginTop: 6, lineHeight: 1.4, overflowWrap: 'anywhere', color: rangeError ? 'var(--danger-text)' : 'var(--ink-3)' }}>
-          {rangeError && errorBy === 'floor' && floorError
-            ? floorError
-            : rangeError
-            ? `That ${rangeError} is outside ${bounds(rangeError).min}–${bounds(rangeError).max} ${dimUnit} — enter one in that range and the room will follow.`
-            // Was "Sizes in {unit}. Anything from 1 to 50 m a side." Trimmed
-            // because the range only matters once you are outside it, which is
-            // what the error branch above is for.
-            //
-            // IN THE USER'S UNIT, and it has to be. The literal `m` here was
-            // defended on the grounds that `ROOM_SIDE_M` / `ROOM_HEIGHT_M` are
-            // metres by name and by value — true, and beside the point: the field
-            // above shows `500.0` to someone working in centimetres, so "1–50 m"
-            // told them a range in a unit they were not typing in. `boundsToUnit`
-            // is what makes both correct at once, and the numbers here are the
-            // SAME call the arrows are bounded by, so the sentence cannot name a
-            // range the stepper will not reach.
-            //
-            // PER AXIS, and that is new. "a side" was exact while both floor axes
-            // shared one static bound; the furniture stop is per-axis, so a room
-            // with a 3.6 m sofa along x and nothing deep read "3.60–50 m a side"
-            // while the Depth chevron walked happily down to 1.00 — two numbers on
-            // one 200px panel, about the same word, disagreeing. It also answers
-            // the stepper's silent stop: pressing DOWN at the floor is correctly
-            // inert (`steppedValue` refuses a clamp that moves a value against its
-            // own arrow), so the refusal sentence never fires on that path and this
-            // line is the only thing on screen that can explain why. Naming the
-            // piece here is what makes the inert press legible.
-            : `${axisRange('width')} wide, ${axisRange('depth')} deep, ${bounds('height').min}–${bounds('height').max} ${dimUnit} tall.`}
-        </div>
+        {/* Only the FAILURE is spoken. The standing range inscription ("…wide,
+            …deep, …tall") was removed from this panel: the range only matters once
+            you are outside it, which is what this sentence is for, and the fields
+            themselves are visible anyway. The sentence is IN THE USER'S UNIT via
+            the same `boundsToUnit` call the arrows are bounded by, so it cannot
+            name a range the stepper will not reach — and PER AXIS, because the
+            furniture stop is per-axis, and naming the offending piece inside it
+            (`floorError`) is what makes the inert press legible. */}
+        {rangeError && (
+          <div style={{ fontSize: 11, marginTop: 6, lineHeight: 1.4, overflowWrap: 'anywhere', color: 'var(--danger-text)' }}>
+            {errorBy === 'floor' && floorError
+              ? floorError
+              : `That ${rangeError} is outside ${bounds(rangeError).min}–${bounds(rangeError).max} ${dimUnit} — enter one in that range and the room will follow.`}
+          </div>
+        )}
     </div>
   );
 }
