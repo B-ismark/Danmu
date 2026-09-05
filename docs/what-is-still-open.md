@@ -110,7 +110,7 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 6 | **§ 38.1** the confined "Try a fix" refusal is unreachable — **ANSWERED 2026-09-03: leave it, and the measurement stays beside the branch** | A decision rather than a defect: 212 confined solves over every finding of every preset declined **zero** times. **No code change, and that was checked rather than assumed** — `RoomTools.tsx`'s decline branch already carries both the 212-solve measurement and the reason for keeping both sentences, so the recommendation was already implemented in the only place that matters. Widening the confine is the one answer that would have been a product change, and it was declined | S — mostly a judgement | done |
 | 7 | **§ B.17** ~~the placement row — dragging a piece off a surface should DROP it~~ → **RESOLVED 2026-09-03, and the premise had expired** | The recorded answer — *"dragging would work"*, keep the operations and drop the row — rested on "neither Floor-off-a-table nor Surface-back-onto-it is reachable by dragging", which stopped being true when the drag pipeline moved into `lib/drag-resolve.ts` and nobody re-derived it. Measured against `resolvePlacement`: clear of a desk → y = 0, back over it → 0.75 with `supportId` set. Put back to the user with that measurement; they chose **drop Surface only**. Wall (nearest wall + face the room, gated on `ridesWall` so no drag reaches it) and Floor (drops IN PLACE where a drag carries it sideways) stay. `supportBelow`, `snapToSurface` and the `snap-surface` glyph went with the button — and so, after a browser measurement, did the `.rail-triple` class and the container-query rule that folded it, which a two-button row no longer needs. Confirmed on screen: the row is `Wall | Floor`, and Room check reads correctly in all five units with no clipping and 0px of document overflow | done | — |
 | 8 | ~~**§ H.3** every Library click drops its piece at the room centre, facing the same way~~ **ANSWERED AND BUILT** — fan out from the drop point with a legality gate (`openSpotForNewPart`, 2026-09-03), and **residue 1 answered and built 2026-09-04**: an explicit aim overrides `ceilingSpot`'s midpoint default, so the ceiling family fans out too and a dragged fan lands where it was dropped | **One residue left**, named in § H.3's section below: an unaimed click may still rest one tabletop-prone piece on another, and whether it should is a product question rather than a defect | — | **done, with one filed residue** |
-| 9 | **§ H.8** two reports that need a real repro | A group drag bounded by the lead's rules rather than the set's, and a merged set that drills in from a nightstand but never from the bed. Both are DOM-reachable on the 2D plan, which is the cheap way in | M | wants row 15's shims |
+| 9 | **§ H.8** ~~two reports that need a real repro~~ → **the drag half is CONFIRMED 2026-09-05; the drill-in half is what is left** | The group drag is measured and pinned (`tests/drag-convoy.test.ts`): the set refuses 450 mm before the dragged bed runs out, because a nightstand the containment clamp corrects fails the rigidity test and vetoes the gesture. **It needed no browser** — it was filed as DOM-only and is arithmetic in `lib/`. What remains of that half is a product decision: refuse, or slide to the limit. **The drill-in half is unchanged** and does need a real click sequence with the store read between clicks | S for the decision; M for the drill-in | row 15's shims are done |
 | 10 | **§ B.14** a turn that puts a corner through the wall — **ANSWERED AND BUILT 2026-09-03: keep and report, both paths** | The angle is always taken; what may not happen is a turn succeeding in silence. Two findings changed the shape of it: the second document said to contradict the first **no longer exists**, and `valid` is computed on the ALREADY-CLAMPED position, so a turn that slid a piece across the floor reports success. `turnNudge` is the sentence; `spinSelection` joins `turnInPlace` and stops being the one turn gesture with no pipeline, no cascade and no report | S once decided | done |
 | 11 | **§ H.6** Suggest, from the ground up — the user's explicit ask | The largest open thing here. It **subsumes** A.2, A.7 and G.2, and the 5 parked `it.fails` retire here too. (It used to name "A.3's `:555`" as a fourth; that line number stopped existing when the assertion was fixed, and § A.3 is closed — the surviving question there is not Suggest's to answer, it is whether ONE refusal in 532 is enough evidence for the re-check.) **It is NOT un-researched** — `docs/research/suggest-and-collision.md` is a three-layer design whose four questions to the user are all ANSWERED, including the feasibility split being in scope. Of the three things this section calls missing, **only one is** (support); facing is priced by `relationCost`, and groups move rigidly already | XL — refresh the research against `main`, then execute its rows | wants row 1 measured first, since it is a symptom |
 | 12 | **§ H.7** collision, properly — the user is open to replacing the engine | Every piece is one box or one ellipse, so a sofa's L, a table's legs and a plant's canopy are all the same rectangle. Same research doc, rows 4a/4b — and 4b is **half done** (`verticalExtent` makes ONE extent right; more than one still needs 4a). The duplication this row used to carry — *"six hand-written copies of the vertical-extent rule in five files"* — is **RETIRED (2026-09-04)**: all six call `verticalExtent`, plus a **seventh** the original list never named (`layout-settle.ts:380`), and `layout-score.ts:487` records it in the code. The only raw `pos[1] +` left in `lib/` is `rigid-parent.ts:184`'s rigid-child offset, never an instance of the rule. **This row is smaller than it was**, and the seventh copy is why a grep for the old wording could not have closed it | XL | independent of row 11, but they meet |
@@ -2640,11 +2640,37 @@ own account: **a flush travelling neighbour silently defeats the grid snap**, si
 magnet wins and lands the lead exactly on the raw delta. Coarse snap is a 50 mm lattice and
 this drag ignored it.
 
-So the block is something else. The likeliest remaining candidate is the containment clamp
-bounding the **lead** by its own extent while a **member** is the piece that runs out of
-room — in which case the set stops where the *nightstand* meets the wall and the piece named
-is not the piece under the hand, which would match the report exactly. Not settled. Needs a
-real drag.
+So the block is something else. The remaining candidate was the containment clamp bounding
+the **lead** by its own extent while a **member** is the piece that runs out of room — in
+which case the set stops where the *nightstand* meets the wall and the piece named is not the
+piece under the hand. This paragraph said *"Not settled. Needs a real drag."*
+
+**CONFIRMED 2026-09-05, and it needed no drag.** A 1400x2000 bed at x = 3.0 in the 6 x 4 m
+room, a 450x400 nightstand flush on each side, dragged east:
+
+    dx      lead accepted   valid   blocked
+    1.85    1.8500          true    -
+    1.90    1.9000          false   ns-r
+
+The set travels freely until `ns-r`'s own east edge meets the wall at **1.85 m**, then
+refuses — while the bed under the hand accepted the delta **in full** and has **2.30 m** of
+headroom. **The set stops 450 mm short of where the dragged piece could go and names a piece
+that is not under the hand**, which is the report. A member the containment clamp corrects
+fails `resolveConvoy`'s rigidity test — `RIGID_EPS` is a micron — so it vetoes the whole
+gesture; with a nightstand on each side the veto is symmetric, which is why the user saw it
+in both directions. Pinned in `tests/drag-convoy.test.ts`, 9/9 mutations killed.
+
+**Whether it is a DEFECT is still open, and that is now the only open half.** The set truly
+cannot go further, so refusing is defensible; sliding to the limit instead of refusing is a
+product decision nobody has made. The measurement is what that decision should be made
+against.
+
+**The transferable part is where it turned out to live.** This was filed under "needs a real
+repro" and grouped with a click sequence as DOM-only, and it is arithmetic in `lib/` that
+reproduces in milliseconds. **A report that arrives as a gesture is not thereby a question
+about the DOM** — the gesture is how the user could see it, not where it is. The first
+candidate was refuted from `lib/` too, by the same kind of measurement, and that was already
+on the page when this one was called un-reproducible.
 
 **Clicking a merged set drills in from a nightstand but never from the bed.** And, second
 half of the same report, after clicking away a nightstand click acts on that piece alone
@@ -2653,8 +2679,11 @@ notion of which piece — so the defect is not in that function; it is in what `
 when the click arrives. Needs a real click sequence, on both tabs, with the store read
 between clicks.
 
-Both are DOM-reachable on the **2D plan**, which is SVG with real elements and is the cheap
-way in. The 3D tab needs world→screen mapping to place a synthetic pointer.
+**The drill-in half** is DOM-reachable on the **2D plan**, which is SVG with real elements
+and is the cheap way in; the 3D tab needs world→screen mapping to place a synthetic
+pointer. It is genuinely a question about what `current` holds between two clicks, so the
+store has to be read between them and there is no `lib/` shortcut to it. This sentence used
+to say *"both"*, which is the claim the drag half disproved.
 
 ### 9. Room previews are all drawn as rectangles — FIXED
 
