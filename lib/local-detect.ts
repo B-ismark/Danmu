@@ -32,13 +32,16 @@
 import type { Detection } from './detection';
 import type { CaptureSlot } from './storage';
 import type { Category, Shape } from './scene-spec';
-import { acceptableModel, digestMatches } from './model-verify';
-
-const MODEL_FILE = 'yolov8n-oiv7.onnx';
-const NAMES_FILE = 'yolov8n-oiv7.names.json';
-// Second, open-vocabulary pass. Optional: when it is absent (e.g. an older
-// local export) detection still runs on the OIV7 model alone.
-const WORLD_FILE = 'yolov8s-worldv2-danmu.onnx';
+// The three file names come from `model-verify` rather than being declared here: they
+// are the list the digest registry has to cover, and a rename that moved only one of
+// the two would leave a real download unpinned with nothing to report it.
+import {
+  MODEL_FILE,
+  NAMES_FILE,
+  WORLD_FILE,
+  acceptableModel,
+  digestMatches,
+} from './model-verify';
 // Served from public/ when the export script has been run locally.
 const LOCAL_BASE = '/models/';
 // Hugging Face mirror, tried only when the local export is absent — lets a
@@ -237,19 +240,21 @@ const ORT_ENTRY = 'ort.min.mjs';
  *
  *  A file with no pinned digest passes: the registry is allowed to be partial so
  *  that adding a model file does not require a release to pin it first. */
-async function fetchVerifiedBytes(base: string, file: string): Promise<ArrayBuffer | null> {
+async function fetchBytes(base: string, file: string): Promise<ArrayBuffer | null> {
   const res = await fetch(base + file);
   if (!res.ok) return null;
-  const buf = await res.arrayBuffer();
-  return (await digestMatches(file, buf)) ? buf : null;
+  return res.arrayBuffer();
+}
+
+async function fetchVerifiedBytes(base: string, file: string): Promise<ArrayBuffer | null> {
+  const buf = await fetchBytes(base, file);
+  return buf && (await digestMatches(file, buf)) ? buf : null;
 }
 
 /** …and for a graph, the format check as well. */
 async function fetchVerifiedModel(base: string, file: string): Promise<Uint8Array | null> {
-  const res = await fetch(base + file);
-  if (!res.ok) return null;
-  const buf = await res.arrayBuffer();
-  return (await acceptableModel(file, buf)) ? new Uint8Array(buf) : null;
+  const buf = await fetchBytes(base, file);
+  return buf && (await acceptableModel(file, buf)) ? new Uint8Array(buf) : null;
 }
 
 /** The class-name table. It is not code, but it silently decides what every

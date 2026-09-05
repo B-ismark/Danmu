@@ -33,6 +33,18 @@
 // protobuf, and the realistic failure mode is receiving something that is not one at all
 // (an HTML error page, a redirect body, a truncated download). Local files are the
 // user's own export and are trusted as-is.
+// The three files fetched from the mirror. They live HERE, beside the registry, rather
+// than in `local-detect.ts` where they were declared, because "what the app downloads"
+// and "what is pinned" drifting apart is the one failure this registry cannot report:
+// renaming a graph on one side alone leaves a real download with no digest behind it,
+// and `digestMatches` answers TRUE for an unpinned name by design. One list, two readers.
+export const MODEL_FILE = 'yolov8n-oiv7.onnx';
+export const NAMES_FILE = 'yolov8n-oiv7.names.json';
+/** Second, open-vocabulary pass. Optional: when it is absent (e.g. an older local
+ *  export) detection still runs on the OIV7 model alone. */
+export const WORLD_FILE = 'yolov8s-worldv2-danmu.onnx';
+export const REMOTE_FILES = [MODEL_FILE, NAMES_FILE, WORLD_FILE] as const;
+
 export const MODEL_DIGESTS: Record<string, string> = {
   'yolov8n-oiv7.names.json':
     'sha256-8126ccfbc3780e25825a1beae446edf7d663b69223b5ce796d8499ea8c3ce13d',
@@ -60,9 +72,13 @@ export function looksLikeOnnx(buf: ArrayBuffer): boolean {
   if (buf.byteLength < MIN_MODEL_BYTES || buf.byteLength > MAX_MODEL_BYTES) return false;
   const head = new Uint8Array(buf, 0, Math.min(16, buf.byteLength));
   if (head[0] !== 0x08) return false;
-  // The producer_name / domain strings appear early in every graph we ship.
+  // The producer_name / domain strings appear early in every graph we ship. `ai.onnx`
+  // is deliberately NOT a third disjunct: it CONTAINS `onnx`, so it could never be the
+  // literal that decided an answer, and a reader seeing it there would reasonably think
+  // dropping `onnx` was safe. It is not — `pytorch` is the only independent one, which
+  // is why deleting THAT is the mutation that goes red and deleting `ai.onnx` was not.
   const text = new TextDecoder('latin1').decode(new Uint8Array(buf, 0, Math.min(4096, buf.byteLength)));
-  return text.includes('onnx') || text.includes('pytorch') || text.includes('ai.onnx');
+  return text.includes('onnx') || text.includes('pytorch');
 }
 
 /** Whether these bytes may be used for `file`.

@@ -19,6 +19,7 @@ import {
   MODEL_DIGESTS,
   MIN_MODEL_BYTES,
   MAX_MODEL_BYTES,
+  REMOTE_FILES,
   acceptableModel,
   digestMatches,
   looksLikeOnnx,
@@ -49,13 +50,25 @@ describe('the registry itself', () => {
   });
 
   it('pins every file the app fetches from the mirror, by name', () => {
-    // Derived from the module rather than typed here would be circular — this is the
-    // list of things that MUST be pinned, and it is a decision. The two graphs and the
-    // class-name JSON: the JSON is not code, and it decides what every detection is
-    // CALLED, which is why it is in the registry at all.
-    for (const f of ['yolov8n-oiv7.onnx', 'yolov8s-worldv2-danmu.onnx', 'yolov8n-oiv7.names.json']) {
-      expect(MODEL_DIGESTS[f], `${f} is not pinned`).toBeTruthy();
+    // `REMOTE_FILES` is what the app DOWNLOADS and `MODEL_DIGESTS` is what is PINNED —
+    // two different lists, so asserting one covers the other is a real check rather than
+    // a circular one. It would be circular the other way round: deriving the expected
+    // names FROM the registry can only ever agree with itself.
+    //
+    // This was a hand-typed list of three literals, which passed while naming files
+    // nobody fetched any more — rename a graph in `local-detect.ts` and the old name is
+    // still pinned, still asserted, and the new download has no digest behind it.
+    for (const f of REMOTE_FILES) {
+      expect(MODEL_DIGESTS[f], `${f} is fetched and not pinned`).toBeTruthy();
     }
+    // Three is a decision, and a list that quietly shrank would satisfy the loop above
+    // by having nothing left to check. The two graphs and the class-name JSON: the JSON
+    // is not code, and it decides what every detection is CALLED, which is why it is in
+    // the registry at all.
+    expect(REMOTE_FILES).toHaveLength(3);
+    expect([...REMOTE_FILES].sort()).toEqual(
+      ['yolov8n-oiv7.names.json', 'yolov8n-oiv7.onnx', 'yolov8s-worldv2-danmu.onnx'],
+    );
   });
 
   it('states each digest in the sha256-<64 hex> form the comparison builds', () => {
@@ -150,11 +163,37 @@ describe('looksLikeOnnx', () => {
     expect(looksLikeOnnx(fakeOnnx(MIN_MODEL_BYTES))).toBe(true);
   });
 
-  it('refuses a file over the ceiling, and accepts it at the ceiling', () => {
-    // The ceiling is 512 MB and allocating that twice here would be unkind, so the
-    // ceiling is checked through the constant's relationship to the floor plus one
-    // oversized-by-construction buffer at a size the runner can afford. The pair below
-    // is what pins the ceiling as a DECISION rather than as whatever number is there.
+  it('refuses a file one byte over the ceiling and accepts it AT the ceiling', () => {
+    // 512 MB is never allocated here, and the ceiling is pinned at both ends anyway.
+    // `looksLikeOnnx` reads `byteLength` as a PROPERTY, while every read of the bytes
+    // goes through the buffer's internal slot — so shadowing that one property on a real
+    // 1 MB graph presents an oversized file to the size check and a perfectly valid one
+    // to everything after it. Remove `|| buf.byteLength > MAX_MODEL_BYTES` and the first
+    // line is ACCEPTED; turn the `>` into `>=` and the second is REFUSED.
+    //
+    // The first version of this test was `{ byteLength: MAX_MODEL_BYTES + 1 } as unknown
+    // as ArrayBuffer`, and it was decoration — the mutation run is the only reason that
+    // is known. A plain object is not an ArrayBuffer, so `new Uint8Array(obj, 0, 16)`
+    // treats it as array-like, finds no `length`, and yields an EMPTY view; `head[0]` is
+    // then `undefined`, the function returns false for the wrong reason, and deleting the
+    // ceiling changed nothing. The `expect(...byteLength)` line below is there so a
+    // stand-in that stops standing in fails loudly instead of passing vacuously.
+    const atCeiling = fakeOnnx();
+    Object.defineProperty(atCeiling, 'byteLength', { value: MAX_MODEL_BYTES });
+    const overCeiling = fakeOnnx();
+    Object.defineProperty(overCeiling, 'byteLength', { value: MAX_MODEL_BYTES + 1 });
+    expect(overCeiling.byteLength, 'the stand-in did not take the shadowed length').toBe(
+      MAX_MODEL_BYTES + 1,
+    );
+    expect(looksLikeOnnx(overCeiling)).toBe(false);
+    expect(looksLikeOnnx(atCeiling)).toBe(true);
+  });
+
+  it('pins both bounds as decisions, not as whatever numbers are there', () => {
+    // The comparisons are pinned at their boundaries above; these pin the NUMBERS, which
+    // is a separate question — a floor that quietly became 2 MB would refuse a graph the
+    // mirror really serves, and no boundary test can see that because it takes its
+    // boundary from the constant it is checking.
     expect(MAX_MODEL_BYTES).toBeGreaterThan(MIN_MODEL_BYTES);
     expect(MAX_MODEL_BYTES).toBe(512 * 1024 * 1024);
     expect(MIN_MODEL_BYTES).toBe(1024 * 1024);
@@ -176,8 +215,11 @@ describe('looksLikeOnnx', () => {
   });
 
   it('takes any of the three producer strings the graphs carry', () => {
-    // Named separately because they are three OR-ed literals, and a sweep over one of
-    // them cannot see the other two being deleted.
+    // Three markers, and — after the mutation run — only TWO disjuncts in the code:
+    // `ai.onnx` CONTAINS `onnx`, so it could never be the literal that decided an
+    // answer, and deleting it changed nothing. The sweep stays exactly as it was,
+    // because it pins the accepted BEHAVIOUR, which is what a caller depends on; what
+    // changed is the code, and `pytorch` is the one disjunct whose deletion goes red.
     for (const marker of ['onnx', 'pytorch', 'ai.onnx']) {
       expect(looksLikeOnnx(fakeOnnx(MIN_MODEL_BYTES + 128, marker)), marker).toBe(true);
     }
