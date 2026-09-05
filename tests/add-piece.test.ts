@@ -204,19 +204,25 @@ describe('a piece dropped onto something RIDES it, and the edge is recorded', ()
   it('records NOTHING for a support too LOW to seat anything', () => {
     // The control — and the first version of it was decoration. It used an EMPTY room, so
     // `findSupportDetailed` returned null and the 0.3 m bar, the thing the control is
-    // named for, was never reached: BOTH mutations that decouple the id from the bar
-    // survived it. A rug is 5 mm tall — a real overlapping part the probe does find,
-    // whose top fails the bar. It is the only fixture in the catalogue that separates
-    // "nothing under it" from "something under it that cannot seat it".
+    // named for, was never reached.
     //
     // It matters because `deriveRiderYs` rule 2 honours a recorded edge UNCONDITIONALLY,
     // so an edge to something the piece is not standing on is worse than no edge: it
     // LIFTS the piece rather than being ignored.
+    //
+    // **A coffee table at 250 mm, and the fixture took three tries.** An EMPTY room was
+    // the first, and it was decoration: the probe returns null and the bar is never
+    // reached. A RUG was the second, and it is not a support candidate at all — the
+    // probe returns null for it too, so both mutations decoupling the id from the bar
+    // survived a second time. Instrumenting rather than reasoning is what settled it:
+    // printed against the catalogue, 15 pieces can legally reach a top of 0.3 m or
+    // below and 18 cannot, and a coffee table at its own minimum height is one of the
+    // 15. The bar is reachable; the first two fixtures simply could not reach it.
     useScene.setState({
       parts: [
         {
-          id: 'rug-1', name: 'Rug', category: 'rug', shape: 'rug',
-          dimMM: [2400, 1600, 5], pos: [0, 0, 0], rot: 0, locked: false,
+          id: 'coffee-1', name: 'Coffee table', category: 'table', shape: 'coffee-table',
+          dimMM: [1100, 600, 250], pos: [0, 0, 0], rot: 0, locked: false,
         },
       ],
     });
