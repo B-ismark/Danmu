@@ -103,6 +103,63 @@ renderer calls them". Thirteen other mutations were killed.
 **Not seen:** a real GPU. All of this is headless Chromium on SwiftShader, so nothing
 here speaks to how the shapes look with real lighting on a real device.*
 
+### A bedside lamp draws as a RECTANGLE on a freshly seeded room
+
+**Where to click.** Open the plan tab on a fresh `u`-shape starter and look at the
+bedside lamp on each nightstand. It must draw as an **ellipse**, not a rectangle.
+
+**What is wrong.** `defaultScene` authors the `circle` flag at four sites and misses a
+fifth: the `u` starter's `lamp-table`. `normalizeStoredParts` re-derives the flag, but
+only on the three paths that load a **persisted** snapshot — the seed path hands
+`defaultScene` straight to `setParts`. **A room saved and reloaded is therefore NOT the
+test**: the load path corrects it, so the defect exists only in a freshly seeded room.
+
+**Seen, and not by me.** The `footprint` lane put it on screen: on `main` `26db2d1` the
+bedside lamp is a `<rect>` and ten pieces draw with zero round; at `546fc4f` it is an
+`<ellipse>`. Filed here at that lane’s request because the fix is on PR #123 and the
+items live on this branch. **The observation is theirs. I have not seen it.** Delete this
+item when #123 lands, not before.
+
+### An air purifier's intake slats stand up through it instead of banding around it
+
+**Where to click.** Any room, **3D Model** tab, Library → **Air purifier**. Look at it from
+the side, not from above.
+
+**What is wrong.** `AirPurifierGeo` (`components/three/DynamicPart.tsx:1232-1236`) draws its
+three intake slats as `<torusGeometry>` with **no rotation**. A torus lies in XY with its
+axis on Z; the purifier body is a cylinder about Y. So the three rings stand as vertical
+hoops in the `z = 0` plane, cutting edge-on through the body, where they are meant to be
+horizontal bands around it. The fix is almost certainly `rotation={[Math.PI/2, 0, 0]}` —
+the same axis confusion the washing-machine drum already carries a comment about.
+
+**Why it is filed here and not fixed.** It is a one-line rotation, which is exactly the
+class of change that ships upside-down because it was obviously right. Nothing in this repo
+renders geometry — the `FanGeo` control mutation above is the standing proof — so no gate
+can tell a corrected slat from a slat rotated the other way. Someone has to see it before
+and after.
+
+**Found by** the footprint lane, incidentally, while sweeping shapes for compound
+footprints. Never in a browser. Related, same class, also unfixed: `DeskGeo` draws the
+L-desk's return wing so the piece spans **2.86 m** where every consumer reads 1.60 m, and
+32 of 46 shapes draw outside their own `dimMM`.
+
+**Its twin has been looked at, and this one can be settled the same way.** `WardrobeGeo`'s
+doors sat here as one class with this item — both one-line rotations, both "obviously
+right", both filed because no gate in this repo can tell a corrected rotation from one
+flipped twice. That item is deleted because the `footprint` lane put it on screen: a
+Playwright A/B, SwiftShader, production builds, one arm at a time. Closed, the panels
+stand 12 mm proud; opened on `main` the box **shrank** to 1.380..1.980 against a closed
+1.368..1.980, and with the fix it grows to 0.856..1.980 — **+512 mm into the room** —
+across three bays with alternating hinge signs, so both directions were measured rather
+than reasoned. The write-up is on PR #123; the fix is on `fix/seeded-flags-and-wardrobe-doors`
+and unmerged at the time of writing. **That observation is not mine — I have not seen
+either piece.** What it establishes for this item is that the route exists. Two traps it
+cost, both on that PR rather than in the route section below: a plan piece is never
+`visible` to Playwright, because its stroke is drawn only while it is selected — wait on
+`{ state: 'attached' }` instead, or the locator resolves and times out; and projecting a
+part's world centre through the camera lands on the CANVAS and selects nothing, so
+clicking and reading `aria-selected` back is the only aiming that works.
+
 ### A ceiling fan hangs flush against the slab — and an OLD room's fan still does not
 
 **Where to click.** Any room, **3D Model** tab, Library → Appliances → **Ceiling fan**,
@@ -512,14 +569,78 @@ constitutionally unable to show.*
 
 ### The two decline toasts — the halves nobody has pressed, merged to `main` in `4cc663b` (PR #89)
 
-**Half of this item has been looked at and is deleted rather than struck through.**
-Seen in a real browser on 2026-09-03, seeded U at 6 x 4, production build: presses 1
-and 2 give *"No safe arrangement found — Every layout tried put a piece through a wall
-or inside another one, so nothing was moved. Press Fix again for a different try, or
-unlock a piece to give it more room."*, press 3 applies and says *"Moved 4 pieces"* with
-the room visibly rearranging. The long message **wraps to four lines and does not clip**,
-which was the open question about it. Presses 1, 2 and 5/7 declining matches the
-measurement exactly.
+**Half of this item was looked at on 2026-09-03 and the sentence it recorded no longer
+exists.** It is back open, and the reason is worth keeping: the observation was correct
+about a string this app has stopped producing.
+
+What was seen, in a real browser, seeded U at 6 x 4, production build: presses 1 and 2
+gave *"No safe arrangement found — Every layout tried put a piece through a wall or
+inside another one, so nothing was moved. Press Fix again for a different try, or unlock
+a piece to give it more room."*, press 3 applied and said *"Moved 4 pieces"* with the room
+visibly rearranging. The long message **wrapped to four lines and did not clip**, which
+was the open question. Presses 1, 2 and 5/7 declining matched the measurement exactly.
+
+**Two things changed under it, and only one of them is cosmetic.**
+
+The refusal now names WHICH impossible condition it hit rather than always saying both,
+so the same two presses should read *"No safe arrangement found — The closest it found
+put a piece **through a wall**, so nothing was moved. Press Fix again …"*. **Measured on
+2026-09-05 against a `lib/layout-solve.ts` whose blob hash matches its own commit, both
+before and after the run: `u`/`l`/`t` at 6x4, seeds 1-8, both modes = 48 solves, 9
+impossible, 38 applied, 1 no-gain. All 9 name `outside` alone, and all 9 are on the `u`.**
+`arrange` declines on seeds 1, 2, 5, 7 — the same four the earlier session saw — so the
+press pattern above is unchanged and only the wording moved.
+
+**This item previously said 11, and so did `Design.md` and `scripts/declined-terms-sweep.mjs`.**
+The three agreed with each other and all three were wrong; a fourth number, already sitting
+in `lib/layout-solve.ts` beside the decline itself, said 9 and was right. Three copies
+agreeing is not evidence — it is one unverified number written down three times.
+
+And the body no longer opens *"Every layout tried"*. That universal was true of the
+disjunction and false of a single named condition, because the clause comes off the
+WINNER's breakdown while `bestCandidate` ranks on the sum of both terms. The title
+already says nothing worked, so the body says the narrower true thing.
+
+**The wrap question is OPEN, and an earlier version of this item wrongly retired it.** It
+said the new message was "144 with one condition named and 166 with both — so the maximum
+is one character *shorter* than the string already observed wrapping to four lines without
+clipping". Both numbers came off a draft prefix, *"The closest found put a piece"*, three
+characters short of the shipped *"The closest it found put a piece"*. Measured from the
+literals in `components/studio/RoomTools.tsx`:
+
+| site | `outside` | `overlap` | both |
+|---|---|---|---|
+| `:731` Fix (the longest) | 147 | 151 | **169** |
+| `:1207` Try a fix, scoped | 116 | 120 | 138 |
+| `:1089` re-fit offer | 106 | 110 | 128 |
+| `:1208` Try a fix, unscoped | 93 | 97 | 115 |
+
+The old sentence was **167**. So the longest form is two characters LONGER than the one
+already seen wrapping, not shorter, and the range across the four sites is **93 to 169** —
+someone checking against "144 to 166" would test neither end. The comment in `RoomTools.tsx`
+carried the same wrong claim and has been corrected too.
+
+`overlap` alone has never been produced by any solve measured so far — 48 solves across
+three room shapes, every refusal `outside` — so *"inside another one"* as a standalone
+clause is unseen, and the 169-character both-terms string has never been produced at all.
+Those are the two arms to look for; the one quoted above is the one that already exists.
+
+The both-terms string is now driven at all four sites by `tests/impossible-clause-wired.test.tsx`,
+which mocks the solver — so it exists in a test and still in no measured solve. If you want to
+see the longest form on screen without waiting for one, that file names the shape of refusal
+that produces it.
+
+**Open the left rail before trying the re-fit path.** `RoomTools` is mounted only inside
+`PartTree` (`PartTree.tsx:364`), and `LeftRailBody` renders `RoomHealthDot` instead of
+`PartTree` when the rail is shut — so with it collapsed the whole Room-check surface is
+unmounted and none of these four sentences can appear. `railLeftOpen` is persisted in
+`STUDIO_PREFS`, so a rail collapsed once stays collapsed across reloads. The re-fit offer
+is the sharpest case: it is a watcher in `RoomTools`'s body, and the resize that triggers
+it is made from the *right* rail's Inspector, so with the left rail shut a resize produces
+no offer at all and reopening does not recover it (the watcher takes the first geometry
+change after remount as its baseline). That is pre-existing, not this branch's doing, and
+it is filed here because it makes the path this item names unreachable rather than merely
+awkward.
 
 What is left is the part that probe could not reach.
 
@@ -545,8 +666,11 @@ What is left is the part that probe could not reach.
 
 **What wrong looks like.**
 
-- **A narrow window.** The long messages are ~170 characters at `ttl: 14000`. The toast
-  host is `min(360px, calc(100vw - 32px))` with no `overflow`, so it should grow
+- **A narrow window.** The four refusal bodies span **93 to 169** characters at
+  `ttl: 14000` — see the table in the decline-toast item above for the per-site figures,
+  and check the two ENDS rather than a middle. This bullet twice carried a wrong range
+  ("~170", then "144 … 166"); the longest, `Fix` with both conditions named, is 169. The
+  toast host is `min(360px, calc(100vw - 32px))` with no `overflow`, so it should grow
   downward; at ~400px wide it will be tall. Check it does not push its own dismiss
   button off, and that 14 s is actually enough to read it.
 - **Toast pile-up.** Pressing `Fix` repeatedly stacks identical *"No safe arrangement

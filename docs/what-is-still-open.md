@@ -681,6 +681,22 @@ the file as "four times".
 - **The calibration was inert on CI** — it printed `factor 1.00`, so both bars sat at
   exactly their stated values and the scaling path was never exercised by that green. What
   CI did verify is the 30 s timeout and best-of-N sampling.
+- **NEW, 2026-09-05: the calibration's own self-test now fails on CI at random, and it is
+  the fourth timing site — not one of § A.4's three `performance.now()` assertions.**
+  `tests/perf-calibration.test.ts` asserts the reference workload still costs something,
+  with a floor of `REFERENCE_IDLE_MS * 0.4` = **8.8 ms** and a message saying a machine
+  more than 2.5× the calibration box needs the constant re-measured there. A run of PR
+  #121 got `expected 8.554660000000013 to be greater than 8.8` — the runner at **2.57×**,
+  3% past the window. Re-running the same job on the same commit passed in 3m23s, and the
+  commit before it passed on byte-identical content, so it is variance at a boundary
+  rather than a drift that has arrived. **This is the opposite failure to the one § A.4
+  answered**: that was a slow machine under load, this is a fast one idle, and the bullet
+  above ("inert on CI") is the same fact one notch further along — CI is not merely at or
+  above the calibration box, it is far enough past it to trip the guard. Two ways to
+  close it and they are not the same decision: re-measure `REFERENCE_IDLE_MS` on a
+  runner, which pins the constant to hardware nobody controls; or widen the floor, which
+  weakens the only assertion that can catch the loop shrinking. It needs the range across
+  several runs before either, and nothing here has that.
 - The factor is measured once per **test file**, not per worker process: vitest 4 defaults
   to `pool: 'forks'` with `isolate: true`. So the figure `perf-calibration` prints is that
   file's, and the two bars each take their own.
@@ -690,6 +706,37 @@ result: gating PR #21's merge produced `1 failed | 1482 passed`, the failing tes
 was lost to a follow-up run that matched nothing, and it was **never reproduced**. Two greens
 on the identical tree afterwards, at 72 s and 76 s against a 48 s baseline. An unidentified
 failure that was never reproduced is not a failure explained.
+
+### 4b. `isCleanShuffle` asks for EXACTLY zero, and floating point does not oblige
+
+`lib/layout-shuffle.ts:224` is `HARD_TERMS.every((term) => result.breakdownAfter[term]
+=== 0)`, and `:350` burns any candidate that fails it. Exact equality on five WEIGHTED
+cost terms. `outside` accumulates a continuous `deficit / radius` arm, so a piece a
+fraction of a picometre past the boundary scores non-zero and the candidate is
+discarded; if every candidate carries such residue, `shuffleRoom` returns `null` and
+Shuffle refuses a room that is clean by any tolerance anyone would name.
+
+**Reachable, measured here:** 360 solves over five presets × three sizes × twelve seeds
+× both modes — 229 came back with every hard term exactly zero, and **4 carried an
+`outside` that was non-zero and below 1e-9** (6.05e-14 on `t` 5.5×3.8 at seeds 1, 2 and
+5; 4.68e-13 on `u` 5.5×3.8 at seed 9). The smallest non-zero value any other hard term
+reached in the same population was `access` at 0.0113 — twelve orders of magnitude away,
+so this is `outside`’s arithmetic and not a general property of the breakdown.
+
+**What that population does NOT show, and the distinction is the whole decision:** in
+all four of those rows another hard term was also non-zero, so none of them was
+rejected *solely* for the sub-epsilon value. The `footprint` lane reports a case where
+it was — one seed whose only non-zero term was `outside` at 2.025e-13 — in a different
+fixture, with the scatter `shuffleRoom` applies and this probe does not. **That case is
+theirs and is not reproduced here.** So the mechanism is confirmed and its rate as a
+sole cause is unmeasured.
+
+**Three readers, one question, two answers.** `isCleanShuffle` uses `=== 0`; a test in
+the same lane adopts 1e-9 for the same question seventy lines from where it counts
+clean shuffles with `=== 0`. A tolerance belongs beside `HARD_TERMS` as one named
+constant both read, which is `layout-rules.ts`’s rule in a different file. Not fixed
+here: it changes what Shuffle accepts, so it moves numbers the suite pins, and it wants
+the sole-cause rate first.
 
 ### 5. Is there a public Vercel production alias?
 

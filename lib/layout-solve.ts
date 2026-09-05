@@ -102,8 +102,8 @@ export type SolveOptions = {
   placed?: Set<string>;
   /** Which finalist becomes the suggestion. Returns an index into the candidates it
    *  is handed; omit it and `bestCandidate` is used — least impossible first, then
-   *  cheapest on `total`. On a pool where no candidate has a piece through a wall or
-   *  inside another piece, which is most of them, that is the plain argmin on `total`
+   *  cheapest on `total`. On a pool where no candidate has a piece inside another one
+   *  or through a wall, which is most of them, that is the plain argmin on `total`
    *  this has always taken.
    *
    *  The seam exists because **variety is a property of the set of suggestions**, and
@@ -160,7 +160,12 @@ export type Candidate = {
  *  solid through a wall, are things the room cannot contain. A blocked door, an
  *  unreachable corner, a wardrobe whose doors will not open are all rooms that exist
  *  and are bad — the room report names each of them and **Try a fix** acts on them.
- *  The remaining three of `HARD_TERMS` are therefore deliberately absent here.
+ *  The rest of `HARD_TERMS` is therefore deliberately absent here. **No count is
+ *  written in that sentence on purpose:** it used to say "the remaining three", which
+ *  is a hand-typed copy of a partition nothing reads, and a sixth hard term would go
+ *  red only at `tests/impossible-veto.test.ts`'s pinned `HARD_TERMS` list — leaving
+ *  this line saying "three" about four, with no gate anywhere near it. The test
+ *  derives the complement; this sentence names the rule.
  *
  *  ── Why this cannot be a weight, which is the thing to read before re-tuning ──
  *
@@ -187,9 +192,126 @@ export type Candidate = {
  *  The obvious alternative is a cliff on `outside`, and `layout-score.ts` argues
  *  against exactly that in its own words — *"a cost function is read as a gradient and
  *  a cliff gives the annealer nothing to walk down"* — and it is right. The descent
- *  keeps its gradient. This term list is read only where an arrangement is **chosen**:
- *  which finalist wins, and whether the answer is handed back at all. */
-export const IMPOSSIBLE_TERMS: Array<keyof ScoreWeights> = ['overlap', 'outside'];
+ *  keeps its gradient. This term list is read where an arrangement is **chosen** —
+ *  which finalist wins, and whether the answer is handed back at all — and, since
+ *  `declinedTerms`, in one place more: `impossibleClause` walks it to build the sentence
+ *  the refusal shows. So its ORDER is prose-visible, which it was not when this comment
+ *  was first written. Reordering it reorders a sentence a user reads. */
+export const IMPOSSIBLE_TERMS = ['overlap', 'outside'] as const satisfies readonly (keyof ScoreWeights)[];
+
+/** One of the two, DERIVED from the array rather than typed beside it.
+ *
+ *  `satisfies` keeps the compiler checking that every entry is a real weight while
+ *  `as const` keeps the literals, so the union and the list cannot disagree. A union
+ *  hand-written next to a list is the drift this repo names in `CLAUDE.md`: it goes
+ *  wrong in the one direction nobody notices, and here that would be a sentence about
+ *  a condition the solver no longer has.
+ *
+ *  **There is deliberately no `isImpossibleTerm` guard beside this, and it was deleted
+ *  rather than never written.** It read a `keyof ScoreWeights` and narrowed it, and its
+ *  docblock argued for consumers that do not exist: every production reader of the
+ *  partition — `impossibleTermsWorse`, `impossibleClause`, `impossibility` — walks
+ *  `IMPOSSIBLE_TERMS` itself, so none of them ever holds an outside key to test. Its
+ *  only callers were two filters and an assertion in `tests/impossible-veto.test.ts`,
+ *  which now derive `RECOVERABLE` once at module scope. An export with no production
+ *  caller reads as shipped code to the next person; if a real consumer appears, the
+ *  guard is three lines and the widening cast belongs in it rather than at that call
+ *  site. */
+export type ImpossibleTerm = (typeof IMPOSSIBLE_TERMS)[number];
+
+/** Which impossible conditions the answer would have INTRODUCED, given the two
+ *  breakdowns `declineFor` compared.
+ *
+ *  Separate from `declineFor` because that function answers WHICH REFUSAL and this one
+ *  answers WHICH CONDITION, and only the first is an ordering. Both are pure over
+ *  numbers, which is what lets the ordering be asserted without a solve.
+ *
+ *  **Plain `>` and no epsilon, deliberately, and the invariant that buys is
+ *  arithmetic:** `declineFor` fires on the SUM rising, and a sum of two terms cannot
+ *  rise unless one of them strictly does — so whenever `declined === 'impossible'`
+ *  this is non-empty, and the sentence can never be built from nothing. An epsilon
+ *  here would break exactly that: two terms each rising 1e-6 raise the sum past
+ *  `declineFor`'s own 1e-6 while neither clears a per-term bar, and the caller would
+ *  hold a refusal it could not name.
+ *
+ *  **This is a DELTA and the four sentences reading it are STATIVE — they agree on
+ *  every legal origin, which is every room this app seeds, and they can part company
+ *  after the user has made one illegal.** A term is listed when it ROSE, so a fault the
+ *  rejected arrangement HAS but did not introduce is not named. `before = {overlap:
+ *  500, outside: 0}` against `after = {overlap: 400, outside: 200}` sums 500 → 600, so
+ *  the answer is refused, and only `outside` rose: the toast says *"The closest it
+ *  found put a piece through a wall"* while that same arrangement still has two pieces
+ *  well inside each other. Never false — `after[k] > before[k] >= 0` means every named
+ *  term is a real fault of the winner — but not exhaustive, and a reader who assumes it
+ *  is will infer the wrong remedy.
+ *
+ *  Left as a delta on purpose: the sentence exists to explain the REFUSAL, and what
+ *  refused the answer is what rose. Naming a fault the user's own room already had
+ *  would explain nothing. The reachable version needs `before.overlap > 0`, which on a
+ *  seeded room is zero on every term — the re-fit path after a shrink is where it would
+ *  first appear, and it has not been measured. `scripts/declined-terms-sweep.mjs`'s Arm
+ *  B is written for exactly that and has never completed a run. */
+export function impossibleTermsWorse(before: CostBreakdown, after: CostBreakdown): ImpossibleTerm[] {
+  return IMPOSSIBLE_TERMS.filter((k) => after[k] > before[k]);
+}
+
+/** The whole of the rule, as a pure function of the decision and the two breakdowns.
+ *
+ *  Out here for the same reason `declineFor` is: the part worth asserting is a
+ *  RELATIONSHIP between the refusal and the conditions, and that cannot be observed
+ *  from a `SolveResult` — every decline reverts identically, so a `no-gain` refusal and
+ *  an `impossible` one both come back with `after === before` and `moved: []`.
+ *
+ *  Inline, the gate on `declined === 'impossible'` was untestable and it survived
+ *  mutation: relaxing it to `declined ?` fills the list on a `no-gain` refusal whenever
+ *  float noise nudges a hard term up, and nothing could see it because the only reader
+ *  is the impossible branch of a toast. The contract is that the list is empty unless
+ *  the refusal is about impossibility, and a contract with no failing test is a comment. */
+export function declinedTermsFor(
+  declined: SolveDecline | null,
+  before: CostBreakdown,
+  after: CostBreakdown,
+): ImpossibleTerm[] {
+  return declined === 'impossible' ? impossibleTermsWorse(before, after) : [];
+}
+
+/** What to call those conditions, in a sentence.
+ *
+ *  Here rather than in the component because **four hand-typed copies of one sentence
+ *  is what this replaces**: `RoomTools` said *"put a piece through a wall or inside
+ *  another one"* in four places, and it said BOTH every time because nothing told it
+ *  which. Two of those four are on paths a user reaches from different buttons, so the
+ *  drift would have been invisible — the same claim, four chances to be edited once.
+ *
+ *  The phrases are written to read in either order — but the order they come out in is
+ *  `IMPOSSIBLE_TERMS`', so that array is prose as well as arithmetic now. See the note
+ *  on it.
+ *
+ *  **`another one`, not `another piece`.** Every call site opens *"The closest it found
+ *  put a piece …"*, so the anaphor is what keeps the sentence from saying "piece" twice
+ *  in six words. It is also the wording that shipped, and reading a refusal is not the
+ *  moment to make someone parse a heavier clause.
+ *
+ *  An empty list falls back to the disjunction rather than to an empty string. It is
+ *  unreachable while `declineFor` is the only caller — see the note above — but a
+ *  sentence with a hole in it is the worse failure of the two, and the disjunction is
+ *  exactly the honest thing to say when the condition is not known. */
+const IMPOSSIBLE_PHRASE: Record<ImpossibleTerm, string> = {
+  overlap: 'inside another one',
+  outside: 'through a wall',
+};
+
+export function impossibleClause(terms: readonly ImpossibleTerm[]): string {
+  const named = IMPOSSIBLE_TERMS.filter((k) => terms.includes(k)).map((k) => IMPOSSIBLE_PHRASE[k]);
+  // The fallback is the SAME walk over the whole list, not a second spelling of it. It
+  // was hand-typed — `${IMPOSSIBLE_PHRASE.outside} or ${IMPOSSIBLE_PHRASE.overlap}` — and
+  // in the REVERSE order of the line above it, so "both conditions" had two spellings
+  // seven lines apart, each pinned by its own test and neither test able to see the
+  // other. One place decides how the conditions are named and in what order; that is the
+  // entire reason this function exists rather than four strings in a component.
+  if (named.length === 0) return impossibleClause(IMPOSSIBLE_TERMS);
+  return named.join(' or ');
+}
 
 /** How much of this arrangement cannot physically exist, in weighted cost units.
  *
@@ -284,8 +406,9 @@ export type MoveReason = {
  *  · `'no-gain'` — every finalist cost more than the layout already on screen. The
  *    room is fine, or at least this solver cannot improve it.
  *  · `'impossible'` — the answer would have been MORE impossible than the room it was
- *    given: a piece through a wall, or inside another piece. See `IMPOSSIBLE_TERMS`.
- *    The room may be a mess; what the search found was worse than a mess.
+ *    given: a piece inside another one, or through a wall. See `IMPOSSIBLE_TERMS`,
+ *    whose order this sentence follows because `impossibleClause` makes it
+ *    prose-visible. The room may be a mess; what the search found was worse than a mess.
  *
  *  Before this existed, `RoomTools` reported both as *"This is already a good
  *  arrangement"*, which is true of the first and a lie about the second. */
@@ -299,6 +422,21 @@ export type SolveResult = {
    *  could improve from a room whose every candidate was illegal, and only the solver
    *  is in a position to know which happened. */
   declined: SolveDecline | null;
+  /** Which impossible conditions the refused answer would have introduced — empty
+   *  unless `declined === 'impossible'`, and never empty when it is.
+   *
+   *  It exists because the UI had to say BOTH. `RoomTools` carried the sentence *"put a
+   *  piece through a wall or inside another one"* in four places, because `declined`
+   *  told it that something impossible happened and nothing told it what. A disjunction
+   *  is true and it is not an answer: half of it is always false, and the user cannot
+   *  tell which half, which is the difference between "unlock the wardrobe" and "the
+   *  room is too small for this".
+   *
+   *  Reported rather than re-derived: `breakdownBefore` and `breakdownAfter` are both on
+   *  this object, so a caller COULD compute it — and the two would then be two answers
+   *  to one question, because after a decline `breakdownAfter` is deliberately reset to
+   *  `breakdownBefore` and the difference the decision was made on is gone. */
+  declinedTerms: ImpossibleTerm[];
   /** Cost before and after, so a caller can say what it achieved — and so a
    *  suggestion that achieved nothing can be recognised and not offered. */
   before: number;
@@ -821,6 +959,7 @@ export function solveLayout(
       // Nothing was movable, so there was never an answer to refuse. `no-gain` would
       // be the wrong word for it and `impossible` a worse one.
       declined: null,
+      declinedTerms: [],
       before,
       after: before,
       breakdownBefore,
@@ -1174,6 +1313,11 @@ export function solveLayout(
   // stops reading 0, the repair is to fall back to the picked finalist rather than to
   // the origin; widening this comparison would only hide it.
   const declined = declineFor(impossibleBefore, impossibleAfter, before, breakdownAfter.total, shuffle);
+  // Named BEFORE the revert, and that ordering is the whole of it: the line below resets
+  // `breakdownAfter` to `breakdownBefore`, so after it there is no difference left to
+  // read and the two breakdowns on the result agree. Computing this in the caller would
+  // therefore answer "nothing rose" about every refusal there has ever been.
+  const declinedTerms = declinedTermsFor(declined, breakdownBefore, breakdownAfter);
   if (declined) {
     winner = origin.map((p) => ({ ...p }));
     breakdownAfter = breakdownBefore;
@@ -1210,6 +1354,7 @@ export function solveLayout(
   return {
     placements: winner,
     declined,
+    declinedTerms,
     before,
     after: breakdownAfter.total,
     breakdownBefore,
