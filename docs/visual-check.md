@@ -103,6 +103,23 @@ renderer calls them". Thirteen other mutations were killed.
 **Not seen:** a real GPU. All of this is headless Chromium on SwiftShader, so nothing
 here speaks to how the shapes look with real lighting on a real device.*
 
+### A bedside lamp draws as a RECTANGLE on a freshly seeded room
+
+**Where to click.** Open the plan tab on a fresh `u`-shape starter and look at the
+bedside lamp on each nightstand. It must draw as an **ellipse**, not a rectangle.
+
+**What is wrong.** `defaultScene` authors the `circle` flag at four sites and misses a
+fifth: the `u` starter's `lamp-table`. `normalizeStoredParts` re-derives the flag, but
+only on the three paths that load a **persisted** snapshot — the seed path hands
+`defaultScene` straight to `setParts`. **A room saved and reloaded is therefore NOT the
+test**: the load path corrects it, so the defect exists only in a freshly seeded room.
+
+**Seen, and not by me.** The `footprint` lane put it on screen: on `main` `26db2d1` the
+bedside lamp is a `<rect>` and ten pieces draw with zero round; at `546fc4f` it is an
+`<ellipse>`. Filed here at that lane’s request because the fix is on PR #123 and the
+items live on this branch. **The observation is theirs. I have not seen it.** Delete this
+item when #123 lands, not before.
+
 ### An air purifier's intake slats stand up through it instead of banding around it
 
 **Where to click.** Any room, **3D Model** tab, Library → **Air purifier**. Look at it from
