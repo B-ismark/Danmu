@@ -187,8 +187,11 @@ export type Candidate = {
  *  The obvious alternative is a cliff on `outside`, and `layout-score.ts` argues
  *  against exactly that in its own words — *"a cost function is read as a gradient and
  *  a cliff gives the annealer nothing to walk down"* — and it is right. The descent
- *  keeps its gradient. This term list is read only where an arrangement is **chosen**:
- *  which finalist wins, and whether the answer is handed back at all. */
+ *  keeps its gradient. This term list is read where an arrangement is **chosen** —
+ *  which finalist wins, and whether the answer is handed back at all — and, since
+ *  `declinedTerms`, in one place more: `impossibleClause` walks it to build the sentence
+ *  the refusal shows. So its ORDER is prose-visible, which it was not when this comment
+ *  was first written. Reordering it reorders a sentence a user reads. */
 export const IMPOSSIBLE_TERMS = ['overlap', 'outside'] as const satisfies readonly (keyof ScoreWeights)[];
 
 /** One of the two, DERIVED from the array rather than typed beside it.
@@ -260,21 +263,33 @@ export function declinedTermsFor(
  *  which. Two of those four are on paths a user reaches from different buttons, so the
  *  drift would have been invisible — the same claim, four chances to be edited once.
  *
- *  The phrases are written to read in either order, so nothing about prose constrains
- *  `IMPOSSIBLE_TERMS`, whose order is about a SUM and is therefore free.
+ *  The phrases are written to read in either order — but the order they come out in is
+ *  `IMPOSSIBLE_TERMS`', so that array is prose as well as arithmetic now. See the note
+ *  on it.
+ *
+ *  **`another one`, not `another piece`.** Every call site opens *"The closest it found
+ *  put a piece …"*, so the anaphor is what keeps the sentence from saying "piece" twice
+ *  in six words. It is also the wording that shipped, and reading a refusal is not the
+ *  moment to make someone parse a heavier clause.
  *
  *  An empty list falls back to the disjunction rather than to an empty string. It is
  *  unreachable while `declineFor` is the only caller — see the note above — but a
  *  sentence with a hole in it is the worse failure of the two, and the disjunction is
  *  exactly the honest thing to say when the condition is not known. */
 const IMPOSSIBLE_PHRASE: Record<ImpossibleTerm, string> = {
-  overlap: 'inside another piece',
+  overlap: 'inside another one',
   outside: 'through a wall',
 };
 
 export function impossibleClause(terms: readonly ImpossibleTerm[]): string {
   const named = IMPOSSIBLE_TERMS.filter((k) => terms.includes(k)).map((k) => IMPOSSIBLE_PHRASE[k]);
-  if (named.length === 0) return `${IMPOSSIBLE_PHRASE.outside} or ${IMPOSSIBLE_PHRASE.overlap}`;
+  // The fallback is the SAME walk over the whole list, not a second spelling of it. It
+  // was hand-typed — `${IMPOSSIBLE_PHRASE.outside} or ${IMPOSSIBLE_PHRASE.overlap}` — and
+  // in the REVERSE order of the line above it, so "both conditions" had two spellings
+  // seven lines apart, each pinned by its own test and neither test able to see the
+  // other. One place decides how the conditions are named and in what order; that is the
+  // entire reason this function exists rather than four strings in a component.
+  if (named.length === 0) return impossibleClause(IMPOSSIBLE_TERMS);
   return named.join(' or ');
 }
 

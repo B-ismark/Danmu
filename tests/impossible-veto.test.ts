@@ -540,15 +540,26 @@ describe('SolveResult.declinedTerms — which condition, not both conditions', (
 
   it('is a sentence fragment that reads for one condition or two', () => {
     expect(impossibleClause(['outside'])).toBe('through a wall');
-    expect(impossibleClause(['overlap'])).toBe('inside another piece');
-    expect(impossibleClause(['overlap', 'outside'])).toBe('inside another piece or through a wall');
+    expect(impossibleClause(['overlap'])).toBe('inside another one');
+    expect(impossibleClause(['overlap', 'outside'])).toBe('inside another one or through a wall');
     // Order in, order out: the clause is built from `IMPOSSIBLE_TERMS` rather than from
     // the caller's array, so the same pair cannot produce two sentences.
     expect(impossibleClause(['outside', 'overlap'])).toBe(impossibleClause(['overlap', 'outside']));
     // The unreachable arm, kept because a sentence with a hole in it is the worse of the
     // two failures. Naming both is exactly the honest thing to say when the condition is
     // unknown — which is what the whole app used to say, always.
-    expect(impossibleClause([])).toBe('through a wall or inside another piece');
+    //
+    // **Two assertions, and the second is the one that was missing.** This used to read
+    // `'through a wall or inside another piece'` — the REVERSE of the line four above,
+    // because the fallback hand-typed its own copy of "both conditions" seven lines from
+    // the branch that derives it. Each spelling had a test, neither test could see the
+    // other, and the function whose entire job is to decide how the conditions are named
+    // named them two ways. The identity is what makes that unrepeatable.
+    expect(impossibleClause([])).toBe('inside another one or through a wall');
+    expect(
+      impossibleClause([]),
+      'the empty fallback and the both-terms clause are one sentence, not two',
+    ).toBe(impossibleClause(['overlap', 'outside']));
   });
 
   it('is filled on real impossible declines and empty on every other outcome', () => {
@@ -560,16 +571,30 @@ describe('SolveResult.declinedTerms — which condition, not both conditions', (
     const parts = defaultScene('u', 6, 4);
     const poly = footprintForLayout('u', 6, 4);
     let impossible = 0;
+    let singletons = 0;
     for (const seed of SEEDS) {
       const r = solveLayout(parts, poly, lockedForSolve(parts, {}, null), { seed });
       if (r.declined === 'impossible') {
         impossible++;
+        if (r.declinedTerms.length === 1) singletons++;
         expect(r.declinedTerms.length, `seed ${seed} refused for impossibility and named nothing`).toBeGreaterThan(0);
         for (const t of r.declinedTerms) expect(isImpossibleTerm(t)).toBe(true);
+        console.log(`  seed ${seed}  impossible  terms=[${r.declinedTerms.join(',')}]  -> "${impossibleClause(r.declinedTerms)}"`);
       } else {
         expect(r.declinedTerms, `seed ${seed} declined ${r.declined} and named a condition`).toEqual([]);
       }
     }
     expect(impossible, 'no solve took the impossibility arm, so the filled half proved nothing').toBeGreaterThan(0);
+    // **The claim the whole change rests on, asserted rather than argued.** If every real
+    // refusal named BOTH conditions, this branch would be a more expensive way to print
+    // the disjunction it replaces, and every assertion above would still pass. Measured
+    // over these seeds on `u` 6 × 4: every impossible refusal names exactly one — so the
+    // disjunction was never once the true answer. The row is printed above, on a passing
+    // run, because a rate that drifts back toward both-terms is the signal that this
+    // feature has quietly stopped earning its place, and a diff cannot show that.
+    expect(
+      singletons,
+      `${impossible} impossible refusals and ${singletons} named one condition — a clause that always names both is the disjunction with extra steps`,
+    ).toBe(impossible);
   }, 600_000);
 });
