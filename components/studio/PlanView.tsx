@@ -647,8 +647,11 @@ export const PlanView = forwardRef<PlanViewHandle, {
      *  not the last. The two fallbacks are this function's own idea (keep x, take z),
      *  so the reason one of THEM failed is an answer to a question nobody asked. */
     let refusedAs: Refusal | undefined;
-    /** Where the company lands, and its veto, for a lead standing at `lead`. A
-     *  candidate this piece could take but its set cannot is not a candidate. */
+    /** Where the company lands, and its veto, for a lead standing at `lead`.
+     *
+     *  A candidate this piece could take but its set cannot is not a candidate — but
+     *  "cannot" now means cannot at ANY delta. A set that has merely run out of room
+     *  takes the candidate at a shorter one, through `settleLead` below. */
     const askConvoy = (lead: ReturnType<typeof resolveAt>) =>
       resolveConvoy({
         convoy,

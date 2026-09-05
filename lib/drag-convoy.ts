@@ -34,8 +34,13 @@ import { nearestEdge, type Poly } from './geometry';
 
 /** How far a convoy member may be corrected sideways by its own resolve and still
  *  count as having gone where the set sent it. Metres — a micron, i.e. only
- *  floating-point noise. Anything bigger is a containment clamp or a wall snap,
- *  which means the set would arrive deformed. */
+ *  floating-point noise. Anything bigger is a containment clamp or a wall snap. For
+ *  a wall rider that is the wall doing its job and is exempt; for anyone else it is
+ *  an overshoot, and the overshoot is exactly what the slide limit subtracts — so a
+ *  correction above this epsilon either shortens the gesture or refuses it, and never
+ *  arrives as a deformed set. It is also the threshold the limit itself is tested
+ *  against, because `d + over` is floating point and a set flush against its wall
+ *  produces `5e-17` rather than `0`. */
 const RIGID_EPS = 1e-6;
 
 export type ConvoyMember = {
@@ -84,10 +89,14 @@ export type ConvoyMember = {
    * mid-gesture — and a member that answers `false` keeps travelling with the set
    * and simply does not get a vote on where it goes.
    *
-   * It gates the LEGALITY half of the veto only. The rigidity half is not gated,
-   * because a set arriving deformed is made deformed by this gesture by
-   * definition. One residue of that: a member whose start position is outside the
-   * room's bounding box is clamped every frame, never rigid, and still vetoes.
+   * It gates the LEGALITY half of the veto, and the slide limit with it — a member
+   * corrected every frame would otherwise name a limit that pins the set at zero in
+   * every direction forever, which is the inertness this flag exists to prevent,
+   * arriving through a second door. The rigidity half is NOT gated, because a set
+   * arriving deformed is made deformed by this gesture by definition. One residue of
+   * that: a member whose start position is outside the room's bounding box is clamped
+   * every frame, never rigid, and still vetoes — so a set holding one refuses rather
+   * than sliding, which is correct and is pinned.
    * Nothing in the app is known to place a piece there — the containment clamp is
    * in every write path — so it is recorded rather than coded around.
    */
@@ -239,9 +248,14 @@ export type ConvoyResult = {
   /** Returned whether or not the step is legal, so a caller can hold the set at
    *  the last legal delta without recomputing. Apply them only when `valid`. */
   moves: ConvoyMove[];
-  /** False when some member cannot go where the set is asking it to. The set then
+  /** False when some member cannot go where the set is asking it to **and a shorter
+   *  delta cannot fix it** — a collision with a piece that is staying put has no
+   *  overshoot to subtract, so sliding has nothing to offer it. A member that has
+   *  merely run out of room shortens the gesture instead; see `leadPos`. The set then
    *  refuses AS A UNIT rather than deforming to fit or pushing a piece through the
-   *  plaster — rule 2's "say so, never silently resize it to fit", for position.
+   *  plaster — rule 2's "say so, never silently resize it to fit", for position — and
+   *  it refuses at the delta the user ASKED for, never at a shorter one nobody
+   *  requested, or the caller draws a refusal where the pointer never was.
    *
    *  The dragged piece's own legality is the caller's business; this is the
    *  company's. */
