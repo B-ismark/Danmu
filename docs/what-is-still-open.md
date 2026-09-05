@@ -132,7 +132,7 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 14 | **A.2 / G.2** variety in Shuffle, the anchor-first trade. *(G.3 was a third item carried in this row's header rather than in a row of its own, which is how a done thing hides inside an open one — it shipped in #106 and is recorded in § G.3.)* | Real, but none is a defect a user has reported. A.2's number is measured (penalty 4, range 2–8, in cost units) and **nothing pins it** — a test that fails at `diversityPenalty: 0` is still owed. G.2 stays a decision: gating a pass on room shape trades one preset's tail for another's. **G.3 turned out not to be a decision at all**: it was filed as "shorter card or signpost gap", and both tabs render the same two lists out of the same shell, so the copy was already true on the plan and simply unsaid there | varies | after row 11 decides whether they still exist |
 | 15 | **E** the jsdom component bucket — **the shim half is DONE 2026-09-03; the coverage half is row 9's** | The count in this row was already stale when it was written: **14 `.test.tsx` files**, not 9, and **ten** hand-rolled the `next/navigation` object rather than five. They had drifted into three formattings of the same object and two different comments explaining it. `vitest.config.ts` now names `setupFiles: ['tests/helpers/setup.ts']` for the two globals — jsdom implements neither, and `lib/use-media-query.ts` calls `window.matchMedia` **unguarded** while every other reader uses `?.`, so `matches: false` changes nothing for the optional readers and unblocks the one that needs it; the `typeof window` guard is what keeps ~115 node-environment files from paying for it. `tests/helpers/mount.ts` owns `navigationMock`, called per file because the room id differs — `vi.mock`'s factory is `async` and `await import()`s it, since vitest hoists the call above every `import` and a static one throws *before initialization*. Both halves gated in `tests/toolchain.test.ts`, because an extraction is undone by one paste | done | **row 9 is what is left of § E** |
 | 16 | **§ A.3** the standalone re-search script — **WRITTEN 2026-09-04** | `scripts/openroutes-sweep.mjs`, plain Node through vite's SSR pipeline, not a Vitest file — a measurement campaign that takes minutes is not a gate. Both reds it was filed to serve had been **green since `4be144c`** and this table's own red list said so while § A.3 still described them reproducing. What the script buys is the part that was never rot: the fixture has been re-hunted by hand FOUR times, each time because a cost-function change moved the space. Run in full: **19 of 54 cut, 532 trials, 1 refusal** — the first two exactly as recorded, the third down from 3, which the test file predicted and refused to quote unmeasured. **The live finding is that one trial**: the fine-grid re-check has a single piece of evidence across the whole grid | done | nothing |
-| 17 | **§ H.10** undo / redo should cover selection | The user asked for it. The consequence worth stating before building it is that one press per click on the way back is why most tools do not do this — a separate history, or coalesced runs, is their call | M | needs the user |
+| 17 | **§ H.10** undo / redo should cover selection — **ANSWERED 2026-09-05: a SEPARATE history. NOT BUILT** | The user's call, taken on the recommendation: selection gets its own back/forward, not entries in the main stack. § H.10 below carries the reason, the four sub-decisions the build has to make anyway, and a recommendation for each — chiefly that **a stored selection names part ids that a main-stack undo can make stale**, which is the hazard that should be built first rather than discovered. Deliberately scheduled for later | M | ready to build |
 | 18 | **§ 33.2** the on-device detector cannot name the four newest shapes | Needs a 50 MB re-export and a digest re-pin on a Python toolchain. Two things found while mapping it, and **the first is now half closed**: the digest pin had no test of any kind, because every path to it ran through a dynamic `onnxruntime-web` import — `lib/model-verify.ts` + `tests/model-verify.test.ts` (2026-09-05) put the mechanism somewhere a test can address it, so a re-pin is gated against a malformed, mis-prefixed, unpinned or empty registry. It is **not** gated against a pin that is simply the wrong digest: proving a pin matches the real bytes needs the ~62 MB download, and `pnpm hash:models --verify` is still the only command that does it. Still open: nothing exercises `detectLocalAcrossImages`, `load()`, `tilesFor` or `toTensor` | L, and mostly not code | the cloud path already handles them, so this is a completeness item |
 | 19 | **§ MOB** how the app is presented on a phone — **recorded 2026-09-05, deliberately NOT scheduled** | The user's ruling: *"mobile isn't the focus but it doesn't mean we should turn a blind eye to how the platform is presented on there"*, and *"the mobile audit is for later not now"*. So this row exists to stop the work being lost, not to start it. `docs/mobile-ux-audit.md` is the source — nine systemic issues, eight per-flow sections and the author's own priority order, which § MOB keeps rather than re-ranking. Four of its claims were re-derived against `main`; one (**M5**, the Android icon ladder) is recorded with its premise marked **unverified**, because it is the one that would send someone to fix a manifest that may not be broken | varies; M1/M2/M4 are each an afternoon | **nothing blocks it and it blocks nothing** — it is filed, not queued |
 
@@ -2767,17 +2767,60 @@ assertions were real, and the fixtures could not express the defect.
 **NOT verified:** that the shape reads correctly at 240 × 150 with furniture drawn over it.
 An item in `visual-check.md`.
 
-### 10. Undo / redo should cover selection — a decision, not a defect
+### 10. Undo / redo should cover selection — ANSWERED 2026-09-05, NOT BUILT
 
 The user: *"undo and redo should track selections too, so that you can undo a selection or
 redo a selection."* Today `lib/history.ts` tracks the transform and scene maps; selection
 lives in `useStudio.selection` and is not on the undo stack.
 
-Flagging one consequence before building it, because it is the reason most tools do **not**
-do this: if every click is an undo step, walking back to the move you actually want to undo
-costs one press per click you made on the way. The usual answer is a **separate** history for
-selection (a back/forward through selections, not entries in the main stack), or coalescing
-runs of selection changes into one entry. Which of those the user wants is their call.
+The consequence flagged before the decision, because it is why most tools do **not** do
+this: if every click is an undo step, walking back to the move you actually want to undo
+costs one press per click you made on the way. Two shapes answer it — a **separate**
+history (a back/forward through selections), or coalescing runs of selection changes into
+one entry of the main stack.
+
+**The user's answer is the separate history**, taken on the recommendation. **It is
+deliberately not scheduled**: this section exists so the decision is not re-litigated and so
+the build does not start by re-deriving what is written below.
+
+**Why separate, in the terms `lib/history.ts` already uses.** Every field on `Snapshot`
+earned its place by one test, and the file states it: *"view preferences, not part of the
+design being edited"* is what keeps `quality` and `dressed` out, and the two closest calls
+went IN because undoing an edit otherwise left the room in a state the UI could not name —
+`lighting`, because a theme changes the mood in the same gesture as the colours, and
+`hidden`, because pressing H and then Ctrl+Z undid the edit BEFORE the hide. Selection fails
+that test in both directions: it changes nothing about the room, and no edit is left
+un-named by leaving it out. The second reason is arithmetic — `MAX` is **80** snapshots, and
+a marquee session would spend that ring on clicks and push the real edits off the bottom.
+
+**Four sub-decisions the build has to make anyway. A recommendation for each, so that they
+are decisions rather than discoveries:**
+
+1. **Stale ids — build this first.** A selection entry names part ids. Undo past a deletion
+   and the ids come back; redo past one and a stored selection names parts that no longer
+   exist. **Recommend: filter every restored selection against the live part list and drop
+   an entry that comes back empty.** Never resurrect a part to satisfy a selection — that
+   would make the selection history an editor, which is exactly what the separation says it
+   is not. This is the one thing that makes "separate" harder than a field on `Snapshot`,
+   and it is invisible until someone deletes a piece.
+2. **Keys.** `Ctrl/Cmd+Z` and `Ctrl/Cmd+Shift+Z` are taken (`KeyboardShortcuts.tsx:605`).
+   **Recommend `Alt+Left` / `Alt+Right`** — it reads as browser back/forward, which is the
+   right metaphor for a cursor rather than an edit, and the studio binds neither. It
+   registers in `KeyboardShortcuts.tsx` with every other binding rather than starting a
+   second key handler, and it inherits that handler's existing `INPUT / TEXTAREA /
+   contentEditable` guard for free. **A binding nobody can find is not a feature**, so the
+   shortcut list ships in the same change.
+3. **Coalescing.** A marquee drag emits many selections. **Recommend the rule the main stack
+   already uses: the GESTURE is the unit** — record on gesture end and dedupe consecutive
+   equal sets — reusing `draggingId`'s existing pattern rather than inventing a second
+   debounce constant beside the 250 ms one.
+4. **Interaction with the main stack.** `applySnapshot` restores transforms and structure and
+   must not push a selection entry while doing it. `history.ts` has already solved this
+   problem once and records the failure: an in-place version *"would push itself onto the
+   stack and wipe the redo branch"*. **Recommend one shared suspension flag rather than a
+   second one**, since two flags that must agree is the drift this repo keeps finding.
+
+**Cost: M.** Nothing here is blocked and nothing blocks on it.
 
 ---
 
