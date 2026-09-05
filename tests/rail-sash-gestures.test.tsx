@@ -29,7 +29,7 @@
 // and a browser's; that a no-move release stores nothing at all is this file's.
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useStudio } from '@/lib/store';
 import { viewportAt } from './helpers/mount';
 
@@ -545,5 +545,93 @@ describe('when no drag is live, the element says what the store says', () => {
 
     expect(useStudio.getState().railLeftW, 'the drag did not commit the width it ended on').toBe(228);
     expect(sashVar(shell, 'left'), 'the raw preview outlived the gesture, unclamped').toContain('clamp(');
+  });
+});
+
+describe('a width written from outside a gesture still reaches the element', () => {
+  it('setRailWidth from anywhere repaints --sash-left', () => {
+    // The gate on `DockedShell`'s two bare `useStudio(...)` calls, which read nothing and
+    // therefore look deletable. They are the shell's only subscription to a rail width now
+    // that `applySashWidths` takes its values from `getState()` at call time: the layout
+    // effect carries no dependency array, so it runs after every render and never once
+    // without one. Delete either line and the shell paints correctly on mount and then
+    // never again — a store write from a keyboard shortcut, a restored preference or any
+    // future caller lands in the store and stops there.
+    useStudio.setState(OPEN);
+    const shell = mount(1100);
+
+    expect(sashVar(shell, 'left'), 'the mount paint is already a number, so this proves nothing').not.toContain(
+      '320px',
+    );
+    act(() => useStudio.setState({ railLeftW: 320 }));
+    expect(sashVar(shell, 'left'), 'a width written outside a gesture never reached the DOM').toContain('320px');
+
+    // The side control: one subscription covers one property, and `railWidth` is a lookup
+    // keyed on `side`. Deleting only the right-hand line passes the assertion above.
+    act(() => useStudio.setState({ railRightW: 360 }));
+    expect(sashVar(shell, 'right'), 'the right rail has its own subscription and its own hole').toContain('360px');
+  });
+});
+
+describe('opening a rail publishes a width inside its own range', () => {
+  /** The rail's measured width depends on whether it is OPEN, which the fixed-width stub
+   *  above cannot express — and that difference is the whole subject here. 37px is
+   *  `--rail-closed`; 208px is `--rail-left-tight`, what the compact step renders. */
+  function stubTogglingLayout(): () => void {
+    const realCS = window.getComputedStyle.bind(window);
+    const realRect = Element.prototype.getBoundingClientRect;
+    const TOKENS: Record<string, string> = {
+      '--rail-closed': '37px',
+      '--rail-left-min': '228px',
+      '--rail-left-tight': '208px',
+      '--rail-max-share': '0.4',
+    };
+    window.getComputedStyle = ((el: Element, pe?: string | null) => {
+      const cs = realCS(el, pe ?? undefined);
+      return new Proxy(cs, {
+        get(t, k) {
+          if (k !== 'getPropertyValue') return Reflect.get(t, k);
+          return (name: string) => TOKENS[name] ?? t.getPropertyValue(name);
+        },
+      });
+    }) as typeof window.getComputedStyle;
+    Element.prototype.getBoundingClientRect = function rect(this: Element) {
+      if (!this.classList?.contains('rail')) return realRect.call(this);
+      const w = useStudio.getState().railLeftOpen ? 208 : 37;
+      return { x: 0, y: 0, top: 0, left: 0, right: w, bottom: 0, width: w, height: 0, toJSON: () => ({}) } as DOMRect;
+    };
+    return () => {
+      window.getComputedStyle = realCS as typeof window.getComputedStyle;
+      Element.prototype.getBoundingClientRect = realRect;
+    };
+  }
+
+  it('Enter on a closed sash does not publish aria-valuenow below aria-valuemin', () => {
+    // The same impossible-slider defect the compact step had, through the door nobody
+    // opened: while a rail is shut its measured width is `--rail-closed` (37px), and
+    // NEITHER toggle path calls `sync`. So the render that opens the rail starts
+    // publishing the trio again from a measurement taken while it was closed — 37 against
+    // a minimum of 208 — and a ResizeObserver closes it a frame later, in a browser that
+    // has one. `open` is a dependency of the measuring effect for this reason.
+    useStudio.setState({ ...OPEN, railLeftOpen: false });
+    mount(1100);
+    const undo = stubTogglingLayout();
+    const el = sashEl('left');
+
+    // Closed, the trio is not published at all — so the assertion below is about a value
+    // that appeared, not about one that was always there.
+    expect(el.getAttribute('aria-valuenow'), 'a shut rail published a width').toBeNull();
+
+    fireEvent.keyDown(el, { key: 'Enter' });
+    undo();
+
+    expect(useStudio.getState().railLeftOpen, 'Enter did not open the rail, so nothing was measured').toBe(true);
+    const now = Number(el.getAttribute('aria-valuenow'));
+    const min = Number(el.getAttribute('aria-valuemin'));
+    const max = Number(el.getAttribute('aria-valuemax'));
+    expect(Number.isFinite(now) && Number.isFinite(min), 'the trio is incomplete on an open rail').toBe(true);
+    // 208 within [208, 512] on the fixed build; 37 within [208, 512] on the broken one.
+    expect(now, `aria-valuenow ${now} is below aria-valuemin ${min}`).toBeGreaterThanOrEqual(min);
+    expect(now, `aria-valuenow ${now} is above aria-valuemax ${max}`).toBeLessThanOrEqual(max);
   });
 });

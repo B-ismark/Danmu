@@ -35,8 +35,15 @@ export const RAIL_ID = { left: 'studio-rail-left', right: 'studio-rail-right' } 
 
 export function DockedShell({ surface, layout }: { surface: ReactNode; layout: StudioLayout }) {
   const { leftOpen, rightOpen, toggleRail } = useRails();
-  const storedLeft = useStudio((s) => s.railLeftW);
-  const storedRight = useStudio((s) => s.railRightW);
+  // Subscribed so that a width written from ANYWHERE re-renders this shell — the
+  // layout effect below carries no dependency array and runs after every render, so
+  // the subscription is what turns a store write into a DOM write. The values are
+  // deliberately not read for the write itself; see `applySashWidths`. Deleting
+  // either line leaves a shell that paints the right thing on mount and never
+  // updates, which is why `tests/rail-sash-gestures.test.tsx` writes a width from
+  // outside the component and asserts the variable follows.
+  useStudio((s) => s.railLeftW);
+  useStudio((s) => s.railRightW);
 
   const shellRef = useRef<HTMLDivElement>(null);
   const leftRef = useRef<HTMLElement>(null);
@@ -69,12 +76,23 @@ export function DockedShell({ surface, layout }: { surface: ReactNode; layout: S
    *  `RailSash` is the other, because that effect runs on a RENDER and the gestures
    *  that have to undo a painted preview are exactly the ones that change no state:
    *  a press that resized nothing, and a double-click on a rail whose stored width is
-   *  already `null`. One function so the expression cannot be written twice. */
+   *  already `null`. One function so the expression cannot be written twice.
+   *
+   *  **`getState()` rather than this render's values, and that is the whole reason the
+   *  subscriptions above read nothing.** `RailSash` calls this in the same handler as
+   *  `setRailWidth`, one line later — so a closure over the subscribed values would
+   *  write the PRE-drag width every time, and be correct only because the store change
+   *  schedules a render whose layout effect runs before the browser paints. That is an
+   *  invariant nobody stated and no test in this repo can see: `sashVar()` reads the
+   *  final value of `el.style` after `act()` has flushed everything, so swapping those
+   *  two lines, or demoting the effect below to `useEffect`, leaves the suite green.
+   *  Reading at call time removes the dependency rather than documenting it. */
   const applySashWidths = () => {
     const el = shellRef.current;
     if (!el || stacked) return;
-    el.style.setProperty('--sash-left', railWidth(storedLeft, 'left'));
-    el.style.setProperty('--sash-right', railWidth(storedRight, 'right'));
+    const { railLeftW, railRightW } = useStudio.getState();
+    el.style.setProperty('--sash-left', railWidth(railLeftW, 'left'));
+    el.style.setProperty('--sash-right', railWidth(railRightW, 'right'));
   };
 
   const shell = (

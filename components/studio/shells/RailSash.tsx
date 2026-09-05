@@ -186,7 +186,15 @@ export function RailSash({
       ro.disconnect();
       window.removeEventListener('resize', sync);
     };
-  }, [railRef, sync]);
+    // `open` is a dependency, not decoration. While the rail is shut `metrics.width` is
+    // the CLOSED width — `--rail-closed`, 37px — and `shown` starts publishing again the
+    // instant `open` flips, so Enter or the chevron put `aria-valuenow=37` against an
+    // `aria-valuemin` of 208 or 228 for the render after the toggle. That is the same
+    // impossible-slider defect the compact step had, through the other door: neither
+    // toggle path calls `sync`, and the ResizeObserver only closes it a frame later and
+    // only in a browser that has one. Re-measuring on the flip closes it in the render
+    // that opens the rail.
+  }, [railRef, sync, open]);
 
   useEffect(
     () => () => {
