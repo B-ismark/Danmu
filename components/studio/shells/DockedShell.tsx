@@ -25,7 +25,7 @@
 // the container queries are what make a dragged-narrow rail safe rather than
 // silently clipped.
 
-import { type CSSProperties, type ReactNode, useRef } from 'react';
+import { type CSSProperties, type ReactNode, useLayoutEffect, useRef } from 'react';
 import { useStudio } from '@/lib/store';
 import type { StudioLayout } from '../NarrowViewportBanner';
 import { RailSash } from './RailSash';
@@ -75,8 +75,8 @@ export function DockedShell({ surface, layout }: { surface: ReactNode; layout: S
           overflow: 'auto',
         }
       : {
-          '--sash-left': railWidth(storedLeft, 'left'),
-          '--sash-right': railWidth(storedRight, 'right'),
+          // `--sash-left` / `--sash-right` are NOT set here — see the layout effect
+          // below, which writes them to the DOM after every render.
           gridTemplateColumns: [
             leftOpen ? 'var(--sash-left)' : 'var(--rail-closed)',
             '1fr',
@@ -85,6 +85,37 @@ export function DockedShell({ surface, layout }: { surface: ReactNode; layout: S
           height: '100%',
         }
   ) as CSSProperties;
+
+  // The two sash variables are written to the DOM after every render rather than
+  // carried in the style object above, and that is a correctness fix rather than a
+  // preference.
+  //
+  // `RailSash` used to hand a width back to its token with
+  // `style.removeProperty('--sash-left')`. React never learns about that:
+  // `setValueForStyles` writes a key only when the value it last RENDERED differs
+  // from the new one, so removing a property React believes it already set is
+  // invisible to that comparison and is never restored. On a rail whose stored width
+  // was already `null` — which `toggleRail` now guarantees on every open — the
+  // accompanying `setRailWidth(side, null)` changed nothing either, so the property
+  // simply stayed gone. The next open then resolved
+  // `grid-template-columns: var(--sash-left) 1fr var(--rail-right)` against a
+  // variable defined nowhere else in the app: invalid at computed-value time, which
+  // for `grid-template-columns` means `none`, which auto-places the left rail, the
+  // canvas and the right rail one per ROW. Double-clicking the sash to reset it took
+  // the same path and could not repair it, because that was another
+  // remove-then-write-the-same-null.
+  //
+  // Writing unconditionally after every render makes the DOM the source of truth
+  // instead of React's memory of it, so no caller can put the shell into a state
+  // React declines to fix. The skip is for a live drag only: `RailSash` paints a px
+  // preview straight onto this element every frame, and a render that happened to
+  // land mid-gesture would otherwise snap that preview back to the token.
+  useLayoutEffect(() => {
+    const el = shellRef.current;
+    if (!el || stacked || el.dataset.sashDragging === '1') return;
+    el.style.setProperty('--sash-left', railWidth(storedLeft, 'left'));
+    el.style.setProperty('--sash-right', railWidth(storedRight, 'right'));
+  });
 
   const railStyle: CSSProperties = stacked
     ? {

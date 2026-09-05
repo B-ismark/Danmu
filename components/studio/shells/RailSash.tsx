@@ -76,18 +76,30 @@ export function RailSash({
   // `metrics` would trust a value the ResizeObserver is deliberately not updating
   // mid-drag. Neither can change during a drag anyway — the ceiling is a share of
   // a window nobody is resizing while dragging a divider inside it.
-  const drag = useRef<{
-    startX: number;
-    startW: number;
-    floor: number;
-    ceiling: number;
-    pending: number;
-    collapse: boolean;
-    raf: number;
-    /** True only for the drag that opened a closed rail: the first move re-seeds
-     *  the gesture from the now-open width, and a no-move release commits it. */
-    openedHere?: boolean;
-  } | null>(null);
+  //
+  // Two SHAPES rather than one shape with a flag, and that is not tidiness: the
+  // gesture that opens a closed rail has no width, no floor and no ceiling to seed
+  // from, because the open width cannot be read until React has re-rendered. The
+  // first version carried the flag and seeded `startW: 0, floor: 0, ceiling: 0`,
+  // which are four numbers nothing may read — and `ceiling: 0` in particular would
+  // clamp a committed width to 0px, below the rail's own token floor, if anything
+  // ever did. `tests/reflow.test.ts`'s `not.toMatch(/floor = \d/)` guard exists to
+  // catch exactly that and could not see them, because it matches assignment syntax
+  // and those were object properties. A union makes them unwritable instead.
+  const drag = useRef<
+    | { kind: 'opening'; startX: number; raf: number }
+    | {
+        kind: 'sizing';
+        startX: number;
+        startW: number;
+        floor: number;
+        ceiling: number;
+        pending: number;
+        collapse: boolean;
+        raf: number;
+      }
+    | null
+  >(null);
 
   /** Measured, not remembered — and read outside render, because these are all
    *  layout questions. The ceiling is derived from the same share the stylesheet
@@ -106,6 +118,20 @@ export function RailSash({
   }, [railRef, shellRef, side]);
 
   const sync = useCallback(() => setMetrics(measure()), [measure]);
+
+  /** Tells `DockedShell` to leave `--sash-*` alone while this gesture paints it.
+   *  A dataset flag rather than React state on purpose: it has to be readable from
+   *  inside a layout effect on the parent, and it must not cause a render — a render
+   *  per pointermove is exactly what the rAF write exists to avoid. */
+  const markDragging = useCallback(
+    (on: boolean) => {
+      const el = shellRef.current;
+      if (!el) return;
+      if (on) el.dataset.sashDragging = '1';
+      else delete el.dataset.sashDragging;
+    },
+    [shellRef],
+  );
 
   // The rail's width answers to the window (the token carries a `vw` term), to
   // the collapse toggle and to this drag, so observing the element is the only
@@ -133,13 +159,16 @@ export function RailSash({
   useEffect(
     () => () => {
       if (drag.current?.raf) cancelAnimationFrame(drag.current.raf);
+      // Unmounting mid-drag would otherwise leave the shell marked and `DockedShell`
+      // would stop restoring `--sash-*` for the rest of the session.
+      markDragging(false);
     },
-    [],
+    [markDragging],
   );
 
   function paint() {
     const d = drag.current;
-    if (!d) return;
+    if (!d || d.kind !== 'sizing') return;
     d.raf = 0;
     // A pending collapse previews itself at the closed width, so releasing is not
     // a surprise.
@@ -151,24 +180,16 @@ export function RailSash({
     if (!open) {
       // A closed rail normally ignores pointer drags (the early-return below). Letting
       // the user pull a collapsed sash open is the requested behaviour: open it to the
-      // token default — issue 1's toggleRail guarantees that, never a stored width —
-      // and turn this gesture into a drag. Once open, the grid column tracks
-      // --sash-left and paint() can drive it, so the rest of this handler's logic
-      // applies. The open width can't be read synchronously (React re-renders next),
-      // so the gesture is seeded from the floor and corrected on the first move.
+      // token default — `toggleRail` clears any stored width on open — and turn this
+      // gesture into a drag. Once open, the grid column tracks --sash-left and paint()
+      // can drive it, so the rest of this handler's logic applies. The open width
+      // cannot be read synchronously (React re-renders next), so this gesture carries
+      // no width at all until the first move measures one.
       e.preventDefault();
       e.currentTarget.setPointerCapture(e.pointerId);
+      markDragging(true);
       onToggle();
-      drag.current = {
-        startX: e.clientX,
-        startW: 0,
-        floor: 0,
-        ceiling: 0,
-        pending: 0,
-        collapse: false,
-        raf: 0,
-        openedHere: true,
-      };
+      drag.current = { kind: 'opening', startX: e.clientX, raf: 0 };
       setDragging(true);
       return;
     }
@@ -176,7 +197,9 @@ export function RailSash({
     if (!m) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
+    markDragging(true);
     drag.current = {
+      kind: 'sizing',
       startX: e.clientX,
       startW: m.width,
       floor: m.floor,
@@ -191,19 +214,31 @@ export function RailSash({
   function onPointerMove(e: ReactPointerEvent<HTMLDivElement>) {
     const d = drag.current;
     if (!d) return;
-    if (d.openedHere) {
+    if (d.kind === 'opening') {
       // First move after opening a closed rail: the DOM now reflects the open width,
-      // so measure it and re-seed the gesture from the current pointer. Resetting
-      // startX here means the rail holds its freshly opened width until the user
-      // actually moves, rather than leaping by the travel during the open.
+      // so measure it and promote the gesture to a sizing one, seeded from the current
+      // pointer. Resetting startX means the rail holds its freshly opened width until
+      // the user actually moves, rather than leaping by the travel during the open.
+      //
+      // **`if (m)` is not the guard this needs, and that was the defect.** A move
+      // dispatched before the open has laid out measures the CLOSED rail — 37px, a
+      // number, so `if (m)` passes — and seeds `startW` at 37 against a floor of 228.
+      // Every later move then computes `collapse = 37 + delta < floor - SNAP_PAST_FLOOR`,
+      // which is true unless the user has already dragged the width of the rail
+      // rightward, so the release closes the rail the press just opened. A width below
+      // the floor is not a width this rail can have; refuse it and stay opening.
       const m = measure();
-      if (m) {
-        d.startX = e.clientX;
-        d.startW = m.width;
-        d.floor = m.floor;
-        d.ceiling = m.ceiling;
-        d.pending = m.width;
-        d.openedHere = false;
+      if (m && m.width >= m.floor) {
+        drag.current = {
+          kind: 'sizing',
+          startX: e.clientX,
+          startW: m.width,
+          floor: m.floor,
+          ceiling: m.ceiling,
+          pending: m.width,
+          collapse: false,
+          raf: d.raf,
+        };
       }
       return;
     }
@@ -221,22 +256,31 @@ export function RailSash({
     if (d.raf) cancelAnimationFrame(d.raf);
     drag.current = null;
     setDragging(false);
+    // Cleared BEFORE the store writes below, because `DockedShell` restores
+    // `--sash-*` after the render they cause and must not skip that pass.
+    markDragging(false);
     e.currentTarget.releasePointerCapture?.(e.pointerId);
-    if (d.collapse) {
-      // Hand the width back to the token, so reopening starts from the design's
-      // number rather than the sliver the drag ended on. Then close.
-      shellRef.current?.style.removeProperty(WIDTH_PROP[side]);
-      setRailWidth(side, null);
-      onToggle();
+    if (d.kind === 'opening') {
+      // Opened a closed rail and released without moving. **Commit nothing.** The
+      // rail is already open at its token default and there is no width here worth
+      // storing — the first version committed the measured one, and that measurement
+      // is the RENDERED token, so at the 1024–1279px step it was `--rail-left-tight`
+      // 208px, which `DockedShell` then renders as `clamp(--rail-left-min, 208px, …)`
+      // = 228px. A press that moved nothing widened the rail 20px on release (28px on
+      // the right), and — worse — made `railLeftW` a number for good: `railWidth`
+      // never takes its compact arm again for that rail, the value persists through
+      // `STUDIO_PREFS`, and the whole compact step is gone. A stored width is a fact
+      // about a DRAG, and this gesture was not one.
+      sync();
       return;
     }
-    if (d.openedHere) {
-      // Opened a closed rail but released without moving: commit the width it opened
-      // to (the token default) so the open state is sticky and consistent with the
-      // open-rail drag, rather than storing the untouched `0`.
-      const m = measure();
-      setRailWidth(side, m ? m.width : null);
-      sync();
+    if (d.collapse) {
+      // Hand the width back to the token, so reopening starts from the design's
+      // number rather than the sliver the drag ended on. Then close. The property
+      // itself is `DockedShell`'s to restore — see the note there on why removing it
+      // here could not be undone.
+      setRailWidth(side, null);
+      onToggle();
       return;
     }
     setRailWidth(side, d.pending);
@@ -267,8 +311,12 @@ export function RailSash({
     setRailWidth(side, Math.max(m.floor, Math.min(m.ceiling, next)));
   }
 
+  // Double-click. Only the store is written: `DockedShell` rewrites `--sash-*` after
+  // every render, so the token default is back on the next paint. This used to
+  // `removeProperty` first, and on a rail that had never been dragged that was a
+  // one-gesture way to stack the whole studio vertically — see the note in
+  // `DockedShell` for the mechanism.
   function reset() {
-    shellRef.current?.style.removeProperty(WIDTH_PROP[side]);
     setRailWidth(side, null);
   }
 
