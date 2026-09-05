@@ -599,6 +599,19 @@ positions, that is **189 positions in 172,032 — 0.11%** — concentrated in `f
 five are never-read-`dimMM` renderers drawing a chair or a pedestal fan smaller than its
 declared box, where the answer is a corrected literal rather than a hull.
 
+**A second production defect, found by asking the table a question it had been silent about.**
+Every row above is measured with every door and drawer SHUT, which for the two shapes that read
+`openState` made the table one of two answers without saying which. Measured as a ramp at
+open = 0 / 0.25 / 0.5 / 0.75 / 1, `nightstand` behaves — its drawer reach reads 21 / 66 / 111 /
+156 / 201 mm — and **`wardrobe` goes the wrong way**: 12 / 0 / 0 / 0 / 0. At any open above
+zero its bounds are *exactly* the declared box, because the doors are inside the carcass.
+`WardrobeGeo` rotates each door group by `[0, dir * swing, 0]`, and a rotation about +Y carries
+local +x toward -z, so a door extending along +x from a hinge on the front face swings inward
+through the back panel, the dividers and anything on the shelves. Flipping the sign puts the far
+edge at z = 0.824 m, 524 mm proud of the face, and makes the ramp monotone. One line in a
+renderer; it wants an eye rather than a test, and it is not fixed here because this change
+touches no production code.
+
 **Recommendation: retire 4a with this number.** Fix the renderers that draw outside their box,
 which is a separate, smaller, better-defined piece of work, and leave every piece one box. The
 picking figure is the one that deserves its own row.

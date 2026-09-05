@@ -19,8 +19,15 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
+// `openState` is a MEASUREMENT PARAMETER, not scenery. At 0 every door and drawer in the
+// catalogue is shut, and a shut wardrobe is the only wardrobe the table below describes —
+// which would be a silent caveat on every row for the two shapes that can open. The mock
+// reads a mutable value so one test can ask the other question, and the table states which
+// answer it is publishing.
+let openAmount = 0;
 vi.mock('@/lib/store', () => ({
-  useStudio: (sel: (s: unknown) => unknown) => sel({ dims: {}, openState: {}, hidden: {}, quality: 'high' }),
+  useStudio: (sel: (s: unknown) => unknown) =>
+    sel({ dims: {}, openState: new Proxy({}, { get: () => openAmount }), hidden: {}, quality: 'high' }),
 }));
 
 // `SURFACE.fabric` and `SURFACE.wood` expose `normalMap` as a GETTER that builds a
@@ -171,6 +178,60 @@ describe('what a shape actually occupies, against the one box every consumer rea
       if (r.shape === 'mirror-oval') expect(r.fill, `${r.shape}/${r.size}`).toBe(0);
       else expect(r.fill, `${r.shape}/${r.size} covers none of its own box`).toBeGreaterThan(0);
     }
+  });
+
+  it('says how far an OPEN door and drawer reach, and which way they go', () => {
+    // Two shapes read `openState`: `WardrobeGeo` swings its doors `open * 1.15` rad about
+    // each bay's outer edge, and `NightstandGeo` slides its drawer faces forward along +z.
+    // Every row above is measured shut, so for these two the table was one of two answers
+    // and did not say which — a number correct about its subject and silent about its own
+    // conditions, which is the failure this repo keeps finding.
+    //
+    // It is a RAMP rather than an on/off switch, because the direction and the magnitude
+    // are two claims and a single open/shut pair can establish only the first.
+    const AMOUNTS = [0, 0.25, 0.5, 0.75, 1];
+    const lines: string[] = [];
+    let anyMoved = 0;
+    let inward = 0;
+    for (const shape of ['wardrobe', 'nightstand'] as Shape[]) {
+      const dim = PART_LIBRARY.find((l) => l.shape === shape)!.dimMM as [number, number, number];
+      const reach = AMOUNTS.map((a) => {
+        openAmount = a;
+        const r = measure(shape, 'lib', dim);
+        return Math.max(r.overX, r.overZ);
+      });
+      openAmount = 0;
+      const moved = Math.max(...reach) - Math.min(...reach);
+      anyMoved = Math.max(anyMoved, moved);
+      // Monotone DOWN across the whole ramp: opening the piece makes its drawn footprint
+      // smaller at every step. A door or a drawer cannot do that by moving outward.
+      const shrinks = reach.every((v, i) => i === 0 || v <= reach[i - 1] + 1e-9) && moved > 1;
+      if (shrinks) inward++;
+      lines.push(
+        `  ${shape.padEnd(12)} ${reach.map((v) => v.toFixed(0).padStart(6)).join('')}` +
+          `${shrinks ? '   <<< reaches LESS far open than shut' : ''}`,
+      );
+    }
+    console.log(
+      '\nOPEN vs SHUT — furthest the geometry reaches outside `dimMM`, mm, at open =' +
+        ` ${AMOUNTS.join(' / ')}\n` +
+        lines.join('\n') +
+        '\n  `wardrobe` swinging INWARD is a finding, not a measurement artefact: at any' +
+        '\n  open > 0 its bounds are exactly the declared box, so the doors are inside the' +
+        '\n  carcass. See the note in this test and § 4.6.',
+    );
+    // Both halves of the fixture must reach the open state, or one of these rows is two
+    // identical numbers reading as "opening it changes nothing".
+    expect(anyMoved, 'the open state must actually move geometry').toBeGreaterThan(1);
+    // The finding, pinned so that fixing the renderer fails this test rather than passing
+    // it silently. `WardrobeGeo` rotates each door group by `[0, dir * swing, 0]`, and a
+    // rotation about +Y carries local +x toward -z — so a door extending along +x from a
+    // hinge on the front face swings INTO the wardrobe. Flipping the sign sends the far
+    // edge to z = 0.824 at the library size, 524 mm proud of the face, and the ramp
+    // becomes monotone upward. That is a one-line change to a renderer, it wants an eye
+    // rather than a test, and it is deliberately not made here: this PR touches no
+    // production code. Update this expectation in the same commit as the fix.
+    expect(inward, 'shapes whose footprint shrinks as they open').toBe(1);
   });
 
   it('prints the table', () => {
