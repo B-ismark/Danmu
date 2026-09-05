@@ -386,14 +386,21 @@ describe('a gesture that resized nothing leaves no pixel behind either', () => {
     fireEvent.pointerDown(el, { button: 0, clientX: 400, pointerId: 1 });
     fireEvent.pointerMove(el, { clientX: 400, pointerId: 1 });
 
-    expect(sashVar(shell, 'left'), 'a move of zero pixels painted a width').not.toMatch(/^\d/);
+    // `toMatch(/^var\(/)`, not `not.toMatch(/^\d/)`. `sashVar` is `getPropertyValue().trim()`,
+    // which answers `''` for a property that is ABSENT — and absent is the removeProperty
+    // outcome that `DockedShell`'s note says React cannot undo, the one that resolves
+    // `grid-template-columns` against nothing and stacks the studio one pane per row. A
+    // predicate that only refuses a numeric literal accepted the grid collapse these three
+    // assertions exist to catch. Naming what is RIGHT discriminates; naming one thing that
+    // is wrong never can.
+    expect(sashVar(shell, 'left'), 'a move of zero pixels painted a width').toMatch(/^var\(/);
 
     fireEvent.pointerUp(el, { clientX: 400, pointerId: 1 });
     frames();
     undo();
 
     expect(useStudio.getState().railLeftW, 'a press that moved nothing stored a width').toBe(null);
-    expect(sashVar(shell, 'left'), 'the release left a painted width standing').not.toMatch(/^\d/);
+    expect(sashVar(shell, 'left'), 'the release left a painted width standing').toMatch(/^var\(/);
   });
 
   it('and a double-click puts the variable back even when the store does not change', () => {
@@ -418,7 +425,7 @@ describe('a gesture that resized nothing leaves no pixel behind either', () => {
     undo();
 
     expect(useStudio.getState().railLeftW, 'the reset left a width stored').toBe(null);
-    expect(sashVar(shell, 'left'), 'the reset left the painted width on the element').not.toMatch(/^\d/);
+    expect(sashVar(shell, 'left'), 'the reset left the painted width on the element').toMatch(/^var\(/);
   });
 });
 
