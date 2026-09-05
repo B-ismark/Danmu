@@ -753,8 +753,43 @@ proves the page.
 *Owner: `shell`. The Library click-through was looked at on 2026-08-30 — the Add rail is
 present and the panel is visible on both tabs, which is the whole of what was left for a
 person. The three signposts and the click-through are gated by `tests/studio-copy.test.tsx`
-and `tests/library-click-through.test.tsx`. The one item below is new, and it is here
-because what a test can check about it and what a person can see are different halves.*
+and `tests/library-click-through.test.tsx`. The two items below are new, and each
+is here because what a test can check about it and what a person can see are different
+halves.*
+
+### Pressing Shuffle moves the button out from under the pointer
+
+*Filed by `rails` on 2026-09-05 from a peer's browser measurement during PR #115's review.
+Nothing here fixes it, and it is a look rather than a probe because the question is what a
+person does next, not what a number says.*
+
+Measured on a production build at 1100 × 900, on the plan tab, in the right rail's room
+actions row:
+
+| | idle | pressed |
+|---|---|---|
+| the Shuffle button | 95px wide | **175px** |
+| the row holding it | 30px, one line | **66px, two lines** |
+
+The row is a wrapping flex row — that is the fix from § E, and it is the right one: at
+`--rail-left-tight` there are 85px per column and `.ds-btn` spends 50px of it on chrome,
+so a grid cut the word instead. But `Shuffling…` is ~18px wider than `Shuffle`, and the
+row answers by wrapping, so **Fix takes the whole first line and Shuffle drops to the
+second**. The pointer has not moved and is now over a different control.
+
+**What to look at.** Press Shuffle on the plan tab at a laptop width and do not move the
+mouse. Watch whether the button leaves from under the cursor, and whether the reflow reads
+as the app responding or as the layout breaking. Then press it again without moving —
+whether that second press lands on **Fix** is the thing worth knowing.
+
+**What would fix it, if it needs fixing:** reserve the busy width so the row cannot
+reflow — render the longest label as a hidden sizer inside the button, so its width is the
+maximum of its two states and neither string changes it. That is a change to `RoomTools`
+and it is deliberately not in #115, because the busy window is short and a peer caught it
+**once in four runs**: a fix nobody can watch land is worse than a recorded measurement.
+
+**Unverified either way:** a real font at a real DPI, and touch, where the finger is
+already lifted before the reflow happens and the second-press question does not arise.
 
 ### A dragged SET slides to its binding member — and only a pointer can show it
 
