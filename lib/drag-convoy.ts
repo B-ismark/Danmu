@@ -1011,5 +1011,8 @@ export function settleLead<R extends SettleLead>(
     lead = next;
     co = nextCo;
   }
-  return { lead, co, settled: false };
+  // `first` on this path too, and for the same reason as inside the loop: an
+  // unsettled gesture is refused, and a refusal belongs where the pointer asked for
+  // it rather than at whichever intermediate spot the last pass happened to try.
+  return { lead: first, co, settled: false };
 }

@@ -1869,6 +1869,69 @@ describe('the slide limit, at the edges where it is decided', () => {
   });
 });
 
+// Three properties of `ConvoyResult` that only a RAW consumer can see, so they are
+// asserted through `carry` rather than through `dragged`.
+//
+// Settling hides them by construction: on the pass that settles, `leadPos` equals the
+// lead's own resolve, so `moves` cascaded about either one agree and the height in
+// `leadPos` has already been replaced by the re-resolve. That makes each of these a
+// contract the two callers rely on and no caller-shaped fixture can break — which is
+// exactly the kind of line that rots quietly.
+describe('what `resolveConvoy` promises its caller about the limited position', () => {
+  const lead = () => part({ id: 'lead', pos: [1.5, 0, 2], dimMM: [500, 500, 900], category: 'chair', shape: 'chair-dining' });
+  const mate = () => part({ id: 'mate', pos: [2.0, 0, 1], dimMM: [740, 740, 400] });
+  const MATE_HEADROOM = 6 - 0.74 / 2 - 2.0;
+
+  it('leaves the height exactly as the caller handed it over', () => {
+    // `leadPos[1]` is `pos[1]`, never `startPos[1]`: this function has no opinion
+    // about gravity and says so in a comment. Invisible to every other fixture here,
+    // because a drag across a flat floor has the two equal — so the fixture hands over
+    // a height that differs from the start, which is what a lead resting on something
+    // looks like.
+    const world = [mate(), lead()];
+    const c = plan('lead', world, ['lead', 'mate']);
+    const co = carry(c, 'lead', world, [1.5, 0, 2], [1.5 + 3.9, 0.75, 2]);
+    expect(co.leadPos[1]).toBe(0.75);
+  });
+
+  it('cascades the lead’s rigid children about the LIMITED pivot', () => {
+    // The lead's children follow the lead rather than the delta, so they are cascaded
+    // about its pivot — and that pivot is not final until the limit has been taken.
+    // Cascading once up front left a lamp riding the desk's UNLIMITED position: the
+    // desk stops at the wall and its lamp keeps going, which is the same set-coming-
+    // apart this whole change exists to prevent, one layer down.
+    const desk = part({ id: 'lead', pos: [1.5, 0, 2], dimMM: [1400, 700, 750], category: 'desk', shape: 'desk-standard' });
+    const lamp = part({ id: 'lamp', pos: [1.8, 0.75, 2], dimMM: [200, 200, 300], category: 'lamp', shape: 'lamp-table' });
+    const world = [mate(), desk, lamp];
+    const c = plan('lead', world, ['lead', 'mate'], { lamp: 'lead' });
+    expect(c.own.map((d) => d.id)).toEqual(['lamp']);
+
+    const asked = 3.75;
+    const co = carry(c, 'lead', world, [1.5, 0, 2], [1.5 + asked, 0, 2]);
+    expect(co.valid).toBe(true);
+    expect(co.leadPos[0]).toBeCloseTo(1.5 + MATE_HEADROOM, 9);
+    // The lamp keeps its 0.3 m offset from the LIMITED lead, not from the asked one.
+    expect(co.moves.find((m) => m.id === 'lamp')!.pos[0]).toBeCloseTo(1.5 + MATE_HEADROOM + 0.3, 9);
+  });
+
+  it('shortens a westward drag towards ZERO and never past it', () => {
+    // The mirror of "never runs the set BACKWARDS", on the other sign. A member west
+    // of the room is clamped inward by more than the whole delta, so `d + over` turns
+    // POSITIVE while the pointer went west; without `Math.min(c, 0)` the set would
+    // travel east away from the hand. The eastward fixture cannot see this — it
+    // exercises `Math.max(c, 0)` — and with every drag in this file going east or
+    // south, the whole `d < 0` arm was dead to the suite.
+    const outside = part({ id: 'outside', pos: [-3, 0, 1], dimMM: [800, 800, 400] });
+    const wLead = part({ id: 'lead', pos: [4.5, 0, 2], dimMM: [500, 500, 900], category: 'chair', shape: 'chair-dining' });
+    const world = [outside, wLead];
+    const c = plan('lead', world, ['lead', 'outside']);
+    const co = carry(c, 'lead', world, [4.5, 0, 2], [4.5 - 0.3, 0, 2]);
+    expect(co.valid).toBe(false);
+    // Unlimited, `limited(-0.3, +3.4)` returns +3.1 and the lead runs east.
+    expect(co.leadPos[0]).toBeCloseTo(4.2, 9);
+  });
+});
+
 // `settleLead` — the loop both tabs used to carry a different, shorter version of.
 //
 // It is here rather than in a component for one reason worth stating: `Draggable` is
@@ -1922,15 +1985,39 @@ describe('settling the lead against the set it is dragging', () => {
   });
 
   it('reports a refusal where the pointer asked for it, not at some shorter delta', () => {
+    // The stub answers `leadPos: 4` on a REFUSAL, which `resolveConvoy` never does —
+    // every refusing path there returns `leadPos: pos`. It is deliberate: with the
+    // two equal, deleting the `!co.valid` early return changes nothing, because the
+    // stability check one line below catches it. The mutant is only visible against a
+    // convoy whose refusal names a different position, so the fixture makes one.
     const s = settleLead<Lead>(
       () => {
         throw new Error('must not re-resolve a refusal');
       },
-      () => answer(false, 5),
+      () => answer(false, 4),
       at(5),
     );
     expect(s.settled).toBe(true);
     expect(s.co.valid).toBe(false);
+    expect(s.lead.pos[0]).toBe(5);
+  });
+
+  it('refuses when the shorter delta is somewhere the SET may not go either', () => {
+    // The lead can stand at the limit; its company cannot. Distinct from the case
+    // below, where the LEAD is the one refused — and each needs its own fixture,
+    // because either half of `!next.valid || !nextCo.valid` alone passes the other's
+    // test.
+    //
+    // Two passes before it goes wrong, deliberately: on the FIRST pass the running
+    // lead is still the asked one, so returning `first` and returning `lead` are the
+    // same object and an assertion about which cannot fail. The set only refuses once
+    // the lead has actually moved on.
+    const s = settleLead<Lead>(
+      (x) => at(x),
+      (l) => (l.pos[0] === 5 ? answer(true, 4) : l.pos[0] === 4 ? answer(true, 3) : answer(false, l.pos[0])),
+      at(5),
+    );
+    expect(s.settled).toBe(false);
     expect(s.lead.pos[0]).toBe(5);
   });
 
@@ -1948,17 +2035,24 @@ describe('settling the lead against the set it is dragging', () => {
     expect(s.lead.pos[0]).toBe(5);
   });
 
-  it('refuses a 2-cycle instead of committing a stretched set', () => {
+  it('refuses a gesture that will not converge, and answers where the pointer was', () => {
     // The grid snap is the first step of `resolvePlacement` and the limit is a
-    // continuous correction, so feeding one back into the other can oscillate: 4.876
-    // rounds to 4.880, whose limit is 4.876 again. A comment here used to assert the
-    // second answer is always the same as the first; at coarse snap this stretches
+    // continuous correction, so feeding one back into the other need not settle: each
+    // pass rounds, the next limit shortens it again, and a comment here used to assert
+    // the second answer is always the same as the first. At coarse snap that stretches
     // the set by up to 25 mm, silently, with `valid` saying true.
+    //
+    // The lead that comes back is the one the POINTER asked for. Returning the last
+    // one tried would draw the refusal at some intermediate spot nobody named, and
+    // this fixture drifts rather than oscillating precisely so that the two are
+    // different numbers — with a true 2-cycle they coincide and the assertion is
+    // decoration.
     const s = settleLead<Lead>(
       (x) => at(Math.round(x * 100) / 100),
-      (l) => answer(true, l.pos[0] - 0.004),
+      (l) => answer(true, l.pos[0] - 0.006),
       at(4.88),
     );
     expect(s.settled).toBe(false);
+    expect(s.lead.pos[0]).toBe(4.88);
   });
 });
