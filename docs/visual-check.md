@@ -512,14 +512,40 @@ constitutionally unable to show.*
 
 ### The two decline toasts — the halves nobody has pressed, merged to `main` in `4cc663b` (PR #89)
 
-**Half of this item has been looked at and is deleted rather than struck through.**
-Seen in a real browser on 2026-09-03, seeded U at 6 x 4, production build: presses 1
-and 2 give *"No safe arrangement found — Every layout tried put a piece through a wall
-or inside another one, so nothing was moved. Press Fix again for a different try, or
-unlock a piece to give it more room."*, press 3 applies and says *"Moved 4 pieces"* with
-the room visibly rearranging. The long message **wraps to four lines and does not clip**,
-which was the open question about it. Presses 1, 2 and 5/7 declining matches the
-measurement exactly.
+**Half of this item was looked at on 2026-09-03 and the sentence it recorded no longer
+exists.** It is back open, and the reason is worth keeping: the observation was correct
+about a string this app has stopped producing.
+
+What was seen, in a real browser, seeded U at 6 x 4, production build: presses 1 and 2
+gave *"No safe arrangement found — Every layout tried put a piece through a wall or
+inside another one, so nothing was moved. Press Fix again for a different try, or unlock
+a piece to give it more room."*, press 3 applied and said *"Moved 4 pieces"* with the room
+visibly rearranging. The long message **wrapped to four lines and did not clip**, which
+was the open question. Presses 1, 2 and 5/7 declining matched the measurement exactly.
+
+**Two things changed under it, and only one of them is cosmetic.**
+
+The refusal now names WHICH impossible condition it hit rather than always saying both,
+so the same two presses should read *"No safe arrangement found — The closest it found
+put a piece **through a wall**, so nothing was moved. Press Fix again …"*. **Measured on
+this exact fixture, against a module hash-verified against its commit: 11 impossible
+refusals over `u` 6x4 at seeds 1-8 in both modes, and all 11 name `outside` alone.**
+`arrange` declines on seeds 1, 2, 5, 7 — the same four the earlier session saw — so the
+press pattern above is unchanged and only the wording moved.
+
+And the body no longer opens *"Every layout tried"*. That universal was true of the
+disjunction and false of a single named condition, because the clause comes off the
+WINNER's breakdown while `bestCandidate` ranks on the sum of both terms. The title
+already says nothing worked, so the body says the narrower true thing.
+
+**The wrap question does not need re-deriving, only re-seeing.** The old message was 167
+characters; the new one is 144 with one condition named and 166 with both — so the
+maximum is one character *shorter* than the string already observed wrapping to four
+lines without clipping. If it clips now, something other than length changed.
+
+`overlap` alone has never been produced by any solve measured so far, so *"inside another
+one"* as a standalone clause is still unseen — that is the arm to look for, not the one
+above.
 
 What is left is the part that probe could not reach.
 
@@ -545,7 +571,9 @@ What is left is the part that probe could not reach.
 
 **What wrong looks like.**
 
-- **A narrow window.** The long messages are ~170 characters at `ttl: 14000`. The toast
+- **A narrow window.** The long messages are 144 characters with one condition named and
+  166 with both, at `ttl: 14000` — the figure here used to read ~170, which was the
+  version before the refusal started naming its condition. The toast
   host is `min(360px, calc(100vw - 32px))` with no `overflow`, so it should grow
   downward; at ~400px wide it will be tall. Check it does not push its own dismiss
   button off, and that 14 s is actually enough to read it.

@@ -714,8 +714,21 @@ function FixAllButton({
               // is a refusal rather than a failure. The other two decline paths in this
               // file are untoned for the same reason.
               title: 'No safe arrangement found',
+              // **The universal belongs in the title, not in the body.** The body used to
+              // open "Every layout tried put a piece …", which was safe while the clause
+              // was the DISJUNCTION — every candidate did fail one way or the other. It
+              // stops being true once the clause names one condition: `declinedTerms` is
+              // derived from the WINNER's breakdown, and `bestCandidate` ranks on the SUM
+              // of the two terms, so a runner-up may have failed on the other one. Told
+              // "every layout put a piece through a wall", someone concludes the room is
+              // too small and never unlocks the wardrobe that was the overlap everywhere
+              // else — false in the one direction that misdirects the remedy.
+              //
+              // `No safe arrangement found` already says nothing worked, so the body is
+              // free to say the narrower true thing, and comes out shorter than the
+              // sentence it replaces rather than longer.
               message:
-                `Every layout tried put a piece ${impossibleClause(result.declinedTerms)}, so nothing was moved. Press Fix again for a different try, or unlock a piece to give it more room.`,
+                `The closest it found put a piece ${impossibleClause(result.declinedTerms)}, so nothing was moved. Press Fix again for a different try, or unlock a piece to give it more room.`,
               ttl: 14000,
             }
           : {
@@ -1073,7 +1086,7 @@ function useRefitOffer(
                 ? {
                     title: 'No safe way to fit that',
                     message:
-                      `Every arrangement tried put a piece ${impossibleClause(result.declinedTerms)}. A smaller size, or unlocking a piece, gives it more room.`,
+                      `The closest it found put a piece ${impossibleClause(result.declinedTerms)}. A smaller size, or unlocking a piece, gives it more room.`,
                     ttl: 14000,
                   }
                 : {
@@ -1191,8 +1204,8 @@ function FixButton({
         message:
           result.declined === 'impossible'
             ? scope
-              ? `Every arrangement of those put a piece ${impossibleClause(result.declinedTerms)}. Fix can rearrange the whole room, which gives it more to work with.`
-              : `Every arrangement tried put a piece ${impossibleClause(result.declinedTerms)}. Try unlocking a piece, or making some space.`
+              ? `The closest it found put a piece ${impossibleClause(result.declinedTerms)}. Fix can rearrange the whole room, which gives it more to work with.`
+              : `The closest it found put a piece ${impossibleClause(result.declinedTerms)}. Try unlocking a piece, or making some space.`
             : scope
               ? 'Nothing better was found without touching the rest of the room. Fix can rearrange everything.'
               : 'Nothing better was found. Try unlocking a piece, or making some space.',
