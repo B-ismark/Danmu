@@ -126,6 +126,37 @@ footprints. Never in a browser. Related, same class, also unfixed: `DeskGeo` dra
 L-desk's return wing so the piece spans **2.86 m** where every consumer reads 1.60 m, and
 32 of 46 shapes draw outside their own `dimMM`.
 
+### A wardrobe's doors open INTO it — double-click one and watch the shelves
+
+**Where to click.** Any room, **3D Model** tab, add a **Wardrobe** from the Library and
+**double-click** it. Watch the doors, and watch what is behind them.
+
+**What is wrong.** `WardrobeGeo` (`components/three/DynamicPart.tsx`) hangs each bay's door
+in a group at the front face and turns it with `rotation={[0, dir * swing, 0]}`. A rotation
+about **+Y** carries local **+x toward −z**, so a door panel extending along `+x` from its
+hinge travels *backwards* — through the back panel, the dividers, and anything on the
+shelves. Both hinge sides do it: the right-hand doors use `dir = -1` and a negated angle,
+which lands them on −z as well. Negating the angle is the fix, and the tell is that at any
+open state above zero the piece's bounds are **exactly its declared box**, which no
+outward-swinging door can produce.
+
+**Read this item and the one above it together.** Both are one-line rotations, both are
+"obviously right", and both are exactly the change that ships turned the other way — the
+washing-machine drum in this same file already carries a comment about the identical
+confusion. If anyone is getting an eye on the purifier, get it on this at the same press.
+
+**Why it is not fixed here.** Nothing in this repo renders geometry, so no gate can tell a
+corrected swing from one flipped twice. **It is pinned rather than fixed**: the count of
+shapes whose footprint *shrinks* as they open is asserted at 1, so making the fix fails that
+test rather than passing it silently — which is the right way round for a defect nobody has
+seen yet.
+
+**Found by** the footprint lane, taking `openState` as a **ramp** rather than a switch. Its
+own table is the argument: the nightstand grows 21 → 66 → 111 → 156 → 201 across five open
+states and the wardrobe reads 12 → 0 → 0 → 0 → 0. Every earlier row in that instrument had
+been measured with doors and drawers **shut**, which made it one of two answers without
+saying which. Never in a browser.
+
 ### A ceiling fan hangs flush against the slab — and an OLD room's fan still does not
 
 **Where to click.** Any room, **3D Model** tab, Library → Appliances → **Ceiling fan**,
