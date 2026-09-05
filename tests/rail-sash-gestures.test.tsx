@@ -134,6 +134,24 @@ describe('a press that moves nothing writes nothing', () => {
 
     expect(useStudio.getState().railLeftW, 'a real drag stored nothing').not.toBeNull();
   });
+
+  it('and a drag on the RIGHT sash stores the RIGHT width, not the left one', () => {
+    // The side control. Everything in `RailSash` is a lookup keyed on `side` —
+    // `WIDTH_PROP`, `FLOOR_TOKEN`, the sign of the delta, the store setter — and the
+    // test above drags the left rail, so a hard-coded `'left'` in the release is
+    // invisible to it. Both stores are read, because writing BOTH would also pass an
+    // assertion that only looked at the right one.
+    useStudio.setState(OPEN);
+    mount();
+
+    const el = sashEl('right');
+    fireEvent.pointerDown(el, { button: 0, clientX: 900, pointerId: 1 });
+    fireEvent.pointerMove(el, { clientX: 840, pointerId: 1 });
+    fireEvent.pointerUp(el, { clientX: 840, pointerId: 1 });
+
+    expect(useStudio.getState().railRightW, 'the right drag stored nothing').not.toBeNull();
+    expect(useStudio.getState().railLeftW, 'the right drag wrote the LEFT rail').toBeNull();
+  });
 });
 
 describe('the grid never loses the variable it reads its columns from', () => {
@@ -193,5 +211,76 @@ describe('opening a rail hands it back to its token', () => {
     useStudio.setState({ ...OPEN, railLeftOpen: false, railLeftW: null, railRightW: 500 });
     useStudio.getState().toggleRail('left');
     expect(useStudio.getState().railRightW).toBe(500);
+  });
+});
+
+describe('a move that arrives before the open has laid out is refused, not seeded from', () => {
+  // The only test here that fakes layout, and it has to: the guard reads a measured width
+  // against a measured floor, and jsdom answers 0 for both, so `m.width >= m.floor` is
+  // `0 >= 0` either way and the mutant that removes it survives untouched. Two stubs give
+  // the two numbers a real browser would have at the instant the defect fires — the rail
+  // still at its CLOSED width because React has not re-rendered yet, and the floor token
+  // resolved from the stylesheet.
+  const CLOSED_PX = 37; // --rail-closed
+  const FLOOR_PX = 228; // --rail-left-min
+  let undo: Array<() => void> = [];
+
+  beforeEach(() => {
+    const realCS = window.getComputedStyle.bind(window);
+    const realRect = Element.prototype.getBoundingClientRect;
+    undo = [
+      () => {
+        window.getComputedStyle = realCS as typeof window.getComputedStyle;
+      },
+      () => {
+        Element.prototype.getBoundingClientRect = realRect;
+      },
+    ];
+    window.getComputedStyle = ((el: Element, pe?: string | null) => {
+      const cs = realCS(el, pe ?? undefined);
+      return new Proxy(cs, {
+        get(t, k) {
+          if (k !== 'getPropertyValue') return Reflect.get(t, k);
+          return (name: string) => {
+            if (name === '--rail-left-min') return `${FLOOR_PX}px`;
+            if (name === '--rail-right-min') return '276px';
+            if (name === '--rail-max-share') return '0.4';
+            return t.getPropertyValue(name);
+          };
+        },
+      });
+    }) as typeof window.getComputedStyle;
+    Element.prototype.getBoundingClientRect = function rect(this: Element) {
+      const w = this.classList?.contains('rail') ? CLOSED_PX : 0;
+      return { x: 0, y: 0, top: 0, left: 0, right: w, bottom: 0, width: w, height: 0, toJSON: () => ({}) } as DOMRect;
+    };
+  });
+
+  afterEach(() => {
+    for (const f of undo) f();
+    undo = [];
+  });
+
+  it('keeps the rail open when every measurement is still the closed width', () => {
+    // The premise, asserted rather than assumed: if the stubs stopped applying, the floor
+    // would be 0, the guard would pass, and this test would be measuring nothing.
+    expect(CLOSED_PX).toBeLessThan(FLOOR_PX);
+
+    useStudio.setState({ ...OPEN, railLeftOpen: false });
+    mount();
+
+    const el = sashEl('left');
+    fireEvent.pointerDown(el, { button: 0, clientX: 400, pointerId: 1 });
+    // The move that arrives too early, and then one far enough left to arm a collapse if
+    // the first one had been believed.
+    fireEvent.pointerMove(el, { clientX: 399, pointerId: 1 });
+    fireEvent.pointerMove(el, { clientX: -100, pointerId: 1 });
+    fireEvent.pointerUp(el, { clientX: -100, pointerId: 1 });
+
+    expect(
+      useStudio.getState().railLeftOpen,
+      'the gesture closed the rail it had just opened, from a width the rail cannot have',
+    ).toBe(true);
+    expect(useStudio.getState().railLeftW).toBeNull();
   });
 });
