@@ -743,6 +743,15 @@ export function resolveConvoy(input: {
       // stand where it started is corrected every frame, and letting it set the
       // limit would pin the set at zero in every direction forever — the inertness
       // `startValid` exists to prevent, arriving through a new door.
+      //
+      // A correction pointing the SAME way as the delta is not filtered out here, and
+      // that was tried: a member pushed further along the way the set is already going
+      // has not run out of room, so on the face of it it should not set a limit. It
+      // cannot matter. Any correction big enough to reach `overX` at all is bigger than
+      // `RIGID_EPS`, which means that member has already failed the rigidity veto and
+      // refuses every delta including the shorter one — so the gesture ends in a refusal
+      // whichever number `overX` holds. A filter here would be a branch nothing can
+      // observe, which is worse than the asymmetry it tidies.
       if (!wallRider && m.startValid) {
         if (Math.abs(cx) > Math.abs(overX)) overX = cx;
         if (Math.abs(cz) > Math.abs(overZ)) overZ = cz;
@@ -805,7 +814,23 @@ export function resolveConvoy(input: {
   if (!chosen.valid) {
     const lx = limited(dx, chosen.overX);
     const lz = limited(dz, chosen.overZ);
-    if (lx !== dx || lz !== dz) {
+    // A limit of zero on every axis that was asked for is the set saying "not one
+    // millimetre", and that is a REFUSAL rather than a slide of length nothing. Two
+    // things go wrong if it is treated as a slide. The member loop emits a move for
+    // every member unconditionally, so a drag that went nowhere would write an
+    // override for each of them — which per `lib/transforms.ts` pins it against a
+    // re-detect and persists it, the same stamp the zero-delta branch above has a
+    // gate to refuse. And the caller would be handed `valid: true` with nothing
+    // moved, so the refusal is neither drawn nor spoken: an arrow-key nudge into a
+    // member's wall becomes a key that does nothing and says nothing, which used to
+    // name the piece that was in the way.
+    // A tolerance, not `=== 0`: `limited` computes `d + over` in floating point, so a
+    // set flush against the wall it is dragged into gives `0.05 + -0.05 = 5e-17` and
+    // an equality here silently let the whole branch through. `RIGID_EPS` is the
+    // file's own definition of "did not move" — a micron — and is what the rigidity
+    // veto three dozen lines above is measured against.
+    const stuck = Math.abs(lx) < RIGID_EPS && Math.abs(lz) < RIGID_EPS;
+    if (!stuck && (lx !== dx || lz !== dz)) {
       const retry = runMembers(lx, lz);
       // Only if the shorter delta actually FIXES it. A set refused for a reason the
       // clamp cannot explain — a member that collides with something not in the
@@ -913,4 +938,78 @@ export function convoyRestore(
     moves.push(...cascadeTransform(m.part.id, m.startPos, m.part.rot, m.descendants, hasRotOverride));
   }
   return moves;
+}
+/** The shape `settleLead` needs from whatever a caller's own resolve returns.
+ *
+ *  Structural rather than an import of `Resolved`, because the two callers reach
+ *  `resolvePlacement` through different wrappers and this function has no business
+ *  knowing which. */
+export type SettleLead = { pos: [number, number, number]; rot: number; valid: boolean };
+
+/** How many times the lead may be re-resolved at a shorter delta before the
+ *  gesture is called unsettled. Four is generous: the ordinary limited frame
+ *  settles on the second pass, and the only thing that can move the answer again
+ *  is the grid snap re-rounding the shorter delta. */
+const SETTLE_PASSES = 4;
+
+export type Settled<R extends SettleLead> = {
+  /** The lead's own resolve at the position the SET can take. */
+  lead: R;
+  /** The convoy, answered at that lead. */
+  co: ConvoyResult;
+  /** False when the passes ran out, or when the shorter delta turned out to be
+   *  illegal for the lead itself. **A caller must treat this as a refusal** — the
+   *  alternative is committing a lead and a set that were resolved at different
+   *  deltas, which is the deformed-but-`valid` arrival `leadPos` exists to prevent. */
+  settled: boolean;
+};
+
+/**
+ * Resolve the lead at the delta the SET can take, and keep asking until the two
+ * answers agree.
+ *
+ * **Why this is not two lines in each caller.** `resolveConvoy` returns `leadPos`,
+ * and a caller that ignores it puts the lead at the full delta while the members
+ * stop short. But a caller that writes `leadPos` RAW is wrong in the other
+ * direction: the limit is a translation, and a translation changes what the piece
+ * is standing on, what it is snapped to, and which guides are being drawn — so the
+ * lead has to be re-resolved THERE, not merely moved there. That re-resolve can
+ * itself move the lead (the grid snap re-rounds a delta that is off-grid by
+ * construction), which changes the members' answer, which can change the limit
+ * again. Hence a loop rather than the single extra pass a comment here used to
+ * claim was provably enough.
+ *
+ * Both tabs called this differently and one of them did neither half, which is the
+ * `lib/drag-resolve.ts` scar exactly: **one rule, two consumers, each with its own
+ * copy.** It lives here so it is reachable from a test — `Draggable` is R3F and
+ * cannot be mounted, so a bug in the 3D copy could only ever be found by looking.
+ */
+export function settleLead<R extends SettleLead>(
+  /** The caller's own resolve, already closed over rotation, size and world. */
+  resolveAt: (x: number, z: number) => R,
+  /** The caller's own `resolveConvoy` call, closed over everything but the lead. */
+  askConvoy: (lead: R) => ConvoyResult,
+  /** The resolve at the delta the pointer actually asked for. */
+  first: R,
+): Settled<R> {
+  let lead = first;
+  let co = askConvoy(lead);
+  for (let pass = 0; pass < SETTLE_PASSES; pass++) {
+    // A refusal is reported where the user asked for it. `leadPos` is `pos` on
+    // every refusing path, so this is also the stable case for them.
+    if (!co.valid) return { lead, co, settled: true };
+    if (co.leadPos[0] === lead.pos[0] && co.leadPos[2] === lead.pos[2]) {
+      return { lead, co, settled: true };
+    }
+    const next = resolveAt(co.leadPos[0], co.leadPos[2]);
+    const nextCo = askConvoy(next);
+    // The shorter delta is not somewhere the lead may rest — it has been carried
+    // into something that is staying put. Refuse rather than pick one of the two
+    // answers: the first has the lead ahead of its set, the second refuses at a
+    // spot the pointer never named.
+    if (!next.valid || !nextCo.valid) return { lead: first, co, settled: false };
+    lead = next;
+    co = nextCo;
+  }
+  return { lead, co, settled: false };
 }

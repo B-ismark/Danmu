@@ -61,7 +61,7 @@ import {
   type Resolved,
 } from '@/lib/drag-resolve';
 import { wouldCreateCycle } from '@/lib/rigid-parent';
-import { convoyRestore, gestureFor, planConvoy, resolveConvoy, travellingWorld, type Convoy, type ConvoyResult } from '@/lib/drag-convoy';
+import { convoyRestore, gestureFor, planConvoy, resolveConvoy, settleLead, travellingWorld, type Convoy, type ConvoyResult } from '@/lib/drag-convoy';
 import { Pickable } from './Pickable';
 import { Highlight } from './Highlight';
 
@@ -474,14 +474,24 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // The convoy has a veto: a spot this piece could take but its company cannot
     // is not a spot the gesture may rest at, so it must not be remembered as the
     // fallback `commit()` slides back to either.
-    const co = carry(resolved.pos, resolved.rot);
-    // The lead goes where the SET can go — `resolved.pos` unless a member ran out of
-    // room first, in which case `leadPos` is the shorter delta the whole set takes.
-    // Set AFTER the convoy is asked, not before: writing `resolved.pos` here and the
-    // members' limited positions a frame later is the set visibly coming apart under
-    // the hand, which is the failure `leadPos` exists to prevent.
-    ref.current.position.set(co.leadPos[0], co.leadPos[1], co.leadPos[2]);
-    const valid = resolved.valid && co.valid;
+    // The lead goes where the SET can go — `resolved` unless a member ran out of
+    // room first, in which case `settleLead` re-resolves this piece at the shorter
+    // delta and re-asks the company until the two agree. **Re-resolved, not merely
+    // moved**: the limit is a translation, and a translation changes what the piece
+    // is standing on and what it is snapped to, so every number below has to come
+    // from the settled answer rather than from the one taken at the pointer.
+    const settle = settleLead<Resolved>(
+      (x, z) => resolvePlacement(x, z, resolved.rot, dim, travelWorld(x, z)),
+      (l) => carry(l.pos, l.rot),
+      resolved,
+    );
+    const lead = settle.lead;
+    const co = settle.co;
+    ref.current.position.set(lead.pos[0], lead.pos[1], lead.pos[2]);
+    // `settled` is part of the legality question, not a diagnostic: an unsettled
+    // frame is one where the lead and its set were resolved at DIFFERENT deltas, and
+    // committing that is the deformed-but-valid arrival the limit exists to prevent.
+    const valid = lead.valid && co.valid && settle.settled;
     // Say it, not just draw it. Design.md claimed both tabs spoke this sentence;
     // only the plan did, and there was no `announce(` anywhere under
     // components/three/ — so in 3D a refusal was a colour change and a tag, and to
@@ -499,19 +509,24 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       // were both stuck, the tag read "blocked" with no name while the live region
       // spoke a different piece's name. A sighted screen-reader user got two
       // answers; anyone relying on the sentence got the wrong piece.
-      const namesMember = resolved.valid ? co.blocked : undefined;
+      const namesMember = lead.valid ? co.blocked : undefined;
       const saying = namesMember ? `blocker:${namesMember.id}` : `self:${partId}`;
       if (saidRef.current !== saying) {
         saidRef.current = saying;
         announce(
           namesMember
             ? `${namesMember.name} will not fit there — the rest of the selection cannot follow.`
-            : `${part.name} will not fit there — ${refusalCause(resolved)}`,
+            : `${part.name} will not fit there — ${refusalCause(lead)}`,
         );
       }
     }
     if (valid) {
-      lastFreePos.current = [resolved.pos[0], resolved.pos[1], resolved.pos[2]];
+      // The SETTLED position, not the one at the pointer. `commit()`'s invalid-drop
+      // fallback slides back to this, and its comment promises "a spot this piece
+      // already stood in" — while a set is limited the piece never stands at the
+      // pointer, so recording that spot made the fallback commit the lead a whole
+      // slide ahead of its members, silently and with `valid` saying true.
+      lastFreePos.current = [lead.pos[0], lead.pos[1], lead.pos[2]];
       // Only on a legal step. On an illegal one the set holds at the last legal
       // delta while the piece under the hand goes red and keeps following the
       // pointer — the separation IS the feedback, and the drop reunites them.
@@ -519,10 +534,16 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     }
     setLive({
       partId,
-      x: resolved.pos[0],
-      y: resolved.pos[1],
-      z: resolved.pos[2],
-      rot: resolved.rot,
+      // Where the piece IS, which is where it is drawn two dozen lines above.
+      // `MeasureGuides` builds the OBB, the four wall-gap rays and the size tag's
+      // anchor out of these three numbers, so publishing the pointer's position
+      // while the mesh sits at the limited one drew every measurement at a place
+      // the piece is not — the hand-typed-measurement failure, arriving as a
+      // correctly derived number about the wrong spot.
+      x: lead.pos[0],
+      y: lead.pos[1],
+      z: lead.pos[2],
+      rot: lead.rot,
       dimMM: dim,
       floor: isFloorStanding(part.category, part.shape),
       valid,
@@ -538,8 +559,10 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
       // point at the wrong piece. `co.blocked` was computed here from the start
       // and then dropped on the floor, so the 3D tab refused a set in silence
       // while the plan named the piece — one rule, two consumers, again.
-      blockedBy: resolved.valid && co.blocked ? co.blocked.name : undefined,
-      snapLines: resolved.snapLines,
+      blockedBy: lead.valid && co.blocked ? co.blocked.name : undefined,
+      // From the settled resolve for the same reason as the position: a guide
+      // asserting two edges are level is a claim about where this piece is.
+      snapLines: lead.snapLines,
     });
     setDragInvalid((prev) => (prev === !valid ? prev : !valid));
     invalidate(); // the object3D moved imperatively — request the repaint
@@ -549,19 +572,15 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     if (!ref.current || !part) return;
     const dim = currentDim();
     const p = ref.current.position;
-    let resolved = resolvePlacement(p.x, p.z, ref.current.rotation.y, dim, travelWorld(p.x, p.z));
-    let co = carry(resolved.pos, resolved.rot);
-
-    // A set limited by one of its members: take the shorter delta and RE-RESOLVE the
-    // lead there rather than just moving it. The limit is a translation, and a
-    // translation changes what the piece is standing on — committing `leadPos` raw
-    // would keep the support (and the rigid parent below) that belonged to a spot the
-    // gesture no longer rests at. Re-asked once, not looped: the second answer is the
-    // same delta, so a third pass could only find what the second already did.
-    if (co.leadPos[0] !== resolved.pos[0] || co.leadPos[2] !== resolved.pos[2]) {
-      resolved = resolvePlacement(co.leadPos[0], co.leadPos[2], resolved.rot, dim, travelWorld(co.leadPos[0], co.leadPos[2]));
-      co = carry(resolved.pos, resolved.rot);
-    }
+    /** Resolve here, ask the company, and keep going until the lead and its set
+     *  agree on one delta — see `settleLead`. Both branches below need it, and the
+     *  fallback branch is the one that used to skip it. */
+    const settleAt = (rot: number) => (x: number, z: number) =>
+      resolvePlacement(x, z, rot, dim, travelWorld(x, z));
+    const first = settleAt(ref.current.rotation.y)(p.x, p.z);
+    let settle = settleLead<Resolved>(settleAt(first.rot), (l) => carry(l.pos, l.rot), first);
+    let resolved = settle.lead;
+    let co = settle.co;
 
     // Invalid drop → rest at the last spot of the drag where the WHOLE convoy was
     // clear (slide-up-to-the-obstacle); fall back to the pre-drag position. The
@@ -569,13 +588,20 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // by construction from both branches — `lastFreePos` is only written on a frame
     // where the company fitted, and `lastValidPos` is this piece's pre-drag
     // position, which makes the delta zero and the company's answer "stay".
-    if (!resolved.valid || !co.valid) {
+    if (!resolved.valid || !co.valid || !settle.settled) {
       const back = lastFreePos.current ?? lastValidPos.current;
       if (back) {
         // Rebuilt at `back`, not reused from the drop point: the world the convoy
         // occupies is a function of the delta, so a world built for a spot the
         // gesture is no longer resting at puts the company in the wrong place.
-        const r = resolvePlacement(back[0], back[2], ref.current.rotation.y, dim, travelWorld(back[0], back[2]));
+        const back0 = settleAt(ref.current.rotation.y)(back[0], back[2]);
+        // Settled here too. `lastFreePos` is a position the whole set could take,
+        // so this normally agrees on the first pass — but "normally" is what the
+        // first version of this assumed, and a fallback that writes the lead from
+        // its own resolve while the members take `co.moves` is precisely the caller
+        // `ConvoyResult.leadPos` was added to stop existing.
+        settle = settleLead<Resolved>(settleAt(back0.rot), (l) => carry(l.pos, l.rot), back0);
+        const r = settle.lead;
         // `r`, whole — never `back` raw with the live angle written beside it, which
         // is what this did. `resolvePlacement` returns a CONTAINMENT-CLAMPED position
         // whether or not the frame came out legal, so throwing it away on the invalid
@@ -593,7 +619,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
         // through the plaster. It also claimed `valid: true` on the way out, which is
         // why nothing went red.
         resolved = r;
-        co = carry(r.pos, r.rot);
+        co = settle.co;
       }
     }
 
@@ -633,7 +659,7 @@ export function Draggable({ partId, children }: { partId: string; children: Reac
     // Members are only ever written on a legal frame, so skipping them here leaves
     // them at the last delta the whole set could take — which is the fallback the
     // block above describes.
-    if (co.valid && co.moves.length > 0) setTransformsFor(co.moves);
+    if (co.valid && settle.settled && co.moves.length > 0) setTransformsFor(co.moves);
 
     lastValidPos.current = [x, y, z];
     lastFreePos.current = null;

@@ -37,7 +37,7 @@ import {
 import { refusalAfterGesture, turnNudge, turnAngleHeld, turnDrop, REFUSAL_HOLD_MS } from '@/lib/refusal';
 import { useDragLive } from '@/lib/drag-live';
 import { snapGuideEnds, type SnapLine } from '@/lib/item-snap';
-import { convoyRestore, planConvoy, resolveConvoy, travellingWorld, type Convoy } from '@/lib/drag-convoy';
+import { convoyRestore, planConvoy, resolveConvoy, settleLead, travellingWorld, type Convoy } from '@/lib/drag-convoy';
 import { cascadeTransform } from '@/lib/rigid-parent';
 import { formatDim, formatLength } from '@/lib/units';
 import { clientDeltaToViewBox, clientToViewBox } from '@/lib/plan-view-transform';
@@ -647,23 +647,17 @@ export const PlanView = forwardRef<PlanViewHandle, {
      *  not the last. The two fallbacks are this function's own idea (keep x, take z),
      *  so the reason one of THEM failed is an answer to a question nobody asked. */
     let refusedAs: Refusal | undefined;
-    for (const [tx, tz] of candidates) {
-      const r = resolveAt(part, tx, tz, convoy, world, startPos);
-      if (!r.valid) {
-        refusedAs ??= r.refusal;
-        continue;
-      }
-      // Where the company lands, and its veto. A candidate this piece could take
-      // but its set cannot is not a candidate: the set refuses as a unit rather
-      // than deforming or shoving a member through the plaster.
-      const co = resolveConvoy({
+    /** Where the company lands, and its veto, for a lead standing at `lead`. A
+     *  candidate this piece could take but its set cannot is not a candidate. */
+    const askConvoy = (lead: ReturnType<typeof resolveAt>) =>
+      resolveConvoy({
         convoy,
         // Always: the plan's rotate never comes through here — it writes the angle
         // directly, and its rigid children ride the cascade below.
         gesture: 'move',
         draggedId: part.id,
-        pos: r.pos,
-        rot: r.rot,
+        pos: lead.pos,
+        rot: lead.rot,
         startPos,
         parts: world,
         footprint: ROOM_DYN.footprint,
@@ -673,16 +667,36 @@ export const PlanView = forwardRef<PlanViewHandle, {
         // snapshot in `dragRef`.
         memberHasPosOverride: (id) => useStudio.getState().positions[id] !== undefined,
       });
-      // Where the SET can go. `resolveConvoy` returns a shorter delta when a member
-      // runs out of room before this piece does, and the candidate loop below writes
-      // the lead from `r.pos` — so without adopting it here the lead would take the
-      // full delta while the members stopped short, and `co.valid` would say true.
-      // The plan already tries axis-slide CANDIDATES; this is the continuous version
-      // of the same idea and has to win over the candidate's own answer.
-      if (co.valid && (co.leadPos[0] !== r.pos[0] || co.leadPos[2] !== r.pos[2])) {
-        r.pos = co.leadPos;
+
+    for (const [tx, tz] of candidates) {
+      const asked = resolveAt(part, tx, tz, convoy, world, startPos);
+      if (!asked.valid) {
+        refusedAs ??= asked.refusal;
+        continue;
       }
-      if (!co.valid) {
+      // Where the SET can go. `resolveConvoy` returns a shorter delta when a member
+      // runs out of room before this piece does, and `settleLead` RE-RESOLVES this
+      // piece there rather than merely moving it — the limit is a translation, and a
+      // translation changes what the piece is standing on, what it is snapped to and
+      // which guides hold. Writing `leadPos` raw put a lamp at desk height over bare
+      // floor, off-grid, with guides drawn where the pointer was: the floating-vase
+      // scar, in the one tab you cannot see height from. 3D re-resolved and the plan
+      // did not, which made one gesture two answers — so the loop lives in `lib/`
+      // and both tabs call it.
+      //
+      // The plan already tries axis-slide CANDIDATES; this is the continuous version
+      // of the same idea and wins over the candidate's own answer.
+      const settle = settleLead(
+        (x, z) => resolveAt(part, x, z, convoy, world, startPos),
+        askConvoy,
+        asked,
+      );
+      const r = settle.lead;
+      const co = settle.co;
+      // `settled` is part of the veto: it is false exactly when the lead and its set
+      // could not be brought to one delta, and committing that is the deformed
+      // arrival `ConvoyResult.leadPos` exists to prevent.
+      if (!co.valid || !settle.settled) {
         // Remembered for the message, but the slide candidates are still tried: a
         // set stopped from moving diagonally can usually still go along one axis.
         blocker = blocker ?? co.blocked;
