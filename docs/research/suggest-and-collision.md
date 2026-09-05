@@ -277,6 +277,98 @@ decide".
   `openRoutes` can refuse the pick outright, so the wiring has to walk down the ranked list
   rather than take one.
 
+### 3.2 The offer floor — MEASURED 2026-09-05, AND THE PREMISE IS REFUTED
+
+**Do not build this. The evidence for it was a price, and the price is right; the claim
+built on top of it is not.** `scripts/offer-floor-sweep.mjs` is the artifact.
+
+`bandCost`'s docblock says *"the thing that is wrong is what gets OFFERED, not what gets
+searched — `isWorthOffering` under-values a real fix"*, and the fix proposed below is a
+relation-aware floor: offer it if any relation went from out of band to in. Swept end to
+end, **that floor would fire on nothing**:
+
+```
+whole-room solves, five presets x every in-band relation x 5 pushes x 3 directions
+  45 classified · 2 refused by the floor · 0 of those brought a relation into band
+
+one piece out of band, EVERY other piece locked — so the only move is the repair
+  22 cases · 11 refused with the solver producing NO CHANGE AT ALL
+             1 refused having actually moved the piece  <- the informative one
+            10 offered
+             0 refusals of either kind repaired the band
+            12 of the 22 carry no hard term at all
+```
+
+**The three-way split is not tidiness and collapsing it was the same defect one level
+in.** A refusal in which the solver produced no change is refused by *any* floor
+whatsoever — the floor is `max(MIN_GAIN_ABS, MIN_GAIN_SHARE × before)` and `MIN_GAIN_ABS`
+is 1.00, so a gain of 0.00 fails it in every room. Counted beside a refusal the gate
+actually decided, the line cannot tell *"the gate is too high"* from *"the search had
+nothing to offer"*, which is exactly what it gets read as answering. **The informative
+denominator is one**, and it was one before the skip was fixed too. The partition is
+total: "offered with no change" cannot exist.
+
+That relocates the finding rather than weakening it. **Eleven of twenty-two cases are a
+solver that will not move the piece at all**, and the ramp is what makes that a fact about
+the term rather than about the rooms, because those same cases start moving as it comes
+down.
+
+**The price is exactly as recorded — a 450 mm band miss on a coffee table is worth about
+one cost unit, and `rect` is refused by 0.01 of it.** What is not true is the next clause.
+With every other piece locked the solver either moves the piece partway back and **stops
+short of its own band** — 0.90 m → 0.60 m against a 0.50 m maximum — or does not move it
+at all. Neither produces the out-of-band → in-band transition the floor would key on.
+
+**Why `inertia`, and how much of it is measured.** In `arrange` mode the origin the search
+is anchored to is the DISPLACED position (`layout-solve.ts` builds `origin` from the parts
+as handed in; `layout-score.ts` charges `hypot(placement − origin)`), so the repair is
+charged for being a change. Read as a **ramp** rather than a switch, over four seeds, with
+one fixed denominator — a case where the solver declined to move counts as not repaired,
+because skipping those made the denominator a function of the setting:
+
+```
+inertia           seed 1        seed 2        seed 3        seed 4     (all / no hard term)
+  x1.00        5/22  0/12    4/22  0/12    5/22  0/12    5/22  0/12
+  x0.50        7/22  0/12    5/22  0/12    4/22  0/12    5/22  0/12
+  x0.25        8/22  2/12    6/22  0/12    8/22  1/12    5/22  0/12
+  x0.00       12/22  4/12    6/22  0/12   12/22  6/12   12/22  6/12
+```
+
+**In the rooms with no hard term — the only population where a one-cost-unit floor can
+bind at all — the band is repaired 0 of 12 times at default inertia, at every one of the
+four seeds.** Lowering the term repairs some of them at three seeds of four; **seed 2
+reaches none even at zero**, so inertia is not the whole obstacle and this is not a claim
+about magnitude.
+
+**The ramp is not a clean isolation and saying so is part of the result.** `weights` is
+built once in `solveLayout` and the same object reaches `snapYaws` and `pruneMoves`, whose
+own comment says it hands a piece its origin place back for free when the room is barely
+worse. So some of the response is the prune. A monotone response across four settings is
+evidence about the TERM; zero-versus-default would only have been evidence about the
+object, which is why the first version of this measurement was replaced.
+
+So the fault is in what gets **searched** after all. An offer floor keyed on an `inBand`
+transition cannot fire, because the transition does not happen. **The successor question
+is `inertia` against a relation that is out of band — not a weight sweep** (§ C is the
+record of what those do to a summed objective), and probably not a weight at all: the
+piece is being charged for undoing a displacement it did not choose.
+
+*Three things about the method that cost a run each and are worth inheriting.* The first
+population pushed pieces in a RANDOM direction and 32 of 35 rooms came back with a hard
+term already non-zero — the sweep had conflated "out of band" with "through the plaster",
+and a floor of one cost unit cannot bind against a term weighted 1000. The second filtered
+those rooms OUT on `HARD_TERMS`, which threw away 88 of 150 and left three to reason from;
+but `access`, `door` and `navigation` are FINDINGS, not broken rooms, and they are exactly
+the rooms a user presses Suggest in. They are recorded per row now rather than filtered.
+The third is the denominator above: skipping a solve that moved nothing gave 11 cases at
+default inertia against 19 at zero, and comparing those two rates compares two populations.
+
+**Not verified:** seeds past 4, and `shuffle` mode — everything here is `arrange`, and the
+successor question will need both.
+
+The section below is the design as it was scoped, kept because the price measurement in it
+is still correct and because the next person needs to see what was refuted.
+
 ### 3.2 The offer floor, which § C already scoped
 
 § C's untried direction — *"the fault is in what gets OFFERED, not what gets searched. A
