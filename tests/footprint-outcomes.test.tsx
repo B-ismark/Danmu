@@ -33,11 +33,12 @@ vi.mock('@/components/three/materials', () => ({
 }));
 
 import { PartGeometry } from '@/components/three/DynamicPart';
-import { defaultScene, SHAPES, PART_LIBRARY, type ScenePart, type Shape } from '@/lib/scene-spec';
-import { footFromPart, footOverlap, footArea } from '@/lib/geometry';
+import { defaultScene, collidesAt, SHAPES, PART_LIBRARY, type ScenePart, type Shape } from '@/lib/scene-spec';
+import { footFromPart, footOverlap, pointInFoot } from '@/lib/geometry';
 import { verticalExtent } from '@/lib/physics';
 import { isSoftFurnishing } from '@/lib/layout-rules';
 import { footprintForLayout } from '@/lib/footprint';
+import { hitsAt, planPaintOrder } from '@/lib/plan-hit';
 import { pointInPoly } from '@/lib/geometry';
 import { walk, worldHulls, hullsOverlap, pointInHull, convexHull } from './helpers/geometry-walk';
 
@@ -74,6 +75,16 @@ function hullsOf(p: ScenePart) {
   return out;
 }
 
+/** The id a plain click gets under the BOX footprints — `hitsAt`'s answer in the form the
+ *  sweep needs. Pinned to `hitsAt` by a control below rather than trusted. */
+function frontIdByBox(x: number, z: number, order: readonly ScenePart[]): string | null {
+  let id: string | null = null;
+  for (const part of order) {
+    if (pointInFoot(x, z, footFromPart(part.pos, part.rot, part.dimMM, part.circle))) id = part.id;
+  }
+  return id;
+}
+
 /** The pair test `collidesAt` runs, with its footprint arm swapped out. */
 function pairHits(a: ScenePart, b: ScenePart, mode: 'box' | 'geometry'): boolean {
   const [aB, aT] = verticalExtent(a.category, a.shape, a.dimMM, a.pos[1]);
@@ -92,6 +103,55 @@ function pairHits(a: ScenePart, b: ScenePart, mode: 'box' | 'geometry'): boolean
 }
 
 describe('one box per piece, against the geometry the app draws', () => {
+  it('the box arm IS the production predicate, not a faithful copy of it', () => {
+    // Both arms of every rate below are written out here rather than called out of `lib/`,
+    // because the geometry arm has to differ in exactly ONE place and the two must
+    // otherwise be the same function. A copy that is faithful today is still a copy, and
+    // the failure it invites is silent in the worst way: change `collidesAt`'s 0.005
+    // vertical epsilon, its -0.01 pad or its soft-furnishing filter and BOTH arms here
+    // still agree with each other, all six tests stay green, and every number this file
+    // publishes becomes a measurement of a predicate the app no longer runs.
+    const obstacle = { id: 'obs', name: 'wardrobe', shape: 'wardrobe' as Shape, category: 'storage',
+                       dimMM: [2400, 600, 2100] as [number, number, number],
+                       pos: [0, 0, 0] as [number, number, number], rot: 0, color: '#b07a52' } as unknown as ScenePart;
+    let checked = 0;
+    let agreed = 0;
+    let collided = 0;
+    for (let x = -1.6; x <= 1.6; x += 0.1) {
+      for (let z = -1.6; z <= 1.6; z += 0.1) {
+        const m = { id: 'mover', name: 'mover', shape: 'box' as Shape, category: 'other',
+                    dimMM: [600, 600, 900] as [number, number, number],
+                    pos: [x, 0, z] as [number, number, number], rot: 0, color: '#888' } as unknown as ScenePart;
+        const mine = pairHits(m, obstacle, 'box');
+        checked++;
+        if (mine === collidesAt([m, obstacle], 'mover', m.pos, m.rot, m.dimMM)) agreed++;
+        if (mine) collided++;
+      }
+    }
+    // All three matter. A run that checked nothing agrees on nothing and would pass a bare
+    // equality; a fixture that never collides agrees everywhere for the wrong reason.
+    expect(checked, 'positions compared').toBeGreaterThan(500);
+    expect(collided, 'the fixture must reach the colliding case').toBeGreaterThan(0);
+    expect(agreed, 'box arm disagreed with collidesAt').toBe(checked);
+  });
+
+  it('the picking arm IS `hitsAt`, and the paint order IS `planPaintOrder`', () => {
+    const parts = defaultScene('rect', ROOM_W, ROOM_D).filter((p) => !isSoftFurnishing(p));
+    const order = planPaintOrder(parts);
+    let checked = 0;
+    let hits = 0;
+    for (let x = -3; x <= 3; x += 0.1) {
+      for (let z = -2; z <= 2; z += 0.1) {
+        checked++;
+        const theirs = hitsAt(x, z, parts)[0] ?? null;
+        expect(frontIdByBox(x, z, order), `box pick disagreed with hitsAt at ${x.toFixed(2)},${z.toFixed(2)}`).toBe(theirs);
+        if (theirs) hits++;
+      }
+    }
+    expect(checked, 'points compared').toBeGreaterThan(1000);
+    expect(hits, 'the raster must actually land on furniture').toBeGreaterThan(0);
+  });
+
   const rooms = LAYOUTS.map((layout) => ({
     layout,
     poly: footprintForLayout(layout, ROOM_W, ROOM_D),
@@ -176,10 +236,7 @@ describe('one box per piece, against the geometry the app draws', () => {
     for (const room of rooms) {
       // `planPaintOrder`'s order, computed ONCE off the box areas, and used by both
       // arms. Re-deriving it from hull areas would move a second thing.
-      const order = [...room.parts]
-        .map((part, i) => ({ part, i, area: footArea(footFromPart(part.pos, part.rot, part.dimMM, part.circle)) }))
-        .sort((a, b) => b.area - a.area || a.i - b.i)
-        .map((r) => r.part);
+      const order = planPaintOrder(room.parts);
 
       const xs = room.poly.map((p) => p[0]);
       const zs = room.poly.map((p) => p[1]);
@@ -187,18 +244,9 @@ describe('one box per piece, against the geometry the app draws', () => {
         for (let z = Math.min(...zs); z <= Math.max(...zs); z += PICK_STEP) {
           if (!pointInPoly(x, z, room.poly)) continue;
           sampled++;
-          let boxId: string | null = null;
+          const boxId = frontIdByBox(x, z, order);
           let geoId: string | null = null;
           for (const part of order) {
-            const f = footFromPart(part.pos, part.rot, part.dimMM, part.circle);
-            const c = Math.cos(f.rot), s = Math.sin(f.rot);
-            const dx = x - f.cx, dz = z - f.cz;
-            const lx = dx * c - dz * s;
-            const lz = dx * s + dz * c;
-            const inBox = part.circle
-              ? (lx / f.hw) ** 2 + (lz / f.hd) ** 2 <= 1
-              : Math.abs(lx) <= f.hw && Math.abs(lz) <= f.hd;
-            if (inBox) boxId = part.id;
             if (hullsOf(part).some((h) => pointInHull(x, z, h.hull))) geoId = part.id;
           }
           if (boxId === geoId) continue;
@@ -223,7 +271,11 @@ describe('one box per piece, against the geometry the app draws', () => {
       console.log(`    ${k.padEnd(28)} ${v}`);
     }
     expect(sampled).toBeGreaterThan(0);
-  });
+    // 166,664 points x every part's hulls, ~3.8 s idle here. vitest.config.ts's own
+    // measured table puts an 18-way oversubscribed runner at ~9.6x, which lands this on
+    // top of the 30 s default — and being killed there surfaces as a hang, not a slow
+    // test. Stated beside the body, which is this repo's convention.
+  }, 120_000);
 
   it('sweeps one mover past every shape and counts the refusals that differ', () => {
     // The population the resting-pair count above cannot express. `collidesAt` is asked
@@ -338,5 +390,6 @@ DRAG SWEEP — a 600 x 600 x 900 box moved past one obstacle, ${STEP * 1000} mm 
     console.log(`
   shapes where NO position differs: ${quiet.length} of ${built}  [${quiet.map((r) => r.shape).join(', ')}]`);
     expect(built + missing.length).toBe(SHAPES.length);
-  });
+    // ~1.9 s idle; same argument as the picking body above.
+  }, 120_000);
 });
