@@ -8,14 +8,16 @@
 // copies would be in the measurements too. Same argument as `StudioShell` itself
 // existing: two copies of a layout is two places for it to drift.
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useStudio } from '@/lib/store';
 import { Icon } from '@/components/ui/Icon';
 import { PartTree } from '../PartTree';
 import { Inspector } from '../Inspector';
+import { RailSection } from '../RailSection';
 import { RailFooter } from '../RailFooter';
 import { SelectionHeader } from '../SelectionHeader';
 import { RoomHealthDot } from '../RoomTools';
+import { ViewOptions } from '../ViewOptions';
 
 export type RailSide = 'left' | 'right';
 
@@ -99,8 +101,41 @@ export function RightRailBody({ open }: { open: boolean }): ReactNode {
   return (
     <>
       <SelectionHeader />
-      <Inspector />
+      {/* The Inspector and the View section share ONE scroll region, and the footer
+          stays pinned below it — the same shape the left rail has had all along.
+
+          Before this they were two siblings of `.rail` directly, and only one of them
+          could give: `RailSection` is `flex: 0 0 auto` when it is not `grow`, and
+          `.rail-footer` is `flex-shrink: 0`. Measured in a browser at a 1100 × 520
+          window, the right rail is 427px and its children were 37 + 94 + 277 + 56 =
+          464, so the pinned footer painted **37px past the rail's own bottom edge**;
+          at 420px tall it was 137px. `.rail` sets no `overflow`, so there was no clip,
+          no scrollbar and no error — the vertical twin of the horizontal spill
+          `globals.css` already records.
+
+          One scroll box rather than a height cap on the View section, because a cap
+          is a number that has to be re-derived every time either panel grows. */}
+      <div style={{ flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+        <Inspector />
+        <ViewSection />
+      </div>
       <RailFooter />
     </>
+  );
+}
+
+/** The View panel (Floor grid / Decor / Quality), which used to be the LEFT
+ *  rail's own section. It lives between the Inspector and the pinned footer so
+ *  that, with nothing selected, it sits directly on top of Add, and with a piece
+ *  or a wall selected it sits underneath the panel's last section (Exact size /
+ *  the wall's height). Open by default rather than matching the left rail's old
+ *  `view: false`: the controls are the useful half of the no-selection state,
+ *  and the disclosure still exists for the tall-selection case. */
+function ViewSection() {
+  const [open, setOpen] = useState(true);
+  return (
+    <RailSection title="View" open={open} onToggle={() => setOpen((v) => !v)} divider={false}>
+      <ViewOptions />
+    </RailSection>
   );
 }

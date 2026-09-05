@@ -14,7 +14,6 @@ import { RailSection } from './RailSection';
 import { RoomTools } from './RoomTools';
 import { NorthDial } from './NorthDial';
 import { LightingPicker } from './LightingPicker';
-import { ViewOptions } from './ViewOptions';
 import { duplicateSelection, removeParts } from './KeyboardShortcuts';
 import { THEMES, themeColorFor, type Theme } from '@/lib/themes';
 import { LIGHTING } from '@/lib/lighting-moods';
@@ -55,8 +54,8 @@ export function PartTree() {
   // Local, not persisted: which drawer you left open is not a preference worth
   // remembering across rooms, and `partialize` should stay about how the room
   // LOOKS. Room and Catalog open by default — the dimensions and the piece list
-  // are what the rail is for; Style and View are occasional.
-  const [sec, setSec] = useState({ room: true, style: false, view: false, pieces: true });
+  // are what the rail is for; Style is occasional (View moved to the right rail).
+  const [sec, setSec] = useState({ room: true, style: false, pieces: true });
   const toggle = (k: keyof typeof sec) => setSec((v) => ({ ...v, [k]: !v[k] }));
   const listRef = useRef<HTMLDivElement>(null);
   // Where a Shift-range starts. Every plain click moves it; a range never does, so
@@ -374,6 +373,12 @@ export function PartTree() {
           // rule 2 means by a displayed measurement having to be derived: the number
           // beside the fields disagreed with the fields and neither was labelled
           // with its unit.
+          //
+          // Deleted once on the grounds that it was the line printing `0.0×0.0m`, and
+          // put back because it was not: the divide was gone by then, this rendered
+          // the room correctly, and a `meta` is what a COLLAPSED section says about
+          // itself — "the fields are the measurement now" is true only while the
+          // fields are on screen, which is the state a meta does not serve.
           meta={<span className="mono">{room.width.toFixed(1)}×{room.depth.toFixed(1)}m</span>}
           open={sec.room}
           onToggle={() => toggle('room')}
@@ -410,9 +415,9 @@ export function PartTree() {
           {/* Which way the room faces. It used to live inside the Lighting mood
               that consumed it, alongside a latitude and a longitude; it is a
               property of the ROOM — `lib/storage.ts` says so in as many words —
-              so it belongs with the room's other dimensions. See NorthDial. */}
+              so it belongs with the room's other dimensions. NorthDial renders
+              its own Facing label, with the drag hint on an info tooltip. */}
           <div style={{ marginTop: 12 }}>
-            <span className="ds-label" style={{ display: 'block', marginBottom: 6 }}>Facing</span>
             <NorthDial />
           </div>
         </RailSection>
@@ -552,10 +557,6 @@ export function PartTree() {
             </button>
           </div>
         )}
-        </RailSection>
-
-        <RailSection title="View" open={sec.view} onToggle={() => toggle('view')}>
-          <ViewOptions />
         </RailSection>
 
         <RailSection

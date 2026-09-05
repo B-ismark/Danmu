@@ -759,20 +759,27 @@ describe('the studio shells', () => {
   });
 
   it('gives the sash the window-splitter role and its keys', () => {
-    expect(SASH).toMatch(/role="separator"/);
-    expect(SASH).toMatch(/aria-valuenow/);
-    expect(SASH, 'a separator that cannot be focused cannot be operated').toMatch(/tabIndex=\{0\}/);
+    // `codeOnly`, for the reason the floor gate below spells out — and this assertion is
+    // where that fix was NOT applied when its neighbour got it. `RailSash` now explains
+    // the impossible-slider defect in prose, so `aria-valuenow` appears in four comments;
+    // deleting the attribute itself left this green. The key list is `toContain` on
+    // quoted literals, which no comment in that file writes.
+    const CODE = codeOnly(SASH);
+    expect(CODE).toMatch(/role="separator"/);
+    expect(CODE).toMatch(/aria-valuenow=/);
+    expect(CODE, 'a separator advertising no minimum publishes an unbounded range').toMatch(/aria-valuemin=/);
+    expect(CODE, 'a separator that cannot be focused cannot be operated').toMatch(/tabIndex=\{0\}/);
     for (const key of ['Enter', 'Home', 'End', 'ArrowRight', 'ArrowLeft']) {
-      expect(SASH, `the splitter pattern binds ${key}`).toContain(`'${key}'`);
+      expect(CODE, `the splitter pattern binds ${key}`).toContain(`'${key}'`);
     }
   });
 
   it('drags by writing CSS, never React state', () => {
     // A setState per pointermove re-renders the piece tree, the inspector and the
     // R3F tree ~60×/second while the user is judging a panel width.
-    expect(SASH).toMatch(/requestAnimationFrame\(paint\)/);
-    expect(SASH).toMatch(/style\.setProperty\(WIDTH_PROP\[side\]/);
-    expect(SASH, 'the ResizeObserver must stand down mid-drag or it re-renders anyway').toMatch(
+    expect(codeOnly(SASH)).toMatch(/requestAnimationFrame\(paint\)/);
+    expect(codeOnly(SASH)).toMatch(/style\.setProperty\(WIDTH_PROP\[side\]/);
+    expect(codeOnly(SASH), 'the ResizeObserver must stand down mid-drag or it re-renders anyway').toMatch(
       /if \(drag\.current\) return;/,
     );
   });
@@ -780,9 +787,32 @@ describe('the studio shells', () => {
   it('takes its floor and ceiling from tokens', () => {
     // A number copied into a pointer handler is a floor that stops moving when
     // the stylesheet's does.
-    expect(SASH).toMatch(/--rail-left-min/);
-    expect(SASH).toMatch(/--rail-max-share/);
-    expect(SASH, 'no invented pixel floors').not.toMatch(/floor = \d/);
+    //
+    // `codeOnly`, and it is the difference between a gate and a decoration: this file
+    // read the RAW source, and `RailSash` now explains the compact step in prose, so
+    // four comments name `--rail-left-min` and the assertion matched off one of them.
+    // Deleting `FLOOR_TOKEN` and hard-coding `floor: 228` left this green. Measured
+    // both ways: green with the mutation on this branch, RED with the same mutation
+    // against a tree whose only occurrence was the code. The suite catches that
+    // particular mutant elsewhere by accident — the jsdom gesture tests go red when the
+    // floor stops resolving to 0 — but a mutation that keeps `tokenPx(shell, …)` and
+    // merely inlines the string would survive both, which is what makes this a gate.
+    const CODE = codeOnly(SASH);
+    expect(CODE).toMatch(/--rail-left-min/);
+    expect(CODE).toMatch(/--rail-max-share/);
+    // The width the rail RENDERS across the compact step. It used to be read HERE too,
+    // for `aria-valuemin`, and that was wrong above the compact step — the tight tokens
+    // sit on bare `:root`, so a 400px rail advertised a minimum of 208 it could not
+    // reach. `narrowest()` derives it from the measured width instead, so the token has
+    // exactly one reader again and this assertion moved to it.
+    expect(codeOnly(DOCKED), 'the compact step is rendered from the token, not a number').toMatch(
+      /--rail-\$\{side\}-tight/,
+    );
+    // `[:=]`, because the first version could not match the idiom it was written to
+    // catch: the numbers it was aimed at were object PROPERTIES (`floor: 228`) and the
+    // pattern only matched an assignment. Its own docblock next door said so.
+    expect(CODE, 'no invented pixel floors').not.toMatch(/floor\s*[:=]\s*\d/);
+    expect(CODE, 'no invented pixel ceilings either').not.toMatch(/ceiling\s*[:=]\s*\d/);
   });
 });
 
@@ -1094,5 +1124,73 @@ describe('a piece row keeps enough width to read the piece name', () => {
       nameWidth,
       `a piece name gets ${nameWidth}px at --rail-left-min with ${buttons} row actions`,
     ).toBeGreaterThanOrEqual(56);
+  });
+});
+
+describe('the room-check actions wrap rather than cut a word', () => {
+  // Fix and Shuffle sit under the health chip in the LEFT rail, inside `PartTree`'s own
+  // `12px 16px` wrapper and OUTSIDE its scroller, so their content box is the rail width
+  // less 32 — the same figure every rail assertion above uses.
+  //
+  // They were briefly a `1fr 1fr` grid, which aligned them with the room-check button
+  // above and truncated both labels at every rail width that ships. `.ds-btn`'s own rule
+  // in `globals.css` names the two legal answers for a button with no room — its ROW
+  // wraps, or its label gets an element and ellipsises — and this row takes the first,
+  // because the second cuts `Shuffling…`, which is the tell that has to survive
+  // `prefers-reduced-motion` when the spinner does not turn.
+  const ROOM = readSrc('components', 'studio', 'RoomTools.tsx');
+
+  it('declares a wrapping row whose buttons grow but never shrink', () => {
+    const row = /\{\/\* Two `\.ds-btn`s[\s\S]*?<div style=\{\{([^}]*)\}\}>/.exec(ROOM);
+    expect(row, 'the Fix/Shuffle row is no longer where this test looks for it').toBeTruthy();
+    expect(row![1], 'the row must wrap, or a label is cut instead').toContain("flexWrap: 'wrap'");
+
+    // `1 0 auto` and not `1 1 auto`: the middle number is the whole mechanism. A shrink
+    // factor of 1 lets a button go below its content width, which is truncation again
+    // with a different declaration — and it would leave `flexWrap` in the file looking
+    // like the fix while the defect is back.
+    //
+    // Asserted PER BUTTON, against that function's own slice. The first version counted
+    // both declarations across the whole file and wanted two of each — and `RoomTools`
+    // has other centred buttons, so deleting one of these two left the count at two and
+    // the mutant alive. A count over the wrong population is not a weaker assertion, it
+    // is a different one.
+    for (const fn of ['FixAllButton', 'ShuffleButton']) {
+      const from = ROOM.indexOf(`function ${fn}(`);
+      expect(from, `${fn} is not declared in RoomTools.tsx`).toBeGreaterThan(-1);
+      const next = ROOM.indexOf('\nfunction ', from + 1);
+      const body = ROOM.slice(from, next === -1 ? undefined : next);
+      expect(body, `${fn} must grow but never shrink`).toContain("flex: '1 0 auto',");
+      expect(body, `${fn} is stretched and .ds-btn sets no justify-content`).toContain(
+        "justifyContent: 'center',",
+      );
+    }
+  });
+
+  it('and the arithmetic is why: half the tight rail cannot hold the busy label', () => {
+    // The measurement the wrap answers to. If this ever comes out generous, the grid was
+    // fine after all and this row can go back to one — but it is not a matter of taste
+    // while the number is 35.
+    const btn = /^\.ds-btn \{[\s\S]*?^\}/m.exec(CSS);
+    expect(btn, '.ds-btn is not declared in globals.css').toBeTruthy();
+    const padX = Number(/padding: 0 (\d+)px/.exec(btn![0])![1]);
+
+    // The row's own gap, and the icon each button carries, read out of the source.
+    const rowGap = Number(/flexWrap: 'wrap', gap: (\d+) \}\}>\s*<FixAllButton/.exec(ROOM)![1]);
+    const iconPx = Number(/<Icon name="shuffle" size=\{(\d+)\}/.exec(ROOM)![1]);
+    const btnGap = Number(/height: 30,\s*fontSize: 11,\s*gap: (\d+),/.exec(ROOM)![1]);
+
+    const content = Number(/^(\d+)px$/.exec(token('rail-left-tight'))![1]) - 32;
+    const column = (content - rowGap) / 2;
+    const label = column - padX * 2 - iconPx - btnGap;
+
+    // ~5.9px per character at 11px, scaled from the 13px figure the piece-name floor
+    // above uses (~7px). Chosen rather than derived, for the reason recorded there: a
+    // derived floor moves with the thing it constrains and can never go red.
+    const needed = Math.round('Shuffling…'.length * 5.9);
+    expect(
+      label,
+      `a 1fr column at --rail-left-tight leaves ${label}px for a label that wants ~${needed}px`,
+    ).toBeLessThan(needed);
   });
 });

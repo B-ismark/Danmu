@@ -576,14 +576,28 @@ point of the change, and no test can tell you it reads that way on screen.
 
 **What wrong looks like.**
 
-- **The row clipping.** Two `.ds-btn`s sit in a `display: flex` row with **no
-  `flexWrap`**, inside a rail whose box is `overflow: hidden`. The derived budget is
-  ~166px of button in 176px of rail at `--rail-left-tight` — about 10px of slack, never
-  measured on a real font. Drag the left rail to its narrowest and watch for `Shuffle`
-  losing its right-hand side or its label. There is no scrollbar and no error; the
-  glyphs just stop. (`LightingPicker` next door solves the same problem with
-  `flexWrap: 'wrap'` *and* two assertions in `tests/reflow.test.ts`; this row has
-  neither yet.)
+- **The row fitting.** Two `.ds-btn`s sit in a wrapping `display: flex` row under
+  the health chip, each `flex: 1 0 auto` — they grow to fill a line they fit on and,
+  because they may not shrink, wrap onto two lines rather than cut a word. The rail
+  around the row is `overflow: hidden`, so anything past the edge would be eaten
+  with no scrollbar and no error.
+
+  **Drag the left rail to its narrowest and press Shuffle.** What to watch is the
+  busy label: it becomes `Shuffling…` for the whole 2–3 s freeze, and under
+  `prefers-reduced-motion` the ring does not turn, so that word is the only tell
+  that anything is happening. It must be whole. Whether the row wraps to two lines
+  while it does that is fine and is the intended trade.
+
+  This bullet twice described a version that truncated. It was briefly a `1fr 1fr`
+  grid whose columns are 85px at `--rail-left-tight` against 50px of `.ds-btn`
+  chrome — 35px for a word that wants ~41px, and ~59px while busy — and the note
+  then told a reviewer the full label was *"still reachable on hover"*. It was not:
+  Fix's `title` never contains the word "Fix" and Shuffle's contains "Fix" and not
+  "Shuffle". **A hand-off note that names the wrong thing to look at does not
+  merely mislead, it scopes the search** — someone hovering a cut label to check a
+  tooltip would have confirmed the truncation and gone no further.
+  (`tests/reflow.test.ts` now holds both halves: that the row wraps and may not
+  shrink, and the arithmetic saying why.)
 - **The refusal.** On a `t` or `open` footprint roughly a sixth to a third of presses
   answer *"No new arrangement this time"* and leave the room alone. That is **correct**
   — it is refusing to show a room with something in the way — but it must not read as a
@@ -739,8 +753,72 @@ proves the page.
 *Owner: `shell`. The Library click-through was looked at on 2026-08-30 — the Add rail is
 present and the panel is visible on both tabs, which is the whole of what was left for a
 person. The three signposts and the click-through are gated by `tests/studio-copy.test.tsx`
-and `tests/library-click-through.test.tsx`. The one item below is new, and it is here
-because what a test can check about it and what a person can see are different halves.*
+and `tests/library-click-through.test.tsx`. The two items below are new, and each
+is here because what a test can check about it and what a person can see are different
+halves.*
+
+### Pressing Shuffle moves the button out from under the pointer
+
+*Filed by `rails` on 2026-09-05 from a peer's browser measurement during PR #115's review.
+Nothing here fixes it, and it is a look rather than a probe because the question is what a
+person does next, not what a number says.*
+
+Measured on a production build at 1100 × 900, on the plan tab, in the **left** rail's room
+actions row. *(This said "right rail" until a peer checked it: `RoomTools` renders from
+`PartTree.tsx:364`, and `PartTree` is `LeftRailBody`. The table below derives from
+`--rail-left-tight`, nine lines on, which is the tell that was sitting in the same entry.)*
+
+| | idle | pressed |
+|---|---|---|
+| the Shuffle button | 95px wide | **175px** |
+| the row holding it | 30px, one line | **66px, two lines** |
+
+The row is a wrapping flex row — that is the fix from § E, and it is the right one: at
+`--rail-left-tight` there are 85px per column and `.ds-btn` spends 50px of it on chrome,
+so a grid cut the word instead. But `Shuffling…` is ~18px wider than `Shuffle`, and the
+row answers by wrapping, so **Fix takes the whole first line and Shuffle drops to the
+second**. The pointer has not moved and is now over a different control.
+
+**What to look at.** Press Shuffle on the plan tab at a laptop width and do not move the
+mouse. Watch whether the button leaves from under the cursor, and whether the reflow reads
+as the app responding or as the layout breaking. Then press it again without moving —
+whether that second press lands on **Fix** is the thing worth knowing.
+
+**What would fix it, if it needs fixing:** reserve the busy width so the row cannot
+reflow — render the longest label as a hidden sizer inside the button, so its width is the
+maximum of its two states and neither string changes it. That is a change to `RoomTools`
+and it is deliberately not in #115, because the busy window is short and a peer caught it
+**once in four runs**: a fix nobody can watch land is worse than a recorded measurement.
+
+**Unverified either way:** a real font at a real DPI, and touch, where the finger is
+already lifted before the reflow happens and the second-press question does not arise.
+
+### A dragged SET slides to its binding member — and only a pointer can show it
+
+*Filed by `drag` (§ H.8, built 2026-09-05, PR #113). It is here rather than in a probe
+for a reason worth keeping: a probe was built and run against both builds, it reproduced
+the old behaviour in a browser — a two-piece selection stopping **3.55 m short** of where
+the dragged piece reaches alone — and it still could **not tell the two builds apart**.
+An arrow nudge is a fixed step, and in every fixture reachable from the keyboard the
+binding member's clamp lands exactly on the lattice, where "refuse" and "slide to the
+limit" stop in the same place to six decimals. **A sub-step delta needs a pointer drag**,
+which is the one gesture that probe never made. Five versions failed five different ways
+and all five are written into `scripts/slide-probe.mjs`.*
+
+**Where to click.** Merge a bed with a nightstand on each side, or shift-click any
+multi-selection, and drag it **with the pointer** toward the wall the members are nearest.
+
+**Right.** The set slides until the nearest member is flush against the wall and stops
+there, still following the hand. Nothing goes red; nothing is announced.
+
+**Wrong.** The piece under the hand runs ahead of its company. Or the size tag and the
+wall-gap labels sit somewhere the piece is not — 3D drew the mesh at the limited position
+while publishing the live channel from the pointer's, so `MeasureGuides` built the OBB at
+a place the piece was not; that is fixed, and this is where it would show.
+
+**Unverified and named as such:** four mutants survive in that change — both `Draggable`
+call sites and the two `settled` gates — because no test in this repo reaches an R3F
+component and the probe cannot make a sub-step drag. This row is the only check they have.
 
 ### The placement row is two buttons now — does it still read as a row, at every rail width?
 

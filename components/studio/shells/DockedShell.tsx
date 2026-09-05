@@ -25,7 +25,7 @@
 // the container queries are what make a dragged-narrow rail safe rather than
 // silently clipped.
 
-import { type CSSProperties, type ReactNode, useRef } from 'react';
+import { type CSSProperties, type ReactNode, useLayoutEffect, useRef } from 'react';
 import { useStudio } from '@/lib/store';
 import type { StudioLayout } from '../NarrowViewportBanner';
 import { RailSash } from './RailSash';
@@ -35,8 +35,15 @@ export const RAIL_ID = { left: 'studio-rail-left', right: 'studio-rail-right' } 
 
 export function DockedShell({ surface, layout }: { surface: ReactNode; layout: StudioLayout }) {
   const { leftOpen, rightOpen, toggleRail } = useRails();
-  const storedLeft = useStudio((s) => s.railLeftW);
-  const storedRight = useStudio((s) => s.railRightW);
+  // Subscribed so that a width written from ANYWHERE re-renders this shell — the
+  // layout effect below carries no dependency array and runs after every render, so
+  // the subscription is what turns a store write into a DOM write. The values are
+  // deliberately not read for the write itself; see `applySashWidths`. Deleting
+  // either line leaves a shell that paints the right thing on mount and never
+  // updates, which is why `tests/rail-sash-gestures.test.tsx` writes a width from
+  // outside the component and asserts the variable follows.
+  useStudio((s) => s.railLeftW);
+  useStudio((s) => s.railRightW);
 
   const shellRef = useRef<HTMLDivElement>(null);
   const leftRef = useRef<HTMLElement>(null);
@@ -65,6 +72,29 @@ export function DockedShell({ surface, layout }: { surface: ReactNode; layout: S
     return layout === 'compact' ? `var(--rail-${side}-tight)` : `var(--rail-${side})`;
   };
 
+  /** Write both variables from the store. The layout effect below is one caller and
+   *  `RailSash` is the other, because that effect runs on a RENDER and the gestures
+   *  that have to undo a painted preview are exactly the ones that change no state:
+   *  a press that resized nothing, and a double-click on a rail whose stored width is
+   *  already `null`. One function so the expression cannot be written twice.
+   *
+   *  **`getState()` rather than this render's values, and that is the whole reason the
+   *  subscriptions above read nothing.** `RailSash` calls this in the same handler as
+   *  `setRailWidth`, one line later — so a closure over the subscribed values would
+   *  write the PRE-drag width every time, and be correct only because the store change
+   *  schedules a render whose layout effect runs before the browser paints. That is an
+   *  invariant nobody stated and no test in this repo can see: `sashVar()` reads the
+   *  final value of `el.style` after `act()` has flushed everything, so swapping those
+   *  two lines, or demoting the effect below to `useEffect`, leaves the suite green.
+   *  Reading at call time removes the dependency rather than documenting it. */
+  const applySashWidths = () => {
+    const el = shellRef.current;
+    if (!el || stacked) return;
+    const { railLeftW, railRightW } = useStudio.getState();
+    el.style.setProperty('--sash-left', railWidth(railLeftW, 'left'));
+    el.style.setProperty('--sash-right', railWidth(railRightW, 'right'));
+  };
+
   const shell = (
     stacked
       ? {
@@ -75,8 +105,8 @@ export function DockedShell({ surface, layout }: { surface: ReactNode; layout: S
           overflow: 'auto',
         }
       : {
-          '--sash-left': railWidth(storedLeft, 'left'),
-          '--sash-right': railWidth(storedRight, 'right'),
+          // `--sash-left` / `--sash-right` are NOT set here — see the layout effect
+          // below, which writes them to the DOM after every render.
           gridTemplateColumns: [
             leftOpen ? 'var(--sash-left)' : 'var(--rail-closed)',
             '1fr',
@@ -85,6 +115,37 @@ export function DockedShell({ surface, layout }: { surface: ReactNode; layout: S
           height: '100%',
         }
   ) as CSSProperties;
+
+  // The two sash variables are written to the DOM after every render rather than
+  // carried in the style object above, and that is a correctness fix rather than a
+  // preference.
+  //
+  // `RailSash` used to hand a width back to its token with
+  // `style.removeProperty('--sash-left')`. React never learns about that:
+  // `setValueForStyles` writes a key only when the value it last RENDERED differs
+  // from the new one, so removing a property React believes it already set is
+  // invisible to that comparison and is never restored. On a rail whose stored width
+  // was already `null` — a press that resizes nothing reaches that state, and
+  // `toggleRail` does NOT clear a stored width, which three comments in this branch
+  // claimed and `lib/store.ts` explains at length that it deliberately does not — the
+  // accompanying `setRailWidth(side, null)` changed nothing either, so the property
+  // simply stayed gone. The next open then resolved
+  // `grid-template-columns: var(--sash-left) 1fr var(--rail-right)` against a
+  // variable defined nowhere else in the app: invalid at computed-value time, which
+  // for `grid-template-columns` means `none`, which auto-places the left rail, the
+  // canvas and the right rail one per ROW. Double-clicking the sash to reset it took
+  // the same path and could not repair it, because that was another
+  // remove-then-write-the-same-null.
+  //
+  // Writing unconditionally after every render makes the DOM the source of truth
+  // instead of React's memory of it, so no caller can put the shell into a state
+  // React declines to fix. The skip is for a live drag only: `RailSash` paints a px
+  // preview straight onto this element every frame, and a render that happened to
+  // land mid-gesture would otherwise snap that preview back to the token.
+  useLayoutEffect(() => {
+    if (shellRef.current?.dataset.sashDragging === '1') return;
+    applySashWidths();
+  });
 
   const railStyle: CSSProperties = stacked
     ? {
@@ -116,6 +177,7 @@ export function DockedShell({ surface, layout }: { surface: ReactNode; layout: S
           railId={RAIL_ID.left}
           open={leftOpen}
           onToggle={() => toggleRail('left')}
+          onRestoreWidths={applySashWidths}
         />
       )}
     </aside>
@@ -133,6 +195,7 @@ export function DockedShell({ surface, layout }: { surface: ReactNode; layout: S
           railId={RAIL_ID.right}
           open={rightOpen}
           onToggle={() => toggleRail('right')}
+          onRestoreWidths={applySashWidths}
         />
       )}
     </aside>

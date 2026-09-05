@@ -60,6 +60,20 @@ export function DemoBanner() {
         flexWrap: 'wrap',
         gap: '4px 12px',
         padding: '9px 16px',
+        // NO `marginBottom`, and the absence is a decision rather than an omission.
+        // A pass added `marginBottom: 8` with the reason "push the toolbar down so
+        // the banner does not overlap it at narrow widths", and that overlap cannot
+        // happen: this is a `flexShrink: 0` child in the document flow of the column
+        // in `app/room/[roomId]/layout.tsx`, and the canvas toolbars are
+        // `position: absolute` INSIDE the canvas, which begins below this strip —
+        // §1 of this file's header and the JSX comment above say so, and that is the
+        // whole reason the old floating pill was replaced by a strip. What the margin
+        // did do is detach the `borderBottom` below from what it divides: tint, then
+        // a hairline, then 8px of bare `--paper`, which is the exact relationship
+        // `globals.css` records three separate user reports of being read as a stray
+        // horizontal scrollbar. It also cost 8px of canvas in the one session this
+        // banner appears. Reverted 2026-09-05; do not re-add it without a width at
+        // which the overlap has actually been seen.
         // A tint, not the flat accent: white on --accent is 3.0:1, and --accent
         // is a fill token. --accent-text on --accent-tint measures 4.85:1.
         background: 'var(--accent-tint)',

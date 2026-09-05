@@ -644,7 +644,13 @@ a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; bo
      `.rail-section-*` is in this list because `RailSection` is what the LEFT rail's
      panels are built from — it replaced `.section` there. While its padding was
      stated inline in the component, this rule reached the Inspector and nothing
-     else, so the relief the comment above describes applied to one rail of two. */
+     else, so the relief the comment above describes applied to one rail of two.
+
+     It does NOT reach the right rail's View panel, and a note here briefly said it
+     did. `ViewSection` is a sibling of `Inspector`, so its nearest
+     `container-name: rail` is `.rail` itself, whose narrowest right-hand value is
+     `--rail-right-tight` at 248px and whose sash floor is `--rail-right-min` at
+     276px. 240px is unreachable on that side, so this query can never fire for it. */
   .section, .section--flush,
   .rail-section-body,
   .rail-footer { padding-left: 12px; padding-right: 12px; }

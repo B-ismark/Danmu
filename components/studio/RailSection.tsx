@@ -34,6 +34,11 @@ export function RailSection({
   /** Let the body take the leftover rail height and scroll inside itself. */
   grow = false,
   action,
+  /** Paint the section's bottom hairline. The rail's pinned footer already separates
+   *  the last section with its `--paper-2` tone, and a hairline directly above that
+   *  band is the defect globals.css documents as reading like a stray scrollbar — so
+   *  the section that sits immediately above the footer passes `false` here. */
+  divider = true,
 }: {
   title: string;
   /** The count or state this section is responsible for. Derived, never typed. */
@@ -47,12 +52,13 @@ export function RailSection({
    *  section is closed, which is the point: it is about the section, not about
    *  what the section is currently showing. */
   action?: ReactNode;
+  divider?: boolean;
 }) {
   const id = useId();
   return (
     <div
       style={{
-        borderBottom: '1px solid var(--hairline)',
+        borderBottom: divider ? '1px solid var(--hairline)' : 'none',
         // A grown section owns the leftover space, but only while it is open —
         // a collapsed one must not hold a column of empty rail.
         flex: grow && open ? '1 1 auto' : '0 0 auto',

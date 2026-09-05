@@ -93,38 +93,58 @@ export function NorthDial() {
     [setSite],
   );
 
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-      <Dial bearingDeg={bearingDeg} sunAzimuthDeg={sunAzimuthDeg} onChange={onChange} />
-      {/* `minWidth: 0` on the text and `flexShrink: 0` on the dial: the dial is a
-          fixed 76px of SVG and the sentence is the part that should reflow, which
-          is the opposite of what a flex row does by default.
-          Two short sentences, not four clauses. The long version explained the
-          mechanism ("the room stays put and the compass turns around it") to
-          someone who can see the mechanism turning under their cursor — a rail is
-          not the place to narrate a control that demonstrates itself. What the
-          picture cannot say is which way the light then comes from, so that is
-          the half that stayed. */}
-      <div style={{ flex: 1, minWidth: 0, fontSize: 10.5, color: 'var(--ink-3)', lineHeight: 1.4 }}>
-        Drag to set north.
-        {/* NAMES the direction rather than saying "the dot": the dot is invisible
-            to a screen reader, and the dial's `aria-valuetext` is about the
-            bearing, which is the slider's own value and not the place to bolt
-            this on. Derived from the same azimuth the marker is drawn at, so the
-            two cannot disagree.
+  // The drag hint is STANDING TEXT under the dial, not a tooltip. It was briefly an
+  // info bubble on a 24px button beside the Facing label, and three things were wrong
+  // with that. `Tooltip` latches on press (`onPointerDown` sets `pressedRef`), so on a
+  // touch device the sequence is enter → open → down → latch-closed and the hint
+  // flashes and is gone, with no second rendering anywhere. The trigger was a
+  // `<button>` with no `onClick`, no `aria-expanded` and no `aria-describedby` — a
+  // control that does nothing, whose accessible name was an instruction, sitting 6px
+  // from a visible "Facing" label a screen reader had just read. And the frame
+  // argument below rests on the sentence being NEXT TO the dial; a bubble opens above
+  // the Facing row, which is the position furthest from the dial on the whole panel.
+  //
+  // It NAMES the direction rather than saying
+  // "the dot": the dot is invisible to a screen reader, and the dial's
+  // `aria-valuetext` is about the bearing, which is the slider's own value and
+  // not the place to bolt this on. Derived from the same azimuth the marker is
+  // drawn at, so the two cannot disagree.
+  //
+  // THE FRAME IS NAMED, and it has to be. This read "Light comes from the
+  // bottom-right" — a bare screen direction, with nothing saying what it was a
+  // direction *in*. In the 2D plan it is true of the drawing; in the 3D tab the
+  // camera orbits, so the same sentence is false at every heading but one and
+  // there is no way to tell from the words which. The dial is the one frame that
+  // survives both: it is 12 px away, it never rotates, and `planSide` is computed
+  // from `sunAzimuthDeg - bearingDeg`, which IS the screen angle the marker is
+  // drawn at (`sunAt` in `Dial`). So the sentence describes the picture beside
+  // it rather than the room behind it, and the room's own answer stays where it
+  // belongs — the marker for the eye, `aria-valuetext` for a screen reader.
+  const hint =
+    sunAzimuthDeg === null
+      ? 'Drag to set north.'
+      : `Drag to set north. Light comes from the dial's ${planSide(sunAzimuthDeg - bearingDeg)}.`;
 
-            THE FRAME IS NAMED, and it has to be. This read "Light comes from the
-            bottom-right" — a bare screen direction, with nothing saying what it
-            was a direction *in*. In the 2D plan it is true of the drawing; in the
-            3D tab the camera orbits, so the same sentence is false at every
-            heading but one and there is no way to tell from the words which. The
-            dial is the one frame that survives both: it is 12 px away, it never
-            rotates, and `planSide` is computed from `sunAzimuthDeg - bearingDeg`,
-            which IS the screen angle the marker is drawn at (`sunAt` in `Dial`).
-            So the sentence now describes the picture beside it rather than the
-            room behind it, and the room's own answer stays where it belongs —
-            the marker for the eye, `aria-valuetext` for a screen reader. */}
-        {sunAzimuthDeg !== null && ` Light comes from the dial's ${planSide(sunAzimuthDeg - bearingDeg)}.`}
+  return (
+    <div style={{ minWidth: 0 }}>
+      <span className="ds-label" style={{ display: 'block', marginBottom: 6 }}>Facing</span>
+      <Dial bearingDeg={bearingDeg} sunAzimuthDeg={sunAzimuthDeg} onChange={onChange} />
+      {/* Under the dial and a few pixels from it, which is what the frame argument
+          above depends on — "the dial's bottom-right" is only a direction anyone can
+          follow while the dial is the nearest thing to the words. `minWidth: 0` so
+          the sentence reflows inside a narrow rail rather than pushing the section
+          wider; `overflowWrap` because "bottom-right" is one long token. */}
+      <div
+        style={{
+          minWidth: 0,
+          marginTop: 8,
+          fontSize: 10.5,
+          color: 'var(--ink-3)',
+          lineHeight: 1.4,
+          overflowWrap: 'anywhere',
+        }}
+      >
+        {hint}
       </div>
     </div>
   );
@@ -182,7 +202,7 @@ function Dial({
   const [nx, ny] = pt(northAt, R - 7);
 
   return (
-    <div style={{ flexShrink: 0, textAlign: 'center' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
       <svg
         ref={ref}
         width={C * 2}
@@ -276,8 +296,8 @@ function Dial({
             return <circle cx={sx} cy={sy} r={5} fill="var(--accent)" stroke="var(--accent-text)" strokeWidth={1.5} />;
           })()}
       </svg>
-      <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 2 }}>
-        <Icon name="compass" size={9} style={{ display: 'inline-block', verticalAlign: '-1px', marginRight: 3 }} />
+      <div style={{ fontSize: 10, color: 'var(--ink-3)', display: 'flex', alignItems: 'center', gap: 3 }}>
+        <Icon name="compass" size={9} />
         <span className="mono">{Math.round(bearingDeg)}°</span>
       </div>
     </div>
