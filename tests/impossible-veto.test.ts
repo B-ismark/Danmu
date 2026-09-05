@@ -579,6 +579,16 @@ describe('SolveResult.declinedTerms — which condition, not both conditions', (
     // to the intent, and it is honest to call it redundant: an earlier version of this
     // comment claimed the assertion was what closed the drift, which credited a line
     // that cannot fail with work the recursion does.
+    //
+    // **Measured rather than argued, and by someone who set out to refute it.** A peer
+    // reintroduced the hand-typed reverse fallback: it fails at the literal below and the
+    // identity two lines under it never runs. Moved ABOVE the two literals the identity
+    // becomes the first assertion to run and the same mutation then reports there instead
+    // — so the reorder only changes which of two co-firing lines speaks, and it makes the
+    // less useful one speak, since the literal names the string that was expected while
+    // the identity can only name two values that differ. It is kept below, and kept: it is
+    // entailed by the two literals above rather than tautological, and it is the line a
+    // future edit that hand-types the fallback back would have to delete on purpose.
     expect(impossibleClause([])).toBe('inside another one or through a wall');
     expect(
       impossibleClause([]),

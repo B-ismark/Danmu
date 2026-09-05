@@ -204,16 +204,41 @@ function said(): ToastSpec {
   return toasts[0];
 }
 
-// One case per reachable clause. The negative half carries each row: asserting only that
-// "through a wall" appears passes against the disjunction, which CONTAINS it — and the
-// disjunction is exactly what a call site that stopped passing its terms produces.
-const CASES: { terms: ImpossibleTerm[]; says: string; notSays: string }[] = [
-  { terms: ['outside'], says: 'through a wall', notSays: 'inside another' },
-  { terms: ['overlap'], says: 'inside another', notSays: 'through a wall' },
+// One case per reachable clause — and the both-terms row is not decoration. Without it
+// every row drives every site with a ONE-element array, where `declinedTerms.slice(0, 1)`
+// is the identity, so three of the four sites were never asked whether they pass the WHOLE
+// list. That mutation survived at `:1101`, `:1219` and `:1220` and died only at `:743`,
+// which the standalone both-terms test this row replaces happened to press. It is the
+// docblock's own argument one level down: pinning the join at ONE site leaves three free,
+// for the same reason driving three sites would leave the fourth free.
+//
+// **Its reachability is unmeasured rather than demonstrated, and that is the honest
+// status.** All 9 refusals any sweep has produced name `outside` alone, because
+// `impossibleTermsWorse` is a DELTA and every seeded room starts legal, so nothing
+// measured here can enter this row. Both terms rise together once `before.overlap > 0` —
+// a room the user has already made a mess of, which is the population Fix exists for and
+// not the one the sweeps cover. A coverage gap, then, not a live defect.
+//
+// The negative half carries each single-term row: asserting only that "through a wall"
+// appears passes against the disjunction, which CONTAINS it — and the disjunction is
+// exactly what a call site that stopped passing its terms produces. The both-terms row has
+// no negative, because both phrases belong there; what it pins instead is the two phrases
+// JOINED, in `IMPOSSIBLE_TERMS`' order. (A first draft of that counted ` or ` occurrences
+// and was simply wrong: the remedy clause after it — "Press Fix again …, or unlock a
+// piece" — carries a second one, so the count was 2 for a correct sentence. A count over a
+// whole sentence is not a claim about a list.)
+//
+// Every `says` carries the `put a piece ` prefix because all four sentences splice the
+// clause at that same point, so the table pins where the clause LANDS rather than only
+// that it appears somewhere in the toast.
+const CASES: { terms: ImpossibleTerm[]; says: string; notSays?: string }[] = [
+  { terms: ['outside'], says: 'put a piece through a wall', notSays: 'inside another' },
+  { terms: ['overlap'], says: 'put a piece inside another one', notSays: 'through a wall' },
+  { terms: ['overlap', 'outside'], says: 'put a piece inside another one or through a wall' },
 ];
 
 describe('the refusal names the condition the solver named, at every site that says it', () => {
-  describe.each(CASES)('a refusal naming only $terms', ({ terms, says, notSays }) => {
+  describe.each(CASES)('a refusal naming $terms', ({ terms, says, notSays }) => {
     it('Fix says it', () => {
       const parts = mount();
       solveSpy.mockReturnValue(refusal(terms, parts));
@@ -223,10 +248,11 @@ describe('the refusal names the condition the solver named, at every site that s
       expect(solveSpy, 'the press must actually have solved').toHaveBeenCalled();
       expect(said().title).toBe('No safe arrangement found');
       expect(said().message).toContain(says);
-      expect(
-        said().message,
-        'a site that stopped passing its terms falls back to the disjunction',
-      ).not.toContain(notSays);
+      if (notSays)
+        expect(
+          said().message,
+          'a site that stopped passing its terms falls back to the disjunction',
+        ).not.toContain(notSays);
     });
 
     it('a confined Try a fix says it — the finding that names a piece', () => {
@@ -238,7 +264,7 @@ describe('the refusal names the condition the solver named, at every site that s
       });
       expect(said().title).toBe('No safe way to move those');
       expect(said().message).toContain(says);
-      expect(said().message).not.toContain(notSays);
+      if (notSays) expect(said().message).not.toContain(notSays);
       // The confined arm's own half: it must offer the WIDER move, which is the only thing
       // separating this sentence from the unconfined one below.
       expect(said().message).toContain('Fix can rearrange the whole room');
@@ -253,7 +279,7 @@ describe('the refusal names the condition the solver named, at every site that s
       });
       expect(said().title).toBe('No safe way to move those');
       expect(said().message).toContain(says);
-      expect(said().message).not.toContain(notSays);
+      if (notSays) expect(said().message).not.toContain(notSays);
       expect(said().message).toContain('Try unlocking a piece');
     });
 
@@ -284,22 +310,8 @@ describe('the refusal names the condition the solver named, at every site that s
       });
       expect(said().title).toBe('No safe way to fit that');
       expect(said().message).toContain(says);
-      expect(said().message).not.toContain(notSays);
+      if (notSays) expect(said().message).not.toContain(notSays);
     });
-  });
-
-  it('a refusal naming BOTH conditions still says both, joined once', () => {
-    const parts = mount();
-    solveSpy.mockReturnValue(refusal(['overlap', 'outside'], parts));
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: /^Fix$/ }));
-    });
-    // The two phrases JOINED, not merely both present somewhere in the sentence — which
-    // is what pins the order, and the order is `IMPOSSIBLE_TERMS`'. A first draft counted
-    // ` or ` occurrences instead and was simply wrong: the remedy clause after it ("Press
-    // Fix again …, or unlock a piece") carries a second one, so the count was 2 for a
-    // correct sentence. A count over a whole sentence is not a claim about a list.
-    expect(said().message).toContain('put a piece inside another one or through a wall');
   });
 
   it('a decline that is NOT impossible never reaches the clause at all', () => {

@@ -622,6 +622,11 @@ three room shapes, every refusal `outside` — so *"inside another one"* as a st
 clause is unseen, and the 169-character both-terms string has never been produced at all.
 Those are the two arms to look for; the one quoted above is the one that already exists.
 
+The both-terms string is now driven at all four sites by `tests/impossible-clause-wired.test.tsx`,
+which mocks the solver — so it exists in a test and still in no measured solve. If you want to
+see the longest form on screen without waiting for one, that file names the shape of refusal
+that produces it.
+
 **Open the left rail before trying the re-fit path.** `RoomTools` is mounted only inside
 `PartTree` (`PartTree.tsx:364`), and `LeftRailBody` renders `RoomHealthDot` instead of
 `PartTree` when the rail is shut — so with it collapsed the whole Room-check surface is
