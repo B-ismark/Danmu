@@ -5518,6 +5518,18 @@ are here rather than in a commit message because each needs a decision:
    above its own drop handler** — the file knew the answer and the handler did not use it.
    Fixed by making parts not a parameter at all: `addPieceToRoom` (`lib/add-piece.ts`)
    reads `currentRoomScene()` itself.
+   **And that fix needed a second half, which its own review found.** Reading the
+   RESOLVED scene means the support top written into `pos[1]` is an *effective* number
+   landing in the **authored** layer, while `ridingParents` infers who rides what from
+   the **authored** array within `SUPPORT_Y_EPS` — so they disagree the moment anything
+   overrides the support, and nothing called `setParent`. Resize a desk to 900 mm, drop
+   a lamp, resize back to 750: the lamp is stored at 0.90 against an authored top of
+   0.75, rides nothing, and hangs 150 mm in the air — invisible from directly above and
+   permanent, since `normalizeStoredParts` does not settle. **§ 12's own failure shape,
+   through the door § 12 warned about.** Second face: even with no resize the edge was
+   never recorded, so a lamp DROPPED on a desk sat outside that desk's convoy while a
+   lamp DRAGGED onto it travelled with it. `placeNewPart` returns `supportId` now, gated
+   on the same condition as the height, and `addPieceToRoom` records the edge.
 6. ~~**The 3D drop announces nothing.**~~ **FIXED 2026-09-04, same change and the same
    cause** — it was the second copy missing a line the first copy had, not a decision
    anyone made about the 3D tab. Announcing is `addPieceToRoom`'s default now. A third
