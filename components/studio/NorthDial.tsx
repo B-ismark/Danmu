@@ -33,7 +33,6 @@ import { useScene } from '@/lib/scene-store';
 import { useStudio } from '@/lib/store';
 import { LIGHTING } from '@/lib/lighting-moods';
 import { Icon } from '@/components/ui/Icon';
-import { Tooltip } from '@/components/ui/Tooltip';
 
 /** Eight points, because sixteen would be precision the sentence around it does
  *  not have. */
@@ -94,8 +93,18 @@ export function NorthDial() {
     [setSite],
   );
 
-  // The drag hint lives on an info tooltip beside the Facing label, not as a
-  // standing caption under the dial. It NAMES the direction rather than saying
+  // The drag hint is STANDING TEXT under the dial, not a tooltip. It was briefly an
+  // info bubble on a 24px button beside the Facing label, and three things were wrong
+  // with that. `Tooltip` latches on press (`onPointerDown` sets `pressedRef`), so on a
+  // touch device the sequence is enter → open → down → latch-closed and the hint
+  // flashes and is gone, with no second rendering anywhere. The trigger was a
+  // `<button>` with no `onClick`, no `aria-expanded` and no `aria-describedby` — a
+  // control that does nothing, whose accessible name was an instruction, sitting 6px
+  // from a visible "Facing" label a screen reader had just read. And the frame
+  // argument below rests on the sentence being NEXT TO the dial; a bubble opens above
+  // the Facing row, which is the position furthest from the dial on the whole panel.
+  //
+  // It NAMES the direction rather than saying
   // "the dot": the dot is invisible to a screen reader, and the dial's
   // `aria-valuetext` is about the bearing, which is the slider's own value and
   // not the place to bolt this on. Derived from the same azimuth the marker is
@@ -117,16 +126,26 @@ export function NorthDial() {
       : `Drag to set north. Light comes from the dial's ${planSide(sunAzimuthDeg - bearingDeg)}.`;
 
   return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-        <span className="ds-label" style={{ display: 'block' }}>Facing</span>
-        <Tooltip label={hint}>
-          <button type="button" className="icon-btn" aria-label={`Facing — ${hint}`} style={{ width: 24, height: 24, color: 'var(--ink-3)' }}>
-            <Icon name="info" size={13} />
-          </button>
-        </Tooltip>
-      </div>
+    <div style={{ minWidth: 0 }}>
+      <span className="ds-label" style={{ display: 'block', marginBottom: 6 }}>Facing</span>
       <Dial bearingDeg={bearingDeg} sunAzimuthDeg={sunAzimuthDeg} onChange={onChange} />
+      {/* Under the dial and a few pixels from it, which is what the frame argument
+          above depends on — "the dial's bottom-right" is only a direction anyone can
+          follow while the dial is the nearest thing to the words. `minWidth: 0` so
+          the sentence reflows inside a narrow rail rather than pushing the section
+          wider; `overflowWrap` because "bottom-right" is one long token. */}
+      <div
+        style={{
+          minWidth: 0,
+          marginTop: 8,
+          fontSize: 10.5,
+          color: 'var(--ink-3)',
+          lineHeight: 1.4,
+          overflowWrap: 'anywhere',
+        }}
+      >
+        {hint}
+      </div>
     </div>
   );
 }

@@ -21,8 +21,13 @@
 // to someone else.
 //
 // It is now the body of the RIGHT rail's "View" section, and NOT a popover. The
-// section moved out of the left rail so the decorating rail — which answers both
-// "what is selected" and "how does the room render" — holds it. That was
+// section moved out of the left rail because the two rails divide the work between
+// them: the left one is what is IN the room, the right one is how it LOOKS, and the
+// three values below are three answers to the second question. (An earlier note
+// here said it belonged on the right because it is "about the selected piece as much
+// as the room". It is not — this file reads `showGrid`, `dressed` and `quality` and
+// never touches `selectedPartId`, as the paragraph twenty lines above already says.)
+// That was
 // half-finished for a while: the header claimed it "no longer positions
 // anything" while the code still hung a `position: absolute; width: 300` card
 // off a "Look" button. Two things were wrong with that, and both were visible:

@@ -223,6 +223,27 @@ export function RoomDimsEditor() {
   // component that keeps its own order can put it back in a different one.
   const labels: ['Width', 'Depth', 'Height'] = ['Width', 'Depth', 'Height'];
 
+  /** The floor axes where a PIECE is holding the minimum up, rather than
+   *  `roomAxisRange`'s static one.
+   *
+   *  This is the whole reason a standing line survives on a panel that otherwise
+   *  speaks only when something is wrong. Pressing DOWN at the furniture floor is
+   *  correctly inert — `steppedValue` refuses a clamp that would move a value
+   *  against its own arrow — so `onChange` never fires, `commit` never runs,
+   *  `applyRoomEdits` never refuses, and none of `rangeError` / `errorBy` /
+   *  `floorError` is ever set. A panel that speaks only on `rangeError` therefore
+   *  cannot say a word about the one press that visibly does nothing.
+   *
+   *  The version this replaces inscribed all three axes' ranges unconditionally,
+   *  which is more standing chrome than a rail wants; the version after that
+   *  removed the line and put the claim in a comment, asserting that `floorError`
+   *  made the inert press legible. It cannot: `floorError` is rendered inside the
+   *  `rangeError` branch, and this path never sets it. So the line is back, and it
+   *  is back only for the axes that can actually be stuck. */
+  const heldAxes = (['width', 'depth'] as FloorAxis[]).filter((axis) =>
+    namesTheStop(floors[axis].stop, axis === 'width' ? room.width : room.depth),
+  );
+
   // The furniture refusal, in the user's unit — and it is CARRIED from the commit
   // that made it, not re-derived at render time.
   //
@@ -247,9 +268,16 @@ export function RoomDimsEditor() {
   // a `RailSection`, and it cost a click to reach the fields plus a chevron and a
   // title that repeated what the section above already said.
   //
-  // Its collapsed summary went with it, and so did the header's dimension meta:
-  // the fields themselves are the measurement now. (The old header summary was
-  // also the one printing `0.0×0.0m`: it divided metres by 1000.)
+  // Its collapsed summary went with it. That existed only because this was
+  // collapsed, and the Room section's own `meta` is where a collapsed state
+  // belongs — one summary, in the header that does the collapsing.
+  //
+  // A later pass deleted that `meta` too, on the stated grounds that it was "the one
+  // printing `0.0×0.0m`: it divided metres by 1000". It was not. The divide had
+  // already been fixed, and the comment being deleted in the same breath said so —
+  // the header was rendering `room.width.toFixed(1)`, correctly, in metres. The
+  // replacement reason, that the fields are the measurement now, is only true while
+  // the section is OPEN, which is exactly when a `meta` is not shown. It is back.
   return (
     // `--hairline`, not `--edge`: a decorative divider between two groups in the
     // rail, not the boundary of anything interactive.
@@ -299,13 +327,23 @@ export function RoomDimsEditor() {
             name a range the stepper will not reach — and PER AXIS, because the
             furniture stop is per-axis, and naming the offending piece inside it
             (`floorError`) is what makes the inert press legible. */}
-        {rangeError && (
+        {rangeError ? (
           <div style={{ fontSize: 11, marginTop: 6, lineHeight: 1.4, overflowWrap: 'anywhere', color: 'var(--danger-text)' }}>
             {errorBy === 'floor' && floorError
               ? floorError
               : `That ${rangeError} is outside ${bounds(rangeError).min}–${bounds(rangeError).max} ${dimUnit} — enter one in that range and the room will follow.`}
           </div>
-        )}
+        ) : heldAxes.length > 0 ? (
+          // Not an error, so not `--danger-text`: nothing has gone wrong, a chevron
+          // simply has nowhere further to go. The number is `bounds()`, the SAME call
+          // the arrows are clamped by, so the sentence cannot name a stop the stepper
+          // will not reach — which is the pairing `boundsToUnit` exists for.
+          <div style={{ fontSize: 11, marginTop: 6, lineHeight: 1.4, overflowWrap: 'anywhere', color: 'var(--ink-3)' }}>
+            {heldAxes
+              .map((axis) => `${axis === 'width' ? 'Width' : 'Depth'} stops at ${bounds(axis).min} ${dimUnit} (“${floors[axis].stop!.name}”).`)
+              .join(' ')}
+          </div>
+        ) : null}
     </div>
   );
 }

@@ -40,6 +40,7 @@ import type { ScenePart } from '@/lib/scene-spec';
 
 export function PartTree() {
   const parts = useScene((s) => s.parts);
+  const room = useScene((s) => s.room);
   const ungroupParts = useScene((s) => s.ungroupParts);
   const selectedId = useStudio((s) => s.selectedPartId);
   const selection = useStudio((s) => s.selection);
@@ -366,6 +367,19 @@ export function PartTree() {
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
         <RailSection
           title="Room"
+          // NOT `/ 1000`. `RoomShape.width` is METRES (see `lib/scene-store.ts`),
+          // so the divide rendered every room as `0.0×0.0m` — a 7.5 m room reported
+          // as 0.0. It read as plausible chrome rather than as a bug, which is what
+          // rule 2 means by a displayed measurement having to be derived: the number
+          // beside the fields disagreed with the fields and neither was labelled
+          // with its unit.
+          //
+          // Deleted once on the grounds that it was the line printing `0.0×0.0m`, and
+          // put back because it was not: the divide was gone by then, this rendered
+          // the room correctly, and a `meta` is what a COLLAPSED section says about
+          // itself — "the fields are the measurement now" is true only while the
+          // fields are on screen, which is the state a meta does not serve.
+          meta={<span className="mono">{room.width.toFixed(1)}×{room.depth.toFixed(1)}m</span>}
           open={sec.room}
           onToggle={() => toggle('room')}
           // Re-scan changes what is IN the room, which is this section's subject — it

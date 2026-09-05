@@ -576,13 +576,28 @@ point of the change, and no test can tell you it reads that way on screen.
 
 **What wrong looks like.**
 
-- **The row fitting.** Two `.ds-btn`s sit in a `display: grid` row of two equal
-  columns under the health chip, each ellipsising its own label in a `min-width:
-  0` span — the same opt-out `RailFooter`'s labels use. The rail around the row is
-  `overflow: hidden`, so anything past the edge would be eaten with no scrollbar
-  and no error. Drag the left rail to its narrowest and watch that both Fix and
-  Shuffle keep their full click areas and most of their words, with the full
-  label still reachable on hover.
+- **The row fitting.** Two `.ds-btn`s sit in a wrapping `display: flex` row under
+  the health chip, each `flex: 1 0 auto` — they grow to fill a line they fit on and,
+  because they may not shrink, wrap onto two lines rather than cut a word. The rail
+  around the row is `overflow: hidden`, so anything past the edge would be eaten
+  with no scrollbar and no error.
+
+  **Drag the left rail to its narrowest and press Shuffle.** What to watch is the
+  busy label: it becomes `Shuffling…` for the whole 2–3 s freeze, and under
+  `prefers-reduced-motion` the ring does not turn, so that word is the only tell
+  that anything is happening. It must be whole. Whether the row wraps to two lines
+  while it does that is fine and is the intended trade.
+
+  This bullet twice described a version that truncated. It was briefly a `1fr 1fr`
+  grid whose columns are 85px at `--rail-left-tight` against 50px of `.ds-btn`
+  chrome — 35px for a word that wants ~41px, and ~59px while busy — and the note
+  then told a reviewer the full label was *"still reachable on hover"*. It was not:
+  Fix's `title` never contains the word "Fix" and Shuffle's contains "Fix" and not
+  "Shuffle". **A hand-off note that names the wrong thing to look at does not
+  merely mislead, it scopes the search** — someone hovering a cut label to check a
+  tooltip would have confirmed the truncation and gone no further.
+  (`tests/reflow.test.ts` now holds both halves: that the row wraps and may not
+  shrink, and the arithmetic saying why.)
 - **The refusal.** On a `t` or `open` footprint roughly a sixth to a third of presses
   answer *"No new arrangement this time"* and leave the room alone. That is **correct**
   — it is refusing to show a room with something in the way — but it must not read as a

@@ -1180,11 +1180,7 @@ and closes when you are not using it.
   region, with the count in `.section-meta`. Open/closed is **local, not
   persisted**: which drawer you left open is not a preference worth carrying
   between rooms, and `partialize` should stay about how the room *looks*.
-  **View is in the right rail now.** It left this list because it is about how
-  the SELECTED piece renders as much as how the room does — the right rail ends
-  (above the pinned footer) with a collapsible `<RailSection title="View">`
-  holding `ViewOptions`, directly on top of Add when nothing is selected and
-  underneath Exact size when a piece is.
+  **View is in the right rail now** — described under that rail below, not here.
   **A rail section's body is inline, never a popover.** `ViewOptions` shipped for
   a while as a "Look" button opening a 300px absolute card inside a 260px rail:
   it was cut off down the left by `PartTree`'s own scroll box, and it was a
@@ -1198,6 +1194,34 @@ and closes when you are not using it.
   lighting, so the narrower word named about half of what is in there.
 - **Re-scan moved here** from the top bar: it changes what is *in* the room, not
   how the app is framed.
+
+### The right rail — the selection, then how the room is drawn
+
+`SelectionHeader` → `Inspector` → a collapsible **View** section → the pinned
+`RailFooter`. It had no heading of its own for a while, and the paragraph
+describing it was filed under *The left rail* above — which is how the only
+canonical statement of one rail's composition came to sit under the other's name.
+
+- **View (`ViewOptions`) is the last section before the footer.** With nothing
+  selected it sits directly on top of Add; with a piece or a wall selected it sits
+  under the Inspector's last section. It passes `divider={false}` to `RailSection`,
+  because `.rail-footer`'s own `--paper-2` band already separates it and a hairline
+  directly above that band is the artefact `globals.css` records as having been
+  reported three times as a stray scrollbar.
+- **Why it is on this side, and the reason first written down was wrong.** It was
+  filed as *"about how the SELECTED piece renders as much as how the room does"*.
+  It is not: `ViewOptions` reads exactly three values — `showGrid`, `dressed`,
+  `quality` — and never touches `selectedPartId`. Its own file says so twenty lines
+  above where that claim was repeated. The true reason is the rails' division of
+  labour: the left rail is **what is in the room**, the right rail is **how it
+  looks**, and whether the grid and the props are drawn and how hard the renderer
+  works are three answers to the second question.
+- **Open by default**, unlike the left rail's old `view: false`. The controls are
+  the useful half of the no-selection state. Like every `RailSection` here that is
+  **local, not persisted** — and, because `RightRailBody` returns `null` when the
+  rail is closed and `StudioShell` is mounted per page, it also reopens on a rail
+  collapse and on a 3D ↔ 2D tab switch. Same as the left rail's `sec`; worth knowing
+  before anyone treats the disclosure as a place to hide it for good.
 
 **Both rails collapse** (`railLeftOpen` / `railRightOpen`, persisted next to
 `showGrid`). Two fixed rails spend 45% of a 1280px laptop on chrome in an app whose
