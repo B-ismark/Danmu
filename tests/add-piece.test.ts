@@ -156,6 +156,7 @@ describe('addPieceToRoom, the parts nobody should have to remember', () => {
   });
 });
 
+
 describe('a piece dropped onto something RIDES it, and the edge is recorded', () => {
   // § H.3 finding 5's second half, which the first version of this file could not see.
   //
@@ -164,14 +165,14 @@ describe('a piece dropped onto something RIDES it, and the edge is recorded', ()
   // `ridingParents` infers who rides what from the AUTHORED array within 50 mm. The two
   // disagree the moment anything overrides the support, and nothing recorded the edge.
   //
-  // **Why the earlier fixture could not express it:** it set only `positions`, and it
-  // built its "resolved" array with `resolveParts` — one layer short of the
-  // `resolveScene` the subject actually calls. So the whole correction layer this lives
-  // in was unexercised. These set `dims`, which is what makes authored and effective
-  // tops differ, and they read the recorded edge rather than a coordinate.
+  // **Why the earlier fixture could not express it:** it set only `positions`, and built
+  // its "resolved" array with `resolveParts` — one layer short of the `resolveScene` the
+  // subject actually calls — so the whole correction layer this lives in was unexercised.
+  // These set `dims`, which is what makes authored and effective tops differ, and they
+  // read the recorded EDGE rather than a coordinate.
 
-  /** The desk, resized by the user through the Inspector. 900 mm is inside
-   *  `desk-standard`'s legal 600–900 range, so this is a room a user can really make. */
+  /** The desk, resized by the user. 900 mm is inside `desk-standard`'s legal 600–900
+   *  range, so this is a room a person can really make. */
   const RESIZED: [number, number, number] = [1400, 700, 900];
 
   it('records the riding edge, so the lamp is not merely at the right height once', () => {
@@ -180,19 +181,18 @@ describe('a piece dropped onto something RIDES it, and the edge is recorded', ()
 
     const id = addPieceToRoom(LAMP, [0, 0]);
 
-    // The edge itself, which is the fix. Asserting the Y alone would pass on the broken
-    // build too — it was correct at the moment of the drop and only went wrong later.
+    // The edge itself. Asserting the Y alone would pass on the broken build too — it was
+    // correct at the moment of the drop and only went wrong later.
     expect(useStudio.getState().parentIds[id], 'the lamp rides nothing').toBe('desk-1');
   });
 
   it('and follows the desk back down when the desk is resized again', () => {
-    // The symptom a person would see, and the reason the edge matters. On the broken
-    // build the lamp is stored at 0.90 against an authored top of 0.75 and stays there.
+    // The symptom a person would see. On the broken build the lamp is stored at 0.90
+    // against an authored top of 0.75 and stays there, 150 mm in the air.
     seedDesk();
     useStudio.setState({ dims: { 'desk-1': RESIZED } });
     const id = addPieceToRoom(LAMP, [0, 0]);
 
-    // Put the desk back to its authored size.
     useStudio.setState({ dims: {} });
 
     const s = useStudio.getState();
@@ -201,11 +201,25 @@ describe('a piece dropped onto something RIDES it, and the edge is recorded', ()
     expect(ys[id], `lamp at ${ys[id]}, desk top now ${authoredTop}`).toBeCloseTo(authoredTop, 6);
   });
 
-  it('records NOTHING for a piece that floored, so a wrong edge cannot lift it', () => {
-    // The control, and it is not decoration: `deriveRiderYs` rule 2 honours a recorded
-    // edge UNCONDITIONALLY, so an edge written for a piece that is not standing on
-    // anything is worse than no edge — it lifts the piece instead of being ignored.
-    // An empty room has nothing to rest on, so the lamp floors.
+  it('records NOTHING for a support too LOW to seat anything', () => {
+    // The control — and the first version of it was decoration. It used an EMPTY room, so
+    // `findSupportDetailed` returned null and the 0.3 m bar, the thing the control is
+    // named for, was never reached: BOTH mutations that decouple the id from the bar
+    // survived it. A rug is 5 mm tall — a real overlapping part the probe does find,
+    // whose top fails the bar. It is the only fixture in the catalogue that separates
+    // "nothing under it" from "something under it that cannot seat it".
+    //
+    // It matters because `deriveRiderYs` rule 2 honours a recorded edge UNCONDITIONALLY,
+    // so an edge to something the piece is not standing on is worse than no edge: it
+    // LIFTS the piece rather than being ignored.
+    useScene.setState({
+      parts: [
+        {
+          id: 'rug-1', name: 'Rug', category: 'rug', shape: 'rug',
+          dimMM: [2400, 1600, 5], pos: [0, 0, 0], rot: 0, locked: false,
+        },
+      ],
+    });
     const id = addPieceToRoom(LAMP, [0, 0]);
     expect(useScene.getState().parts.find((p) => p.id === id)!.pos[1]).toBeCloseTo(
       groundY('lamp', 'lamp-table', LAMP_DIM, 2.5),
@@ -214,12 +228,21 @@ describe('a piece dropped onto something RIDES it, and the edge is recorded', ()
     expect(useStudio.getState().parentIds[id], 'a floored piece rides nothing').toBeUndefined();
   });
 
-  it('records nothing for a wall-mounted piece, which rests on no furniture at all', () => {
+  it('records nothing for a wall piece OR a ceiling piece — two different branches', () => {
+    // Both, because they are two separate `return` statements in `placeNewPart`, and the
+    // first version of this test reached only one: hard-coding a support id into the
+    // CEILING branch survived it, since a mirror rides a wall and never gets there.
     seedDesk();
-    const id = addPieceToRoom(
+    const onWall = addPieceToRoom(
       { label: 'Wall mirror', category: 'mirror', shape: 'mirror', dimMM: [600, 30, 900] },
       [0, 0],
     );
-    expect(useStudio.getState().parentIds[id]).toBeUndefined();
+    expect(useStudio.getState().parentIds[onWall], 'a wall piece rides no furniture').toBeUndefined();
+
+    const onCeiling = addPieceToRoom(
+      { label: 'Ceiling fan', category: 'fan', shape: 'fan', dimMM: [1000, 1000, 200] },
+      [0, 0],
+    );
+    expect(useStudio.getState().parentIds[onCeiling], 'a ceiling piece rides no furniture').toBeUndefined();
   });
 });
