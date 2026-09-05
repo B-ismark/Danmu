@@ -23,12 +23,17 @@ they say whether each item exists in a commit. An item disappears from here when
 says FIXED — the struck-through rows this table used to carry are gone, because a queue that
 keeps its own history stops being readable as a queue.
 
-**What is OPEN, which is the only list this header keeps.** Rows **9, 11, 12, 13, 17 and
-18**; the **A.2 / G.2** half of row 14, whose G.3 half shipped in #106; the **device**
-half of row 2, where the draw-call count is measured and only a real GPU can finish the
-verdict; and § E's remaining coverage gap, which has no row because it was found after the
-table was built — one test now renders the `stacked` shell and **nothing renders `compact`**.
-Everything else in the table below is marked done in its own row.
+**What is OPEN, which is the only list this header keeps.** Rows **11, 12, 13, 17, 18 and
+19**; the **drill-in half only** of row 9, whose drag half was measured and then built on
+2026-09-05; the **A.2 / G.2** half of row 14, whose G.3 half shipped in #106; and the
+**device** half of row 2, where the draw-call count is measured and only a real GPU can
+finish the verdict. Everything else in the table below is marked done in its own row.
+
+**§ E's coverage gap is closed, and this paragraph used to be the record of it.** It read
+*"one test now renders the `stacked` shell and nothing renders `compact`"*, which was true
+when written and stopped being true when #110 landed `tests/compact-rail-widths.test.tsx`.
+Left alone it is exactly the rot this header was rewritten to avoid, sitting one paragraph
+below the sentence explaining why.
 
 **This is an open list because the previous header kept a closed one, and a closed list
 rots by omission in the direction nobody checks.** Its "Closed since the last rewrite"
@@ -110,7 +115,7 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 6 | **§ 38.1** the confined "Try a fix" refusal is unreachable — **ANSWERED 2026-09-03: leave it, and the measurement stays beside the branch** | A decision rather than a defect: 212 confined solves over every finding of every preset declined **zero** times. **No code change, and that was checked rather than assumed** — `RoomTools.tsx`'s decline branch already carries both the 212-solve measurement and the reason for keeping both sentences, so the recommendation was already implemented in the only place that matters. Widening the confine is the one answer that would have been a product change, and it was declined | S — mostly a judgement | done |
 | 7 | **§ B.17** ~~the placement row — dragging a piece off a surface should DROP it~~ → **RESOLVED 2026-09-03, and the premise had expired** | The recorded answer — *"dragging would work"*, keep the operations and drop the row — rested on "neither Floor-off-a-table nor Surface-back-onto-it is reachable by dragging", which stopped being true when the drag pipeline moved into `lib/drag-resolve.ts` and nobody re-derived it. Measured against `resolvePlacement`: clear of a desk → y = 0, back over it → 0.75 with `supportId` set. Put back to the user with that measurement; they chose **drop Surface only**. Wall (nearest wall + face the room, gated on `ridesWall` so no drag reaches it) and Floor (drops IN PLACE where a drag carries it sideways) stay. `supportBelow`, `snapToSurface` and the `snap-surface` glyph went with the button — and so, after a browser measurement, did the `.rail-triple` class and the container-query rule that folded it, which a two-button row no longer needs. Confirmed on screen: the row is `Wall | Floor`, and Room check reads correctly in all five units with no clipping and 0px of document overflow | done | — |
 | 8 | ~~**§ H.3** every Library click drops its piece at the room centre, facing the same way~~ **ANSWERED AND BUILT** — fan out from the drop point with a legality gate (`openSpotForNewPart`, 2026-09-03), and **residue 1 answered and built 2026-09-04**: an explicit aim overrides `ceilingSpot`'s midpoint default, so the ceiling family fans out too and a dragged fan lands where it was dropped | **One residue left**, named in § H.3's section below: an unaimed click may still rest one tabletop-prone piece on another, and whether it should is a product question rather than a defect | — | **done, with one filed residue** |
-| 9 | **§ H.8** ~~two reports that need a real repro~~ → **the drag half is CONFIRMED 2026-09-05; the drill-in half is what is left** | The group drag is measured and pinned (`tests/drag-convoy.test.ts`): the set refuses 450 mm before the dragged bed runs out, because a nightstand the containment clamp corrects fails the rigidity test and vetoes the gesture. **It needed no browser** — it was filed as DOM-only and is arithmetic in `lib/`. What remains of that half is a product decision: refuse, or slide to the limit. **The drill-in half is unchanged** and does need a real click sequence with the store read between clicks | S for the decision; M for the drill-in | row 15's shims are done |
+| 9 | **§ H.8** ~~two reports that need a real repro~~ → ~~the drag half~~ **BUILT 2026-09-05; the drill-in half is all that is left** | The group drag was measured and pinned in `lib/` (`tests/drag-convoy.test.ts`) — the set refused 450 mm before the dragged bed ran out, because a nightstand the containment clamp corrects fails the rigidity test and vetoes the gesture. **It needed no browser**: it was filed as DOM-only and is arithmetic. The user then chose **slide to the limit**, and it is built — `ConvoyResult.leadPos`, both call sites, 11/14 mutations. **The drill-in half is untouched** and does need a real click sequence with the store read between clicks | M, and only the drill-in half is left | row 15's shims are done |
 | 10 | **§ B.14** a turn that puts a corner through the wall — **ANSWERED AND BUILT 2026-09-03: keep and report, both paths** | The angle is always taken; what may not happen is a turn succeeding in silence. Two findings changed the shape of it: the second document said to contradict the first **no longer exists**, and `valid` is computed on the ALREADY-CLAMPED position, so a turn that slid a piece across the floor reports success. `turnNudge` is the sentence; `spinSelection` joins `turnInPlace` and stops being the one turn gesture with no pipeline, no cascade and no report | S once decided | done |
 | 11 | **§ H.6** Suggest, from the ground up — the user's explicit ask | The largest open thing here. It **subsumes** A.2, A.7 and G.2, and the 5 parked `it.fails` retire here too. (It used to name "A.3's `:555`" as a fourth; that line number stopped existing when the assertion was fixed, and § A.3 is closed — the surviving question there is not Suggest's to answer, it is whether ONE refusal in 532 is enough evidence for the re-check.) **It is NOT un-researched** — `docs/research/suggest-and-collision.md` is a three-layer design whose four questions to the user are all ANSWERED, including the feasibility split being in scope. Of the three things this section calls missing, **only one is** (support); facing is priced by `relationCost`, and groups move rigidly already | XL — refresh the research against `main`, then execute its rows | wants row 1 measured first, since it is a symptom |
 | 12 | **§ H.7** collision, properly — the user is open to replacing the engine | Every piece is one box or one ellipse, so a sofa's L, a table's legs and a plant's canopy are all the same rectangle. Same research doc, rows 4a/4b — and 4b is **half done** (`verticalExtent` makes ONE extent right; more than one still needs 4a). The duplication this row used to carry — *"six hand-written copies of the vertical-extent rule in five files"* — is **RETIRED (2026-09-04)**: all six call `verticalExtent`, plus a **seventh** the original list never named (`layout-settle.ts:380`), and `layout-score.ts:487` records it in the code. The only raw `pos[1] +` left in `lib/` is `rigid-parent.ts:184`'s rigid-child offset, never an instance of the rule. **This row is smaller than it was**, and the seventh copy is why a grep for the old wording could not have closed it | XL | independent of row 11, but they meet |
@@ -120,6 +125,7 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 16 | **§ A.3** the standalone re-search script — **WRITTEN 2026-09-04** | `scripts/openroutes-sweep.mjs`, plain Node through vite's SSR pipeline, not a Vitest file — a measurement campaign that takes minutes is not a gate. Both reds it was filed to serve had been **green since `4be144c`** and this table's own red list said so while § A.3 still described them reproducing. What the script buys is the part that was never rot: the fixture has been re-hunted by hand FOUR times, each time because a cost-function change moved the space. Run in full: **19 of 54 cut, 532 trials, 1 refusal** — the first two exactly as recorded, the third down from 3, which the test file predicted and refused to quote unmeasured. **The live finding is that one trial**: the fine-grid re-check has a single piece of evidence across the whole grid | done | nothing |
 | 17 | **§ H.10** undo / redo should cover selection | The user asked for it. The consequence worth stating before building it is that one press per click on the way back is why most tools do not do this — a separate history, or coalesced runs, is their call | M | needs the user |
 | 18 | **§ 33.2** the on-device detector cannot name the four newest shapes | Needs a 50 MB re-export and a digest re-pin on a Python toolchain. Two things found while mapping it: **no test asserts `MODEL_DIGESTS` at all**, so a re-pin has no gate but the manual `pnpm hash:models --verify`; and nothing exercises `detectLocalAcrossImages`, `load()`, `tilesFor` or `toTensor` | L, and mostly not code | the cloud path already handles them, so this is a completeness item |
+| 19 | **§ MOB** how the app is presented on a phone — **recorded 2026-09-05, deliberately NOT scheduled** | The user's ruling: *"mobile isn't the focus but it doesn't mean we should turn a blind eye to how the platform is presented on there"*, and *"the mobile audit is for later not now"*. So this row exists to stop the work being lost, not to start it. `docs/mobile-ux-audit.md` is the source — nine systemic issues, eight per-flow sections and the author's own priority order, which § MOB keeps rather than re-ranking. Four of its claims were re-derived against `main`; one (**M5**, the Android icon ladder) is recorded with its premise marked **unverified**, because it is the one that would send someone to fix a manifest that may not be broken | varies; M1/M2/M4 are each an afternoon | **nothing blocks it and it blocks nothing** — it is filed, not queued |
 
 **Three that are deliberately not on this list**, so nobody adds them back: the seeder
 putting a 1450 mm TV on a 1.2 m wall in the small L and T (`placeNewPart` has no
@@ -1740,7 +1746,7 @@ from `navigationMock` kills nothing, because no page this suite mounts reads the
 string. It stays — a partial module mock is the failure mode the extraction exists to
 prevent, and `room-tools-findings` mocking only `useParams` is what that looked like.
 
-**What is left of § E is row 9**, the two `H.8` repros the shims were wanted for.
+**What is left of § E is HALF of row 9** — the § H.8 drill-in repro. The drag half was measured in `lib/` and then built (#111, #113), and needed no shim at all, which is the second time this file has filed something as DOM-only that was arithmetic.
 
 ### What this does not do
 
@@ -2660,10 +2666,37 @@ fails `resolveConvoy`'s rigidity test — `RIGID_EPS` is a micron — so it veto
 gesture; with a nightstand on each side the veto is symmetric, which is why the user saw it
 in both directions. Pinned in `tests/drag-convoy.test.ts`, 9/9 mutations killed.
 
-**Whether it is a DEFECT is still open, and that is now the only open half.** The set truly
-cannot go further, so refusing is defensible; sliding to the limit instead of refusing is a
-product decision nobody has made. The measurement is what that decision should be made
-against.
+**DECIDED AND BUILT 2026-09-05: slide to the limit.** Put to the user against the
+measurement above, and their answer was that a lone piece meeting a wall stops rather than
+refusing, so a set should not behave differently for having company. `resolveConvoy` now
+computes the shortest member's limit and returns it as `ConvoyResult.leadPos`: the set
+travels to **1.85 m and stays valid**, where it used to refuse at 1.90. A refusal that
+sliding cannot explain — a collision with a piece that is staying put — still refuses, and
+**at the delta the user asked for**, so a caller never draws a refusal in a place the
+pointer never was.
+
+**The limit is analytic rather than a search, and it rests on a coincidence worth naming.**
+For a member that can veto, the containment clamp is the ONLY x/z correction
+`resolvePlacement` applies — but only because `drag-resolve.ts` gates `snapToNeighbors` on
+`snapMode` and `snapToWall` on `ridesAWall`, two exemptions decided in unrelated places that
+happen to cover each other exactly. The correction therefore **is** the overshoot, so
+subtracting the largest one lands on the limit in a single retry rather than a search. Both
+halves of that coincidence are pinned, because either one moving alone silently turns the
+arithmetic into a guess.
+
+**`leadPos` is not optional, and the type cannot enforce it.** A caller that keeps its own
+`resolvePlacement` answer puts the lead at the full delta while the members stop short: the
+set arrives **deformed with `valid` saying true**, which is strictly worse than the refusal
+it replaced, because a refusal is at least visible. Both call sites write the lead from it.
+
+**What the mutation round cost, because it is the reusable half.** The first pass killed
+**6 of 14 and every survivor was a guard** — one sentence explains all five: *the limit only
+runs when the set is invalid*, so a fixture where nothing vetoes cannot reach the code at
+all. The wall-rider test written for exactly that concern asserted the exemption honestly
+and could never have caught `!wallRider` being deleted. Five fixtures now pair each guard
+with a member that actually vetoes: **11 of 14**. The three survivors are the two
+`Draggable` call sites and PlanView's, which no test in this repo reaches — recorded rather
+than papered over, and the reason the change was put in a browser before it landed.
 
 **The transferable part is where it turned out to live.** This was filed under "needs a real
 repro" and grouped with a click sequence as DOM-only, and it is arithmetic in `lib/` that
@@ -2876,12 +2909,38 @@ seventeen items put to them, which is where every defect in § 2 – § 5 and §
 Their report is the *observation*; the mechanism and every number beside it is arithmetic
 this session did afterwards, from the functions named.
 
-**Not seen by anybody:** everything in § A – § G, § H.1's replacement row, and the two
-repros in § H.8. The four items still live in `visual-check.md`.
+**Not seen by anybody:** everything in § A – § G, § H.1's replacement row, and the
+drill-in repro in § H.8. The four items still live in `visual-check.md`.
 
-That boundary is the reason § H.8 says "needs a real repro" rather than proposing a fix: two
+That boundary is the reason § H.8 said "needs a real repro" rather than proposing a fix: two
 of the user's reports have a plausible mechanism and no measurement, and one of the two
 plausible mechanisms this session did measure came back **refuted**.
+
+**The drag half of § H.8 has since been in a browser, and what that run could and could not
+settle is worth recording, because the "could not" is the interesting half.** Driving a
+two-piece selection with the arrow keys on the plan tab, against a production build of
+`main`: the set stopped **3.55 m short** of where the dragged piece reaches on its own. That
+is the user's report, on screen, for the first time — the mechanism had only ever been shown
+in `lib/`.
+
+**The same run could not tell the two builds apart, and the reason is a lattice.** An arrow
+nudge is a fixed step, so the set stops on a multiple of it; in every fixture reachable from
+the keyboard the binding member's clamp landed exactly on one of those multiples, and
+"refuse" and "slide to the limit" then stop in the same place to six decimals. Five versions
+of the probe each failed differently and each failure is written into
+[`scripts/slide-probe.mjs`](../scripts/slide-probe.mjs): a whole-room selection is bounded by a wall rider or an
+already-illegal member, and **neither of those can set a slide limit by design**; driving the
+widest piece measures its own clamp rather than a member's; a 15° turn moves the clamp but
+not off the lattice; and the snap control that would change the step lives in
+`TransformToolbar`, which renders on the **model** route only and needs a selection there, so
+it is not reachable from the tab the drag happens on. Seeding `snapMode: 'coarse'` into
+`danmu-studio-prefs` gets past that last one and still landed on a multiple.
+
+**So the four mutants that survive `tests/drag-convoy.test.ts` are still unverified**: the two
+`Draggable` call sites, `PlanView`'s `settled` gate and `Draggable`'s. What the browser did
+establish is that the branch drags a set, carries it, and persists it with no console errors —
+a smoke test, not the discrimination. **A sub-step delta needs a POINTER drag**, which is the
+one gesture this probe never made.
 
 The desktop half of both is reachable with `pnpm build && pnpm start` and no login. What
 worked, so nobody re-derives it: **Playwright with Chromium, installed outside the repo**
@@ -5685,3 +5744,51 @@ fifty lines of live code in `app/onboarding/capture/page.tsx`, including two `se
 strings. A forbidden-vocabulary string planted inside that window kept the suite green;
 the identical string four lines past it went red. Both sweeps now use the character
 scanner in `tests/helpers/source.ts`, which was already there.
+---
+
+## § MOB · Mobile — recorded, not built, and the premise is the part to get right
+
+Filed **2026-09-05** from `docs/mobile-ux-audit.md`, a 227-line audit written by a third
+session working in the same checkout. **Nothing here is to be built**, and the row above says
+so twice on purpose.
+
+**The premise, because a later reader will otherwise collapse it into one of two things it is
+not.** Mobile is **neither a supported target nor a refused one**. It is a surface the app is
+*presented on*, and the bar is that it should not embarrass itself there. That is weaker than
+"supported" — no flow owes a phone a good experience, and no row below is allowed to grow into
+a mobile-first redesign — and it is stronger than "declined", which would make every row
+unopenable. The user's words, verbatim:
+
+> "mobile isn't the focus but it doesn't mean we should turn a blind eye to how the platform
+> is presented on there. If the fixes in the audit are legit and won't break anything just
+> keept note of it for later."
+
+and, in the same message, *"The mobile audit is for later not now"* — later meaning after the
+backlog cycles, not next.
+
+`NarrowViewportBanner` stays exactly as it is. It shows a touch device a modal and that modal
+is **dismissible**, so mobile is discouraged rather than blocked, and that is precisely the
+shape this ruling endorses. **Do not file "remove the banner" as a mobile row**; it is the
+mechanism by which the ruling is already true.
+
+| # | item | what it is | cost | state |
+|---|---|---|---|---|
+| M1 | **S1** every text field is 13px, and iOS Safari zooms the page on focus below 16px | **Re-derived on `main` @ `6c3c0c9`**: `.field` is `font-size: 13px` (`app/globals.css:717`). One block at a coarse-pointer media query fixes every screen at once. **The fix must not be `maximum-scale=1` / `userScalable: false`** — `app/layout.tsx`'s `viewport` correctly sets neither today, and adding them to stop the zoom would take pinch-zoom away from everyone who needs it. That is the trap this row exists to pre-empt | S | recorded, not built |
+| M2 | **S2** the app is installable and handles no safe area | **Re-derived**: `grep -rn safe-area app components lib` returns nothing, against a real `app/manifest.ts`. On a notched phone the installed PWA paints under the home indicator | S | recorded, not built |
+| M3 | **S3 + S4** sub-32px touch targets, and hover states that stick on iOS | The audit's figures, **not re-derived**. Both are a design-system pass rather than per-screen work, which is why they are one row | M | recorded, not built |
+| M4 | **S6** no `touch-action: manipulation` on controls | **Re-derived**: exactly one `touch-action` in the whole stylesheet (`globals.css:517`, `none`, on a drag surface). Every button keeps the double-tap-zoom delay | S | recorded, not built |
+| M5 | **S7** the Android icon ladder — **and this is the one claim to check before acting on it** | `app/manifest.ts` ships **one** `image/svg+xml` at `sizes: 'any'`, `purpose: 'any'`, with a comment saying a PNG ladder would be "a manifest that lies about what it can render". Chrome has taken SVG icons for installability since M93, so *"Android install is broken"* is probably **overstated**; what is real is the absent `maskable` purpose, which is cosmetic. **Do not raise a PR on this row without measuring an actual install** | S to measure | recorded, **premise unverified** |
+| M6 | **S5 / S8 / S9** a modal with no height ceiling, top-right toasts with 26px actions, 10–11.5px meta text | The audit's P1/P2 tail, grouped because they are one "does this read and fit on a small screen" pass | M | recorded, not built |
+| M7 | **flows 1–8** the per-route findings: landscape-phone capture and `dvh` (C1), the detect sticky CTA and capped review sheet (D1), photo pinch-zoom on detect (D3), touch-first onboarding CTA order (W1+L1), the touch studio toolbar and coach card (M1+M2), the quality default on touch (M4) | The audit's own order is S1 → C1 → D1 → D3 → W1+L1 → S2 → S3+S4 → M1+M2 → M4 → S5. **Keep it** — it is the author's, it is sound, and re-ranking it here would be a second source of truth for a priority nobody has re-measured | L in total | recorded, not built |
+
+**Two findings turned up while checking the audit that are NOT mobile**, recorded here only
+because this is where they were found and they would otherwise be lost with the window:
+
+- **`CatalogToggle` is rendered by `app/room/[roomId]/model/page.tsx` alone**, so on the **2D
+  plan** tab the only route into the Library is the right rail's footer button. Measured by a
+  Playwright probe on 2026-09-05, not inferred from the source. Same tab and the same shape as
+  § G.3's plan-tab help gap, and it is a desktop finding.
+- **Two buttons share the accessible name "Add"** (`CatalogToggle`, `AddPiecesButton`),
+  separated only by `title`. `CatalogPanel`'s own comment says the agreement is deliberate, so
+  this is a question rather than a defect: a screen-reader user on `/model` hears "Add,
+  collapsed" twice.
