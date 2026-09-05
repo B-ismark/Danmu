@@ -127,7 +127,7 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 9 | ~~**§ H.8** two reports that need a real repro~~ — **BOTH HALVES BUILT; this row is CLOSED 2026-09-05** | The group drag was measured and pinned in `lib/` (`tests/drag-convoy.test.ts`) — the set refused 450 mm before the dragged bed ran out, because a nightstand the containment clamp corrects fails the rigidity test and vetoes the gesture. **It needed no browser**: it was filed as DOM-only and is arithmetic. The user then chose **slide to the limit**, and it is built — `ConvoyResult.leadPos`, both call sites, 11/14 mutations. **The drill-in half was ALREADY BUILT when this row still said it was untouched**, and the contradiction sat 1,500 lines below it in this file's own § H.8 section: `lib/press-selection.ts` records the press in the CAPTURE phase, so the drill-in survives the gizmo swallowing the press, and it was verified in a browser on a production build. `lib/drag-click.ts` is the second half — a click collapses the selection only on a release that never moved. Both are on `main` with tests, and `Pickable.tsx` calls the first. Re-derived 2026-09-05 by checking for the modules rather than by reading this row | done | nothing |
 | 10 | **§ B.14** a turn that puts a corner through the wall — **ANSWERED AND BUILT 2026-09-03: keep and report, both paths** | The angle is always taken; what may not happen is a turn succeeding in silence. Two findings changed the shape of it: the second document said to contradict the first **no longer exists**, and `valid` is computed on the ALREADY-CLAMPED position, so a turn that slid a piece across the floor reports success. `turnNudge` is the sentence; `spinSelection` joins `turnInPlace` and stops being the one turn gesture with no pipeline, no cascade and no report | S once decided | done |
 | 11 | **§ H.6** Suggest, from the ground up — the user's explicit ask | The largest open thing here. It **subsumes** A.2, A.7 and G.2, and the 5 parked `it.fails` retire here too. (It used to name "A.3's `:555`" as a fourth; that line number stopped existing when the assertion was fixed, and § A.3 is closed — the surviving question there is not Suggest's to answer, it is whether ONE refusal in 532 is enough evidence for the re-check.) **It is NOT un-researched** — `docs/research/suggest-and-collision.md` is a three-layer design whose four questions to the user are all ANSWERED, including the feasibility split being in scope. Of the three things this section calls missing, **only one is** (support); facing is priced by `relationCost`, and groups move rigidly already | XL — refresh the research against `main`, then execute its rows | wants row 1 measured first, since it is a symptom |
-| 12 | **§ H.7** collision, properly — the user is open to replacing the engine | Every piece is one box or one ellipse, so a sofa's L, a table's legs and a plant's canopy are all the same rectangle. Same research doc, rows 4a/4b — and 4b is **half done** (`verticalExtent` makes ONE extent right; more than one still needs 4a). The duplication this row used to carry — *"six hand-written copies of the vertical-extent rule in five files"* — is **RETIRED (2026-09-04)**: all six call `verticalExtent`, plus a **seventh** the original list never named (`layout-settle.ts:380`), and `layout-score.ts:487` records it in the code. The only raw `pos[1] +` left in `lib/` is `rigid-parent.ts:184`'s rigid-child offset, never an instance of the rule. **This row is smaller than it was**, and the seventh copy is why a grep for the old wording could not have closed it | XL | independent of row 11, but they meet |
+| 12 | **§ H.7** collision, properly — the user is open to replacing the engine | **4a is MEASURED (2026-09-05) and the recommendation is to retire it — see § 4.6 of the research doc.** Swapping the box for the drawn geometry changes 0.11% of drag positions (189 of 172,032 once the instrument's own 299 are subtracted, 42 shapes, every shape a row) and **3.3% of sampled picking points** (5521 of 166,664 — the larger outcome by an order of magnitude, and not a collision question); every position in the *other* direction traces to a renderer drawing outside its own `dimMM`, which is literals in the wrong place rather than a case for compound footprints. **"Fix the six renderers" is not that work**: the 1120 geometry-only positions come from 20 shapes, the never-read-`dimMM` list is 6 renderers, and the two sets overlap in exactly two — two of the six are in the OPPOSITE column and two differ at no position at all. **`desk-l` draws 2.86 m where every consumer reads 1.60 m**, and 32 of 46 shapes escape their box at all. What this row still holds, unmeasured, is `analyzeRoom`'s clearance findings and the solver's cost. Previously: every piece is one box or one ellipse, so a table's legs and a plant's canopy are the same rectangle — and "a sofa's L" was in that sentence for months describing a shape this codebase does not have. Same research doc, rows 4a/4b — and 4b is **half done** (`verticalExtent` makes ONE extent right; more than one still needs 4a). The duplication this row used to carry — *"six hand-written copies of the vertical-extent rule in five files"* — is **RETIRED (2026-09-04)**: all six call `verticalExtent`, plus a **seventh** the original list never named (`layout-settle.ts:380`), and `layout-score.ts:487` records it in the code. The only raw `pos[1] +` left in `lib/` is `rigid-parent.ts:184`'s rigid-child offset, never an instance of the rule. **This row is smaller than it was**, and the seventh copy is why a grep for the old wording could not have closed it | XL | independent of row 11, but they meet |
 | 13 | **A.7** `snapYaws`' residual — 40 crooked pieces in 240 solves | **The 197 was BEFORE the fix**, which shipped in `fa12f1a`; this row said 197 for weeks and § A.7's own heading said it too. What is left is the residual, and § A.7 already says what it needs: a search that can move the piece **and** its neighbour, which a finish pass cannot do | M | **a symptom of row 11 and only closable there** |
 | 14 | **A.2 / G.2** variety in Shuffle, the anchor-first trade. *(G.3 was a third item carried in this row's header rather than in a row of its own, which is how a done thing hides inside an open one — it shipped in #106 and is recorded in § G.3.)* | Real, but none is a defect a user has reported. A.2's number is measured (penalty 4, range 2–8, in cost units) and **nothing pins it** — a test that fails at `diversityPenalty: 0` is still owed. G.2 stays a decision: gating a pass on room shape trades one preset's tail for another's. **G.3 turned out not to be a decision at all**: it was filed as "shorter card or signpost gap", and both tabs render the same two lists out of the same shell, so the copy was already true on the plan and simply unsaid there | varies | after row 11 decides whether they still exist |
 | 15 | **E** the jsdom component bucket — **the shim half is DONE 2026-09-03; the coverage half is row 9's** | The count in this row was already stale when it was written: **14 `.test.tsx` files**, not 9, and **ten** hand-rolled the `next/navigation` object rather than five. They had drifted into three formattings of the same object and two different comments explaining it. `vitest.config.ts` now names `setupFiles: ['tests/helpers/setup.ts']` for the two globals — jsdom implements neither, and `lib/use-media-query.ts` calls `window.matchMedia` **unguarded** while every other reader uses `?.`, so `matches: false` changes nothing for the optional readers and unblocks the one that needs it; the `typeof window` guard is what keeps ~115 node-environment files from paying for it. `tests/helpers/mount.ts` owns `navigationMock`, called per file because the room id differs — `vi.mock`'s factory is `async` and `await import()`s it, since vitest hoists the call above every `import` and a static one throws *before initialization*. Both halves gated in `tests/toolchain.test.ts`, because an extraction is undone by one paste | done | **row 9 is what is left of § E** |
@@ -2623,16 +2623,55 @@ need be. If we need to build a proper engine and structured algorithm too, that'
 The baseline to research against, so nobody has to reconstruct it: every piece is **one box**
 in its own frame (`obbFromPart`) or **one ellipse** (`footFromPart`, when `part.circle`),
 tested by separating axes (`obbOverlap`) with a −10 mm pad, plus a vertical-extent test in
-`collidesAt` that permits stacking. There is **no per-shape hull anywhere**: a sofa's L, a
-dining table's legs, a curtain's drape and a plant's canopy are all the same rectangle. That
-is why a chair only tucks under a table by the width of the pad, and why the solver's overlap
-term is coarser than what the user can see on screen.
+`collidesAt` that permits stacking. There is **no per-shape hull anywhere**: a dining table's
+legs, a curtain's drape and a plant's canopy are all the same rectangle. That is why a chair
+only tucks under a table by the width of the pad, and why the solver's overlap term is coarser
+than what the user can see on screen.
+
+**Measured 2026-09-05, and it changes what this paragraph argues for.** The sentence used to
+open with "a sofa's L", which is a shape this codebase does not have — `SofaGeo` draws a
+full-width plinth. More importantly the list implies the box is a conservative outer bound a
+hull would shrink, and for **32 of 46 shapes it is not**: they draw geometry outside their own
+`dimMM`, so the box is too SMALL and the error is a false negative. Dragging a 600 mm box past
+one obstacle at 4096 positions a shape, the drawn geometry refuses **1120** positions the box
+allows and the box refuses **488** the geometry allows, of which 299 are the instrument
+(`mirror-oval` draws nothing with floor area) leaving **189** — and **every one of the 1120
+traces to a renderer drawing outside `dimMM`**, which is a literal in the wrong place rather
+than a case for a hull. `desk-l` draws 2.86 m where every consumer reads 1.60 m. The larger
+reported outcome is not collision at all: **picking differs at 5521 of 166,664 sampled points,
+3.3%**. See § 4.6 of `docs/research/suggest-and-collision.md` for the tables; the instrument is
+`tests/footprint-fidelity.test.tsx`, `tests/footprint-outcomes.test.tsx` and
+`tests/helpers/geometry-walk.ts`.
+
+**The first version of those numbers was wrong, and how it was wrong is the reusable part.**
+The sweep minted its own obstacle and did not set `circle`, so all eight round shapes were
+swept as rectangles: box-only read 592 rather than 488, and `fan` reported 56 box-only and 0
+geometry-only when it is 0 and 12 — the direction reversed on the shape the write-up had
+picked as its leading example. `collidesAt` reads the **persisted** `o.circle` rather than
+deriving roundness from the shape, which makes the flag a stored relation: a fixture that mints
+its own parts is not a second reader of that rule, it is a different rule that agrees on the 34
+of 42 shapes which are not round. The control that existed for exactly this class could not
+see it, because it hands `collidesAt` and the copy under test the same object.
 
 Two properties of the current design are worth carrying into any replacement, because both
 were bought with defects: the footprint is **derived from `dimMM`**, so it recalibrates on a
-resize for free, and a round piece is tested as an **ellipse rather than its box** — which
+resize for free — though six renderers never read `dimMM` at all, so what is drawn does not
+always recalibrate with it — and a round piece is tested as an **ellipse rather than its
+box** — which
 `lib/plan-hit.ts` also does for picking, so the thing you can click and the thing that
 collides agree.
+
+**They agree with each other and can still both be wrong, because both read the stored flag.**
+`defaultScene` authors `circle` itself at four sites and misses a fifth: the `u` layout's
+`lamp-table` ("Bedside lamp", 250 x 250 x 500) is seeded without it, while the plant, floor
+lamp and pendant beside it get it. `normalizeStoredParts` re-derives the flag, but only on the
+three paths that load a **persisted** snapshot — the seed path hands `defaultScene` straight to
+`setParts` — so that lamp has a square footprint in a fresh starter room and a round one after
+the room has been saved and reloaded. The 3D tab draws a cylinder throughout. Same defect shape
+as the one `addPart` was written to end, one layer over: `scene-store.ts` owns the rule for
+everything added from the Library precisely because three callers each copying it is how the
+ceiling fan came to be square when added and round when detected. The seeder is the fourth
+caller and nothing sweeps it.
 
 ### 8. Two reports that need a real repro before they can be fixed
 
