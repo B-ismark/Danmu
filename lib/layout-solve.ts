@@ -200,22 +200,19 @@ export const IMPOSSIBLE_TERMS = ['overlap', 'outside'] as const satisfies readon
  *  `as const` keeps the literals, so the union and the list cannot disagree. A union
  *  hand-written next to a list is the drift this repo names in `CLAUDE.md`: it goes
  *  wrong in the one direction nobody notices, and here that would be a sentence about
- *  a condition the solver no longer has. */
-export type ImpossibleTerm = (typeof IMPOSSIBLE_TERMS)[number];
-
-/** Is this hard term one of the impossible ones — as a type guard, because narrowing
- *  the list to a tuple narrows `includes` with it.
+ *  a condition the solver no longer has.
  *
- *  Every consumer of the partition holds a `keyof ScoreWeights` (it comes out of
- *  `HARD_TERMS`, or out of a `CostBreakdown` key), and `IMPOSSIBLE_TERMS.includes(k)`
- *  stopped type-checking the moment the array became `as const` — which is the version
- *  that made the union derivable, so the two changes travel together. A cast at each
- *  call site would work and would put the widening in the callers, where the next one
- *  copies it; one guard here puts it in a single place and hands back the narrowing as
- *  a `k is` rather than a boolean. */
-export function isImpossibleTerm(k: keyof ScoreWeights): k is ImpossibleTerm {
-  return (IMPOSSIBLE_TERMS as readonly string[]).includes(k);
-}
+ *  **There is deliberately no `isImpossibleTerm` guard beside this, and it was deleted
+ *  rather than never written.** It read a `keyof ScoreWeights` and narrowed it, and its
+ *  docblock argued for consumers that do not exist: every production reader of the
+ *  partition — `impossibleTermsWorse`, `impossibleClause`, `impossibility` — walks
+ *  `IMPOSSIBLE_TERMS` itself, so none of them ever holds an outside key to test. Its
+ *  only callers were two filters and an assertion in `tests/impossible-veto.test.ts`,
+ *  which now derive `RECOVERABLE` once at module scope. An export with no production
+ *  caller reads as shipped code to the next person; if a real consumer appears, the
+ *  guard is three lines and the widening cast belongs in it rather than at that call
+ *  site. */
+export type ImpossibleTerm = (typeof IMPOSSIBLE_TERMS)[number];
 
 /** Which impossible conditions the answer would have INTRODUCED, given the two
  *  breakdowns `declineFor` compared.

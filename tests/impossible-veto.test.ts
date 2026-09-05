@@ -8,7 +8,6 @@ import {
   declinedTermsFor,
   impossibleClause,
   impossibleTermsWorse,
-  isImpossibleTerm,
   lockedForSolve,
   makeRng,
   openRoutes,
@@ -58,6 +57,17 @@ const cand = (total: number, b: Partial<CostBreakdown> = {}): Candidate => ({
   breakdown: { ...ZERO, ...b, total },
 });
 
+/** The other side of the partition, derived once.
+ *
+ *  `IMPOSSIBLE_TERMS` is `as const`, so `includes` narrows with it and refuses a wider
+ *  `keyof ScoreWeights`; the widening cast is the price of that, and it is paid here
+ *  rather than at each filter. `lib/layout-solve.ts` used to export an `isImpossibleTerm`
+ *  type guard for the same reason, with a docblock arguing for production consumers that
+ *  never existed — every reader there walks the tuple itself. The cast moved to the only
+ *  file that needs it; see the note on `ImpossibleTerm` for why the guard is not coming
+ *  back. */
+const RECOVERABLE = HARD_TERMS.filter((t) => !(IMPOSSIBLE_TERMS as readonly string[]).includes(t));
+
 describe('IMPOSSIBLE_TERMS — the split is by kind, not by severity', () => {
   it('names the two terms that describe a room that cannot exist', () => {
     expect([...IMPOSSIBLE_TERMS].sort()).toEqual(['outside', 'overlap']);
@@ -75,7 +85,7 @@ describe('IMPOSSIBLE_TERMS — the split is by kind, not by severity', () => {
     // absent from every list, so it silently becomes recoverable and `Fix` writes it
     // to the store. That is CLAUDE.md rule 3's shape exactly — absence inherits a
     // default, and absence is never the defect.
-    const recoverable = HARD_TERMS.filter((t) => !isImpossibleTerm(t));
+    const recoverable = RECOVERABLE;
     expect(recoverable, 'a hard term is either impossible or priced, and door is priced')
       .toContain('door');
     for (const term of recoverable) {
@@ -98,7 +108,7 @@ describe('IMPOSSIBLE_TERMS — the split is by kind, not by severity', () => {
     // decision: is it a room that cannot exist, or a room that is merely bad?
     expect([...HARD_TERMS].sort()).toEqual(['access', 'door', 'navigation', 'outside', 'overlap']);
 
-    const recoverable = HARD_TERMS.filter((t) => !isImpossibleTerm(t));
+    const recoverable = RECOVERABLE;
     expect([...IMPOSSIBLE_TERMS, ...recoverable].sort()).toEqual([...HARD_TERMS].sort());
     for (const term of IMPOSSIBLE_TERMS) expect(HARD_TERMS).toContain(term);
     // Non-empty in both directions: an emptied `IMPOSSIBLE_TERMS` makes the `for` above
@@ -570,21 +580,52 @@ describe('SolveResult.declinedTerms — which condition, not both conditions', (
     // the disjunction this replaces.
     const parts = defaultScene('u', 6, 4);
     const poly = footprintForLayout('u', 6, 4);
-    let impossible = 0;
+    /** Every outcome counted, including the ones that turn out not to happen.
+     *
+     *  The `else` arm below carries the "empty on every other outcome" half of this
+     *  test's NAME, and nothing here asserted that it ever ran: eight impossible
+     *  refusals satisfy `impossible > 0` and leave that half measuring an empty set,
+     *  green. So both sides are counted and both are asserted non-empty.
+     *
+     *  The rows are keyed on the `SolveDecline` union with `null` folded in as
+     *  `applied`, which is what makes a THIRD refusal reason a typecheck error here
+     *  rather than a silently uncounted seed — a census whose rows appear on demand
+     *  always sums to `SEEDS.length` and can never notice an outcome nobody decided
+     *  about. And the zeros are printed rather than skipped: `no-gain` is 0 over these
+     *  eight seeds, which is precisely the fact the next reader needs, because it says
+     *  the unit tests above are that arm's only cover. */
+    const census: Record<'impossible' | 'no-gain' | 'applied', number> = {
+      impossible: 0,
+      'no-gain': 0,
+      applied: 0,
+    };
     let singletons = 0;
     for (const seed of SEEDS) {
       const r = solveLayout(parts, poly, lockedForSolve(parts, {}, null), { seed });
+      census[r.declined ?? 'applied']++;
       if (r.declined === 'impossible') {
-        impossible++;
         if (r.declinedTerms.length === 1) singletons++;
         expect(r.declinedTerms.length, `seed ${seed} refused for impossibility and named nothing`).toBeGreaterThan(0);
-        for (const t of r.declinedTerms) expect(isImpossibleTerm(t)).toBe(true);
+        for (const t of r.declinedTerms) {
+          expect(IMPOSSIBLE_TERMS, `seed ${seed} named ${t}, which is not one of the impossible terms`).toContain(t);
+        }
         console.log(`  seed ${seed}  impossible  terms=[${r.declinedTerms.join(',')}]  -> "${impossibleClause(r.declinedTerms)}"`);
       } else {
         expect(r.declinedTerms, `seed ${seed} declined ${r.declined} and named a condition`).toEqual([]);
       }
     }
+    const impossible = census.impossible;
+    console.log(
+      `  census over ${SEEDS.length} seeds: ` +
+        Object.entries(census)
+          .map(([k, v]) => `${k}=${v}`)
+          .join('  '),
+    );
     expect(impossible, 'no solve took the impossibility arm, so the filled half proved nothing').toBeGreaterThan(0);
+    expect(
+      census['no-gain'] + census.applied,
+      'every seed refused for impossibility, so the empty-on-every-other-outcome half never ran',
+    ).toBeGreaterThan(0);
     // **The claim the whole change rests on, asserted rather than argued.** If every real
     // refusal named BOTH conditions, this branch would be a more expensive way to print
     // the disjunction it replaces, and every assertion above would still pass. Measured
