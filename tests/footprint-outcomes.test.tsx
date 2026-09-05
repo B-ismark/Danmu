@@ -33,7 +33,7 @@ vi.mock('@/components/three/materials', () => ({
 }));
 
 import { PartGeometry } from '@/components/three/DynamicPart';
-import { defaultScene, collidesAt, SHAPES, PART_LIBRARY, type ScenePart, type Shape } from '@/lib/scene-spec';
+import { defaultScene, collidesAt, isRoundPart, isWallMountedPart, normalizeStoredParts, SHAPES, PART_LIBRARY, type Category, type ScenePart, type Shape } from '@/lib/scene-spec';
 import { footFromPart, footOverlap, pointInFoot } from '@/lib/geometry';
 import { verticalExtent } from '@/lib/physics';
 import { isSoftFurnishing } from '@/lib/layout-rules';
@@ -85,6 +85,41 @@ function frontIdByBox(x: number, z: number, order: readonly ScenePart[]): string
   return id;
 }
 
+/** Every part this file mints, minted the way production mints one.
+ *
+ *  `collidesAt` reads the PERSISTED `o.circle` rather than deriving roundness from the
+ *  shape (`lib/scene-spec.ts:3183`). So a fixture that builds its own object is not a
+ *  second reader of that rule — it is a DIFFERENT rule that happens to agree on the 34
+ *  of 42 shapes which are not round, which is exactly why it read as correct.
+ *
+ *  The sweep below minted its obstacle without the flag and swept all eight round shapes
+ *  as rectangles. `fan` reported 56 box-only positions and 0 geometry-only; with the flag
+ *  it is 0 and 12 — the direction reverses — and the flagless number had already been
+ *  published as the leading "the box is too generous" case.
+ *
+ *  `isRoundPart(shape) || undefined` is `normalizeStoredParts`' own spelling, character
+ *  for character, so this is the production derivation rather than a copy of it. The
+ *  `|| undefined` half is load-bearing: absent and `false` must be one answer, because
+ *  every reader tests the flag for truthiness.
+ *
+ *  ONE mint site, for the reason `scene-store.ts`'s `addPart` gives for owning it in
+ *  production: three callers each copying the rule is how the ceiling fan came to be
+ *  square-footed when added from the Library and round when found in a photograph. */
+function mint(
+  shape: Shape,
+  category: Category,
+  dimMM: [number, number, number],
+  pos: [number, number, number],
+  id: string,
+  rot = 0,
+): ScenePart {
+  return {
+    id, name: shape, shape, category, dimMM, pos, rot, color: '#b07a52',
+    circle: isRoundPart(shape) || undefined,
+    wallMounted: isWallMountedPart(category, shape) || undefined,
+  } as unknown as ScenePart;
+}
+
 /** The pair test `collidesAt` runs, with its footprint arm swapped out. */
 function pairHits(a: ScenePart, b: ScenePart, mode: 'box' | 'geometry'): boolean {
   const [aB, aT] = verticalExtent(a.category, a.shape, a.dimMM, a.pos[1]);
@@ -111,40 +146,82 @@ describe('one box per piece, against the geometry the app draws', () => {
     // vertical epsilon, its -0.01 pad or its soft-furnishing filter and BOTH arms here
     // still agree with each other, all six tests stay green, and every number this file
     // publishes becomes a measurement of a predicate the app no longer runs.
-    const obstacle = { id: 'obs', name: 'wardrobe', shape: 'wardrobe' as Shape, category: 'storage',
-                       dimMM: [2400, 600, 2100] as [number, number, number],
-                       pos: [0, 0, 0] as [number, number, number], rot: 0, color: '#b07a52' } as unknown as ScenePart;
+    //
+    // TWO obstacles, and the round one is not decoration. With a wardrobe alone this
+    // control never reached `footFromPart`'s circle branch on either side, so the whole
+    // round-footprint half of the predicate it claims to pin was unexercised — and the
+    // `plant` here is a shape the sweep below reports on.
+    const obstacles = [
+      mint('wardrobe', 'wardrobe', [2400, 600, 2100], [0, 0, 0], 'obs'),
+      mint('plant', 'plant', [400, 400, 1600], [0, 0, 0], 'obs'),
+    ];
+    // `'storage'` stood where `'wardrobe'` does now. It is not a member of `Category` at
+    // all, and `as unknown as ScenePart` — which every fixture in this file used to carry
+    // — suppressed the error for as long as the object was built inline. `anchorFor`
+    // answers `'floor'` for both, so no number moves; the point is that a cast wide
+    // enough to build a fixture is wide enough to build an impossible one, and one mint
+    // site with a real `Category` parameter is what makes tsc the thing that says so.
     let checked = 0;
     let agreed = 0;
     let collided = 0;
     let straddled = 0;
-    // The mover is lifted through a range of heights as well as swept across the floor.
-    // Sweeping at y = 0 only, this control could not see `collidesAt`'s VERTICAL gate at
-    // all: widening its 0.005 epsilon to 0.5 changed nothing and the mutation survived,
-    // because nothing in the fixture ever sat near the boundary. `obstacle` is 2100 mm
-    // tall, so a 900 mm mover at y = 2.09 overlaps it by 10 mm and at y = 2.11 clears it
-    // by 10 mm — either side of the epsilon, which is what makes the gate observable.
-    const [, obsTop] = verticalExtent(obstacle.category, obstacle.shape, obstacle.dimMM, obstacle.pos[1]);
-    for (let x = -1.6; x <= 1.6; x += 0.2) {
-      for (let z = -1.6; z <= 1.6; z += 0.2) {
-        for (const y of [0, obsTop - 0.01, obsTop - 0.004, obsTop + 0.004, obsTop + 0.01]) {
-          const m = { id: 'mover', name: 'mover', shape: 'box' as Shape, category: 'other',
-                      dimMM: [600, 600, 900] as [number, number, number],
-                      pos: [x, y, z] as [number, number, number], rot: 0, color: '#888' } as unknown as ScenePart;
-          const mine = pairHits(m, obstacle, 'box');
-          checked++;
-          if (mine === collidesAt([m, obstacle], 'mover', m.pos, m.rot, m.dimMM)) agreed++;
-          if (mine) collided++;
-          if (Math.abs(y - obsTop) <= 0.01) straddled++;
+    let round = 0;
+    for (const obstacle of obstacles) {
+      // The mover is lifted through a range of heights as well as swept across the floor.
+      // Sweeping at y = 0 only, this control could not see `collidesAt`'s VERTICAL gate at
+      // all: widening its 0.005 epsilon to 0.5 changed nothing and the mutation survived,
+      // because nothing in the fixture ever sat near the boundary. The wardrobe is 2100 mm
+      // tall, so a 900 mm mover at y = 2.09 overlaps it by 10 mm and at y = 2.11 clears it
+      // by 10 mm — either side of the epsilon, which is what makes the gate observable.
+      const [, obsTop] = verticalExtent(obstacle.category, obstacle.shape, obstacle.dimMM, obstacle.pos[1]);
+      for (let x = -1.6; x <= 1.6; x += 0.2) {
+        for (let z = -1.6; z <= 1.6; z += 0.2) {
+          for (const y of [0, obsTop - 0.01, obsTop - 0.004, obsTop + 0.004, obsTop + 0.01]) {
+            const m = mint('box', 'other', [600, 600, 900], [x, y, z], 'mover');
+            const mine = pairHits(m, obstacle, 'box');
+            checked++;
+            if (mine === collidesAt([m, obstacle], 'mover', m.pos, m.rot, m.dimMM)) agreed++;
+            if (mine) collided++;
+            if (Math.abs(y - obsTop) <= 0.01) straddled++;
+            if (obstacle.circle && mine) round++;
+          }
         }
       }
     }
-    // All three matter. A run that checked nothing agrees on nothing and would pass a bare
-    // equality; a fixture that never collides agrees everywhere for the wrong reason.
+    // All four matter. A run that checked nothing agrees on nothing and would pass a bare
+    // equality; a fixture that never collides agrees everywhere for the wrong reason; and
+    // a fixture that never collides with the ROUND obstacle leaves the circle branch of
+    // both `footFromPart` calls untaken while reporting full agreement.
     expect(checked, 'positions compared').toBeGreaterThan(500);
     expect(collided, 'the fixture must reach the colliding case').toBeGreaterThan(0);
     expect(straddled, 'the fixture must reach the vertical gate').toBeGreaterThan(0);
+    expect(round, 'the fixture must reach the ROUND footprint branch').toBeGreaterThan(0);
     expect(agreed, 'box arm disagreed with collidesAt').toBe(checked);
+  });
+
+  it('every part this file mints carries the flags production would give it', () => {
+    // The control the one above STRUCTURALLY cannot be. It hands `collidesAt` and
+    // `pairHits` the same object, so an object minted with the wrong flag is wrong on
+    // both sides and they agree perfectly — which is what happened: the sweep swept
+    // eight round shapes as rectangles and this file reported full agreement throughout.
+    // A control that restates its subject cannot see its subject's inputs.
+    //
+    // `normalizeStoredParts` returns the SAME OBJECT when it has nothing to correct, so
+    // identity is the assertion and there is no field list here to drift. That is not a
+    // convenience: on its first run this caught a SECOND missing flag nobody was looking
+    // for — `wallMounted`, absent from every part this file mints. It moves no number
+    // here (`DynamicPart` never reads it, and `verticalExtent` derives the anchor from
+    // category and shape rather than from the flag), and it is fixed anyway, because the
+    // whole point of one mint site is that it does not get to be selectively faithful.
+    const minted = SHAPES.flatMap((shape) => {
+      const lib = PART_LIBRARY.find((l) => l.shape === shape);
+      return lib ? [mint(shape, lib.category, lib.dimMM, [0, 0, 0], 'probe')] : [];
+    });
+    expect(minted.length, 'the sweep must have shapes to mint').toBeGreaterThan(40);
+    expect(minted.filter((p) => p.circle).length, 'and round ones among them').toBeGreaterThan(0);
+    for (const p of minted) {
+      expect(normalizeStoredParts([p])[0], `${p.shape} is not minted as production mints it`).toBe(p);
+    }
   });
 
   it('the picking arm IS `hitsAt`, and the paint order IS `planPaintOrder`', () => {
@@ -154,8 +231,7 @@ describe('one box per piece, against the geometry the app draws', () => {
     // a control that cannot observe the thing it is pinning. A small piece sitting
     // inside a large one is exactly the case `planPaintOrder` exists to decide.
     const mk = (id: string, dim: [number, number, number], pos: [number, number, number]) =>
-      ({ id, name: id, shape: 'box' as Shape, category: 'other', dimMM: dim, pos, rot: 0,
-         color: '#888' }) as unknown as ScenePart;
+      mint('box', 'other', dim, pos, id);
     const parts = [
       ...defaultScene('rect', ROOM_W, ROOM_D).filter((p) => !isSoftFurnishing(p)),
       mk('big', [1600, 1200, 400], [-1.2, 0, 0.8]),
@@ -190,11 +266,7 @@ describe('one box per piece, against the geometry the app draws', () => {
     // footprint, so its rotated hull bounds must equal `footFromPart`'s corners — and
     // the fixture is deliberately NON-SQUARE and rotated off an axis, because at 0°,
     // 180° or on a square a sign error in the rotation is invisible.
-    const probe = {
-      id: 'ctl', name: 'ctl', shape: 'box' as Shape, category: 'other',
-      dimMM: [1200, 400, 600] as [number, number, number],
-      pos: [1.5, 0, -0.75] as [number, number, number], rot: Math.PI / 6, color: '#888',
-    } as unknown as ScenePart;
+    const probe = mint('box', 'other', [1200, 400, 600], [1.5, 0, -0.75], 'ctl', Math.PI / 6);
     const mine = convexHull(hullsOf(probe).flatMap((h) => h.hull));
     const f = footFromPart(probe.pos, probe.rot, probe.dimMM, false);
     const c = Math.cos(f.rot), s = Math.sin(f.rot);
@@ -315,10 +387,7 @@ describe('one box per piece, against the geometry the app draws', () => {
     // every shape gets a row whether or not anything differs.
     const STEP = 0.05;
     const REACH = 1.6;
-    const mover = (x: number, z: number) =>
-      ({ id: 'mover', name: 'mover', shape: 'box' as Shape, category: 'other',
-         dimMM: [600, 600, 900] as [number, number, number],
-         pos: [x, 0, z] as [number, number, number], rot: 0, color: '#888' }) as unknown as ScenePart;
+    const mover = (x: number, z: number) => mint('box', 'other', [600, 600, 900], [x, 0, z], 'mover');
 
     type SweepRow = { shape: Shape; n: number; boxOnly: number; geomOnly: number; both: number };
     const out: SweepRow[] = [];
@@ -326,8 +395,7 @@ describe('one box per piece, against the geometry the app draws', () => {
     for (const shape of SHAPES) {
       const lib = PART_LIBRARY.find((l) => l.shape === shape);
       if (!lib) continue; // recorded below as a row that could not be built, not dropped in silence
-      const obstacle = { id: 'obs', name: shape, shape, category: lib.category, dimMM: lib.dimMM,
-                         pos: [0, 0, 0] as [number, number, number], rot: 0, color: '#b07a52' } as unknown as ScenePart;
+      const obstacle = mint(shape, lib.category, lib.dimMM, [0, 0, 0], 'obs');
       const row: SweepRow = { shape, n: 0, boxOnly: 0, geomOnly: 0, both: 0 };
       for (let x = -REACH; x <= REACH; x += STEP) {
         for (let z = -REACH; z <= REACH; z += STEP) {
@@ -385,8 +453,7 @@ DRAG SWEEP — a 600 x 600 x 900 box moved past one obstacle, ${STEP * 1000} mm 
     // Splitting them is the whole result, so it is pinned here.
     const overOf = (shape: Shape) => {
       const lib = PART_LIBRARY.find((l) => l.shape === shape)!;
-      const part = { id: 'o', name: shape, shape, category: lib.category, dimMM: lib.dimMM,
-                     pos: [0, 0, 0] as [number, number, number], rot: 0, color: '#b07a52' } as unknown as ScenePart;
+      const part = mint(shape, lib.category, lib.dimMM, [0, 0, 0], 'o');
       const hs = hullsOf(part);
       const hw = lib.dimMM[0] / 2000, hd = lib.dimMM[1] / 2000;
       let over = 0;
