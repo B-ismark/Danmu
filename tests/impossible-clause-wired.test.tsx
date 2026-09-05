@@ -79,6 +79,22 @@ const ZERO = {
 
 const HEIGHT = 2.5;
 
+/** The `u` starter, as the SEED path produces it — which is not quite as the load path
+ *  does, and that was checked rather than assumed.
+ *
+ *  `defaultScene` authors `circle` at four sites and misses a fifth: this room's
+ *  `lamp-table` is seeded without it while the plant, floor lamp and pendant get it.
+ *  `normalizeStoredParts` re-derives the flag, but only on the three paths that load a
+ *  PERSISTED snapshot — the seed path hands `defaultScene` straight to `setParts`,
+ *  because the seeder is supposed to author it. So a fresh starter room and the same room
+ *  after a save disagree about one lamp's footprint (found by the footprint lane, filed in
+ *  the research doc's § H.7, unfixed at the time of writing).
+ *
+ *  It does not reach this file, and that is measured, not argued: `analyzeRoom` over this
+ *  scene reports the same two findings — `zone` "Bed hard to get into" and `cut-off` "Part
+ *  of the floor is cut off" — with the flag set and with it absent. Both arms of
+ *  `tryFixFor` below therefore exist in both worlds. Worth re-running if that fix lands
+ *  and this file goes red for no reason you can see. */
 function seeded(w: number, d: number) {
   const footprint = footprintForLayout('u', w, d);
   return { footprint, parts: defaultScene('u', w, d, { footprint, height: HEIGHT }) };
