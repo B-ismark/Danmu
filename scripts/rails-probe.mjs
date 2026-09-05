@@ -10,9 +10,14 @@
 // returns zeros from getBoundingClientRect, so tests/rail-sash-gestures.test.tsx asserts
 // the store and the property STRING and says so in its own header.
 //
-// MEASURED, against two production builds:
+// MEASURED, against two production builds, when this file held S1-S8:
 //   third-agent/mobile-ux-pass 8fbfd85 ..... 2 passed, 8 failed
 //   fix/third-agent-rails (this repair) ... 10 passed, 0 failed
+//   ...and a peer ran this same file against their own build and reproduced 10/0.
+//
+// S9, S10 and S11 were added after five review lenses measured four more ways to move
+// a rail nobody asked to move — three of them present on `main` as well. Their numbers
+// are in the run this file's PR quotes; do not read the 10/0 above as covering them.
 //
 // The prediction was written before the first run and is kept beside this file at
 // scripts/rails-probe-PREDICTION.md, because a prediction read after the fact is not a
@@ -199,6 +204,15 @@ async function main() {
   }
 
   // ── S4 · the Shuffle label, idle and busy ─────────────────────────────────
+  //
+  // The busy string is the one this scenario exists for. `Shuffling…` is ~18px wider
+  // than `Shuffle` and it is the tell that has to survive `prefers-reduced-motion`,
+  // where the ring does not turn — so the arithmetic in the PR that widened this row
+  // is about the BUSY label, and the first version of this scenario measured the idle
+  // one and printed "not counted either way" when it missed the other. That is an
+  // assertion opting out when its subject is absent: two recorded runs both reported
+  // 10 of a possible 11 checks, which says it never once executed, on either build.
+  // It fails now instead. A probe that cannot see its subject has not passed.
   {
     const { ctx, page } = await fresh(browser);
     const read = () =>
@@ -207,14 +221,22 @@ async function main() {
           /^(Shuffle|Shuffling)/.test(b.textContent?.trim() ?? ''),
         );
         if (!btn) return null;
-        // The label's own box, which is the span when there is one and the button
-        // otherwise — a bare text node has no box to measure.
-        const span = btn.querySelector('span') ?? btn;
+        // The span carrying the TEXT. `querySelector('span')` takes the first one,
+        // which in the busy state is the spinner — a plausible number about the wrong
+        // element, which is worse than no number. A bare text node has no box, so the
+        // button is the fallback.
+        const label = [...btn.querySelectorAll('span')].find((s) => /Shuffl/.test(s.textContent ?? ''));
+        const box = label ?? btn;
+        const r = btn.getBoundingClientRect();
+        const row = btn.parentElement?.getBoundingClientRect();
         return {
           text: btn.textContent.trim(),
-          scroll: span.scrollWidth,
-          client: span.clientWidth,
-          buttonW: Math.round(btn.getBoundingClientRect().width),
+          measured: label ? 'label span' : 'button',
+          scroll: box.scrollWidth,
+          client: box.clientWidth,
+          buttonW: Math.round(r.width),
+          buttonTop: Math.round(r.top),
+          rowH: row ? Math.round(row.height) : null,
         };
       });
 
@@ -222,26 +244,45 @@ async function main() {
     if (!idle) {
       no('S4', 'precondition: no Shuffle button on the plan tab');
     } else {
-      note('S4', `idle "${idle.text}": span ${idle.scroll} in ${idle.client}, button ${idle.buttonW}px`);
+      note('S4', `idle "${idle.text}" (${idle.measured}): ${idle.scroll} in ${idle.client}, button ${idle.buttonW}px, row ${idle.rowH}px`);
       const cut = idle.scroll > idle.client + 1;
       if (!cut) ok('S4', `the idle label is whole (${idle.scroll} ≤ ${idle.client})`);
       else no('S4', `the idle label is cut: ${idle.scroll} of text in ${idle.client}`);
 
-      // And the busy string, which is the longer one and the reduced-motion tell.
       await page.evaluate(() => {
         const btn = [...document.querySelectorAll('button')].find((b) =>
           /^Shuffle/.test(b.textContent?.trim() ?? ''),
         );
         btn?.click();
       });
-      await page.waitForTimeout(120);
-      const busy = await read();
-      if (busy && /Shuffling/.test(busy.text)) {
-        note('S4', `busy "${busy.text}": span ${busy.scroll} in ${busy.client}`);
+      // Polled rather than slept. The busy window is short and variable — four runs on
+      // one machine caught it once — so a fixed wait decides whether this scenario runs
+      // by luck, and the luck was 0 for 2 on the runs that were written down.
+      let busy = null;
+      for (let i = 0; i < 60 && !busy; i++) {
+        const seen = await read();
+        if (seen && /Shuffling/.test(seen.text)) busy = seen;
+        else await page.waitForTimeout(25);
+      }
+
+      if (!busy) {
+        no('S4-busy', 'the busy label never appeared within 1.5s — the string this row was widened for went unmeasured');
+      } else {
+        note('S4', `busy "${busy.text}" (${busy.measured}): ${busy.scroll} in ${busy.client}, button ${busy.buttonW}px, row ${busy.rowH}px`);
         if (busy.scroll > busy.client + 1) no('S4-busy', `the busy label is cut: ${busy.scroll} in ${busy.client}`);
         else ok('S4-busy', `the busy label is whole (${busy.scroll} ≤ ${busy.client})`);
-      } else {
-        note('S4', `the busy state was not caught (label read "${busy?.text}") — not counted either way`);
+        // [measurement, not a gate] Whether the row REFLOWS when the label grows. It
+        // does: the two buttons go from side by side to stacked full-width, so the
+        // button under a pointer that has not moved is no longer the one that was
+        // pressed. That is a real finding and it is recorded rather than asserted,
+        // because nothing here fixes it — see the PR and docs/visual-check.md.
+        const moved = busy.buttonTop !== idle.buttonTop || busy.buttonW !== idle.buttonW;
+        note(
+          'S4',
+          moved
+            ? `[measurement] the row reflows on press: button ${idle.buttonW}→${busy.buttonW}px, top ${idle.buttonTop}→${busy.buttonTop}, row ${idle.rowH}→${busy.rowH}px — the control under a still pointer changes`
+            : `[measurement] the row holds its shape on press (button ${busy.buttonW}px, row ${busy.rowH}px)`,
+        );
       }
     }
     await ctx.close();
@@ -279,6 +320,13 @@ async function main() {
   }
 
   // ── S7 · the right rail's fixed stack at short windows ───────────────────
+  //
+  // Two readings, and the finding is BOTH of them together: `.rail` computes
+  // `overflow-y: visible`, so it cannot clip and would give no scrollbar and no error
+  // if anything crossed it — and nothing does, because the Inspector and the View
+  // section now share one scroll region. So the zero below is a MEASUREMENT, not a
+  // guard: make the footer taller tomorrow and nothing here or in the suite fails.
+  // The overflow line is printed for that reason and not as decoration.
   for (const winH of [520, 420]) {
     const { ctx, page } = await fresh(browser, { width: COMPACT_PX, height: winH });
     const m = await page.evaluate(() => {
@@ -307,6 +355,111 @@ async function main() {
       else if (spill > 0) no(`S7@${winH}`, `the pinned footer paints ${spill}px past the rail's own bottom edge`);
       else ok(`S7@${winH}`, `the footer sits inside the rail (bottom − bottom = ${spill}px)`);
     }
+    await ctx.close();
+  }
+
+
+  // ── S9 · a press that moves straight DOWN must not paint, and not close ───
+  //
+  // The door the click guard did not close, and it is two doors on two rails. `d.moved`
+  // stays false when the pointer travels no horizontal distance, so the release
+  // correctly commits nothing — but `paint()` used to run anyway and writes `pending`,
+  // clamped UP to the drag floor, so a 208px rail was painted `228px` and no render
+  // followed to take it back. On the right rail the same gesture ARMED the collapse,
+  // because 248 < 276 − 24 is already true at zero delta, and the Inspector shut.
+  for (const side of ['left', 'right']) {
+    const { ctx, page } = await fresh(browser);
+    const before = await railWidth(page, side);
+    const box = await page.locator(`[aria-label="Resize the ${side} panel"]`).boundingBox();
+    if (!box) {
+      no(`S9-${side}`, 'precondition: no sash on screen');
+    } else {
+      const x = Math.round(box.x + box.width / 2);
+      const y = Math.round(box.y + box.height / 2);
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x, y + 40, { steps: 4 }); // straight down: zero horizontal delta
+      await page.waitForTimeout(60);
+      await page.mouse.up();
+      await page.waitForTimeout(250);
+      const after = await railWidth(page, side);
+      const open = await page.evaluate((s) => !!document.querySelector(`.rail--${s}`), side);
+      const varValue = await page.evaluate(
+        (s) => document.querySelector('.split')?.style.getPropertyValue(`--sash-${s}`).trim() ?? '(none)',
+        side,
+      );
+      note(`S9-${side}`, `${before}px → ${after}px, --sash-${side} is "${varValue}", rail present: ${open}`);
+      if (after === before) ok(`S9-${side}`, `a vertical press left the rail at ${after}px`);
+      else no(`S9-${side}`, `a vertical press moved the rail ${before} → ${after}px`);
+      if (!/^\d/.test(varValue)) ok(`S9-${side}-var`, `--sash-${side} is still an expression, not a painted literal`);
+      else no(`S9-${side}-var`, `--sash-${side} was left as the literal "${varValue}", unclamped and stuck`);
+    }
+    await ctx.close();
+  }
+
+  // ── S10 · the separator publishes a range its own value fits inside ───────
+  //
+  // `aria-valuenow` sat BELOW `aria-valuemin` on both rails for the whole compact band
+  // — 208 in [228, …] and 248 in [276, …]. The file's own comment says a CLOSED sash
+  // publishes no value rather than an impossible one; this is the same impossibility,
+  // open, and it went unnoticed because nothing reads these attributes but a screen
+  // reader.
+  {
+    const { ctx, page } = await fresh(browser);
+    for (const side of ['left', 'right']) {
+      const a = await page.evaluate((s) => {
+        const el = document.querySelector(`[aria-label="Resize the ${s} panel"]`);
+        if (!el) return null;
+        return {
+          now: Number(el.getAttribute('aria-valuenow')),
+          min: Number(el.getAttribute('aria-valuemin')),
+          max: Number(el.getAttribute('aria-valuemax')),
+        };
+      }, side);
+      if (!a || !Number.isFinite(a.now)) {
+        no(`S10-${side}`, 'precondition: the sash publishes no value to read');
+      } else {
+        note(`S10-${side}`, `now ${a.now}, min ${a.min}, max ${a.max}`);
+        if (a.min <= a.now && a.now <= a.max) ok(`S10-${side}`, `the value sits inside the published range`);
+        else no(`S10-${side}`, `aria-valuenow ${a.now} is outside [${a.min}, ${a.max}]`);
+      }
+    }
+    await ctx.close();
+  }
+
+  // ── S11 · the shrink key must not widen the rail, and must not persist one ─
+  //
+  // The only one of these that survives the session. One ArrowLeft on a focused left
+  // sash at the compact step: 208 − 16 = 192, clamped up to the 228px floor, stored —
+  // so the key that means "narrower" widened the rail 20px and pinned it out of the
+  // compact step for good. `Home` did it too, which is worse, because `Home` means
+  // "smallest". The grow key is the control: a guard that refused every key press would
+  // pass the first half of this on its own.
+  {
+    const { ctx, page } = await fresh(browser);
+    const sash = page.locator('[aria-label="Resize the left panel"]');
+    await sash.focus();
+    const before = await railWidth(page, 'left');
+    await sash.press('ArrowLeft');
+    await page.waitForTimeout(200);
+    const afterShrink = await railWidth(page, 'left');
+    const storedShrink = await storedW(page, 'left');
+    note('S11', `ArrowLeft: ${before}px → ${afterShrink}px, stored ${JSON.stringify(storedShrink)}`);
+    if (afterShrink <= before) ok('S11', `the shrink key did not widen the rail (${before} → ${afterShrink})`);
+    else no('S11', `the shrink key WIDENED the rail ${before} → ${afterShrink}px`);
+
+    await sash.press('Home');
+    await page.waitForTimeout(200);
+    const afterHome = await railWidth(page, 'left');
+    if (afterHome <= before) ok('S11-home', `Home did not widen the rail (${before} → ${afterHome})`);
+    else no('S11-home', `Home WIDENED the rail ${before} → ${afterHome}px`);
+
+    await sash.press('ArrowRight');
+    await page.waitForTimeout(200);
+    const afterGrow = await railWidth(page, 'left');
+    note('S11', `ArrowRight: → ${afterGrow}px, stored ${JSON.stringify(await storedW(page, 'left'))}`);
+    if (afterGrow > afterHome) ok('S11-grow', `[control] the grow key still resizes (${afterHome} → ${afterGrow})`);
+    else no('S11-grow', `[control] the grow key did nothing either — the guard refuses everything`);
     await ctx.close();
   }
 

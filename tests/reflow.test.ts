@@ -770,9 +770,9 @@ describe('the studio shells', () => {
   it('drags by writing CSS, never React state', () => {
     // A setState per pointermove re-renders the piece tree, the inspector and the
     // R3F tree ~60×/second while the user is judging a panel width.
-    expect(SASH).toMatch(/requestAnimationFrame\(paint\)/);
-    expect(SASH).toMatch(/style\.setProperty\(WIDTH_PROP\[side\]/);
-    expect(SASH, 'the ResizeObserver must stand down mid-drag or it re-renders anyway').toMatch(
+    expect(codeOnly(SASH)).toMatch(/requestAnimationFrame\(paint\)/);
+    expect(codeOnly(SASH)).toMatch(/style\.setProperty\(WIDTH_PROP\[side\]/);
+    expect(codeOnly(SASH), 'the ResizeObserver must stand down mid-drag or it re-renders anyway').toMatch(
       /if \(drag\.current\) return;/,
     );
   });
@@ -780,9 +780,23 @@ describe('the studio shells', () => {
   it('takes its floor and ceiling from tokens', () => {
     // A number copied into a pointer handler is a floor that stops moving when
     // the stylesheet's does.
-    expect(SASH).toMatch(/--rail-left-min/);
-    expect(SASH).toMatch(/--rail-max-share/);
-    expect(SASH, 'no invented pixel floors').not.toMatch(/floor = \d/);
+    //
+    // `codeOnly`, and it is the difference between a gate and a decoration: this file
+    // read the RAW source, and `RailSash` now explains the compact step in prose, so
+    // four comments name `--rail-left-min` and the assertion matched off one of them.
+    // Deleting `FLOOR_TOKEN` and hard-coding `floor: 228` left this green. Measured
+    // both ways: green with the mutation on this branch, RED with the same mutation
+    // against a tree whose only occurrence was the code. The suite catches that
+    // particular mutant elsewhere by accident — the jsdom gesture tests go red when the
+    // floor stops resolving to 0 — but a mutation that keeps `tokenPx(shell, …)` and
+    // merely inlines the string would survive both, which is what makes this a gate.
+    const CODE = codeOnly(SASH);
+    expect(CODE).toMatch(/--rail-left-min/);
+    expect(CODE).toMatch(/--rail-max-share/);
+    // The width the rail RENDERS across the compact step, read for `aria-valuemin`
+    // because publishing the drag floor there put the value below its own minimum.
+    expect(CODE).toMatch(/--rail-left-tight/);
+    expect(CODE, 'no invented pixel floors').not.toMatch(/floor = \d/);
   });
 });
 

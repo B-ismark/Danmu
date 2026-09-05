@@ -369,6 +369,16 @@ export function RailSash({
       return;
     }
     setRailWidth(side, d.pending);
+    // Every gesture that ENDS re-asserts the store's value on the element, this one
+    // included — the rule is "when no drag is live, the DOM says what the store says",
+    // and each branch above is an instance of it rather than its own special case.
+    // The commit path is the one that pins the rule, because it is the one whose hole
+    // is reachable: `paint()` writes a RAW `228px`, while the shell renders a stored
+    // width as `clamp(var(--rail-left-min), 228px, var(--rail-max))`. Drag a rail to a
+    // width it is already stored at and zustand compares the two equal, so no render
+    // follows and the raw value stays — a width no longer bounded by `--rail-max`,
+    // which is the one thing that keeps the room when the window gets smaller.
+    onRestoreWidths();
     sync();
   }
 

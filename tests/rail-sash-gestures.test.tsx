@@ -519,3 +519,31 @@ describe('a key that asks for less never delivers more', () => {
     expect(useStudio.getState().railLeftW, 'ArrowRight stored no width at all').toBe(228);
   });
 });
+
+describe('when no drag is live, the element says what the store says', () => {
+  it('a drag that lands on the width already stored still leaves a CLAMPED value', () => {
+    // The reachable hole in that rule, and the one that pins it. `paint()` writes a raw
+    // `228px`; the shell renders a stored width as
+    // `clamp(var(--rail-left-min), 228px, var(--rail-max))`. Drag to a width the rail is
+    // already stored at and zustand compares the two equal — no render, no layout effect,
+    // and the raw value stands. A raw px is not bounded by `--rail-max`, which is the
+    // token that keeps most of the window for the room when the window gets smaller: the
+    // rail would hold 520px on a laptop that opened the same browser profile.
+    useStudio.setState({ ...OPEN, railLeftW: 228 });
+    const shell = mount(1100);
+    const undo = stubLayout({ railPx: 208 });
+    const frames = syncFrames();
+
+    const el = sashEl('left');
+    fireEvent.pointerDown(el, { button: 0, clientX: 400, pointerId: 1 });
+    // 208 measured + 20 = 228, which is both the drag floor and what is already stored.
+    fireEvent.pointerMove(el, { clientX: 420, pointerId: 1 });
+    expect(sashVar(shell, 'left'), 'the drag painted nothing, so this proves nothing').toBe('228px');
+    fireEvent.pointerUp(el, { clientX: 420, pointerId: 1 });
+    frames();
+    undo();
+
+    expect(useStudio.getState().railLeftW, 'the drag did not commit the width it ended on').toBe(228);
+    expect(sashVar(shell, 'left'), 'the raw preview outlived the gesture, unclamped').toContain('clamp(');
+  });
+});

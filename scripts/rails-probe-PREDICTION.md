@@ -52,6 +52,51 @@ something else:
    visible rather than rounded into a verdict.
 3. **The compact step is 1024–1279px.** A viewport set outside it measures `--rail-left`
    and the whole S1 arithmetic changes. Assert the width band before trusting S1.
-4. `railLeftW` lives in `localStorage` through `STUDIO_PREFS`, so a scenario that stores
+4. `railLeftW` lives in `localStorage` under `danmu-studio-prefs` — NOT `STUDIO_PREFS`,
+   which is the name of the comment describing the persisted set. So a scenario that stores
    one **poisons every later scenario in the same context**. Each starts from a cleared
    store.
+
+---
+
+# Second round — S9, S10, S11, and S4's busy half
+
+Written before the run, same as the first round, and for the same reason: a prediction
+read after the fact is not a prediction. Five review lenses and a peer's independent
+browser probe measured four more ways to move a rail nobody asked to move. **Three of the
+four are present on `main` at `11f7a4f` and were measured there**, so the discriminating
+comparison for these is against `main`, not against `8fbfd85`.
+
+| | scenario | predicted on `main` | predicted here |
+|---|---|---|---|
+| S9-left | press the left sash and drag straight DOWN | **FAIL — 208 → 228px** | PASS — 208px |
+| S9-left-var | `--sash-left` after that release | **FAIL — the literal `228px`** | PASS — an expression |
+| S9-right | the same gesture on the right sash | **FAIL — 248 → 37px, the Inspector shuts** | PASS — 248px |
+| S9-right-var | `--sash-right` after it | **FAIL** | PASS |
+| S10-left | `aria-valuenow` inside `[min, max]` | **FAIL — 208 in [228, 512]** | PASS |
+| S10-right | same, right rail | **FAIL — 248 in [276, 512]** | PASS |
+| S11 | one ArrowLeft on the focused left sash | **FAIL — 208 → 228, stored 228** | PASS — no widening |
+| S11-home | `Home`, which means "smallest" | **FAIL — 208 → 228** | PASS |
+| S11-grow | control: ArrowRight still resizes | PASS | PASS |
+| S4-busy | the `Shuffling…` label, polled rather than slept | (not run there) | PASS — whole |
+
+**What would mean the probe is measuring something else**
+
+- if **S11-grow fails**, the keyboard guard refuses everything, which is the exact shape
+  of the mistake this branch already made once with `m.width >= m.floor`. A guard that
+  rejects needs an input it accepts, or it is satisfied by refusing every input;
+- if **S9-right passes on `main`**, the collapse arithmetic is not what closed the rail
+  there and my single-root reading is wrong — three fixes then need re-deriving, not one;
+- if **S10 passes on `main`**, the attributes are not what the lens read and the
+  measurement came from somewhere else;
+- if **S4-busy fails to catch the label at all**, the polling is still too slow and the
+  scenario is unmeasured — which is a FAIL here on purpose. The first version printed
+  "not counted either way" and both recorded runs reported 10 of a possible 11 checks,
+  which is the arithmetic that says it never executed once, on either build. An
+  assertion that opts out when its subject is missing is not an assertion.
+
+**What this round cannot settle.** Whether the busy label is *cut* on a real font at a
+real DPI is one 1px-tolerance measurement on one machine; and the row reflowing on press
+— two side-by-side buttons becoming two stacked full-width ones, so the control under a
+pointer that has not moved is no longer the one that was pressed — is printed as a
+measurement and fixed by nothing here.
