@@ -681,6 +681,22 @@ the file as "four times".
 - **The calibration was inert on CI** — it printed `factor 1.00`, so both bars sat at
   exactly their stated values and the scaling path was never exercised by that green. What
   CI did verify is the 30 s timeout and best-of-N sampling.
+- **NEW, 2026-09-05: the calibration's own self-test now fails on CI at random, and it is
+  the fourth timing site — not one of § A.4's three `performance.now()` assertions.**
+  `tests/perf-calibration.test.ts` asserts the reference workload still costs something,
+  with a floor of `REFERENCE_IDLE_MS * 0.4` = **8.8 ms** and a message saying a machine
+  more than 2.5× the calibration box needs the constant re-measured there. A run of PR
+  #121 got `expected 8.554660000000013 to be greater than 8.8` — the runner at **2.57×**,
+  3% past the window. Re-running the same job on the same commit passed in 3m23s, and the
+  commit before it passed on byte-identical content, so it is variance at a boundary
+  rather than a drift that has arrived. **This is the opposite failure to the one § A.4
+  answered**: that was a slow machine under load, this is a fast one idle, and the bullet
+  above ("inert on CI") is the same fact one notch further along — CI is not merely at or
+  above the calibration box, it is far enough past it to trip the guard. Two ways to
+  close it and they are not the same decision: re-measure `REFERENCE_IDLE_MS` on a
+  runner, which pins the constant to hardware nobody controls; or widen the floor, which
+  weakens the only assertion that can catch the loop shrinking. It needs the range across
+  several runs before either, and nothing here has that.
 - The factor is measured once per **test file**, not per worker process: vitest 4 defaults
   to `pool: 'forks'` with `isolate: true`. So the figure `perf-calibration` prints is that
   file's, and the two bars each take their own.
