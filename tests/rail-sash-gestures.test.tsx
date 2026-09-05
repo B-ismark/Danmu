@@ -442,6 +442,13 @@ describe('a rail born below its own floor is not a rail being closed', () => {
     undo();
 
     expect(useStudio.getState().railRightOpen, 'a two-pixel press closed the right rail').toBe(true);
+    // …and it stored nothing, which is the half this test was one assertion short of.
+    // The gesture asked for 246px; the clamp handed it the 276px floor and the release
+    // committed that — 28px WIDER than the rail the pointer was narrowing, stored, so
+    // the compact step never applied to that rail again. Same harm as the keyboard
+    // shrink, on the input the branch's first pass left raw. See `narrowest` and the
+    // reachable-widths note in `onPointerMove`.
+    expect(useStudio.getState().railRightW, 'a two-pixel NARROWING drag stored a wider rail').toBeNull();
   });
 
   it('but a real push past where it started still collapses it', () => {
@@ -633,5 +640,103 @@ describe('opening a rail publishes a width inside its own range', () => {
     // 208 within [208, 512] on the fixed build; 37 within [208, 512] on the broken one.
     expect(now, `aria-valuenow ${now} is below aria-valuemin ${min}`).toBeGreaterThanOrEqual(min);
     expect(now, `aria-valuenow ${now} is above aria-valuemax ${max}`).toBeLessThanOrEqual(max);
+  });
+});
+
+describe('a drag that asks for less never delivers more', () => {
+  it('narrowing the LEFT rail below its own floor stores nothing', () => {
+    // The side control for the two-pixel right-sash pair above, and the same defect:
+    // 208px rendered against a 228px floor, so the clamp turned a 2px narrowing into a
+    // stored 228. Both sides, because every width in `RailSash` is a lookup keyed on
+    // `side` and a fix applied to one branch of such a table is this repo's own scar.
+    useStudio.setState(OPEN);
+    mount(1100);
+    const undo = stubLayout({ railPx: 208 });
+    const frames = syncFrames();
+
+    const el = sashEl('left');
+    fireEvent.pointerDown(el, { button: 0, clientX: 400, pointerId: 1 });
+    fireEvent.pointerMove(el, { clientX: 398, pointerId: 1 });
+    fireEvent.pointerUp(el, { clientX: 398, pointerId: 1 });
+    frames();
+    undo();
+
+    expect(useStudio.getState().railLeftW, 'a narrowing drag stored a wider rail').toBeNull();
+    expect(useStudio.getState().railLeftOpen, 'it closed the rail instead').toBe(true);
+  });
+
+  it('while a drag that reaches a storable width still commits it', () => {
+    // The accept half, and this file has already shipped one guard that refused
+    // everything. 208 + 90 = 298, which is above the 228px floor, so it is a width the
+    // shell can render as itself rather than as the floor.
+    useStudio.setState(OPEN);
+    mount(1100);
+    const undo = stubLayout({ railPx: 208 });
+    const frames = syncFrames();
+
+    const el = sashEl('left');
+    fireEvent.pointerDown(el, { button: 0, clientX: 400, pointerId: 1 });
+    fireEvent.pointerMove(el, { clientX: 490, pointerId: 1 });
+    fireEvent.pointerUp(el, { clientX: 490, pointerId: 1 });
+    frames();
+    undo();
+
+    expect(useStudio.getState().railLeftW, 'a real widening drag stored nothing').toBe(298);
+  });
+
+  it('and narrowing from ABOVE the floor still reaches the floor', () => {
+    // The third case, and the one that says the rule is about reachable widths rather
+    // than about refusing to narrow: a rail already stored at 400 may be dragged down
+    // to 228, because 228 is a width the shell renders as itself. Without this the
+    // pair above is satisfied by a `RailSash` that never narrows anything at all.
+    useStudio.setState({ ...OPEN, railLeftW: 400 });
+    mount(1100);
+    const undo = stubLayout({ railPx: 400 });
+    const frames = syncFrames();
+
+    const el = sashEl('left');
+    fireEvent.pointerDown(el, { button: 0, clientX: 400, pointerId: 1 });
+    // 400 − 190 = 210, under the 228px floor, so the clamp is what answers — and here
+    // it is allowed to, because the rail STARTED above the floor.
+    fireEvent.pointerMove(el, { clientX: 210, pointerId: 1 });
+    fireEvent.pointerUp(el, { clientX: 210, pointerId: 1 });
+    frames();
+    undo();
+
+    expect(useStudio.getState().railLeftW, 'a narrowing drag from above the floor did not reach it').toBe(228);
+  });
+});
+
+describe('aria-valuemin is the width the rail can reach, at every step', () => {
+  it('is the rendered width at the compact step and the drag floor above it', () => {
+    // The ordering `valuemin <= valuenow` is true by construction now — `narrowest()`
+    // is `min(floor, width)` — so asserting it would be asserting nothing. The VALUE is
+    // the claim, and it was wrong in two directions at once: reading the drag floor put
+    // the value ABOVE `aria-valuenow` for the whole compact step, and reading the tight
+    // token put it BELOW anything reachable above that step, since the tight tokens sit
+    // on bare `:root` and apply at every width. A rail at 400px advertising a minimum of
+    // 208 gives a screen-reader user 20px of travel that ArrowLeft silently refuses.
+    // The stub goes up BEFORE the mount, unlike every other test here: the attribute is
+    // rendered from `metrics`, which only the measuring effect writes, and that effect
+    // runs once on mount. A stub installed afterwards is read by `measure()` on the next
+    // gesture and never by the mount.
+    useStudio.setState(OPEN);
+    let undo = stubLayout({ railPx: 208 });
+    mount(1100);
+    expect(sashEl('left').getAttribute('aria-valuemin'), 'the compact step advertises the drag floor').toBe('208');
+    // …and the value it publishes is the rendered width, so the pair is a real pair
+    // rather than one number asserted twice.
+    expect(sashEl('left').getAttribute('aria-valuenow')).toBe('208');
+    undo();
+
+    cleanup();
+    useStudio.setState({ ...OPEN, railLeftW: 400 });
+    undo = stubLayout({ railPx: 400 });
+    mount(1100);
+    expect(sashEl('left').getAttribute('aria-valuemin'), 'a wide rail advertises a minimum it cannot reach').toBe(
+      '228',
+    );
+    expect(sashEl('left').getAttribute('aria-valuenow')).toBe('400');
+    undo();
   });
 });

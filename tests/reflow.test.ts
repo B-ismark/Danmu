@@ -759,11 +759,18 @@ describe('the studio shells', () => {
   });
 
   it('gives the sash the window-splitter role and its keys', () => {
-    expect(SASH).toMatch(/role="separator"/);
-    expect(SASH).toMatch(/aria-valuenow/);
-    expect(SASH, 'a separator that cannot be focused cannot be operated').toMatch(/tabIndex=\{0\}/);
+    // `codeOnly`, for the reason the floor gate below spells out — and this assertion is
+    // where that fix was NOT applied when its neighbour got it. `RailSash` now explains
+    // the impossible-slider defect in prose, so `aria-valuenow` appears in four comments;
+    // deleting the attribute itself left this green. The key list is `toContain` on
+    // quoted literals, which no comment in that file writes.
+    const CODE = codeOnly(SASH);
+    expect(CODE).toMatch(/role="separator"/);
+    expect(CODE).toMatch(/aria-valuenow=/);
+    expect(CODE, 'a separator advertising no minimum publishes an unbounded range').toMatch(/aria-valuemin=/);
+    expect(CODE, 'a separator that cannot be focused cannot be operated').toMatch(/tabIndex=\{0\}/);
     for (const key of ['Enter', 'Home', 'End', 'ArrowRight', 'ArrowLeft']) {
-      expect(SASH, `the splitter pattern binds ${key}`).toContain(`'${key}'`);
+      expect(CODE, `the splitter pattern binds ${key}`).toContain(`'${key}'`);
     }
   });
 
@@ -793,10 +800,19 @@ describe('the studio shells', () => {
     const CODE = codeOnly(SASH);
     expect(CODE).toMatch(/--rail-left-min/);
     expect(CODE).toMatch(/--rail-max-share/);
-    // The width the rail RENDERS across the compact step, read for `aria-valuemin`
-    // because publishing the drag floor there put the value below its own minimum.
-    expect(CODE).toMatch(/--rail-left-tight/);
-    expect(CODE, 'no invented pixel floors').not.toMatch(/floor = \d/);
+    // The width the rail RENDERS across the compact step. It used to be read HERE too,
+    // for `aria-valuemin`, and that was wrong above the compact step — the tight tokens
+    // sit on bare `:root`, so a 400px rail advertised a minimum of 208 it could not
+    // reach. `narrowest()` derives it from the measured width instead, so the token has
+    // exactly one reader again and this assertion moved to it.
+    expect(codeOnly(DOCKED), 'the compact step is rendered from the token, not a number').toMatch(
+      /--rail-\$\{side\}-tight/,
+    );
+    // `[:=]`, because the first version could not match the idiom it was written to
+    // catch: the numbers it was aimed at were object PROPERTIES (`floor: 228`) and the
+    // pattern only matched an assignment. Its own docblock next door said so.
+    expect(CODE, 'no invented pixel floors').not.toMatch(/floor\s*[:=]\s*\d/);
+    expect(CODE, 'no invented pixel ceilings either').not.toMatch(/ceiling\s*[:=]\s*\d/);
   });
 });
 

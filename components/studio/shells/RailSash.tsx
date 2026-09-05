@@ -37,20 +37,38 @@ import type { RailSide } from './shell-parts';
 
 /** How far past the floor a drag has to go before it means "close this". */
 const SNAP_PAST_FLOOR = 24;
-/** One arrow press. Shift makes it 1px, for the last bit of a fussy adjustment. */
+/** One arrow press. Shift makes it 1px, for the last bit of a fussy adjustment —
+ *  **except from below the drag floor, where there is no 1px to be had.** At the
+ *  compact step the rail renders 208px against a 228px floor and the only widths it
+ *  can be stored at start at 228, so the first grow press of any size lands on 228 and
+ *  the fine step only means what it says from there on. That is the token system's
+ *  answer rather than a bug in this constant: see the reachable-widths note in
+ *  `onPointerMove`. */
 const STEP = 16;
 
 const WIDTH_PROP: Record<RailSide, string> = { left: '--sash-left', right: '--sash-right' };
 const FLOOR_TOKEN: Record<RailSide, string> = { left: '--rail-left-min', right: '--rail-right-min' };
-/** The width the rail RENDERS between 1024 and 1279px, which globals.css puts
- *  deliberately BELOW the floor above: the floor is what a DRAG may reach, the tight
- *  token is what the reflowed default ships at. Both numbers are real widths of this
- *  rail, and every defect this file has had came from treating them as one. */
-const TIGHT_TOKEN: Record<RailSide, string> = { left: '--rail-left-tight', right: '--rail-right-tight' };
 /** The width a SHUT rail measures — just the reopen toggle. */
 const CLOSED_TOKEN = '--rail-closed';
 
-type Metrics = { width: number; floor: number; tight: number; ceiling: number; closed: number };
+type Metrics = { width: number; floor: number; ceiling: number; closed: number };
+
+/** The narrowest this rail can be right now: its drag floor, unless it is ALREADY
+ *  narrower, which between 1024 and 1279px it is by design — `globals.css` renders
+ *  `--rail-*-tight` there, deliberately below `--rail-*-min`, because the floor is
+ *  what a DRAG may reach and the tight token is what the reflowed default ships at.
+ *
+ *  **One function because `Home` and `aria-valuemin` must be the same number**, and
+ *  they were two: `Home` read `min(floor, width)` and the attribute read
+ *  `min(floor, tight)`. Reading the tight token is wrong above the compact step —
+ *  the tight tokens sit on bare `:root`, so at 1600px the left rail advertised a
+ *  minimum of 208 when nothing can take it below 228, and ArrowLeft went silently
+ *  dead with 20px of advertised travel still on the dial. The RENDERED width answers
+ *  it at every step without reading a second token, which is also why nothing in this
+ *  file reads `--rail-*-tight` any more. */
+function narrowest(m: Metrics): number {
+  return Math.min(m.floor, m.width);
+}
 
 function tokenPx(el: Element, name: string): number {
   const n = Number.parseFloat(getComputedStyle(el).getPropertyValue(name));
@@ -138,13 +156,10 @@ export function RailSash({
       // floor therefore refused the real open width for the whole compact step, and
       // the drag-a-closed-sash-open gesture never started.
       closed: tokenPx(shell, CLOSED_TOKEN),
-      // The narrowest width the rail is ever OPEN at, which is not the same as the
-      // narrowest a drag may produce. `aria-valuenow` has to sit inside the published
-      // range and the compact step renders 208px against a 228px floor, so publishing
-      // the floor as `aria-valuemin` described an impossible slider for the whole band.
-      // Falls back to the floor rather than to zero: `tokenPx` answers 0 for a token it
-      // cannot read, and a zero minimum is a wrong bound rather than a missing one.
-      tight: tokenPx(shell, TIGHT_TOKEN[side]) || tokenPx(shell, FLOOR_TOKEN[side]),
+      // (`narrowest()` above is the width the rail is ever OPEN at, which is not the
+      // same as the narrowest a drag may produce. `aria-valuenow` has to sit inside the
+      // published range and the compact step renders 208px against a 228px floor, so
+      // publishing
       ceiling: Number.isFinite(share) && share > 0 ? share * window.innerWidth : Number.POSITIVE_INFINITY,
     };
   }, [railRef, shellRef, side]);
@@ -306,8 +321,26 @@ export function RailSash({
     // moved straight down shut the Inspector. The left rail is the same shape 4px in.
     // A collapse means the user pulled this divider meaningfully narrower than where
     // it was, and a rail that opens below its own floor has not been pulled anywhere.
-    d.collapse = raw < Math.min(d.floor, d.startW) - SNAP_PAST_FLOOR;
-    d.pending = Math.max(d.floor, Math.min(d.ceiling, raw));
+    // The floor THIS gesture may reach, which is the drag floor unless the rail
+    // started below it. Read by the collapse test and by the width alike, because they
+    // are the same question asked twice.
+    const gestureFloor = Math.min(d.floor, d.startW);
+    d.collapse = raw < gestureFloor - SNAP_PAST_FLOOR;
+    const want = Math.max(gestureFloor, Math.min(d.ceiling, raw));
+    // **The widths this rail can actually BE are its token width and the closed
+    // interval `[floor, ceiling]` — nothing in between.** `DockedShell` renders a
+    // stored width as `clamp(var(--rail-side-min), Npx, var(--rail-max))`, so any
+    // number below the drag floor comes back AS the drag floor. At the compact step
+    // the right rail is born at `--rail-right-tight` 248px against a floor of 276px,
+    // and the branch that fixed the keyboard left this line clamping straight up to
+    // the floor: pull the divider 2px TOWARD the Inspector and it committed 276 —
+    // 28px WIDER, stored, and the compact step gone for that rail for good. Every
+    // delta in [-24, +28) landed on exactly 276, so there was no narrowing gesture in
+    // that band at all. The keyboard's rule is "a key that asked for less must never
+    // deliver more"; this is the same rule on the other input, and it is expressed as
+    // the set of reachable widths rather than as a second guard, so the PREVIEW cannot
+    // show a size the release is going to refuse.
+    d.pending = want < d.floor ? d.startW : want;
     // Nothing is painted until the pointer has actually travelled. `pending` is
     // clamped UP to the drag floor, so a zero-delta move at the compact step painted
     // `228px` over a 208px rail — a 20px jump on a press that resized nothing, and one
@@ -376,6 +409,15 @@ export function RailSash({
       onToggle();
       return;
     }
+    if (d.pending < d.floor) {
+      // The gesture never reached a width this rail can hold. `pending` is `startW`
+      // here by construction — see the note where it is computed — and storing it
+      // would render as the drag floor, which is the widen-by-narrowing defect this
+      // branch exists to remove. Nothing is stored; the rail keeps its token.
+      onRestoreWidths();
+      sync();
+      return;
+    }
     setRailWidth(side, d.pending);
     // Every gesture that ENDS re-asserts the store's value on the element, this one
     // included — the rule is "when no drag is live, the DOM says what the store says",
@@ -410,19 +452,26 @@ export function RailSash({
     // The narrowest this rail can be, which is its drag floor UNLESS it is already
     // narrower — the compact step renders it below that floor by design, and `Home`
     // meaning "smallest" must never be the key that makes it bigger.
-    else if (e.key === 'Home') next = Math.min(m.floor, m.width);
+    else if (e.key === 'Home') next = narrowest(m);
     else if (e.key === 'End') next = Number.isFinite(m.ceiling) ? m.ceiling : m.width;
     else return;
     e.preventDefault();
     const clamped = Math.max(m.floor, Math.min(m.ceiling, next));
     // A key that asked for LESS must never deliver more. Between 1024 and 1279px the
     // rail renders 208px against a 228px floor, so clamping a shrink up to the floor
-    // turned one ArrowLeft into a 20px WIDEN — and unlike the pointer paths, this one
-    // PERSISTS: `railLeftW` becomes 228 and the compact step never applies to that rail
-    // again. `Home` did it too. Refusing is the honest answer and it is not silent:
-    // `aria-valuenow` and `aria-valuemin` are both 208 there, so a screen reader says
-    // the rail is already at its minimum. That is only true because `aria-valuemin`
-    // reports the tight token — the two fixes are one fix.
+    // turned one ArrowLeft into a 20px WIDEN, stored: `railLeftW` becomes 228 and the
+    // compact step never applies to that rail again. `Home` did it too.
+    //
+    // **An earlier version of this comment said that unlike the pointer paths this one
+    // persists. That was false and it scoped a search:** the commit at the end of
+    // `onPointerUp` calls the same `setRailWidth`, so a 2px narrowing DRAG persisted
+    // 228 (left) and 276 (right) identically, and the comment claiming otherwise is
+    // why the branch shipped with the keyboard fixed and the pointer raw. The pointer
+    // half is the reachable-widths rule in `onPointerMove`.
+    //
+    // Refusing is the honest answer and it is not silent: `aria-valuemin` is the
+    // rendered width when the rail is under its floor, so a screen reader says the
+    // rail is already at its minimum — the two fixes are one fix.
     if (clamped > m.width && next <= m.width) return;
     setRailWidth(side, clamped);
   }
@@ -467,9 +516,12 @@ export function RailSash({
       // The DRAG floor is 228px (left) and the rail renders 208px for the whole
       // compact step, so publishing the floor here put `aria-valuenow` BELOW
       // `aria-valuemin` on both rails across that whole band — an impossible slider,
-      // which is the thing the comment above says this file refuses to publish. What
-      // is honest is the narrowest width the rail is ever open at.
-      aria-valuemin={shown ? Math.round(Math.min(shown.floor, shown.tight)) : undefined}
+      // which is the thing the comment above says this file refuses to publish.
+      // `narrowest()` is the same number `Home` moves to, deliberately, and it makes
+      // `valuemin <= valuenow` true by construction rather than by assertion — so a
+      // test that only checks the ordering is checking nothing. What is worth pinning
+      // is the VALUE: 208 at the compact step, the floor above it.
+      aria-valuemin={shown ? Math.round(narrowest(shown)) : undefined}
       aria-valuemax={max ?? undefined}
       aria-valuetext={now != null ? `${now} pixels` : undefined}
       // The affordance a CLOSED sash offers is not the one an open sash offers, and

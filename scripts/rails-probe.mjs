@@ -421,19 +421,36 @@ async function main() {
     for (const side of ['left', 'right']) {
       const a = await page.evaluate((s) => {
         const el = document.querySelector(`[aria-label="Resize the ${s} panel"]`);
-        if (!el) return null;
+        const rail = document.querySelector(`aside.rail--${s}`);
+        if (!el || !rail) return null;
+        // The RAW attributes, because `Number(null)` is 0 and the first version of this
+        // scenario then compared `0 <= 0 <= 0` and called it a pass: it reported the
+        // range as sound on a build that publishes no ARIA at all. A missing attribute
+        // and a wrong number are two failures and one predicate saw neither.
         return {
-          now: Number(el.getAttribute('aria-valuenow')),
-          min: Number(el.getAttribute('aria-valuemin')),
-          max: Number(el.getAttribute('aria-valuemax')),
+          now: el.getAttribute('aria-valuenow'),
+          min: el.getAttribute('aria-valuemin'),
+          max: el.getAttribute('aria-valuemax'),
+          railW: Math.round(rail.getBoundingClientRect().width),
         };
       }, side);
-      if (!a || !Number.isFinite(a.now)) {
-        no(`S10-${side}`, 'precondition: the sash publishes no value to read');
+      if (!a) {
+        no(`S10-${side}`, 'precondition: no sash or no rail to read');
+      } else if (a.now === null || a.min === null || a.max === null) {
+        no(`S10-${side}`, `the sash publishes an incomplete range: now=${a.now} min=${a.min} max=${a.max}`);
       } else {
-        note(`S10-${side}`, `now ${a.now}, min ${a.min}, max ${a.max}`);
-        if (a.min <= a.now && a.now <= a.max) ok(`S10-${side}`, `the value sits inside the published range`);
-        else no(`S10-${side}`, `aria-valuenow ${a.now} is outside [${a.min}, ${a.max}]`);
+        const now = Number(a.now);
+        const min = Number(a.min);
+        const max = Number(a.max);
+        note(`S10-${side}`, `now ${now}, min ${min}, max ${max}, rail ${a.railW}px`);
+        // The ORDERING is true by construction now — `aria-valuemin` is
+        // `min(floor, width)` — so it is checked to catch a regression in that
+        // construction rather than as the claim. The claim is the VALUE: the published
+        // minimum must not exceed the width the rail is actually rendering, which is
+        // exactly what `main` gets wrong (min 228 against a 208px rail).
+        if (min > a.railW) no(`S10-${side}`, `aria-valuemin ${min} is wider than the ${a.railW}px rail itself`);
+        else if (min <= now && now <= max) ok(`S10-${side}`, `the value sits inside the published range`);
+        else no(`S10-${side}`, `aria-valuenow ${now} is outside [${min}, ${max}]`);
       }
     }
     await ctx.close();

@@ -763,8 +763,10 @@ halves.*
 Nothing here fixes it, and it is a look rather than a probe because the question is what a
 person does next, not what a number says.*
 
-Measured on a production build at 1100 × 900, on the plan tab, in the right rail's room
-actions row:
+Measured on a production build at 1100 × 900, on the plan tab, in the **left** rail's room
+actions row. *(This said "right rail" until a peer checked it: `RoomTools` renders from
+`PartTree.tsx:364`, and `PartTree` is `LeftRailBody`. The table below derives from
+`--rail-left-tight`, nine lines on, which is the tell that was sitting in the same entry.)*
 
 | | idle | pressed |
 |---|---|---|
