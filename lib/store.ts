@@ -280,20 +280,26 @@ export const useStudio = create<StudioState>()(
   setCatalogOpen: (open) => set({ catalogOpen: open }),
   setSnapMode: (m) => set({ snapMode: m }),
   toggleGrid: () => set((s) => ({ showGrid: !s.showGrid })),
+  // Opens and closes. It does NOT touch the width, and that is a decision rather
+  // than an omission.
+  //
+  // A pass through here made opening a rail clear its stored width, on the grounds
+  // that restoring a dragged width on every reopen is a "fills the screen" surprise.
+  // That surprise is already bounded one layer down: `DockedShell` renders a stored
+  // width as `clamp(var(--rail-*-min), Npx, var(--rail-max))` and `--rail-max` is
+  // `40vw`, so a 520px rail dragged on a monitor is a ceiling and not a promise on a
+  // laptop — its own comment says so, and `tests/reflow.test.ts` pins the clamp. What
+  // the clear did instead was throw away a preference `STUDIO_PREFS` persists
+  // deliberately, with no undo: drag the right rail to 480px to read long piece
+  // names, catch the chevron (24px, about 5px from a 10px sash), press it again to
+  // put the panel back, and the 480 is gone from storage too.
+  //
+  // It also made the sash's `removeProperty` + `setRailWidth(null)` pair a
+  // guaranteed null-over-null rather than an occasional one, which is what turned a
+  // rare grid collapse into a reachable one. That half is fixed in `DockedShell`
+  // whichever way this goes; this is the half about the user's own width.
   toggleRail: (side) =>
-    set((s) => {
-      const willOpen = side === 'left' ? !s.railLeftOpen : !s.railRightOpen;
-      // Opening a rail always returns it to the token default: a previously dragged
-      // width is a fact about the OPEN rail, and restoring it on every reopen is the
-      // "fills the screen" surprise. Drop it so the chevron is predictable. (The
-      // sash's own collapse path already clears the width before it toggles.)
-      if (willOpen) {
-        return side === 'left'
-          ? { railLeftOpen: true, railLeftW: null }
-          : { railRightOpen: true, railRightW: null };
-      }
-      return side === 'left' ? { railLeftOpen: false } : { railRightOpen: false };
-    }),
+    set((s) => (side === 'left' ? { railLeftOpen: !s.railLeftOpen } : { railRightOpen: !s.railRightOpen })),
   setRailWidth: (side, px) => {
     // Only finiteness and a floor of zero are enforced here. The real bounds are
     // the rail token's own `clamp()`, which is where the design values live and

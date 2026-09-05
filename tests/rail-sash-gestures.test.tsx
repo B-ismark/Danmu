@@ -194,22 +194,29 @@ describe('the grid never loses the variable it reads its columns from', () => {
   });
 });
 
-describe('opening a rail hands it back to its token', () => {
-  it('clears a dragged width, so a reopen is the design and not the last drag', () => {
-    // The third agent's own change to `toggleRail`, which nothing pinned. It is the
-    // reason the two defects above became reachable rather than rare, so it is asserted
-    // here beside them rather than left as a property somebody has to infer from a diff.
+describe('the chevron opens and closes, and owns no width', () => {
+  it('a width the user dragged survives a close and a reopen', () => {
+    // `STUDIO_PREFS` persists `railLeftW` under "the user set them once and expects
+    // them to stick", and a pass through `toggleRail` briefly cleared it on every
+    // open. The loss has no undo and the gesture that causes it is a mis-click: the
+    // chevron is a 24px button about 5px from a 10px sash. The "fills the screen"
+    // surprise it was added to prevent is already bounded by `--rail-max: 40vw`
+    // inside `DockedShell`'s own `clamp()`.
     useStudio.setState({ ...OPEN, railLeftW: 460 });
     useStudio.getState().toggleRail('left'); // closes
     expect(useStudio.getState().railLeftW, 'closing threw the width away').toBe(460);
     useStudio.getState().toggleRail('left'); // opens
-    expect(useStudio.getState().railLeftW).toBeNull();
+    expect(useStudio.getState().railLeftW, 'reopening threw the width away').toBe(460);
   });
 
-  it('and leaves the OTHER rail alone', () => {
-    // One `set` writing two keys is how a rail loses a width nobody touched.
-    useStudio.setState({ ...OPEN, railLeftOpen: false, railLeftW: null, railRightW: 500 });
+  it('and touches neither the other rail nor the other rail`s width', () => {
+    // One `set` writing more keys than its name is how a rail loses something nobody
+    // touched — which is what the cleared-on-open version did, one side at a time.
+    useStudio.setState({ ...OPEN, railLeftOpen: false, railLeftW: 300, railRightW: 500 });
     useStudio.getState().toggleRail('left');
+    expect(useStudio.getState().railLeftOpen).toBe(true);
+    expect(useStudio.getState().railLeftW).toBe(300);
+    expect(useStudio.getState().railRightOpen).toBe(true);
     expect(useStudio.getState().railRightW).toBe(500);
   });
 });

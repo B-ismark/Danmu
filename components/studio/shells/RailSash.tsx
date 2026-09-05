@@ -343,7 +343,15 @@ export function RailSash({
       aria-valuemin={shown ? Math.round(shown.floor) : undefined}
       aria-valuemax={max ?? undefined}
       aria-valuetext={now != null ? `${now} pixels` : undefined}
-      title="Drag to resize · double-click to reset · Enter to collapse"
+      // The affordance a CLOSED sash offers is not the one an open sash offers, and
+      // it used to advertise the open one either way: "drag to resize" on a strip
+      // there is nothing to resize, and "Enter to collapse" on something already
+      // collapsed. Both gestures do open it, so both are named.
+      title={
+        open
+          ? 'Drag to resize · double-click to reset · Enter to collapse'
+          : 'Drag or press to open · Enter to open'
+      }
       className={`rail-sash rail-sash--${side}${dragging ? ' is-dragging' : ''}`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
