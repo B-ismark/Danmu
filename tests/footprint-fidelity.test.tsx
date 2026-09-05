@@ -1,0 +1,183 @@
+// Row 12 / 4a — the ground truth for "does one box per piece change an answer?"
+//
+// `docs/research/suggest-and-collision.md` § 4.1 records the limitation ("There is no
+// per-shape hull anywhere") and the build scope says 4a is not worth doing "if the
+// compound footprints do not change any reported outcome. Unmeasured, and the
+// measurement is cheap next to the build." Nothing could measure it, because the only
+// statement of what a shape occupies is its renderer, and CLAUDE.md rule 2 names a TSX
+// renderer as precisely where arithmetic hides from every gate.
+//
+// `tests/helpers/geometry-walk.ts` reaches it by CALLING the components rather than
+// rendering them. This file turns that into a table.
+//
+// Denominator is FIXED: every shape in `SHAPES`, at three sizes each. A shape that fits
+// inside its own box is an outcome, not a row to skip. Both directions are reported per
+// row, because they are different defects: `fill` is how much of the declared box the
+// geometry does NOT occupy (the box is too generous — false positives), `outside` is how
+// much geometry escapes the declared box (the box is too small — false NEGATIVES, which
+// the research document does not consider possible).
+
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('@/lib/store', () => ({
+  useStudio: (sel: (s: unknown) => unknown) => sel({ dims: {}, openState: {}, hidden: {}, quality: 'high' }),
+}));
+
+// `SURFACE.fabric` and `SURFACE.wood` expose `normalMap` as a GETTER that builds a
+// canvas-backed texture, so spreading one into a material element reaches `document`.
+// Three renderers spread it (`FloorLampGeo`, `TableLampGeo`, `MirrorGeo`) and threw
+// `document is not defined` — the walk reported that rather than counting them as
+// shapes that drew nothing, which is the failure this instrument exists to avoid.
+// A material carries no geometry, so replacing the presets cannot move a footprint.
+vi.mock('@/components/three/materials', () => ({
+  SURFACE: new Proxy({}, { get: () => ({}) }),
+  PHYSICAL_SURFACES: ['fabric'],
+}));
+
+import { PartGeometry } from '@/components/three/DynamicPart';
+import { SHAPES, PART_LIBRARY, type Shape, type ScenePart, type Category } from '@/lib/scene-spec';
+import { isParametric } from '@/lib/scene-spec';
+import { dimRangeFor } from '@/lib/dimension-ranges';
+import { walk, horizontalBounds, unionArea } from './helpers/geometry-walk';
+
+/** Rasterisation step for every area in this file, metres. Quoted with the numbers
+ *  it produces, because a sampled area without its step is not a measurement. */
+const STEP = 0.005;
+
+const categoryOf = (shape: Shape): Category =>
+  PART_LIBRARY.find((l) => l.shape === shape)?.category ?? 'other';
+
+const partAt = (shape: Shape, dimMM: [number, number, number]): ScenePart =>
+  ({
+    id: `probe-${shape}`,
+    name: shape,
+    shape,
+    category: categoryOf(shape),
+    dimMM,
+    pos: [0, 0, 0],
+    rot: 0,
+    color: '#b07a52',
+  }) as unknown as ScenePart;
+
+type Row = {
+  shape: Shape;
+  size: 'min' | 'lib' | 'max';
+  dim: [number, number, number];
+  /** furthest the drawn geometry reaches beyond the declared half-width, mm */
+  overX: number;
+  /** same on the depth axis, mm */
+  overZ: number;
+  /** drawn floor area INSIDE the declared box ÷ the declared box's area */
+  fill: number;
+  /** drawn floor area OUTSIDE the declared box ÷ the declared box's area */
+  outside: number;
+  /** the y-range of whatever escapes, so a canopy can be told from a leg */
+  overY: [number, number] | null;
+  prims: number;
+  /** true = the renderer is handed the RESIZED dim, so all three rows are sizes the
+   *  app really draws. false = the piece is authored at `dimMM` and wears a resize as
+   *  a uniform group scale, so the ratios are size-invariant and only the AUTHORED dim
+   *  is a real configuration. */
+  param: boolean;
+};
+
+function measure(shape: Shape, size: Row['size'], dim: [number, number, number]): Row {
+  const rep = walk(PartGeometry({ part: partAt(shape, dim), locked: false }));
+  if (Object.keys(rep.unhandled).length || Object.keys(rep.threw).length) {
+    throw new Error(`${shape}/${size}: walk incomplete ${JSON.stringify({ ...rep.unhandled, ...rep.threw })}`);
+  }
+  const hw = dim[0] / 2000;
+  const hd = dim[1] / 2000;
+  const b = horizontalBounds(rep.prims);
+  const overX = Math.max(0, b.x1 - hw, -b.x0 - hw) * 1000;
+  const overZ = Math.max(0, b.z1 - hd, -b.z0 - hd) * 1000;
+
+  const declared = { x0: -hw, x1: hw, z0: -hd, z1: hd };
+  const inside = unionArea(rep.prims, declared, STEP);
+  const whole = unionArea(rep.prims, {
+    x0: Math.min(b.x0, -hw), x1: Math.max(b.x1, hw),
+    z0: Math.min(b.z0, -hd), z1: Math.max(b.z1, hd),
+  }, STEP);
+  const boxArea = hw * 2 * hd * 2;
+
+  // Which primitives are the ones escaping, and how high they sit.
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const p of rep.prims) {
+    const out = p.pts.some(([x, z]) => Math.abs(x) > hw + 1e-9 || Math.abs(z) > hd + 1e-9);
+    if (out) { lo = Math.min(lo, p.y[0]); hi = Math.max(hi, p.y[1]); }
+  }
+
+  return {
+    shape, size, dim, overX, overZ,
+    fill: inside / boxArea,
+    outside: (whole - inside) / boxArea,
+    overY: lo === Infinity ? null : [lo, hi],
+    prims: rep.prims.length,
+    param: isParametric(shape),
+  };
+}
+
+function rowsFor(shape: Shape): Row[] {
+  const r = dimRangeFor(categoryOf(shape), shape);
+  const lib = PART_LIBRARY.find((l) => l.shape === shape)?.dimMM;
+  const mid: [number, number, number] = [
+    Math.round((r.min[0] + r.max[0]) / 2),
+    Math.round((r.min[1] + r.max[1]) / 2),
+    Math.round((r.min[2] + r.max[2]) / 2),
+  ];
+  return [
+    measure(shape, 'min', r.min as [number, number, number]),
+    // `closet`, `cylinder` and `plane` are not in PART_LIBRARY; the range midpoint
+    // stands in, and the row is the same row either way — no shape is dropped.
+    measure(shape, 'lib', (lib ?? mid) as [number, number, number]),
+    measure(shape, 'max', r.max as [number, number, number]),
+  ];
+}
+
+describe('what a shape actually occupies, against the one box every consumer reads', () => {
+  const rows: Row[] = SHAPES.flatMap(rowsFor);
+
+  it('the walk reproduces a shape whose footprint IS its box', () => {
+    // The control. `BoxGeo` draws one `Box` at `dimMM`, so a correct walk returns the
+    // declared extents exactly — which is a statement about the transform maths, not a
+    // restatement of the claim under test. Any error in the matrix stack shows here
+    // before it can be read as a finding about a real shape.
+    const box = rows.filter((r) => r.shape === 'box');
+    expect(box).toHaveLength(3);
+    for (const r of box) {
+      expect(r.overX, `box/${r.size} overX`).toBeCloseTo(0, 6);
+      expect(r.overZ, `box/${r.size} overZ`).toBeCloseTo(0, 6);
+      expect(r.fill, `box/${r.size} fill`).toBeGreaterThan(0.99);
+    }
+  });
+
+  it('prints the table', () => {
+    const f = (n: number, w: number, d = 0) => n.toFixed(d).padStart(w);
+    console.log(
+      `\nFOOTPRINT vs dimMM — every shape, three sizes, ${STEP * 1000} mm raster` +
+        `\n  over{X,Z} mm : furthest the drawn geometry reaches OUTSIDE the declared box` +
+        `\n  fill         : drawn floor area inside the box ÷ box area  (low = box too generous)` +
+        `\n  outside      : drawn floor area outside the box ÷ box area (>0 = box too SMALL)\n`,
+    );
+    console.log('shape                size  par    W     D   overX  overZ   fill  outside  prims  escapes at y');
+    for (const r of rows) {
+      const flag = r.overX > 1 || r.overZ > 1 ? ' <<<' : '';
+      console.log(
+        `${r.shape.padEnd(20)} ${r.size.padEnd(4)} ${r.param ? ' P ' : ' . '} ${f(r.dim[0], 5)} ${f(r.dim[1], 5)} ` +
+          `${f(r.overX, 6, 1)} ${f(r.overZ, 6, 1)} ${f(r.fill, 6, 2)} ${f(r.outside, 7, 2)} ` +
+          `${f(r.prims, 6)}  ${r.overY ? `${r.overY[0].toFixed(2)}…${r.overY[1].toFixed(2)}` : '—'}${flag}`,
+      );
+    }
+
+    const denom = rows.length;
+    const escaping = rows.filter((r) => r.overX > 1 || r.overZ > 1);
+    const shapesEscaping = new Set(escaping.map((r) => r.shape));
+    console.log(
+      `\nrows ${denom} = ${SHAPES.length} shapes x 3 sizes` +
+        `\n  geometry outside the declared box (>1 mm) : ${escaping.length} rows, ${shapesEscaping.size} shapes` +
+        `\n  [${[...shapesEscaping].join(', ')}]`,
+    );
+    expect(denom).toBe(SHAPES.length * 3);
+  });
+});

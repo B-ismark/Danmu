@@ -404,8 +404,15 @@ with a −10 mm pad, plus a vertical-extent test in `collidesAt` (`lib/scene-spe
 permits stacking. A round footprint polygonises to a **32-sided inscribed** polygon, inscribed
 so a round piece is never reported as hitting something it does not touch.
 
-There is no per-shape hull anywhere: a sofa's L, a dining table's legs, a curtain's drape and a
-plant's canopy are all the same rectangle.
+There is no per-shape hull anywhere: a dining chair's legs, a curtain's drape and a plant's
+canopy are all the same rectangle.
+
+**Two corrections to the sentence this used to be, both found by measuring it (§ 4.6).** It
+opened with "a sofa's L", and there is no L-shaped sofa in this codebase — `SofaGeo` draws a
+full-width plinth, and the only L is `desk-l`. And the list as a whole implies the box is a
+conservative OUTER bound that a hull would shrink. For a third of the catalogue it is not:
+thirty-two of forty-six shapes draw geometry outside their own `dimMM`, so for those the box is
+too SMALL and the error is a false negative.
 
 Two behaviours were found while reading it, neither of them in the doc, both silent. **Both
 are fixed on `main` as of `d26ce5c` (PR #42), and this section is written in the past tense
@@ -505,6 +512,69 @@ compound hull must keep that direction of error.
 Whether a solver scoring tens of thousands of arrangements can afford a compound footprint.
 The broad-phase makes it plausible; the constant factor is a real question and belongs to
 whoever implements it, **with a number rather than an argument.**
+
+Still unmeasured, and unchanged by § 4.6: nothing below runs the solver. § 4.6 measures what
+the footprint changes, not what it costs.
+
+### 4.6 Measured, 2026-09-05 — and it retires 4a rather than sizing it
+
+The build scope below gates 4a on "if the compound footprints do not change any reported
+outcome". They change one, rarely, and **the changes divide into two causes that want opposite
+work.** `tests/footprint-fidelity.test.tsx` and `tests/footprint-outcomes.test.tsx` are the
+instrument; `tests/helpers/geometry-walk.ts` is how it reaches the renderers, by CALLING the
+components rather than rendering them, so there is no jsdom and no WebGL.
+
+**Ground truth — every shape, three authored sizes, 138 rows, nothing skipped.**
+
+| | |
+|---|---|
+| shapes drawing geometry OUTSIDE their own `dimMM` | **32 of 46** |
+| worst, and it is not close — `desk-l` | **+1260 mm** at the library size; the escaping area is **0.50x the whole declared box**, at every size |
+| `plant` at its library `[400, 400, 1600]` | draws **920 mm** wide and **1940 mm** tall; escaping area **1.81x** the box |
+| renderers that never read `part.dimMM` at all | **6 of 42** — `DiningChairGeo`, `OfficeChairGeo`, `ArmchairGeo`, `PlantGeo`, `FloorLampGeo`, `TableLampGeo` |
+
+`desk-l` is the sharpest: `DeskGeo` (`components/three/DynamicPart.tsx:736`) draws the return
+wing at `position [w/2 + (d*0.9)/2, ...]`, so at `[1600, 1400, 750]` it spans x ∈ [0.80, 2.06]
+against a declared half-width of 0.80. The piece draws 2.86 m of desk where every consumer
+reads 1.60 m, and `grep -n lShape` outside that file returns nothing. This is CLAUDE.md rule
+2's `fanBlade` scar at twice the magnitude — 79% against the fan's 40%.
+
+**Reported outcomes — a 600 x 600 x 900 box dragged past one obstacle, 50 mm grid, 4096
+positions per shape, 42 shapes, 172,032 positions. Every shape gets a row.**
+
+| | | |
+|---|---|---|
+| box refuses, geometry does not | 592 | **0.34%** — of which **299 are the instrument**, not the app (`mirror-oval` draws nothing with floor area, so its arm cannot report a hit at all) |
+| geometry refuses, box does not | 1100 | **0.64%** |
+| shapes where NO position differs | **12 of 42** | `sofa`, `tv`, `rug`, `chair-armchair`, `ottoman`, `desk-standard`, `coffee-table`, `side-table`, `shoe-rack`, `door`, `tv-console`, `stool` |
+
+At rest, in the five shipped layouts, it is **1 differing pair out of 302** — but that
+denominator cannot express the finding, because almost nothing in a preset touches anything.
+`collidesAt` is asked its question thousands of times during a drag, so positions are the
+population and pairs are not.
+
+**The result, and it is a split rather than a rate.** Every one of the 1100
+geometry-refuses-and-box-does-not positions traces to a shape drawing outside its own `dimMM`
+— pinned as an assertion, not observed and described. That is **not** an argument for compound
+footprints. It is six-or-so renderers with a literal in the wrong place, each repaired without
+any new footprint model, and 4a would paper over them by teaching the collision engine to
+agree with the mistake.
+
+What is left as 4a's actual case is the other direction: the box being a true outer bound and
+simply too generous for a round or leggy piece. That is **293 positions in 172,032 — 0.17%** —
+and it is concentrated in `fan-standing` (100), `fan` (56), `chair-office` (52) and
+`chair-dining` (41), where the answer is a `circle: true` flag or a slightly smaller `dimMM`
+rather than a hull.
+
+**Recommendation: retire 4a with this number.** Fix the renderers that draw outside their box,
+which is a separate, smaller, better-defined piece of work, and leave every piece one box.
+
+**Not measured, and it stays said.** `analyzeRoom`'s clearance findings: its zones come from
+`lib/layout-rules.ts` keyed on `dimMM`, so a compound footprint does not substitute into them
+one-for-one, and measuring it means designing the zone semantics first — which is the XL this
+row exists to decide about. Nothing here has been in a browser. `Sway`'s +/-0.03 to 0.05 rad
+oscillation is not modelled, and it moves a plant's canopy about 95 mm further out, so the
+plant figures are the floor rather than the range.
 
 ---
 
@@ -673,8 +743,11 @@ spent** — the veto already moved those numbers and the suite was re-pinned aro
   and delete the row** rather than leaving a wired-but-inert term to be rediscovered.
 - **1a:** if merged sets in real rooms are almost always two pieces that are already adjacent,
   the solver's relation-derived groups may cover them. Countable before building.
-- **4a:** if the compound footprints do not change any reported outcome. Unmeasured, and the
-  measurement is cheap next to the build.
+- **4a:** if the compound footprints do not change any reported outcome. **Measured, 2026-09-05
+  — see § 4.6, and the answer is that they change 0.17% of drag positions once the changes
+  caused by renderers drawing outside their own `dimMM` are separated out.** Those are a
+  different, cheaper defect, and 4a would entrench them. The recommendation on the table is to
+  retire this row and fix the six renderers instead.
 
 ### Not re-derived here, and named rather than implied
 
