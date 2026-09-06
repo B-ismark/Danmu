@@ -602,6 +602,32 @@ the nightstand, carried nowhere while the nightstand moved. That fix does want e
 is the item below, because it is the one defect in this file that the 2D plan is
 constitutionally unable to show.*
 
+### The standing fan is 144 mm shallower than it was, in the plan and in 3D (§ 39)
+
+`fan-standing` declared `450 x 450` and drew `450 x 306`. On the user’s ruling it now
+declares **`450 x 310`** — the base, not the cage. Nothing about the 3D geometry moved:
+`StandingFanGeo` never read `dimMM[1]`, so the mesh is the same mesh. **What moved is the
+footprint**, which is what the plan draws and what the solver keeps clear.
+
+**What to look for.** Add a Standing fan from the Library, then the 2D Plan tab. Its
+outline should be a visibly OVAL ellipse — wider than it is deep — where it used to be a
+circle. `Foot.circle` has always meant ellipse (`footCorners` reads `hw` and `hd`
+separately); it drew round only because the two were equal. Wrong would be a circle still,
+or an ellipse whose long axis runs the wrong way.
+
+**The half a probe cannot take: whether it reads as a fan.** A pedestal fan seen from
+directly above is mostly cage, and the cage is 450 across in both axes — it is only the
+BASE that is 306. So the honest footprint may well look too narrow to be the thing it
+represents. That is an aesthetic call about what a plan symbol is for, and it is the one
+question the geometry cannot answer.
+
+**Also worth a glance while it is on screen:** a fan whose depth was typed by hand now
+draws deeper than it did — 500 mm declared drew 340 and now draws 493. Correct, and
+visible. Reachable only in a room with no saved scene snapshot.
+
+Gates: `pnpm typecheck` 0, `pnpm test` 142 files / 2557 passed / 5 expected-fail, `pnpm
+lint` 0. **None of that is a look.**
+
 ### The two decline toasts — the halves nobody has pressed, merged to `main` in `4cc663b` (PR #89)
 
 **The refusal now names WHICH impossible condition it hit**, rather than always saying
