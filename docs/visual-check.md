@@ -693,10 +693,21 @@ Three things settled that were never eye questions:
 
 **What is NOT closed, stated so nobody reads the above as more than it is:**
 
-· **The 169-character both-terms string still has never been produced.** It is the `Fix`
-  refusal, not Shuffle’s, and no solve either of us has run has emitted it. Measuring the
-  two lengths that occur and implying the 169 fits would be the same error as the
-  126/145.
+· **The 169-character both-terms string still has never been produced — 0 of 840 solves.**
+  It is the `Fix` refusal, not Shuffle’s. Swept 2026-09-06 over 5 layouts × 7 sizes × 12
+  seeds × both modes: **840 solves, 22 declined for impossibility, and all 22 named
+  `outside` alone.** So `overlap` alone is 0/840 as well, and the disjunction has never
+  once been the true answer. Measuring the two lengths that occur and implying the 169
+  fits would be the same error as the 126/145.
+
+  **It needs both terms to rise in ONE declined solve**, which is what makes the rate
+  meaningful rather than merely unobserved: `declinedTermsFor` returns
+  `IMPOSSIBLE_TERMS.filter((k) => after[k] > before[k])`, and all four call sites in
+  `RoomTools.tsx` pass `result.declinedTerms` on the `declined === 'impossible'` branch.
+  The empty-list fallback inside `impossibleClause` — which also returns the 169 — cannot
+  fire from the app, because `impossibility` is a SUM over those terms, so a decline
+  implies at least one of them rose. **This was driven through the same value the four
+  sites render**, which is the check the struck `l` 3×2.4 row did not have.
 · **`l` 3×2.4 did not reproduce, and its row is struck above.** Shuffle SUCCEEDED on all
   14 presses, so that 120-char arm is unrendered. **Two instruments reached the same 0/14
   independently** — 14 real presses in a browser, and `shuffleRoom` driven over ten rooms
@@ -718,9 +729,13 @@ and read the toast — the quoted finding must match a line in Room check word f
 and there must be no "press again" in it. Then a `rect` at 6 × 4, where the old sentence
 is still the right one. **Both were rendered on `4cef13a`** — the table above — so what is
 left at these two lengths is whether the wording reads well.
-`overlap` alone has never been produced by any solve measured so far — 48 solves across
-three room shapes, every refusal `outside` — so *"inside another one"* as a standalone
-clause is unseen, and the 169-character both-terms string has never been produced at all.
+`overlap` alone has never been produced by any solve measured so far — **0 of 840**, five
+room shapes, every refusal `outside` — so *"inside another one"* as a standalone clause is
+unseen, and the 169-character both-terms string has never been produced at all. (This
+sentence's own earlier figure was 48 solves across three shapes; the sweep above replaces
+it. The **other** "48 solves" in this section, at the top under PR #89, is a different and
+narrower measurement — `u`/`l`/`t` at 6×4, seeds 1-8 — and it stands: it carries the
+seed-level decline pattern, which the wide sweep does not record.)
 Those are the two arms to look for; the one quoted above is the one that already exists.
 
 The both-terms string is now driven at all four sites by `tests/impossible-clause-wired.test.tsx`,
