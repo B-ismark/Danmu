@@ -731,8 +731,11 @@ is still the right one. **Both were rendered on `4cef13a`** — the table above 
 left at these two lengths is whether the wording reads well.
 `overlap` alone has never been produced by any solve measured so far — **0 of 840**, five
 room shapes, every refusal `outside` — so *"inside another one"* as a standalone clause is
-unseen, and the 169-character both-terms string has never been produced at all. (The
-earlier figure here was 48 solves across three shapes; the sweep above replaces it.)
+unseen, and the 169-character both-terms string has never been produced at all. (This
+sentence's own earlier figure was 48 solves across three shapes; the sweep above replaces
+it. The **other** "48 solves" in this section, at the top under PR #89, is a different and
+narrower measurement — `u`/`l`/`t` at 6×4, seeds 1-8 — and it stands: it carries the
+seed-level decline pattern, which the wide sweep does not record.)
 Those are the two arms to look for; the one quoted above is the one that already exists.
 
 The both-terms string is now driven at all four sites by `tests/impossible-clause-wired.test.tsx`,
