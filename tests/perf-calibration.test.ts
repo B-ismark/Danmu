@@ -46,6 +46,7 @@ import {
   REFERENCE_IDLE_MS,
   TWENTY_PIECE_BAR_MS,
   bestMs,
+  yardstickWorkload,
   ceilingMs,
   clampFactor,
   machineFactor,
@@ -63,50 +64,109 @@ describe('the reference workload', () => {
     // then measures nothing, which is a calibration that reads every machine as
     // infinitely fast — the direction that loosens both bars.
     expect(Number.isFinite(a)).toBe(true);
-    expect(Math.abs(a)).toBeGreaterThan(1);
     expect(b).toBe(a);
+
+    // **The exact value, which is the guard every timing assertion in this file was
+    // trying to be and structurally could not.** `> 1` passes for any loop that runs
+    // at all: halve the rounds and it returns 10810.88, halve the inner array and it
+    // returns 15000.86, and a bound of 1 waves both through.
+    //
+    // Nothing here is timed, so it reads the same on a runner as it does locally. The
+    // workload is deterministic float maths over constant inputs — the assertion
+    // directly above already depends on that — so its result is a fingerprint of the
+    // round count, the array length and the body at once, in BOTH directions. That
+    // last part is the half a floor never had: a floor is one-sided, a workload grown
+    // fourfold measures HIGHER, and `tests/helpers/perf.ts` named exactly that growth
+    // as a failure "not detectable from inside a test that can only compare the
+    // calibration against itself". It is detectable. It was being asked in the one
+    // space — milliseconds — where the answer belongs to the machine.
+    //
+    // `toBeCloseTo(…, 3)` and not `toBe`: V8 computes `Math.sin`/`Math.cos` in
+    // software, so an engine upgrade could move the last ULPs of a 512,000-term sum.
+    // The tolerance is deliberately at the loose end — 5e-4 against a smallest
+    // observed edit of 6627 leaves seven orders of magnitude, so precision buys
+    // nothing and costs a false red on a node bump.
+    expect(
+      a,
+      'referenceWorkload was edited — the calibration now measures a different program',
+    ).toBeCloseTo(21627.954983732892, 3);
   });
 
   it('costs enough to survive a scheduler quantum', () => {
-    // A calibration shorter than a preemption is noise. 22 ms was measured; the
-    // assertion is a wide band around it, because the point is the ORDER of
-    // magnitude — a future edit that shrinks this to 1 ms brings back the defect
-    // that the first version of this helper had.
-    expect(REFERENCE_IDLE_MS).toBeGreaterThanOrEqual(10);
-    expect(REFERENCE_IDLE_MS).toBeLessThanOrEqual(100);
+    // A calibration shorter than a preemption is noise. 22 ms was measured on the
+    // calibration box, and this band used to be 10-100 — an ORDER-of-magnitude check,
+    // because the workload the constant describes could itself be edited and there is
+    // no sense pinning a measurement of a moving program.
+    //
+    // **The workload cannot move now**: the test above pins its exact return. So
+    // `REFERENCE_IDLE_MS` describes a FIXED program, which makes it a decision rather
+    // than a re-measurement, and a decision can be pinned tightly. 15-30 admits this
+    // machine's real idle spread (19.35-22.58 ms over 25 samples) and refuses both
+    // values a review found sailing through the old band: 10, which pins every
+    // machine at the floor and switches the calibration off, and 90, which pins every
+    // machine at the clamp and inflates both bars.
+    //
+    // It is not a bound on how fast the machine running this is. That is
+    // `machineFactor`'s job, and conflating the two is what put a wall-clock
+    // assertion in the test below for as long as there was one.
+    expect(REFERENCE_IDLE_MS).toBeGreaterThanOrEqual(15);
+    expect(REFERENCE_IDLE_MS).toBeLessThanOrEqual(30);
   });
 
-  it('and the workload itself still costs that, not just the constant naming it', () => {
-    // The assertion above pins a NUMBER, which a mutation that shrinks the loop
-    // leaves untouched: the constant would then describe a workload that no longer
-    // exists, every machine would read as fast, and both bars would quietly sit at
-    // their idle figures forever. So the body is timed too.
+  it('reports what the two workloads cost here, and asserts nothing about the clock', () => {
+    // **Every wall-clock assertion that used to live here is gone, and a measurement
+    // retired them rather than a loosening.** There were two — a bare `measured > 5`
+    // and a floor at `REFERENCE_IDLE_MS * 0.4` = 8.8 ms. Both existed to catch the
+    // reference loop being edited, and both asked that question in milliseconds, which
+    // makes the answer a property of the machine rather than of the loop.
     //
-    // A floor, never a band around REFERENCE_IDLE_MS: this runs on CI hardware
-    // nobody here has measured, and the only direction that breaks the calibration
-    // is the workload becoming too SHORT to outlast a scheduler quantum. 5 ms leaves
-    // room for a machine four times faster than the one this was written on.
+    // A GitHub runner answered it wrong on 2026-09-06: `expected 8.554660000000013 to
+    // be greater than 8.8`, on a commit with nothing wrong with it. Re-running the
+    // same job on the same commit passed, and this file reddened again later at a
+    // different assertion. The floor's own comment had claimed "no CI box can trip
+    // this" and prescribed re-measuring `REFERENCE_IDLE_MS` on the machine that fired
+    // it — advice nobody can follow, because that machine is a runner nobody here
+    // controls.
+    //
+    // What replaced them, one defect at a time:
+    //
+    // · loop shrunk, or optimised away entirely → the exact-value pin above
+    // · loop GROWN fourfold → the exact-value pin above, and nothing before it. A
+    //   floor is one-sided and growth measures HIGHER, so that failure was open for
+    //   as long as the floor stood in for it.
+    // · `REFERENCE_IDLE_MS` moved to 10 or to 90 → the narrowed band above
+    //
+    // Nothing is left for a clock to answer, so nothing here asks one.
     referenceWorkload();
     const measured = bestMs(referenceWorkload, 3);
-    expect(measured).toBeGreaterThan(5);
+    yardstickWorkload();
+    const yard = bestMs(yardstickWorkload, 3);
 
-    // And the pair, which is the half that was missing. The constant and the workload
-    // were each pinned alone — a band for one, a floor for the other — and nothing
-    // tied them together, so `REFERENCE_IDLE_MS = 90` (inside its own band) or a
-    // workload grown fourfold both sailed through: the first pins every machine at
-    // the FLOOR and switches the calibration off, the second pins every machine at
-    // the CLAMP and inflates both bars. Two opposite failures, one missing assertion.
+    // Printed on every passing run (`--disableConsoleIntercept`), so drift stays
+    // visible without reading a diff.
     //
-    // One-sided on purpose, and it is the safe side: a slower machine measures
-    // HIGHER, so no CI box can trip this. Only a shrunken workload or an inflated
-    // constant can. If it does fire on a genuinely much faster machine, the fix is to
-    // re-measure `REFERENCE_IDLE_MS` there, which is the right thing to be told.
-    expect(
-      measured,
-      `the workload costs far less than REFERENCE_IDLE_MS (${REFERENCE_IDLE_MS} ms) claims — ` +
-        `either the loop shrank, the constant was inflated, or this machine is >2.5x the ` +
-        `calibration box and the constant needs re-measuring here`,
-    ).toBeGreaterThan(REFERENCE_IDLE_MS * 0.4);
+    // **The ratio was proposed as a SCALE-FREE bound and the first CI reading refutes
+    // it.** The argument was that both workloads scale with the CPU, so their ratio
+    // would normalise machine speed where an absolute floor could not. Measured:
+    // 16.6-24.3 here over 20 pairs, and **8.55-9.30 on the runner** over two runs — below
+    // the whole local range rather than inside it, with the two runner samples 1.09x
+    // apart, so the direction and the magnitude are both replicated rather than one
+    // reading quoted as an effect.
+    //
+    // The reason was already written, in `yardstickWorkload`'s own docblock, before the
+    // measurement: this workload is "deliberately UNLIKE `referenceWorkload` — scalar
+    // float maths, no allocation — so the pair also says whether a machine is starved
+    // of CPU or of allocation bandwidth." A pair that can tell those two apart is by
+    // construction a pair whose ratio moves between machines. A diagnostic and a
+    // normaliser are opposite requirements and one pair cannot be both.
+    //
+    // So the ratio stays printed and unasserted, now for a measured reason instead of
+    // a precautionary one. Any bound the local range would have justified is above
+    // 9.30, and both CI runs came in under it.
+    console.log(
+      `  calibration: workload=${measured.toFixed(2)}ms yardstick=${yard.toFixed(2)}ms ` +
+        `ratio=${(measured / yard).toFixed(2)} (runner 8.55-9.30, this box 16.6-24.3)`,
+    );
   });
 });
 

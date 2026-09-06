@@ -26,13 +26,25 @@
 // · The factor is **clamped to `MAX_FACTOR`**. A calibration that goes wrong — a
 //   pathological JIT deopt, a reference loop that got optimised into nothing and
 //   reads as an infinitely fast machine, a future edit — cannot inflate a bar without
-//   limit. `MAX_FACTOR` is the ONLY thing bounding the damage from a broken
-//   calibration, which is why it is small: a review found that growing
-//   `referenceWorkload` fourfold, or moving `REFERENCE_IDLE_MS` anywhere inside the
-//   band its own test asserts, pins every machine at the clamp with the whole suite
-//   still green. Neither of those is detectable from inside a test that can only
-//   compare the calibration against itself. So the answer is not a cleverer
-//   assertion, it is a ceiling low enough that being wrong is survivable:
+//   limit. `MAX_FACTOR` bounds the damage from a broken calibration, which is why
+//   it is small: a review found that growing `referenceWorkload` fourfold, or
+//   moving `REFERENCE_IDLE_MS` anywhere inside the band its own test asserted, pins
+//   every machine at the clamp with the whole suite still green. That paragraph
+//   then said neither was "detectable from inside a test that can only compare the
+//   calibration against itself", and concluded the answer could not be a cleverer
+//   assertion, only a low ceiling.
+//
+//   **Both are detectable, and the ceiling is no longer the only thing holding.**
+//   The undetectability was a property of asking in MILLISECONDS, not of the
+//   question. `referenceWorkload` is deterministic, so its exact return is pinned in
+//   `tests/perf-calibration.test.ts`, catching an edit in EITHER direction on any
+//   machine — growth included, which no one-sided floor could ever reach — and with
+//   the workload fixed, the constant below stops being a measurement of a moving
+//   program and its band narrows to a decision. The ceiling stays, because a JIT
+//   deopt still is not detectable that way; it is the backstop it was described as
+//   rather than the whole defence.
+//
+//   Either way it is set low enough that being wrong is survivable:
 //   `TWENTY_PIECE_BAR_MS × MAX_FACTOR` stays a factor below `HOIST_REGRESSION_MS`,
 //   and `tests/perf-calibration.test.ts` asserts exactly that, reading both numbers
 //   from here rather than retyping them.
@@ -55,14 +67,18 @@
  *
  * An earlier draft said being wrong here "only shifts every calibrated bound by the
  * same proportion". That is false in one direction and the false direction is the
- * quiet one. Set it too HIGH — 90 is inside the band its own test asserts — and the
- * raw factor drops below 1 on every machine, the floor clamps it to exactly 1,
- * `ceilingMs` becomes the identity, and the whole calibration is switched off with
- * the suite green and the printed factor reading a confident `1.00`. Hence the
- * one-sided pin in `tests/perf-calibration.test.ts`: the measured cost must not come
- * back far BELOW this constant. That direction is safe to assert because a slower
- * machine measures higher, so no CI box can trip it; only a shrunken workload or a
- * badly inflated constant can.
+ * quiet one. Set it too HIGH — 90 was inside the band its own test used to assert —
+ * and the raw factor drops below 1 on every machine, the floor clamps it to exactly 1,
+ * `ceilingMs` becomes the identity, and the whole calibration is switched off with the
+ * suite green and the printed factor reading a confident `1.00`.
+ *
+ * **That used to be guarded by a one-sided wall-clock pin here, and this paragraph used
+ * to end "a slower machine measures higher, so no CI box can trip it". A GitHub runner
+ * tripped it on 2026-09-06.** The pin is gone. The band in
+ * `tests/perf-calibration.test.ts` is 15-30 instead, which refuses 90 outright and
+ * involves no clock — affordable only because the same file now pins
+ * `referenceWorkload`'s exact return, so this constant describes a program that cannot
+ * move and is therefore a decision rather than a measurement waiting to go stale.
  */
 export const REFERENCE_IDLE_MS = 22;
 
@@ -113,6 +129,56 @@ export function referenceWorkload(): number {
   return acc;
 }
 
+/**
+ * A second workload, sized by nothing `referenceWorkload` reads — the yardstick for a
+ * SCALE-FREE version of the calibration check.
+ *
+ * **Why this exists, and it is a measured failure rather than a tidy idea.** The
+ * calibration test asserts `referenceWorkload` still costs a fair share of
+ * `REFERENCE_IDLE_MS` — an ABSOLUTE floor at 8.8 ms — and its own comment says "no CI
+ * box can trip this", because a slower machine measures higher. **A GitHub runner
+ * tripped it on 2026-09-06**: `expected 8.554660000000013 to be greater than 8.8`.
+ * Re-running the same job on the same commit passed, and the same file reddened again
+ * later at a DIFFERENT assertion. So the runner sits inside the noise of that floor,
+ * and the comment's prescribed fix — "re-measure `REFERENCE_IDLE_MS` there" — cannot
+ * be followed, because "there" is hardware nobody here controls.
+ *
+ * The defect that floor existed to catch is the reference loop being edited, which
+ * would make every machine read as fast — or as slow — and move both bars silently.
+ * That is a question about the workload, and asking it in absolute milliseconds makes
+ * the answer depend on the machine. The idea here was that a RATIO would not: both
+ * workloads scale with the CPU, so a shrunken loop drops the ratio while a fast
+ * machine leaves it alone.
+ *
+ * **That idea is wrong, and the first CI reading it asked for is what says so.** The
+ * ratio is 16.6-24.3 on the machine that wrote this (20 pairs, spread 1.47x) and
+ * **8.55-9.30 on a GitHub runner**, two runs 1.09x apart — below the entire local
+ * range rather than inside it, so direction and magnitude are both replicated.
+ * The reason is in the last paragraph of this docblock, written before the
+ * measurement and reading as its refutation: a pair that can tell CPU starvation
+ * from allocation starvation is by construction a pair whose ratio moves between
+ * machines. A diagnostic and a normaliser are opposite requirements.
+ *
+ * **So it is printed and asserted by nothing, and now for a measured reason.** Had a
+ * bound been set from the local range — anything above 9.3, which every honest
+ * reading of 16.6-24.3 would have suggested — CI would have gone red on the next run.
+ * That is the whole value of the restraint, cashed one run after adding it.
+ *
+ * The defect itself is caught elsewhere and exactly: `tests/perf-calibration.test.ts`
+ * pins this file's `referenceWorkload` return value, which is deterministic, moves in
+ * both directions and reads the same on every machine. No clock is involved at all,
+ * which is why every wall-clock assertion in that file could be deleted rather than
+ * retuned.
+ *
+ * Its shape is deliberately UNLIKE `referenceWorkload` — scalar float maths, no
+ * allocation — so the pair also says whether a machine is starved of CPU or of
+ * allocation bandwidth.
+ */
+export function yardstickWorkload(): number {
+  let acc = 0;
+  for (let i = 1; i <= 400_000; i++) acc += Math.sqrt(i) / (i + 1);
+  return acc;
+}
 /** Best (lowest) wall-clock of `runs` calls, in ms. The best sample measures what the
  *  machine CAN do, which is the question a ceiling is asking; a mean measures what
  *  else was running. `runs` defaults to 3, matching `tests/clearance-field.test.ts`,
