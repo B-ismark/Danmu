@@ -624,7 +624,11 @@ pattern is unchanged and only the wording moved.
 The range across the four sites is **93 to 169** characters. Check the two ENDS, not a
 middle — a reviewer given the old "144 to 166" would have tested neither.
 
-**A FIFTH refusal joined this panel and has never been on screen either.** Shuffle used
+**A FIFTH refusal joined this panel, and it is the one arm here that HAS now been on
+screen** — 133 characters at `t` 5.5×3.8, rendered on `4cef13a`; the block further down
+has the measurement. This sentence said "has never been on screen either" for one commit
+after that stopped being true, which is the trap `docs/traps.md` now carries under *a
+document contradicts itself and nothing conflicted*. Shuffle used
 to answer every failed press with *"Every layout it tried left something in the way …
 Press Shuffle again for a different try."* In a room that already carries a hard finding
 that press can often fail — `isCleanShuffle` is absolute where the other shuffle gate
