@@ -371,6 +371,17 @@ describe('what a shape actually occupies, against the one box every consumer rea
   // Every shape gets an answer: `OVERHANG_MM` if it is named, `DEFAULT_OVERHANG_MM`
   // otherwise. `Object.keys` of the exception table is asserted too, so deleting a row to
   // make a red go away fails a different assertion instead of silently relaxing the gate.
+  // Free at the top exactly as RATIO_TOL was: 60 -> 600 was mutated and killed NOTHING,
+  // because `worst > budget` passes everything once the budget is wide enough. Given its
+  // own ceiling below.
+  //
+  // UNLIKE RATIO_TOL, this one has NO MARGIN, and that is the sharper half. Setting it to
+  // 0 reports 26 shapes overhanging at all, and the two largest are `window` and `monitor`
+  // at 60.0 mm against a budget of exactly 60. The comparison is strict, so both sit on
+  // the line and pass. It is therefore already pinned from BELOW by its own worst case -
+  // 59 would be red - and was unpinned above, which is the dangerous direction: the next
+  // renderer change of 0.1 mm on either shape reddens this, and the cheapest fix in the
+  // moment is to widen the number. Something holds it now.
   const DEFAULT_OVERHANG_MM = 60;
   const OVERHANG_MM: Partial<Record<Shape, number>> = {
     // `plant: 260` stood here for one commit and is GONE rather than kept at 0. It excused
@@ -502,5 +513,23 @@ describe('what a shape actually occupies, against the one box every consumer rea
     // The exception table is itself pinned. Without this, the cheapest way to green a red
     // is to add a row here, and nothing would say so.
     expect(Object.keys(OVERHANG_MM).sort(), 'shapes excused from the default budget').toEqual(['laptop']);
+
+    // The budget itself, pinned from above for the same reason the tolerance is. The key
+    // SET here was already pinned; no VALUE was, and a key set does not stop a budget
+    // being widened until it forgives everything.
+    expect(DEFAULT_OVERHANG_MM, 'a budget is free at the top, and this one has no margin below').toBeLessThanOrEqual(60);
+
+    // Every EXCUSE too, not only the default. `laptop: 70 -> 700` survived until this
+    // loop existed. Sweeping the values bounds a future excuse on arrival, where naming
+    // `laptop` would hold only the one excuse that exists today.
+    //
+    // The regress stops here on purpose, and it is worth saying why rather than pinning
+    // the pin. A literal inside an assertion cannot be widened invisibly: raising it is a
+    // diff that reads as "someone raised the limit". A budget the assertions merely USE is
+    // the opposite — widening it reddens nothing and looks like a tuning change. The point
+    // is not that a number becomes unwidenable, it is that widening becomes VISIBLE.
+    for (const [shape, mm] of Object.entries(OVERHANG_MM)) {
+      expect(mm, `${shape} is excused more overhang than an excuse can justify`).toBeLessThanOrEqual(100);
+    }
   });
 });
