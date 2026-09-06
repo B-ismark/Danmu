@@ -23,12 +23,39 @@ they say whether each item exists in a commit. An item disappears from here when
 says FIXED — the struck-through rows this table used to carry are gone, because a queue that
 keeps its own history stops being readable as a queue.
 
-**What is OPEN, which is the only list this header keeps.** Rows **11, 12, 13, 17 and 19**;
-the **A.2 / G.2** half of row 14, whose G.3 half shipped in #106; the **device** half of
-row 2, where the draw-call count is measured and only a real GPU can finish the verdict;
-and the **wrong-digest** half of row 18, since `lib/model-verify.ts` (#116) gates the
-registry's shape but proving a pin matches the real bytes still needs the ~62 MB
-`pnpm hash:models --verify`. Everything else in the table below is marked done in its own row.
+**What is OPEN, which is the only list this header keeps. Re-derived 2026-09-06 against
+`origin/main` @ `71f1671`,** at the end of a day that landed **24 commits**.
+
+Rows **11, 12, 13 and 19**; the **A.2 / G.2** half of row 14, whose G.3 half shipped in
+#106; the **device** half of row 2, where the draw-call count is measured and only a real
+GPU can finish the verdict; and the **wrong-digest** half of row 18, since
+`lib/model-verify.ts` (#116) gates the registry's shape but proving a pin matches the real
+bytes still needs the ~62 MB `pnpm hash:models --verify`. Plus **§ 40** and **§ 41**, both
+filed 2026-09-06 and both DECISIONS. Everything else in the table below is marked done in
+its own row.
+
+**Row 17 was in the paragraph above until 2026-09-06 and had already shipped** — #130,
+`§ H.10`, selection on the main undo stack. The table row said **BUILT** while this header
+said open, which is the row-9 failure described three paragraphs down, repeating inside the
+header written to name it. **A header is edited from the previous header; a table row is
+edited when the work is done.** The rule that catches it is the one `traps.md` gained today:
+after answering an open question, grep for the QUESTION’s vocabulary, not the answer’s.
+
+**Closed 2026-09-06:** § 39 (the user ruled — a pedestal fan declares `450 x 310`, its base
+rather than its cage, #141); § A.4’s calibration, which now has **no clock left** — both
+wall-clock assertions deleted rather than loosened, `referenceWorkload` pinned by exact
+return; § 4c, which is **rendered** and is the only thing from the day that has been on a
+screen; and row 17 above.
+
+**Opened 2026-09-06, both needing a decision only the user can make:**
+
+- **§ 40** — six more shapes declare a depth their renderer never reads. § 39 was one fan;
+  it is a class of seven. Four are already pinned (and the pin is the TIGHT case, ±0.03
+  against the band’s ±0.10); two pass by coincidence. `window` declares 60 mm and draws 120.
+- **§ 41** — the Inspector prints `part.category`, an internal key, as user-facing copy, so
+  the Radiator reads **"Fridge · Radiator"**. 13 of 47 catalogue rows; six read "Fridge".
+  A second site, `HoverCard.tsx:86`, shows the bare key. **Only looking found this** — it
+  typechecks, lints and passes every test, and no assertion in the repo reads the string.
 
 **Row 9 came off this list on 2026-09-05, and how it survived here is the lesson.** The
 header said the drill-in half was open; the table said it was untouched; § H.8, 1,500 lines
@@ -55,10 +82,14 @@ the section, finds FIXED, and deletes the line. **Prefer the staleness that anno
 itself.** The rewrite before this one made the same point about the table and then wrote
 the header the other way round.
 
-**The baseline every row's numbers should be compared against**, re-measured at `7bba831`
-on **2026-09-04**: `typecheck` clean in 21 s, `lint --max-warnings 0` clean in 17 s,
-`build` clean in 89 s with **no `Invalid Options` tell**, and the suite **132 files, 2401
-passed / 5 expected-fail / 0 failed** in 238 s.
+**The baseline every row's numbers should be compared against**, re-measured at `71f1671`
+on **2026-09-06**, on an idle machine: `typecheck` **exit 0**, `lint --max-warnings 0`
+**exit 0**, `build` **exit 0** with **no `Invalid Options` tell** (its output was grepped,
+not merely its status), and the suite **142 files, 2557 passed / 5 expected-fail / 0
+failed**, exit 0.
+
+The previous line here read *132 files, 2401 passed* at `7bba831` on 2026-09-04 — ten test
+files and 156 assertions in two days.
 
 **Read the zero carefully — it is not the same claim as "the flakes are fixed".** The
 `35b702f` baseline recorded *3 failed / 2146 passed over 118 files*, and all three of those
@@ -6146,6 +6177,57 @@ the studio is a legitimate internal use (`anchorFor`, `defaultBodyColor`, `suppo
 lookup.
 
 **Not verified:** the 3D tab’s own surfaces were not swept, only `components/studio/`.
+
+---
+
+### § 42 — what exists in a commit but not on `main`, derived 2026-09-06
+
+**This section is the "does it exist in a commit anywhere" question asked of the branches
+themselves**, at the close of the 2026-09-06 round. `main` was `71f1671`. Three branches sit
+on `origin` that are not merged by ancestry; **squash-merge makes every landed branch read
+as unmerged, so ancestry is not the test.** What follows compares FILES against `main`.
+
+**1. `wip/a2-diversity-finding` @ `d4ae21c` holds one genuinely unlanded file, and it is a
+file this document has been asking for.**
+
+`tests/shuffle-diversity.test.ts` is **absent from `main`** — `git cat-file -e
+`origin/main:tests/shuffle-diversity.test.ts`` fails. Its own header says:
+
+> *§ A.2 — variety in Shuffle. The measurement was done long ago (penalty 4, working range
+> 2-8, in cost units rather than a normalised lambda) and **nothing pinned it**:
+> `docs/what-is-still-open.md` has said for weeks that "a test that fails at
+> `diversityPenalty: 0` is still owed". This is that test.*
+
+Its tip commit is **"WIP, RED ON PURPOSE: the Shuffle diversity penalty is inert at its
+shipped value"**, dated 2026-09-04. **The other two commits on the branch DID land** —
+`tests/spawn-spread.test.ts` and `tests/wall-parts.test.ts` are both on `main`. So the branch
+is two-thirds landed and one-third not, **which is exactly the shape that reads as done**
+from its name and from a glance at its files.
+
+**Not verified, and it is the whole claim:** nobody has re-run that test or confirmed the
+penalty is inert. What is established is narrower and is the useful half — *a red-on-purpose
+assertion about it exists in a commit and is not on `main`.* Row 14 / § A.2 should be read
+against this before anyone writes the test a third time.
+
+**Authorship is not established and must not be guessed.** It predates both sessions that
+closed this round; neither claimed it. Do not attribute it.
+
+**2. `third-agent/mobile-ux-pass` @ `8fbfd85` (1 ahead) and `fix/third-agent-rails`
+(19 ahead) — every file on both already exists on `main`,** and `docs/mobile-ux-audit.md`
+landed via #114. **Only file existence was checked, not hunks**, so "the content landed" is
+NOT established for either, and the trap has bitten here before: a dirty tree
+from a dead session was once thirteen files all already on `main`. The cheap check says
+these are probably the same story; the expensive one was not run.
+
+**3. The primary shared checkout is CLEAN.** `D:\CODES _AI\Antigravity\Claude\Danmu` is
+on branch `work` at `a0fb53d`, which **is an ancestor of `origin/main`**, with no modified
+files and no stashes. It opened this round dirty in ~13 files; nothing is stranded there now.
+
+**4. The Playwright harness is GONE and no handoff should imply it can be re-run.** Both
+sessions drove browsers from session-scoped temp directories that do not survive. The
+*recipe* is durable — memory, plus the probe gotchas in `traps.md` — but the scripts are not.
+Rebuilding it is an hour, and it is deliberately outside the repo, so this is a statement of
+fact rather than a proposal to commit it.
 
 ## § H.3 · the Library fan-out, and the residue it has left
 
