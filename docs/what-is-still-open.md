@@ -6001,6 +6001,61 @@ is a number someone may have typed. Not taken unilaterally.
 now puts the swept CORNER exactly on it, and the 819 that opened this line of enquiry was
 the rest-pose bounding box of three spokes — an instrument reading, corrected in
 `occupiedPts`. Do not re-file it.
+---
+
+### § 40 — six more shapes declare a depth their renderer never reads — DECISION
+
+**Found by asking what else has § 39’s shape, once § 39 was built.** § 39 was filed as one
+fan. It is a class of seven, and four of the other six are **already pinned**, which is the
+part worth stating first: the pin RECORDS the mismatch rather than fixing it.
+
+**The census, derived not sampled.** `components/three/DynamicPart.tsx` holds 42 `*Geo`
+renderers. **28 read `part.dimMM[1]`; 14 do not.** Seven of those 14 declare `W == D`
+(`air-purifier`, `chair-armchair`, `chair-dining`, `chair-office`, `lamp-floor`,
+`lamp-table`, `plant`) and are harmless — a width-driven drawing is right when the two are
+equal. `cylinder` is parametric. **Six declare `W != D` and draw their thin axis from hard
+literals**, which cannot track a declared depth by construction:
+
+| shape | declared D | drawn D | ratio | in `DRAWN_RATIO`? |
+|---|---|---|---|---|
+| `window` | 60 | 120 | **2.00** | pinned |
+| `mirror` | 30 | 45 | 1.50 | pinned |
+| `monitor` | 200 | 300 | 1.50 | pinned |
+| `mirror-oval` | 30 | 25 | 0.83 | pinned |
+| `painting` | 30 | 28 | 0.92 | **no — inside the band by coincidence** |
+| `curtain` | 80 | 81 | 1.01 | **no — inside the band by coincidence** |
+
+Read off `tests/footprint-fidelity.test.tsx`’s printed table on a passing run, at the
+catalogue size. `PaintingGeo` draws its frame as `Box size={[w + 0.04, h + 0.04, 0.025]}`,
+a literal 25 mm against a declared 30. **The mechanism was checked only for `painting`;
+for the other five the claim is the weaker and sufficient one** — the function never
+mentions `dimMM[1]`, so whatever produces its thin axis, it cannot be the declared depth.
+
+**The last two rows are the ones with no guard at all.** `painting` and `curtain` sit
+inside the 0.90-1.10 band because a hard-coded 25 mm happens to be close to a declared 30,
+not because anything holds them together. **A literal agreeing with a declared number is
+not agreement, it is a coincidence with a gate wrapped round it** — edit either side and
+the band fires with no explanation of which one moved.
+
+**This is a decision per shape, not a defect sweep, which is why it is filed rather than
+fixed.** For some of these, drawing thicker than declared is defensible: a frame IS thicker
+than the art it holds, and a window has a sill. § 39’s answer — *declare what you draw* — is
+the template, but it was chosen there because nothing oscillates and the footprint was
+reserving floor. The equivalent question here is what the DEPTH of a wall-mounted piece is
+for, and that has a different answer: these pieces do not stand on the floor, so the
+footprint argument that settled § 39 does not reach them.
+
+**`window` is the widest gap and the question is purely visual, which was worth checking
+rather than assuming.** Declared 60 mm and drawn 120 means it stands 30 mm proud of the
+plaster on each side, or 60 on one. The obvious worry is the light: it is not one.
+`lib/apertures.ts` reads `dimMM[0]` and `dimMM[2]` and **never `dimMM[1]`**, so the hole
+light comes through is width × height and the depth does not enter it. So nothing about
+the shadow changes either way, and what is left is whether a window that thick looks
+wrong — which no test here can answer.
+
+**Not verified, and none of it is new breakage.** Every ratio above is on `main` today and
+has been for as long as the pins have. Nothing here regressed; it was found by looking.
+
 ## § H.3 · the Library fan-out, and the residue it has left
 
 **Answered 2026-09-03 (fan out from the drop point, with a legality gate) and built:
