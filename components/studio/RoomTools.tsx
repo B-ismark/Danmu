@@ -78,6 +78,8 @@ import {
   HISTORY_DEPTH,
   lockedForShuffle,
   shuffleRoom,
+  shuffleBlockers,
+  shuffleRefusal,
   type ShuffleOffer,
   type ShuffleRoom,
 } from '@/lib/layout-shuffle';
@@ -968,17 +970,33 @@ function ShuffleButton({
         );
         toast(
           anythingToMove
-            ? {
-                // Not an error, and worded so it does not read as one: on a
-                // complex footprint this is 2–4 attempts in 12 (see
-                // `lib/layout-shuffle.ts`). Nothing went wrong — every
-                // arrangement it found would have left something in the way, and
-                // showing one of those is the thing it is refusing to do. "Press
-                // again" is real advice: the next attempt is a different search.
-                title: 'No new arrangement this time',
-                message:
-                  'Every layout it tried left something in the way, so your room is unchanged. Press Shuffle again for a different try.',
-              }
+            ? // Not an error, and worded so it does not read as one: on a complex
+              // footprint this is 2–4 attempts in 12 (see `lib/layout-shuffle.ts`).
+              // Nothing went wrong — every arrangement it found would have left
+              // something in the way, and showing one of those is the thing it is
+              // refusing to do.
+              //
+              // **Which of the two "no" it is comes from the ROOM, not the search.**
+              // `isCleanShuffle` is absolute where the other gate is relative, so a
+              // room that already carries a hard finding refuses on every press and
+              // "press again" is advice that cannot work (§ 4c). `shuffleBlockers`
+              // derives that from `RULE_HANDLING` rather than a list here, and
+              // `shuffleRefusal` owns both sentences so neither is a literal in a
+              // component — #121 measured what happens when a sentence and its call
+              // site are two things nothing joins.
+              //
+              // `analyzeRoom` runs again here, on the refusal path only. The report
+              // above is a memo in another component and this is an event handler,
+              // so reaching for it would mean lifting state to save one call that
+              // happens when a press already failed.
+              shuffleRefusal(
+                shuffleBlockers(
+                  analyzeRoom(effParts, room, {
+                    accessibility: useSettings.getState().stepFree,
+                    dimUnit: useSettings.getState().dimUnit,
+                  }).issues,
+                ),
+              )
             : {
                 title: 'Nothing to shuffle',
                 message: 'Every piece is locked or wall-mounted — there is nothing left to move.',

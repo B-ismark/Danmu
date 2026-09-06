@@ -5,10 +5,30 @@ import {
   movableFor,
   randomizeStart,
   solveLayout,
+  NEGLIGIBLE_COST,
+  LAYOUT_SIMILAR_M,
+  TURN_EPSILON,
+  type SolveResult,
 } from '@/lib/layout-solve';
-import { isCleanShuffle, newRoomFindings, shuffleRoom } from '@/lib/layout-shuffle';
+import { DEFAULT_WEIGHTS } from '@/lib/layout-score';
+import { layoutSimilarity } from '@/lib/layout-offer';
+import {
+  isCleanShuffle,
+  newRoomFindings,
+  shuffleRoom,
+  DIVERSITY_PENALTY,
+  REPEAT_SIMILARITY,
+  shuffleRefusal,
+} from '@/lib/layout-shuffle';
 import { defaultScene } from '@/lib/scene-spec';
 import { footprintForLayout, pointInFootprint, type LayoutId } from '@/lib/footprint';
+
+/** Every cost term at zero, derived from the weight table so a new term cannot leave
+ *  this fixture one key short of the type it claims to be. */
+const ZERO_BREAKDOWN = {
+  ...(Object.fromEntries(Object.keys(DEFAULT_WEIGHTS).map((k) => [k, 0])) as Record<string, number>),
+  total: 0,
+} as unknown as SolveResult['breakdownAfter'];
 
 // Shuffle — a different arrangement, as distinct from a repair.
 //
@@ -202,6 +222,120 @@ describe("solveLayout mode: 'shuffle'", () => {
 });
 
 describe('shuffleRoom — the offer, not the search', () => {
+  it('a hard term is judged NEGLIGIBLE, not zero — and the bound is pinned at both ends', () => {
+    // **Why this is not a loosening, and why it is a pair.** `isCleanShuffle` compared
+    // five WEIGHTED cost terms with `=== 0`. `outside` is the one that is continuous —
+    // its containment arm is `deficit / radius`, a ratio of two floats — so a piece the
+    // settle pass put back inside the polygon can land a fraction of a picometre past
+    // the boundary and score for it. Measured through `shuffleRoom`'s own loop over 90
+    // attempts: of 826 rejected candidates, **5 had no fault except an `outside` in the
+    // 1e-14 range**. Each was an arrangement clean by any tolerance a person would name,
+    // and a candidate discarded for a picometre is one the user is not offered.
+    //
+    // A guard written against the wrong constant refuses every legal value, so the
+    // accepting half and the REFUSING half are asserted together. Without the second,
+    // `() => true` passes.
+    const at = (outside: number, overlap = 0): SolveResult =>
+      ({
+        moved: ['a'],
+        breakdownAfter: { ...ZERO_BREAKDOWN, outside, overlap },
+      } as unknown as SolveResult);
+
+    expect(isCleanShuffle(at(0)), 'an exactly-clean candidate').toBe(true);
+    expect(
+      isCleanShuffle(at(4.681111291435601e-13)),
+      'the largest sub-epsilon outside any measured shuffle produced',
+    ).toBe(true);
+    expect(isCleanShuffle(at(NEGLIGIBLE_COST)), 'exactly at the bound is negligible').toBe(true);
+    // The refusing half, one ulp-ish above the bound and then at a real signal.
+    expect(isCleanShuffle(at(NEGLIGIBLE_COST * 1.0001)), 'just past the bound is a fault').toBe(false);
+    expect(isCleanShuffle(at(0.0113)), 'the smallest real signal any hard term reached').toBe(false);
+    expect(isCleanShuffle(at(0, 0.0113)), 'a real fault on a term that is never noisy').toBe(false);
+    // A candidate that moved nothing is still refused, tolerance or not.
+    expect(isCleanShuffle({ moved: [], breakdownAfter: ZERO_BREAKDOWN } as unknown as SolveResult)).toBe(false);
+
+    // **Both ends of the constant.** Asserted from below only, it would be free to
+    // shrink back to something the measured noise clears; from above only, free to grow
+    // until it swallows a real fault. The two numbers are the measured ones.
+    expect(NEGLIGIBLE_COST, 'must clear the worst float residue any sweep produced').toBeGreaterThan(
+      4.681111291435601e-13,
+    );
+    expect(NEGLIGIBLE_COST, 'must stay far below the smallest real signal measured').toBeLessThan(0.0113);
+  });
+  it('the candidates a shuffle ranks are already unlike each other — which is what makes the diversity term inert', { timeout: 300_000 }, () => {
+    // **§ A.2 asked for a test that fails at `diversityPenalty: 0`. This is the reason
+    // there cannot be one at this level, asserted rather than argued.**
+    //
+    // `orderOffers` scores `cost + penalty x (closest already picked)`. Measured end to
+    // end, `shuffleRoom` at penalty 0 and at 4 returned byte-identical placements in all
+    // 26 attempt-pairs over four presets and two sizes. The cause is here: the clean set
+    // is mutually dissimilar, so the penalty multiplies zero.
+    //
+    // The clean set is rebuilt the way `shuffleRoom` builds it — same seed derivation,
+    // same two gates, both exported — because `clean` is a local. The reconstruction is
+    // asserted to reach a real set rather than assumed to: a sweep over "whatever it
+    // found" passes over an empty list, and 0 pairs would satisfy every bound below.
+    const sims: number[] = [];
+    let candidates = 0;
+    for (const [id, w, d] of [['rect', 6, 4], ['l', 6, 4], ['open', 6, 4]] as const) {
+      const { parts, footprint, locked, movable } = room(id, w, d);
+      const clean: ReturnType<typeof solveLayout>[] = [];
+      for (let sSeed = 0; sSeed < 12 && clean.length < 4; sSeed++) {
+        const start = randomizeStart(parts, footprint, movable, makeRng(sSeed));
+        const r = solveLayout(parts, footprint, locked, { seed: sSeed, mode: 'shuffle', start });
+        if (!isCleanShuffle(r)) continue;
+        if (newRoomFindings(parts, { footprint, height: 2.5 }, r).length > 0) continue;
+        clean.push(r);
+      }
+      candidates += clean.length;
+      for (let i = 0; i < clean.length; i++)
+        for (let j = i + 1; j < clean.length; j++)
+          sims.push(
+            layoutSimilarity(clean[i].placements, clean[j].placements, {
+              spotM: LAYOUT_SIMILAR_M,
+              yawRad: TURN_EPSILON,
+              movable,
+            }),
+          );
+    }
+
+    expect(candidates, 'the reconstruction must reach real candidates, or every bound below is vacuous').toBeGreaterThan(4);
+    expect(sims.length, 'and enough PAIRS to compare — one candidate per room yields none').toBeGreaterThan(2);
+    const worst = Math.max(...sims);
+    console.log(`  clean candidates=${candidates} pairs=${sims.length} zero=${sims.filter((v) => v === 0).length} worst=${worst.toFixed(3)}`);
+
+    // The agreement itself. Not `worst === 0` — five of 66 measured pairs were non-zero
+    // — but that no pair comes near the bar at which a repeat would be skipped, and that
+    // what the penalty can add stays small against the cost it is added to.
+    expect(
+      worst,
+      'a candidate pair reached REPEAT_SIMILARITY: the search is producing near-duplicates and the diversity term now has work to do — see DIVERSITY_PENALTY',
+    ).toBeLessThan(REPEAT_SIMILARITY);
+    expect(
+      DIVERSITY_PENALTY * worst,
+      'the diversity term can now outweigh a real cost difference between candidates',
+    ).toBeLessThan(2);
+  });
+  it('the refusal counts the findings it does not name, rather than naming them all', () => {
+    // The wire test (`tests/shuffle-refusal-wired.test.tsx`) drives both branches
+    // through the panel; it cannot reach this one, because it would need a fixture
+    // seeding two hard findings and that is a property of the seeder rather than of
+    // this sentence. The count is DERIVED — a hand-typed number beside a list one line
+    // away is the defect this repo keeps finding — so the assertion is that it moves
+    // with the list, not that it equals 1.
+    const issue = (title: string) => ({ title }) as unknown as Parameters<typeof shuffleRefusal>[0][number];
+    expect(shuffleRefusal([issue('Bed hard to get into')]).message).not.toContain(' more,');
+    expect(
+      shuffleRefusal([issue('Bed hard to get into'), issue('Door blocked')]).message,
+    ).toContain('and 1 more,');
+    expect(
+      shuffleRefusal([issue('A'), issue('B'), issue('C'), issue('D')]).message,
+    ).toContain('and 3 more,');
+    // The empty list is the OTHER sentence, and it must not fall through to this one:
+    // forcing that branch open crashes on `blockers[0]`, so the guard is load-bearing.
+    expect(shuffleRefusal([]).title).toBe('No new arrangement this time');
+  });
+
   it('a single solve is NOT reliably clean, which is why the pipeline exists', { timeout: 60_000 }, () => {
     // The negative control for the test below, and the finding the filter answers.
     // Without it, "shuffleRoom returns a clean room" reads as a property of

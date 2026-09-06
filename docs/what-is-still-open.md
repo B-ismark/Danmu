@@ -129,7 +129,7 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 11 | **§ H.6** Suggest, from the ground up — the user's explicit ask | The largest open thing here. It **subsumes** A.2, A.7 and G.2, and the 5 parked `it.fails` retire here too. (It used to name "A.3's `:555`" as a fourth; that line number stopped existing when the assertion was fixed, and § A.3 is closed — the surviving question there is not Suggest's to answer, it is whether ONE refusal in 532 is enough evidence for the re-check.) **It is NOT un-researched** — `docs/research/suggest-and-collision.md` is a three-layer design whose four questions to the user are all ANSWERED, including the feasibility split being in scope. Of the three things this section calls missing, **only one is** (support); facing is priced by `relationCost`, and groups move rigidly already | XL — refresh the research against `main`, then execute its rows | wants row 1 measured first, since it is a symptom |
 | 12 | **§ H.7** collision, properly — the user is open to replacing the engine | **4a is MEASURED (2026-09-05) and the recommendation is to retire it — see § 4.6 of the research doc.** Swapping the box for the drawn geometry changes 0.11% of drag positions (189 of 172,032 once the instrument's own 299 are subtracted, 42 shapes, every shape a row) and **3.3% of sampled picking points** (5521 of 166,664 — the larger outcome by an order of magnitude, and not a collision question); every position in the *other* direction traces to a renderer drawing outside its own `dimMM`, which is literals in the wrong place rather than a case for compound footprints. **"Fix the six renderers" is not that work**: the 1120 geometry-only positions come from 20 shapes, the never-read-`dimMM` list is 6 renderers, and the two sets overlap in exactly two — two of the six are in the OPPOSITE column and two differ at no position at all. **~~`desk-l` draws 2.86 m where every consumer reads 1.60 m~~ **FIXED 2026-09-06****, and 32 of 46 shapes escape their box at all. What this row still holds, unmeasured, is `analyzeRoom`'s clearance findings and the solver's cost. Previously: every piece is one box or one ellipse, so a table's legs and a plant's canopy are the same rectangle — and "a sofa's L" was in that sentence for months describing a shape this codebase does not have. Same research doc, rows 4a/4b — and 4b is **half done** (`verticalExtent` makes ONE extent right; more than one still needs 4a). The duplication this row used to carry — *"six hand-written copies of the vertical-extent rule in five files"* — is **RETIRED (2026-09-04)**: all six call `verticalExtent`, plus a **seventh** the original list never named (`layout-settle.ts:380`), and `layout-score.ts:487` records it in the code. The only raw `pos[1] +` left in `lib/` is `rigid-parent.ts:184`'s rigid-child offset, never an instance of the rule. **This row is smaller than it was**, and the seventh copy is why a grep for the old wording could not have closed it | XL | independent of row 11, but they meet |
 | 13 | **A.7** `snapYaws`' residual — 40 crooked pieces in 240 solves | **The 197 was BEFORE the fix**, which shipped in `fa12f1a`; this row said 197 for weeks and § A.7's own heading said it too. What is left is the residual, and § A.7 already says what it needs: a search that can move the piece **and** its neighbour, which a finish pass cannot do | M | **a symptom of row 11 and only closable there** |
-| 14 | **A.2 / G.2** variety in Shuffle, the anchor-first trade. *(G.3 was a third item carried in this row's header rather than in a row of its own, which is how a done thing hides inside an open one — it shipped in #106 and is recorded in § G.3.)* | Real, but none is a defect a user has reported. A.2's number is measured (penalty 4, range 2–8, in cost units) and **nothing pins it** — a test that fails at `diversityPenalty: 0` is still owed. G.2 stays a decision: gating a pass on room shape trades one preset's tail for another's. **G.3 turned out not to be a decision at all**: it was filed as "shorter card or signpost gap", and both tabs render the same two lists out of the same shell, so the copy was already true on the plan and simply unsaid there | varies | after row 11 decides whether they still exist |
+| 14 | **A.2 / G.2** variety in Shuffle, the anchor-first trade. *(G.3 was a third item carried in this row's header rather than in a row of its own, which is how a done thing hides inside an open one — it shipped in #106 and is recorded in § G.3.)* | Real, but none is a defect a user has reported. **A.2 is ANSWERED 2026-09-06, and the answer is that the owed test cannot be written at this level.** `shuffleRoom` run twice on the same attempt with the previous offer as history, once at `diversityPenalty: 0` and once at 4, returned **byte-identical placements in all 26 pairs** over four presets and two sizes. Cause, instrumented inside the ranking loop: **40 shuffle calls produced 66 candidate pairs, 61 of them similarity exactly 0**, the five non-zero ones 0.111 / 0.125 / 0.200 / 0.400, **none reaching `REPEAT_SIMILARITY`**. So the penalty multiplies zero in 92% of pairs and adds at most 1.6 cost units in the rest, against candidate costs of 10–75 — and `ranked[0]`, which is what a caller with no history gets, cannot be moved by it at all because the first pick has `picked = []`. The term is live code that this app's data cannot exercise. **So the gate is on the AGREEMENT** — `tests/layout-shuffle.test.ts` asserts the clean set stays mutually dissimilar, with the vacuity guard asserted first because a reconstruction that reaches nothing satisfies every bound; three mutations kill it, each with its own message. The day the search starts producing near-duplicates that test goes red and this term has work to do. The UNIT behaviour was already pinned in `tests/layout-offer.test.ts`, where the fixture supplies the similar candidates the search does not. G.2 stays a decision: gating a pass on room shape trades one preset's tail for another's. **G.3 turned out not to be a decision at all**: it was filed as "shorter card or signpost gap", and both tabs render the same two lists out of the same shell, so the copy was already true on the plan and simply unsaid there | varies | after row 11 decides whether they still exist |
 | 15 | **E** the jsdom component bucket — **the shim half is DONE 2026-09-03; the coverage half is row 9's** | The count in this row was already stale when it was written: **14 `.test.tsx` files**, not 9, and **ten** hand-rolled the `next/navigation` object rather than five. They had drifted into three formattings of the same object and two different comments explaining it. `vitest.config.ts` now names `setupFiles: ['tests/helpers/setup.ts']` for the two globals — jsdom implements neither, and `lib/use-media-query.ts` calls `window.matchMedia` **unguarded** while every other reader uses `?.`, so `matches: false` changes nothing for the optional readers and unblocks the one that needs it; the `typeof window` guard is what keeps ~115 node-environment files from paying for it. `tests/helpers/mount.ts` owns `navigationMock`, called per file because the room id differs — `vi.mock`'s factory is `async` and `await import()`s it, since vitest hoists the call above every `import` and a static one throws *before initialization*. Both halves gated in `tests/toolchain.test.ts`, because an extraction is undone by one paste | done | **row 9 is what is left of § E** |
 | 16 | **§ A.3** the standalone re-search script — **WRITTEN 2026-09-04** | `scripts/openroutes-sweep.mjs`, plain Node through vite's SSR pipeline, not a Vitest file — a measurement campaign that takes minutes is not a gate. Both reds it was filed to serve had been **green since `4be144c`** and this table's own red list said so while § A.3 still described them reproducing. What the script buys is the part that was never rot: the fixture has been re-hunted by hand FOUR times, each time because a cost-function change moved the space. Run in full: **19 of 54 cut, 532 trials, 1 refusal** — the first two exactly as recorded, the third down from 3, which the test file predicted and refused to quote unmeasured. **The live finding is that one trial**: the fine-grid re-check has a single piece of evidence across the whole grid | done | nothing |
 | 17 | **§ H.10** undo / redo should cover selection — **ANSWERED 2026-09-05: a SEPARATE history. NOT BUILT** | The user's call, taken on the recommendation: selection gets its own back/forward, not entries in the main stack. § H.10 below carries the reason, the four sub-decisions the build has to make anyway, and a recommendation for each — chiefly that **a stored selection names part ids that a main-stack undo can make stale**, which is the hazard that should be built first rather than discovered. Deliberately scheduled for later | M | ready to build |
@@ -697,6 +697,12 @@ the file as "four times".
   runner, which pins the constant to hardware nobody controls; or widen the floor, which
   weakens the only assertion that can catch the loop shrinking. It needs the range across
   several runs before either, and nothing here has that.
+  **Second observation the same day, and it moves the item:** a full local run under load
+  reddened the same FILE at a different assertion — `bestMs > takes the lowest sample, not
+  the first and not the mean` — green in isolation immediately after. So this is not one
+  marginal bound, it is a file whose several assertions all sit close enough to machine
+  speed to fail on contention, which is why the fix is a decision about the constant
+  rather than a nudge to one comparison.
 - The factor is measured once per **test file**, not per worker process: vitest 4 defaults
   to `pool: 'forks'` with `isolate: true`. So the figure `perf-calibration` prints is that
   file's, and the two bars each take their own.
@@ -707,7 +713,7 @@ was lost to a follow-up run that matched nothing, and it was **never reproduced*
 on the identical tree afterwards, at 72 s and 76 s against a 48 s baseline. An unidentified
 failure that was never reproduced is not a failure explained.
 
-### 4b. `isCleanShuffle` asks for EXACTLY zero, and floating point does not oblige
+### 4b. ~~`isCleanShuffle` asks for EXACTLY zero~~ → **FIXED 2026-09-06, and the sole-cause rate is measured**
 
 `lib/layout-shuffle.ts:224` is `HARD_TERMS.every((term) => result.breakdownAfter[term]
 === 0)`, and `:350` burns any candidate that fails it. Exact equality on five WEIGHTED
@@ -723,13 +729,28 @@ Shuffle refuses a room that is clean by any tolerance anyone would name.
 reached in the same population was `access` at 0.0113 — twelve orders of magnitude away,
 so this is `outside`’s arithmetic and not a general property of the breakdown.
 
-**What that population does NOT show, and the distinction is the whole decision:** in
-all four of those rows another hard term was also non-zero, so none of them was
-rejected *solely* for the sub-epsilon value. The `footprint` lane reports a case where
-it was — one seed whose only non-zero term was `outside` at 2.025e-13 — in a different
-fixture, with the scatter `shuffleRoom` applies and this probe does not. **That case is
-theirs and is not reproduced here.** So the mechanism is confirmed and its rate as a
-sole cause is unmeasured.
+**The sole-cause rate is now measured, and the other lane's case reproduces.** The gap
+in the first sweep was that it called `solveLayout` directly and so never saw the scatter
+`shuffleRoom` applies. Re-run THROUGH that loop, instrumented at the rejection itself and
+restored by blob hash: **90 attempts over five presets x three sizes, 826 candidates
+rejected, 17 carrying a value non-zero and below 1e-9, and 5 rejected with NO other fault
+at all** — `outside` at 4.63e-14, 3.02e-14 and 2.42e-13, every other term exactly 0.
+
+**Fixed:** `NEGLIGIBLE_COST = 1e-9` is exported from `lib/layout-solve.ts` beside
+`HARD_TERMS`, because it is a fact about how that list is read, and `isCleanShuffle` asks
+`<= NEGLIGIBLE_COST` rather than `=== 0`. It sits eleven orders of magnitude above the
+worst measured residue and below the smallest real signal any other hard term reached
+(`access` 0.0113), and `tests/layout-shuffle.test.ts` pins it from BOTH ends — a constant
+asserted from one end is free at the other. The guard is asserted as a PAIR, accepting and
+refusing, because a guard written against the wrong constant refuses every legal value.
+Four mutations killed it: the old `=== 0`, a guard that accepts everything, the constant
+below the noise, and the constant above the signal.
+
+**Effect size, measured the same way:** the same 90 attempts go from **58 offers to 59**.
+One Shuffle that refused outright now offers. Small, and it is the whole point — the
+refusal was the last candidate being discarded for a picometre.
+
+**A claim made in this section was WRONG and is corrected in § 4c below.** The same run reported Shuffle offering 0 of 18 on the `u` preset and called it the largest user-visible thing it saw. The three sizes were mine and onboarding offers `u` at 6 x 5, where it offers 6/6; across the five offered sizes it is 28/30. What survives is a narrower finding about the two gates disagreeing, and it is a decision rather than a fix.
 
 **Three readers, one question, two answers.** `isCleanShuffle` uses `=== 0`; a test in
 the same lane adopts 1e-9 for the same question seventy lines from where it counts
@@ -737,6 +758,66 @@ clean shuffles with `=== 0`. A tolerance belongs beside `HARD_TERMS` as one name
 constant both read, which is `layout-rules.ts`’s rule in a different file. Not fixed
 here: it changes what Shuffle accepts, so it moves numbers the suite pins, and it wants
 the sole-cause rate first.
+
+### 4c. One shuffle gate is RELATIVE and the other is ABSOLUTE — so a room that starts faulty cannot be shuffled at all
+
+**A decision, not a defect to fix quietly, and it was found by correcting a claim of my
+own that was wrong.** `shuffleRoom` runs two gates. `newRoomFindings` is explicitly
+relative — its docblock says *"the findings this arrangement would ADD"*, and it compares
+against the room before the shuffle, because a preset that already has a finding is not
+this button's to answer for. `isCleanShuffle` is absolute: it asks every hard term to be
+at most `NEGLIGIBLE_COST`, and `breakdownBefore` appears nowhere in that file.
+
+So in a room whose geometry cannot reach zero, **every candidate fails the absolute gate**
+and `shuffleRoom` returns `null` — Shuffle is a dead button in exactly the room a user is
+most likely to press it in.
+
+**How this was found, and the correction matters more than the finding.** A sweep of mine
+reported *"Shuffle offers 0 of 18 on the `u` preset at all three sizes"* and called it the
+largest user-visible thing it had seen. **That number was an artefact of a population I
+built.** The three sizes were mine — 6x4, 5.5x3.8, 3x2.4 — and onboarding offers `u` at
+**6 x 5**. Re-run at the five sizes `tests/helpers/offered-sizes.ts` parses off the picker:
+
+| preset | size | parts | offers |
+|---|---|---|---|
+| `rect` | 6 x 4 | 12 | 6/6 |
+| `l` | 6 x 4.7 | 14 | 6/6 |
+| `t` | 5.5 x 4.7 | 16 | 4/6 |
+| `u` | 6 x 5 | 12 | **6/6** |
+| `open` | 7.5 x 5.6 | 17 | 6/6 |
+
+**28 of 30.** The `u` is fine at the size the app ships it at. This is the CLAUDE.md rule
+about a constructed population failing silently, with the sweep as the instrument: I chose
+sizes, and at 6x4 the seeded `u` already scores `access` 40 and `navigation` 451 before
+anything is shuffled, so the all-zero gate can never pass.
+
+**What survives is narrower and real.** Those sizes are reachable — editing a room's
+dimensions reseeds it, which is § G.1 row 1's own finding — so a user CAN arrive at a `u`
+that Shuffle silently refuses forever. Instrumented at the rejection, `u` 6x4 over 6
+attempts: 72 candidates rejected, **50 of them the unmoved room itself**, carrying
+`access=40.00, navigation=451.20`; the rest genuinely worse (`access` 100-120). Not one
+could reach zero.
+
+**The decision, which is the user's and not mine.** Should Shuffle offer an arrangement
+that is still faulty but **no worse than what is on screen**, the way `newRoomFindings`
+already reasons? Three answers:
+
+- **Leave it.** Shuffle promises a sound room and honestly refuses when it cannot find
+  one. The cost is a button that does nothing, with no explanation, in a bad room.
+- **Make the hard gate relative too** — accept a candidate whose hard terms are no worse
+  than the room it replaces. Symmetrical with the other gate, and it turns the dead button
+  into an offer. It also means Shuffle can hand back a room Room check still reports on,
+  which is a promise change and not a bug fix.
+- **Keep the gate and say so** — refuse, but tell the user the room has a problem Shuffle
+  cannot arrange away, which is the existing refusal sentence pointed at a real cause.
+
+**Recommendation: the third**, then the second if the user wants the offer. The refusal
+already exists and says nothing about why; naming the cause costs no promise change, and
+it is the same argument that produced the § 4b sentence work — a refusal that names its
+condition beats one that does not.
+
+**Not verified:** no browser. The 28/30 and the 72-rejection breakdown are lib-level
+measurements, restored by blob hash after instrumenting.
 
 ### 5. Is there a public Vercel production alias?
 

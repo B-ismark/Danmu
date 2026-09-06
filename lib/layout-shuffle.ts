@@ -105,6 +105,7 @@ import {
   lockedForSolve,
   makeRng,
   movableFor,
+  NEGLIGIBLE_COST,
   randomizeStart,
   solveLayout,
   LAYOUT_SIMILAR_M,
@@ -112,6 +113,7 @@ import {
   type SolveResult,
 } from './layout-solve';
 import { layoutSimilarity, orderOffers } from './layout-offer';
+import { RULE_HANDLING } from './layout-score';
 import { analyzeRoom, type ClearanceIssue } from './clearance';
 import type { Placement } from './layout-score';
 import type { ScenePart } from './scene-spec';
@@ -133,7 +135,35 @@ export const MIN_CLEAN = 4;
  *  to avoid. Not chosen here — it is the median measured across five presets and
  *  fifteen rearranged rooms in § A.2 of `docs/what-is-still-open.md`, whose working
  *  range is 2–8. Below 0.25 the term never fires at all; above ~8 cost stops
- *  mattering. */
+ *  mattering.
+ *
+ *  **Measured 2026-09-06: on this app's data this term cannot change an outcome, and
+ *  that is recorded here rather than acted on.**
+ *
+ *  `orderOffers` scores `cost + DIVERSITY_PENALTY x (closest already picked)`. Two
+ *  facts make the second half zero almost always. The first pick has `picked = []`,
+ *  so nothing can move `ranked[0]` — and `ranked[0]` is what a caller with no history
+ *  is handed. And the candidates that reach the ranking are already unlike each other:
+ *  instrumented inside this very loop, **40 shuffle calls produced 66 candidate pairs,
+ *  of which 61 scored similarity exactly 0**; the five non-zero ones were 0.111, 0.125,
+ *  0.200 and 0.400, and **none reached `REPEAT_SIMILARITY`**. So the penalty multiplies
+ *  zero in 92% of pairs and contributes at most 1.6 cost units in the rest, against
+ *  candidate costs measured between 10 and 75.
+ *
+ *  End to end: `shuffleRoom` run twice on the same attempt with the previous offer as
+ *  history, once at `diversityPenalty: 0` and once at 4, returned **byte-identical
+ *  placements in all 26 pairs** over four presets and two sizes.
+ *
+ *  **So the honest gate is on the AGREEMENT, not on the term** — the same shape as the
+ *  note above about `newRoomFindings` rejecting none of 816 candidates.
+ *  `tests/layout-shuffle.test.ts` asserts that the clean set stays mutually dissimilar,
+ *  which is what makes this inert; the day the search starts producing near-duplicates
+ *  that test goes red and this term has work to do. Writing a test that fails at
+ *  `diversityPenalty: 0` was the outstanding ask (§ A.2). It cannot be written at this
+ *  level against real rooms, and the reason is the measurement above rather than an
+ *  absence of effort. The unit behaviour IS pinned, in `tests/layout-offer.test.ts`,
+ *  where the fixture supplies the similar candidates this search does not.
+ */
 export const DIVERSITY_PENALTY = 4;
 /** Above this, two arrangements are the same idea shown twice.
  *
@@ -218,10 +248,19 @@ export type ShuffleOutcome = {
  *
  *  **This is necessary and not sufficient**, which is the whole reason
  *  `newRoomFindings` exists beside it. Asserting only this in a test is asserting
- *  the filter against its own definition — see the note on `roomChecks` below. */
+ *  the filter against its own definition — see the note on `roomChecks` below.
+ *
+ *  **It asks NEGLIGIBLE, not zero, and that is a fix rather than a loosening.** It
+ *  read `=== 0` on five WEIGHTED cost terms, and `outside` is continuous — see
+ *  `NEGLIGIBLE_COST`, which carries the measurement. Measured through this very
+ *  loop: of 826 candidates it rejected over 90 attempts, **5 had no fault except an
+ *  `outside` in the 1e-14 range**, and each of those was an arrangement clean by any
+ *  tolerance a person would name. A candidate discarded for a picometre is one the
+ *  user is not offered, and when it is the last one standing the whole Shuffle
+ *  refuses. */
 export function isCleanShuffle(result: SolveResult): boolean {
   if (result.moved.length === 0) return false;
-  return HARD_TERMS.every((term) => result.breakdownAfter[term] === 0);
+  return HARD_TERMS.every((term) => (result.breakdownAfter[term] as number) <= NEGLIGIBLE_COST);
 }
 
 /** Apply a solved arrangement to the parts, so the room can be asked about it.
@@ -394,6 +433,93 @@ export function shuffleRoom(
   return { result, offer: { ids, placements: result.placements }, tried, clean: clean.length };
 }
 
+/** The findings a room ALREADY has that no offer can be clean while they stand.
+ *
+ *  **This exists because the two gates in `shuffleRoom` disagree in kind, and only
+ *  one of them says so.** `newRoomFindings` is relative — its docblock above says
+ *  "the findings this arrangement would ADD" — because a preset that already has a
+ *  finding is not this button's to answer for. `isCleanShuffle` is absolute:
+ *  `breakdownBefore` appears nowhere in this file. So in a room whose geometry
+ *  cannot reach zero on a hard term, EVERY candidate fails the second gate and
+ *  `shuffleRoom` returns `null` on every press, forever, in exactly the room a user
+ *  is most likely to press it in (§ 4c).
+ *
+ *  The user ruled on 2026-09-06: **keep the gate, name the cause.** So this does not
+ *  change what Shuffle will offer — it gives the refusal something true to say.
+ *
+ *  Which findings count is DERIVED, never listed: a rule blocks a shuffle exactly
+ *  when `RULE_HANDLING` says its cost term is one `isCleanShuffle` reads. A
+ *  hand-kept list here would be a second source of truth for "what is a hard fault",
+ *  and this repo has paid for that one twice. A rule with no cost term — `tall`,
+ *  `crowding`, `turning` — cannot block a gate that reads cost terms, so it is
+ *  correctly absent. */
+export function shuffleBlockers(issues: readonly ClearanceIssue[]): ClearanceIssue[] {
+  return issues.filter((i) => {
+    const term = RULE_HANDLING[i.rule]?.costTerm;
+    return term != null && (HARD_TERMS as readonly string[]).includes(term);
+  });
+}
+
+/** What the panel SAYS when a shuffle finds nothing, given what the room already has.
+ *
+ *  Pure, exported and tested for the reason `impossibleClause` is: the sentence and
+ *  the call site are two things, and #121 measured the gap — all four call sites of
+ *  that clause could be reverted to a disjunction with the whole suite green,
+ *  because nothing joined the string to the screen. A refusal computed and not said
+ *  is a refusal that does not exist.
+ *
+ *  The blocked sentence names the first finding rather than all of them, and says
+ *  the count separately. Both are DERIVED — a hand-typed number beside the thing it
+ *  describes can disagree with it, and here it would be a number about a list one
+ *  line away.
+ *
+ *  **The finding is QUOTED, not spliced, and that is a fix rather than a style.** The
+ *  first version read `already has ${title.toLowerCase()}`, which assumes a finding
+ *  title is a noun phrase. **Counted across both files that author one — 11 in
+ *  `clearance.ts`, 13 zone titles in `layout-rules.ts` — only 9 of the 24 are.** The
+ *  other 15 are clauses with their own subject and verb ("The way in is blocked",
+ *  "You can't walk to everything", "Wardrobe doors can't open"), verb phrases
+ *  ("Can't reach the front of it"), or neither ("Taller than the room"). Spliced, those
+ *  produced *"this one already has you can't walk to everything"*. The nine that did
+ *  survive share one accident — they begin "No room…", "Tight…" or "Two pieces…" — so
+ *  the template was right about a minority and wrong about the rest.
+ *
+ *  Quoting takes the title as the report's own words, reads correctly for every shape,
+ *  and keeps the casing lowercasing was destroying.
+ *
+ *  **The transferable half:** a splice is safe when its source is a CLOSED vocabulary
+ *  of nouns and unsafe when its source is authored prose. The eight other
+ *  `toLowerCase()` splices in this app all draw from the first kind — `DECOR_LABEL`,
+ *  `categoryLabel`, `slotLabel`, `unitName`, the axis names — and `ClearanceIssue.title`
+ *  is the only authored-prose source in the app, which is why it was the one that broke.
+ *  Cross-checked: no other site splices a finding title into a sentence.
+ *
+ *  **Found by DERIVING the string from real rooms rather than reading the template**,
+ *  with the template in front of me both times. A hand-typed example in the first pass
+ *  used a title that happened to be one of the nine, so it read correctly AND every
+ *  character count taken off it was wrong.
+ *
+ *  Length matters: the four refusal bodies in this panel run 93 to 169 characters and
+ *  the wrap at the top of that range is unverified in any browser
+ *  (`docs/visual-check.md`), so this stays away from the top. Derived across the five
+ *  offered sizes and nine reachable ones: clean is 116 at every size, blocked runs
+ *  116-155 before this fix and is re-derived in that doc after it. */
+export function shuffleRefusal(blockers: readonly ClearanceIssue[]): { title: string; message: string } {
+  if (blockers.length === 0)
+    return {
+      title: 'No new arrangement this time',
+      message:
+        'Every layout it tried left something in the way, so your room is unchanged. Press Shuffle again for a different try.',
+    };
+  const more = blockers.length - 1;
+  return {
+    title: 'Shuffle cannot arrange around this',
+    message:
+      `Room check reports “${blockers[0].title}”` +
+      (more > 0 ? ` and ${more} more` : '') +
+      ', and Shuffle only offers rooms with nothing in the way. Try Fix first.',
+  };
+}
 /** The three reasons a piece may not move, for a whole-room shuffle. A thin re-export
  *  of the solver's own composer so a caller does not have to know that a shuffle
  *  confines nothing. */
