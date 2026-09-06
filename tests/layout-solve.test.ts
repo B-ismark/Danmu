@@ -13,7 +13,14 @@ import {
   type Placement,
   RULE_HANDLING,
 } from '@/lib/layout-score';
-import { HARD_TERMS, isWorthOffering, LAYOUT_SIMILAR_M, lockedForSolve, solveLayout } from '@/lib/layout-solve';
+import {
+  HARD_TERMS,
+  isWorthOffering,
+  LAYOUT_SIMILAR_M,
+  lockedForSolve,
+  NEGLIGIBLE_COST,
+  solveLayout,
+} from '@/lib/layout-solve';
 import { analyzeRoom } from '@/lib/clearance';
 import { footFromPart, footInsidePoly } from '@/lib/geometry';
 import { footprintBounds } from '@/lib/footprint';
@@ -1009,21 +1016,20 @@ describe('the room’s anchor is settled first', () => {
     return cached;
   }
 
-  // THE tolerance for "this hard term is nothing", and it is derived from the mechanism
-  // rather than chosen to pass. `c.outside` is `max(outsideShare, deficit / radius)`;
-  // `outsideShare` can only produce 0, 1/9, 2/9 … 1, so the sub-epsilon values come from
-  // `outsideDeficit`'s walk over `footCorners` — a polygonised ellipse for a round piece,
-  // where four box corners used to be. Measured twice, on two different populations:
-  // this fixture's worst is 4.68e-13, and a 360-solve sweep over five presets × three
-  // sizes × twelve seeds × both modes found four sub-epsilon values, all below 1e-12
-  // (6.05e-14 three times, 4.68e-13 once). The smallest non-zero any OTHER hard term
-  // reached in that sweep was `access` 0.0113.
+  // The tolerance for "this hard term is nothing" is `NEGLIGIBLE_COST`, imported rather
+  // than restated. This file carried its own `NEGLIGIBLE_COST = 1e-10` against the shipped
+  // 1e-9 — two answers to one question, which is the defect both docblocks were written
+  // to end, still live because each was fixed on its own side. They cannot disagree on
+  // any data either of us measured (`[1e-10, 1e-9)` was empty in both populations), and
+  // that is exactly why it survived: a second source of truth that never differs is one
+  // nothing can catch until the day it does.
   //
-  // So 1e-10 sits ~213x above the noise and eleven orders of magnitude below the
-  // smallest real signal, and `[1e-10, 1e-9)` was empty in both populations. It was
-  // 1e-9 for one commit, which is 2136x the worst observed value — a tolerance that
-  // wide is not measuring anything.
-  const HARD_EPS = 1e-10;
+  // What this file reads DIFFERENTLY from production, on purpose: `Math.abs`.
+  // `isCleanShuffle` compares `<= NEGLIGIBLE_COST` one-sided, which is right there —
+  // every hard term is non-negative by construction (`c.outside` is a `max` of two
+  // non-negatives). Here the bound is two-sided because the thing being defended
+  // against is not a runtime state but a MUTATION: flipping `c.outside +=` to `-=` at
+  // layout-score.ts passes a one-sided bound, since -12 is less than any epsilon.
 
   // ONE definition of "clean", read by both counts in this file, because they ask the same
   // question of the same fixture and an exact-zero copy beside a tolerant one is precisely
@@ -1031,13 +1037,14 @@ describe('the room’s anchor is settled first', () => {
   // bound admits every negative, and flipping `+=` to `-=` inside the term under test
   // survived the one-sided version of the per-seed assertion below.
   const cleanSeeds = (rows: ReturnType<typeof scrambledU>['rows']) =>
-    rows.filter((r) => HARD_TERMS.every((k) => Math.abs(r[k]) < HARD_EPS)).length;
+    rows.filter((r) => HARD_TERMS.every((k) => Math.abs(r[k]) < NEGLIGIBLE_COST)).length;
 
   it.fails('stops a scrambled bedroom from ending in the occasional disaster — PARKED at 7 of 12', () => {
     const { rows } = scrambledU();
     // Reads `cleanSeeds` rather than carrying its own `=== 0`. Both counts in this file run
     // over the SAME cached `rows`, so the tolerance moves this one too: 8 under `=== 0`,
-    // 9 under `HARD_EPS`, because seed 3's only non-zero hard term is `outside` 2.025e-13.
+    // 9 under `NEGLIGIBLE_COST`, because seed 3's only non-zero hard term is `outside` 2.025e-13 —
+    // which is below 1e-10 and below 1e-9 alike, so taking the shipped constant does not move it.
     // The bar is 11 and this stays `it.fails` either way — the change is to what the number
     // MEANS, not to whether this line is red.
     //
@@ -1243,13 +1250,13 @@ describe('the room’s anchor is settled first', () => {
       `\n  outside vs a piece pushed toward the wall, m of push → cost share\n` +
         ramp.map(([p, v]) => `    ${(p * 1000).toFixed(0).padStart(4)} mm  ${v.toExponential(2)}`).join('\n'),
     );
-    const firstReal = ramp.find(([, v]) => v > HARD_EPS);
+    const firstReal = ramp.find(([, v]) => v > NEGLIGIBLE_COST);
     // Orders of magnitude, not a margin: the smallest overhang this fixture can produce
     // must sit far above the tolerance, or the tolerance is hiding real defects.
     //
     // `?? [0, 0]` rather than `!`, and this replaced a `toBeDefined()` guard on the line
     // above. That guard could not fail without this line failing too — a ramp with no
-    // value above `HARD_EPS` has no `firstReal` to read — so it was decoration whose only
+    // value above `NEGLIGIBLE_COST` has no `firstReal` to read — so it was decoration whose only
     // effect was to turn one failure into two. Substituting 0 keeps the good message and
     // fails HERE.
     expect((firstReal ?? [0, 0])[1], 'the smallest real overhang is barely above the noise').toBeGreaterThan(1e-6);
@@ -1264,7 +1271,7 @@ describe('the room’s anchor is settled first', () => {
       // before this line, so this assertion is NOT shown to be what catches it. The
       // `Math.abs` is here on the arithmetic rather than on an isolated mutation: it costs
       // nothing and closes an end that was open. Do not upgrade that to "verified".
-      expect(Math.abs(r.outside), `seed ${i} leaves floor outside the room`).toBeLessThan(HARD_EPS);
+      expect(Math.abs(r.outside), `seed ${i} leaves floor outside the room`).toBeLessThan(NEGLIGIBLE_COST);
     }
   }, 120_000);
 
