@@ -295,4 +295,61 @@ describe('what a shape actually occupies, against the one box every consumer rea
     );
     expect(denom).toBe(SHAPES.length * 3);
   });
+
+  // A BUDGET FOR EVERY SHAPE, not a threshold with a list of things excused from it.
+  //
+  // The table above has printed "32 shapes draw outside their box" on every green run for
+  // as long as it has existed, and nothing failed, so the number was read as scenery. It
+  // is not: `footFromPart` gives ONE box per piece, and the plan, `plan-hit` picking,
+  // `footOverlap`, `outsideShare`, every clearance answer and the solver's own cost all
+  // read that box. A piece drawing outside it has the 3D tab and every other consumer
+  // disagreeing about how much floor it occupies.
+  //
+  // MEASURED AT THE `lib` ROW ONLY, and that is a real distinction rather than a
+  // convenience. For a shape outside `PARAMETRIC_SHAPES` the renderer is authored once and
+  // a resize arrives as a uniform group scale applied by `Draggable`, so `min` and `max`
+  // here are not configurations the app ever draws — only the authored dim is. Asserting
+  // over all three would pin two rows per shape that mean nothing and would have to be
+  // widened to accommodate them, which is how a gate stops being one.
+  //
+  // Every shape gets an answer: `OVERHANG_MM` if it is named, `DEFAULT_OVERHANG_MM`
+  // otherwise. `Object.keys` of the exception table is asserted too, so deleting a row to
+  // make a red go away fails a different assertion instead of silently relaxing the gate.
+  const DEFAULT_OVERHANG_MM = 60;
+  const OVERHANG_MM: Partial<Record<Shape, number>> = {
+    // The one real outlier, and it is the § 12 / row 12 defect in miniature: `PlantGeo` is
+    // hard-coded metres end to end — canopy blobs of r 0.34 at y 1.55, a pot cylinder of
+    // r 0.21 — and never reads `part.dimMM` at all. Declared 400 x 400 x 1600; drawn
+    // 920 x 720 x 1940. Left at its measured value rather than fixed here, because the fix
+    // is a product decision that has not been taken: shrink the plant to its declared box,
+    // or restate the box at the size the plant is actually drawn. Both change something a
+    // user can see. Recorded in `docs/what-is-still-open.md`.
+    plant: 260,
+    // Physical rather than a slip, and the distinction is why it is 70 and not 260. The
+    // lid is hinged at the back edge (`-d / 2 + 0.01`) and tilted -0.34 rad, so an OPEN
+    // screen leans behind the base — which is what a real laptop does. `dimMM`'s depth
+    // describes the base, so the lid's sweep is outside it by 68.1 mm at the library size
+    // and the ratio grows with the piece (44.7 / 68.1 / 94.8 across min / lib / max).
+    // Closing it would mean either standing the screen up or restating the depth; both
+    // are worse than recording 70 mm of leaning screen. Found BY this gate on its first
+    // run, not before it — it sat under the eyeball threshold used to draft the table.
+    laptop: 70,
+  };
+
+  it('keeps every shape inside the one box every consumer reads', () => {
+    const over: string[] = [];
+    for (const shape of SHAPES) {
+      const r = rowsFor(shape).find((q) => q.size === 'lib')!;
+      const budget = OVERHANG_MM[shape] ?? DEFAULT_OVERHANG_MM;
+      const worst = Math.max(r.overX, r.overZ);
+      if (worst > budget) over.push(`${shape} ${worst.toFixed(1)} mm > ${budget}`);
+    }
+    // The whole list, not the first one: a per-shape loop of `expect` stops at the earliest
+    // failure and hides how many others moved with it.
+    expect(over, 'shapes drawing further outside `dimMM` than their budget allows').toEqual([]);
+
+    // The exception table is itself pinned. Without this, the cheapest way to green a red
+    // is to add a row here, and nothing would say so.
+    expect(Object.keys(OVERHANG_MM).sort(), 'shapes excused from the default budget').toEqual(['laptop', 'plant']);
+  });
 });

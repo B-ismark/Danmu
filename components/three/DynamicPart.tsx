@@ -738,18 +738,50 @@ function DeskGeo({ part, locked, lShape }: { part: ScenePart; locked: boolean; l
   const h = part.dimMM[2] / 1000;
   const top = body(part, locked);
   const leg = shade(top, -25);
+
+  // THE L IS BUILT INSIDE `dimMM`, and it used to be built outside it.
+  //
+  // The return arm was `size={[d * 0.9, …]}` at `position={[w / 2 + (d * 0.9) / 2, …]}`,
+  // which starts at the box's right edge and runs a further `d * 0.9` beyond it — while
+  // the main tabletop was already the full `w x d`, so there was no room inside the
+  // declared footprint for an L in the first place. At the library size that drew
+  // 2860 mm of desk against a `dimMM` of 1600: `tests/footprint-fidelity.test.tsx`
+  // measured `overX` 1260 mm, and the ratio held at every size (0.75 / 0.79 / 0.76), so
+  // it was never a rounding artefact at one end of the range.
+  //
+  // It is not cosmetic, and the plan is the half that shows it: `footFromPart` gives one
+  // box per piece, so `PlanView` drew 1600 mm while the 3D tab drew 2860. Everything
+  // reading that box — `plan-hit` picking, `footOverlap`, `outsideShare`, every clearance
+  // and collision answer, and the solver's own cost — reserved 1600 mm of floor for a
+  // piece occupying 2860. Suggest could park something in the other 1260 and score it
+  // clean. That is CLAUDE.md rule 2's corollary exactly: a renderer with its own idea of
+  // how big the piece is, in a TSX file where no test could reach the arithmetic.
+  //
+  // So the long arm now takes `armD` of the depth and the return takes the rest, both
+  // within `w x d`. `desk-standard` is untouched by construction: at `lShape === false`
+  // `armD === d` and `armZ === 0`, which is the tabletop this function always drew.
+  const armD = lShape ? d * 0.52 : d;
+  const armZ = -d / 2 + armD / 2;
+  const armW = w * 0.42;
+
   return (
     <>
-      {/* tabletop with a subtle lip edge */}
-      <Box size={[w, 0.045, d]} position={[0, h - 0.022, 0]} color={top} roughness={0.65} />
+      {/* tabletop with a subtle lip edge — the long arm, against the back edge */}
+      <Box size={[w, 0.045, armD]} position={[0, h - 0.022, armZ]} color={top} roughness={0.65} />
       {lShape && (
-        <Box size={[d * 0.9, 0.045, w * 0.55]} position={[w / 2 + (d * 0.9) / 2, h - 0.022, -w * 0.05]} color={top} roughness={0.65} />
+        /* the return, filling the depth the long arm leaves at the right-hand end */
+        <Box
+          size={[armW, 0.045, d - armD]}
+          position={[w / 2 - armW / 2, h - 0.022, -d / 2 + armD + (d - armD) / 2]}
+          color={top}
+          roughness={0.65}
+        />
       )}
-      {/* side modesty panel on left — encloses the leg space */}
-      <Box size={[0.018, h * 0.82, d * 0.88]} position={[-w / 2 + 0.009, h * 0.41, 0]} color={leg} roughness={0.68} />
+      {/* side modesty panel on left — encloses the leg space, within the long arm */}
+      <Box size={[0.018, h * 0.82, armD * 0.88]} position={[-w / 2 + 0.009, h * 0.41, armZ]} color={leg} roughness={0.68} />
       {/* right rear leg */}
       <Box size={[0.05, h - 0.04, 0.05]} position={[w / 2 - 0.04, (h - 0.04) / 2, -d / 2 + 0.04]} color={leg} roughness={0.7} edgeOpacity={0.4} />
-      {/* right front leg */}
+      {/* right front leg — under the return in L form, under the top otherwise */}
       <Box size={[0.05, h - 0.04, 0.05]} position={[w / 2 - 0.04, (h - 0.04) / 2, d / 2 - 0.04]} color={leg} roughness={0.7} edgeOpacity={0.4} />
       {/* cable management rail under back edge */}
       <Box size={[w * 0.75, 0.03, 0.04]} position={[0, h - 0.065, -d / 2 + 0.05]} color={shade(leg, 8)} roughness={0.6} />
