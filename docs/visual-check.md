@@ -116,9 +116,42 @@ test**: the load path corrects it, so the defect exists only in a freshly seeded
 
 **Seen, and not by me.** The `footprint` lane put it on screen: on `main` `26db2d1` the
 bedside lamp is a `<rect>` and ten pieces draw with zero round; at `546fc4f` it is an
-`<ellipse>`. Filed here at that lane’s request because the fix is on PR #123 and the
-items live on this branch. **The observation is theirs. I have not seen it.** Delete this
-item when #123 lands, not before.
+`<ellipse>`. Filed here at that lane’s request because the fix was on PR #123 and the
+items live on this branch. **The observation is theirs. I have not seen it.**
+
+**#123 LANDED as `82f85c9` (2026-09-06), and this item stays.** It was filed saying
+"delete when #123 lands", which is the rule this file used to keep and explicitly gave up:
+*merging is not looking*. Re-pointed at the merge commit rather than deleted.
+
+Two reasons it is still owed a person, and the second is the one that matters. The
+`<rect>` → `<ellipse>` check was read out of the DOM by Playwright — a **machine** reading
+a tag name, which settles that the flag now derives and settles nothing about whether the
+room looks right. And a round footprint changes more than the plan outline: `footFromPart`
+feeds `plan-hit`, so the lamp is now **picked** by the ellipse it draws, and `footOverlap`
+treats it as π/4 of its box. Whether the lamp is still easy to click, and whether it now
+slides under an overhang it used to collide with, are questions no DOM assertion asked.
+
+### The L-shaped desk is a different shape now, and nobody has looked at it
+
+**Where to click.** 3D Model, add **L-shaped desk** from the Library. Then the same piece
+in **2D Plan**, and drag it against a wall in both tabs.
+
+**What changed.** Its return arm used to be drawn entirely OUTSIDE the box every other
+consumer reads — 2860 mm of desk against a `dimMM` of 1600 — while the main tabletop
+already filled the whole footprint. The L is now built inside `w × d`: the long arm takes
+52% of the depth against the back edge, and the return fills the rest at the right-hand
+end. `overX` went 1260 mm → 0 at all three sizes.
+
+**What "wrong" looks like.** It should still read as an L-shaped desk — a long working
+surface with a return at one end, not a square table with a notch, and not two thin
+planks. The right front leg now sits under the return rather than under open air; check it
+is not floating. `desk-standard` must be **completely unchanged** — same top, same legs,
+same modesty panel — since the two share `DeskGeo` and only the `lShape` branch moved.
+
+**What is already settled and does not need eyes.** That the geometry is inside its box at
+min, library and max sizes, and that `desk-standard` is behaviourally identical (fill 1.00,
+over 0, all three sizes) — both measured by `tests/footprint-fidelity.test.tsx`. The open
+question is purely whether the new proportions look like furniture. PR #124.
 
 ### An air purifier's intake slats stand up through it instead of banding around it
 
