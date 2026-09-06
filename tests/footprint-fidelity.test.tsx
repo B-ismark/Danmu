@@ -45,7 +45,7 @@ import { PartGeometry } from '@/components/three/DynamicPart';
 import { SHAPES, PART_LIBRARY, type Shape, type ScenePart, type Category } from '@/lib/scene-spec';
 import { isParametric } from '@/lib/scene-spec';
 import { dimRangeFor } from '@/lib/dimension-ranges';
-import { walk, horizontalBounds, unionArea } from './helpers/geometry-walk';
+import { walk, horizontalBounds, occupiedPts, unionArea } from './helpers/geometry-walk';
 
 /** Rasterisation step for every area in this file, metres. Quoted with the numbers
  *  it produces, because a sampled area without its step is not a measurement. */
@@ -110,10 +110,16 @@ function measure(shape: Shape, size: Row['size'], dim: [number, number, number])
   const boxArea = hw * 2 * hd * 2;
 
   // Which primitives are the ones escaping, and how high they sit.
+  //
+  // `occupiedPts`, not `p.pts` — this was the FOURTH reader of the rest pose and it was
+  // missed on the first pass of the same fix, which found the other three. It changes no
+  // number today (the fan sweeps to exactly `hw`, so it escapes by nothing either way),
+  // and that is the reason to change it rather than a reason not to: a reader that agrees
+  // by coincidence is the one that diverges silently later.
   let lo = Infinity;
   let hi = -Infinity;
   for (const p of rep.prims) {
-    const out = p.pts.some(([x, z]) => Math.abs(x) > hw + 1e-9 || Math.abs(z) > hd + 1e-9);
+    const out = occupiedPts(p).some(([x, z]) => Math.abs(x) > hw + 1e-9 || Math.abs(z) > hd + 1e-9);
     if (out) { lo = Math.min(lo, p.y[0]); hi = Math.max(hi, p.y[1]); }
   }
 
@@ -196,6 +202,38 @@ describe('what a shape actually occupies, against the one box every consumer rea
       if (r.shape === 'mirror-oval') expect(r.fill, `${r.shape}/${r.size}`).toBe(0);
       else expect(r.fill, `${r.shape}/${r.size} covers none of its own box`).toBeGreaterThan(0);
     }
+  });
+
+  it('measures a spinning shape as the disc it sweeps, not as its rest pose', () => {
+    // **The assertion `occupiedPts` owes, and the reason it is here rather than in the
+    // ratio table.** Making `horizontalBounds` sweep moves the fan row, which the table
+    // catches. Making `unionArea` sweep moves only `fill`, which nothing above pins
+    // harder than `> 0` — so half the fix was landing unasserted, which is the exact
+    // shape of defect this file exists to find.
+    //
+    // A ceiling fan is three blades. At rest they cover 22% of the declared box and the
+    // box looks wildly too generous; swept, they cover the INSCRIBED DISC of it, which
+    // is pi/4 = 0.785 and is precisely the circle `PlanView` draws for a `ROUND_SHAPES`
+    // member. So this number is the two tabs agreeing, not a curiosity: the geometry
+    // occupies what the plan claims it occupies.
+    //
+    // Banded rather than exact because `unionArea` rasterises at `STEP`; the disc is
+    // sampled, not integrated.
+    const fan = rowsFor('fan').find((q) => q.size === 'lib')!;
+    expect(fan.fill, `a swept fan covers its inscribed disc`).toBeGreaterThan(0.75);
+    expect(fan.fill, `...and no more than the box it is inscribed in`).toBeLessThan(0.81);
+
+    // The negative control, and it is what separates "swept" from "big": the SAME
+    // primitives read at rest cover far less. Without this, returning the whole box
+    // from `occupiedPts` would pass the two bounds above.
+    const rep = walk(PartGeometry({ part: partAt('fan', [1000, 1000, 200]), locked: false }));
+    expect(rep.prims.filter((q) => q.spun), `the fixture must reach the spun branch`).toHaveLength(3);
+    const rest = unionArea(
+      rep.prims.map((q) => ({ ...q, spun: false })),
+      { x0: -0.5, x1: 0.5, z0: -0.5, z1: 0.5 },
+      STEP,
+    );
+    expect(rest, `the rest pose is what this used to measure`).toBeLessThan(0.3);
   });
 
   it('says how far an OPEN door and drawer reach, and which way they go', () => {
@@ -379,12 +417,25 @@ describe('what a shape actually occupies, against the one box every consumer rea
     // A rug is 5 mm of declared thickness and 21 mm of drawn pile plus its border. The ratio
     // is 4.2 and the absolute error is 16 mm, which is the case for reading BOTH columns.
     rug: [1.0, 1.0, 4.2],
-    // These two draw SMALLER than they declare, which the overhang gate above is blind to by
-    // construction, and they are the two worth someone's judgement rather than a budget:
-    // a ceiling fan declaring a 1000 mm sweep draws 819, and a pedestal fan declaring a
-    // 450 mm depth draws 306. Both are in `ROUND_SHAPES`, so the plan draws a full circle
-    // at the declared size over geometry that does not fill it.
-    fan: [0.82, 0.95, 1.0],
+    // **`fan` was pinned here at [0.82, 0.95, 1.0] and it was never a size defect.** Three
+    // blades at 0/120/240 have an asymmetric REST bbox — x runs -319.3 to +500.0, giving
+    // 819.3 — and `measure` was reading the rest pose for a shape that spins. The helper
+    // declared a `spun` flag for exactly this and only `worldHulls` read it; it is
+    // `occupiedPts` now, so all three readers sweep and the fan measures 1.00/1.00/1.00.
+    // The blade also had a real 6.4 mm overhang hiding under the same reading (the swept
+    // point is a CORNER, `hypot(tip, chord/2)`), fixed in `fanBlade` by sizing the
+    // centre-line so the corner lands on the radius.
+    //
+    // The lesson is the row, not the fan: **a measurement disagreeing with a declared
+    // number is exactly as likely to be the instrument as the subject**, and this table
+    // had already caught six renderers by then, which is what made the seventh reading
+    // look like a seventh finding.
+    //
+    // `fan-standing` is the survivor and a different fact: nothing about it spins
+    // (`spun` 0 of 4 primitives), it is genuinely 450 wide and 306 deep, and it is in
+    // `ROUND_SHAPES` — so the plan draws a 450 circle over a piece 144 mm shallower and
+    // the solver reserves floor it does not occupy. That one is a declared-number
+    // decision about a pedestal fan's base, parked in `docs/what-is-still-open.md`.
     'fan-standing': [1.0, 0.68, 1.0],
     // A plane has no height by definition; `dimMM[2]` is what a resize would scale.
     plane: [1.0, 1.0, 0.0],
@@ -414,7 +465,7 @@ describe('what a shape actually occupies, against the one box every consumer rea
     expect(rows.length, 'every shape, not whatever the sweep found').toBe(SHAPES.length);
     expect(off, 'shapes drawing at a size other than the one they declare').toEqual([]);
     expect(Object.keys(DRAWN_RATIO).sort(), 'shapes excused from the 0.90–1.10 band').toEqual([
-      'bed-double', 'bed-single', 'door', 'fan', 'fan-standing', 'laptop', 'mirror',
+      'bed-double', 'bed-single', 'door', 'fan-standing', 'laptop', 'mirror',
       'mirror-oval', 'monitor', 'plane', 'rug', 'water-dispenser', 'window',
     ]);
   });

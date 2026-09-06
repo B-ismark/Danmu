@@ -269,13 +269,50 @@ export function walk(node: ReactNode): WalkReport {
   return rep;
 }
 
+/** How many sides the swept disc is polygonised into. `footFromPart` polygonises a
+ *  round piece the same way, so a round thing is never reported hitting what it does
+ *  not touch. */
+const DISC_SIDES = 32;
+
+/** What a primitive OCCUPIES on the floor — its own points, or, for a spun one, the
+ *  disc it sweeps about the part's Y axis.
+ *
+ *  **This exists because `spun` was declared, documented, and read by exactly one of
+ *  the three functions that answer the question it exists for.** `worldHulls` swept;
+ *  `horizontalBounds` and `unionArea` took the rest pose, so `footprint-outcomes` and
+ *  `footprint-fidelity` gave two different answers about the same piece — the
+ *  two-readers defect, inside the helper written to be the single reader.
+ *
+ *  It reported as a size defect rather than as an instrument one. A ceiling fan came
+ *  out 819 x 946 against a declared 1000 x 1000 and was filed as a renderer drawing
+ *  smaller than it declares. It is not: three blades at 0/120/240 have an asymmetric
+ *  rest bbox (x runs -319.3 to +500.0), and the fan sweeps its full declared circle.
+ *  **A measurement disagreeing with a declared number is exactly as likely to be the
+ *  instrument as the subject.**
+ *
+ *  One shape reaches this today — `fan`, 1 of 46, derived by walking every shape
+ *  rather than by grepping for `Spin`. The reason to fix the helper rather than the
+ *  row is that the next `Spin` is measured at rest in silence, and reads as a shape
+ *  that draws small. */
+export function occupiedPts(p: Prim): Array<[number, number]> {
+  if (!p.spun) return p.pts;
+  const r = Math.max(...p.pts.map(([x, z]) => Math.hypot(x, z)));
+  const disc: Array<[number, number]> = [];
+  for (let i = 0; i < DISC_SIDES; i++) {
+    const a = (i / DISC_SIDES) * Math.PI * 2;
+    disc.push([Math.cos(a) * r, Math.sin(a) * r]);
+  }
+  return disc;
+}
+
 /** The walk's answer as a floor rectangle: the axis-aligned bounds of everything
- *  drawn, in the part's own local frame, metres. */
+ *  drawn, in the part's own local frame, metres. Spun primitives contribute the disc
+ *  they sweep, via `occupiedPts`. */
 export function horizontalBounds(prims: Prim[], keep?: (p: Prim) => boolean) {
   let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
   for (const p of prims) {
     if (keep && !keep(p)) continue;
-    for (const [x, z] of p.pts) {
+    for (const [x, z] of occupiedPts(p)) {
       x0 = Math.min(x0, x); x1 = Math.max(x1, x);
       z0 = Math.min(z0, z); z1 = Math.max(z1, z);
     }
@@ -322,7 +359,7 @@ export function unionArea(
   box: { x0: number; x1: number; z0: number; z1: number },
   step: number,
 ): number {
-  const hulls = prims.map((p) => convexHull(p.pts)).filter((h) => h.length >= 3);
+  const hulls = prims.map((p) => convexHull(occupiedPts(p))).filter((h) => h.length >= 3);
   let cells = 0;
   let total = 0;
   for (let x = box.x0 + step / 2; x < box.x1; x += step) {
@@ -397,17 +434,14 @@ export function worldHulls(
   const out: Array<{ hull: Array<[number, number]>; y: [number, number] }> = [];
   for (const p of prims) {
     if (p.spun) {
-      // `Spin` turns the group about Y, so this primitive occupies the DISC it sweeps
-      // about the part's own axis — a 32-gon, inscribed the way `footFromPart`
-      // polygonises a round piece so a round thing is never reported hitting what it
-      // does not touch.
-      const r = Math.max(...p.pts.map(([x, z]) => Math.hypot(x, z)));
-      const disc: Array<[number, number]> = [];
-      for (let i = 0; i < 32; i++) {
-        const a = (i / 32) * Math.PI * 2;
-        disc.push([pos[0] + Math.cos(a) * r, pos[2] + Math.sin(a) * r]);
-      }
-      out.push({ hull: disc, y: [pos[1] + p.y[0], pos[1] + p.y[1]] });
+      // The disc comes from `occupiedPts`, translated. It is deliberately NOT rotated
+      // by `rot`: a disc is invariant under rotation about its own centre, which is
+      // the whole point of sweeping. This branch used to build the 32-gon itself, and
+      // that copy is how the other two readers came to answer differently.
+      out.push({
+        hull: occupiedPts(p).map(([x, z]) => [pos[0] + x, pos[2] + z] as [number, number]),
+        y: [pos[1] + p.y[0], pos[1] + p.y[1]],
+      });
       continue;
     }
     const hull = convexHull(p.pts.map(([x, z]) => [pos[0] + x * c + z * s, pos[2] - x * s + z * c] as [number, number]));

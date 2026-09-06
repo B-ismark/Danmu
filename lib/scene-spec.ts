@@ -152,6 +152,12 @@ export function lightFor(part: Pick<ScenePart, 'shape' | 'light'>): PartLight | 
   return part.light ?? LIGHT_BY_SHAPE[part.shape] ?? null;
 }
 
+/** How WIDE one ceiling-fan blade is, in metres — the axis that makes the swept
+ *  radius a corner rather than the blade's tip. A module constant rather than a
+ *  literal in the returned object, because `fanBlade` now has to read it before it
+ *  can size the blade. */
+const FAN_BLADE_CHORD = 0.16;
+
 /** Radius of a ceiling fan's motor housing, in metres. The blades start here and
  *  `FanGeo` draws the same cylinder, so it is one number rather than two. */
 export const FAN_HUB_R = 0.1;
@@ -170,37 +176,59 @@ export const FAN_HUB_R = 0.1;
  *  straight off `dimMM` (`circle: true`), so the two tabs disagreed by 40% on the
  *  same piece.
  *
- *  Returns metres. `tip` is the invariant worth testing: it is the fan's own
- *  radius, so the swept circle is the declared width and nothing else. */
+ *  Returns metres. **`sweep` is the invariant worth testing, and it is NOT `tip`.**
+ *  A blade is a box, not a line: the point that travels furthest from the axis is a
+ *  CORNER, at `hypot(tip, chord/2)`. Sizing `tip` to the fan's own radius therefore
+ *  swept `hypot(0.5, 0.08)` = 506.4 mm for a declared 500, so a 1000 mm fan swept
+ *  1012.7 mm while the plan drew the 1000 mm circle `dimMM` asks for. Same defect as
+ *  the 1.4r one this function was extracted to fix, two orders of magnitude smaller
+ *  and in the same direction.
+ *
+ *  It survived because the three assertions pinning it all read `tip`, which is the
+ *  blade's centre-line and sweeps nothing. `sweep` exists so the quantity that has to
+ *  equal the declared radius is the quantity a test can name. `tip` is still returned,
+ *  because `FanGeo` needs somewhere to end the box.
+ *
+ *  The one case where `sweep` is not the declared radius is the `Math.max` floor
+ *  below, which is unreachable through `clampDims` and exists so three.js is never
+ *  handed a negative box. */
 export function fanBlade(widthMM: number): {
   hub: number;
   length: number;
   centre: number;
   tip: number;
+  sweep: number;
   thickness: number;
   chord: number;
 } {
   const r = widthMM / 2000;
+  // The blade CORNER is what sweeps, so the centre-line stops short of `r` by exactly
+  // enough that `hypot(tip, chord/2)` lands on it. `r - FAN_HUB_R` put the corner
+  // 6.4 mm outside the declared circle on every fan in the catalogue band.
+  const reach = Math.sqrt(Math.max(0, r * r - FAN_BLADE_CHORD * FAN_BLADE_CHORD * 0.25));
   // A fan narrower than its own hub is not reachable through `clampDims` (the
   // range starts at 900 mm) but the floor keeps this total rather than returning a
   // negative box, which three.js renders inside-out rather than refusing.
-  const length = Math.max(0.05, r - FAN_HUB_R);
+  const length = Math.max(0.05, reach - FAN_HUB_R);
   return {
     hub: FAN_HUB_R,
     length,
     centre: FAN_HUB_R + length / 2,
     tip: FAN_HUB_R + length,
+    sweep: Math.hypot(FAN_HUB_R + length, FAN_BLADE_CHORD / 2),
     // The blade's other two sides, and they are CONSTANTS rather than functions of
     // `widthMM` on purpose: a fan declares one dimension that means anything - the
-    // swept circle, which is `tip` - and a blade's depth is a style choice like a
-    // cord's diameter. They live here anyway, because `thickness` interacts with
+    // swept circle, which is `sweep` - and a blade's depth is a style choice like a
+    // cord's diameter. `chord` is the exception that proves it: it is a style choice
+    // that the swept radius READS, which is why it had to become a module constant
+    // rather than a literal here. They live here anyway, because `thickness` interacts with
     // `fanColumn`'s housing (a blade thicker than the hub sticks out of the motor)
     // and the test saying so had to re-type `0.012` out of the TSX to reach it.
     // Two sources of truth, and measured: with the copy in place, moving the
     // renderer's literal to 200 mm - a blade three times its own motor - left that
     // assertion green.
     thickness: 0.012,
-    chord: 0.16,
+    chord: FAN_BLADE_CHORD,
   };
 }
 
