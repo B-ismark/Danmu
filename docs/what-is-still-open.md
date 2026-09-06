@@ -6006,8 +6006,19 @@ the rest-pose bounding box of three spokes — an instrument reading, corrected 
 ### § 40 — six more shapes declare a depth their renderer never reads — DECISION
 
 **Found by asking what else has § 39’s shape, once § 39 was built.** § 39 was filed as one
-fan. It is a class of seven, and four of the other six are **already pinned**, which is the
-part worth stating first: the pin RECORDS the mismatch rather than fixing it.
+fan. It is a class of seven, and four of the other six are **already pinned**.
+
+**Which of the two groups is better guarded is the opposite of what it looks like, and both
+the first draft of this item and the peer’s reading of it had it backwards.** `RATIO_TOL` is
+**0.03**. A shape PRESENT in `DRAWN_RATIO` must match its recorded ratio to ±0.03; a shape
+ABSENT from it is checked against the 0.90-1.10 band, which is ±0.10 — **three times looser**.
+So the four pinned rows are the tightly held ones, and the key set is closed on top of that:
+`expect(Object.keys(DRAWN_RATIO).sort(), ...).toEqual([...])` means a new excuse cannot be
+added silently. **The pin does not merely record the mismatch, it holds it still.**
+
+What a pin cannot catch is its own VALUE being edited to fit a renderer that moved — the
+expected number and the recorded decision are the same literal. That is the residual risk on
+the four, and it is much smaller than the one on the two.
 
 **The census, derived not sampled.** `components/three/DynamicPart.tsx` holds 42 `*Geo`
 renderers. **28 read `part.dimMM[1]`; 14 do not.** Seven of those 14 declare `W == D`
@@ -6031,11 +6042,20 @@ a literal 25 mm against a declared 30. **The mechanism was checked only for `pai
 for the other five the claim is the weaker and sufficient one** — the function never
 mentions `dimMM[1]`, so whatever produces its thin axis, it cannot be the declared depth.
 
-**The last two rows are the ones with no guard at all.** `painting` and `curtain` sit
-inside the 0.90-1.10 band because a hard-coded 25 mm happens to be close to a declared 30,
-not because anything holds them together. **A literal agreeing with a declared number is
-not agreement, it is a coincidence with a gate wrapped round it** — edit either side and
-the band fires with no explanation of which one moved.
+**The last two rows are the loosely held ones — not unguarded, which is a distinction worth
+keeping.** `painting` and `curtain` ARE checked; they sit inside the 0.90-1.10 band because
+a hard-coded 25 mm happens to be close to a declared 30 (0.92) and an 81 near an 80 (1.01).
+**A literal agreeing with a declared number is not agreement, it is a coincidence with a
+gate wrapped round it** — and here the gate is wide enough to hold the coincidence: 7% of
+disagreement fits inside ±10% and is reported as fine.
+
+**It is NOT the `Partial<Record<Shape, …>>` inheritance scar, and the difference matters.**
+`DRAWN_RATIO` is one of those tables, and `CLAUDE.md` warns that a shape absent from one
+*inherits its category’s answer* — which is how `fan-standing` hung from a ceiling with every
+sweep green. Absence here falls back to the general BAND, not to another shape’s answer, and
+the band is a real check these two pass. So the hazard is the reverse of that scar: not a
+shape nobody asked about, but a shape asked the wrong question — *"within 10% of your
+declaration?"* rather than *"does anything derive one from the other?"*
 
 **This is a decision per shape, not a defect sweep, which is why it is filed rather than
 fixed.** For some of these, drawing thicker than declared is defensible: a frame IS thicker
