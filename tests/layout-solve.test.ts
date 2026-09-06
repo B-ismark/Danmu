@@ -1009,9 +1009,42 @@ describe('the room’s anchor is settled first', () => {
     return cached;
   }
 
+  // THE tolerance for "this hard term is nothing", and it is derived from the mechanism
+  // rather than chosen to pass. `c.outside` is `max(outsideShare, deficit / radius)`;
+  // `outsideShare` can only produce 0, 1/9, 2/9 … 1, so the sub-epsilon values come from
+  // `outsideDeficit`'s walk over `footCorners` — a polygonised ellipse for a round piece,
+  // where four box corners used to be. Measured twice, on two different populations:
+  // this fixture's worst is 4.68e-13, and a 360-solve sweep over five presets × three
+  // sizes × twelve seeds × both modes found four sub-epsilon values, all below 1e-12
+  // (6.05e-14 three times, 4.68e-13 once). The smallest non-zero any OTHER hard term
+  // reached in that sweep was `access` 0.0113.
+  //
+  // So 1e-10 sits ~213x above the noise and eleven orders of magnitude below the
+  // smallest real signal, and `[1e-10, 1e-9)` was empty in both populations. It was
+  // 1e-9 for one commit, which is 2136x the worst observed value — a tolerance that
+  // wide is not measuring anything.
+  const HARD_EPS = 1e-10;
+
+  // ONE definition of "clean", read by both counts in this file, because they ask the same
+  // question of the same fixture and an exact-zero copy beside a tolerant one is precisely
+  // how two readers of one quantity drift apart. `Math.abs`, not a bare `<`: a one-sided
+  // bound admits every negative, and flipping `+=` to `-=` inside the term under test
+  // survived the one-sided version of the per-seed assertion below.
+  const cleanSeeds = (rows: ReturnType<typeof scrambledU>['rows']) =>
+    rows.filter((r) => HARD_TERMS.every((k) => Math.abs(r[k]) < HARD_EPS)).length;
+
   it.fails('stops a scrambled bedroom from ending in the occasional disaster — PARKED at 7 of 12', () => {
     const { rows } = scrambledU();
-    const clean = rows.filter((r) => HARD_TERMS.every((k) => r[k] === 0)).length;
+    // Reads `cleanSeeds` rather than carrying its own `=== 0`. Both counts in this file run
+    // over the SAME cached `rows`, so the tolerance moves this one too: 8 under `=== 0`,
+    // 9 under `HARD_EPS`, because seed 3's only non-zero hard term is `outside` 2.025e-13.
+    // The bar is 11 and this stays `it.fails` either way — the change is to what the number
+    // MEANS, not to whether this line is red.
+    //
+    // Two figures below this were measured before that and are NOT re-derived here: the
+    // "12 of 12 measured" and the `steps = 1` survival both predate the tolerance and
+    // predate `outsideDeficit`. Re-run them before quoting either.
+    const clean = cleanSeeds(rows);
 
     // A COUNT of seeds that end with nothing on any hard term, never a sum.
     // `HARD_TERMS` is the solver's own exported list and this reads it term by term
@@ -1118,15 +1151,31 @@ describe('the room’s anchor is settled first', () => {
   // equal, which no measurement supports.
   it('records how far the winding fix moved this fixture — a baseline, not a target', () => {
     const { rows } = scrambledU();
-    const clean = rows.filter((r) => HARD_TERMS.every((k) => r[k] === 0)).length;
+    const clean = cleanSeeds(rows);
     expect(rows.length, 'twelve seeds, not whatever the fixture returned').toBe(12);
-    // Was 9, until `defaultScene` began deriving `circle` rather than hand-writing it:
-    // the `u` layout's bedside lamp had been seeded square and is round now, so this
-    // fixture's containment and overlap answers moved. Attributed by reverting only that
-    // half of the change, which puts this and `bed-rung-safety.test.ts` back to green.
-    // A baseline, not a target, and twelve seeds on one scrambled U cannot say whether
-    // one fewer clean seed is worse — only that it is different.
-    expect(clean, 'seeds ending with nothing on any hard term').toBe(8);
+    // 9, AND IT NEVER MOVED. This read 8 for one commit, with a note blaming "this
+    // fixture's containment and overlap answers" for the drop. That note was wrong twice
+    // over, and both halves are worth keeping because the mistake is cheap to repeat.
+    //
+    // It was wrong about the CAUSE. Printing all five hard terms per seed — rather than
+    // the one column that moved — gives seed 3 as `overlap` 0, `outside` 2.025e-13,
+    // `door` 0, `access` 0, `navigation` 0. The arrangement is identical; a single term
+    // sits 2e-13 above zero, which is float noise from `outsideDeficit` walking a
+    // polygonised ellipse instead of four box corners. The count said `=== 0` and the
+    // per-seed assertion eleven lines down had ALREADY been widened for exactly that
+    // noise. One quantity, two readers, and only the one that went red was widened.
+    //
+    // And it was wrong about `overlap`, which is exactly 0 on all twelve seeds and was
+    // never a candidate. Half the stated cause was a term that did not move at all.
+    //
+    // `cleanSeeds` is the fix: both readers in this file share one predicate and one
+    // tolerance, so neither can be widened alone again. The THIRD reader of this same
+    // rule is `isCleanShuffle` (`lib/layout-shuffle.ts:224`), which is shipped, still
+    // `=== 0`, and therefore still rejects a shuffle whose only fault is 2e-13 of a
+    // metre. That is deliberately NOT changed here — it moves what Shuffle accepts, and
+    // the rate at which it bites is unmeasured. Filed as § 4b in
+    // `docs/what-is-still-open.md`; do not "tidy" it into this commit.
+    expect(clean, 'seeds ending with nothing on any hard term').toBe(9);
     // Was 7 clean / 92.1018827121954 worst. Both moved when `c.outside` learned to see
     // an overhang (`outsideDeficit`), and the direction of each is the point:
     //
@@ -1147,8 +1196,9 @@ describe('the room’s anchor is settled first', () => {
     // actually took them instead of where the annealer had left them hanging, and
     // `alignment` / `balance` read a slightly tidier room for it. Nothing hard moved
     // — `outside` is still nothing on all twelve — which is the whole reason a rider can
-    // be carried after the search rather than inside it. (`clean` was 9 here and is 8;
-    // see the note on that assertion above.)
+    // be carried after the search rather than inside it. (`clean` is 9 and did not move.
+    // A sentence here once said it had gone to 8; that was the noise reading, and the
+    // note on the assertion above says how it happened.)
     expect(Math.max(...rows.map((r) => r.total)), 'worst total').toBeCloseTo(412.6663679837667, 6);
     // A TOLERANCE, and it is a physical one rather than a number chosen to pass. This
     // read `toEqual(rows.map(() => 0))`, which was available only while every footprint in
@@ -1193,14 +1243,28 @@ describe('the room’s anchor is settled first', () => {
       `\n  outside vs a piece pushed toward the wall, m of push → cost share\n` +
         ramp.map(([p, v]) => `    ${(p * 1000).toFixed(0).padStart(4)} mm  ${v.toExponential(2)}`).join('\n'),
     );
-    const firstReal = ramp.find(([, v]) => v > 1e-9);
-    expect(firstReal, 'pushing a piece out must eventually cost something').toBeDefined();
+    const firstReal = ramp.find(([, v]) => v > HARD_EPS);
     // Orders of magnitude, not a margin: the smallest overhang this fixture can produce
     // must sit far above the tolerance, or the tolerance is hiding real defects.
-    expect(firstReal![1], 'the smallest real overhang is barely above the noise').toBeGreaterThan(1e-6);
+    //
+    // `?? [0, 0]` rather than `!`, and this replaced a `toBeDefined()` guard on the line
+    // above. That guard could not fail without this line failing too — a ramp with no
+    // value above `HARD_EPS` has no `firstReal` to read — so it was decoration whose only
+    // effect was to turn one failure into two. Substituting 0 keeps the good message and
+    // fails HERE.
+    expect((firstReal ?? [0, 0])[1], 'the smallest real overhang is barely above the noise').toBeGreaterThan(1e-6);
 
     for (const [i, r] of rows.entries()) {
-      expect(r.outside, `seed ${i} leaves floor outside the room`).toBeLessThan(1e-9);
+      // `Math.abs`, because a bound with one end open is not a bound: `toBeLessThan(eps)`
+      // accepts -12 as readily as 1e-13, so every negative reading passes it.
+      //
+      // Be exact about what that claims. Flipping `c.outside +=` to `-=`
+      // (`lib/layout-score.ts:710`) rewards the solver for pushing pieces out of the room,
+      // and it IS killed — but it takes five tests down with it, and `clean` above fires
+      // before this line, so this assertion is NOT shown to be what catches it. The
+      // `Math.abs` is here on the arithmetic rather than on an isolated mutation: it costs
+      // nothing and closes an end that was open. Do not upgrade that to "verified".
+      expect(Math.abs(r.outside), `seed ${i} leaves floor outside the room`).toBeLessThan(HARD_EPS);
     }
   }, 120_000);
 

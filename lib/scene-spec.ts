@@ -1641,7 +1641,7 @@ function dress(
       // the whole of what this field means. Both hand-set answers are gone;
       // `extra` can still override for a piece that genuinely needs it, and nothing
       // does.
-      wallMounted: isWallMountedPart(category, shape),
+      wallMounted: isWallMountedPart(category, shape) || undefined,
       // Same rule, same reason, the other flag. See `place` above.
       circle: isRoundPart(shape) || undefined,
       ...extra,

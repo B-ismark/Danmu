@@ -282,8 +282,10 @@ describe('the bed ladder comes down a rung when the room cannot take a wider one
     const single = rows[rows.length - 1];
     expect(single.width, 'the shipped rung is the narrowest').toBe(900);
     // 118.0587814554503 before `outsideDeficit` taught the containment term to see an
-    // overhang. It is NOT a containment regression — `outside` is 0.00 on all twelve
-    // seeds now, pinned in `layout-solve.test.ts` — it is `navigation`: seed 1 alone
+    // overhang. It is NOT a containment regression — `outside` is nothing on all twelve
+    // seeds, pinned in `layout-solve.test.ts` as `Math.abs(r.outside) < 1e-10` rather than
+    // as an exact zero, because a polygonised ellipse's corners leave ~2e-13 of float noise
+    // behind and the pin has to tell that apart from an overhang — it is `navigation`: seed 1 alone
     // carries 408 of stranded floor where it used to carry 36. The solver used to buy
     // a connected floor on that seed by letting a piece hang through a wall for free,
     // and cannot any more. Containment is weighted 1000 against navigation's 120, so

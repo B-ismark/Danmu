@@ -193,7 +193,6 @@ describe('what a shape actually occupies, against the one box every consumer rea
     const lines: string[] = [];
     const moves = new Map<Shape, number>();
     const ramps = new Map<Shape, number[]>();
-    let inward = 0;
     for (const shape of ['wardrobe', 'nightstand'] as Shape[]) {
       const dim = PART_LIBRARY.find((l) => l.shape === shape)!.dimMM as [number, number, number];
       const reach = AMOUNTS.map((a) => {
@@ -206,9 +205,10 @@ describe('what a shape actually occupies, against the one box every consumer rea
       moves.set(shape, moved);
       ramps.set(shape, reach);
       // Monotone DOWN across the whole ramp: opening the piece makes its drawn footprint
-      // smaller at every step. A door or a drawer cannot do that by moving outward.
+      // smaller at every step. A door or a drawer cannot do that by moving outward. Read
+      // by the printed table below rather than by an assertion — the per-shape monotone
+      // loop is what fails on it, and it names the shape and the step.
       const shrinks = reach.every((v, i) => i === 0 || v <= reach[i - 1] + 1e-9) && moved > 1;
-      if (shrinks) inward++;
       lines.push(
         `  ${shape.padEnd(12)} ${reach.map((v) => v.toFixed(0).padStart(6)).join('')}` +
           `${shrinks ? '   <<< reaches LESS far open than shut' : ''}`,
@@ -233,12 +233,30 @@ describe('what a shape actually occupies, against the one box every consumer rea
     // its declared box, which an outward-swinging door cannot produce. It is
     // `-dir * swing` now and the ramp is 12 / 164 / 314 / 437 / 524.
     //
-    // The expectation is kept rather than deleted, and this is the reason: the defect was
-    // invisible for as long as nothing measured a footprint with the doors open, so the
-    // check that matters is not "is the sign right" but "does opening a piece still push
-    // its geometry outward". A monotone ramp says both, and a sign flipped back fails on
-    // the first step rather than on a value someone has to recognise.
-    expect(inward, 'shapes whose footprint shrinks as they open').toBe(0);
+    // An `expect(inward).toBe(0)` used to stand here, with a paragraph arguing it was
+    // kept rather than deleted. The argument was wrong: `inward` counts shapes whose
+    // footprint shrinks at some step, and the per-shape monotone loop below asserts
+    // `ramp[i] > ramp[i - 1]` at EVERY step of EVERY shape, which no shrinking shape can
+    // satisfy. It was entailed, so it could never fail alone — and it reported a bare
+    // count where the loop names the shape and the step that broke.
+    //
+    // WHAT THIS RAMP STILL CANNOT SEE, measured rather than assumed. Mutating the door
+    // rotation from `-dir * swing` to `-swing` — dropping the per-bay hinge factor, so
+    // the odd-numbered bays swing INTO the carcass while the even ones swing out —
+    // leaves this file at 4 passed with the wardrobe ramp byte-identical at
+    // 12 / 164 / 314 / 437 / 524. Both controls die as they should: restoring the old
+    // `dir * swing` and hinging on the back face are each red on the first step. The
+    // blind spot is structural — `overX` / `overZ` reduce the whole part to
+    // `Math.max(r.overX, r.overZ)`, one unsigned scalar over all bays and both axes, so
+    // a bay reaching the wrong way is hidden by any other bay reaching further the right
+    // way.
+    //
+    // Deliberately NOT patched here. Every candidate assertion that would catch it has to
+    // know where the bays are, which means importing a second source of truth about bay
+    // tiling into a test whose whole subject is that the geometry and `dimMM` agree — and
+    // the three swept sizes give 1, 4 and 5 bays, so the fixture cannot even hold one
+    // answer. A per-bay footprint is the real fix and it belongs with the compound-
+    // footprint work, not with a sign flip.
     for (const [shape, ramp] of ramps) {
       for (let i = 1; i < ramp.length; i++) {
         expect(
