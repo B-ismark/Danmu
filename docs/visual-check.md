@@ -128,6 +128,36 @@ question is purely whether the new proportions look like furniture. PR #124.
 
 ### Six pieces changed size — a plant, three chairs and two lamps
 
+**MEASURED IN A BROWSER 2026-09-06 — the SIZE half is settled by a second instrument.**
+Playwright against the production build of `4533321`, reading the three.js scene graph the
+browser actually built (via three’s `__THREE_DEVTOOLS__` hook and `userData.danmuPartId`)
+rather than the fidelity test’s own JSX walk. Every piece was seeded TWICE — at its
+catalogue size and at a deliberately odd one — so each is compared against ITSELF at another
+size and no table of expected values has to be right for the result to mean something.
+
+**14 of 14 rows at ratio 1.00 on all three axes**: `plant`, `chair-dining`, `chair-office`,
+`chair-armchair`, `lamp-floor`, `lamp-table` and `desk-l`, each at two sizes. (`plant`’s
+depth reads 0.98 — the chord of a polygonised cylinder, not a defect.)
+
+**The probe was wrong first, and how it announced itself is worth keeping.** Its first run
+read a 500 mm dining chair as 2810 mm wide — but with an IDENTICAL A/B ratio at both
+declared sizes. A renderer that ignored `dimMM` could not produce a constant ratio, so the
+contamination had to be in the instrument. The per-child dump found `LineSegmentsGeometry`
+at 1674×1469×**2870** inside the chair’s stamped subtree — room-scale guide lines whose
+height is the CEILING, which is also what pinned `desk-l`’s "height" at a flat 3000 mm
+regardless of what it declared. Excluding line geometry took every row to 1.00.
+
+**Decor is NOT inside the stamped group**, established by the same measurement rather than
+by reading: `desk-l` came back 751 mm tall against a declared 750 with a candle and a
+cylinder sitting on top of it in the screenshot.
+
+**Still open, and it is the whole reason this item exists:** whether a 400 mm plant and a
+500 mm dining chair *look* right at those sizes. A screenshot of all fourteen shows nothing
+obviously broken — every piece is recognisable and proportionate to its neighbours — but
+"draws 400 mm" and "looks like a 400 mm plant" are different claims and only the first is
+measured.
+
+
 **Where to click.** Library → add **Plant**, **Dining chair**, **Office chair**, **Armchair**,
 **Floor lamp**, **Table lamp**. Look at each in 3D beside a piece of known size (a 2 m sofa,
 a 750 mm desk), then switch to **2D Plan** and check the outline matches what 3D draws.
@@ -1060,6 +1090,30 @@ Everything below typechecks, lints, and is covered by 10 tests and 12 killed mut
 None of it has been on screen. **The whole point of this item is that the tests can prove
 the stack is right and cannot say whether the behaviour is pleasant**, which is the one
 question the ruling was actually about.
+
+**MEASURED IN A BROWSER 2026-09-06 — steps 1–3 below are answered; do not redo them.**
+Playwright, production build of `4533321`, SwiftShader, six pieces seeded in a rect room.
+The instrument is the Undo button’s own `disabled` state: `UndoRedo` computes
+`canUndo = past.length >= 2`, so pressing Undo until it disables COUNTS undo steps in the
+units a user feels them, with no app instrumentation.
+
+| what was driven | result |
+|---|---|
+| six selection clicks, 420 ms apart | **1** undo step |
+| CONTROL: four arrow-key moves | **5** undo steps (1 for the selecting click + 4 moves) |
+| move made with A selected, then select B, then one Undo | selection returns to **A** |
+
+The control is what makes the 1 mean anything — a counter stuck at 1 reports 1, and this
+one reached 5 on the same page. And the selection reading CHANGED across the Undo press
+(`["Echo shelf"]` → `["Alpha sofa"]`), so "restored" is a value that moved rather than a
+value that never left.
+
+**What is still open is the only part that was ever the real question: does it FEEL
+chatty?** Six clicks costing one press is the mechanical answer; whether stepping back
+through a highlight reads as stepping back through *work* is a judgement, and the 250 ms
+coalescing window is still the debounce every other edit uses rather than a measurement.
+Step 4 (undo across a layout change) was NOT driven — it needs a room-shape switch
+mid-session, which the probe does not do.
 
 **Where to click.** Any room, 3D or 2D.
 
