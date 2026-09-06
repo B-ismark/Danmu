@@ -625,9 +625,17 @@ describe('a restored selection is filtered, on both axes', () => {
   });
 
   it('clears a wall index the restored footprint cannot reach', () => {
-    // The sharper axis, and the one the write-up missed: `selectedWall` is an INDEX. A U
-    // has eight edges and a rectangle four, so undoing across a layout change leaves a 7
-    // pointing at nothing, and `WallInspector` is handed it directly.
+    // The sharper axis, and the one the write-up missed: `selectedWall` is an INDEX, so it
+    // can point past the end of the footprint it indexes.
+    //
+    // The reason first given here was WRONG, and is corrected rather than deleted because a
+    // wrong reason stops the next reader where a missing one does not. It said "undoing
+    // across a layout change leaves a 7 pointing at nothing". It cannot: `applySnapshot`
+    // restores `snap.room` and validates the index against THAT footprint, and both come
+    // out of one `takeSnapshot` — so an index and the polygon it indexes always travel
+    // together. This filter is an honour-system backstop, not a guard against a reachable
+    // state, and the real hazard is upstream: nothing clears `selectedWall` when the
+    // footprint changes under it. See the note in `lib/history.ts`.
     const room = useScene.getState().room;
     expect(room.footprint.length).toBeLessThan(8);
     applySnapshot(snapshot({ selectedWall: 7 }));
