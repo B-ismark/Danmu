@@ -1229,7 +1229,32 @@ the user went and looked.
     NOT in that set, because no path marks a table lamp round today and adding it would be
     a new decision rather than a reconciliation.
 
-    **Committed:** nothing but this paragraph. The predicate is not written; the browser
+    > **BUILT, and the paragraph above is SUPERSEDED — resolved by the user 2026-09-06.**
+    > `ROUND_SHAPES` is on `main` (§ 32 carries the work) and holds **eight** shapes, not
+    > the four proposed here: `fan`, `fan-standing`, `lamp-floor`, `lamp-table`,
+    > `lamp-pendant`, `plant`, `stool`, `cylinder`.
+    >
+    > `lamp-table` is in it, and the paragraph above says in as many words that it should
+    > not be. That contradiction was surfaced rather than fixed, because "it changes what a
+    > piece LOOKS like" makes it the user's call and not an implementer's.
+    > **Put to the user, who ruled: a bedside lamp IS round. The set stands as it is, all
+    > eight, and the paragraph above is the thing that is out of date.** No code change
+    > follows; `lamp-table`, `fan-standing`, `stool` and `cylinder` keep their membership.
+    >
+    > Two things worth keeping now that it is settled. It was **not** a defect in
+    > `fix/seeded-flags-and-wardrobe-doors` and predates it — that branch only made the
+    > SEEDER derive the flag it had been hand-writing, which is what put the reversal on
+    > screen (the `u` starter's bedside lamp draws as an `<ellipse>`; on `main` before it,
+    > a `<rect>`). And **the reversal itself was never recorded anywhere**: a set assembled
+    > on the merits, in a file whose own entry had reserved the question. The tell was the
+    > COUNT — four proposed, eight shipped — which is the same tell as § 32's "four doors"
+    > against eight call sites, in the same pair of commits. **Where a decision fixes a
+    > SET, the count is the cheapest thing that can go stale, and the only one a reader
+    > can check without re-deriving the reasoning.**
+
+    **Committed:** the predicate is written and shipped — see the block above and § 32.
+    What was true when the following was written, and is kept because the reasoning still
+    holds for anything ADDED to the set in future: the browser
     measurement above is real.
 
 16. **A rider floats after a reload — ANSWERED: derive at read time, write nothing. BUILT
@@ -5284,9 +5309,29 @@ clearance and collision answer downstream of those.
 **Fixed the way the entry said it should be**, rather than with the cheap patch it warned
 against: roundness is a property of the SHAPE. `ROUND_SHAPES` + `isRoundPart` sit beside
 `SHAPES`; `CATEGORY_DEFAULTS.circle` is **deleted** rather than left as a second answer;
-and the flag is derived at each of the four doors — `addPart`, `normalizeStoredParts`, the
-detection builder, and `readPart` at the file boundary, where it joins `clampDims` and
-`isWallMountedPart` as something a file has nothing to say about.
+and the flag is derived at each door rather than written.
+
+**"Four doors" is what this paragraph said until #123, and the count was the tell.** It
+named `addPart`, `normalizeStoredParts`, the detection builder, and `readPart` at the file
+boundary — where the flag joins `clampDims` and `isWallMountedPart` as something a file has
+nothing to say about. All four were real. What the list omitted is that the SEEDER builds
+parts at three more sites of its own (`openings`, `place`, and the `add` inside
+`defaultScene`), and those were still hand-writing the answer. Derived by grepping
+`isRoundPart(` rather than by re-reading the list, it is **eight call sites across three
+files** today: six in `lib/scene-spec.ts`, `readPart` in `lib/scene-file.ts`, `addPart` in
+`lib/scene-store.ts`.
+
+The omission had a visible consequence for one commit short of a year: the `u` starter's
+bedside lamp was seeded square and drew as a `<rect>` in the plan, because
+`buildSceneFromRoom` falls through to `defaultScene` when there are no detections, and
+`normalizeStoredParts` runs only on the three persisted-snapshot loaders. A freshly seeded
+room never passes through the corrector that this paragraph was counting on. Confirmed in a
+browser A/B on production builds: on `main` the lamp is a `<rect>` and ten pieces draw with
+zero round; on the fix it is an `<ellipse>`.
+
+**The lesson is the arithmetic, not the lamp.** A sentence that says "each of the four
+doors" is falsified by a fifth door, and nothing about the sentence tells you to go and
+count. Where a doc names a set of call sites, name the grep that produces it instead.
 
 The persisted question the entry flagged as a blocker turned out to have a clean answer:
 nothing has ever let a user CHOOSE a footprint shape, so deriving can only correct. A room

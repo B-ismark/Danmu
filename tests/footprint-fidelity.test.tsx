@@ -192,7 +192,7 @@ describe('what a shape actually occupies, against the one box every consumer rea
     const AMOUNTS = [0, 0.25, 0.5, 0.75, 1];
     const lines: string[] = [];
     const moves = new Map<Shape, number>();
-    let inward = 0;
+    const ramps = new Map<Shape, number[]>();
     for (const shape of ['wardrobe', 'nightstand'] as Shape[]) {
       const dim = PART_LIBRARY.find((l) => l.shape === shape)!.dimMM as [number, number, number];
       const reach = AMOUNTS.map((a) => {
@@ -203,10 +203,12 @@ describe('what a shape actually occupies, against the one box every consumer rea
       openAmount = 0;
       const moved = Math.max(...reach) - Math.min(...reach);
       moves.set(shape, moved);
+      ramps.set(shape, reach);
       // Monotone DOWN across the whole ramp: opening the piece makes its drawn footprint
-      // smaller at every step. A door or a drawer cannot do that by moving outward.
+      // smaller at every step. A door or a drawer cannot do that by moving outward. Read
+      // by the printed table below rather than by an assertion — the per-shape monotone
+      // loop is what fails on it, and it names the shape and the step.
       const shrinks = reach.every((v, i) => i === 0 || v <= reach[i - 1] + 1e-9) && moved > 1;
-      if (shrinks) inward++;
       lines.push(
         `  ${shape.padEnd(12)} ${reach.map((v) => v.toFixed(0).padStart(6)).join('')}` +
           `${shrinks ? '   <<< reaches LESS far open than shut' : ''}`,
@@ -215,10 +217,7 @@ describe('what a shape actually occupies, against the one box every consumer rea
     console.log(
       '\nOPEN vs SHUT — furthest the geometry reaches outside `dimMM`, mm, at open =' +
         ` ${AMOUNTS.join(' / ')}\n` +
-        lines.join('\n') +
-        '\n  `wardrobe` swinging INWARD is a finding, not a measurement artefact: at any' +
-        '\n  open > 0 its bounds are exactly the declared box, so the doors are inside the' +
-        '\n  carcass. See the note in this test and § 4.6.',
+        lines.join('\n'),
     );
     // PER SHAPE, not a maximum over them. Written as one `Math.max` across both rows it
     // was decoration for the nightstand: zeroing its drawer slide outright left the
@@ -227,15 +226,45 @@ describe('what a shape actually occupies, against the one box every consumer rea
     for (const shape of moves.keys()) {
       expect(moves.get(shape), `${shape} does not move at all as it opens`).toBeGreaterThan(1);
     }
-    // The finding, pinned so that fixing the renderer fails this test rather than passing
-    // it silently. `WardrobeGeo` rotates each door group by `[0, dir * swing, 0]`, and a
-    // rotation about +Y carries local +x toward -z — so a door extending along +x from a
-    // hinge on the front face swings INTO the wardrobe. Flipping the sign sends the far
-    // edge to z = 0.824 at the library size, 524 mm proud of the face, and the ramp
-    // becomes monotone upward. That is a one-line change to a renderer, it wants an eye
-    // rather than a test, and it is deliberately not made here: this PR touches no
-    // production code. Update this expectation in the same commit as the fix.
-    expect(inward, 'shapes whose footprint shrinks as they open').toBe(1);
+    // This read `.toBe(1)` and pinned a DEFECT: `WardrobeGeo` rotated each door group by
+    // `[0, dir * swing, 0]`, and a rotation about +Y carries local +x toward -z, so a door
+    // extending along +x from a hinge on the front face swung into the carcass. The ramp
+    // read 12 / 0 / 0 / 0 / 0 — at any open above zero the wardrobe's bounds were exactly
+    // its declared box, which an outward-swinging door cannot produce. It is
+    // `-dir * swing` now and the ramp is 12 / 164 / 314 / 437 / 524.
+    //
+    // An `expect(inward).toBe(0)` used to stand here, with a paragraph arguing it was
+    // kept rather than deleted. The argument was wrong: `inward` counts shapes whose
+    // footprint shrinks at some step, and the per-shape monotone loop below asserts
+    // `ramp[i] > ramp[i - 1]` at EVERY step of EVERY shape, which no shrinking shape can
+    // satisfy. It was entailed, so it could never fail alone — and it reported a bare
+    // count where the loop names the shape and the step that broke.
+    //
+    // WHAT THIS RAMP STILL CANNOT SEE, measured rather than assumed. Mutating the door
+    // rotation from `-dir * swing` to `-swing` — dropping the per-bay hinge factor, so
+    // the odd-numbered bays swing INTO the carcass while the even ones swing out —
+    // leaves this file at 4 passed with the wardrobe ramp byte-identical at
+    // 12 / 164 / 314 / 437 / 524. Both controls die as they should: restoring the old
+    // `dir * swing` and hinging on the back face are each red on the first step. The
+    // blind spot is structural — `overX` / `overZ` reduce the whole part to
+    // `Math.max(r.overX, r.overZ)`, one unsigned scalar over all bays and both axes, so
+    // a bay reaching the wrong way is hidden by any other bay reaching further the right
+    // way.
+    //
+    // Deliberately NOT patched here. Every candidate assertion that would catch it has to
+    // know where the bays are, which means importing a second source of truth about bay
+    // tiling into a test whose whole subject is that the geometry and `dimMM` agree — and
+    // the three swept sizes give 1, 4 and 5 bays, so the fixture cannot even hold one
+    // answer. A per-bay footprint is the real fix and it belongs with the compound-
+    // footprint work, not with a sign flip.
+    for (const [shape, ramp] of ramps) {
+      for (let i = 1; i < ramp.length; i++) {
+        expect(
+          ramp[i],
+          `${shape} reaches less far at open ${AMOUNTS[i]} than at ${AMOUNTS[i - 1]}`,
+        ).toBeGreaterThan(ramp[i - 1]);
+      }
+    }
   });
 
   it('prints the table', () => {
