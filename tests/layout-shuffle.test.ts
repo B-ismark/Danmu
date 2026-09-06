@@ -18,6 +18,7 @@ import {
   shuffleRoom,
   DIVERSITY_PENALTY,
   REPEAT_SIMILARITY,
+  shuffleRefusal,
 } from '@/lib/layout-shuffle';
 import { defaultScene } from '@/lib/scene-spec';
 import { footprintForLayout, pointInFootprint, type LayoutId } from '@/lib/footprint';
@@ -315,6 +316,26 @@ describe('shuffleRoom — the offer, not the search', () => {
       'the diversity term can now outweigh a real cost difference between candidates',
     ).toBeLessThan(2);
   });
+  it('the refusal counts the findings it does not name, rather than naming them all', () => {
+    // The wire test (`tests/shuffle-refusal-wired.test.tsx`) drives both branches
+    // through the panel; it cannot reach this one, because it would need a fixture
+    // seeding two hard findings and that is a property of the seeder rather than of
+    // this sentence. The count is DERIVED — a hand-typed number beside a list one line
+    // away is the defect this repo keeps finding — so the assertion is that it moves
+    // with the list, not that it equals 1.
+    const issue = (title: string) => ({ title }) as unknown as Parameters<typeof shuffleRefusal>[0][number];
+    expect(shuffleRefusal([issue('Bed hard to get into')]).message).not.toContain('more like it');
+    expect(
+      shuffleRefusal([issue('Bed hard to get into'), issue('Door blocked')]).message,
+    ).toContain('and 1 more like it');
+    expect(
+      shuffleRefusal([issue('A'), issue('B'), issue('C'), issue('D')]).message,
+    ).toContain('and 3 more like it');
+    // The empty list is the OTHER sentence, and it must not fall through to this one:
+    // forcing that branch open crashes on `blockers[0]`, so the guard is load-bearing.
+    expect(shuffleRefusal([]).title).toBe('No new arrangement this time');
+  });
+
   it('a single solve is NOT reliably clean, which is why the pipeline exists', { timeout: 60_000 }, () => {
     // The negative control for the test below, and the finding the filter answers.
     // Without it, "shuffleRoom returns a clean room" reads as a property of

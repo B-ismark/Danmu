@@ -697,6 +697,12 @@ the file as "four times".
   runner, which pins the constant to hardware nobody controls; or widen the floor, which
   weakens the only assertion that can catch the loop shrinking. It needs the range across
   several runs before either, and nothing here has that.
+  **Second observation the same day, and it moves the item:** a full local run under load
+  reddened the same FILE at a different assertion — `bestMs > takes the lowest sample, not
+  the first and not the mean` — green in isolation immediately after. So this is not one
+  marginal bound, it is a file whose several assertions all sit close enough to machine
+  speed to fail on contention, which is why the fix is a decision about the constant
+  rather than a nudge to one comparison.
 - The factor is measured once per **test file**, not per worker process: vitest 4 defaults
   to `pool: 'forks'` with `isolate: true`. So the figure `perf-calibration` prints is that
   file's, and the two bars each take their own.

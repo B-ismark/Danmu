@@ -113,6 +113,7 @@ import {
   type SolveResult,
 } from './layout-solve';
 import { layoutSimilarity, orderOffers } from './layout-offer';
+import { RULE_HANDLING } from './layout-score';
 import { analyzeRoom, type ClearanceIssue } from './clearance';
 import type { Placement } from './layout-score';
 import type { ScenePart } from './scene-spec';
@@ -432,6 +433,63 @@ export function shuffleRoom(
   return { result, offer: { ids, placements: result.placements }, tried, clean: clean.length };
 }
 
+/** The findings a room ALREADY has that no offer can be clean while they stand.
+ *
+ *  **This exists because the two gates in `shuffleRoom` disagree in kind, and only
+ *  one of them says so.** `newRoomFindings` is relative — its docblock above says
+ *  "the findings this arrangement would ADD" — because a preset that already has a
+ *  finding is not this button's to answer for. `isCleanShuffle` is absolute:
+ *  `breakdownBefore` appears nowhere in this file. So in a room whose geometry
+ *  cannot reach zero on a hard term, EVERY candidate fails the second gate and
+ *  `shuffleRoom` returns `null` on every press, forever, in exactly the room a user
+ *  is most likely to press it in (§ 4c).
+ *
+ *  The user ruled on 2026-09-06: **keep the gate, name the cause.** So this does not
+ *  change what Shuffle will offer — it gives the refusal something true to say.
+ *
+ *  Which findings count is DERIVED, never listed: a rule blocks a shuffle exactly
+ *  when `RULE_HANDLING` says its cost term is one `isCleanShuffle` reads. A
+ *  hand-kept list here would be a second source of truth for "what is a hard fault",
+ *  and this repo has paid for that one twice. A rule with no cost term — `tall`,
+ *  `crowding`, `turning` — cannot block a gate that reads cost terms, so it is
+ *  correctly absent. */
+export function shuffleBlockers(issues: readonly ClearanceIssue[]): ClearanceIssue[] {
+  return issues.filter((i) => {
+    const term = RULE_HANDLING[i.rule]?.costTerm;
+    return term != null && (HARD_TERMS as readonly string[]).includes(term);
+  });
+}
+
+/** What the panel SAYS when a shuffle finds nothing, given what the room already has.
+ *
+ *  Pure, exported and tested for the reason `impossibleClause` is: the sentence and
+ *  the call site are two things, and #121 measured the gap — all four call sites of
+ *  that clause could be reverted to a disjunction with the whole suite green,
+ *  because nothing joined the string to the screen. A refusal computed and not said
+ *  is a refusal that does not exist.
+ *
+ *  The blocked sentence names the first finding rather than all of them, and says
+ *  the count separately. Both are DERIVED — a hand-typed number beside the thing it
+ *  describes can disagree with it, and here it would be a number about a list one
+ *  line away. Length matters: the four refusal bodies in this panel run 93 to 169
+ *  characters and the wrap at the top of that range is unverified in any browser
+ *  (`docs/visual-check.md`), so this stays at the short end. */
+export function shuffleRefusal(blockers: readonly ClearanceIssue[]): { title: string; message: string } {
+  if (blockers.length === 0)
+    return {
+      title: 'No new arrangement this time',
+      message:
+        'Every layout it tried left something in the way, so your room is unchanged. Press Shuffle again for a different try.',
+    };
+  const more = blockers.length - 1;
+  return {
+    title: 'Shuffle cannot arrange around this',
+    message:
+      `Shuffle only offers rooms with nothing in the way, and this one already has ${blockers[0].title.toLowerCase()}` +
+      (more > 0 ? ` and ${more} more like it` : '') +
+      '. Try Fix first, then Shuffle.',
+  };
+}
 /** The three reasons a piece may not move, for a whole-room shuffle. A thin re-export
  *  of the solver's own composer so a caller does not have to know that a shuffle
  *  confines nothing. */
