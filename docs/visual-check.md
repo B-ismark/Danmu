@@ -654,9 +654,6 @@ The sentence above said a press "can never succeed" in a room carrying a hard fi
 unaffected — it only renders when `shuffleRoom` returns null, and then it names the cause
 correctly — but the reachability claim was wrong.
 
-Still not produced by anything, stated rather than implied: the **169**-character
-both-terms string, which no solve in either derivation has emitted.
-
 The lengths were **not** read off the template, which is how the
 first version of this row was wrong twice over. It quoted 126 and 145 from a hand-typed
 example whose finding title happened to be a noun phrase, and the template it was
@@ -696,9 +693,10 @@ Three things settled that were never eye questions:
   refusal, not Shuffle’s, and no solve either of us has run has emitted it. Measuring the
   two lengths that occur and implying the 169 fits would be the same error as the
   126/145.
-· **`l` 3×2.4 did not reproduce.** This row lists a 120-char "one finding, long title" arm
-  seen there; Shuffle SUCCEEDED on all 14 presses, so that arm is unrendered and the room
-  named for it does not currently reach a refusal.
+· **`l` 3×2.4 did not reproduce, and its row is struck above.** Shuffle SUCCEEDED on all
+  14 presses, so that 120-char arm is unrendered. **Two instruments reached the same 0/14
+  independently** — 14 real presses in a browser, and `shuffleRoom` driven over ten rooms
+  × 14 attempts — which is worth more than the row it retired.
 · **Whether the wording reads well is untouched.** A probe can say the sentence fits and
   quotes accurately. It cannot say it is good.
 
@@ -714,7 +712,8 @@ the thing you want, never the first one that is long enough.
 **What to look for:** open a `t` at 5.5 × 3.8 (Room panel, type the size), press Shuffle,
 and read the toast — the quoted finding must match a line in Room check word for word,
 and there must be no "press again" in it. Then a `rect` at 6 × 4, where the old sentence
-is still the right one. Neither has been rendered.
+is still the right one. **Both were rendered on `4cef13a`** — the table above — so what is
+left at these two lengths is whether the wording reads well.
 `overlap` alone has never been produced by any solve measured so far — 48 solves across
 three room shapes, every refusal `outside` — so *"inside another one"* as a standalone
 clause is unseen, and the 169-character both-terms string has never been produced at all.
