@@ -134,7 +134,35 @@ export const MIN_CLEAN = 4;
  *  to avoid. Not chosen here — it is the median measured across five presets and
  *  fifteen rearranged rooms in § A.2 of `docs/what-is-still-open.md`, whose working
  *  range is 2–8. Below 0.25 the term never fires at all; above ~8 cost stops
- *  mattering. */
+ *  mattering.
+ *
+ *  **Measured 2026-09-06: on this app's data this term cannot change an outcome, and
+ *  that is recorded here rather than acted on.**
+ *
+ *  `orderOffers` scores `cost + DIVERSITY_PENALTY x (closest already picked)`. Two
+ *  facts make the second half zero almost always. The first pick has `picked = []`,
+ *  so nothing can move `ranked[0]` — and `ranked[0]` is what a caller with no history
+ *  is handed. And the candidates that reach the ranking are already unlike each other:
+ *  instrumented inside this very loop, **40 shuffle calls produced 66 candidate pairs,
+ *  of which 61 scored similarity exactly 0**; the five non-zero ones were 0.111, 0.125,
+ *  0.200 and 0.400, and **none reached `REPEAT_SIMILARITY`**. So the penalty multiplies
+ *  zero in 92% of pairs and contributes at most 1.6 cost units in the rest, against
+ *  candidate costs measured between 10 and 75.
+ *
+ *  End to end: `shuffleRoom` run twice on the same attempt with the previous offer as
+ *  history, once at `diversityPenalty: 0` and once at 4, returned **byte-identical
+ *  placements in all 26 pairs** over four presets and two sizes.
+ *
+ *  **So the honest gate is on the AGREEMENT, not on the term** — the same shape as the
+ *  note above about `newRoomFindings` rejecting none of 816 candidates.
+ *  `tests/layout-shuffle.test.ts` asserts that the clean set stays mutually dissimilar,
+ *  which is what makes this inert; the day the search starts producing near-duplicates
+ *  that test goes red and this term has work to do. Writing a test that fails at
+ *  `diversityPenalty: 0` was the outstanding ask (§ A.2). It cannot be written at this
+ *  level against real rooms, and the reason is the measurement above rather than an
+ *  absence of effort. The unit behaviour IS pinned, in `tests/layout-offer.test.ts`,
+ *  where the fixture supplies the similar candidates this search does not.
+ */
 export const DIVERSITY_PENALTY = 4;
 /** Above this, two arrangements are the same idea shown twice.
  *

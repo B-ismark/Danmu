@@ -6,10 +6,19 @@ import {
   randomizeStart,
   solveLayout,
   NEGLIGIBLE_COST,
+  LAYOUT_SIMILAR_M,
+  TURN_EPSILON,
   type SolveResult,
 } from '@/lib/layout-solve';
 import { DEFAULT_WEIGHTS } from '@/lib/layout-score';
-import { isCleanShuffle, newRoomFindings, shuffleRoom } from '@/lib/layout-shuffle';
+import { layoutSimilarity } from '@/lib/layout-offer';
+import {
+  isCleanShuffle,
+  newRoomFindings,
+  shuffleRoom,
+  DIVERSITY_PENALTY,
+  REPEAT_SIMILARITY,
+} from '@/lib/layout-shuffle';
 import { defaultScene } from '@/lib/scene-spec';
 import { footprintForLayout, pointInFootprint, type LayoutId } from '@/lib/footprint';
 
@@ -251,6 +260,60 @@ describe('shuffleRoom — the offer, not the search', () => {
       4.681111291435601e-13,
     );
     expect(NEGLIGIBLE_COST, 'must stay far below the smallest real signal measured').toBeLessThan(0.0113);
+  });
+  it('the candidates a shuffle ranks are already unlike each other — which is what makes the diversity term inert', { timeout: 300_000 }, () => {
+    // **§ A.2 asked for a test that fails at `diversityPenalty: 0`. This is the reason
+    // there cannot be one at this level, asserted rather than argued.**
+    //
+    // `orderOffers` scores `cost + penalty x (closest already picked)`. Measured end to
+    // end, `shuffleRoom` at penalty 0 and at 4 returned byte-identical placements in all
+    // 26 attempt-pairs over four presets and two sizes. The cause is here: the clean set
+    // is mutually dissimilar, so the penalty multiplies zero.
+    //
+    // The clean set is rebuilt the way `shuffleRoom` builds it — same seed derivation,
+    // same two gates, both exported — because `clean` is a local. The reconstruction is
+    // asserted to reach a real set rather than assumed to: a sweep over "whatever it
+    // found" passes over an empty list, and 0 pairs would satisfy every bound below.
+    const sims: number[] = [];
+    let candidates = 0;
+    for (const [id, w, d] of [['rect', 6, 4], ['l', 6, 4], ['open', 6, 4]] as const) {
+      const { parts, footprint, locked, movable } = room(id, w, d);
+      const clean: ReturnType<typeof solveLayout>[] = [];
+      for (let sSeed = 0; sSeed < 12 && clean.length < 4; sSeed++) {
+        const start = randomizeStart(parts, footprint, movable, makeRng(sSeed));
+        const r = solveLayout(parts, footprint, locked, { seed: sSeed, mode: 'shuffle', start });
+        if (!isCleanShuffle(r)) continue;
+        if (newRoomFindings(parts, { footprint, height: 2.5 }, r).length > 0) continue;
+        clean.push(r);
+      }
+      candidates += clean.length;
+      for (let i = 0; i < clean.length; i++)
+        for (let j = i + 1; j < clean.length; j++)
+          sims.push(
+            layoutSimilarity(clean[i].placements, clean[j].placements, {
+              spotM: LAYOUT_SIMILAR_M,
+              yawRad: TURN_EPSILON,
+              movable,
+            }),
+          );
+    }
+
+    expect(candidates, 'the reconstruction must reach real candidates, or every bound below is vacuous').toBeGreaterThan(4);
+    expect(sims.length, 'and enough PAIRS to compare — one candidate per room yields none').toBeGreaterThan(2);
+    const worst = Math.max(...sims);
+    console.log(`  clean candidates=${candidates} pairs=${sims.length} zero=${sims.filter((v) => v === 0).length} worst=${worst.toFixed(3)}`);
+
+    // The agreement itself. Not `worst === 0` — five of 66 measured pairs were non-zero
+    // — but that no pair comes near the bar at which a repeat would be skipped, and that
+    // what the penalty can add stays small against the cost it is added to.
+    expect(
+      worst,
+      'a candidate pair reached REPEAT_SIMILARITY: the search is producing near-duplicates and the diversity term now has work to do — see DIVERSITY_PENALTY',
+    ).toBeLessThan(REPEAT_SIMILARITY);
+    expect(
+      DIVERSITY_PENALTY * worst,
+      'the diversity term can now outweigh a real cost difference between candidates',
+    ).toBeLessThan(2);
   });
   it('a single solve is NOT reliably clean, which is why the pipeline exists', { timeout: 60_000 }, () => {
     // The negative control for the test below, and the finding the filter answers.
