@@ -148,10 +148,28 @@ describe('the reference workload', () => {
     // **The ratio was proposed as a SCALE-FREE bound and the first CI reading refutes
     // it.** The argument was that both workloads scale with the CPU, so their ratio
     // would normalise machine speed where an absolute floor could not. Measured:
-    // 16.6-24.3 here over 20 pairs, and **8.55-9.30 on the runner** over two runs — below
-    // the whole local range rather than inside it, with the two runner samples 1.09x
-    // apart, so the direction and the magnitude are both replicated rather than one
-    // reading quoted as an effect.
+    // 16.6-24.3 here over 20 pairs, and **8.55-14.33 on the runner** over three runs —
+    // below the whole local range rather than inside it.
+    //
+    // **The third sample is why this quotes a range and not a pair.** Two runs said
+    // 9.30 and 8.55 and looked tight enough to build on; the run that gated this very
+    // change said 14.33. Per run, workload / yardstick / ratio:
+    //
+    //     15.39   1.66    9.30
+    //     14.39   1.68    8.55
+    //     25.27   1.76   14.33
+    //
+    // **Read the columns, because they say something the ratio alone does not.** The
+    // yardstick spans 1.06x across those runs and the reference workload spans 1.76x,
+    // so essentially all of the ratio's spread is the reference term's own noise. The
+    // yardstick is not normalising it; it is simply steady while the other is not. That
+    // is a second and independent reason a ratio bound fails here, on top of the two
+    // workloads not scaling together between machines.
+    //
+    // And the runner's 25.27 is ABOVE this box's idle maximum of 22.58, while its
+    // 14.39 is below the idle minimum. **The runner is not a fast machine, it is a
+    // variable one** — which is the real account of the original 8.55 ms absolute
+    // failure, and it is not a thing any bound calibrated on a steady machine survives.
     //
     // The reason was already written, in `yardstickWorkload`'s own docblock, before the
     // measurement: this workload is "deliberately UNLIKE `referenceWorkload` — scalar
@@ -165,7 +183,7 @@ describe('the reference workload', () => {
     // 9.30, and both CI runs came in under it.
     console.log(
       `  calibration: workload=${measured.toFixed(2)}ms yardstick=${yard.toFixed(2)}ms ` +
-        `ratio=${(measured / yard).toFixed(2)} (runner 8.55-9.30, this box 16.6-24.3)`,
+        `ratio=${(measured / yard).toFixed(2)} (runner 8.55-14.33, this box 16.6-24.3)`,
     );
   });
 });
