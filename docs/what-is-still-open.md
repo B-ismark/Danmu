@@ -703,6 +703,53 @@ the file as "four times".
   marginal bound, it is a file whose several assertions all sit close enough to machine
   speed to fail on contention, which is why the fix is a decision about the constant
   rather than a nudge to one comparison.
+
+  **MEASURED 2026-09-06, which is what this item said it needed before either fix.** The
+  distribution, 25 samples of `bestMs(referenceWorkload, 3)` on an idle machine:
+
+  | | ms |
+  |---|---|
+  | min | 19.35 |
+  | median | 20.50 |
+  | max | 22.58 |
+  | the floor | 8.80 |
+  | **margin at the minimum** | **2.20x** |
+  | the runner, when it fired | **8.55 → 0.97x** |
+
+  So the premise behind the floor was RIGHT and its margin was nil. It was chosen to
+  leave room for a machine 2.5x the calibration box; the runner is about 2.5x it. What
+  was wrong is the comment beside it, which claimed *"no CI box can trip this"* and
+  prescribed re-measuring `REFERENCE_IDLE_MS` **on the machine that fired it** — advice
+  that cannot be followed, because that machine is a runner nobody here controls. Both
+  halves are corrected in the file.
+
+  **A third option the first write-up did not have, and it is the only one that trades
+  nothing away.** The defect this floor exists to catch is the reference loop being
+  SHRUNK, which would make every machine read as fast and switch the calibration off in
+  silence. That is a question about the workload, and asking it in absolute milliseconds
+  makes the answer depend on the machine. Asked against a second workload sized by
+  nothing the first one reads, it does not: both scale with the CPU, so a shrunken loop
+  drops the RATIO while a fast machine leaves it alone.
+
+  `yardstickWorkload` is in `tests/helpers/perf.ts` for that, and the ratio is **printed
+  on every passing run and asserted by nothing**. That restraint is the point: the ratio
+  is 16.6-24.3 here over 20 pairs (spread 1.47x), and whether it holds on a runner is
+  precisely what the absolute floor assumed and got wrong. **Replacing a bound that
+  failed on CI with a bound whose CI behaviour is unmeasured would be the same mistake
+  in a better shape.** Read the ratio out of a CI log across a few runs, then set it.
+
+  **First load reading, taken by accident and worth keeping.** The full suite prints this
+  line, so the run that gated this very change recorded a contended sample:
+  `workload=65.70ms yardstick=1.99ms ratio=33.01`, against `22.13 / 1.01 / 22.01` idle.
+  The workload inflated 3.0x and the yardstick 2.0x, so **the ratio is not load-invariant
+  either** — it moved 22 to 33. For a FLOOR that is the safe direction, since contention
+  can only push it up. But it means the ratio is a machine-speed normaliser and not a
+  contention one, and a bound set from idle numbers alone would be quoting the wrong
+  population. Two more reasons to read a CI log before setting it.
+
+  Widening the existing floor stays available and stays second choice: it weakens the
+  only assertion that can catch the loop shrinking, in exchange for nothing the ratio
+  would not give for free.
 - The factor is measured once per **test file**, not per worker process: vitest 4 defaults
   to `pool: 'forks'` with `isolate: true`. So the figure `perf-calibration` prints is that
   file's, and the two bars each take their own.

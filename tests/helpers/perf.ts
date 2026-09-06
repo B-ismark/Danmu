@@ -113,6 +113,43 @@ export function referenceWorkload(): number {
   return acc;
 }
 
+/**
+ * A second workload, sized by nothing `referenceWorkload` reads — the yardstick for a
+ * SCALE-FREE version of the calibration check.
+ *
+ * **Why this exists, and it is a measured failure rather than a tidy idea.** The
+ * calibration test asserts `referenceWorkload` still costs a fair share of
+ * `REFERENCE_IDLE_MS` — an ABSOLUTE floor at 8.8 ms — and its own comment says "no CI
+ * box can trip this", because a slower machine measures higher. **A GitHub runner
+ * tripped it on 2026-09-06**: `expected 8.554660000000013 to be greater than 8.8`.
+ * Re-running the same job on the same commit passed, and the same file reddened again
+ * later at a DIFFERENT assertion. So the runner sits inside the noise of that floor,
+ * and the comment's prescribed fix — "re-measure `REFERENCE_IDLE_MS` there" — cannot
+ * be followed, because "there" is hardware nobody here controls.
+ *
+ * The defect that floor exists to catch is the reference loop being SHRUNK, which
+ * would make every machine read as fast and switch the calibration off silently. That
+ * is a question about the workload, and asking it in absolute milliseconds makes the
+ * answer depend on the machine. Measured against this yardstick it does not: both
+ * scale with the CPU, so a shrunken loop drops the RATIO while a fast machine leaves
+ * it alone.
+ *
+ * **Not yet an assertion, and deliberately.** The ratio is 16.6-24.3 on the machine
+ * that wrote this (20 pairs, spread 1.47x), and whether it holds on a runner is
+ * exactly the thing the absolute floor got wrong by assuming. So this is printed on
+ * every passing run and asserted by nothing — replacing a bound that failed on CI
+ * with a bound whose CI behaviour is unmeasured would be the same mistake wearing a
+ * better shape. Read the number out of a CI log, then decide.
+ *
+ * Its shape is deliberately UNLIKE `referenceWorkload` — scalar float maths, no
+ * allocation — so the pair also says whether a machine is starved of CPU or of
+ * allocation bandwidth.
+ */
+export function yardstickWorkload(): number {
+  let acc = 0;
+  for (let i = 1; i <= 400_000; i++) acc += Math.sqrt(i) / (i + 1);
+  return acc;
+}
 /** Best (lowest) wall-clock of `runs` calls, in ms. The best sample measures what the
  *  machine CAN do, which is the question a ceiling is asking; a mean measures what
  *  else was running. `runs` defaults to 3, matching `tests/clearance-field.test.ts`,

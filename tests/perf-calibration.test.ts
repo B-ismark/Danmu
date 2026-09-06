@@ -46,6 +46,7 @@ import {
   REFERENCE_IDLE_MS,
   TWENTY_PIECE_BAR_MS,
   bestMs,
+  yardstickWorkload,
   ceilingMs,
   clampFactor,
   machineFactor,
@@ -97,16 +98,43 @@ describe('the reference workload', () => {
     // the FLOOR and switches the calibration off, the second pins every machine at
     // the CLAMP and inflates both bars. Two opposite failures, one missing assertion.
     //
-    // One-sided on purpose, and it is the safe side: a slower machine measures
-    // HIGHER, so no CI box can trip this. Only a shrunken workload or an inflated
-    // constant can. If it does fire on a genuinely much faster machine, the fix is to
-    // re-measure `REFERENCE_IDLE_MS` there, which is the right thing to be told.
+    // One-sided on purpose: a slower machine measures HIGHER, so only a shrunken
+    // workload or an inflated constant can push it down.
+    //
+    // **This comment used to say "no CI box can trip this" and prescribe re-measuring
+    // `REFERENCE_IDLE_MS` on the machine that fired it. Both halves are wrong, and a
+    // GitHub runner proved it on 2026-09-06:** `expected 8.554660000000013 to be
+    // greater than 8.8`. Re-running the same job on the same commit passed, and this
+    // file reddened again later at a different assertion — so the runner sits inside
+    // the noise of this floor rather than safely above it. And the prescribed fix
+    // cannot be carried out, because "there" is hardware nobody here controls.
+    //
+    // Measured for the decision rather than argued: this machine idles at 19.35-22.58
+    // ms over 25 samples (median 20.5, 2.2x the floor); the runner reported 8.55, or
+    // 0.97x it. The floor was chosen to leave room for a machine 2.5x the calibration
+    // box and the runner is about 2.5x it, so the premise was right and the margin was
+    // nil. See `docs/what-is-still-open.md` for the two candidate fixes and why
+    // neither is taken here.
     expect(
       measured,
       `the workload costs far less than REFERENCE_IDLE_MS (${REFERENCE_IDLE_MS} ms) claims — ` +
         `either the loop shrank, the constant was inflated, or this machine is >2.5x the ` +
         `calibration box and the constant needs re-measuring here`,
     ).toBeGreaterThan(REFERENCE_IDLE_MS * 0.4);
+
+    // The scale-free reading of the same question, PRINTED and asserted by nothing.
+    // A shrunken reference loop drops this ratio; a fast machine leaves it alone,
+    // because both workloads scale with the CPU. Whether that holds on a runner is
+    // the very thing the absolute floor above assumed and got wrong, so the number is
+    // published on every passing run and a bound waits until a CI log has supplied
+    // one. 16.6-24.3 here over 20 pairs, spread 1.47x.
+    yardstickWorkload();
+    const yard = bestMs(yardstickWorkload, 3);
+    console.log(
+      `  calibration: workload=${measured.toFixed(2)}ms yardstick=${yard.toFixed(2)}ms ` +
+        `ratio=${(measured / yard).toFixed(2)} floor=${(REFERENCE_IDLE_MS * 0.4).toFixed(2)}ms ` +
+        `margin=${(measured / (REFERENCE_IDLE_MS * 0.4)).toFixed(2)}x`,
+    );
   });
 });
 
