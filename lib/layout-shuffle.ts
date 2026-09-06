@@ -475,14 +475,29 @@ export function shuffleBlockers(issues: readonly ClearanceIssue[]): ClearanceIss
  *
  *  **The finding is QUOTED, not spliced, and that is a fix rather than a style.** The
  *  first version read `already has ${title.toLowerCase()}`, which assumes a finding
- *  title is a noun phrase. Half of them are not: `access` titles read *"you can't walk
- *  to everything"* and *"no room to pull the chairs out"*, so the sentence came out as
- *  *"this one already has you can't walk to everything"*. Quoting takes the title as
- *  the report's own words and reads correctly for both shapes — and it keeps the
- *  original casing, which lowercasing was destroying. **Found by DERIVING the string
- *  from real rooms rather than reading the template**; a hand-typed example in the
- *  first review used a title that happened to be a noun phrase, and every length
- *  quoted off it was wrong too.
+ *  title is a noun phrase. **Counted across both files that author one — 11 in
+ *  `clearance.ts`, 13 zone titles in `layout-rules.ts` — only 9 of the 24 are.** The
+ *  other 15 are clauses with their own subject and verb ("The way in is blocked",
+ *  "You can't walk to everything", "Wardrobe doors can't open"), verb phrases
+ *  ("Can't reach the front of it"), or neither ("Taller than the room"). Spliced, those
+ *  produced *"this one already has you can't walk to everything"*. The nine that did
+ *  survive share one accident — they begin "No room…", "Tight…" or "Two pieces…" — so
+ *  the template was right about a minority and wrong about the rest.
+ *
+ *  Quoting takes the title as the report's own words, reads correctly for every shape,
+ *  and keeps the casing lowercasing was destroying.
+ *
+ *  **The transferable half:** a splice is safe when its source is a CLOSED vocabulary
+ *  of nouns and unsafe when its source is authored prose. The eight other
+ *  `toLowerCase()` splices in this app all draw from the first kind — `DECOR_LABEL`,
+ *  `categoryLabel`, `slotLabel`, `unitName`, the axis names — and `ClearanceIssue.title`
+ *  is the only authored-prose source in the app, which is why it was the one that broke.
+ *  Cross-checked: no other site splices a finding title into a sentence.
+ *
+ *  **Found by DERIVING the string from real rooms rather than reading the template**,
+ *  with the template in front of me both times. A hand-typed example in the first pass
+ *  used a title that happened to be one of the nine, so it read correctly AND every
+ *  character count taken off it was wrong.
  *
  *  Length matters: the four refusal bodies in this panel run 93 to 169 characters and
  *  the wrap at the top of that range is unverified in any browser
