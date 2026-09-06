@@ -371,6 +371,17 @@ describe('what a shape actually occupies, against the one box every consumer rea
   // Every shape gets an answer: `OVERHANG_MM` if it is named, `DEFAULT_OVERHANG_MM`
   // otherwise. `Object.keys` of the exception table is asserted too, so deleting a row to
   // make a red go away fails a different assertion instead of silently relaxing the gate.
+  // Free at the top exactly as RATIO_TOL was: 60 -> 600 was mutated and killed NOTHING,
+  // because `worst > budget` passes everything once the budget is wide enough. Given its
+  // own ceiling below.
+  //
+  // UNLIKE RATIO_TOL, this one has NO MARGIN, and that is the sharper half. Setting it to
+  // 0 reports 26 shapes overhanging at all, and the two largest are `window` and `monitor`
+  // at 60.0 mm against a budget of exactly 60. The comparison is strict, so both sit on
+  // the line and pass. It is therefore already pinned from BELOW by its own worst case -
+  // 59 would be red - and was unpinned above, which is the dangerous direction: the next
+  // renderer change of 0.1 mm on either shape reddens this, and the cheapest fix in the
+  // moment is to widen the number. Something holds it now.
   const DEFAULT_OVERHANG_MM = 60;
   const OVERHANG_MM: Partial<Record<Shape, number>> = {
     // `plant: 260` stood here for one commit and is GONE rather than kept at 0. It excused
@@ -400,6 +411,16 @@ describe('what a shape actually occupies, against the one box every consumer rea
   // Default band is 0.90–1.10. Everything outside it is NAMED with its measured ratio and
   // held to ±0.03, so each is a pin rather than an excuse — and the key set is asserted, so
   // adding a row cannot be the cheap way to green a red.
+  // A pinned shape is held to its recorded ratio to within this, which is THREE TIMES
+  // TIGHTER than the 0.90-1.10 band an unpinned shape gets. The pin is the strict case,
+  // not the excuse: it holds a known mismatch still rather than merely recording it.
+  //
+  // Asserted from ABOVE below, because a tolerance is free at the top and this one was.
+  // Widening it 0.03 -> 0.5 was mutated and killed NOTHING: all seven tests stayed green
+  // at sixteen times the slack. Measured spread is far smaller again — setting it to 0
+  // reports every one of the eleven pinned rows, and each matches its pin to the two
+  // decimals this table prints, so no real deviation reaches 0.005. 0.03 is already six
+  // times the noise; 0.5 is a hundred times, and nothing said so.
   const RATIO_TOL = 0.03;
   const DRAWN_RATIO: Partial<Record<Shape, [number, number, number]>> = {
     // Real protrusions above the declared box, all on ONE axis and all defensible: a bed's
@@ -465,6 +486,12 @@ describe('what a shape actually occupies, against the one box every consumer rea
     }
     expect(rows.length, 'every shape, not whatever the sweep found').toBe(SHAPES.length);
     expect(off, 'shapes drawing at a size other than the one they declare').toEqual([]);
+
+    // The tolerance itself, pinned from above. Every assertion in this file measures a
+    // ratio against RATIO_TOL, so RATIO_TOL is the one number here that no assertion can
+    // reach - widening it makes every pinned row pass more easily and reddens nothing.
+    // That is the whole failure mode of a one-sided pin, and it was live: 0.5 survived.
+    expect(RATIO_TOL, 'a tolerance is free at the top, so it needs its own ceiling').toBeLessThanOrEqual(0.03);
     expect(Object.keys(DRAWN_RATIO).sort(), 'shapes excused from the 0.90–1.10 band').toEqual([
       'bed-double', 'bed-single', 'door', 'laptop', 'mirror',
       'mirror-oval', 'monitor', 'plane', 'rug', 'water-dispenser', 'window',
@@ -486,5 +513,23 @@ describe('what a shape actually occupies, against the one box every consumer rea
     // The exception table is itself pinned. Without this, the cheapest way to green a red
     // is to add a row here, and nothing would say so.
     expect(Object.keys(OVERHANG_MM).sort(), 'shapes excused from the default budget').toEqual(['laptop']);
+
+    // The budget itself, pinned from above for the same reason the tolerance is. The key
+    // SET here was already pinned; no VALUE was, and a key set does not stop a budget
+    // being widened until it forgives everything.
+    expect(DEFAULT_OVERHANG_MM, 'a budget is free at the top, and this one has no margin below').toBeLessThanOrEqual(60);
+
+    // Every EXCUSE too, not only the default. `laptop: 70 -> 700` survived until this
+    // loop existed. Sweeping the values bounds a future excuse on arrival, where naming
+    // `laptop` would hold only the one excuse that exists today.
+    //
+    // The regress stops here on purpose, and it is worth saying why rather than pinning
+    // the pin. A literal inside an assertion cannot be widened invisibly: raising it is a
+    // diff that reads as "someone raised the limit". A budget the assertions merely USE is
+    // the opposite — widening it reddens nothing and looks like a tuning change. The point
+    // is not that a number becomes unwidenable, it is that widening becomes VISIBLE.
+    for (const [shape, mm] of Object.entries(OVERHANG_MM)) {
+      expect(mm, `${shape} is excused more overhang than an excuse can justify`).toBeLessThanOrEqual(100);
+    }
   });
 });
