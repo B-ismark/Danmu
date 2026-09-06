@@ -744,10 +744,7 @@ below the noise, and the constant above the signal.
 One Shuffle that refused outright now offers. Small, and it is the whole point — the
 refusal was the last candidate being discarded for a picometre.
 
-**Found in the same run and NOT fixed here, because it is row 11's:** Shuffle offers
-**0 of 18** on the `u` preset at all three sizes, and 1/6 and 2/6 on the `t` at two of
-them, against 6/6 for `rect`, `l` and `open`. That is not a tolerance question and it is
-the largest user-visible thing this sweep saw.
+**A claim made in this section was WRONG and is corrected in § 4c below.** The same run reported Shuffle offering 0 of 18 on the `u` preset and called it the largest user-visible thing it saw. The three sizes were mine and onboarding offers `u` at 6 x 5, where it offers 6/6; across the five offered sizes it is 28/30. What survives is a narrower finding about the two gates disagreeing, and it is a decision rather than a fix.
 
 **Three readers, one question, two answers.** `isCleanShuffle` uses `=== 0`; a test in
 the same lane adopts 1e-9 for the same question seventy lines from where it counts
@@ -755,6 +752,66 @@ clean shuffles with `=== 0`. A tolerance belongs beside `HARD_TERMS` as one name
 constant both read, which is `layout-rules.ts`’s rule in a different file. Not fixed
 here: it changes what Shuffle accepts, so it moves numbers the suite pins, and it wants
 the sole-cause rate first.
+
+### 4c. One shuffle gate is RELATIVE and the other is ABSOLUTE — so a room that starts faulty cannot be shuffled at all
+
+**A decision, not a defect to fix quietly, and it was found by correcting a claim of my
+own that was wrong.** `shuffleRoom` runs two gates. `newRoomFindings` is explicitly
+relative — its docblock says *"the findings this arrangement would ADD"*, and it compares
+against the room before the shuffle, because a preset that already has a finding is not
+this button's to answer for. `isCleanShuffle` is absolute: it asks every hard term to be
+at most `NEGLIGIBLE_COST`, and `breakdownBefore` appears nowhere in that file.
+
+So in a room whose geometry cannot reach zero, **every candidate fails the absolute gate**
+and `shuffleRoom` returns `null` — Shuffle is a dead button in exactly the room a user is
+most likely to press it in.
+
+**How this was found, and the correction matters more than the finding.** A sweep of mine
+reported *"Shuffle offers 0 of 18 on the `u` preset at all three sizes"* and called it the
+largest user-visible thing it had seen. **That number was an artefact of a population I
+built.** The three sizes were mine — 6x4, 5.5x3.8, 3x2.4 — and onboarding offers `u` at
+**6 x 5**. Re-run at the five sizes `tests/helpers/offered-sizes.ts` parses off the picker:
+
+| preset | size | parts | offers |
+|---|---|---|---|
+| `rect` | 6 x 4 | 12 | 6/6 |
+| `l` | 6 x 4.7 | 14 | 6/6 |
+| `t` | 5.5 x 4.7 | 16 | 4/6 |
+| `u` | 6 x 5 | 12 | **6/6** |
+| `open` | 7.5 x 5.6 | 17 | 6/6 |
+
+**28 of 30.** The `u` is fine at the size the app ships it at. This is the CLAUDE.md rule
+about a constructed population failing silently, with the sweep as the instrument: I chose
+sizes, and at 6x4 the seeded `u` already scores `access` 40 and `navigation` 451 before
+anything is shuffled, so the all-zero gate can never pass.
+
+**What survives is narrower and real.** Those sizes are reachable — editing a room's
+dimensions reseeds it, which is § G.1 row 1's own finding — so a user CAN arrive at a `u`
+that Shuffle silently refuses forever. Instrumented at the rejection, `u` 6x4 over 6
+attempts: 72 candidates rejected, **50 of them the unmoved room itself**, carrying
+`access=40.00, navigation=451.20`; the rest genuinely worse (`access` 100-120). Not one
+could reach zero.
+
+**The decision, which is the user's and not mine.** Should Shuffle offer an arrangement
+that is still faulty but **no worse than what is on screen**, the way `newRoomFindings`
+already reasons? Three answers:
+
+- **Leave it.** Shuffle promises a sound room and honestly refuses when it cannot find
+  one. The cost is a button that does nothing, with no explanation, in a bad room.
+- **Make the hard gate relative too** — accept a candidate whose hard terms are no worse
+  than the room it replaces. Symmetrical with the other gate, and it turns the dead button
+  into an offer. It also means Shuffle can hand back a room Room check still reports on,
+  which is a promise change and not a bug fix.
+- **Keep the gate and say so** — refuse, but tell the user the room has a problem Shuffle
+  cannot arrange away, which is the existing refusal sentence pointed at a real cause.
+
+**Recommendation: the third**, then the second if the user wants the offer. The refusal
+already exists and says nothing about why; naming the cause costs no promise change, and
+it is the same argument that produced the § 4b sentence work — a refusal that names its
+condition beats one that does not.
+
+**Not verified:** no browser. The 28/30 and the 72-rejection breakdown are lib-level
+measurements, restored by blob hash after instrumenting.
 
 ### 5. Is there a public Vercel production alias?
 
