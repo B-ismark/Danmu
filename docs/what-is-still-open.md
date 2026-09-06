@@ -6076,6 +6076,77 @@ wrong — which no test here can answer.
 **Not verified, and none of it is new breakage.** Every ratio above is on `main` today and
 has been for as long as the pins have. Nothing here regressed; it was found by looking.
 
+---
+
+### § 41 — the Inspector shows an internal grouping key as copy, and calls six things "Fridge" — DECISION
+
+**Found by looking, on 2026-09-06, which is the only way it could have been found** — it
+typechecks, lints and passes every test, and no assertion in the repo reads this string.
+
+`components/studio/Inspector.tsx:313` renders `{part.category} · {part.shape}` **raw**, under
+the piece name. So selecting the Radiator shows:
+
+> **Radiator**
+> Fridge · Radiator
+
+`category` is an internal key. It drives `ROLE_BY_SHAPE`, the palette defaults
+(`defaultBodyColor`) and the clearance rules — 22 of them, all single lower-case words — and
+grouping a radiator with a fridge is defensible as *machinery that stands against a wall*.
+It is not defensible as a caption.
+
+**Swept rather than sampled: 13 of the 47 catalogue rows** print a category word that appears
+in neither their label nor their shape.
+
+| shown as | the piece |
+|---|---|
+| **Fridge · radiator** | Radiator |
+| **Fridge · microwave** | Microwave |
+| **Fridge · washing machine** | Washing machine |
+| **Fridge · air purifier** | Air purifier |
+| **Fridge · chest freezer** | Chest freezer |
+| **Fridge · water dispenser** | Water dispenser |
+| Monitor · laptop | Laptop |
+| Tv · soundbar | Soundbar |
+| Chair · stool | Stool |
+| Shelf · bookshelf | Bookshelf |
+| Shelf · shoe rack | Shoe rack |
+| Shelf · tv console | TV console |
+| Other · window | Window |
+
+The bottom seven are a taxonomy a reader can follow — a bookshelf IS a shelf. **The six
+"Fridge" rows are not**, and `Other · window` says nothing at all.
+
+**The human-readable field already exists and the Inspector cannot reach it.** Every
+`PART_LIBRARY` row carries `group` — the Radiator’s is **`'Appliances'`** — and that is what
+the Library panel groups by. But `group` lives on the catalogue row and **not on
+`ScenePart`**, so this is not a one-word swap: it needs a shape-to-group lookup, or a display
+-name table, and either is a new `Partial<Record<Shape, …>>` unless it is derived from
+`PART_LIBRARY` itself. **Derive it** — a hand-kept second list of names beside the catalogue
+is the drift this repo keeps finding.
+
+**The decision, and it is a product one:** what should the second line say?
+
+| | second line becomes | cost |
+|---|---|---|
+| derive `group` from `PART_LIBRARY` by shape | *Appliances · Radiator* | a lookup; `group` is already authored for all 47 |
+| drop the category, keep the shape | *Radiator* | loses the grouping entirely, and the line then restates the name above it |
+| drop the line | — | the name is already the heading; this line may be earning nothing |
+
+**Recommend the first.** `group` is authored, human, and already user-facing in the Library,
+so it is the one of the three that adds no new source of truth. A piece detected from a
+photo has no catalogue row, so the lookup must have a fallback — and the honest fallback is
+to show nothing rather than the internal key.
+
+**There is a SECOND raw reader, found by grepping rather than by looking, and it is worse.**
+`components/studio/HoverCard.tsx:86` is `{part.name || part.category}` — so a piece the user
+has not renamed hovers under the bare key: a radiator reads **`fridge`**, lower-case and
+alone, with no shape beside it to give it context. Every other reader of `part.category` in
+the studio is a legitimate internal use (`anchorFor`, `defaultBodyColor`, `supportsDecor`,
+`restingOn`, `DimensionEditor`), so the fix has exactly two sites and both want the same
+lookup.
+
+**Not verified:** the 3D tab’s own surfaces were not swept, only `components/studio/`.
+
 ## § H.3 · the Library fan-out, and the residue it has left
 
 **Answered 2026-09-03 (fan out from the drop point, with a legality gate) and built:
