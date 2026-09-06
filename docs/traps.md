@@ -587,6 +587,15 @@ answer.** One command over those five phrases.
 → When more than one PR touches the doc, `git merge-tree --write-tree` takes textual
 conflict off the table and nothing more. **Read the merged section out of the tree it
 returns** — `git show <tree-sha>:path` — before merging. Exit 0 is not agreement.
+→ **The vocabulary grep does not find a superseded NUMBER, and that is a different search.**
+A wider measurement landing beside a narrower one leaves BOTH figures true and the section
+ambiguous — no open-state words are involved, so the sweep above is blind to it. **Grep the
+figure you are superseding**, and say which of the hits stands and why.
+*(Danmu 2026-09-06, in the PR that filed this entry: § 4c ended up carrying a 48-solve
+figure and an 840-solve figure. Same instrument — both count `solveLayout` declining for
+impossibility — at two denominators, and the tail called one superseded without naming
+WHICH of the two hits it meant. The narrower one stands: it records a seed-level decline
+pattern the wide sweep does not carry.)*
 *(Cost twice, and the second occasion refutes the first’s own prediction rule, which is why
 the entry is worded around the vocabulary rather than around merges. **2026-08-28:** `#24`
 rewrote a shared preamble’s rule while `#25` kept seven items that breached it — two PRs,
