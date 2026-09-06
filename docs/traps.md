@@ -575,6 +575,31 @@ A union merge resurrects items the other branch **deliberately deleted**. Take t
 file, re-apply your own additions, then grep for four things they removed to prove none
 came back.
 
+**Symptom: a document contradicts itself and nothing conflicted.**
+A doc states the same open question in more than one place, and answering it updates only
+the place you were looking at. No textual conflict, no failing test, no lint — and the
+standing sweep (*grep the term you removed*) cannot see it, because answering a question
+removes no term. The stale line is phrased in the vocabulary of the OPEN state — *never
+been*, *nobody has*, *neither*, *unseen*, *not yet* — which is by definition vocabulary
+your diff does not contain.
+→ After answering an open question in a doc, **grep for the question, not for your
+answer.** One command over those five phrases.
+→ When more than one PR touches the doc, `git merge-tree --write-tree` takes textual
+conflict off the table and nothing more. **Read the merged section out of the tree it
+returns** — `git show <tree-sha>:path` — before merging. Exit 0 is not agreement.
+*(Cost twice, and the second occasion refutes the first’s own prediction rule, which is why
+the entry is worded around the vocabulary rather than around merges. **2026-08-28:** `#24`
+rewrote a shared preamble’s rule while `#25` kept seven items that breached it — two PRs,
+disjoint hunks, either order merges clean and only one order contradicts. The note written
+then concluded the tell was *a PR that changes a rule or convention rather than a fact*,
+and that *a PR editing only its own facts cannot cause this.* **2026-09-06:** `#134` edited
+only facts and caused it, from a SINGLE PR — it filed a rendered measurement into § 4c of
+`visual-check.md` and left *"Neither has been rendered"* standing four paragraphs below and
+*"has never been on screen either"* sixty lines above, both live on `main`. A peer found the
+first; the grep above then found TWO more in one command — that sentence, and row 17’s
+status cell in `what-is-still-open.md`, which still read *nobody has pressed Ctrl+Z in a
+browser* after a probe had done exactly that and counted the steps.)*
+
 **Symptom: a peer's message contains a fact you were about to act on.**
 Verify the cheap ones yourself. Two peer claims held exactly and one constant was wrong;
 the check was one `grep` each time.
