@@ -1589,6 +1589,14 @@ export const HARD_TERMS: Array<keyof ScoreWeights> = ['overlap', 'outside', 'doo
  *  pins it from ABOVE and from BELOW. A constant asserted from one end is free at the
  *  other.
  *
+ *  How far above the noise, in the two directions a reader wants: 1e-9 is ~2136x the
+ *  worst residue either sweep produced (4.68e-13) and ~1.1e7 times below the smallest
+ *  real signal (`access` 0.0113). A tighter 1e-10 was carried privately by
+ *  `tests/layout-solve.test.ts` for a while, and the interval BETWEEN them was empty in
+ *  both populations — no measured value has ever fallen in `[1e-10, 1e-9)`. So the
+ *  choice between them changes no verdict on any data measured here, which is the
+ *  argument for one of them existing rather than for which one.
+ *
  *  It is exported because the alternative is the thing this repo keeps finding:
  *  several readers of one question giving two answers. `isCleanShuffle` compared with
  *  `=== 0` while a test seventy lines from its own clean count adopted 1e-9 for the
