@@ -627,20 +627,37 @@ middle — a reviewer given the old "144 to 166" would have tested neither.
 **A FIFTH refusal joined this panel and has never been on screen either.** Shuffle used
 to answer every failed press with *"Every layout it tried left something in the way …
 Press Shuffle again for a different try."* In a room that already carries a hard finding
-that press can never succeed — `isCleanShuffle` is absolute where the other shuffle gate
+that press can often fail — `isCleanShuffle` is absolute where the other shuffle gate
 is relative (§ 4c) — so the advice was wrong in exactly the room it was most likely to be
 read in. On the user's ruling it now names the room's own finding instead. Both sentences
 come out of `shuffleRefusal` in `lib/layout-shuffle.ts`, not out of the component.
 
-| Shuffle refusal | length | seen at |
+| Shuffle refusal | length | refusals / 14 presses |
 |---|---|---|
-| clean — "press again" (unchanged) | 116 | every offered size |
-| blocked, one finding | 112 | `u` 5.5×3.8, `u` 3×2.4 |
-| blocked, one finding, long title | 120 | `l` 3×2.4 |
-| blocked, two findings (the longest) | **133** | `t` 5.5×3.8 |
+| clean — "press again" (unchanged) | 116 | `rect` 6×4 **2/14**, `t` 5.5×4.7 **9/14** |
+| blocked, one finding | 112 | `u` 5.5×3.8 **14/14**, `u` 3×2.4 **14/14** |
+| blocked, two findings (the longest) | **133** | `t` 5.5×3.8 **10/14** |
+| ~~blocked, one finding, long title — 120 at `l` 3×2.4~~ | — | **0/14 — no press produces it** |
 
-Derived by calling `shuffleRefusal(shuffleBlockers(analyzeRoom(...)))` across the five
-offered sizes and nine reachable ones — **not** read off the template, which is how the
+**The column above was `seen at` and it named a population no press reaches.** It was
+derived by calling `shuffleRefusal(shuffleBlockers(analyzeRoom(...)))` — a LIB-level
+derivation that never asked whether `shuffleRoom` actually refuses. It does not at
+`l` 3×2.4: that room has one blocker and Shuffle succeeded on **14 of 14** presses, so
+the 120-character string is real code output that no user can be shown. Re-derived by
+driving `shuffleRoom` itself over ten rooms × 14 attempts, and the browser run agrees —
+133 at `t` 5.5×3.8 and 116 at `rect` 6×4, both rendered on `4cef13a`.
+
+**Having a blocker and refusing are not the same thing, and this row asserted they were.**
+The sentence above said a press "can never succeed" in a room carrying a hard finding.
+`l` 3×2.4 refutes it: `shuffleBlockers` reads `analyzeRoom`, `isCleanShuffle` reads
+`breakdownAfter`, and the two can disagree about the same room. The refusal copy is
+unaffected — it only renders when `shuffleRoom` returns null, and then it names the cause
+correctly — but the reachability claim was wrong.
+
+Still not produced by anything, stated rather than implied: the **169**-character
+both-terms string, which no solve in either derivation has emitted.
+
+The lengths were **not** read off the template, which is how the
 first version of this row was wrong twice over. It quoted 126 and 145 from a hand-typed
 example whose finding title happened to be a noun phrase, and the template it was
 measuring spliced the title into *"this one already has …"*, which produced *"this one
