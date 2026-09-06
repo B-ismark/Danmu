@@ -473,6 +473,25 @@ part worth remembering, because it costs more than the lost edits did.)*
 
 ---
 
+**Symptom: you audit line endings on Windows and every blob reports CRLF.**
+The pipe, not the blob. Git Bash / MSYS does text-mode translation between processes, so a
+**pure-LF object arrives at `grep` carrying CR on every line** — 648 of 648, which reads as a
+definite finding rather than a broken tool. `od`, `wc -c` and `cat -A` are all suspect the
+same way.
+→ **Read the bytes with no shell in the path** — `execFileSync` into a Buffer, count 13s and
+10s. A line-ending audit is precisely when a CR-adding pipe is fatal, because the thing being
+measured is the thing the pipe fabricates, and it fails in the direction that invents a
+catastrophe rather than hiding one.
+→ The companion, which is the same wrong target one layer up: **a script that detects EOL from
+the working copy and writes it back is aiming at the wrong artifact** whenever the blob differs
+from the checkout. Every such script run on 2026-09-06 was harmless only because `autocrlf`
+normalises on add. That is luck, not design — decide against the BLOB.
+*(Cost: 2026-09-06, verifying a peer’s LF all-clear at wrap. The reading said `main` was
+entirely CRLF and that the peer had it backwards. The tell was not suspicion but a
+CONTRADICTION: git had warned hours earlier that "in the working copy of `docs/traps.md`, LF
+will be replaced by CRLF", which only makes sense if the stored form is LF. **Two readings
+disagreed, so one of them was the instrument** — and on Windows that is the better bet. Reading
+the blobs as bytes gave CR:0 on all four files. The peer was right.)*
 ## Numbers
 
 **Symptom: you are about to quote a number from earlier in the session.**
