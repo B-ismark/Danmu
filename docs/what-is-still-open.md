@@ -1229,31 +1229,32 @@ the user went and looked.
     NOT in that set, because no path marks a table lamp round today and adding it would be
     a new decision rather than a reconciliation.
 
-    > **BUILT, and the paragraph above is superseded — but read the last sentence of it
-    > again first.** `ROUND_SHAPES` is on `main` (§ 32 below carries the work) and it holds
-    > **eight** shapes, not the four proposed here: `fan`, `fan-standing`, `lamp-floor`,
-    > `lamp-table`, `lamp-pendant`, `plant`, `stool`, `cylinder`.
+    > **BUILT, and the paragraph above is SUPERSEDED — resolved by the user 2026-09-06.**
+    > `ROUND_SHAPES` is on `main` (§ 32 carries the work) and holds **eight** shapes, not
+    > the four proposed here: `fan`, `fan-standing`, `lamp-floor`, `lamp-table`,
+    > `lamp-pendant`, `plant`, `stool`, `cylinder`.
     >
-    > **`lamp-table` is in it.** This entry says in as many words that it should not be,
-    > that adding it "would be a new decision rather than a reconciliation", and that a
-    > change to what a piece LOOKS like is the user's call. Three shapes beyond the
-    > original four joined the same way. Nothing in § 32 records that decision being put to
-    > anyone; it reads as a set assembled on the merits, which is exactly the move this
-    > entry was written to prevent.
+    > `lamp-table` is in it, and the paragraph above says in as many words that it should
+    > not be. That contradiction was surfaced rather than fixed, because "it changes what a
+    > piece LOOKS like" makes it the user's call and not an implementer's.
+    > **Put to the user, who ruled: a bedside lamp IS round. The set stands as it is, all
+    > eight, and the paragraph above is the thing that is out of date.** No code change
+    > follows; `lamp-table`, `fan-standing`, `stool` and `cylinder` keep their membership.
     >
-    > This is **not** a defect in `fix/seeded-flags-and-wardrobe-doors`, and it predates it
-    > — that branch only made the SEEDER derive the flag it was hand-writing, which is what
-    > made the reversal visible on screen (the `u` starter's bedside lamp draws as an
-    > `<ellipse>` now; on `main` before it, a `<rect>`). Recorded here rather than quietly
-    > fixed in either direction, because both directions are product decisions:
-    > **is a bedside lamp round?** If yes, this paragraph is simply out of date and should
-    > be deleted. If no, `lamp-table` comes out of `ROUND_SHAPES` and the plan draws it
-    > square again. It is one line either way; what it must not be is settled by whoever
-    > next reads only one of these two paragraphs.
+    > Two things worth keeping now that it is settled. It was **not** a defect in
+    > `fix/seeded-flags-and-wardrobe-doors` and predates it — that branch only made the
+    > SEEDER derive the flag it had been hand-writing, which is what put the reversal on
+    > screen (the `u` starter's bedside lamp draws as an `<ellipse>`; on `main` before it,
+    > a `<rect>`). And **the reversal itself was never recorded anywhere**: a set assembled
+    > on the merits, in a file whose own entry had reserved the question. The tell was the
+    > COUNT — four proposed, eight shipped — which is the same tell as § 32's "four doors"
+    > against eight call sites, in the same pair of commits. **Where a decision fixes a
+    > SET, the count is the cheapest thing that can go stale, and the only one a reader
+    > can check without re-deriving the reasoning.**
 
     **Committed:** the predicate is written and shipped — see the block above and § 32.
     What was true when the following was written, and is kept because the reasoning still
-    holds for anything ADDED to the set: the browser
+    holds for anything ADDED to the set in future: the browser
     measurement above is real.
 
 16. **A rider floats after a reload — ANSWERED: derive at read time, write nothing. BUILT
