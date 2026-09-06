@@ -1567,6 +1567,34 @@ export function openRoutes(
  *  sixteen hundred evaluations, and only for pieces already inside `SNAP_TOL`. */
 export const HARD_TERMS: Array<keyof ScoreWeights> = ['overlap', 'outside', 'door', 'access', 'navigation'];
 
+/** The cost below which a hard term is float residue rather than a fault.
+ *
+ *  **A hard term is not asked whether it is zero. It is asked whether it is
+ *  negligible**, and those are different questions because `outside` is continuous:
+ *  the containment term takes `Math.max(outsideShare(...), deficit / radius)`, and
+ *  that second arm is a ratio of two floats. A piece the settle pass put back inside
+ *  the polygon can land a fraction of a picometre past the boundary and score a
+ *  genuinely non-zero cost for it. Every other hard term is a sum of sampled or
+ *  quantised quantities and does not do this — which is why this bound is not a
+ *  general slackening of the veto.
+ *
+ *  **Measured, not chosen.** 90 shuffle attempts over five presets x three sizes,
+ *  with every rejected candidate's five hard terms recorded: 826 rejections, of
+ *  which **17 carried a value that was non-zero and below 1e-9, and 5 were rejected
+ *  with NO other fault at all** — `outside` at 4.63e-14, 3.02e-14 and 2.42e-13, and
+ *  every other term exactly 0. A separate 360-solve sweep put the smallest non-zero
+ *  any OTHER hard term reached at `access` = 0.0113. So there are eleven orders of
+ *  magnitude between the noise and the smallest real signal, and this bound sits
+ *  inside that gap with room at both ends — which is why `tests/layout-shuffle.test.ts`
+ *  pins it from ABOVE and from BELOW. A constant asserted from one end is free at the
+ *  other.
+ *
+ *  It is exported because the alternative is the thing this repo keeps finding:
+ *  several readers of one question giving two answers. `isCleanShuffle` compared with
+ *  `=== 0` while a test seventy lines from its own clean count adopted 1e-9 for the
+ *  same question, and a baseline moved by the difference. */
+export const NEGLIGIBLE_COST = 1e-9;
+
 /** The hard terms, kept APART rather than added up.
  *
  *  A sum was the first version and it quietly gave away the thing the veto is for:

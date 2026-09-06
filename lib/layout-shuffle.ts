@@ -105,6 +105,7 @@ import {
   lockedForSolve,
   makeRng,
   movableFor,
+  NEGLIGIBLE_COST,
   randomizeStart,
   solveLayout,
   LAYOUT_SIMILAR_M,
@@ -218,10 +219,19 @@ export type ShuffleOutcome = {
  *
  *  **This is necessary and not sufficient**, which is the whole reason
  *  `newRoomFindings` exists beside it. Asserting only this in a test is asserting
- *  the filter against its own definition — see the note on `roomChecks` below. */
+ *  the filter against its own definition — see the note on `roomChecks` below.
+ *
+ *  **It asks NEGLIGIBLE, not zero, and that is a fix rather than a loosening.** It
+ *  read `=== 0` on five WEIGHTED cost terms, and `outside` is continuous — see
+ *  `NEGLIGIBLE_COST`, which carries the measurement. Measured through this very
+ *  loop: of 826 candidates it rejected over 90 attempts, **5 had no fault except an
+ *  `outside` in the 1e-14 range**, and each of those was an arrangement clean by any
+ *  tolerance a person would name. A candidate discarded for a picometre is one the
+ *  user is not offered, and when it is the last one standing the whole Shuffle
+ *  refuses. */
 export function isCleanShuffle(result: SolveResult): boolean {
   if (result.moved.length === 0) return false;
-  return HARD_TERMS.every((term) => result.breakdownAfter[term] === 0);
+  return HARD_TERMS.every((term) => (result.breakdownAfter[term] as number) <= NEGLIGIBLE_COST);
 }
 
 /** Apply a solved arrangement to the parts, so the room can be asked about it.

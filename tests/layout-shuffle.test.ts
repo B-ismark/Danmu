@@ -5,10 +5,20 @@ import {
   movableFor,
   randomizeStart,
   solveLayout,
+  NEGLIGIBLE_COST,
+  type SolveResult,
 } from '@/lib/layout-solve';
+import { DEFAULT_WEIGHTS } from '@/lib/layout-score';
 import { isCleanShuffle, newRoomFindings, shuffleRoom } from '@/lib/layout-shuffle';
 import { defaultScene } from '@/lib/scene-spec';
 import { footprintForLayout, pointInFootprint, type LayoutId } from '@/lib/footprint';
+
+/** Every cost term at zero, derived from the weight table so a new term cannot leave
+ *  this fixture one key short of the type it claims to be. */
+const ZERO_BREAKDOWN = {
+  ...(Object.fromEntries(Object.keys(DEFAULT_WEIGHTS).map((k) => [k, 0])) as Record<string, number>),
+  total: 0,
+} as unknown as SolveResult['breakdownAfter'];
 
 // Shuffle — a different arrangement, as distinct from a repair.
 //
@@ -202,6 +212,46 @@ describe("solveLayout mode: 'shuffle'", () => {
 });
 
 describe('shuffleRoom — the offer, not the search', () => {
+  it('a hard term is judged NEGLIGIBLE, not zero — and the bound is pinned at both ends', () => {
+    // **Why this is not a loosening, and why it is a pair.** `isCleanShuffle` compared
+    // five WEIGHTED cost terms with `=== 0`. `outside` is the one that is continuous —
+    // its containment arm is `deficit / radius`, a ratio of two floats — so a piece the
+    // settle pass put back inside the polygon can land a fraction of a picometre past
+    // the boundary and score for it. Measured through `shuffleRoom`'s own loop over 90
+    // attempts: of 826 rejected candidates, **5 had no fault except an `outside` in the
+    // 1e-14 range**. Each was an arrangement clean by any tolerance a person would name,
+    // and a candidate discarded for a picometre is one the user is not offered.
+    //
+    // A guard written against the wrong constant refuses every legal value, so the
+    // accepting half and the REFUSING half are asserted together. Without the second,
+    // `() => true` passes.
+    const at = (outside: number, overlap = 0): SolveResult =>
+      ({
+        moved: ['a'],
+        breakdownAfter: { ...ZERO_BREAKDOWN, outside, overlap },
+      } as unknown as SolveResult);
+
+    expect(isCleanShuffle(at(0)), 'an exactly-clean candidate').toBe(true);
+    expect(
+      isCleanShuffle(at(4.681111291435601e-13)),
+      'the largest sub-epsilon outside any measured shuffle produced',
+    ).toBe(true);
+    expect(isCleanShuffle(at(NEGLIGIBLE_COST)), 'exactly at the bound is negligible').toBe(true);
+    // The refusing half, one ulp-ish above the bound and then at a real signal.
+    expect(isCleanShuffle(at(NEGLIGIBLE_COST * 1.0001)), 'just past the bound is a fault').toBe(false);
+    expect(isCleanShuffle(at(0.0113)), 'the smallest real signal any hard term reached').toBe(false);
+    expect(isCleanShuffle(at(0, 0.0113)), 'a real fault on a term that is never noisy').toBe(false);
+    // A candidate that moved nothing is still refused, tolerance or not.
+    expect(isCleanShuffle({ moved: [], breakdownAfter: ZERO_BREAKDOWN } as unknown as SolveResult)).toBe(false);
+
+    // **Both ends of the constant.** Asserted from below only, it would be free to
+    // shrink back to something the measured noise clears; from above only, free to grow
+    // until it swallows a real fault. The two numbers are the measured ones.
+    expect(NEGLIGIBLE_COST, 'must clear the worst float residue any sweep produced').toBeGreaterThan(
+      4.681111291435601e-13,
+    );
+    expect(NEGLIGIBLE_COST, 'must stay far below the smallest real signal measured').toBeLessThan(0.0113);
+  });
   it('a single solve is NOT reliably clean, which is why the pipeline exists', { timeout: 60_000 }, () => {
     // The negative control for the test below, and the finding the filter answers.
     // Without it, "shuffleRoom returns a clean room" reads as a property of

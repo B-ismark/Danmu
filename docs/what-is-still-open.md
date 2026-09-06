@@ -707,7 +707,7 @@ was lost to a follow-up run that matched nothing, and it was **never reproduced*
 on the identical tree afterwards, at 72 s and 76 s against a 48 s baseline. An unidentified
 failure that was never reproduced is not a failure explained.
 
-### 4b. `isCleanShuffle` asks for EXACTLY zero, and floating point does not oblige
+### 4b. ~~`isCleanShuffle` asks for EXACTLY zero~~ → **FIXED 2026-09-06, and the sole-cause rate is measured**
 
 `lib/layout-shuffle.ts:224` is `HARD_TERMS.every((term) => result.breakdownAfter[term]
 === 0)`, and `:350` burns any candidate that fails it. Exact equality on five WEIGHTED
@@ -723,13 +723,31 @@ Shuffle refuses a room that is clean by any tolerance anyone would name.
 reached in the same population was `access` at 0.0113 — twelve orders of magnitude away,
 so this is `outside`’s arithmetic and not a general property of the breakdown.
 
-**What that population does NOT show, and the distinction is the whole decision:** in
-all four of those rows another hard term was also non-zero, so none of them was
-rejected *solely* for the sub-epsilon value. The `footprint` lane reports a case where
-it was — one seed whose only non-zero term was `outside` at 2.025e-13 — in a different
-fixture, with the scatter `shuffleRoom` applies and this probe does not. **That case is
-theirs and is not reproduced here.** So the mechanism is confirmed and its rate as a
-sole cause is unmeasured.
+**The sole-cause rate is now measured, and the other lane's case reproduces.** The gap
+in the first sweep was that it called `solveLayout` directly and so never saw the scatter
+`shuffleRoom` applies. Re-run THROUGH that loop, instrumented at the rejection itself and
+restored by blob hash: **90 attempts over five presets x three sizes, 826 candidates
+rejected, 17 carrying a value non-zero and below 1e-9, and 5 rejected with NO other fault
+at all** — `outside` at 4.63e-14, 3.02e-14 and 2.42e-13, every other term exactly 0.
+
+**Fixed:** `NEGLIGIBLE_COST = 1e-9` is exported from `lib/layout-solve.ts` beside
+`HARD_TERMS`, because it is a fact about how that list is read, and `isCleanShuffle` asks
+`<= NEGLIGIBLE_COST` rather than `=== 0`. It sits eleven orders of magnitude above the
+worst measured residue and below the smallest real signal any other hard term reached
+(`access` 0.0113), and `tests/layout-shuffle.test.ts` pins it from BOTH ends — a constant
+asserted from one end is free at the other. The guard is asserted as a PAIR, accepting and
+refusing, because a guard written against the wrong constant refuses every legal value.
+Four mutations killed it: the old `=== 0`, a guard that accepts everything, the constant
+below the noise, and the constant above the signal.
+
+**Effect size, measured the same way:** the same 90 attempts go from **58 offers to 59**.
+One Shuffle that refused outright now offers. Small, and it is the whole point — the
+refusal was the last candidate being discarded for a picometre.
+
+**Found in the same run and NOT fixed here, because it is row 11's:** Shuffle offers
+**0 of 18** on the `u` preset at all three sizes, and 1/6 and 2/6 on the `t` at two of
+them, against 6/6 for `rect`, `l` and `open`. That is not a tolerance question and it is
+the largest user-visible thing this sweep saw.
 
 **Three readers, one question, two answers.** `isCleanShuffle` uses `=== 0`; a test in
 the same lane adopts 1e-9 for the same question seventy lines from where it counts
