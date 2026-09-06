@@ -5,11 +5,15 @@ import {
   HARD_TERMS,
   impossibility,
   IMPOSSIBLE_TERMS,
+  declinedTermsFor,
+  impossibleClause,
+  impossibleTermsWorse,
   lockedForSolve,
   makeRng,
   openRoutes,
   solveLayout,
   type Candidate,
+  type SolveDecline,
 } from '@/lib/layout-solve';
 import {
   costBreakdown,
@@ -54,6 +58,17 @@ const cand = (total: number, b: Partial<CostBreakdown> = {}): Candidate => ({
   breakdown: { ...ZERO, ...b, total },
 });
 
+/** The other side of the partition, derived once.
+ *
+ *  `IMPOSSIBLE_TERMS` is `as const`, so `includes` narrows with it and refuses a wider
+ *  `keyof ScoreWeights`; the widening cast is the price of that, and it is paid here
+ *  rather than at each filter. `lib/layout-solve.ts` used to export an `isImpossibleTerm`
+ *  type guard for the same reason, with a docblock arguing for production consumers that
+ *  never existed — every reader there walks the tuple itself. The cast moved to the only
+ *  file that needs it; see the note on `ImpossibleTerm` for why the guard is not coming
+ *  back. */
+const RECOVERABLE = HARD_TERMS.filter((t) => !(IMPOSSIBLE_TERMS as readonly string[]).includes(t));
+
 describe('IMPOSSIBLE_TERMS — the split is by kind, not by severity', () => {
   it('names the two terms that describe a room that cannot exist', () => {
     expect([...IMPOSSIBLE_TERMS].sort()).toEqual(['outside', 'overlap']);
@@ -71,12 +86,17 @@ describe('IMPOSSIBLE_TERMS — the split is by kind, not by severity', () => {
     // absent from every list, so it silently becomes recoverable and `Fix` writes it
     // to the store. That is CLAUDE.md rule 3's shape exactly — absence inherits a
     // default, and absence is never the defect.
-    const recoverable = HARD_TERMS.filter((t) => !IMPOSSIBLE_TERMS.includes(t));
+    const recoverable = RECOVERABLE;
     expect(recoverable, 'a hard term is either impossible or priced, and door is priced')
       .toContain('door');
-    for (const term of recoverable) {
-      expect(IMPOSSIBLE_TERMS, term + ' is recoverable and must stay a price').not.toContain(term);
-    }
+    // The loop that used to stand here — `for (const term of recoverable) expect(
+    // IMPOSSIBLE_TERMS).not.toContain(term)` — is deleted. `RECOVERABLE` is
+    // `HARD_TERMS.filter(t => !IMPOSSIBLE_TERMS.includes(t))`, so "no member of H \ I
+    // is in I" is the definition of the filter and no change to either list can make
+    // it false: both sides move together. It is the same tautology the comment at the
+    // NEXT test names for the union assertion, and it sat here unremarked because it
+    // reads like a second, independent check. `toContain('door')` is the assertion in
+    // this test that can actually go red — it names a member by hand.
   });
 
   it('partitions HARD_TERMS — and a NEW hard term has to be assigned a side by hand', () => {
@@ -94,7 +114,7 @@ describe('IMPOSSIBLE_TERMS — the split is by kind, not by severity', () => {
     // decision: is it a room that cannot exist, or a room that is merely bad?
     expect([...HARD_TERMS].sort()).toEqual(['access', 'door', 'navigation', 'outside', 'overlap']);
 
-    const recoverable = HARD_TERMS.filter((t) => !IMPOSSIBLE_TERMS.includes(t));
+    const recoverable = RECOVERABLE;
     expect([...IMPOSSIBLE_TERMS, ...recoverable].sort()).toEqual([...HARD_TERMS].sort());
     for (const term of IMPOSSIBLE_TERMS) expect(HARD_TERMS).toContain(term);
     // Non-empty in both directions: an emptied `IMPOSSIBLE_TERMS` makes the `for` above
@@ -468,4 +488,194 @@ describe('Candidate.breakdown', () => {
         .toBeCloseTo(DEFAULT_WEIGHTS.outside, 6);
     }
   }, 300_000);
+});
+
+// ─── A refusal that names the condition, not both conditions ────────────────
+//
+// `declined === 'impossible'` told the UI that something the room cannot contain had
+// been introduced, and nothing told it WHICH. So `RoomTools` said both, in four places:
+// "put a piece through a wall or inside another one". A disjunction is true and it is
+// not an answer — half of it is always false and the user cannot tell which half, which
+// is the difference between "unlock the wardrobe" and "this room is too small".
+
+describe('SolveResult.declinedTerms — which condition, not both conditions', () => {
+  const B = (over: Partial<CostBreakdown>): CostBreakdown => ({ ...ZERO, ...over });
+  const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8];
+
+  it('names only the terms that actually rose', () => {
+    expect(impossibleTermsWorse(B({ overlap: 1, outside: 1 }), B({ overlap: 2, outside: 1 }))).toEqual(['overlap']);
+    expect(impossibleTermsWorse(B({ overlap: 1, outside: 1 }), B({ overlap: 1, outside: 2 }))).toEqual(['outside']);
+    expect(impossibleTermsWorse(B({ overlap: 1, outside: 1 }), B({ overlap: 2, outside: 2 }))).toEqual([
+      'overlap',
+      'outside',
+    ]);
+    // The negative control, and it is the one that fails if the comparison is inverted:
+    // an answer that IMPROVED both names neither. Without it, `after[k] < before[k]`
+    // passes every assertion above with the arguments swapped.
+    expect(impossibleTermsWorse(B({ overlap: 2, outside: 2 }), B({ overlap: 1, outside: 1 }))).toEqual([]);
+    expect(impossibleTermsWorse(B({ overlap: 1, outside: 1 }), B({ overlap: 1, outside: 1 }))).toEqual([]);
+  });
+
+  it('ignores a hard term that is not one of the two', () => {
+    // `door`, `access` and `navigation` are rooms that exist and are bad. A refusal is
+    // never about them — see the partition above — so a door getting worse must not put
+    // a word in a sentence about impossibility.
+    expect(impossibleTermsWorse(B({ door: 1 }), B({ door: 900 }))).toEqual([]);
+  });
+
+  it('cannot be empty when `declineFor` says impossible, and that is arithmetic', () => {
+    // The invariant the sentence rests on, and the reason `impossibleTermsWorse` uses a
+    // plain `>` with no epsilon of its own: `declineFor` fires on the SUM rising, and a
+    // sum of two terms cannot rise unless one strictly does. A per-term epsilon breaks
+    // it — the pair below raises the sum past `declineFor`'s 1e-6 while neither term
+    // moves 1e-6, so a `> before[k] + 1e-6` filter hands back a refusal nothing can name.
+    const before = B({ overlap: 1, outside: 1 });
+    const after = B({ overlap: 1 + 9e-7, outside: 1 + 9e-7 });
+    expect(declineFor(impossibility(before), impossibility(after), 10, 9, false)).toBe('impossible');
+    expect(impossibleTermsWorse(before, after).length, 'a refusal with no condition to name').toBeGreaterThan(0);
+  });
+
+  it('is empty unless the refusal is ABOUT impossibility', () => {
+    // The contract, and it needed extracting before it could be asserted: inside
+    // `solveLayout` the gate on `declined === 'impossible'` was invisible, because every
+    // decline reverts identically and the only reader is one branch of one toast.
+    // Relaxing it to `declined ?` survived the whole battery.
+    //
+    // The fixture is a `no-gain` refusal in which a hard term nevertheless rose — the
+    // state the relaxed version fills and the correct one does not. It is reachable:
+    // `declineFor` forgives a rise under 1e-6 as float noise, so an answer can be
+    // fractionally more impossible and still be refused for being dearer.
+    const before = B({ overlap: 1, outside: 1 });
+    const after = B({ overlap: 1 + 5e-7, outside: 1 });
+    expect(declineFor(impossibility(before), impossibility(after), 10, 11, false)).toBe('no-gain');
+    expect(declinedTermsFor('no-gain', before, after), 'a no-gain refusal named a condition').toEqual([]);
+    expect(declinedTermsFor(null, before, after), 'an answer that was not refused named one').toEqual([]);
+    // …and the accepting half, or a function that returned `[]` for everything would pass.
+    expect(declinedTermsFor('impossible', before, after)).toEqual(['overlap']);
+  });
+
+  it('is a sentence fragment that reads for one condition or two', () => {
+    expect(impossibleClause(['outside'])).toBe('through a wall');
+    expect(impossibleClause(['overlap'])).toBe('inside another one');
+    expect(impossibleClause(['overlap', 'outside'])).toBe('inside another one or through a wall');
+    // Order in, order out: the clause is built from `IMPOSSIBLE_TERMS` rather than from
+    // the caller's array, so the same pair cannot produce two sentences.
+    expect(impossibleClause(['outside', 'overlap'])).toBe(impossibleClause(['overlap', 'outside']));
+    // The unreachable arm, kept because a sentence with a hole in it is the worse of the
+    // two failures. Naming both is exactly the honest thing to say when the condition is
+    // unknown — which is what the whole app used to say, always.
+    //
+    // This used to read `'through a wall or inside another piece'` — the REVERSE of the
+    // line four above, because the fallback hand-typed its own copy of "both conditions"
+    // seven lines from the branch that derives it. Each spelling had a test, neither test
+    // could see the other, and the function whose entire job is to decide how the
+    // conditions are named named them two ways.
+    //
+    // **What makes that unrepeatable is the CONSTRUCTION, not the assertion below it.**
+    // The empty arm is now `return impossibleClause(IMPOSSIBLE_TERMS)` — the same walk
+    // over the same list through the same phrase table — so the two sides are one
+    // expression and the identity holds by definition. No mutation reddens the identity
+    // without reddening the literal on the line above it first. It is kept as a witness
+    // to the intent, and it is honest to call it redundant: an earlier version of this
+    // comment claimed the assertion was what closed the drift, which credited a line
+    // that cannot fail with work the recursion does.
+    //
+    // **Measured rather than argued, and by someone who set out to refute it.** A peer
+    // reintroduced the hand-typed reverse fallback and found the identity could not be
+    // reddened alone: the LITERAL fired and the identity below it never ran. So the two
+    // lines co-fire and only their order decides which one speaks — which is why the
+    // identity is first. Both report the same pair of values, because the literal's
+    // expected string IS the both-terms clause; the identity additionally carries the
+    // sentence naming the invariant, and the literal carries no message at all. A first
+    // version of this note claimed the opposite and was corrected by the measurement.
+    //
+    // It stays for the same reason it cannot fail alone: it is ENTAILED by the both-terms
+    // literal further up and the empty-fallback literal below, in every position rather
+    // than only this one, so it is a witness to the intent and never a gate. The line a
+    // future edit that hand-types the fallback back would have to delete on purpose.
+    expect(
+      impossibleClause([]),
+      'the empty fallback and the both-terms clause are one sentence, not two',
+    ).toBe(impossibleClause(['overlap', 'outside']));
+    expect(impossibleClause([])).toBe('inside another one or through a wall');
+  });
+
+  it('is filled on real impossible declines and empty on every other outcome', () => {
+    // The wiring, which no unit input can prove: `declinedTerms` is computed BEFORE the
+    // revert, and the revert sets `breakdownAfter = breakdownBefore`. Compute it one line
+    // later — or in the caller, from the two breakdowns on the result — and it is empty
+    // on every refusal there has ever been, silently, with the sentence falling back to
+    // the disjunction this replaces.
+    const parts = defaultScene('u', 6, 4);
+    const poly = footprintForLayout('u', 6, 4);
+    /** Every outcome counted, including the ones that turn out not to happen.
+     *
+     *  The `else` arm below carries the "empty on every other outcome" half of this
+     *  test's NAME, and nothing here asserted that it ever ran: eight impossible
+     *  refusals satisfy `impossible > 0` and leave that half measuring an empty set,
+     *  green. So both sides are counted and both are asserted non-empty.
+     *
+     *  The key type is `SolveDecline | 'applied'` — **derived, not the three literals
+     *  typed out**, which is what makes a THIRD refusal reason a typecheck error here
+     *  rather than a silently uncounted seed. A census whose rows appear on demand
+     *  always sums to `SEEDS.length` and can never notice an outcome nobody decided
+     *  about. Two things about that guard are worth stating rather than assuming:
+     *  spelling the keys as literals would have compiled a new union member into an
+     *  index error *here* but left the initializer happy, while deriving errors at both
+     *  ends; and **`vitest` does not typecheck**, so `pnpm test` alone would never see
+     *  it — this row is only guarded by `pnpm typecheck`.
+     *
+     *  And the zeros are printed rather than skipped: `no-gain` is 0 over these eight
+     *  seeds, which is precisely the fact the next reader needs, because it says the
+     *  unit tests above are that arm's only cover. The assertion below is satisfied by
+     *  `applied` alone, so it proves the else arm RAN and not that the `no-gain` arm
+     *  did. */
+    const census: Record<SolveDecline | 'applied', number> = {
+      impossible: 0,
+      'no-gain': 0,
+      applied: 0,
+    };
+    let singletons = 0;
+    for (const seed of SEEDS) {
+      const r = solveLayout(parts, poly, lockedForSolve(parts, {}, null), { seed });
+      census[r.declined ?? 'applied']++;
+      if (r.declined === 'impossible') {
+        if (r.declinedTerms.length === 1) singletons++;
+        expect(r.declinedTerms.length, `seed ${seed} refused for impossibility and named nothing`).toBeGreaterThan(0);
+        // No `expect(IMPOSSIBLE_TERMS).toContain(t)` here, and it was deleted rather
+        // than never written. `declinedTerms` IS `IMPOSSIBLE_TERMS.filter(...)`, so the
+        // container is the source of the thing contained and the claim holds under
+        // every mutation of the comparison — `<`, `>=`, `!==` — and under emptying or
+        // reordering the list. It fired four times per run and asserted nothing. The
+        // predecessor spelling, `expect(isImpossibleTerm(t)).toBe(true)`, was the same
+        // tautology wearing a type guard.
+        console.log(`  seed ${seed}  impossible  terms=[${r.declinedTerms.join(',')}]  -> "${impossibleClause(r.declinedTerms)}"`);
+      } else {
+        expect(r.declinedTerms, `seed ${seed} declined ${r.declined} and named a condition`).toEqual([]);
+      }
+    }
+    const impossible = census.impossible;
+    console.log(
+      `  census over ${SEEDS.length} seeds: ` +
+        Object.entries(census)
+          .map(([k, v]) => `${k}=${v}`)
+          .join('  '),
+    );
+    expect(impossible, 'no solve took the impossibility arm, so the filled half proved nothing').toBeGreaterThan(0);
+    expect(
+      census['no-gain'] + census.applied,
+      'every seed refused for impossibility, so the empty-on-every-other-outcome half never ran',
+    ).toBeGreaterThan(0);
+    // **The claim the whole change rests on, asserted rather than argued.** If every real
+    // refusal named BOTH conditions, this branch would be a more expensive way to print
+    // the disjunction it replaces, and every assertion above would still pass. Measured
+    // over these seeds on `u` 6 × 4: every impossible refusal names exactly one — so the
+    // disjunction was never once the true answer. The row is printed above, on a passing
+    // run, because a rate that drifts back toward both-terms is the signal that this
+    // feature has quietly stopped earning its place, and a diff cannot show that.
+    expect(
+      singletons,
+      `${impossible} impossible refusals and ${singletons} named one condition — a clause that always names both is the disjunction with extra steps`,
+    ).toBe(impossible);
+  }, 600_000);
 });
