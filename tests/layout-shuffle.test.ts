@@ -324,13 +324,13 @@ describe('shuffleRoom — the offer, not the search', () => {
     // away is the defect this repo keeps finding — so the assertion is that it moves
     // with the list, not that it equals 1.
     const issue = (title: string) => ({ title }) as unknown as Parameters<typeof shuffleRefusal>[0][number];
-    expect(shuffleRefusal([issue('Bed hard to get into')]).message).not.toContain('more like it');
+    expect(shuffleRefusal([issue('Bed hard to get into')]).message).not.toContain(' more,');
     expect(
       shuffleRefusal([issue('Bed hard to get into'), issue('Door blocked')]).message,
-    ).toContain('and 1 more like it');
+    ).toContain('and 1 more,');
     expect(
       shuffleRefusal([issue('A'), issue('B'), issue('C'), issue('D')]).message,
-    ).toContain('and 3 more like it');
+    ).toContain('and 3 more,');
     // The empty list is the OTHER sentence, and it must not fall through to this one:
     // forcing that branch open crashes on `blockers[0]`, so the guard is load-bearing.
     expect(shuffleRefusal([]).title).toBe('No new arrangement this time');

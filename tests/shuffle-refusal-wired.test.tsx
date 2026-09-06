@@ -108,7 +108,10 @@ describe('the shuffle refusal says which of the two "no" it is', () => {
 
     const said = pressShuffle();
     expect(said.title).toBe('Shuffle cannot arrange around this');
-    expect(said.message).toContain(blockers[0].title.toLowerCase());
+    // The title VERBATIM, not lowercased. Half of these are sentences rather than
+    // noun phrases — `access` reads "you can't walk to everything" — so the sentence
+    // quotes the report instead of splicing it, and quoting keeps the casing.
+    expect(said.message).toContain(`“${blockers[0].title}”`);
     expect(said.message).toContain('Try Fix first');
     // The negative half, and it carries the row: the shipped sentence contains this,
     // so a call site that stopped asking the room passes every positive assertion.

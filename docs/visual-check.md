@@ -558,6 +558,35 @@ pattern is unchanged and only the wording moved.
 
 The range across the four sites is **93 to 169** characters. Check the two ENDS, not a
 middle — a reviewer given the old "144 to 166" would have tested neither.
+
+**A FIFTH refusal joined this panel and has never been on screen either.** Shuffle used
+to answer every failed press with *"Every layout it tried left something in the way …
+Press Shuffle again for a different try."* In a room that already carries a hard finding
+that press can never succeed — `isCleanShuffle` is absolute where the other shuffle gate
+is relative (§ 4c) — so the advice was wrong in exactly the room it was most likely to be
+read in. On the user's ruling it now names the room's own finding instead. Both sentences
+come out of `shuffleRefusal` in `lib/layout-shuffle.ts`, not out of the component.
+
+| Shuffle refusal | length | seen at |
+|---|---|---|
+| clean — "press again" (unchanged) | 116 | every offered size |
+| blocked, one finding | 112 | `u` 5.5×3.8, `u` 3×2.4 |
+| blocked, one finding, long title | 120 | `l` 3×2.4 |
+| blocked, two findings (the longest) | **133** | `t` 5.5×3.8 |
+
+Derived by calling `shuffleRefusal(shuffleBlockers(analyzeRoom(...)))` across the five
+offered sizes and nine reachable ones — **not** read off the template, which is how the
+first version of this row was wrong twice over. It quoted 126 and 145 from a hand-typed
+example whose finding title happened to be a noun phrase, and the template it was
+measuring spliced the title into *"this one already has …"*, which produced *"this one
+already has you can't walk to everything"* on every `access` finding. Deriving the string
+from real rooms found the broken grammar; reading the template had not. The finding is
+quoted verbatim now, and the longest form came DOWN from 155 to 133.
+
+**What to look for:** open a `t` at 5.5 × 3.8 (Room panel, type the size), press Shuffle,
+and read the toast — the quoted finding must match a line in Room check word for word,
+and there must be no "press again" in it. Then a `rect` at 6 × 4, where the old sentence
+is still the right one. Neither has been rendered.
 `overlap` alone has never been produced by any solve measured so far — 48 solves across
 three room shapes, every refusal `outside` — so *"inside another one"* as a standalone
 clause is unseen, and the 169-character both-terms string has never been produced at all.

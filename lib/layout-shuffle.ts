@@ -471,9 +471,24 @@ export function shuffleBlockers(issues: readonly ClearanceIssue[]): ClearanceIss
  *  The blocked sentence names the first finding rather than all of them, and says
  *  the count separately. Both are DERIVED — a hand-typed number beside the thing it
  *  describes can disagree with it, and here it would be a number about a list one
- *  line away. Length matters: the four refusal bodies in this panel run 93 to 169
- *  characters and the wrap at the top of that range is unverified in any browser
- *  (`docs/visual-check.md`), so this stays at the short end. */
+ *  line away.
+ *
+ *  **The finding is QUOTED, not spliced, and that is a fix rather than a style.** The
+ *  first version read `already has ${title.toLowerCase()}`, which assumes a finding
+ *  title is a noun phrase. Half of them are not: `access` titles read *"you can't walk
+ *  to everything"* and *"no room to pull the chairs out"*, so the sentence came out as
+ *  *"this one already has you can't walk to everything"*. Quoting takes the title as
+ *  the report's own words and reads correctly for both shapes — and it keeps the
+ *  original casing, which lowercasing was destroying. **Found by DERIVING the string
+ *  from real rooms rather than reading the template**; a hand-typed example in the
+ *  first review used a title that happened to be a noun phrase, and every length
+ *  quoted off it was wrong too.
+ *
+ *  Length matters: the four refusal bodies in this panel run 93 to 169 characters and
+ *  the wrap at the top of that range is unverified in any browser
+ *  (`docs/visual-check.md`), so this stays away from the top. Derived across the five
+ *  offered sizes and nine reachable ones: clean is 116 at every size, blocked runs
+ *  116-155 before this fix and is re-derived in that doc after it. */
 export function shuffleRefusal(blockers: readonly ClearanceIssue[]): { title: string; message: string } {
   if (blockers.length === 0)
     return {
@@ -485,9 +500,9 @@ export function shuffleRefusal(blockers: readonly ClearanceIssue[]): { title: st
   return {
     title: 'Shuffle cannot arrange around this',
     message:
-      `Shuffle only offers rooms with nothing in the way, and this one already has ${blockers[0].title.toLowerCase()}` +
-      (more > 0 ? ` and ${more} more like it` : '') +
-      '. Try Fix first, then Shuffle.',
+      `Room check reports “${blockers[0].title}”` +
+      (more > 0 ? ` and ${more} more` : '') +
+      ', and Shuffle only offers rooms with nothing in the way. Try Fix first.',
   };
 }
 /** The three reasons a piece may not move, for a whole-room shuffle. A thin re-export
