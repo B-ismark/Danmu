@@ -132,6 +132,9 @@ for.
 `git checkout -- file` / `git checkout HEAD -- file` restores from the index or HEAD. If
 your work is uncommitted, it is destroyed.
 → **Commit before mutating.** A throwaway `wip:` commit, squashed later, costs nothing.
+**Staging alone is also enough, and is cheaper** — `git checkout -- file` restores from the
+INDEX, so a `git add` of your own work survives it. What matters is the ORDER, which is the
+part that is easy to get backwards: staging AFTER the mutation stages the mutation.
 The tell is a needle that stops matching, or a lint error naming a parameter you never
 touched — **or, worst of the three, no tell at all.** The third occasion was a *comment*
 rewrite in `lib/drag-resolve.ts` correcting a false claim, made while the fix itself was
@@ -142,8 +145,10 @@ surfaced only when `git status` listed three modified files where four were expe
 restore that eats prose is invisible to every gate in the repo.
 → So: **read the file list, not just the exit code**, after any restore — and prefer
 mutating a copy, or committing first, whenever the same file also holds work of yours.
-*(Cost: five times — `lib/footprint.ts`, `lib/layout-score.ts`, `lib/drag-resolve.ts`'s
-comment, and then `app/globals.css` TWICE in one battery. All recovered, all avoidable.)*
+*(Cost: SIX times — `lib/footprint.ts`, `lib/layout-score.ts`, `lib/drag-resolve.ts`'s
+comment, `app/globals.css` TWICE in one battery, and `lib/scene-spec.ts` on 2026-09-06 — that
+last one by a peer who knew this entry and staged AFTER the change rather than before the
+mutation, which the prescription above now spells out. All recovered, all avoidable.)*
 
 **The fifth occurrence adds a consequence the first four did not name: it silently
 invalidates the rest of the battery.** A `@container` breakpoint fix was uncommitted when
