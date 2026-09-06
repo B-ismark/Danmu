@@ -31,18 +31,26 @@ function snapshot(over: Partial<Snapshot> = {}): Snapshot {
     room: sc.room,
     lighting: t.lighting,
     hidden: t.hidden,
+    selectedPartId: t.selectedPartId,
+    selection: t.selection,
+    selectedWall: t.selectedWall,
     ...over,
   };
 }
 
 beforeEach(() => {
-  useHistory.setState({ past: [], future: [], suspended: false });
+  useHistory.setState({ past: [], future: [], suspended: false, topIsSelectionOnly: false });
   // `hidden`/`parentIds` are not part of loadTransforms — applySnapshot
   // restores them through their own setters for the same reason, so reset
   // them the same way.
   useStudio.getState().loadTransforms({ positions: {}, rotations: {}, dims: {} });
   useStudio.getState().setHiddenMap({});
   useStudio.getState().setParentIds({});
+  // The selection is part of a snapshot now, so a test that leaves one behind changes
+  // what the NEXT test’s baseline contains. `setSelectedWall(null)` second because it
+  // and `setSelected` clear each other.
+  useStudio.getState().setSelected(null);
+  useStudio.getState().setSelectedWall(null);
 });
 
 describe('the stack', () => {
@@ -392,5 +400,245 @@ describe('startHistoryRecording', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+// The user’s ruling, in their own words: *"in blender, actions and selections are both
+// affectted by undo and redoing so wouldn’t it be best to do the same for this platform
+// too?"* — so selection rides in the main stack rather than in a history beside it.
+//
+// The recommendation this overrode was a SEPARATE history, and the reason to note that
+// here is that the two designs fail differently: a separate history cannot flood the
+// main stack, and this one can. Every test below the first is about that, or about the
+// staleness a shared stack creates and a separate one would not have.
+describe('the selection is part of the undo stack', () => {
+  it('carries the selection, so undoing a move puts back the pieces that made it', () => {
+    // Undo has to land on a NON-EMPTY selection that differs from the live one, or this
+    // asserts nothing: the first version walked back to the empty baseline while the
+    // store was also empty, and passed identically with the selection left out of a
+    // `Snapshot` entirely. An assertion whose expected value is already on screen is
+    // decoration.
+    const parts = useScene.getState().parts;
+    const [a, b, c] = [parts[0].id, parts[1].id, parts[2].id];
+    seedHistory();
+
+    // A move made with two pieces selected…
+    useStudio.getState().setSelection([a, b], b);
+    useStudio.getState().setPosition(a, [1, 0, 2]);
+    useHistory.getState().push(snapshot());
+
+    // …then a second move, made with something else selected.
+    useStudio.getState().setSelected(c);
+    useStudio.getState().setPosition(a, [5, 0, 6]);
+    useHistory.getState().push(snapshot());
+
+    const restored = useHistory.getState().undo();
+    expect(restored?.selection).toEqual([a, b]);
+    expect(restored?.selectedPartId).toBe(b);
+
+    applySnapshot(restored!);
+    // The pieces come back highlighted where they landed, which is the state the user
+    // was actually in when they made the move. That is the whole behaviour the ruling
+    // asked for.
+    expect(useStudio.getState().selection).toEqual([a, b]);
+    expect(useStudio.getState().selectedPartId).toBe(b);
+    expect(useStudio.getState().positions[a]).toEqual([1, 0, 2]);
+  });
+
+  it('restores a wall selection too, since a wall edit is made with a wall selected', () => {
+    seedHistory();
+    useStudio.getState().setSelectedWall(1);
+    const snap = snapshot();
+    expect(snap.selectedWall).toBe(1);
+    useStudio.getState().setSelectedWall(null);
+    applySnapshot(snap);
+    expect(useStudio.getState().selectedWall).toBe(1);
+  });
+
+  it('the entry the RECORDER builds carries all three selection fields', async () => {
+    // Not `snapshot()` — the real `takeSnapshot`, reached by letting the subscription
+    // fire. This test exists because of a survivor: zeroing `selection` inside
+    // `takeSnapshot` killed nothing, since every assertion about a recorded selection
+    // ran against this file’s OWN factory, which is a hand-kept copy of the production
+    // one. A fixture that mirrors the thing under test cannot report it drifting.
+    //
+    // Three fields asserted separately and none of them empty, because a check against
+    // the value a field already holds is not a check: the primary and the multi-set have
+    // to differ, and the wall has to be a real index rather than the null it starts at.
+    vi.useFakeTimers();
+    const stop = startHistoryRecording();
+    try {
+      const [a, b] = useScene.getState().parts.slice(0, 2).map((p) => p.id);
+      seedHistory();
+      useStudio.getState().setSelection([a, b], a);
+      await vi.advanceTimersByTimeAsync(300);
+
+      const entry = useHistory.getState().past[1];
+      expect(entry.selection).toEqual([a, b]);
+      expect(entry.selectedPartId).toBe(a);
+      expect(entry.selectedWall).toBeNull();
+
+      // …and the wall, which the part selection cannot reach: they clear each other, so
+      // this is the only way to see `selectedWall` travel.
+      useStudio.getState().setSelectedWall(1);
+      await vi.advanceTimersByTimeAsync(300);
+      const walled = useHistory.getState().past[useHistory.getState().past.length - 1];
+      expect(walled.selectedWall).toBe(1);
+      expect(walled.selection).toEqual([]);
+    } finally {
+      stop();
+      vi.useRealTimers();
+    }
+  });
+  it('a run of clicks costs ONE undo step, not one per click', async () => {
+    // The failure this prevents is not untidiness. The stack is a ring of 80, so
+    // without coalescing, clicking around the room discards real edits off the far end.
+    vi.useFakeTimers();
+    const stop = startHistoryRecording();
+    try {
+      const ids = useScene.getState().parts.slice(0, 6).map((p) => p.id);
+      seedHistory();
+      for (const id of ids) {
+        useStudio.getState().setSelected(id);
+        await vi.advanceTimersByTimeAsync(300);
+      }
+      // One entry for the whole run, on top of the baseline — and it holds the LAST
+      // click, not the first.
+      expect(useHistory.getState().past).toHaveLength(2);
+      expect(useHistory.getState().past[1].selectedPartId).toBe(ids[ids.length - 1]);
+    } finally {
+      stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it('the first click after an edit pushes, so the edit is never overwritten', async () => {
+    // The narrow half of the coalescing rule. If a selection-only change could replace
+    // ANY top entry, the entry recording the edit would be the one it replaced, and the
+    // edit would become unreachable — compression turning into loss.
+    vi.useFakeTimers();
+    const stop = startHistoryRecording();
+    try {
+      const [a, b] = useScene.getState().parts.slice(0, 2).map((p) => p.id);
+      seedHistory();
+      useStudio.getState().setPosition(a, [3, 0, 4]);
+      await vi.advanceTimersByTimeAsync(300);
+      expect(useHistory.getState().past).toHaveLength(2);
+
+      useStudio.getState().setSelected(b);
+      await vi.advanceTimersByTimeAsync(300);
+      // Three, not two: the click did not eat the move.
+      expect(useHistory.getState().past).toHaveLength(3);
+      expect(useHistory.getState().past[1].positions[a]).toEqual([3, 0, 4]);
+
+      // And undo still reaches the state before the move.
+      expect(useHistory.getState().undo()?.selectedPartId).toBeNull();
+    } finally {
+      stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it('clicking the same piece twice records nothing at all', async () => {
+    // `setSelected` writes a fresh `id ? [id] : []` every call, so the array is a new
+    // reference with identical contents. Under the reference compare every other field
+    // uses, a second click on the same piece was an undo entry for nothing.
+    vi.useFakeTimers();
+    const stop = startHistoryRecording();
+    try {
+      const a = useScene.getState().parts[0].id;
+      seedHistory();
+      useStudio.getState().setSelected(a);
+      await vi.advanceTimersByTimeAsync(300);
+      expect(useHistory.getState().past).toHaveLength(2);
+
+      useStudio.getState().setSelected(a);
+      await vi.advanceTimersByTimeAsync(300);
+      expect(useHistory.getState().past).toHaveLength(2);
+    } finally {
+      stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it('a click after an undo does not overwrite the entry the undo restored', async () => {
+    // `topIsSelectionOnly` describes an entry THIS stack pushed. After a restore the top
+    // is an entry it did not push, so the flag is cleared rather than guessed at — the
+    // one path by which coalescing could destroy history instead of compressing it.
+    //
+    // THE EDIT BELOW IS LOAD-BEARING and the first version of this test did not have it.
+    // Undoing a two-click run leaves the stack one deep, and `push` refuses to coalesce
+    // into a stack of one anyway (`past.length > 1`) — so deleting the flag reset from
+    // `undo` changed nothing here and the mutation SURVIVED. A guard only runs in a
+    // state the fixture has to build: the undo has to land on a stack still deep enough
+    // for coalescing to be possible.
+    vi.useFakeTimers();
+    const stop = startHistoryRecording();
+    try {
+      const [a, b, c, d] = useScene.getState().parts.slice(0, 4).map((p) => p.id);
+      seedHistory();
+      useStudio.getState().setPosition(a, [2, 0, 2]);
+      await vi.advanceTimersByTimeAsync(300);
+      useStudio.getState().setSelected(b);
+      await vi.advanceTimersByTimeAsync(300);
+      useStudio.getState().setSelected(c);
+      await vi.advanceTimersByTimeAsync(300);
+      // baseline, the move, and one coalesced entry for both clicks
+      expect(useHistory.getState().past).toHaveLength(3);
+
+      applySnapshot(useHistory.getState().undo()!);
+      await vi.advanceTimersByTimeAsync(300);
+      const depthAfterUndo = useHistory.getState().past.length;
+      expect(depthAfterUndo).toBe(2);
+
+      useStudio.getState().setSelected(d);
+      await vi.advanceTimersByTimeAsync(300);
+      // Pushed beside the restored entry, not over it — the move is still reachable.
+      expect(useHistory.getState().past.length).toBe(depthAfterUndo + 1);
+      expect(useHistory.getState().past[1].positions[a]).toEqual([2, 0, 2]);
+    } finally {
+      stop();
+      vi.useRealTimers();
+    }
+  });
+});
+
+// Both of these are what § H.10 meant by "a stored selection names part ids that a
+// main-stack undo can make stale", plus the axis it did not name. The app’s own delete
+// path keeps `parts` and `selection` consistent, so these snapshots are built by hand
+// rather than driven through the UI — which is the point: a `Snapshot` is a plain
+// object, and the guard exists for whoever writes the next producer of one.
+describe('a restored selection is filtered, on both axes', () => {
+  it('drops ids the restored room does not contain', () => {
+    const parts = useScene.getState().parts;
+    const alive = parts[0].id;
+    const snap = snapshot({
+      parts: [parts[0]],
+      selection: [alive, 'ghost-1'],
+      selectedPartId: 'ghost-1',
+    });
+    applySnapshot(snap);
+    expect(useStudio.getState().selection).toEqual([alive]);
+    // The primary named a piece that is not in the room, so it clears rather than
+    // falling back to another one: the gizmo attaches to `selectedPartId` alone.
+    expect(useStudio.getState().selectedPartId).toBeNull();
+  });
+
+  it('clears a wall index the restored footprint cannot reach', () => {
+    // The sharper axis, and the one the write-up missed: `selectedWall` is an INDEX. A U
+    // has eight edges and a rectangle four, so undoing across a layout change leaves a 7
+    // pointing at nothing, and `WallInspector` is handed it directly.
+    const room = useScene.getState().room;
+    expect(room.footprint.length).toBeLessThan(8);
+    applySnapshot(snapshot({ selectedWall: 7 }));
+    // Cleared, not clamped: wall 3 of a rectangle is not the wall the user had.
+    expect(useStudio.getState().selectedWall).toBeNull();
+  });
+
+  it('keeps a wall index the footprint does reach', () => {
+    // The control. Without it the assertion above passes just as well against a filter
+    // that clears every wall, which is a different feature.
+    applySnapshot(snapshot({ selectedWall: 0 }));
+    expect(useStudio.getState().selectedWall).toBe(0);
   });
 });
