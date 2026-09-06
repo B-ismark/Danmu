@@ -67,14 +67,18 @@
  *
  * An earlier draft said being wrong here "only shifts every calibrated bound by the
  * same proportion". That is false in one direction and the false direction is the
- * quiet one. Set it too HIGH — 90 is inside the band its own test asserts — and the
- * raw factor drops below 1 on every machine, the floor clamps it to exactly 1,
- * `ceilingMs` becomes the identity, and the whole calibration is switched off with
- * the suite green and the printed factor reading a confident `1.00`. Hence the
- * one-sided pin in `tests/perf-calibration.test.ts`: the measured cost must not come
- * back far BELOW this constant. That direction is safe to assert because a slower
- * machine measures higher, so no CI box can trip it; only a shrunken workload or a
- * badly inflated constant can.
+ * quiet one. Set it too HIGH — 90 was inside the band its own test used to assert —
+ * and the raw factor drops below 1 on every machine, the floor clamps it to exactly 1,
+ * `ceilingMs` becomes the identity, and the whole calibration is switched off with the
+ * suite green and the printed factor reading a confident `1.00`.
+ *
+ * **That used to be guarded by a one-sided wall-clock pin here, and this paragraph used
+ * to end "a slower machine measures higher, so no CI box can trip it". A GitHub runner
+ * tripped it on 2026-09-06.** The pin is gone. The band in
+ * `tests/perf-calibration.test.ts` is 15-30 instead, which refuses 90 outright and
+ * involves no clock — affordable only because the same file now pins
+ * `referenceWorkload`'s exact return, so this constant describes a program that cannot
+ * move and is therefore a decision rather than a measurement waiting to go stale.
  */
 export const REFERENCE_IDLE_MS = 22;
 

@@ -723,8 +723,10 @@ the file as "four times".
   that cannot be followed, because that machine is a runner nobody here controls. Both
   halves are corrected in the file.
 
-  **A third option the first write-up did not have, and it is the only one that trades
-  nothing away.** The defect this floor exists to catch is the reference loop being
+  **A third option the first write-up did not have** — and **REFUTED on 2026-09-06 by
+  the first CI reading it asked for; see the CLOSED block at the end of this item.** It
+  is kept because the reasoning is what produced the answer that did work. The defect
+  this floor exists to catch is the reference loop being
   SHRUNK, which would make every machine read as fast and switch the calibration off in
   silence. That is a question about the workload, and asking it in absolute milliseconds
   makes the answer depend on the machine. Asked against a second workload sized by
@@ -750,6 +752,49 @@ the file as "four times".
   Widening the existing floor stays available and stays second choice: it weakens the
   only assertion that can catch the loop shrinking, in exchange for nothing the ratio
   would not give for free.
+
+  **CLOSED 2026-09-06. Neither candidate was taken, and the CI reading is why.**
+
+  The first runner sample of the printed line: `workload=15.39ms yardstick=1.66ms
+  ratio=9.30`. Against 16.6-24.3 locally that is **below the entire local range, not
+  inside it** — so the ratio is not scale-free and a bound set from local numbers would
+  have gone red on the very next run. The reason was already written in
+  `yardstickWorkload`'s own docblock, before the measurement: the yardstick is
+  *deliberately unlike* `referenceWorkload`, so the pair can say whether a machine is
+  starved of CPU or of allocation bandwidth. A pair that can tell those apart is by
+  construction a pair whose ratio moves between machines. **A diagnostic and a
+  normaliser are opposite requirements and one pair cannot be both.** The restraint —
+  print it, assert nothing — paid for itself one CI run after being added.
+
+  **What actually closed it: the question did not have to be asked in milliseconds at
+  all.** `referenceWorkload` is deterministic float maths over constant inputs, and the
+  file already asserted that (`expect(b).toBe(a)`) without using it. Its exact return is
+  a fingerprint of the round count, the array length and the body at once, it reads the
+  same on every machine, and it moves in BOTH directions. So:
+
+  | defect | was | now |
+  |---|---|---|
+  | loop shrunk / folded away | floor at 8.8 ms, plus `> 1` | exact value pin |
+  | **loop GROWN fourfold** | **nothing — measured** | exact value pin |
+  | `REFERENCE_IDLE_MS` at 10 or 90 | floor at 8.8 ms | band narrowed 10-100 to 15-30 |
+
+  Both wall-clock assertions in `tests/perf-calibration.test.ts` are **deleted**, not
+  loosened, because nothing was left for a clock to answer. The line still prints.
+
+  **The growth row is a finding, not bookkeeping.** `tests/helpers/perf.ts` stated that
+  growing the workload fourfold was "not detectable from inside a test that can only
+  compare the calibration against itself", and the test file stated that its pair
+  assertion had closed "two opposite failures, one missing assertion". A floor is
+  one-sided and growth measures HIGHER, so it can only ever have closed one. Verified by
+  running the mutation against the pre-change commit: `round < 4000` passes **15/15**,
+  printing `workload=109.13ms ... margin=12.40x` — twelve times clear of the floor, in
+  the wrong direction. Every machine would have been pinned at `MAX_FACTOR` with the
+  whole suite green. The value pin kills it at 86506.75 against 21627.95.
+
+  All five mutations killed (shrink, growth, array 512 to 256, constant to 10, constant
+  to 90). The constant's band could be narrowed only *because* the workload is now
+  pinned: it describes a fixed program, which makes it a decision rather than a
+  re-measurement of something that can move.
 - The factor is measured once per **test file**, not per worker process: vitest 4 defaults
   to `pool: 'forks'` with `isolate: true`. So the figure `perf-calibration` prints is that
   file's, and the two bars each take their own.
