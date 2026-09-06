@@ -1050,6 +1050,48 @@ the SwiftShader screenshot times out, so **nobody has seen this**. Still open �
 
 ---
 
+### Ctrl+Z now walks back through the SELECTION too — and only a person can say how that feels
+
+Row 17 / § H.10, built on `feat/selection-in-the-undo-stack`. The user’s ruling was
+Blender’s behaviour — *"in blender, actions and selections are both affectted by undo and
+redoing"* — so selection rides in the main undo entry rather than in a history of its own.
+
+Everything below typechecks, lints, and is covered by 10 tests and 12 killed mutations.
+None of it has been on screen. **The whole point of this item is that the tests can prove
+the stack is right and cannot say whether the behaviour is pleasant**, which is the one
+question the ruling was actually about.
+
+**Where to click.** Any room, 3D or 2D.
+
+1. **Move a piece with two selected, then Ctrl+Z.** Shift-click two pieces, drag one, undo.
+   The move should come back undone *with both pieces still highlighted* — that is the new
+   behaviour. If the highlight is gone, the selection is not riding the entry.
+2. **Click around, then press Ctrl+Z once.** Click six different pieces, pausing between
+   each. One press should take you back past the whole run, not six presses. If each click
+   costs its own press, coalescing is not firing — and the real cost of that is not
+   tedium: the stack is a ring of 80, so a long clicking session would push real edits off
+   the end.
+3. **The one that would be worst to get wrong.** Move a piece, then click three others,
+   then Ctrl+Z twice. The first press should restore the selection the move was made with;
+   the second should undo the move itself. If the move is unreachable, a click has
+   overwritten the entry holding it.
+4. **Undo across a room-shape change.** Select a wall (click one in the 2D plan), switch
+   the layout to a shape with fewer walls, then undo back. Nothing should select a
+   *different* wall, and the wall inspector must not open on a wall that is not there.
+   This is the axis the write-up never named — `selectedWall` is an index, not a name.
+
+**What "wrong" looks like** is mostly a feeling, and it is the reason this needs eyes:
+undo becoming *chatty*. If pressing Ctrl+Z repeatedly feels like it is stepping through
+highlights rather than through work, the coalescing window is in the wrong place — it is
+currently the same 250 ms debounce every other edit uses, which is a guess and not a
+measurement. Nobody has watched a person use it.
+
+**Not a defect if you see it:** clicking the *same* piece twice records nothing at all,
+deliberately. And a selection restored onto a room that no longer holds those pieces comes
+back partially — the pieces that survive stay selected and the rest are dropped, rather
+than the whole selection clearing.
+
+---
 ## The browser route, so the next person does not rebuild it
 
 Looking is a half-hour of setup nobody has to hand, which is the actual reason items sit

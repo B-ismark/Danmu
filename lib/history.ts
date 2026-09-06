@@ -1,7 +1,7 @@
 'use client';
 
 // Undo/redo stack of immutable snapshots. Covers BOTH stores:
-//   useStudio — transform overrides (move / rotate / scale)
+//   useStudio — transform overrides (move / rotate / scale), and the selection
 //   useScene  — structure (add / delete / swap parts, wall paint, room resize)
 // Bounded ring buffer to keep memory in check on long sessions.
 
@@ -33,6 +33,25 @@ export type Snapshot = {
    *  hide, and walking back past a hide left the part hidden in a state the stack
    *  did not describe. The help card advertises Ctrl+Z two lines under H. */
   hidden: Record<string, boolean>;
+  /** The selection, all three fields of it, because the user’s ruling is that this
+   *  platform behaves like Blender: *"in blender, actions and selections are both
+   *  affectted by undo and redoing so wouldn’t it be best to do the same for this
+   *  platform too?"*
+   *
+   *  It rides in the SAME entry as the edit rather than in a history of its own, so
+   *  undoing a move puts back the selection that made the move — the pieces come back
+   *  highlighted where they landed, which is the state the user was actually in.
+   *
+   *  All three, and not just `selection`: they are mutually exclusive by construction
+   *  (`setSelected` clears `selectedWall` and `setSelectedWall` clears the part
+   *  selection), so restoring a subset can produce a pair the store’s own setters can
+   *  never make. `frameSelectedToken` deliberately stays out — it is a nudge counter,
+   *  and replaying it would re-aim the camera on every undo. */
+  selectedPartId: string | null;
+  selection: string[];
+  /** Index into `room.footprint`, so it goes stale in a way a part id does not — see
+   *  `applySnapshot`. */
+  selectedWall: number | null;
 };
 
 const MAX = 80;
@@ -42,7 +61,10 @@ type HistoryState = {
   future: Snapshot[];
   /** suspends recording during programmatic restores so undo doesn't push them */
   suspended: boolean;
-  push: (s: Snapshot) => void;
+  /** Whether `past[past.length - 1]` was pushed by a change that touched ONLY the
+   *  selection. It is what lets a run of clicks coalesce; see `push`. */
+  topIsSelectionOnly: boolean;
+  push: (s: Snapshot, selectionOnly?: boolean) => void;
   undo: () => Snapshot | undefined;
   redo: () => Snapshot | undefined;
   reset: () => void;
@@ -52,11 +74,33 @@ export const useHistory = create<HistoryState>((set, get) => ({
   past: [],
   future: [],
   suspended: false,
-  push: (s) => {
+  topIsSelectionOnly: false,
+  // A RUN of selection changes is ONE undo step, and that is not a nicety.
+  //
+  // Blender’s own complaint about selection-in-undo is a run of clicks flooding the
+  // stack, and here the stack is a ring of MAX — so without coalescing, clicking
+  // around the room 80 times discards every edit the user actually made. That is data
+  // loss wearing the shape of a preference.
+  //
+  // The rule is narrow on purpose: replace the top entry only when the new change is
+  // selection-only AND the entry it would replace was itself selection-only. So the
+  // first click after an edit PUSHES — the edit’s own selection is preserved
+  // underneath it and stays reachable — and the second through eightieth overwrite
+  // that one entry. Undo then walks back to the selection the last edit ended with,
+  // and back again to before the run.
+  //
+  // It never overwrites an entry that recorded an edit, which is the property that
+  // makes this safe rather than clever.
+  push: (s, selectionOnly = false) => {
     if (get().suspended) return;
-    const past = [...get().past, s];
-    if (past.length > MAX) past.shift();
-    set({ past, future: [] });
+    const { past, topIsSelectionOnly } = get();
+    if (selectionOnly && topIsSelectionOnly && past.length > 1) {
+      set({ past: [...past.slice(0, -1), s], future: [] });
+      return;
+    }
+    const next = [...past, s];
+    if (next.length > MAX) next.shift();
+    set({ past: next, future: [], topIsSelectionOnly: selectionOnly });
   },
   undo: () => {
     const { past, future } = get();
@@ -64,17 +108,21 @@ export const useHistory = create<HistoryState>((set, get) => ({
     // last entry is current; the one before is the prior state we want to restore
     const prior = past[past.length - 2];
     const current = past[past.length - 1];
-    set({ past: past.slice(0, -1), future: [current, ...future] });
+    // `false`, always: after a restore the top entry is one this stack did not just
+    // push, and whether IT was selection-only is not tracked per entry. Claiming
+    // otherwise would let the next click overwrite a restored state, which is the one
+    // way this coalescing could destroy history rather than compress it.
+    set({ past: past.slice(0, -1), future: [current, ...future], topIsSelectionOnly: false });
     return prior;
   },
   redo: () => {
     const { past, future } = get();
     if (future.length === 0) return undefined;
     const [next, ...rest] = future;
-    set({ past: [...past, next], future: rest });
+    set({ past: [...past, next], future: rest, topIsSelectionOnly: false });
     return next;
   },
-  reset: () => set({ past: [], future: [] }),
+  reset: () => set({ past: [], future: [], topIsSelectionOnly: false }),
 }));
 
 let lastSnapshot: Snapshot | null = null;
@@ -92,6 +140,9 @@ function takeSnapshot(): Snapshot {
     room: sc.room,
     lighting: t.lighting,
     hidden: t.hidden,
+    selectedPartId: t.selectedPartId,
+    selection: t.selection,
+    selectedWall: t.selectedWall,
   };
 }
 
@@ -107,7 +158,7 @@ function takeSnapshot(): Snapshot {
 export function seedHistory() {
   const snap = takeSnapshot();
   lastSnapshot = snap;
-  useHistory.setState({ past: [snap], future: [] });
+  useHistory.setState({ past: [snap], future: [], topIsSelectionOnly: false });
 }
 
 function scheduleSnapshot() {
@@ -143,9 +194,13 @@ function scheduleSnapshot() {
   // ~250ms after the user stops to avoid filling the stack with intermediate states.
   timer = setTimeout(() => {
     const snap = takeSnapshot();
-    if (lastSnapshot && shallowEq(snap, lastSnapshot)) return;
+    if (lastSnapshot && sameEdit(snap, lastSnapshot) && sameSelection(snap, lastSnapshot)) return;
+    // Selection-only means every EDIT field is identical and only the selection moved.
+    // With no previous snapshot at all this is the first entry and has nothing to
+    // coalesce into, so it is not selection-only whatever it contains.
+    const selectionOnly = lastSnapshot !== null && sameEdit(snap, lastSnapshot);
     lastSnapshot = snap;
-    useHistory.getState().push(snap);
+    useHistory.getState().push(snap, selectionOnly);
   }, 250);
 }
 
@@ -170,7 +225,10 @@ export function startHistoryRecording() {
       state.dims === prev.dims &&
       state.parentIds === prev.parentIds &&
       state.lighting === prev.lighting &&
-      state.hidden === prev.hidden
+      state.hidden === prev.hidden &&
+      state.selectedPartId === prev.selectedPartId &&
+      state.selection === prev.selection &&
+      state.selectedWall === prev.selectedWall
     )
       return;
     scheduleSnapshot();
@@ -185,7 +243,10 @@ export function startHistoryRecording() {
   };
 }
 
-function shallowEq(a: Snapshot, b: Snapshot): boolean {
+/** Everything a snapshot holds EXCEPT the selection. Kept apart from
+ *  `sameSelection` because "did the edit change" and "did the selection change" are
+ *  now two different questions, and `scheduleSnapshot` needs both answers. */
+function sameEdit(a: Snapshot, b: Snapshot): boolean {
   return (
     a.positions === b.positions &&
     a.rotations === b.rotations &&
@@ -195,6 +256,21 @@ function shallowEq(a: Snapshot, b: Snapshot): boolean {
     a.room === b.room &&
     a.lighting === b.lighting &&
     a.hidden === b.hidden
+  );
+}
+
+/** By CONTENT, not by reference, which is the one place this cannot copy the rest of
+ *  the file. Every other field is replaced wholesale by its setter, so `===` answers
+ *  it; `selection` is rebuilt on each call — `setSelected` writes a fresh
+ *  `id ? [id] : []` — so clicking the SAME piece twice yields two arrays that are
+ *  equal and not identical. Under a reference compare that pushed an undo entry for a
+ *  selection that had not changed. */
+function sameSelection(a: Snapshot, b: Snapshot): boolean {
+  return (
+    a.selectedPartId === b.selectedPartId &&
+    a.selectedWall === b.selectedWall &&
+    a.selection.length === b.selection.length &&
+    a.selection.every((id, i) => id === b.selection[i])
   );
 }
 
@@ -215,6 +291,33 @@ export function applySnapshot(snap: Snapshot) {
   useStudio.getState().setHiddenMap(snap.hidden);
   useStudio.getState().setParentIds(snap.parentIds);
   useScene.setState({ parts: snap.parts, room: snap.room });
+  // A stored selection names things that may not be there any more, on TWO axes, and
+  // this is the hazard § H.10 said to build first rather than discover.
+  //
+  // Part ids: an entry’s `parts` and `selection` are captured in one
+  // `takeSnapshot`, and the app’s own delete path (`removeParts`) drops the doomed
+  // ids from the selection, so a snapshot THIS module took is already consistent — but a
+  // snapshot is a plain object and every future writer of one is on the honour system.
+  // The filter is what stops the gizmo and the Inspector being handed an id nothing in
+  // the room answers to.
+  //
+  // `selectedWall` is the axis the write-up did NOT name, and it is the sharper one,
+  // because it is an INDEX into `room.footprint` rather than a name. Undoing across a
+  // layout change moves the wall count under it — a U has eight edges and a rect four —
+  // so wall 7 restored into a rectangle indexes nothing, and `WallInspector` is handed
+  // it directly. Cleared rather than clamped: wall 3 of a rectangle is not the wall the
+  // user had, and silently selecting a different one is worse than selecting none.
+  const alive = new Set(snap.parts.map((p) => p.id));
+  const wallCount = snap.room.footprint.length;
+  useStudio.setState({
+    selection: snap.selection.filter((id) => alive.has(id)),
+    selectedPartId:
+      snap.selectedPartId !== null && alive.has(snap.selectedPartId) ? snap.selectedPartId : null,
+    selectedWall:
+      snap.selectedWall !== null && snap.selectedWall >= 0 && snap.selectedWall < wallCount
+        ? snap.selectedWall
+        : null,
+  });
   // small async unsuspend so subscribe fires after state settles
   setTimeout(() => {
     useHistory.setState({ suspended: false });
