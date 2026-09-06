@@ -364,6 +364,18 @@ nearly acted on. Second occasion: a `pnpm ... | tail` printing `EXIT=0` for a ga
 never started at all — see the worktree-on-`AppData` entry below, where a startup crash
 produces no `Test Files` line and a summary grep prints an empty failure list.)*
 
+**Symptom: you stopped the dev server, and the port still answers 200.**
+`next start` is spawned through a wrapper. Stopping the TASK kills the wrapper and leaves
+the node process serving, so **a stop that reports success is not a port that is free** —
+and the next probe run silently measures the OLD build, which is the damage. The stop is
+not lying; it ended the thing it was given.
+→ Kill by **listener**, then re-check the port:
+`Get-NetTCPConnection -LocalPort <p> -State Listen | %{ Stop-Process -Id $_.OwningProcess -Force }`,
+then confirm the port is clear. Never trust the task stop alone.
+*(Cost: twice. The first time a `next start` outlived its parent and a later probe read a
+stale bundle. Second occasion 2026-09-06: `TaskStop` returned “Successfully stopped” and
+curl still answered `200`, caught only because the port was re-checked on principle.)*
+
 **Symptom: typecheck goes red in files you have never opened, right after your own
 change.**
 A declared devDependency that is not installed in **this** worktree. It reads as your
