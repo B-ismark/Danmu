@@ -466,6 +466,37 @@ merged doc and four messages before one `grep` settled it.
 → **Name the artifact every number came from**, and re-derive when the tree moved. The
 pattern across all four: *everything measured held; the one thing reasoned did not.*
 
+**Symptom: an assertion fails only on CI, and the failure comes with a plausible ratio.**
+The wrong move is to retune to it. `expected 8.554660000000013 to be greater than 8.8`
+was read as "the runner is about 2.5x the calibration box", which was arithmetically true
+and was the wrong account. Four printed samples of the same workload on the same runner:
+**11.55, 14.39, 15.39, 25.27 ms** — a 2.19x spread straddling a local idle range of
+19.35-22.58. **The runner is not a fast machine, it is a variable one**, and 8.55 was the
+low end of a wide distribution rather than a machine speed.
+→ Nothing calibrated on a steady machine survives that — not an absolute floor and not a
+ratio. Cost twice: once as the original flake, once as my re-tuning it to a "2.5x" that
+described a single sample. The fix was to stop asking in milliseconds at all;
+`referenceWorkload` is deterministic, so pinning its exact RETURN catches every edit it
+was guarding, in both directions, on any machine.
+
+**Symptom: you are about to publish a range from two readings.**
+Two readings are not a range. "8.55-9.30, 1.09x apart" was published as replicated; the
+third sample was 14.33 and the fourth 8.01, and the range widened on **every** reading
+taken. A pair that looks tight is the most misleading shape a distribution has, because
+it reads as convergence.
+→ And **read the columns, not the derived figure.** That ratio was proposed as a
+machine-speed normaliser; per-run, the yardstick spanned 1.22x while the workload spanned
+2.19x, so the "normaliser" supplied a fraction of the variance and was dividing by a
+constant. The ratio alone could never have shown that.
+
+**Symptom: a reference range is hand-typed into output that prints every run.**
+It is stale the moment it is committed, and stale in the reassuring direction, because a
+reader compares this run against it. A printed `(runner 8.55-9.30, ...)` was wrong on the
+CI run that shipped it; replaced with `(runner 8.55-14.33, ...)`, that was wrong on the CI
+run that shipped *it*.
+→ Print what this run measured. Observed ranges belong in a dated comment, where being
+provisional is legible.
+
 **Symptom: two files report the same figure to fifteen digits.**
 Determinism, not corroboration — same solver, same seed, same fixture, observed twice.
 → Do not lift it into a shared constant. That asserts they must always be equal, which
