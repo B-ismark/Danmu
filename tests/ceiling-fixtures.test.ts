@@ -126,7 +126,9 @@ describe('the ceiling fan is drawn at the height it declares', () => {
   it('leaves the swept circle to `fanBlade` and does not touch it', () => {
     // The two axes are separate functions on purpose; this pins that the vertical
     // one has not started having opinions about the horizontal one.
-    expect(fanBlade(1000).tip).toBeCloseTo(0.5, 9);
+    // `sweep`, not `tip`: the swept circle is the blade CORNER, and this assertion
+    // read the centre-line while claiming to pin the swept circle.
+    expect(fanBlade(1000).sweep).toBeCloseTo(0.5, 9);
     expect(FAN_HUB_R).toBeCloseTo(0.1, 9);
   });
 });

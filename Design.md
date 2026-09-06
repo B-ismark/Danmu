@@ -756,9 +756,12 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
   renders the wrong size at scale 1. It did not even need the 3D tab to see: the plan
   draws a fan as a circle straight off `dimMM`, so the two tabs disagreed by 40% about
   the same piece. The span is `fanBlade` in `scene-spec.ts` now, where a test can
-  reach it — `tip` is the fan's own radius across the whole clamp range, and the
-  inner end is the hub, because a tip-only assertion passes for a blade of the right
-  length in the wrong place.
+  reach it — **`sweep` is the fan's own radius across the whole clamp range, and `tip`
+  is deliberately less than it**, because a blade is a box and the point travelling
+  furthest from the axis is a CORNER. Sizing `tip` to the radius swept 506.4 mm for a
+  declared 500. Every assertion about this function read `tip`, so the file was green
+  about a quantity the fan does not have. The inner end is pinned at the hub too,
+  because a tip-only assertion passes for a blade of the right length in the wrong place.
 - **Parametric shapes** (`isParametric` — fourteen of them, and the list is not
   restated here because every prose copy of it has gone stale at least once)
   rebuild from effective dimensions instead of stretching: sofa tiles seat

@@ -118,16 +118,48 @@ describe('worldHulls', () => {
     expect(corner.hull.every(([, z]) => z < 0), 'local +x lands at world -z').toBe(true);
   });
 
-  it('gives a spun primitive the disc it sweeps, not the box it is drawn as', () => {
+  it('gives a spun primitive the disc it sweeps, placed where the part is', () => {
     // A blade drawn out at x = 0.7 occupies the whole 0.7 m circle once `Spin` turns it.
+    //
+    // **This ran at `pos` [0, 0, 0] and could not see the translation.** Deleting the
+    // `pos[0] +` / `pos[2] +` from the spun branch — putting every ceiling fan at the
+    // room origin regardless of where it hangs — passed 16 of 16 here. The origin is
+    // the one position at which "translated" and "not translated" agree, which is the
+    // same shape as testing a rotation on a square. So the fixture hangs off-axis now.
     const blade: Prim = { kind: 'Box', pts: rect(0.7, 0, 0.1, 0.05), y: [2, 2.1], spun: true };
-    const [got] = worldHulls([blade], [0, 0, 0], 0);
-    const r = Math.max(...got.hull.map(([x, z]) => Math.hypot(x, z)));
+    const at: [number, number, number] = [3, 2.4, -1];
+    const [got] = worldHulls([blade], at, 0);
+    const xs = got.hull.map((h) => h[0]);
+    const zs = got.hull.map((h) => h[1]);
+    expect((Math.max(...xs) + Math.min(...xs)) / 2, 'centred on pos x').toBeCloseTo(3, 6);
+    expect((Math.max(...zs) + Math.min(...zs)) / 2, 'centred on pos z').toBeCloseTo(-1, 6);
+    const r = Math.max(...got.hull.map(([x, z]) => Math.hypot(x - at[0], z - at[2])));
     expect(r, 'reaches the blade tip in every direction').toBeCloseTo(0.75, 2);
-    expect(pointInHull(-0.6, 0, got.hull), 'including behind the hub').toBe(true);
+    expect(pointInHull(at[0] - 0.6, at[2], got.hull), 'including behind the hub').toBe(true);
+    expect(got.y, 'the vertical extent is offset by pos too').toEqual([4.4, 4.5]);
+
+    // A disc is invariant under rotation about its own centre, which is why the spun
+    // branch ignores `rot` rather than having forgotten it. Asserted, because "ignores
+    // an argument" and "has a bug about an argument" look identical from outside.
+    const [turned] = worldHulls([blade], at, 1.1);
+    expect(turned.hull, 'a swept disc ignores which way the part faces').toEqual(got.hull);
+
     // Not spun, the same primitive stays where it is drawn.
-    const [still] = worldHulls([{ ...blade, spun: false }], [0, 0, 0], 0);
-    expect(pointInHull(-0.6, 0, still.hull), 'a still blade is only where it is drawn').toBe(false);
+    const [still] = worldHulls([{ ...blade, spun: false }], at, 0);
+    expect(pointInHull(at[0] - 0.6, at[2], still.hull), 'a still blade is only where drawn').toBe(false);
+  });
+
+  it('sweeps in `unionArea` too, which is a different reader of the same flag', () => {
+    // `occupiedPts` is the one answer to "what does this occupy". Before it, `worldHulls`
+    // swept and `unionArea` did not, so the two measurement files disagreed about the
+    // same piece. One assertion per reader, or the shared function loses a caller
+    // silently — which is how it got into this state.
+    const blade: Prim = { kind: 'Box', pts: rect(0.35, 0, 0.1, 0.05), y: [2, 2.1], spun: true };
+    const box = { x0: -1, x1: 1, z0: -1, z1: 1 };
+    const swept = unionArea([blade], box, 0.005);
+    const rest = unionArea([{ ...blade, spun: false }], box, 0.005);
+    expect(swept, 'a disc of the blade tip radius').toBeCloseTo(Math.PI * 0.4 * 0.4, 2);
+    expect(rest, 'the box it is drawn as').toBeCloseTo(0.005, 3);
   });
 });
 

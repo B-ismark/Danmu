@@ -34,11 +34,20 @@ describe('a ceiling fan sweeps the circle it declares', () => {
   // renderer with its own idea of the size renders the wrong size at scale 1. And
   // the plan draws a fan straight off `dimMM` (`circle: true`), so the two tabs
   // disagreed by 40% about the same piece - visible without opening 3D at all.
-  it('puts the blade tip on the radius, across the whole clamp range', () => {
+  it('puts the blade SWEEP on the radius, across the whole clamp range', () => {
     const r = dimRangeFor('fan', 'fan');
     for (let w = r.min[0]; w <= r.max[0]; w += 50) {
       const b = fanBlade(w);
-      expect(b.tip, `${w} mm fan`).toBeCloseTo(w / 2000, 9);
+      // **This read `b.tip` and that is the wrong quantity.** A blade is a box, so the
+      // point travelling furthest from the axis is a CORNER, `hypot(tip, chord/2)`.
+      // With `tip` on the radius the corner swept 506.4 mm for a declared 500 — a
+      // 1000 mm fan sweeping 1012.7 while the plan drew 1000. Every assertion about
+      // this function read the centre-line, which sweeps nothing, so the whole file
+      // was green about a quantity the fan does not have.
+      expect(b.sweep, `${w} mm fan`).toBeCloseTo(w / 2000, 9);
+      // The centre-line stops SHORT of the radius by exactly the corner correction,
+      // which is the same claim from the other side and fails if `reach` is dropped.
+      expect(b.tip, `${w} mm centre-line`).toBeLessThan(w / 2000);
       // Both ends: the blade must also START at the hub, not inside it and not
       // through it. A tip-only assertion passes for a blade of the right length in
       // the wrong place, which is the shape of the bug being fixed.
@@ -48,7 +57,7 @@ describe('a ceiling fan sweeps the circle it declares', () => {
   });
 
   it('is the number the catalog entry and the plan already agree on', () => {
-    expect(fanBlade(1000).tip * 2).toBeCloseTo(1.0, 9);
+    expect(fanBlade(1000).sweep * 2).toBeCloseTo(1.0, 9);
     // What it used to be, named rather than described.
     const old = { size: (1000 / 2000) * 1.6, at: (1000 / 2000) * 0.6 };
     expect(old.at + old.size / 2).toBeCloseTo(0.7, 9);

@@ -5919,6 +5919,35 @@ tests, not only in someone else's.
 
 ---
 
+### § 39 — a pedestal fan reserves 144 mm of floor it does not stand on — DECISION
+
+`fan-standing` declares `450 x 450 x 1300` and draws **450 wide by 306 deep**. It is in
+`ROUND_SHAPES`, so `footFromPart` models a 450 circle and `PlanView` draws one, over a
+piece 144 mm shallower than that circle in one axis. The solver reserves the same floor.
+
+**Nothing spins here and that is the point of stating it** — `spun` is 0 of its 4
+primitives, so unlike the ceiling fan beside it in the same table, this is not the
+instrument. Derived through `geometry-walk`, both ways, identical: `rest 450.0 x 306.0`,
+`swept 450.0 x 306.0`. The deepest primitive is a radius-153 cylinder, which is the base.
+
+**This is a judgement, not a measurement, which is why it is filed rather than picked.**
+A pedestal fan is a round base on a pole under a cage. What the declared footprint should
+describe is the question:
+
+| | declared | what it means |
+|---|---|---|
+| leave `450 x 450` | the cage diameter, swept as if the head turned | honest if the head oscillates; today nothing models that |
+| change to `450 x 310` | the drawn geometry | plan and 3D agree; the piece stops reserving floor it does not use |
+| drop from `ROUND_SHAPES` | an ellipse, not a circle | already what `footFromPart` supports — W and D are separately editable |
+
+The middle one is the smallest honest change and the one to recommend, but **changing a
+declared size changes what the user reads in the Inspector**, and a 450 that becomes a 310
+is a number someone may have typed. Not taken unilaterally.
+
+**What is NOT open:** the ceiling `fan`. Its declared 1000 is the swept circle, `fanBlade`
+now puts the swept CORNER exactly on it, and the 819 that opened this line of enquiry was
+the rest-pose bounding box of three spokes — an instrument reading, corrected in
+`occupiedPts`. Do not re-file it.
 ## § H.3 · the Library fan-out, and the residue it has left
 
 **Answered 2026-09-03 (fan out from the drop point, with a legality gate) and built:
