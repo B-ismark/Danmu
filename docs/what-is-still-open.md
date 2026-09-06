@@ -5936,7 +5936,43 @@ tests, not only in someone else's.
 
 ---
 
-### § 39 — a pedestal fan reserves 144 mm of floor it does not stand on — DECISION
+### § 39 — a pedestal fan reserves 144 mm of floor it does not stand on — ANSWERED AND BUILT
+
+**The user ruled 2026-09-06: declare `450 x 310`, the base rather than the cage.** Built —
+`PART_LIBRARY`’s `fan-standing` row in `lib/scene-spec.ts`. The options as filed are kept
+below, because the reasoning is still the reasoning; **two things in them were wrong and
+are corrected here rather than in place.**
+
+**1. The third option was already in force.** The table below offers *"drop from
+`ROUND_SHAPES`— an ellipse, not a circle"* as a distinct choice. It is not one. `Foot.circle`
+means ELLIPSE: `footCorners` reads `hw` and `hd` separately (`cos(t)*hw`, `sin(t)*hd`) and
+`PlanView` draws an `<ellipse>`, not a `<circle>`. The plan drew a circle only because W
+and D were equal. So declaring `450 x 310` gets the third option’s shape for free, and
+`ROUND_SHAPES` membership is untouched. **Two of the three rows were one row.**
+
+**2. The declared depth is not a size the renderer obeys.** `StandingFanGeo` reads
+`dimMM[0]` and `dimMM[2]` and **never `dimMM[1]`** — every depth in the drawing comes off
+the width (the base is `r * 0.68`, which is the 306). So the old 450 was not a number the
+geometry disagreed with; it was a number nothing read except `footFromPart` and
+`Draggable`’s scale divisor. That is why this was a declared-number decision and not a
+renderer bug, and it is the distinction the ceiling-fan row next to it does NOT have.
+
+**What it changes for a piece someone already resized, stated because it is visible.**
+`Draggable` scales by `storedDim / part.dimMM`, so a fan with a depth override of 500 mm
+drew at `500/450` = 1.11x of 306, or 340 mm — a piece declaring 500 and drawing 340. It now
+draws at `500/310` = 1.61x, or 493 mm. **That is the fix reaching resized pieces, not a
+regression**, but it is a visible change for anyone who had typed a depth. Rooms with a
+saved scene snapshot are untouched: their parts carry the authored 450 in the snapshot.
+
+**One excuse retired rather than adjusted.** `fan-standing` was pinned in
+`tests/footprint-fidelity.test.tsx`’s `DRAWN_RATIO` at `[1.0, 0.68, 1.0]`. At 306/310 the
+row sits inside the ordinary 0.90-1.10 band, so the pin AND its entry in the excused-shapes
+list are deleted. The mutation was watched: putting 450 back makes the band report
+`fan-standing 1.00/0.68/1.00`.
+
+**Not verified: nobody has looked at it.** Filed in [`visual-check.md`](visual-check.md).
+
+#### The decision as it was filed
 
 `fan-standing` declares `450 x 450 x 1300` and draws **450 wide by 306 deep**. It is in
 `ROUND_SHAPES`, so `footFromPart` models a 450 circle and `PlanView` draws one, over a

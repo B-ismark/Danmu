@@ -2133,7 +2133,14 @@ export const PART_LIBRARY: LibraryItem[] = [
   // had no `circle` field and `spawn` set none, so a piece added from the picker was
   // square-footed whatever its shape — the CEILING FAN included — while the same shape
   // found in a photograph was round. That was § 32 and it is closed.
-  { label: 'Standing fan', group: 'Appliances', category: 'fan', shape: 'fan-standing', dimMM: [450, 450, 1300] },
+  // Depth is the BASE, not the cage. § 39: the guard disc is 450 across and 50 thick,
+  // so the deepest thing this piece stands on is the base cylinder at 306 mm. Declaring
+  // 450 deep made `footFromPart` reserve a 450 circle over a piece 144 mm shallower than
+  // it in one axis, and the solver kept that floor clear. Nothing here oscillates, so the
+  // swept-circle reading the old number implied was describing a motion the app does not
+  // model. 310 rather than 306 leaves the drawn geometry a little room inside its own
+  // declaration rather than exactly on it.
+  { label: 'Standing fan', group: 'Appliances', category: 'fan', shape: 'fan-standing', dimMM: [450, 310, 1300] },
   { label: 'Chest freezer', group: 'Appliances', category: 'fridge', shape: 'chest-freezer', dimMM: [1250, 650, 850] },
   { label: 'AC unit', group: 'Appliances', category: 'ac', shape: 'ac-unit', dimMM: [800, 220, 280] },
   { label: 'Door', group: 'Appliances', category: 'door', shape: 'door', dimMM: [900, 50, 2100] },

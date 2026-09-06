@@ -431,12 +431,13 @@ describe('what a shape actually occupies, against the one box every consumer rea
     // had already caught six renderers by then, which is what made the seventh reading
     // look like a seventh finding.
     //
-    // `fan-standing` is the survivor and a different fact: nothing about it spins
-    // (`spun` 0 of 4 primitives), it is genuinely 450 wide and 306 deep, and it is in
-    // `ROUND_SHAPES` — so the plan draws a 450 circle over a piece 144 mm shallower and
-    // the solver reserves floor it does not occupy. That one is a declared-number
-    // decision about a pedestal fan's base, parked in `docs/what-is-still-open.md`.
-    'fan-standing': [1.0, 0.68, 1.0],
+    // `fan-standing` WAS here at [1.0, 0.68, 1.0] and is deliberately gone rather than
+    // re-pinned. Nothing about it spins (`spun` 0 of 4 primitives), so unlike the ceiling
+    // fan the 0.68 was the subject and not the instrument: it is genuinely 450 wide and
+    // 306 deep, and it declared 450 x 450. § 39 was that declared number, and the user
+    // ruled on it — 450 x 310, the base rather than the cage. At 306/310 the row sits
+    // inside the ordinary 0.90-1.10 band, so the excuse is RETIRED rather than adjusted.
+    // That is the outcome to want from one of these: the list below gets shorter.
     // A plane has no height by definition; `dimMM[2]` is what a resize would scale.
     plane: [1.0, 1.0, 0.0],
   };
@@ -465,7 +466,7 @@ describe('what a shape actually occupies, against the one box every consumer rea
     expect(rows.length, 'every shape, not whatever the sweep found').toBe(SHAPES.length);
     expect(off, 'shapes drawing at a size other than the one they declare').toEqual([]);
     expect(Object.keys(DRAWN_RATIO).sort(), 'shapes excused from the 0.90–1.10 band').toEqual([
-      'bed-double', 'bed-single', 'door', 'fan-standing', 'laptop', 'mirror',
+      'bed-double', 'bed-single', 'door', 'laptop', 'mirror',
       'mirror-oval', 'monitor', 'plane', 'rug', 'water-dispenser', 'window',
     ]);
   });
