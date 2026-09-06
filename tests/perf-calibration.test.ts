@@ -148,10 +148,33 @@ describe('the reference workload', () => {
     // **The ratio was proposed as a SCALE-FREE bound and the first CI reading refutes
     // it.** The argument was that both workloads scale with the CPU, so their ratio
     // would normalise machine speed where an absolute floor could not. Measured:
-    // 16.6-24.3 here over 20 pairs, and **8.55-9.30 on the runner** over two runs — below
-    // the whole local range rather than inside it, with the two runner samples 1.09x
-    // apart, so the direction and the magnitude are both replicated rather than one
-    // reading quoted as an effect.
+    // 16.6-24.3 here over 20 pairs, and **8.01-14.33 on the runner** over four runs (as
+    // of 2026-09-06) — below the whole local range rather than inside it.
+    //
+    // **The runner range has widened on every single reading taken so far**: 9.30, then
+    // 8.55, then 14.33, then 8.01. Four samples have not converged, which is itself the
+    // finding — treat any figure here as a lower bound on the spread, never as settled.
+    //
+    // **The third sample is why this quotes a range and not a pair.** Two runs said
+    // 9.30 and 8.55 and looked tight enough to build on; the run that gated this very
+    // change said 14.33. Per run, workload / yardstick / ratio:
+    //
+    //     15.39   1.66    9.30
+    //     14.39   1.68    8.55
+    //     25.27   1.76   14.33
+    //     11.55   1.44    8.01
+    //
+    // **Read the columns, because they say something the ratio alone does not.** The
+    // yardstick spans 1.06x across those runs and the reference workload spans 1.76x,
+    // so essentially all of the ratio's spread is the reference term's own noise. The
+    // yardstick is not normalising it; it is simply steady while the other is not. That
+    // is a second and independent reason a ratio bound fails here, on top of the two
+    // workloads not scaling together between machines.
+    //
+    // And the runner's 25.27 is ABOVE this box's idle maximum of 22.58, while its
+    // 14.39 is below the idle minimum. **The runner is not a fast machine, it is a
+    // variable one** — which is the real account of the original 8.55 ms absolute
+    // failure, and it is not a thing any bound calibrated on a steady machine survives.
     //
     // The reason was already written, in `yardstickWorkload`'s own docblock, before the
     // measurement: this workload is "deliberately UNLIKE `referenceWorkload` — scalar
@@ -163,9 +186,19 @@ describe('the reference workload', () => {
     // So the ratio stays printed and unasserted, now for a measured reason instead of
     // a precautionary one. Any bound the local range would have justified is above
     // 9.30, and both CI runs came in under it.
+    // **The printed line carries no reference range, and that is a correction.** It read
+    // `(runner 8.55-9.30, this box 16.6-24.3)` for one commit and `(runner 8.55-14.33,
+    // ...)` for the next, and both went stale on the CI run that shipped them — 14.33
+    // then 8.01. A hand-typed number beside the thing it describes is the one thing this
+    // repo has a rule against, and a range that widens every time it is read is the
+    // worst case of it: the literal is wrong the moment it is committed, and it is wrong
+    // in the reassuring direction, because a reader compares this run against it.
+    //
+    // The observed range lives in the comment above, dated, where being provisional is
+    // legible. Here there is only what this run measured.
     console.log(
       `  calibration: workload=${measured.toFixed(2)}ms yardstick=${yard.toFixed(2)}ms ` +
-        `ratio=${(measured / yard).toFixed(2)} (runner 8.55-9.30, this box 16.6-24.3)`,
+        `ratio=${(measured / yard).toFixed(2)}`,
     );
   });
 });
