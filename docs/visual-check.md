@@ -67,41 +67,14 @@ section is yours to fix if you are the one reading it.
 
 ## Sizes and fit
 
-*Owner: `sizes`. **The four new shapes were LOOKED AT on 2026-09-01 and are gone from this
-list.** Standing fan, chest freezer, TV console and stool, seeded apart in a 7 x 5 room and
-photographed front-on and from the corner: the fan reads as a pedestal fan — round guard,
-dark pole, weighted base — and not as the lollipop the contract could not rule out; the
-freezer has its lid seam and handle; the console has two open bays; the stool is a round
-seat on splayed legs. Nothing draws outside its own footprint. That is the one question no
-test in this repo can answer, and it is answered.
+*Owner: `sizes`. Every item previously listed here was looked at and is gone.*
 
-Two things were seen while looking that are NOT shape defects and are filed elsewhere:
-every Library click dropped at room centre, so five added pieces landed in one heap
-(§ H.3 — **fixed 2026-09-03**, they fan out to the first clear spot now; the ceiling
-family was the documented residue and heaped for one more day, because `ceilingSpot`
-discarded the aim — **fixed 2026-09-04**, and the drag half of that fix is an item below);
-and the plan draws the standing fan and the stool as SQUARES, which is § 32 seen rather
-than inferred.
-
-**And the item that replaced them — the pendant and the ceiling fan drawn bigger than
-they declare, § 34 — was FIXED and LOOKED AT on 2026-09-02, so it is gone too.** What
-was seen: six ceiling fixtures seeded at both ends of both catalogue bands in one 6 x 5
-room — pendants at 150 / 400 / 900 mm and fans at 150 / 200 / 450 mm — drawing at six
-visibly different sizes. Before the fix all three pendants drew the same 800 mm and all
-three fans the same 260 mm, because neither renderer read `dimMM` on any axis. A second
-shot with the 400 mm pendant selected shows its geometry sitting INSIDE the selection
-box, which is drawn from `dimMM`: 400 mm of cord used to stick out of the top of that
-box, and the Inspector's derived "Height off the floor 2.38 m" now matches what is on
-screen under a 2.80 m ceiling.
-
-**That look was not optional and it is worth saying why.** A deliberate control mutation
-— `FanGeo` passing a literal `200` instead of `part.dimMM[2]` — survives the whole of
-`tests/ceiling-fixtures.test.ts`, because nothing in this repo renders geometry. The
-band shot is the only thing that can distinguish "the helpers are right" from "the
-renderer calls them". Thirteen other mutations were killed.
-
-**Not seen:** a real GPU. All of this is headless Chromium on SwiftShader, so nothing
-here speaks to how the shapes look with real lighting on a real device.*
+*Two standing caveats for everything in this section. **No test in this repo renders
+geometry** — a control mutation (`FanGeo` passing a literal `200` instead of
+`part.dimMM[2]`) survives the whole of `tests/ceiling-fixtures.test.ts` — so a renderer
+defect can only ever be settled by looking at it. And **nothing here has been on a real
+GPU**: it is all headless Chromium on SwiftShader, which says nothing about how these
+shapes look under real lighting on a real device.*
 
 ### A bedside lamp draws as a RECTANGLE on a freshly seeded room
 
@@ -458,21 +431,7 @@ This is the only defect in the whole item that a mouse cannot produce.
 `components/three/Pickable.tsx` + `components/three/RoomShell.tsx` +
 `components/three/Room.tsx`. Merged to `main` in **`d2ef257`** (PR #73).
 
-
 ### Eight shapes stopped stretching their details — merged to `main` in `6912849` (PR #90)
-
-**Partly looked at on 2026-09-03**, production build, every pair rendered side by side
-at its catalogue size and at the end of its band. What was seen and is therefore NOT in
-the list below: the fan puts its extra height into the DOWNROD with the motor unchanged;
-the pendant at 150 × 900 is a narrow shade on a long cord rather than a funnel, **and it
-casts a clean pool of light on the floor beneath it** — which is the review's blocker
-confirmed, since an emitter left at the authored anchor would have been sitting on the
-bare cord above the shade with the shade occluding it; the console, stool and nightstand
-pairs differ in the right axis only; and a fan given 1500 × 900 reads as an oval in both
-tabs. The 2D plan agrees with `dimMM` throughout, which matters because the plan never
-group-scaled and is therefore the control.
-
-What is left is below.
 
 **Where to click.** Add each piece below from the **Library**, select it, press `S` for
 Scale, and pull it to the end of its band. Then compare against the same piece at its
@@ -531,28 +490,6 @@ gate itself was per-row, so an empty table passed every assertion in it.
 
 ### The Inspector now says where the selected piece stands — merged to `main` in `e0c484a` (PR #91)
 
-**All six states were LOOKED AT on 2026-09-03**, production build, one room holding all
-of them, selected through the rail the way a user selects. What was seen, verbatim:
-
-| piece | banner |
-|---|---|
-| dining table | ✓ **On floor** · "Standing on the floor." |
-| chair half under it | ✓ **On floor** — *not* "Blocked", which is the whole item |
-| lamp on the table | ✓ **On Dining table** · "Resting on Dining table." |
-| the same lamp 350 mm up | **Floating** · "Nothing is holding it up…" |
-| wall TV | ✓ **Wall-mounted** · "Fixed to a wall." |
-| ceiling fan | ✓ **Hanging** · "Hanging from the ceiling." |
-| sofa through a wall | **Sticks out of the room** · *the report's own sentence* |
-
-The long one wraps to three lines and does not clip, and the left rail's chip read
-"1 issue" throughout — the sofa's, and only the sofa's — so the two surfaces agree on
-screen and not merely in a test. **Floating renders in the amber warn tone, visibly
-different from the red danger one**, which is the review's point: the report says
-nothing at all about a floating piece, so a red banner beside a green chip would be the
-very contradiction this item is about.
-
-**What is left is below**, and it is what a screenshot cannot answer.
-
 **Where to click.** Select any piece. The banner sits above the decorating controls,
 between the name and the Colour row.
 
@@ -602,44 +539,15 @@ constitutionally unable to show.*
 
 ### The two decline toasts — the halves nobody has pressed, merged to `main` in `4cc663b` (PR #89)
 
-**Half of this item was looked at on 2026-09-03 and the sentence it recorded no longer
-exists.** It is back open, and the reason is worth keeping: the observation was correct
-about a string this app has stopped producing.
+**The refusal now names WHICH impossible condition it hit**, rather than always saying
+both, so a declining press should read *"No safe arrangement found — The closest it found
+put a piece **through a wall**, so nothing was moved. Press Fix again …"*. Measured on
+`u`/`l`/`t` at 6x4, seeds 1-8, both modes: 48 solves, 9 impossible, 38 applied, 1 no-gain,
+and all 9 name `outside` alone. `arrange` declines on seeds 1, 2, 5 and 7, so the press
+pattern is unchanged and only the wording moved.
 
-What was seen, in a real browser, seeded U at 6 x 4, production build: presses 1 and 2
-gave *"No safe arrangement found — Every layout tried put a piece through a wall or
-inside another one, so nothing was moved. Press Fix again for a different try, or unlock
-a piece to give it more room."*, press 3 applied and said *"Moved 4 pieces"* with the room
-visibly rearranging. The long message **wrapped to four lines and did not clip**, which
-was the open question. Presses 1, 2 and 5/7 declining matched the measurement exactly.
-
-**Two things changed under it, and only one of them is cosmetic.**
-
-The refusal now names WHICH impossible condition it hit rather than always saying both,
-so the same two presses should read *"No safe arrangement found — The closest it found
-put a piece **through a wall**, so nothing was moved. Press Fix again …"*. **Measured on
-2026-09-05 against a `lib/layout-solve.ts` whose blob hash matches its own commit, both
-before and after the run: `u`/`l`/`t` at 6x4, seeds 1-8, both modes = 48 solves, 9
-impossible, 38 applied, 1 no-gain. All 9 name `outside` alone, and all 9 are on the `u`.**
-`arrange` declines on seeds 1, 2, 5, 7 — the same four the earlier session saw — so the
-press pattern above is unchanged and only the wording moved.
-
-**This item previously said 11, and so did `Design.md` and `scripts/declined-terms-sweep.mjs`.**
-The three agreed with each other and all three were wrong; a fourth number, already sitting
-in `lib/layout-solve.ts` beside the decline itself, said 9 and was right. Three copies
-agreeing is not evidence — it is one unverified number written down three times.
-
-And the body no longer opens *"Every layout tried"*. That universal was true of the
-disjunction and false of a single named condition, because the clause comes off the
-WINNER's breakdown while `bestCandidate` ranks on the sum of both terms. The title
-already says nothing worked, so the body says the narrower true thing.
-
-**The wrap question is OPEN, and an earlier version of this item wrongly retired it.** It
-said the new message was "144 with one condition named and 166 with both — so the maximum
-is one character *shorter* than the string already observed wrapping to four lines without
-clipping". Both numbers came off a draft prefix, *"The closest found put a piece"*, three
-characters short of the shipped *"The closest it found put a piece"*. Measured from the
-literals in `components/studio/RoomTools.tsx`:
+**The wrap question is OPEN.** Character counts, from the literals in
+`components/studio/RoomTools.tsx`:
 
 | site | `outside` | `overlap` | both |
 |---|---|---|---|
@@ -648,11 +556,8 @@ literals in `components/studio/RoomTools.tsx`:
 | `:1089` re-fit offer | 106 | 110 | 128 |
 | `:1208` Try a fix, unscoped | 93 | 97 | 115 |
 
-The old sentence was **167**. So the longest form is two characters LONGER than the one
-already seen wrapping, not shorter, and the range across the four sites is **93 to 169** —
-someone checking against "144 to 166" would test neither end. The comment in `RoomTools.tsx`
-carried the same wrong claim and has been corrected too.
-
+The range across the four sites is **93 to 169** characters. Check the two ENDS, not a
+middle — a reviewer given the old "144 to 166" would have tested neither.
 `overlap` alone has never been produced by any solve measured so far — 48 solves across
 three room shapes, every refusal `outside` — so *"inside another one"* as a standalone
 clause is unseen, and the 169-character both-terms string has never been produced at all.
@@ -745,14 +650,10 @@ point of the change, and no test can tell you it reads that way on screen.
   that anything is happening. It must be whole. Whether the row wraps to two lines
   while it does that is fine and is the intended trade.
 
-  This bullet twice described a version that truncated. It was briefly a `1fr 1fr`
-  grid whose columns are 85px at `--rail-left-tight` against 50px of `.ds-btn`
-  chrome — 35px for a word that wants ~41px, and ~59px while busy — and the note
-  then told a reviewer the full label was *"still reachable on hover"*. It was not:
-  Fix's `title` never contains the word "Fix" and Shuffle's contains "Fix" and not
-  "Shuffle". **A hand-off note that names the wrong thing to look at does not
-  merely mislead, it scopes the search** — someone hovering a cut label to check a
-  tooltip would have confirmed the truncation and gone no further.
+  *Do not re-propose a `1fr 1fr` grid here — it was tried and cut the word. A column is
+  85px at `--rail-left-tight` against 50px of `.ds-btn` chrome, leaving ~35px for a word
+  wanting ~41px. And the full label is NOT recoverable on hover: Fix's `title` never
+  contains "Fix", and Shuffle's contains "Fix" and not "Shuffle".*
   (`tests/reflow.test.ts` now holds both halves: that the row wraps and may not
   shrink, and the arithmetic saying why.)
 - **The refusal.** On a `t` or `open` footprint roughly a sixth to a third of presses
@@ -793,26 +694,17 @@ turn with them, not trail behind at an angle.
 used to carry are gone with the merge: they measured a branch tip that `main` has since
 moved five PRs past, and quoting them here would be quoting the wrong artifact.
 
-### Does Shuffle keep the bedside table by the bed? — a known defect, `main`
-
 ### The solve buttons say they are working — LOOKED AT for three of the four
 
-Kept as a paragraph rather than deleted, because the measurement is the point and because
-the fourth button has only just landed.
+Suggest, Try a fix and Check the room were seen busy on a production build: the spinner,
+`aria-busy="true"`, the label **Thinking…** and a disabled button across two consecutive
+animation frames — with the synchronous solve blocking for ~2.9 s *after* the busy state
+was already painted, which is what `afterPaint`'s two rAFs are for. All three share
+`useBusyAction`.
 
-Chromium against a production build, per-frame sampling from inside the page: pressing
-**Suggest** on a scrambled room put `.ds-spinner` in the DOM with `aria-busy="true"`, the
-label **Thinking…** and the button `disabled` across **two consecutive animation frames**
-17 ms apart — so the compositor had a frame boundary with it up, which is a paint — and the
-frames either side of it show gaps of **2983 ms and 2899 ms**, the synchronous solve
-blocking the main thread *after* the busy state was already on screen. That is exactly the
-sequence `afterPaint`'s two rAFs are for. Try a fix and Check the room share the identical
-`useBusyAction` hook, which is what the extraction was for.
-
-Three earlier versions of that probe each reported "never observed" for a reason of their
-own making — polling slower than the window, matching the wrong label, and a
-MutationObserver whose callback reads the current DOM and so cannot see a state that opens
-and closes inside one microtask checkpoint. Worth knowing before anyone re-measures it.
+*Before re-measuring: three earlier probes each reported "never observed" for a reason of
+their own making — polling slower than the window, matching the wrong label, and a
+MutationObserver that cannot see a state opening and closing inside one microtask.*
 
 **Still unlooked-at, and small.** **Shuffle** was routed through the same hook on PR #67 and
 has the longest solve in the app — one press is up to twelve solves, a median 2.0 s and a
@@ -856,44 +748,19 @@ the rail grows a horizontal scrollbar, the wrap is not doing its job.
 
 **Where it rides.** Merged to `main` in `270455f` (PR #72).
 
-
-
 ### A numbered piece can vanish under the piece drawn after it — the exported floor plan
 
-**Half of this was already fixed on `main` when it was rescued, and the rescue said the
-opposite.** Rescued 2026-09-03 from `fix/derive-mounted-and-vertical-extent` on the grounds
-that it "exists in no commit on `main`" — derived later the same day, that is **false**.
-`0e60478`, *"fix(export): a number badge could be buried by the next piece's footprint"*, is
-on `main`; `lib/plan-export.ts` draws in **two passes** with a comment describing this exact
-defect (*"piece `i + 1`'s fill and outline landed on top of piece `i`'s NUMBER"*); and
-`tests/plan-export-order.test.ts` gates it with three assertions, the first being that every
-footprint is drawn before the first badge.
+**The draw-order half is fixed and gated.** `0e60478` on `main` splits `lib/plan-export.ts`
+into two passes, and `tests/plan-export-order.test.ts` asserts every footprint is drawn
+before the first badge. *(An earlier note claimed this existed in no commit on `main`,
+having searched and found nothing. A search that returns nothing is evidence about the
+search, not about the tree.)*
 
-**Why the rescue got it wrong is the part worth keeping.** Its author searched `main` and
-reported *"no mention of plan export at all"* — about a repo containing `lib/plan-export.ts`
-and `tests/plan-export-order.test.ts`. That is § D's trap arriving from the other side: a
-search that returns nothing is evidence about the search, not about the tree, and "no mention
-anywhere" is the single easiest claim to make and the hardest to notice being wrong. It cost
-a rescue of work that was already home, and it would have cost a re-fix.
-
-**What is actually left**, and it is the second of the two causes that item named: the badge
-could still be placed at a centroid sitting under a **neighbour's badge**. The gate's own
-words are that *"a number can now only be crossed by another number"* — so the draw-order
-half is closed and the collision-between-badges half has never been looked at.
-
-**What was seen.** A production build, a room holding a **Ceiling fan** and a **Sofa**,
-**Export → Floor plan**. The legend is right — `1 Ceiling fan — 1.00 × 1.00 × 0.20 m (W×D×H)`
-and `2 Sofa — 2.20 × 0.95 × 0.88 m`, both numbered, no bare tick anywhere — so the
-`wallMounted` → `ridesWall` regression that item was about is closed by a picture. What was
-**not** right: the fan's number badge never appeared in the sheet. It is drawn UNDER the
-sofa's footprint.
-
-**The question that framed it, and which half of it survives.** It named two possible
-causes — a z-order defect in the draw order (every footprint painted, then every badge,
-versus one piece fully painted at a time) or a badge placed at a centroid that happens to sit
-under a neighbour. **The first is fixed and gated**; the second is what to look for now. The
-failure worth naming is unchanged and is why this still wants eyes: *a legend that references
-a label the drawing does not carry* is worse than omitting both.
+**What is left is the other cause:** a badge placed at a centroid that happens to sit under
+a **neighbour's** badge. The gate's own words are that *"a number can now only be crossed by
+another number"*, and that half has never been looked at. The failure worth naming is
+unchanged — *a legend that references a label the drawing does not carry* is worse than
+omitting both.
 
 **Where to click.** Any room. Add a large piece — a sofa — then add a small one and drag it
 so its footprint sits **inside** the sofa's. Export the floor plan. Both numbers must appear
@@ -1119,36 +986,18 @@ the SwiftShader screenshot times out, so **nobody has seen this**. Still open �
 
 ---
 
-## Almost nothing here has been in a browser — and here is the route that works
+## The browser route, so the next person does not rebuild it
 
-**The heading used to say "nothing", and that stopped being true on `cb711cc`.** Some of
-this has now been seen, headlessly, with a before/after and a control, and the route is
-written down below because the reason nothing gets looked at is that looking is a
-half-hour of setup nobody has to hand.
+Looking is a half-hour of setup nobody has to hand, which is the actual reason items sit
+here unchecked. This is that half-hour, written down once.
 
-### What was seen, on the T and the U
-
-`fix/inward-normals-from-winding`, A/B against `origin/main` @ `3da5df2`, three
-preset rooms created through `/onboarding/layout-pick` and screenshotted on the 3D
-Model tab at 1440x900, zero console errors on all six shots:
-
-| preset | on `main` @ `3da5df2` | on `cb711cc` |
-|---|---|---|
-| T-Shape 5.5x4.7 | a **wall standing in the middle of the room**, drawn opaque and lit toward the camera, hiding the dining arm and most of its chairs | gone — the arm, its table and all four chairs are visible |
-| U-Shape 6x5.0 | the **notch is open**: you see through where its three walls are, to bare floor, and the east return is a detached unlit slab | a closed shell, notch walls present and lit from inside |
-| L-Shape 6x4.7 | — | **structurally identical to `main`** |
-
-The L is the control and it is the whole point: it is the one non-convex preset whose
-corner average can see all six of its walls, so it renders the same before and after.
-A check that swept a rectangle and an L would have shown nothing. The two rooms that
-changed are exactly the two the sweep measured wrong (`t#2`, `t#6`, `u#1`, `u#2`,
-`u#3`), which is what makes these six pictures evidence rather than six pictures.
-
-Pixel hashes differ on all three pairs, including the L — SwiftShader is not
-bit-deterministic across processes, so **do not use an image hash as the comparison**.
-Look at them.
-
-### The route, so the next person does not rebuild it
+Two lessons from the run that established it, kept because they are about method rather
+than about that fix. **Pick a control that CANNOT change**: the L-shape preset is the one
+non-convex room whose corner average sees all six of its walls, so it rendered identically
+before and after — a sweep of a rectangle and an L would have shown nothing at all. And
+**never compare screenshots by hash**: SwiftShader is not bit-deterministic across
+processes, so pixel hashes differed on every pair including the unchanged control. Look at
+them.
 
 Playwright lives **outside the repo** (`npm i playwright-core` in a scratch dir; the
 browsers are already under `AppData/Local/ms-playwright`), because adding it to this
@@ -1194,7 +1043,7 @@ the **left rail's room fields** before the Inspector's, so the probe grew the ro
 `DOCUMENT_POSITION_FOLLOWING` from the Inspector's own "Exact size" button — which is
 already open on a fresh selection, so clicking it unconditionally closes it.
 
-## Nothing else here has been in a browser
+## The service worker, and where you have to be to check it
 
 Every commit gets a Vercel deployment, and a deployment is the only place the
 production-only service worker registers — `next dev` cannot check that one at all.
