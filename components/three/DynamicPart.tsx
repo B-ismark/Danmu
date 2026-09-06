@@ -329,28 +329,64 @@ function shade(hex: string, pct: number): string {
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
 }
 
+/** Scales a renderer whose geometry is hard-coded metres to the size the piece DECLARES.
+ *
+ *  CLAUDE.md rule 2's corollary, and six renderers were breaking it: geometry must be
+ *  authored at `part.dimMM`, because `Draggable` scales by `storedDim / part.dimMM` — so a
+ *  renderer drawing one fixed size draws the WRONG size at scale 1, and the 2D plan (which
+ *  reads `dimMM` directly through `footFromPart`) and the 3D tab then show the same piece at
+ *  two sizes. `PlantGeo` declared 400 × 400 × 1600 and drew 880 × 700 × 1940: the plan
+ *  outlined a 400 mm pot around a 1.9 m plant, and every clearance, collision and picking
+ *  answer used the outline.
+ *
+ *  `natural` is the extent the children actually occupy, in metres, as **[x, y, z]** —
+ *  MEASURED by `tests/footprint-fidelity.test.tsx` rather than added up from the literals.
+ *  That distinction is not pedantry: the literals here are sphere centres and radii, and the
+ *  hand-computed figure for the plant was 920 mm against a measured 880. The gate re-measures
+ *  every shape, so a `natural` that drifts from its geometry fails there instead of silently
+ *  rescaling the piece.
+ *
+ *  Scaling is about the origin, so anything standing on the floor at y = 0 stays there.
+ */
+function FitToDim({
+  natural,
+  part,
+  children,
+}: {
+  natural: [number, number, number];
+  part: ScenePart;
+  children: React.ReactNode;
+}) {
+  const [w, d, h] = part.dimMM;
+  return (
+    <group scale={[w / 1000 / natural[0], h / 1000 / natural[1], d / 1000 / natural[2]]}>
+      {children}
+    </group>
+  );
+}
+
 // ─── Chairs ──────────────────────────────────────────────────────────────
 function DiningChairGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const wood = body(part, locked);
   const seat = shade(wood, 14);
   return (
-    <>
-      <Box size={[0.42, 0.06, 0.42]} position={[0, 0.46, 0]} color={seat} roughness={0.97} />
-      {/* back slats — two thin bars instead of a solid slab */}
-      <Box size={[0.42, 0.04, 0.04]} position={[0, 0.68, -0.19]} color={wood} roughness={0.7} />
-      <Box size={[0.42, 0.04, 0.04]} position={[0, 0.82, -0.19]} color={wood} roughness={0.7} />
-      <Box size={[0.42, 0.04, 0.04]} position={[0, 0.96, -0.19]} color={wood} roughness={0.7} />
-      {/* top rail */}
-      <Box size={[0.42, 0.06, 0.05]} position={[0, 1.06, -0.18]} color={wood} roughness={0.7} />
-      {[
-        [-0.18, -0.18],
-        [0.18, -0.18],
-        [-0.18, 0.18],
-        [0.18, 0.18],
-      ].map(([x, z], i) => (
-        <Box key={i} size={[0.04, 0.45, 0.04]} position={[x, 0.225, z]} color={wood} roughness={0.7} edgeOpacity={0.4} />
-      ))}
-    </>
+    <FitToDim natural={[0.42, 1.09, 0.42]} part={part}>
+        <Box size={[0.42, 0.06, 0.42]} position={[0, 0.46, 0]} color={seat} roughness={0.97} />
+        {/* back slats — two thin bars instead of a solid slab */}
+        <Box size={[0.42, 0.04, 0.04]} position={[0, 0.68, -0.19]} color={wood} roughness={0.7} />
+        <Box size={[0.42, 0.04, 0.04]} position={[0, 0.82, -0.19]} color={wood} roughness={0.7} />
+        <Box size={[0.42, 0.04, 0.04]} position={[0, 0.96, -0.19]} color={wood} roughness={0.7} />
+        {/* top rail */}
+        <Box size={[0.42, 0.06, 0.05]} position={[0, 1.06, -0.18]} color={wood} roughness={0.7} />
+        {[
+          [-0.18, -0.18],
+          [0.18, -0.18],
+          [-0.18, 0.18],
+          [0.18, 0.18],
+        ].map(([x, z], i) => (
+          <Box key={i} size={[0.04, 0.45, 0.04]} position={[x, 0.225, z]} color={wood} roughness={0.7} edgeOpacity={0.4} />
+        ))}
+    </FitToDim>
   );
 }
 
@@ -358,41 +394,41 @@ function OfficeChairGeo({ part, locked }: { part: ScenePart; locked: boolean }) 
   const cushion = body(part, locked);
   const metal = '#5A5A5A';
   return (
-    <>
-      {/* 5-spoke wheeled base */}
-      <mesh position={[0, 0.04, 0]}>
-        <cylinderGeometry args={[0.04, 0.04, 0.05, 8]} />
-        <meshStandardMaterial color={metal} {...SURFACE.metal} />
-      </mesh>
-      {[0, 1, 2, 3, 4].map((i) => {
-        const a = (i * 2 * Math.PI) / 5;
-        const x = Math.cos(a) * 0.16;
-        const z = Math.sin(a) * 0.16;
-        return (
-          <group key={i}>
-            <Box size={[0.32, 0.025, 0.05]} position={[x / 2, 0.045, z / 2]} rotation={[0, -a, 0]} color={metal} edgeOpacity={0.4} />
-            <mesh position={[x, 0.03, z]}>
-              <sphereGeometry args={[0.03, 8, 8]} />
-              <meshStandardMaterial color={DETAIL.hardware} />
-            </mesh>
-          </group>
-        );
-      })}
-      {/* gas piston */}
-      <mesh position={[0, 0.28, 0]}>
-        <cylinderGeometry args={[0.03, 0.03, 0.42, 12]} />
-        <meshStandardMaterial color={metal} {...SURFACE.metal} />
-      </mesh>
-      {/* seat */}
-      <Box size={[0.5, 0.08, 0.48]} position={[0, 0.5, 0]} color={cushion} roughness={0.97} />
-      {/* backrest */}
-      <Box size={[0.48, 0.6, 0.06]} position={[0, 0.85, -0.21]} color={cushion} roughness={0.97} />
-      {/* lumbar curve hint — slightly protruding box gives depth */}
-      <Box size={[0.44, 0.18, 0.04]} position={[0, 0.7, -0.19]} color={shade(cushion, -8)} roughness={0.97} />
-      {/* armrests */}
-      <Box size={[0.04, 0.04, 0.32]} position={[-0.27, 0.62, -0.05]} color={DETAIL.hardware} roughness={0.55} metalness={0.3} edgeOpacity={0.4} />
-      <Box size={[0.04, 0.04, 0.32]} position={[0.27, 0.62, -0.05]} color={DETAIL.hardware} roughness={0.55} metalness={0.3} edgeOpacity={0.4} />
-    </>
+    <FitToDim natural={[0.58, 1.15, 0.48]} part={part}>
+        {/* 5-spoke wheeled base */}
+        <mesh position={[0, 0.04, 0]}>
+          <cylinderGeometry args={[0.04, 0.04, 0.05, 8]} />
+          <meshStandardMaterial color={metal} {...SURFACE.metal} />
+        </mesh>
+        {[0, 1, 2, 3, 4].map((i) => {
+          const a = (i * 2 * Math.PI) / 5;
+          const x = Math.cos(a) * 0.16;
+          const z = Math.sin(a) * 0.16;
+          return (
+            <group key={i}>
+              <Box size={[0.32, 0.025, 0.05]} position={[x / 2, 0.045, z / 2]} rotation={[0, -a, 0]} color={metal} edgeOpacity={0.4} />
+              <mesh position={[x, 0.03, z]}>
+                <sphereGeometry args={[0.03, 8, 8]} />
+                <meshStandardMaterial color={DETAIL.hardware} />
+              </mesh>
+            </group>
+          );
+        })}
+        {/* gas piston */}
+        <mesh position={[0, 0.28, 0]}>
+          <cylinderGeometry args={[0.03, 0.03, 0.42, 12]} />
+          <meshStandardMaterial color={metal} {...SURFACE.metal} />
+        </mesh>
+        {/* seat */}
+        <Box size={[0.5, 0.08, 0.48]} position={[0, 0.5, 0]} color={cushion} roughness={0.97} />
+        {/* backrest */}
+        <Box size={[0.48, 0.6, 0.06]} position={[0, 0.85, -0.21]} color={cushion} roughness={0.97} />
+        {/* lumbar curve hint — slightly protruding box gives depth */}
+        <Box size={[0.44, 0.18, 0.04]} position={[0, 0.7, -0.19]} color={shade(cushion, -8)} roughness={0.97} />
+        {/* armrests */}
+        <Box size={[0.04, 0.04, 0.32]} position={[-0.27, 0.62, -0.05]} color={DETAIL.hardware} roughness={0.55} metalness={0.3} edgeOpacity={0.4} />
+        <Box size={[0.04, 0.04, 0.32]} position={[0.27, 0.62, -0.05]} color={DETAIL.hardware} roughness={0.55} metalness={0.3} edgeOpacity={0.4} />
+    </FitToDim>
   );
 }
 
@@ -401,26 +437,26 @@ function ArmchairGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const leg = body(part, locked, '#4A3526');
   const cushionDark = shade(seat, -10);
   return (
-    <>
-      {/* seat cushion */}
-      <Box size={[0.7, 0.12, 0.7]} position={[0, 0.43, 0]} color={seat} surface="fabric" />
-      {/* back cushion */}
-      <Box size={[0.68, 0.58, 0.12]} position={[0, 0.73, -0.29]} color={seat} surface="fabric" />
-      {/* back cushion crease line */}
-      <Box size={[0.62, 0.005, 0.1]} position={[0, 0.68, -0.24]} color={cushionDark} surface="fabric" roughness={0.98} />
-      {/* armrests */}
-      <Box size={[0.1, 0.38, 0.68]} position={[-0.3, 0.56, 0]} color={seat} surface="fabric" roughness={0.95} />
-      <Box size={[0.1, 0.38, 0.68]} position={[0.3, 0.56, 0]} color={seat} surface="fabric" roughness={0.95} />
-      {/* wooden legs */}
-      {[
-        [-0.3, -0.3],
-        [0.3, -0.3],
-        [-0.3, 0.3],
-        [0.3, 0.3],
-      ].map(([x, z], i) => (
-        <Box key={i} size={[0.05, 0.32, 0.05]} position={[x, 0.16, z]} color={leg} roughness={0.7} edgeOpacity={0.4} />
-      ))}
-    </>
+    <FitToDim natural={[0.7, 1.02, 0.7]} part={part}>
+        {/* seat cushion */}
+        <Box size={[0.7, 0.12, 0.7]} position={[0, 0.43, 0]} color={seat} surface="fabric" />
+        {/* back cushion */}
+        <Box size={[0.68, 0.58, 0.12]} position={[0, 0.73, -0.29]} color={seat} surface="fabric" />
+        {/* back cushion crease line */}
+        <Box size={[0.62, 0.005, 0.1]} position={[0, 0.68, -0.24]} color={cushionDark} surface="fabric" roughness={0.98} />
+        {/* armrests */}
+        <Box size={[0.1, 0.38, 0.68]} position={[-0.3, 0.56, 0]} color={seat} surface="fabric" roughness={0.95} />
+        <Box size={[0.1, 0.38, 0.68]} position={[0.3, 0.56, 0]} color={seat} surface="fabric" roughness={0.95} />
+        {/* wooden legs */}
+        {[
+          [-0.3, -0.3],
+          [0.3, -0.3],
+          [-0.3, 0.3],
+          [0.3, 0.3],
+        ].map(([x, z], i) => (
+          <Box key={i} size={[0.05, 0.32, 0.05]} position={[x, 0.16, z]} color={leg} roughness={0.7} edgeOpacity={0.4} />
+        ))}
+    </FitToDim>
   );
 }
 
@@ -437,35 +473,35 @@ function PlantGeo({ part }: { part: ScenePart }) {
     { p: [-0.06, 1.3, 0.18], r: 0.18, c: '#4A7048' },
   ];
   return (
-    <>
-      {/* tapered pot */}
-      <mesh position={[0, 0.18, 0]}>
-        <cylinderGeometry args={[0.21, 0.16, 0.36, 20]} />
-        <meshStandardMaterial color={pot} {...SURFACE.ceramic} />
-      </mesh>
-      {/* soil */}
-      <mesh position={[0, 0.355, 0]}>
-        <cylinderGeometry args={[0.2, 0.2, 0.03, 20]} />
-        <meshStandardMaterial color="#3a2c20" roughness={1} />
-      </mesh>
-      {/* stem + canopy sway gently from the soil line */}
-      <group position={[0, 0.37, 0]}>
-        <Sway amp={0.03} speed={0.9}>
-          <group position={[0, -0.37, 0]}>
-            <mesh position={[0, 0.95, 0]}>
-              <cylinderGeometry args={[0.02, 0.025, 1.2, 8]} />
-              <meshStandardMaterial color="#4A3526" />
-            </mesh>
-            {blobs.map((b, i) => (
-              <mesh key={i} position={b.p}>
-                <sphereGeometry args={[b.r, 14, 12]} />
-                <meshStandardMaterial color={b.c} {...SURFACE.foliage} />
+    <FitToDim natural={[0.88, 1.94, 0.7]} part={part}>
+        {/* tapered pot */}
+        <mesh position={[0, 0.18, 0]}>
+          <cylinderGeometry args={[0.21, 0.16, 0.36, 20]} />
+          <meshStandardMaterial color={pot} {...SURFACE.ceramic} />
+        </mesh>
+        {/* soil */}
+        <mesh position={[0, 0.355, 0]}>
+          <cylinderGeometry args={[0.2, 0.2, 0.03, 20]} />
+          <meshStandardMaterial color="#3a2c20" roughness={1} />
+        </mesh>
+        {/* stem + canopy sway gently from the soil line */}
+        <group position={[0, 0.37, 0]}>
+          <Sway amp={0.03} speed={0.9}>
+            <group position={[0, -0.37, 0]}>
+              <mesh position={[0, 0.95, 0]}>
+                <cylinderGeometry args={[0.02, 0.025, 1.2, 8]} />
+                <meshStandardMaterial color="#4A3526" />
               </mesh>
-            ))}
-          </group>
-        </Sway>
-      </group>
-    </>
+              {blobs.map((b, i) => (
+                <mesh key={i} position={b.p}>
+                  <sphereGeometry args={[b.r, 14, 12]} />
+                  <meshStandardMaterial color={b.c} {...SURFACE.foliage} />
+                </mesh>
+              ))}
+            </group>
+          </Sway>
+        </group>
+    </FitToDim>
   );
 }
 
@@ -474,20 +510,20 @@ function FloorLampGeo({ part }: { part: ScenePart }) {
   const metal = '#9A7848';
   const shade = tint(part);
   return (
-    <>
-      <mesh position={[0, 0.02, 0]}>
-        <cylinderGeometry args={[0.15, 0.18, 0.04, 16]} />
-        <meshStandardMaterial color={metal} {...SURFACE.metal} />
-      </mesh>
-      <mesh position={[0, 0.85, 0]}>
-        <cylinderGeometry args={[0.015, 0.015, 1.6, 8]} />
-        <meshStandardMaterial color={metal} {...SURFACE.metal} />
-      </mesh>
-      <mesh position={[0, 1.7, 0]}>
-        <coneGeometry args={[0.18, 0.3, 16, 1, true]} />
-        <meshStandardMaterial color={shade} side={2} {...SURFACE.fabric} />
-      </mesh>
-    </>
+    <FitToDim natural={[0.36, 1.85, 0.36]} part={part}>
+        <mesh position={[0, 0.02, 0]}>
+          <cylinderGeometry args={[0.15, 0.18, 0.04, 16]} />
+          <meshStandardMaterial color={metal} {...SURFACE.metal} />
+        </mesh>
+        <mesh position={[0, 0.85, 0]}>
+          <cylinderGeometry args={[0.015, 0.015, 1.6, 8]} />
+          <meshStandardMaterial color={metal} {...SURFACE.metal} />
+        </mesh>
+        <mesh position={[0, 1.7, 0]}>
+          <coneGeometry args={[0.18, 0.3, 16, 1, true]} />
+          <meshStandardMaterial color={shade} side={2} {...SURFACE.fabric} />
+        </mesh>
+    </FitToDim>
   );
 }
 
@@ -495,23 +531,23 @@ function TableLampGeo({ part }: { part: ScenePart }) {
   const metal = '#9A7848';
   const shade = tint(part);
   return (
-    <>
-      {/* base */}
-      <mesh position={[0, 0.03, 0]}>
-        <cylinderGeometry args={[0.08, 0.1, 0.06, 16]} />
-        <meshStandardMaterial color={metal} {...SURFACE.metal} />
-      </mesh>
-      {/* short stem */}
-      <mesh position={[0, 0.2, 0]}>
-        <cylinderGeometry args={[0.012, 0.012, 0.28, 8]} />
-        <meshStandardMaterial color={metal} {...SURFACE.metal} />
-      </mesh>
-      {/* shade */}
-      <mesh position={[0, 0.42, 0]}>
-        <coneGeometry args={[0.14, 0.2, 16, 1, true]} />
-        <meshStandardMaterial color={shade} side={2} {...SURFACE.fabric} />
-      </mesh>
-    </>
+    <FitToDim natural={[0.28, 0.52, 0.28]} part={part}>
+        {/* base */}
+        <mesh position={[0, 0.03, 0]}>
+          <cylinderGeometry args={[0.08, 0.1, 0.06, 16]} />
+          <meshStandardMaterial color={metal} {...SURFACE.metal} />
+        </mesh>
+        {/* short stem */}
+        <mesh position={[0, 0.2, 0]}>
+          <cylinderGeometry args={[0.012, 0.012, 0.28, 8]} />
+          <meshStandardMaterial color={metal} {...SURFACE.metal} />
+        </mesh>
+        {/* shade */}
+        <mesh position={[0, 0.42, 0]}>
+          <coneGeometry args={[0.14, 0.2, 16, 1, true]} />
+          <meshStandardMaterial color={shade} side={2} {...SURFACE.fabric} />
+        </mesh>
+    </FitToDim>
   );
 }
 

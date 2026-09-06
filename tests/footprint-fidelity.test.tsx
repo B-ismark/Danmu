@@ -80,6 +80,8 @@ type Row = {
   outside: number;
   /** the y-range of whatever escapes, so a canopy can be told from a leg */
   overY: [number, number] | null;
+  /** what the renderer DRAWS, mm, on [x, z, y] — to be read against `dim` */
+  span: [number, number, number];
   prims: number;
   /** true = the renderer is handed the RESIZED dim, so all three rows are sizes the
    *  app really draws. false = the piece is authored at `dimMM` and wears a resize as
@@ -115,8 +117,24 @@ function measure(shape: Shape, size: Row['size'], dim: [number, number, number])
     if (out) { lo = Math.min(lo, p.y[0]); hi = Math.max(hi, p.y[1]); }
   }
 
+  // What the renderer actually DRAWS, on all three axes, against what the piece declares.
+  // `overX` / `overZ` only answer "does it escape"; a piece can sit entirely inside its box
+  // and still be the wrong size, which is the half nothing here measured. A plant declaring
+  // 400 mm and drawing 920 is a defect; so is one declaring 1200 and drawing 920.
+  let ylo = Infinity;
+  let yhi = -Infinity;
+  for (const p of rep.prims) {
+    ylo = Math.min(ylo, p.y[0]);
+    yhi = Math.max(yhi, p.y[1]);
+  }
+  const span: [number, number, number] = [
+    (b.x1 - b.x0) * 1000,
+    (b.z1 - b.z0) * 1000,
+    ylo === Infinity ? 0 : (yhi - ylo) * 1000,
+  ];
+
   return {
-    shape, size, dim, overX, overZ,
+    shape, size, dim, overX, overZ, span,
     fill: inside / boxArea,
     outside: (whole - inside) / boxArea,
     overY: lo === Infinity ? null : [lo, hi],
@@ -317,14 +335,13 @@ describe('what a shape actually occupies, against the one box every consumer rea
   // make a red go away fails a different assertion instead of silently relaxing the gate.
   const DEFAULT_OVERHANG_MM = 60;
   const OVERHANG_MM: Partial<Record<Shape, number>> = {
-    // The one real outlier, and it is the § 12 / row 12 defect in miniature: `PlantGeo` is
-    // hard-coded metres end to end — canopy blobs of r 0.34 at y 1.55, a pot cylinder of
-    // r 0.21 — and never reads `part.dimMM` at all. Declared 400 x 400 x 1600; drawn
-    // 920 x 720 x 1940. Left at its measured value rather than fixed here, because the fix
-    // is a product decision that has not been taken: shrink the plant to its declared box,
-    // or restate the box at the size the plant is actually drawn. Both change something a
-    // user can see. Recorded in `docs/what-is-still-open.md`.
-    plant: 260,
+    // `plant: 260` stood here for one commit and is GONE rather than kept at 0. It excused
+    // the worst instance of the defect this file exists to find — `PlantGeo` drew
+    // 880 x 700 x 1940 against a declared 400 x 400 x 1600 — and the moment the renderer was
+    // made to read `dimMM`, the entry became a licence nothing needed. An exception that no
+    // longer excuses anything is the most dangerous row in a table like this: it reads as a
+    // known limitation and quietly permits a 260 mm regression forever.
+    //
     // Physical rather than a slip, and the distinction is why it is 70 and not 260. The
     // lid is hinged at the back edge (`-d / 2 + 0.01`) and tilted -0.34 rad, so an OPEN
     // screen leans behind the base — which is what a real laptop does. `dimMM`'s depth
@@ -335,6 +352,72 @@ describe('what a shape actually occupies, against the one box every consumer rea
     // run, not before it — it sat under the eyeball threshold used to draft the table.
     laptop: 70,
   };
+
+  // WHAT THE PIECE DRAWS AGAINST WHAT IT DECLARES, which is a different question from
+  // `overX`/`overZ` above. Those only ask whether geometry ESCAPES the box; a piece can sit
+  // entirely inside its box and still be the wrong size, and nothing measured that until
+  // now. The plan draws `dimMM` through `footFromPart`, the 3D tab draws the geometry, so a
+  // ratio away from 1 is the two tabs showing one piece at two sizes.
+  //
+  // Default band is 0.90–1.10. Everything outside it is NAMED with its measured ratio and
+  // held to ±0.03, so each is a pin rather than an excuse — and the key set is asserted, so
+  // adding a row cannot be the cheap way to green a red.
+  const RATIO_TOL = 0.03;
+  const DRAWN_RATIO: Partial<Record<Shape, [number, number, number]>> = {
+    // Real protrusions above the declared box, all on ONE axis and all defensible: a bed's
+    // headboard rises past the mattress height `dimMM` describes, a monitor and a laptop
+    // lean back past their base, a door and a mirror carry a handle and a frame.
+    'bed-single': [1.0, 1.01, 1.4],
+    'bed-double': [1.0, 1.01, 1.4],
+    monitor: [1.0, 1.5, 0.98],
+    laptop: [1.0, 1.4, 1.04],
+    door: [1.0, 1.5, 1.0],
+    mirror: [1.05, 1.5, 1.02],
+    'mirror-oval': [1.1, 0.83, 1.05],
+    window: [1.1, 2.0, 1.11],
+    'water-dispenser': [1.0, 1.14, 1.02],
+    // A rug is 5 mm of declared thickness and 21 mm of drawn pile plus its border. The ratio
+    // is 4.2 and the absolute error is 16 mm, which is the case for reading BOTH columns.
+    rug: [1.0, 1.0, 4.2],
+    // These two draw SMALLER than they declare, which the overhang gate above is blind to by
+    // construction, and they are the two worth someone's judgement rather than a budget:
+    // a ceiling fan declaring a 1000 mm sweep draws 819, and a pedestal fan declaring a
+    // 450 mm depth draws 306. Both are in `ROUND_SHAPES`, so the plan draws a full circle
+    // at the declared size over geometry that does not fill it.
+    fan: [0.82, 0.95, 1.0],
+    'fan-standing': [1.0, 0.68, 1.0],
+    // A plane has no height by definition; `dimMM[2]` is what a resize would scale.
+    plane: [1.0, 1.0, 0.0],
+  };
+
+  it('draws every shape at the size it declares', () => {
+    const rows = SHAPES.map((s) => rowsFor(s).find((q) => q.size === 'lib')!);
+    const f = (n: number, w: number, d = 0) => n.toFixed(d).padStart(w);
+    console.log('\nDECLARED vs DRAWN at the catalogue size, mm — ratio drawn/declared');
+    console.log('shape                  decW  decD  decH | drwW  drwD  drwH |   rW    rD    rH');
+    const off: string[] = [];
+    for (const r of rows) {
+      const ratio: [number, number, number] = [
+        r.span[0] / r.dim[0], r.span[1] / r.dim[1], r.span[2] / r.dim[2],
+      ];
+      const pin = DRAWN_RATIO[r.shape];
+      const bad = pin
+        ? ratio.some((v, i) => Math.abs(v - pin[i]) > RATIO_TOL)
+        : ratio.some((v) => v < 0.9 || v > 1.1);
+      if (bad) off.push(`${r.shape} ${ratio.map((v) => v.toFixed(2)).join('/')}${pin ? ` vs pinned ${pin.join('/')}` : ''}`);
+      console.log(
+        `${r.shape.padEnd(20)} ${f(r.dim[0], 5)} ${f(r.dim[1], 5)} ${f(r.dim[2], 5)} |` +
+          ` ${f(r.span[0], 5)} ${f(r.span[1], 5)} ${f(r.span[2], 5)} |` +
+          ` ${f(ratio[0], 5, 2)} ${f(ratio[1], 5, 2)} ${f(ratio[2], 5, 2)}${pin ? '  pinned' : ''}${bad ? '  <<<' : ''}`,
+      );
+    }
+    expect(rows.length, 'every shape, not whatever the sweep found').toBe(SHAPES.length);
+    expect(off, 'shapes drawing at a size other than the one they declare').toEqual([]);
+    expect(Object.keys(DRAWN_RATIO).sort(), 'shapes excused from the 0.90–1.10 band').toEqual([
+      'bed-double', 'bed-single', 'door', 'fan', 'fan-standing', 'laptop', 'mirror',
+      'mirror-oval', 'monitor', 'plane', 'rug', 'water-dispenser', 'window',
+    ]);
+  });
 
   it('keeps every shape inside the one box every consumer reads', () => {
     const over: string[] = [];
@@ -350,6 +433,6 @@ describe('what a shape actually occupies, against the one box every consumer rea
 
     // The exception table is itself pinned. Without this, the cheapest way to green a red
     // is to add a row here, and nothing would say so.
-    expect(Object.keys(OVERHANG_MM).sort(), 'shapes excused from the default budget').toEqual(['laptop', 'plant']);
+    expect(Object.keys(OVERHANG_MM).sort(), 'shapes excused from the default budget').toEqual(['laptop']);
   });
 });
