@@ -126,6 +126,41 @@ min, library and max sizes, and that `desk-standard` is behaviourally identical 
 over 0, all three sizes) — both measured by `tests/footprint-fidelity.test.tsx`. The open
 question is purely whether the new proportions look like furniture. PR #124.
 
+### Six pieces changed size — a plant, three chairs and two lamps
+
+**Where to click.** Library → add **Plant**, **Dining chair**, **Office chair**, **Armchair**,
+**Floor lamp**, **Table lamp**. Look at each in 3D beside a piece of known size (a 2 m sofa,
+a 750 mm desk), then switch to **2D Plan** and check the outline matches what 3D draws.
+
+**What changed.** All six renderers were hard-coded metres and never read `part.dimMM`, so
+they drew one fixed size no matter what the piece declared. They are scaled to their declared
+size now. The plant is the extreme: it declared 400 × 400 × 1600 and drew **880 × 700 × 1940**,
+so the plan outlined a 400 mm pot around a 1.9 m plant.
+
+| piece | was drawn | now |
+|---|---|---|
+| Plant | 880 × 700 × 1940 | 400 × 400 × 1600 |
+| Dining chair | 420 × 420 × 1090 | 500 × 500 × 850 |
+| Office chair | 580 × 480 × 1150 | 600 × 600 × 1100 |
+| Armchair | 700 × 700 × 1020 | 700 × 700 × 900 |
+| Floor lamp | 360 × 360 × 1850 | 300 × 300 × 1700 |
+| Table lamp | 280 × 280 × 520 | 250 × 250 × 500 |
+
+**What "wrong" looks like.** The plant is the one to judge first — it loses more than half its
+width and about a fifth of its height, and a squashed shrub is the risk. The dining chair goes
+the other way on the floor axes and **down 240 mm in height**, so check it still reads as a
+dining chair against a table rather than as a stool with a back. The scale is non-uniform
+(each axis maps to its own declared dimension), so anything that looked round from above
+should still look round: the plant, both lamps and the stool are in `ROUND_SHAPES` and the
+plan draws them as ellipses.
+
+**What is already settled and does not need eyes.** That all six now draw at exactly their
+declared size — ratio 1.00 on all three axes, gated per shape in
+`tests/footprint-fidelity.test.tsx`, mutation-verified. What no measurement can answer is
+whether a plant at its declared size still looks like a plant. If any of them look wrong, the
+honest fix is the **declared size in `PART_LIBRARY`**, not the renderer — the geometry is
+correct now and the catalogue number is the thing that was never checked against it.
+
 ### An air purifier's intake slats stand up through it instead of banding around it
 
 **Where to click.** Any room, **3D Model** tab, Library → **Air purifier**. Look at it from
