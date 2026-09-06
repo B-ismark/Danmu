@@ -755,10 +755,13 @@ the file as "four times".
 
   **CLOSED 2026-09-06. Neither candidate was taken, and the CI reading is why.**
 
-  The first runner sample of the printed line: `workload=15.39ms yardstick=1.66ms
-  ratio=9.30`. Against 16.6-24.3 locally that is **below the entire local range, not
+  The runner samples of the printed line, two runs: `workload=15.39ms yardstick=1.66ms
+  ratio=9.30` and `workload=14.39ms yardstick=1.68ms ratio=8.55`. Against 16.6-24.3
+  locally that is **below the entire local range, not
   inside it** — so the ratio is not scale-free and a bound set from local numbers would
-  have gone red on the very next run. The reason was already written in
+  have gone red on the very next run — and both runs came in under it, 1.09x apart, so
+  the direction and the magnitude are replicated rather than one reading quoted as an
+  effect. The reason was already written in
   `yardstickWorkload`'s own docblock, before the measurement: the yardstick is
   *deliberately unlike* `referenceWorkload`, so the pair can say whether a machine is
   starved of CPU or of allocation bandwidth. A pair that can tell those apart is by

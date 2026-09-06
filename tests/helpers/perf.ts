@@ -152,14 +152,15 @@ export function referenceWorkload(): number {
  *
  * **That idea is wrong, and the first CI reading it asked for is what says so.** The
  * ratio is 16.6-24.3 on the machine that wrote this (20 pairs, spread 1.47x) and
- * **9.30 on a GitHub runner** — below the entire local range rather than inside it.
+ * **8.55-9.30 on a GitHub runner**, two runs 1.09x apart — below the entire local
+ * range rather than inside it, so direction and magnitude are both replicated.
  * The reason is in the last paragraph of this docblock, written before the
  * measurement and reading as its refutation: a pair that can tell CPU starvation
  * from allocation starvation is by construction a pair whose ratio moves between
  * machines. A diagnostic and a normaliser are opposite requirements.
  *
  * **So it is printed and asserted by nothing, and now for a measured reason.** Had a
- * bound been set from the local range — anything above 9.30, which every honest
+ * bound been set from the local range — anything above 9.3, which every honest
  * reading of 16.6-24.3 would have suggested — CI would have gone red on the next run.
  * That is the whole value of the restraint, cashed one run after adding it.
  *

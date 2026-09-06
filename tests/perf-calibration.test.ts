@@ -148,8 +148,10 @@ describe('the reference workload', () => {
     // **The ratio was proposed as a SCALE-FREE bound and the first CI reading refutes
     // it.** The argument was that both workloads scale with the CPU, so their ratio
     // would normalise machine speed where an absolute floor could not. Measured:
-    // 16.6-24.3 here over 20 pairs, and **9.30 on the runner** — below the whole local
-    // range rather than inside it.
+    // 16.6-24.3 here over 20 pairs, and **8.55-9.30 on the runner** over two runs — below
+    // the whole local range rather than inside it, with the two runner samples 1.09x
+    // apart, so the direction and the magnitude are both replicated rather than one
+    // reading quoted as an effect.
     //
     // The reason was already written, in `yardstickWorkload`'s own docblock, before the
     // measurement: this workload is "deliberately UNLIKE `referenceWorkload` — scalar
@@ -160,10 +162,10 @@ describe('the reference workload', () => {
     //
     // So the ratio stays printed and unasserted, now for a measured reason instead of
     // a precautionary one. Any bound the local range would have justified is above
-    // 9.30, and would have gone red on the next CI run.
+    // 9.30, and both CI runs came in under it.
     console.log(
       `  calibration: workload=${measured.toFixed(2)}ms yardstick=${yard.toFixed(2)}ms ` +
-        `ratio=${(measured / yard).toFixed(2)} (runner 9.30, this box 16.6-24.3)`,
+        `ratio=${(measured / yard).toFixed(2)} (runner 8.55-9.30, this box 16.6-24.3)`,
     );
   });
 });
