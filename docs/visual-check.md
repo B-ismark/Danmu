@@ -627,20 +627,34 @@ middle — a reviewer given the old "144 to 166" would have tested neither.
 **A FIFTH refusal joined this panel and has never been on screen either.** Shuffle used
 to answer every failed press with *"Every layout it tried left something in the way …
 Press Shuffle again for a different try."* In a room that already carries a hard finding
-that press can never succeed — `isCleanShuffle` is absolute where the other shuffle gate
+that press can often fail — `isCleanShuffle` is absolute where the other shuffle gate
 is relative (§ 4c) — so the advice was wrong in exactly the room it was most likely to be
 read in. On the user's ruling it now names the room's own finding instead. Both sentences
 come out of `shuffleRefusal` in `lib/layout-shuffle.ts`, not out of the component.
 
-| Shuffle refusal | length | seen at |
+| Shuffle refusal | length | refusals / 14 presses |
 |---|---|---|
-| clean — "press again" (unchanged) | 116 | every offered size |
-| blocked, one finding | 112 | `u` 5.5×3.8, `u` 3×2.4 |
-| blocked, one finding, long title | 120 | `l` 3×2.4 |
-| blocked, two findings (the longest) | **133** | `t` 5.5×3.8 |
+| clean — "press again" (unchanged) | 116 | `rect` 6×4 **2/14**, `t` 5.5×4.7 **9/14** |
+| blocked, one finding | 112 | `u` 5.5×3.8 **14/14**, `u` 3×2.4 **14/14** |
+| blocked, two findings (the longest) | **133** | `t` 5.5×3.8 **10/14** |
+| ~~blocked, one finding, long title — 120 at `l` 3×2.4~~ | — | **0/14 — no press produces it** |
 
-Derived by calling `shuffleRefusal(shuffleBlockers(analyzeRoom(...)))` across the five
-offered sizes and nine reachable ones — **not** read off the template, which is how the
+**The column above was `seen at` and it named a population no press reaches.** It was
+derived by calling `shuffleRefusal(shuffleBlockers(analyzeRoom(...)))` — a LIB-level
+derivation that never asked whether `shuffleRoom` actually refuses. It does not at
+`l` 3×2.4: that room has one blocker and Shuffle succeeded on **14 of 14** presses, so
+the 120-character string is real code output that no user can be shown. Re-derived by
+driving `shuffleRoom` itself over ten rooms × 14 attempts, and the browser run agrees —
+133 at `t` 5.5×3.8 and 116 at `rect` 6×4, both rendered on `4cef13a`.
+
+**Having a blocker and refusing are not the same thing, and this row asserted they were.**
+The sentence above said a press "can never succeed" in a room carrying a hard finding.
+`l` 3×2.4 refutes it: `shuffleBlockers` reads `analyzeRoom`, `isCleanShuffle` reads
+`breakdownAfter`, and the two can disagree about the same room. The refusal copy is
+unaffected — it only renders when `shuffleRoom` returns null, and then it names the cause
+correctly — but the reachability claim was wrong.
+
+The lengths were **not** read off the template, which is how the
 first version of this row was wrong twice over. It quoted 126 and 145 from a hand-typed
 example whose finding title happened to be a noun phrase, and the template it was
 measuring spliced the title into *"this one already has …"*, which produced *"this one
@@ -679,9 +693,10 @@ Three things settled that were never eye questions:
   refusal, not Shuffle’s, and no solve either of us has run has emitted it. Measuring the
   two lengths that occur and implying the 169 fits would be the same error as the
   126/145.
-· **`l` 3×2.4 did not reproduce.** This row lists a 120-char "one finding, long title" arm
-  seen there; Shuffle SUCCEEDED on all 14 presses, so that arm is unrendered and the room
-  named for it does not currently reach a refusal.
+· **`l` 3×2.4 did not reproduce, and its row is struck above.** Shuffle SUCCEEDED on all
+  14 presses, so that 120-char arm is unrendered. **Two instruments reached the same 0/14
+  independently** — 14 real presses in a browser, and `shuffleRoom` driven over ten rooms
+  × 14 attempts — which is worth more than the row it retired.
 · **Whether the wording reads well is untouched.** A probe can say the sentence fits and
   quotes accurately. It cannot say it is good.
 
@@ -697,7 +712,8 @@ the thing you want, never the first one that is long enough.
 **What to look for:** open a `t` at 5.5 × 3.8 (Room panel, type the size), press Shuffle,
 and read the toast — the quoted finding must match a line in Room check word for word,
 and there must be no "press again" in it. Then a `rect` at 6 × 4, where the old sentence
-is still the right one. Neither has been rendered.
+is still the right one. **Both were rendered on `4cef13a`** — the table above — so what is
+left at these two lengths is whether the wording reads well.
 `overlap` alone has never been produced by any solve measured so far — 48 solves across
 three room shapes, every refusal `outside` — so *"inside another one"* as a standalone
 clause is unseen, and the 169-character both-terms string has never been produced at all.
