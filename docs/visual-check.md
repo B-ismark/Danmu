@@ -648,6 +648,52 @@ already has you can't walk to everything"* on every `access` finding. Deriving t
 from real rooms found the broken grammar; reading the template had not. The finding is
 quoted verbatim now, and the longest form came DOWN from 155 to 133.
 
+**RENDERED AT LAST, 2026-09-06 — both Shuffle arms, in a browser, on `4cef13a`.** Playwright,
+production build, rooms seeded META-ONLY so `defaultScene` builds the real starter
+arrangement (seeding a scene would run `normalizeStoredParts` and re-derive the state the
+refusal is about).
+
+| room | arm | rendered message | chars | predicted |
+|---|---|---|---|---|
+| `t` 5.5×3.8 | blocked, two findings | *Room check reports “No room to pull the chairs out” and 1 more, and Shuffle only offers rooms with nothing in the way. Try Fix first.* | **133** | 133 |
+| `rect` 6×4 | clean | *Every layout it tried left something in the way, so your room is unchanged. Press Shuffle again for a different try.* | **116** | 116 |
+
+**Both predicted lengths were exactly right**, which retires the doubt this row carried
+about its own table — the derivation-from-real-rooms was sound where the earlier
+hand-typed 126/145 was not.
+
+Three things settled that were never eye questions:
+
+· **The quoted finding matches a Room check line WORD FOR WORD** — compared as strings
+  between the toast and the room panel in the same DOM. This is the exact defect the row
+  records having had (*"this one already has you can’t walk to everything"*), and it is
+  not present.
+· **The blocked arm carries no "press again"** and the clean arm does. Correct both ways.
+· **Neither is clipped.** Both render 306×52 px with `scrollWidth === clientWidth` and
+  `scrollHeight === clientHeight`, and walking up from the text found **no ancestor that
+  clips at all**. So the wrap question is answered for the two lengths that exist.
+
+**What is NOT closed, stated so nobody reads the above as more than it is:**
+
+· **The 169-character both-terms string still has never been produced.** It is the `Fix`
+  refusal, not Shuffle’s, and no solve either of us has run has emitted it. Measuring the
+  two lengths that occur and implying the 169 fits would be the same error as the
+  126/145.
+· **`l` 3×2.4 did not reproduce.** This row lists a 120-char "one finding, long title" arm
+  seen there; Shuffle SUCCEEDED on all 14 presses, so that arm is unrendered and the room
+  named for it does not currently reach a refusal.
+· **Whether the wording reads well is untouched.** A probe can say the sentence fits and
+  quotes accurately. It cannot say it is good.
+
+**Two probe defects worth keeping, because both reported a believable wrong answer.**
+The matcher first accepted `/arrangement/`, which is in the SUCCESS toast ("A different
+arrangement, not a fix") — so two rooms "found a toast" that was not a refusal and the
+loop stopped satisfied. **A matcher that accepts the thing you are ruling out cannot rule
+it out.** Then, with that fixed, the host STACKS toasts and the first long line still
+belonged to an earlier success: the run printed a 68-char success message while the
+refusal it came for sat further down the same element. Pick the leaf whose own text is
+the thing you want, never the first one that is long enough.
+
 **What to look for:** open a `t` at 5.5 × 3.8 (Room panel, type the size), press Shuffle,
 and read the toast — the quoted finding must match a line in Room check word for word,
 and there must be no "press again" in it. Then a `rect` at 6 × 4, where the old sentence
@@ -1129,10 +1175,18 @@ mid-session, which the probe does not do.
    then Ctrl+Z twice. The first press should restore the selection the move was made with;
    the second should undo the move itself. If the move is unreachable, a click has
    overwritten the entry holding it.
-4. **Undo across a room-shape change.** Select a wall (click one in the 2D plan), switch
-   the layout to a shape with fewer walls, then undo back. Nothing should select a
-   *different* wall, and the wall inspector must not open on a wall that is not there.
-   This is the axis the write-up never named — `selectedWall` is an index, not a name.
+4. **A stale wall index — and this step was looking for the wrong thing.** It used to say
+   "undo across a room-shape change", which cannot produce the state: `applySnapshot`
+   restores the room and the index from the SAME entry, so they always travel together.
+   The reachable version needs no undo at all. Select a wall in a U (click one in the 2D
+   plan), get the footprint to change under it, and look at the right-hand panel: nothing
+   clears `selectedWall` when the room shape changes, so a stale 7 renders a **"Wall 8"
+   panel in a four-walled room** and its paint button writes a colour to a wall that does
+   not exist. It does not throw, which is why nobody has reported it.
+   **Still unproven: which in-studio gesture actually changes the edge count.** A resize
+   does not — `setRoom` rebuilds the polygon at the same `layoutId`. Opening a scene file
+   saved from a differently-shaped room is the candidate and has NOT been driven. Until
+   someone finds the gesture, the consequence is verified by reading and the path is not.
 
 **What "wrong" looks like** is mostly a feeling, and it is the reason this needs eyes:
 undo becoming *chatty*. If pressing Ctrl+Z repeatedly feels like it is stepping through

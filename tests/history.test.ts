@@ -641,4 +641,31 @@ describe('a restored selection is filtered, on both axes', () => {
     applySnapshot(snapshot({ selectedWall: 0 }));
     expect(useStudio.getState().selectedWall).toBe(0);
   });
+
+  it('draws the line between the LAST wall and the one past it', () => {
+    // 0 and 7 are both a long way from the edge, and that is exactly where this test
+    // family sat until a sweep for the pattern found it: widening the bound to
+    // `<= wallCount` — which admits index 4 in a four-walled room — left all 30 tests
+    // green. A guard tested only far from its boundary is a guard tested nowhere near
+    // the thing it decides.
+    //
+    // Both indices are DERIVED from the footprint rather than typed, so this keeps
+    // meaning the same thing if a preset ever changes shape underneath it.
+    const walls = useScene.getState().room.footprint.length;
+    expect(walls, 'a room with no walls would make both cases vacuous').toBeGreaterThan(0);
+
+    applySnapshot(snapshot({ selectedWall: walls - 1 }));
+    expect(useStudio.getState().selectedWall, 'the last real wall survives').toBe(walls - 1);
+
+    applySnapshot(snapshot({ selectedWall: walls }));
+    expect(useStudio.getState().selectedWall, 'one past the last is not a wall').toBeNull();
+  });
+
+  it('clears a negative wall index', () => {
+    // The other end of the same bound. `>= 0` is the half that a `> 0` slip would break,
+    // and it is cheap to hold from both sides — a constant asserted from one end is free
+    // at the other.
+    applySnapshot(snapshot({ selectedWall: -1 }));
+    expect(useStudio.getState().selectedWall).toBeNull();
+  });
 });

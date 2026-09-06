@@ -301,11 +301,27 @@ export function applySnapshot(snap: Snapshot) {
   // The filter is what stops the gizmo and the Inspector being handed an id nothing in
   // the room answers to.
   //
-  // `selectedWall` is the axis the write-up did NOT name, and it is the sharper one,
-  // because it is an INDEX into `room.footprint` rather than a name. Undoing across a
-  // layout change moves the wall count under it — a U has eight edges and a rect four —
-  // so wall 7 restored into a rectangle indexes nothing, and `WallInspector` is handed
-  // it directly. Cleared rather than clamped: wall 3 of a rectangle is not the wall the
+  // `selectedWall` is the axis the write-up did not name, and it is an INDEX into
+  // `room.footprint` rather than a name — so it can point past the end.
+  //
+  // **THE FIRST VERSION OF THIS COMMENT GAVE A REASON THAT CANNOT HAPPEN**, and a wrong
+  // reason is worse than none because the next reader stops there. It said "undoing
+  // across a layout change leaves wall 7 in a rectangle". It cannot: the line above
+  // restores `snap.room`, and the index is validated against THAT footprint. Both come
+  // out of one `takeSnapshot`, so an index and the polygon it indexes always travel
+  // together — restoring wall 7 also restores the U it belongs to.
+  //
+  // So this half is the same honour-system backstop the part-id half is, and the real
+  // hazard is UPSTREAM of history entirely: nothing clears `selectedWall` when the
+  // footprint changes under it. `lib/store.ts` clears it in exactly three places —
+  // `setSelected`, `setSelection` and an explicit `setSelectedWall(null)` — and none of
+  // them is a room change. A live `selectedWall` of 7 against a four-edge footprint
+  // reaches `WallInspector` unguarded, where `segs[index]` is undefined and the name
+  // falls back to the literal `Wall ${index + 1}`: a "Wall 8" panel in a four-walled room,
+  // whose paint button writes `room.wallColors[7]`. It does not throw, which is why
+  // nothing has ever reported it.
+  //
+  // Cleared rather than clamped, either way: wall 3 of a rectangle is not the wall the
   // user had, and silently selecting a different one is worse than selecting none.
   const alive = new Set(snap.parts.map((p) => p.id));
   const wallCount = snap.room.footprint.length;
