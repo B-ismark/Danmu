@@ -1053,10 +1053,32 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
     `(hover: none) and (pointer: coarse)` and shows phone users a go-away modal.
     The one device that could answer it is the one device the studio refuses.
   · **It cost two device permissions and a stored coordinate pair.** `geolocation`
-    and the `accelerometer`/`gyroscope`/`magnetometer` trio are back to `()` in
-    `next.config.mjs`, and `Site` no longer has a `lat` or a `lon` — a coordinate
-    for the inside of someone's home, held for a feature that is gone, reads as
-    something the app keeps about you. See §3 and rule 5 in `CLAUDE.md`.
+    is back to `()` in `next.config.mjs`, and `Site` no longer has a `lat` or a
+    `lon` — a coordinate for the inside of someone's home, held for a feature that
+    is gone, reads as something the app keeps about you. See §3 and rule 5 in
+    `CLAUDE.md`.
+
+    **The sensor trio went with it, and that part was wrong** — recorded here
+    because this sub-bullet is where the mistake was made. `accelerometer`,
+    `gyroscope` and `magnetometer` were all denied along with the compass, on the
+    reasoning that the compass was their only consumer. It was not:
+    `lib/device-tilt.ts` reads the lens tilt at the shutter off the same
+    `deviceorientation` event, and per the W3C Device Orientation and Motion spec
+    the relative event is dispatched only when `accelerometer` **and** `gyroscope`
+    are granted. So the tilt read was switched off by this change — `tilt` null
+    forever on Chrome, every live-camera photo silently back on the assumed-level
+    camera, ~20% distance error for an ordinary 5° droop, on every engine that
+    enforces the header. All three are `(self)` again — **and the reason it is
+    three rather than two is the second half of the same lesson.** The spec says the
+    relative `deviceorientation` event needs `accelerometer` + `gyroscope` only, and
+    granting just those two is correct about the spec, correct about Blink, and
+    would have left the read dead on iOS: WebKit has no
+    `ondeviceorientationabsolute` and requires the magnetometer token for plain
+    `ondeviceorientation`. A header has to satisfy every engine that will run the
+    app, so the grant is the union over engines, not the spec's minimum.
+    `tests/permissions-policy.test.ts` now reads the header the config actually
+    serves, derives what it should be from the consumers, and fails in both
+    directions — which is what the comment claiming to be the guard could not do.
 
   **What survived, and where it went.** `lib/solar.ts` keeps `sunDirection` and
   `daylightKelvin` (68 lines, down from 229) — the axis convention and the colour

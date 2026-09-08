@@ -982,6 +982,46 @@ and `tests/library-click-through.test.tsx`. The two items below are new, and eac
 is here because what a test can check about it and what a person can see are different
 halves.*
 
+### The lens tilt read needs a real phone, on BOTH engines
+
+**Where to click.** On an Android phone in Chrome and on an iPhone in Safari: open
+`/onboarding/capture`, tap **Turn on camera**, grant the camera and (on iOS) the
+motion-and-orientation prompt, then hold the phone upright and take a wall photo with the
+top edge tipped visibly **down**. The photo must arrive carrying a tilt.
+
+**What wrong looks like.** Nothing. That is the whole problem, and it is why this item
+exists rather than a test. When the sensor grant is missing, `deviceorientation` simply
+never fires, `useDeviceTilt` reports `null` forever, and the geometry falls back to
+assuming a level camera — a ~20% distance error for an ordinary 5° droop, with no error,
+no warning and no failing test. The screen looks identical either way.
+
+**How to tell, given there is nothing to see.** The capture screen does not surface tilt
+anywhere today (that is filed as its own gap — see § below on making it legible). Until it
+does, the check is a devtools one: with the page open, `window.addEventListener(
+'deviceorientation', e => console.log(e.beta, e.gamma))` must log a stream of numbers, and
+`beta` must fall as the phone tips forward. Silence means the header is still wrong.
+
+**Why both engines, and why this is not paranoia.** The grant was wrong twice on the same
+three entries, in opposite directions, and the second time it was *nearly* shipped:
+`accelerometer` + `gyroscope` is what the W3C spec requires for the relative
+`deviceorientation` event and what Blink enforces, but WebKit implements no
+`ondeviceorientationabsolute` and requires `magnetometer` as well for plain
+`ondeviceorientation`. All three are granted for that reason. **The WebKit half is the
+part that is not verified**: the primary sources were unreachable from the environment the
+fix was written in, so it rests on a secondary W3C device-APIs thread and was chosen
+because the asymmetry is one-sided — a spare token costs an entry Blink ignores, a missing
+one costs every iPhone. An iPhone is the only thing that closes it. If iOS turns out not
+to need `magnetometer`, the honest follow-up is to drop it and say so here, not to leave a
+token granted "just in case": a permission with no consumer is the other half of the same
+rule.
+
+**Where it rides.** Branch `claude/amazing-dijkstra-d0am9g`. `next.config.mjs` grants the
+trio; `tests/permissions-policy.test.ts` pins the pairing in both directions (9/9, and
+four mutations were confirmed to fail it — sensors denied, `geolocation` granted with no
+consumer, the consumer import removed, and a new powerful feature granted with no reason
+row). Every one of those is a check that the *header text* matches the *source*. **Not one
+of them can tell you an event fired.**
+
 ### Pressing Shuffle moves the button out from under the pointer
 
 *Filed by `rails` on 2026-09-05 from a peer's browser measurement during PR #115's review.

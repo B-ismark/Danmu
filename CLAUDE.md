@@ -391,16 +391,49 @@ backend, no account. The 3D studio *is* the product.
    `Permissions-Policy` allows only the features the app actually uses — which is
    now exactly one, `camera=(self)` for capture — and denies the rest; `()` there
    overrides the user's own grant, so a feature and its header entry move
-   together. **In both directions, and the removing one is the direction that gets
-   forgotten:** four entries sat at `(self)` for the sun mood — `geolocation` for
-   its latitude, and `accelerometer`/`gyroscope`/`magnetometer` for the phone
-   compass that read the room's bearing. Collapsing that mood to fixed presets
-   (see §Lighting in `Design.md`) deleted every caller, and leaving the four at
-   `(self)` would have broken nothing, failed no test and shown no warning — it
-   would simply have left the app permanently asking for two sensors and a
-   location it can no longer use. A permission with no consumer reads as
-   something the app keeps about you, which is the same rule the EXIF budget
-   above answers to. `lib/geolocate.ts` is gone entirely; `lib/compass.ts` is
+   together. **In both directions, and BOTH directions have now drawn blood.**
+   Four entries sat at `(self)` for the sun mood — `geolocation` for its latitude,
+   and `accelerometer`/`gyroscope`/`magnetometer` for the phone compass that read
+   the room's bearing. Collapsing that mood to fixed presets (see §Lighting in
+   `Design.md`) deleted the compass, and leaving the four at `(self)` would have
+   broken nothing, failed no test and shown no warning — it would simply have left
+   the app permanently asking for two sensors and a location it can no longer use.
+   A permission with no consumer reads as something the app keeps about you, which
+   is the same rule the EXIF budget above answers to.
+   **What this paragraph used to claim, and the correction, because the claim is
+   what caused the second failure:** it said that collapse "deleted every caller".
+   It did not. `lib/device-tilt.ts` reads the lens tilt at the shutter off the same
+   `deviceorientation` event, `app/onboarding/capture/page.tsx` still calls it, and
+   the relative event is dispatched only when `accelerometer` AND `gyroscope` are
+   granted — so denying the trio switched the tilt read off. `tilt` was null
+   forever on Chrome and every live-camera photo fell back to the assumed-level
+   camera, a ~20% distance error for an ordinary 5° droop, on **every** engine that
+   enforces the header — which is both of them, and a first draft of this paragraph
+   asserted the opposite (that Safari ignored it and the feature survived on iOS).
+   That was invented, not checked, and it is struck rather than quietly deleted
+   because a comforting unverified claim is the thing this file exists to refuse.
+   Two lessons, and the second is the general one: a shared gate has more than one consumer, so **audit by asking who
+   READS the thing, never by remembering which feature it was added for.**
+   **Then the fix itself went wrong the other way, which is the half worth reading.**
+   Restoring the trio, the obvious move is to grant only `accelerometer` +
+   `gyroscope`: the W3C Device Orientation and Motion spec says the RELATIVE
+   `deviceorientation` event needs exactly those two, and `magnetometer` gates the
+   absolute variant. That is correct about the spec, correct about Blink, and it
+   would have left the tilt read dead on iOS — WebKit implements no
+   `ondeviceorientationabsolute` and requires all three tokens for plain
+   `ondeviceorientation`. So the same bug, on the other engine, reached by *citing a
+   standard*. **A header must satisfy every engine that will run the app: the grant
+   is the UNION over engines, never the minimum a spec describes** — and a
+   spec citation is exactly what makes a narrowing look justified on the way past.
+   All three are `(self)`; `geolocation` stays denied, having no consumer at all.
+   The WebKit half rests on a secondary source that could not be fetched to quote,
+   so it is written down as the reason for the SAFE choice rather than as a verified
+   fact — the asymmetry decides it either way, and `docs/visual-check.md` carries
+   the item a real phone closes. The guard is
+   `tests/permissions-policy.test.ts`, which reads the header the config actually
+   SERVES, derives what it should be from the consumers, and fails in both
+   directions — the old comment in `next.config.mjs` claimed to *be* the guard, and
+   a comment is not one. `lib/geolocate.ts` is gone entirely; `lib/compass.ts` is
    `lib/bearings.ts` now, because the compass read went and what is left is the
    circular-mean maths `lib/capture-slots.ts` needs for photo bearings — **a
    module still named for the half that was deleted is the scar rule 1
