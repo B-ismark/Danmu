@@ -1125,7 +1125,7 @@ read at the near one. Compare a nightstand's height against the bed beside it.
 
 **Where it rides.** The commit whose subject begins *"A floor piece is a solid"* on
 `claude/amazing-dijkstra-d0am9g`, draft PR #148. Gates on it: typecheck, lint, build clean
-of `ESLint: Invalid Options`, and 147 test files / 2712 passing / 5 expected fail — with 38
+of `ESLint: Invalid Options`, and 147 test files / 2713 passing / 5 expected fail — with 38
 over `tests/photo-geometry.test.ts` and 14 over `tests/detect-pipeline.test.ts`, whose
 printed baseline table is the record of what changed.
 
