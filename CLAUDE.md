@@ -128,6 +128,29 @@ backend, no account. The 3D studio *is* the product.
    *every* photo: an identical pair carrying no world-axis label. `wallSpan` is
    the honest version of that idea — the length a wall ought to be, on screen, for
    the user to check.
+   **And there is now a SECOND, independent reason, measured rather than argued —
+   which matters because the first one does not cover every use.** The natural next
+   proposal is not a bearing at all but the magnitude of the off-square angle ψ, to
+   tell someone their shot is crooked and offer a retake: a number for a person, like
+   `wallSpan`, with nothing downstream measuring from it. That form genuinely does not
+   touch the prohibition above, so it was built and measured, and the answer is still
+   no: **a square-on wall capture is the DEGENERATE case for the method.** Verticals
+   parallel, wall-parallel family parallel — the squarer the shot, the less there is
+   to measure, and the residual reads as a few degrees of yaw. On a wall fixture at
+   three resolutions the same 100° lens came back **23.5°, 97.8° and no answer**, with
+   **`coverage` 0.96 on the one that was 76° wrong** — so the field documented for
+   telling a well-supported estimate from a thin one cannot gate it either.
+   `tests/vanishing-point.test.ts` holds that measurement and prints it on every green
+   run.
+   Two lessons worth more than the result. **A closed form that verifies exactly tells
+   you nothing about the pipeline that feeds it:** ψ came back to six decimals from
+   ideal segments and was unusable from detected ones, and the gap between those two
+   facts is where the whole feature died. And **a fixture must match the INPUT, not
+   merely the domain** — measured on that file's box-room fixture the method looks
+   unreliable; measured on one wall framed head-on, which is what the capture flow
+   asks people to photograph, it is degenerate. Same trap as the depthless card, one
+   layer up: the fixture was a picture of the right kind of thing in the wrong
+   composition.
 3. **Single source of truth for furniture** is `lib/scene-spec.ts` (+
    `lib/parts-catalog.ts`). 3D scene, 2D plan, inspector, catalog and decor all
    read from it. Add a shape / behaviour flag there, not ad-hoc in a component.

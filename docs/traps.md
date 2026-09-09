@@ -709,3 +709,38 @@ appeared at the subject the block would not have read as orphaned in the first p
 *(Cost: a docblock judged dead and deleted in the same commit as the gate that found it,
 while its function had five live readers including the Inspector gate the block's last
 clause describes. Second occasion: the dead-code sweep above, same mechanism.)*
+
+## A closed form verifies exactly and the feature still does not work
+
+**Symptom.** The maths round-trips to six or twelve decimals against a synthetic input, the
+assertions are real, and then the thing behaves badly — or the number it produces is nowhere
+near the truth — the moment it is fed by a detector, a decoder, or anything that measures
+rather than states.
+
+**What it is.** Two different questions got answered as one: *is the inversion correct* and
+*is the input good enough to invert*. The first is cheap and satisfying to verify. The second
+is the whole feature.
+
+**Twice, in one session, both in § 42.**
+
+1. The off-square angle ψ. Recovered from `lib/vanishing-point.ts`'s own direction vectors to
+   **six decimals** across 0–35° on two lenses, roll costing 0.054° at 10°. Then measured
+   through `detectSegments` on a wall capture: 23.5°, 97.8° and no answer for the same 100°
+   lens at three resolutions, with `coverage` 0.96 on the one that was 76° wrong. The feature
+   was reverted. Nothing about the closed form was wrong.
+2. The near-face floor fix, the other way round: exact to 1e-13 against a projected solid, and
+   the *fixture* was a depthless card, so the exactness was a property of the fixture. Same
+   gap, opposite side of it.
+
+**What to do.** Before verifying an inversion, write down what will feed it in production and
+measure the inversion **on that** — a detector's segments, a decoder's pixels, a catalogue's
+default. If the producing end is a heuristic, its failure modes are the feature's failure
+modes, and no amount of precision downstream recovers them.
+
+**And check the fixture is the right COMPOSITION, not merely the right domain.** ψ measured on
+`tests/vanishing-point.test.ts`'s box-room fixture looks merely unreliable; measured on one
+wall framed head-on — what the capture flow actually asks people to photograph — it is
+degenerate, because that composition puts two of the three vanishing points at infinity. The
+box room was a picture of the right kind of thing in the wrong composition, which is a harder
+mismatch to notice than a wrong kind of thing.
+

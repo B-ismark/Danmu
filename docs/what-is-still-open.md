@@ -170,7 +170,7 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 19 | **§ MOB** how the app is presented on a phone — **recorded 2026-09-05, deliberately NOT scheduled** | The user's ruling: *"mobile isn't the focus but it doesn't mean we should turn a blind eye to how the platform is presented on there"*, and *"the mobile audit is for later not now"*. So this row exists to stop the work being lost, not to start it. `docs/mobile-ux-audit.md` is the source — nine systemic issues, eight per-flow sections and the author's own priority order, which § MOB keeps rather than re-ranking. Four of its claims were re-derived against `main`; one (**M5**, the Android icon ladder) is recorded with its premise marked **unverified**, because it is the one that would send someone to fix a manifest that may not be broken | varies; M1/M2/M4 are each an afternoon | **nothing blocks it and it blocks nothing** — it is filed, not queued |
 | 20 | **§ 42.1** a floor-standing piece was measured at its NEAR FACE, so its position was short by about half its depth — **at a perfectly square camera** | **FIXED 2026-09-09.** `placeFloorObject` decodes a piece's CENTRE now, and it took the whole silhouette rather than a nudge to the position, because width, lateral offset and height all rode the same wrong distance. Three closed forms, no iteration, exact to 1e-13 against a forward-projected box at 0°, ±5° and ±12° of tilt; a ROUND footprint inverts from its tangent pair instead and needs no assumed depth at all, since a circle's depth IS its width. Two errors nobody had measured fell out with it: a piece whose top is below the lens reads its FAR top edge, so both nightstands were ~130 mm too tall (the baseline table had no height column — it has one now), and tilt roughly DOUBLED the width inflation, a lamp going from +81% level to +132% at 5°. What is left, in order: the ceiling fan at 0.1136 m (its own allowance, now the largest error at zero yaw), the three wall pieces at 5–23 mm (§ 42.4, fixed the same day, and those figures were themselves understated by a fixture of thin panels), the sofa at exactly 0.0500 m — half the gap between its real 850 mm depth and the catalogue's 950 — and a round footprint under tilt at +6% of width at 5°. The fixture had to move first: `tests/helpers/project.ts` projects solids now, because a 1e-9 baseline that holds only because the fixture cannot express the defect is the same thing as an assertion that cannot fail | **nothing** — decided (catalogue depth, and the piece is rendered with the same number), built, and mutation-tested: ten mechanism mutants, all caught | `lib/photo-geometry.ts`, `lib/detect-refine.ts`, `tests/helpers/project.ts`, `tests/helpers/known-room.ts`, and the three suites |
 | 20b | **§ 42.4** a WALL piece was measured at its centre-on-the-plaster, where its BACK goes | **FIXED 2026-09-09**, the same fix one anchor over, with `lateralSpan` extracted rather than copied. The three figures this was filed with — TV 21 mm/3.5%, curtain 23 mm/3.4%, painting 5 mm/1.6% — understated it by an order of magnitude, because all three wall fixtures are 30–80 mm deep. The catalogue goes to 220 mm (`ac-unit`) and 200 mm (`window`), and at 220 mm the old placer read a correct 800×280 unit **+21.7% wide and 91 mm too tall** — 371 mm against the shape's own 250–350 band, so `judgeLabel` accused a correctly identified air conditioner. An `ac` row went into the truth table with the fix. **Half of this item was mis-titled and the correction matters:** the wall-normal position never reached the rendered scene, because `snapToWall` recomputes it from the wall as `inward × (depth/2 + gap)` and `groundY` overwrites the height — so the scene was already right by a downstream correction, and what the user gains is SIZE, not position | **nothing** — built and mutation-tested: nine mutants, two of them FIXTURE mutants (wall pieces back to panels; `truthCentre` stripped), all caught | `lib/photo-geometry.ts`, `lib/detect-refine.ts`, `tests/helpers/known-room.ts`, and the three suites |
-| 21 | **§ 42.2** off-square framing is what creates the duplicate the user reported, and it takes only ±4° | MEASURED 2026-09-09, same file. The cross-slot lamp stops merging at **±4° of DIFFERENTIAL yaw** (per-shot hand variation). A **uniform** bias — the same angle on every wall — never splits it at any angle tested to 20°, because it moves both sightings the same way and they still agree. That common-mode / differential split is the structural result and it is measured, not argued. The feared opposite failure does **not** occur: the two nightstands, 0.55 m apart in the 0.35 m `tight` tier with only 0.20 m of headroom, keep a gap of 0.5133 → 0.5077 m across 0–20°, because both sit in the SAME photo and an off-square camera carries them together. **The sweep's position columns were optimistic and are re-derived**: two same-labelled truths could match one refined row, off-frame boxes were counted and then measured anyway, and the "median" column was the upper middle. The ±4° split threshold and the uniform-vs-differential result are unaffected — both are counted from row counts rather than from matched positions | a DECISION: the only source that works on uploads is the wall-parallel vanishing point, and `CLAUDE.md` rule 2 says *"do not re-propose vanishing points for the no-bearing case"*. The argument that this is a different quantity — the magnitude of an angle, not which wall a photo is — is written up in the session plan and has NOT been put to the user as a build proposal | **nothing blocking any more** — row 20 was the larger, independent term and is fixed, so ψ is the dominant error again. The measured split threshold moved from ±4° to ±3.5° with that fix, inside the bracket this file already pins |
+| 21 | **§ 42.2** off-square framing is what creates the duplicate, and it takes only ±3.5° | **MEASURED, then DECIDED AGAINST 2026-09-09.** The cross-slot lamp stops merging at ±3.5° of DIFFERENTIAL yaw; a UNIFORM bias never splits it at any angle to 20°, because it moves both sightings together. The nightstands never collapse (gap within 6 mm across the sweep) because they share a photo. The user chose the report-only fix — measure ψ, tell the person, offer a retake, nothing downstream reading it — and it was built and reverted: the angle is exact from ideal segments (six decimals, 0–35°, roll costing 0.054° at 10°) but the pixel path on a WALL capture gives 23.5°, 97.8° and no answer for the same 100° lens at three resolutions, with **coverage 0.96 on the answer that is 76° wrong** — so there is no confidence signal to gate a report on. A square-on wall capture is the degenerate case for vanishing points, which is a second and independent reason for rule 2's prohibition | **nothing** — closed with evidence; `tests/vanishing-point.test.ts` prints the table on every green run | the measurement and the negative result are in a commit; no `lib/` change survives |
 
 **Three that are deliberately not on this list**, so nobody adds them back: the seeder
 putting a 1450 mm TV on a 1.2 m wall in the small L and T (`placeNewPart` has no
@@ -6650,44 +6650,66 @@ the fixture is part of what needs mutating.
   depth moves its measured size, that is worth a decision: either `window` gets a category of
   its own, or the route is written down where someone reading `defaultDepthFor` will find it.
 
-### § 42.2 · ψ ≈ 4° is enough to create a duplicate — DECISION NEEDED
+### § 42.2 · ψ ≈ 3.5° is enough to create a duplicate — **DECIDED AGAINST 2026-09-09**
 
 The user's original report was duplicated furniture. This is where it comes from, and the
-threshold is low: **±4° of differential off-square framing** splits the cross-slot lamp
-into two rows. Nobody here has measured how far off-square people actually shoot, so
-whether 4° is common is still unknown — the one argument available is that
-`lib/capture.ts`'s "frame it corner to corner" instruction is a manual nulling loop, which
-is an argument and not a measurement.
-
-Two results worth keeping beyond the threshold:
+threshold is low: **±3.5° of differential off-square framing** splits the cross-slot lamp
+into two rows. Two results worth keeping:
 
 - **A uniform bias is harmless to the merge.** Off-square by the same angle on every wall,
-  both sightings move together and still agree — no split at any angle to 20°. Only
-  per-shot variation separates them. So anything aimed at this must recover the
-  *differential* part; the common part costs position but not duplicates.
-- **The invisible failure does not happen.** The nightstand pair was the case to fear (0.55 m
-  apart, 0.35 m tier, 0.20 m of headroom) because a merge there *deletes* a real piece and
-  leaves no trace. Their gap moves by 6 mm across the whole sweep, because they share a
-  photo. Measured rather than feared, and that is the ordering this file is for.
+  both sightings move together and still agree — no split at any angle to 20°. Only per-shot
+  variation separates them.
+- **The invisible failure does not happen.** The nightstand pair keeps its gap to within
+  6 mm across the whole sweep, because they share a photo.
 
-**What would unblock it:** a decision about the source. Device sensors are out — the design
-review found `deviceorientation`'s Z-X'-Y'' chain is gimbal-locked at `beta ≈ 90°`, which
-is exactly the upright pose the capture rig requires, and a rigid 90°-grid residual
-discards the common mode anyway. The only source that works on an upload is the
-wall-parallel vanishing point, in closed form from quantities `lib/vanishing-point.ts`
-already computes. That brushes the letter of rule 2, and the argument for why it is a
-different quantity (the magnitude and sign of an angle relative to the framed wall, not
-which wall a photo is) has been written down but **not** put to the user as a proposal.
+**What was decided, and what was built to decide it.** The user chose the *report-only* form:
+measure how far off-square a shot is, tell the person, offer a retake. No dimension, position
+or size from it — the `wallSpan` shape, a number for a person to check their own photograph,
+which does not touch what rule 2 forbids. It was built, measured, and **reverted**, because
+the signal is not there. `tests/vanishing-point.test.ts` § *a square-on wall capture is the
+degenerate case for vanishing points* is the live artifact; it prints its table on every green
+run. Four findings, in order:
 
-**Order mattered, and the blocker is gone.** § 42.1 was larger and independent, so
-correcting ψ while a floor piece was still decoded at its near face would have been treating
-the smaller term. It is fixed as of 2026-09-09, which makes off-square framing the dominant
-error again for anything beyond a few degrees — and moves the measured split threshold
-slightly, from ±4° to **±3.5°** of differential yaw, because the two sightings of the
-cross-slot lamp now agree exactly at zero and diverge from there rather than starting apart.
-The bracket this file pins (`> 2°`, `<= 5°`) is unchanged and still holds; the common-mode
-versus differential result is unchanged too, being counted from row counts rather than from
-matched positions.
+1. **The angle is recoverable exactly from ideal segments.** `frameSupport` already builds the
+   camera's whole rotation as three perpendicular directions and collapses them to one length.
+   Reading the azimuth off the horizontal one returns the yaw to **six decimals** from 0° to
+   35°, on a 75° and a 106° lens, signed; roll — which `CameraCal` does not model — costs
+   0.013° at 5° and 0.054° at 10°, and tilt is modelled so it can be removed. Implemented and
+   verified, then reverted: a field nothing can trust is worse than no field, and one nothing
+   reads is rule 1's shape.
+2. **Read as a POINT rather than a direction it is useless**, which is what § 42.2 previously
+   proposed ("closed form from quantities `lib/vanishing-point.ts` already computes"). The
+   wall-parallel vanishing point sits **6.2 frame-widths outside the picture at 3.5°** and
+   21.6 at 1° — it runs to infinity exactly where the signal is needed.
+3. **Through the real pixel path on a wall capture the whole calibration is erratic.** The
+   same synthetic wall, the same camera, three resolutions: **23.5°, 97.8°, and no answer**,
+   for a true 100° lens. Not a degradation with size — a different vanishing-point pair being
+   chosen, which `lib/vanishing-point.ts` already documents happening on 1.5 px of endpoint
+   noise. Whatever ψ is read off that frame cannot be better than the frame.
+4. **And `coverage` does not certify it**, which is what settles it. The plan proposed gating
+   the report on coverage — speak only on a well-supported estimate, which is what that field
+   is documented for. Coverage is **0.96 on the answer that is 76° wrong**. There is no cheap
+   confidence signal to hold the false positives back, and a badge that cries wolf on a good
+   photograph teaches people to ignore the four real flags beside it on the same card.
+
+**The reason is rule 2's, arriving at a different question.** `lib/capture-slots.ts` refuses
+vanishing points as a slot signal because a VP pair carries no world-axis label. This is a
+second, independent reason: **a square-on wall capture is the degenerate case for the method.**
+Verticals parallel, wall-parallel family parallel — the squarer the shot, the less there is to
+measure, and the residual reads as a few degrees of yaw. The prohibition turns out to be
+load-bearing for more than the question it was written about.
+
+**One claim NOT to make, because the first draft of this made it and it was false:** that a
+level camera never gets an answer on a wall capture. It depends on incidental edge content —
+deleting the skirting line from the fixture makes the same scene calibrate to 98° of a true
+100°. *Fragility* is the finding, not refusal.
+
+**What would change the answer**, recorded so it is not re-derived from scratch: a source of ψ
+that is not a vanishing point. The device sensors are already out (the design review found
+`deviceorientation`'s Z-X'-Y'' chain gimbal-locked at `beta ≈ 90°`, exactly the upright pose
+the rig requires). What is left is either a detector good enough that the VP pair stops
+flipping, or a different observable entirely. Neither is close, and the duplicate stays one
+tap to delete — which `lib/detect-refine.ts` already argues is the safe way to be wrong.
 
 ### § 42.3 · Two gates that are missing today, found by the same review
 

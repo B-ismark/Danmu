@@ -627,8 +627,15 @@ today's placers. Two results, both filed in `docs/what-is-still-open.md` § 42:
   match the same refined row, boxes that had left the frame were counted and then measured
   anyway, and the "median" column was the upper middle.
 
-The first is not fixed and is still a decision — see § 42.2 — because the only source that
-works on an upload touches the trust boundary rule 2 governs.
+The first is **closed with evidence** rather than fixed — see § 42.2. The report-only form
+(measure how far off-square a shot is, tell the person, offer a retake, with nothing
+downstream reading it) does not touch rule 2's boundary at all, so it was built and measured.
+The angle comes back exact from ideal segments — six decimals, 0° to 35° — and is unusable
+from detected ones: on a wall fixture at three resolutions the same 100° lens reports 23.5°,
+97.8° and no answer, with `coverage` 0.96 on the one that is 76° wrong. A square-on wall
+capture is the degenerate case for vanishing points, which is a second and independent reason
+for the prohibition. Reverted; the measurement is in `tests/vanishing-point.test.ts` and
+prints on every green run.
 
 ### A piece of furniture is a SOLID, and that is what the placers invert
 
