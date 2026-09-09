@@ -528,19 +528,28 @@ function lateralSpan(
  *
  * Two of the three placers do not measure the distance to their subject, they ASSUME
  * it — `placeWallObject` puts the piece on the framed wall's plane, `placeCeilingObject`
- * on the slab. The decoded lateral offset is a TEST of that assumption: the room's
- * lateral extent from this camera is `wallSpan`, so an answer outside it says the ray
- * left the room, which means the plane it was inverted against was the wrong plane and
- * every number taken off it — width, height, position — is void rather than slightly off.
+ * on the slab. The decoded lateral offset is a TEST of that assumption: an answer past the
+ * framed wall's own ends says the ray left the room, which means the plane it was inverted
+ * against was the wrong plane and every number taken off it — width, height, position — is
+ * void rather than slightly off. Those ends come from the FOOTPRINT (`wallFrame`), never
+ * from `wallSpan`: a bounding-box dimension describes the wall only in a room centred on
+ * the lens, and reading it as the room's lateral extent is how the first version of this
+ * refused a correctly measured print in a room whose wall had been dragged.
  *
  * **On an ultrawide, every ordinary room has picture beyond the ends of the wall it is
  * photographing**, and what is out there is the RETURN wall. The condition is
  * `wallSpan < 2·tan(hFOV/2) · wallDistance`, which at 106° is `< 2.654 × wallDistance`;
  * a square room sits at 2.0, so it is always exposed. Measured in a 7 × 6 room: a
- * 700 × 500 print on the north wall 700 mm from the north-east corner is wholly inside
- * the east photo's frame and decodes as an east-wall piece 769 mm past that wall's end,
- * **960 mm wide and 711 mm tall** — +37% and +42%, larger than the air conditioner that
- * `placeWallObject`'s own docblock is written around.
+ * 700 × 500 print on the north wall, its centre 800 mm from the north-east corner of a
+ * 6 × 4 room, is wholly inside the east photo's frame and decodes as an east-wall piece
+ * **764 mm past that wall's end, 893 mm wide and 803 mm tall — +28% and +61%**, larger
+ * than the air conditioner that `placeWallObject`'s own docblock is written around.
+ *
+ * **Those figures are printed by `tests/photo-geometry.test.ts` on every green run, and
+ * the ones this paragraph used to carry were not.** It said 960 × 711 at 769 mm, which
+ * came from a scratch script that re-implemented the arithmetic in node rather than
+ * calling the placer — careful measurement of the wrong subject. The height error is also
+ * the LARGER of the two and went unmentioned for as long as the number was hand-carried.
  *
  * **What it does NOT do is remove the duplicate row, and that claim was written here
  * before it was measured.** The same print is in the north photo, correctly placed; the
@@ -569,7 +578,12 @@ function lateralSpan(
  * by `snapToWall`. The line ITSELF is a floating-point boundary — a centre computed at
  * exactly the half-span comes back as 2.0000000000000004 and is refused — and that is
  * recorded rather than tuned, because nothing real sits there: a piece centred on the
- * plaster is half buried in it, and the margins this catches are 600–800 mm.
+ * plaster is half buried in it, and the margins this catches are 600–800 mm. Which is
+ * also why **flipping these two comparisons to strict is a mutant that SURVIVES**, and
+ * saying so is cheaper than a test that would pin float noise: no fixture can put a
+ * centre exactly on a bound, so the closed-vs-open end of this interval is not a
+ * behaviour anything observes. The bound's SIDES are pinned — `Math.abs(right) <=
+ * frame.right` survived until an off-centre fabrication past the short end was built.
  *
  * **`placeFloorObject` deliberately has no such gate**, and that is the whole shape of
  * this rule rather than an omission: it MEASURES its distance from the bottom row, so a
@@ -588,24 +602,77 @@ function lateralSpan(
  * halves: the invariance, and the direction the near-face clamp moves the answer when the
  * lens is under-read, which is inward.
  *
- * The bound is `wallSpan`'s ±half pair rather than `wallFrame`'s honest footprint bounds,
- * and that is deliberate: a gate must speak the same convention as the assumption it
- * falsifies, and the plane comes from `wallDistance`. Gating with real bounds while the
- * plane stays ±half would have the two disagree about where the room is, which is worse
- * than both being wrong the same way. § 44 moves the pair together.
+ * **The bound is the wall's REAL extent, from `wallFrame`, and the argument that used to
+ * stand here for the ±half pair was wrong.** It said a gate must speak the same convention
+ * as the assumption it falsifies, so that both would at least be wrong the same way. They
+ * are not wrong the same way: drag a room's EAST wall out and the north wall's distance is
+ * still exactly `depth/2` — the plane is right — while `wallSpan/2` no longer describes how
+ * far that wall reaches. Only the bound was wrong, and the excuse described a case that was
+ * not this one. Where the plane IS wrong too, the gate declines to fire; see below.
  *
- * **One limitation, stated rather than smoothed: this is only as good as the lens.** A
- * cal assumed NARROWER than the truth under-reads every lateral, pulling a fabrication
- * inward where nothing can see it — the same print read at 66° instead of 106° lands
- * 2.27 m out, comfortably inside a 3.0 m half-span. So it closes the case where the lens
- * is known and cannot touch the case where it is wrong.
+ * **One limitation, stated rather than smoothed: this is only as good as the lens — and
+ * both directions are measured, where every earlier version of this paragraph named only
+ * the harmless one.** A wall piece's decoded offset is EXACTLY proportional to `cal.k`:
+ * the distance is pinned to the wall and `lateralSpan`'s multipliers are room-derived, so
+ * none of the cancellation `placeFloorObject` enjoys happens here. The threshold therefore
+ * moves as `1/r` for `r = k_believed / k_true`, and the room never changes. Measured, and
+ * printed by `tests/photo-geometry.test.ts` on every green run — the largest fraction of
+ * the half-span still accepted, and what the same `r` did to the SIZE:
+ *
+ *     shot at   read as    r      last accepted   size wrong by
+ *      100°       106°   1.114        0.85            +11%
+ *       90°       106°   1.327        0.75            +32%
+ *       80°       106°   1.582        0.60            +58%
+ *       66°       106°   2.043        0.45           +104%
+ *      106°        66°   0.489        1.00 (never)    −51%
+ *
+ * A cal assumed NARROWER than the truth never refuses: it under-reads every lateral,
+ * pulling a fabrication inward where nothing can see it — the same print read at 66°
+ * instead of 106° lands 2.27 m out, comfortably inside a 3.0 m half-span — but it cannot
+ * touch a real piece. An over-read one refuses further in the wider the error, and 66°
+ * mistaken for 106° costs the outer HALF of every wall.
+ *
+ * **The last column is what makes that defensible**, and it is an argument this gate could
+ * not make until somebody measured instead of reasoning: width comes off the same tangents
+ * at the same pinned distance, so an `r` that moves the threshold has already inflated the
+ * size by the same factor. The piece refused at 0.45 of the wall would have come back 104%
+ * too wide. So the over-read case discards a measurement that was already worthless —
+ * which is not a bound overruling a measurement, the thing the floor exemption above
+ * exists to prevent.
  */
 function onFramedSurface(
   right: number,
   slot: CaptureSlot,
-  room: { width: number; depth: number },
+  room: { width: number; depth: number; footprint: Footprint },
 ): boolean {
-  return Math.abs(right) <= wallSpan(slot, room) / 2;
+  const frame = wallFrame(slot, room.footprint);
+  // No frame is no answer, and no answer must not become a refusal: `wallFrame`
+  // declines a polygon with fewer than three points, a NaN vertex, or one the lens
+  // does not stand inside, and none of those tell us the piece is off the wall.
+  if (!frame) return true;
+  // And the bound may only speak where the PLANE it bounds is trustworthy. The two
+  // disagree exactly when the framed wall — or the one opposite it — has been dragged,
+  // and then `placeWallObject`'s assumed distance is wrong too: a north wall pulled
+  // INWARD makes the decode over-read every lateral offset by `wallDistance / true`,
+  // which clears even an honest bound and would refuse a correct measurement. So the
+  // gate goes inert there and says why, rather than refusing on an input it cannot
+  // check. § 44 is what closes it, by moving the distance to this same frame.
+  //
+  // Exact inequality rather than a tolerance, and that is not brittle: on any room
+  // centred on the lens both sides are the same two divisions of the same numbers, so
+  // they agree bit-for-bit — `tests/wall-sample.test.ts` pins that equivalence, and it
+  // is what makes reading the frame here a NO-OP on every room the harness uses.
+  if (frame.distance !== wallDistance(slot, room)) return true;
+  // The wall's own ends, asymmetric, because a room is not obliged to be centred on
+  // the lens: pull a 6 × 6 room's east wall out by a metre and the north wall reaches
+  // x = +4 while ±half still says 3.5. Measured before this read the polygon: a
+  // 700 × 500 print at x = 3.2 came back exactly 700 × 500 and the same print at
+  // x = 3.52 — wholly inside the room, wholly inside the frame — was REFUSED. A gate
+  // that discards a correct measurement is worse than the fabrication it was built to
+  // catch, and it took an off-centre fixture to see it: `wallSpan/2` is a BOUNDING-BOX
+  // dimension, and the sentence this docblock used to carry ("the room's lateral extent
+  // from this camera IS `wallSpan`") was true only of a rectangle centred on the origin.
+  return right >= frame.left && right <= frame.right;
 }
 
 /**
@@ -792,14 +859,17 @@ export function placeFloorObject(
  * **And the plane it assumes is not always the right plane.** An ultrawide frames more
  * than the wall it is pointed at, so a piece on the RETURN wall near the shared corner
  * is in shot, and reading it against the framed wall's plane fabricates both its offset
- * and its size — a 700 × 500 print 700 mm from the corner comes back 960 × 711 at
- * 769 mm past the wall's end. `onFramedSurface` refuses that, which is why this
+ * and its size — a 700 × 500 print 800 mm from the corner comes back **893 × 803 at
+ * 764 mm past the wall's end** (+28% wide, +61% tall; measured and printed by
+ * `tests/photo-geometry.test.ts`). `onFramedSurface` refuses that, which is why this
  * function can return null for a box that is perfectly in frame.
  */
 export function placeWallObject(
   box: [number, number, number, number],
   slot: CaptureSlot,
-  room: { width: number; depth: number },
+  /** `footprint` is required because `onFramedSurface` bounds the decoded offset by the
+   *  wall's REAL ends; width/depth still give the assumed plane, which is § 44's to move. */
+  room: { width: number; depth: number; footprint: Footprint },
   cal: CameraCal,
   foot: PieceFootprint,
 ): GeoPlacement | null {
@@ -897,15 +967,18 @@ export type GeoCeilingPlacement = Omit<GeoPlacement, 'heightMM'>;
  * it justifies bounded the wall-normal distance only, so a ray could reach the slab
  * INSIDE the framed wall and still be outside the room sideways — measured, a 300 mm
  * vent high on the north wall 770 mm from the north-east corner sits wholly inside the
- * east photo's frame, intersects at 3.30 m against a 3.5 m bound, lands 643 mm outside
- * the room, and is read 401 mm wide against a true 300. Same argument, same answer:
+ * east photo's frame, intersects the slab at 2.56 m against a 3.0 m bound — INSIDE it, so
+ * the gate above never sees it — lands 571 mm outside the room, and is read 386 mm wide
+ * against a true 300. (Those are the 6 × 4 room the tests use; the same case in a 7 × 6
+ * room is 3.30 m against 3.5, 643 mm out and 401 mm wide, which is what this note used to
+ * quote while the fixture beside it measured the other room.) Same argument, same answer:
  * `onFramedSurface` refuses it. A refusal that covers one of two axes is not half a
  * refusal, it is a gate whose docstring certifies the hole.
  */
 export function placeCeilingObject(
   box: [number, number, number, number],
   slot: CaptureSlot,
-  room: { width: number; depth: number; height: number },
+  room: { width: number; depth: number; height: number; footprint: Footprint },
   cal: CameraCal,
 ): GeoCeilingPlacement | null {
   const [bx, by, bw, bh] = box;
@@ -930,9 +1003,10 @@ export function placeCeilingObject(
   // And nothing on this room's ceiling is outside its walls SIDEWAYS either, which is
   // the half of that refusal this function shipped without. Same fixture shape, same
   // arithmetic: a 300 mm vent high on the north wall 770 mm from the north-east corner
-  // is wholly in the east photo's frame, intersects the slab 3.30 m out — INSIDE the
-  // 3.5 m gate above, so that one never sees it — 643 mm outside the room laterally, and
-  // is read 401 mm wide against a true 300. See `onFramedSurface`.
+  // is wholly in the east photo's frame, intersects the slab 2.56 m out — INSIDE the
+  // 3.0 m gate above, so that one never sees it — 571 mm outside the room laterally, and
+  // is read 386 mm wide against a true 300. Printed by `tests/photo-geometry.test.ts`,
+  // in the room those fixtures actually use. See `onFramedSurface`.
   if (!onFramedSurface(right, slot, room)) return null;
   const widthM = t * (tanX(bx + bw, cal) - tanX(bx, cal));
   if (widthM <= 0.01) return null;

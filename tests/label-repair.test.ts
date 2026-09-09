@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { categoriesFittingSize, judgeLabel, judgeLabels, sizeFitsLabel } from '@/lib/label-repair';
-import { placeFloorObject, placeWallObject, type CameraCal } from '@/lib/photo-geometry';
+import { placeFloorObject, placeWallObject, wallDistance, type CameraCal } from '@/lib/photo-geometry';
 import { PART_LIBRARY, defaultDepthFor, type Category, type Shape } from '@/lib/scene-spec';
 import { dimRangeFor } from '@/lib/dimension-ranges';
 import type { CalMap, RoomDims } from '@/lib/detect-refine';
 import type { Detection } from '@/lib/detection';
+import { footprintForLayout } from '@/lib/footprint';
+import { bboxOfWallSolid } from './helpers/project';
 
-const ROOM: RoomDims = { width: 6, depth: 4, height: 2.8 };
+const ROOM: RoomDims = { width: 6, depth: 4, height: 2.8, footprint: footprintForLayout('rect', 6, 4) };
 const CAL: CameraCal = { k: 1.2, aspect: 4 / 3 };
 const CALS: CalMap = { n: CAL, e: CAL, w: CAL }; // 's' deliberately uncalibrated
 const WALL_BOX: Detection['box'] = [0.4, 0.4, 0.2, 0.2];
@@ -301,5 +303,33 @@ describe('judgeLabel — ceiling items', () => {
     expect(judgeLabel(det({ category: 'fan', shape: 'fan', slot: 'n', box: CEILING_BOX }), CALS, ROOM).status).toBe(
       'unmeasured',
     );
+  });
+
+  it('WITHDRAWS a verdict on a return-wall piece rather than accusing it', () => {
+    // `onFramedSurface` was described as stopping `judgeLabel` accusing a correctly
+    // identified piece. For the print that was the wrong way round and needed a test to
+    // see it: `painting`'s band is 150–2400 × 150–1800, so the fabricated 893 × 803 sat
+    // comfortably inside and the old answer was **`ok`** — a false clean bill, not an
+    // accusation. What the refusal buys here is that the clean bill is withdrawn.
+    const wide: CameraCal = { k: 2 * Math.tan(((106 / 2) * Math.PI) / 180), aspect: 4 / 3 };
+    const cals: CalMap = { n: wide, e: wide, s: wide, w: wide };
+    const onNorth = (view: 'n' | 'e') =>
+      det({
+        label: 'framed print',
+        category: 'painting',
+        shape: 'painting',
+        slot: view,
+        box: bboxOfWallSolid('n', view, 2.2, 1.5, wallDistance('n', ROOM), 0.7, 0.5, 0.03, wide),
+      });
+    // Its own camera measures it and clears it, for the right reason.
+    expect(judgeLabel(onNorth('n'), cals, ROOM).status).toBe('ok');
+    // The neighbour's camera now says nothing at all, where it used to say `ok` about a
+    // piece it had sized 28% wide and 61% tall.
+    expect(judgeLabel(onNorth('e'), cals, ROOM).status).toBe('unmeasured');
+    // And the band is why `ok` was reachable — pinned, so the reason cannot rot.
+    const band = dimRangeFor('painting', 'painting');
+    expect(band.min[0]).toBeLessThan(893);
+    expect(band.max[0]).toBeGreaterThan(893);
+    expect(band.max[2]).toBeGreaterThan(803);
   });
 });

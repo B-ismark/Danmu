@@ -5,6 +5,7 @@ import { defaultScene, buildSceneFromRoom, isRoundPart, type ScenePart } from '.
 import { ROOM as ROOM_DEFAULT } from './parts-catalog';
 import {
   footprintForLayout,
+  roomFootprint,
   offsetWall,
   footprintBounds,
   wallSegments,
@@ -132,10 +133,7 @@ export const useScene = create<SceneState>((set, get) => ({
     const layoutId = (room.layoutId ?? 'rect') as LayoutId;
     // A saved custom footprint (from independent wall moves) is the source of
     // truth; otherwise derive the preset shape from the layout + dims.
-    const footprint =
-      room.footprint && room.footprint.length >= 3
-        ? (room.footprint as Footprint)
-        : footprintForLayout(layoutId, room.width, room.depth);
+    const footprint = roomFootprint(room);
     set({
       loadedRoomId: room.id,
       parts: buildSceneFromRoom(room),

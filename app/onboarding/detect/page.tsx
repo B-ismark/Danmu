@@ -44,6 +44,7 @@ import { shouldAutoConfirm, sourceLabel, sourceOf } from '@/lib/detect-confidenc
 import { cleanLabelOf, fromRecord, toRecord } from '@/lib/detection-record';
 import { formatDim } from '@/lib/units';
 import type { DimUnit } from '@/lib/store';
+import { roomFootprint } from '@/lib/footprint';
 
 type SlotEntry = { slot: CaptureSlot; url: string; cap: Capture };
 type Box = [number, number, number, number];
@@ -361,7 +362,16 @@ export default function DetectPage() {
       // one that would have silently lost it is the geometry pass, where a missing
       // ceiling means every fan in the room stops being measured.
       const dims: RoomDims | null = room
-        ? { width: room.width, depth: room.depth, height: room.height }
+        ? {
+            width: room.width,
+            depth: room.depth,
+            height: room.height,
+            // The room's real outline, not the box around it. Every consumer of this
+            // state inherits it — the pipeline below, `judgeLabels`, the manual-draw
+            // path and `suggestFromLabel` all read `roomDims` — which is why it goes
+            // here rather than being threaded through five signatures.
+            footprint: roomFootprint(room),
+          }
         : null;
       if (dims) {
         calMap = await buildCals(entries, dims);

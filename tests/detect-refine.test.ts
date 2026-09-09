@@ -12,6 +12,7 @@ import { anchorFor } from '@/lib/physics';
 import { CATEGORIES, SHAPES, defaultAxisFor, defaultDepthFor, isRoundPart, type Category } from '@/lib/scene-spec';
 import { bboxOfWallSolid } from './helpers/project';
 import { dimRangeFor } from '@/lib/dimension-ranges';
+import { footprintForLayout } from '@/lib/footprint';
 
 // The five contracts below are the ones every later phase of the detection plan
 // has to keep. They deliberately do NOT re-test the projection maths — that is
@@ -21,7 +22,7 @@ import { dimRangeFor } from '@/lib/dimension-ranges';
 // placer this detection should have gone through and asserting it did not go
 // through the other one.
 
-const ROOM: RoomDims = { width: 6, depth: 4, height: 2.8 };
+const ROOM: RoomDims = { width: 6, depth: 4, height: 2.8, footprint: footprintForLayout('rect', 6, 4) };
 const CAL: CameraCal = { k: 1.2, aspect: 4 / 3 };
 // 's' is deliberately absent — an unphotographed wall is a normal outcome.
 const CALS: CalMap = { n: CAL, e: CAL, w: CAL };
@@ -361,22 +362,67 @@ describe('a refused placement', () => {
 
   it('keeps the detection and drops only the measurement', () => {
     // The refusal path is `return d` — the SAME object — which is what
-    // `lib/label-repair.ts` reads as "unmeasurable" via identity. So the piece still
-    // reaches the scene at its catalogue size through `placementForSlot`; it is the
-    // fabricated numbers that go, not the furniture. "A piece that never appears leaves
-    // no trace" is the failure this repo fears, and this is why the gate does not cause it.
+    // `lib/label-repair.ts` reads as "unmeasurable" via identity. The piece still reaches
+    // the scene; it is the fabricated numbers that go, not the furniture. "A piece that
+    // never appears leaves no trace" is the failure this repo fears, and this is why the
+    // gate does not cause it.
+    //
+    // Object identity is the whole assertion here. Two lines checking that the SEED's own
+    // `dimMM`/`position` are still undefined used to sit below it, presented as evidence;
+    // `geoRefine` spreads and never mutates its argument, so they were assertions about a
+    // literal three lines up and could not fail for any change to the gate.
     const seed = print('e');
     expect(geoRefine(seed, WCALS, ROOM)).toBe(seed);
-    expect(seed.dimMM).toBeUndefined();
-    expect(seed.position).toBeUndefined();
+    // …and the same detection through its own camera is NOT returned by identity, which is
+    // what makes the line above a test of the refusal rather than of `geoRefine` at large.
+    const measured = geoRefine(print('n'), WCALS, ROOM);
+    expect(measured.dimMM).toBeDefined();
+  });
+
+  it('on the CLOUD path the fallback is the AI’s size, not the catalogue’s', () => {
+    // The claim this replaces said a refused piece "still appears at its catalogue size".
+    // False on the path that spends the user's quota: `buildSceneFromRoom` prefers the
+    // detector's own `dimMM` through `clampDims` and reaches `cfg.dim` only when there is
+    // no hint at all — and `lib/detect-prompt.ts` asks the model for `dimMM` AND
+    // `position`. The fixture above carries neither, because that is the on-device shape,
+    // so it could not express the case the claim was about.
+    const cloud: Detection = {
+      ...print('e'),
+      dimMM: [1500, 40, 1100], // a generous guess, well inside `painting`'s band
+      position: { x: 2.9, y: 1.5, z: -1.6 },
+    };
+    const refused = geoRefine(cloud, WCALS, ROOM);
+    expect(refused).toBe(cloud); // still refused
+    // The hint SURVIVES the refusal — this is the honest contract.
+    expect(refused.dimMM).toEqual([1500, 40, 1100]);
+    expect(refused.position).toBeDefined();
+  });
+
+  it('and a refused CLOUD row can change the merge, where an on-device one cannot', () => {
+    // The other half of the same fixture gap. `dedupeDetections` bails only when a
+    // position is MISSING, so a refused row that kept the model's own position is still
+    // compared — and two sightings 0.3 m apart in `painting`'s 0.35 m tier merge to one.
+    // So "two rows in, two rows out, before and after" was true of the fixture, not of
+    // the gate.
+    const near = (view: 'n' | 'e', z: number): Detection => ({
+      ...print(view),
+      position: { x: 2.2, y: 1.5, z },
+    });
+    const merged = refineDetections([near('n', -1.9), near('e', -1.7)], WCALS, ROOM);
+    expect(merged).toHaveLength(1);
   });
 
   it('does NOT change the row count — the duplicate survives either way', () => {
-    // Two sightings of one print. Measured, they are ~1.0 m apart against `painting`'s
-    // 0.35 m tier, so both survive; refused, the second has no position at all and
-    // `dedupeDetections` declines to compare a missing one — so both survive again.
-    // Two in, two out, before and after the gate. The gate buys size and verdicts, not
-    // de-duplication, and saying otherwise is the claim that had to be retracted.
+    // Two sightings of one print, in the ON-DEVICE shape (no `dimMM`, no `position` of
+    // their own). Measured, they are ~1.0 m apart against `painting`'s 0.35 m tier, so
+    // both survive; refused, the second has no position at all and `dedupeDetections`
+    // declines to compare a missing one — so both survive again. Two in, two out, before
+    // and after the gate.
+    //
+    // Scoped to that shape deliberately: the test above shows a refused CLOUD row keeping
+    // its own position and merging. The gate buys size and verdicts, not de-duplication,
+    // and the row count was never its to move — but the reason it does not move here is
+    // the fixture, not the gate, and the first version of this comment claimed the latter.
     const out = refineDetections([print('n'), print('e')], WCALS, ROOM);
     expect(out).toHaveLength(2);
 

@@ -763,9 +763,26 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
 
 Both of those placers ASSUME a surface rather than measuring it — the framed wall, or the
 slab — and until 2026-09-09 neither checked the answer against the room. The decoded
-lateral offset is a test of the assumption: the room's lateral extent from a camera IS
-`wallSpan`, so an answer outside it says the ray left the room and the plane was the wrong
-plane, which makes every number taken off it fabricated rather than slightly off.
+lateral offset is a test of the assumption: an answer past the framed wall's own ends says
+the ray left the room and the plane was the wrong plane, which makes every number taken off
+it fabricated rather than slightly off.
+
+**Those ends come from the FOOTPRINT, and the first version read `wallSpan` instead.** This
+paragraph asserted that the room's lateral extent from a camera *is* `wallSpan` — true only
+of a rectangle centred on the lens. `wallSpan` reads the bounding box, so one wall drag
+separates them: pull a 6 × 6 room's east wall out a metre and the north wall runs
+x ∈ [−3, +4] while ±half still says ±3.5. Measured, a correctly decoded 700 × 500 print at
+x = 3.52 — wholly in the room, wholly in frame — was **refused**, which is worse than the
+fabrication the gate exists to catch. It reads `wallFrame` now, and because that returns
+`wallDistance` and `±wallSpan/2` bit-for-bit on a centred room the change is a verified
+no-op on every fixture here: the `detect-pipeline` baseline table is byte-identical.
+
+One half stays open on purpose. `wallFrame.distance` and `wallDistance` disagree only when
+the framed wall itself was dragged, and then the assumed plane is wrong too, so even an
+honest bound would refuse correct measurements. The gate **goes inert** there rather than
+refusing on an input it cannot check — *a bound may falsify an assumption only where the
+assumption's own inputs are trustworthy* — and § 44 closes it by moving the distance onto
+the same frame.
 
 **It is not an exotic case.** On an ultrawide every ordinary room has picture beyond the
 ends of the wall being photographed, and what is out there is the return wall. The exposure
@@ -773,22 +790,36 @@ condition is `wallSpan < 2·tan(hFOV/2) · wallDistance`, which at 106° is `< 2
 wallDistance` — and a square room sits at 2.0, so a square room always is. At the 66°
 default the factor is 1.299 and it is not, so this is a hazard of the lens being *known*.
 
-Measured, with both fixtures wholly inside the frame: a 700 × 500 print on the north wall
-800 mm from the north-east corner, seen in the east photo, decoded 769 mm past the east
-wall's end at **960 × 711** — +37% and +42%, larger than the air conditioner above. And a
-300 mm vent high on the same wall, read as a ceiling piece, **passed the ceiling placer's
-existing gate** at 3.30 m of a 3.5 m bound while sitting 643 mm outside the room, and came
-back 401 mm wide. That gate bounded the wall-normal axis only and its docstring read as
-though it covered both, which is the failure this document keeps naming: not a missing
+Measured, with both fixtures wholly inside the frame — and **printed by
+`tests/photo-geometry.test.ts` on every green run**, which is the correction that matters
+here: the figures this section first carried (960 × 711, 769 mm) came from a scratch script
+that re-implemented the placer instead of calling it, and were quoted in four more files
+before anyone regenerated them. In the 6 × 4 room the tests use: a 700 × 500 print on the
+north wall, centre 800 mm from the north-east corner, seen in the east photo, decodes
+**764 mm past the east wall's end at 893 × 803 — +28% wide and +61% tall**, the height being
+the larger error and the one no version of this paragraph mentioned. And a 300 mm vent high
+on the same wall, read as a ceiling piece, **passed the ceiling placer's existing gate** at
+2.56 m of a 3.0 m bound while sitting 571 mm outside the room, and came back 386 mm wide.
+That gate bounded the wall-normal axis only and its docstring read as though it covered both, which is the failure this document keeps naming: not a missing
 check, a check whose prose certifies the hole beside it.
 
 `onFramedSurface` refuses both. **Refused rather than clamped**, because clamping leaves the
 piece a metre from the truth *and* keeps a size read off the wrong plane; and refusal is not
-deletion — `geoRefine` hands the detection back unchanged, so it still reaches the scene at
-its catalogue size through `placementForSlot`, and `label-repair` reads that same object
-identity as "unmeasurable" so `judgeLabel` does not accuse it. It tests the CENTRE, not the
-extent: the wholly-off-the-wall variant accepts a 1400 mm curtain on the return wall as
-**1815 × 942**.
+deletion — `geoRefine` hands the detection back unchanged, so the piece still reaches the
+scene, and `label-repair` reads that same object identity as "unmeasurable", which WITHDRAWS
+a verdict rather than accusing. (For the print that verdict had been `ok`: `painting`'s band
+is 150–2400 × 150–1800, so a fabricated 893 × 803 fits it comfortably and was given a false
+clean bill. The row that was genuinely accused is the vent, at 386 mm against `fan`'s floor.)
+
+**What size it arrives at is NOT the catalogue's on the path that spends the user's quota**,
+and this section claimed otherwise. `buildSceneFromRoom` prefers the detector's own `dimMM`
+through `clampDims` and falls back to `cfg.dim` only when there is no hint at all — and the
+cloud prompt asks for `dimMM`. So a refused *cloud* detection is drawn at the AI's clamped
+guess; only an on-device one, which sends no size, reaches the catalogue. Whether a refusal
+should also discard that hint is a trust-boundary decision, filed in § 42.3, not taken here.
+
+It tests the CENTRE, not the extent: the wholly-off-the-wall variant accepts a 1400 mm
+curtain on the return wall as **1815 × 942**.
 
 **`placeFloorObject` is deliberately exempt**, and that is the shape of the rule rather than
 an omission: it MEASURES its distance, so its lateral is an observation, and a bound may
@@ -798,16 +829,44 @@ floor lateral is first-order invariant to the assumed lens, distance ∝ 1/k aga
 ∝ k, with a ~2.8% residual from the catalogue depth, which is the one term that does not
 scale.
 
-The bound is `wallSpan`'s ±half pair rather than `wallFrame`'s honest footprint bounds, on
-purpose: a gate must speak the same convention as the assumption it falsifies, and the plane
-comes from `wallDistance`. Gating with real bounds while the plane stays ±half would have
-the two disagree about where the room is. § 44 moves the pair together.
+**It is only as good as the lens, and BOTH directions are measured now** — every document
+here used to name only the harmless one. A wall piece's decoded offset is *exactly*
+proportional to `cal.k`: `placeWallObject` pins its distance to the wall, and `lateralSpan`'s
+multipliers are room-derived, so there is none of the cancellation `placeFloorObject` enjoys.
+The refusal threshold therefore moves as `1/r`, where `r` is the ratio of the believed `k` to
+the true one. Measured (`tests/photo-geometry.test.ts` prints it on every green run — the
+largest fraction of the half-span still accepted):
+
+| the shot was | read as | k ratio | last accepted | size already wrong by |
+|---|---|---|---|---|
+| 100° | 106° | 1.114 | 0.85 of the half-span | +11% |
+| 90° | 106° | 1.327 | 0.75 | +32% |
+| 80° | 106° | 1.582 | 0.60 | +58% |
+| 66° | 106° | 2.043 | 0.45 | +104% |
+| 106° | 66° | 0.489 | **1.00** — never refuses | −51% |
+
+So an **under-read** lens never refuses anything: it pulls every offset inward, which hides a
+fabrication where nothing can see it (the same print read at 66° instead of 106° lands 2.27 m
+out, comfortably inside a 3.0 m half-span) but cannot touch a real piece. That is the safe
+half, and the only half this document used to state. An **over-read** lens refuses further in
+the wider the error — 66° mistaken for 106° costs the outer half of every wall.
+
+**What makes that defensible is the last column**, and it is an argument the commit could not
+make until it looked: the same `r` has already inflated the piece's *size*, because width
+comes off the same tangents at the same pinned distance. A piece refused at 0.45 of the wall
+would have been decoded 104% too wide. So the over-read case discards a measurement that was
+already worthless, and the trade is not "a correct answer for a cautious one" — which is what
+a bound overruling a measurement would be, and what the floor exemption above exists to
+prevent.
 
 **And what it does NOT do**, because the first draft of its docblock claimed otherwise
 before anyone measured: it does not remove a duplicate row. Two sightings of one print go in
-and two come out, before and after — a refused detection has no position, and the merge
-declines to compare a missing one. What changes is that the second row is unmeasured rather
-than mis-measured.
+and two come out, before and after. The mechanism is fixture-dependent, and the honest
+version says so: a detection with no position of its own cannot be compared by
+`dedupeDetections`, so it survives — but the cloud prompt asks for `position` as well, and a
+refused row that has one *is* compared, so the count can move there. What changes in both
+cases is that the second row is unmeasured rather than mis-measured; the row count was never
+this gate's to move.
 
 ---
 

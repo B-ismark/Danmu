@@ -12,8 +12,9 @@ import type { CameraCal } from '@/lib/photo-geometry';
 import type { CalMap, RoomDims } from '@/lib/detect-refine';
 import type { Detection } from '@/lib/detection';
 import { PART_LIBRARY } from '@/lib/scene-spec';
+import { footprintForLayout } from '@/lib/footprint';
 
-const ROOM: RoomDims = { width: 6, depth: 4, height: 2.8 };
+const ROOM: RoomDims = { width: 6, depth: 4, height: 2.8, footprint: footprintForLayout('rect', 6, 4) };
 const CAL: CameraCal = { k: 1.2, aspect: 4 / 3 };
 const CALS: CalMap = { n: CAL, e: CAL, w: CAL };
 /** A floor-standing box in the lower middle of the frame — the same shape of box

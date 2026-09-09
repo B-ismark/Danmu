@@ -115,14 +115,18 @@ export function extent(pts: Array<[number, number]>): Box {
   return [u0, v0, Math.max(...us) - u0, Math.max(...vs) - v0];
 }
 
-/** Which world direction each slot's camera LOOKS, as a unit XZ vector — the axis
- *  `ALONG` is perpendicular to. Named separately because the two are what let a
- *  fixture describe a piece on one wall and photograph it from another. */
-export const FACING: Record<CaptureSlot, [number, number]> = {
-  n: [0, -1],
-  s: [0, 1],
-  e: [1, 0],
-  w: [-1, 0],
+/** Which world direction each slot's camera LOOKS, DERIVED from `ALONG` rather than
+ *  written out again.
+ *
+ *  It was a second hand-kept table, and it was exactly a fixed 90° rotation of the
+ *  first — while `floorBoxCorners` below derives the same axis inline a third time as
+ *  `[-az, ax]`. One fact, three expressions, nothing checking that they agree: rule 3's
+ *  scar. Nine of twelve single-row mutants survived the whole suite, because only the
+ *  `n` row was reachable from any cross-slot fixture. Deriving it deletes all nine
+ *  mutants at once, which is a better outcome than pinning them. */
+const facing = (slot: CaptureSlot): [number, number] => {
+  const [ax, az] = ALONG[slot];
+  return [az, -ax];
 };
 
 /** The eight world corners of a wall piece whose BACK is on the plaster and whose
@@ -135,8 +139,12 @@ export const FACING: Record<CaptureSlot, [number, number]> = {
  *  the camera that saw it were the same thing by construction. A fixture shaped like
  *  that cannot pose the question `onFramedSurface` answers — it is the third time a
  *  fixture in this section could not express the defect it was meant to bound, after
- *  the depthless floor card and the depthless wall panel. */
-export function wallSolidCorners(
+ *  the depthless floor card and the depthless wall panel.
+ *
+ *  NOT exported: `bboxOfWallSolid` below is its only reader, and every other export in
+ *  this file has between two and seventy. An export by analogy is plumbing with no
+ *  consumer, which is rule 1's shape at small scale. */
+function wallSolidCorners(
   mountSlot: CaptureSlot,
   lateral: number,
   yC: number,
@@ -145,7 +153,7 @@ export function wallSolidCorners(
   hM: number,
   depthM: number,
 ): Array<[number, number, number]> {
-  const [fx, fz] = FACING[mountSlot];
+  const [fx, fz] = facing(mountSlot);
   const [ax, az] = ALONG[mountSlot];
   const out: Array<[number, number, number]> = [];
   // Measured INWARD from the plaster, so a depth of 0 is the plaster itself and the
@@ -233,8 +241,11 @@ export function floorBoxCorners(
   depthM: number,
 ): Array<[number, number, number]> {
   const [ax, az] = ALONG[slot];
-  // The view axis, perpendicular to the wall-parallel one in the XZ plane.
-  const [nx, nz] = [-az, ax];
+  // The view axis, perpendicular to the wall-parallel one in the XZ plane — the same
+  // rotation `facing` applies, negated, because this offsets INTO the room while a wall
+  // piece's depth runs away from the camera. Read from there so there is one expression
+  // of it: this was the third copy.
+  const [nx, nz] = facing(slot).map((v) => -v) as [number, number];
   const out: Array<[number, number, number]> = [];
   for (const sw of [-1, 1]) {
     for (const sd of depthM > 0 ? [-1, 1] : [0]) {

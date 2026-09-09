@@ -111,7 +111,7 @@ backend, no account. The 3D studio *is* the product.
    picture beyond the ends of the wall being photographed** (`wallSpan < 2·tan(hFOV/2)·
    wallDistance`; a square room sits at 2.0 against 2.654 at 106°, so it always is), and
    what is out there is the RETURN wall: a 700 × 500 print 800 mm from a corner decodes
-   onto the neighbouring wall at **+37% wide and +42% tall**, larger than the air
+   onto the neighbouring wall at **+28% wide and +61% tall**, larger than the air
    conditioner above, and a 300 mm vent read as a ceiling piece **passed the ceiling
    placer's own gate** — which bounded the wall-normal axis only *while its docstring read
    as though it covered both*, a gate whose prose certifies the hole beside it.
@@ -120,16 +120,35 @@ backend, no account. The 3D studio *is* the product.
    property rather than an assertion (adding the gate there is a mutant that survives) —
    a floor lateral is first-order invariant to the assumed lens, distance ∝ 1/k against
    tangent ∝ k, residual ~2.8% from the catalogue depth, the one term that does not scale.
+   **The bound is the wall's REAL extent, from the FOOTPRINT** (`wallFrame`), and the first
+   version read `wallSpan/2` — a bounding-box dimension — under an argument that a gate must
+   speak the same convention as the assumption it falsifies, so both would at least be wrong
+   the same way. They are not: drag a room's EAST wall out and the north wall's distance is
+   still exactly `depth/2`, so the plane is right and only the bound is wrong. It refused a
+   correctly measured print at x = 3.52 in a room whose wall reached +4 — **a gate that
+   discards a measurement is worse than the fabrication it was built to catch**, and it took
+   an off-centre fixture to see, because in a room centred on the lens the two are the same
+   number. Hence the second half of the rule: **a bound may falsify an assumption only where
+   the assumption's own inputs are trustworthy.** Where `wallFrame.distance` and
+   `wallDistance` disagree — the framed wall itself dragged — the gate goes INERT rather
+   than refusing on an input it cannot check, and § 44 is what closes that.
    **Refusing is not deleting**, which is what made refuse-over-clamp decidable: `geoRefine`
-   hands a refused detection back unchanged, so the piece still appears at its catalogue
-   size and `judgeLabel` does not accuse it. Two lessons from getting this wrong on the
-   way, both written from reasoning and disproved by measurement: it does **not** remove
-   the duplicate row (two sightings in, two out, before and after — a refused detection has
-   no position and the merge declines to compare a missing one), and the looser
-   wholly-off-the-wall variant **survived a full round of mutation** until a fixture was
-   built that separates the two, because the example first offered for it was invented.
+   hands a refused detection back unchanged, so the piece still appears. Three claims that
+   sentence used to carry, each written from reasoning and each disproved by measurement:
+   it does **not** remove the duplicate row (two sightings in, two out, before and after —
+   though the mechanism is fixture-dependent, since the merge only skips a row whose
+   position is MISSING and the cloud prompt asks for one); the piece does **not** appear at
+   its catalogue size on the cloud path (`buildSceneFromRoom` prefers the detector's own
+   `dimMM` and reaches `cfg.dim` only with no hint at all); and `judgeLabel` was **not**
+   accusing the print — `painting`'s band is 150–2400 × 150–1800, so the fabrication was
+   judged `ok`, a false clean bill, and the refusal withdraws it. The looser
+   wholly-off-the-wall variant also **survived a full round of mutation** until a fixture
+   was built that separates the two, because the example first offered for it was invented.
    **A prediction a plan makes is not evidence, even when the plan turns out right about
-   the fix.**
+   the fix** — and neither is a guard written in the same hour: nine of twelve mutants on
+   this commit's own new fixture table survived, because only one of the four walls was
+   reachable from any test, and its coverage counters were floors (`> 0`) rather than the
+   literals `docs/traps.md` asks for.
    **Which wall a photo is, is code's answer now too** (`lib/capture-slots.ts`),
    and it belongs to this rule because a wrong slot is a wrong room:
    `wallDistance` reads n/s at `depth/2` and e/w at `width/2`, so a photo of the

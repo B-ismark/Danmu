@@ -1173,9 +1173,12 @@ an oversized ceiling light.
 the RETURN wall is in shot near the shared corner — and both wall and ceiling placers
 inverted whatever they were given against their own assumed plane without ever asking
 whether the answer was still inside the room. Measured: a 700 × 500 print 800 mm from a
-corner came back **960 × 711** — +37% and +42% — 769 mm past the end of the wall it was
-pinned to; a 300 mm vent read as a ceiling piece came back 401 mm wide and 643 mm outside
+corner came back **893 × 803** — +28% and **+61%** — 764 mm past the end of the wall it was
+pinned to; a 300 mm vent read as a ceiling piece came back 386 mm wide and 571 mm outside
 the room, having passed the one gate that function already had. Both are refused now.
+(Those figures come from the table `tests/photo-geometry.test.ts` prints on every green run.
+The ones this item first carried — 960 × 711, 769 mm — were measured against a scratch
+re-implementation of the placer instead of the placer, and described a different room.)
 
 **What is NOT worth looking for, and this is the part a test had to establish.** Fewer
 rows. The refusal does not delete the second sighting — a refused detection keeps its

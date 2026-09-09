@@ -33,6 +33,7 @@ import { anchorFor } from '@/lib/physics';
 import type { CameraCal } from '@/lib/photo-geometry';
 import type { Detection } from '@/lib/detection';
 import type { CaptureSlot, RoomData } from '@/lib/storage';
+import { footprintForLayout } from '@/lib/footprint';
 import {
   ALONG,
   bboxOfCeilingDisc,
@@ -52,7 +53,7 @@ import {
 // distance at which a piece is both fully inside the walls and fully inside the
 // picture. Every fixture asserts `inFrame`, so shrinking this room fails loudly
 // rather than quietly measuring things that were never photographed.
-export const ROOM: RoomDims = { width: 7, depth: 6, height: 2.7 };
+export const ROOM: RoomDims = { width: 7, depth: 6, height: 2.7, footprint: footprintForLayout('rect', 7, 6) };
 
 // A ~106° phone ultrawide — the only common lens that frames floor, wall AND
 // ceiling from one level shot. The nominal 66° sees walls and nothing else.

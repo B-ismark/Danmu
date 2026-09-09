@@ -19,13 +19,24 @@ import { placeCeilingObject, placeFloorObject, placeWallObject, type CameraCal }
 import type { Detection } from './detection';
 import { defaultAxisFor, defaultDepthFor, isRoundPart, type Category, type Shape } from './scene-spec';
 import type { CaptureSlot } from './storage';
+import type { Footprint } from './footprint';
 
 /** Room extent in METRES. `depth` is the N–S dimension.
  *
  *  `height` is required, not optional, and that is the point: it is the only thing
  *  that locates the ceiling plane, so a caller that forgot it would silently stop
  *  measuring every fan and pendant in the room rather than fail to compile. */
-export type RoomDims = { width: number; depth: number; height: number };
+export type RoomDims = {
+  width: number;
+  depth: number;
+  height: number;
+  /** The room's own outline. Required, not optional, and for the same reason `height`
+   *  is: `onFramedSurface` bounds a decoded lateral offset against the wall's real
+   *  ends, and a caller that omitted this would get the bounding box back — which is
+   *  exactly the defect it exists to fix, silently. `roomFootprint` derives it from a
+   *  saved room in one line. */
+  footprint: Footprint;
+};
 
 /** One calibrated camera per wall the user actually photographed. A slot with no
  *  entry has no calibration — a normal outcome for a partial capture, not a

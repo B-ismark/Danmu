@@ -534,6 +534,23 @@ merged doc and four messages before one `grep` settled it.
 → **Name the artifact every number came from**, and re-derive when the tree moved. The
 pattern across all four: *everything measured held; the one thing reasoned did not.*
 
+**Symptom: you measured carefully, in a scratch script, and the number is still wrong.**
+Because the script was not the subject. § 42.3's headline figures were produced by
+re-implementing `placeWallObject`'s arithmetic in `node -e` — transcribed faithfully,
+checked twice — and published as measurements: **960 × 711 at 769 mm past the wall**. The
+placer returns **949 × 708 at 774 mm** for that room, and the fixture the tests actually
+exercise is a different room again, at **893 × 803, 764 mm**. They reached a source
+docblock, `CLAUDE.md`, `Design.md`, two docs and a PR body before anything regenerated
+them. Worse, the transcription silently dropped the axis with the LARGER error: the height
+was +61% and no version of the note mentioned height at all.
+→ **Call the function.** Import it in a test and print what it returns; a transcription
+is a second implementation, and the whole point of the number is what the first one does.
+*(Cost twice, in one item, by two different readers: the reviewer auditing the same commit
+re-implemented `placeCeilingObject` the same way, got 3.509 m where the placer gives 3.301,
+and filed a finding that the published ceiling figures were unreproducible. They were
+reproducible. The re-implementation was the thing that was wrong — in the pass whose whole
+job was checking the numbers.)*
+
 **Symptom: an assertion fails only on CI, and the failure comes with a plausible ratio.**
 The wrong move is to retune to it. `expected 8.554660000000013 to be greater than 8.8`
 was read as "the runner is about 2.5x the calibration box", which was arithmetically true
