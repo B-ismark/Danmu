@@ -120,3 +120,35 @@ export function dominantColor(rgba: ArrayLike<number>, opts: ReduceOptions = {})
   };
   return rgbToHex(medianOf(r), medianOf(g), medianOf(b));
 }
+
+/** Parse `#rrggbb` into channels, or null. Deliberately strict: this reads values
+ *  this module produced, and a lenient parser here would let a malformed colour
+ *  reach the store where nothing validates one. */
+export function parseHex(hex: string): [number, number, number] | null {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex.trim());
+  if (!m) return null;
+  return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
+}
+
+/**
+ * The representative of several already-reduced colours, per channel.
+ *
+ * Used when a room's shape cannot say which wall each photo shows, so the four
+ * walls get one colour between them. NOT `dominantColor` over a buffer built from
+ * these: that would apply the highlight/shadow trim to four samples, and with
+ * `MIN_SAMPLES` at 8 it would refuse outright. Different question, different
+ * function — the trim is about pixels within one surface, and these are already
+ * one answer each.
+ *
+ * An even count takes the upper of the two middles, matching `dominantColor`'s
+ * `Math.floor(length / 2)` so the two never disagree about what a median is.
+ */
+export function medianHex(hexes: readonly string[]): string | null {
+  const parsed = hexes.map(parseHex).filter((c): c is [number, number, number] => c !== null);
+  if (parsed.length === 0) return null;
+  const at = (ch: 0 | 1 | 2) => {
+    const vals = parsed.map((c) => c[ch]).sort((a, b) => a - b);
+    return vals[Math.floor(vals.length / 2)];
+  };
+  return rgbToHex(at(0), at(1), at(2));
+}

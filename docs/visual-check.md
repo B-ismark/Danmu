@@ -1022,6 +1022,43 @@ consumer, the consumer import removed, and a new powerful feature granted with n
 row). Every one of those is a check that the *header text* matches the *source*. **Not one
 of them can tell you an event fired.**
 
+### Sampled wall colours — do they look like the room they came from?
+
+**Where to click.** Open a room that was built from photos (the capture flow, not
+the picker). Left rail → **Room** → **Use the colours in my photos**. Then compare each
+wall in the 3D view against the photo it came from — the capture screen still has them,
+or `/onboarding/detect`.
+
+**What wrong looks like.** Four kinds, and only the first would fail a test:
+
+· **The wrong wall.** Wall 2's colour on Wall 3. The mapping is swept over every preset
+  in `tests/wall-sample.test.ts`, so this would have to be a footprint the sweep does not
+  hold — worth one look at a room whose walls have been dragged.
+· **A colour that is not the wall.** A sofa's beige, a curtain's navy, the skirting's
+  white. The band is bounded by derived rows and furniture boxes are excluded when the
+  room has them, but neither is a guarantee: **a room opened from a saved scene file has
+  no detection boxes at all** (`fromDetection` is stripped on export), so that is the
+  case most likely to show it. The toast says when furniture was not excluded — check
+  that it did.
+· **Too dark, uniformly.** Every wall reading like its own shadow. The sample is a median
+  over one band, and a wall lit from one side has no single colour; this is the failure
+  mode I would expect first and no assertion can see it.
+· **Nothing happens.** The button renders only for a room with captures. If it is absent
+  on a room that has photos, `hasCaptures` is the thing to check.
+
+**What a test already covers, so you do not have to.** That the band excludes floor and
+ceiling (against an independent camera model, across four slots, two aspects, two
+lenses, ±5° tilt and three camera heights); that the mapping refuses a triangle, a
+chamfered rectangle, a room turned 30° off the axes, and a room with two walls facing the
+same way; that the highlight/shadow trim rejects a shadowed navy curtain; that no key is
+written outside the footprint. **What no test covers is whether the result looks like the
+room** — every one of those checks is about numbers, and the deliverable is a colour.
+
+**Where it rides.** Branch `claude/amazing-dijkstra-d0am9g`, draft PR #148. 71 tests over
+`lib/wall-sample.ts` + `lib/color-reduce.ts`; gates clean (typecheck, lint, build, 2637
+passing / 5 expected fail). Mutation-tested in four rounds, which changed the code three
+times — see the commit.
+
 ### Pressing Shuffle moves the button out from under the pointer
 
 *Filed by `rails` on 2026-09-05 from a peer's browser measurement during PR #115's review.

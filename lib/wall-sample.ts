@@ -18,6 +18,7 @@
 
 import type { CaptureSlot } from './storage';
 import { SLOT_ORDER } from './capture-slots';
+import { medianHex } from './color-reduce';
 import { wallOutwardNormal, type Footprint } from './footprint';
 import { wallColumns, wallRowAtHeight, type CameraCal } from './photo-geometry';
 
@@ -217,4 +218,74 @@ export function slotWallIndices(footprint: Footprint): Record<CaptureSlot, numbe
     out[slot] = i;
   }
   return SLOT_ORDER.every((s) => out[s] !== undefined) ? (out as Record<CaptureSlot, number>) : null;
+}
+
+/** Why a photo produced no colour. Each one is said out loud rather than dropped:
+ *  a sample that quietly covered three walls of four looks like a bug. */
+export type SkipReason =
+  /** The room leaves too little clear wall between skirting and coving. */
+  | 'no-wall'
+  /** Furniture covers most of the wall in this photo. */
+  | 'blocked'
+  /** The pixels could not be read — an undecodable blob, a decode failure. */
+  | 'unreadable';
+
+export type Skipped = { slot: CaptureSlot; reason: SkipReason };
+
+export type WallColorProposal = {
+  /** Wall index → colour, when the room's shape can say which wall each photo is. */
+  perWall: Record<number, string>;
+  /** One colour for every wall, when it cannot. Never set at the same time as
+   *  `perWall` carrying anything. */
+  allWalls: string | null;
+  skipped: Skipped[];
+  /** Whether known furniture was excluded. False means the room had no detection
+   *  boxes to hand — a scene opened from a file carries none — so the answer leans
+   *  on the wall band and the median alone. Said out loud for the same reason as
+   *  `skipped`. */
+  usedBoxes: boolean;
+};
+
+/**
+ * Turn per-photo colours into what to paint. **Pure, and here rather than in the
+ * browser shell on purpose:** this is the decision that can be wrong in the way
+ * that matters — painting the wrong wall — while decoding a JPEG can only fail
+ * loudly. The shell above it does I/O and nothing else.
+ *
+ * When the footprint cannot be mapped to four slots the offer collapses to one
+ * colour for every wall. That is a different answer rather than a worse one: an
+ * L-shaped room has no four-wall mapping, and four guesses would be the wrong wall
+ * three times.
+ */
+export function wallColorProposal(
+  found: ReadonlyArray<{ slot: CaptureSlot; hex: string }>,
+  skipped: Skipped[],
+  footprint: Footprint,
+  usedBoxes: boolean,
+): WallColorProposal {
+  const base = { skipped, usedBoxes };
+  if (found.length === 0) return { perWall: {}, allWalls: null, ...base };
+
+  const indices = slotWallIndices(footprint);
+  if (!indices) return { perWall: {}, allWalls: medianHex(found.map((f) => f.hex)), ...base };
+
+  const perWall: Record<number, string> = {};
+  for (const { slot, hex } of found) {
+    const index = indices[slot];
+    // Cannot fire today, and that is stated rather than tested: `slotWallIndices`
+    // produces these as its own loop index over this same polygon, so they are in
+    // range by construction. Kept because this is the BOUNDARY — nothing on the
+    // write path validates a wall index, and an unrenderable `wallColors[7]` is
+    // exactly what a stale index produced once before (the long note in
+    // `lib/history.ts`). So it guards a future change to the matcher, not a
+    // present bug.
+    //
+    // Second one of these in this file, after the `every` in `slotWallIndices`.
+    // The rule both follow: an assertion that cannot fire is fine when it is the
+    // thing making a cast or a write sound, and is decoration when it is standing
+    // in for a runtime case — and the way to tell is to mutate it and see whether
+    // any honest test could have caught it. Neither of these could; both say so.
+    if (index >= 0 && index < footprint.length) perWall[index] = hex;
+  }
+  return { perWall, allWalls: null, ...base };
 }

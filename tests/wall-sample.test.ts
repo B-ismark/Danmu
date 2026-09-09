@@ -8,6 +8,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  wallColorProposal,
   COVING_M,
   EDGE_TRIM,
   MAX_MASKED,
@@ -291,5 +292,74 @@ describe('slotWallIndices — swept across every preset, not sampled', () => {
       [-2.8, 2.1],
     ];
     expect(slotWallIndices(poly)).toEqual({ n: 0, e: 1, s: 2, w: 3 });
+  });
+});
+
+describe('wallColorProposal — which wall actually gets painted', () => {
+  const RECT = footprintForLayout('rect', ROOM.width, ROOM.depth);
+  const L = footprintForLayout('l', ROOM.width, ROOM.depth);
+  const found = (...pairs: Array<[CaptureSlot, string]>) =>
+    pairs.map(([slot, hex]) => ({ slot, hex }));
+
+  it('maps each photo to its own wall in a four-walled room', () => {
+    const p = wallColorProposal(
+      found(['n', '#8ca082'], ['e', '#c8b49b'], ['s', '#efe7d8'], ['w', '#7a6a58']),
+      [],
+      RECT,
+      true,
+    );
+    expect(p.perWall).toEqual({ 0: '#8ca082', 1: '#c8b49b', 2: '#efe7d8', 3: '#7a6a58' });
+    expect(p.allWalls).toBeNull();
+  });
+
+  it('paints only the walls that were photographed', () => {
+    const p = wallColorProposal(found(['e', '#c8b49b']), [{ slot: 'n', reason: 'blocked' }], RECT, true);
+    expect(p.perWall).toEqual({ 1: '#c8b49b' });
+    expect(p.skipped).toEqual([{ slot: 'n', reason: 'blocked' }]);
+  });
+
+  it('falls back to ONE colour when the room has no four-wall mapping', () => {
+    // An L cannot say which wall each photo shows, so four guesses would be the
+    // wrong wall three times. The single colour is the per-channel median.
+    const p = wallColorProposal(found(['n', '#202020'], ['e', '#404040'], ['s', '#808080']), [], L, true);
+    expect(p.perWall).toEqual({});
+    expect(p.allWalls).toBe('#404040');
+  });
+
+  it('proposes nothing at all when nothing was read', () => {
+    const p = wallColorProposal([], [{ slot: 'n', reason: 'no-wall' }], RECT, false);
+    expect(p.perWall).toEqual({});
+    expect(p.allWalls).toBeNull();
+    // …and the reasons survive, because a silent skip reads as a half-working
+    // feature.
+    expect(p.skipped).toHaveLength(1);
+    expect(p.usedBoxes).toBe(false);
+  });
+
+  it('carries usedBoxes through, so the UI can say furniture was not excluded', () => {
+    expect(wallColorProposal(found(['n', '#111111']), [], RECT, false).usedBoxes).toBe(false);
+    expect(wallColorProposal(found(['n', '#111111']), [], RECT, true).usedBoxes).toBe(true);
+  });
+
+  it('every key it produces is a real wall of the footprint it was given', () => {
+    // A property, not a guard: the in-range check in `wallColorProposal` cannot
+    // fire, because `slotWallIndices` produces the indices as its own loop index
+    // over this same polygon. Deleting that check breaks nothing, which is why the
+    // code says so instead of this test pretending to cover it. What this DOES
+    // pin is the property itself, so a future matcher that stops deriving indices
+    // from the polygon has something to fail.
+    for (const layout of ['rect', 'open', 'custom'] as const) {
+      const poly = footprintForLayout(layout, ROOM.width, ROOM.depth);
+      const p = wallColorProposal(
+        found(['n', '#111111'], ['e', '#222222'], ['s', '#333333'], ['w', '#444444']),
+        [],
+        poly,
+        true,
+      );
+      for (const key of Object.keys(p.perWall)) {
+        expect(Number(key)).toBeGreaterThanOrEqual(0);
+        expect(Number(key)).toBeLessThan(poly.length);
+      }
+    }
   });
 });

@@ -6,7 +6,7 @@
 // no `createImageBitmap` shim: the function under test takes numbers.
 
 import { describe, expect, it } from 'vitest';
-import { MIN_SAMPLES, TRIM, dominantColor, luma, rgbToHex } from '@/lib/color-reduce';
+import { MIN_SAMPLES, TRIM, dominantColor, luma, medianHex, parseHex, rgbToHex } from '@/lib/color-reduce';
 
 /** `n` opaque pixels of one colour. */
 function solid(n: number, [r, g, b]: [number, number, number]): number[] {
@@ -132,5 +132,43 @@ describe('the helpers it is built from', () => {
     expect(MIN_SAMPLES).toBeGreaterThanOrEqual(4);
     expect(TRIM).toBeGreaterThan(0);
     expect(TRIM).toBeLessThan(0.5);
+  });
+});
+
+describe('medianHex — the one colour several walls share', () => {
+  it('takes the per-channel median of already-reduced colours', () => {
+    expect(medianHex(['#202020', '#404040', '#808080'])).toBe('#404040');
+  });
+
+  it('mixes channels independently, like dominantColor does', () => {
+    expect(medianHex(['#ff0000', '#00ff00', '#0000ff'])).toBe('#000000');
+  });
+
+  it('does not apply the highlight trim', () => {
+    // The trim is about pixels within one surface; these are already one answer
+    // each. Applying it here would also refuse outright, since three samples is
+    // under MIN_SAMPLES — which is exactly why this is not `dominantColor` over a
+    // buffer built from the hexes.
+    expect(medianHex(['#ffffff', '#8ca082', '#000000'])).toBe('#8ca082');
+    expect(dominantColor(new Uint8ClampedArray([255, 255, 255, 255]))).toBeNull();
+  });
+
+  it('takes the upper middle on an even count, matching dominantColor', () => {
+    expect(medianHex(['#101010', '#202020'])).toBe('#202020');
+  });
+
+  it('ignores entries that are not colours rather than failing the lot', () => {
+    expect(medianHex(['not a colour', '#404040'])).toBe('#404040');
+    expect(medianHex([])).toBeNull();
+    expect(medianHex(['nope'])).toBeNull();
+  });
+
+  it('parseHex is strict, because nothing downstream validates a colour', () => {
+    expect(parseHex('#8CA082')).toEqual([140, 160, 130]);
+    expect(parseHex('  #8ca082  ')).toEqual([140, 160, 130]);
+    expect(parseHex('#8ca')).toBeNull();
+    expect(parseHex('8ca082')).toBeNull();
+    expect(parseHex('#8ca08z')).toBeNull();
+    expect(parseHex('')).toBeNull();
   });
 });
