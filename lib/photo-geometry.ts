@@ -20,6 +20,7 @@
 // +Y up, +Z toward the South wall. Slot cameras: n looks −Z, s +Z, e +X, w −X.
 
 import type { CaptureSlot } from './storage';
+import { footprintBounds, type Footprint } from './footprint';
 import {
   calibrateFromSegments,
   detectSegments,
@@ -149,8 +150,26 @@ const MIN_SOLVED_HEIGHT = 0.8;
 const MAX_SOLVED_HEIGHT = 2.2;
 
 /**
+ * The FORWARD (view-axis) component of the offset from the lens to a point on the
+ * framed wall at height `y`. Positive means in front of the lens.
+ *
+ * This is `bAtFloorLine`'s own denominator, named and shared, because it is what
+ * makes both of the projections below row-dependent under tilt: the lens rotates
+ * about its right axis, so how far ahead a point on the wall is depends on how
+ * high up the wall it is. `wallColumnsAtHeight` is the reason this had to be
+ * pulled out — the lateral projection divides by it too, and the version that
+ * did not was wrong under tilt while claiming to be exact.
+ */
+function forwardAtHeight(y: number, d: number, cal: CameraCal): number {
+  const off = heightOf(cal) - y;
+  const t = tiltOf(cal);
+  return off * Math.sin(t) + d * Math.cos(t);
+}
+
+/**
  * The image row showing a point on the framed wall at height `y` above the floor,
- * as a normalized v (0 = top of frame).
+ * as a normalized v (0 = top of frame). `d` is the distance from the lens to that
+ * wall — `wallFrame(...).distance`, never `width / 2`.
  *
  * This is the FORWARD direction of the one equation `calibrateFromFloorLine` and
  * `heightFromFloorLine` each invert: those are handed a row and solve for a camera
@@ -168,50 +187,122 @@ const MAX_SOLVED_HEIGHT = 2.2;
  * `height`, so a point above the lens is the same expression with a negative
  * offset and no second formula is needed.
  *
- * **Null means "not in this frame", which is an ordinary answer and not a
- * failure.** A level camera 1.5 m up, 2.8 m from the wall, on a 66° lens must look
- * down 28.2° to see the wall-floor junction while its frame reaches 26° — so that
- * junction is just off the bottom edge and the wall runs to the edge instead. A
- * caller building a band should read null as "the wall continues past this edge",
- * never as "refuse".
+ * **The row it returns is NOT clamped to the frame and may be negative or past 1**
+ * — a level camera 1.5 m up, 2.8 m from the wall, on a 66° lens must look down
+ * 28.2° to see the wall-floor junction while its frame reaches 26°, so that
+ * junction sits below the bottom edge at v ≈ 1.15. That is an ordinary answer:
+ * the wall runs past the edge of the picture.
+ *
+ * **The first version of this returned null for exactly that case, and the null
+ * was a silent wrong answer waiting to happen.** It threw away WHICH edge the row
+ * left by, and its docstring told a caller building a band to read null as "the
+ * wall continues past this edge" — so a caller defaulted the top row to 0 and the
+ * bottom to 1, and when BOTH rows left by the same edge (a 10 m room at the tilt
+ * sensor's 45° limit; an 1.8 m ceiling at −30°) the band became the whole frame
+ * and the sampler read floor as the wall colour, reporting success. A caller
+ * cannot recover information the callee discarded, so the number crosses the
+ * boundary intact and clamping is the caller's decision.
+ *
+ * Null now means only that there is no answer: the point is level with or behind
+ * the lens (tilt far enough that the wall's top has passed the lens plane), where
+ * the projection is not a row but a mirror image of one.
  */
-export function wallRowAtHeight(
-  y: number,
-  slot: CaptureSlot,
-  room: { width: number; depth: number },
-  cal: CameraCal,
-): number | null {
-  const d = wallDistance(slot, room);
+export function wallRowAtHeight(y: number, d: number, cal: CameraCal): number | null {
+  if (!(forwardAtHeight(y, d, cal) > 0)) return null;
   // Vertical offset from the lens down to the point, the convention
   // `bAtFloorLine` is written in: positive when the point is below the lens.
   const b = bAtFloorLine(heightOf(cal) - y, d, tiltOf(cal));
   if (!Number.isFinite(b)) return null;
   const v = 0.5 - (b * cal.aspect) / cal.k;
-  if (!Number.isFinite(v)) return null;
-  return v > 0 && v < 1 ? v : null;
+  return Number.isFinite(v) ? v : null;
+}
+
+/** Where the framed wall's two ends are, in metres, measured from the camera at
+ *  the world origin: `distance` along the view axis, `left` and `right` along the
+ *  lens's own right axis (so `left` is negative for a camera standing inside the
+ *  room). */
+export type WallFrame = { distance: number; left: number; right: number };
+
+/**
+ * The framed wall's geometry taken from the FOOTPRINT'S BOUNDS, which is the
+ * contract `lib/scene-store.ts` states for `moveWall`: *"the room becomes
+ * off-centre; width/depth are re-derived from the new bounding box and every
+ * downstream consumer reads footprint bounds (not ±width/2)"*.
+ *
+ * `wallDistance` and `wallSpan` above are the ±half pair, and they are what the
+ * placers still use. This is not a duplicate of them but the honest version, and
+ * the difference is only visible in a room whose walls have been dragged: pull a
+ * 1.5 × 5.0 room's east wall out by a metre and the north wall's midpoint moves to
+ * x = +0.5 while `±width/2` still centres it on the lens. A sampler asking
+ * "which columns of this photo are the north wall" then reads a sixth of the west
+ * return wall and calls it north.
+ *
+ * The camera is at the world origin, which is the capture rig's premise rather
+ * than an assumption of this function's (`slotToWorld` derives every placement
+ * from the same origin). So a footprint that does not CONTAIN the origin is a
+ * room the rig cannot describe, and this refuses it rather than returning a
+ * negative distance that would project as a mirror image.
+ */
+export function wallFrame(slot: CaptureSlot, footprint: Footprint): WallFrame | null {
+  if (footprint.length < 3) return null;
+  // Every coordinate, not the bounds: `footprintBounds` compares with `<` and `>`,
+  // which are both false against NaN, so a NaN vertex is silently SKIPPED and the
+  // bounds come back finite and confident. `lib/dimension-ranges.ts` records NaN as
+  // a live hazard on this path, and this is the shape it arrives in.
+  for (const [x, z] of footprint) if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
+  const { minX, maxX, minZ, maxZ } = footprintBounds(footprint);
+  // Distance and lateral extent in the lens's own axes, from `slotToWorld`'s
+  // convention: n looks −Z with image-right +X, s looks +Z with right −X, e looks
+  // +X with right +Z, w looks −X with right −Z.
+  const frame =
+    slot === 'n'
+      ? { distance: -minZ, left: minX, right: maxX }
+      : slot === 's'
+        ? { distance: maxZ, left: -maxX, right: -minX }
+        : slot === 'e'
+          ? { distance: maxX, left: minZ, right: maxZ }
+          : { distance: -minX, left: -maxZ, right: -minZ };
+  if (!(frame.distance > 0)) return null;
+  if (!(frame.left < 0 && frame.right > 0)) return null;
+  return frame;
 }
 
 /**
- * How wide the framed wall is on screen, as normalized u for its two ends.
+ * The image columns the framed wall's two ends occupy, at one height on it.
  *
  * The lateral companion to `wallRowAtHeight`, and the reason a wall sample does
  * not need a guessed horizontal margin: a point on the wall plane at lateral
- * offset `x` has `tanX = x / d`, so the wall's own ends sit at
- * `0.5 ± (wallSpan/2 / d) / k`. Outside that lie the RETURN walls, which are a
- * different colour and a different lighting, and are exactly what a percentage
- * margin would have been protecting against by luck.
+ * offset `x` projects to `u = 0.5 + (x / forward) / k`, so the wall's own ends are
+ * a computed pair. Outside them lie the RETURN walls, which are a different
+ * colour under different light, and are exactly what a percentage margin would
+ * have been protecting against by luck.
  *
- * Clamped to the frame, because in a small room the wall is wider than the lens
- * can see and both ends are simply off-screen.
+ * **It takes a height because the answer depends on one.** The previous version
+ * divided by the wall distance and its docstring claimed the ends sit at
+ * `0.5 ± (span/2 / d) / k` exactly; that is true only on the row level with the
+ * lens. Tilt rotates about the right axis, so `forward` grows as the row drops
+ * (`forwardAtHeight`) and the wall's ends move inward with it — measured at 3.6%
+ * of the sampled band on the return wall at 30° of tilt, and the docstring was
+ * the worse half of that defect. A caller wanting columns valid over a whole band
+ * intersects the answer at the band's two ends; `forwardAtHeight` is monotonic in
+ * `y`, so the two ends bound the interior and no sweep is needed.
+ *
+ * NOT clamped to the frame, for `wallRowAtHeight`'s reason: in a small room the
+ * wall is wider than the lens can see and both ends are legitimately off-screen,
+ * and which side they left by is the caller's to use. Null when the row is level
+ * with or behind the lens.
  */
-export function wallColumns(
-  slot: CaptureSlot,
-  room: { width: number; depth: number },
+export function wallColumnsAtHeight(
+  y: number,
+  wall: WallFrame,
   cal: CameraCal,
-): { left: number; right: number } {
-  const half = wallSpan(slot, room) / 2 / wallDistance(slot, room) / cal.k;
-  if (!Number.isFinite(half)) return { left: 0, right: 1 };
-  return { left: Math.max(0, 0.5 - half), right: Math.min(1, 0.5 + half) };
+): { left: number; right: number } | null {
+  const fwd = forwardAtHeight(y, wall.distance, cal);
+  if (!(fwd > 0)) return null;
+  const left = 0.5 + wall.left / fwd / cal.k;
+  const right = 0.5 + wall.right / fwd / cal.k;
+  if (!Number.isFinite(left) || !Number.isFinite(right)) return null;
+  return { left, right };
 }
 
 /**

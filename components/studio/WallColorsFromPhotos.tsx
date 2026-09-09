@@ -89,7 +89,7 @@ export function WallColorsFromPhotos() {
 
     const proposal = await sampleWallColors({
       captures,
-      room: { width: room.width, depth: room.depth, height: room.height },
+      ceilingM: room.height,
       footprint: room.footprint,
       boxesBySlot,
     });

@@ -6641,3 +6641,44 @@ all go together). Worth noting how this was nearly got wrong: a literal grep sai
 consumer at all", which is false — computed key access (`SCENE[key]`) finds no literal
 match, exactly the false positive `CLAUDE.md` warns about. **Exists in a commit:** the
 finding is recorded here and nowhere else; nothing is changed.
+
+## I · Batch 0 of the 2026-09-09 audit — what it fixed, and the one thing it left
+
+**Where it rides.** Branch `claude/amazing-dijkstra-d0am9g`, the commit whose subject
+begins *"Draw the wall band from the room the photo was taken in"*. `lib/photo-geometry.ts`
+(`wallFrame`, `wallColumnsAtHeight`, `wallRowAtHeight`'s contract), `lib/wall-sample.ts`
+(`WIDEST_HFOV_DEG`, `bandCal`, `MIN_BAND_FRAC`), `lib/wall-colors.ts`, and 73 tests in
+`tests/wall-sample.test.ts`, thirteen mutations of the code each confirmed to fail one.
+
+Six findings, all of them silent wrong answers rather than crashes, and the top one on the
+**normal** path: an unknown lens was read as the 66° phone main, so a photo taken on the
+ultrawide put a third of the sampled band on floor and ceiling. `Design.md` § Wall colours
+carries the three false claims that justified the design and what replaced each.
+
+### 44. The PLACERS still measure from ±width/2, and an off-centre room is what that costs
+
+**Not fixed, and deliberately not folded into Batch 0.** `wallDistance` and `wallSpan`
+(`lib/photo-geometry.ts`) are `depth/2` and `width`, which is the exact pattern
+`lib/scene-store.ts:147-151` warns every downstream consumer against: *"the room becomes
+off-centre; width/depth are re-derived from the new bounding box and every downstream
+consumer reads footprint bounds (not ±width/2)."* The wall sampler was a new consumer of
+it and now reads `wallFrame` instead; `placeFloorObject`, `placeWallObject`,
+`placeCeilingObject` and `calibrateFromFloorLine` still do not.
+
+**What it costs, worked rather than guessed:** drag a 1.5 × 5.0 m room's east wall out by a
+metre — legal, one gesture — and the north wall's midpoint moves to x = +0.5 while the
+placers still centre it on the lens. Every size taken off that photo is then measured from
+a distance 11% wrong, and every lateral position is half a metre out.
+
+**Why it is its own item.** It changes every number in `tests/detect-pipeline.test.ts`,
+whose zero-error baseline is the file's most valuable property (*"the day one of these
+numbers moves, something changed"*). So it wants its own commit with that table re-derived
+deliberately, not a line inside a colour fix. It is also **only reachable after a wall
+drag**: a room straight out of the capture flow is centred, which is why the ±half pair
+was right for as long as nothing could move a wall.
+
+**What it does not need.** The camera is at the world origin and that is the rig's premise
+rather than an assumption to relax — `slotToWorld` derives every placement from the same
+origin. `wallFrame` refuses a footprint that does not contain the origin instead of
+returning a negative distance, and that refusal is the shape the fix should take here too.
+

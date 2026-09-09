@@ -13,14 +13,28 @@
 // pure core and no test, it needs `bestE >= 2.2 * meanE` to answer at all, and
 // when the junction is oblique in frame it LOSES the answer rather than biasing
 // it. The room's own numbers already say where the wall is — `wallRowAtHeight`
-// and `wallColumns` are that, in closed form — so there is nothing here to
-// detect.
+// and `wallColumnsAtHeight` are that, in closed form — so there is nothing here
+// to detect.
+//
+// **Except the lens, which is the one term the room cannot supply**, and the first
+// version of this file waved that away: it read an unknown lens as the 66° phone
+// main and said a wrong lens was forgiving here. On a photo taken on the ultrawide
+// — the normal case in a small room, and the case with no EXIF focal length in it —
+// a third of what it sampled was floor and ceiling. `WIDEST_HFOV_DEG` is the answer:
+// the error is one-sided, so an assumed lens is assumed WIDE, which shrinks the
+// band onto real wall instead of spilling it off both ends.
 
 import type { CaptureSlot } from './storage';
 import { SLOT_ORDER } from './capture-slots';
 import { medianHex } from './color-reduce';
 import { wallOutwardNormal, type Footprint } from './footprint';
-import { wallColumns, wallRowAtHeight, type CameraCal } from './photo-geometry';
+import {
+  CAM_HEIGHT,
+  wallColumnsAtHeight,
+  wallFrame,
+  wallRowAtHeight,
+  type CameraCal,
+} from './photo-geometry';
 
 /** Skirting boards, and whatever is stacked against them. Real rooms have 70–150 mm
  *  of painted timber at the bottom of every wall, in a different colour from the
@@ -34,14 +48,72 @@ export const COVING_M = 0.22;
 
 /** Below this much clear wall between the two allowances there is nothing worth
  *  sampling, and the honest answer is to refuse rather than to sample the coving.
- *  Metres. A 1.8 m ceiling — the floor of `ROOM_SIDE_M`'s range — still clears it. */
+ *  Metres. A 1.8 m ceiling — `ROOM_HEIGHT_M.min`, the lowest this app accepts —
+ *  still clears it. (This said `ROOM_SIDE_M` and named the wrong constant: that
+ *  one is a room's width and depth, 1–50 m.) */
 export const MIN_WALL_M = 0.5;
 
 /** Fraction of the wall's on-screen WIDTH trimmed from each end. Unlike the
- *  vertical allowances this one is not a physical length: `wallColumns` already
- *  puts the return walls outside the region, and this only guards the last few
- *  pixels of resampling bleed at that boundary. */
+ *  vertical allowances this one is not a physical length: `wallColumnsAtHeight`
+ *  computes where the return walls begin, and this only guards the last few pixels
+ *  of resampling bleed at that boundary.
+ *
+ *  It used to be doing more than that without saying so, which is why the wording
+ *  is narrow now: the columns were computed at the wall distance alone, so they
+ *  were a few percent too wide under tilt and further out again in an off-centre
+ *  room, and this 4% was quietly absorbing both. Both are computed now, and a trim
+ *  that is only a trim can stay small. */
 export const EDGE_TRIM = 0.04;
+
+/** How much of the frame the band must cover, in each direction, to be a reading
+ *  of a wall rather than of whatever happens to sit at one height in it. Fraction
+ *  of the frame's own height and width.
+ *
+ *  This is the check that was missing: `MIN_WALL_M` asks whether the ROOM has
+ *  clear wall, which is not the same question as whether that wall is visible.
+ *  A camera 5 m from the wall at 40° of tilt gave a band 1.7% of the frame tall —
+ *  accepted, resampled up into the 24×24 grid, so `MIN_SAMPLES` never noticed and
+ *  the answer was a confident colour read off a sliver. */
+export const MIN_BAND_FRAC = 0.05;
+
+/** Whether the lens is known or assumed, which changes how the band is drawn.
+ *  `measured` means EXIF gave a focal length for this photo. */
+export type LensSource = 'measured' | 'assumed';
+
+/** The lens the band assumes when the photo does not say. Degrees of horizontal
+ *  field of view.
+ *
+ *  **Not the typical lens — the widest one, and the asymmetry is the whole
+ *  argument.** A row's distance from the frame centre scales as `1/k`, so
+ *  assuming a NARROWER lens than the real one pushes both junctions further out
+ *  than they really are and the band spills onto floor and ceiling; assuming a
+ *  wider one pulls them in and the band is a smaller piece of real wall. One
+ *  failure is a wrong colour reported as a right one, the other is less wall
+ *  sampled. So the unknown case takes the wide end.
+ *
+ *  What this replaces: the 66° phone-main default. Measured on a 5.6 × 4.2 × 2.5 m
+ *  room, level camera at 1.5 m, photographed on a 106° ultrawide and read as 66° —
+ *  the band ran v 0.119…1.000 where the true junctions are 0.261 and 0.859, so
+ *  **32.1% of what was sampled was floor and ceiling**. `CLAUDE.md` records that
+ *  not one of the four real phone photos this repo was tested against carried a
+ *  focal length, and `lib/photo-geometry.ts` records that a wall in a small room is
+ *  often shot on the ultrawide, so that was the NORMAL path, not an edge case.
+ *
+ *  120° rather than the 106° of a typical phone ultrawide, for margin. The
+ *  guarantee is one-sided and ends here: a lens wider than this re-opens the
+ *  defect in proportion. */
+export const WIDEST_HFOV_DEG = 120;
+
+/** The camera to draw the band with: the photo's own when EXIF measured it, the
+ *  widest plausible lens when it did not. Never narrower than the caller's, so a
+ *  measured ultrawide is left alone either way. */
+export function bandCal(cal: CameraCal, lens: LensSource): CameraCal {
+  if (lens === 'measured') return cal;
+  const widest = 2 * Math.tan(((WIDEST_HFOV_DEG / 2) * Math.PI) / 180);
+  return cal.k >= widest ? cal : { ...cal, k: widest };
+}
+
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 /** A normalized [x, y, w, h] region of a photo, the shape `sampleRegionColor` takes. */
 export type Region = [number, number, number, number];
@@ -50,44 +122,76 @@ export type Region = [number, number, number, number];
  * The part of this photo that is wall: inside the wall's own on-screen ends,
  * between the skirting and the coving.
  *
- * Every bound is derived from the room's dimensions and the camera, never from a
+ * Every bound is derived from the room's own geometry and the camera, never from a
  * percentage of the frame — the vertical pair through `wallRowAtHeight`, the
- * horizontal pair through `wallColumns`. A row or column the frame does not reach
- * is clamped to the frame edge, which is not a fallback but the truth: the wall
- * continues past the edge of the picture.
+ * horizontal pair through `wallColumnsAtHeight`, and both from `wallFrame`, which
+ * reads the footprint's BOUNDS rather than ±width/2 so that a room whose walls
+ * have been dragged is still measured from where its walls are.
  *
- * Returns null when there is not enough clear wall to be worth reading. That is
- * the rule 2 posture — say so rather than sample something else and call it the
- * wall colour.
+ * A bound past the edge of the picture is CLAMPED to that edge, and the clamp is
+ * safe only because of the refusal under it: when both bounds leave by the same
+ * edge the clamped band is empty, and `MIN_BAND_FRAC` refuses it. That pair is
+ * the fix for the worst defect this file has had — the previous version was handed
+ * nulls it could not tell apart, defaulted the top to 0 and the bottom to 1, and
+ * so answered "the whole frame is wall" for a camera tilted far enough that the
+ * wall had left the picture upward. It reported success and returned the colour of
+ * the floor.
  *
- * A wrong lens is forgiving here, and it is worth saying why, because rule 2 is
- * otherwise strict about calibration error: `k` only makes the region slightly
- * too tall or too wide, the allowances absorb that, and a colour is not a
- * dimension — nothing downstream measures anything from it.
+ * Returns null when there is not enough clear wall to be worth reading, when the
+ * camera's pose is not one a room can be photographed from, or when the band that
+ * survives is too small on screen. That is the rule 2 posture — say so rather than
+ * sample something else and call it the wall colour.
+ *
+ * `lens` is not optional and not inferable: it says whether the photo's own focal
+ * length is behind `cal`, and an assumed lens is widened to `WIDEST_HFOV_DEG`
+ * before anything is derived from it, because the error is one-sided. The
+ * paragraph this replaces claimed "a wrong lens is forgiving here, and the
+ * allowances absorb that". It was the justification for skipping the calibration
+ * ladder and it was false by a third of the band; see `WIDEST_HFOV_DEG`.
  */
 export function wallRegion(
   slot: CaptureSlot,
-  room: { width: number; depth: number; height: number },
+  footprint: Footprint,
+  ceilingM: number,
   cal: CameraCal,
+  lens: LensSource,
 ): Region | null {
-  if (!(room.height > 0)) return null;
-  const clearTop = room.height - COVING_M;
+  if (!(ceilingM > 0) || !Number.isFinite(ceilingM)) return null;
+  const clearTop = ceilingM - COVING_M;
   if (clearTop - SKIRTING_M < MIN_WALL_M) return null;
 
-  // Null = beyond the frame, so the wall reaches that edge.
-  const top = wallRowAtHeight(clearTop, slot, room, cal) ?? 0;
-  const bottom = wallRowAtHeight(SKIRTING_M, slot, room, cal) ?? 1;
-  if (!(bottom > top)) return null;
+  const wall = wallFrame(slot, footprint);
+  if (!wall) return null;
 
-  const { left, right } = wallColumns(slot, room, cal);
+  const view = bandCal(cal, lens);
+  // A lens under the ceiling is the rig's premise; above it the room is being
+  // photographed from inside the slab. `placeCeilingObject` refuses the mirror
+  // case, and the two limits do not overlap on their own — `pose.heightM` reaches
+  // 2.2 m and `ROOM_HEIGHT_M.min` is 1.8 — so it has to be said here.
+  const camH = view.height ?? CAM_HEIGHT;
+  if (!(camH > 0 && camH < ceilingM)) return null;
+
+  const topV = wallRowAtHeight(clearTop, wall.distance, view);
+  const bottomV = wallRowAtHeight(SKIRTING_M, wall.distance, view);
+  if (topV === null || bottomV === null) return null;
+  const top = clamp01(topV);
+  const bottom = clamp01(bottomV);
+  if (!(bottom - top >= MIN_BAND_FRAC)) return null;
+
+  // The columns valid over the WHOLE band, which is the intersection of the two
+  // rows' answers: `forwardAtHeight` is monotonic in height, so the band's ends
+  // bound its interior and there is nothing between them to check.
+  const atTop = wallColumnsAtHeight(clearTop, wall, view);
+  const atBottom = wallColumnsAtHeight(SKIRTING_M, wall, view);
+  if (!atTop || !atBottom) return null;
+  const left = clamp01(Math.max(atTop.left, atBottom.left));
+  const right = clamp01(Math.min(atTop.right, atBottom.right));
   const w = right - left;
-  if (!(w > 0)) return null;
   const trim = w * EDGE_TRIM;
-  const x = left + trim;
   const width = w - 2 * trim;
-  if (!(width > 0)) return null;
+  if (!(width >= MIN_BAND_FRAC)) return null;
 
-  return [x, top, width, bottom - top];
+  return [left + trim, top, width, bottom - top];
 }
 
 /**

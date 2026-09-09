@@ -20,6 +20,7 @@ import {
   maskLeavesEnough,
   wallColorProposal,
   wallRegion,
+  type LensSource,
   type Region,
   type Skipped,
   type WallColorProposal,
@@ -29,21 +30,29 @@ import type { Capture, CaptureSlot } from './storage';
 
 export type { SkipReason, WallColorProposal } from './wall-sample';
 
-/** The camera for a capture: EXIF focal length if the photo carried one, the 66°
- *  default otherwise, plus whatever the capture screen measured. The same ladder
- *  the detect screen climbs, minus the floor-line solve — which is not needed
- *  here, because a lens error only makes the sampled band slightly the wrong
- *  height and the skirting/coving allowances absorb that. */
-function calFor(pose: Capture['pose'], aspect: number): CameraCal {
+/** The camera for a capture, and **whether the lens in it was measured or
+ *  assumed** — which the band needs to know, so the two travel together rather
+ *  than as a camera plus a flag a caller could forget to pass.
+ *
+ *  EXIF focal length when the photo carried one, otherwise the default, plus
+ *  whatever the capture screen measured about the pose. The same ladder the detect
+ *  screen climbs, minus the floor-line solve — and this comment used to justify
+ *  skipping that rung by saying a lens error only makes the band slightly the
+ *  wrong height. It does not: read a 106° ultrawide as the 66° default and a third
+ *  of the band is floor and ceiling (`WIDEST_HFOV_DEG`). What stands in for the
+ *  missing rung is assuming the WIDE end instead of the typical one, which is
+ *  sound only because the error is one-sided. */
+function calFor(pose: Capture['pose'], aspect: number): { cal: CameraCal; lens: LensSource } {
   const view: CameraView = {};
   if (pose?.heightM !== undefined) view.height = pose.heightM;
   if (pose?.tiltDeg !== undefined) view.tiltRad = (pose.tiltDeg * Math.PI) / 180;
   // `hfovFromFocal35` returns null for a tag outside 20–150°, which is a
-  // transcription error rather than a lens. Falling through to the default is the
-  // right answer there, not an error to report: the band is forgiving of the lens.
+  // transcription error rather than a lens. Falling through to the assumed lens is
+  // the right answer there rather than an error to report — but it is `assumed`,
+  // not `measured`, because a rejected tag told us nothing.
   const hfov = pose?.focal35mm !== undefined ? hfovFromFocal35(pose.focal35mm, aspect) : null;
-  if (hfov !== null) return calFromHfov(hfov, aspect, view);
-  return { ...defaultCal(aspect), ...view };
+  if (hfov !== null) return { cal: calFromHfov(hfov, aspect, view), lens: 'measured' };
+  return { cal: { ...defaultCal(aspect), ...view }, lens: 'assumed' };
 }
 
 /**
@@ -54,12 +63,17 @@ function calFor(pose: Capture['pose'], aspect: number): CameraCal {
  */
 export async function sampleWallColors(args: {
   captures: readonly Capture[];
-  room: { width: number; depth: number; height: number };
+  /** The room's ceiling height in metres. **Its width and depth are deliberately
+   *  not taken:** the wall geometry comes from `footprint` through `wallFrame`,
+   *  which reads the polygon's bounds, and `scene-store.ts`'s `moveWall` contract
+   *  says every downstream consumer must. Handing this the bbox dims was how the
+   *  first version got them from ±width/2 anyway. */
+  ceilingM: number;
   footprint: Footprint;
   /** Normalized furniture boxes per slot, when the room has them. */
   boxesBySlot?: Partial<Record<CaptureSlot, readonly Region[]>>;
 }): Promise<WallColorProposal | null> {
-  const { captures, room, footprint, boxesBySlot } = args;
+  const { captures, ceilingM, footprint, boxesBySlot } = args;
   if (captures.length === 0) return null;
 
   const found: Array<{ slot: CaptureSlot; hex: string }> = [];
@@ -81,7 +95,8 @@ export async function sampleWallColors(args: {
       skipped.push({ slot: cap.slot, reason: 'unreadable' });
       continue;
     }
-    const region = wallRegion(cap.slot, room, calFor(cap.pose, aspect));
+    const { cal, lens } = calFor(cap.pose, aspect);
+    const region = wallRegion(cap.slot, footprint, ceilingM, cal, lens);
     if (!region) {
       skipped.push({ slot: cap.slot, reason: 'no-wall' });
       continue;

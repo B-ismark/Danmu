@@ -789,12 +789,41 @@ the answer rather than bias it. The room's own numbers already say.
 `wallRowAtHeight` (`lib/photo-geometry.ts`) is the **forward** direction of the
 one equation `calibrateFromFloorLine` and `heightFromFloorLine` each invert, so
 the wall–floor and wall–ceiling junctions are calls rather than cases, and
-`wallColumns` puts the return walls outside the region. Both bounds are real
-lengths in metres — a skirting allowance and a coving allowance — never a
-percentage of the frame; a row the frame does not reach comes back null, which
-means "the wall runs past this edge" and is true rather than a fallback. A wrong
-lens is forgiving here, unusually for this engine: it only makes the band slightly
-the wrong height, the allowances absorb that, and a colour is not a dimension.
+`wallColumnsAtHeight` puts the return walls outside the region. Both vertical
+bounds are real lengths in metres — a skirting allowance and a coving allowance —
+never a percentage of the frame, and the lateral pair comes from `wallFrame`,
+which reads the footprint's **bounds** rather than ±width/2, per the contract
+`moveWall` states in `lib/scene-store.ts`.
+
+**Three claims this section made, and what replaced them**, because each was the
+justification for a piece of the design and all three were false:
+
+- *"A wrong lens is forgiving here — it only makes the band slightly the wrong
+  height."* It was the reason for skipping the calibration ladder's floor-line
+  rung, and it is false on the **normal** path: read a 106° ultrawide as the 66°
+  phone-main default and 32.1% of the sampled band is floor and ceiling (level
+  camera, 5.6 × 4.2 × 2.5 m room, both junctions measured). Not one of the four
+  real phone photos this repo was tested against carried an EXIF focal length, so
+  that was the ordinary case rather than an edge one. What replaces it is
+  `WIDEST_HFOV_DEG`: the error is **one-sided** — assuming a narrower lens than
+  the real one spills the band off both ends of the wall, assuming a wider one
+  samples a smaller piece of real wall — so an assumed lens is assumed **wide**.
+  A measured lens is used as measured.
+- *"A row the frame does not reach comes back null, which means the wall runs past
+  this edge and is true rather than a fallback."* True for one row, false for the
+  pair: when **both** rows leave by the same edge — a deep room at the tilt
+  sensor's own 45° limit, an 1.8 m ceiling at −30° — a caller defaulting the top
+  to 0 and the bottom to 1 gets the whole frame and reads the floor as the wall
+  colour, reporting success. `wallRowAtHeight` returns the row **unclamped** now,
+  because which side it left by is the only thing that separates those two cases,
+  and `wallRegion` clamps and then refuses a band too small **on screen**
+  (`MIN_BAND_FRAC`) — a separate question from whether the ROOM has clear wall,
+  which is what `MIN_WALL_M` asks.
+- *"`wallColumns` puts the return walls outside the region."* Only at zero tilt.
+  The lens rotates about its right axis, so how far ahead a point on the wall is
+  depends on how high up the wall it is, and the wall's ends move inward as the row
+  drops. The columns take a height now and the band uses the intersection of its
+  two ends; `forwardAtHeight` is monotonic, so those two bound the interior.
 
 **Which wall a photo paints reads the polygon's winding**, not `layoutId` — a
 dragged rectangle is `custom` while still being four walls facing four ways. It
