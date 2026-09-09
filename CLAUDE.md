@@ -388,8 +388,10 @@ backend, no account. The 3D studio *is* the product.
    Every
    third-party host is allow-listed with a reason in `next.config.mjs`'s CSP;
    adding a fetch target means adding it there too. The same file's
-   `Permissions-Policy` allows only the features the app actually uses — which is
-   now exactly one, `camera=(self)` for capture — and denies the rest; `()` there
+   `Permissions-Policy` allows only the features the app actually uses — `camera`
+   for the capture screen's viewfinder, and the `accelerometer`/`gyroscope`/
+   `magnetometer` trio that gate the one `deviceorientation` read behind it — and
+   denies the rest; `()` there
    overrides the user's own grant, so a feature and its header entry move
    together. **In both directions, and BOTH directions have now drawn blood.**
    Four entries sat at `(self)` for the sun mood — `geolocation` for its latitude,

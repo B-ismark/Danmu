@@ -149,6 +149,72 @@ const MIN_SOLVED_HEIGHT = 0.8;
 const MAX_SOLVED_HEIGHT = 2.2;
 
 /**
+ * The image row showing a point on the framed wall at height `y` above the floor,
+ * as a normalized v (0 = top of frame).
+ *
+ * This is the FORWARD direction of the one equation `calibrateFromFloorLine` and
+ * `heightFromFloorLine` each invert: those are handed a row and solve for a camera
+ * term; this is handed the camera and returns the row. It reuses `bAtFloorLine`
+ * rather than restating it, so there is one description of where a height lands on
+ * screen and three readers of it — the alternative is the shape rule 3 of
+ * `CLAUDE.md` warns about, two copies of one number drifting apart.
+ *
+ * `y = 0` is the wall-floor junction and `y = room.height` the wall-ceiling one,
+ * so the two junctions are calls rather than cases. Taking a HEIGHT instead of a
+ * surface name is what lets a caller ask for the row 150 mm above the skirting in
+ * metres, rather than guessing a percentage of the frame.
+ *
+ * `bAtFloorLine` is written for a surface below the lens at vertical offset
+ * `height`, so a point above the lens is the same expression with a negative
+ * offset and no second formula is needed.
+ *
+ * **Null means "not in this frame", which is an ordinary answer and not a
+ * failure.** A level camera 1.5 m up, 2.8 m from the wall, on a 66° lens must look
+ * down 28.2° to see the wall-floor junction while its frame reaches 26° — so that
+ * junction is just off the bottom edge and the wall runs to the edge instead. A
+ * caller building a band should read null as "the wall continues past this edge",
+ * never as "refuse".
+ */
+export function wallRowAtHeight(
+  y: number,
+  slot: CaptureSlot,
+  room: { width: number; depth: number },
+  cal: CameraCal,
+): number | null {
+  const d = wallDistance(slot, room);
+  // Vertical offset from the lens down to the point, the convention
+  // `bAtFloorLine` is written in: positive when the point is below the lens.
+  const b = bAtFloorLine(heightOf(cal) - y, d, tiltOf(cal));
+  if (!Number.isFinite(b)) return null;
+  const v = 0.5 - (b * cal.aspect) / cal.k;
+  if (!Number.isFinite(v)) return null;
+  return v > 0 && v < 1 ? v : null;
+}
+
+/**
+ * How wide the framed wall is on screen, as normalized u for its two ends.
+ *
+ * The lateral companion to `wallRowAtHeight`, and the reason a wall sample does
+ * not need a guessed horizontal margin: a point on the wall plane at lateral
+ * offset `x` has `tanX = x / d`, so the wall's own ends sit at
+ * `0.5 ± (wallSpan/2 / d) / k`. Outside that lie the RETURN walls, which are a
+ * different colour and a different lighting, and are exactly what a percentage
+ * margin would have been protecting against by luck.
+ *
+ * Clamped to the frame, because in a small room the wall is wider than the lens
+ * can see and both ends are simply off-screen.
+ */
+export function wallColumns(
+  slot: CaptureSlot,
+  room: { width: number; depth: number },
+  cal: CameraCal,
+): { left: number; right: number } {
+  const half = wallSpan(slot, room) / 2 / wallDistance(slot, room) / cal.k;
+  if (!Number.isFinite(half)) return { left: 0, right: 1 };
+  return { left: Math.max(0, 0.5 - half), right: Math.min(1, 0.5 + half) };
+}
+
+/**
  * Solve for CAMERA HEIGHT, given a known lens.
  *
  * This is the same one equation as `calibrateFromFloorLine`, inverted for the
