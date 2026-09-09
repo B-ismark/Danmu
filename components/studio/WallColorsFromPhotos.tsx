@@ -67,8 +67,6 @@ function skipSentence(skipped: Array<{ slot: CaptureSlot; reason: SkipReason }>)
 
 export function WallColorsFromPhotos() {
   const { roomId } = useParams<{ roomId: string }>();
-  const room = useScene((s) => s.room);
-  const parts = useScene((s) => s.parts);
   const setWallColor = useScene((s) => s.setWallColor);
   const setAllWallColors = useScene((s) => s.setAllWallColors);
   const [busy, run] = useBusyAction();
@@ -79,11 +77,31 @@ export function WallColorsFromPhotos() {
   useEffect(() => {
     if (!roomId) return;
     let live = true;
-    void roomStore.hasCaptures(roomId).then((yes) => {
-      if (live) setHasPhotos(yes);
-    });
+    const ask = () => {
+      roomStore
+        .hasCaptures(roomId)
+        .then((yes) => {
+          if (live) setHasPhotos(yes);
+        })
+        // No captures as far as this control is concerned. The rationale below
+        // says a button that can only fail is worse than no button, and an
+        // unreadable IndexedDB is that case — but it has to be an explicit choice
+        // rather than an unhandled rejection, which is what this was.
+        .catch(() => {
+          if (live) setHasPhotos(false);
+        });
+    };
+    ask();
+    // Asked ONCE per `roomId` before, so the answer went stale in both
+    // directions: photograph the room that is already open (in another tab, or
+    // through the capture screen and back without a remount) and the button stayed
+    // absent, while deleting the captures left it present and only able to fail.
+    // Focus is the cheap signal that something may have happened elsewhere; the
+    // press itself still re-checks by loading the captures.
+    window.addEventListener('focus', ask);
     return () => {
       live = false;
+      window.removeEventListener('focus', ask);
     };
   }, [roomId]);
 
@@ -108,6 +126,13 @@ export function WallColorsFromPhotos() {
   }
 
   async function sampleAndPaint() {
+    // Read at PRESS time rather than out of the last render's closure. Both were
+    // the same value in practice — the component subscribed to `room`, so React
+    // re-rendered before the press — but a press handler that reads the store when
+    // it is pressed cannot be wrong about it, and this one now also decides which
+    // room it is allowed to write to.
+    const { room, parts } = useScene.getState();
+    const sampledFootprint = room.footprint;
     const captures = await roomStore.loadCaptures(roomId);
     // Detected furniture, so a sofa does not become the wall colour. Rides on the
     // parts as `fromDetection`, which is stripped from an exported scene file — so
@@ -127,6 +152,26 @@ export function WallColorsFromPhotos() {
       boxesBySlot,
     });
 
+    // Every write below is a global store action that outlives this component, so
+    // the room the answer belongs to has to be checked again now that the awaits
+    // are done — see `loadedRoomId` in `lib/scene-store.ts`.
+    const stillHere = () => useScene.getState().loadedRoomId === roomId;
+    if (!stillHere()) return;
+    // And the geometry the sample was measured from has to still be the geometry
+    // on screen: a wall dragged mid-sample re-derives the footprint, so these wall
+    // indices would land on a shape that no longer exists — and the in-range check
+    // in `wallColorProposal` cannot catch it, having been evaluated against the
+    // footprint as it was. `moveWall` and `setRoom` both write a fresh polygon
+    // array, so identity is the test; painting a wall does not, so an ordinary
+    // recolour mid-sample is not mistaken for a reshape.
+    if (useScene.getState().room.footprint !== sampledFootprint) {
+      toast({
+        title: 'The room changed while your photos were being read',
+        message: 'Nothing was applied, because the colours were measured from the room’s old shape. Press it again.',
+      });
+      return;
+    }
+
     const detail = proposal ? skipSentence(proposal.skipped) : undefined;
     const caveat = proposal ? furnitureSentence(proposal.furniture) : undefined;
     const painted = proposal ? Object.keys(proposal.perWall).length : 0;
@@ -140,13 +185,24 @@ export function WallColorsFromPhotos() {
       return;
     }
 
-    // Captured BEFORE the write so Undo restores exactly what was there, rather
-    // than racing the 250 ms history snapshot. Restoring the map creates a new
-    // `room` object, so the normal undo stack still sees it as an edit.
-    const before = room.wallColors;
+    // The undo snapshot is taken HERE — after the awaits, immediately before the
+    // write — and that is the whole of it. Read at the press (or, as the first
+    // version had it, out of the render closure) it is the map from before four
+    // JPEG decodes, so a wall the user painted while they waited was not in it and
+    // Undo silently discarded their work. Restoring the map creates a new `room`
+    // object, so the normal undo stack still sees it as an edit.
+    //
+    // The gate matters more here than on the write: a toast lives 9 seconds, which
+    // is long enough to open another room, and this map is the OTHER room's paint
+    // — usually `{}`. Pressing Undo there erased whatever the user had painted in
+    // the room they were now looking at.
+    const before = useScene.getState().room.wallColors;
     const undo = {
       label: 'Undo',
-      onClick: () => useScene.setState((s) => ({ room: { ...s.room, wallColors: before } })),
+      onClick: () => {
+        if (!stillHere()) return;
+        useScene.setState((s) => ({ room: { ...s.room, wallColors: before } }));
+      },
     };
 
     if (proposal.allWalls) {
@@ -167,7 +223,7 @@ export function WallColorsFromPhotos() {
     }
 
     for (const [index, hex] of Object.entries(proposal.perWall)) setWallColor(Number(index), hex);
-    const total = wallSegments(room.footprint).length;
+    const total = wallSegments(sampledFootprint).length;
     toast({
       tone: 'success',
       title: `${painted} of ${total} walls took their colour from your photos`,
