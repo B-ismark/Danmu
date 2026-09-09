@@ -3,7 +3,15 @@
 import { create } from 'zustand';
 import { defaultScene, buildSceneFromRoom, isRoundPart, type ScenePart } from './scene-spec';
 import { ROOM as ROOM_DEFAULT } from './parts-catalog';
-import { footprintForLayout, offsetWall, footprintBounds, type Footprint, type LayoutId } from './footprint';
+import {
+  footprintForLayout,
+  roomFootprint,
+  offsetWall,
+  footprintBounds,
+  wallSegments,
+  type Footprint,
+  type LayoutId,
+} from './footprint';
 import { ROOM_SIDE_EPS, ROOM_SIDE_M } from './dimension-ranges';
 import type { RoomData, Site } from './storage';
 
@@ -32,6 +40,19 @@ type SceneState = {
   parts: ScenePart[];
   /** room shell — dimensions + polygon footprint */
   room: RoomShape;
+  /** Which room this scene currently holds, or null before one is loaded (and for
+   *  the default scene, which belongs to no saved room).
+   *
+   *  **Here because an async writer has to be able to ask.** Every setter on this
+   *  store is global and survives the unmount of whatever called it, so an action
+   *  that reads the room, awaits something slow — decoding four photographs, say —
+   *  and then writes, can land its answer in whichever room the studio has since
+   *  navigated to. `wallColors` sampled from room A were being applied to room B,
+   *  `RoomSync` was persisting them, and the success toast named a room that was
+   *  never photographed. Nothing in the store could tell the two apart, so nothing
+   *  did. Set by `loadFromRoom`, which is the one place the scene changes which
+   *  room it is about. */
+  loadedRoomId: string | null;
   ready: boolean;
   setParts: (p: ScenePart[]) => void;
   setRoom: (r: { width: number; depth: number; height: number }) => void;
@@ -80,6 +101,7 @@ const DEFAULT_ROOM: RoomShape = {
 export const useScene = create<SceneState>((set, get) => ({
   parts: defaultScene(),
   room: DEFAULT_ROOM,
+  loadedRoomId: null,
   ready: false,
   setParts: (parts) => set({ parts, ready: true }),
   // Dimension edits re-derive the footprint from the current layout preset when
@@ -100,6 +122,7 @@ export const useScene = create<SceneState>((set, get) => ({
   loadFromRoom: (room) => {
     if (!room)
       return set({
+        loadedRoomId: null,
         parts: defaultScene(DEFAULT_ROOM.layoutId, DEFAULT_ROOM.width, DEFAULT_ROOM.depth, {
           footprint: DEFAULT_ROOM.footprint,
           height: DEFAULT_ROOM.height,
@@ -110,11 +133,9 @@ export const useScene = create<SceneState>((set, get) => ({
     const layoutId = (room.layoutId ?? 'rect') as LayoutId;
     // A saved custom footprint (from independent wall moves) is the source of
     // truth; otherwise derive the preset shape from the layout + dims.
-    const footprint =
-      room.footprint && room.footprint.length >= 3
-        ? (room.footprint as Footprint)
-        : footprintForLayout(layoutId, room.width, room.depth);
+    const footprint = roomFootprint(room);
     set({
+      loadedRoomId: room.id,
       parts: buildSceneFromRoom(room),
       room: {
         width: room.width,
@@ -134,7 +155,16 @@ export const useScene = create<SceneState>((set, get) => ({
   setAllWallColors: (color) =>
     set((s) => {
       const next: Record<number, string> = {};
-      for (let i = 0; i < s.room.footprint.length; i++) next[i] = color;
+      // **`wallSegments`, not `footprint.length`.** `RoomShell` paints
+      // `wallSegments(footprint)`, which SKIPS an edge shorter than 1e-4 — so on a
+      // footprint carrying a degenerate edge this wrote one index the renderer
+      // never reads and left the last real wall unpainted. Invisible while every
+      // wall gets the same colour, which is exactly why it survived: the wrong
+      // index and the right one hold the same string. It is a live path now that
+      // the photo sampler falls back to this when a room's shape cannot say which
+      // wall each photo is.
+      const walls = wallSegments(s.room.footprint).length;
+      for (let i = 0; i < walls; i++) next[i] = color;
       return { room: { ...s.room, wallColors: next } };
     }),
   resetWallColor: (index) =>

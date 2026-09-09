@@ -13,6 +13,7 @@ import { RoomDimsEditor } from './RoomDimsEditor';
 import { RailSection } from './RailSection';
 import { RoomTools } from './RoomTools';
 import { NorthDial } from './NorthDial';
+import { WallColorsFromPhotos } from './WallColorsFromPhotos';
 import { LightingPicker } from './LightingPicker';
 import { duplicateSelection, removeParts } from './KeyboardShortcuts';
 import { THEMES, themeColorFor, type Theme } from '@/lib/themes';
@@ -420,6 +421,12 @@ export function PartTree() {
           <div style={{ marginTop: 12 }}>
             <NorthDial />
           </div>
+          {/* Reads the room's real wall colours out of its capture photos. In the
+              body rather than beside Re-scan because `RailSection` carries ONE
+              header action and Re-scan is it — and this is an in-place async
+              action, not a navigation. Renders nothing for a room with no photos:
+              a button that can only fail is worse than no button. */}
+          <WallColorsFromPhotos />
         </RailSection>
 
         <RailSection

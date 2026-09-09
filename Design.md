@@ -583,12 +583,290 @@ for on the capture screen (`useSettings.camHeightM`, remembered per person since
 it is a property of the shooter, not the room) and written onto each photo's
 `CapturePose` as it is saved.
 
+**The fourth assumption is the unmeasured one, and it has now been priced.** The rig's
+header names four: camera at the room centre, at a known height, level, and **framing one
+wall straight-on**. Three of those are asked for or solved; the fourth is assumed and
+nothing checks it. `tests/off-square-cost.test.ts` measures what it costs, changing nothing
+in `lib/` — it projects the known room through an off-square camera and hands the boxes to
+today's placers. Two results, both filed in `docs/what-is-still-open.md` § 42:
+
+- **±4° of differential off-square framing is enough to turn one piece of furniture into
+  two.** That is where duplicated detections come from. A *uniform* bias — the same angle
+  on every wall — never splits a cross-slot object at any angle to 20°, because it moves
+  both sightings the same way and they still agree; only per-shot variation separates them.
+  The nightstand pair, which was the case to fear because a merge there deletes a real
+  piece silently, keeps its gap to within 6 mm across the whole sweep — both nightstands
+  sit in one photo, so an off-square camera carries them together.
+- **A larger error was found on the way, it is not about yaw at all, and it is now
+  FIXED.** `placeFloorObject` backprojected the bbox bottom edge, which for a real 3D box
+  is the corner nearest the lens rather than the centre plane — so a floor piece was
+  measured about half its own depth too close, and a square-footprint piece read far too
+  wide because its silhouette is its diagonal. At a **perfectly square** camera: the sofa
+  was out by 0.4250 m (exactly half its 850 mm depth) and the lamp read 78.7% too wide.
+  Invisible to the whole suite because every fixture was a **depthless card**, so the
+  placer was exactly right about the thing it was being given.
+  See § A floor piece is a solid below for what replaced it.
+- **"Wall and ceiling pieces are untouched, which is the other half of the diagnosis" was
+  published here and it was a tautology.** `wallCorners` in the fixture took no depth
+  parameter, so `realDepth: true` could not move a wall piece at all, and the assertion
+  that wall anchors were exact to nine decimals could not fail — the same depthless-fixture
+  defect the measurement had just been written to expose, reproduced one anchor over in the
+  same commit. The ceiling fan was exempted from the yaw sweep outright, on the stated
+  grounds that a yaw about the vertical leaves it alone in the axis that matters; that was
+  false too, since `placeCeilingObject` derives the lateral position from `tanX` at the
+  box's own horizontal centre.
+  Measured once the fixture could express either: **wall pieces are affected but by one to
+  two orders less** — TV 21 mm and 3.5%, curtain 23 mm and 3.4%, painting 5 mm and 1.6% —
+  because the camera is at the room centre and the piece is off to one side, so its depth
+  does show in the silhouette. **The fan moves with yaw and by more than anything else at
+  the wide end:** 0.1136 m at 0° (its own disc-tangent allowance), 0.4100 m at 10°,
+  0.7940 m at 20°, the last nearly twice the sofa's half-depth error. So the conclusion
+  that survives is the ORDERING — floor-standing furniture is where the error worth acting
+  on lives — and not the claim that anything is exempt. The position figures for the sweep
+  itself were also optimistic on three counts, all fixed: two same-labelled pieces could
+  match the same refined row, boxes that had left the frame were counted and then measured
+  anyway, and the "median" column was the upper middle.
+
+The first is **closed with evidence** rather than fixed — see § 42.2. The report-only form
+(measure how far off-square a shot is, tell the person, offer a retake, with nothing
+downstream reading it) does not touch rule 2's boundary at all, so it was built and measured.
+The angle comes back exact from ideal segments — six decimals, 0° to 35° — and is unusable
+from detected ones: on a wall fixture at three resolutions the same 100° lens reports 23.5°,
+97.8° and no answer, with `coverage` 0.96 on the one that is 76° wrong. A square-on wall
+capture is the degenerate case for vanishing points, which is a second and independent reason
+for the prohibition. Reverted; the measurement is in `tests/vanishing-point.test.ts` and
+prints on every green run.
+
+### A piece of furniture is a SOLID, and that is what the placers invert
+
+The second is fixed, and it took the whole model rather than a nudge to the position,
+because every other term rode the same wrong distance.
+
+**The one fact it rests on:** a floor point's image row is a function of its forward
+distance ALONE. The lens rotates about its own right axis, so `tanX` is untouched by tilt
+and two floor points at the same distance share a row to twelve digits. So the lowest row
+in a silhouette is the closest ground contact the piece has — its near face — and never its
+centre. Three closed forms follow, no iteration:
+
+- **Forward** — `near + depth/2`.
+- **Height** — the topmost row is the near top edge when the piece's top is ABOVE the lens
+  and the far one when it is below, and the sign of the top ray says which. Reading it
+  always at the near face is why a nightstand came back ~130 mm too tall while a wardrobe
+  came out right: a height error nobody had measured, because the printed baseline had no
+  height column. It has one now.
+- **Width and lateral offset** — each silhouette edge is a corner of the box, and which
+  corner is decided by the tilt-rotated forward distance `forwardAtHeight`, which depends on
+  the corner's HEIGHT as well as its face. That is the term that made a `tests/photo-geometry.test.ts`
+  tolerance necessary — 60 mm of position and 90 mm of width on a tilted card, under a
+  stated reason ("nothing can recover that from a bbox alone") that was a claim rather than
+  a fact. Both are exact now, at four tilts instead of two.
+
+**A ROUND footprint inverts differently, and owes the catalogue nothing.** A cylinder's
+silhouette is its pair of tangent lines, not the projection of its bounding square, so a box
+inverse infers corners that are not on the object and comes back ~55% NARROW — worse than
+the error being fixed. The tangent form solves it in closed form instead, and a circle's
+depth IS its width, so the diameter is measured rather than assumed. That is the good half of
+the ordering: the two pieces that were worst on width, a floor lamp at +81% and a plant at
++54%, are the two the fix does not have to trust a default for.
+
+**Where the depth comes from, and why it is not the detector's.** `defaultDepthFor(category,
+shape)` — code-owned, narrowed to the shape's own range. `depthM` moves the decoded
+*position*, so a depth the AI guessed would be an AI-decided placement, which is exactly what
+rule 2 exists to prevent. `geoRefine` writes the same number into `dimMM[1]`, so a floor
+piece is DRAWN with the depth it was placed by and its near face lands where the photograph
+put it; a hint kept for the render beside a default used for the maths would leave the two
+disagreeing by half their difference, on the one axis the photo did measure.
+
+### …and so is a wall piece, which was the same fix one anchor over
+
+`placeWallObject` assumed the piece *lay on* the wall plane, so it put the piece's CENTRE on
+the plaster — where its **back** goes. Its body is therefore a little nearer the lens than the
+placer thought, every angular measurement was read at the wrong plane, and everything came
+back large.
+
+**The three figures previously recorded here understated it by an order of magnitude**, and
+for the third time in this thread the reason was the fixture: all three wall pieces in the
+truth table are 30–80 mm deep. The catalogue's wall shapes go to 220 mm (`ac-unit`) and
+200 mm (`window`, which gets there by the `other` category's 600 mm hitting its shape's
+clamp), and at that depth:
+
+| piece | width, before | height, before |
+|---|---|---|
+| painting, 30 mm | +1.8% level, +4.9% at 12° | +7 mm |
+| TV, 60 mm | +4.1% level, +9.1% at 12° | +19 mm |
+| curtain, 80 mm | +3.3% level, +15.5% at 12° | +63 mm |
+| **air conditioner, 220 mm** | **+21.7% level, +27.8% at 12°** | **+91 mm** |
+
+The last row is more than a sizing error: 280 + 91 = 371 mm against `ac-unit`'s own 250–350
+band, so `judgeLabel` marked a correctly identified air conditioner **suspect** and the detect
+screen offered to repair the word. A truth-table row for it is what makes the assertion mean
+anything, and it went in with the fix.
+
+The model is the floor one with the depth axis pinned differently — the back is on the plaster
+at a distance the room already gives, rather than the near face being measured from a bottom
+row — so `lateralSpan` is now shared by both placers rather than copied. Same
+above-or-below-the-lens test decides which face each row came from.
+
+**One thing to know before reading the position it returns.** The wall-normal coordinate does
+not reach the rendered scene: `wallAffinity` is `must-wall` for every wall anchor, and that
+branch calls `snapToWall` unconditionally, which recomputes x/z as
+`wall + inward normal × (depth/2 + gap)` and discards the placer's answer; `groundY` overwrites
+the height on the line before. **So the scene was already putting a wall piece's back on the
+plaster, by a downstream correction rather than by the geometry being right.** What this fix
+changes for the user is the SIZE. The position is returned honestly anyway, because
+`dedupeDetections` and the in-room gate read the raw value, and because a placer whose answer
+needs a correction downstream to be right is how the next reader is misled.
+
+**What is left, measured rather than described.** In the known room every piece is now within
+a millimetre except the fan and the three whose real depth differs from the default:
+
+| what | how much | why |
+|---|---|---|
+| the ceiling fan | 0.1136 m | its own documented allowance — a disc spanning a range of distances, read at one row. The LARGEST error at zero yaw |
+| the sofa | exactly 0.0500 m | half the gap between its real 850 mm depth and the catalogue's 950 |
+| the TV and the painting | 11 mm and 5 mm | the same gap on a wall piece (80 against 60, 40 against 30), plus the small lateral term that rides it. Pinned as a RATIO to half the gap — measured 1.000 to 1.130 — rather than as three figures to re-fit |
+| a round footprint under tilt | +6% of width at 5°, +13% at 12° | the one approximate term: a vertical tangent line's image column varies with the row, and the row where tangency falls is not the bbox's own top row. Exact at a level lens |
+
+Seven of the eleven pieces have no depth gap at all and every one of them is exact — including
+both round pieces, which owe the catalogue nothing, and the deep air conditioner.
+
+**Two clamps now, against two different walls, and keeping them apart is not tidiness.** The
+near face is measured, so it is bounded by the plaster — that is the clamp this function
+always had, and it earns its keep on the lens, pulling an assumed-narrow decode back and
+re-deriving the width with it. The centre is measurement plus assumption, so it gets its own
+bound: the piece's back may reach the wall and no further. Folding the depth into the first
+instead is the obvious one-liner and it shrank a MEASURED 2.0 m sofa to 1.925 m — an
+assumption corrupting an observation. Caught by measuring, not by reasoning.
+
+**And the fixture had to move first, which is the part worth carrying forward.** A 1e-9
+baseline that holds because the fixture cannot express the defect is the same thing as an
+assertion that cannot fail. `tests/helpers/project.ts` projects solids now — eight corners
+for a box footprint, tangent rim samples for a round one, and a wall piece's body extending
+inward from the plaster — and the exactness that remains is a statement about the placer. The
+printed table is the record, and it carries a height column too, because height was one of
+the three things riding the wrong distance and there was no column for it to appear in.
+
+**The harness also had to learn one convention**, which is worth knowing before reading its
+numbers: a wall piece's truth `x`/`z` is its MOUNT, and a placer returns its body CENTRE.
+`truthCentre` converts, once, beside the convention it converts — comparing the two directly
+reports half the piece's depth as error (110 mm on the air conditioner), which looks exactly
+like a regression and invites a fix in the wrong file.
+
 Which term the assumed values hurt is not uniform, and it is worth knowing before
 tuning any of this: for a **floor-standing** piece the lens cancels out of the size
 (distance scales as 1/k, angular size as k) and only its *position* moves; for a
 **wall-mounted** piece the distance is pinned to the wall, so the lens error lands
 directly on the measured size — and conversely the camera height cancels out of
 its W and H. See `tests/photo-geometry.test.ts`, which pins both.
+
+### …and the plane it is inverted against has to be the RIGHT plane
+
+Both of those placers ASSUME a surface rather than measuring it — the framed wall, or the
+slab — and until 2026-09-09 neither checked the answer against the room. The decoded
+lateral offset is a test of the assumption: an answer past the framed wall's own ends says
+the ray left the room and the plane was the wrong plane, which makes every number taken off
+it fabricated rather than slightly off.
+
+**Those ends come from the FOOTPRINT, and the first version read `wallSpan` instead.** This
+paragraph asserted that the room's lateral extent from a camera *is* `wallSpan` — true only
+of a rectangle centred on the lens. `wallSpan` reads the bounding box, so one wall drag
+separates them: pull a 6 × 6 room's east wall out a metre and the north wall runs
+x ∈ [−3, +4] while ±half still says ±3.5. Measured, a correctly decoded 700 × 500 print at
+x = 3.52 — wholly in the room, wholly in frame — was **refused**, which is worse than the
+fabrication the gate exists to catch. It reads `wallFrame` now, and because that returns
+`wallDistance` and `±wallSpan/2` bit-for-bit on a centred room the change is a verified
+no-op on every fixture here: the `detect-pipeline` baseline table is byte-identical.
+
+One half stays open on purpose. `wallFrame.distance` and `wallDistance` disagree only when
+the framed wall itself was dragged, and then the assumed plane is wrong too, so even an
+honest bound would refuse correct measurements. The gate **goes inert** there rather than
+refusing on an input it cannot check — *a bound may falsify an assumption only where the
+assumption's own inputs are trustworthy* — and § 44 closes it by moving the distance onto
+the same frame.
+
+**It is not an exotic case.** On an ultrawide every ordinary room has picture beyond the
+ends of the wall being photographed, and what is out there is the return wall. The exposure
+condition is `wallSpan < 2·tan(hFOV/2) · wallDistance`, which at 106° is `< 2.654 ×
+wallDistance` — and a square room sits at 2.0, so a square room always is. At the 66°
+default the factor is 1.299 and it is not, so this is a hazard of the lens being *known*.
+
+Measured, with both fixtures wholly inside the frame — and **printed by
+`tests/photo-geometry.test.ts` on every green run**, which is the correction that matters
+here: the figures this section first carried (960 × 711, 769 mm) came from a scratch script
+that re-implemented the placer instead of calling it, and were quoted in four more files
+before anyone regenerated them. In the 6 × 4 room the tests use: a 700 × 500 print on the
+north wall, centre 800 mm from the north-east corner, seen in the east photo, decodes
+**764 mm past the east wall's end at 893 × 803 — +28% wide and +61% tall**, the height being
+the larger error and the one no version of this paragraph mentioned. And a 300 mm vent high
+on the same wall, read as a ceiling piece, **passed the ceiling placer's existing gate** at
+2.56 m of a 3.0 m bound while sitting 571 mm outside the room, and came back 386 mm wide.
+That gate bounded the wall-normal axis only and its docstring read as though it covered both, which is the failure this document keeps naming: not a missing
+check, a check whose prose certifies the hole beside it.
+
+`onFramedSurface` refuses both. **Refused rather than clamped**, because clamping leaves the
+piece a metre from the truth *and* keeps a size read off the wrong plane; and refusal is not
+deletion — `geoRefine` hands the detection back unchanged, so the piece still reaches the
+scene, and `label-repair` reads that same object identity as "unmeasurable", which WITHDRAWS
+a verdict rather than accusing. (For the print that verdict had been `ok`: `painting`'s band
+is 150–2400 × 150–1800, so a fabricated 893 × 803 fits it comfortably and was given a false
+clean bill. The row that was genuinely accused is the vent, at 386 mm against `fan`'s floor.)
+
+**What size it arrives at is NOT the catalogue's on the path that spends the user's quota**,
+and this section claimed otherwise. `buildSceneFromRoom` prefers the detector's own `dimMM`
+through `clampDims` and falls back to `cfg.dim` only when there is no hint at all — and the
+cloud prompt asks for `dimMM`. So a refused *cloud* detection is drawn at the AI's clamped
+guess; only an on-device one, which sends no size, reaches the catalogue. Whether a refusal
+should also discard that hint is a trust-boundary decision, filed in § 42.3, not taken here.
+
+It tests the CENTRE, not the extent: the wholly-off-the-wall variant accepts a 1400 mm
+curtain on the return wall as **1815 × 942**.
+
+**`placeFloorObject` is deliberately exempt**, and that is the shape of the rule rather than
+an omission: it MEASURES its distance, so its lateral is an observation, and a bound may
+falsify an assumption but not overrule a measurement. The exemption is held by a property
+rather than an assertion — adding the gate there is a mutant that survives — namely that a
+floor lateral is first-order invariant to the assumed lens, distance ∝ 1/k against tangent
+∝ k, with a ~2.8% residual from the catalogue depth, which is the one term that does not
+scale.
+
+**It is only as good as the lens, and BOTH directions are measured now** — every document
+here used to name only the harmless one. A wall piece's decoded offset is *exactly*
+proportional to `cal.k`: `placeWallObject` pins its distance to the wall, and `lateralSpan`'s
+multipliers are room-derived, so there is none of the cancellation `placeFloorObject` enjoys.
+The refusal threshold therefore moves as `1/r`, where `r` is the ratio of the believed `k` to
+the true one. Measured (`tests/photo-geometry.test.ts` prints it on every green run — the
+largest fraction of the half-span still accepted):
+
+| the shot was | read as | k ratio | last accepted | size already wrong by |
+|---|---|---|---|---|
+| 100° | 106° | 1.114 | 0.85 of the half-span | +11% |
+| 90° | 106° | 1.327 | 0.75 | +32% |
+| 80° | 106° | 1.582 | 0.60 | +58% |
+| 66° | 106° | 2.043 | 0.45 | +104% |
+| 106° | 66° | 0.489 | **1.00** — never refuses | −51% |
+
+So an **under-read** lens never refuses anything: it pulls every offset inward, which hides a
+fabrication where nothing can see it (the same print read at 66° instead of 106° lands 2.27 m
+out, comfortably inside a 3.0 m half-span) but cannot touch a real piece. That is the safe
+half, and the only half this document used to state. An **over-read** lens refuses further in
+the wider the error — 66° mistaken for 106° costs the outer half of every wall.
+
+**What makes that defensible is the last column**, and it is an argument the commit could not
+make until it looked: the same `r` has already inflated the piece's *size*, because width
+comes off the same tangents at the same pinned distance. A piece refused at 0.45 of the wall
+would have been decoded 104% too wide. So the over-read case discards a measurement that was
+already worthless, and the trade is not "a correct answer for a cautious one" — which is what
+a bound overruling a measurement would be, and what the floor exemption above exists to
+prevent.
+
+**And what it does NOT do**, because the first draft of its docblock claimed otherwise
+before anyone measured: it does not remove a duplicate row. Two sightings of one print go in
+and two come out, before and after. The mechanism is fixture-dependent, and the honest
+version says so: a detection with no position of its own cannot be compared by
+`dedupeDetections`, so it survives — but the cloud prompt asks for `position` as well, and a
+refused row that has one *is* compared, so the count can move there. What changes in both
+cases is that the second row is unmeasured rather than mis-measured; the row count was never
+this gate's to move.
 
 ---
 
@@ -745,6 +1023,76 @@ its W and H. See `tests/photo-geometry.test.ts`, which pins both.
   (Auto / Matte / Satin / Polished / Metal) — `FinishApplier` traverses the
   part's meshes and overrides roughness / metalness / envMapIntensity (caches
   originals for "Auto" restore, skips emissive materials). Real per-part physics.
+
+### Wall colours read out of the photos — `lib/wall-sample.ts`, `lib/wall-colors.ts`
+
+**"Use the colours in my photos"** in the left rail's Room section samples each
+wall's real colour from the capture of it and writes it through the ordinary
+`setWallColor` / `setAllWallColors`, so it is one undo step and every wall stays
+editable afterwards. Zero API cost, no upload, and no photograph leaves the
+device — the sample happens in the page and only a hex reaches the store.
+
+**Where the wall is, is derived — not detected.** `findFloorLine` is the obvious
+tool and the wrong one: it is a luminance heuristic with no pure core, no test,
+and a `bestE ≥ 2.2·meanE` dominance gate that makes an oblique junction *lose*
+the answer rather than bias it. The room's own numbers already say.
+`wallRowAtHeight` (`lib/photo-geometry.ts`) is the **forward** direction of the
+one equation `calibrateFromFloorLine` and `heightFromFloorLine` each invert, so
+the wall–floor and wall–ceiling junctions are calls rather than cases, and
+`wallColumnsAtHeight` puts the return walls outside the region. Both vertical
+bounds are real lengths in metres — a skirting allowance and a coving allowance —
+never a percentage of the frame, and the lateral pair comes from `wallFrame`,
+which reads the footprint's **bounds** rather than ±width/2, per the contract
+`moveWall` states in `lib/scene-store.ts`.
+
+**Three claims this section made, and what replaced them**, because each was the
+justification for a piece of the design and all three were false:
+
+- *"A wrong lens is forgiving here — it only makes the band slightly the wrong
+  height."* It was the reason for skipping the calibration ladder's floor-line
+  rung, and it is false on the **normal** path: read a 106° ultrawide as the 66°
+  phone-main default and 32.1% of the sampled band is floor and ceiling (level
+  camera, 5.6 × 4.2 × 2.5 m room, both junctions measured). Not one of the four
+  real phone photos this repo was tested against carried an EXIF focal length, so
+  that was the ordinary case rather than an edge one. What replaces it is
+  `WIDEST_HFOV_DEG`: the error is **one-sided** — assuming a narrower lens than
+  the real one spills the band off both ends of the wall, assuming a wider one
+  samples a smaller piece of real wall — so an assumed lens is assumed **wide**.
+  A measured lens is used as measured.
+- *"A row the frame does not reach comes back null, which means the wall runs past
+  this edge and is true rather than a fallback."* True for one row, false for the
+  pair: when **both** rows leave by the same edge — a deep room at the tilt
+  sensor's own 45° limit, an 1.8 m ceiling at −30° — a caller defaulting the top
+  to 0 and the bottom to 1 gets the whole frame and reads the floor as the wall
+  colour, reporting success. `wallRowAtHeight` returns the row **unclamped** now,
+  because which side it left by is the only thing that separates those two cases,
+  and `wallRegion` clamps and then refuses a band too small **on screen**
+  (`MIN_BAND_FRAC`) — a separate question from whether the ROOM has clear wall,
+  which is what `MIN_WALL_M` asks.
+- *"`wallColumns` puts the return walls outside the region."* Only at zero tilt.
+  The lens rotates about its right axis, so how far ahead a point on the wall is
+  depends on how high up the wall it is, and the wall's ends move inward as the row
+  drops. The columns take a height now and the band uses the intersection of its
+  two ends; `forwardAtHeight` is monotonic, so those two bound the interior.
+
+**Which wall a photo paints reads the polygon's winding**, not `layoutId` — a
+dragged rectangle is `custom` while still being four walls facing four ways. It
+asks for a bijection (every wall claims one slot, every slot gets one wall) and
+refuses otherwise; an L / T / U has no four-wall mapping, so the offer collapses
+to one colour for every wall, which is a different answer rather than a worse one.
+
+Furniture is excluded when the room has detection boxes (`part.fromDetection`),
+and **that is best-effort on purpose**: `lib/scene-file.ts` strips
+`fromDetection` on export, so a room opened from a file has none. Whether it
+happened is reported to the user rather than silently done, as is every skipped
+photo and why.
+
+The pure/browser seam is the same one `calibrateFromPhoto` draws, at the typed
+array: `lib/wall-sample.ts` and `lib/color-reduce.ts` are pure and tested;
+`lib/wall-colors.ts` and `lib/color-sample.ts` only decode and draw. That split
+was made *because* `sampleBoxColor` had no test for as long as its arithmetic sat
+inside its `createImageBitmap` call — see `lib/image-quality.ts` for the same
+shape still untested.
 
 ### Procedural & parametric furniture — `DynamicPart.tsx`, `scene-spec.ts`
 - Furniture is **procedural geometry, not imported models** — zero asset weight.
@@ -1053,10 +1401,32 @@ interpolates `CATALOG_SHAPES_ORDERED`, so a new shape is nameable there at once.
     `(hover: none) and (pointer: coarse)` and shows phone users a go-away modal.
     The one device that could answer it is the one device the studio refuses.
   · **It cost two device permissions and a stored coordinate pair.** `geolocation`
-    and the `accelerometer`/`gyroscope`/`magnetometer` trio are back to `()` in
-    `next.config.mjs`, and `Site` no longer has a `lat` or a `lon` — a coordinate
-    for the inside of someone's home, held for a feature that is gone, reads as
-    something the app keeps about you. See §3 and rule 5 in `CLAUDE.md`.
+    is back to `()` in `next.config.mjs`, and `Site` no longer has a `lat` or a
+    `lon` — a coordinate for the inside of someone's home, held for a feature that
+    is gone, reads as something the app keeps about you. See §3 and rule 5 in
+    `CLAUDE.md`.
+
+    **The sensor trio went with it, and that part was wrong** — recorded here
+    because this sub-bullet is where the mistake was made. `accelerometer`,
+    `gyroscope` and `magnetometer` were all denied along with the compass, on the
+    reasoning that the compass was their only consumer. It was not:
+    `lib/device-tilt.ts` reads the lens tilt at the shutter off the same
+    `deviceorientation` event, and per the W3C Device Orientation and Motion spec
+    the relative event is dispatched only when `accelerometer` **and** `gyroscope`
+    are granted. So the tilt read was switched off by this change — `tilt` null
+    forever on Chrome, every live-camera photo silently back on the assumed-level
+    camera, ~20% distance error for an ordinary 5° droop, on every engine that
+    enforces the header. All three are `(self)` again — **and the reason it is
+    three rather than two is the second half of the same lesson.** The spec says the
+    relative `deviceorientation` event needs `accelerometer` + `gyroscope` only, and
+    granting just those two is correct about the spec, correct about Blink, and
+    would have left the read dead on iOS: WebKit has no
+    `ondeviceorientationabsolute` and requires the magnetometer token for plain
+    `ondeviceorientation`. A header has to satisfy every engine that will run the
+    app, so the grant is the union over engines, not the spec's minimum.
+    `tests/permissions-policy.test.ts` now reads the header the config actually
+    serves, derives what it should be from the consumers, and fails in both
+    directions — which is what the comment claiming to be the guard could not do.
 
   **What survived, and where it went.** `lib/solar.ts` keeps `sunDirection` and
   `daylightKelvin` (68 lines, down from 229) — the axis convention and the colour

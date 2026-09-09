@@ -270,6 +270,159 @@ describe('end to end, from pixels', () => {
   });
 });
 
+// ── Can this module say how far OFF-SQUARE a wall capture is? Measured: no ─────
+//
+// The question is § 42.2's: ±3.5° of differential yaw splits one piece of furniture
+// into two rows, so it would be worth telling someone their shot is off-square and
+// offering a retake — a number for a PERSON, like `wallSpan`, with nothing
+// downstream measuring anything from it. That form does not touch what rule 2
+// forbids, so it was worth checking whether this module could supply it.
+//
+// **It cannot, and this describe is the artifact for that claim** rather than a
+// deleted script. Four findings, in the order they were established:
+//
+// 1. The angle IS recoverable exactly from ideal segments. `frameSupport` already
+//    builds the camera's whole rotation as three perpendicular directions and
+//    collapses them to one length; reading the azimuth off the horizontal one
+//    returned the yaw to six decimals from 0° to 35°, on both a 75° and a 106° lens,
+//    with roll — which `CameraCal` does not model — costing 0.013° at 5° and 0.054°
+//    at 10°. That much was implemented, verified, and then reverted, because a field
+//    nothing can trust is worse than no field.
+// 2. Read as a POINT rather than a direction it is useless, which is what the
+//    original proposal said to do: the wall-parallel vanishing point sits 6.2
+//    frame-widths outside the picture at 3.5° and 21.6 at 1°. It runs to infinity
+//    exactly where the signal is needed.
+// 3. Through the real pixel path on a WALL CAPTURE the whole calibration is erratic.
+//    Same synthetic wall, same camera, three resolutions: 23.5°, 97.8°, and no
+//    answer, for a true 100° lens. Not a degradation with size — a different
+//    vanishing-point pair being chosen, which this file already documents happening
+//    on 1.5 px of endpoint noise. Whatever ψ is read off that frame cannot be better
+//    than the frame.
+// 4. **And `coverage` does not certify it**, which is what the test below pins and
+//    what finally settles it. The plan for this feature proposed gating the report on
+//    coverage — speak only on a well-supported estimate — and `coverage` is 0.96 on
+//    the answer that is 76° wrong. So there is no cheap confidence signal available
+//    to hold the false positives back, and a badge that cries wolf on a good
+//    photograph teaches people to ignore the four real flags beside it.
+//
+// One thing NOT to claim, because the first draft of this note did and it was false:
+// that a level camera never gets an answer here. It depends on incidental edge
+// content — deleting the skirting line from the fixture makes the same scene
+// calibrate to 98° of a true 100°. Fragility is the finding, not refusal.
+//
+// The underlying reason is the one `lib/capture-slots.ts` already gives for refusing
+// vanishing points as a slot signal, arriving at a different question: a square-on
+// wall capture is the DEGENERATE case for this method. Verticals parallel,
+// wall-parallel family parallel — the squarer the shot, the less there is to measure.
+// Rule 2's prohibition gives a different reason (a VP pair carries no world-axis
+// label, so it cannot name a wall); this is a second, independent one, and measured.
+//
+// Filed in `docs/what-is-still-open.md` § 42.2 as decided against.
+
+/** One WALL framed head-on from the middle of a room: both junctions, a skirting
+ *  line, the wall's own corners, a door frame, and the side walls receding.
+ *
+ *  The existing `roomEdges` fixture above is a box seen obliquely, which is a
+ *  different picture — and building this was the step that changed the answer.
+ *  Measured on the box, the method looks merely unreliable; measured on what the
+ *  capture flow actually asks people to photograph, it is degenerate. A fixture that
+ *  does not match the input cannot answer a question about the input. */
+function wallCapture(w: number, h: number, hfovDeg: number, tiltDeg: number, yawDeg: number) {
+  const D = 3.0;
+  const CH = 2.7;
+  const EYE = 1.5;
+  const half = 2.8;
+  const edges: Array<[[number, number, number], [number, number, number]]> = [];
+  for (const y of [0, 0.12, CH]) edges.push([[-half, y - EYE, D], [half, y - EYE, D]]);
+  for (const x of [-half, half, -1.2, 0.9]) edges.push([[x, -EYE, D], [x, CH - EYE, D]]);
+  for (const x of [-half, half]) {
+    for (const y of [0, CH]) edges.push([[x, y - EYE, D], [x, y - EYE, D - 2.2]]);
+  }
+
+  const k = hfovToK(hfovDeg);
+  const tilt = (tiltDeg * Math.PI) / 180;
+  const aspect = w / h;
+  const img = blank(w, h);
+  for (const [a, b] of edges) {
+    const pr = (p: [number, number, number]): [number, number] | null => {
+      const [right, up, fwd] = yawed(p, (yawDeg * Math.PI) / 180);
+      const c = Math.cos(tilt);
+      const si = Math.sin(tilt);
+      const den = -si * up + c * fwd;
+      if (den <= 1e-6) return null;
+      return [(0.5 + right / den / k) * w, (0.5 - (((c * up + si * fwd) / den) * aspect) / k) * h];
+    };
+    const pa = pr(a);
+    const pb = pr(b);
+    if (!pa || !pb) continue;
+    const seg = { x1: pa[0], y1: pa[1], x2: pb[0], y2: pb[1] };
+    if (!Number.isFinite(seg.x1 + seg.y1 + seg.x2 + seg.y2)) continue;
+    if (Math.max(seg.x1, seg.x2) < 0 || Math.min(seg.x1, seg.x2) > w) continue;
+    if (Math.max(seg.y1, seg.y2) < 0 || Math.min(seg.y1, seg.y2) > h) continue;
+    draw(img, w, h, seg);
+  }
+  return img;
+}
+
+describe('a square-on wall capture is the degenerate case for vanishing points', () => {
+  const TRUE_HFOV = 100;
+
+  // Printed, because this is a measurement and a measurement nobody reads is not one
+  // — the same reason `tests/detect-pipeline.test.ts` prints its table.
+  console.log(
+    '\nvanishing points on a square-on WALL capture · same scene, same camera, three sizes' +
+      [
+        [800, 600],
+        [1200, 900],
+        [1600, 1200],
+      ]
+        .map(([w, h]) => {
+          const cal = calibrateFromSegments(detectSegments(wallCapture(w, h, TRUE_HFOV, 5, 0), w, h), w, h);
+          const got = cal ? `hfov ${cal.hfovDeg.toFixed(1)}  cov ${cal.coverage.toFixed(2)}` : 'no answer';
+          return `\n  ${String(w).padStart(4)} x ${String(h).padStart(4)}  ${got}`;
+        })
+        .join('') +
+      `\n  (the lens really is ${TRUE_HFOV}°, and the shot really is square)`,
+  );
+
+  it('reports high coverage on an answer that is not remotely the lens', () => {
+    // The fact that settles § 42.2, and the one worth an assertion: `coverage` is the
+    // only confidence signal this module offers, it is documented as the way to
+    // "prefer a well-supported estimate over a thin one" — and here it is ≥0.9 while
+    // the answer is wrong by more than half. So a ψ report cannot be gated on it, and
+    // there is nothing else on offer.
+    //
+    // A SQUARE shot on purpose: the report this was for exists to say "your shot is
+    // off-square", so being wrong about a shot that is not is the failure that
+    // matters, not being wrong about one that is.
+    const cal = calibrateFromSegments(detectSegments(wallCapture(800, 600, TRUE_HFOV, 5, 0), 800, 600), 800, 600);
+    expect(cal).not.toBeNull();
+    expect(cal!.coverage, 'coverage calls it well supported').toBeGreaterThan(0.9);
+    expect(
+      Math.abs(cal!.hfovDeg - TRUE_HFOV) / TRUE_HFOV,
+      'and the lens it reports is wrong by more than half',
+    ).toBeGreaterThan(0.5);
+  });
+
+  it('and does not settle down as the photograph gets bigger', () => {
+    // Not monotone in resolution, which is what rules out "just sample larger". The
+    // three answers above are 23.5°, 97.8° and none. Asserted as "these three do not
+    // agree" rather than as the figures, so an improved detector fails this and sends
+    // the reader to the note above rather than to a stale number.
+    const answers = (
+      [
+        [800, 600],
+        [1200, 900],
+        [1600, 1200],
+      ] as Array<[number, number]>
+    ).map(([w, h]) => calibrateFromSegments(detectSegments(wallCapture(w, h, TRUE_HFOV, 5, 0), w, h), w, h));
+
+    const usable = answers.filter((c) => c !== null && Math.abs(c.hfovDeg - TRUE_HFOV) / TRUE_HFOV < 0.1);
+    expect(usable.length, 'at least one size gets close, or the scene is simply unreadable').toBeGreaterThan(0);
+    expect(usable.length, 'but not all of them — that is the instability').toBeLessThan(answers.length);
+  });
+});
+
 describe('toGrayscale', () => {
   it('uses the same luminance weights the rest of the app does', () => {
     const rgba = new Uint8ClampedArray([255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255]);

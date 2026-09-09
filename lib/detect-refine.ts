@@ -17,15 +17,26 @@
 import { anchorFor } from './physics';
 import { placeCeilingObject, placeFloorObject, placeWallObject, type CameraCal } from './photo-geometry';
 import type { Detection } from './detection';
-import { defaultAxisFor, defaultDepthFor, type Category, type Shape } from './scene-spec';
+import { defaultAxisFor, defaultDepthFor, isRoundPart, type Category, type Shape } from './scene-spec';
 import type { CaptureSlot } from './storage';
+import type { Footprint } from './footprint';
 
 /** Room extent in METRES. `depth` is the N–S dimension.
  *
  *  `height` is required, not optional, and that is the point: it is the only thing
  *  that locates the ceiling plane, so a caller that forgot it would silently stop
  *  measuring every fan and pendant in the room rather than fail to compile. */
-export type RoomDims = { width: number; depth: number; height: number };
+export type RoomDims = {
+  width: number;
+  depth: number;
+  height: number;
+  /** The room's own outline. Required, not optional, and for the same reason `height`
+   *  is: `onFramedSurface` bounds a decoded lateral offset against the wall's real
+   *  ends, and a caller that omitted this would get the bounding box back — which is
+   *  exactly the defect it exists to fix, silently. `roomFootprint` derives it from a
+   *  saved room in one line. */
+  footprint: Footprint;
+};
 
 /** One calibrated camera per wall the user actually photographed. A slot with no
  *  entry has no calibration — a normal outcome for a partial capture, not a
@@ -34,17 +45,33 @@ export type CalMap = Partial<Record<CaptureSlot, CameraCal>>;
 
 // Replace the AI's guessed position/size with values computed from projective
 // geometry: bbox bottom edge → floor position; angular size × distance → real
-// W and H. Depth genuinely cannot be observed from one photo, so it falls back
-// to the category's typical depth narrowed by the shape's range — never a
-// literal — and clampDims gates everything downstream. AI keeps naming and
-// classifying only.
+// W and H. Depth genuinely cannot be observed from one photo, so it comes from
+// the category's typical depth narrowed by the shape's range — never a literal —
+// and clampDims gates everything downstream. AI keeps naming and classifying only.
+//
+// For a FLOOR or WALL piece that default is no longer only a filler for the axis
+// nobody measured: both placers READ it, because a bbox edge is a corner of a solid
+// rather than a point on a plane — a floor piece's bottom row is its near face, and
+// a wall piece's back is on the plaster with its body in the room. So both branches
+// stop preferring `d.dimMM[1]`, and that is rule 2 rather than tidiness: the AI's
+// depth guess would otherwise move a measurement. The same catalogue number is what
+// the piece is drawn with, so a hint kept for the render beside a default used for
+// the maths cannot leave the two disagreeing.
+//
+// The CEILING branch is the one place `d.dimMM[1]` still wins, and it is not an
+// oversight: `placeCeilingObject` reads one row of a disc and takes no depth, so
+// nothing there turns a depth into a measurement.
 export function geoRefine(d: Detection, cals: CalMap, room: RoomDims): Detection {
   const cal = cals[d.slot];
   if (!cal) return d;
   const cat = (d.category ?? 'other') as Category;
   const shape = (d.shape ?? 'box') as Shape;
   const anchor = anchorFor(cat, shape);
-  const depth = d.dimMM?.[1] ?? defaultDepthFor(cat, shape);
+  const catalogueDepth = defaultDepthFor(cat, shape);
+  // Named for its only consumer. It was `hintedDepth`, read by two branches of
+  // three; a name that outlives the second consumer reads as a ladder the other
+  // branches are also on.
+  const ceilingDepth = d.dimMM?.[1] ?? catalogueDepth;
 
   // A curtain whose shape resolves to the ceiling is still CLOTH ON A WALL — the
   // exception predates the ceiling placer and survives it, because the question
@@ -60,20 +87,27 @@ export function geoRefine(d: Detection, cals: CalMap, room: RoomDims): Detection
       ...d,
       position: g.position,
       yaw: typeof d.yaw === 'number' ? d.yaw : g.yaw,
-      dimMM: [g.widthMM, depth, d.dimMM?.[2] ?? defaultAxisFor(cat, shape, 2)],
+      dimMM: [g.widthMM, ceilingDepth, d.dimMM?.[2] ?? defaultAxisFor(cat, shape, 2)],
     };
   }
 
+  // ONE footprint for both placers, because it answers one question — what shape is
+  // this piece in plan — and the two placers differ only in what pins its depth
+  // axis. Roundness is read off the SAME (category, shape) pair as the depth, so the
+  // number a piece is measured by and the footprint it is inverted as cannot
+  // disagree. A detection with no shape resolves to `box` here, which is exactly
+  // what its depth default already assumes.
+  const foot = { depthM: catalogueDepth / 1000, round: isRoundPart(shape) };
   const g =
     anchor === 'floor'
-      ? placeFloorObject(d.box, d.slot, room, cal)
-      : placeWallObject(d.box, d.slot, room, cal);
+      ? placeFloorObject(d.box, d.slot, room, cal, foot)
+      : placeWallObject(d.box, d.slot, room, cal, foot);
   if (!g) return d;
   return {
     ...d,
     position: g.position,
     yaw: typeof d.yaw === 'number' ? d.yaw : g.yaw,
-    dimMM: [g.widthMM, depth, g.heightMM],
+    dimMM: [g.widthMM, catalogueDepth, g.heightMM],
   };
 }
 

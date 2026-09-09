@@ -1,10 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { dedupeDetections, geoRefine, refineDetections, type CalMap, type RoomDims } from '@/lib/detect-refine';
-import { placeCeilingObject, placeFloorObject, placeWallObject, type CameraCal } from '@/lib/photo-geometry';
+import {
+  placeCeilingObject,
+  placeFloorObject,
+  placeWallObject,
+  wallDistance,
+  type CameraCal,
+} from '@/lib/photo-geometry';
 import type { Detection } from '@/lib/detection';
 import { anchorFor } from '@/lib/physics';
-import { CATEGORIES, SHAPES, defaultAxisFor, defaultDepthFor, type Category } from '@/lib/scene-spec';
+import { CATEGORIES, SHAPES, defaultAxisFor, defaultDepthFor, isRoundPart, type Category } from '@/lib/scene-spec';
+import { bboxOfWallSolid } from './helpers/project';
 import { dimRangeFor } from '@/lib/dimension-ranges';
+import { footprintForLayout } from '@/lib/footprint';
 
 // The five contracts below are the ones every later phase of the detection plan
 // has to keep. They deliberately do NOT re-test the projection maths — that is
@@ -14,7 +22,7 @@ import { dimRangeFor } from '@/lib/dimension-ranges';
 // placer this detection should have gone through and asserting it did not go
 // through the other one.
 
-const ROOM: RoomDims = { width: 6, depth: 4, height: 2.8 };
+const ROOM: RoomDims = { width: 6, depth: 4, height: 2.8, footprint: footprintForLayout('rect', 6, 4) };
 const CAL: CameraCal = { k: 1.2, aspect: 4 / 3 };
 // 's' is deliberately absent — an unphotographed wall is a normal outcome.
 const CALS: CalMap = { n: CAL, e: CAL, w: CAL };
@@ -48,13 +56,24 @@ describe('geoRefine', () => {
       position: { x: 99, y: 99, z: 99 },
       dimMM: [1, 2, 3],
     });
-    const g = placeFloorObject(FLOOR_BOX, 'n', ROOM, CAL);
+    // The footprint is written out rather than read back through `isRoundPart` and
+    // `defaultDepthFor`: a test that recomputes the decision under test agrees with
+    // itself whatever the decision is. A sofa is a box, and its catalogue depth is
+    // 950 mm — both pinned on the next two lines so the literal cannot rot.
+    expect(defaultDepthFor('sofa', 'sofa')).toBe(950);
+    expect(isRoundPart('sofa')).toBe(false);
+    const g = placeFloorObject(FLOOR_BOX, 'n', ROOM, CAL, { depthM: 0.95, round: false });
     expect(g).not.toBeNull();
 
     const out = geoRefine(d, CALS, ROOM);
     expect(out.position).toEqual(g!.position);
-    // W and H are measured; the AI's depth hint is the one number that survives.
-    expect(out.dimMM).toEqual([g!.widthMM, 2, g!.heightMM]);
+    // W and H are measured. So, now, is the DEPTH's effect on them: the bbox's
+    // bottom edge is the sofa's near face, so pushing out to its centre takes a
+    // depth, and a depth the AI guessed would be an AI-decided position. So the
+    // floor branch discards the hint — the `2` this line used to assert was that
+    // hint surviving — and writes the catalogue number it measured with, which is
+    // also what the piece is drawn at.
+    expect(out.dimMM).toEqual([g!.widthMM, 950, g!.heightMM]);
     // Independent of the placer: a floor anchor sits on the floor, and the sizes
     // are millimetres of furniture rather than metres or pixels.
     expect(out.position!.y).toBe(0);
@@ -63,10 +82,28 @@ describe('geoRefine', () => {
     expect(out.dimMM![2]).toBeLessThan(3000);
   });
 
+  it('inverts a ROUND floor piece as a cylinder, not as a box', () => {
+    // The second half of the footprint decision, and it has to be asserted rather
+    // than assumed: a cylinder's silhouette is its tangent span, so inverting one
+    // as a box reads its depth off corners that are not on the object and comes
+    // back badly narrow. `plant` is round in the catalogue and `sofa` is not, so
+    // the two branches must give different answers for the same box.
+    expect(isRoundPart('plant')).toBe(true);
+    const asRound = placeFloorObject(FLOOR_BOX, 'n', ROOM, CAL, { depthM: 0.4, round: true })!;
+    const asBox = placeFloorObject(FLOOR_BOX, 'n', ROOM, CAL, { depthM: 0.4, round: false })!;
+    expect(asRound.widthMM).not.toBe(asBox.widthMM);
+
+    const out = geoRefine(det({ category: 'plant', shape: 'plant', slot: 'n' }), CALS, ROOM);
+    expect(out.position).toEqual(asRound.position);
+    expect(out.position).not.toEqual(asBox.position);
+    expect(out.dimMM).toEqual([asRound.widthMM, defaultDepthFor('plant', 'plant'), asRound.heightMM]);
+  });
+
   it('measures a wall-anchored detection through placeWallObject, not the floor one', () => {
     const d = det({ category: 'painting', shape: 'painting', slot: 'n', box: WALL_BOX });
-    const wall = placeWallObject(WALL_BOX, 'n', ROOM, CAL);
-    const floor = placeFloorObject(WALL_BOX, 'n', ROOM, CAL);
+    expect(defaultDepthFor('painting', 'painting')).toBe(30);
+    const wall = placeWallObject(WALL_BOX, 'n', ROOM, CAL, { depthM: 0.03, round: false });
+    const floor = placeFloorObject(WALL_BOX, 'n', ROOM, CAL, { depthM: 0.03 });
     expect(wall).not.toBeNull();
     expect(floor).not.toBeNull(); // both are available, so the next line has teeth
 
@@ -126,7 +163,9 @@ describe('geoRefine', () => {
     const d = det({ category: 'curtain', shape: 'fan', slot: 'n', box: WALL_BOX });
     const out = geoRefine(d, CALS, ROOM);
     expect(out).not.toBe(d);
-    expect(out.position).toEqual(placeWallObject(WALL_BOX, 'n', ROOM, CAL)!.position);
+    expect(out.position).toEqual(
+      placeWallObject(WALL_BOX, 'n', ROOM, CAL, { depthM: defaultDepthFor('curtain', 'fan') / 1000, round: false })!.position,
+    );
   });
 
   it('leaves a detection from an uncalibrated slot completely untouched', () => {
@@ -137,7 +176,7 @@ describe('geoRefine', () => {
   });
 
   it('keeps the AI yaw when there is one, and takes the geometric yaw otherwise', () => {
-    const g = placeFloorObject(FLOOR_BOX, 'w', ROOM, CAL)!;
+    const g = placeFloorObject(FLOOR_BOX, 'w', ROOM, CAL, { depthM: 0.95, round: false })!;
     expect(g.yaw).not.toBe(0); // slot 'w' faces +X, so 0 is a distinguishable value
 
     expect(geoRefine(det({ category: 'sofa', slot: 'w', yaw: 1.23 }), CALS, ROOM).yaw).toBe(1.23);
@@ -192,16 +231,44 @@ describe('geoRefine', () => {
     }
   });
 
-  it('still prefers the AI depth hint over the derived one', () => {
-    // Depth is the one axis the cloud detector's guess is better than nothing on,
-    // which is why lib/detection.ts keeps asking for dimMM. 45 mm is inside a
-    // painting's 15–60 band, so this cannot pass by accident of clamping.
-    const out = geoRefine(
+  it('takes the AI depth hint on the CEILING branch and nowhere else', () => {
+    // **This test used to assert the opposite for a wall piece**, and the reason it
+    // changed is rule 2 rather than taste. Its comment read: "depth is the one axis
+    // the cloud detector's guess is better than nothing on, which is why
+    // lib/detection.ts keeps asking for dimMM" — true while depth was only the axis
+    // nobody measured. It is now an INPUT to both the floor and wall placers, because
+    // a bbox edge is a corner of a solid, so a depth the AI guessed would move a
+    // measured width and height. Those two branches take the catalogue's.
+    //
+    // 45 mm is inside a painting's 15–60 band, so the floor/wall lines below cannot
+    // pass by accident of clamping — the hint is discarded, not clamped away.
+    const wall = geoRefine(
       det({ category: 'painting', shape: 'painting', slot: 'n', box: WALL_BOX, dimMM: [700, 45, 500] }),
       CALS,
       ROOM,
     );
-    expect(out.dimMM![1]).toBe(45);
+    expect(wall.dimMM![1]).toBe(defaultDepthFor('painting', 'painting'));
+    expect(wall.dimMM![1]).not.toBe(45);
+
+    const floor = geoRefine(
+      det({ category: 'sofa', shape: 'sofa', slot: 'n', box: FLOOR_BOX, dimMM: [2000, 800, 800] }),
+      CALS,
+      ROOM,
+    );
+    expect(floor.dimMM![1]).toBe(defaultDepthFor('sofa', 'sofa'));
+    expect(floor.dimMM![1]).not.toBe(800);
+
+    // The ceiling branch is where it survives, and that is not an oversight:
+    // `placeCeilingObject` reads one row of a disc and takes no depth at all, so
+    // nothing there turns the hint into a measurement. 1100 mm is inside a fan's
+    // 900–1500 band, so this is the hint winning rather than a clamp landing on it.
+    const ceiling = geoRefine(
+      det({ category: 'fan', shape: 'fan', slot: 'n', box: CEILING_BOX, dimMM: [1000, 1100, 200] }),
+      WIDE_CALS,
+      ROOM,
+    );
+    expect(ceiling.dimMM![1]).toBe(1100);
+    expect(defaultDepthFor('fan', 'fan')).not.toBe(1100); // premise: the two differ
   });
 });
 
@@ -267,5 +334,105 @@ describe('refineDetections', () => {
     );
     expect(out).toHaveLength(2);
     for (const d of out) expect(d.dimMM).toBeDefined();
+  });
+});
+
+// ── What a REFUSED placement costs, measured rather than argued ──────────────
+//
+// `onFramedSurface` refuses a piece decoded outside the framed wall. The question this
+// describe exists to answer is what that costs downstream, because the first version of
+// the docblock in `lib/photo-geometry.ts` claimed the refusal removed a duplicate ROW
+// and it does not — the count was reasoned, not measured, which is the mistake this file
+// keeps catching. Both directions are pinned here so the next reader does not have to
+// re-derive them.
+describe('a refused placement', () => {
+  const W: CameraCal = { k: 2 * Math.tan(((106 / 2) * Math.PI) / 180), aspect: 4 / 3 };
+  const WCALS: CalMap = { n: W, e: W, s: W, w: W };
+
+  /** One 700 × 500 print on the N wall, 800 mm from the north-east corner, as seen
+   *  from whichever camera. `e` is the return-wall sighting an ultrawide catches. */
+  const print = (view: 'n' | 'e'): Detection => ({
+    label: 'framed print',
+    conf: 0.9,
+    category: 'painting',
+    shape: 'painting',
+    slot: view,
+    box: bboxOfWallSolid('n', view, 2.2, 1.5, wallDistance('n', ROOM), 0.7, 0.5, 0.03, W),
+  });
+
+  it('keeps the detection and drops only the measurement', () => {
+    // The refusal path is `return d` — the SAME object — which is what
+    // `lib/label-repair.ts` reads as "unmeasurable" via identity. The piece still reaches
+    // the scene; it is the fabricated numbers that go, not the furniture. "A piece that
+    // never appears leaves no trace" is the failure this repo fears, and this is why the
+    // gate does not cause it.
+    //
+    // Object identity is the whole assertion here. Two lines checking that the SEED's own
+    // `dimMM`/`position` are still undefined used to sit below it, presented as evidence;
+    // `geoRefine` spreads and never mutates its argument, so they were assertions about a
+    // literal three lines up and could not fail for any change to the gate.
+    const seed = print('e');
+    expect(geoRefine(seed, WCALS, ROOM)).toBe(seed);
+    // …and the same detection through its own camera is NOT returned by identity, which is
+    // what makes the line above a test of the refusal rather than of `geoRefine` at large.
+    const measured = geoRefine(print('n'), WCALS, ROOM);
+    expect(measured.dimMM).toBeDefined();
+  });
+
+  it('on the CLOUD path the fallback is the AI’s size, not the catalogue’s', () => {
+    // The claim this replaces said a refused piece "still appears at its catalogue size".
+    // False on the path that spends the user's quota: `buildSceneFromRoom` prefers the
+    // detector's own `dimMM` through `clampDims` and reaches `cfg.dim` only when there is
+    // no hint at all — and `lib/detect-prompt.ts` asks the model for `dimMM` AND
+    // `position`. The fixture above carries neither, because that is the on-device shape,
+    // so it could not express the case the claim was about.
+    const cloud: Detection = {
+      ...print('e'),
+      dimMM: [1500, 40, 1100], // a generous guess, well inside `painting`'s band
+      position: { x: 2.9, y: 1.5, z: -1.6 },
+    };
+    const refused = geoRefine(cloud, WCALS, ROOM);
+    expect(refused).toBe(cloud); // still refused
+    // The hint SURVIVES the refusal — this is the honest contract.
+    expect(refused.dimMM).toEqual([1500, 40, 1100]);
+    expect(refused.position).toBeDefined();
+  });
+
+  it('and a refused CLOUD row can change the merge, where an on-device one cannot', () => {
+    // The other half of the same fixture gap. `dedupeDetections` bails only when a
+    // position is MISSING, so a refused row that kept the model's own position is still
+    // compared — and two sightings 0.3 m apart in `painting`'s 0.35 m tier merge to one.
+    // So "two rows in, two rows out, before and after" was true of the fixture, not of
+    // the gate.
+    const near = (view: 'n' | 'e', z: number): Detection => ({
+      ...print(view),
+      position: { x: 2.2, y: 1.5, z },
+    });
+    const merged = refineDetections([near('n', -1.9), near('e', -1.7)], WCALS, ROOM);
+    expect(merged).toHaveLength(1);
+  });
+
+  it('does NOT change the row count — the duplicate survives either way', () => {
+    // Two sightings of one print, in the ON-DEVICE shape (no `dimMM`, no `position` of
+    // their own). Measured, they are ~1.0 m apart against `painting`'s 0.35 m tier, so
+    // both survive; refused, the second has no position at all and `dedupeDetections`
+    // declines to compare a missing one — so both survive again. Two in, two out, before
+    // and after the gate.
+    //
+    // Scoped to that shape deliberately: the test above shows a refused CLOUD row keeping
+    // its own position and merging. The gate buys size and verdicts, not de-duplication,
+    // and the row count was never its to move — but the reason it does not move here is
+    // the fixture, not the gate, and the first version of this comment claimed the latter.
+    const out = refineDetections([print('n'), print('e')], WCALS, ROOM);
+    expect(out).toHaveLength(2);
+
+    const own = out.find((d) => d.slot === 'n')!;
+    expect(own.dimMM![0]).toBe(700);
+    expect(own.dimMM![2]).toBe(500);
+    expect(own.position!.x).toBeCloseTo(2.2, 9);
+
+    const returned = out.find((d) => d.slot === 'e')!;
+    expect(returned.dimMM).toBeUndefined();
+    expect(returned.position).toBeUndefined();
   });
 });

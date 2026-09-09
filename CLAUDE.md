@@ -59,6 +59,96 @@ backend, no account. The 3D studio *is* the product.
    because choosing examples is exactly how the first version missed them. And
    when something does not fit, **say so — never silently resize it to fit**. A piece taller than the
    ceiling keeps its real height and `lib/clearance.ts` reports it.
+   **An axis a photo cannot see is not an axis the geometry can ignore**, and treating
+   the two as the same thing is what made every scanned floor piece land half its own
+   depth too close to the lens. `placeFloorObject` backprojected the bbox's bottom edge
+   onto the floor and called that the object's centre; that edge is the corner NEAREST
+   the camera, so an 850 mm sofa was decoded 425 mm out — most of a pace — and the width,
+   the lateral offset and the height all rode the same wrong distance, a lamp reading
+   +81% wide level and +132% at 5° of tilt, a nightstand ~130 mm too tall. Depth is
+   genuinely unobservable from one photograph and the module header says so; what it does
+   not need is to be *observed*, only accounted for.
+   **`placeWallObject` had the same defect one anchor over**, and it is the same
+   paragraph rather than a second one: it assumed a piece *lay on* the wall plane, so it
+   put the piece's CENTRE on the plaster where its BACK goes. The three figures that
+   error was filed with (TV 21 mm and 3.5%) understated it by an order of magnitude,
+   because every wall fixture in the harness is 30–80 mm deep while the catalogue goes
+   to 220 mm — and at 220 mm it read a correct 280 mm air conditioner as 371, outside
+   `ac-unit`'s own band, so `judgeLabel` accused a correctly identified piece. **Its
+   position half, though, never reached the user at all:** `snapToWall` recomputes a
+   wall piece's wall-normal coordinate as `inward × (depth/2 + gap)` and `groundY`
+   overwrites the height, so the scene was already right by a downstream correction.
+   Which is its own lesson — **trace what a placer's output actually reaches before
+   calling any of it the largest remaining error**, because a value a caller replaces is
+   not a value the user has.
+   So both placers take the depth as an INPUT, and **which** number they take is the
+   whole trust boundary: `defaultDepthFor(category, shape)` from the catalogue, never
+   `d.dimMM[1]` from the detector, because `depthM` moves a measurement and a depth the
+   AI guessed would be an AI-decided one. The CEILING branch is the one place the hint
+   still wins, and that is not an oversight — `placeCeilingObject` reads one row of a
+   disc and takes no depth, so nothing there turns a hint into a measurement. The corollary is the half that is easy to
+   miss: `geoRefine` writes that same catalogue number into `dimMM[1]`, so the piece is
+   DRAWN with the depth it was PLACED by — a hint kept for the render beside a default
+   used for the maths leaves the two disagreeing by half their difference, on the one axis
+   the photograph did measure. A round footprint is the good case and worth knowing about:
+   a circle's depth IS its width, so the tangent form recovers it and owes the catalogue
+   nothing.
+   Two lessons beyond the arithmetic. **A fixture that cannot express a defect certifies
+   it** — every floor fixture here was a depthless CARD, for which a piece's near face and
+   its centre plane are the same plane, so the harness reported nine of ten pieces exact
+   to 1e-9 and that was a property of the fixture; the same shape as `polygonCentroid`
+   passing on rectangles, and as a check that cannot fail. And **a clamp may bound an
+   assumption or a measurement, never both with one line**: the obvious single clamp
+   (`near ≤ wallDistance − depth`) let a catalogue depth 100 mm too generous shrink a
+   correctly MEASURED 2.0 m sofa to 1.925 m — an exact size traded for an exact position,
+   an assumption corrupting an observation. The near face is measured and is bounded by
+   the plaster; the centre is measurement plus assumption and gets its own bound.
+   That clamp rule has a second half, and it is the one the two placers needed next:
+   **a bound may FALSIFY an assumption, and may never overrule a measurement.** Both the
+   wall and ceiling placers assume a plane rather than measuring it, and neither checked
+   the decoded lateral offset against the room — so a ray that left the room sideways was
+   inverted against a plane it never touched. On an ultrawide **every ordinary room has
+   picture beyond the ends of the wall being photographed** (`wallSpan < 2·tan(hFOV/2)·
+   wallDistance`; a square room sits at 2.0 against 2.654 at 106°, so it always is), and
+   what is out there is the RETURN wall: a 700 × 500 print 800 mm from a corner decodes
+   onto the neighbouring wall at **+28% wide and +61% tall**, larger than the air
+   conditioner above, and a 300 mm vent read as a ceiling piece **passed the ceiling
+   placer's own gate** — which bounded the wall-normal axis only *while its docstring read
+   as though it covered both*, a gate whose prose certifies the hole beside it.
+   `onFramedSurface` refuses both, and `placeFloorObject` is exempt because it MEASURES
+   its distance: its lateral is an observation, and the exemption is held by a measured
+   property rather than an assertion (adding the gate there is a mutant that survives) —
+   a floor lateral is first-order invariant to the assumed lens, distance ∝ 1/k against
+   tangent ∝ k, residual ~2.8% from the catalogue depth, the one term that does not scale.
+   **The bound is the wall's REAL extent, from the FOOTPRINT** (`wallFrame`), and the first
+   version read `wallSpan/2` — a bounding-box dimension — under an argument that a gate must
+   speak the same convention as the assumption it falsifies, so both would at least be wrong
+   the same way. They are not: drag a room's EAST wall out and the north wall's distance is
+   still exactly `depth/2`, so the plane is right and only the bound is wrong. It refused a
+   correctly measured print at x = 3.52 in a room whose wall reached +4 — **a gate that
+   discards a measurement is worse than the fabrication it was built to catch**, and it took
+   an off-centre fixture to see, because in a room centred on the lens the two are the same
+   number. Hence the second half of the rule: **a bound may falsify an assumption only where
+   the assumption's own inputs are trustworthy.** Where `wallFrame.distance` and
+   `wallDistance` disagree — the framed wall itself dragged — the gate goes INERT rather
+   than refusing on an input it cannot check, and § 44 is what closes that.
+   **Refusing is not deleting**, which is what made refuse-over-clamp decidable: `geoRefine`
+   hands a refused detection back unchanged, so the piece still appears. Three claims that
+   sentence used to carry, each written from reasoning and each disproved by measurement:
+   it does **not** remove the duplicate row (two sightings in, two out, before and after —
+   though the mechanism is fixture-dependent, since the merge only skips a row whose
+   position is MISSING and the cloud prompt asks for one); the piece does **not** appear at
+   its catalogue size on the cloud path (`buildSceneFromRoom` prefers the detector's own
+   `dimMM` and reaches `cfg.dim` only with no hint at all); and `judgeLabel` was **not**
+   accusing the print — `painting`'s band is 150–2400 × 150–1800, so the fabrication was
+   judged `ok`, a false clean bill, and the refusal withdraws it. The looser
+   wholly-off-the-wall variant also **survived a full round of mutation** until a fixture
+   was built that separates the two, because the example first offered for it was invented.
+   **A prediction a plan makes is not evidence, even when the plan turns out right about
+   the fix** — and neither is a guard written in the same hour: nine of twelve mutants on
+   this commit's own new fixture table survived, because only one of the four walls was
+   reachable from any test, and its coverage counters were floors (`> 0`) rather than the
+   literals `docs/traps.md` asks for.
    **Which wall a photo is, is code's answer now too** (`lib/capture-slots.ts`),
    and it belongs to this rule because a wrong slot is a wrong room:
    `wallDistance` reads n/s at `depth/2` and e/w at `width/2`, so a photo of the
@@ -84,6 +174,29 @@ backend, no account. The 3D studio *is* the product.
    *every* photo: an identical pair carrying no world-axis label. `wallSpan` is
    the honest version of that idea — the length a wall ought to be, on screen, for
    the user to check.
+   **And there is now a SECOND, independent reason, measured rather than argued —
+   which matters because the first one does not cover every use.** The natural next
+   proposal is not a bearing at all but the magnitude of the off-square angle ψ, to
+   tell someone their shot is crooked and offer a retake: a number for a person, like
+   `wallSpan`, with nothing downstream measuring from it. That form genuinely does not
+   touch the prohibition above, so it was built and measured, and the answer is still
+   no: **a square-on wall capture is the DEGENERATE case for the method.** Verticals
+   parallel, wall-parallel family parallel — the squarer the shot, the less there is
+   to measure, and the residual reads as a few degrees of yaw. On a wall fixture at
+   three resolutions the same 100° lens came back **23.5°, 97.8° and no answer**, with
+   **`coverage` 0.96 on the one that was 76° wrong** — so the field documented for
+   telling a well-supported estimate from a thin one cannot gate it either.
+   `tests/vanishing-point.test.ts` holds that measurement and prints it on every green
+   run.
+   Two lessons worth more than the result. **A closed form that verifies exactly tells
+   you nothing about the pipeline that feeds it:** ψ came back to six decimals from
+   ideal segments and was unusable from detected ones, and the gap between those two
+   facts is where the whole feature died. And **a fixture must match the INPUT, not
+   merely the domain** — measured on that file's box-room fixture the method looks
+   unreliable; measured on one wall framed head-on, which is what the capture flow
+   asks people to photograph, it is degenerate. Same trap as the depthless card, one
+   layer up: the fixture was a picture of the right kind of thing in the wrong
+   composition.
 3. **Single source of truth for furniture** is `lib/scene-spec.ts` (+
    `lib/parts-catalog.ts`). 3D scene, 2D plan, inspector, catalog and decor all
    read from it. Add a shape / behaviour flag there, not ad-hoc in a component.
@@ -388,19 +501,67 @@ backend, no account. The 3D studio *is* the product.
    Every
    third-party host is allow-listed with a reason in `next.config.mjs`'s CSP;
    adding a fetch target means adding it there too. The same file's
-   `Permissions-Policy` allows only the features the app actually uses — which is
-   now exactly one, `camera=(self)` for capture — and denies the rest; `()` there
+   `Permissions-Policy` allows only the features the app actually uses — `camera`
+   for the capture screen's viewfinder, the `accelerometer`/`gyroscope`/
+   `magnetometer` trio that gate the one `deviceorientation` read behind it, and
+   `clipboard-write` for the Room panel's Copy — and denies the rest **by naming
+   them**, which is the part that reads as optional and is not: almost every
+   powerful feature defaults to an allowlist of `self`, so a feature LEFT OUT of
+   the header is granted, not denied. Five were
+   (`screen-wake-lock`, `window-management`, `local-fonts`,
+   `xr-spatial-tracking`, `compute-pressure`) while the guard's own
+   "denies everything it does not name a reason for" test swept the entries that
+   were already there and could not see them. `()` there
    overrides the user's own grant, so a feature and its header entry move
-   together. **In both directions, and the removing one is the direction that gets
-   forgotten:** four entries sat at `(self)` for the sun mood — `geolocation` for
-   its latitude, and `accelerometer`/`gyroscope`/`magnetometer` for the phone
-   compass that read the room's bearing. Collapsing that mood to fixed presets
-   (see §Lighting in `Design.md`) deleted every caller, and leaving the four at
-   `(self)` would have broken nothing, failed no test and shown no warning — it
-   would simply have left the app permanently asking for two sensors and a
-   location it can no longer use. A permission with no consumer reads as
-   something the app keeps about you, which is the same rule the EXIF budget
-   above answers to. `lib/geolocate.ts` is gone entirely; `lib/compass.ts` is
+   together. **In both directions, and BOTH directions have now drawn blood.**
+   Four entries sat at `(self)` for the sun mood — `geolocation` for its latitude,
+   and `accelerometer`/`gyroscope`/`magnetometer` for the phone compass that read
+   the room's bearing. Collapsing that mood to fixed presets (see §Lighting in
+   `Design.md`) deleted the compass, and leaving the four at `(self)` would have
+   broken nothing, failed no test and shown no warning — it would simply have left
+   the app permanently asking for two sensors and a location it can no longer use.
+   A permission with no consumer reads as something the app keeps about you, which
+   is the same rule the EXIF budget above answers to.
+   **What this paragraph used to claim, and the correction, because the claim is
+   what caused the second failure:** it said that collapse "deleted every caller".
+   It did not. `lib/device-tilt.ts` reads the lens tilt at the shutter off the same
+   `deviceorientation` event, `app/onboarding/capture/page.tsx` still calls it, and
+   the relative event is dispatched only when `accelerometer` AND `gyroscope` are
+   granted — so denying the trio switched the tilt read off. `tilt` was null
+   forever on Chrome and every live-camera photo fell back to the assumed-level
+   camera, a ~20% distance error for an ordinary 5° droop, on **every** engine that
+   enforces the header — which is both of them, and a first draft of this paragraph
+   asserted the opposite (that Safari ignored it and the feature survived on iOS).
+   That was invented, not checked, and it is struck rather than quietly deleted
+   because a comforting unverified claim is the thing this file exists to refuse.
+   Two lessons, and the second is the general one: a shared gate has more than one consumer, so **audit by asking who
+   READS the thing, never by remembering which feature it was added for.**
+   **Then the fix itself went wrong the other way, which is the half worth reading.**
+   Restoring the trio, the obvious move is to grant only `accelerometer` +
+   `gyroscope`: the W3C Device Orientation and Motion spec says the RELATIVE
+   `deviceorientation` event needs exactly those two, and `magnetometer` gates the
+   absolute variant. That is correct about the spec, correct about Blink, and it
+   would have left the tilt read dead on iOS — WebKit implements no
+   `ondeviceorientationabsolute` and requires all three tokens for plain
+   `ondeviceorientation`. So the same bug, on the other engine, reached by *citing a
+   standard*. **A header must satisfy every engine that will run the app: the grant
+   is the UNION over engines, never the minimum a spec describes** — and a
+   spec citation is exactly what makes a narrowing look justified on the way past.
+   All three are `(self)`; `geolocation` stays denied, having no consumer at all.
+   The WebKit half rests on a secondary source that could not be fetched to quote,
+   so it is written down as the reason for the SAFE choice rather than as a verified
+   fact — the asymmetry decides it either way, and `docs/visual-check.md` carries
+   the item a real phone closes. The guard is
+   `tests/permissions-policy.test.ts`, which reads the header the config actually
+   SERVES, derives what it should be from the consumers, and fails in both
+   directions — the old comment in `next.config.mjs` claimed to *be* the guard, and
+   a comment is not one. Two things it got wrong itself, since a guard is not
+   exempt: it scanned the app with a `git ls-files` double-star pathspec, which
+   needs the following slash literally and so matched **none** of a flat `lib/` —
+   76 files with the whole engine invisible, under a file-count floor of 50 that
+   the broken result passed. It reads directories with a suffix filter now, and its
+   floor is named files. And it read the header for one build, `NODE_ENV=test`; that
+   both builds serve the same policy is asserted rather than assumed. `lib/geolocate.ts` is gone entirely; `lib/compass.ts` is
    `lib/bearings.ts` now, because the compass read went and what is left is the
    circular-mean maths `lib/capture-slots.ts` needs for photo bearings — **a
    module still named for the half that was deleted is the scar rule 1

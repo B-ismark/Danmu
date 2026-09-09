@@ -982,6 +982,226 @@ and `tests/library-click-through.test.tsx`. The two items below are new, and eac
 is here because what a test can check about it and what a person can see are different
 halves.*
 
+### The lens tilt read needs a real phone, on BOTH engines
+
+**Where to click.** On an Android phone in Chrome and on an iPhone in Safari: open
+`/onboarding/capture`, tap **Turn on camera**, grant the camera and (on iOS) the
+motion-and-orientation prompt, then hold the phone upright and take a wall photo with the
+top edge tipped visibly **down**. The photo must arrive carrying a tilt.
+
+**What wrong looks like.** Nothing. That is the whole problem, and it is why this item
+exists rather than a test. When the sensor grant is missing, `deviceorientation` simply
+never fires, `useDeviceTilt` reports `null` forever, and the geometry falls back to
+assuming a level camera — a ~20% distance error for an ordinary 5° droop, with no error,
+no warning and no failing test. The screen looks identical either way.
+
+**How to tell, given there is nothing to see.** The capture screen does not surface tilt
+anywhere today (that is filed as its own gap — see § below on making it legible). Until it
+does, the check is a devtools one: with the page open, `window.addEventListener(
+'deviceorientation', e => console.log(e.beta, e.gamma))` must log a stream of numbers, and
+`beta` must fall as the phone tips forward. Silence means the header is still wrong.
+
+**Why both engines, and why this is not paranoia.** The grant was wrong twice on the same
+three entries, in opposite directions, and the second time it was *nearly* shipped:
+`accelerometer` + `gyroscope` is what the W3C spec requires for the relative
+`deviceorientation` event and what Blink enforces, but WebKit implements no
+`ondeviceorientationabsolute` and requires `magnetometer` as well for plain
+`ondeviceorientation`. All three are granted for that reason. **The WebKit half is the
+part that is not verified**: the primary sources were unreachable from the environment the
+fix was written in, so it rests on a secondary W3C device-APIs thread and was chosen
+because the asymmetry is one-sided — a spare token costs an entry Blink ignores, a missing
+one costs every iPhone. An iPhone is the only thing that closes it. If iOS turns out not
+to need `magnetometer`, the honest follow-up is to drop it and say so here, not to leave a
+token granted "just in case": a permission with no consumer is the other half of the same
+rule.
+
+**Where it rides.** `145a7ff` on `claude/amazing-dijkstra-d0am9g`, draft PR #148 (this
+item said "branch", against this file's own rule that the artifact is a commit and never
+"the tree" — a branch moves and the counts below were left attached to nothing).
+`next.config.mjs` grants the trio; `tests/permissions-policy.test.ts` pins the pairing in both directions (9/9, and
+four mutations were confirmed to fail it — sensors denied, `geolocation` granted with no
+consumer, the consumer import removed, and a new powerful feature granted with no reason
+row). Every one of those is a check that the *header text* matches the *source*. **Not one
+of them can tell you an event fired.**
+
+### Sampled wall colours — do they look like the room they came from?
+
+**Where to click.** Open a room that was built from photos (the capture flow, not
+the picker). Left rail → **Room** → **Use the colours in my photos**. Then compare each
+wall in the 3D view against the photo it came from — the capture screen still has them,
+or `/onboarding/detect`.
+
+**What wrong looks like.** Four kinds, and only the first would fail a test:
+
+· **The wrong wall.** Wall 2's colour on Wall 3. The mapping is swept over every preset
+  in `tests/wall-sample.test.ts`, so this would have to be a footprint the sweep does not
+  hold — worth one look at a room whose walls have been dragged.
+· **A colour that is not the wall.** A sofa's beige, a curtain's navy, the skirting's
+  white. The band is bounded by derived rows and furniture boxes are excluded when the
+  room has them, but neither is a guarantee: **a room opened from a saved scene file has
+  no detection boxes at all** (`fromDetection` is stripped on export), so that is the
+  case most likely to show it. The toast says when furniture was not excluded — check
+  that it did.
+· **Too dark, uniformly.** Every wall reading like its own shadow. The sample is a median
+  over one band, and a wall lit from one side has no single colour; this is the failure
+  mode I would expect first and no assertion can see it.
+· **Nothing happens.** The button renders only for a room with captures. If it is absent
+  on a room that has photos, `hasCaptures` is the thing to check.
+
+**What a test already covers, so you do not have to.** That the band excludes floor and
+ceiling (against an independent camera model, across four slots, two aspects, two
+lenses, ±5° tilt and three camera heights, and over a footprint with two walls dragged as
+well as a centred one); that an ASSUMED lens keeps the band inside the true junctions for
+every real lens from 66° to 120°; that a band which leaves the frame by the same edge
+twice, or that is under 5% of the frame, is refused; that the mapping refuses a triangle, a
+chamfered rectangle, a room turned 30° off the axes, and a room with two walls facing the
+same way; that the highlight/shadow trim rejects a shadowed navy curtain; that no key is
+written outside the footprint. **What no test covers is whether the result looks like the
+room** — every one of those checks is about numbers, and the deliverable is a colour.
+
+**One thing to look at that is new, and it is the reason to re-look at all of this.** The
+band this now samples is SMALLER than the one the screenshots in this item were taken
+against: with no EXIF focal length it is drawn for a 120° lens rather than a 66° one,
+because the old band put about a third of its samples on floor and ceiling for any photo
+taken on an ultrawide (the normal case — see `Design.md` § Wall colours). Smaller and on
+the wall is the intended trade. **What would say it went too far is a photo whose walls
+are read but whose colours now come out flatter or darker than before**, i.e. a band that
+has shrunk into one lit strip; and, at the other end, a room where the button now reports
+"no wall colour to read" on photos that used to answer.
+
+**Where it rides.** `b618329` (the control and the shell) and `3d130f8` (the pure seam) on
+`claude/amazing-dijkstra-d0am9g`, draft PR #148, then `fc132b8`, which rewrote the band
+itself. 73 tests over `lib/wall-sample.ts` plus 19 over `lib/color-reduce.ts`; gates clean
+on `fc132b8` (typecheck, lint, build, 2672 passing / 5 expected fail). Thirteen mutations
+of the band's code, each confirmed to fail a test; two survived the first round and both
+were the trap the fix is about — see the commit.
+
+### Does "Use my photos’ colours" fit the left rail at 1024–1279px?
+
+**Where to click.** Open a photographed room, narrow the window to about 1100px — the
+compact step, where the left rail is `--rail-left-tight` **208px** — and look at the
+button under the Room section's dimensions.
+
+**What wrong looks like.** The label printing through the button's rounded border, or
+running under the rail's right edge and being clipped with no scrollbar and no other
+clue. `.ds-btn` is `white-space: nowrap` with no `overflow` of its own, and the rail is
+`overflow: hidden`, so those are the two failure modes and both are silent.
+
+**Why it is here.** The label was "Use the colours in my photos" — 28 characters, which
+at 12px Nunito is ~168–185px, plus a 13px icon, a 6px gap and 32px of padding: 219–236px
+of content in a 208px rail. Font metrics are not derivable from a test, so the exact
+figure is a browser question, but the direction was not in doubt. It is shortened to 22
+characters AND given its own element with `minWidth: 0` and an ellipsis, which is what
+`.ds-btn`'s own comment prescribes for a button with no room. **The busy label is
+SHORTER, so the idle state is the one to check.**
+
+**Where it rides.** The commit whose subject begins *"Close the last of the audit"* on
+`claude/amazing-dijkstra-d0am9g`, draft PR #148.
+
+### Scanned furniture should now stand AWAY from the wall by half its own depth
+
+**Where to click.** Photograph or upload a room with a detectable floor piece against a
+wall — a wardrobe, a sofa, a chest of drawers — and run the detect screen, then open the
+3D tab and the 2D plan. Look at the gap between the piece's back and the plaster.
+
+**What wrong looks like.** The piece pressed flat into the wall with its back plane
+through the plaster, or standing a visible hand's width too far out into the room. Also
+worth a look on the 2D plan, where a wrong wall standoff reads as a stripe of floor behind
+the piece that is not there in the photograph.
+
+**Why it is here.** `placeFloorObject` used to decode the bbox's bottom edge as the
+piece's CENTRE. That edge is its near face, so every floor piece landed about half its own
+depth too close to the lens — a 850 mm sofa by 425 mm, which is most of a pace. It decodes
+the centre now, so a piece's back should sit where the wall is, and its front should sit
+half a depth into the room. The suite proves the arithmetic exactly against a projected
+solid; what it cannot see is whether the scene then LOOKS right against the photograph it
+came from, and there is a second mover downstream — `snapToWall` with `wallStandoff`, which
+also nudges a piece toward the plaster and could now be double-counting or fighting it.
+
+**One more thing to check while you are there.** Low pieces should have stopped reading
+tall. A nightstand or a coffee table was coming back ~130 mm too tall, because the top row
+of a piece whose top is BELOW the lens images its far top edge and the height was being
+read at the near one. Compare a nightstand's height against the bed beside it.
+
+**Where it rides.** The commit whose subject begins *"A floor piece is a solid"* on
+`claude/amazing-dijkstra-d0am9g`, draft PR #148. Gates on it: typecheck, lint, build clean
+of `ESLint: Invalid Options`, and 147 test files / 2713 passing / 5 expected fail — with 38
+over `tests/photo-geometry.test.ts` and 14 over `tests/detect-pipeline.test.ts`, whose
+printed baseline table is the record of what changed.
+
+### A scanned air conditioner or TV should stop coming back over-wide
+
+**Where to click.** Scan a room that has something deep on a wall — an air conditioner or
+a split unit is the case, but a chunky TV or a boxed-in window will do — and look at the
+piece's WIDTH in the Inspector against the real thing, then at the detect screen for any
+"looks wrong" flag on a word that was in fact correct.
+
+**What wrong looks like.** A wall piece noticeably wider or taller than the real one; or
+the detect screen offering to repair a label it identified correctly.
+
+**Why it is here.** `placeWallObject` used to put a piece's centre on the plaster, where
+its back goes, so its body sat nearer the lens than the placer thought and every angular
+measurement was read at the wrong plane. Thin pieces barely showed it — a painting +1.8% —
+but the catalogue's air conditioner is 220 mm deep and read **+21.7% wide and 91 mm too
+tall**, which put a correct 280 mm unit outside its own 250–350 band and made `judgeLabel`
+accuse the word. The arithmetic is now exact against a projected solid at five tilts; what
+no test can see is whether a real detector's box on a real AC unit gives a width that looks
+right in the room.
+
+**What is NOT worth looking for.** Its distance from the wall. The wall-normal position
+never came from this placer in the rendered scene — `snapToWall` recomputes it from the wall
+itself — so a wall piece has always sat with its back on the plaster and this change does
+not move it.
+
+**Where it rides.** The commit whose subject begins *"A wall piece is a solid too"* on
+`claude/amazing-dijkstra-d0am9g`, draft PR #148. Gates on it: typecheck, lint, build clean
+of `ESLint: Invalid Options`, and 147 test files / 2716 passing / 5 expected fail — with 40
+over `tests/photo-geometry.test.ts` and 15 over `tests/detect-pipeline.test.ts`.
+
+### A picture near a corner should stop appearing twice at two different sizes
+
+**Where to click.** Scan a room that has something hanging close to a corner — a framed
+print, a mirror, a wall clock, a curtain that runs up to the return wall. Take the two
+photos that share that corner. Then look at the detect screen for a second copy of the same
+piece, and at each copy's WIDTH in the Inspector.
+
+**What wrong looks like.** Two of one picture, and the second one noticeably bigger than
+the real thing — or a high wall fixture (a vent, an alarm, a corner speaker) turning up as
+an oversized ceiling light.
+
+**Why it is here.** An ultrawide frames more than the wall it is pointed at, so a piece on
+the RETURN wall is in shot near the shared corner — and both wall and ceiling placers
+inverted whatever they were given against their own assumed plane without ever asking
+whether the answer was still inside the room. Measured: a 700 × 500 print 800 mm from a
+corner came back **893 × 803** — +28% and **+61%** — 764 mm past the end of the wall it was
+pinned to; a 300 mm vent read as a ceiling piece came back 386 mm wide and 571 mm outside
+the room, having passed the one gate that function already had. Both are refused now.
+(Those figures come from the table `tests/photo-geometry.test.ts` prints on every green run.
+The ones this item first carried — 960 × 711, 769 mm — were measured against a scratch
+re-implementation of the placer instead of the placer, and described a different room.)
+
+**What is NOT worth looking for, and this is the part a test had to establish.** Fewer
+rows. The refusal does not delete the second sighting — a refused detection keeps its
+catalogue size and gets arranged, so **you should still expect to see two pieces**. What
+should be gone is the *fabricated size*: the second copy should look like a plain
+catalogue-sized picture rather than a confidently over-large one, and the detect screen
+should stop offering to repair a label it read correctly. Deleting the duplicate is a
+separate question and nothing here touches the merge distances.
+
+**The one thing this cannot fix, so do not read a failure into it.** The gate is only as
+good as the lens. A wide photo whose focal length EXIF does not carry, read as the 66°
+default, under-reads every lateral offset and pulls a fabrication back INSIDE the wall
+where no bound can see it — the same print lands 2.27 m along a 3.0 m half-span. If a
+piece near a corner still comes back over-wide, the lens is the suspect, not the gate.
+
+**Where it rides.** The commit whose subject begins *"A wall or ceiling piece must be on
+the surface"* on `claude/amazing-dijkstra-d0am9g`, draft PR #148. Gates on it: typecheck,
+lint, build clean of `ESLint: Invalid Options`, and 147 test files / 2726 passing / 5
+expected fail — with 46 over `tests/photo-geometry.test.ts` and 19 over
+`tests/detect-refine.test.ts`. The `detect-pipeline` baseline table is byte-identical and
+the off-square sweep diffs clean against `main`, which is how "it refuses nothing
+legitimate" was established rather than assumed.
+
 ### Pressing Shuffle moves the button out from under the pointer
 
 *Filed by `rails` on 2026-09-05 from a peer's browser measurement during PR #115's review.

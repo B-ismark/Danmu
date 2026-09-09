@@ -128,6 +128,38 @@ for.
 
 ## Mutation testing and tests
 
+**Symptom: you mutated something and the test still passed, so you loosened the test.**
+That is backwards, and it is the easiest mistake in this whole practice to make while
+believing you are being rigorous. Mutation testing perturbs the **code under test** and
+asks whether an assertion notices. Loosening a bound *in the assertion* can never make its
+own test fail, so a "surviving mutation" you produced by editing the test file has told you
+nothing at all.
+→ The tell: your mutation and your assertion are in the **same file**. If the thing you
+changed is the `expect(...)` line, stop — go and perturb the mechanism instead. For a
+number the code derives, that means changing the derivation: halve the input, double it,
+send it down the wrong axis.
+→ The companion tell, one level subtler: an assertion that survives every honest mutation
+may be **unreachable**, not weak. Two guards in `lib/wall-sample.ts` were deleted for this
+(an explicit degenerate-edge check and a `length !== 4` proxy) — both were implied by
+another check, so nothing could fail them. The fix is not a cleverer test; it is to assert
+the real invariant, or to write down that the assertion is type-narrowing that cannot fire
+and say why.
+*(Cost: TWICE on 2026-09-09, both in one session — first loosening a `>=` bound in
+`tests/wall-sample.test.ts` instead of perturbing `slotWallIndices`, then loosening a
+ratio floor in `tests/off-square-cost.test.ts` instead of perturbing the box depth. The
+second time it was a bound I had written twenty minutes earlier to replace a bound that had
+failed the same way.)*
+
+**Symptom: a test asserts the property of every case instead of the one case you meant.**
+`RUNS.filter((x) => x.label.includes('0°'))` reads as "the zero-yaw cases" and matches
+`+10°` and `±20°` as well, so a "costs nothing at zero" assertion was applied to every
+angle in the sweep and failed. A string test standing in for a numeric one.
+→ **Filter on the number, not on the label it appears in.** Carry the quantity on the row
+if it is not there already. The same shape bites `startsWith` on ids and slugs.
+*(Cost: once, 2026-09-09, `tests/off-square-cost.test.ts` — recorded because it cost only
+minutes but looked for a while like a real finding about the geometry, which is the
+expensive part.)*
+
 **Symptom: after mutating and restoring, your own changes are gone.**
 `git checkout -- file` / `git checkout HEAD -- file` restores from the index or HEAD. If
 your work is uncommitted, it is destroyed.
@@ -502,6 +534,23 @@ merged doc and four messages before one `grep` settled it.
 → **Name the artifact every number came from**, and re-derive when the tree moved. The
 pattern across all four: *everything measured held; the one thing reasoned did not.*
 
+**Symptom: you measured carefully, in a scratch script, and the number is still wrong.**
+Because the script was not the subject. § 42.3's headline figures were produced by
+re-implementing `placeWallObject`'s arithmetic in `node -e` — transcribed faithfully,
+checked twice — and published as measurements: **960 × 711 at 769 mm past the wall**. The
+placer returns **949 × 708 at 774 mm** for that room, and the fixture the tests actually
+exercise is a different room again, at **893 × 803, 764 mm**. They reached a source
+docblock, `CLAUDE.md`, `Design.md`, two docs and a PR body before anything regenerated
+them. Worse, the transcription silently dropped the axis with the LARGER error: the height
+was +61% and no version of the note mentioned height at all.
+→ **Call the function.** Import it in a test and print what it returns; a transcription
+is a second implementation, and the whole point of the number is what the first one does.
+*(Cost twice, in one item, by two different readers: the reviewer auditing the same commit
+re-implemented `placeCeilingObject` the same way, got 3.509 m where the placer gives 3.301,
+and filed a finding that the published ceiling figures were unreproducible. They were
+reproducible. The re-implementation was the thing that was wrong — in the pass whose whole
+job was checking the numbers.)*
+
 **Symptom: an assertion fails only on CI, and the failure comes with a plausible ratio.**
 The wrong move is to retune to it. `expected 8.554660000000013 to be greater than 8.8`
 was read as "the runner is about 2.5x the calibration box", which was arithmetically true
@@ -677,3 +726,38 @@ appeared at the subject the block would not have read as orphaned in the first p
 *(Cost: a docblock judged dead and deleted in the same commit as the gate that found it,
 while its function had five live readers including the Inspector gate the block's last
 clause describes. Second occasion: the dead-code sweep above, same mechanism.)*
+
+## A closed form verifies exactly and the feature still does not work
+
+**Symptom.** The maths round-trips to six or twelve decimals against a synthetic input, the
+assertions are real, and then the thing behaves badly — or the number it produces is nowhere
+near the truth — the moment it is fed by a detector, a decoder, or anything that measures
+rather than states.
+
+**What it is.** Two different questions got answered as one: *is the inversion correct* and
+*is the input good enough to invert*. The first is cheap and satisfying to verify. The second
+is the whole feature.
+
+**Twice, in one session, both in § 42.**
+
+1. The off-square angle ψ. Recovered from `lib/vanishing-point.ts`'s own direction vectors to
+   **six decimals** across 0–35° on two lenses, roll costing 0.054° at 10°. Then measured
+   through `detectSegments` on a wall capture: 23.5°, 97.8° and no answer for the same 100°
+   lens at three resolutions, with `coverage` 0.96 on the one that was 76° wrong. The feature
+   was reverted. Nothing about the closed form was wrong.
+2. The near-face floor fix, the other way round: exact to 1e-13 against a projected solid, and
+   the *fixture* was a depthless card, so the exactness was a property of the fixture. Same
+   gap, opposite side of it.
+
+**What to do.** Before verifying an inversion, write down what will feed it in production and
+measure the inversion **on that** — a detector's segments, a decoder's pixels, a catalogue's
+default. If the producing end is a heuristic, its failure modes are the feature's failure
+modes, and no amount of precision downstream recovers them.
+
+**And check the fixture is the right COMPOSITION, not merely the right domain.** ψ measured on
+`tests/vanishing-point.test.ts`'s box-room fixture looks merely unreliable; measured on one
+wall framed head-on — what the capture flow actually asks people to photograph — it is
+degenerate, because that composition puts two of the three vanishing points at infinity. The
+box room was a picture of the right kind of thing in the wrong composition, which is a harder
+mismatch to notice than a wrong kind of thing.
+

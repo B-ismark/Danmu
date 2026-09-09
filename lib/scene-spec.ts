@@ -3,7 +3,7 @@
 
 import { ROOM } from './parts-catalog';
 import {
-  footprintForLayout,
+  roomFootprint,
   footprintBounds,
   clampIntoFootprint,
   interiorPoint,
@@ -855,8 +855,7 @@ export function defaultScene(
   d: number = ROOM.depth,
   opts: { footprint?: Footprint; height?: number } = {},
 ): ScenePart[] {
-  const poly: Footprint =
-    opts.footprint && opts.footprint.length >= 3 ? opts.footprint : footprintForLayout(layoutId, w, d);
+  const poly: Footprint = roomFootprint({ width: w, depth: d, layoutId, footprint: opts.footprint });
   const height = opts.height ?? ROOM.height;
   const bays = roomBays(poly, { max: 2, minSide: 0.9, minArea: 1.2 });
   if (bays.length === 0) return [];
@@ -2371,10 +2370,7 @@ export function buildSceneFromRoom(room: RoomData): ScenePart[] {
   // Non-rectangular rooms: keep detected items inside the actual footprint
   // (detection still reasons about a rectangle, so an item can land in the
   // void of an L/U/T notch — pull it back in). A saved custom footprint wins.
-  const footprint =
-    room.footprint && room.footprint.length >= 3
-      ? (room.footprint as [number, number][])
-      : footprintForLayout((room.layoutId ?? 'rect') as LayoutId, rw, rd);
+  const footprint = roomFootprint(room);
 
   // The starter scene is seeded from the same polygon, not from the layout preset's
   // idealised rectangle: a room whose walls the user has dragged has a footprint the

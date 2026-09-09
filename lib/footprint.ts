@@ -14,6 +14,28 @@ export { polygonSignedArea };
 export type LayoutId = 'rect' | 'l' | 't' | 'u' | 'open' | 'custom';
 export type Footprint = [number, number][];
 
+/** The polygon a saved room actually has: its own custom outline when independent
+ *  wall moves gave it one, else the preset shape derived from `layoutId` and the
+ *  bounding dimensions.
+ *
+ *  Extracted because this exact three-line conditional was written out verbatim in
+ *  `lib/scene-spec.ts` and `lib/scene-store.ts`, and the placers were about to be a
+ *  third copy — which is the shape rule 3 of `CLAUDE.md` names: one rule, three
+ *  implementations, drifting apart in the direction nobody looks. It is a `Partial`
+ *  rather than `RoomData` so `lib/` modules that must not import storage can read it.
+ *
+ *  `length >= 3` is the same floor `wallFrame` applies: two points are not a room. */
+export function roomFootprint(room: {
+  width: number;
+  depth: number;
+  layoutId?: string;
+  footprint?: Array<[number, number]>;
+}): Footprint {
+  return room.footprint && room.footprint.length >= 3
+    ? (room.footprint as Footprint)
+    : footprintForLayout((room.layoutId ?? 'rect') as LayoutId, room.width, room.depth);
+}
+
 /** Build a centred polygon for a layout preset from overall width/depth. */
 export function footprintForLayout(layout: LayoutId, w: number, d: number): Footprint {
   const hw = w / 2;
