@@ -243,7 +243,21 @@ export function WallColorsFromPhotos() {
         style={{ width: '100%', height: 32, fontSize: 12, gap: 6, justifyContent: 'center' }}
       >
         {busy ? <Spinner size={12} /> : <Icon name="image" size={13} />}
-        {busy ? 'Reading your photos…' : 'Use the colours in my photos'}
+        {/* The label gets its OWN element, which is what `.ds-btn`'s own comment
+            prescribes for a button with no room: it is `white-space: nowrap` with
+            no `overflow`, and a bare text node beside an icon is an anonymous flex
+            item that nothing can address — so a label too long for the pill printed
+            straight through its border, and the rail's `overflow: hidden` clipped
+            what crossed the edge with no scrollbar and no clue.
+            "Use the colours in my photos" is 28 characters: ~168–185px at 12px
+            Nunito, plus a 13px icon, a 6px gap and 32px of padding, so 219–236px of
+            content against a rail that is `--rail-left-tight` 208px at the compact
+            step (1024–1279px) and 228px at its floor. The idle label is the one that
+            breaks — the busy one is shorter. Shortened AND made to ellipsise, so a
+            future rewording degrades instead of spilling. */}
+        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {busy ? 'Reading your photos…' : 'Use my photos’ colours'}
+        </span>
       </button>
       <p style={{ margin: '6px 0 0', fontSize: 10.5, lineHeight: 1.4, color: 'var(--ink-3)' }}>
         Reads the wall colour straight out of each photo. Nothing is uploaded, and Undo puts it back.

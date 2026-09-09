@@ -283,29 +283,39 @@ const MATCH_DOT = Math.cos((20 * Math.PI) / 180);
  *
  * Three refusals, all reachable:
  *
- * · **An edge matching no slot.** Covers the `l`/`t`/`u` presets (6/8/8 edges, so
- *   the length guard takes them first), a room turned too far off the axes, and a
- *   ZERO-LENGTH edge, whose normal `wallOutwardNormal` reports as `[0, 0]` — dot
- *   zero against everything, so it matches nothing and the room is refused.
- *   That last one matters beyond tidiness: `wallSegments` SKIPS a degenerate edge,
- *   so the painted index would shift off the polygon index and every wall after it
- *   would take its neighbour's colour. It is also what keeps `setAllWallColors`,
- *   which counts polygon vertices, agreeing with the renderer, which counts
- *   segments.
- *   **There was an explicit degeneracy check here and it is deleted, not moved:**
- *   with four vertices a zero-length edge leaves three real walls, so some slot
- *   was always going to find nothing. Four separate mutations of this function
- *   survived the first version of its test suite because the checks were implied
- *   by each other — the guard that cannot fail is the same defect as the check
- *   that cannot fail.
- * · **Two edges claiming one slot.** Measured rather than assumed reachable: of
- *   500,000 random quadrilaterals, 23,045 hit it and **13,559 of those were simple
- *   (non-self-intersecting)** — so an ordinary dragged room can get here, and
- *   `tests/wall-sample.test.ts` carries one of them.
- * The closing `every` is **not** a third runtime refusal, and saying so is the
+ * · **A polygon the renderer would paint with fewer walls than it has edges.**
+ *   `wallSegments` skips any edge shorter than **1e-4**, so the painted index
+ *   shifts off the polygon index and every wall past the short one takes its
+ *   neighbour's colour. This is the check that has to be explicit, and the reason
+ *   is a gap of exactly that 1e-4: `wallOutwardNormal` reports `[0, 0]` only for an
+ *   edge of length EXACTLY zero, so a 5e-5 edge gets a full unit normal, passes the
+ *   bijection below, and produces a complete-looking map whose indices are wrong.
+ *   An earlier version of this comment claimed the zero-normal case covered it —
+ *   true for a literal duplicate vertex and false for every degenerate edge a
+ *   float actually produces.
+ * · **An edge matching no slot.** Covers the `l`/`t`/`u` presets (6/8/8 edges, with
+ *   several facing the same way), and a room turned too far off the axes.
+ *   **There was also an explicit `length !== 4` guard here and it is deleted, not
+ *   moved:** it is implied for every polygon with more than four edges, since there
+ *   are only four slots. Four separate mutations of this function survived the
+ *   first version of its test suite because the checks were implied by each
+ *   other — the guard that cannot fail is the same defect as the check that cannot
+ *   fail, which is also why the 1e-4 check above is the one that is written out.
+ * · **Two edges claiming one slot.** Measured rather than assumed reachable, and by
+ *   a sweep that runs on every green build (`tests/wall-sample.test.ts`, which
+ *   prints its own count): a few percent of random quads hit it and a good half of
+ *   those are SIMPLE, non-self-intersecting polygons — so an ordinary dragged room
+ *   can get here, and that file carries one of them as a fixture. The figures first
+ *   written here (23,045 of 500,000, 13,559 simple) came from a throwaway script
+ *   that is gone, which is the un-reproducible standing claim `CLAUDE.md` forbids;
+ *   the sweep replaces them.
+ * The closing `every` is **not** a fourth runtime refusal, and saying so is the
  * point: it cannot fire. For a slot to be left unclaimed while no edge matched
  * nothing and none duplicated, the polygon would need fewer than four edges all
- * axis-aligned in distinct directions, and no closed polygon has three. It earns
+ * axis-aligned in distinct directions, and no closed polygon has three. (A triangle
+ * is refused by the no-match branch, not by this — the earlier version of this
+ * docblock credited the completeness check, and the test file had it right while
+ * the source had it wrong.) It earns
  * its place as the check that makes the cast from `Partial` SOUND — the type
  * narrowing is the job — and it is written as an assertion rather than a cast so
  * that a future change to the matching logic cannot quietly hand a caller a record
@@ -313,6 +323,10 @@ const MATCH_DOT = Math.cos((20 * Math.PI) / 180);
  * is the reason for this paragraph rather than for a test pretending otherwise.
  */
 export function slotWallIndices(footprint: Footprint): Record<CaptureSlot, number> | null {
+  // The indices this returns are POLYGON edge indices and the renderer paints
+  // SEGMENTS, so the two counts have to be equal or every index past a skipped
+  // edge names the wrong wall.
+  if (wallSegments(footprint).length !== footprint.length) return null;
   const out: Partial<Record<CaptureSlot, number>> = {};
   for (let i = 0; i < footprint.length; i += 1) {
     const [nx, nz] = wallOutwardNormal(footprint, i);

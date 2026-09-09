@@ -21,6 +21,7 @@ import 'fake-indexeddb/auto';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 import { useScene } from '@/lib/scene-store';
+import { wallSegments, type Footprint } from '@/lib/footprint';
 import type { RoomData } from '@/lib/storage';
 import type { WallColorProposal } from '@/lib/wall-colors';
 
@@ -114,6 +115,35 @@ describe('the store knows which room it is holding', () => {
     expect(useScene.getState().loadedRoomId).toBe('room-a');
     useScene.getState().loadFromRoom(undefined);
     expect(useScene.getState().loadedRoomId).toBeNull();
+  });
+});
+
+describe('painting every wall counts what the renderer paints', () => {
+  it('writes one colour per WALL SEGMENT, not per polygon corner', () => {
+    // `setAllWallColors` looped `footprint.length`, while `RoomShell` paints
+    // `wallSegments(footprint)` — which skips an edge shorter than 1e-4. So on a
+    // footprint carrying a degenerate edge it wrote one index the renderer never
+    // reads and left the last real wall unpainted. Unobservable while every wall
+    // takes the SAME colour, which is why it survived; and now a live path, since
+    // the photo sampler falls back to this whenever a room's shape cannot say
+    // which wall each photo is.
+    const degenerate: Footprint = [
+      [-2, -2],
+      [-2, -2],
+      [2, -2],
+      [2, 2],
+    ];
+    useScene.getState().loadFromRoom({ ...roomRecord('room-poly'), footprint: degenerate } as RoomData);
+    useScene.getState().setAllWallColors('#8ca082');
+    const painted = Object.keys(useScene.getState().room.wallColors).map(Number).sort();
+    expect(wallSegments(degenerate)).toHaveLength(3);
+    expect(painted).toEqual([0, 1, 2]);
+  });
+
+  it('and one per corner when none of them is degenerate', () => {
+    useScene.getState().setAllWallColors('#8ca082');
+    const painted = Object.keys(useScene.getState().room.wallColors).map(Number).sort();
+    expect(painted).toEqual([0, 1, 2, 3]);
   });
 });
 

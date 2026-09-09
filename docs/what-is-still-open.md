@@ -6682,3 +6682,31 @@ rather than an assumption to relax — `slotToWorld` derives every placement fro
 origin. `wallFrame` refuses a footprint that does not contain the origin instead of
 returning a negative distance, and that refusal is the shape the fix should take here too.
 
+### 45. The sensor grant is site-wide when one route needs it — NOT fixed, and not a one-liner
+
+**Where it stands.** `next.config.mjs` grants `accelerometer` / `gyroscope` /
+`magnetometer` on the catch-all `/:path*`. The only consumer is
+`app/onboarding/capture/page.tsx` through `lib/device-tilt.ts`, so every other route
+carries three sensor permissions it never uses — the same "permission with no consumer"
+shape rule 5 argues against, one level down from the feature to the route. It is not
+purely theoretical: `script-src` allows the jsDelivr ORT CDN as the `onnxruntime-web`
+fallback, and a script from that host executes in this origin, where it could construct a
+`Magnetometer` this app never reads directly and only holds open to satisfy WebKit's
+gating of an event on the capture screen.
+
+**Why it is filed rather than fixed.** Next's `headers()` applies EVERY matching rule,
+so adding a route-specific entry beside the catch-all emits the header **twice**, and a
+feature named in both is resolved by the first occurrence per the structured-field
+parse — which would make the outcome depend on rule order rather than on intent, in the
+direction that fails silently (the route-specific `(self)` ignored, the tilt read dead
+again). Doing it properly means the catch-all EXCLUDING the capture route, i.e. a
+negative-lookahead `source`, and the only honest way to confirm that is to read the
+served response headers on both a matching and a non-matching path. That is a browser
+check, not a test-suite one, so it wants its own change with a
+`docs/visual-check.md` item rather than a line inside an audit batch.
+
+**What is done.** `tests/permissions-policy.test.ts` asserts the pairing on the catch-all
+and would need one line changed (assert present on the route with the consumer, absent
+elsewhere) once the header is split, which is a sharper invariant than "present
+somewhere".
+

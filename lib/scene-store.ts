@@ -3,7 +3,14 @@
 import { create } from 'zustand';
 import { defaultScene, buildSceneFromRoom, isRoundPart, type ScenePart } from './scene-spec';
 import { ROOM as ROOM_DEFAULT } from './parts-catalog';
-import { footprintForLayout, offsetWall, footprintBounds, type Footprint, type LayoutId } from './footprint';
+import {
+  footprintForLayout,
+  offsetWall,
+  footprintBounds,
+  wallSegments,
+  type Footprint,
+  type LayoutId,
+} from './footprint';
 import { ROOM_SIDE_EPS, ROOM_SIDE_M } from './dimension-ranges';
 import type { RoomData, Site } from './storage';
 
@@ -150,7 +157,16 @@ export const useScene = create<SceneState>((set, get) => ({
   setAllWallColors: (color) =>
     set((s) => {
       const next: Record<number, string> = {};
-      for (let i = 0; i < s.room.footprint.length; i++) next[i] = color;
+      // **`wallSegments`, not `footprint.length`.** `RoomShell` paints
+      // `wallSegments(footprint)`, which SKIPS an edge shorter than 1e-4 — so on a
+      // footprint carrying a degenerate edge this wrote one index the renderer
+      // never reads and left the last real wall unpainted. Invisible while every
+      // wall gets the same colour, which is exactly why it survived: the wrong
+      // index and the right one hold the same string. It is a live path now that
+      // the photo sampler falls back to this when a room's shape cannot say which
+      // wall each photo is.
+      const walls = wallSegments(s.room.footprint).length;
+      for (let i = 0; i < walls; i++) next[i] = color;
       return { room: { ...s.room, wallColors: next } };
     }),
   resetWallColor: (index) =>

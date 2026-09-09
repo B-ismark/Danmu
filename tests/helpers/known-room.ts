@@ -84,7 +84,7 @@ export const TRUTH: Truth[] = [
 /** The box a perfect detector would draw around this piece in this slot's photo.
  *  Which projection is used follows from the piece's own anchor — the same table
  *  `geoRefine` reads to choose the inverse. */
-export function boxFor(t: Truth, slot: CaptureSlot, cal: CameraCal = CAL): Box {
+export function boxFor(t: Truth, slot: CaptureSlot, cal: CameraCal): Box {
   const anchor = anchorFor(t.category, t.shape);
   const wM = t.dimMM[0] / 1000;
   const hM = t.dimMM[2] / 1000;
@@ -101,7 +101,7 @@ export type Shot = { truth: Truth; slot: CaptureSlot; det: Detection };
  *  photographed — `tests/helpers/project.ts` says so at `inFrame`, and the sweep
  *  was counting them and then running them anyway. */
 export function shots(
-  boxOf: (t: Truth, slot: CaptureSlot) => Box = boxFor,
+  boxOf: (t: Truth, slot: CaptureSlot) => Box,
   keep: (t: Truth, slot: CaptureSlot, box: Box) => boolean = () => true,
 ): Shot[] {
   return TRUTH.flatMap((truth) =>
@@ -204,15 +204,41 @@ export type Run = {
   PARTS: ReturnType<typeof buildSceneFromRoom>;
 };
 
+/** Boxes → detections → refined, and nothing after it.
+ *
+ *  For a sweep that only counts ROWS — "did the cross-slot lamp split" — where
+ *  `judgeLabels` and `buildSceneFromRoom` are work nothing reads. The split probe
+ *  runs up to 81 of them, and a measurement harness slow enough to discourage
+ *  sweeping wider is a measurement harness that stops being used. */
+export function refinedOnly(
+  boxOf: (t: Truth, slot: CaptureSlot) => Box,
+  cals: CalMap,
+  keep?: (t: Truth, slot: CaptureSlot, box: Box) => boolean,
+): Detection[] {
+  return refineDetections(
+    shots(boxOf, keep).map((s) => s.det),
+    cals,
+    ROOM,
+  );
+}
+
 /** Truth table → boxes → detections → refined → verdicts → parts.
  *
- *  `boxOf` is the only seam: hand it the square-on projector for the baseline, or a
- *  yawed one to measure what off-square framing costs. `cals` is what the INVERSE
- *  is told about the camera — deliberately separate, because the whole measurement
- *  is what happens when the projector and the placer disagree. */
+ *  `boxOf` is the only seam: hand it `squareOn(CAL)` for the baseline, or a yawed
+ *  one to measure what off-square framing costs. `cals` is what the INVERSE is told
+ *  about the camera — deliberately separate, because the whole measurement is what
+ *  happens when the projector and the placer disagree.
+ *
+ *  **Neither has a default, and that is the point.** They used to default to
+ *  `boxFor` and `CALS`, so `runPipeline(undefined, otherCals)` would project
+ *  through one camera and invert through another with no diagnostic — in the very
+ *  parameter pair whose separation is documented as deliberate. `boxFor`'s own
+ *  `cal = CAL` default was the same hole one level down. A caller names both, and
+ *  `squareOn(cal)` is how it says "the square-on projector for this camera" in one
+ *  expression. */
 export function runPipeline(
-  boxOf: (t: Truth, slot: CaptureSlot) => Box = boxFor,
-  cals: CalMap = CALS,
+  boxOf: (t: Truth, slot: CaptureSlot) => Box,
+  cals: CalMap,
   keep?: (t: Truth, slot: CaptureSlot, box: Box) => boolean,
 ): Run {
   const IN = shots(boxOf, keep);
@@ -345,7 +371,11 @@ export function boxForYawed(t: Truth, slot: CaptureSlot, cal: CameraCal, opts: Y
 }
 
 /** The square-on, depthless projector — `boxFor` with an explicit camera. Named so a
- *  caller reads which of the two it is asking for. */
+ *  caller reads which of the two it is asking for, and the reason `boxFor` needs no
+ *  default: this is what `runPipeline`'s baseline callers pass. It was exported and
+ *  called by nobody for one commit, which is rule 1's shape — plumbing with no
+ *  feature — and the fix was to use it rather than to delete it, because the thing
+ *  it replaces is a defaultable seam. */
 export const squareOn = (cal: CameraCal) => (t: Truth, slot: CaptureSlot) => boxFor(t, slot, cal);
 
 /** The off-square projector, as the callback `runPipeline` takes. */

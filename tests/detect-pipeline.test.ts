@@ -24,7 +24,7 @@ import { footprintForLayout } from '@/lib/footprint';
 import type { Detection } from '@/lib/detection';
 import type { CaptureSlot } from '@/lib/storage';
 import { bboxOfFloorObject, bboxOfWallPanel, inFrame } from './helpers/project';
-import { CAL, CALS, ROOM, TRUTH, nearest, runPipeline } from './helpers/known-room';
+import { CAL, CALS, ROOM, TRUTH, nearest, runPipeline, squareOn } from './helpers/known-room';
 
 // The room, its ten pieces, the projector and the pipeline all live in
 // `tests/helpers/known-room.ts` now — `tests/off-square-cost.test.ts` runs the same
@@ -35,7 +35,7 @@ import { CAL, CALS, ROOM, TRUTH, nearest, runPipeline } from './helpers/known-ro
 
 // ── The run, done once and asserted many times ────────────────────────────────
 
-const { IN, REFINED, VERDICTS, PARTS } = runPipeline();
+const { IN, REFINED, VERDICTS, PARTS } = runPipeline(squareOn(CAL), CALS);
 
 type Row = {
   name: string;

@@ -1076,6 +1076,28 @@ on `fc132b8` (typecheck, lint, build, 2672 passing / 5 expected fail). Thirteen 
 of the band's code, each confirmed to fail a test; two survived the first round and both
 were the trap the fix is about — see the commit.
 
+### Does "Use my photos’ colours" fit the left rail at 1024–1279px?
+
+**Where to click.** Open a photographed room, narrow the window to about 1100px — the
+compact step, where the left rail is `--rail-left-tight` **208px** — and look at the
+button under the Room section's dimensions.
+
+**What wrong looks like.** The label printing through the button's rounded border, or
+running under the rail's right edge and being clipped with no scrollbar and no other
+clue. `.ds-btn` is `white-space: nowrap` with no `overflow` of its own, and the rail is
+`overflow: hidden`, so those are the two failure modes and both are silent.
+
+**Why it is here.** The label was "Use the colours in my photos" — 28 characters, which
+at 12px Nunito is ~168–185px, plus a 13px icon, a 6px gap and 32px of padding: 219–236px
+of content in a 208px rail. Font metrics are not derivable from a test, so the exact
+figure is a browser question, but the direction was not in doubt. It is shortened to 22
+characters AND given its own element with `minWidth: 0` and an ellipsis, which is what
+`.ds-btn`'s own comment prescribes for a button with no room. **The busy label is
+SHORTER, so the idle state is the one to check.**
+
+**Where it rides.** The commit whose subject begins *"Close the last of the audit"* on
+`claude/amazing-dijkstra-d0am9g`, draft PR #148.
+
 ### Pressing Shuffle moves the button out from under the pointer
 
 *Filed by `rails` on 2026-09-05 from a peer's browser measurement during PR #115's review.

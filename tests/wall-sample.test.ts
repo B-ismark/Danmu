@@ -36,7 +36,13 @@ import {
   type CameraCal,
   type WallFrame,
 } from '@/lib/photo-geometry';
-import { footprintForLayout, offsetWall, wallSegments, type Footprint } from '@/lib/footprint';
+import {
+  footprintForLayout,
+  offsetWall,
+  wallOutwardNormal,
+  wallSegments,
+  type Footprint,
+} from '@/lib/footprint';
 import { ALONG, project } from './helpers/project';
 import type { CaptureSlot } from '@/lib/storage';
 
@@ -533,6 +539,29 @@ describe('maskForBoxes', () => {
   });
 });
 
+/** Seeded PRNG, same one as `tests/clearance-field.test.ts` — a sweep that reports a
+ *  number has to report the same one twice. */
+function rng(seed: number) {
+  return () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** The slot directions and the tolerance, restated here ONLY to classify which of
+ *  `slotWallIndices`' two refusals a random quad hit — the function itself returns
+ *  a bare null. Not a second source of truth for the mapping: every assertion about
+ *  what maps where reads the real function. */
+const SLOT_DIR: Record<CaptureSlot, readonly [number, number]> = {
+  n: [0, -1],
+  e: [1, 0],
+  s: [0, 1],
+  w: [-1, 0],
+};
+const MATCH_DOT_TEST = Math.cos((20 * Math.PI) / 180);
+
 /** The room's own rectangle, turned `deg` about the origin. Winding is preserved,
  *  so the outward normals stay outward. */
 function rotated(deg: number): Footprint {
@@ -591,6 +620,24 @@ describe('slotWallIndices — swept across every preset, not sampled', () => {
     expect(slotWallIndices(poly)).toBeNull();
   });
 
+  it('refuses a NEARLY degenerate edge, not only an exactly zero one', () => {
+    // The 1e-4 gap, and the reason this refusal is written out rather than implied.
+    // `wallSegments` skips an edge shorter than 1e-4; `wallOutwardNormal` reports
+    // `[0, 0]` only for an edge of length exactly zero. So a 5e-5 edge has a full
+    // unit normal, maps bijectively, and hands back four indices of which the last
+    // two name the wrong walls — the exact failure the zero-length fixture above
+    // was believed to cover.
+    // A rectangle 4 m wide and 5e-5 m deep: four edges facing four ways, so the
+    // bijection is COMPLETE and every other refusal passes it — while the renderer
+    // paints two walls. That combination is what isolates this check, and the first
+    // fixture written here did not: a short edge parallel to its neighbour claims
+    // the same slot, so it was refused for the duplicate-slot reason and the
+    // mutation survived.
+    const nearlyDegenerate = footprintForLayout('rect', 4, 5e-5);
+    expect(wallSegments(nearlyDegenerate)).toHaveLength(2);
+    expect(slotWallIndices(nearlyDegenerate)).toBeNull();
+  });
+
   it('refuses a triangle', () => {
     const tri: Footprint = [
       [-2, -2],
@@ -623,10 +670,9 @@ describe('slotWallIndices — swept across every preset, not sampled', () => {
 
   it('refuses a room where two walls face the same way', () => {
     // The second of the two refusals, and reachable by a SIMPLE polygon — not just
-    // a self-intersecting curiosity. Found by search: of 500,000 random quads,
-    // 23,045 have two edges claiming one slot and 13,559 of those are
-    // non-self-intersecting. This is one of them, so the branch has a fixture
-    // rather than an argument.
+    // a self-intersecting curiosity. This is one such quad, so the branch has a
+    // fixture rather than an argument; the sweep below is what says how reachable
+    // the case is, and it re-derives that on every run.
     const poly: Footprint = [
       [2.18, 3.91],
       [2.83, 1.63],
@@ -645,6 +691,60 @@ describe('slotWallIndices — swept across every preset, not sampled', () => {
     // …and 10° is inside the tolerance, so the bound is pinned from both sides
     // rather than only from outside.
     expect(slotWallIndices(rotated(10))).toEqual({ n: 0, e: 1, s: 2, w: 3 });
+  });
+
+  it('and how reachable that is, measured here rather than quoted', () => {
+    // The claim this replaces was "of 500,000 random quadrilaterals, 23,045 hit it
+    // and 13,559 of those were simple" — from a throwaway script that no longer
+    // exists, so nobody could re-derive it. `CLAUDE.md` forbids that by name: a
+    // number in shipped source has to name a live artifact. This is the artifact.
+    //
+    // Simplicity is tested by segment intersection rather than assumed, because the
+    // interesting half of the old claim was exactly that half of the hits were
+    // ORDINARY polygons a dragged room could be.
+    const rand = rng(20260909);
+    const cross = (ax: number, az: number, bx: number, bz: number) => ax * bz - az * bx;
+    const segsCross = (p: number[], q: number[], r: number[], t: number[]) => {
+      const d1 = cross(t[0] - r[0], t[1] - r[1], p[0] - r[0], p[1] - r[1]);
+      const d2 = cross(t[0] - r[0], t[1] - r[1], q[0] - r[0], q[1] - r[1]);
+      const d3 = cross(q[0] - p[0], q[1] - p[1], r[0] - p[0], r[1] - p[1]);
+      const d4 = cross(q[0] - p[0], q[1] - p[1], t[0] - p[0], t[1] - p[1]);
+      return d1 * d2 < 0 && d3 * d4 < 0;
+    };
+    const isSimple = (poly: Footprint) =>
+      !segsCross(poly[0], poly[1], poly[2], poly[3]) && !segsCross(poly[1], poly[2], poly[3], poly[0]);
+
+    const TRIALS = 40000;
+    let refused = 0;
+    let simpleRefused = 0;
+    for (let i = 0; i < TRIALS; i += 1) {
+      const poly = Array.from({ length: 4 }, () => [rand() * 8 - 4, rand() * 8 - 4]) as Footprint;
+      if (slotWallIndices(poly) !== null) continue;
+      // Only the two-edges-one-slot refusal is the subject; an edge matching
+      // nothing is the common case and is not what the fixture above is about.
+      const claimed = new Set<CaptureSlot>();
+      let duplicate = false;
+      let unmatched = false;
+      for (let e = 0; e < 4; e += 1) {
+        const [nx, nz] = wallOutwardNormal(poly, e);
+        const slot = SLOT_ORDER.find((sl) => nx * SLOT_DIR[sl][0] + nz * SLOT_DIR[sl][1] > MATCH_DOT_TEST);
+        if (!slot) unmatched = true;
+        else if (claimed.has(slot)) duplicate = true;
+        else claimed.add(slot);
+      }
+      if (duplicate && !unmatched) {
+        refused += 1;
+        if (isSimple(poly)) simpleRefused += 1;
+      }
+    }
+    console.log(
+      `wall map · ${TRIALS} random quads · ${refused} refused for two walls facing one way, ${simpleRefused} of them simple`,
+    );
+    // Floors, not the figures: the point is that both halves are reachable, and a
+    // change that made either unreachable would mean the fixture above had become a
+    // curiosity rather than a case.
+    expect(refused).toBeGreaterThan(0);
+    expect(simpleRefused).toBeGreaterThan(0);
   });
 
   it('accepts a small skew, since a dragged room is rarely exact', () => {

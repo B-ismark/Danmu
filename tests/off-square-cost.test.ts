@@ -35,7 +35,9 @@ import {
   boxFor,
   boxForYawed,
   offSquare,
+  refinedOnly,
   runPipeline,
+  squareOn,
   type Truth,
 } from './helpers/known-room';
 import { inFrame, project } from './helpers/project';
@@ -65,8 +67,8 @@ describe('the off-square projector is the proven one at zero', () => {
   });
 
   it('and the whole pipeline reproduces the baseline through it', () => {
-    const base = runPipeline();
-    const same = runPipeline(offSquare(CAL, { yawRad: 0 }));
+    const base = runPipeline(squareOn(CAL), CALS);
+    const same = runPipeline(offSquare(CAL, { yawRad: 0 }), CALS);
     expect(same.REFINED.length).toBe(base.REFINED.length);
     expect(same.PARTS.length).toBe(base.PARTS.length);
     for (let i = 0; i < base.REFINED.length; i += 1) {
@@ -342,8 +344,13 @@ console.log(
  *  splits it — see the assertion that pins exactly that. */
 const splitDeg = (() => {
   for (let deg = 0; deg <= 20; deg += 0.25) {
-    const r = measure(`probe ${deg}`, deg, (sl) => rad(sl === 'n' || sl === 's' ? deg : -deg), true);
-    if (r.lampRows > 1) return deg;
+    // `refinedOnly`, not `measure`: this counts ROWS, and running `judgeLabels` and
+    // `buildSceneFromRoom` 81 times for a number nobody reads is how a measurement
+    // harness gets slow enough that nobody sweeps wider.
+    const boxOf = (t: Truth, slot: CaptureSlot) =>
+      boxForYawed(t, slot, CAL, { yawRad: rad(slot === 'n' || slot === 's' ? deg : -deg), realDepth: true });
+    const rows = refinedOnly(boxOf, CALS, (t, slot, box) => inFrame(box));
+    if (rows.filter((d) => d.label === 'floor lamp').length > 1) return deg;
   }
   return NaN;
 })();
@@ -475,8 +482,12 @@ describe('the cost, measured', () => {
   it('and the DOMINANT error is already there at yaw 0, once boxes have depth', () => {
     // The control experiment, and the finding that reorders this whole question:
     // hand today's placers the silhouette of a real 3D box rather than a depthless
-    // card and the worst piece is already ~0.42 m out of place and ~79% too wide,
-    // with the camera perfectly square. Every yaw below 10° is smaller than that.
+    // card and, with the camera perfectly square, the worst POSITION error is
+    // ~0.42 m (the sofa) and the worst WIDTH error ~79% (the lamp). Two different
+    // pieces: the sentence here read "the worst piece is already ~0.42 m out and
+    // ~79% too wide", which is no piece at all — the sofa is in fact the BEST case
+    // for width, at 0.0%, as the test below proves. Every yaw below 10° is smaller
+    // than the position figure.
     //
     // Pinned as floors, not as figures — the printed table carries the figures, and
     // pinning those would be pinning today's defect as a requirement.

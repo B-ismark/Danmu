@@ -72,10 +72,14 @@ export function project(slot: CaptureSlot, x: number, y: number, z: number, cal:
 
 /** Turn the CAMERA by `yawRad` in place, expressed as a rotation of the world.
  *
- *  Equivalent because the capture rig puts the camera at the room centre —
- *  `project` derives forward/right from world x/z with no camera offset — so
- *  rotating world points about the vertical axis through the origin is exactly
- *  turning the lens. Doing it this way needs no yaw parameter threaded through
+ *  Equivalent because THIS FUNCTION puts the camera at the world origin — it
+ *  derives forward/right from world x/z with no camera offset — so rotating world
+ *  points about the vertical axis through the origin is exactly turning the lens.
+ *  (The reason first written here was that the capture rig puts the camera at the
+ *  room centre. That is true of the rig and is not what makes this identity hold:
+ *  a reader carrying it into a room whose footprint is NOT centred on the origin —
+ *  which one wall drag produces — would expect this to keep working, and it would
+ *  not.) Doing it this way needs no yaw parameter threaded through
  *  `project` and the three `bboxOf*` helpers, and no new sign convention: the
  *  convention is the one `tests/vanishing-point.test.ts` already uses.
  *
