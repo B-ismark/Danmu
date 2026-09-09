@@ -583,6 +583,34 @@ for on the capture screen (`useSettings.camHeightM`, remembered per person since
 it is a property of the shooter, not the room) and written onto each photo's
 `CapturePose` as it is saved.
 
+**The fourth assumption is the unmeasured one, and it has now been priced.** The rig's
+header names four: camera at the room centre, at a known height, level, and **framing one
+wall straight-on**. Three of those are asked for or solved; the fourth is assumed and
+nothing checks it. `tests/off-square-cost.test.ts` measures what it costs, changing nothing
+in `lib/` — it projects the known room through an off-square camera and hands the boxes to
+today's placers. Two results, both filed in `docs/what-is-still-open.md` § 42:
+
+- **±4° of differential off-square framing is enough to turn one piece of furniture into
+  two.** That is where duplicated detections come from. A *uniform* bias — the same angle
+  on every wall — never splits a cross-slot object at any angle to 20°, because it moves
+  both sightings the same way and they still agree; only per-shot variation separates them.
+  The nightstand pair, which was the case to fear because a merge there deletes a real
+  piece silently, keeps its gap to within 6 mm across the whole sweep — both nightstands
+  sit in one photo, so an off-square camera carries them together.
+- **A larger error was found on the way and it is not about yaw at all.**
+  `placeFloorObject` backprojects the bbox bottom edge, which for a real 3D box is the
+  corner nearest the lens rather than the centre plane — so a floor piece is measured about
+  half its own depth too close, and a square-footprint piece reads far too wide because its
+  silhouette is its diagonal. At a **perfectly square** camera: the sofa is out by 0.4250 m
+  (exactly half its 850 mm depth), the lamp reads 78.7% too wide. Wall and ceiling pieces
+  are untouched, which is the other half of the diagnosis. This was invisible to the whole
+  suite because every fixture was a **depthless card**, so the placer was exactly right
+  about the thing it was being given.
+
+Neither is fixed. The second is larger and independent of the first, so it is the one to
+decide about first — and both are decisions rather than patches, because the only sources
+available touch the trust boundary rule 2 governs.
+
 Which term the assumed values hurt is not uniform, and it is worth knowing before
 tuning any of this: for a **floor-standing** piece the lens cancels out of the size
 (distance scales as 1/k, angular size as k) and only its *position* moves; for a

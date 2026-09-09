@@ -70,7 +70,40 @@ export function project(slot: CaptureSlot, x: number, y: number, z: number, cal:
   return [u, v];
 }
 
-function extent(pts: Array<[number, number]>): Box {
+/** Turn the CAMERA by `yawRad` in place, expressed as a rotation of the world.
+ *
+ *  Equivalent because the capture rig puts the camera at the room centre —
+ *  `project` derives forward/right from world x/z with no camera offset — so
+ *  rotating world points about the vertical axis through the origin is exactly
+ *  turning the lens. Doing it this way needs no yaw parameter threaded through
+ *  `project` and the three `bboxOf*` helpers, and no new sign convention: the
+ *  convention is the one `tests/vanishing-point.test.ts` already uses.
+ *
+ *  **Positive `yawRad` turns the camera toward its own RIGHT — pass the yaw
+ *  through unnegated.** Worked out rather than assumed: `yawedPoint([1, ·, 0], +90°)`
+ *  gives `[0, ·, -1]`, so the world turns from +X toward −Z; slot `n` looks along
+ *  −Z with image-right at +X, so a world turning +X→−Z is a camera turning −Z→+X,
+ *  which is that camera's right.
+ *
+ *  The first version of this comment said to pass `-yaw`, and the caller did. The
+ *  hand-derived assertion in `tests/off-square-cost.test.ts` — turn the lens right
+ *  and the scene moves left — caught it, which is the one check a round-trip
+ *  through this file and `lib/photo-geometry.ts` cannot make
+ *  (see the note at the top of this file). Do not re-derive the direction from
+ *  either implementation; that assertion is the authority. */
+export function yawedPoint(
+  [x, y, z]: [number, number, number],
+  yawRad: number,
+): [number, number, number] {
+  const c = Math.cos(yawRad);
+  const s = Math.sin(yawRad);
+  return [x * c + z * s, y, -x * s + z * c];
+}
+
+/** The bounding box of a set of projected points. Exported so a fixture that
+ *  builds its own corner list — a real-depth box, a rotated one — reduces it the
+ *  same way the three `bboxOf*` helpers do, rather than writing a second min/max. */
+export function extent(pts: Array<[number, number]>): Box {
   const us = pts.map((p) => p[0]);
   const vs = pts.map((p) => p[1]);
   const u0 = Math.min(...us);

@@ -31,8 +31,9 @@ Rows **11, 12, 13 and 19**; the **A.2 / G.2** half of row 14, whose G.3 half shi
 GPU can finish the verdict; and the **wrong-digest** half of row 18, since
 `lib/model-verify.ts` (#116) gates the registry's shape but proving a pin matches the real
 bytes still needs the ~62 MB `pnpm hash:models --verify`. Plus **§ 40** and **§ 41**, both
-filed 2026-09-06 and both DECISIONS. Everything else in the table below is marked done in
-its own row.
+filed 2026-09-06 and both DECISIONS. **And rows 20 and 21, filed 2026-09-09 — both
+MEASURED, neither fixed, and row 20 is the larger of the two by a wide margin.**
+Everything else in the table below is marked done in its own row.
 
 **Row 17 was in the paragraph above until 2026-09-06 and had already shipped** — #130,
 `§ H.10`, selection on the main undo stack. The table row said **BUILT** while this header
@@ -166,6 +167,8 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 17 | **§ H.10** undo / redo covers selection — **RE-ANSWERED 2026-09-06: the MAIN stack. BUILT** | The 2026-09-05 answer here was a separate history, and the user superseded it in their own words: *"in blender, actions and selections are both affectted by undo and redoing so wouldn't it be best to do the same for this platform too?"* So selection rides in the main entry — undoing a move puts back the selection that made it. Two things the earlier note did not have. **Coalescing is not a nicety:** the stack is a ring of `MAX`, so without it clicking around the room 80 times discards every real edit off the far end, and a separate history could not have done that. A run of clicks now replaces one entry, and the first click after an edit always pushes, so an entry holding an edit is never overwritten. **And the staleness hazard has TWO axes, not the one this row named:** part ids, yes — but `selectedWall` is an *index* into `room.footprint`, so it can point past the end. **The reason first written here was wrong and is corrected in #134:** it said "undoing across a layout change leaves a 7 pointing into a four-edge rectangle", which cannot happen — `applySnapshot` restores `snap.room` and validates the index against THAT footprint, and both come out of one `takeSnapshot`, so an index and the polygon it indexes always travel together. The history filter is an honour-system backstop; **the live hazard is upstream and unfixed** — nothing clears `selectedWall` when the footprint changes under it (`lib/store.ts` clears it in three places, none of them a room change), so a stale 7 renders a **"Wall 8" panel in a four-walled room** whose paint button writes `wallColors[7]` and does not throw. Verified by reading `Inspector.tsx:773-774`; **the PATH is verified by nobody** — there is no layout switcher in the studio and `setRoom` rebuilds at the same `layoutId`, so a resize cannot change the edge count. Opening a scene file saved from a differently-shaped room is the one candidate and has never been driven, so no guard is written. Cleared rather than clamped, either way. `lib/history.ts`; 32 tests, boundary cases added in #134 | M | **built, driven, not judged** — a Playwright probe pressed Undo in a real browser on `4cef13a` and COUNTED the steps: six selection clicks cost **1** undo step, four moves cost **5**. The instrument was the shipped control’s own `disabled` state (`canUndo = past.length >= 2`), so nothing was added to shipped code. What is left is the half a probe cannot take — whether a run of clicks *feels* chatty. This cell said "nobody has pressed Ctrl+Z in a browser" after that stopped being true; see `docs/traps.md` under *a document contradicts itself and nothing conflicted* |
 | 18 | **§ 33.2** the on-device detector cannot name the four newest shapes | Needs a 50 MB re-export and a digest re-pin on a Python toolchain. Two things found while mapping it, and **the first is now half closed**: the digest pin had no test of any kind, because every path to it ran through a dynamic `onnxruntime-web` import — `lib/model-verify.ts` + `tests/model-verify.test.ts` (2026-09-05) put the mechanism somewhere a test can address it, so a re-pin is gated against a malformed, mis-prefixed, unpinned or empty registry. It is **not** gated against a pin that is simply the wrong digest: proving a pin matches the real bytes needs the ~62 MB download, and `pnpm hash:models --verify` is still the only command that does it. Still open: nothing exercises `detectLocalAcrossImages`, `load()`, `tilesFor` or `toTensor` | L, and mostly not code | the cloud path already handles them, so this is a completeness item |
 | 19 | **§ MOB** how the app is presented on a phone — **recorded 2026-09-05, deliberately NOT scheduled** | The user's ruling: *"mobile isn't the focus but it doesn't mean we should turn a blind eye to how the platform is presented on there"*, and *"the mobile audit is for later not now"*. So this row exists to stop the work being lost, not to start it. `docs/mobile-ux-audit.md` is the source — nine systemic issues, eight per-flow sections and the author's own priority order, which § MOB keeps rather than re-ranking. Four of its claims were re-derived against `main`; one (**M5**, the Android icon ladder) is recorded with its premise marked **unverified**, because it is the one that would send someone to fix a manifest that may not be broken | varies; M1/M2/M4 are each an afternoon | **nothing blocks it and it blocks nothing** — it is filed, not queued |
+| 20 | **§ 42.1** a floor-standing piece is measured at its NEAR FACE, so its position is short by about half its depth — **at a perfectly square camera** | MEASURED 2026-09-09, `tests/off-square-cost.test.ts`. `placeFloorObject` backprojects the bbox bottom edge onto the floor; for a real 3D box that edge is the corner nearest the camera, not the centre plane. The sofa makes it exact: 850 mm deep, **0.4250 m** of position error. Wardrobe 0.313, plant 0.228, nightstands 0.204/0.214, lamp 0.191 — every floor piece, ratio to half-depth between 1.00 and 1.27. Width is worse for a square footprint, which presents its diagonal: **lamp +78.7%, plant +54.5%**, wardrobe +15%, sofa 0%. Wall and ceiling pieces are untouched (0.0000 m, 0.0%), which is half the diagnosis — a wall panel really is fronto-parallel. **Invisible until now because every fixture was a depthless card**: `bboxOfFloorObject` offsets along the wall axis only, so the harness reported these widths as exact and that was a property of the fixture, not the placer | unknown — needs a DECISION first (see § 42.1; depth is the declared unobservable, but the placer already assigns a category default depth it could account for) | **nothing** — the measurement is on `main`-bound work and needs no further tooling |
+| 21 | **§ 42.2** off-square framing is what creates the duplicate the user reported, and it takes only ±4° | MEASURED 2026-09-09, same file. The cross-slot lamp stops merging at **±4° of DIFFERENTIAL yaw** (per-shot hand variation). A **uniform** bias — the same angle on every wall — never splits it at any angle tested to 20°, because it moves both sightings the same way and they still agree. That common-mode / differential split is the structural result and it is measured, not argued. The feared opposite failure does **not** occur: the two nightstands, 0.55 m apart in the 0.35 m `tight` tier with only 0.20 m of headroom, keep a gap of 0.5133 → 0.5077 m across 0–20°, because both sit in the SAME photo and an off-square camera carries them together | a DECISION: the only source that works on uploads is the wall-parallel vanishing point, and `CLAUDE.md` rule 2 says *"do not re-propose vanishing points for the no-bearing case"*. The argument that this is a different quantity — the magnitude of an angle, not which wall a photo is — is written up in the session plan and has NOT been put to the user as a build proposal | row 20, which is larger and independent: fixing ψ while a floor piece is still decoded at its near face would be treating the smaller term |
 
 **Three that are deliberately not on this list**, so nobody adds them back: the seeder
 putting a 1450 mm TV on a 1.2 m wall in the small L and T (`placeNewPart` has no
@@ -6501,3 +6504,91 @@ because this is where they were found and they would otherwise be lost with the 
   separated only by `title`. `CatalogPanel`'s own comment says the agreement is deliberate, so
   this is a question rather than a defect: a screen-reader user on `/model` hears "Add,
   collapsed" twice.
+
+
+---
+
+## § 42 · Off-square framing, measured — and the bigger thing found on the way
+
+Filed **2026-09-09**. Both halves come from `tests/off-square-cost.test.ts`, which changes
+nothing in `lib/` — it projects the known room through a camera that is not square to the
+wall, hands the boxes to today's unmodified placers, and prints what comes back. The
+fixture and the pipeline moved to `tests/helpers/known-room.ts` to make that possible;
+`tests/detect-pipeline.test.ts`'s printed table came out **byte-identical** afterwards,
+which is what made the extraction safe to make.
+
+**The question asked was about duplicates.** The answer is § 42.2, and it is a clean one.
+But the control experiment run first — the one that had to exist before a yaw sweep could
+mean anything — turned up § 42.1, which is larger, is present at every angle including
+zero, and had been invisible to the suite for as long as the suite has existed.
+
+### § 42.1 · A floor piece is decoded at its near face — DECISION NEEDED
+
+`placeFloorObject` backprojects the bbox's bottom edge onto the floor plane. For a
+fronto-parallel card that edge is the object's centre line; for a real box it is the
+corner **nearest the camera**. So every floor-standing piece is measured about half its
+own depth too close to the lens, and a piece with a square footprint additionally reads
+far too wide, because its silhouette is its diagonal.
+
+Why nobody saw it: `bboxOfFloorObject` (`tests/helpers/project.ts`) builds its corners by
+offsetting along the wall-parallel axis **only**. A 600 mm-deep wardrobe was a flat card,
+so the placer's answer was exactly right about the thing it was given. The zero-error
+baseline in `detect-pipeline.test.ts` is real and is still the most valuable property that
+file has — it just never described furniture with depth.
+
+**What is unknown, and it is a product question rather than a maths one.** Depth is the
+module's declared unobservable: one photo cannot see it, which `lib/photo-geometry.ts`
+says in its header. But the pipeline does not need to *observe* it to account for it —
+`geoRefine` already writes a category default depth into `dimMM[1]`, and the same default
+could correct the near-face bias and the diagonal silhouette. That would make the geometry
+lean on a catalogue default in a way it currently does not, which is exactly the kind of
+trust-boundary change rule 2 exists to govern. Hence a decision, not a patch.
+
+**Does it exist in a commit?** The measurement does, with its mechanism pinned (the sofa's
+0.4250 m against half of 850 mm, plus a ratio band over every floor piece, both shown to
+fail when the mechanism is perturbed). No fix exists anywhere.
+
+### § 42.2 · ψ ≈ 4° is enough to create a duplicate — DECISION NEEDED
+
+The user's original report was duplicated furniture. This is where it comes from, and the
+threshold is low: **±4° of differential off-square framing** splits the cross-slot lamp
+into two rows. Nobody here has measured how far off-square people actually shoot, so
+whether 4° is common is still unknown — the one argument available is that
+`lib/capture.ts`'s "frame it corner to corner" instruction is a manual nulling loop, which
+is an argument and not a measurement.
+
+Two results worth keeping beyond the threshold:
+
+- **A uniform bias is harmless to the merge.** Off-square by the same angle on every wall,
+  both sightings move together and still agree — no split at any angle to 20°. Only
+  per-shot variation separates them. So anything aimed at this must recover the
+  *differential* part; the common part costs position but not duplicates.
+- **The invisible failure does not happen.** The nightstand pair was the case to fear (0.55 m
+  apart, 0.35 m tier, 0.20 m of headroom) because a merge there *deletes* a real piece and
+  leaves no trace. Their gap moves by 6 mm across the whole sweep, because they share a
+  photo. Measured rather than feared, and that is the ordering this file is for.
+
+**What would unblock it:** a decision about the source. Device sensors are out — the design
+review found `deviceorientation`'s Z-X'-Y'' chain is gimbal-locked at `beta ≈ 90°`, which
+is exactly the upright pose the capture rig requires, and a rigid 90°-grid residual
+discards the common mode anyway. The only source that works on an upload is the
+wall-parallel vanishing point, in closed form from quantities `lib/vanishing-point.ts`
+already computes. That brushes the letter of rule 2, and the argument for why it is a
+different quantity (the magnitude and sign of an angle relative to the framed wall, not
+which wall a photo is) has been written down but **not** put to the user as a proposal.
+
+**Order matters:** § 42.1 is larger and independent. Correcting ψ while a floor piece is
+still decoded at its near face would be treating the smaller term first.
+
+### § 42.3 · Two gates that are missing today, found by the same review
+
+Neither needs ψ and neither is fixed:
+
+- **`placeWallObject` has no lateral gate.** `placeCeilingObject` refuses an intersection
+  past the framed wall and explains why; the wall placer never checks the decoded
+  along-wall offset against `wallSpan/2`. A photo whose frame catches a slice of the
+  return wall can therefore pin a picture that is actually on the *adjacent* wall onto the
+  framed one, at a fabricated offset. **A defect today, not only under yaw** — and yaw
+  makes the framing that triggers it more likely, not less.
+- **`placeCeilingObject`'s gate is one-sided** — it bounds wall-normal distance only, so a
+  ceiling point can leave the room sideways.
