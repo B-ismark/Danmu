@@ -13,11 +13,22 @@
 // in `detect-pipeline.test.ts` had to come out BYTE-IDENTICAL afterwards, and every
 // one of its assertions — nine of the ten pieces bounded at 1e-9 — had to pass
 // untouched. No judgement call about whether the move was faithful.
+//
+// That baseline has since moved ONCE, deliberately, and this is the note that says
+// why so nobody reads the paragraph above as still describing the numbers. The
+// floor projector was a depthless CARD, for which a piece's near face and its
+// centre plane are the same plane — which is the one quantity `placeFloorObject`
+// got wrong, so the harness certified it exact and the exactness was a property of
+// the fixture. `boxFor` projects the real shape now: eight corners for a box
+// footprint, tangent rim samples for a round one. The pieces are still exact,
+// except the sofa, whose 850 mm depth differs from the catalogue's 950 mm — and
+// that residual is asserted as half the difference rather than allowed as a
+// tolerance.
 
 import { refineDetections, type CalMap, type RoomDims } from '@/lib/detect-refine';
 import { judgeLabels } from '@/lib/label-repair';
 import { toRecord, type SavedDetection } from '@/lib/detection-record';
-import { buildSceneFromRoom, type Category, type Shape } from '@/lib/scene-spec';
+import { buildSceneFromRoom, isRoundPart, type Category, type Shape } from '@/lib/scene-spec';
 import { anchorFor } from '@/lib/physics';
 import type { CameraCal } from '@/lib/photo-geometry';
 import type { Detection } from '@/lib/detection';
@@ -25,9 +36,10 @@ import type { CaptureSlot, RoomData } from '@/lib/storage';
 import {
   ALONG,
   bboxOfCeilingDisc,
-  bboxOfFloorObject,
   bboxOfWallPanel,
   extent,
+  floorBoxCorners,
+  floorCylinderPoints,
   project,
   yawedPoint,
   type Box,
@@ -82,15 +94,56 @@ export const TRUTH: Truth[] = [
 ];
 
 /** The box a perfect detector would draw around this piece in this slot's photo.
- *  Which projection is used follows from the piece's own anchor — the same table
- *  `geoRefine` reads to choose the inverse. */
+ *  Which projection is used follows from the piece's own anchor and its own
+ *  FOOTPRINT — the same two tables `geoRefine` reads to choose the inverse, so a
+ *  disagreement between them is a real disagreement rather than a fixture artefact.
+ *
+ *  A floor piece is projected as the solid it is: a cylinder when `isRoundPart`
+ *  says its plan is a circle, an eight-corner box otherwise. It used to be a
+ *  depthless rectangle for both, which is why every floor number in
+ *  `tests/detect-pipeline.test.ts` read exact while `placeFloorObject` was
+ *  decoding the near face as the centre. `bboxOfFloorObject` still exists for the
+ *  card-versus-solid control experiment; it is no longer the truth.
+ *
+ *  A WALL piece stays a flat PANEL here, and that is a decision worth stating
+ *  because the obvious reading of the paragraph above is that it should not be. Wall
+ *  pieces have the same defect one anchor over — `placeWallObject` puts a piece's
+ *  centre on the plaster where a TV's BACK goes, so its body is a little nearer the
+ *  lens than the placer thinks and it reads 5 to 23 mm out and a few per cent wide.
+ *
+ *  The difference is that the solid wall case is already measured, with a band and a
+ *  must-be-non-zero floor, in `tests/off-square-cost.test.ts` — which projects wall
+ *  solids through `boxForYawed`'s `realDepth`. So nothing anywhere certifies the
+ *  wall placer as exact on a solid, and this projector's flat panel asks a narrower
+ *  question that is still a real one: given a genuinely flat panel, is the wall
+ *  plane, the mount height and the slot mapping right? That question has an exact
+ *  answer and keeps its 1e-9 bar.
+ *
+ *  Making it a solid instead was tried and reverted deliberately. It moves three
+ *  pieces off exact and into tolerances derived from a defect nobody is fixing in
+ *  this commit, which trades the strongest property this baseline has for a
+ *  restatement of something the file next door already measures. The wall placer is
+ *  the next item in `docs/what-is-still-open.md`, and it should be FIXED rather than
+ *  allowed for. */
 export function boxFor(t: Truth, slot: CaptureSlot, cal: CameraCal): Box {
   const anchor = anchorFor(t.category, t.shape);
   const wM = t.dimMM[0] / 1000;
   const hM = t.dimMM[2] / 1000;
   if (anchor === 'ceiling') return bboxOfCeilingDisc(slot, t.x, t.z, wM, cal, ROOM.height);
-  if (anchor === 'floor') return bboxOfFloorObject(slot, t.x, t.z, wM, hM, cal);
-  return bboxOfWallPanel(slot, t.x, t.y ?? 1.2, t.z, wM, hM, cal);
+  if (anchor !== 'floor') return bboxOfWallPanel(slot, t.x, t.y ?? 1.2, t.z, wM, hM, cal);
+  return extent(floorPoints(t, slot, true).map((p) => project(slot, ...p, cal)));
+}
+
+/** A floor piece's world points, as the solid it is or as the flat card the harness
+ *  used to model it with. One function so `boxFor` and `boxForYawed` cannot drift:
+ *  the yawed builder has to rotate the points before projecting, and the square-on
+ *  one does not, and that is the only difference between them. */
+function floorPoints(t: Truth, slot: CaptureSlot, solid: boolean): Array<[number, number, number]> {
+  const wM = t.dimMM[0] / 1000;
+  const dM = t.dimMM[1] / 1000;
+  const hM = t.dimMM[2] / 1000;
+  if (solid && isRoundPart(t.shape)) return floorCylinderPoints(t.x, t.z, wM, hM);
+  return floorBoxCorners(slot, t.x, t.z, wM, hM, solid ? dM : 0);
 }
 
 export type Shot = { truth: Truth; slot: CaptureSlot; det: Detection };
@@ -256,36 +309,6 @@ export function runPipeline(
 
 // ── The off-square projector ──────────────────────────────────────────────────
 
-/** A piece's world corners. `depthM > 0` gives the REAL box — eight corners — which
- *  is the thing `bboxOfFloorObject` cannot express: it offsets along the wall only,
- *  so a 600 mm-deep wardrobe is a flat card and its silhouette inflation is
- *  invisible to the harness. */
-function floorCorners(
-  slot: CaptureSlot,
-  x: number,
-  z: number,
-  wM: number,
-  hM: number,
-  depthM: number,
-): Array<[number, number, number]> {
-  const [ax, az] = ALONG[slot];
-  // The view axis, perpendicular to the wall-parallel one in the XZ plane.
-  const [nx, nz] = [-az, ax];
-  const out: Array<[number, number, number]> = [];
-  for (const sw of [-1, 1]) {
-    for (const sd of depthM > 0 ? [-1, 1] : [0]) {
-      for (const y of [0, hM]) {
-        out.push([
-          x + ax * sw * (wM / 2) + nx * sd * (depthM / 2),
-          y,
-          z + az * sw * (wM / 2) + nz * sd * (depthM / 2),
-        ]);
-      }
-    }
-  }
-  return out;
-}
-
 /** A wall piece's world corners, `depthM` deep INWARD from the wall plane — a TV
  *  hangs with its back against the plaster, so the truth point is the mount and the
  *  body projects into the room.
@@ -329,7 +352,9 @@ function wallCorners(
 export type YawOptions = {
   /** Camera yaw in radians, positive turning the lens toward its own right. */
   yawRad: number;
-  /** Model floor pieces as real boxes rather than depthless cards. */
+  /** Model floor and wall pieces as the solids they are rather than as depthless
+   *  cards. `boxFor` always does; this option exists so the card-versus-solid
+   *  control experiment still has a card to compare against. */
   realDepth?: boolean;
 };
 
@@ -346,9 +371,11 @@ export type YawOptions = {
  * the sweep. `bboxOfCeilingDisc` takes the yaw itself now, rotating its 720 rim
  * samples, so the circle's tangent silhouette is still exact.
  *
- * At `yawRad: 0` with `realDepth` off this must agree with `boxFor` exactly —
+ * At `yawRad: 0` with `realDepth` ON this must agree with `boxFor` exactly —
  * asserted in `tests/off-square-cost.test.ts`, which is what validates this builder
- * against the proven one rather than trusting that they were written to match.
+ * against the proven one rather than trusting that they were written to match. It
+ * used to be `realDepth` OFF, because `boxFor` was a card too; the assertion moved
+ * with the fixture, which is the point of having it.
  */
 export function boxForYawed(t: Truth, slot: CaptureSlot, cal: CameraCal, opts: YawOptions): Box {
   const anchor = anchorFor(t.category, t.shape);
@@ -361,7 +388,7 @@ export function boxForYawed(t: Truth, slot: CaptureSlot, cal: CameraCal, opts: Y
 
   const corners =
     anchor === 'floor'
-      ? floorCorners(slot, t.x, t.z, wM, hM, opts.realDepth ? dM : 0)
+      ? floorPoints(t, slot, opts.realDepth === true)
       : wallCorners(slot, t.x, t.y ?? 1.2, t.z, wM, hM, opts.realDepth ? dM : 0);
 
   // Turn the camera by rotating the world. NOT negated — see `yawedPoint`, where
@@ -370,8 +397,8 @@ export function boxForYawed(t: Truth, slot: CaptureSlot, cal: CameraCal, opts: Y
   return extent(corners.map((p) => project(slot, ...yawedPoint(p, opts.yawRad), cal)));
 }
 
-/** The square-on, depthless projector — `boxFor` with an explicit camera. Named so a
- *  caller reads which of the two it is asking for, and the reason `boxFor` needs no
+/** The square-on projector — `boxFor` with an explicit camera. Named so a caller
+ *  reads which of the two it is asking for, and the reason `boxFor` needs no
  *  default: this is what `runPipeline`'s baseline callers pass. It was exported and
  *  called by nobody for one commit, which is rule 1's shape — plumbing with no
  *  feature — and the fix was to use it rather than to delete it, because the thing

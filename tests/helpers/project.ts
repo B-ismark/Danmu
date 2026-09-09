@@ -140,6 +140,97 @@ export function bboxOfFloorObject(
   return extent(pts);
 }
 
+/** The eight world corners of a REAL box standing on the floor: width `wM` across
+ *  the slot's wall, `depthM` along its view axis, `hM` tall, centred in plan on
+ *  (x, z).
+ *
+ *  This is the fixture `bboxOfFloorObject` could not be. That one offsets along the
+ *  wall axis only, so a 600 mm-deep wardrobe is a flat card whose near face and
+ *  centre plane are the same thing — which is exactly the quantity
+ *  `placeFloorObject` used to get wrong, so the harness reported it exact and that
+ *  was a property of the fixture rather than of the placer.
+ *
+ *  Corners rather than a bbox, because the yaw sweep has to rotate them before
+ *  projecting; `bboxOfFloorBox` below is the square-on case. `depthM: 0` collapses
+ *  to the same four points `bboxOfFloorObject` uses. */
+export function floorBoxCorners(
+  slot: CaptureSlot,
+  x: number,
+  z: number,
+  wM: number,
+  hM: number,
+  depthM: number,
+): Array<[number, number, number]> {
+  const [ax, az] = ALONG[slot];
+  // The view axis, perpendicular to the wall-parallel one in the XZ plane.
+  const [nx, nz] = [-az, ax];
+  const out: Array<[number, number, number]> = [];
+  for (const sw of [-1, 1]) {
+    for (const sd of depthM > 0 ? [-1, 1] : [0]) {
+      for (const y of [0, hM]) {
+        out.push([
+          x + ax * sw * (wM / 2) + nx * sd * (depthM / 2),
+          y,
+          z + az * sw * (wM / 2) + nz * sd * (depthM / 2),
+        ]);
+      }
+    }
+  }
+  return out;
+}
+
+/** bbox of that real box, square on. */
+export function bboxOfFloorBox(
+  slot: CaptureSlot,
+  x: number,
+  z: number,
+  wM: number,
+  hM: number,
+  depthM: number,
+  cal: CameraCal,
+): Box {
+  return extent(floorBoxCorners(slot, x, z, wM, hM, depthM).map((p) => project(slot, ...p, cal)));
+}
+
+/** Rim samples of a vertical CYLINDER of diameter `diaM` and height `hM` standing
+ *  on the floor, centred in plan on (x, z).
+ *
+ *  Rim samples rather than corners, for the reason `bboxOfCeilingDisc` already
+ *  gives: the silhouette of a circle is its pair of TANGENT lines, and the bounding
+ *  box of the projected bounding SQUARE is wider than that. Getting this wrong
+ *  matters in both directions — a cylinder fed to a box inverse comes back ~55%
+ *  narrow — so the fixture has to be the real shape or neither branch of
+ *  `placeFloorObject` can be trusted.
+ *
+ *  No `slot`: a circle is the same circle from every wall, and only the projection
+ *  is slot-dependent. 720 samples, matching `bboxOfCeilingDisc`. */
+export function floorCylinderPoints(
+  x: number,
+  z: number,
+  diaM: number,
+  hM: number,
+): Array<[number, number, number]> {
+  const r = diaM / 2;
+  const out: Array<[number, number, number]> = [];
+  for (let i = 0; i < 720; i++) {
+    const a = (i / 720) * 2 * Math.PI;
+    for (const y of [0, hM]) out.push([x + r * Math.cos(a), y, z + r * Math.sin(a)]);
+  }
+  return out;
+}
+
+/** bbox of that cylinder, square on. */
+export function bboxOfFloorCylinder(
+  slot: CaptureSlot,
+  x: number,
+  z: number,
+  diaM: number,
+  hM: number,
+  cal: CameraCal,
+): Box {
+  return extent(floorCylinderPoints(x, z, diaM, hM).map((p) => project(slot, ...p, cal)));
+}
+
 /** bbox of a flat panel of width w and height h hung on a wall, centred at world
  *  (x, y, z). Spans the slot's own left-to-right axis, so it is correct on the E/W
  *  walls as well as N/S. */

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { categoriesFittingSize, judgeLabel, judgeLabels, sizeFitsLabel } from '@/lib/label-repair';
 import { placeFloorObject, placeWallObject, type CameraCal } from '@/lib/photo-geometry';
-import { PART_LIBRARY, type Category, type Shape } from '@/lib/scene-spec';
+import { PART_LIBRARY, defaultDepthFor, type Category, type Shape } from '@/lib/scene-spec';
 import { dimRangeFor } from '@/lib/dimension-ranges';
 import type { CalMap, RoomDims } from '@/lib/detect-refine';
 import type { Detection } from '@/lib/detection';
@@ -186,7 +186,9 @@ describe('judgeLabel', () => {
     // pixels that measure 480 x 360 as a hung painting measure 480 x 1680 as
     // something standing on the floor. That is exactly why a repaired word has to
     // be re-measured rather than keeping the numbers taken under the old one.
-    const g = placeFloorObject(WALL_BOX, 'n', ROOM, CAL)!;
+    const g = placeFloorObject(WALL_BOX, 'n', ROOM, CAL, {
+      depthM: defaultDepthFor('bed', 'box') / 1000,
+    })!;
     const v = judgeLabel(det({ category: 'bed', slot: 'n', box: WALL_BOX }), CALS, ROOM);
     expect(v.status).toBe('suspect');
     if (v.status !== 'suspect') return;

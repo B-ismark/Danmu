@@ -59,6 +59,35 @@ backend, no account. The 3D studio *is* the product.
    because choosing examples is exactly how the first version missed them. And
    when something does not fit, **say so — never silently resize it to fit**. A piece taller than the
    ceiling keeps its real height and `lib/clearance.ts` reports it.
+   **An axis a photo cannot see is not an axis the geometry can ignore**, and treating
+   the two as the same thing is what made every scanned floor piece land half its own
+   depth too close to the lens. `placeFloorObject` backprojected the bbox's bottom edge
+   onto the floor and called that the object's centre; that edge is the corner NEAREST
+   the camera, so an 850 mm sofa was decoded 425 mm out — most of a pace — and the width,
+   the lateral offset and the height all rode the same wrong distance, a lamp reading
+   +81% wide level and +132% at 5° of tilt, a nightstand ~130 mm too tall. Depth is
+   genuinely unobservable from one photograph and the module header says so; what it does
+   not need is to be *observed*, only accounted for.
+   So the placer takes the depth as an INPUT, and **which** number it takes is the whole
+   trust boundary: `defaultDepthFor(category, shape)` from the catalogue, never
+   `d.dimMM[1]` from the detector, because `depthM` moves a POSITION and a depth the AI
+   guessed would be an AI-decided placement. The corollary is the half that is easy to
+   miss: `geoRefine` writes that same catalogue number into `dimMM[1]`, so the piece is
+   DRAWN with the depth it was PLACED by — a hint kept for the render beside a default
+   used for the maths leaves the two disagreeing by half their difference, on the one axis
+   the photograph did measure. A round footprint is the good case and worth knowing about:
+   a circle's depth IS its width, so the tangent form recovers it and owes the catalogue
+   nothing.
+   Two lessons beyond the arithmetic. **A fixture that cannot express a defect certifies
+   it** — every floor fixture here was a depthless CARD, for which a piece's near face and
+   its centre plane are the same plane, so the harness reported nine of ten pieces exact
+   to 1e-9 and that was a property of the fixture; the same shape as `polygonCentroid`
+   passing on rectangles, and as a check that cannot fail. And **a clamp may bound an
+   assumption or a measurement, never both with one line**: the obvious single clamp
+   (`near ≤ wallDistance − depth`) let a catalogue depth 100 mm too generous shrink a
+   correctly MEASURED 2.0 m sofa to 1.925 m — an exact size traded for an exact position,
+   an assumption corrupting an observation. The near face is measured and is bounded by
+   the plaster; the centre is measurement plus assumption and gets its own bound.
    **Which wall a photo is, is code's answer now too** (`lib/capture-slots.ts`),
    and it belongs to this rule because a wrong slot is a wrong room:
    `wallDistance` reads n/s at `depth/2` and e/w at `width/2`, so a photo of the

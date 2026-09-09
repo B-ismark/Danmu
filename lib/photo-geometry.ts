@@ -10,10 +10,18 @@
 //     floor plane (y = 0), i.e. a floor homography
 //   · its real width and height — angular size × distance
 //
-// Only depth (front-to-back) is unobservable from one photo; it stays with the
-// category default and clampDims guards it like everything else. The one
-// exception is a CEILING object, where height is unobservable too — a fan seen
-// from below projects as a disc, so its bbox has no thickness in it. See
+// Only depth (front-to-back) is unobservable from one photo, and clampDims guards
+// it like everything else. But unobservable is not the same as irrelevant, and
+// treating the two as the same thing is what put every floor piece half its own
+// depth too close to the lens: the bbox's bottom edge is the corner NEAREST the
+// camera, so a decode that ignores depth decodes the near face and calls it the
+// centre. `placeFloorObject` therefore takes the depth as an INPUT — from the
+// catalogue, never from the detector, because a number the AI guessed would
+// otherwise move a position. A round footprint needs no such input at all: a
+// circle's depth is its width, and the silhouette measures it.
+//
+// The one place height is unobservable too is a CEILING object — a fan seen from
+// below projects as a disc, so its bbox has no thickness in it. See
 // `placeCeilingObject`.
 //
 // World frame matches lib/detection.ts: origin = room-centre floor, +X East,
@@ -407,43 +415,224 @@ export type GeoPlacement = {
   distance: number;
 };
 
+/** What the placer needs to know about a floor piece's PLAN shape: the axis one
+ *  photograph cannot see, plus whether the footprint is a circle.
+ *
+ *  Both come from the catalogue — `defaultDepthFor` and `isRoundPart` — and never
+ *  from the detector. That is rule 2's trust boundary rather than a preference:
+ *  `depthM` moves the decoded POSITION, so taking it from the AI's depth guess
+ *  would be an AI-decided placement. `lib/detect-refine.ts` reads both off the
+ *  same `(category, shape)` pair, so the depth a piece is positioned by and the
+ *  roundness it is inverted as cannot disagree — and it writes that same depth
+ *  into `dimMM[1]`, so the piece is DRAWN with the number it was placed by and
+ *  its near face lands where the photograph actually put it.
+ *
+ *  `depthM: 0` is a depthless card. Nothing in the app produces one — a card is
+ *  not a piece of furniture — but it is what the older fixtures project, and it
+ *  is the case in which every term below collapses to the pre-depth arithmetic.
+ */
+export type FloorFootprint = {
+  /** Front-to-back depth in metres, along the view axis of the framing camera. */
+  depthM: number;
+  /** Circular in plan (`isRoundPart`). A cylinder's silhouette is its TANGENT
+   *  span, not the projection of its bounding box, so it inverts differently —
+   *  and inverting one as a box over-reads its depth and comes back ~55% NARROW,
+   *  which is worse than the error being fixed. */
+  round?: boolean;
+};
+
 /**
- * Floor-standing object: backproject the bbox bottom-centre onto the floor
- * plane, then size from angular extents at that distance.
- * box = [x, y, w, h] normalized 0..1, origin top-left.
+ * Lateral offset, width and height of a BOX footprint, given where its near face
+ * is. Returns the centre's forward distance, not the near face's.
+ *
+ * Each silhouette edge is one of the box's eight corners, and which one is decided
+ * by `zc` — the forward distance after the tilt rotation, which depends on the
+ * corner's HEIGHT as well as which face it is on. `forwardAtHeight` is that
+ * expression, shared with the wall-colour band that first needed it. So the two
+ * extremes over the eight corners are all this needs: an edge whose observed
+ * tangent is positive came from the corner with the smallest `zc`, and a negative
+ * one from the largest. No search, no iteration, and exact — checked to thirteen
+ * digits against a forward-projected box at 0°, ±5° and 12° of tilt.
+ *
+ * At `depthM: 0` and a level lens this is the arithmetic it replaces, to the last
+ * bit. Under tilt it is deliberately NOT, because the old version read the width
+ * off the bbox's own centre column while the edges came from the top corners — a
+ * card 1.6 m wide read 90 mm out at 5°, which is why the tolerance in
+ * `tests/photo-geometry.test.ts` that allowed it could be tightened to nothing.
+ */
+function floorFromBox(
+  box: [number, number, number, number],
+  near: number,
+  depthM: number,
+  cal: CameraCal,
+): { d: number; right: number; widthM: number; heightM: number } | null {
+  const [bx, by, bw] = box;
+  const far = near + depthM;
+  const top = ray(bx + bw / 2, by, cal);
+  if (!(top.fwd > 0)) return null;
+
+  // The topmost row is the NEAR top edge when the piece's top is above the lens
+  // and the FAR one when it is below — and the sign of the top ray tells us which
+  // without knowing the height first. Reading it always at the near face is what
+  // made a nightstand ~130 mm too tall while a wardrobe came out right.
+  const heightM = heightOf(cal) + ((top.up > 0 ? near : far) / top.fwd) * top.up;
+  if (!(heightM > 0)) return null;
+
+  const zc = [near, far].flatMap((f) => [forwardAtHeight(0, f, cal), forwardAtHeight(heightM, f, cal)]);
+  const zMin = Math.min(...zc);
+  const zMax = Math.max(...zc);
+  // Arithmetic protection, and it does NOT fire — said plainly rather than left
+  // looking tested. A negative `zc` would flip the sign of both silhouette edges
+  // and hand back a mirrored piece in silence, so the guard is worth its line; but
+  // swept over nine tilts from −60° to +60°, a dense grid of boxes and four depths
+  // to 12 m, no input reaches it, and deleting it fails nothing. Documented instead
+  // of given a test that would have to pretend.
+  if (!(zMin > 0)) return null;
+
+  const tanL = tanX(bx, cal);
+  const tanR = tanX(bx + bw, cal);
+  const left = tanL < 0 ? tanL * zMin : tanL * zMax;
+  const right = tanR > 0 ? tanR * zMin : tanR * zMax;
+  return { d: near + depthM / 2, right: (left + right) / 2, widthM: right - left, heightM };
+}
+
+/**
+ * The same three answers for a ROUND footprint, where the diameter is recovered
+ * rather than assumed — a circle's depth IS its width, so this branch needs no
+ * catalogue number at all. Worth stating plainly: the two pieces with the worst
+ * width errors under the old model, a floor lamp at +81% and a plant at +54%, are
+ * the two the fix does not have to trust a default for.
+ *
+ * The bbox's edges are the circle's tangent lines, so they give the centre's
+ * azimuth `α` and the half-tangent-angle `β` directly, and the near rim closes it:
+ * `near = m·cos α − ρ` with `ρ = m·sin β`, hence `m = near / (cos α − sin β)`.
+ * Exact at a level lens.
+ *
+ * **The one term here that is approximate, measured rather than assumed.** A
+ * vertical tangent line's image column varies with row, and the row at which the
+ * tangency actually falls is not the bbox's own top row, so under tilt `α` and `β`
+ * are read a little off. Measured at 5°: a plant reads +9.8% (was +24%) and a tall
+ * floor lamp +37% (was +73%) — exact level, roughly twice as good tilted. A
+ * fixed-point refinement was tried and does not converge for a tall thin cylinder,
+ * so it is not shipped on the strength of a guess; the residual is recorded in
+ * `docs/what-is-still-open.md` instead.
+ */
+function floorFromRound(
+  box: [number, number, number, number],
+  near: number,
+  cal: CameraCal,
+): { d: number; right: number; widthM: number; heightM: number } | null {
+  const [bx, by, bw, bh] = box;
+  // Where a tangent line's column is extreme: at the piece's own top when the lens
+  // tilts down, its base when the lens tilts up — whichever end `forwardAtHeight`
+  // makes nearest.
+  const vEdge = tiltOf(cal) > 0 ? by : by + bh;
+  const eL = ray(bx, vEdge, cal);
+  const eR = ray(bx + bw, vEdge, cal);
+  if (!(eL.fwd > 0) || !(eR.fwd > 0)) return null;
+
+  const alpha = (Math.atan2(eR.right, eR.fwd) + Math.atan2(eL.right, eL.fwd)) / 2;
+  const beta = (Math.atan2(eR.right, eR.fwd) - Math.atan2(eL.right, eL.fwd)) / 2;
+  // There is no `beta > 0` guard here, and there was one for a commit. A zero- or
+  // negative-width bbox gives `beta <= 0`, hence `radius <= 0`, hence a width the
+  // shared check at the bottom of `placeFloorObject` already refuses — so the guard
+  // refused nothing that was not refused anyway, and mutation said so: deleting it
+  // failed no test, including the one written for it. The behaviour is pinned in
+  // `tests/photo-geometry.test.ts` where it belongs, on the answer rather than on the
+  // line that was supposed to produce it.
+  //
+  // Not reachable, and the same note as `zMin` above applies. `den` is
+  // `cos α − sin β`, which is ≤ 0 only when the lens is inside the circle — that
+  // needs `α + β ≥ 90°`, i.e. a tangent leaving the frame's own half-angle. The
+  // widest lens this app will accept is 150° from an EXIF focal length and 120° from
+  // the floor-line solve, so `α + β ≤ 75°`. It guards a division, not a behaviour.
+  const den = Math.cos(alpha) - Math.sin(beta);
+  if (!(den > 1e-6)) return null;
+  const m = near / den;
+  const radius = m * Math.sin(beta);
+
+  const top = ray(bx + bw / 2, by, cal);
+  if (!(top.fwd > 0)) return null;
+  const heightM = heightOf(cal) + ((top.up > 0 ? near : near + 2 * radius) / top.fwd) * top.up;
+  if (!(heightM > 0)) return null;
+
+  return { d: m * Math.cos(alpha), right: m * Math.sin(alpha), widthM: 2 * radius, heightM };
+}
+
+/**
+ * Floor-standing object: backproject the bbox's bottom edge onto the floor to find
+ * the piece's NEAR FACE, then solve the silhouette for where its centre is and how
+ * big it is. box = [x, y, w, h] normalized 0..1, origin top-left.
+ *
+ * **The bottom row is the near face, and for as long as this function existed it
+ * was decoded as the centre.** A floor point's image row is a function of its
+ * forward distance ALONE — the lens rotates about its own right axis, so `tanX` is
+ * untouched by tilt and two floor points at the same distance share a row to twelve
+ * digits — which means the lowest row in a silhouette is the closest ground contact
+ * the piece has. For a real box that is the corner nearest the lens; for a
+ * fronto-parallel card it is the centre plane, and the two are the same thing. So
+ * every floor piece was measured about half its own depth too close: an 850 mm sofa
+ * by 425 mm, exactly.
+ *
+ * It was invisible for as long as the suite existed because the FIXTURE was a card
+ * too — `bboxOfFloorObject` offsets along the wall axis only, so a 600 mm wardrobe
+ * was a flat rectangle and the placer was exactly right about the thing it was
+ * given. A 1e-9 baseline that holds because the fixture cannot express the defect
+ * is the same failure as an assertion that cannot fail; `bboxOfFloorBox` and
+ * `bboxOfFloorCylinder` in `tests/helpers/project.ts` are the fixtures that can.
+ *
+ * Every other term rode that same distance, so this is one model rather than a
+ * patch on the position: the forward answer is `near + depth/2`, and width, lateral
+ * offset and height come from `floorFromBox` or `floorFromRound` above.
  */
 export function placeFloorObject(
   box: [number, number, number, number],
   slot: CaptureSlot,
   room: { width: number; depth: number },
   cal: CameraCal,
+  foot: FloorFootprint,
 ): GeoPlacement | null {
   const [bx, by, bw, bh] = box;
-  const uC = bx + bw / 2;
-  const vBottom = by + bh;
   const height = heightOf(cal);
+  const depthM = foot.depthM > 0 ? foot.depthM : 0;
 
   // Where the bottom edge's ray meets the floor plane.
-  const bottom = ray(uC, vBottom, cal);
+  const bottom = ray(bx + bw / 2, by + bh, cal);
   if (bottom.up >= -0.02) return null; // at or above the horizon — not on the floor
-  let t = height / -bottom.up; // along the ray
-  let d = t * bottom.fwd; // forward distance from the camera
-  if (!(d > 0)) return null;
+  let near = (height / -bottom.up) * bottom.fwd;
+  if (!(near > 0)) return null;
 
+  // TWO clamps, against two different walls, because there are now two kinds of
+  // wrong and only one of them is the photograph's fault.
+  //
+  // The NEAR FACE is measured, and a measured face cannot be beyond the plaster —
+  // that is the clamp this function has always had, and it earns its keep on the
+  // lens: an assumed-narrow lens over-reads distance, the clamp pulls it back, and
+  // the width is re-derived with it so the two agree (see the `defaultCal` pair in
+  // `tests/photo-geometry.test.ts`). Unchanged, and it is the only clamp that may
+  // touch a measurement.
   const wallD = wallDistance(slot, room);
-  d = Math.min(Math.max(d, 0.3), wallD);
-  t = d / bottom.fwd; // re-derive after clamping so lateral and width agree
+  near = Math.min(Math.max(near, 0.3), wallD);
 
-  // Both horizontal edges share this row, so they share `t`.
-  const right = t * bottom.right;
-  const widthM = t * (tanX(bx + bw, cal) - tanX(bx, cal));
-
-  // Top of the object, at the same forward distance rather than the same ray
-  // length — a tilted camera sees the top edge along a different ray.
-  const top = ray(uC, by, cal);
-  if (!(top.fwd > 0)) return null;
-  const heightM = height + (d / top.fwd) * top.up;
+  const solved = foot.round
+    ? floorFromRound(box, near, cal)
+    : floorFromBox(box, near, depthM, cal);
+  if (!solved) return null;
+  const { right, widthM, heightM } = solved;
   if (widthM <= 0.01 || heightM <= 0.01) return null;
+
+  // The CENTRE is measurement plus assumption, so it gets its own bound: the
+  // piece's back may reach the wall and no further. Half a round footprint's depth
+  // is its own measured radius; a box's is the catalogue number.
+  //
+  // Keeping these apart is not tidiness. Folding the depth into the first clamp
+  // instead — near ≤ wallD − depth, which is the obvious one line — makes a
+  // catalogue depth 100 mm too generous shrink a MEASURED width: the sofa's 2.0 m
+  // came back 1.925 m, exact position traded for an inexact size, an assumption
+  // corrupting an observation. Measured, not reasoned: that is what the first
+  // version of this did.
+  const half = (foot.round ? widthM : depthM) / 2;
+  const d = Math.min(solved.d, Math.max(0.3, wallD - half));
 
   const { x, z, yaw } = slotToWorld(slot, d, right);
   return {

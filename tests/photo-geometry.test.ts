@@ -13,13 +13,28 @@ import {
   type CameraCal,
 } from '@/lib/photo-geometry';
 import { hfovFromFocal35 } from '@/lib/exif';
-import { bboxOfCeilingDisc, bboxOfFloorObject, bboxOfWallPanel, project } from './helpers/project';
+import {
+  bboxOfCeilingDisc,
+  bboxOfFloorBox,
+  bboxOfFloorCylinder,
+  bboxOfFloorObject,
+  bboxOfWallPanel,
+  project,
+} from './helpers/project';
 
 const ROOM = { width: 6, depth: 4, height: 2.8 };
 /** ~106° hFOV — a phone ultrawide. The only common lens whose frame contains any
  *  ceiling at all from 1.5 m in a 2.8 m room; see `placeCeilingObject`. */
 const WIDE: CameraCal = { k: 2 * Math.tan(((106 / 2) * Math.PI) / 180), aspect: 4 / 3 };
 const CAL: CameraCal = { k: 1.2, aspect: 4 / 3 };
+/** A depthless CARD — the footprint every fixture in this file below projects, and
+ *  the case in which `placeFloorObject`'s depth terms collapse. Not a piece of
+ *  furniture: nothing in the app produces a card, and the solid-footprint round
+ *  trips that prove the placer are in their own describe at the bottom. It is here
+ *  because the hand-computed cases above it were written against a card, and
+ *  changing them to solids would have moved every number they were derived from by
+ *  hand — which is the one property in this file worth keeping. */
+const CARD = { depthM: 0 };
 
 describe('wallDistance', () => {
   it('n/s walls sit at depth/2; e/w at width/2', () => {
@@ -71,7 +86,7 @@ describe('placeFloorObject', () => {
   it('recovers position and size on the N wall side', () => {
     // 1.6m-wide, 0.9m-tall sideboard at (0.8, -1.5), seen from the N camera.
     const box = bboxOfFloorObject('n', 0.8, -1.5, 1.6, 0.9, CAL);
-    const g = placeFloorObject(box, 'n', ROOM, CAL)!;
+    const g = placeFloorObject(box, 'n', ROOM, CAL, CARD)!;
     expect(g.position.x).toBeCloseTo(0.8, 2);
     expect(g.position.z).toBeCloseTo(-1.5, 2);
     expect(g.widthMM).toBeCloseTo(1600, -1);
@@ -81,7 +96,7 @@ describe('placeFloorObject', () => {
 
   it('recovers position via the mirrored S camera', () => {
     const box = bboxOfFloorObject('s', -0.5, 1.2, 0.6, 1.8, CAL);
-    const g = placeFloorObject(box, 's', ROOM, CAL)!;
+    const g = placeFloorObject(box, 's', ROOM, CAL, CARD)!;
     expect(g.position.x).toBeCloseTo(-0.5, 2);
     expect(g.position.z).toBeCloseTo(1.2, 2);
     expect(g.heightMM).toBeCloseTo(1800, -1);
@@ -90,7 +105,7 @@ describe('placeFloorObject', () => {
 
   it('recovers position via the E camera (axes swapped)', () => {
     const box = bboxOfFloorObject('e', 2.0, 0.7, 1.0, 0.5, CAL);
-    const g = placeFloorObject(box, 'e', ROOM, CAL)!;
+    const g = placeFloorObject(box, 'e', ROOM, CAL, CARD)!;
     expect(g.position.x).toBeCloseTo(2.0, 2);
     expect(g.position.z).toBeCloseTo(0.7, 2);
     expect(g.widthMM).toBeCloseTo(1000, -1);
@@ -98,12 +113,12 @@ describe('placeFloorObject', () => {
 
   it('clamps distance to the wall (bbox bottom near the horizon)', () => {
     // Bottom edge barely below centre → naive distance would exceed the room.
-    const g = placeFloorObject([0.45, 0.2, 0.1, 0.33], 'n', ROOM, CAL)!;
+    const g = placeFloorObject([0.45, 0.2, 0.1, 0.33], 'n', ROOM, CAL, CARD)!;
     expect(g.distance).toBeLessThanOrEqual(wallDistance('n', ROOM));
   });
 
   it('returns null when the bottom edge is above the horizon', () => {
-    expect(placeFloorObject([0.4, 0.1, 0.2, 0.3], 'n', ROOM, CAL)).toBeNull();
+    expect(placeFloorObject([0.4, 0.1, 0.2, 0.3], 'n', ROOM, CAL, CARD)).toBeNull();
   });
 });
 
@@ -121,6 +136,209 @@ describe('placeWallObject', () => {
     expect(g.heightMM).toBeCloseTo(700, -1);
   });
 });
+
+// ── A floor piece is a SOLID, and that is what the placer inverts ─────────────
+//
+// The describe below is the proof of the near-face fix, and it is the assertion the
+// suite did not have for as long as the suite existed. Every fixture above this
+// point projects a depthless CARD — a rectangle offset along the wall axis only —
+// for which a piece's near face and its centre plane are the same plane. That is
+// exactly the quantity `placeFloorObject` was getting wrong, so it came back exact
+// and the exactness was a property of the fixture. An 850 mm sofa was decoded
+// 425 mm too close, a nightstand read ~130 mm too tall, and a floor lamp 81% too
+// wide, with every gate green.
+//
+// So the fixtures here project solids: eight corners for a box footprint, tangent
+// rim samples for a round one. The forward model and the inverse are genuinely
+// different code — an extent over projected points versus three closed forms — so
+// this is a round trip that can fail, which `tests/helpers/project.ts`'s own header
+// is careful to say a round trip is not always.
+
+/** The tangent bbox of a vertical cylinder worked out in CLOSED FORM, for a level
+ *  lens: azimuth ± asin(r/m) for the columns, the near rim for the bottom row, and
+ *  the near or far top rim for the top row depending on whether the piece's top is
+ *  above the lens.
+ *
+ *  Beside the sampled projector rather than instead of it, and the pair is the
+ *  point. `bboxOfFloorCylinder` samples 720 rim points, so its bbox is a polygon's
+ *  and lands a micron or so inside the true tangent — small, but it plateaus rather
+ *  than vanishing, and "small" is not a claim about which side of the seam an error
+ *  is on. This says: with no sampling at all, the inverse is exact to twelve
+ *  decimals. That is what lets `tests/detect-pipeline.test.ts` name its round
+ *  allowance after the fixture instead of hoping. */
+function tangentBboxOfCylinder(
+  f: number,
+  lateral: number,
+  diaM: number,
+  hM: number,
+  cal: CameraCal,
+): [number, number, number, number] {
+  const height = cal.height ?? CAM_HEIGHT;
+  const rho = diaM / 2;
+  const m = Math.hypot(f, lateral);
+  const al = Math.atan2(lateral, f);
+  const be = Math.asin(rho / m);
+  const uOf = (t: number) => t / cal.k + 0.5;
+  const vOf = (b: number) => 0.5 - (b * cal.aspect) / cal.k;
+  const uL = uOf(Math.tan(al - be));
+  const uR = uOf(Math.tan(al + be));
+  const vBottom = vOf(-height / (f - rho));
+  const vTop = vOf((hM - height) / (hM > height ? f - rho : f + rho));
+  return [uL, vTop, uR - uL, vBottom - vTop];
+}
+
+describe('placeFloorObject over solids', () => {
+  const TILTS = [0, 5, -5, 12, -12];
+  const cal = (deg: number): CameraCal => ({ k: 1.2, aspect: 4 / 3, tiltRad: (deg * Math.PI) / 180 });
+
+  it('recovers a real box exactly, at every tilt and on every wall', () => {
+    // Position, width AND height, all four at once, because they all rode the same
+    // near-face distance and so were all wrong together. The lateral offsets are
+    // deliberately signed and non-zero: at x = 0 a sign error is invisible, and the
+    // straddling case (the piece across its own view axis) and the off-to-one-side
+    // case take DIFFERENT branches of the corner selection — one reads both edges on
+    // the near face, the other reads one on each.
+    for (const slot of ['n', 's', 'e', 'w'] as const) {
+      for (const deg of TILTS) {
+        for (const lateral of [0, 0.9, -1.1]) {
+          const c = cal(deg);
+          const box = bboxOfFloorBox(slot, ...place(slot, lateral, 1.6), 1.2, 0.95, 0.6, c);
+          const g = placeFloorObject(box, slot, ROOM, c, { depthM: 0.6 })!;
+          const where = `${slot} ${deg}° lat ${lateral}`;
+          const [tx, tz] = place(slot, lateral, 1.6);
+          expect(g.position.x, where).toBeCloseTo(tx, 9);
+          expect(g.position.z, where).toBeCloseTo(tz, 9);
+          expect(g.widthMM, where).toBe(1200);
+          expect(g.heightMM, where).toBe(950);
+        }
+      }
+    }
+  });
+
+  it('recovers a round footprint exactly from its own tangents, with no depth to assume', () => {
+    // The half of this fix that owes the catalogue nothing: a circle's depth IS its
+    // width, so the diameter is measured rather than assumed. `depthM` is passed a
+    // deliberately WRONG number here to prove it — 2 m of depth on a 400 mm plant —
+    // and the answer does not move, because the round branch never reads it.
+    for (const lateral of [0, 1.3, -0.7]) {
+      const c = cal(0);
+      const box = tangentBboxOfCylinder(1.8, lateral, 0.4, 0.9, c);
+      const g = placeFloorObject(box, 'n', ROOM, c, { depthM: 2, round: true })!;
+      expect(g.position.x).toBeCloseTo(lateral, 12);
+      expect(g.position.z).toBeCloseTo(-1.8, 12);
+      expect(g.widthMM).toBe(400);
+      expect(g.heightMM).toBe(900);
+    }
+  });
+
+  it('reads a round footprint as a box only at a cost, which is why the branch exists', () => {
+    // The reason `FloorFootprint.round` is not a nicety. A cylinder's silhouette is
+    // its tangent span, which is NARROWER than the projection of its bounding
+    // square, so a box inverse infers corners that are not on the object and comes
+    // back badly narrow. Measured, so the branch has a number behind it rather than
+    // an argument.
+    const c = cal(0);
+    const box = tangentBboxOfCylinder(1.8, 1.3, 0.4, 0.9, c);
+    const asBox = placeFloorObject(box, 'n', ROOM, c, { depthM: 0.4, round: false })!;
+    expect(asBox.widthMM).toBeLessThan(400 * 0.75);
+  });
+
+  it('is approximate for a round footprint under TILT, and here is how much', () => {
+    // The one term in this fix that is not exact, measured rather than described. A
+    // vertical tangent line's image column varies with the row, and the row at which
+    // the tangency actually falls is not the bbox's own top row, so the azimuths are
+    // read a little off. A 400 mm plant 1.5 m away: +6% of width at 5°, +13% at 12°,
+    // and under 30 mm of position throughout.
+    //
+    // Bounded on BOTH sides. A floor under it, because the day someone makes this
+    // exact the floor is what tells them — a bound that only caps an error cannot
+    // notice it being fixed, and a stale "approximate" note is how a solved problem
+    // stays open.
+    let worstWidth = 0;
+    let worstPos = 0;
+    for (const deg of [5, -5, 12, -12]) {
+      const c = cal(deg);
+      const g = placeFloorObject(bboxOfFloorCylinder('n', 0.5, -1.5, 0.4, 0.9, c), 'n', ROOM, c, {
+        depthM: 0.4,
+        round: true,
+      })!;
+      worstWidth = Math.max(worstWidth, Math.abs(g.widthMM - 400) / 400);
+      worstPos = Math.max(worstPos, Math.hypot(g.position.x - 0.5, g.position.z + 1.5));
+    }
+    expect(worstWidth).toBeGreaterThan(0.02);
+    expect(worstWidth).toBeLessThan(0.2);
+    expect(worstPos).toBeLessThan(0.05);
+  });
+
+  it('refuses a box with no width, on both branches', () => {
+    // Reachable input, so a real assertion: `addManual` on the detect screen hands
+    // over whatever rectangle the user's drag produced, and a press that never moved
+    // is one.
+    //
+    // Asserted on the ANSWER rather than on a guard. The round branch used to carry
+    // its own `beta > 0` refusal and this test was written for it — then mutation
+    // showed that deleting the guard failed nothing, because a zero angular width
+    // gives a zero radius and the shared `widthM <= 0.01` check refuses it either
+    // way. The guard is gone; what the caller needs is still true, and this is where
+    // it is held.
+    const c = cal(0);
+    const flat: [number, number, number, number] = [0.4, 0.5, 0, 0.3];
+    expect(placeFloorObject(flat, 'n', ROOM, c, { depthM: 0.4, round: true })).toBeNull();
+    expect(placeFloorObject(flat, 'n', ROOM, c, { depthM: 0.4 })).toBeNull();
+  });
+
+  it('clamps the assumed depth without touching the measured width', () => {
+    // Two clamps, two jobs, and the second one is why this is asserted. The near
+    // face is MEASURED, so it is bounded by the wall itself. The centre is
+    // measurement plus an assumed depth, so it gets its own bound — the piece's back
+    // may reach the wall and no further.
+    //
+    // Folding the depth into the first clamp instead is the obvious one-liner and it
+    // is wrong: a catalogue depth too generous by 100 mm then shrinks a width that
+    // was measured correctly, trading an exact size for an exact position. That is
+    // an assumption corrupting an observation, and it is what the first draft of
+    // this did — caught here, not reasoned about.
+    const c = cal(0);
+    // A piece hard against the far wall: near face at 3.6, so a 1.0 m depth would put
+    // its back 0.6 m through the plaster of a wall 2 m away.
+    const box = bboxOfFloorBox('n', 0, -1.9, 1.2, 0.95, 0.2, c);
+    const tight = placeFloorObject(box, 'n', ROOM, c, { depthM: 1.0 })!;
+    const loose = placeFloorObject(box, 'n', ROOM, c, { depthM: 0.2 })!;
+    expect(tight.distance).toBeCloseTo(wallDistance('n', ROOM) - 0.5, 9);
+    expect(tight.widthMM).toBe(loose.widthMM);
+
+    // The HEIGHT is a different matter, and this is where it gets said rather than
+    // discovered later. This piece's top is BELOW the lens, so the topmost row of
+    // its silhouette is the FAR top edge — which means recovering its height needs
+    // the far face's distance, which needs the depth. So an assumed depth does reach
+    // the height of a low piece, and a five-times-too-generous one here costs 220 mm.
+    //
+    // That is not a defect to route around: reading it at the near face instead is
+    // what made a nightstand ~130 mm too tall with a depth that was RIGHT. It is a
+    // real term with a real source, and it belongs in
+    // `docs/what-is-still-open.md` beside the sofa's position residual rather than in
+    // a comment claiming the depth does not matter.
+    expect(tight.heightMM).toBeLessThan(loose.heightMM);
+    expect(loose.heightMM).toBe(950);
+  });
+});
+
+/** A truth point given as (lateral, distance from the lens) in the slot's own frame,
+ *  mapped to world x/z. The inverse of `project`'s first switch, and written out
+ *  because a fixture that only ever tests slot `n` cannot see a slot table with two
+ *  rows transposed. */
+function place(slot: 'n' | 's' | 'e' | 'w', lateral: number, forward: number): [number, number] {
+  switch (slot) {
+    case 'n':
+      return [lateral, -forward];
+    case 's':
+      return [-lateral, forward];
+    case 'e':
+      return [forward, lateral];
+    case 'w':
+      return [-forward, -lateral];
+  }
+}
 
 describe('defaultCal', () => {
   it('uses a plausible phone FOV', () => {
@@ -142,23 +360,36 @@ describe('camera tilt', () => {
   it('recovers a centred object exactly when the tilt is known', () => {
     for (const cal of [DOWN_5, UP_5]) {
       const box = bboxOfFloorObject('n', 0, -1.5, 1.6, 0.9, cal);
-      const g = placeFloorObject(box, 'n', ROOM, cal)!;
+      const g = placeFloorObject(box, 'n', ROOM, cal, CARD)!;
       expect(g.position.x).toBeCloseTo(0, 6);
       expect(g.position.z).toBeCloseTo(-1.5, 6);
       expect(g.heightMM).toBeCloseTo(900, -1);
     }
   });
 
-  it('is close, not exact, off to one side — a tilted rectangle images as a trapezoid', () => {
-    // The two rows of the object project at different scales, so its bounding box
-    // is centred on the WIDER row while the decode works from the bottom one.
-    // Nothing can recover that from a bbox alone; the residue is a few per cent,
-    // against the ~20% below for ignoring tilt altogether.
-    for (const cal of [DOWN_5, UP_5]) {
-      const g = placeFloorObject(bboxOfFloorObject('n', 0.8, -1.5, 1.6, 0.9, cal), 'n', ROOM, cal)!;
-      expect(Math.abs(g.position.x - 0.8)).toBeLessThan(0.06);
-      expect(g.position.z).toBeCloseTo(-1.5, 2);
-      expect(Math.abs(g.widthMM - 1600)).toBeLessThan(90);
+  it('is EXACT off to one side too, and the reason it used not to be is written below', () => {
+    // This test used to allow 60 mm of position and 90 mm of width here, under a
+    // stated reason that turned out to be a claim rather than a fact: "the two rows
+    // of the object project at different scales, so its bounding box is centred on
+    // the WIDER row while the decode works from the bottom one — nothing can
+    // recover that from a bbox alone."
+    //
+    // The first half is right and the conclusion is wrong. Which row is wider is not
+    // unknowable: under tilt the lens's forward distance to a point depends on how
+    // HIGH that point is (`forwardAtHeight`), so the bbox's left and right edges come
+    // from the object's top corners at a known distance, not from its bottom ones.
+    // Reading the width at the bottom row's distance is what those tolerances were
+    // allowing for, and `floorFromBox` reads it at the corner's own instead. A
+    // tolerance that could be tightened to nothing is the same defect as an
+    // assertion that cannot fail, so it is nothing now — at four tilts rather than
+    // two, since the residue this replaces grew with the angle.
+    for (const deg of [5, -5, 12, -12]) {
+      const cal: CameraCal = { k: 1.2, aspect: 4 / 3, tiltRad: (deg * Math.PI) / 180 };
+      const g = placeFloorObject(bboxOfFloorObject('n', 0.8, -1.5, 1.6, 0.9, cal), 'n', ROOM, cal, CARD)!;
+      expect(g.position.x, `${deg}°`).toBeCloseTo(0.8, 9);
+      expect(g.position.z, `${deg}°`).toBeCloseTo(-1.5, 9);
+      expect(g.widthMM, `${deg}°`).toBe(1600);
+      expect(g.heightMM, `${deg}°`).toBe(900);
     }
   });
 
@@ -173,8 +404,8 @@ describe('camera tilt', () => {
     const trueZ = -1.4;
     for (const [cal, dir] of [[DOWN_5, 'down'], [UP_5, 'up']] as const) {
       const box = bboxOfFloorObject('n', 0, trueZ, 1.0, 0.9, cal);
-      const naive = placeFloorObject(box, 'n', ROOM, { k: cal.k, aspect: cal.aspect })!;
-      const aware = placeFloorObject(box, 'n', ROOM, cal)!;
+      const naive = placeFloorObject(box, 'n', ROOM, { k: cal.k, aspect: cal.aspect }, CARD)!;
+      const aware = placeFloorObject(box, 'n', ROOM, cal, CARD)!;
       expect(aware.distance).toBeCloseTo(1.4, 6);
       expect(naive.distance).toBeLessThan(wallDistance('n', ROOM)); // not clamped
       const error = (naive.distance - 1.4) / 1.4;
@@ -199,11 +430,11 @@ describe('camera height', () => {
     // This is the ±17% the fixed 1.5 m assumption cost on every measurement.
     const cal: CameraCal = { k: 1.2, aspect: 4 / 3, height: 1.3 };
     const box = bboxOfFloorObject('n', 0, -1.5, 1.6, 0.9, cal);
-    const right = placeFloorObject(box, 'n', ROOM, cal)!;
+    const right = placeFloorObject(box, 'n', ROOM, cal, CARD)!;
     expect(right.position.z).toBeCloseTo(-1.5, 6);
     expect(right.widthMM).toBeCloseTo(1600, -1);
 
-    const assumed = placeFloorObject(box, 'n', ROOM, { k: cal.k, aspect: cal.aspect })!;
+    const assumed = placeFloorObject(box, 'n', ROOM, { k: cal.k, aspect: cal.aspect }, CARD)!;
     const ratio = CAM_HEIGHT / 1.3;
     expect(assumed.distance / right.distance).toBeCloseTo(ratio, 6);
     expect(assumed.widthMM / right.widthMM).toBeCloseTo(ratio, 3);
@@ -238,7 +469,7 @@ describe('heightFromFloorLine', () => {
 describe('calFromHfov', () => {
   it('round-trips a 35 mm-equivalent focal length into a usable calibration', () => {
     const cal = calFromHfov(hfovFromFocal35(26, 4 / 3)!, 4 / 3);
-    const g = placeFloorObject(bboxOfFloorObject('n', 0, -1.2, 1.0, 0.8, cal), 'n', ROOM, cal)!;
+    const g = placeFloorObject(bboxOfFloorObject('n', 0, -1.2, 1.0, 0.8, cal), 'n', ROOM, cal, CARD)!;
     expect(g.position.z).toBeCloseTo(-1.2, 6);
     expect(g.widthMM).toBeCloseTo(1000, -1);
   });
@@ -262,8 +493,8 @@ describe('calFromHfov', () => {
     // wall clamp stays out of it — see below for what happens when it does not.
     const wide = calFromHfov(hfovFromFocal35(13, 4 / 3)!, 4 / 3);
     const box = bboxOfFloorObject('n', 0, -0.9, 1.6, 0.9, wide);
-    const right = placeFloorObject(box, 'n', ROOM, wide)!;
-    const assumed = placeFloorObject(box, 'n', ROOM, defaultCal(4 / 3))!;
+    const right = placeFloorObject(box, 'n', ROOM, wide, CARD)!;
+    const assumed = placeFloorObject(box, 'n', ROOM, defaultCal(4 / 3), CARD)!;
     expect(assumed.distance).toBeLessThan(wallDistance('n', ROOM));
     expect(assumed.widthMM).toBe(right.widthMM);
     expect(assumed.heightMM).toBe(right.heightMM);
@@ -276,8 +507,8 @@ describe('calFromHfov', () => {
     // breaks and the piece comes out small as well as mislocated.
     const wide = calFromHfov(hfovFromFocal35(13, 4 / 3)!, 4 / 3);
     const box = bboxOfFloorObject('n', 0, -1.5, 1.6, 0.9, wide);
-    const right = placeFloorObject(box, 'n', ROOM, wide)!;
-    const assumed = placeFloorObject(box, 'n', ROOM, defaultCal(4 / 3))!;
+    const right = placeFloorObject(box, 'n', ROOM, wide, CARD)!;
+    const assumed = placeFloorObject(box, 'n', ROOM, defaultCal(4 / 3), CARD)!;
     expect(assumed.distance).toBe(wallDistance('n', ROOM));
     expect(assumed.widthMM).toBeLessThan(right.widthMM * 0.7);
   });

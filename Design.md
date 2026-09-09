@@ -597,14 +597,15 @@ today's placers. Two results, both filed in `docs/what-is-still-open.md` § 42:
   The nightstand pair, which was the case to fear because a merge there deletes a real
   piece silently, keeps its gap to within 6 mm across the whole sweep — both nightstands
   sit in one photo, so an off-square camera carries them together.
-- **A larger error was found on the way and it is not about yaw at all.**
-  `placeFloorObject` backprojects the bbox bottom edge, which for a real 3D box is the
-  corner nearest the lens rather than the centre plane — so a floor piece is measured about
-  half its own depth too close, and a square-footprint piece reads far too wide because its
-  silhouette is its diagonal. At a **perfectly square** camera: the sofa is out by 0.4250 m
-  (exactly half its 850 mm depth), the lamp reads 78.7% too wide. This was invisible to the
-  whole suite because every fixture was a **depthless card**, so the placer was exactly
-  right about the thing it was being given.
+- **A larger error was found on the way, it is not about yaw at all, and it is now
+  FIXED.** `placeFloorObject` backprojected the bbox bottom edge, which for a real 3D box
+  is the corner nearest the lens rather than the centre plane — so a floor piece was
+  measured about half its own depth too close, and a square-footprint piece read far too
+  wide because its silhouette is its diagonal. At a **perfectly square** camera: the sofa
+  was out by 0.4250 m (exactly half its 850 mm depth) and the lamp read 78.7% too wide.
+  Invisible to the whole suite because every fixture was a **depthless card**, so the
+  placer was exactly right about the thing it was being given.
+  See § A floor piece is a solid below for what replaced it.
 - **"Wall and ceiling pieces are untouched, which is the other half of the diagnosis" was
   published here and it was a tautology.** `wallCorners` in the fixture took no depth
   parameter, so `realDepth: true` could not move a wall piece at all, and the assertion
@@ -626,9 +627,73 @@ today's placers. Two results, both filed in `docs/what-is-still-open.md` § 42:
   match the same refined row, boxes that had left the frame were counted and then measured
   anyway, and the "median" column was the upper middle.
 
-Neither is fixed. The second is larger and independent of the first, so it is the one to
-decide about first — and both are decisions rather than patches, because the only sources
-available touch the trust boundary rule 2 governs.
+The first is not fixed and is still a decision — see § 42.2 — because the only source that
+works on an upload touches the trust boundary rule 2 governs.
+
+### A floor piece is a SOLID, and that is what the placer inverts
+
+The second is fixed, and it took the whole model rather than a nudge to the position,
+because every other term rode the same wrong distance.
+
+**The one fact it rests on:** a floor point's image row is a function of its forward
+distance ALONE. The lens rotates about its own right axis, so `tanX` is untouched by tilt
+and two floor points at the same distance share a row to twelve digits. So the lowest row
+in a silhouette is the closest ground contact the piece has — its near face — and never its
+centre. Three closed forms follow, no iteration:
+
+- **Forward** — `near + depth/2`.
+- **Height** — the topmost row is the near top edge when the piece's top is ABOVE the lens
+  and the far one when it is below, and the sign of the top ray says which. Reading it
+  always at the near face is why a nightstand came back ~130 mm too tall while a wardrobe
+  came out right: a height error nobody had measured, because the printed baseline had no
+  height column. It has one now.
+- **Width and lateral offset** — each silhouette edge is a corner of the box, and which
+  corner is decided by the tilt-rotated forward distance `forwardAtHeight`, which depends on
+  the corner's HEIGHT as well as its face. That is the term that made a `tests/photo-geometry.test.ts`
+  tolerance necessary — 60 mm of position and 90 mm of width on a tilted card, under a
+  stated reason ("nothing can recover that from a bbox alone") that was a claim rather than
+  a fact. Both are exact now, at four tilts instead of two.
+
+**A ROUND footprint inverts differently, and owes the catalogue nothing.** A cylinder's
+silhouette is its pair of tangent lines, not the projection of its bounding square, so a box
+inverse infers corners that are not on the object and comes back ~55% NARROW — worse than
+the error being fixed. The tangent form solves it in closed form instead, and a circle's
+depth IS its width, so the diameter is measured rather than assumed. That is the good half of
+the ordering: the two pieces that were worst on width, a floor lamp at +81% and a plant at
++54%, are the two the fix does not have to trust a default for.
+
+**Where the depth comes from, and why it is not the detector's.** `defaultDepthFor(category,
+shape)` — code-owned, narrowed to the shape's own range. `depthM` moves the decoded
+*position*, so a depth the AI guessed would be an AI-decided placement, which is exactly what
+rule 2 exists to prevent. `geoRefine` writes the same number into `dimMM[1]`, so a floor
+piece is DRAWN with the depth it was placed by and its near face lands where the photograph
+put it; a hint kept for the render beside a default used for the maths would leave the two
+disagreeing by half their difference, on the one axis the photo did measure.
+
+**What is left, measured rather than described.** In the known room every piece is now within
+a millimetre except three, and the ordering has reversed:
+
+| what | how much | why |
+|---|---|---|
+| the ceiling fan | 0.1136 m | its own documented allowance — a disc spanning a range of distances, read at one row. Now the LARGEST error at zero yaw |
+| the three wall pieces | 5–23 mm, 1.6–3.5% | `placeWallObject` puts a piece's centre on the plaster where its BACK goes — the same near-face mistake one anchor over, at one to two orders less because a TV is 80 mm deep and a sofa 850. Filed, not fixed |
+| the sofa | exactly 0.0500 m | half the gap between its real 850 mm depth and the catalogue's 950. Asserted as that figure, not allowed as a tolerance |
+| a round footprint under tilt | +6% of width at 5°, +13% at 12° | the one approximate term: a vertical tangent line's image column varies with the row, and the row where tangency falls is not the bbox's own top row. Exact at a level lens |
+
+**Two clamps now, against two different walls, and keeping them apart is not tidiness.** The
+near face is measured, so it is bounded by the plaster — that is the clamp this function
+always had, and it earns its keep on the lens, pulling an assumed-narrow decode back and
+re-deriving the width with it. The centre is measurement plus assumption, so it gets its own
+bound: the piece's back may reach the wall and no further. Folding the depth into the first
+instead is the obvious one-liner and it shrank a MEASURED 2.0 m sofa to 1.925 m — an
+assumption corrupting an observation. Caught by measuring, not by reasoning.
+
+**And the fixture had to move first, which is the part worth carrying forward.** A 1e-9
+baseline that holds because the fixture cannot express the defect is the same thing as an
+assertion that cannot fail. `tests/helpers/project.ts` projects solids now — eight corners
+for a box footprint, tangent rim samples for a round one — and the exactness that remains is
+a statement about the placer. Nine of ten pieces still read exact; the printed table is the
+record, and it now carries a height column too.
 
 Which term the assumed values hurt is not uniform, and it is worth knowing before
 tuning any of this: for a **floor-standing** piece the lens cancels out of the size

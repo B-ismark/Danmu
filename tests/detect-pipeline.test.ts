@@ -21,6 +21,7 @@ import { describe, expect, it } from 'vitest';
 import { mergeDistanceFor, refineDetections } from '@/lib/detect-refine';
 import { footFromPart, footInsidePoly } from '@/lib/geometry';
 import { footprintForLayout } from '@/lib/footprint';
+import { defaultDepthFor } from '@/lib/scene-spec';
 import type { Detection } from '@/lib/detection';
 import type { CaptureSlot } from '@/lib/storage';
 import { bboxOfFloorObject, bboxOfWallPanel, inFrame } from './helpers/project';
@@ -43,6 +44,12 @@ type Row = {
   found: boolean;
   posErrM: number;
   widthErrMM: number;
+  /** Signed height error in mm. Added with the near-face fix, because height was
+   *  one of the three things riding the wrong distance and a column nobody printed
+   *  is a measurement nobody has. A piece whose top is BELOW the lens images its FAR
+   *  top edge, so its height was read at the near face and came back tall — the
+   *  nightstands by ~130 mm, with every gate green. */
+  heightErrMM: number;
   verdict: string;
   scenePosErrM: number;
 };
@@ -59,7 +66,16 @@ const REPORT: Row[] = TRUTH.map((t) => {
     ),
   );
   if (!hit) {
-    return { name: t.name, label: t.label, found: false, posErrM: NaN, widthErrMM: NaN, verdict: 'LOST', scenePosErrM: NaN };
+    return {
+      name: t.name,
+      label: t.label,
+      found: false,
+      posErrM: NaN,
+      widthErrMM: NaN,
+      heightErrMM: NaN,
+      verdict: 'LOST',
+      scenePosErrM: NaN,
+    };
   }
   const d = REFINED[hit.i];
   return {
@@ -68,10 +84,36 @@ const REPORT: Row[] = TRUTH.map((t) => {
     found: true,
     posErrM: Math.hypot(hit.x - t.x, hit.z - t.z),
     widthErrMM: (d.dimMM?.[0] ?? 0) - t.dimMM[0],
+    heightErrMM: (d.dimMM?.[2] ?? 0) - t.dimMM[2],
     verdict: VERDICTS[hit.i].status,
     scenePosErrM: part ? Math.hypot(part.x - t.x, part.z - t.z) : NaN,
   };
 });
+
+/** Half the difference between the sofa's real depth and the depth
+ *  `placeFloorObject` has to assume for it — the one residual left in this room
+ *  once a floor piece is decoded at its centre instead of its near face.
+ *
+ *  Read from the catalogue rather than typed, so a change to either number moves
+ *  the expectation with it instead of turning this file red for the wrong reason. */
+const SOFA_DEPTH_GAP_M =
+  Math.abs(defaultDepthFor('sofa', 'sofa') - TRUTH.find((t) => t.name === 'sofa')!.dimMM[1]) / 2000;
+
+/** How far the ROUND fixture's own discretisation can move an answer.
+ *
+ *  `floorCylinderPoints` samples a circle at 720 rim points, so the extreme sample
+ *  sits a little short of the true tangent and the bbox it builds is a polygon's,
+ *  not a circle's. Measured: the plant lands 8.8e-7 m out at 720 samples and 1.4e-7
+ *  at 1440, so it shrinks with the sample count — and `tests/photo-geometry.test.ts`
+ *  round-trips the same inverse against an ANALYTIC tangent bbox, where it is exact
+ *  to 1e-15 on position, width and height alike. So this is the fixture's number
+ *  and not the placer's, which is the distinction worth having an assertion for
+ *  rather than a sentence.
+ *
+ *  Not driven to zero by raising the count: 31,000 samples would be needed, and the
+ *  off-square sweep builds these boxes eighty-one times. 1e-5 m is four orders below
+ *  anything the app can display and two above what is measured here. */
+const ROUND_RIM_M = 1e-5;
 
 // ── What each piece is allowed to be off by ───────────────────────────────────
 //
@@ -79,12 +121,42 @@ const REPORT: Row[] = TRUTH.map((t) => {
 // is deterministic arithmetic, so a floor or wall piece coming back even a
 // millimetre out is a defect rather than noise. Keeping the bar at zero is the whole
 // value of this file: the day one of these numbers moves, something changed.
+//
+// **What that bar means changed once, and this is the note that says so.** It used
+// to hold against a fixture that projected floor pieces as depthless CARDS, for
+// which a piece's near face and its centre plane are the same plane — the one
+// quantity `placeFloorObject` was getting wrong. So every floor row read 0.0000 and
+// that was a property of the fixture rather than of the placer, which is the same
+// defect as an assertion that cannot fail. `boxFor` projects solids now: eight
+// corners for a box footprint, tangent rim samples for a round one. Nine of the ten
+// pieces are still exact, and now that is a statement about the code.
 const ALLOW: Record<string, { posM: number; widthFrac: number; why: string }> = {
   fan: {
     posM: 0.12,
     widthFrac: 0.03,
     why: 'placeCeilingObject reads one bbox row for a plate that spans a range of distances — see its note on why the centre row and not the top',
   },
+  sofa: {
+    // DERIVED, not fitted, and it is the whole story of the near-face fix. Every
+    // floor piece is now decoded at its centre, which takes a depth, and the depth
+    // comes from the catalogue because a photograph cannot see it. This sofa is
+    // 850 mm deep and the catalogue says 950, so its centre lands exactly half that
+    // 100 mm gap too far back. Nothing else about it moves: its width is exact,
+    // because it straddles its own view axis and both silhouette edges therefore
+    // sit on the near face, where the assumed depth cannot reach them.
+    //
+    // Half of a difference is a figure, so it is asserted as one rather than
+    // allowed as a slack — see the `it` below that pins it to nine decimals. This
+    // row exists only so the sweep's message names the reason.
+    posM: SOFA_DEPTH_GAP_M + 1e-9,
+    widthFrac: 1e-9,
+    why: 'exactly half the gap between its real 850 mm depth and the catalogue default the placer must assume — see the assertion below',
+  },
+  // The two round pieces, allowed the FIXTURE's rim polygon and nothing else. See
+  // ROUND_RIM_M: the inverse itself is exact to 1e-15 against an analytic tangent
+  // bbox, so what is being allowed here is 720 sample points, not a model error.
+  plant: { posM: ROUND_RIM_M, widthFrac: ROUND_RIM_M, why: "the round fixture's 720-point rim polygon, not the placer — see ROUND_RIM_M" },
+  lamp: { posM: ROUND_RIM_M, widthFrac: ROUND_RIM_M, why: "the round fixture's 720-point rim polygon, not the placer — see ROUND_RIM_M" },
 };
 const EXACT = { posM: 1e-9, widthFrac: 1e-9 };
 const allowanceFor = (name: string) => ALLOW[name] ?? EXACT;
@@ -111,7 +183,7 @@ describe('detection pipeline over a known room', () => {
       `\ndetect pipeline · in=${IN.length} refined=${REFINED.length} parts=${PARTS.length} truth=${TRUTH.length}`,
       ...REPORT.map(
         (r) =>
-          `  ${r.name.padEnd(14)} ${r.found ? 'ok  ' : 'LOST'}  pos ${fmt(r.posErrM)} m  dW ${String(Math.round(r.widthErrMM)).padStart(5)} mm  ${r.verdict.padEnd(10)} scene ${fmt(r.scenePosErrM)} m`,
+          `  ${r.name.padEnd(14)} ${r.found ? 'ok  ' : 'LOST'}  pos ${fmt(r.posErrM)} m  dW ${String(Math.round(r.widthErrMM)).padStart(5)} mm  dH ${String(Math.round(r.heightErrMM)).padStart(5)} mm  ${r.verdict.padEnd(10)} scene ${fmt(r.scenePosErrM)} m`,
       ),
     ].join('\n'),
   );
@@ -158,6 +230,64 @@ describe('detection pipeline over a known room', () => {
       expect(frac, `${r.name}: ${allowanceFor(r.name).why ?? 'must be exact'}`).toBeLessThanOrEqual(
         allowanceFor(r.name).widthFrac,
       );
+    }
+  });
+
+  it('measures every piece at the HEIGHT it actually is', () => {
+    // The column that did not exist until the near-face fix, and the reason it now
+    // does: height rode the same wrong distance as position and width. A piece whose
+    // top is BELOW the lens images its FAR top edge, so reading it at the near face
+    // made both nightstands ~130 mm too tall and the sofa ~150 mm, with every gate
+    // in this file green — a printed table with no height column in it, which is the
+    // failure this repo keeps finding rather than a new one.
+    for (const r of REPORT) {
+      if (r.name === 'sofa') continue;
+      expect(Math.abs(r.heightErrMM), `${r.name}: must be exact`).toBeLessThanOrEqual(1);
+    }
+
+    // The sofa again, and for the same single reason: recovering the height of a low
+    // piece needs its FAR face, so the depth it cannot see reaches the height too.
+    // 950 mm assumed against 850 real puts the far face 100 mm too far back, and the
+    // same angular drop over a longer distance reads as less height. Signed, because
+    // "too short" is the direction the mechanism predicts and a bound on the
+    // magnitude alone would pass if it went the other way.
+    const sofa = REPORT.find((r) => r.name === 'sofa')!;
+    expect(sofa.heightErrMM).toBeLessThan(0);
+    expect(sofa.heightErrMM).toBeGreaterThan(-30);
+  });
+
+  it('and the one residual left is exactly half a depth it cannot see', () => {
+    // The near-face fix in one assertion. A floor piece is decoded at its centre
+    // now, which takes a depth, and a photograph cannot see depth — so the placer
+    // reads the catalogue's, which for this sofa is 950 mm against its real 850.
+    // Half that gap, 0.0500 m, is the whole error. Not a tolerance: a figure, to
+    // nine decimals, so it fails if the mechanism changes and not merely if the
+    // number grows.
+    //
+    // What this replaces is worth remembering: the same sofa was 0.4250 m out —
+    // exactly half its OWN 850 mm depth — because the bbox's bottom edge is its
+    // near face and the placer called that the centre.
+    const sofa = REPORT.find((r) => r.name === 'sofa')!;
+    expect(sofa.posErrM).toBeCloseTo(SOFA_DEPTH_GAP_M, 9);
+    expect(SOFA_DEPTH_GAP_M).toBeCloseTo(0.05, 9);
+
+    // And it is the only piece that owes anything to a catalogue number. Three of
+    // the six floor pieces are exact outright, because for those the catalogue depth
+    // IS their real depth.
+    for (const name of ['wardrobe', 'nightstand-L', 'nightstand-R']) {
+      expect(REPORT.find((r) => r.name === name)!.posErrM, `${name} is exact`).toBeLessThanOrEqual(1e-9);
+    }
+
+    // The other two are round, and that is the half worth asserting rather than
+    // stating: a circle's depth IS its width, so the placer measures it and owes the
+    // catalogue nothing at all. It is why the two pieces that used to be worst on
+    // width — a floor lamp at +81%, a plant at +54% — are now the two that need no
+    // assumed number. What is left is the fixture's rim polygon, four orders below
+    // a millimetre.
+    for (const name of ['plant', 'lamp']) {
+      const r = REPORT.find((x) => x.name === name)!;
+      expect(r.posErrM, `${name} owes the catalogue nothing`).toBeLessThan(ROUND_RIM_M);
+      expect(Math.abs(r.widthErrMM), `${name} width`).toBeLessThan(1);
     }
   });
 

@@ -1098,6 +1098,37 @@ SHORTER, so the idle state is the one to check.**
 **Where it rides.** The commit whose subject begins *"Close the last of the audit"* on
 `claude/amazing-dijkstra-d0am9g`, draft PR #148.
 
+### Scanned furniture should now stand AWAY from the wall by half its own depth
+
+**Where to click.** Photograph or upload a room with a detectable floor piece against a
+wall — a wardrobe, a sofa, a chest of drawers — and run the detect screen, then open the
+3D tab and the 2D plan. Look at the gap between the piece's back and the plaster.
+
+**What wrong looks like.** The piece pressed flat into the wall with its back plane
+through the plaster, or standing a visible hand's width too far out into the room. Also
+worth a look on the 2D plan, where a wrong wall standoff reads as a stripe of floor behind
+the piece that is not there in the photograph.
+
+**Why it is here.** `placeFloorObject` used to decode the bbox's bottom edge as the
+piece's CENTRE. That edge is its near face, so every floor piece landed about half its own
+depth too close to the lens — a 850 mm sofa by 425 mm, which is most of a pace. It decodes
+the centre now, so a piece's back should sit where the wall is, and its front should sit
+half a depth into the room. The suite proves the arithmetic exactly against a projected
+solid; what it cannot see is whether the scene then LOOKS right against the photograph it
+came from, and there is a second mover downstream — `snapToWall` with `wallStandoff`, which
+also nudges a piece toward the plaster and could now be double-counting or fighting it.
+
+**One more thing to check while you are there.** Low pieces should have stopped reading
+tall. A nightstand or a coffee table was coming back ~130 mm too tall, because the top row
+of a piece whose top is BELOW the lens images its far top edge and the height was being
+read at the near one. Compare a nightstand's height against the bed beside it.
+
+**Where it rides.** The commit whose subject begins *"A floor piece is a solid"* on
+`claude/amazing-dijkstra-d0am9g`, draft PR #148. Gates on it: typecheck, lint, build clean
+of `ESLint: Invalid Options`, and 147 test files / 2712 passing / 5 expected fail — with 38
+over `tests/photo-geometry.test.ts` and 14 over `tests/detect-pipeline.test.ts`, whose
+printed baseline table is the record of what changed.
+
 ### Pressing Shuffle moves the button out from under the pointer
 
 *Filed by `rails` on 2026-09-05 from a peer's browser measurement during PR #115's review.

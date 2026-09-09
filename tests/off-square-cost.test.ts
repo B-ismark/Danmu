@@ -41,6 +41,7 @@ import {
   type Truth,
 } from './helpers/known-room';
 import { inFrame, project } from './helpers/project';
+import { defaultDepthFor } from '@/lib/scene-spec';
 import { anchorFor } from '@/lib/physics';
 import type { CaptureSlot } from '@/lib/storage';
 
@@ -51,14 +52,27 @@ const fmt = (n: number) => (Number.isNaN(n) ? '  --  ' : n.toFixed(4).padStart(7
 // ── First, is the new projector the same projector? ───────────────────────────
 
 describe('the off-square projector is the proven one at zero', () => {
-  it('agrees with boxFor exactly at yaw 0 with no depth', () => {
+  it('agrees with boxFor exactly at yaw 0, per anchor', () => {
     // This is what validates a freshly written corner builder against the three
     // `bboxOf*` helpers that already have a suite, rather than trusting that the
     // two were written to match.
+    //
+    // It used to compare against `realDepth: false` for everything, because
+    // `boxFor` was a depthless card for everything. `boxFor` projects FLOOR pieces
+    // as solids now — a card cannot express the near-face error and so certified it
+    // as exact — while a wall piece stays a flat panel there on purpose (see
+    // `boxFor`'s own note: the solid wall case is measured in this file instead, so
+    // that the baseline's flat-panel question keeps an exact answer).
+    //
+    // Hence per anchor rather than one flag. The alternative is a single flag and a
+    // fixture that disagrees with the baseline on three pieces, which is how a
+    // harness starts reporting a difference between two of its own builders as a
+    // finding about the code.
     for (const t of TRUTH) {
+      const solid = anchorFor(t.category, t.shape) === 'floor';
       for (const slot of t.slots) {
         const a = boxFor(t, slot, CAL);
-        const b = boxForYawed(t, slot, CAL, { yawRad: 0 });
+        const b = boxForYawed(t, slot, CAL, { yawRad: 0, realDepth: solid });
         for (let i = 0; i < 4; i += 1) {
           expect(b[i], `${t.name} ${slot} component ${i}`).toBeCloseTo(a[i], 12);
         }
@@ -68,7 +82,10 @@ describe('the off-square projector is the proven one at zero', () => {
 
   it('and the whole pipeline reproduces the baseline through it', () => {
     const base = runPipeline(squareOn(CAL), CALS);
-    const same = runPipeline(offSquare(CAL, { yawRad: 0 }), CALS);
+    const same = runPipeline(
+      (tr, slot) => boxForYawed(tr, slot, CAL, { yawRad: 0, realDepth: anchorFor(tr.category, tr.shape) === 'floor' }),
+      CALS,
+    );
     expect(same.REFINED.length).toBe(base.REFINED.length);
     expect(same.PARTS.length).toBe(base.PARTS.length);
     for (let i = 0; i < base.REFINED.length; i += 1) {
@@ -119,22 +136,29 @@ describe('which way a turned camera moves the picture', () => {
 
 // ── The control: what the harness cannot currently see ────────────────────────
 
-describe('silhouette inflation, live at yaw 0 today', () => {
-  const rows = TRUTH.filter((t) => anchorFor(t.category, t.shape) === 'floor').flatMap((t) =>
-    t.slots.map((slot) => {
-      const card = boxForYawed(t, slot, CAL, { yawRad: 0, realDepth: false });
-      const box = boxForYawed(t, slot, CAL, { yawRad: 0, realDepth: true });
-      return {
-        name: t.name,
-        slot,
-        depthMM: t.dimMM[1],
-        widthMM: t.dimMM[0],
-        cardU: card[2],
-        boxU: box[2],
-        inflate: box[2] / card[2] - 1,
-      };
-    }),
-  );
+/** How much wider a real solid images than the depthless card the fixtures used to
+ *  project, per floor piece per photo. At module scope because two describes read
+ *  it: this one prints it, and the width test far below uses it as its PREMISE —
+ *  "the decode carries none of this inflation" is worth nothing unless the
+ *  inflation is still there to carry. */
+const INFLATE = TRUTH.filter((t) => anchorFor(t.category, t.shape) === 'floor').flatMap((t) =>
+  t.slots.map((slot) => {
+    const card = boxForYawed(t, slot, CAL, { yawRad: 0, realDepth: false });
+    const box = boxForYawed(t, slot, CAL, { yawRad: 0, realDepth: true });
+    return {
+      name: t.name,
+      slot,
+      depthMM: t.dimMM[1],
+      widthMM: t.dimMM[0],
+      cardU: card[2],
+      boxU: box[2],
+      inflate: box[2] / card[2] - 1,
+    };
+  }),
+);
+
+describe('silhouette inflation, still in the picture and no longer in the answer', () => {
+  const rows = INFLATE;
 
   // The measurement IS the output — see `tests/toolchain.test.ts` on why
   // `--disableConsoleIntercept` is load-bearing, and `CLAUDE.md` on gates whose
@@ -301,7 +325,10 @@ console.log(
 
 /** Per-piece error for one camera, so a headline number can name its own worst case. */
 function perPiece(yawRad: number, realDepth: boolean) {
-  const boxOf = (t: Truth, slot: CaptureSlot) => boxForYawed(t, slot, CAL, { yawRad, realDepth });
+  // Through `offSquare` rather than an inline closure: it is the same expression,
+  // and a helper this file stopped calling is plumbing with no feature — which is
+  // what `squareOn` next to it already carries a note about having been.
+  const boxOf = offSquare(CAL, { yawRad, realDepth });
   const { REFINED } = runPipeline(boxOf, CALS, (t, slot, box) => inFrame(box));
   const pool = REFINED.filter((d) => d.position).map((d) => ({
     label: d.label,
@@ -479,44 +506,90 @@ describe('the cost, measured', () => {
     }
   });
 
-  it('and the DOMINANT error is already there at yaw 0, once boxes have depth', () => {
-    // The control experiment, and the finding that reorders this whole question:
-    // hand today's placers the silhouette of a real 3D box rather than a depthless
-    // card and, with the camera perfectly square, the worst POSITION error is
-    // ~0.42 m (the sofa) and the worst WIDTH error ~79% (the lamp). Two different
-    // pieces: the sentence here read "the worst piece is already ~0.42 m out and
-    // ~79% too wide", which is no piece at all — the sofa is in fact the BEST case
-    // for width, at 0.0%, as the test below proves. Every yaw below 10° is smaller
-    // than the position figure.
+  it('the near-face error is GONE at yaw 0, and what is left is named', () => {
+    // **This test used to assert the opposite, and the inversion is the deliverable.**
+    // It read: "hand today's placers the silhouette of a real 3D box rather than a
+    // depthless card and, with the camera perfectly square, the worst POSITION error
+    // is ~0.42 m (the sofa) and the worst WIDTH error ~79% (the lamp)" — pinned as
+    // FLOORS, deliberately, "so a change that quietly makes the card and the box
+    // agree fails rather than passes".
     //
-    // Pinned as floors, not as figures — the printed table carries the figures, and
-    // pinning those would be pinning today's defect as a requirement.
+    // `placeFloorObject` decodes a piece's centre now rather than its near face, so
+    // those floors are ceilings. Same reasoning, other direction: a bound that only
+    // caps an error cannot notice it coming back.
     const worstPos = Math.max(...ZERO_DETAIL.map((r) => r.posErrM));
     const worstW = Math.max(...ZERO_DETAIL.map((r) => Math.abs(r.widthFrac)));
-    expect(worstPos).toBeGreaterThan(0.2);
-    expect(worstW).toBeGreaterThan(0.3);
+    expect(worstPos).toBeLessThan(0.12);
+    expect(worstW).toBeLessThan(0.04);
+
+    // And what is left is named rather than merely bounded, because "small" is not a
+    // measurement. At a square camera the whole room is now within a millimetre
+    // except three things, in this order:
+    //
+    //   · the ceiling fan, 0.1136 m — its own documented allowance, a disc that
+    //     spans a range of distances read at one row. Untouched by this change and
+    //     now the LARGEST single error at zero yaw.
+    //   · the three wall pieces, 5–23 mm — `placeWallObject` puts a piece's centre
+    //     on the plaster rather than its back against it, which is the same near-face
+    //     mistake one anchor over, at one to two orders less because a TV is 80 mm
+    //     deep and a sofa is 850. Filed, not fixed here.
+    //   · the sofa, 0.0500 m — half the gap between its real depth and the
+    //     catalogue's, and nothing else. See the assertion below.
+    const worstFloor = Math.max(...ZERO_DETAIL.filter((r) => r.anchor === 'floor').map((r) => r.posErrM));
+    const worstWall = Math.max(...ZERO_DETAIL.filter((r) => r.anchor.startsWith('wall')).map((r) => r.posErrM));
+    const fan = ZERO_DETAIL.find((r) => r.name === 'fan')!;
+    expect(fan.posErrM).toBeGreaterThan(worstFloor);
+    expect(fan.posErrM).toBeGreaterThan(worstWall);
+    expect(worstWall).toBeLessThan(0.03);
+    expect(worstFloor).toBeLessThan(0.06);
   });
 
-  it('and the cause is legible: a floor piece decodes at its NEAR FACE', () => {
-    // Not just "there is an error" — the mechanism. `placeFloorObject` backprojects
-    // the bbox BOTTOM EDGE onto the floor, which for a real box is the corner
-    // nearest the camera, not the centre. So the decoded position sits about
-    // `depth/2` short. The sofa makes it exact: 850 mm deep, 0.4250 m of error.
+  it('and every floor piece but one is now EXACT, which is the fix', () => {
+    // The mechanism, stated as what it now is. What this test used to hold is worth
+    // keeping in view because it was true and is not any more:
     //
-    // **What this said, and why it was worth nothing:** "wall pieces are untouched
+    //   "`placeFloorObject` backprojects the bbox BOTTOM EDGE onto the floor, which
+    //    for a real box is the corner nearest the camera, not the centre. So the
+    //    decoded position sits about `depth/2` short. The sofa makes it exact:
+    //    850 mm deep, 0.4250 m of error."
+    //
+    // — pinned as a BAND on `posErrM / halfDepth`, 0.95 to 1.5 over every floor
+    // piece. Every one of those ratios is now zero, except the sofa's, and the sofa's
+    // is not a ratio to its own depth any more: it is half the gap between its depth
+    // and the one the placer has to assume.
+    const floorErrs = ZERO_DETAIL.filter((r) => r.anchor === 'floor');
+    expect(floorErrs.length).toBe(6);
+    for (const r of floorErrs) {
+      if (r.name === 'sofa') continue;
+      const halfDepthM = r.dims[1] / 2000;
+      // Not merely "small": small RELATIVE TO the thing that used to explain it. A
+      // regression that reintroduces the near-face decode puts every one of these
+      // back at ~1.0, so a bound at a hundredth of half-depth is the assertion that
+      // notices — where an absolute millimetre bound would also pass for a piece
+      // that happens to be shallow.
+      expect(r.posErrM / halfDepthM, `${r.name}: error ÷ half its ${r.dims[1]} mm depth`).toBeLessThan(0.01);
+      expect(Math.abs(r.widthFrac), `${r.name}: width`).toBeLessThan(0.001);
+    }
+  });
+
+  it('and the WALL placer still has the error the floor one just lost', () => {
+    // Kept from the previous version of this file, with its own reason intact,
+    // because it is the finding this change does NOT address and the ordering has
+    // reversed underneath it.
+    //
+    // **What it said before that was worth nothing:** "wall pieces are untouched
     // (0.0000 m, 0.0%), which is the other half of the diagnosis — a wall panel IS
-    // fronto-parallel and thin, so giving it depth changes nothing." It was a
-    // TAUTOLOGY: `wallCorners` took no depth parameter, so `realDepth: true` could
-    // not move a wall piece by construction, and `toBeCloseTo(0, 9)` could not
-    // fail. It was published in `Design.md` and in the commit body as a finding.
+    // fronto-parallel and thin, so giving it depth changes nothing." A TAUTOLOGY:
+    // `wallCorners` took no depth parameter, so `realDepth: true` could not move a
+    // wall piece by construction and `toBeCloseTo(0, 9)` could not fail. It was
+    // published in `Design.md` and in a commit body as a finding.
     //
-    // Measured now that the fixture can express it: wall pieces ARE affected, and
-    // the honest version of the claim is about the SIZE of the effect. A wall piece
-    // is seen from an angle too — the camera is at the room centre and the piece is
-    // off to one side — so its depth shows in the silhouette: the TV is 21 mm out
-    // and 3.5% too wide, the painting 5 mm and 1.6%, the curtain 23 mm and 3.4%.
-    // That is one to two orders below the floor pieces' half-depth error, which is
-    // what makes floor-standing furniture the defect worth acting on.
+    // Measured once the fixture could express it: the TV is 21 mm out and 3.5% too
+    // wide, the painting 5 mm and 1.6%, the curtain 23 mm and 3.4%. That WAS one to
+    // two orders below the floor pieces, which is what made floor furniture the
+    // defect to act on first. It no longer is — the floor pieces are exact — so
+    // `placeWallObject` putting a piece's centre on the plaster instead of its back
+    // is now the largest anchor-shaped error left after the fan.
     const wallErrs = ZERO_DETAIL.filter((r) => r.anchor.startsWith('wall'));
     expect(wallErrs.length).toBeGreaterThan(2);
     for (const r of wallErrs) {
@@ -533,34 +606,6 @@ describe('the cost, measured', () => {
     // larger silhouette. So the direction gets its own bound.
     const tv = wallErrs.find((r) => r.name === 'tv')!;
     expect(tv.posErrM, 'the TV projects into the room, not into the wall').toBeGreaterThan(0.015);
-
-    // …and the ordering is the finding: the worst wall error is a fraction of the
-    // worst floor one.
-    const worstWall = Math.max(...wallErrs.map((r) => r.posErrM));
-    const worstFloor = Math.max(...ZERO_DETAIL.filter((r) => r.anchor === 'floor').map((r) => r.posErrM));
-    expect(worstWall * 10).toBeLessThan(worstFloor);
-
-    for (const r of ZERO_DETAIL) {
-      if (r.anchor.startsWith('wall')) continue;
-      if (r.anchor !== 'floor') continue;
-      const halfDepthM = r.dims[1] / 2000;
-      // A BAND on the ratio, not a floor. The first version asserted
-      // `posErrM > halfDepth * 0.9`, which every nonzero error passes, so it pinned
-      // "there is an error" rather than the mechanism. Measured ratios run 1.00
-      // (the sofa, near its view axis) to 1.27 (the lamp, furthest off it, which
-      // adds a lateral term on top of the near face).
-      //
-      // Shown to have teeth by perturbing the MECHANISM, not the assertion:
-      // halving the box's depth, doubling it, or offsetting its corners along the
-      // wall axis instead of the view axis each fails this. (Loosening the bound
-      // in this file of course cannot fail it — mutating an assertion tests
-      // nothing, which is worth saying because two of the first mutations here
-      // did exactly that.) Breadth lives in this band; precision lives in the
-      // sofa case below.
-      const ratio = r.posErrM / halfDepthM;
-      expect(ratio, `${r.name}: error ÷ half its ${r.dims[1]} mm depth`).toBeGreaterThan(0.95);
-      expect(ratio, `${r.name}: error ÷ half its ${r.dims[1]} mm depth`).toBeLessThan(1.5);
-    }
   });
 
   it('the CEILING piece moves with yaw too, and was exempted from the sweep', () => {
@@ -593,22 +638,49 @@ describe('the cost, measured', () => {
     expect(Number.isNaN(twenty.posErrM)).toBe(false);
   });
 
-  it('and the sofa nails it exactly, being square to its own camera', () => {
-    // The cleanest instance: 850 mm deep, sitting essentially on its slot's view
-    // axis, so the lateral term vanishes and the whole error IS half the depth.
-    // 0.4250 m against 0.425 m is the mechanism with nothing else mixed in.
+  it('and the sofa still nails a figure exactly — a different one', () => {
+    // The cleanest instance, before and after. It used to be half the sofa's OWN
+    // depth: 850 mm deep, 0.4250 m of error, the near face read as the centre with
+    // nothing else mixed in. It is now half the gap between that depth and the one
+    // the placer has to assume, because a photograph cannot see depth — 950 mm from
+    // the catalogue against 850 real, so 0.0500 m.
+    //
+    // Both are exact figures rather than tolerances, and that is deliberate: the
+    // mechanism is what is being asserted, so the number has to be the one the
+    // mechanism predicts and not a bound it happens to sit inside.
     const sofa = ZERO_DETAIL.find((r) => r.name === 'sofa')!;
-    expect(sofa.posErrM).toBeCloseTo(850 / 2000, 4);
+    const gapM = Math.abs(defaultDepthFor('sofa', 'sofa') - 850) / 2000;
+    expect(gapM).toBeCloseTo(0.05, 9);
+    expect(sofa.posErrM).toBeCloseTo(gapM, 4);
+    // And its width survives untouched, which is the clamp doing its job: the near
+    // face is measured and the depth is assumed, so only the centre is bounded by
+    // the assumption. Folding the depth into the near-face clamp instead shrank this
+    // to 1.925 m.
+    expect(sofa.widthFrac).toBeCloseTo(0, 6);
   });
 
-  it('and a square-footprint piece is the worst case for width', () => {
-    // A 300 × 300 lamp and a 400 × 400 plant present their DIAGONAL, so the
-    // silhouette is up to √2 wider than the width; a 2000 × 850 sofa on the view
-    // axis presents almost exactly its width. That ordering is the mechanism
-    // showing itself, and it is what a fixture of depthless cards cannot express.
+  it('and the diagonal inflation is REMOVED, not absent — the silhouette still has it', () => {
+    // The distinction that makes this test worth writing, and the trap it avoids.
+    // A 300 × 300 lamp and a 400 × 400 plant present their DIAGONAL, so their
+    // silhouette is up to √2 wider than their width; a 2000 × 850 sofa on its own
+    // view axis presents almost exactly its width. This test used to pin that
+    // ordering in the DECODED widths — lamp worse than wardrobe, plant worse than
+    // sofa — because the placer inherited the inflation whole. All four of those
+    // numbers are zero now.
+    //
+    // So asserting "the widths are exact" alone would pass equally well if the
+    // fixture had quietly gone back to projecting cards, which is the failure this
+    // file was written to catch in the first place. Two assertions, then: the
+    // silhouette is still inflated by 16–49% (the control experiment above measures
+    // it), AND the decode no longer carries any of it.
     const by = new Map(ZERO_DETAIL.map((r) => [r.name, r]));
-    expect(by.get('lamp')!.widthFrac).toBeGreaterThan(by.get('wardrobe')!.widthFrac);
-    expect(by.get('plant')!.widthFrac).toBeGreaterThan(by.get('sofa')!.widthFrac);
+    for (const name of ['lamp', 'plant', 'wardrobe', 'sofa']) {
+      expect(Math.abs(by.get(name)!.widthFrac), `${name}: width`).toBeLessThan(0.001);
+    }
+    // The premise, from the card-versus-box control: the boxes really are wider on
+    // screen than the cards. If this ever reads ~0 the fixture has stopped being a
+    // solid and the line above means nothing.
+    expect(Math.max(...INFLATE.map((r) => r.inflate))).toBeGreaterThan(0.15);
   });
 
   it('costs position, monotonically in the angle', () => {

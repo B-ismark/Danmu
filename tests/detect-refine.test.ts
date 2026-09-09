@@ -3,7 +3,7 @@ import { dedupeDetections, geoRefine, refineDetections, type CalMap, type RoomDi
 import { placeCeilingObject, placeFloorObject, placeWallObject, type CameraCal } from '@/lib/photo-geometry';
 import type { Detection } from '@/lib/detection';
 import { anchorFor } from '@/lib/physics';
-import { CATEGORIES, SHAPES, defaultAxisFor, defaultDepthFor, type Category } from '@/lib/scene-spec';
+import { CATEGORIES, SHAPES, defaultAxisFor, defaultDepthFor, isRoundPart, type Category } from '@/lib/scene-spec';
 import { dimRangeFor } from '@/lib/dimension-ranges';
 
 // The five contracts below are the ones every later phase of the detection plan
@@ -48,13 +48,24 @@ describe('geoRefine', () => {
       position: { x: 99, y: 99, z: 99 },
       dimMM: [1, 2, 3],
     });
-    const g = placeFloorObject(FLOOR_BOX, 'n', ROOM, CAL);
+    // The footprint is written out rather than read back through `isRoundPart` and
+    // `defaultDepthFor`: a test that recomputes the decision under test agrees with
+    // itself whatever the decision is. A sofa is a box, and its catalogue depth is
+    // 950 mm — both pinned on the next two lines so the literal cannot rot.
+    expect(defaultDepthFor('sofa', 'sofa')).toBe(950);
+    expect(isRoundPart('sofa')).toBe(false);
+    const g = placeFloorObject(FLOOR_BOX, 'n', ROOM, CAL, { depthM: 0.95, round: false });
     expect(g).not.toBeNull();
 
     const out = geoRefine(d, CALS, ROOM);
     expect(out.position).toEqual(g!.position);
-    // W and H are measured; the AI's depth hint is the one number that survives.
-    expect(out.dimMM).toEqual([g!.widthMM, 2, g!.heightMM]);
+    // W and H are measured. So, now, is the DEPTH's effect on them: the bbox's
+    // bottom edge is the sofa's near face, so pushing out to its centre takes a
+    // depth, and a depth the AI guessed would be an AI-decided position. So the
+    // floor branch discards the hint — the `2` this line used to assert was that
+    // hint surviving — and writes the catalogue number it measured with, which is
+    // also what the piece is drawn at.
+    expect(out.dimMM).toEqual([g!.widthMM, 950, g!.heightMM]);
     // Independent of the placer: a floor anchor sits on the floor, and the sizes
     // are millimetres of furniture rather than metres or pixels.
     expect(out.position!.y).toBe(0);
@@ -63,10 +74,27 @@ describe('geoRefine', () => {
     expect(out.dimMM![2]).toBeLessThan(3000);
   });
 
+  it('inverts a ROUND floor piece as a cylinder, not as a box', () => {
+    // The second half of the footprint decision, and it has to be asserted rather
+    // than assumed: a cylinder's silhouette is its tangent span, so inverting one
+    // as a box reads its depth off corners that are not on the object and comes
+    // back badly narrow. `plant` is round in the catalogue and `sofa` is not, so
+    // the two branches must give different answers for the same box.
+    expect(isRoundPart('plant')).toBe(true);
+    const asRound = placeFloorObject(FLOOR_BOX, 'n', ROOM, CAL, { depthM: 0.4, round: true })!;
+    const asBox = placeFloorObject(FLOOR_BOX, 'n', ROOM, CAL, { depthM: 0.4, round: false })!;
+    expect(asRound.widthMM).not.toBe(asBox.widthMM);
+
+    const out = geoRefine(det({ category: 'plant', shape: 'plant', slot: 'n' }), CALS, ROOM);
+    expect(out.position).toEqual(asRound.position);
+    expect(out.position).not.toEqual(asBox.position);
+    expect(out.dimMM).toEqual([asRound.widthMM, defaultDepthFor('plant', 'plant'), asRound.heightMM]);
+  });
+
   it('measures a wall-anchored detection through placeWallObject, not the floor one', () => {
     const d = det({ category: 'painting', shape: 'painting', slot: 'n', box: WALL_BOX });
     const wall = placeWallObject(WALL_BOX, 'n', ROOM, CAL);
-    const floor = placeFloorObject(WALL_BOX, 'n', ROOM, CAL);
+    const floor = placeFloorObject(WALL_BOX, 'n', ROOM, CAL, { depthM: 0.03 });
     expect(wall).not.toBeNull();
     expect(floor).not.toBeNull(); // both are available, so the next line has teeth
 
@@ -137,7 +165,7 @@ describe('geoRefine', () => {
   });
 
   it('keeps the AI yaw when there is one, and takes the geometric yaw otherwise', () => {
-    const g = placeFloorObject(FLOOR_BOX, 'w', ROOM, CAL)!;
+    const g = placeFloorObject(FLOOR_BOX, 'w', ROOM, CAL, { depthM: 0.95, round: false })!;
     expect(g.yaw).not.toBe(0); // slot 'w' faces +X, so 0 is a distinguishable value
 
     expect(geoRefine(det({ category: 'sofa', slot: 'w', yaw: 1.23 }), CALS, ROOM).yaw).toBe(1.23);
