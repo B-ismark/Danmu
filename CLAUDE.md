@@ -68,10 +68,25 @@ backend, no account. The 3D studio *is* the product.
    +81% wide level and +132% at 5° of tilt, a nightstand ~130 mm too tall. Depth is
    genuinely unobservable from one photograph and the module header says so; what it does
    not need is to be *observed*, only accounted for.
-   So the placer takes the depth as an INPUT, and **which** number it takes is the whole
-   trust boundary: `defaultDepthFor(category, shape)` from the catalogue, never
-   `d.dimMM[1]` from the detector, because `depthM` moves a POSITION and a depth the AI
-   guessed would be an AI-decided placement. The corollary is the half that is easy to
+   **`placeWallObject` had the same defect one anchor over**, and it is the same
+   paragraph rather than a second one: it assumed a piece *lay on* the wall plane, so it
+   put the piece's CENTRE on the plaster where its BACK goes. The three figures that
+   error was filed with (TV 21 mm and 3.5%) understated it by an order of magnitude,
+   because every wall fixture in the harness is 30–80 mm deep while the catalogue goes
+   to 220 mm — and at 220 mm it read a correct 280 mm air conditioner as 371, outside
+   `ac-unit`'s own band, so `judgeLabel` accused a correctly identified piece. **Its
+   position half, though, never reached the user at all:** `snapToWall` recomputes a
+   wall piece's wall-normal coordinate as `inward × (depth/2 + gap)` and `groundY`
+   overwrites the height, so the scene was already right by a downstream correction.
+   Which is its own lesson — **trace what a placer's output actually reaches before
+   calling any of it the largest remaining error**, because a value a caller replaces is
+   not a value the user has.
+   So both placers take the depth as an INPUT, and **which** number they take is the
+   whole trust boundary: `defaultDepthFor(category, shape)` from the catalogue, never
+   `d.dimMM[1]` from the detector, because `depthM` moves a measurement and a depth the
+   AI guessed would be an AI-decided one. The CEILING branch is the one place the hint
+   still wins, and that is not an oversight — `placeCeilingObject` reads one row of a
+   disc and takes no depth, so nothing there turns a hint into a measurement. The corollary is the half that is easy to
    miss: `geoRefine` writes that same catalogue number into `dimMM[1]`, so the piece is
    DRAWN with the depth it was PLACED by — a hint kept for the render beside a default
    used for the maths leaves the two disagreeing by half their difference, on the one axis

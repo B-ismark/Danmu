@@ -168,7 +168,8 @@ and rows 15–18 are infrastructure and completeness. The eyes list is
 | 17 | **§ H.10** undo / redo covers selection — **RE-ANSWERED 2026-09-06: the MAIN stack. BUILT** | The 2026-09-05 answer here was a separate history, and the user superseded it in their own words: *"in blender, actions and selections are both affectted by undo and redoing so wouldn't it be best to do the same for this platform too?"* So selection rides in the main entry — undoing a move puts back the selection that made it. Two things the earlier note did not have. **Coalescing is not a nicety:** the stack is a ring of `MAX`, so without it clicking around the room 80 times discards every real edit off the far end, and a separate history could not have done that. A run of clicks now replaces one entry, and the first click after an edit always pushes, so an entry holding an edit is never overwritten. **And the staleness hazard has TWO axes, not the one this row named:** part ids, yes — but `selectedWall` is an *index* into `room.footprint`, so it can point past the end. **The reason first written here was wrong and is corrected in #134:** it said "undoing across a layout change leaves a 7 pointing into a four-edge rectangle", which cannot happen — `applySnapshot` restores `snap.room` and validates the index against THAT footprint, and both come out of one `takeSnapshot`, so an index and the polygon it indexes always travel together. The history filter is an honour-system backstop; **the live hazard is upstream and unfixed** — nothing clears `selectedWall` when the footprint changes under it (`lib/store.ts` clears it in three places, none of them a room change), so a stale 7 renders a **"Wall 8" panel in a four-walled room** whose paint button writes `wallColors[7]` and does not throw. Verified by reading `Inspector.tsx:773-774`; **the PATH is verified by nobody** — there is no layout switcher in the studio and `setRoom` rebuilds at the same `layoutId`, so a resize cannot change the edge count. Opening a scene file saved from a differently-shaped room is the one candidate and has never been driven, so no guard is written. Cleared rather than clamped, either way. `lib/history.ts`; 32 tests, boundary cases added in #134 | M | **built, driven, not judged** — a Playwright probe pressed Undo in a real browser on `4cef13a` and COUNTED the steps: six selection clicks cost **1** undo step, four moves cost **5**. The instrument was the shipped control’s own `disabled` state (`canUndo = past.length >= 2`), so nothing was added to shipped code. What is left is the half a probe cannot take — whether a run of clicks *feels* chatty. This cell said "nobody has pressed Ctrl+Z in a browser" after that stopped being true; see `docs/traps.md` under *a document contradicts itself and nothing conflicted* |
 | 18 | **§ 33.2** the on-device detector cannot name the four newest shapes | Needs a 50 MB re-export and a digest re-pin on a Python toolchain. Two things found while mapping it, and **the first is now half closed**: the digest pin had no test of any kind, because every path to it ran through a dynamic `onnxruntime-web` import — `lib/model-verify.ts` + `tests/model-verify.test.ts` (2026-09-05) put the mechanism somewhere a test can address it, so a re-pin is gated against a malformed, mis-prefixed, unpinned or empty registry. It is **not** gated against a pin that is simply the wrong digest: proving a pin matches the real bytes needs the ~62 MB download, and `pnpm hash:models --verify` is still the only command that does it. Still open: nothing exercises `detectLocalAcrossImages`, `load()`, `tilesFor` or `toTensor` | L, and mostly not code | the cloud path already handles them, so this is a completeness item |
 | 19 | **§ MOB** how the app is presented on a phone — **recorded 2026-09-05, deliberately NOT scheduled** | The user's ruling: *"mobile isn't the focus but it doesn't mean we should turn a blind eye to how the platform is presented on there"*, and *"the mobile audit is for later not now"*. So this row exists to stop the work being lost, not to start it. `docs/mobile-ux-audit.md` is the source — nine systemic issues, eight per-flow sections and the author's own priority order, which § MOB keeps rather than re-ranking. Four of its claims were re-derived against `main`; one (**M5**, the Android icon ladder) is recorded with its premise marked **unverified**, because it is the one that would send someone to fix a manifest that may not be broken | varies; M1/M2/M4 are each an afternoon | **nothing blocks it and it blocks nothing** — it is filed, not queued |
-| 20 | **§ 42.1** a floor-standing piece was measured at its NEAR FACE, so its position was short by about half its depth — **at a perfectly square camera** | **FIXED 2026-09-09.** `placeFloorObject` decodes a piece's CENTRE now, and it took the whole silhouette rather than a nudge to the position, because width, lateral offset and height all rode the same wrong distance. Three closed forms, no iteration, exact to 1e-13 against a forward-projected box at 0°, ±5° and ±12° of tilt; a ROUND footprint inverts from its tangent pair instead and needs no assumed depth at all, since a circle's depth IS its width. Two errors nobody had measured fell out with it: a piece whose top is below the lens reads its FAR top edge, so both nightstands were ~130 mm too tall (the baseline table had no height column — it has one now), and tilt roughly DOUBLED the width inflation, a lamp going from +81% level to +132% at 5°. What is left, in order: the ceiling fan at 0.1136 m (its own allowance, now the largest error at zero yaw), the three wall pieces at 5–23 mm (§ 42.4), the sofa at exactly 0.0500 m — half the gap between its real 850 mm depth and the catalogue's 950 — and a round footprint under tilt at +6% of width at 5°. The fixture had to move first: `tests/helpers/project.ts` projects solids now, because a 1e-9 baseline that holds only because the fixture cannot express the defect is the same thing as an assertion that cannot fail | **nothing** — decided (catalogue depth, and the piece is rendered with the same number), built, and mutation-tested: ten mechanism mutants, all caught | `lib/photo-geometry.ts`, `lib/detect-refine.ts`, `tests/helpers/project.ts`, `tests/helpers/known-room.ts`, and the three suites |
+| 20 | **§ 42.1** a floor-standing piece was measured at its NEAR FACE, so its position was short by about half its depth — **at a perfectly square camera** | **FIXED 2026-09-09.** `placeFloorObject` decodes a piece's CENTRE now, and it took the whole silhouette rather than a nudge to the position, because width, lateral offset and height all rode the same wrong distance. Three closed forms, no iteration, exact to 1e-13 against a forward-projected box at 0°, ±5° and ±12° of tilt; a ROUND footprint inverts from its tangent pair instead and needs no assumed depth at all, since a circle's depth IS its width. Two errors nobody had measured fell out with it: a piece whose top is below the lens reads its FAR top edge, so both nightstands were ~130 mm too tall (the baseline table had no height column — it has one now), and tilt roughly DOUBLED the width inflation, a lamp going from +81% level to +132% at 5°. What is left, in order: the ceiling fan at 0.1136 m (its own allowance, now the largest error at zero yaw), the three wall pieces at 5–23 mm (§ 42.4, fixed the same day, and those figures were themselves understated by a fixture of thin panels), the sofa at exactly 0.0500 m — half the gap between its real 850 mm depth and the catalogue's 950 — and a round footprint under tilt at +6% of width at 5°. The fixture had to move first: `tests/helpers/project.ts` projects solids now, because a 1e-9 baseline that holds only because the fixture cannot express the defect is the same thing as an assertion that cannot fail | **nothing** — decided (catalogue depth, and the piece is rendered with the same number), built, and mutation-tested: ten mechanism mutants, all caught | `lib/photo-geometry.ts`, `lib/detect-refine.ts`, `tests/helpers/project.ts`, `tests/helpers/known-room.ts`, and the three suites |
+| 20b | **§ 42.4** a WALL piece was measured at its centre-on-the-plaster, where its BACK goes | **FIXED 2026-09-09**, the same fix one anchor over, with `lateralSpan` extracted rather than copied. The three figures this was filed with — TV 21 mm/3.5%, curtain 23 mm/3.4%, painting 5 mm/1.6% — understated it by an order of magnitude, because all three wall fixtures are 30–80 mm deep. The catalogue goes to 220 mm (`ac-unit`) and 200 mm (`window`), and at 220 mm the old placer read a correct 800×280 unit **+21.7% wide and 91 mm too tall** — 371 mm against the shape's own 250–350 band, so `judgeLabel` accused a correctly identified air conditioner. An `ac` row went into the truth table with the fix. **Half of this item was mis-titled and the correction matters:** the wall-normal position never reached the rendered scene, because `snapToWall` recomputes it from the wall as `inward × (depth/2 + gap)` and `groundY` overwrites the height — so the scene was already right by a downstream correction, and what the user gains is SIZE, not position | **nothing** — built and mutation-tested: nine mutants, two of them FIXTURE mutants (wall pieces back to panels; `truthCentre` stripped), all caught | `lib/photo-geometry.ts`, `lib/detect-refine.ts`, `tests/helpers/known-room.ts`, and the three suites |
 | 21 | **§ 42.2** off-square framing is what creates the duplicate the user reported, and it takes only ±4° | MEASURED 2026-09-09, same file. The cross-slot lamp stops merging at **±4° of DIFFERENTIAL yaw** (per-shot hand variation). A **uniform** bias — the same angle on every wall — never splits it at any angle tested to 20°, because it moves both sightings the same way and they still agree. That common-mode / differential split is the structural result and it is measured, not argued. The feared opposite failure does **not** occur: the two nightstands, 0.55 m apart in the 0.35 m `tight` tier with only 0.20 m of headroom, keep a gap of 0.5133 → 0.5077 m across 0–20°, because both sit in the SAME photo and an off-square camera carries them together. **The sweep's position columns were optimistic and are re-derived**: two same-labelled truths could match one refined row, off-frame boxes were counted and then measured anyway, and the "median" column was the upper middle. The ±4° split threshold and the uniform-vs-differential result are unaffected — both are counted from row counts rather than from matched positions | a DECISION: the only source that works on uploads is the wall-parallel vanishing point, and `CLAUDE.md` rule 2 says *"do not re-propose vanishing points for the no-bearing case"*. The argument that this is a different quantity — the magnitude of an angle, not which wall a photo is — is written up in the session plan and has NOT been put to the user as a build proposal | **nothing blocking any more** — row 20 was the larger, independent term and is fixed, so ψ is the dominant error again. The measured split threshold moved from ±4° to ±3.5° with that fix, inside the bracket this file already pins |
 
 **Three that are deliberately not on this list**, so nobody adds them back: the seeder
@@ -6567,7 +6568,7 @@ own diameter.
 | what | how much | status |
 |---|---|---|
 | the ceiling fan | 0.1136 m at zero yaw | its own documented allowance — a disc spanning a range of distances read at one row. Now the largest single error at a square camera |
-| the three wall pieces | 5–23 mm, 1.6–3.5% | § 42.4 below — the same mistake one anchor over |
+| the three wall pieces | 5–23 mm, 1.6–3.5% | **§ 42.4, FIXED the same day** — and the figures here were themselves understated, because every wall fixture was thin; a 220 mm air conditioner read +21.7% wide |
 | the sofa | exactly 0.0500 m | half the gap between its real depth and the catalogue's. Asserted as that figure to nine decimals, not allowed as a tolerance |
 | a round footprint under tilt | +6% of width at 5°, +13% at 12° | the one approximate term — see below. Exact at a level lens |
 
@@ -6594,34 +6595,60 @@ clamps folded into one, and the round branch's tilt-aware edge row flattened. Fo
 survived and were dealt with honestly rather than left looking tested: one was redundant and
 is deleted, and two are unreachable at any lens or pose the app accepts and say so in place.
 
-### § 42.4 · The WALL placer has the error the floor one just lost — NOT FIXED
+### § 42.4 · The WALL placer had the error the floor one lost — **FIXED 2026-09-09**
 
-Filed **2026-09-09**, as the direct successor to § 42.1 and now the largest anchor-shaped
-error left after the fan.
+Filed and fixed the same day, as the direct successor to § 42.1.
 
-`placeWallObject` assumes a piece lies ON the framed wall plane, so it puts the piece's
-**centre** on the plaster — where its BACK goes. A TV hangs with its back against the wall and
-its body in the room, so it is nearer the lens than the placer thinks and its silhouette is
-correspondingly wider: measured at 21 mm and 3.5% too wide for the TV, 23 mm and 3.4% for the
-curtain, 5 mm and 1.6% for the painting. That is one to two orders below what floor pieces used
-to be, which is exactly why floor furniture was the thing to fix first — and it no longer is,
-because the floor pieces are exact.
+`placeWallObject` assumed a piece *lay on* the framed wall plane, so it put the piece's
+**centre** on the plaster — where its BACK goes. Its body is therefore nearer the lens than
+the placer thought, every angular measurement was read at the wrong plane, and everything
+came back large.
 
-**The fix is the same mechanism**: read the angular extents at the near face
-(`wallDistance − depth`) and return the centre at `wallDistance − depth/2`, with the same
-above-or-below-the-lens rule choosing which face each vertical extreme came from. `geoRefine`
-already has the depth in hand. It is a second solver rather than a one-liner, which is why it
-was kept out of the floor commit.
+**The three figures this item was filed with understated it by an order of magnitude**, and
+for the third time in this thread the reason was the fixture. TV 21 mm and 3.5%, curtain
+23 mm and 3.4%, painting 5 mm and 1.6% — all three of those pieces are 30–80 mm deep. The
+catalogue's wall-anchored shapes go to **220 mm** (`ac-unit`) and **200 mm** (`window`, which
+gets there by the `other` category's 600 mm default hitting its own shape's clamp — nobody
+chose 200), and at that depth the old placer read a correct 800 × 280 unit as **+21.7% wide
+and 91 mm too tall**.
 
-**A note on the fixture, because it is a live decision and not an oversight.**
-`tests/helpers/known-room.ts`'s `boxFor` projects floor pieces as solids and wall pieces as
-flat PANELS. Making the wall pieces solid too was tried and reverted: it moves three pieces off
-the baseline's 1e-9 bar and into tolerances derived from a defect nobody is fixing yet, trading
-the strongest property that file has for a restatement of something
-`tests/off-square-cost.test.ts` already measures with a band and a must-be-non-zero floor. So
-nothing certifies the wall placer as exact on a solid; the baseline asks the narrower question
-(given a genuinely flat panel, are the wall plane, the mount height and the slot mapping
-right?) which has an exact answer. **When this is fixed, the fixture moves with it.**
+**That last number is more than a size error.** 280 + 91 = 371 mm against `ac-unit`'s own
+250–350 band, so `judgeLabel` marked a correctly identified air conditioner `suspect` and the
+detect screen offered to repair the word. An `ac` row went into the truth table with the fix,
+and it is what gives the new assertions teeth.
+
+**The half that does NOT reach the user, established before building rather than after.** The
+wall-normal coordinate never reached the rendered scene: `wallAffinity` is `must-wall` for
+every wall anchor and that branch calls `snapToWall` unconditionally, which recomputes x/z as
+`wall + inward normal × (depth/2 + gap)` and discards the placer's answer; `groundY` overwrites
+the height on the line before. So the scene was **already** placing a wall piece's back on the
+plaster, by a downstream correction rather than by the geometry being right — which means this
+item was mis-titled as "the largest anchor-shaped error left". What it actually bought the user
+is **size**. The position is returned honestly anyway, because `dedupeDetections` and
+`buildSceneFromRoom`'s in-room gate read the raw value.
+
+**What is left:** the TV and the painting, 11 mm and 5 mm, being the only wall pieces whose
+real depth differs from the catalogue's — the same depth-gap residual the sofa carries, pinned
+as a ratio to half the gap (measured 1.000 to 1.130) rather than as figures. The curtain and
+the air conditioner are exact.
+
+**Does it exist in a commit?** Yes. Nine mechanism mutants, all caught, and two of them are
+FIXTURE mutants — reverting wall pieces to depthless panels, and removing `truthCentre`'s
+mount-to-centre conversion — because after three instances of a fixture certifying a defect,
+the fixture is part of what needs mutating.
+
+### § 42.5 · Two conventions the harness now depends on — worth knowing, not fixing
+
+- **A wall piece's truth `x`/`z` is its MOUNT; a placer returns its body CENTRE.**
+  `truthCentre` in `tests/helpers/known-room.ts` converts. Comparing the two directly reports
+  half the piece's depth as error — 110 mm on the air conditioner — which reads exactly like a
+  regression and invites a fix in the wrong file. It is also what `nearest` and
+  `assignOneToOne` match on, so getting it wrong biases every pairing.
+- **There is no `window` category.** A detected window arrives as `other`, whose catalogue
+  depth is 600 mm, narrowed by its *shape's* range to 200 — so the second-deepest wall piece
+  in the app gets its depth from a generic fallback hitting a clamp. Now that a wall piece's
+  depth moves its measured size, that is worth a decision: either `window` gets a category of
+  its own, or the route is written down where someone reading `defaultDepthFor` will find it.
 
 ### § 42.2 · ψ ≈ 4° is enough to create a duplicate — DECISION NEEDED
 

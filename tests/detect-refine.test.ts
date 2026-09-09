@@ -93,7 +93,8 @@ describe('geoRefine', () => {
 
   it('measures a wall-anchored detection through placeWallObject, not the floor one', () => {
     const d = det({ category: 'painting', shape: 'painting', slot: 'n', box: WALL_BOX });
-    const wall = placeWallObject(WALL_BOX, 'n', ROOM, CAL);
+    expect(defaultDepthFor('painting', 'painting')).toBe(30);
+    const wall = placeWallObject(WALL_BOX, 'n', ROOM, CAL, { depthM: 0.03, round: false });
     const floor = placeFloorObject(WALL_BOX, 'n', ROOM, CAL, { depthM: 0.03 });
     expect(wall).not.toBeNull();
     expect(floor).not.toBeNull(); // both are available, so the next line has teeth
@@ -154,7 +155,9 @@ describe('geoRefine', () => {
     const d = det({ category: 'curtain', shape: 'fan', slot: 'n', box: WALL_BOX });
     const out = geoRefine(d, CALS, ROOM);
     expect(out).not.toBe(d);
-    expect(out.position).toEqual(placeWallObject(WALL_BOX, 'n', ROOM, CAL)!.position);
+    expect(out.position).toEqual(
+      placeWallObject(WALL_BOX, 'n', ROOM, CAL, { depthM: defaultDepthFor('curtain', 'fan') / 1000, round: false })!.position,
+    );
   });
 
   it('leaves a detection from an uncalibrated slot completely untouched', () => {
@@ -220,16 +223,44 @@ describe('geoRefine', () => {
     }
   });
 
-  it('still prefers the AI depth hint over the derived one', () => {
-    // Depth is the one axis the cloud detector's guess is better than nothing on,
-    // which is why lib/detection.ts keeps asking for dimMM. 45 mm is inside a
-    // painting's 15–60 band, so this cannot pass by accident of clamping.
-    const out = geoRefine(
+  it('takes the AI depth hint on the CEILING branch and nowhere else', () => {
+    // **This test used to assert the opposite for a wall piece**, and the reason it
+    // changed is rule 2 rather than taste. Its comment read: "depth is the one axis
+    // the cloud detector's guess is better than nothing on, which is why
+    // lib/detection.ts keeps asking for dimMM" — true while depth was only the axis
+    // nobody measured. It is now an INPUT to both the floor and wall placers, because
+    // a bbox edge is a corner of a solid, so a depth the AI guessed would move a
+    // measured width and height. Those two branches take the catalogue's.
+    //
+    // 45 mm is inside a painting's 15–60 band, so the floor/wall lines below cannot
+    // pass by accident of clamping — the hint is discarded, not clamped away.
+    const wall = geoRefine(
       det({ category: 'painting', shape: 'painting', slot: 'n', box: WALL_BOX, dimMM: [700, 45, 500] }),
       CALS,
       ROOM,
     );
-    expect(out.dimMM![1]).toBe(45);
+    expect(wall.dimMM![1]).toBe(defaultDepthFor('painting', 'painting'));
+    expect(wall.dimMM![1]).not.toBe(45);
+
+    const floor = geoRefine(
+      det({ category: 'sofa', shape: 'sofa', slot: 'n', box: FLOOR_BOX, dimMM: [2000, 800, 800] }),
+      CALS,
+      ROOM,
+    );
+    expect(floor.dimMM![1]).toBe(defaultDepthFor('sofa', 'sofa'));
+    expect(floor.dimMM![1]).not.toBe(800);
+
+    // The ceiling branch is where it survives, and that is not an oversight:
+    // `placeCeilingObject` reads one row of a disc and takes no depth at all, so
+    // nothing there turns the hint into a measurement. 1100 mm is inside a fan's
+    // 900–1500 band, so this is the hint winning rather than a clamp landing on it.
+    const ceiling = geoRefine(
+      det({ category: 'fan', shape: 'fan', slot: 'n', box: CEILING_BOX, dimMM: [1000, 1100, 200] }),
+      WIDE_CALS,
+      ROOM,
+    );
+    expect(ceiling.dimMM![1]).toBe(1100);
+    expect(defaultDepthFor('fan', 'fan')).not.toBe(1100); // premise: the two differ
   });
 });
 

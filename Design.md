@@ -630,7 +630,7 @@ today's placers. Two results, both filed in `docs/what-is-still-open.md` § 42:
 The first is not fixed and is still a decision — see § 42.2 — because the only source that
 works on an upload touches the trust boundary rule 2 governs.
 
-### A floor piece is a SOLID, and that is what the placer inverts
+### A piece of furniture is a SOLID, and that is what the placers invert
 
 The second is fixed, and it took the whole model rather than a nudge to the position,
 because every other term rode the same wrong distance.
@@ -670,15 +670,58 @@ piece is DRAWN with the depth it was placed by and its near face lands where the
 put it; a hint kept for the render beside a default used for the maths would leave the two
 disagreeing by half their difference, on the one axis the photo did measure.
 
+### …and so is a wall piece, which was the same fix one anchor over
+
+`placeWallObject` assumed the piece *lay on* the wall plane, so it put the piece's CENTRE on
+the plaster — where its **back** goes. Its body is therefore a little nearer the lens than the
+placer thought, every angular measurement was read at the wrong plane, and everything came
+back large.
+
+**The three figures previously recorded here understated it by an order of magnitude**, and
+for the third time in this thread the reason was the fixture: all three wall pieces in the
+truth table are 30–80 mm deep. The catalogue's wall shapes go to 220 mm (`ac-unit`) and
+200 mm (`window`, which gets there by the `other` category's 600 mm hitting its shape's
+clamp), and at that depth:
+
+| piece | width, before | height, before |
+|---|---|---|
+| painting, 30 mm | +1.8% level, +4.9% at 12° | +7 mm |
+| TV, 60 mm | +4.1% level, +9.1% at 12° | +19 mm |
+| curtain, 80 mm | +3.3% level, +15.5% at 12° | +63 mm |
+| **air conditioner, 220 mm** | **+21.7% level, +27.8% at 12°** | **+91 mm** |
+
+The last row is more than a sizing error: 280 + 91 = 371 mm against `ac-unit`'s own 250–350
+band, so `judgeLabel` marked a correctly identified air conditioner **suspect** and the detect
+screen offered to repair the word. A truth-table row for it is what makes the assertion mean
+anything, and it went in with the fix.
+
+The model is the floor one with the depth axis pinned differently — the back is on the plaster
+at a distance the room already gives, rather than the near face being measured from a bottom
+row — so `lateralSpan` is now shared by both placers rather than copied. Same
+above-or-below-the-lens test decides which face each row came from.
+
+**One thing to know before reading the position it returns.** The wall-normal coordinate does
+not reach the rendered scene: `wallAffinity` is `must-wall` for every wall anchor, and that
+branch calls `snapToWall` unconditionally, which recomputes x/z as
+`wall + inward normal × (depth/2 + gap)` and discards the placer's answer; `groundY` overwrites
+the height on the line before. **So the scene was already putting a wall piece's back on the
+plaster, by a downstream correction rather than by the geometry being right.** What this fix
+changes for the user is the SIZE. The position is returned honestly anyway, because
+`dedupeDetections` and the in-room gate read the raw value, and because a placer whose answer
+needs a correction downstream to be right is how the next reader is misled.
+
 **What is left, measured rather than described.** In the known room every piece is now within
-a millimetre except three, and the ordering has reversed:
+a millimetre except the fan and the three whose real depth differs from the default:
 
 | what | how much | why |
 |---|---|---|
-| the ceiling fan | 0.1136 m | its own documented allowance — a disc spanning a range of distances, read at one row. Now the LARGEST error at zero yaw |
-| the three wall pieces | 5–23 mm, 1.6–3.5% | `placeWallObject` puts a piece's centre on the plaster where its BACK goes — the same near-face mistake one anchor over, at one to two orders less because a TV is 80 mm deep and a sofa 850. Filed, not fixed |
-| the sofa | exactly 0.0500 m | half the gap between its real 850 mm depth and the catalogue's 950. Asserted as that figure, not allowed as a tolerance |
+| the ceiling fan | 0.1136 m | its own documented allowance — a disc spanning a range of distances, read at one row. The LARGEST error at zero yaw |
+| the sofa | exactly 0.0500 m | half the gap between its real 850 mm depth and the catalogue's 950 |
+| the TV and the painting | 11 mm and 5 mm | the same gap on a wall piece (80 against 60, 40 against 30), plus the small lateral term that rides it. Pinned as a RATIO to half the gap — measured 1.000 to 1.130 — rather than as three figures to re-fit |
 | a round footprint under tilt | +6% of width at 5°, +13% at 12° | the one approximate term: a vertical tangent line's image column varies with the row, and the row where tangency falls is not the bbox's own top row. Exact at a level lens |
+
+Seven of the eleven pieces have no depth gap at all and every one of them is exact — including
+both round pieces, which owe the catalogue nothing, and the deep air conditioner.
 
 **Two clamps now, against two different walls, and keeping them apart is not tidiness.** The
 near face is measured, so it is bounded by the plaster — that is the clamp this function
@@ -691,9 +734,16 @@ assumption corrupting an observation. Caught by measuring, not by reasoning.
 **And the fixture had to move first, which is the part worth carrying forward.** A 1e-9
 baseline that holds because the fixture cannot express the defect is the same thing as an
 assertion that cannot fail. `tests/helpers/project.ts` projects solids now — eight corners
-for a box footprint, tangent rim samples for a round one — and the exactness that remains is
-a statement about the placer. Nine of ten pieces still read exact; the printed table is the
-record, and it now carries a height column too.
+for a box footprint, tangent rim samples for a round one, and a wall piece's body extending
+inward from the plaster — and the exactness that remains is a statement about the placer. The
+printed table is the record, and it carries a height column too, because height was one of
+the three things riding the wrong distance and there was no column for it to appear in.
+
+**The harness also had to learn one convention**, which is worth knowing before reading its
+numbers: a wall piece's truth `x`/`z` is its MOUNT, and a placer returns its body CENTRE.
+`truthCentre` converts, once, beside the convention it converts — comparing the two directly
+reports half the piece's depth as error (110 mm on the air conditioner), which looks exactly
+like a regression and invites a fix in the wrong file.
 
 Which term the assumed values hurt is not uniform, and it is worth knowing before
 tuning any of this: for a **floor-standing** piece the lens cancels out of the size

@@ -415,8 +415,14 @@ export type GeoPlacement = {
   distance: number;
 };
 
-/** What the placer needs to know about a floor piece's PLAN shape: the axis one
- *  photograph cannot see, plus whether the footprint is a circle.
+/** What a placer needs to know about a piece's PLAN shape: the axis one photograph
+ *  cannot see, plus whether the footprint is a circle.
+ *
+ *  Read by BOTH `placeFloorObject` and `placeWallObject`, which is why it is not
+ *  named for either. They use it for the same reason — a bbox edge is a corner of a
+ *  solid, not a point on a plane — and differ only in what pins the depth axis: a
+ *  floor piece's near face is measured from the bottom row, a wall piece's BACK is
+ *  on the plaster at a distance the room already gives.
  *
  *  Both come from the catalogue — `defaultDepthFor` and `isRoundPart` — and never
  *  from the detector. That is rule 2's trust boundary rather than a preference:
@@ -431,7 +437,7 @@ export type GeoPlacement = {
  *  not a piece of furniture — but it is what the older fixtures project, and it
  *  is the case in which every term below collapses to the pre-depth arithmetic.
  */
-export type FloorFootprint = {
+export type PieceFootprint = {
   /** Front-to-back depth in metres, along the view axis of the framing camera. */
   depthM: number;
   /** Circular in plan (`isRoundPart`). A cylinder's silhouette is its TANGENT
@@ -445,14 +451,9 @@ export type FloorFootprint = {
  * Lateral offset, width and height of a BOX footprint, given where its near face
  * is. Returns the centre's forward distance, not the near face's.
  *
- * Each silhouette edge is one of the box's eight corners, and which one is decided
- * by `zc` — the forward distance after the tilt rotation, which depends on the
- * corner's HEIGHT as well as which face it is on. `forwardAtHeight` is that
- * expression, shared with the wall-colour band that first needed it. So the two
- * extremes over the eight corners are all this needs: an edge whose observed
- * tangent is positive came from the corner with the smallest `zc`, and a negative
- * one from the largest. No search, no iteration, and exact — checked to thirteen
- * digits against a forward-projected box at 0°, ±5° and 12° of tilt.
+ * Which corner each silhouette edge came from is `lateralSpan`'s question, below;
+ * this function's own job is the two faces and the two heights to hand it. Exact —
+ * checked to thirteen digits against a forward-projected box at 0°, ±5° and 12°.
  *
  * At `depthM: 0` and a level lens this is the arithmetic it replaces, to the last
  * bit. Under tilt it is deliberately NOT, because the old version read the width
@@ -478,7 +479,33 @@ function floorFromBox(
   const heightM = heightOf(cal) + ((top.up > 0 ? near : far) / top.fwd) * top.up;
   if (!(heightM > 0)) return null;
 
-  const zc = [near, far].flatMap((f) => [forwardAtHeight(0, f, cal), forwardAtHeight(heightM, f, cal)]);
+  const span = lateralSpan(box, [near, far], [0, heightM], cal);
+  if (!span) return null;
+  return { d: near + depthM / 2, right: span.right, widthM: span.widthM, heightM };
+}
+
+/**
+ * The lateral offset and width of a box, given the two faces and the two heights
+ * its eight corners occupy.
+ *
+ * Shared by the floor and wall placers because it is the same question for both: an
+ * observed bbox edge is a CORNER, and which corner is decided by `zc` — the forward
+ * distance after the tilt rotation, which depends on the corner's height as well as
+ * its face. So an edge whose observed tangent is positive came from the corner with
+ * the smallest `zc`, and a negative one from the largest. No search, no iteration.
+ *
+ * Extracted rather than copied. Two placers each holding their own version of this
+ * is the shape of scar `lib/layout-rules.ts` and `lib/drag-convoy.ts` both carry —
+ * one rule, three implementations, drifting apart in the direction nobody looks.
+ */
+function lateralSpan(
+  box: [number, number, number, number],
+  faces: [number, number],
+  heights: [number, number],
+  cal: CameraCal,
+): { right: number; widthM: number } | null {
+  const [bx, , bw] = box;
+  const zc = faces.flatMap((f) => heights.map((y) => forwardAtHeight(y, f, cal)));
   const zMin = Math.min(...zc);
   const zMax = Math.max(...zc);
   // Arithmetic protection, and it does NOT fire — said plainly rather than left
@@ -493,7 +520,7 @@ function floorFromBox(
   const tanR = tanX(bx + bw, cal);
   const left = tanL < 0 ? tanL * zMin : tanL * zMax;
   const right = tanR > 0 ? tanR * zMin : tanR * zMax;
-  return { d: near + depthM / 2, right: (left + right) / 2, widthM: right - left, heightM };
+  return { right: (left + right) / 2, widthM: right - left };
 }
 
 /**
@@ -590,7 +617,7 @@ export function placeFloorObject(
   slot: CaptureSlot,
   room: { width: number; depth: number },
   cal: CameraCal,
-  foot: FloorFootprint,
+  foot: PieceFootprint,
 ): GeoPlacement | null {
   const [bx, by, bw, bh] = box;
   const height = heightOf(cal);
@@ -645,43 +672,81 @@ export function placeFloorObject(
 }
 
 /**
- * Wall-mounted object (TV, painting, window, AC…): assume it lies ON the
- * framed wall plane at the known wall distance — both size and mount height
- * follow directly.
+ * Wall-mounted object (TV, painting, window, AC…). Its BACK is on the framed wall
+ * at the known wall distance, and its body projects into the room — so the plane
+ * that casts the silhouette is `d − depth`, not `d`.
+ *
+ * **It used to put the piece's CENTRE on the plaster**, which is where a TV's back
+ * goes, and that made the whole piece a little nearer the lens than the placer
+ * thought. Every angular measurement was then read at the wrong plane and came back
+ * large: at a level lens a 60 mm TV +4.1% wide, an 80 mm curtain +63 mm tall, and a
+ * 220 mm air conditioner **+21.7% wide and +81 mm tall** — the last of which decodes
+ * a correct 280 mm unit as 371 mm, outside `ac-unit`'s own 250–350 band, so
+ * `judgeLabel` accused a correctly identified piece and the detect screen offered to
+ * repair it. Like the floor case, the error GROWS with tilt: the curtain reaches
+ * +15.5% at 12°.
+ *
+ * Same shape of defect as `placeFloorObject`'s near face, same fix, and the same
+ * reason nobody saw it: the fixture. `boxFor` projected wall pieces as depthless
+ * PANELS, and all three in the truth table are thin (30–80 mm), so wiring depth
+ * through measured 5–23 mm and the finding read as minor. The catalogue's wall
+ * shapes go to 220 mm (`ac-unit`) and 200 mm (`window`, which gets there by the
+ * `other` category's 600 mm hitting its shape's clamp).
+ *
+ * **One thing to know before reading the position it returns.** The wall-normal
+ * coordinate does not reach the rendered scene: `wallAffinity` is `must-wall` for
+ * every wall anchor and that branch calls `snapToWall` unconditionally, which
+ * recomputes x/z as `wall + inward normal × (depth/2 + gap)` and discards this
+ * answer; `groundY` overwrites the height on the line before. So the scene was
+ * already putting the piece's back on the plaster, by a downstream correction. What
+ * this fix changes for the USER is the SIZE. The position is returned honestly
+ * anyway, because `dedupeDetections` and `buildSceneFromRoom`'s in-room gate read
+ * the raw value, and because a placer whose own answer needs a correction
+ * downstream to be right is how the next reader is misled.
  */
 export function placeWallObject(
   box: [number, number, number, number],
   slot: CaptureSlot,
   room: { width: number; depth: number },
   cal: CameraCal,
+  foot: PieceFootprint,
 ): GeoPlacement | null {
   const [bx, by, bw, bh] = box;
   const d = wallDistance(slot, room);
   const uC = bx + bw / 2;
   const height = heightOf(cal);
+  // The near face may not reach the lens. Belt and braces rather than a behaviour:
+  // the deepest wall-anchored shape is 300 mm and `ROOM_SIDE_M` floors a wall at
+  // 0.5 m away, so `d − depth` is at least 0.2 m and this never bites. Kept because
+  // a negative near face would mirror the piece in silence.
+  const depthM = Math.min(foot.depthM > 0 ? foot.depthM : 0, Math.max(0, d - 0.3));
+  const near = d - depthM;
 
-  // Everything lies on one vertical plane at forward distance d, so each row's
-  // ray is scaled to reach that plane rather than sharing one length.
   const rTop = ray(uC, by, cal);
   const rBottom = ray(uC, by + bh, cal);
-  const rMid = ray(uC, by + bh / 2, cal);
-  if (!(rTop.fwd > 0) || !(rBottom.fwd > 0) || !(rMid.fwd > 0)) return null;
+  if (!(rTop.fwd > 0) || !(rBottom.fwd > 0)) return null;
 
-  const tMid = d / rMid.fwd;
-  const right = tMid * rMid.right;
-  const widthM = tMid * (tanX(bx + bw, cal) - tanX(bx, cal));
-  const topM = height + (d / rTop.fwd) * rTop.up;
-  const bottomM = height + (d / rBottom.fwd) * rBottom.up;
-  const heightM = topM - bottomM;
+  // Which face each row came from, and it is observable rather than assumed. A point
+  // ABOVE the lens climbs the frame as it gets nearer, so the topmost row is the
+  // near face's top edge; a point below does the opposite. The bottom row takes the
+  // opposite choice on the same test. Reading both at the plaster is the old bug.
+  const yTop = height + ((rTop.up > 0 ? near : d) / rTop.fwd) * rTop.up;
+  const yBottom = height + ((rBottom.up > 0 ? d : near) / rBottom.fwd) * rBottom.up;
+  const heightM = yTop - yBottom;
+
+  const span = lateralSpan(box, [near, d], [yBottom, yTop], cal);
+  if (!span) return null;
+  const { right, widthM } = span;
   if (widthM <= 0.01 || heightM <= 0.01) return null;
 
-  const { x, z, yaw } = slotToWorld(slot, d, right);
+  // The body's centre: its back is on the plaster, so it sits half a depth in.
+  const { x, z, yaw } = slotToWorld(slot, d - depthM / 2, right);
   return {
-    position: { x, y: (topM + bottomM) / 2, z },
+    position: { x, y: (yTop + yBottom) / 2, z },
     widthMM: Math.round(widthM * 1000),
     heightMM: Math.round(heightM * 1000),
     yaw,
-    distance: d,
+    distance: d - depthM / 2,
   };
 }
 

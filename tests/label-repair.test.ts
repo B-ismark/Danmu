@@ -171,7 +171,9 @@ describe('judgeLabel', () => {
   });
 
   it('clears a word the measurement agrees with', () => {
-    const g = placeWallObject(WALL_BOX, 'n', ROOM, CAL)!;
+    const g = placeWallObject(WALL_BOX, 'n', ROOM, CAL, {
+      depthM: defaultDepthFor('painting', 'painting') / 1000,
+    })!;
     expect(sizeFitsLabel('painting', 'painting', g.widthMM, g.heightMM)).toBe(true); // premise
     expect(judgeLabel(det({ category: 'painting', shape: 'painting', slot: 'n', box: WALL_BOX }), CALS, ROOM)).toEqual({
       status: 'ok',

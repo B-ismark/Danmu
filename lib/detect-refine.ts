@@ -38,24 +38,29 @@ export type CalMap = Partial<Record<CaptureSlot, CameraCal>>;
 // the category's typical depth narrowed by the shape's range — never a literal —
 // and clampDims gates everything downstream. AI keeps naming and classifying only.
 //
-// For a FLOOR piece that default is no longer only a filler for the axis nobody
-// measured: `placeFloorObject` reads it, because the bbox's bottom edge is the
-// piece's near face and pushing out to its centre takes a depth. So the floor
-// branch stops preferring `d.dimMM[1]`, and that is rule 2 rather than tidiness —
-// the AI's depth guess would otherwise move a POSITION. The same catalogue number
-// is what the piece is drawn with, so its near face lands where the photograph put
-// it; a hint kept for the render and a default used for the maths would leave the
-// two disagreeing by half their difference, on the one axis the photo did measure.
-// Wall and ceiling pieces keep the hint-first ladder, since nothing there reads
-// depth as geometry.
+// For a FLOOR or WALL piece that default is no longer only a filler for the axis
+// nobody measured: both placers READ it, because a bbox edge is a corner of a solid
+// rather than a point on a plane — a floor piece's bottom row is its near face, and
+// a wall piece's back is on the plaster with its body in the room. So both branches
+// stop preferring `d.dimMM[1]`, and that is rule 2 rather than tidiness: the AI's
+// depth guess would otherwise move a measurement. The same catalogue number is what
+// the piece is drawn with, so a hint kept for the render beside a default used for
+// the maths cannot leave the two disagreeing.
+//
+// The CEILING branch is the one place `d.dimMM[1]` still wins, and it is not an
+// oversight: `placeCeilingObject` reads one row of a disc and takes no depth, so
+// nothing there turns a depth into a measurement.
 export function geoRefine(d: Detection, cals: CalMap, room: RoomDims): Detection {
   const cal = cals[d.slot];
   if (!cal) return d;
   const cat = (d.category ?? 'other') as Category;
   const shape = (d.shape ?? 'box') as Shape;
   const anchor = anchorFor(cat, shape);
-  const hintedDepth = d.dimMM?.[1] ?? defaultDepthFor(cat, shape);
   const catalogueDepth = defaultDepthFor(cat, shape);
+  // Named for its only consumer. It was `hintedDepth`, read by two branches of
+  // three; a name that outlives the second consumer reads as a ladder the other
+  // branches are also on.
+  const ceilingDepth = d.dimMM?.[1] ?? catalogueDepth;
 
   // A curtain whose shape resolves to the ceiling is still CLOTH ON A WALL — the
   // exception predates the ceiling placer and survives it, because the question
@@ -71,27 +76,27 @@ export function geoRefine(d: Detection, cals: CalMap, room: RoomDims): Detection
       ...d,
       position: g.position,
       yaw: typeof d.yaw === 'number' ? d.yaw : g.yaw,
-      dimMM: [g.widthMM, hintedDepth, d.dimMM?.[2] ?? defaultAxisFor(cat, shape, 2)],
+      dimMM: [g.widthMM, ceilingDepth, d.dimMM?.[2] ?? defaultAxisFor(cat, shape, 2)],
     };
   }
 
-  const onFloor = anchor === 'floor';
-  const g = onFloor
-    ? placeFloorObject(d.box, d.slot, room, cal, {
-        depthM: catalogueDepth / 1000,
-        // Read off the SAME (category, shape) pair as the depth, so the number a
-        // piece is positioned by and the footprint it is inverted as cannot
-        // disagree. A detection with no shape resolves to `box` here, which is
-        // exactly what its depth default already assumes.
-        round: isRoundPart(shape),
-      })
-    : placeWallObject(d.box, d.slot, room, cal);
+  // ONE footprint for both placers, because it answers one question — what shape is
+  // this piece in plan — and the two placers differ only in what pins its depth
+  // axis. Roundness is read off the SAME (category, shape) pair as the depth, so the
+  // number a piece is measured by and the footprint it is inverted as cannot
+  // disagree. A detection with no shape resolves to `box` here, which is exactly
+  // what its depth default already assumes.
+  const foot = { depthM: catalogueDepth / 1000, round: isRoundPart(shape) };
+  const g =
+    anchor === 'floor'
+      ? placeFloorObject(d.box, d.slot, room, cal, foot)
+      : placeWallObject(d.box, d.slot, room, cal, foot);
   if (!g) return d;
   return {
     ...d,
     position: g.position,
     yaw: typeof d.yaw === 'number' ? d.yaw : g.yaw,
-    dimMM: [g.widthMM, onFloor ? catalogueDepth : hintedDepth, g.heightMM],
+    dimMM: [g.widthMM, catalogueDepth, g.heightMM],
   };
 }
 

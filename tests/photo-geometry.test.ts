@@ -128,7 +128,7 @@ describe('placeWallObject', () => {
     const [u1, vTop] = project('n', -0.6 - 0.6, 1.4 + 0.35, -2, CAL);
     const [u2, vBottom] = project('n', -0.6 + 0.6, 1.4 - 0.35, -2, CAL);
     const box: [number, number, number, number] = [u1, vTop, u2 - u1, vBottom - vTop];
-    const g = placeWallObject(box, 'n', ROOM, CAL)!;
+    const g = placeWallObject(box, 'n', ROOM, CAL, CARD)!;
     expect(g.position.x).toBeCloseTo(-0.6, 2);
     expect(g.position.z).toBeCloseTo(-2, 2);
     expect(g.position.y).toBeCloseTo(1.4, 2);
@@ -323,6 +323,85 @@ describe('placeFloorObject over solids', () => {
   });
 });
 
+describe('placeWallObject over solids', () => {
+  const TILTS = [0, 5, -5, 12, -12];
+  const cal = (deg: number): CameraCal => ({ k: 1.2, aspect: 4 / 3, tiltRad: (deg * Math.PI) / 180 });
+
+  /** The bbox of a wall piece whose BACK is on the plaster and whose body projects
+   *  into the room — eight corners, the convention `wallCorners` uses in the harness
+   *  and the one a TV actually hangs by. Local to this file because it is the inverse
+   *  of the thing under test and belongs beside it. */
+  function bboxOfWallSolid(
+    lateral: number,
+    yC: number,
+    d: number,
+    wM: number,
+    hM: number,
+    depthM: number,
+    c: CameraCal,
+  ): [number, number, number, number] {
+    const pts: Array<[number, number]> = [];
+    for (const f of depthM > 0 ? [d - depthM, d] : [d]) {
+      for (const dr of [-wM / 2, wM / 2]) {
+        for (const dy of [-hM / 2, hM / 2]) {
+          pts.push(project('n', lateral + dr, yC + dy, -f, c));
+        }
+      }
+    }
+    const us = pts.map((p) => p[0]);
+    const vs = pts.map((p) => p[1]);
+    const u0 = Math.min(...us);
+    const v0 = Math.min(...vs);
+    return [u0, v0, Math.max(...us) - u0, Math.max(...vs) - v0];
+  }
+
+  it('recovers a real wall solid exactly, at every tilt', () => {
+    // Position, width, height and mount centre together, because all four rode the
+    // plane the silhouette was read at. The deep case is the point: a 220 mm air
+    // conditioner is what the catalogue ships, and at that depth the old placer read
+    // it +21.7% wide and 91 mm too tall. Lateral offsets are signed and non-zero —
+    // at 0 a sign error is invisible — and both the straddling and off-to-one-side
+    // cases appear, which take different branches of the corner selection.
+    const cases: Array<[string, number, number, number, number, number]> = [
+      ['tv 60mm', 0.9, 1.2, 1.2, 0.7, 0.06],
+      ['painting 30mm', -1.4, 1.5, 0.7, 0.5, 0.03],
+      ['curtain 80mm', -0.3, 1.45, 1.4, 2.0, 0.08],
+      ['ac unit 220mm', 1.1, 2.3, 0.8, 0.28, 0.22],
+      ['a 400mm box', 0.0, 1.0, 0.6, 0.6, 0.4],
+    ];
+    for (const [name, lateral, yC, wM, hM, depthM] of cases) {
+      for (const deg of TILTS) {
+        const c = cal(deg);
+        const d = wallDistance('n', ROOM);
+        const g = placeWallObject(bboxOfWallSolid(lateral, yC, d, wM, hM, depthM, c), 'n', ROOM, c, { depthM })!;
+        const where = `${name} at ${deg}°`;
+        expect(g.position.x, where).toBeCloseTo(lateral, 9);
+        // Its back is on the plaster, so its centre sits half a depth into the room.
+        expect(g.position.z, where).toBeCloseTo(-(d - depthM / 2), 9);
+        expect(g.position.y, where).toBeCloseTo(yC, 9);
+        expect(g.widthMM, where).toBe(Math.round(wM * 1000));
+        expect(g.heightMM, where).toBe(Math.round(hM * 1000));
+      }
+    }
+  });
+
+  it('and the depth is what a flat-panel decode was getting wrong', () => {
+    // The before, so the fix has a number rather than a claim. Reading the same
+    // silhouette as if it were flat on the plaster — which is what the placer did —
+    // over-reads everything, and the deeper the piece the worse: this is the
+    // assertion that would fail if someone reverted to `d` and kept the fixture.
+    const c = cal(0);
+    const d = wallDistance('n', ROOM);
+    const deep = placeWallObject(bboxOfWallSolid(1.1, 2.3, d, 0.8, 0.28, 0.22, c), 'n', ROOM, c, { depthM: 0.22 })!;
+    const asFlat = placeWallObject(bboxOfWallSolid(1.1, 2.3, d, 0.8, 0.28, 0.22, c), 'n', ROOM, c, { depthM: 0 })!;
+    expect(deep.widthMM).toBe(800);
+    expect(deep.heightMM).toBe(280);
+    // Over-read by a fifth of its width and a third of its height.
+    expect(asFlat.widthMM / 800).toBeGreaterThan(1.15);
+    expect(asFlat.heightMM / 280).toBeGreaterThan(1.25);
+  });
+});
+
 /** A truth point given as (lateral, distance from the lens) in the slot's own frame,
  *  mapped to world x/z. The inverse of `project`'s first switch, and written out
  *  because a fixture that only ever tests slot `n` cannot see a slot table with two
@@ -414,12 +493,23 @@ describe('camera tilt', () => {
     }
   });
 
-  it('recovers a wall-mounted panel under tilt', () => {
-    const box = bboxOfWallPanel('n', -0.6, 1.4, -2, 1.2, 0.7, DOWN_5);
-    const g = placeWallObject(box, 'n', ROOM, DOWN_5)!;
-    expect(Math.abs(g.position.x - -0.6)).toBeLessThan(0.02);
-    expect(g.position.y).toBeCloseTo(1.4, 2);
-    expect(Math.abs(g.heightMM - 700)).toBeLessThan(20);
+  it('recovers a wall-mounted panel under tilt EXACTLY, at four angles', () => {
+    // Another tolerance that turned out to be a symptom rather than a limit. This
+    // allowed 20 mm of position and 20 mm of height at one angle, for the same reason
+    // the floor card did: the lateral extremes of a panel with height come from its
+    // top corners, whose tilt-rotated forward distance differs from the row the
+    // decode was reading. `lateralSpan` reads each edge at its own corner's distance,
+    // so there is nothing left to allow — and it is checked at four angles rather
+    // than one, since the residue this replaces grew with the angle.
+    for (const deg of [5, -5, 12, -12]) {
+      const cal: CameraCal = { k: 1.2, aspect: 4 / 3, tiltRad: (deg * Math.PI) / 180 };
+      const box = bboxOfWallPanel('n', -0.6, 1.4, -2, 1.2, 0.7, cal);
+      const g = placeWallObject(box, 'n', ROOM, cal, CARD)!;
+      expect(g.position.x, `${deg}°`).toBeCloseTo(-0.6, 9);
+      expect(g.position.y, `${deg}°`).toBeCloseTo(1.4, 9);
+      expect(g.widthMM, `${deg}°`).toBe(1200);
+      expect(g.heightMM, `${deg}°`).toBe(700);
+    }
   });
 });
 
@@ -480,8 +570,8 @@ describe('calFromHfov', () => {
     // divided back out and the whole error lands on the measurement.
     const wide = calFromHfov(hfovFromFocal35(13, 4 / 3)!, 4 / 3);
     const box = bboxOfWallPanel('n', 0, 1.4, -2, 1.4, 0.8, wide);
-    const right = placeWallObject(box, 'n', ROOM, wide)!;
-    const assumed = placeWallObject(box, 'n', ROOM, defaultCal(4 / 3))!;
+    const right = placeWallObject(box, 'n', ROOM, wide, CARD)!;
+    const assumed = placeWallObject(box, 'n', ROOM, defaultCal(4 / 3), CARD)!;
     expect(right.widthMM).toBeCloseTo(1400, -1);
     expect(assumed.widthMM).toBeLessThan(right.widthMM * 0.55);
   });

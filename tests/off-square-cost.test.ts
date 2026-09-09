@@ -38,6 +38,7 @@ import {
   refinedOnly,
   runPipeline,
   squareOn,
+  truthCentre,
   type Truth,
 } from './helpers/known-room';
 import { inFrame, project } from './helpers/project';
@@ -64,15 +65,14 @@ describe('the off-square projector is the proven one at zero', () => {
     // `boxFor`'s own note: the solid wall case is measured in this file instead, so
     // that the baseline's flat-panel question keeps an exact answer).
     //
-    // Hence per anchor rather than one flag. The alternative is a single flag and a
-    // fixture that disagrees with the baseline on three pieces, which is how a
-    // harness starts reporting a difference between two of its own builders as a
-    // finding about the code.
+    // It was per-anchor for exactly one commit, while the floor projector was a solid
+    // and the wall one still a flat panel. Both are solids now, so it is one flag
+    // again — and the intermediate state is worth the sentence, because a harness
+    // whose two builders disagree reports the difference as a finding about the code.
     for (const t of TRUTH) {
-      const solid = anchorFor(t.category, t.shape) === 'floor';
       for (const slot of t.slots) {
         const a = boxFor(t, slot, CAL);
-        const b = boxForYawed(t, slot, CAL, { yawRad: 0, realDepth: solid });
+        const b = boxForYawed(t, slot, CAL, { yawRad: 0, realDepth: true });
         for (let i = 0; i < 4; i += 1) {
           expect(b[i], `${t.name} ${slot} component ${i}`).toBeCloseTo(a[i], 12);
         }
@@ -82,10 +82,7 @@ describe('the off-square projector is the proven one at zero', () => {
 
   it('and the whole pipeline reproduces the baseline through it', () => {
     const base = runPipeline(squareOn(CAL), CALS);
-    const same = runPipeline(
-      (tr, slot) => boxForYawed(tr, slot, CAL, { yawRad: 0, realDepth: anchorFor(tr.category, tr.shape) === 'floor' }),
-      CALS,
-    );
+    const same = runPipeline(offSquare(CAL, { yawRad: 0, realDepth: true }), CALS);
     expect(same.REFINED.length).toBe(base.REFINED.length);
     expect(same.PARTS.length).toBe(base.PARTS.length);
     for (let i = 0; i < base.REFINED.length; i += 1) {
@@ -260,7 +257,8 @@ function measure(label: string, deg: number, yawOf: (slot: CaptureSlot) => numbe
       return;
     }
     const t = measurable[i];
-    posErrs.push(Math.hypot(hit.x - t.x, hit.z - t.z));
+    const c = truthCentre(t);
+    posErrs.push(Math.hypot(hit.x - c.x, hit.z - c.z));
     // NaN rather than 0 for a missing size: `?? 0` printed as "100% wrong width",
     // which reads as a sizing error rather than as no measurement at all.
     if (Number.isFinite(hit.w)) {
@@ -345,7 +343,7 @@ function perPiece(yawRad: number, realDepth: boolean) {
       anchor: anchorFor(t.category, t.shape),
       dims: t.dimMM,
       offFrame: anyOff,
-      posErrM: hit ? Math.hypot(hit.x - t.x, hit.z - t.z) : NaN,
+      posErrM: hit ? Math.hypot(hit.x - truthCentre(t).x, hit.z - truthCentre(t).z) : NaN,
       widthFrac: hit && Number.isFinite(hit.w) ? (hit.w - t.dimMM[0]) / t.dimMM[0] : NaN,
     };
   });
@@ -524,23 +522,26 @@ describe('the cost, measured', () => {
 
     // And what is left is named rather than merely bounded, because "small" is not a
     // measurement. At a square camera the whole room is now within a millimetre
-    // except three things, in this order:
+    // except two things, in this order:
     //
     //   · the ceiling fan, 0.1136 m — its own documented allowance, a disc that
-    //     spans a range of distances read at one row. Untouched by this change and
-    //     now the LARGEST single error at zero yaw.
-    //   · the three wall pieces, 5–23 mm — `placeWallObject` puts a piece's centre
-    //     on the plaster rather than its back against it, which is the same near-face
-    //     mistake one anchor over, at one to two orders less because a TV is 80 mm
-    //     deep and a sofa is 850. Filed, not fixed here.
-    //   · the sofa, 0.0500 m — half the gap between its real depth and the
-    //     catalogue's, and nothing else. See the assertion below.
+    //     spans a range of distances read at one row. Untouched by either solid fix
+    //     and the LARGEST single error at zero yaw.
+    //   · the three pieces whose real depth differs from the catalogue default the
+    //     placers must assume — the sofa (850 against 950, so 0.0500 m), the TV (80
+    //     against 60) and the painting (40 against 30). Nothing else.
+    //
+    // The WALL row of this list is gone, and that is the second solid fix. It read
+    // "the three wall pieces, 5–23 mm — `placeWallObject` puts a piece's centre on
+    // the plaster rather than its back against it… filed, not fixed here", and the
+    // deep piece added with the fix is why it mattered more than 23 mm suggested: an
+    // air conditioner at 220 mm read +21.7% wide and 91 mm too tall.
     const worstFloor = Math.max(...ZERO_DETAIL.filter((r) => r.anchor === 'floor').map((r) => r.posErrM));
     const worstWall = Math.max(...ZERO_DETAIL.filter((r) => r.anchor.startsWith('wall')).map((r) => r.posErrM));
     const fan = ZERO_DETAIL.find((r) => r.name === 'fan')!;
     expect(fan.posErrM).toBeGreaterThan(worstFloor);
     expect(fan.posErrM).toBeGreaterThan(worstWall);
-    expect(worstWall).toBeLessThan(0.03);
+    expect(worstWall).toBeLessThan(0.02);
     expect(worstFloor).toBeLessThan(0.06);
   });
 
@@ -572,40 +573,53 @@ describe('the cost, measured', () => {
     }
   });
 
-  it('and the WALL placer still has the error the floor one just lost', () => {
-    // Kept from the previous version of this file, with its own reason intact,
-    // because it is the finding this change does NOT address and the ordering has
-    // reversed underneath it.
+  it('and the WALL placer no longer has it either — this test inverted twice', () => {
+    // Worth keeping the whole history, because this one assertion has been wrong in
+    // both directions and the second version is the interesting one.
     //
-    // **What it said before that was worth nothing:** "wall pieces are untouched
-    // (0.0000 m, 0.0%), which is the other half of the diagnosis — a wall panel IS
-    // fronto-parallel and thin, so giving it depth changes nothing." A TAUTOLOGY:
-    // `wallCorners` took no depth parameter, so `realDepth: true` could not move a
-    // wall piece by construction and `toBeCloseTo(0, 9)` could not fail. It was
-    // published in `Design.md` and in a commit body as a finding.
+    // **First it was a tautology.** It read: "wall pieces are untouched (0.0000 m,
+    // 0.0%), which is the other half of the diagnosis — a wall panel IS
+    // fronto-parallel and thin, so giving it depth changes nothing." `wallCorners`
+    // took no depth parameter, so `realDepth: true` could not move a wall piece by
+    // construction and `toBeCloseTo(0, 9)` could not fail. It was published in
+    // `Design.md` and a commit body as a finding.
     //
-    // Measured once the fixture could express it: the TV is 21 mm out and 3.5% too
-    // wide, the painting 5 mm and 1.6%, the curtain 23 mm and 3.4%. That WAS one to
-    // two orders below the floor pieces, which is what made floor furniture the
-    // defect to act on first. It no longer is — the floor pieces are exact — so
-    // `placeWallObject` putting a piece's centre on the plaster instead of its back
-    // is now the largest anchor-shaped error left after the fan.
+    // **Then it was a real measurement of a real defect**, once the fixture could
+    // express it: TV 21 mm and 3.5% too wide, painting 5 mm and 1.6%, curtain 23 mm
+    // and 3.4% — pinned with a must-be-NON-ZERO floor, deliberately, so that a fix
+    // would fail it rather than pass quietly. That floor has now done its job.
+    //
+    // **And the fixture was still understating it**, which is the part worth
+    // carrying. All three of those pieces are 30–80 mm deep, so "one to two orders
+    // below the floor pieces" was as much a property of the fixture as the earlier
+    // 0.0000 was. The air conditioner in the truth table is 220 mm — what the
+    // catalogue ships — and at that depth the old placer read a correct 280 mm unit
+    // as 371, outside `ac-unit`'s own band. Three instances of the same lesson in one
+    // thread: a fixture that cannot express a defect certifies it.
     const wallErrs = ZERO_DETAIL.filter((r) => r.anchor.startsWith('wall'));
-    expect(wallErrs.length).toBeGreaterThan(2);
+    expect(wallErrs.length).toBeGreaterThan(3);
+
     for (const r of wallErrs) {
-      // Non-zero, which is the assertion the old fixture could not make: if this
-      // ever reads exactly 0 again, the depth has stopped reaching the projection.
-      expect(r.posErrM, `${r.name} (wall) must be affected at all`).toBeGreaterThan(1e-3);
-      expect(r.posErrM, `${r.name} (wall) stays small`).toBeLessThan(0.05);
-      expect(Math.abs(r.widthFrac), `${r.name} (wall) stays small`).toBeLessThan(0.05);
+      const t = TRUTH.find((x) => x.name === r.name)!;
+      const gapM = Math.abs(defaultDepthFor(t.category, t.shape) - t.dimMM[1]) / 1000;
+      // Bounded by the piece's own depth GAP and nothing else — so a wall piece whose
+      // catalogue depth is right (the curtain, the air conditioner) must be exact, and
+      // one whose depth is wrong is allowed only what that difference can explain.
+      // Reinstating the centre-on-the-plaster decode fails this on all four.
+      expect(r.posErrM, `${r.name} (wall) within its ${(gapM * 1000).toFixed(0)} mm depth gap`).toBeLessThanOrEqual(
+        gapM + 1e-9,
+      );
+      expect(Math.abs(r.widthFrac), `${r.name} (wall) width`).toBeLessThan(0.01);
     }
-    // The depth has to project INWARD, into the room, because that is where a TV
-    // hangs — its back is on the plaster. Mutating it to extend outward, through
-    // the wall, is not caught by the band above: it leaves the TV at 6.7 mm and
-    // 1.1% rather than 21 mm and 3.5%, since a body nearer the camera casts the
-    // larger silhouette. So the direction gets its own bound.
-    const tv = wallErrs.find((r) => r.name === 'tv')!;
-    expect(tv.posErrM, 'the TV projects into the room, not into the wall').toBeGreaterThan(0.015);
+
+    // The two with no gap at all, named rather than left to the loop, because they
+    // are the assertion the old fixture could not make in either direction: exact,
+    // against a solid, on a placer that reads their depth.
+    for (const name of ['curtain', 'ac']) {
+      const r = wallErrs.find((x) => x.name === name)!;
+      expect(r.posErrM, `${name} is exact`).toBeLessThan(1e-9);
+      expect(Math.abs(r.widthFrac), `${name} width is exact`).toBeLessThan(1e-9);
+    }
   });
 
   it('the CEILING piece moves with yaw too, and was exempted from the sweep', () => {

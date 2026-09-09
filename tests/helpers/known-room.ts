@@ -36,7 +36,6 @@ import type { CaptureSlot, RoomData } from '@/lib/storage';
 import {
   ALONG,
   bboxOfCeilingDisc,
-  bboxOfWallPanel,
   extent,
   floorBoxCorners,
   floorCylinderPoints,
@@ -88,6 +87,14 @@ export const TRUTH: Truth[] = [
   { name: 'tv', label: '55 inch tv', category: 'tv', shape: 'tv', x: 3.5, z: 1.2, y: 1.2, dimMM: [1200, 80, 700], slots: ['e'] },
   { name: 'painting', label: 'framed print', category: 'painting', shape: 'painting', x: -3.5, z: -0.6, y: 1.5, dimMM: [700, 40, 500], slots: ['w'] },
   { name: 'curtain', label: 'linen curtain', category: 'curtain', shape: 'curtain', x: -1.0, z: 3.0, y: 1.45, dimMM: [1400, 80, 2300], slots: ['s'] },
+  // The DEEP wall piece, and the reason it is here rather than a fourth thin one.
+  // 220 mm is what the catalogue ships for an `ac-unit`, against 30–80 mm for the
+  // three above, and depth is the axis `placeWallObject` was getting wrong: at this
+  // depth the old placer decoded a correct 280 mm unit as 371 mm — outside the
+  // shape's own 250–350 band, so `judgeLabel` marked a correctly identified piece
+  // `suspect`. Mounted high on the north wall at the height `groundY` gives a
+  // `wall-high` anchor in a 2.7 m room, clear of the wardrobe and the fan below it.
+  { name: 'ac', label: 'air conditioner', category: 'ac', shape: 'ac-unit', x: 1.8, z: -3.0, y: 2.51, dimMM: [800, 220, 280], slots: ['n'] },
   { name: 'fan', label: 'ceiling fan', category: 'fan', shape: 'fan', x: 0, z: -2.2, dimMM: [1000, 1000, 200], slots: ['n'] },
   // The cross-slot case: one lamp in the NE quadrant, in both photos.
   { name: 'lamp', label: 'floor lamp', category: 'lamp', shape: 'lamp-floor', x: 2.0, z: -2.2, dimMM: [300, 300, 1700], slots: ['n', 'e'] },
@@ -105,33 +112,58 @@ export const TRUTH: Truth[] = [
  *  decoding the near face as the centre. `bboxOfFloorObject` still exists for the
  *  card-versus-solid control experiment; it is no longer the truth.
  *
- *  A WALL piece stays a flat PANEL here, and that is a decision worth stating
- *  because the obvious reading of the paragraph above is that it should not be. Wall
- *  pieces have the same defect one anchor over — `placeWallObject` puts a piece's
- *  centre on the plaster where a TV's BACK goes, so its body is a little nearer the
- *  lens than the placer thinks and it reads 5 to 23 mm out and a few per cent wide.
+ *  A WALL piece is a solid here too, with its body extending INWARD from the
+ *  plaster, because that is where a TV hangs. It was a flat PANEL for one commit,
+ *  deliberately and with the reason written down: making it a solid then would have
+ *  moved three pieces off the 1e-9 bar and into tolerances derived from a defect
+ *  nobody was fixing yet, and the note said *"when this is fixed, the fixture moves
+ *  with it"*. `placeWallObject` decodes the solid now, so it has.
  *
- *  The difference is that the solid wall case is already measured, with a band and a
- *  must-be-non-zero floor, in `tests/off-square-cost.test.ts` — which projects wall
- *  solids through `boxForYawed`'s `realDepth`. So nothing anywhere certifies the
- *  wall placer as exact on a solid, and this projector's flat panel asks a narrower
- *  question that is still a real one: given a genuinely flat panel, is the wall
- *  plane, the mount height and the slot mapping right? That question has an exact
- *  answer and keeps its 1e-9 bar.
- *
- *  Making it a solid instead was tried and reverted deliberately. It moves three
- *  pieces off exact and into tolerances derived from a defect nobody is fixing in
- *  this commit, which trades the strongest property this baseline has for a
- *  restatement of something the file next door already measures. The wall placer is
- *  the next item in `docs/what-is-still-open.md`, and it should be FIXED rather than
- *  allowed for. */
+ *  The deep piece in the table is the point of that move. All three original wall
+ *  pieces are thin — 30 to 80 mm — so even with depth wired through they measured 5
+ *  to 23 mm and the defect read as minor. The air conditioner is 220 mm, which is
+ *  what the catalogue actually ships, and at that depth the old placer read it
+ *  +21.7% wide and 91 mm too tall: outside `ac-unit`'s own height band, so it
+ *  accused a correct label. A fixture that cannot express a defect certifies it, and
+ *  this is the third time in one thread. */
 export function boxFor(t: Truth, slot: CaptureSlot, cal: CameraCal): Box {
   const anchor = anchorFor(t.category, t.shape);
   const wM = t.dimMM[0] / 1000;
   const hM = t.dimMM[2] / 1000;
   if (anchor === 'ceiling') return bboxOfCeilingDisc(slot, t.x, t.z, wM, cal, ROOM.height);
-  if (anchor !== 'floor') return bboxOfWallPanel(slot, t.x, t.y ?? 1.2, t.z, wM, hM, cal);
-  return extent(floorPoints(t, slot, true).map((p) => project(slot, ...p, cal)));
+  const pts =
+    anchor === 'floor'
+      ? floorPoints(t, slot, true)
+      : wallCorners(slot, t.x, t.y ?? 1.2, t.z, wM, hM, t.dimMM[1] / 1000);
+  return extent(pts.map((p) => project(slot, ...p, cal)));
+}
+
+/** The XZ point a placer should decode for this piece — which is NOT always the
+ *  point in the truth table.
+ *
+ *  A wall piece's `x`/`z` is its MOUNT: where it is fixed to the plaster, which is
+ *  the physically meaningful thing to write down and what `wallCorners` builds its
+ *  body inward from. `placeWallObject` returns the body's CENTRE, half a depth into
+ *  the room. Comparing one against the other reports half the piece's depth as
+ *  error — 110 mm for the air conditioner — which is a units mismatch in the harness
+ *  rather than anything the placer got wrong, and exactly the kind of thing that
+ *  reads as a regression and gets "fixed" in the wrong file.
+ *
+ *  So the conversion lives here, once, beside the convention it converts. Floor and
+ *  ceiling pieces are already centres and pass through.
+ *
+ *  It offsets by the piece's OWN depth, not the catalogue's, which is the point: what
+ *  is left over after this is the gap between the two, and that is a figure worth
+ *  asserting rather than a tolerance to allow. */
+export function truthCentre(t: Truth): { x: number; z: number } {
+  if (anchorFor(t.category, t.shape) === 'floor') return { x: t.x, z: t.z };
+  // A wall piece hangs on exactly one wall, so its slot names the inward direction.
+  const slot = t.slots[0];
+  if (!slot || !anchorFor(t.category, t.shape).startsWith('wall-')) return { x: t.x, z: t.z };
+  const [ax, az] = ALONG[slot];
+  const [nx, nz] = [-az, ax];
+  const half = t.dimMM[1] / 2000;
+  return { x: t.x + nx * half, z: t.z + nz * half };
 }
 
 /** A floor piece's world points, as the solid it is or as the flat card the harness
@@ -223,7 +255,8 @@ export function assignOneToOne<T extends { label?: string; x: number; z: number 
   truths.forEach((t, ti) =>
     pool.forEach((p, ri) => {
       if (p.label !== undefined && p.label !== t.label) return;
-      pairs.push({ ti, ri, d: Math.hypot(p.x - t.x, p.z - t.z) });
+      const c = truthCentre(t);
+      pairs.push({ ti, ri, d: Math.hypot(p.x - c.x, p.z - c.z) });
     }),
   );
   pairs.sort((a, b) => a.d - b.d);
@@ -242,8 +275,12 @@ export function assignOneToOne<T extends { label?: string; x: number; z: number 
 export function nearest<T extends { label?: string; x: number; z: number }>(t: Truth, pool: T[]): T | undefined {
   const same = pool.filter((p) => p.label === undefined || p.label === t.label);
   if (same.length === 0) return undefined;
+  // Against `truthCentre`, not the truth row: a wall piece's `x`/`z` is its mount and
+  // a placer returns its body centre. Matching on the wrong one of those biases every
+  // pairing by half a depth, which is 110 mm on the air conditioner.
+  const c = truthCentre(t);
   return same.reduce((best, p) =>
-    Math.hypot(p.x - t.x, p.z - t.z) < Math.hypot(best.x - t.x, best.z - t.z) ? p : best,
+    Math.hypot(p.x - c.x, p.z - c.z) < Math.hypot(best.x - c.x, best.z - c.z) ? p : best,
   );
 }
 

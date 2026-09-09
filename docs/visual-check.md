@@ -1129,6 +1129,35 @@ of `ESLint: Invalid Options`, and 147 test files / 2713 passing / 5 expected fai
 over `tests/photo-geometry.test.ts` and 14 over `tests/detect-pipeline.test.ts`, whose
 printed baseline table is the record of what changed.
 
+### A scanned air conditioner or TV should stop coming back over-wide
+
+**Where to click.** Scan a room that has something deep on a wall — an air conditioner or
+a split unit is the case, but a chunky TV or a boxed-in window will do — and look at the
+piece's WIDTH in the Inspector against the real thing, then at the detect screen for any
+"looks wrong" flag on a word that was in fact correct.
+
+**What wrong looks like.** A wall piece noticeably wider or taller than the real one; or
+the detect screen offering to repair a label it identified correctly.
+
+**Why it is here.** `placeWallObject` used to put a piece's centre on the plaster, where
+its back goes, so its body sat nearer the lens than the placer thought and every angular
+measurement was read at the wrong plane. Thin pieces barely showed it — a painting +1.8% —
+but the catalogue's air conditioner is 220 mm deep and read **+21.7% wide and 91 mm too
+tall**, which put a correct 280 mm unit outside its own 250–350 band and made `judgeLabel`
+accuse the word. The arithmetic is now exact against a projected solid at five tilts; what
+no test can see is whether a real detector's box on a real AC unit gives a width that looks
+right in the room.
+
+**What is NOT worth looking for.** Its distance from the wall. The wall-normal position
+never came from this placer in the rendered scene — `snapToWall` recomputes it from the wall
+itself — so a wall piece has always sat with its back on the plaster and this change does
+not move it.
+
+**Where it rides.** The commit whose subject begins *"A wall piece is a solid too"* on
+`claude/amazing-dijkstra-d0am9g`, draft PR #148. Gates on it: typecheck, lint, build clean
+of `ESLint: Invalid Options`, and 147 test files / 2716 passing / 5 expected fail — with 40
+over `tests/photo-geometry.test.ts` and 15 over `tests/detect-pipeline.test.ts`.
+
 ### Pressing Shuffle moves the button out from under the pointer
 
 *Filed by `rails` on 2026-09-05 from a peer's browser measurement during PR #115's review.
