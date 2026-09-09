@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { dedupeDetections, geoRefine, refineDetections, type CalMap, type RoomDims } from '@/lib/detect-refine';
-import { placeCeilingObject, placeFloorObject, placeWallObject, type CameraCal } from '@/lib/photo-geometry';
+import {
+  placeCeilingObject,
+  placeFloorObject,
+  placeWallObject,
+  wallDistance,
+  type CameraCal,
+} from '@/lib/photo-geometry';
 import type { Detection } from '@/lib/detection';
 import { anchorFor } from '@/lib/physics';
 import { CATEGORIES, SHAPES, defaultAxisFor, defaultDepthFor, isRoundPart, type Category } from '@/lib/scene-spec';
+import { bboxOfWallSolid } from './helpers/project';
 import { dimRangeFor } from '@/lib/dimension-ranges';
 
 // The five contracts below are the ones every later phase of the detection plan
@@ -326,5 +333,60 @@ describe('refineDetections', () => {
     );
     expect(out).toHaveLength(2);
     for (const d of out) expect(d.dimMM).toBeDefined();
+  });
+});
+
+// ── What a REFUSED placement costs, measured rather than argued ──────────────
+//
+// `onFramedSurface` refuses a piece decoded outside the framed wall. The question this
+// describe exists to answer is what that costs downstream, because the first version of
+// the docblock in `lib/photo-geometry.ts` claimed the refusal removed a duplicate ROW
+// and it does not — the count was reasoned, not measured, which is the mistake this file
+// keeps catching. Both directions are pinned here so the next reader does not have to
+// re-derive them.
+describe('a refused placement', () => {
+  const W: CameraCal = { k: 2 * Math.tan(((106 / 2) * Math.PI) / 180), aspect: 4 / 3 };
+  const WCALS: CalMap = { n: W, e: W, s: W, w: W };
+
+  /** One 700 × 500 print on the N wall, 800 mm from the north-east corner, as seen
+   *  from whichever camera. `e` is the return-wall sighting an ultrawide catches. */
+  const print = (view: 'n' | 'e'): Detection => ({
+    label: 'framed print',
+    conf: 0.9,
+    category: 'painting',
+    shape: 'painting',
+    slot: view,
+    box: bboxOfWallSolid('n', view, 2.2, 1.5, wallDistance('n', ROOM), 0.7, 0.5, 0.03, W),
+  });
+
+  it('keeps the detection and drops only the measurement', () => {
+    // The refusal path is `return d` — the SAME object — which is what
+    // `lib/label-repair.ts` reads as "unmeasurable" via identity. So the piece still
+    // reaches the scene at its catalogue size through `placementForSlot`; it is the
+    // fabricated numbers that go, not the furniture. "A piece that never appears leaves
+    // no trace" is the failure this repo fears, and this is why the gate does not cause it.
+    const seed = print('e');
+    expect(geoRefine(seed, WCALS, ROOM)).toBe(seed);
+    expect(seed.dimMM).toBeUndefined();
+    expect(seed.position).toBeUndefined();
+  });
+
+  it('does NOT change the row count — the duplicate survives either way', () => {
+    // Two sightings of one print. Measured, they are ~1.0 m apart against `painting`'s
+    // 0.35 m tier, so both survive; refused, the second has no position at all and
+    // `dedupeDetections` declines to compare a missing one — so both survive again.
+    // Two in, two out, before and after the gate. The gate buys size and verdicts, not
+    // de-duplication, and saying otherwise is the claim that had to be retracted.
+    const out = refineDetections([print('n'), print('e')], WCALS, ROOM);
+    expect(out).toHaveLength(2);
+
+    const own = out.find((d) => d.slot === 'n')!;
+    expect(own.dimMM![0]).toBe(700);
+    expect(own.dimMM![2]).toBe(500);
+    expect(own.position!.x).toBeCloseTo(2.2, 9);
+
+    const returned = out.find((d) => d.slot === 'e')!;
+    expect(returned.dimMM).toBeUndefined();
+    expect(returned.position).toBeUndefined();
   });
 });

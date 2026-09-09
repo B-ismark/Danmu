@@ -1158,6 +1158,47 @@ not move it.
 of `ESLint: Invalid Options`, and 147 test files / 2716 passing / 5 expected fail — with 40
 over `tests/photo-geometry.test.ts` and 15 over `tests/detect-pipeline.test.ts`.
 
+### A picture near a corner should stop appearing twice at two different sizes
+
+**Where to click.** Scan a room that has something hanging close to a corner — a framed
+print, a mirror, a wall clock, a curtain that runs up to the return wall. Take the two
+photos that share that corner. Then look at the detect screen for a second copy of the same
+piece, and at each copy's WIDTH in the Inspector.
+
+**What wrong looks like.** Two of one picture, and the second one noticeably bigger than
+the real thing — or a high wall fixture (a vent, an alarm, a corner speaker) turning up as
+an oversized ceiling light.
+
+**Why it is here.** An ultrawide frames more than the wall it is pointed at, so a piece on
+the RETURN wall is in shot near the shared corner — and both wall and ceiling placers
+inverted whatever they were given against their own assumed plane without ever asking
+whether the answer was still inside the room. Measured: a 700 × 500 print 800 mm from a
+corner came back **960 × 711** — +37% and +42% — 769 mm past the end of the wall it was
+pinned to; a 300 mm vent read as a ceiling piece came back 401 mm wide and 643 mm outside
+the room, having passed the one gate that function already had. Both are refused now.
+
+**What is NOT worth looking for, and this is the part a test had to establish.** Fewer
+rows. The refusal does not delete the second sighting — a refused detection keeps its
+catalogue size and gets arranged, so **you should still expect to see two pieces**. What
+should be gone is the *fabricated size*: the second copy should look like a plain
+catalogue-sized picture rather than a confidently over-large one, and the detect screen
+should stop offering to repair a label it read correctly. Deleting the duplicate is a
+separate question and nothing here touches the merge distances.
+
+**The one thing this cannot fix, so do not read a failure into it.** The gate is only as
+good as the lens. A wide photo whose focal length EXIF does not carry, read as the 66°
+default, under-reads every lateral offset and pulls a fabrication back INSIDE the wall
+where no bound can see it — the same print lands 2.27 m along a 3.0 m half-span. If a
+piece near a corner still comes back over-wide, the lens is the suspect, not the gate.
+
+**Where it rides.** The commit whose subject begins *"A wall or ceiling piece must be on
+the surface"* on `claude/amazing-dijkstra-d0am9g`, draft PR #148. Gates on it: typecheck,
+lint, build clean of `ESLint: Invalid Options`, and 147 test files / 2726 passing / 5
+expected fail — with 46 over `tests/photo-geometry.test.ts` and 19 over
+`tests/detect-refine.test.ts`. The `detect-pipeline` baseline table is byte-identical and
+the off-square sweep diffs clean against `main`, which is how "it refuses nothing
+legitimate" was established rather than assumed.
+
 ### Pressing Shuffle moves the button out from under the pointer
 
 *Filed by `rails` on 2026-09-05 from a peer's browser measurement during PR #115's review.

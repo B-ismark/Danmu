@@ -759,6 +759,56 @@ tuning any of this: for a **floor-standing** piece the lens cancels out of the s
 directly on the measured size — and conversely the camera height cancels out of
 its W and H. See `tests/photo-geometry.test.ts`, which pins both.
 
+### …and the plane it is inverted against has to be the RIGHT plane
+
+Both of those placers ASSUME a surface rather than measuring it — the framed wall, or the
+slab — and until 2026-09-09 neither checked the answer against the room. The decoded
+lateral offset is a test of the assumption: the room's lateral extent from a camera IS
+`wallSpan`, so an answer outside it says the ray left the room and the plane was the wrong
+plane, which makes every number taken off it fabricated rather than slightly off.
+
+**It is not an exotic case.** On an ultrawide every ordinary room has picture beyond the
+ends of the wall being photographed, and what is out there is the return wall. The exposure
+condition is `wallSpan < 2·tan(hFOV/2) · wallDistance`, which at 106° is `< 2.654 ×
+wallDistance` — and a square room sits at 2.0, so a square room always is. At the 66°
+default the factor is 1.299 and it is not, so this is a hazard of the lens being *known*.
+
+Measured, with both fixtures wholly inside the frame: a 700 × 500 print on the north wall
+800 mm from the north-east corner, seen in the east photo, decoded 769 mm past the east
+wall's end at **960 × 711** — +37% and +42%, larger than the air conditioner above. And a
+300 mm vent high on the same wall, read as a ceiling piece, **passed the ceiling placer's
+existing gate** at 3.30 m of a 3.5 m bound while sitting 643 mm outside the room, and came
+back 401 mm wide. That gate bounded the wall-normal axis only and its docstring read as
+though it covered both, which is the failure this document keeps naming: not a missing
+check, a check whose prose certifies the hole beside it.
+
+`onFramedSurface` refuses both. **Refused rather than clamped**, because clamping leaves the
+piece a metre from the truth *and* keeps a size read off the wrong plane; and refusal is not
+deletion — `geoRefine` hands the detection back unchanged, so it still reaches the scene at
+its catalogue size through `placementForSlot`, and `label-repair` reads that same object
+identity as "unmeasurable" so `judgeLabel` does not accuse it. It tests the CENTRE, not the
+extent: the wholly-off-the-wall variant accepts a 1400 mm curtain on the return wall as
+**1815 × 942**.
+
+**`placeFloorObject` is deliberately exempt**, and that is the shape of the rule rather than
+an omission: it MEASURES its distance, so its lateral is an observation, and a bound may
+falsify an assumption but not overrule a measurement. The exemption is held by a property
+rather than an assertion — adding the gate there is a mutant that survives — namely that a
+floor lateral is first-order invariant to the assumed lens, distance ∝ 1/k against tangent
+∝ k, with a ~2.8% residual from the catalogue depth, which is the one term that does not
+scale.
+
+The bound is `wallSpan`'s ±half pair rather than `wallFrame`'s honest footprint bounds, on
+purpose: a gate must speak the same convention as the assumption it falsifies, and the plane
+comes from `wallDistance`. Gating with real bounds while the plane stays ±half would have
+the two disagree about where the room is. § 44 moves the pair together.
+
+**And what it does NOT do**, because the first draft of its docblock claimed otherwise
+before anyone measured: it does not remove a duplicate row. Two sightings of one print go in
+and two come out, before and after — a refused detection has no position, and the merge
+declines to compare a missing one. What changes is that the second row is unmeasured rather
+than mis-measured.
+
 ---
 
 ## 5. The decoration studio

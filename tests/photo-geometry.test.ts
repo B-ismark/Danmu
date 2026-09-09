@@ -19,6 +19,8 @@ import {
   bboxOfFloorCylinder,
   bboxOfFloorObject,
   bboxOfWallPanel,
+  bboxOfWallSolid,
+  inFrame,
   project,
 } from './helpers/project';
 
@@ -327,33 +329,14 @@ describe('placeWallObject over solids', () => {
   const TILTS = [0, 5, -5, 12, -12];
   const cal = (deg: number): CameraCal => ({ k: 1.2, aspect: 4 / 3, tiltRad: (deg * Math.PI) / 180 });
 
-  /** The bbox of a wall piece whose BACK is on the plaster and whose body projects
-   *  into the room — eight corners, the convention `wallCorners` uses in the harness
-   *  and the one a TV actually hangs by. Local to this file because it is the inverse
-   *  of the thing under test and belongs beside it. */
-  function bboxOfWallSolid(
-    lateral: number,
-    yC: number,
-    d: number,
-    wM: number,
-    hM: number,
-    depthM: number,
-    c: CameraCal,
-  ): [number, number, number, number] {
-    const pts: Array<[number, number]> = [];
-    for (const f of depthM > 0 ? [d - depthM, d] : [d]) {
-      for (const dr of [-wM / 2, wM / 2]) {
-        for (const dy of [-hM / 2, hM / 2]) {
-          pts.push(project('n', lateral + dr, yC + dy, -f, c));
-        }
-      }
-    }
-    const us = pts.map((p) => p[0]);
-    const vs = pts.map((p) => p[1]);
-    const u0 = Math.min(...us);
-    const v0 = Math.min(...vs);
-    return [u0, v0, Math.max(...us) - u0, Math.max(...vs) - v0];
-  }
+  /** A wall piece on the N wall, seen from the N camera — the fronto-parallel case.
+   *  It used to be written out here, taking a lateral offset and a distance and
+   *  projecting through slot `n`, which made the wall a piece was MOUNTED on and the
+   *  camera that saw it the same thing by construction. It delegates now, so the
+   *  return-wall case is expressible (see `the framed surface`, below) and this
+   *  describe is unchanged. */
+  const wallBox = (lateral: number, yC: number, d: number, wM: number, hM: number, depthM: number, c: CameraCal) =>
+    bboxOfWallSolid('n', 'n', lateral, yC, d, wM, hM, depthM, c);
 
   it('recovers a real wall solid exactly, at every tilt', () => {
     // Position, width, height and mount centre together, because all four rode the
@@ -373,7 +356,7 @@ describe('placeWallObject over solids', () => {
       for (const deg of TILTS) {
         const c = cal(deg);
         const d = wallDistance('n', ROOM);
-        const g = placeWallObject(bboxOfWallSolid(lateral, yC, d, wM, hM, depthM, c), 'n', ROOM, c, { depthM })!;
+        const g = placeWallObject(wallBox(lateral, yC, d, wM, hM, depthM, c), 'n', ROOM, c, { depthM })!;
         const where = `${name} at ${deg}°`;
         expect(g.position.x, where).toBeCloseTo(lateral, 9);
         // Its back is on the plaster, so its centre sits half a depth into the room.
@@ -392,8 +375,8 @@ describe('placeWallObject over solids', () => {
     // assertion that would fail if someone reverted to `d` and kept the fixture.
     const c = cal(0);
     const d = wallDistance('n', ROOM);
-    const deep = placeWallObject(bboxOfWallSolid(1.1, 2.3, d, 0.8, 0.28, 0.22, c), 'n', ROOM, c, { depthM: 0.22 })!;
-    const asFlat = placeWallObject(bboxOfWallSolid(1.1, 2.3, d, 0.8, 0.28, 0.22, c), 'n', ROOM, c, { depthM: 0 })!;
+    const deep = placeWallObject(wallBox(1.1, 2.3, d, 0.8, 0.28, 0.22, c), 'n', ROOM, c, { depthM: 0.22 })!;
+    const asFlat = placeWallObject(wallBox(1.1, 2.3, d, 0.8, 0.28, 0.22, c), 'n', ROOM, c, { depthM: 0 })!;
     expect(deep.widthMM).toBe(800);
     expect(deep.heightMM).toBe(280);
     // Over-read by a fifth of its width and a third of its height.
@@ -705,5 +688,211 @@ describe('placeCeilingObject', () => {
     const box = bboxOfCeilingDisc('n', 0, -2.5, 1.2, WIDE, ROOM.height);
     expect(placeCeilingObject(box, 'n', { ...ROOM, height: 1.5 }, WIDE)).toBeNull();
     expect(placeCeilingObject(box, 'n', { ...ROOM, height: 1.2 }, WIDE)).toBeNull();
+  });
+});
+
+// ── The framed surface: a bound that FALSIFIES an assumption ─────────────────
+//
+// `placeWallObject` and `placeCeilingObject` do not measure the distance to their
+// subject, they assume it — one plane at `wallDistance`, one at the slab. The decoded
+// lateral offset is a test of that assumption, and neither function used to make it:
+// the wall placer had no lateral bound at all, and the ceiling placer's refusal covered
+// the wall-normal axis only while its docstring read as though it covered both.
+//
+// On an ultrawide every ordinary room has picture beyond the ends of the wall being
+// photographed, and what is out there is the RETURN wall. So these are not exotic
+// inputs: every box below is asserted `inFrame`, because a box a detector could not
+// have handed over proves nothing.
+describe('the framed surface', () => {
+  const WALLD = (slot: 'n' | 's' | 'e' | 'w') => wallDistance(slot, ROOM);
+  const HALF = (slot: 'n' | 's' | 'e' | 'w') => wallSpan(slot, ROOM) / 2;
+
+  // The FALSE-POSITIVE direction first, and deliberately so: a gate that refuses real
+  // furniture is this repo's worst failure — a piece that never appears leaves no
+  // trace — and it is worth more than the gate itself. Written before either refusal.
+  it('accepts every legitimate wall piece, out to the wall’s own end', () => {
+    const SLOTS = ['n', 's', 'e', 'w'] as const;
+    const wide: CameraCal = { k: 2 * Math.tan(((106 / 2) * Math.PI) / 180), aspect: 4 / 3 };
+    let atTheEnd = 0;
+    let skipped = 0;
+    for (const slot of SLOTS) {
+      for (const cal of [wide, { ...wide, tiltRad: (5 * Math.PI) / 180 }, { ...wide, tiltRad: (-12 * Math.PI) / 180 }]) {
+        for (const frac of [0, 0.4, -0.4, 0.8, -0.8, 0.99, -0.99]) {
+          const lateral = HALF(slot) * frac;
+          const d = WALLD(slot);
+          const box = bboxOfWallSolid(slot, slot, lateral, 1.5, d, 0.7, 0.5, 0.03, cal);
+          // A wall wider than the frame is the good case and the reason nothing here is
+          // tuned: no in-frame column can decode past the end of such a wall, so the
+          // gate CANNOT fire on it. Those combinations are skipped and counted rather
+          // than measured, per `inFrame`'s own rule.
+          if (!inFrame(box)) {
+            skipped++;
+            continue;
+          }
+          const g = placeWallObject(box, slot, ROOM, cal, { depthM: 0.03 });
+          const where = `${slot} at ${frac} of the half-span, tilt ${cal.tiltRad ?? 0}`;
+          expect(g, where).not.toBeNull();
+          expect(g!.widthMM, where).toBe(700);
+          expect(g!.heightMM, where).toBe(500);
+          if (Math.abs(frac) === 0.99) atTheEnd++;
+        }
+      }
+    }
+    // The boundary has to have been exercised somewhere, or the sweep proves only that
+    // the middle of a wall is safe. It is `e` and `w` that reach it here: their walls
+    // are 4 m across a 3 m viewing distance, so the wall's end is inside the frame,
+    // while `n`/`s` are 6 m across 2 m and run past it.
+    expect(atTheEnd).toBeGreaterThan(0);
+    expect(skipped).toBeGreaterThan(0);
+  });
+
+  it('accepts every legitimate ceiling piece, including one centred at the wall', () => {
+    const wide: CameraCal = { k: 2 * Math.tan(((106 / 2) * Math.PI) / 180), aspect: 4 / 3 };
+    // (lateral, forward). The at-the-wall rows sit further forward on purpose: a disc's
+    // widest image point is where the ray is TANGENT to its rim, which is nearer the
+    // camera than its lateral extreme, so a 0.9 m disc centred on the wall line at 2.0 m
+    // has its tangent point outside a 106° frame. That is the fixture being honest about
+    // an ultrawide, not the gate — hence `inFrame` asserted on every row.
+    const rows: Array<[number, number]> = [
+      [0, 2.0],
+      [1.0, 2.0],
+      [-1.0, 2.0],
+      [1.9, 2.6],
+      [-1.9, 2.6],
+      [1.95, 2.6],
+      [-1.95, 2.6],
+    ];
+    // 1.95 of a 2.0 half-span, not 2.0 itself. A centre exactly ON the wall line decodes
+    // to 2.0000000000000004 and is refused, and that is a floating-point boundary rather
+    // than a behaviour: nothing real sits there — a fan centred on the plaster is half
+    // buried in it — so it is recorded here instead of asserted either way. Both placers
+    // do it, and the margins the gate exists for are 600–800 mm.
+    expect(HALF('e')).toBe(2);
+    for (const [lateral, forward] of rows) {
+      const box = bboxOfCeilingDisc('e', forward, lateral, 0.9, wide, ROOM.height);
+      expect(inFrame(box), `${lateral}`).toBe(true);
+      // A disc centred ON the wall line is kept: the gate tests the CENTRE, and pulling
+      // the rim inside the room is `contain`'s job downstream, not a measurement's.
+      expect(placeCeilingObject(box, 'e', ROOM, wide), `${lateral}`).not.toBeNull();
+    }
+  });
+
+  // Now the refusals. Each is a PAIR — the same piece through its own camera must come
+  // back exact — because a lone `toBeNull` passes for any reason at all, including a
+  // fixture that is simply nonsense.
+  it('refuses a print on the RETURN wall, and measures the same print on its own', () => {
+    const wide: CameraCal = { k: 2 * Math.tan(((106 / 2) * Math.PI) / 180), aspect: 4 / 3 };
+    // A 700 × 500 print on the N wall, 800 mm from the north-east corner. The E camera
+    // is 3 m from its own wall and sees 4 m of room across it, so this is well inside
+    // the east photo — and reading it against the east wall's plane fabricates both its
+    // offset and its size.
+    const onNorth = (view: 'n' | 'e') =>
+      bboxOfWallSolid('n', view, 2.2, 1.5, WALLD('n'), 0.7, 0.5, 0.03, wide);
+    expect(inFrame(onNorth('e'))).toBe(true);
+    expect(inFrame(onNorth('n'))).toBe(true);
+
+    // Its own camera measures it exactly — so the fixture is a real piece of furniture.
+    const own = placeWallObject(onNorth('n'), 'n', ROOM, wide, { depthM: 0.03 })!;
+    expect(own.widthMM).toBe(700);
+    expect(own.heightMM).toBe(500);
+    expect(own.position.x).toBeCloseTo(2.2, 9);
+
+    // The framed wall's camera refuses it. Ungated it decoded ~2.73 m along a wall whose
+    // half-span is 2.0, at ~36% too wide — bigger than the air conditioner error that
+    // § 42.4 was written around. What it does NOT do is delete the row: see
+    // `tests/detect-refine.test.ts`, where the count is measured rather than argued.
+    expect(placeWallObject(onNorth('e'), 'e', ROOM, wide, { depthM: 0.03 })).toBeNull();
+  });
+
+  it('tests the CENTRE, because the wholly-off-the-wall variant leaks', () => {
+    // The choice between "centre past the end" and "no part of it on the wall" is a real
+    // fork, and it needed a fixture to settle rather than an example. The print above
+    // does NOT settle it — both variants refuse that one, which is why the looser mutant
+    // survived a first round of mutation with every assertion green.
+    //
+    // A 1400 × 500 curtain on the N wall, its far edge 250 mm from the north-east corner
+    // and wholly inside both the room and the east photo's frame, is what separates them:
+    // wide enough that its decoded near edge falls back inside the east wall while its
+    // centre does not. Under the loose variant it is ACCEPTED as 1815 × 942 at 2.86 m
+    // along a wall whose half-span is 2.0 — +30% wide, +88% tall, 860 mm past the end.
+    const wide: CameraCal = { k: 2 * Math.tan(((106 / 2) * Math.PI) / 180), aspect: 4 / 3 };
+    const curtain = (view: 'n' | 'e') =>
+      bboxOfWallSolid('n', view, 2.25, 1.5, WALLD('n'), 1.4, 0.5, 0.08, wide);
+    expect(inFrame(curtain('e'))).toBe(true);
+    expect(2.25 + 1.4 / 2).toBeLessThanOrEqual(ROOM.width / 2); // premise: it is IN the room
+    expect(placeWallObject(curtain('n'), 'n', ROOM, wide, { depthM: 0.08 })!.widthMM).toBe(1400);
+    expect(placeWallObject(curtain('e'), 'e', ROOM, wide, { depthM: 0.08 })).toBeNull();
+  });
+
+  // Why `placeFloorObject` is exempt — and it is a property, not a preference. Adding the
+  // gate there is a mutant that SURVIVES the whole suite, so the exemption cannot rest on
+  // an assertion; it rests on this. A floor decode's lateral offset is INVARIANT to the
+  // assumed lens, because distance goes as 1/k and the tangent goes as k, so the two
+  // cancel — the same cancellation the `leaves a FLOOR object's SIZE alone` test above
+  // pins for the width. A piece inside the room therefore decodes inside `±wallSpan/2`
+  // whatever the camera is believed to be, and the gate could never fire on it. Which is
+  // the whole shape of the rule: a bound may falsify an ASSUMPTION, and the wall and
+  // ceiling placers assume their plane, while this one measures it.
+  it('needs no gate: a floor piece’s lateral offset does not depend on the lens', () => {
+    const truth = calFromHfov(90, 4 / 3);
+    const assumed = calFromHfov(106, 4 / 3);
+    const narrow = calFromHfov(66, 4 / 3);
+    for (const z of [1.2, 1.5, 1.9]) {
+      // 2.6 m out on the E wall's axis: far enough that a level 90° frame still catches
+      // the bottom edge, near enough that a 600 mm-deep box does not put its BACK through
+      // the plaster at 3.0 m — which the first version of this fixture did, and it read as
+      // a 27 mm invariance failure rather than as a box standing inside a wall.
+      const box = bboxOfFloorBox('e', 2.6, z, 0.6, 0.8, 0.6, truth); // (w, h, depth)
+      expect(inFrame(box), `${z}`).toBe(true);
+      // One photograph, three beliefs about the lens that took it.
+      const lat = (cal: CameraCal) => placeFloorObject(box, 'e', ROOM, cal, { depthM: 0.6 })!.position.z;
+
+      // Exact at the truth, and FIRST-ORDER invariant when the lens is over-read: the
+      // near face is measured (∝ 1/k) and the tangent goes as k, so those cancel. The
+      // residual has a named cause rather than a tolerance — the catalogue DEPTH does not
+      // scale with either, so the far face used in the corner selection is slightly
+      // misplaced. Measured at 30 mm on a 600 mm box read 33% too wide.
+      expect(lat(truth), `${z} truth`).toBeCloseTo(z, 9);
+      // Bounded as a FRACTION, not an absolute, because the residual is proportional to
+      // the offset — 30 mm at 1.2 m and 54 mm at 1.9 m, ~2.8% either way — which is the
+      // signature of a mis-scaled depth rather than a fixed error, and an absolute bound
+      // would have hidden that by needing a different number at each row.
+      expect(Math.abs(lat(assumed) - z) / z, `${z} over-read`).toBeLessThan(0.03);
+
+      // Under-read, the near-face clamp at the wall bites and the answer moves INWARD —
+      // the direction that cannot trip a bound. Asserted as a direction, because a
+      // loosened tolerance here would hide which way it went, and which way is the point.
+      expect(Math.abs(lat(narrow)), `${z} under-read`).toBeLessThan(z);
+
+      // The load-bearing half: whatever the camera is believed to be, a piece inside the
+      // room decodes inside the wall's own half-span. Which is ALMOST why a gate here
+      // could not fire, and the almost is worth the line: at 1.9 of a 2.0 half-span an
+      // over-read lens reaches 1.954, so a piece within ~3% of the wall's end WOULD be
+      // refused by one — refusing a measurement over a lens error, which is the direction
+      // the rule forbids. So the exemption is a decision, not a vacuous case.
+      for (const cal of [truth, assumed, narrow]) {
+        expect(Math.abs(lat(cal)), `${z} @ k=${cal.k}`).toBeLessThan(HALF('e'));
+      }
+    }
+  });
+
+  it('refuses a ceiling ray that leaves the room SIDEWAYS, which the old gate could not see', () => {
+    const wide: CameraCal = { k: 2 * Math.tan(((106 / 2) * Math.PI) / 180), aspect: 4 / 3 };
+    // A 300 mm vent high on the N wall, 300 mm below the slab, read as a ceiling piece
+    // from the E photo.
+    const box = bboxOfWallSolid('n', 'e', 2.0, 2.5, WALLD('n'), 0.3, 0.3, 0, wide);
+    expect(inFrame(box)).toBe(true);
+
+    // The PREMISE, asserted rather than assumed: the existing wall-normal gate does not
+    // catch this. Same arithmetic as the placer, with the middle row, so the test cannot
+    // pass for the wrong reason — which is what a bare `toBeNull` here would have done.
+    const uC = box[0] + box[2] / 2;
+    const vC = box[1] + box[3] / 2;
+    const up = ((0.5 - vC) * wide.k) / wide.aspect;
+    const t = (ROOM.height - CAM_HEIGHT) / up;
+    expect(t * 1).toBeLessThanOrEqual(WALLD('e')); // forward distance, inside the bound
+    expect(Math.abs(t * ((uC - 0.5) * wide.k))).toBeGreaterThan(HALF('e')); // but outside sideways
+
+    expect(placeCeilingObject(box, 'e', ROOM, wide)).toBeNull();
   });
 });

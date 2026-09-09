@@ -115,6 +115,77 @@ export function extent(pts: Array<[number, number]>): Box {
   return [u0, v0, Math.max(...us) - u0, Math.max(...vs) - v0];
 }
 
+/** Which world direction each slot's camera LOOKS, as a unit XZ vector — the axis
+ *  `ALONG` is perpendicular to. Named separately because the two are what let a
+ *  fixture describe a piece on one wall and photograph it from another. */
+export const FACING: Record<CaptureSlot, [number, number]> = {
+  n: [0, -1],
+  s: [0, 1],
+  e: [1, 0],
+  w: [-1, 0],
+};
+
+/** The eight world corners of a wall piece whose BACK is on the plaster and whose
+ *  body projects into the room — the way a TV actually hangs.
+ *
+ *  `mountSlot` is the wall it is ON; `wallD` how far that wall is from the room-centre
+ *  lens along its own normal. Written in world coordinates, not in a slot's own frame,
+ *  and that is the entire point: the version this replaces took a lateral offset and a
+ *  distance and projected them through slot `n`, so the wall a piece was mounted on and
+ *  the camera that saw it were the same thing by construction. A fixture shaped like
+ *  that cannot pose the question `onFramedSurface` answers — it is the third time a
+ *  fixture in this section could not express the defect it was meant to bound, after
+ *  the depthless floor card and the depthless wall panel. */
+export function wallSolidCorners(
+  mountSlot: CaptureSlot,
+  lateral: number,
+  yC: number,
+  wallD: number,
+  wM: number,
+  hM: number,
+  depthM: number,
+): Array<[number, number, number]> {
+  const [fx, fz] = FACING[mountSlot];
+  const [ax, az] = ALONG[mountSlot];
+  const out: Array<[number, number, number]> = [];
+  // Measured INWARD from the plaster, so a depth of 0 is the plaster itself and the
+  // old depthless panel is the `depthM: 0` case rather than a second code path.
+  for (const inward of depthM > 0 ? [0, depthM] : [0]) {
+    for (const dr of [-wM / 2, wM / 2]) {
+      for (const dy of [-hM / 2, hM / 2]) {
+        out.push([
+          fx * (wallD - inward) + ax * (lateral + dr),
+          yC + dy,
+          fz * (wallD - inward) + az * (lateral + dr),
+        ]);
+      }
+    }
+  }
+  return out;
+}
+
+/** …and its bbox as seen from `viewSlot`, which may be a DIFFERENT wall's camera.
+ *  With the two equal this is the fronto-parallel case the placer is exact on; with
+ *  them adjacent it is a piece on the return wall, caught in shot near the shared
+ *  corner, which is what an ultrawide sees in every ordinary room. */
+export function bboxOfWallSolid(
+  mountSlot: CaptureSlot,
+  viewSlot: CaptureSlot,
+  lateral: number,
+  yC: number,
+  wallD: number,
+  wM: number,
+  hM: number,
+  depthM: number,
+  cal: CameraCal,
+): Box {
+  return extent(
+    wallSolidCorners(mountSlot, lateral, yC, wallD, wM, hM, depthM).map((c) =>
+      project(viewSlot, ...c, cal),
+    ),
+  );
+}
+
 /** bbox of a wall-parallel rectangle (width w, height h) standing on the floor at
  *  world centre (x, z).
  *

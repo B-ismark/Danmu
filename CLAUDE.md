@@ -103,6 +103,33 @@ backend, no account. The 3D studio *is* the product.
    correctly MEASURED 2.0 m sofa to 1.925 m — an exact size traded for an exact position,
    an assumption corrupting an observation. The near face is measured and is bounded by
    the plaster; the centre is measurement plus assumption and gets its own bound.
+   That clamp rule has a second half, and it is the one the two placers needed next:
+   **a bound may FALSIFY an assumption, and may never overrule a measurement.** Both the
+   wall and ceiling placers assume a plane rather than measuring it, and neither checked
+   the decoded lateral offset against the room — so a ray that left the room sideways was
+   inverted against a plane it never touched. On an ultrawide **every ordinary room has
+   picture beyond the ends of the wall being photographed** (`wallSpan < 2·tan(hFOV/2)·
+   wallDistance`; a square room sits at 2.0 against 2.654 at 106°, so it always is), and
+   what is out there is the RETURN wall: a 700 × 500 print 800 mm from a corner decodes
+   onto the neighbouring wall at **+37% wide and +42% tall**, larger than the air
+   conditioner above, and a 300 mm vent read as a ceiling piece **passed the ceiling
+   placer's own gate** — which bounded the wall-normal axis only *while its docstring read
+   as though it covered both*, a gate whose prose certifies the hole beside it.
+   `onFramedSurface` refuses both, and `placeFloorObject` is exempt because it MEASURES
+   its distance: its lateral is an observation, and the exemption is held by a measured
+   property rather than an assertion (adding the gate there is a mutant that survives) —
+   a floor lateral is first-order invariant to the assumed lens, distance ∝ 1/k against
+   tangent ∝ k, residual ~2.8% from the catalogue depth, the one term that does not scale.
+   **Refusing is not deleting**, which is what made refuse-over-clamp decidable: `geoRefine`
+   hands a refused detection back unchanged, so the piece still appears at its catalogue
+   size and `judgeLabel` does not accuse it. Two lessons from getting this wrong on the
+   way, both written from reasoning and disproved by measurement: it does **not** remove
+   the duplicate row (two sightings in, two out, before and after — a refused detection has
+   no position and the merge declines to compare a missing one), and the looser
+   wholly-off-the-wall variant **survived a full round of mutation** until a fixture was
+   built that separates the two, because the example first offered for it was invented.
+   **A prediction a plan makes is not evidence, even when the plan turns out right about
+   the fix.**
    **Which wall a photo is, is code's answer now too** (`lib/capture-slots.ts`),
    and it belongs to this rule because a wrong slot is a wrong room:
    `wallDistance` reads n/s at `depth/2` and e/w at `width/2`, so a photo of the
