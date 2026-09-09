@@ -32,7 +32,8 @@ GPU can finish the verdict; and the **wrong-digest** half of row 18, since
 `lib/model-verify.ts` (#116) gates the registry's shape but proving a pin matches the real
 bytes still needs the ~62 MB `pnpm hash:models --verify`. Plus **§ 40** and **§ 41**, both
 filed 2026-09-06 and both DECISIONS. **And rows 20 and 21, filed 2026-09-09 — both
-MEASURED, neither fixed, and row 20 is the larger of the two by a wide margin.**
+MEASURED, neither fixed, and row 20 is the larger of the two by a wide margin — plus
+§ 43's two loose ends, both DECISIONS and neither blocking.**
 Everything else in the table below is marked done in its own row.
 
 **Row 17 was in the paragraph above until 2026-09-06 and had already shipped** — #130,
@@ -6592,3 +6593,51 @@ Neither needs ψ and neither is fixed:
   makes the framing that triggers it more likely, not less.
 - **`placeCeilingObject`'s gate is one-sided** — it bounds wall-normal distance only, so a
   ceiling point can leave the room sideways.
+
+
+---
+
+## § 43 · Two loose ends from the wall-colour work
+
+Filed **2026-09-09** alongside § 42. Neither blocks anything; both are recorded so they
+are not re-derived from scratch.
+
+### § 43.1 · A room has no floor colour at all — DECISION
+
+"Use the colours in my photos" samples the **walls** only. There is no floor colour
+anywhere in the app to sample into: `components/three/RoomShell.tsx` hard-codes
+`const FLOOR = '#E6E1D6'`, and adding one is greenfield across four layers —
+`RoomShape` in `lib/scene-store.ts`, `RoomData` in `lib/storage.ts`, both directions of
+the `lib/scene-file.ts` codec, and the renderer. The sampling machinery itself is done and
+would need only a region: a floor band is the mirror of `wallRegion`, below the
+wall–floor junction instead of above it.
+
+**What is unknown:** whether a per-room floor colour is wanted at all, or whether the floor
+is deliberately one fixed tone so that recolouring reads as *decorating* rather than
+*rebuilding*. That is a product call. **Exists in a commit:** no — only the walls do.
+
+### § 43.2 · Three palette keys nobody reads, and a comment describing a consumer that does not exist
+
+`SCENE.floor`, `SCENE.ceiling` and `SCENE.locked` have **zero readers** in `app/`,
+`components/` and `lib/`. They are not one case, and the difference is the point:
+
+- `locked` is in `tests/color-tokens.test.ts`'s `pairs` list, so it is pinned to a real CSS
+  token. Load-bearing through its assertion — the rule in `CLAUDE.md` about a token whose
+  only reader is a test, working exactly as described.
+- `floor` and `ceiling` are in **neither** `pairs` nor any renderer. Only
+  `tests/scene-palette.test.ts`'s required-key sweep holds them, and it checks they are
+  hex strings — an assertion measuring its own subject. Its title claims they are
+  *"every semantic the scene and inspector share"*, and no scene or inspector code shares
+  them.
+- `RoomShell.tsx`'s comment explains it deliberately does not read `SCENE.floor` because
+  that value *"is the swatch the plan view and inspector show for a floor"*. **That
+  consumer does not exist**: the plan's floor is `PLAN.floor`, read only by
+  `lib/plan-export.ts`.
+
+So three things disagree about who consumes it. **What would unblock it:** deciding whether
+`floor`/`ceiling` are the swatches something ought to be reading (in which case the
+consumer is missing) or leftovers (in which case the key, the sweep entry and the comment
+all go together). Worth noting how this was nearly got wrong: a literal grep said "no
+consumer at all", which is false — computed key access (`SCENE[key]`) finds no literal
+match, exactly the false positive `CLAUDE.md` warns about. **Exists in a commit:** the
+finding is recorded here and nowhere else; nothing is changed.

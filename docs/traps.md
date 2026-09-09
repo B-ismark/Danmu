@@ -128,6 +128,38 @@ for.
 
 ## Mutation testing and tests
 
+**Symptom: you mutated something and the test still passed, so you loosened the test.**
+That is backwards, and it is the easiest mistake in this whole practice to make while
+believing you are being rigorous. Mutation testing perturbs the **code under test** and
+asks whether an assertion notices. Loosening a bound *in the assertion* can never make its
+own test fail, so a "surviving mutation" you produced by editing the test file has told you
+nothing at all.
+→ The tell: your mutation and your assertion are in the **same file**. If the thing you
+changed is the `expect(...)` line, stop — go and perturb the mechanism instead. For a
+number the code derives, that means changing the derivation: halve the input, double it,
+send it down the wrong axis.
+→ The companion tell, one level subtler: an assertion that survives every honest mutation
+may be **unreachable**, not weak. Two guards in `lib/wall-sample.ts` were deleted for this
+(an explicit degenerate-edge check and a `length !== 4` proxy) — both were implied by
+another check, so nothing could fail them. The fix is not a cleverer test; it is to assert
+the real invariant, or to write down that the assertion is type-narrowing that cannot fire
+and say why.
+*(Cost: TWICE on 2026-09-09, both in one session — first loosening a `>=` bound in
+`tests/wall-sample.test.ts` instead of perturbing `slotWallIndices`, then loosening a
+ratio floor in `tests/off-square-cost.test.ts` instead of perturbing the box depth. The
+second time it was a bound I had written twenty minutes earlier to replace a bound that had
+failed the same way.)*
+
+**Symptom: a test asserts the property of every case instead of the one case you meant.**
+`RUNS.filter((x) => x.label.includes('0°'))` reads as "the zero-yaw cases" and matches
+`+10°` and `±20°` as well, so a "costs nothing at zero" assertion was applied to every
+angle in the sweep and failed. A string test standing in for a numeric one.
+→ **Filter on the number, not on the label it appears in.** Carry the quantity on the row
+if it is not there already. The same shape bites `startsWith` on ids and slugs.
+*(Cost: once, 2026-09-09, `tests/off-square-cost.test.ts` — recorded because it cost only
+minutes but looked for a while like a real finding about the geometry, which is the
+expensive part.)*
+
 **Symptom: after mutating and restoring, your own changes are gone.**
 `git checkout -- file` / `git checkout HEAD -- file` restores from the index or HEAD. If
 your work is uncommitted, it is destroyed.
