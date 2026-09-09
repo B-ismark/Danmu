@@ -12,8 +12,8 @@
 // one undo step and the user can change or reset any of it afterwards. Nothing
 // here writes to storage or applies anything on load.
 
-import { SAMPLE_GRID, sampleRegionColor } from './color-sample';
-import { calFromHfov, defaultCal, imageAspect, type CameraCal, type CameraView } from './photo-geometry';
+import { SAMPLE_GRID, decodeBitmap, sampleBitmapRegion } from './color-sample';
+import { calFromHfov, defaultCal, type CameraCal, type CameraView } from './photo-geometry';
 import { hfovFromFocal35 } from './exif';
 import {
   maskForBoxes,
@@ -30,6 +30,14 @@ import type { Capture, CaptureSlot } from './storage';
 
 export type { SkipReason, WallColorProposal } from './wall-sample';
 
+/** What a stored pose may say before it stops being a measurement. The height pair
+ *  matches `heightFromFloorLine`'s own solved range, and the tilt matches the band
+ *  `tiltFromOrientation` accepts, so a pose this app wrote is always inside them
+ *  and only a corrupt one is not. */
+const MIN_POSE_HEIGHT_M = 0.5;
+const MAX_POSE_HEIGHT_M = 2.5;
+const MAX_POSE_TILT_DEG = 45;
+
 /** The camera for a capture, and **whether the lens in it was measured or
  *  assumed** — which the band needs to know, so the two travel together rather
  *  than as a camera plus a flag a caller could forget to pass.
@@ -44,8 +52,18 @@ export type { SkipReason, WallColorProposal } from './wall-sample';
  *  sound only because the error is one-sided. */
 function calFor(pose: Capture['pose'], aspect: number): { cal: CameraCal; lens: LensSource } {
   const view: CameraView = {};
-  if (pose?.heightM !== undefined) view.height = pose.heightM;
-  if (pose?.tiltDeg !== undefined) view.tiltRad = (pose.tiltDeg * Math.PI) / 180;
+  // Validated, not copied. A pose is a record this app wrote, so a zero or NaN
+  // height in it is a bug rather than a user's mistake — but copying it through
+  // made `wallRegion` refuse and the user was told their ROOM had too little clear
+  // wall, which is a confident answer about the wrong thing. Out of range, drop it
+  // and fall back to the assumed camera, the same posture as a focal-length tag
+  // outside the plausible band.
+  if (pose?.heightM !== undefined && pose.heightM > MIN_POSE_HEIGHT_M && pose.heightM < MAX_POSE_HEIGHT_M) {
+    view.height = pose.heightM;
+  }
+  if (pose?.tiltDeg !== undefined && Math.abs(pose.tiltDeg) <= MAX_POSE_TILT_DEG) {
+    view.tiltRad = (pose.tiltDeg * Math.PI) / 180;
+  }
   // `hfovFromFocal35` returns null for a tag outside 20–150°, which is a
   // transcription error rather than a lens. Falling through to the assumed lens is
   // the right answer there rather than an error to report — but it is `assumed`,
@@ -58,8 +76,13 @@ function calFor(pose: Capture['pose'], aspect: number): { cal: CameraCal; lens: 
 /**
  * Sample one colour per photographed wall.
  *
- * Returns null when there was nothing to sample at all, so a caller can say that
- * rather than show an empty result.
+ * **Null means this room has no photographs**, and nothing else — there is not
+ * even a skip to report. Every other outcome is a proposal, which may carry no
+ * colours at all and a reason per photo. The first version's docblock said null
+ * meant "nothing to sample at all", which is a different and larger claim: four
+ * captures that all failed returned a non-null empty proposal, and the one real
+ * caller ignored the documented contract and re-checked by hand. A contract a
+ * caller works around is not a contract.
  */
 export async function sampleWallColors(args: {
   captures: readonly Capture[];
@@ -78,43 +101,50 @@ export async function sampleWallColors(args: {
 
   const found: Array<{ slot: CaptureSlot; hex: string }> = [];
   const skipped: Skipped[] = [];
-  let usedBoxes = false;
 
   for (const cap of captures) {
-    // `imageAspect` REJECTS on a blob the browser cannot decode rather than
-    // returning a falsy number, so the guard has to be a catch. Getting this wrong
-    // would take out the whole sample on one bad photo instead of skipping it.
-    let aspect: number;
+    // ONE decode per photo, and the caller of `decodeBitmap` owns the lifetime.
+    // The aspect has to come out of the decoded image because the camera
+    // calibration is a function of it and the region is a function of the camera,
+    // so the earlier shape — `imageAspect` and then a second `createImageBitmap`
+    // inside the sampler — decoded four multi-megabyte JPEGs twice and reported
+    // the second failure as a photo that could not be read.
+    const bmp = await decodeBitmap(cap.blob);
+    if (!bmp) {
+      skipped.push({ slot: cap.slot, reason: 'unreadable' });
+      continue;
+    }
     try {
-      aspect = await imageAspect(cap.blob);
-    } catch {
-      skipped.push({ slot: cap.slot, reason: 'unreadable' });
-      continue;
+      const aspect = bmp.height > 0 ? bmp.width / bmp.height : NaN;
+      if (!(aspect > 0) || !Number.isFinite(aspect)) {
+        skipped.push({ slot: cap.slot, reason: 'unreadable' });
+        continue;
+      }
+      const { cal, lens } = calFor(cap.pose, aspect);
+      const region = wallRegion(cap.slot, footprint, ceilingM, cal, lens);
+      if (!region) {
+        skipped.push({ slot: cap.slot, reason: 'no-wall' });
+        continue;
+      }
+      const boxes = boxesBySlot?.[cap.slot] ?? [];
+      const mask = maskForBoxes(region, boxes, SAMPLE_GRID);
+      if (!maskLeavesEnough(mask, SAMPLE_GRID)) {
+        skipped.push({ slot: cap.slot, reason: 'blocked' });
+        continue;
+      }
+      const hex = sampleBitmapRegion(bmp, region, mask ?? undefined);
+      if (!hex) {
+        skipped.push({ slot: cap.slot, reason: 'unsampled' });
+        continue;
+      }
+      found.push({ slot: cap.slot, hex });
+    } finally {
+      bmp.close();
     }
-    if (!(aspect > 0) || !Number.isFinite(aspect)) {
-      skipped.push({ slot: cap.slot, reason: 'unreadable' });
-      continue;
-    }
-    const { cal, lens } = calFor(cap.pose, aspect);
-    const region = wallRegion(cap.slot, footprint, ceilingM, cal, lens);
-    if (!region) {
-      skipped.push({ slot: cap.slot, reason: 'no-wall' });
-      continue;
-    }
-    const boxes = boxesBySlot?.[cap.slot] ?? [];
-    const mask = maskForBoxes(region, boxes, SAMPLE_GRID);
-    if (mask) usedBoxes = true;
-    if (!maskLeavesEnough(mask, SAMPLE_GRID)) {
-      skipped.push({ slot: cap.slot, reason: 'blocked' });
-      continue;
-    }
-    const hex = await sampleRegionColor(cap.blob, region, mask ?? undefined);
-    if (!hex) {
-      skipped.push({ slot: cap.slot, reason: 'unreadable' });
-      continue;
-    }
-    found.push({ slot: cap.slot, hex });
   }
 
-  return wallColorProposal(found, skipped, footprint, usedBoxes);
+  // The furniture fact is derived from `found` inside the proposal, not tracked
+  // here: a flag maintained alongside this loop is what reported furniture as
+  // excluded from samples that the refusals below had already thrown away.
+  return wallColorProposal(found, skipped, footprint, boxesBySlot);
 }

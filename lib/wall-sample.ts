@@ -27,7 +27,7 @@
 import type { CaptureSlot } from './storage';
 import { SLOT_ORDER } from './capture-slots';
 import { medianHex } from './color-reduce';
-import { wallOutwardNormal, type Footprint } from './footprint';
+import { wallOutwardNormal, wallSegments, type Footprint } from './footprint';
 import {
   CAM_HEIGHT,
   wallColumnsAtHeight,
@@ -325,16 +325,56 @@ export function slotWallIndices(footprint: Footprint): Record<CaptureSlot, numbe
 }
 
 /** Why a photo produced no colour. Each one is said out loud rather than dropped:
- *  a sample that quietly covered three walls of four looks like a bug. */
+ *  a sample that quietly covered three walls of four looks like a bug.
+ *
+ *  Five reasons where there were three, and the two new ones exist because
+ *  `unreadable` was absorbing them: a photo that decoded perfectly and yielded no
+ *  usable pixels was reported as one that "could not be read", which is a
+ *  confident false statement about the user's photograph. */
 export type SkipReason =
-  /** The room leaves too little clear wall between skirting and coving. */
+  /** The room, the camera pose, or what is visible of the wall leaves no band
+   *  worth sampling. */
   | 'no-wall'
   /** Furniture covers most of the wall in this photo. */
   | 'blocked'
   /** The pixels could not be read — an undecodable blob, a decode failure. */
-  | 'unreadable';
+  | 'unreadable'
+  /** It decoded, and the band yielded no colour: too few opaque samples once the
+   *  furniture mask was applied, or no 2D context to draw into. */
+  | 'unsampled'
+  /** A colour was read and no wall could take it. Cannot happen today — see the
+   *  note at the boundary check in `wallColorProposal` — and exists so that if it
+   *  ever does, the count in the toast and the reasons under it still add up. */
+  | 'unmapped';
 
 export type Skipped = { slot: CaptureSlot; reason: SkipReason };
+
+/** Whether the furniture in each photo was known about, **per photo that produced
+ *  a colour** rather than as an "any".
+ *
+ *  Both fields list only slots that contributed, which is the half the first
+ *  version got wrong in both directions: a flag was set as soon as a mask was
+ *  built, before the refusals that threw the sample away, so a photo whose sofa
+ *  covered the wall reported that its furniture had been excluded — from a sample
+ *  that never happened.
+ *
+ *  **Derived rather than accumulated**, which is what makes the first failure
+ *  impossible rather than merely fixed: `wallColorProposal` computes both lists
+ *  from the colours it was actually given, so there is no flag to set too early.
+ *
+ *  And `knownIn` means the room HAD boxes for that photo, not that a box happened
+ *  to overlap the band. The flag was true only if some box covered a grid cell's
+ *  centre, so a room full of detections whose furniture all sits below the
+ *  skirting line reported "furniture was not detected in this room" — about a room
+ *  the user had just scanned. Whether furniture was in the way is not the same
+ *  question as whether we know where it is, and only the second one is a caveat. */
+export type FurnitureKnowledge = {
+  /** Slots whose photo produced a colour and had detection boxes to exclude. */
+  knownIn: CaptureSlot[];
+  /** Slots whose photo produced a colour with no boxes to go on — a scene opened
+   *  from a file carries none, since `lib/scene-file.ts` strips `fromDetection`. */
+  blindIn: CaptureSlot[];
+};
 
 export type WallColorProposal = {
   /** Wall index → colour, when the room's shape can say which wall each photo is. */
@@ -343,11 +383,7 @@ export type WallColorProposal = {
    *  `perWall` carrying anything. */
   allWalls: string | null;
   skipped: Skipped[];
-  /** Whether known furniture was excluded. False means the room had no detection
-   *  boxes to hand — a scene opened from a file carries none — so the answer leans
-   *  on the wall band and the median alone. Said out loud for the same reason as
-   *  `skipped`. */
-  usedBoxes: boolean;
+  furniture: FurnitureKnowledge;
 };
 
 /**
@@ -365,15 +401,33 @@ export function wallColorProposal(
   found: ReadonlyArray<{ slot: CaptureSlot; hex: string }>,
   skipped: Skipped[],
   footprint: Footprint,
-  usedBoxes: boolean,
+  /** The same map the sampler was given. Taken rather than a pre-computed
+   *  `FurnitureKnowledge` so that the fact is DERIVED from the colours that came
+   *  back — a caller cannot hand this a flag it set before the refusals, which is
+   *  precisely what the first version did. */
+  boxesBySlot?: Partial<Record<CaptureSlot, readonly Region[]>>,
 ): WallColorProposal {
-  const base = { skipped, usedBoxes };
+  const furniture: FurnitureKnowledge = { knownIn: [], blindIn: [] };
+  for (const { slot } of found) {
+    ((boxesBySlot?.[slot]?.length ?? 0) > 0 ? furniture.knownIn : furniture.blindIn).push(slot);
+  }
+  const base = { skipped, furniture };
   if (found.length === 0) return { perWall: {}, allWalls: null, ...base };
 
   const indices = slotWallIndices(footprint);
   if (!indices) return { perWall: {}, allWalls: medianHex(found.map((f) => f.hex)), ...base };
 
   const perWall: Record<number, string> = {};
+  // What the RENDERER counts. `RoomShell` paints `wallSegments(footprint)`, which
+  // skips a degenerate edge, so it can be shorter than the polygon — and the long
+  // note below calls this check the boundary for exactly that class of bug while
+  // the first version measured against `footprint.length`, the count that cannot
+  // catch it. Equivalent on every reachable path, since `slotWallIndices` refuses
+  // a footprint with a degenerate edge, which is the only way the two differ — so
+  // mutating this back to `footprint.length` breaks no test, and that is expected
+  // rather than a gap. It is the denominator the renderer counts, which is what
+  // makes the check mean what its name says.
+  const painted = wallSegments(footprint).length;
   for (const { slot, hex } of found) {
     const index = indices[slot];
     // Cannot fire today, and that is stated rather than tested: `slotWallIndices`
@@ -389,7 +443,14 @@ export function wallColorProposal(
     // thing making a cast or a write sound, and is decoration when it is standing
     // in for a runtime case — and the way to tell is to mutate it and see whether
     // any honest test could have caught it. Neither of these could; both say so.
-    if (index >= 0 && index < footprint.length) perWall[index] = hex;
+    if (index >= 0 && index < painted) perWall[index] = hex;
+    // Dropping it silently is what made the toast able to say "3 of 4 walls" with
+    // an empty list of reasons under it. `unmapped` cannot fire today either —
+    // deleting this line breaks no test, checked — and it is here for the same
+    // reason as the two other unfireable guards in this file: the invariant the UI
+    // reads is that every colour taken either paints a wall or appears in
+    // `skipped`, and that has to hold by construction rather than by luck.
+    else skipped.push({ slot, reason: 'unmapped' });
   }
   return { perWall, allWalls: null, ...base };
 }

@@ -22,6 +22,7 @@ import { useParams } from 'next/navigation';
 import { useScene } from '@/lib/scene-store';
 import { roomStore } from '@/lib/storage';
 import { sampleWallColors, type SkipReason } from '@/lib/wall-colors';
+import type { FurnitureKnowledge } from '@/lib/wall-sample';
 import { wallSegments } from '@/lib/footprint';
 import type { Region } from '@/lib/wall-sample';
 import { Icon } from '@/components/ui/Icon';
@@ -37,7 +38,23 @@ const SKIP_COPY: Record<SkipReason, string> = {
   'no-wall': 'too little clear wall between the skirting and the ceiling',
   blocked: 'furniture covering most of the wall',
   unreadable: 'a photo that could not be read',
+  unsampled: 'a wall strip with too little of the picture in it to read',
+  unmapped: 'a photo that could not be matched to a wall',
 };
+
+/** The furniture caveat, or nothing. Derived from the per-photo fact rather than
+ *  from an "any", and said on BOTH toast paths — the first version appended it only
+ *  to the per-wall branch, so every L/T/U room (and every room opened from a scene
+ *  file, which has no detection boxes at all by design) got a confident success
+ *  with the caveat that applied most of all left off. */
+function furnitureSentence(f: FurnitureKnowledge): string | undefined {
+  if (f.blindIn.length === 0) return undefined;
+  if (f.knownIn.length === 0) {
+    return 'This room has no detected objects, so anything standing against a wall may have tinted its colour.';
+  }
+  const n = f.blindIn.length;
+  return `${n === 1 ? 'One of these photos has' : `${n} of these photos have`} no detected objects to leave out, so furniture may have tinted ${n === 1 ? 'that wall' : 'those walls'}.`;
+}
 
 function skipSentence(skipped: Array<{ slot: CaptureSlot; reason: SkipReason }>): string | undefined {
   if (skipped.length === 0) return undefined;
@@ -75,6 +92,22 @@ export function WallColorsFromPhotos() {
   if (!roomId || hasPhotos !== true) return null;
 
   async function sample() {
+    try {
+      await sampleAndPaint();
+    } catch {
+      // `useBusyAction` clears its flag and re-raises, so without this the spinner
+      // simply stops and NOTHING is said — against copy that promises an outcome
+      // for every path. IndexedDB is unavailable in some private-browsing modes,
+      // and `loadCaptures` is the first thing this does.
+      toast({
+        tone: 'danger',
+        title: 'Could not read your photos',
+        message: 'This room’s photos could not be opened just now. Nothing was changed.',
+      });
+    }
+  }
+
+  async function sampleAndPaint() {
     const captures = await roomStore.loadCaptures(roomId);
     // Detected furniture, so a sofa does not become the wall colour. Rides on the
     // parts as `fromDetection`, which is stripped from an exported scene file — so
@@ -95,6 +128,7 @@ export function WallColorsFromPhotos() {
     });
 
     const detail = proposal ? skipSentence(proposal.skipped) : undefined;
+    const caveat = proposal ? furnitureSentence(proposal.furniture) : undefined;
     const painted = proposal ? Object.keys(proposal.perWall).length : 0;
     if (!proposal || (painted === 0 && !proposal.allWalls)) {
       toast({
@@ -120,9 +154,13 @@ export function WallColorsFromPhotos() {
       toast({
         tone: 'success',
         title: 'Every wall took the colour from your photos',
-        message: `This room’s shape can’t say which wall each photo shows, so they share one colour.${
-          detail ? ` ${detail}` : ''
-        }`,
+        message: [
+          'This room’s shape can’t say which wall each photo shows, so they share one colour.',
+          detail,
+          caveat,
+        ]
+          .filter(Boolean)
+          .join(' '),
         action: undo,
       });
       return;
@@ -133,9 +171,7 @@ export function WallColorsFromPhotos() {
     toast({
       tone: 'success',
       title: `${painted} of ${total} walls took their colour from your photos`,
-      message: [detail, proposal.usedBoxes ? undefined : 'Furniture was not detected in this room, so it may have tinted the reading.']
-        .filter(Boolean)
-        .join(' '),
+      message: [detail, caveat].filter(Boolean).join(' '),
       action: undo,
     });
   }

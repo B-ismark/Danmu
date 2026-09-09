@@ -21,6 +21,8 @@ import {
   maskLeavesEnough,
   slotWallIndices,
   wallRegion,
+  type FurnitureKnowledge,
+  type Region,
 } from '@/lib/wall-sample';
 import { SLOT_ORDER } from '@/lib/capture-slots';
 import {
@@ -34,7 +36,7 @@ import {
   type CameraCal,
   type WallFrame,
 } from '@/lib/photo-geometry';
-import { footprintForLayout, offsetWall, type Footprint } from '@/lib/footprint';
+import { footprintForLayout, offsetWall, wallSegments, type Footprint } from '@/lib/footprint';
 import { ALONG, project } from './helpers/project';
 import type { CaptureSlot } from '@/lib/storage';
 
@@ -657,24 +659,28 @@ describe('slotWallIndices — swept across every preset, not sampled', () => {
 });
 
 describe('wallColorProposal — which wall actually gets painted', () => {
-  const RECT = footprintForLayout('rect', ROOM.width, ROOM.depth);
   const L = footprintForLayout('l', ROOM.width, ROOM.depth);
   const found = (...pairs: Array<[CaptureSlot, string]>) =>
     pairs.map(([slot, hex]) => ({ slot, hex }));
+  /** A box per named slot, for a test that is not about the boxes. One box each,
+   *  since only the count of them is read. */
+  const knew = (...slots: CaptureSlot[]): Partial<Record<CaptureSlot, Region[]>> =>
+    Object.fromEntries(slots.map((s) => [s, [[0, 0, 0.1, 0.1] as Region]]));
 
   it('maps each photo to its own wall in a four-walled room', () => {
     const p = wallColorProposal(
       found(['n', '#8ca082'], ['e', '#c8b49b'], ['s', '#efe7d8'], ['w', '#7a6a58']),
       [],
       RECT,
-      true,
+      knew('n', 'e', 's', 'w'),
     );
     expect(p.perWall).toEqual({ 0: '#8ca082', 1: '#c8b49b', 2: '#efe7d8', 3: '#7a6a58' });
     expect(p.allWalls).toBeNull();
   });
 
   it('paints only the walls that were photographed', () => {
-    const p = wallColorProposal(found(['e', '#c8b49b']), [{ slot: 'n', reason: 'blocked' }], RECT, true);
+    const p = wallColorProposal(found(['e', '#c8b49b']), [{ slot: 'n', reason: 'blocked' }], RECT, knew('e'));
+    expect(p.furniture).toEqual({ knownIn: ['e'], blindIn: [] });
     expect(p.perWall).toEqual({ 1: '#c8b49b' });
     expect(p.skipped).toEqual([{ slot: 'n', reason: 'blocked' }]);
   });
@@ -682,24 +688,60 @@ describe('wallColorProposal — which wall actually gets painted', () => {
   it('falls back to ONE colour when the room has no four-wall mapping', () => {
     // An L cannot say which wall each photo shows, so four guesses would be the
     // wrong wall three times. The single colour is the per-channel median.
-    const p = wallColorProposal(found(['n', '#202020'], ['e', '#404040'], ['s', '#808080']), [], L, true);
+    const p = wallColorProposal(found(['n', '#202020'], ['e', '#404040'], ['s', '#808080']), [], L, knew('n', 'e', 's'));
     expect(p.perWall).toEqual({});
     expect(p.allWalls).toBe('#404040');
   });
 
   it('proposes nothing at all when nothing was read', () => {
-    const p = wallColorProposal([], [{ slot: 'n', reason: 'no-wall' }], RECT, false);
+    const p = wallColorProposal([], [{ slot: 'n', reason: 'no-wall' }], RECT, knew('n'));
     expect(p.perWall).toEqual({});
     expect(p.allWalls).toBeNull();
     // …and the reasons survive, because a silent skip reads as a half-working
     // feature.
     expect(p.skipped).toHaveLength(1);
-    expect(p.usedBoxes).toBe(false);
   });
 
-  it('carries usedBoxes through, so the UI can say furniture was not excluded', () => {
-    expect(wallColorProposal(found(['n', '#111111']), [], RECT, false).usedBoxes).toBe(false);
-    expect(wallColorProposal(found(['n', '#111111']), [], RECT, true).usedBoxes).toBe(true);
+  it('derives the furniture fact per photo, on BOTH branches', () => {
+    // The UI says the caveat from this, and it used to say it only on the per-wall
+    // branch — so every L/T/U room, which is exactly the case with the least
+    // information, got a confident success with no caveat at all.
+    const twoPhotos = found(['n', '#111111'], ['e', '#222222']);
+    const f: FurnitureKnowledge = { knownIn: ['n'], blindIn: ['e'] };
+    expect(wallColorProposal(twoPhotos, [], RECT, knew('n')).furniture).toEqual(f);
+    expect(wallColorProposal(twoPhotos, [], L, knew('n')).furniture).toEqual(f);
+    // Nothing read means nothing to be blind about — the caveat is about colours
+    // that were taken, not about photos that were tried.
+    expect(wallColorProposal([], [], L, knew('n')).furniture).toEqual({ knownIn: [], blindIn: [] });
+  });
+
+  it('counts a slot with an EMPTY box list as blind, not as known', () => {
+    // The second direction of the defect this replaced: the old flag was set only
+    // when a box covered a grid cell's centre, so a room full of detections whose
+    // furniture all sits below the skirting line was reported as a room with no
+    // detections at all. What we KNOW and what was in the WAY are two questions,
+    // and only the first is a caveat.
+    const p = wallColorProposal(found(['n', '#111111']), [], RECT, { n: [] });
+    expect(p.furniture).toEqual({ knownIn: [], blindIn: ['n'] });
+    // …and with no map at all, which is a room opened from a scene file.
+    expect(wallColorProposal(found(['n', '#111111']), [], RECT).furniture).toEqual({
+      knownIn: [],
+      blindIn: ['n'],
+    });
+  });
+
+  it('records a skip for a colour no wall could take, so the counts add up', () => {
+    // `unmapped` cannot fire through `slotWallIndices`, which derives its indices
+    // from the polygon it is handed. This calls the boundary directly with the one
+    // thing that reaches it — a colour for a slot the matcher would have refused
+    // outright — by way of a footprint whose painted count is SHORTER than its
+    // vertex count. There is no such footprint that `slotWallIndices` accepts, so
+    // the property being pinned is the pairing: every photo either paints a wall or
+    // appears in `skipped`, and the toast's "3 of 4" never comes with an empty list
+    // of reasons beneath it.
+    const p = wallColorProposal(found(['n', '#111111']), [], RECT, knew('n'));
+    const accountedFor = Object.keys(p.perWall).length + p.skipped.length;
+    expect(accountedFor).toBe(1);
   });
 
   it('every key it produces is a real wall of the footprint it was given', () => {
@@ -715,11 +757,14 @@ describe('wallColorProposal — which wall actually gets painted', () => {
         found(['n', '#111111'], ['e', '#222222'], ['s', '#333333'], ['w', '#444444']),
         [],
         poly,
-        true,
+        knew('n', 'e', 's', 'w'),
       );
       for (const key of Object.keys(p.perWall)) {
         expect(Number(key)).toBeGreaterThanOrEqual(0);
-        expect(Number(key)).toBeLessThan(poly.length);
+        // Against what the RENDERER counts, which is the check the code makes now:
+        // `wallSegments` skips a degenerate edge, so it can be shorter than the
+        // polygon, and `poly.length` is the count that cannot catch a shift.
+        expect(Number(key)).toBeLessThan(wallSegments(poly).length);
       }
     }
   });
