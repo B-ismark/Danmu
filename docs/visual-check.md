@@ -982,7 +982,7 @@ and `tests/library-click-through.test.tsx`. The two items below are new, and eac
 is here because what a test can check about it and what a person can see are different
 halves.*
 
-### The lens tilt read needs a real phone, on BOTH engines
+### The lens tilt read needs a real phone, on BOTH engines — merged to `main` in `17f9d62` (PR #148)
 
 **Where to click.** On an Android phone in Chrome and on an iPhone in Safari: open
 `/onboarding/capture`, tap **Turn on camera**, grant the camera and (on iOS) the
@@ -1015,16 +1015,14 @@ to need `magnetometer`, the honest follow-up is to drop it and say so here, not 
 token granted "just in case": a permission with no consumer is the other half of the same
 rule.
 
-**Where it rides.** `145a7ff` on `claude/amazing-dijkstra-d0am9g`, draft PR #148 (this
-item said "branch", against this file's own rule that the artifact is a commit and never
-"the tree" — a branch moves and the counts below were left attached to nothing).
-`next.config.mjs` grants the trio; `tests/permissions-policy.test.ts` pins the pairing in both directions (9/9, and
-four mutations were confirmed to fail it — sensors denied, `geolocation` granted with no
-consumer, the consumer import removed, and a new powerful feature granted with no reason
-row). Every one of those is a check that the *header text* matches the *source*. **Not one
-of them can tell you an event fired.**
+**Where it rides.** `17f9d62` on `main`. `next.config.mjs` grants the trio;
+`tests/permissions-policy.test.ts` pins the pairing in both directions, and four mutations
+were confirmed to fail it — sensors denied, `geolocation` granted with no consumer, the
+consumer import removed, and a new powerful feature granted with no reason row. Every one
+of those is a check that the *header text* matches the *source*. **Not one of them can
+tell you an event fired.**
 
-### Sampled wall colours — do they look like the room they came from?
+### Sampled wall colours — do they look like the room they came from? — merged to `main` in `17f9d62` (PR #148)
 
 **Where to click.** Open a room that was built from photos (the capture flow, not
 the picker). Left rail → **Room** → **Use the colours in my photos**. Then compare each
@@ -1069,14 +1067,13 @@ are read but whose colours now come out flatter or darker than before**, i.e. a 
 has shrunk into one lit strip; and, at the other end, a room where the button now reports
 "no wall colour to read" on photos that used to answer.
 
-**Where it rides.** `b618329` (the control and the shell) and `3d130f8` (the pure seam) on
-`claude/amazing-dijkstra-d0am9g`, draft PR #148, then `fc132b8`, which rewrote the band
-itself. 73 tests over `lib/wall-sample.ts` plus 19 over `lib/color-reduce.ts`; gates clean
-on `fc132b8` (typecheck, lint, build, 2672 passing / 5 expected fail). Thirteen mutations
-of the band's code, each confirmed to fail a test; two survived the first round and both
-were the trap the fix is about — see the commit.
+**Where it rides.** `17f9d62` on `main`, which carries the pure seam, the control and
+the shell, and the later rewrite of the band itself. `lib/wall-sample.ts` and
+`lib/color-reduce.ts` are tested from synthetic typed arrays; thirteen mutations of the
+band's code were each confirmed to fail a test, and two survived the first round — both
+were the trap the fix is about.
 
-### Does "Use my photos’ colours" fit the left rail at 1024–1279px?
+### Does "Use my photos’ colours" fit the left rail at 1024–1279px? — merged to `main` in `17f9d62` (PR #148)
 
 **Where to click.** Open a photographed room, narrow the window to about 1100px — the
 compact step, where the left rail is `--rail-left-tight` **208px** — and look at the
@@ -1095,10 +1092,10 @@ characters AND given its own element with `minWidth: 0` and an ellipsis, which i
 `.ds-btn`'s own comment prescribes for a button with no room. **The busy label is
 SHORTER, so the idle state is the one to check.**
 
-**Where it rides.** The commit whose subject begins *"Close the last of the audit"* on
-`claude/amazing-dijkstra-d0am9g`, draft PR #148.
+**Where it rides.** `17f9d62` on `main`. Font metrics are not derivable from a test,
+which is why this is here and not in the suite.
 
-### Scanned furniture should now stand AWAY from the wall by half its own depth
+### Scanned furniture should now stand AWAY from the wall by half its own depth — merged to `main` in `17f9d62` (PR #148)
 
 **Where to click.** Photograph or upload a room with a detectable floor piece against a
 wall — a wardrobe, a sofa, a chest of drawers — and run the detect screen, then open the
@@ -1123,13 +1120,12 @@ tall. A nightstand or a coffee table was coming back ~130 mm too tall, because t
 of a piece whose top is BELOW the lens images its far top edge and the height was being
 read at the near one. Compare a nightstand's height against the bed beside it.
 
-**Where it rides.** The commit whose subject begins *"A floor piece is a solid"* on
-`claude/amazing-dijkstra-d0am9g`, draft PR #148. Gates on it: typecheck, lint, build clean
-of `ESLint: Invalid Options`, and 147 test files / 2713 passing / 5 expected fail — with 38
-over `tests/photo-geometry.test.ts` and 14 over `tests/detect-pipeline.test.ts`, whose
-printed baseline table is the record of what changed.
+**Where it rides.** `17f9d62` on `main`. `tests/detect-pipeline.test.ts` prints the
+baseline table on every green run, and that table is the record of what changed — but no
+test in this repo renders a room, so the gap between a wardrobe's back and the plaster is
+only ever settled by looking.
 
-### A scanned air conditioner or TV should stop coming back over-wide
+### A scanned air conditioner or TV should stop coming back over-wide — merged to `main` in `17f9d62` (PR #148)
 
 **Where to click.** Scan a room that has something deep on a wall — an air conditioner or
 a split unit is the case, but a chunky TV or a boxed-in window will do — and look at the
@@ -1153,12 +1149,12 @@ never came from this placer in the rendered scene — `snapToWall` recomputes it
 itself — so a wall piece has always sat with its back on the plaster and this change does
 not move it.
 
-**Where it rides.** The commit whose subject begins *"A wall piece is a solid too"* on
-`claude/amazing-dijkstra-d0am9g`, draft PR #148. Gates on it: typecheck, lint, build clean
-of `ESLint: Invalid Options`, and 147 test files / 2716 passing / 5 expected fail — with 40
-over `tests/photo-geometry.test.ts` and 15 over `tests/detect-pipeline.test.ts`.
+**Where it rides.** `17f9d62` on `main`. The harness's own deep fixture is a 220 mm
+`ac-unit`, added because every wall piece already in the truth table was 30–80 mm deep and
+so could not express the error — which is the reason to check this against a real deep
+piece rather than trust the green run.
 
-### A picture near a corner should stop appearing twice at two different sizes
+### A picture near a corner should stop appearing twice at two different sizes — merged to `main` in `17f9d62` (PR #148)
 
 **Where to click.** Scan a room that has something hanging close to a corner — a framed
 print, a mirror, a wall clock, a curtain that runs up to the return wall. Take the two
@@ -1194,13 +1190,11 @@ default, under-reads every lateral offset and pulls a fabrication back INSIDE th
 where no bound can see it — the same print lands 2.27 m along a 3.0 m half-span. If a
 piece near a corner still comes back over-wide, the lens is the suspect, not the gate.
 
-**Where it rides.** The commit whose subject begins *"A wall or ceiling piece must be on
-the surface"* on `claude/amazing-dijkstra-d0am9g`, draft PR #148. Gates on it: typecheck,
-lint, build clean of `ESLint: Invalid Options`, and 147 test files / 2726 passing / 5
-expected fail — with 46 over `tests/photo-geometry.test.ts` and 19 over
-`tests/detect-refine.test.ts`. The `detect-pipeline` baseline table is byte-identical and
-the off-square sweep diffs clean against `main`, which is how "it refuses nothing
-legitimate" was established rather than assumed.
+**Where it rides.** `17f9d62` on `main`, which carries both the gate and the later fix
+to the gate's own bound. That the refusal refuses nothing legitimate was established rather
+than assumed: the `detect-pipeline` baseline table came out byte-identical and the
+off-square sweep diffed clean. What no sweep reaches is whether the piece the user gets is
+now one picture at its real size.
 
 ### Pressing Shuffle moves the button out from under the pointer
 

@@ -6908,8 +6908,7 @@ finding is recorded here and nowhere else; nothing is changed.
 
 ## I · Batch 0 of the 2026-09-09 audit — what it fixed, and the one thing it left
 
-**Where it rides.** Branch `claude/amazing-dijkstra-d0am9g`, the commit whose subject
-begins *"Draw the wall band from the room the photo was taken in"*. `lib/photo-geometry.ts`
+**Where it rides.** `17f9d62` on `main` (PR #148). `lib/photo-geometry.ts`
 (`wallFrame`, `wallColumnsAtHeight`, `wallRowAtHeight`'s contract), `lib/wall-sample.ts`
 (`WIDEST_HFOV_DEG`, `bandCal`, `MIN_BAND_FRAC`), `lib/wall-colors.ts`, and 73 tests in
 `tests/wall-sample.test.ts`, thirteen mutations of the code each confirmed to fail one.
