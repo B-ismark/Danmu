@@ -118,22 +118,49 @@ const securityHeaders = [
   // `tests/permissions-policy.test.ts` is the guard now: it reads the header this
   // config actually SERVES (not this source text) and derives what it should be
   // from the consumers, failing in both directions.
+  //
+  // **A feature LEFT OUT of this header is not denied.** Most powerful features
+  // default to an allowlist of `self`, so omission grants them to this origin —
+  // which is why the deny list below is long and why it names things this app has
+  // never touched. The guard's "denies everything it does not name a reason for"
+  // test could only ever iterate the entries that were already here, so a feature
+  // nobody had thought of was granted and tripped nothing.
   {
     key: 'Permissions-Policy',
     value: [
+      // Granted, each with a consumer named in `tests/permissions-policy.test.ts`.
       'camera=(self)',
-      'microphone=()',
-      'geolocation=()',
       'accelerometer=(self)',
       'gyroscope=(self)',
       'magnetometer=(self)',
+      // The Room panel's Copy — `navigator.clipboard.writeText`. Explicit rather
+      // than left to its `self` default, so it has to carry a reason like the rest.
+      'clipboard-write=(self)',
+      // Denied, and every one of these defaults to `self` or wider if omitted.
+      'microphone=()',
+      'geolocation=()',
+      'clipboard-read=()',
       'payment=()',
       'usb=()',
       'midi=()',
-      'display-capture=()',
-      'idle-detection=()',
+      'hid=()',
       'serial=()',
       'bluetooth=()',
+      'display-capture=()',
+      'idle-detection=()',
+      'ambient-light-sensor=()',
+      'autoplay=()',
+      'encrypted-media=()',
+      'fullscreen=()',
+      'picture-in-picture=()',
+      'local-fonts=()',
+      'otp-credentials=()',
+      'publickey-credentials-get=()',
+      'screen-wake-lock=()',
+      'web-share=()',
+      'window-management=()',
+      'xr-spatial-tracking=()',
+      'compute-pressure=()',
     ].join(', '),
   },
   // Ignored on http:// and on localhost, so it is safe to send unconditionally.

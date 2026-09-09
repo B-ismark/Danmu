@@ -389,9 +389,16 @@ backend, no account. The 3D studio *is* the product.
    third-party host is allow-listed with a reason in `next.config.mjs`'s CSP;
    adding a fetch target means adding it there too. The same file's
    `Permissions-Policy` allows only the features the app actually uses — `camera`
-   for the capture screen's viewfinder, and the `accelerometer`/`gyroscope`/
-   `magnetometer` trio that gate the one `deviceorientation` read behind it — and
-   denies the rest; `()` there
+   for the capture screen's viewfinder, the `accelerometer`/`gyroscope`/
+   `magnetometer` trio that gate the one `deviceorientation` read behind it, and
+   `clipboard-write` for the Room panel's Copy — and denies the rest **by naming
+   them**, which is the part that reads as optional and is not: almost every
+   powerful feature defaults to an allowlist of `self`, so a feature LEFT OUT of
+   the header is granted, not denied. Five were
+   (`screen-wake-lock`, `window-management`, `local-fonts`,
+   `xr-spatial-tracking`, `compute-pressure`) while the guard's own
+   "denies everything it does not name a reason for" test swept the entries that
+   were already there and could not see them. `()` there
    overrides the user's own grant, so a feature and its header entry move
    together. **In both directions, and BOTH directions have now drawn blood.**
    Four entries sat at `(self)` for the sun mood — `geolocation` for its latitude,
@@ -435,7 +442,13 @@ backend, no account. The 3D studio *is* the product.
    `tests/permissions-policy.test.ts`, which reads the header the config actually
    SERVES, derives what it should be from the consumers, and fails in both
    directions — the old comment in `next.config.mjs` claimed to *be* the guard, and
-   a comment is not one. `lib/geolocate.ts` is gone entirely; `lib/compass.ts` is
+   a comment is not one. Two things it got wrong itself, since a guard is not
+   exempt: it scanned the app with a `git ls-files` double-star pathspec, which
+   needs the following slash literally and so matched **none** of a flat `lib/` —
+   76 files with the whole engine invisible, under a file-count floor of 50 that
+   the broken result passed. It reads directories with a suffix filter now, and its
+   floor is named files. And it read the header for one build, `NODE_ENV=test`; that
+   both builds serve the same policy is asserted rather than assumed. `lib/geolocate.ts` is gone entirely; `lib/compass.ts` is
    `lib/bearings.ts` now, because the compass read went and what is left is the
    circular-mean maths `lib/capture-slots.ts` needs for photo bearings — **a
    module still named for the half that was deleted is the scar rule 1
