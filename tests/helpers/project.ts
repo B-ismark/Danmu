@@ -165,7 +165,16 @@ export function bboxOfWallPanel(
  *  circle is not the projection of its bounding square: the widest image point is
  *  where the ray is TANGENT to the rim, which sits nearer the camera than the
  *  circle's lateral extreme. Corners would build `placeCeilingObject`'s own
- *  approximation into the thing meant to check it. */
+ *  approximation into the thing meant to check it.
+ *
+ *  `yawRad` turns the camera, exactly as it does for the other two — and it is here
+ *  because leaving it out made a ceiling piece's box byte-identical at 0° and at
+ *  20°, which was justified in a docblock as "the one anchor a yaw about the
+ *  vertical leaves alone in the axis that matters". That was false:
+ *  `placeCeilingObject` derives its lateral position from `tanX` at the box's
+ *  horizontal centre, and a yaw about the vertical is precisely the rotation that
+ *  moves it. Rotating the rim samples is exact, since a yaw about the vertical maps
+ *  this circle onto another circle at the same height. */
 export function bboxOfCeilingDisc(
   slot: CaptureSlot,
   x: number,
@@ -173,12 +182,14 @@ export function bboxOfCeilingDisc(
   dM: number,
   cal: CameraCal,
   ceilingM: number,
+  yawRad = 0,
 ): Box {
   const r = dM / 2;
   const pts: Array<[number, number]> = [];
   for (let i = 0; i < 720; i++) {
     const a = (i / 720) * 2 * Math.PI;
-    pts.push(project(slot, x + r * Math.cos(a), ceilingM, z + r * Math.sin(a), cal));
+    const p: [number, number, number] = [x + r * Math.cos(a), ceilingM, z + r * Math.sin(a)];
+    pts.push(project(slot, ...yawedPoint(p, yawRad), cal));
   }
   return extent(pts);
 }

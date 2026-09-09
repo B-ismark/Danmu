@@ -28,11 +28,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   CAL,
+  CALS,
   ROOM,
   TRUTH,
+  assignOneToOne,
   boxFor,
   boxForYawed,
-  nearest,
   offSquare,
   runPipeline,
   type Truth,
@@ -167,7 +168,19 @@ type Outcome = {
   label: string;
   deg: number;
   refined: number;
+  /** (piece, slot) boxes that left the frame — excluded from the run, not merely
+   *  counted. A real detector cannot emit one. */
   offFrame: number;
+  /** Shots actually fed to the pipeline. Asserted against `offFrame`, so the
+   *  filter cannot quietly stop being applied. */
+  inCount: number;
+  /** Truths with at least one shot still in frame: the ones the pipeline had any
+   *  chance of placing, and the denominator for everything below. */
+  measurable: number;
+  /** Measurable truths that no refined row could be matched to. Must be zero: a
+   *  piece that never appears leaves no trace, which this file's own header calls
+   *  the failure worth fearing. */
+  unmatched: number;
   worstPosM: number;
   medPosM: number;
   worstWidthFrac: number;
@@ -175,30 +188,59 @@ type Outcome = {
   nightstandGapM: number;
 };
 
+/** True median — the mean of the two middles on an even count.
+ *
+ *  Was `sorted[Math.floor(len / 2)]`, the sixth of ten, under a column header and a
+ *  field name that both said "med". */
+function median(xs: readonly number[]): number {
+  if (xs.length === 0) return NaN;
+  const s = [...xs].sort((a, b) => a - b);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
 function measure(label: string, deg: number, yawOf: (slot: CaptureSlot) => number, realDepth: boolean): Outcome {
   const boxOf = (t: Truth, slot: CaptureSlot) =>
     boxForYawed(t, slot, CAL, { yawRad: yawOf(slot), realDepth });
 
+  // A yawed camera pushes fixtures toward the edges, and a box off the edge of the
+  // image is an impossible input rather than a hard one. So an off-frame shot is
+  // DROPPED before the pipeline sees it — the first version counted them and then
+  // ran them anyway, which meant part of the monotonicity result was driven by
+  // boxes no detector could have produced.
+  const seen = (t: Truth, slot: CaptureSlot) => inFrame(boxOf(t, slot));
   let offFrame = 0;
-  for (const t of TRUTH) for (const slot of t.slots) if (!inFrame(boxOf(t, slot))) offFrame += 1;
+  for (const t of TRUTH) for (const slot of t.slots) if (!seen(t, slot)) offFrame += 1;
+  const measurable = TRUTH.filter((t) => t.slots.some((slot) => seen(t, slot)));
 
-  const { REFINED } = runPipeline(boxOf);
+  const { IN, REFINED } = runPipeline(boxOf, CALS, (t, slot, box) => inFrame(box));
+
+  const pool = REFINED.filter((d) => d.position).map((d) => ({
+    label: d.label,
+    x: d.position!.x,
+    z: d.position!.z,
+    w: d.dimMM?.[0] ?? NaN,
+  }));
+  // One-to-one, so the two same-labelled nightstands cannot both claim the same
+  // row and report a spuriously small error each.
+  const hits = assignOneToOne(measurable, pool);
 
   const posErrs: number[] = [];
   let worstWidthFrac = 0;
-  for (const t of TRUTH) {
-    const pool = REFINED.filter((d) => d.position).map((d) => ({
-      label: d.label,
-      x: d.position!.x,
-      z: d.position!.z,
-      w: d.dimMM?.[0] ?? 0,
-    }));
-    const hit = nearest(t, pool);
-    if (!hit) continue;
+  let unmatched = 0;
+  hits.forEach((hit, i) => {
+    if (!hit) {
+      unmatched += 1;
+      return;
+    }
+    const t = measurable[i];
     posErrs.push(Math.hypot(hit.x - t.x, hit.z - t.z));
-    worstWidthFrac = Math.max(worstWidthFrac, Math.abs(hit.w - t.dimMM[0]) / t.dimMM[0]);
-  }
-  const sorted = [...posErrs].sort((a, b) => a - b);
+    // NaN rather than 0 for a missing size: `?? 0` printed as "100% wrong width",
+    // which reads as a sizing error rather than as no measurement at all.
+    if (Number.isFinite(hit.w)) {
+      worstWidthFrac = Math.max(worstWidthFrac, Math.abs(hit.w - t.dimMM[0]) / t.dimMM[0]);
+    }
+  });
 
   const lampRows = REFINED.filter((d) => d.label === 'floor lamp').length;
   const stands = REFINED.filter((d) => d.label === 'bedside table' && d.position);
@@ -215,8 +257,11 @@ function measure(label: string, deg: number, yawOf: (slot: CaptureSlot) => numbe
     deg,
     refined: REFINED.length,
     offFrame,
-    worstPosM: sorted.length ? sorted[sorted.length - 1] : NaN,
-    medPosM: sorted.length ? sorted[Math.floor(sorted.length / 2)] : NaN,
+    inCount: IN.length,
+    measurable: measurable.length,
+    unmatched,
+    worstPosM: posErrs.length ? Math.max(...posErrs) : NaN,
+    medPosM: median(posErrs),
     worstWidthFrac,
     lampRows,
     nightstandGapM,
@@ -239,10 +284,11 @@ for (const deg of ANGLES) {
 console.log(
   [
     `\noff-square · cost of a camera that is not square to the wall (real-depth boxes)`,
-    `  ${'case'.padEnd(16)} refined  offFrame  worst pos  med pos  worst dW  lampRows  standGap`,
+    `  ${'case'.padEnd(16)} refined  dropped  placed  unmatched  worst pos  med pos  worst dW  lampRows  standGap`,
     ...RUNS.map(
       (r) =>
-        `  ${r.label.padEnd(16)} ${String(r.refined).padStart(7)}  ${String(r.offFrame).padStart(8)}` +
+        `  ${r.label.padEnd(16)} ${String(r.refined).padStart(7)}  ${String(r.offFrame).padStart(7)}` +
+        `  ${String(r.measurable).padStart(6)}  ${String(r.unmatched).padStart(9)}` +
         `  ${fmt(r.worstPosM)}  ${fmt(r.medPosM)}  ${(r.worstWidthFrac * 100).toFixed(1).padStart(7)}%` +
         `  ${String(r.lampRows).padStart(8)}  ${fmt(r.nightstandGapM)}`,
     ),
@@ -254,15 +300,16 @@ console.log(
 /** Per-piece error for one camera, so a headline number can name its own worst case. */
 function perPiece(yawRad: number, realDepth: boolean) {
   const boxOf = (t: Truth, slot: CaptureSlot) => boxForYawed(t, slot, CAL, { yawRad, realDepth });
-  const { REFINED } = runPipeline(boxOf);
-  return TRUTH.map((t) => {
-    const pool = REFINED.filter((d) => d.position).map((d) => ({
-      label: d.label,
-      x: d.position!.x,
-      z: d.position!.z,
-      w: d.dimMM?.[0] ?? 0,
-    }));
-    const hit = nearest(t, pool);
+  const { REFINED } = runPipeline(boxOf, CALS, (t, slot, box) => inFrame(box));
+  const pool = REFINED.filter((d) => d.position).map((d) => ({
+    label: d.label,
+    x: d.position!.x,
+    z: d.position!.z,
+    w: d.dimMM?.[0] ?? NaN,
+  }));
+  const hits = assignOneToOne(TRUTH, pool);
+  return TRUTH.map((t, i) => {
+    const hit = hits[i];
     const anyOff = t.slots.some((slot) => !inFrame(boxOf(t, slot)));
     return {
       name: t.name,
@@ -270,7 +317,7 @@ function perPiece(yawRad: number, realDepth: boolean) {
       dims: t.dimMM,
       offFrame: anyOff,
       posErrM: hit ? Math.hypot(hit.x - t.x, hit.z - t.z) : NaN,
-      widthFrac: hit ? (hit.w - t.dimMM[0]) / t.dimMM[0] : NaN,
+      widthFrac: hit && Number.isFinite(hit.w) ? (hit.w - t.dimMM[0]) / t.dimMM[0] : NaN,
     };
   });
 }
@@ -304,10 +351,82 @@ const splitDeg = (() => {
 // The measurement is the output; see the note on the first of these.
 console.log(`\noff-square · the cross-slot lamp splits into a duplicate at ±${splitDeg}° of DIFFERENTIAL yaw`);
 
+describe('the matcher the measurement rests on', () => {
+  // `assignOneToOne` is a test helper, and it is tested because a published number
+  // rests on it. The sweep itself cannot pin it: in this fixture the two bedside
+  // tables happen to pick different rows either way, so removing the one-to-one
+  // constraint changes none of the sweep's assertions — which is exactly the shape
+  // of an unpinned fix. So the contract is exercised directly, on a pool built to
+  // make the shortcut wrong.
+  const stands = TRUTH.filter((t) => t.label === 'bedside table');
+
+  it('and the median column is a median', () => {
+    // `medPosM` was `sorted[Math.floor(len / 2)]` — the sixth of ten — under a
+    // column header and a field name that both said "med". Nothing read the value,
+    // so nothing could notice; this reads it.
+    expect(median([1, 2, 3, 4])).toBe(2.5);
+    expect(median([1, 2, 3])).toBe(2);
+    expect(median([])).toBeNaN();
+  });
+
+  it('gives two same-labelled truths two different rows', () => {
+    expect(stands).toHaveLength(2);
+    // One row sits nearest to BOTH truths. `nearest` per truth would hand it to
+    // each of them, and the one it does not belong to would report a small error
+    // for a row that is not it.
+    const pool = [
+      { label: 'bedside table', x: stands[0].x + 0.05, z: stands[0].z, w: 450 },
+      { label: 'bedside table', x: stands[1].x + 2.5, z: stands[1].z, w: 450 },
+    ];
+    const hits = assignOneToOne(stands, pool);
+    expect(hits[0]).toBe(pool[0]);
+    expect(hits[1]).toBe(pool[1]);
+    // …and the far truth's error is the honest large one rather than the near
+    // row's small one, which is the bias this removes.
+    expect(Math.abs(hits[1]!.x - stands[1].x)).toBeGreaterThan(2);
+  });
+
+  it('leaves a truth unmatched rather than sharing a row', () => {
+    const pool = [{ label: 'bedside table', x: stands[0].x, z: stands[0].z, w: 450 }];
+    const hits = assignOneToOne(stands, pool);
+    expect(hits.filter(Boolean)).toHaveLength(1);
+    expect(hits.filter((h) => !h)).toHaveLength(1);
+  });
+
+  it('never crosses labels', () => {
+    const hits = assignOneToOne(TRUTH, [{ label: 'three-seat sofa', x: 0, z: 0, w: 2000 }]);
+    const sofaIndex = TRUTH.findIndex((t) => t.name === 'sofa');
+    expect(hits.filter(Boolean)).toHaveLength(1);
+    expect(hits[sofaIndex]).toBeDefined();
+  });
+});
+
 describe('the cost, measured', () => {
   it('reports a row per angle, so the baseline cannot drift unseen', () => {
     expect(RUNS.length).toBe(ANGLES.length * 2);
     for (const r of RUNS) expect(Number.isNaN(r.worstPosM)).toBe(false);
+  });
+
+  it('never loses a piece it could see, at ANY angle', () => {
+    // The failure this file's header calls the one worth fearing: a piece that
+    // never appears leaves no trace. It was asserted only in the `deg === 0`
+    // filter, and the statistics quietly SKIPPED an unmatched truth — so a
+    // regression that dropped the wardrobe at 10° would have removed its error
+    // from both columns, lowered them, and passed.
+    //
+    // Stated against what the pipeline could have seen rather than against ten: a
+    // yawed camera legitimately pushes boxes off the edge of the frame, and those
+    // shots are dropped before the run because no detector could emit one.
+    const totalShots = TRUTH.reduce((n, t) => n + t.slots.length, 0);
+    for (const r of RUNS) {
+      expect(r.unmatched, `${r.label}: truths with no row`).toBe(0);
+      // …and the drop actually happened. Without this the filter could stop being
+      // passed and every number here would quietly go back to being measured off
+      // boxes no camera could produce.
+      expect(r.inCount, `${r.label}: shots fed`).toBe(totalShots - r.offFrame);
+    }
+    // The sweep has to REACH the off-frame case, or the line above is vacuous.
+    expect(RUNS.some((r) => r.offFrame > 0)).toBe(true);
   });
 
   it('costs nothing at all at zero, in both sweep shapes', () => {
@@ -373,15 +492,45 @@ describe('the cost, measured', () => {
     // nearest the camera, not the centre. So the decoded position sits about
     // `depth/2` short. The sofa makes it exact: 850 mm deep, 0.4250 m of error.
     //
-    // Wall pieces are untouched (0.0000 m, 0.0%), which is the other half of the
-    // diagnosis: a wall panel IS fronto-parallel and thin, so giving it depth
-    // changes nothing. The defect is specific to floor-standing furniture.
+    // **What this said, and why it was worth nothing:** "wall pieces are untouched
+    // (0.0000 m, 0.0%), which is the other half of the diagnosis — a wall panel IS
+    // fronto-parallel and thin, so giving it depth changes nothing." It was a
+    // TAUTOLOGY: `wallCorners` took no depth parameter, so `realDepth: true` could
+    // not move a wall piece by construction, and `toBeCloseTo(0, 9)` could not
+    // fail. It was published in `Design.md` and in the commit body as a finding.
+    //
+    // Measured now that the fixture can express it: wall pieces ARE affected, and
+    // the honest version of the claim is about the SIZE of the effect. A wall piece
+    // is seen from an angle too — the camera is at the room centre and the piece is
+    // off to one side — so its depth shows in the silhouette: the TV is 21 mm out
+    // and 3.5% too wide, the painting 5 mm and 1.6%, the curtain 23 mm and 3.4%.
+    // That is one to two orders below the floor pieces' half-depth error, which is
+    // what makes floor-standing furniture the defect worth acting on.
+    const wallErrs = ZERO_DETAIL.filter((r) => r.anchor.startsWith('wall'));
+    expect(wallErrs.length).toBeGreaterThan(2);
+    for (const r of wallErrs) {
+      // Non-zero, which is the assertion the old fixture could not make: if this
+      // ever reads exactly 0 again, the depth has stopped reaching the projection.
+      expect(r.posErrM, `${r.name} (wall) must be affected at all`).toBeGreaterThan(1e-3);
+      expect(r.posErrM, `${r.name} (wall) stays small`).toBeLessThan(0.05);
+      expect(Math.abs(r.widthFrac), `${r.name} (wall) stays small`).toBeLessThan(0.05);
+    }
+    // The depth has to project INWARD, into the room, because that is where a TV
+    // hangs — its back is on the plaster. Mutating it to extend outward, through
+    // the wall, is not caught by the band above: it leaves the TV at 6.7 mm and
+    // 1.1% rather than 21 mm and 3.5%, since a body nearer the camera casts the
+    // larger silhouette. So the direction gets its own bound.
+    const tv = wallErrs.find((r) => r.name === 'tv')!;
+    expect(tv.posErrM, 'the TV projects into the room, not into the wall').toBeGreaterThan(0.015);
+
+    // …and the ordering is the finding: the worst wall error is a fraction of the
+    // worst floor one.
+    const worstWall = Math.max(...wallErrs.map((r) => r.posErrM));
+    const worstFloor = Math.max(...ZERO_DETAIL.filter((r) => r.anchor === 'floor').map((r) => r.posErrM));
+    expect(worstWall * 10).toBeLessThan(worstFloor);
+
     for (const r of ZERO_DETAIL) {
-      if (r.anchor.startsWith('wall')) {
-        expect(r.posErrM, `${r.name} (wall) must be exact`).toBeCloseTo(0, 9);
-        expect(r.widthFrac, `${r.name} (wall) must be exact`).toBeCloseTo(0, 9);
-        continue;
-      }
+      if (r.anchor.startsWith('wall')) continue;
       if (r.anchor !== 'floor') continue;
       const halfDepthM = r.dims[1] / 2000;
       // A BAND on the ratio, not a floor. The first version asserted
@@ -401,6 +550,36 @@ describe('the cost, measured', () => {
       expect(ratio, `${r.name}: error ÷ half its ${r.dims[1]} mm depth`).toBeGreaterThan(0.95);
       expect(ratio, `${r.name}: error ÷ half its ${r.dims[1]} mm depth`).toBeLessThan(1.5);
     }
+  });
+
+  it('the CEILING piece moves with yaw too, and was exempted from the sweep', () => {
+    // `boxForYawed` used to short-circuit a ceiling anchor to the square-on
+    // projector, so the fan's box was byte-identical at 0° and at 20°. The stated
+    // reason was that a ceiling fan is "the one anchor a yaw about the vertical
+    // leaves alone in the axis that matters" — the opposite of true.
+    // `placeCeilingObject` takes `uC = bx + bw/2`, rays through it, and derives its
+    // lateral offset from `tanX(uC)`; a yaw about the vertical is exactly the
+    // rotation that moves `uC`.
+    //
+    // Measured now that it rotates: 0.1136 m at 0° (its own documented
+    // disc-tangent allowance), 0.4100 m at 10°, 0.7940 m at 20°. The 20° figure is
+    // nearly twice the sofa's 0.4250 m, which the headline calls the dominant
+    // error — so the exemption was hiding the largest single displacement in the
+    // sweep at the wide end.
+    const fanAt = (deg: number) => perPiece(rad(deg), true).find((r) => r.name === 'fan')!;
+    const zero = fanAt(0);
+    const ten = fanAt(10);
+    const twenty = fanAt(20);
+    expect(zero.posErrM).toBeCloseTo(0.1136, 4);
+    // Strictly growing, which is the whole claim — and the assertion the exemption
+    // made impossible, since the three were the same number.
+    expect(ten.posErrM).toBeGreaterThan(zero.posErrM * 2);
+    expect(twenty.posErrM).toBeGreaterThan(ten.posErrM * 1.5);
+    // And it does NOT vanish in this room, which was the other thing to check:
+    // `placeCeilingObject` refuses a decode whose distance exceeds the framed
+    // wall's, and at 20° in a 7 × 6 m room it has not reached that.
+    expect(twenty.offFrame).toBe(false);
+    expect(Number.isNaN(twenty.posErrM)).toBe(false);
   });
 
   it('and the sofa nails it exactly, being square to its own camera', () => {

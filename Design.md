@@ -602,10 +602,29 @@ today's placers. Two results, both filed in `docs/what-is-still-open.md` § 42:
   corner nearest the lens rather than the centre plane — so a floor piece is measured about
   half its own depth too close, and a square-footprint piece reads far too wide because its
   silhouette is its diagonal. At a **perfectly square** camera: the sofa is out by 0.4250 m
-  (exactly half its 850 mm depth), the lamp reads 78.7% too wide. Wall and ceiling pieces
-  are untouched, which is the other half of the diagnosis. This was invisible to the whole
-  suite because every fixture was a **depthless card**, so the placer was exactly right
-  about the thing it was being given.
+  (exactly half its 850 mm depth), the lamp reads 78.7% too wide. This was invisible to the
+  whole suite because every fixture was a **depthless card**, so the placer was exactly
+  right about the thing it was being given.
+- **"Wall and ceiling pieces are untouched, which is the other half of the diagnosis" was
+  published here and it was a tautology.** `wallCorners` in the fixture took no depth
+  parameter, so `realDepth: true` could not move a wall piece at all, and the assertion
+  that wall anchors were exact to nine decimals could not fail — the same depthless-fixture
+  defect the measurement had just been written to expose, reproduced one anchor over in the
+  same commit. The ceiling fan was exempted from the yaw sweep outright, on the stated
+  grounds that a yaw about the vertical leaves it alone in the axis that matters; that was
+  false too, since `placeCeilingObject` derives the lateral position from `tanX` at the
+  box's own horizontal centre.
+  Measured once the fixture could express either: **wall pieces are affected but by one to
+  two orders less** — TV 21 mm and 3.5%, curtain 23 mm and 3.4%, painting 5 mm and 1.6% —
+  because the camera is at the room centre and the piece is off to one side, so its depth
+  does show in the silhouette. **The fan moves with yaw and by more than anything else at
+  the wide end:** 0.1136 m at 0° (its own disc-tangent allowance), 0.4100 m at 10°,
+  0.7940 m at 20°, the last nearly twice the sofa's half-depth error. So the conclusion
+  that survives is the ORDERING — floor-standing furniture is where the error worth acting
+  on lives — and not the claim that anything is exempt. The position figures for the sweep
+  itself were also optimistic on three counts, all fixed: two same-labelled pieces could
+  match the same refined row, boxes that had left the frame were counted and then measured
+  anyway, and the "median" column was the upper middle.
 
 Neither is fixed. The second is larger and independent of the first, so it is the one to
 decide about first — and both are decisions rather than patches, because the only sources

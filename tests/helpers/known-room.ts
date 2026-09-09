@@ -95,9 +95,19 @@ export function boxFor(t: Truth, slot: CaptureSlot, cal: CameraCal = CAL): Box {
 
 export type Shot = { truth: Truth; slot: CaptureSlot; det: Detection };
 
-export function shots(boxOf: (t: Truth, slot: CaptureSlot) => Box = boxFor): Shot[] {
+/** `keep` drops a (piece, slot) shot before it reaches the pipeline. Used to
+ *  exclude a box that has left the frame: a real detector can only ever hand over
+ *  a box it could see, so feeding one is measuring something that was never
+ *  photographed — `tests/helpers/project.ts` says so at `inFrame`, and the sweep
+ *  was counting them and then running them anyway. */
+export function shots(
+  boxOf: (t: Truth, slot: CaptureSlot) => Box = boxFor,
+  keep: (t: Truth, slot: CaptureSlot, box: Box) => boolean = () => true,
+): Shot[] {
   return TRUTH.flatMap((truth) =>
-    truth.slots.map((slot) => ({
+    truth.slots
+      .filter((slot) => keep(truth, slot, boxOf(truth, slot)))
+      .map((slot) => ({
       truth,
       slot,
       det: {
@@ -110,8 +120,8 @@ export function shots(boxOf: (t: Truth, slot: CaptureSlot) => Box = boxFor): Sho
         // No dimMM and no position, deliberately. That is the on-device detector's
         // output shape, and it means every number this harness reports came from
         // geometry rather than from a hint.
-      } as Detection,
-    })),
+        } as Detection,
+      })),
   );
 }
 
@@ -126,6 +136,51 @@ export function roomData(records: SavedDetection[]): RoomData {
     height: ROOM.height,
     detectedObjects: records,
   };
+}
+
+/**
+ * Match every truth to at most one row, one-to-one, nearest pair first.
+ *
+ * **`nearest` per truth is not this**, and the difference is material wherever the
+ * errors are large: two truths that share a label — the two bedside tables, on
+ * purpose — can both pick the same row, and the one that is not really that row
+ * reports a spuriously small error. The published off-square position figures were
+ * biased optimistic by exactly that, at the angles where the estimates move far
+ * enough for the mis-attribution to happen.
+ *
+ * A helper's documented caveat is scoped to the context it was written in:
+ * `nearest`'s own comment says two pieces share a label deliberately, and in
+ * `detect-pipeline.test.ts`, where every error is ~0, taking the shortcut is
+ * harmless. Reused in a sweep whose whole point is large errors, it changes the
+ * answer.
+ *
+ * Greedy over the globally shortest same-label pair, which is exact for this
+ * fixture (ten pieces, at most two sharing a label) and does not need the
+ * assignment problem solved properly.
+ */
+export function assignOneToOne<T extends { label?: string; x: number; z: number }>(
+  truths: readonly Truth[],
+  pool: readonly T[],
+): Array<T | undefined> {
+  const out: Array<T | undefined> = truths.map(() => undefined);
+  const takenTruth = new Set<number>();
+  const takenRow = new Set<number>();
+  type Pair = { ti: number; ri: number; d: number };
+  const pairs: Pair[] = [];
+  truths.forEach((t, ti) =>
+    pool.forEach((p, ri) => {
+      if (p.label !== undefined && p.label !== t.label) return;
+      pairs.push({ ti, ri, d: Math.hypot(p.x - t.x, p.z - t.z) });
+    }),
+  );
+  pairs.sort((a, b) => a.d - b.d);
+  for (const { ti, ri } of pairs) {
+    if (takenTruth.has(ti) || takenRow.has(ri)) continue;
+    takenTruth.add(ti);
+    takenRow.add(ri);
+    out[ti] = pool[ri];
+  }
+  return out;
 }
 
 /** Nearest same-label candidate to a truth, by XZ. Same-label rather than
@@ -158,8 +213,9 @@ export type Run = {
 export function runPipeline(
   boxOf: (t: Truth, slot: CaptureSlot) => Box = boxFor,
   cals: CalMap = CALS,
+  keep?: (t: Truth, slot: CaptureSlot, box: Box) => boolean,
 ): Run {
-  const IN = shots(boxOf);
+  const IN = shots(boxOf, keep);
   const REFINED = refineDetections(
     IN.map((s) => s.det),
     cals,
@@ -204,6 +260,20 @@ function floorCorners(
   return out;
 }
 
+/** A wall piece's world corners, `depthM` deep INWARD from the wall plane — a TV
+ *  hangs with its back against the plaster, so the truth point is the mount and the
+ *  body projects into the room.
+ *
+ *  **This took no depth at all, in the very commit whose subject was that the
+ *  fixture models furniture as a depthless card.** So `realDepth: true` could not
+ *  change a wall piece by construction, and the assertion that wall anchors were
+ *  exact to 1e-9 was a tautology — published in `Design.md` and in that commit's
+ *  own body as "the other half of the diagnosis". The lesson is the one the commit
+ *  was about: a fixture that cannot express the defect proves nothing, and writing
+ *  the fix for one anchor does not confer immunity while writing the next.
+ *
+ *  The inward normal is `[-az, ax]`, the same one `floorCorners` uses — for slot n,
+ *  `ALONG` is +X and the wall is at −Z, so the room is at +Z. */
 function wallCorners(
   slot: CaptureSlot,
   x: number,
@@ -211,12 +281,20 @@ function wallCorners(
   z: number,
   wM: number,
   hM: number,
+  depthM: number,
 ): Array<[number, number, number]> {
   const [ax, az] = ALONG[slot];
+  const [nx, nz] = [-az, ax];
   const out: Array<[number, number, number]> = [];
   for (const sw of [-1, 1]) {
-    for (const dy of [-hM / 2, hM / 2]) {
-      out.push([x + ax * sw * (wM / 2), y + dy, z + az * sw * (wM / 2)]);
+    for (const sd of depthM > 0 ? [0, 1] : [0]) {
+      for (const dy of [-hM / 2, hM / 2]) {
+        out.push([
+          x + ax * sw * (wM / 2) + nx * sd * depthM,
+          y + dy,
+          z + az * sw * (wM / 2) + nz * sd * depthM,
+        ]);
+      }
     }
   }
   return out;
@@ -233,11 +311,14 @@ export type YawOptions = {
  * `boxFor`, but with the camera turned off-square and optionally with the floor
  * pieces given their real depth.
  *
- * Ceiling discs fall through to the square-on helper: `bboxOfCeilingDisc` samples
- * 720 rim points precisely because a circle's silhouette is not its bounding
- * square's, and rebuilding that here to add a rotation would put an approximation
- * inside the thing meant to check one. A ceiling fan is also the one anchor a yaw
- * about the vertical leaves alone in the axis that matters.
+ * All three anchors yaw. Ceiling discs used to fall through to the square-on
+ * helper, on the stated grounds that a ceiling fan is "the one anchor a yaw about
+ * the vertical leaves alone in the axis that matters" — which is the opposite of
+ * true: `placeCeilingObject` reads the box's horizontal centre through `tanX` and
+ * refuses a decode whose distance exceeds the wall's, so yaw moves the fan
+ * laterally and can make it vanish. Exempting it hid the largest single error in
+ * the sweep. `bboxOfCeilingDisc` takes the yaw itself now, rotating its 720 rim
+ * samples, so the circle's tangent silhouette is still exact.
  *
  * At `yawRad: 0` with `realDepth` off this must agree with `boxFor` exactly —
  * asserted in `tests/off-square-cost.test.ts`, which is what validates this builder
@@ -248,12 +329,14 @@ export function boxForYawed(t: Truth, slot: CaptureSlot, cal: CameraCal, opts: Y
   const wM = t.dimMM[0] / 1000;
   const dM = t.dimMM[1] / 1000;
   const hM = t.dimMM[2] / 1000;
-  if (anchor === 'ceiling') return bboxOfCeilingDisc(slot, t.x, t.z, wM, cal, ROOM.height);
+  if (anchor === 'ceiling') {
+    return bboxOfCeilingDisc(slot, t.x, t.z, wM, cal, ROOM.height, opts.yawRad);
+  }
 
   const corners =
     anchor === 'floor'
       ? floorCorners(slot, t.x, t.z, wM, hM, opts.realDepth ? dM : 0)
-      : wallCorners(slot, t.x, t.y ?? 1.2, t.z, wM, hM);
+      : wallCorners(slot, t.x, t.y ?? 1.2, t.z, wM, hM, opts.realDepth ? dM : 0);
 
   // Turn the camera by rotating the world. NOT negated — see `yawedPoint`, where
   // the direction is worked out, and the hand-derived assertion in
