@@ -1015,8 +1015,10 @@ to need `magnetometer`, the honest follow-up is to drop it and say so here, not 
 token granted "just in case": a permission with no consumer is the other half of the same
 rule.
 
-**Where it rides.** Branch `claude/amazing-dijkstra-d0am9g`. `next.config.mjs` grants the
-trio; `tests/permissions-policy.test.ts` pins the pairing in both directions (9/9, and
+**Where it rides.** `145a7ff` on `claude/amazing-dijkstra-d0am9g`, draft PR #148 (this
+item said "branch", against this file's own rule that the artifact is a commit and never
+"the tree" — a branch moves and the counts below were left attached to nothing).
+`next.config.mjs` grants the trio; `tests/permissions-policy.test.ts` pins the pairing in both directions (9/9, and
 four mutations were confirmed to fail it — sensors denied, `geolocation` granted with no
 consumer, the consumer import removed, and a new powerful feature granted with no reason
 row). Every one of those is a check that the *header text* matches the *source*. **Not one
@@ -1048,16 +1050,31 @@ or `/onboarding/detect`.
 
 **What a test already covers, so you do not have to.** That the band excludes floor and
 ceiling (against an independent camera model, across four slots, two aspects, two
-lenses, ±5° tilt and three camera heights); that the mapping refuses a triangle, a
+lenses, ±5° tilt and three camera heights, and over a footprint with two walls dragged as
+well as a centred one); that an ASSUMED lens keeps the band inside the true junctions for
+every real lens from 66° to 120°; that a band which leaves the frame by the same edge
+twice, or that is under 5% of the frame, is refused; that the mapping refuses a triangle, a
 chamfered rectangle, a room turned 30° off the axes, and a room with two walls facing the
 same way; that the highlight/shadow trim rejects a shadowed navy curtain; that no key is
 written outside the footprint. **What no test covers is whether the result looks like the
 room** — every one of those checks is about numbers, and the deliverable is a colour.
 
-**Where it rides.** Branch `claude/amazing-dijkstra-d0am9g`, draft PR #148. 71 tests over
-`lib/wall-sample.ts` + `lib/color-reduce.ts`; gates clean (typecheck, lint, build, 2637
-passing / 5 expected fail). Mutation-tested in four rounds, which changed the code three
-times — see the commit.
+**One thing to look at that is new, and it is the reason to re-look at all of this.** The
+band this now samples is SMALLER than the one the screenshots in this item were taken
+against: with no EXIF focal length it is drawn for a 120° lens rather than a 66° one,
+because the old band put about a third of its samples on floor and ceiling for any photo
+taken on an ultrawide (the normal case — see `Design.md` § Wall colours). Smaller and on
+the wall is the intended trade. **What would say it went too far is a photo whose walls
+are read but whose colours now come out flatter or darker than before**, i.e. a band that
+has shrunk into one lit strip; and, at the other end, a room where the button now reports
+"no wall colour to read" on photos that used to answer.
+
+**Where it rides.** `b618329` (the control and the shell) and `3d130f8` (the pure seam) on
+`claude/amazing-dijkstra-d0am9g`, draft PR #148, then `fc132b8`, which rewrote the band
+itself. 73 tests over `lib/wall-sample.ts` plus 19 over `lib/color-reduce.ts`; gates clean
+on `fc132b8` (typecheck, lint, build, 2672 passing / 5 expected fail). Thirteen mutations
+of the band's code, each confirmed to fail a test; two survived the first round and both
+were the trap the fix is about — see the commit.
 
 ### Pressing Shuffle moves the button out from under the pointer
 
