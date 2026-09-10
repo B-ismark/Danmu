@@ -1279,9 +1279,10 @@ no assertion reaches. It is also entangled with the larger open item — the rig
 camera at the bounding box's centre — so the right answer may be to move the camera rather
 than to explain the gap. Filed in `docs/what-is-still-open.md` § 44b.
 
-**Where it rides.** The refusal is `9390323`; the label reaching it at all is this branch's
-fix. `scripts/capture-route-probe.mjs` pins the absence as an assertion (S3.1), so the
-silence cannot regress into a wrong number — what it cannot judge is how the gap reads.
+**Where it rides.** The refusal is `9390323`; the label reaching it at all is `e6cd8f4`
+on `main` (PR #154). `scripts/capture-route-probe.mjs` pins the absence as an assertion
+(S3.1), so the silence cannot regress into a wrong number — what it cannot judge is how
+the gap reads.
 
 ### Whether a rebuilt room LOOKS like the room you photographed
 
@@ -1300,6 +1301,12 @@ So the numbers are established and reachable. What a probe cannot do is upload a
 of a real room and have an opinion about the result — its uploads are synthetic, EXIF-less
 images, which is exactly why they are deterministic. **This is the part of the original
 § 44b item that survived being looked at**, and it is the only part.
+
+**Where it rides.** `e6cd8f4` on `main` (PR #154), which is the commit that puts the walk
+itself there — `scripts/capture-route-probe.mjs` and the prediction committed before it.
+The route is unchanged since `9390323`; what the merge adds is the wall-length label being
+right on the way through, so someone judging the rebuilt room is no longer judging it past
+a number that described a different room.
 
 *(The entry this descends from once said **"Branch `claude/amazing-dijkstra-d0am9g` — to be
 re-pointed at its merge commit"**, until a review of its own commit caught it: the third
