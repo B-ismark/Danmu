@@ -1256,7 +1256,7 @@ same day. The rule turns out to be easy to keep while writing about someone else
 easy to drop while writing about your own, which is the only reason this parenthesis
 survives the re-point.)*
 
-### An L, T or U room built from photos — the wall pieces were 2.3× too big
+### An L, T or U room built from photos — the wall pieces were 2.3× too big — merged to `main` in `9390323` (PR #152)
 
 **Where to click.** `/onboarding/welcome` → pick a layout → choose **T-Shape** (or
 **U-Shape**), then the second button, *"Photograph my real room first (optional)"*. Take or
@@ -1298,12 +1298,14 @@ source rather than exercised.
   changed there is the wall's ENDS, and the visible effect is a fabrication disappearing
   rather than a size changing.
 
-**Where it rides.** `335776e`, draft PR #152. Gates on that commit: typecheck · lint
-`--max-warnings 0` · build clean of `ESLint: Invalid Options` · 147 files, **2756 passed / 5
-expected fail**. `wallFrame` names the wall the lens is looking at instead of reading the box
-around the room; `wallSpan` is deleted with it, so the capture screen's *"this wall should be
-N m wide"* label now states the wall's real length — which is itself worth a glance on a
-T-Shape, where it used to say 4.70 m about a 2.58 m wall.
+**Where it rides.** `9390323` on `main`. `wallFrame` names the wall the lens is looking at
+instead of reading the box around the room; `wallSpan` is deleted with it, so the capture
+screen's *"this wall should be N m wide"* label now states the wall's real length — which is
+itself worth a glance on a T-Shape, where it used to say 4.70 m about a 2.58 m wall. The gate
+counts are gone: they were measured on two commits a squash has replaced with one. What
+survives is the reason to look anyway — the geometry is exact against a projected solid at
+every tilt, and none of that says the room the app rebuilt *looks like* the room you
+photographed.
 
 *(This entry said **"Branch `claude/amazing-dijkstra-d0am9g` — to be re-pointed at its merge
 commit"** until a review of its own commit caught it. That is the THIRD time an item here has
