@@ -2,9 +2,21 @@
 
 // Drag handle for moving the selected wall. Renders a grabbable knob on the
 // inside face of the selected wall; dragging it along the wall's normal pushes
-// the wall out (bigger room) or in (smaller). The move resolves to a width/depth
-// change about the room centre (see scene-store `moveWall`), so the dragged edge
-// tracks the pointer while everything stays centred on the origin.
+// the wall out (bigger room) or in (smaller).
+//
+// **This used to claim the move "resolves to a width/depth change about the room
+// centre … so everything stays centred on the origin", and that was false in the
+// direction that matters.** `offsetWall` translates the two vertices of ONE edge and
+// copies the rest, `moveWall` stores that polygon raw and re-derives width/depth from
+// its new bounding box, and nothing anywhere recentres a footprint — `moveWall`'s own
+// docblock says so: *"the room becomes off-centre"*. The call below is
+// `moveWallCarrying`, which does not recentre either.
+//
+// It is corrected rather than quietly deleted because this is the sentence a reader
+// consults when asking whether an off-centre room can exist, and for as long as it
+// said no, the answer scoped the search away from a real defect: every placer in
+// `lib/photo-geometry.ts` measured from `depth/2`, so dragging a wall and pressing
+// Re-scan mis-solved the lens and mis-sized every wall piece by ~13%. See § 44.
 //
 // Drag is driven by window listeners + a manual raycast (not mesh onPointerMove)
 // so it keeps firing even when the cursor leaves the small knob — the same

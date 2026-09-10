@@ -3,8 +3,8 @@ import {
   CAM_HEIGHT,
   defaultCal,
   calFromHfov,
-  wallDistance,
   wallFrame,
+  wallRowAtHeight,
   wallSpan,
   calibrateFromFloorLine,
   heightFromFloorLine,
@@ -14,6 +14,7 @@ import {
   type CameraCal,
 } from '@/lib/photo-geometry';
 import { hfovFromFocal35 } from '@/lib/exif';
+import type { CaptureSlot } from '@/lib/storage';
 import { footprintForLayout, type Footprint } from '@/lib/footprint';
 import {
   ALONG,
@@ -41,27 +42,96 @@ const CAL: CameraCal = { k: 1.2, aspect: 4 / 3 };
  *  hand — which is the one property in this file worth keeping. */
 const CARD = { depthM: 0 };
 
-describe('wallDistance', () => {
-  it('n/s walls sit at depth/2; e/w at width/2', () => {
-    expect(wallDistance('n', ROOM)).toBe(2);
-    expect(wallDistance('s', ROOM)).toBe(2);
-    expect(wallDistance('e', ROOM)).toBe(3);
-    expect(wallDistance('w', ROOM)).toBe(3);
+/** The framed wall's distance, read from the polygon — see `wallD`'s docblock. */
+const wallD = (slot: CaptureSlot, room: { footprint: Footprint }) =>
+  wallFrame(slot, room.footprint)!.distance;
+
+/** A room with ONE wall dragged, which is the fixture every other room in this file
+ *  cannot be. `moveWall` translates two vertices and re-derives width/depth from the
+ *  new bounding box without recentring, so `depth/2` stops describing the wall while
+ *  the polygon still does — and in a room centred on the lens the two are the same
+ *  number, which is why nothing here could express the defect for as long as every
+ *  fixture was centred. Both signs, because inward over-reads the distance and
+ *  outward under-reads it, and a one-signed fixture cannot see a swapped comparison. */
+const dragged = (side: 'n' | 's' | 'e' | 'w', by: number) => {
+  const [hw, hd] = [3, 3];
+  const box = { minX: -hw, maxX: hw, minZ: -hd, maxZ: hd };
+  if (side === 'n') box.minZ -= by;
+  else if (side === 's') box.maxZ += by;
+  else if (side === 'e') box.maxX += by;
+  else box.minX -= by;
+  return {
+    width: box.maxX - box.minX,
+    depth: box.maxZ - box.minZ,
+    height: 2.7,
+    footprint: [
+      [box.minX, box.minZ],
+      [box.maxX, box.minZ],
+      [box.maxX, box.maxZ],
+      [box.minX, box.maxZ],
+    ] as Footprint,
+  };
+};
+
+describe('the framed wall · one description of it, and the half that never moved', () => {
+  it('reads n/s across the depth and e/w across the width, as the deleted pair did', () => {
+    // `wallDistance` is gone, so this states the convention against the arithmetic it
+    // used to be rather than against itself — an assertion that measures its own
+    // subject is the shape `tests/module-tiling.test.ts` was caught by.
+    expect(wallD('n', ROOM)).toBe(ROOM.depth / 2);
+    expect(wallD('s', ROOM)).toBe(ROOM.depth / 2);
+    expect(wallD('e', ROOM)).toBe(ROOM.width / 2);
+    expect(wallD('w', ROOM)).toBe(ROOM.width / 2);
+    expect(wallD('n', ROOM)).toBe(2);
+    expect(wallD('e', ROOM)).toBe(3);
   });
 
-  // The other half of the same convention, and the reason both live in this file:
-  // the wall you stand `depth/2` from is the one that runs the room's full WIDTH.
-  // A version of `wallSpan` that agreed with itself but not with `wallDistance`
-  // would file every photo against the wrong axis and still look reasonable.
+  // The wall you stand `depth/2` from is the one that runs the room's full WIDTH, and
+  // a `wallSpan` that agreed with itself but not with the distance would file every
+  // photo against the wrong axis and still look reasonable.
   it('and the wall you are depth/2 from is the one that is width wide', () => {
     for (const slot of ['n', 'e', 's', 'w'] as const) {
-      const near = wallDistance(slot, ROOM) * 2;
+      const near = wallD(slot, ROOM) * 2;
       const across = wallSpan(slot, ROOM);
       expect(near + across).toBe(ROOM.width + ROOM.depth);
       expect(across).not.toBe(near);
     }
     expect(wallSpan('n', ROOM)).toBe(6);
     expect(wallSpan('e', ROOM)).toBe(4);
+  });
+
+  // WHY `wallSpan` survived the deletion of its twin, made executable rather than
+  // left as a paragraph in its docblock. A span is `maxX − minX` either way, because
+  // `moveWall` re-derives width/depth from `footprintBounds` — so dragging a wall
+  // moves the DISTANCE and the two ENDS INDIVIDUALLY and never the span. That is
+  // also why the surface gate needed `left` and `right` separately: the quantity
+  // `wallSpan` returns is exactly the one that carries no information about where
+  // the wall is.
+  it('a wall’s SPAN is the same in both conventions, dragged or not', () => {
+    for (const side of ['n', 's', 'e', 'w'] as const) {
+      for (const by of [1, 2, -0.5]) {
+        const room = dragged(side, by);
+        for (const slot of ['n', 's', 'e', 'w'] as const) {
+          const frame = wallFrame(slot, room.footprint)!;
+          expect(wallSpan(slot, room), `${side}${by} ${slot}`).toBeCloseTo(frame.right - frame.left, 12);
+        }
+      }
+    }
+  });
+
+  // And the complement, which is the defect itself: the DISTANCE does move, and it
+  // moves for BOTH slots on the dragged axis — the wall opposite the one you pulled
+  // is now mis-measured too, in the other direction, because the bounding box grew
+  // at one end and `depth/2` splits the difference.
+  it('a wall’s DISTANCE moves when any wall on its axis is dragged', () => {
+    const room = dragged('n', 1); // 6 × 6 room, north pulled out: box 6 × 7
+    expect(room.depth).toBe(7);
+    expect(wallD('n', room)).toBe(4); // the real wall
+    expect(wallD('s', room)).toBe(3); // untouched, and also real
+    expect(room.depth / 2).toBe(3.5); // what the deleted pair answered for BOTH
+    // The perpendicular pair is unaffected in distance and grown in span.
+    expect(wallD('e', room)).toBe(3);
+    expect(wallSpan('e', room)).toBe(7);
   });
 });
 
@@ -72,18 +142,18 @@ describe('calibrateFromFloorLine', () => {
     const PORTRAIT: CameraCal = { k: 1.2, aspect: 0.75 };
     const [, vFloor] = project('n', 0, 0, -2, PORTRAIT);
     expect(vFloor).toBeLessThan(0.99); // line is inside the frame
-    const cal = calibrateFromFloorLine(vFloor, 'n', ROOM, PORTRAIT.aspect);
+    const cal = calibrateFromFloorLine(vFloor, 'n', ROOM.footprint, PORTRAIT.aspect);
     expect(cal).not.toBeNull();
     expect(cal!.k).toBeCloseTo(PORTRAIT.k, 5);
   });
 
   it('returns null when the floor line would be outside a landscape frame', () => {
     const [, vFloor] = project('n', 0, 0, -2, CAL); // lands beyond v=1
-    expect(calibrateFromFloorLine(vFloor, 'n', ROOM, CAL.aspect)).toBeNull();
+    expect(calibrateFromFloorLine(vFloor, 'n', ROOM.footprint, CAL.aspect)).toBeNull();
   });
 
   it('rejects a floor line above the image centre', () => {
-    expect(calibrateFromFloorLine(0.4, 'n', ROOM, 4 / 3)).toBeNull();
+    expect(calibrateFromFloorLine(0.4, 'n', ROOM.footprint, 4 / 3)).toBeNull();
   });
 });
 
@@ -91,7 +161,7 @@ describe('placeFloorObject', () => {
   it('recovers position and size on the N wall side', () => {
     // 1.6m-wide, 0.9m-tall sideboard at (0.8, -1.5), seen from the N camera.
     const box = bboxOfFloorObject('n', 0.8, -1.5, 1.6, 0.9, CAL);
-    const g = placeFloorObject(box, 'n', ROOM, CAL, CARD)!;
+    const g = placeFloorObject(box, 'n', ROOM.footprint, CAL, CARD)!;
     expect(g.position.x).toBeCloseTo(0.8, 2);
     expect(g.position.z).toBeCloseTo(-1.5, 2);
     expect(g.widthMM).toBeCloseTo(1600, -1);
@@ -101,7 +171,7 @@ describe('placeFloorObject', () => {
 
   it('recovers position via the mirrored S camera', () => {
     const box = bboxOfFloorObject('s', -0.5, 1.2, 0.6, 1.8, CAL);
-    const g = placeFloorObject(box, 's', ROOM, CAL, CARD)!;
+    const g = placeFloorObject(box, 's', ROOM.footprint, CAL, CARD)!;
     expect(g.position.x).toBeCloseTo(-0.5, 2);
     expect(g.position.z).toBeCloseTo(1.2, 2);
     expect(g.heightMM).toBeCloseTo(1800, -1);
@@ -110,7 +180,7 @@ describe('placeFloorObject', () => {
 
   it('recovers position via the E camera (axes swapped)', () => {
     const box = bboxOfFloorObject('e', 2.0, 0.7, 1.0, 0.5, CAL);
-    const g = placeFloorObject(box, 'e', ROOM, CAL, CARD)!;
+    const g = placeFloorObject(box, 'e', ROOM.footprint, CAL, CARD)!;
     expect(g.position.x).toBeCloseTo(2.0, 2);
     expect(g.position.z).toBeCloseTo(0.7, 2);
     expect(g.widthMM).toBeCloseTo(1000, -1);
@@ -118,12 +188,12 @@ describe('placeFloorObject', () => {
 
   it('clamps distance to the wall (bbox bottom near the horizon)', () => {
     // Bottom edge barely below centre → naive distance would exceed the room.
-    const g = placeFloorObject([0.45, 0.2, 0.1, 0.33], 'n', ROOM, CAL, CARD)!;
-    expect(g.distance).toBeLessThanOrEqual(wallDistance('n', ROOM));
+    const g = placeFloorObject([0.45, 0.2, 0.1, 0.33], 'n', ROOM.footprint, CAL, CARD)!;
+    expect(g.distance).toBeLessThanOrEqual(wallD('n', ROOM));
   });
 
   it('returns null when the bottom edge is above the horizon', () => {
-    expect(placeFloorObject([0.4, 0.1, 0.2, 0.3], 'n', ROOM, CAL, CARD)).toBeNull();
+    expect(placeFloorObject([0.4, 0.1, 0.2, 0.3], 'n', ROOM.footprint, CAL, CARD)).toBeNull();
   });
 });
 
@@ -133,7 +203,7 @@ describe('placeWallObject', () => {
     const [u1, vTop] = project('n', -0.6 - 0.6, 1.4 + 0.35, -2, CAL);
     const [u2, vBottom] = project('n', -0.6 + 0.6, 1.4 - 0.35, -2, CAL);
     const box: [number, number, number, number] = [u1, vTop, u2 - u1, vBottom - vTop];
-    const g = placeWallObject(box, 'n', ROOM, CAL, CARD)!;
+    const g = placeWallObject(box, 'n', ROOM.footprint, CAL, CARD)!;
     expect(g.position.x).toBeCloseTo(-0.6, 2);
     expect(g.position.z).toBeCloseTo(-2, 2);
     expect(g.position.y).toBeCloseTo(1.4, 2);
@@ -208,7 +278,7 @@ describe('placeFloorObject over solids', () => {
         for (const lateral of [0, 0.9, -1.1]) {
           const c = cal(deg);
           const box = bboxOfFloorBox(slot, ...place(slot, lateral, 1.6), 1.2, 0.95, 0.6, c);
-          const g = placeFloorObject(box, slot, ROOM, c, { depthM: 0.6 })!;
+          const g = placeFloorObject(box, slot, ROOM.footprint, c, { depthM: 0.6 })!;
           const where = `${slot} ${deg}° lat ${lateral}`;
           const [tx, tz] = place(slot, lateral, 1.6);
           expect(g.position.x, where).toBeCloseTo(tx, 9);
@@ -228,7 +298,7 @@ describe('placeFloorObject over solids', () => {
     for (const lateral of [0, 1.3, -0.7]) {
       const c = cal(0);
       const box = tangentBboxOfCylinder(1.8, lateral, 0.4, 0.9, c);
-      const g = placeFloorObject(box, 'n', ROOM, c, { depthM: 2, round: true })!;
+      const g = placeFloorObject(box, 'n', ROOM.footprint, c, { depthM: 2, round: true })!;
       expect(g.position.x).toBeCloseTo(lateral, 12);
       expect(g.position.z).toBeCloseTo(-1.8, 12);
       expect(g.widthMM).toBe(400);
@@ -244,7 +314,7 @@ describe('placeFloorObject over solids', () => {
     // an argument.
     const c = cal(0);
     const box = tangentBboxOfCylinder(1.8, 1.3, 0.4, 0.9, c);
-    const asBox = placeFloorObject(box, 'n', ROOM, c, { depthM: 0.4, round: false })!;
+    const asBox = placeFloorObject(box, 'n', ROOM.footprint, c, { depthM: 0.4, round: false })!;
     expect(asBox.widthMM).toBeLessThan(400 * 0.75);
   });
 
@@ -263,7 +333,7 @@ describe('placeFloorObject over solids', () => {
     let worstPos = 0;
     for (const deg of [5, -5, 12, -12]) {
       const c = cal(deg);
-      const g = placeFloorObject(bboxOfFloorCylinder('n', 0.5, -1.5, 0.4, 0.9, c), 'n', ROOM, c, {
+      const g = placeFloorObject(bboxOfFloorCylinder('n', 0.5, -1.5, 0.4, 0.9, c), 'n', ROOM.footprint, c, {
         depthM: 0.4,
         round: true,
       })!;
@@ -288,8 +358,8 @@ describe('placeFloorObject over solids', () => {
     // it is held.
     const c = cal(0);
     const flat: [number, number, number, number] = [0.4, 0.5, 0, 0.3];
-    expect(placeFloorObject(flat, 'n', ROOM, c, { depthM: 0.4, round: true })).toBeNull();
-    expect(placeFloorObject(flat, 'n', ROOM, c, { depthM: 0.4 })).toBeNull();
+    expect(placeFloorObject(flat, 'n', ROOM.footprint, c, { depthM: 0.4, round: true })).toBeNull();
+    expect(placeFloorObject(flat, 'n', ROOM.footprint, c, { depthM: 0.4 })).toBeNull();
   });
 
   it('clamps the assumed depth without touching the measured width', () => {
@@ -307,9 +377,9 @@ describe('placeFloorObject over solids', () => {
     // A piece hard against the far wall: near face at 3.6, so a 1.0 m depth would put
     // its back 0.6 m through the plaster of a wall 2 m away.
     const box = bboxOfFloorBox('n', 0, -1.9, 1.2, 0.95, 0.2, c);
-    const tight = placeFloorObject(box, 'n', ROOM, c, { depthM: 1.0 })!;
-    const loose = placeFloorObject(box, 'n', ROOM, c, { depthM: 0.2 })!;
-    expect(tight.distance).toBeCloseTo(wallDistance('n', ROOM) - 0.5, 9);
+    const tight = placeFloorObject(box, 'n', ROOM.footprint, c, { depthM: 1.0 })!;
+    const loose = placeFloorObject(box, 'n', ROOM.footprint, c, { depthM: 0.2 })!;
+    expect(tight.distance).toBeCloseTo(wallD('n', ROOM) - 0.5, 9);
     expect(tight.widthMM).toBe(loose.widthMM);
 
     // The HEIGHT is a different matter, and this is where it gets said rather than
@@ -358,8 +428,8 @@ describe('placeWallObject over solids', () => {
     for (const [name, lateral, yC, wM, hM, depthM] of cases) {
       for (const deg of TILTS) {
         const c = cal(deg);
-        const d = wallDistance('n', ROOM);
-        const g = placeWallObject(wallBox(lateral, yC, d, wM, hM, depthM, c), 'n', ROOM, c, { depthM })!;
+        const d = wallD('n', ROOM);
+        const g = placeWallObject(wallBox(lateral, yC, d, wM, hM, depthM, c), 'n', ROOM.footprint, c, { depthM })!;
         const where = `${name} at ${deg}°`;
         expect(g.position.x, where).toBeCloseTo(lateral, 9);
         // Its back is on the plaster, so its centre sits half a depth into the room.
@@ -377,9 +447,9 @@ describe('placeWallObject over solids', () => {
     // over-reads everything, and the deeper the piece the worse: this is the
     // assertion that would fail if someone reverted to `d` and kept the fixture.
     const c = cal(0);
-    const d = wallDistance('n', ROOM);
-    const deep = placeWallObject(wallBox(1.1, 2.3, d, 0.8, 0.28, 0.22, c), 'n', ROOM, c, { depthM: 0.22 })!;
-    const asFlat = placeWallObject(wallBox(1.1, 2.3, d, 0.8, 0.28, 0.22, c), 'n', ROOM, c, { depthM: 0 })!;
+    const d = wallD('n', ROOM);
+    const deep = placeWallObject(wallBox(1.1, 2.3, d, 0.8, 0.28, 0.22, c), 'n', ROOM.footprint, c, { depthM: 0.22 })!;
+    const asFlat = placeWallObject(wallBox(1.1, 2.3, d, 0.8, 0.28, 0.22, c), 'n', ROOM.footprint, c, { depthM: 0 })!;
     expect(deep.widthMM).toBe(800);
     expect(deep.heightMM).toBe(280);
     // Over-read by a fifth of its width and a third of its height.
@@ -425,7 +495,7 @@ describe('camera tilt', () => {
   it('recovers a centred object exactly when the tilt is known', () => {
     for (const cal of [DOWN_5, UP_5]) {
       const box = bboxOfFloorObject('n', 0, -1.5, 1.6, 0.9, cal);
-      const g = placeFloorObject(box, 'n', ROOM, cal, CARD)!;
+      const g = placeFloorObject(box, 'n', ROOM.footprint, cal, CARD)!;
       expect(g.position.x).toBeCloseTo(0, 6);
       expect(g.position.z).toBeCloseTo(-1.5, 6);
       expect(g.heightMM).toBeCloseTo(900, -1);
@@ -450,7 +520,7 @@ describe('camera tilt', () => {
     // two, since the residue this replaces grew with the angle.
     for (const deg of [5, -5, 12, -12]) {
       const cal: CameraCal = { k: 1.2, aspect: 4 / 3, tiltRad: (deg * Math.PI) / 180 };
-      const g = placeFloorObject(bboxOfFloorObject('n', 0.8, -1.5, 1.6, 0.9, cal), 'n', ROOM, cal, CARD)!;
+      const g = placeFloorObject(bboxOfFloorObject('n', 0.8, -1.5, 1.6, 0.9, cal), 'n', ROOM.footprint, cal, CARD)!;
       expect(g.position.x, `${deg}°`).toBeCloseTo(0.8, 9);
       expect(g.position.z, `${deg}°`).toBeCloseTo(-1.5, 9);
       expect(g.widthMM, `${deg}°`).toBe(1600);
@@ -469,10 +539,10 @@ describe('camera tilt', () => {
     const trueZ = -1.4;
     for (const [cal, dir] of [[DOWN_5, 'down'], [UP_5, 'up']] as const) {
       const box = bboxOfFloorObject('n', 0, trueZ, 1.0, 0.9, cal);
-      const naive = placeFloorObject(box, 'n', ROOM, { k: cal.k, aspect: cal.aspect }, CARD)!;
-      const aware = placeFloorObject(box, 'n', ROOM, cal, CARD)!;
+      const naive = placeFloorObject(box, 'n', ROOM.footprint, { k: cal.k, aspect: cal.aspect }, CARD)!;
+      const aware = placeFloorObject(box, 'n', ROOM.footprint, cal, CARD)!;
       expect(aware.distance).toBeCloseTo(1.4, 6);
-      expect(naive.distance).toBeLessThan(wallDistance('n', ROOM)); // not clamped
+      expect(naive.distance).toBeLessThan(wallD('n', ROOM)); // not clamped
       const error = (naive.distance - 1.4) / 1.4;
       expect(Math.abs(error)).toBeGreaterThan(0.15);
       expect(dir === 'down' ? error : -error).toBeGreaterThan(0);
@@ -490,7 +560,7 @@ describe('camera tilt', () => {
     for (const deg of [5, -5, 12, -12]) {
       const cal: CameraCal = { k: 1.2, aspect: 4 / 3, tiltRad: (deg * Math.PI) / 180 };
       const box = bboxOfWallPanel('n', -0.6, 1.4, -2, 1.2, 0.7, cal);
-      const g = placeWallObject(box, 'n', ROOM, cal, CARD)!;
+      const g = placeWallObject(box, 'n', ROOM.footprint, cal, CARD)!;
       expect(g.position.x, `${deg}°`).toBeCloseTo(-0.6, 9);
       expect(g.position.y, `${deg}°`).toBeCloseTo(1.4, 9);
       expect(g.widthMM, `${deg}°`).toBe(1200);
@@ -506,11 +576,11 @@ describe('camera height', () => {
     // This is the ±17% the fixed 1.5 m assumption cost on every measurement.
     const cal: CameraCal = { k: 1.2, aspect: 4 / 3, height: 1.3 };
     const box = bboxOfFloorObject('n', 0, -1.5, 1.6, 0.9, cal);
-    const right = placeFloorObject(box, 'n', ROOM, cal, CARD)!;
+    const right = placeFloorObject(box, 'n', ROOM.footprint, cal, CARD)!;
     expect(right.position.z).toBeCloseTo(-1.5, 6);
     expect(right.widthMM).toBeCloseTo(1600, -1);
 
-    const assumed = placeFloorObject(box, 'n', ROOM, { k: cal.k, aspect: cal.aspect }, CARD)!;
+    const assumed = placeFloorObject(box, 'n', ROOM.footprint, { k: cal.k, aspect: cal.aspect }, CARD)!;
     const ratio = CAM_HEIGHT / 1.3;
     expect(assumed.distance / right.distance).toBeCloseTo(ratio, 6);
     expect(assumed.widthMM / right.widthMM).toBeCloseTo(ratio, 3);
@@ -525,27 +595,27 @@ describe('heightFromFloorLine', () => {
     const cal: CameraCal = { k: 1.2, aspect: 0.75, height: 1.62 };
     const [, vFloor] = project('e', 3, 0, 0, cal);
     expect(vFloor).toBeLessThan(0.99);
-    expect(heightFromFloorLine(vFloor, 'e', ROOM, cal)).toBeCloseTo(1.62, 6);
+    expect(heightFromFloorLine(vFloor, 'e', ROOM.footprint, cal)).toBeCloseTo(1.62, 6);
   });
 
   it('solves it under tilt too', () => {
     const cal: CameraCal = { k: 1.2, aspect: 0.75, height: 1.35, tiltRad: (4 * Math.PI) / 180 };
     const [, vFloor] = project('n', 0, 0, -2, cal);
-    expect(heightFromFloorLine(vFloor, 'n', ROOM, cal)).toBeCloseTo(1.35, 6);
+    expect(heightFromFloorLine(vFloor, 'n', ROOM.footprint, cal)).toBeCloseTo(1.35, 6);
   });
 
   it('refuses an answer that is not a person holding a phone', () => {
     // A rug edge or a skirting shadow mistaken for the floor line. Better to
     // report nothing than a confident wrong height.
-    expect(heightFromFloorLine(0.55, 'n', ROOM, { k: 1.2, aspect: 0.75 })).toBeNull();
-    expect(heightFromFloorLine(0.4, 'n', ROOM, { k: 1.2, aspect: 0.75 })).toBeNull();
+    expect(heightFromFloorLine(0.55, 'n', ROOM.footprint, { k: 1.2, aspect: 0.75 })).toBeNull();
+    expect(heightFromFloorLine(0.4, 'n', ROOM.footprint, { k: 1.2, aspect: 0.75 })).toBeNull();
   });
 });
 
 describe('calFromHfov', () => {
   it('round-trips a 35 mm-equivalent focal length into a usable calibration', () => {
     const cal = calFromHfov(hfovFromFocal35(26, 4 / 3)!, 4 / 3);
-    const g = placeFloorObject(bboxOfFloorObject('n', 0, -1.2, 1.0, 0.8, cal), 'n', ROOM, cal, CARD)!;
+    const g = placeFloorObject(bboxOfFloorObject('n', 0, -1.2, 1.0, 0.8, cal), 'n', ROOM.footprint, cal, CARD)!;
     expect(g.position.z).toBeCloseTo(-1.2, 6);
     expect(g.widthMM).toBeCloseTo(1000, -1);
   });
@@ -556,8 +626,8 @@ describe('calFromHfov', () => {
     // divided back out and the whole error lands on the measurement.
     const wide = calFromHfov(hfovFromFocal35(13, 4 / 3)!, 4 / 3);
     const box = bboxOfWallPanel('n', 0, 1.4, -2, 1.4, 0.8, wide);
-    const right = placeWallObject(box, 'n', ROOM, wide, CARD)!;
-    const assumed = placeWallObject(box, 'n', ROOM, defaultCal(4 / 3), CARD)!;
+    const right = placeWallObject(box, 'n', ROOM.footprint, wide, CARD)!;
+    const assumed = placeWallObject(box, 'n', ROOM.footprint, defaultCal(4 / 3), CARD)!;
     expect(right.widthMM).toBeCloseTo(1400, -1);
     expect(assumed.widthMM).toBeLessThan(right.widthMM * 0.55);
   });
@@ -569,9 +639,9 @@ describe('calFromHfov', () => {
     // wall clamp stays out of it — see below for what happens when it does not.
     const wide = calFromHfov(hfovFromFocal35(13, 4 / 3)!, 4 / 3);
     const box = bboxOfFloorObject('n', 0, -0.9, 1.6, 0.9, wide);
-    const right = placeFloorObject(box, 'n', ROOM, wide, CARD)!;
-    const assumed = placeFloorObject(box, 'n', ROOM, defaultCal(4 / 3), CARD)!;
-    expect(assumed.distance).toBeLessThan(wallDistance('n', ROOM));
+    const right = placeFloorObject(box, 'n', ROOM.footprint, wide, CARD)!;
+    const assumed = placeFloorObject(box, 'n', ROOM.footprint, defaultCal(4 / 3), CARD)!;
+    expect(assumed.distance).toBeLessThan(wallD('n', ROOM));
     expect(assumed.widthMM).toBe(right.widthMM);
     expect(assumed.heightMM).toBe(right.heightMM);
     expect(assumed.distance).toBeGreaterThan(right.distance * 1.8);
@@ -583,9 +653,9 @@ describe('calFromHfov', () => {
     // breaks and the piece comes out small as well as mislocated.
     const wide = calFromHfov(hfovFromFocal35(13, 4 / 3)!, 4 / 3);
     const box = bboxOfFloorObject('n', 0, -1.5, 1.6, 0.9, wide);
-    const right = placeFloorObject(box, 'n', ROOM, wide, CARD)!;
-    const assumed = placeFloorObject(box, 'n', ROOM, defaultCal(4 / 3), CARD)!;
-    expect(assumed.distance).toBe(wallDistance('n', ROOM));
+    const right = placeFloorObject(box, 'n', ROOM.footprint, wide, CARD)!;
+    const assumed = placeFloorObject(box, 'n', ROOM.footprint, defaultCal(4 / 3), CARD)!;
+    expect(assumed.distance).toBe(wallD('n', ROOM));
     expect(assumed.widthMM).toBeLessThan(right.widthMM * 0.7);
   });
 });
@@ -605,7 +675,7 @@ describe('placeCeilingObject', () => {
     expect(box[1] + box[3]).toBeLessThan(1);
     const g = placeCeilingObject(box, 'e', ROOM, WIDE)!;
     expect(g).not.toBeNull();
-    expect(g.distance).toBeLessThan(wallDistance('e', ROOM)); // premise: unclamped
+    expect(g.distance).toBeLessThan(wallD('e', ROOM)); // premise: unclamped
     // Within 8%, and UNDER rather than over. The residual is the plate's own
     // foreshortening — the bbox spans a range of distances and one row has to
     // stand for all of them — so this reads a fan slightly small rather than
@@ -647,7 +717,7 @@ describe('placeCeilingObject', () => {
     const box = bboxOfCeilingDisc('e', 1.2, 0, 1.1, WIDE, ROOM.height);
     const g = placeCeilingObject(box, 'e', ROOM, WIDE)!;
     expect(g.position.y).toBe(ROOM.height);
-    expect(g.distance).toBeLessThanOrEqual(wallDistance('e', ROOM));
+    expect(g.distance).toBeLessThanOrEqual(wallD('e', ROOM));
     expect(Math.abs(g.position.x)).toBeLessThanOrEqual(ROOM.width / 2 + 1e-9);
     expect(Math.abs(g.position.z)).toBeLessThanOrEqual(ROOM.depth / 2 + 1e-9);
   });
@@ -767,9 +837,9 @@ describe('the framed surface · what the gate refuses, measured', () => {
     hM: number,
     depthM: number,
   ): Row => {
-    const box = bboxOfWallSolid('n', 'e', lateral, 1.5, wallDistance('n', r), wM, hM, depthM, WIDE);
+    const box = bboxOfWallSolid('n', 'e', lateral, 1.5, wallD('n', r), wM, hM, depthM, WIDE);
     expect(inFrame(box), name).toBe(true);
-    const free = placeWallObject(box, 'e', unbounded(r, 'e'), WIDE, { depthM })!;
+    const free = placeWallObject(box, 'e', unbounded(r, 'e').footprint, WIDE, { depthM })!;
     return {
       name,
       room: `${r.width}×${r.depth}`,
@@ -779,12 +849,12 @@ describe('the framed surface · what the gate refuses, measured', () => {
       end: wallSpan('e', r) / 2,
       decW: free.widthMM,
       decH: free.heightMM,
-      refused: placeWallObject(box, 'e', r, WIDE, { depthM }) === null,
+      refused: placeWallObject(box, 'e', r.footprint, WIDE, { depthM }) === null,
     };
   };
 
   const ceilRow = (name: string, r: ReturnType<typeof room>, lateral: number, yC: number, sizeM: number): Row => {
-    const box = bboxOfWallSolid('n', 'e', lateral, yC, wallDistance('n', r), sizeM, sizeM, 0, WIDE);
+    const box = bboxOfWallSolid('n', 'e', lateral, yC, wallD('n', r), sizeM, sizeM, 0, WIDE);
     expect(inFrame(box), name).toBe(true);
     const free = placeCeilingObject(box, 'e', unbounded(r, 'e'), WIDE)!;
     return {
@@ -851,7 +921,7 @@ describe('the framed surface · what the gate refuses, measured', () => {
 });
 
 describe('the framed surface', () => {
-  const WALLD = (slot: 'n' | 's' | 'e' | 'w') => wallDistance(slot, ROOM);
+  const WALLD = (slot: 'n' | 's' | 'e' | 'w') => wallD(slot, ROOM);
   const HALF = (slot: 'n' | 's' | 'e' | 'w') => wallSpan(slot, ROOM) / 2;
 
   // The FALSE-POSITIVE direction first, and deliberately so: a gate that refuses real
@@ -877,7 +947,7 @@ describe('the framed surface', () => {
             skipped++;
             continue;
           }
-          const g = placeWallObject(box, slot, ROOM, cal, { depthM: 0.03 });
+          const g = placeWallObject(box, slot, ROOM.footprint, cal, { depthM: 0.03 });
           const where = `${slot} at ${frac} of the half-span, tilt ${cal.tiltRad ?? 0}`;
           expect(g, where).not.toBeNull();
           expect(g!.widthMM, where).toBe(700);
@@ -965,7 +1035,7 @@ describe('the framed surface', () => {
         const lateral = HALF('e') * frac;
         const box = bboxOfWallSolid('e', 'e', lateral, 1.5, WALLD('e'), 0.7, 0.5, 0.03, lens(truthDeg));
         if (!inFrame(box)) continue;
-        if (placeWallObject(box, 'e', ROOM, lens(assumedDeg), { depthM: 0.03 })) best = frac;
+        if (placeWallObject(box, 'e', ROOM.footprint, lens(assumedDeg), { depthM: 0.03 })) best = frac;
       }
       return best;
     };
@@ -1009,7 +1079,7 @@ describe('the framed surface', () => {
     // discards was worthless anyway. `halves a wall-mounted TV when an ultrawide shot is
     // read as 66°` is the same proportionality in the other direction.
     const box = bboxOfWallSolid('e', 'e', HALF('e') * 0.5, 1.5, WALLD('e'), 0.7, 0.5, 0.03, lens(80));
-    const wrong = placeWallObject(box, 'e', ROOM, lens(106), { depthM: 0.03 })!;
+    const wrong = placeWallObject(box, 'e', ROOM.footprint, lens(106), { depthM: 0.03 })!;
     expect(wrong.widthMM / 700).toBeCloseTo(lens(106).k / lens(80).k, 2);
   });
 
@@ -1025,7 +1095,7 @@ describe('the framed surface', () => {
     expect(inFrame(onNorth('n'))).toBe(true);
 
     // Its own camera measures it exactly — so the fixture is a real piece of furniture.
-    const own = placeWallObject(onNorth('n'), 'n', ROOM, wide, { depthM: 0.03 })!;
+    const own = placeWallObject(onNorth('n'), 'n', ROOM.footprint, wide, { depthM: 0.03 })!;
     expect(own.widthMM).toBe(700);
     expect(own.heightMM).toBe(500);
     expect(own.position.x).toBeCloseTo(2.2, 9);
@@ -1034,7 +1104,7 @@ describe('the framed surface', () => {
     // half-span is 2.0, at ~36% too wide — bigger than the air conditioner error that
     // § 42.4 was written around. What it does NOT do is delete the row: see
     // `tests/detect-refine.test.ts`, where the count is measured rather than argued.
-    expect(placeWallObject(onNorth('e'), 'e', ROOM, wide, { depthM: 0.03 })).toBeNull();
+    expect(placeWallObject(onNorth('e'), 'e', ROOM.footprint, wide, { depthM: 0.03 })).toBeNull();
   });
 
   it('tests the CENTRE, because the wholly-off-the-wall variant leaks', () => {
@@ -1053,8 +1123,8 @@ describe('the framed surface', () => {
       bboxOfWallSolid('n', view, 2.25, 1.5, WALLD('n'), 1.4, 0.5, 0.08, wide);
     expect(inFrame(curtain('e'))).toBe(true);
     expect(2.25 + 1.4 / 2).toBeLessThanOrEqual(ROOM.width / 2); // premise: it is IN the room
-    expect(placeWallObject(curtain('n'), 'n', ROOM, wide, { depthM: 0.08 })!.widthMM).toBe(1400);
-    expect(placeWallObject(curtain('e'), 'e', ROOM, wide, { depthM: 0.08 })).toBeNull();
+    expect(placeWallObject(curtain('n'), 'n', ROOM.footprint, wide, { depthM: 0.08 })!.widthMM).toBe(1400);
+    expect(placeWallObject(curtain('e'), 'e', ROOM.footprint, wide, { depthM: 0.08 })).toBeNull();
   });
 
   // Why `placeFloorObject` is exempt — and it is a property, not a preference. Adding the
@@ -1078,7 +1148,7 @@ describe('the framed surface', () => {
       const box = bboxOfFloorBox('e', 2.6, z, 0.6, 0.8, 0.6, truth); // (w, h, depth)
       expect(inFrame(box), `${z}`).toBe(true);
       // One photograph, three beliefs about the lens that took it.
-      const lat = (cal: CameraCal) => placeFloorObject(box, 'e', ROOM, cal, { depthM: 0.6 })!.position.z;
+      const lat = (cal: CameraCal) => placeFloorObject(box, 'e', ROOM.footprint, cal, { depthM: 0.6 })!.position.z;
 
       // Exact at the truth, and FIRST-ORDER invariant when the lens is over-read: the
       // near face is measured (∝ 1/k) and the tangent goes as k, so those cancel. The
@@ -1114,8 +1184,7 @@ describe('the framed surface', () => {
     // `e`. That leaves three of the four walls unreachable as a mount, which is how a
     // hand-kept slot table went nine mutants deep without a failure. Both rooms below
     // are needed and the reason is geometric: a wall only shows its neighbour when it
-    // is narrow relative to its own viewing distance (`wallSpan < 2·tan(hFOV/2)·
-    // wallDistance`), so in a 6 × 4 room only `e`/`w` can see a return wall, and the
+    // is narrow relative to its own viewing distance (`span < 2·tan(hFOV/2)·distance`), so in a 6 × 4 room only `e`/`w` can see a return wall, and the
     // transpose is what makes `n`/`s` the seeing pair.
     const wide: CameraCal = { k: 2 * Math.tan(((106 / 2) * Math.PI) / 180), aspect: 4 / 3 };
     const rooms = [
@@ -1132,18 +1201,18 @@ describe('the framed surface', () => {
           const half = wallSpan(mount, room) / 2;
           const toward = view === 'e' || view === 's' ? 1 : -1;
           const lateral = (half - 0.8) * toward * (mount === 's' || mount === 'w' ? -1 : 1);
-          const d = wallDistance(mount, room);
+          const d = wallD(mount, room);
           const own = bboxOfWallSolid(mount, mount, lateral, 1.5, d, 0.7, 0.5, 0.03, wide);
           const seen = bboxOfWallSolid(mount, view, lateral, 1.5, d, 0.7, 0.5, 0.03, wide);
           const where = `${mount} seen from ${view} in ${room.width}×${room.depth}`;
           if (!inFrame(seen)) continue;
           pairs++;
           // Measured exactly by its own camera…
-          const g = placeWallObject(own, mount, room, wide, { depthM: 0.03 })!;
+          const g = placeWallObject(own, mount, room.footprint, wide, { depthM: 0.03 })!;
           expect(g, where).not.toBeNull();
           expect(g.widthMM, where).toBe(700);
           // …and refused by the neighbour's.
-          expect(placeWallObject(seen, view, room, wide, { depthM: 0.03 }), where).toBeNull();
+          expect(placeWallObject(seen, view, room.footprint, wide, { depthM: 0.03 }), where).toBeNull();
         }
       }
     }
@@ -1175,7 +1244,12 @@ describe('the framed surface', () => {
         [-3, 3],
       ] as Footprint,
     };
-    expect(wallDistance('n', off)).toBe(3);
+    // The framed wall's own distance is untouched by an EAST drag, which is what makes
+    // this the case the gate alone could fix: the plane was right and only the bound
+    // was wrong. (§ 44's case is the complementary one — drag the wall being
+    // photographed — and it is the `dragged` fixture at the top of this file.)
+    expect(wallD('n', off)).toBe(3);
+    expect(off.depth / 2, 'premise: the retired pair agreed here').toBe(3);
     expect(wallSpan('n', off) / 2).toBe(3.5); // the bound that used to apply
     for (const [lateral, verdict] of [
       [3.2, 'accepted'],
@@ -1185,10 +1259,10 @@ describe('the framed surface', () => {
       // the gate: a 700 mm print centred much further out puts its near-face corner
       // past the edge of a 106° picture, and `inFrame` refuses to measure a box a
       // detector could not have handed over.
-      const box = bboxOfWallSolid('n', 'n', lateral, 1.5, wallDistance('n', off), 0.7, 0.5, 0.03, wide);
+      const box = bboxOfWallSolid('n', 'n', lateral, 1.5, wallD('n', off), 0.7, 0.5, 0.03, wide);
       expect(inFrame(box), `${lateral}`).toBe(true);
       expect(lateral + 0.35, `${lateral} premise: in the room`).toBeLessThanOrEqual(4);
-      const g = placeWallObject(box, 'n', off, wide, { depthM: 0.03 });
+      const g = placeWallObject(box, 'n', off.footprint, wide, { depthM: 0.03 });
       expect(g, `${lateral} ${verdict}`).not.toBeNull();
       // And measured exactly, which is the point: what the old bound discarded was
       // not a fabrication, it was this.
@@ -1203,38 +1277,128 @@ describe('the framed surface', () => {
     // frame.right` is a mutant that SURVIVES: it agrees with the real bound on every
     // centred room and on the two rows above, so the whole point of F1 would rest on
     // fixtures that cannot tell the two apart.
-    const past = bboxOfWallSolid('n', 'n', -3.4, 1.5, wallDistance('n', off), 0.7, 0.5, 0.03, wide);
+    const past = bboxOfWallSolid('n', 'n', -3.4, 1.5, wallD('n', off), 0.7, 0.5, 0.03, wide);
     expect(inFrame(past)).toBe(true);
     expect(-3.4 + 0.35, 'premise: past the wall’s own west end').toBeLessThan(-3);
     expect(Math.abs(-3.4), 'premise: a symmetric bound would accept it').toBeLessThan(3.5);
-    expect(placeWallObject(past, 'n', off, wide, { depthM: 0.03 })).toBeNull();
+    expect(placeWallObject(past, 'n', off.footprint, wide, { depthM: 0.03 })).toBeNull();
   });
 
-  it('measures the piece when the footprint cannot answer, rather than refusing it', () => {
-    // `wallFrame` declines a polygon with fewer than three points, a NaN vertex, or one
-    // the lens does not stand inside. **No answer must not become a refusal** — and
-    // `if (!frame) return false` was a surviving mutant until this existed, because
-    // every other fixture in the file hands over a real rectangle.
+  // **A footprint that cannot answer means different things to a PLANE and to a
+  // BOUND, and this pair is where that distinction is pinned.** `wallFrame` declines a
+  // polygon with fewer than three points, a NaN vertex, or one the lens does not stand
+  // inside. Until the ±half pair was retired, a wall piece still had a plane in such a
+  // room — `depth/2` always answers — so the only question was whether the GATE fired,
+  // and the answer was no: `if (!frame) return false` was a surviving mutant until a
+  // two-point footprint was built, because every other fixture hands over a rectangle.
+  // Now a wall piece has no plane at all there, and the two halves separate.
+  const BROKEN: Footprint = [
+    [-3, -2],
+    [3, -2],
+  ];
+
+  it('refuses a WALL piece when the footprint cannot locate the plane', () => {
+    // Not a regression from the sentence above, and worth reading as the rule rather
+    // than as a reversal: there is no honest fallback for a plane. The bounding box WAS
+    // the fallback, and inverting a measurement against a wall that might be anywhere
+    // is the confident wrong number this module refuses everywhere else. Refusing costs
+    // the measurement and not the piece — `geoRefine` hands the detection straight back
+    // and `lib/label-repair.ts` reads that identity as unmeasurable.
     const wide: CameraCal = { k: 2 * Math.tan(((106 / 2) * Math.PI) / 180), aspect: 4 / 3 };
-    const broken = { width: 6, depth: 4, height: 2.8, footprint: [[-3, -2], [3, -2]] as Footprint };
-    expect(wallFrame('e', broken.footprint), 'premise: no frame').toBeNull();
+    expect(wallFrame('e', BROKEN), 'premise: no frame').toBeNull();
     const box = bboxOfWallSolid('e', 'e', 0.8, 1.5, WALLD('e'), 0.7, 0.5, 0.03, wide);
-    const g = placeWallObject(box, 'e', broken, wide, { depthM: 0.03 });
-    expect(g).not.toBeNull();
-    expect(g!.widthMM).toBe(700);
-    expect(g!.heightMM).toBe(500);
+    expect(inFrame(box), 'premise: an ordinary, measurable box').toBe(true);
+    // The same box in a room whose polygon DOES answer measures exactly, which is what
+    // makes the null above a refusal rather than a broken placer.
+    const ok = placeWallObject(box, 'e', ROOM.footprint, wide, { depthM: 0.03 });
+    expect(ok!.widthMM).toBe(700);
+    expect(ok!.heightMM).toBe(500);
+    expect(placeWallObject(box, 'e', BROKEN, wide, { depthM: 0.03 })).toBeNull();
   });
 
-  it('declines to refuse at all when the framed wall’s own distance is untrustworthy', () => {
-    // The half of that defect this commit does NOT fix, made executable rather than
-    // left as a sentence. Drag the wall being photographed and `wallDistance` is wrong
-    // too — a wall pulled INWARD makes the decode over-read every lateral offset, so
-    // even an honest bound would refuse correct measurements. The gate goes inert and
-    // § 44 is what closes it, by moving the distance onto the same frame.
+  it('still measures a CEILING piece there, because the slab’s plane is the room’s height', () => {
+    // The other half, and the only remaining route to the gate's own no-frame rule now
+    // that the wall placer returns before reaching it. `placeCeilingObject` intersects a
+    // plane located by `room.height`, which no footprint can move — so both of its gates
+    // are bounds on an assumption rather than the assumption itself, and a polygon that
+    // cannot say where the walls are leaves them INERT. `if (!frame) return true` in
+    // `onFramedSurface`, and `frame &&` on the forward gate, are both pinned here.
+    // The same 1.1 m disc `'puts it on the ceiling plane and inside the room'` uses. No
+    // `inFrame` premise here, deliberately: a ceiling disc seen from below on a 106°
+    // lens legitimately runs its bbox to the frame's own edge, so that gate is the
+    // wrong question for this fixture. The premise that carries the meaning is the
+    // first assertion — the piece IS measurable in a room whose polygon answers — so a
+    // null in the second line is the footprint's doing and nothing else's.
+    const disc = bboxOfCeilingDisc('e', 1.2, 0, 1.1, WIDE, ROOM.height);
+    const good = placeCeilingObject(disc, 'e', ROOM, WIDE);
+    expect(good, 'premise: measurable in a room with a polygon').not.toBeNull();
+    const g = placeCeilingObject(disc, 'e', { height: ROOM.height, footprint: BROKEN }, WIDE);
+    expect(g).not.toBeNull();
+    expect(g!.widthMM).toBe(good!.widthMM);
+  });
+
+  it('and still measures a FLOOR piece there, because its distance was never assumed', () => {
+    // The third role, and the one the other two are defined against. `placeFloorObject`
+    // MEASURES its distance from the bottom row, so the polygon was never its plane —
+    // only its two CLAMPS. A clamp with no trustworthy bound goes inert and the
+    // measurement stands: *a bound may falsify an assumption and may never overrule a
+    // measurement*, which is this function's own two-clamp split read one level up.
+    // Substituting the bounding box here would be a bound overruling an observation on
+    // an input nothing checked.
+    const lens: CameraCal = { ...WIDE, height: 1.5 };
+    const chest = { depthM: 0.4 };
+    // (slot, x, z, wM, hM, depthM, cal). No `inFrame` premise, and for the reason this
+    // module's own header gives: a LEVEL frame does not reach the floor near the lens,
+    // so a close floor piece legitimately runs its bbox past the bottom edge. The
+    // premises that carry the meaning are the two below — the piece measures in a room
+    // whose polygon answers, and it sits clear of that room's own clamp, so what the
+    // last assertion compares is a measurement against a measurement rather than one
+    // bound against another.
+    const box = bboxOfFloorBox('n', 0.5, -1.4, 1.2, 0.8, 0.4, lens);
+    const good = placeFloorObject(box, 'n', ROOM.footprint, lens, chest);
+    expect(good, 'premise: measurable in a room with a polygon').not.toBeNull();
+    expect(good!.distance, 'premise: clear of that room’s clamp').toBeLessThan(
+      ROOM.depth / 2 - chest.depthM / 2 - 1e-9,
+    );
+    const g = placeFloorObject(box, 'n', BROKEN, lens, chest);
+    expect(g).not.toBeNull();
+    expect(g!.widthMM, 'width is a measurement either way').toBe(good!.widthMM);
+    expect(g!.distance, 'and so is the distance').toBeCloseTo(good!.distance, 12);
+    expect(g!.distance, 'recovered exactly, not bounded into place').toBeCloseTo(1.4, 9);
+  });
+
+  it('but the 0.3 m lower guard is NOT conditional, on an input where it bites', () => {
+    // Split out from the case above rather than appended to it, because appended it was
+    // an assertion that could not fail: that fixture decodes at 1.4 m, so
+    // `expect(distance).toBeGreaterThan(0.3)` was true of any implementation at all.
+    // Mutation found it — moving `Math.max(near, 0.3)` inside the `if (frame)` beside it
+    // survived a full run. The guard is arithmetic rather than a bound on the room (a
+    // face AT the lens mirrors the piece in silence), so it must fire whether or not the
+    // footprint can answer, and this is an input at which the difference is observable.
+    const steep: CameraCal = { k: 2 * Math.tan(((66 / 2) * Math.PI) / 180), aspect: 4 / 3, height: 0.8, tiltRad: 0.9 };
+    const g = placeFloorObject([0.3, 0.8, 0.4, 0.1], 'n', BROKEN, steep, CARD)!;
+    expect(g, 'premise: it does return a placement').not.toBeNull();
+    expect(g.distance, 'clamped to the guard, not past it').toBe(0.3);
+    // And the premise that makes that a clamp rather than a coincidence: the same box in
+    // a room whose polygon answers lands on the same guard, so 0.3 is the floor and not
+    // this footprint's doing.
+    expect(placeFloorObject([0.3, 0.8, 0.4, 0.1], 'n', ROOM.footprint, steep, CARD)!.distance).toBe(0.3);
+  });
+
+  it('refuses in a framed-wall-dragged room too, where it used to go inert', () => {
+    // **This assertion is inverted from the one it replaces, and the inversion is the
+    // payoff of retiring the ±half pair.** The gate used to compare the polygon's
+    // distance against `wallDistance`'s and, where they disagreed — the FRAMED wall
+    // itself dragged, as opposed to the one opposite — decline to fire at all, because
+    // the plane it would be bounding was wrong too. That was honest while two
+    // conventions existed and it meant the gate said nothing in exactly the room it was
+    // built for: a room whose walls someone had moved. `placeWallObject` reads the same
+    // frame now, so there is nothing left to be inert about.
     const wide: CameraCal = { k: 2 * Math.tan(((106 / 2) * Math.PI) / 180), aspect: 4 / 3 };
-    // East wall dragged INWARD to x = 2.5: stored box 5.5 × 4, so wallDistance('e') is
-    // 2.75 against a true 2.5.
-    const dragged = {
+    // East wall dragged INWARD to x = 2.5: the stored box is 5.5 × 4, so the deleted
+    // pair answered 2.75 for a wall that is really 2.5 away — over-reading every
+    // lateral offset by 10%, which is what would have cleared an honest bound.
+    const draggedRoom = {
       width: 5.5,
       depth: 4,
       height: 2.8,
@@ -1245,13 +1409,22 @@ describe('the framed surface', () => {
         [-3, 2],
       ] as Footprint,
     };
-    expect(wallDistance('e', dragged)).toBe(2.75);
-    expect(wallFrame('e', dragged.footprint)!.distance).toBe(2.5); // premise: they disagree
+    expect(draggedRoom.width / 2, 'premise: the two conventions disagreed here').toBe(2.75);
+    expect(wallFrame('e', draggedRoom.footprint)!.distance).toBe(2.5);
 
-    // The same return-wall print the centred room refuses.
+    // The same return-wall print the centred room refuses. Refused in both rooms now.
     const box = bboxOfWallSolid('n', 'e', 2.2, 1.5, WALLD('n'), 0.7, 0.5, 0.03, wide);
-    expect(placeWallObject(box, 'e', ROOM, wide, { depthM: 0.03 })).toBeNull(); // centred: refused
-    expect(placeWallObject(box, 'e', dragged, wide, { depthM: 0.03 })).not.toBeNull(); // dragged: inert
+    expect(placeWallObject(box, 'e', ROOM.footprint, wide, { depthM: 0.03 })).toBeNull();
+    expect(placeWallObject(box, 'e', draggedRoom.footprint, wide, { depthM: 0.03 })).toBeNull();
+
+    // And it is a REFUSAL rather than the gate being unreachable: a legitimate piece on
+    // that same dragged east wall still measures, exactly. Without this the assertion
+    // above would pass for a placer that had simply stopped working in dragged rooms.
+    const real = bboxOfWallSolid('e', 'e', 0.6, 1.5, 2.5, 0.7, 0.5, 0.03, wide);
+    const g = placeWallObject(real, 'e', draggedRoom.footprint, wide, { depthM: 0.03 });
+    expect(g).not.toBeNull();
+    expect(g!.widthMM).toBe(700);
+    expect(g!.heightMM).toBe(500);
   });
 
   it('refuses a ceiling ray that leaves the room SIDEWAYS, which the old gate could not see', () => {
@@ -1282,5 +1455,247 @@ describe('the framed surface', () => {
     expect(Math.abs(t * ((uC - 0.5) * wide.k))).toBeGreaterThan(HALF('e')); // but outside sideways
 
     expect(placeCeilingObject(box, 'e', ROOM, wide)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------------
+// § 44 · the ±half pair retired, measured end to end
+//
+// Every other fixture in this file is a room centred on the lens, where `depth/2` and
+// the polygon's own bound are the same number — so for as long as that was the whole
+// harness, no assertion here COULD express what reading a bounding box costs. It is the
+// third time this file has turned on that, after the depthless floor card and the
+// depthless wall panel.
+//
+// **How the retired convention is measured without re-implementing it.** Reading the
+// bounding box is exactly "treat a centred rectangle of the polygon's own bbox as if it
+// were the room", so `bboxAsRoom` below hands the placers that rectangle and every
+// number in the tables comes from the real functions. `docs/traps.md`'s entry is precise
+// about why that matters: the last two numbers published about this module were measured
+// against a scratch re-implementation, which is careful measurement of the wrong subject.
+// ---------------------------------------------------------------------------------
+describe('§ 44 · reading the polygon instead of its bounding box', () => {
+  /** The retired convention, expressed as a fixture rather than as arithmetic: a room
+   *  whose polygon IS its own bounding box, centred on the lens. `wallFrame` then
+   *  returns exactly what `wallDistance` used to. */
+  const bboxAsRoom = (r: { width: number; depth: number; height: number }) => ({
+    ...r,
+    footprint: footprintForLayout('rect', r.width, r.depth),
+  });
+
+  const LEVEL: CameraCal = { ...WIDE, height: 1.5 };
+  /** 6 × 6 room, north wall pulled OUT a metre. The bbox is 6 × 7, so the retired pair
+   *  answered 3.5 m for a wall that is really 4 — and answered 3.5 for the SOUTH wall
+   *  too, which nobody moved, because a bounding box splits the difference. */
+  const OUT = dragged('n', 1);
+  /** …and pulled IN, because inward over-reads where outward under-reads, and a
+   *  one-signed fixture cannot see a swapped comparison. */
+  const IN = dragged('n', -1);
+
+  it('the fixture can express the defect at all, which is the check on the check', () => {
+    expect(OUT.depth).toBe(7);
+    expect(wallD('n', OUT)).toBe(4);
+    expect(wallD('n', bboxAsRoom(OUT)), 'the retired pair').toBe(3.5);
+    expect(IN.depth).toBe(5);
+    expect(wallD('n', IN)).toBe(2);
+    expect(wallD('n', bboxAsRoom(IN)), 'the retired pair, other sign').toBe(2.5);
+  });
+
+  it('solves the LENS from the wall’s real distance', () => {
+    // The first rung of the ladder, so an error here scales everything above it: `k`
+    // comes out proportional to 1/d and every width, height and lateral offset in the
+    // module is proportional to `k`.
+    for (const [name, room, truthD, bboxD] of [
+      ['out', OUT, 4, 3.5],
+      ['in', IN, 2, 2.5],
+    ] as const) {
+      const vFloor = wallRowAtHeight(0, truthD, LEVEL)!;
+      expect(vFloor, `${name}: floor line in frame`).toBeGreaterThan(0.52);
+      expect(vFloor, `${name}: floor line in frame`).toBeLessThan(0.99);
+      const solved = calibrateFromFloorLine(vFloor, 'n', room.footprint, LEVEL.aspect, {
+        height: LEVEL.height,
+      })!;
+      expect(solved.k, `${name}: exact`).toBeCloseTo(LEVEL.k, 12);
+      // And what the bounding box did instead — proportional to 1/d, so the ratio is
+      // the distances', not a fitted number.
+      const wrong = calibrateFromFloorLine(vFloor, 'n', bboxAsRoom(room).footprint, LEVEL.aspect, {
+        height: LEVEL.height,
+      })!;
+      expect(wrong.k / solved.k, `${name}: 1/d`).toBeCloseTo(truthD / bboxD, 9);
+    }
+  });
+
+  it('solves the CAMERA HEIGHT from it too, where no cancellation is available', () => {
+    // H is directly proportional to D, and this rung is only climbed when the lens is
+    // already KNOWN — which is exactly the case the lens solver's cancellation below
+    // does not cover. So this one was simply wrong: 1.3125 m for a 1.5 m camera.
+    const vFloor = wallRowAtHeight(0, 4, LEVEL)!;
+    expect(heightFromFloorLine(vFloor, 'n', OUT.footprint, WIDE)).toBeCloseTo(1.5, 12);
+    expect(heightFromFloorLine(vFloor, 'n', bboxAsRoom(OUT).footprint, WIDE)).toBeCloseTo(1.3125, 9);
+  });
+
+  it('gates a CEILING ray against the real wall, so it stops refusing real ones', () => {
+    // `placeCeilingObject`'s forward gate — an intersection past the framed wall never
+    // touched the ceiling — was reading the bounding box, and this is the direction that
+    // costs something: in a room whose north wall was dragged OUT, the slab really does
+    // run to 4 m, so every legitimate fan or vent between 3.5 and 4 was REFUSED. A gate
+    // discarding correct measurements is the same defect the surface gate was fixed for,
+    // one axis over. (Mutation found this: reading the bbox here survived the whole
+    // suite until this existed, because every other room in the file is centred.)
+    for (const fwd of [3.6, 3.7, 3.9]) {
+      const disc = bboxOfCeilingDisc('n', 0.3, -fwd, 0.9, WIDE, OUT.height);
+      expect(inFrame(disc), `${fwd}: in frame`).toBe(true);
+      const g = placeCeilingObject(disc, 'n', OUT, WIDE);
+      expect(g, `${fwd}: inside the real wall, so measured`).not.toBeNull();
+      expect(g!.distance, `${fwd}`).toBeGreaterThan(OUT.depth / 2);
+      expect(g!.distance, `${fwd}`).toBeLessThanOrEqual(4);
+      // What the bounding box did with the same disc.
+      expect(placeCeilingObject(disc, 'n', bboxAsRoom(OUT), WIDE), `${fwd}: bbox refused it`).toBeNull();
+    }
+    // And it still refuses what is genuinely past the wall, so the assertions above are
+    // not simply the gate having been switched off.
+    const beyond = bboxOfCeilingDisc('n', 0.3, -4.6, 0.9, WIDE, OUT.height);
+    expect(placeCeilingObject(beyond, 'n', OUT, WIDE)).toBeNull();
+  });
+
+  it('measures a WALL piece against the plane the wall is actually on', () => {
+    for (const [name, room, truthD] of [
+      ['out', OUT, 4],
+      ['in', IN, 2],
+    ] as const) {
+      const box = bboxOfWallSolid('n', 'n', 0.8, 1.5, truthD, 0.7, 0.5, 0.03, LEVEL);
+      expect(inFrame(box), `${name}: in frame`).toBe(true);
+      const g = placeWallObject(box, 'n', room.footprint, LEVEL, { depthM: 0.03 })!;
+      expect(g, `${name}`).not.toBeNull();
+      expect(g.widthMM, `${name}: width`).toBe(700);
+      expect(g.heightMM, `${name}: height`).toBe(500);
+      expect(g.position.x, `${name}: lateral`).toBeCloseTo(0.8, 9);
+      expect(g.distance, `${name}: forward`).toBeCloseTo(truthD - 0.015, 9);
+    }
+  });
+
+  it('clamps a FLOOR piece against the real wall, not the bounding box', () => {
+    // The floor placer MEASURES its distance, so the pair was never its plane — it was
+    // its two clamps. Which still matters: a floor position reaches the user, unlike a
+    // wall piece's, and a bound in the wrong place either lets a sofa through the
+    // plaster or pulls a correctly measured one off it.
+    const sofa = { depthM: 0.85 };
+    // A 2.0 × 0.85 × 0.8 sofa with its BACK on the real north wall at z = −4, so its
+    // centre is half a depth in at z = −3.575. (slot, x, z, wM, hM, depthM, cal.)
+    const box = bboxOfFloorBox('n', 0.5, -(4 - 0.425), 2.0, 0.8, 0.85, LEVEL);
+    expect(inFrame(box), 'premise: in frame — far enough out that a level frame reaches it').toBe(true);
+    const g = placeFloorObject(box, 'n', OUT.footprint, LEVEL, sofa)!;
+    // Recovered, not clamped: the bound sits exactly here, so the assertion has to say
+    // which one it is testing. `4 − 0.425` is what the MEASUREMENT gives, and the two
+    // agreeing is the piece being against its own wall rather than the clamp landing on
+    // the right answer by luck — which an earlier draft of this test did.
+    expect(g.distance, 'measured centre, half a depth off the real wall').toBeCloseTo(3.575, 6);
+    expect(g.widthMM, 'and the width is untouched').toBe(2000);
+    // The bounding box pulls the same MEASURED piece 500 mm off its own wall, and it is
+    // the clamp that does it — the measurement was identical in both rooms.
+    const clamped = placeFloorObject(box, 'n', bboxAsRoom(OUT).footprint, LEVEL, sofa)!;
+    expect(clamped.distance, 'the retired bound').toBeCloseTo(3.5 - 0.425, 6);
+    expect(g.distance - clamped.distance).toBeCloseTo(0.5, 6);
+    expect(clamped.widthMM, 'and it costs the position, not the size').toBe(2000);
+  });
+
+  // **The reason all five sites had to move in one commit, and it is measured rather
+  // than argued.** A `k` solved from too short a distance is too LARGE by exactly the
+  // ratio the placers then divide back out, since a wall piece's size goes as `k · d`
+  // and both terms carry the same assumed `d`. So on the floor-line path the sizes were
+  // already right while the distance was 500 mm out — and migrating one half without
+  // the other breaks the cancellation in whichever direction you picked. Nothing on the
+  // EXIF or vanishing-point path ever had it, because there `k` is known independently.
+  it('prints what a HALF-migration would have cost, both ways', () => {
+    const truthD = 4;
+    const boxD = OUT.depth / 2;
+    /** The piece, named once, because the fixture and the table's own truth row are two
+     *  readers of one fact and used to be two hand-written copies of it. See `row` below
+     *  for what that cost. */
+    const TRUTH = { lateral: 0.8, yC: 1.5, wM: 0.7, hM: 0.5, depthM: 0.03 };
+    const mm = (m: number) => Math.round(m * 1000);
+    /** Its back is on the plaster, so its centre sits half a depth into the room — the
+     *  same expression `placeWallObject` states, which is what the § 44 row must return
+     *  rather than merely print alongside. */
+    const truthDist = truthD - TRUTH.depthM / 2;
+    const vFloor = wallRowAtHeight(0, truthD, LEVEL)!;
+    const kBbox = calibrateFromFloorLine(vFloor, 'n', bboxAsRoom(OUT).footprint, LEVEL.aspect, {
+      height: LEVEL.height,
+    })!;
+    const kReal = calibrateFromFloorLine(vFloor, 'n', OUT.footprint, LEVEL.aspect, {
+      height: LEVEL.height,
+    })!;
+    const box = bboxOfWallSolid(
+      'n',
+      'n',
+      TRUTH.lateral,
+      TRUTH.yC,
+      truthD,
+      TRUTH.wM,
+      TRUTH.hM,
+      TRUTH.depthM,
+      LEVEL,
+    );
+    const rows: Array<[string, CameraCal, Footprint]> = [
+      ['shipped   · k from bbox, plane from bbox', kBbox, bboxAsRoom(OUT).footprint],
+      ['half      · k from bbox, plane from polygon', kBbox, OUT.footprint],
+      ['half      · k from polygon, plane from bbox', kReal, bboxAsRoom(OUT).footprint],
+      ['§ 44      · both from the polygon', kReal, OUT.footprint],
+      ['EXIF      · k KNOWN, plane from bbox', LEVEL, bboxAsRoom(OUT).footprint],
+      ['EXIF+§ 44 · k KNOWN, plane from polygon', LEVEL, OUT.footprint],
+    ];
+    // ONE formatter, for the measured rows and for the truth row alike — which is the
+    // whole fix rather than a tidy-up. A row the others are read against cannot be a
+    // second, hand-kept copy of the fixture, and this one was: moving the fixture's
+    // lateral printed a `§ 44` row of 1.0000 directly above a `truth` row of 0.8000 — a
+    // table contradicting itself — with all 65 tests green. Rule 2 names that shape
+    // outright, *a displayed measurement hand-typed next to the thing it describes*, and
+    // it survived review twice because the eye goes to the derived header one line up.
+    // The caption and the dW denominator carried their own copies of 700 as well.
+    const row = (label: string, widthMM: number, heightMM: number, x: number, dist: number) =>
+      `${label.padEnd(44)} ${String(widthMM).padStart(6)}  ${String(heightMM).padStart(6)}  ${
+        `${(((widthMM - mm(TRUTH.wM)) / mm(TRUTH.wM)) * 100).toFixed(1)}%`.padStart(6)
+      }  ${x.toFixed(4).padStart(7)}  ${dist.toFixed(3).padStart(6)}`;
+    const out: string[] = [
+      `\n§ 44 · a ${mm(TRUTH.wM)} × ${mm(TRUTH.hM)} print on a north wall dragged out to ` +
+        `${truthD.toFixed(1)} m (its bounding box says ${boxD.toFixed(1)})`,
+      'configuration                                 width  height   dW      pos.x    dist',
+    ];
+    const got: Record<string, { w: number; h: number; x: number; dist: number }> = {};
+    for (const [label, cal, fp] of rows) {
+      const g = placeWallObject(box, 'n', fp, cal, { depthM: TRUTH.depthM })!;
+      got[label] = { w: g.widthMM, h: g.heightMM, x: g.position.x, dist: g.distance };
+      out.push(row(label, g.widthMM, g.heightMM, g.position.x, g.distance));
+    }
+    out.push(row('truth', mm(TRUTH.wM), mm(TRUTH.hM), TRUTH.lateral, truthDist));
+    console.log(out.join('\n'));
+
+    const at = (k: string) => got[rows.find((r) => r[0].startsWith(k))![0]];
+    // What shipped: sizes right by cancellation, distance 500 mm out.
+    expect(at('shipped').w).toBe(699);
+    expect(at('shipped').h).toBe(499);
+    // Either half alone: ±13–14%, and in OPPOSITE directions. These two assertions are
+    // the whole argument for one commit rather than three.
+    expect(at('half      · k from bbox, plane from polygon').w).toBe(800);
+    expect(at('half      · k from polygon, plane from bbox').w).toBe(611);
+    // The fix, and the case that never had a cancellation to lose.
+    expect(at('§ 44').w).toBe(700);
+    expect(at('§ 44').h).toBe(500);
+    expect(at('EXIF      ').w).toBe(611);
+    expect(at('EXIF+§ 44').w).toBe(700);
+
+    // **The two columns nothing pinned**, which is how the truth row could contradict the
+    // table above it in silence — every assertion here was a width or a height, and the
+    // position half of the defect was printed and checked by nothing. Derived from
+    // `TRUTH`, so moving the fixture now fails here instead of printing a contradiction.
+    expect(at('§ 44').x, 'the fix recovers the lateral offset').toBeCloseTo(TRUTH.lateral, 9);
+    expect(at('§ 44').dist, 'and the distance').toBeCloseTo(truthDist, 9);
+    // And this item's headline figure: the bounding box put the plane 500 mm short, which
+    // is the half that survived the cancellation and reached the user.
+    expect(at('shipped').dist, 'the retired plane, half the bbox').toBeCloseTo(
+      boxD - TRUTH.depthM / 2,
+      9,
+    );
+    expect(at('§ 44').dist - at('shipped').dist, 'the headline: 500 mm').toBeCloseTo(0.5, 9);
   });
 });

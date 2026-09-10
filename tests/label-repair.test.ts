@@ -1,12 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { categoriesFittingSize, judgeLabel, judgeLabels, sizeFitsLabel } from '@/lib/label-repair';
-import { placeFloorObject, placeWallObject, wallDistance, type CameraCal } from '@/lib/photo-geometry';
+import { placeFloorObject, placeWallObject, wallFrame, type CameraCal } from '@/lib/photo-geometry';
 import { PART_LIBRARY, defaultDepthFor, type Category, type Shape } from '@/lib/scene-spec';
 import { dimRangeFor } from '@/lib/dimension-ranges';
 import type { CalMap, RoomDims } from '@/lib/detect-refine';
 import type { Detection } from '@/lib/detection';
-import { footprintForLayout } from '@/lib/footprint';
+import type { CaptureSlot } from '@/lib/storage';
+import { footprintForLayout, type Footprint } from '@/lib/footprint';
 import { bboxOfWallSolid } from './helpers/project';
+
+/** The framed wall's distance, read from the polygon. `wallDistance` — the
+ *  `depth/2` / `width/2` pair every placer used to measure from — is deleted; this
+ *  is the one description of the framed wall there is now, and a test asking for it
+ *  asks the same function the placers do. */
+const wallD = (slot: CaptureSlot, room: { footprint: Footprint }) =>
+  wallFrame(slot, room.footprint)!.distance;
 
 const ROOM: RoomDims = { width: 6, depth: 4, height: 2.8, footprint: footprintForLayout('rect', 6, 4) };
 const CAL: CameraCal = { k: 1.2, aspect: 4 / 3 };
@@ -173,7 +181,7 @@ describe('judgeLabel', () => {
   });
 
   it('clears a word the measurement agrees with', () => {
-    const g = placeWallObject(WALL_BOX, 'n', ROOM, CAL, {
+    const g = placeWallObject(WALL_BOX, 'n', ROOM.footprint, CAL, {
       depthM: defaultDepthFor('painting', 'painting') / 1000,
     })!;
     expect(sizeFitsLabel('painting', 'painting', g.widthMM, g.heightMM)).toBe(true); // premise
@@ -190,7 +198,7 @@ describe('judgeLabel', () => {
     // pixels that measure 480 x 360 as a hung painting measure 480 x 1680 as
     // something standing on the floor. That is exactly why a repaired word has to
     // be re-measured rather than keeping the numbers taken under the old one.
-    const g = placeFloorObject(WALL_BOX, 'n', ROOM, CAL, {
+    const g = placeFloorObject(WALL_BOX, 'n', ROOM.footprint, CAL, {
       depthM: defaultDepthFor('bed', 'box') / 1000,
     })!;
     const v = judgeLabel(det({ category: 'bed', slot: 'n', box: WALL_BOX }), CALS, ROOM);
@@ -319,7 +327,7 @@ describe('judgeLabel — ceiling items', () => {
         category: 'painting',
         shape: 'painting',
         slot: view,
-        box: bboxOfWallSolid('n', view, 2.2, 1.5, wallDistance('n', ROOM), 0.7, 0.5, 0.03, wide),
+        box: bboxOfWallSolid('n', view, 2.2, 1.5, wallD('n', ROOM), 0.7, 0.5, 0.03, wide),
       });
     // Its own camera measures it and clears it, for the right reason.
     expect(judgeLabel(onNorth('n'), cals, ROOM).status).toBe('ok');

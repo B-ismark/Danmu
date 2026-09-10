@@ -1196,6 +1196,66 @@ than assumed: the `detect-pipeline` baseline table came out byte-identical and t
 off-square sweep diffed clean. What no sweep reaches is whether the piece the user gets is
 now one picture at its real size.
 
+### A room whose walls you DRAGGED, then re-scanned — sizes should stop being ~13% small
+
+**Where to click.** Build a room from photos (the capture flow). Open it, drag one wall —
+3D wall handle, the plan view, or Inspector's ±10 cm buttons — far enough to notice, say
+half a metre or a metre. Then left rail → **Room** → the **Re-scan** button in the section
+header (the circular-arrow glyph), which takes you back to `/onboarding/detect` and re-runs
+the geometry against the room you have just reshaped. Compare the wall-mounted pieces — a
+TV, a picture, a window — against the same room before the drag.
+
+**What wrong looks like.** Wall pieces coming back noticeably SMALLER than they should be,
+and floor pieces sitting off their wall. Every plane, bound and clamp in the geometry used
+to be measured from `depth/2` — the room's bounding box — and dragging one wall makes that
+the wrong number for both walls on that axis. Measured, on a north wall dragged out a
+metre: a 700 × 500 print decoded **611 × 437**, and a sofa was pulled 500 mm off its own
+wall.
+
+**Why a person is needed for a fix that is exact in the harness.** Two reasons, and the
+second is the real one.
+
+· The suite's proof is a round trip: project a piece with an independent camera model,
+  invert it with the placer, require the truth back. That proves the arithmetic and says
+  nothing about whether the room the app rebuilt *looks like* the room. Only the drag →
+  re-scan → look loop does.
+· **The re-scan route itself has never been walked with a reshaped room.** It exists —
+  `PartTree`'s header action is an unconditional link, and `RoomSync` deliberately does
+  not pin the scene of a reshaped room that still has photos, so that re-scan keeps
+  working — but that combination was read out of the code, not exercised. If the button
+  silently does nothing on such a room, the fix is real and unreachable, and no test here
+  covers the navigation.
+
+**What would NOT be a bug.** Two things, and the second is the one that will look like
+the bug this item is watching for.
+
+· An **L, T or U** room still measuring to its bounding box. That is a separate and larger
+  item (a `u`'s real north wall is at the notch, not at `depth/2`) and is filed in
+  `docs/what-is-still-open.md` § 44, not fixed. If you want to see the fix work, drag a
+  wall of a **rect** room.
+· **A drag big enough to leave the camera outside the room, where every wall piece comes
+  back at its catalogue size.** `moveWall` only checks the resulting box against
+  `ROOM_SIDE_M`, so dragging one wall of a 6 × 6 room inward by 3 m or more is accepted and
+  puts the whole footprint on one side of the origin — at which point `wallFrame` refuses,
+  and refusing is correct: the photos were taken from somewhere that is no longer in the
+  room. It is indistinguishable **on screen** from the re-scan having silently done
+  nothing, which is the first bullet above, so keep the drag modest — a metre on a 6 m
+  wall is plenty to see the fix. Filed in § 44.
+
+**Where it rides.** `7607794`, draft PR #150. `wallDistance` is deleted; all five sites
+read `wallFrame`. Gates on that commit: typecheck · lint · build clean of
+`ESLint: Invalid Options` · **147 files, 2748 passed / 5 expected fail**, with the
+`detect-pipeline` and `off-square-cost` baseline tables **byte-identical** to `main` —
+which is the proof the change was a no-op on every centred room, and exactly why the
+off-centre case is the one that needs eyes.
+
+*(This entry named the BRANCH and gave no count until a review of its own commit caught
+it — against this file's own rule twelve hundred lines up, that the artifact is a commit
+and never "the tree", and two commits after PR #149 re-pointed six items off that same
+branch name for exactly this reason. A branch moves; this one has already been restarted
+once. The rule is easy to keep while writing about someone else's work and easy to drop
+while writing about your own.)*
+
 ### Pressing Shuffle moves the button out from under the pointer
 
 *Filed by `rails` on 2026-09-05 from a peer's browser measurement during PR #115's review.

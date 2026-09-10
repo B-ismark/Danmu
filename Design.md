@@ -157,11 +157,13 @@ compass bearing measured against an anchor derived from the photos already
 placed, its EXIF shutter time, or the order it arrived in, which is still the
 right answer for the live camera because the person is standing in the room
 turning right as instructed. Every card says which rung answered, because a wrong
-wall is a wrong room: `wallDistance` reads n/s at `depth/2` and e/w at `width/2`,
+wall is a wrong room: the framed wall's distance runs n/s across the depth and e/w
+across the width,
 so a photo of the long wall filed under a short one is measured from the wrong
 distance. A set can only ever be wrong by a whole number of quarter-turns, so one
 "turn the set round" control fixes every case of it, and each card carries the
-length its wall ought to be (`wallSpan`, derived from the room's own dims) as the
+length its wall ought to be (`wallSpan`, derived from the room's own dims — and the one
+quantity the bounding box and the polygon agree on, which is why it survived § 44) as the
 one check a person can make against their own picture. This is what makes an
 arbitrary upload first-class instead of force-fitting it to a ritual — a single
 photo is a supported way to use the screen, not a degraded one.
@@ -357,7 +359,7 @@ This is what makes Danmu trustworthy. All pure math, all covered by tests.
 | File | Role |
 |---|---|
 | `lib/geometry.ts` | Oriented rectangles (OBB) in the XZ plane; separating-axis overlap, gaps, face clearance, point-in-poly, nearest-edge. Also `Foot` — a footprint that may be **round**, meaning the ellipse inscribed in the OBB (a true circle when W = D, which is how round parts are authored, and the ellipse the renderer draws if an axis is scaled). A circle's bounding square is 27% bigger than the circle and all of it is in the corners, which is where the chairs go; `collidesAt` used to refuse a chair tucked diagonally under a round table for corners the table does not have. Containment is the exact closed form; two true circles use the closed-form lens area, and anything else round uses an inscribed 32-gon (99.4% of the area — inscribed on purpose, so a round piece is never reported as hitting what it does not touch). **One rotation convention, and it is three.js's:** `rot` is what the renderer assigns to `rotation.y`, so a part's front (local +Z) is `(sin rot, cos rot)`. Rotating the other way is invisible at 0°/180° and inverts every directional answer on the side walls — it was reporting "doors can't open" on wardrobes correctly snapped to the east and west walls. `localToWorld` / `worldToLocal` / `frontVector` are the shared helpers, pinned against three's own `Euler` by a test. |
-| `lib/photo-geometry.ts` | Pinhole camera at room centre + entered room dims → ray/plane intersection gives real position + W/H from any bbox. `CameraCal` carries the lens (`k`), and optionally the camera's `height` and `tiltRad`; absent values fall back to 1.5 m and level, which is what it always assumed. Tilt matters: 5° of ordinary handheld droop mis-reads distance by ~20%. Three placers, one per surface: `placeFloorObject` intersects the bbox's **bottom** edge with the floor (a vertical thing standing at one distance), `placeWallObject` uses the wall's known distance, and `placeCeilingObject` intersects the **middle** row with the ceiling plane and returns **no height at all** — a `GeoCeilingPlacement` is an `Omit`, so nothing downstream can read a measurement never taken. The middle row rather than an edge because a ceiling fan is a horizontal PLATE seen obliquely: its image spans a range of distances and the top of the bbox is its nearest rim, which reads a 1.2 m fan as 881 mm — further from the truth than the 1000 mm catalogue default it was meant to improve on. It also **refuses** an intersection past the far wall instead of clamping to it, unlike the floor: a level 66° camera in a normal room sees no ceiling at all (the vertical half-angle is ~24°, so from 1.5 m a 2.8 m ceiling first enters frame 2.9 m away, past the wall being photographed), so a high pixel there is wall, and clamping it read a picture frame out as an undersized ceiling fan — the width being computed at the clamped distance rather than the real one. Ceilings need an ultrawide, a camera tilted up, or a tall room. `wallDistance` and `wallSpan` are the two halves of one convention and live together for that reason — the wall you stand `depth/2` from is the one that runs the room's full `width`, and a version of either that agreed with itself but not the other would file every photo against the wrong axis while looking perfectly reasonable. |
+| `lib/photo-geometry.ts` | Pinhole camera at room centre + entered room dims → ray/plane intersection gives real position + W/H from any bbox. `CameraCal` carries the lens (`k`), and optionally the camera's `height` and `tiltRad`; absent values fall back to 1.5 m and level, which is what it always assumed. Tilt matters: 5° of ordinary handheld droop mis-reads distance by ~20%. Three placers, one per surface: `placeFloorObject` intersects the bbox's **bottom** edge with the floor (a vertical thing standing at one distance), `placeWallObject` uses the wall's known distance, and `placeCeilingObject` intersects the **middle** row with the ceiling plane and returns **no height at all** — a `GeoCeilingPlacement` is an `Omit`, so nothing downstream can read a measurement never taken. The middle row rather than an edge because a ceiling fan is a horizontal PLATE seen obliquely: its image spans a range of distances and the top of the bbox is its nearest rim, which reads a 1.2 m fan as 881 mm — further from the truth than the 1000 mm catalogue default it was meant to improve on. It also **refuses** an intersection past the far wall instead of clamping to it, unlike the floor: a level 66° camera in a normal room sees no ceiling at all (the vertical half-angle is ~24°, so from 1.5 m a 2.8 m ceiling first enters frame 2.9 m away, past the wall being photographed), so a high pixel there is wall, and clamping it read a picture frame out as an undersized ceiling fan — the width being computed at the clamped distance rather than the real one. Ceilings need an ultrawide, a camera tilted up, or a tall room. **Every plane, bound and clamp in the module comes from `wallFrame(slot, footprint)`** — the polygon's own bounds — and the five signatures that used to take a `{width, depth}` now take a `Footprint`, so a bounding box cannot be handed to them. `wallSpan` survives alone, read only by the capture screen's label, because a span is `maxX − minX` in both conventions and carries no information about where the wall is; it is the DISTANCE and the two ENDS INDIVIDUALLY that a wall drag moves. See **The ±half pair, retired**. |
 | `lib/exif.ts` | Reads the camera fields a photo carries about itself — 35 mm-equivalent focal length (→ `hfovFromFocal35`), orientation, compass bearing, and the shutter time. Pure byte parsing; browsers expose no EXIF API. **Does not read GPS coordinates**, deliberately: nothing needs them, and moving them from the file into IndexedDB would relocate the exposure rather than remove it. The shutter time is the one field read and then dropped: it exists to put a dropped set of photos back into the order they were shot in (`capture-slots`' `time` rung) and is never persisted or sent, which is what keeps it a weaker exposure than the coordinates next to it. Parsed by hand as UTC rather than by `Date.parse` — the EXIF form is not ISO 8601, so what a built-in does with it is implementation-defined, and the no-clock forms (`0000:00:00 00:00:00`, all spaces) and dates `Date.UTC` would silently roll forward are refused rather than sorted first. |
 | `lib/capture-slots.ts` | **Which wall a photo is**, as a ladder that reports which rung answered: `bearing` (its own compass tag against an anchor derived from the photos already placed), `time` (EXIF shutter order), `order` (arrival), `manual` (the user, who wins). Anchors are averaged as *directions* — 359° and 1° average arithmetically to 180°, the opposite side of the room — and an anchor whose own photos disagree by more than 30° is refused rather than believed, because a slot flips at 45°. Placement is incremental: an arriving photo never moves one already placed, so nothing shuffles under the user and no correction is downgraded to a suggestion. A bearing pointing at a wall that is already taken is **reported, not honoured** — two photos of one wall, or a magnetometer next to a fridge, look identical from here. **Vanishing points are not a rung**, though the plan proposed them: every shot frames one wall straight-on from the middle of a box, so the wall-parallel direction vanishes at infinity and the view axis at the principal point in *every* photo — an identical pair whichever wall is in front of the lens, with nothing in it labelled by world axis. The only signal that survives is that a long wall subtends a wider angle than a short one, which yields an axis and never a direction; `wallSpan` puts that on screen as a number instead. It also owns **moving a placed set around** — `rotateSet` / `swapSet` / `clearSlot` / `patchIfSame` / `describePlacement` — which lived in the capture screen as hand-written spreads until a read-through found three bugs in them, all the same shape: a fact about ONE photo written against a SLOT. A quality score, which is async, landed on whichever photo occupied that wall by the time it resolved (so rotating a set mid-scoring relabelled every score); a clash flag outlived the photo it named; and the live region said "0 photo added: ." when every wall was already full. **A clash flag's lifetime is stated there**: it survives a rotation, where both photos move together and the reference is only relabelled, and nothing else — a swap, a delete or a replace means the user is doing the assignment themselves, which is what the flag was asking for. |
 | `lib/device-tilt.ts` | Lens tilt at the shutter from `deviceorientation`, for the live-camera path only (EXIF has no tilt field). Reports a tilt only for an upright, unrolled phone — a wrong tilt is worse than none, since "none" is the level camera the engine already assumed. |
@@ -777,17 +779,18 @@ fabrication the gate exists to catch. It reads `wallFrame` now, and because that
 `wallDistance` and `±wallSpan/2` bit-for-bit on a centred room the change is a verified
 no-op on every fixture here: the `detect-pipeline` baseline table is byte-identical.
 
-One half stays open on purpose. `wallFrame.distance` and `wallDistance` disagree only when
-the framed wall itself was dragged, and then the assumed plane is wrong too, so even an
-honest bound would refuse correct measurements. The gate **goes inert** there rather than
-refusing on an input it cannot check — *a bound may falsify an assumption only where the
-assumption's own inputs are trustworthy* — and § 44 closes it by moving the distance onto
-the same frame.
+That half stayed open for one commit and is now closed. `wallFrame.distance` and the
+assumed `wallDistance` disagreed only when the framed wall itself was dragged, and then the
+plane was wrong too, so even an honest bound would have refused correct measurements: the
+gate **went inert** there rather than refuse on an input it could not check — *a bound may
+falsify an assumption only where the assumption's own inputs are trustworthy*. § 44 removed
+the untrustworthy input rather than the rule. See **The ±half pair, retired** below; the
+gate's condition now compares the frame with itself, so it speaks in every room.
 
 **It is not an exotic case.** On an ultrawide every ordinary room has picture beyond the
 ends of the wall being photographed, and what is out there is the return wall. The exposure
-condition is `wallSpan < 2·tan(hFOV/2) · wallDistance`, which at 106° is `< 2.654 ×
-wallDistance` — and a square room sits at 2.0, so a square room always is. At the 66°
+condition is `span < 2·tan(hFOV/2) · distance` over `wallFrame`'s two answers, which at
+106° is `< 2.654 × distance` — and a square room sits at 2.0, so a square room always is. At the 66°
 default the factor is 1.299 and it is not, so this is a hazard of the lens being *known*.
 
 Measured, with both fixtures wholly inside the frame — and **printed by
@@ -1044,6 +1047,69 @@ bounds are real lengths in metres — a skirting allowance and a coving allowanc
 never a percentage of the frame, and the lateral pair comes from `wallFrame`,
 which reads the footprint's **bounds** rather than ±width/2, per the contract
 `moveWall` states in `lib/scene-store.ts`.
+
+### The ±half pair, retired
+
+`wallDistance` and `wallSpan` were one convention with two halves — `depth/2` / `width/2`
+and `width` / `depth` — and **five sites measured from them**: `calibrateFromFloorLine`,
+`heightFromFloorLine` and all three placers. That is the ±width/2 pattern `moveWall`
+warns each of its consumers against, in the docblock of the function that creates the
+off-centre case: *"the room becomes off-centre; width/depth are re-derived from the new
+bounding box and every downstream consumer reads footprint bounds (not ±width/2)."*
+
+**It was reachable, and by an ordinary route.** `offsetWall` translates two vertices and
+copies the rest, `moveWall` stores that polygon raw, and nothing anywhere recentres a
+footprint. `RoomSync` persists it; the Room rail offers **Re-scan** unconditionally, and
+`RoomSync` deliberately declines to pin the scene of a reshaped room that still has
+photos so that re-scan keeps working. Drag a wall, press Re-scan, and an off-centre
+polygon reaches every one of the five.
+
+**What it cost, measured by calling the functions** — a 700 × 500 print on a 6 × 6 room's
+north wall dragged out to 4.0 m, where the bounding box says 3.5. Printed by
+`tests/photo-geometry.test.ts` on every green run:
+
+| configuration | width | height | pos.x | distance |
+|---|---|---|---|---|
+| shipped · `k` from bbox, plane from bbox | 699 | 499 | 0.799 | 3.485 |
+| half · `k` from bbox, plane from polygon | 800 (+14.3%) | 571 | 0.914 | 3.985 |
+| half · `k` from polygon, plane from bbox | 611 (−12.7%) | 437 | 0.700 | 3.485 |
+| **§ 44 · both from the polygon** | **700** | **500** | **0.800** | **3.985** |
+| EXIF · `k` KNOWN, plane from bbox | 611 (−12.7%) | 437 | 0.700 | 3.485 |
+| EXIF + § 44 · `k` known, plane from polygon | 700 | 500 | 0.800 | 3.985 |
+
+Two findings there are worth more than the fix. **The error CANCELLED on the floor-line
+path**, because `k` is solved as `∝ 1/d` from the same assumed distance the placers then
+multiply back by — so the sizes were already right while the distance was 500 mm out, and
+that is why nothing caught this for as long as it existed. A cancellation is a trap and
+not a reprieve: **migrating either half alone breaks it**, by +14% one way and −13% the
+other, which is why all five moved in one commit. And on the EXIF or vanishing-point path
+there was never a cancellation to lose, `k` being known independently, so there every wall
+piece was simply 13% wrong — that is the case a user actually had. `heightFromFloorLine`
+had no cancellation available either and solved a 1.5 m camera as **1.3125 m**.
+
+**Three roles, three answers to "what if the polygon cannot say".** `wallFrame` refuses a
+polygon under three points, one with a non-finite vertex, or one the lens does not stand
+inside, and the right response is not one rule:
+
+| role | sites | no frame → |
+|---|---|---|
+| **premise** — the plane or distance being solved from | both floor-line solvers, `placeWallObject` | `null`. There is no honest substitute for a plane; the bounding box *was* the substitute |
+| **gate** — a bound on an assumption located elsewhere | `placeCeilingObject`'s forward gate, `onFramedSurface` | inert. The slab's plane comes from `room.height`, which no footprint can move |
+| **clamp** — a bound on a measurement | `placeFloorObject`'s two | inert, while the 0.3 m arithmetic guard stays. *A bound may falsify an assumption and may never overrule a measurement* |
+
+The five signatures take a `Footprint` rather than a room, so a bounding box is
+**unpassable** rather than merely unread, and `wallDistance` is deleted — its
+deletability being what proves no sixth site was left behind. `wallSpan` survives, read
+only by the capture screen's label, because `frame.right − frame.left` IS `maxX − minX`:
+a span is the one quantity both conventions agree on, and `tests/photo-geometry.test.ts`
+pins that across four slots and both drag directions rather than leaving it as prose.
+
+**What this did not buy.** `wallFrame` reads the polygon's **bounds**, so the off-centre
+rectangle is fixed and an L, T or U is still measured to its box — a `u`'s notch puts the
+wall in front of a north-facing lens at `z = 0` while both conventions answer `depth/2`.
+Filed in `docs/what-is-still-open.md`, not smoothed over here. The `detect-pipeline` and
+`off-square-cost` baselines are byte-identical across the change, which is the proof it
+was a no-op on every centred room.
 
 **Three claims this section made, and what replaced them**, because each was the
 justification for a piece of the design and all three were false:

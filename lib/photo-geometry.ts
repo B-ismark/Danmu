@@ -81,20 +81,40 @@ export type CameraView = { height?: number; tiltRad?: number };
 const heightOf = (cal: CameraCal) => cal.height ?? CAM_HEIGHT;
 const tiltOf = (cal: CameraCal) => cal.tiltRad ?? 0;
 
-/** Distance from the room-centre camera to the framed wall. */
-export function wallDistance(slot: CaptureSlot, room: { width: number; depth: number }): number {
-  return slot === 'n' || slot === 's' ? room.depth / 2 : room.width / 2;
-}
-
-/** How wide the wall in this slot is — the other half of the same convention, so
- *  it lives beside it rather than in the screen that shows it. `slotToWorld` puts
- *  n and s across the room's width and e and w across its depth, and getting one
- *  of these two functions right while the other disagrees is a room measured off
- *  the wrong axis.
+/**
+ * How wide the wall in this slot is. `slotToWorld` puts n and s across the room's
+ * width and e and w across its depth.
  *
- *  Read by `lib/capture-slots.ts` for the one check a person can make against
- *  their own photograph: a slot whose wall should be 5.6 m wide, holding a
- *  picture of a 4.2 m wall, is a set that wants rotating. */
+ * **This used to have a twin, `wallDistance`, and the twin is deleted.** It
+ * answered "how far is the framed wall" as `depth/2` / `width/2`, and every
+ * measurement in this module was taken from it — which is the ±width/2 pattern
+ * `lib/scene-store.ts`'s `moveWall` warns each of its consumers against in the
+ * docblock of the function that creates the off-centre case. `wallFrame` reads the
+ * polygon instead, and nothing here can be handed a bounding box any more: the
+ * five sites that used the pair take a `Footprint` and could not accept a
+ * width/depth if one were offered. See § 44 in `docs/what-is-still-open.md` for
+ * the measurement.
+ *
+ * **This half survives because it was never wrong, and that is worth stating
+ * rather than assumed.** `wallFrame`'s `right − left` IS `maxX − minX`, which is
+ * exactly what this returns, because `moveWall` re-derives `width` and `depth`
+ * from `footprintBounds`. Drag a wall and the SPAN of each wall is still right; it
+ * is the DISTANCE and the two ENDS INDIVIDUALLY that move, which is why the
+ * surface gate needed `left` and `right` separately and not this number.
+ * `tests/photo-geometry.test.ts` pins that equivalence across all four slots and
+ * both drag directions rather than leaving it as this paragraph's word.
+ *
+ * Its one reader is the capture screen's own label — the one check a person can
+ * make against their own photograph: a slot whose wall should be 5.6 m wide,
+ * holding a picture of a 4.2 m wall, is a set that wants rotating. A person
+ * reading that number wants the wall's length either way, so a bbox side and the
+ * polygon's span being the same number is what makes the question moot rather
+ * than a decision.
+ *
+ * (The one way the two DO come apart is a hand-edited scene file:
+ * `readFootprint` never reconciles the polygon's bounds with the file's own
+ * `width`/`depth`. Filed, not handled here.)
+ */
 export function wallSpan(slot: CaptureSlot, room: { width: number; depth: number }): number {
   return slot === 'n' || slot === 's' ? room.width : room.depth;
 }
@@ -127,16 +147,45 @@ function bAtFloorLine(height: number, d: number, tiltRad: number): number {
  *
  * Returns null when vFloor is implausible (≤ centre — the floor line must be in
  * the lower half of a level frame) or the answer is not a lens.
+ *
+ * **It takes the FOOTPRINT, and the distance it solves from is the wall's real
+ * one.** This is the first rung of the ladder, so an error here scales everything
+ * above it: `k` comes out proportional to `1/d`, and every width, height and
+ * lateral offset in this module is proportional to `k`. Measured in a 6 × 6 room
+ * with the north wall dragged out a metre — assumed 3.5 m against a true 4 — it
+ * solved 3.033 for a true 2.654, a lens 14% too wide.
+ *
+ * **That error used to CANCEL, and the cancellation is why nothing caught this.**
+ * A `k` solved from too short a distance is too large by exactly the same ratio
+ * the placers then divide it back out by, since a wall piece's size goes as
+ * `k · d` and both terms carry the same `d_assumed`. So on this path the sizes
+ * were already right — 699 × 499 for a true 700 × 500 — while the distance was
+ * 500 mm out. Which is a trap rather than a reprieve: it means migrating the
+ * placers to the real plane while leaving THIS on the bounding box makes the
+ * sizes 14% wrong in the other direction, and doing only the reverse makes them
+ * 13% wrong. Nothing on the EXIF or vanishing-point paths ever enjoyed the
+ * cancellation, because there `k` is known independently and the assumed plane
+ * simply mis-sized every wall piece by 13%. All five sites therefore moved in
+ * one commit; `tests/photo-geometry.test.ts` prints the six-way table on every
+ * green run so a future half-migration shows up as a number rather than as an
+ * argument.
+ *
+ * Null when the footprint cannot say where the wall is — which joins the four
+ * nulls this already returns, and `buildCals` falls back to `defaultCal` exactly
+ * as it does for an implausible floor line. There is no honest fallback for a
+ * plane, and the bounding box is the thing being retired.
  */
 export function calibrateFromFloorLine(
   vFloor: number,
   slot: CaptureSlot,
-  room: { width: number; depth: number },
+  footprint: Footprint,
   aspect: number,
   view?: CameraView,
 ): CameraCal | null {
   if (vFloor <= 0.52 || vFloor >= 0.99) return null;
-  const d = wallDistance(slot, room);
+  const frame = wallFrame(slot, footprint);
+  if (!frame) return null;
+  const d = frame.distance;
   const height = view?.height ?? CAM_HEIGHT;
   const tiltRad = view?.tiltRad ?? 0;
   const b = bAtFloorLine(height, d, tiltRad);
@@ -237,19 +286,47 @@ export type WallFrame = { distance: number; left: number; right: number };
  * off-centre; width/depth are re-derived from the new bounding box and every
  * downstream consumer reads footprint bounds (not ±width/2)"*.
  *
- * `wallDistance` and `wallSpan` above are the ±half pair, and they are what the
- * placers still use. This is not a duplicate of them but the honest version, and
- * the difference is only visible in a room whose walls have been dragged: pull a
- * 1.5 × 5.0 room's east wall out by a metre and the north wall's midpoint moves to
- * x = +0.5 while `±width/2` still centres it on the lens. A sampler asking
+ * **This is the only description of the framed wall in the module now.** There used
+ * to be a second one — `wallDistance` / `wallSpan`, the ±half pair — and every
+ * measurement was taken from it while this served only the colour sampler and the
+ * surface gate. The difference is visible in a room whose walls have been dragged:
+ * pull a 1.5 × 5.0 room's east wall out by a metre and the north wall's midpoint
+ * moves to x = +0.5 while `±width/2` still centres it on the lens. A sampler asking
  * "which columns of this photo are the north wall" then reads a sixth of the west
- * return wall and calls it north.
+ * return wall and calls it north; a placer asking "how far away is it" is told
+ * `depth/2` about a wall that is somewhere else. `wallDistance` is deleted and
+ * `wallSpan` survives for the capture label, on the measured ground that a span is
+ * the one quantity the two conventions agree on.
+ *
+ * **What it is NOT, said here because the name invites the stronger reading.** These
+ * are the polygon's BOUNDS. For a rectangle — dragged or not — they are the wall.
+ * For a non-convex preset they are not: the `u` footprint's notch runs from
+ * `z = −depth/2` to `z = 0`, so the wall directly in front of a north-facing lens is
+ * at `z = 0` while this answers `depth/2`. Retiring the ±half pair fixed the
+ * off-centre rectangle, which is the case the app can actually reach by dragging a
+ * wall; it did not make an L, T or U room measurable, and that is a filed item rather
+ * than a silent limitation.
  *
  * The camera is at the world origin, which is the capture rig's premise rather
  * than an assumption of this function's (`slotToWorld` derives every placement
  * from the same origin). So a footprint that does not CONTAIN the origin is a
  * room the rig cannot describe, and this refuses it rather than returning a
  * negative distance that would project as a mirror image.
+ *
+ * **That refusal is REACHABLE from the app, and since § 44 it decides whether a wall
+ * piece is measured at all rather than only whether a gate fires — so the trigger is
+ * written down here rather than left to be discovered.** `moveWall` accepts any drag
+ * whose resulting bounding box stays inside `ROOM_SIDE_M`; nothing there checks that the
+ * lens is still inside the polygon. Measured on a 6 × 6 rect, dragging the north wall
+ * inward: −2 m leaves `z ∈ [−1, 3]` and answers 1.00, while **−3 m leaves `z ∈ [0, 3]`,
+ * is accepted, and answers null** — as does −5 m, at a legal 1.0 m depth. Every caller
+ * then takes its no-frame branch at once: both floor-line solvers return null (the lens
+ * falls back to `defaultCal`), `placeWallObject` refuses, and the ceiling and floor
+ * bounds go inert. Which is the honest outcome — those photographs were taken from a
+ * point outside the room as it now is — and better than the ±half pair, which answered
+ * `depth/2` about a wall behind the camera. See § 44 in `docs/what-is-still-open.md`;
+ * `docs/visual-check.md` carries it too, because on screen it looks like a re-scan that
+ * did nothing.
  */
 export function wallFrame(slot: CaptureSlot, footprint: Footprint): WallFrame | null {
   if (footprint.length < 3) return null;
@@ -322,15 +399,29 @@ export function wallColumnsAtHeight(
  * the photo measured:
  *
  *     H = D · (sinθ − b·cosθ) / (b·sinθ + cosθ)
+ *
+ * `H` is directly proportional to `D`, so this is the site where the retired
+ * bounding-box distance was most simply wrong: the same dragged north wall
+ * (assumed 3.5 m, true 4) solved a 1.5 m camera as **1.3125 m**, 187 mm low, and
+ * that height then feeds every placement. No cancellation is available here —
+ * this rung is climbed only when the lens is already KNOWN, which is precisely
+ * the case `calibrateFromFloorLine`'s cancellation does not cover.
+ *
+ * Null when the footprint cannot locate the wall, joining the two range refusals
+ * below on the same rule those state: outside the plausible band the floor line
+ * was not the floor line, and the honest answer is "no measurement" rather than a
+ * confident wrong number.
  */
 export function heightFromFloorLine(
   vFloor: number,
   slot: CaptureSlot,
-  room: { width: number; depth: number },
+  footprint: Footprint,
   cal: CameraCal,
 ): number | null {
   if (vFloor <= 0.5 || vFloor >= 0.99) return null;
-  const d = wallDistance(slot, room);
+  const frame = wallFrame(slot, footprint);
+  if (!frame) return null;
+  const d = frame.distance;
   const b = ((0.5 - vFloor) * cal.k) / cal.aspect;
   const tiltRad = tiltOf(cal);
   const c = Math.cos(tiltRad);
@@ -538,7 +629,8 @@ function lateralSpan(
  *
  * **On an ultrawide, every ordinary room has picture beyond the ends of the wall it is
  * photographing**, and what is out there is the RETURN wall. The condition is
- * `wallSpan < 2·tan(hFOV/2) · wallDistance`, which at 106° is `< 2.654 × wallDistance`;
+ * `span < 2·tan(hFOV/2) · distance` over `wallFrame`'s two answers, which at 106° is
+ * `span < 2.654 × distance`;
  * a square room sits at 2.0, so it is always exposed. Measured in a 7 × 6 room: a
  * 700 × 500 print on the north wall, its centre 800 mm from the north-east corner of a
  * 6 × 4 room, is wholly inside the east photo's frame and decodes as an east-wall piece
@@ -608,7 +700,19 @@ function lateralSpan(
  * are not wrong the same way: drag a room's EAST wall out and the north wall's distance is
  * still exactly `depth/2` — the plane is right — while `wallSpan/2` no longer describes how
  * far that wall reaches. Only the bound was wrong, and the excuse described a case that was
- * not this one. Where the plane IS wrong too, the gate declines to fire; see below.
+ * not this one.
+ *
+ * **It had a second half for a commit, and that half is now deleted rather than
+ * satisfied.** Where `wallFrame.distance` and the assumed `wallDistance` disagreed — the
+ * FRAMED wall itself dragged, as opposed to the one opposite — the plane was wrong too, so
+ * the gate went inert rather than refuse on an input it could not check. That was the
+ * honest answer while two conventions existed, and it meant the gate said nothing in
+ * exactly the room it was built for. `placeWallObject` reads this same frame now, so the
+ * condition is `frame.distance !== frame.distance` and there is nothing left to be inert
+ * about: the gate speaks in every room it has a polygon for.
+ * `tests/photo-geometry.test.ts` pins that as the payoff rather than as a deletion — the
+ * return-wall fabrication is REFUSED in a framed-wall-dragged room, where it was accepted
+ * for as long as the two conventions disagreed.
  *
  * **One limitation, stated rather than smoothed: this is only as good as the lens — and
  * both directions are measured, where every earlier version of this paragraph named only
@@ -640,29 +744,15 @@ function lateralSpan(
  * which is not a bound overruling a measurement, the thing the floor exemption above
  * exists to prevent.
  */
-function onFramedSurface(
-  right: number,
-  slot: CaptureSlot,
-  room: { width: number; depth: number; footprint: Footprint },
-): boolean {
-  const frame = wallFrame(slot, room.footprint);
+function onFramedSurface(right: number, slot: CaptureSlot, footprint: Footprint): boolean {
+  const frame = wallFrame(slot, footprint);
   // No frame is no answer, and no answer must not become a refusal: `wallFrame`
   // declines a polygon with fewer than three points, a NaN vertex, or one the lens
   // does not stand inside, and none of those tell us the piece is off the wall.
+  // (`placeWallObject` never reaches this on such a footprint — it has no plane to
+  // invert against and has already returned null — but `placeCeilingObject` does,
+  // because the slab's height still locates its plane.)
   if (!frame) return true;
-  // And the bound may only speak where the PLANE it bounds is trustworthy. The two
-  // disagree exactly when the framed wall — or the one opposite it — has been dragged,
-  // and then `placeWallObject`'s assumed distance is wrong too: a north wall pulled
-  // INWARD makes the decode over-read every lateral offset by `wallDistance / true`,
-  // which clears even an honest bound and would refuse a correct measurement. So the
-  // gate goes inert there and says why, rather than refusing on an input it cannot
-  // check. § 44 is what closes it, by moving the distance to this same frame.
-  //
-  // Exact inequality rather than a tolerance, and that is not brittle: on any room
-  // centred on the lens both sides are the same two divisions of the same numbers, so
-  // they agree bit-for-bit — `tests/wall-sample.test.ts` pins that equivalence, and it
-  // is what makes reading the frame here a NO-OP on every room the harness uses.
-  if (frame.distance !== wallDistance(slot, room)) return true;
   // The wall's own ends, asymmetric, because a room is not obliged to be centred on
   // the lens: pull a 6 × 6 room's east wall out by a metre and the north wall reaches
   // x = +4 while ±half still says 3.5. Measured before this read the polygon: a
@@ -767,7 +857,7 @@ function floorFromRound(
 export function placeFloorObject(
   box: [number, number, number, number],
   slot: CaptureSlot,
-  room: { width: number; depth: number },
+  footprint: Footprint,
   cal: CameraCal,
   foot: PieceFootprint,
 ): GeoPlacement | null {
@@ -788,10 +878,19 @@ export function placeFloorObject(
   // that is the clamp this function has always had, and it earns its keep on the
   // lens: an assumed-narrow lens over-reads distance, the clamp pulls it back, and
   // the width is re-derived with it so the two agree (see the `defaultCal` pair in
-  // `tests/photo-geometry.test.ts`). Unchanged, and it is the only clamp that may
-  // touch a measurement.
-  const wallD = wallDistance(slot, room);
-  near = Math.min(Math.max(near, 0.3), wallD);
+  // `tests/photo-geometry.test.ts`). It is the only clamp that may touch a
+  // measurement.
+  //
+  // Where the plaster IS is the footprint's answer, not `depth/2`. And when the
+  // footprint has no answer the BOUND goes inert while the 0.3 m floor stays —
+  // which is this function's own two-clamp rule read one level up. An unlocatable
+  // wall is not evidence about a measured face, and substituting the bounding box
+  // for it would be a bound overruling a measurement on an input nothing checked.
+  // The lower guard is arithmetic (a face at the lens mirrors the piece) and owes
+  // the room nothing, so it is not conditional.
+  const frame = wallFrame(slot, footprint);
+  near = Math.max(near, 0.3);
+  if (frame) near = Math.min(near, frame.distance);
 
   const solved = foot.round
     ? floorFromRound(box, near, cal)
@@ -810,8 +909,11 @@ export function placeFloorObject(
   // came back 1.925 m, exact position traded for an inexact size, an assumption
   // corrupting an observation. Measured, not reasoned: that is what the first
   // version of this did.
+  //
+  // Same inertness as the near clamp above, and for the same reason: this bound is
+  // the wall's real distance or it is nothing.
   const half = (foot.round ? widthM : depthM) / 2;
-  const d = Math.min(solved.d, Math.max(0.3, wallD - half));
+  const d = frame ? Math.min(solved.d, Math.max(0.3, frame.distance - half)) : solved.d;
 
   const { x, z, yaw } = slotToWorld(slot, d, right);
   return {
@@ -867,14 +969,22 @@ export function placeFloorObject(
 export function placeWallObject(
   box: [number, number, number, number],
   slot: CaptureSlot,
-  /** `footprint` is required because `onFramedSurface` bounds the decoded offset by the
-   *  wall's REAL ends; width/depth still give the assumed plane, which is § 44's to move. */
-  room: { width: number; depth: number; footprint: Footprint },
+  /** The polygon, and nothing else — the plane this inverts against and the ends
+   *  `onFramedSurface` bounds it by are one answer from one function now, so they
+   *  cannot describe two different walls. A width/depth cannot be passed here. */
+  footprint: Footprint,
   cal: CameraCal,
   foot: PieceFootprint,
 ): GeoPlacement | null {
   const [bx, by, bw, bh] = box;
-  const d = wallDistance(slot, room);
+  // The assumed plane. Null is a refusal rather than a fallback, and it costs the
+  // MEASUREMENT and not the piece: `geoRefine` hands the detection back untouched,
+  // `placementForSlot` arranges it at its catalogue size, and `lib/label-repair.ts`
+  // reads that object identity as unmeasurable. There is no honest substitute for a
+  // plane — the bounding box was the substitute, and it is what this retired.
+  const frame = wallFrame(slot, footprint);
+  if (!frame) return null;
+  const d = frame.distance;
   const uC = bx + bw / 2;
   const height = heightOf(cal);
   // The near face may not reach the lens. Belt and braces rather than a behaviour:
@@ -903,7 +1013,7 @@ export function placeWallObject(
   // A piece whose centre decodes past the ends of the framed wall is not on the framed
   // wall — it is on the RETURN wall, which an ultrawide sees in every ordinary room. See
   // `onFramedSurface`: refused rather than clamped, and it is the SIZE that was wrong.
-  if (!onFramedSurface(right, slot, room)) return null;
+  if (!onFramedSurface(right, slot, footprint)) return null;
 
   // The body's centre: its back is on the plaster, so it sits half a depth in.
   const { x, z, yaw } = slotToWorld(slot, d - depthM / 2, right);
@@ -978,7 +1088,11 @@ export type GeoCeilingPlacement = Omit<GeoPlacement, 'heightMM'>;
 export function placeCeilingObject(
   box: [number, number, number, number],
   slot: CaptureSlot,
-  room: { width: number; depth: number; height: number; footprint: Footprint },
+  /** `height` locates the slab, `footprint` the walls. The one placer that still
+   *  needs a scalar off the room — and it is the CEILING's height, not a lateral
+   *  half-dimension, so it is a measurement the user typed rather than a bounding
+   *  box standing in for a polygon. */
+  room: { height: number; footprint: Footprint },
   cal: CameraCal,
 ): GeoCeilingPlacement | null {
   const [bx, by, bw, bh] = box;
@@ -997,7 +1111,14 @@ export function placeCeilingObject(
   // Nothing on this room's ceiling is beyond the wall being photographed, so a ray
   // that only reaches the ceiling plane out there never touched the ceiling at all.
   // REFUSED, not clamped — see the note above.
-  if (d > wallDistance(slot, room)) return null;
+  //
+  // Both of this function's gates are BOUNDS on an assumption, not the assumption
+  // itself: the slab's plane comes from `room.height`, which no footprint can move.
+  // So a polygon that cannot say where the walls are leaves them INERT rather than
+  // refusing — the same answer `onFramedSurface` gives one axis over, and the
+  // opposite of `placeWallObject`'s, which has no plane at all without a frame.
+  const frame = wallFrame(slot, room.footprint);
+  if (frame && d > frame.distance) return null;
 
   const right = t * mid.right;
   // And nothing on this room's ceiling is outside its walls SIDEWAYS either, which is
@@ -1007,7 +1128,7 @@ export function placeCeilingObject(
   // 3.0 m gate above, so that one never sees it — 571 mm outside the room laterally, and
   // is read 386 mm wide against a true 300. Printed by `tests/photo-geometry.test.ts`,
   // in the room those fixtures actually use. See `onFramedSurface`.
-  if (!onFramedSurface(right, slot, room)) return null;
+  if (!onFramedSurface(right, slot, room.footprint)) return null;
   const widthM = t * (tanX(bx + bw, cal) - tanX(bx, cal));
   if (widthM <= 0.01) return null;
 
