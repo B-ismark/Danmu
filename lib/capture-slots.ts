@@ -22,10 +22,12 @@
 // shows it.
 //
 // (This paragraph named `wallDistance` until § 44 deleted that function. The axis
-// convention is unchanged — `wallFrame` reads the polygon's bounds where the ±half
-// pair read `depth/2` — so only the NAME went stale, which is how a stake paragraph
-// goes wrong without going false: the next reader greps the name to check the claim
-// and finds nothing to check it against.)
+// convention above is the one a RECTANGLE has, and it is what the ±half pair read as
+// `depth/2` / `width/2`; `wallFrame` now names the wall the lens is actually looking
+// at, which in a `t` or `u` is not on the bounding box at all. So the stake is the
+// same and larger: file a photo of the long wall under a short one and the distance
+// is wrong, and in a non-convex room the distance can be wrong by 2.27× before the
+// slot is even in question.)
 //
 // THE LADDER, strongest rung first:
 //
@@ -51,9 +53,10 @@
 // reason, and no bearing. The one signal that does survive is weaker than it
 // sounds: in a non-square room the long wall subtends a visibly wider angle than
 // the short one, so the wall corners would separate {n,s} from {e,w} — an axis,
-// never a direction, and only after finding two corners. `wallSpan` in
-// `lib/photo-geometry.ts` exposes the same fact as a number the user can check
-// against their own photo, which is cheaper and honest.
+// never a direction, and only after finding two corners. The capture screen's
+// wall-length label exposes the same fact as a number the user can check against
+// their own photo, which is cheaper and honest — read off `wallFrame`'s two ends,
+// since `wallSpan` was a bounding-box side and is deleted.
 
 import type { CaptureSlot } from './storage';
 import { circularMeanDeg, circularSpreadDeg } from './bearings';
