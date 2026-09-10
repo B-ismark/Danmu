@@ -236,6 +236,30 @@ backend, no account. The 3D studio *is* the product.
    be, on screen, for the user to check. It reads `wallFrame`'s two ends, not a
    bounding-box side: the number a person checks their own photograph against is the
    last place in the app that should be describing a different room.
+   **That sentence was true of the code and false of the app for two merged commits, and
+   how it survived is the part worth keeping.** § 44b repointed `spanLabel` at
+   `wallFrame(slot, roomFootprint(room))` and never looked at the `room` it was handed:
+   the capture screen held `{ width, depth }` — a bounding box — and `roomFootprint` took
+   `layoutId` and `footprint` as OPTIONAL, so that object type-checked and fell back to
+   `'rect'` in silence. Every preset was measured as a rectangle on that screen, and a
+   T-Shape's stem wall went on being announced as **4.70 m against a real 2.58**, under
+   the instruction *"Check each photo against the wall length beside it."* **It is § 44's
+   own lesson defeated at a boundary** — that commit narrowed five signatures so a
+   bounding box would be *unpassable rather than merely unread*, and one optional
+   parameter hands the hole straight back. `layoutId` is a **required key of
+   possibly-undefined value** now, so `tsc` refuses a caller that has not thought about
+   the outline while `?? 'rect'` still absorbs a genuinely old record; the compiler found
+   exactly one such caller and it was the defect.
+   Three things about the discovery, each a rule this file already states, arriving
+   together. **A comment certified it** — the call site read *"width and depth are what
+   make 'Wall 2 · the 4.2 m wall' possible"*, true of the deleted `wallSpan` and left
+   standing to reassure the next reader. **Nothing could have caught it below the
+   browser**, because the defect was a screen handing a correct function the wrong
+   argument: the suite's round trip, the byte-identical baselines and both merges' green
+   CI are all consistent with it. And **it was found by pressing the buttons** —
+   `scripts/capture-route-probe.mjs`, whose A/B printed the same 12/4 on the build before
+   § 44b and the build after, where the geometry one screen later moved 3.64×. A fix
+   nobody walks is a fix whose reachability is a hypothesis.
    **And there is now a SECOND, independent reason, measured rather than argued —
    which matters because the first one does not cover every use.** The natural next
    proposal is not a bearing at all but the magnitude of the off-square angle ψ, to
