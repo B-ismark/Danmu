@@ -1196,7 +1196,7 @@ than assumed: the `detect-pipeline` baseline table came out byte-identical and t
 off-square sweep diffed clean. What no sweep reaches is whether the piece the user gets is
 now one picture at its real size.
 
-### A room whose walls you DRAGGED, then re-scanned — sizes should stop being ~13% small
+### A room whose walls you DRAGGED, then re-scanned — sizes should stop being ~13% small — merged to `main` in `91f1f6a` (PR #150)
 
 **Where to click.** Build a room from photos (the capture flow). Open it, drag one wall —
 3D wall handle, the plan view, or Inspector's ±10 cm buttons — far enough to notice, say
@@ -1242,19 +1242,19 @@ the bug this item is watching for.
   nothing, which is the first bullet above, so keep the drag modest — a metre on a 6 m
   wall is plenty to see the fix. Filed in § 44.
 
-**Where it rides.** `7607794`, draft PR #150. `wallDistance` is deleted; all five sites
-read `wallFrame`. Gates on that commit: typecheck · lint · build clean of
-`ESLint: Invalid Options` · **147 files, 2748 passed / 5 expected fail**, with the
-`detect-pipeline` and `off-square-cost` baseline tables **byte-identical** to `main` —
-which is the proof the change was a no-op on every centred room, and exactly why the
-off-centre case is the one that needs eyes.
+**Where it rides.** `91f1f6a` on `main`. `wallDistance` is deleted; all five sites read
+`wallFrame`, and the change was a verified no-op on every centred room — the
+`detect-pipeline` and `off-square-cost` baseline tables came out byte-identical, which is
+exactly why the off-centre case is the one that needs eyes. The gate counts are gone: they
+were measured on two commits a squash has replaced with one.
 
-*(This entry named the BRANCH and gave no count until a review of its own commit caught
-it — against this file's own rule twelve hundred lines up, that the artifact is a commit
-and never "the tree", and two commits after PR #149 re-pointed six items off that same
-branch name for exactly this reason. A branch moves; this one has already been restarted
-once. The rule is easy to keep while writing about someone else's work and easy to drop
-while writing about your own.)*
+*(This entry named the BRANCH, and gave no count to attach to it, until a review of its own
+commit caught it — against this file's own rule twelve hundred lines up, that the artifact
+is a commit and never "the tree", and two commits after PR #149 re-pointed six items off
+that same branch name for exactly this reason. A branch moves; that one was restarted the
+same day. The rule turns out to be easy to keep while writing about someone else's work and
+easy to drop while writing about your own, which is the only reason this parenthesis
+survives the re-point.)*
 
 ### Pressing Shuffle moves the button out from under the pointer
 
