@@ -4,15 +4,23 @@ import {
   placeCeilingObject,
   placeFloorObject,
   placeWallObject,
-  wallDistance,
+  wallFrame,
   type CameraCal,
 } from '@/lib/photo-geometry';
 import type { Detection } from '@/lib/detection';
+import type { CaptureSlot } from '@/lib/storage';
 import { anchorFor } from '@/lib/physics';
 import { CATEGORIES, SHAPES, defaultAxisFor, defaultDepthFor, isRoundPart, type Category } from '@/lib/scene-spec';
 import { bboxOfWallSolid } from './helpers/project';
 import { dimRangeFor } from '@/lib/dimension-ranges';
-import { footprintForLayout } from '@/lib/footprint';
+import { footprintForLayout, type Footprint } from '@/lib/footprint';
+
+/** The framed wall's distance, read from the polygon. `wallDistance` — the
+ *  `depth/2` / `width/2` pair every placer used to measure from — is deleted; this
+ *  is the one description of the framed wall there is now, and a test asking for it
+ *  asks the same function the placers do. */
+const wallD = (slot: CaptureSlot, room: { footprint: Footprint }) =>
+  wallFrame(slot, room.footprint)!.distance;
 
 // The five contracts below are the ones every later phase of the detection plan
 // has to keep. They deliberately do NOT re-test the projection maths — that is
@@ -62,7 +70,7 @@ describe('geoRefine', () => {
     // 950 mm — both pinned on the next two lines so the literal cannot rot.
     expect(defaultDepthFor('sofa', 'sofa')).toBe(950);
     expect(isRoundPart('sofa')).toBe(false);
-    const g = placeFloorObject(FLOOR_BOX, 'n', ROOM, CAL, { depthM: 0.95, round: false });
+    const g = placeFloorObject(FLOOR_BOX, 'n', ROOM.footprint, CAL, { depthM: 0.95, round: false });
     expect(g).not.toBeNull();
 
     const out = geoRefine(d, CALS, ROOM);
@@ -89,8 +97,8 @@ describe('geoRefine', () => {
     // back badly narrow. `plant` is round in the catalogue and `sofa` is not, so
     // the two branches must give different answers for the same box.
     expect(isRoundPart('plant')).toBe(true);
-    const asRound = placeFloorObject(FLOOR_BOX, 'n', ROOM, CAL, { depthM: 0.4, round: true })!;
-    const asBox = placeFloorObject(FLOOR_BOX, 'n', ROOM, CAL, { depthM: 0.4, round: false })!;
+    const asRound = placeFloorObject(FLOOR_BOX, 'n', ROOM.footprint, CAL, { depthM: 0.4, round: true })!;
+    const asBox = placeFloorObject(FLOOR_BOX, 'n', ROOM.footprint, CAL, { depthM: 0.4, round: false })!;
     expect(asRound.widthMM).not.toBe(asBox.widthMM);
 
     const out = geoRefine(det({ category: 'plant', shape: 'plant', slot: 'n' }), CALS, ROOM);
@@ -102,8 +110,8 @@ describe('geoRefine', () => {
   it('measures a wall-anchored detection through placeWallObject, not the floor one', () => {
     const d = det({ category: 'painting', shape: 'painting', slot: 'n', box: WALL_BOX });
     expect(defaultDepthFor('painting', 'painting')).toBe(30);
-    const wall = placeWallObject(WALL_BOX, 'n', ROOM, CAL, { depthM: 0.03, round: false });
-    const floor = placeFloorObject(WALL_BOX, 'n', ROOM, CAL, { depthM: 0.03 });
+    const wall = placeWallObject(WALL_BOX, 'n', ROOM.footprint, CAL, { depthM: 0.03, round: false });
+    const floor = placeFloorObject(WALL_BOX, 'n', ROOM.footprint, CAL, { depthM: 0.03 });
     expect(wall).not.toBeNull();
     expect(floor).not.toBeNull(); // both are available, so the next line has teeth
 
@@ -164,7 +172,7 @@ describe('geoRefine', () => {
     const out = geoRefine(d, CALS, ROOM);
     expect(out).not.toBe(d);
     expect(out.position).toEqual(
-      placeWallObject(WALL_BOX, 'n', ROOM, CAL, { depthM: defaultDepthFor('curtain', 'fan') / 1000, round: false })!.position,
+      placeWallObject(WALL_BOX, 'n', ROOM.footprint, CAL, { depthM: defaultDepthFor('curtain', 'fan') / 1000, round: false })!.position,
     );
   });
 
@@ -176,7 +184,7 @@ describe('geoRefine', () => {
   });
 
   it('keeps the AI yaw when there is one, and takes the geometric yaw otherwise', () => {
-    const g = placeFloorObject(FLOOR_BOX, 'w', ROOM, CAL, { depthM: 0.95, round: false })!;
+    const g = placeFloorObject(FLOOR_BOX, 'w', ROOM.footprint, CAL, { depthM: 0.95, round: false })!;
     expect(g.yaw).not.toBe(0); // slot 'w' faces +X, so 0 is a distinguishable value
 
     expect(geoRefine(det({ category: 'sofa', slot: 'w', yaw: 1.23 }), CALS, ROOM).yaw).toBe(1.23);
@@ -357,7 +365,7 @@ describe('a refused placement', () => {
     category: 'painting',
     shape: 'painting',
     slot: view,
-    box: bboxOfWallSolid('n', view, 2.2, 1.5, wallDistance('n', ROOM), 0.7, 0.5, 0.03, W),
+    box: bboxOfWallSolid('n', view, 2.2, 1.5, wallD('n', ROOM), 0.7, 0.5, 0.03, W),
   });
 
   it('keeps the detection and drops only the measurement', () => {

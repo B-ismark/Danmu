@@ -183,14 +183,14 @@ async function buildCals(entries: SlotEntry[], room: RoomDims): Promise<CalMap> 
     if (hfov !== null) {
       let cal = calFromHfov(hfov, aspect, view);
       if (view.height === undefined && vFloor !== null) {
-        const solved = heightFromFloorLine(vFloor, e.slot, room, cal);
+        const solved = heightFromFloorLine(vFloor, e.slot, room.footprint, cal);
         if (solved !== null) cal = { ...cal, height: solved };
       }
       map[e.slot] = cal;
       continue;
     }
     map[e.slot] =
-      (vFloor !== null ? calibrateFromFloorLine(vFloor, e.slot, room, aspect, view) : null) ?? {
+      (vFloor !== null ? calibrateFromFloorLine(vFloor, e.slot, room.footprint, aspect, view) : null) ?? {
         ...defaultCal(aspect),
         ...view,
       };

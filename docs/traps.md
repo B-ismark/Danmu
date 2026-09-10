@@ -271,6 +271,25 @@ inconvenience.
 itself**. A predicate checked against an inline `bandCost(...) === 0` elsewhere in the
 same module passes when the predicate is replaced by `return true`.
 
+**Symptom: a mutation of a GUARD survives, and the assertion for that guard is right
+there in a passing test, reading correctly.**
+Third shape in this family, and distinct from both above: the assertion is sound, the
+fixture is sound *for what its test is about*, and the two are **positioned** so that no
+implementation could fail it. It happens when an assertion is APPENDED to an existing
+test rather than given one — the host fixture was chosen for a different question, so it
+sits nowhere near the boundary the new line names.
+→ Before appending an assertion about a bound, print the value it is bounding. A guard at
+0.3 asserted as `toBeGreaterThan(0.3)` on a fixture that decodes at **1.4** is a sentence
+about the guard and a test of nothing; the fix is a second test on an input where the
+guard actually bites, found by sweeping for one rather than by reasoning about one. The
+tell in the diff is an assertion whose constant appears nowhere in its own fixture's
+setup.
+*(Cost: twice, both inside § 44's own thread. The coverage counters written as floors
+`> 0` where `docs/traps.md` already asked for literals — 21 of 60 rows could vanish
+green. Then `expect(distance).toBeGreaterThan(0.3)` appended to a test whose piece is at
+1.4 m, which let the floor placer's unconditional 0.3 m guard be moved inside a
+conditional and survive a full run. Review found neither; mutation found both.)*
+
 **Symptom: you revert your own fix and the test you just wrote for it stays green.**
 The assertion is usually sound; the **fixture** cannot reach the defect. A hand-built
 object is missing a piece of state that every real producer sets, so the branch with the

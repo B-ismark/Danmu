@@ -29,7 +29,6 @@ import {
   calFromHfov,
   defaultCal,
   wallColumnsAtHeight,
-  wallDistance,
   wallFrame,
   wallRowAtHeight,
   wallSpan,
@@ -45,6 +44,13 @@ import {
 } from '@/lib/footprint';
 import { ALONG, project } from './helpers/project';
 import type { CaptureSlot } from '@/lib/storage';
+
+/** The framed wall's distance, read from the polygon. `wallDistance` — the
+ *  `depth/2` / `width/2` pair every placer used to measure from — is deleted; this
+ *  is the one description of the framed wall there is now, and a test asking for it
+ *  asks the same function the placers do. */
+const wallD = (slot: CaptureSlot, room: { footprint: Footprint }) =>
+  wallFrame(slot, room.footprint)!.distance;
 
 const ROOM = { width: 5.6, depth: 4.2, height: 2.5 };
 const RECT = footprintForLayout('rect', ROOM.width, ROOM.depth);
@@ -87,7 +93,7 @@ describe('wallFrame — the footprint\'s bounds, not ±width/2', () => {
     // nothing noticed for as long as no wall had been dragged.
     for (const slot of SLOT_ORDER) {
       const frame = wallFrame(slot, RECT)!;
-      expect(frame.distance).toBeCloseTo(wallDistance(slot, ROOM), 12);
+      expect(frame.distance).toBeCloseTo(wallD(slot, { footprint: RECT }), 12);
       expect(frame.right - frame.left).toBeCloseTo(wallSpan(slot, ROOM), 12);
       expect(frame.left).toBeCloseTo(-frame.right, 12);
     }

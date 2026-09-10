@@ -99,7 +99,8 @@ backend, no account. The 3D studio *is* the product.
    to 1e-9 and that was a property of the fixture; the same shape as `polygonCentroid`
    passing on rectangles, and as a check that cannot fail. And **a clamp may bound an
    assumption or a measurement, never both with one line**: the obvious single clamp
-   (`near ≤ wallDistance − depth`) let a catalogue depth 100 mm too generous shrink a
+   (`near ≤ wallDistance − depth`, when that was still the wall's assumed distance) let a
+   catalogue depth 100 mm too generous shrink a
    correctly MEASURED 2.0 m sofa to 1.925 m — an exact size traded for an exact position,
    an assumption corrupting an observation. The near face is measured and is bounded by
    the plaster; the centre is measurement plus assumption and gets its own bound.
@@ -108,8 +109,9 @@ backend, no account. The 3D studio *is* the product.
    wall and ceiling placers assume a plane rather than measuring it, and neither checked
    the decoded lateral offset against the room — so a ray that left the room sideways was
    inverted against a plane it never touched. On an ultrawide **every ordinary room has
-   picture beyond the ends of the wall being photographed** (`wallSpan < 2·tan(hFOV/2)·
-   wallDistance`; a square room sits at 2.0 against 2.654 at 106°, so it always is), and
+   picture beyond the ends of the wall being photographed** (`span < 2·tan(hFOV/2)·distance`
+   over `wallFrame`'s two answers; a square room sits at 2.0 against 2.654 at 106°, so it
+   always is), and
    what is out there is the RETURN wall: a 700 × 500 print 800 mm from a corner decodes
    onto the neighbouring wall at **+28% wide and +61% tall**, larger than the air
    conditioner above, and a 300 mm vent read as a ceiling piece **passed the ceiling
@@ -129,9 +131,34 @@ backend, no account. The 3D studio *is* the product.
    discards a measurement is worse than the fabrication it was built to catch**, and it took
    an off-centre fixture to see, because in a room centred on the lens the two are the same
    number. Hence the second half of the rule: **a bound may falsify an assumption only where
-   the assumption's own inputs are trustworthy.** Where `wallFrame.distance` and
-   `wallDistance` disagree — the framed wall itself dragged — the gate goes INERT rather
-   than refusing on an input it cannot check, and § 44 is what closes that.
+   the assumption's own inputs are trustworthy.** That rule bought the gate an exemption
+   for a commit — where `wallFrame.distance` and the assumed `wallDistance` disagreed, the
+   framed wall itself having been dragged, it went INERT rather than refuse on an input it
+   could not check — and **the exemption is now deleted, because the untrustworthy input
+   was.** `wallDistance` and `wallSpan` were the ±half pair, `depth/2` and `width/2`, and
+   five sites measured from them: both floor-line solvers, all three placers. They read
+   `wallFrame` now and the pair is **gone**, so the gate's condition compares the frame
+   with itself and it speaks in every room it has a polygon for.
+   Three things that migration taught, each measured by calling the functions rather than
+   re-deriving them. **A wrong shared assumption can CANCEL, and a cancellation is a trap
+   rather than a reprieve:** `calibrateFromFloorLine` solves `k ∝ 1/d` from the same
+   assumed distance the placers then multiply back by, so on the floor-line path a dragged
+   room's wall sizes were already right (699 × 499 for a true 700 × 500) while the distance
+   was 500 mm out — and migrating either half alone breaks it, +14% one way and −13% the
+   other. Nothing on the EXIF or vanishing-point path ever had it, `k` being known
+   independently, so there every wall piece was simply 13% wrong. **Which is why all five
+   moved in one commit**, and why "one mechanism per commit" is about the mechanism and not
+   the file count. Second, the answer to "what does a site do when the polygon cannot
+   answer" is not one answer but **three, by role**: a PREMISE returns null (there is no
+   honest substitute for a plane — the bounding box WAS the substitute), a GATE goes inert,
+   and a CLAMP goes inert while its arithmetic guard stays. Third, **retiring a convention
+   means deleting it, not merely ceasing to call it**: `wallDistance`'s deletability is what
+   proves no sixth site was left behind, and narrowing the five signatures to a `Footprint`
+   is what makes a bounding box unpassable rather than merely unread.
+   What it did NOT buy: `wallFrame` reads the polygon's **bounds**, so this fixed the
+   off-centre RECTANGLE — the case a wall drag plus Re-scan actually reaches — and left an
+   L, T or U measured to its box. A `u`'s notch means the wall in front of a north-facing
+   lens is at `z = 0` while both conventions answer `depth/2`. Filed, not smoothed.
    **Refusing is not deleting**, which is what made refuse-over-clamp decidable: `geoRefine`
    hands a refused detection back unchanged, so the piece still appears. Three claims that
    sentence used to carry, each written from reasoning and each disproved by measurement:
@@ -151,9 +178,9 @@ backend, no account. The 3D studio *is* the product.
    literals `docs/traps.md` asks for.
    **Which wall a photo is, is code's answer now too** (`lib/capture-slots.ts`),
    and it belongs to this rule because a wrong slot is a wrong room:
-   `wallDistance` reads n/s at `depth/2` and e/w at `width/2`, so a photo of the
-   long wall filed under a short one is measured from the wrong distance and every
-   size taken off it is wrong. So it is a **ladder that names its rung** — EXIF
+   the framed wall's distance is read n/s across the depth and e/w across the width, so a
+   photo of the long wall filed under a short one is measured from the wrong distance and
+   every size taken off it is wrong. So it is a **ladder that names its rung** — EXIF
    compass bearing, EXIF shutter time, arrival order, the user — rather than a
    guess in an answer's clothes. **Rung one almost never fires, and that is
    measured, not feared:** run against four real photographs of a real bedroom off a

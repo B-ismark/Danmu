@@ -1196,6 +1196,48 @@ than assumed: the `detect-pipeline` baseline table came out byte-identical and t
 off-square sweep diffed clean. What no sweep reaches is whether the piece the user gets is
 now one picture at its real size.
 
+### A room whose walls you DRAGGED, then re-scanned — sizes should stop being ~13% small
+
+**Where to click.** Build a room from photos (the capture flow). Open it, drag one wall —
+3D wall handle, the plan view, or Inspector's ±10 cm buttons — far enough to notice, say
+half a metre or a metre. Then left rail → **Room** → the **Re-scan** button in the section
+header (the circular-arrow glyph), which takes you back to `/onboarding/detect` and re-runs
+the geometry against the room you have just reshaped. Compare the wall-mounted pieces — a
+TV, a picture, a window — against the same room before the drag.
+
+**What wrong looks like.** Wall pieces coming back noticeably SMALLER than they should be,
+and floor pieces sitting off their wall. Every plane, bound and clamp in the geometry used
+to be measured from `depth/2` — the room's bounding box — and dragging one wall makes that
+the wrong number for both walls on that axis. Measured, on a north wall dragged out a
+metre: a 700 × 500 print decoded **611 × 437**, and a sofa was pulled 500 mm off its own
+wall.
+
+**Why a person is needed for a fix that is exact in the harness.** Two reasons, and the
+second is the real one.
+
+· The suite's proof is a round trip: project a piece with an independent camera model,
+  invert it with the placer, require the truth back. That proves the arithmetic and says
+  nothing about whether the room the app rebuilt *looks like* the room. Only the drag →
+  re-scan → look loop does.
+· **The re-scan route itself has never been walked with a reshaped room.** It exists —
+  `PartTree`'s header action is an unconditional link, and `RoomSync` deliberately does
+  not pin the scene of a reshaped room that still has photos, so that re-scan keeps
+  working — but that combination was read out of the code, not exercised. If the button
+  silently does nothing on such a room, the fix is real and unreachable, and no test here
+  covers the navigation.
+
+**What would NOT be a bug.** An **L, T or U** room still measuring to its bounding box.
+That is a separate and larger item (a `u`'s real north wall is at the notch, not at
+`depth/2`) and is filed in `docs/what-is-still-open.md` § 44, not fixed. If you want to
+see the fix work, drag a wall of a **rect** room.
+
+**Where it rides.** Branch `claude/amazing-dijkstra-d0am9g`, draft PR for § 44.
+`wallDistance` is deleted; all five sites read `wallFrame`. Gates on that branch:
+typecheck · lint · build clean · full suite green, with the `detect-pipeline` and
+`off-square-cost` baseline tables **byte-identical** to `main` — which is the proof the
+change was a no-op on every centred room, and exactly why the off-centre case is the one
+that needs eyes.
+
 ### Pressing Shuffle moves the button out from under the pointer
 
 *Filed by `rails` on 2026-09-05 from a peer's browser measurement during PR #115's review.
