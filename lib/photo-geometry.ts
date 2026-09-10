@@ -28,7 +28,7 @@
 // +Y up, +Z toward the South wall. Slot cameras: n looks −Z, s +Z, e +X, w −X.
 
 import type { CaptureSlot } from './storage';
-import { footprintBounds, type Footprint } from './footprint';
+import { wallOutwardNormal, type Footprint } from './footprint';
 import {
   calibrateFromSegments,
   detectSegments,
@@ -80,44 +80,6 @@ export type CameraView = { height?: number; tiltRad?: number };
 
 const heightOf = (cal: CameraCal) => cal.height ?? CAM_HEIGHT;
 const tiltOf = (cal: CameraCal) => cal.tiltRad ?? 0;
-
-/**
- * How wide the wall in this slot is. `slotToWorld` puts n and s across the room's
- * width and e and w across its depth.
- *
- * **This used to have a twin, `wallDistance`, and the twin is deleted.** It
- * answered "how far is the framed wall" as `depth/2` / `width/2`, and every
- * measurement in this module was taken from it — which is the ±width/2 pattern
- * `lib/scene-store.ts`'s `moveWall` warns each of its consumers against in the
- * docblock of the function that creates the off-centre case. `wallFrame` reads the
- * polygon instead, and nothing here can be handed a bounding box any more: the
- * five sites that used the pair take a `Footprint` and could not accept a
- * width/depth if one were offered. See § 44 in `docs/what-is-still-open.md` for
- * the measurement.
- *
- * **This half survives because it was never wrong, and that is worth stating
- * rather than assumed.** `wallFrame`'s `right − left` IS `maxX − minX`, which is
- * exactly what this returns, because `moveWall` re-derives `width` and `depth`
- * from `footprintBounds`. Drag a wall and the SPAN of each wall is still right; it
- * is the DISTANCE and the two ENDS INDIVIDUALLY that move, which is why the
- * surface gate needed `left` and `right` separately and not this number.
- * `tests/photo-geometry.test.ts` pins that equivalence across all four slots and
- * both drag directions rather than leaving it as this paragraph's word.
- *
- * Its one reader is the capture screen's own label — the one check a person can
- * make against their own photograph: a slot whose wall should be 5.6 m wide,
- * holding a picture of a 4.2 m wall, is a set that wants rotating. A person
- * reading that number wants the wall's length either way, so a bbox side and the
- * polygon's span being the same number is what makes the question moot rather
- * than a decision.
- *
- * (The one way the two DO come apart is a hand-edited scene file:
- * `readFootprint` never reconciles the polygon's bounds with the file's own
- * `width`/`depth`. Filed, not handled here.)
- */
-export function wallSpan(slot: CaptureSlot, room: { width: number; depth: number }): number {
-  return slot === 'n' || slot === 's' ? room.width : room.depth;
-}
 
 /**
  * The wall-floor line ties camera height, focal length and tilt together in one
@@ -281,37 +243,88 @@ export function wallRowAtHeight(y: number, d: number, cal: CameraCal): number | 
 export type WallFrame = { distance: number; left: number; right: number };
 
 /**
- * The framed wall's geometry taken from the FOOTPRINT'S BOUNDS, which is the
- * contract `lib/scene-store.ts` states for `moveWall`: *"the room becomes
- * off-centre; width/depth are re-derived from the new bounding box and every
- * downstream consumer reads footprint bounds (not ±width/2)"*.
+ * The framed wall — the wall the lens is actually looking at. Of the walls whose
+ * INNER face is turned toward this slot's camera and which reach the image's centre
+ * column, the nearest one, provided nothing stands between it and the lens.
+ * `distance` is that wall's own distance along the view axis; `left` and `right` are
+ * its two ends on the lens's right axis.
  *
- * **This is the only description of the framed wall in the module now.** There used
- * to be a second one — `wallDistance` / `wallSpan`, the ±half pair — and every
- * measurement was taken from it while this served only the colour sampler and the
- * surface gate. The difference is visible in a room whose walls have been dragged:
- * pull a 1.5 × 5.0 room's east wall out by a metre and the north wall's midpoint
- * moves to x = +0.5 while `±width/2` still centres it on the lens. A sampler asking
- * "which columns of this photo are the north wall" then reads a sixth of the west
- * return wall and calls it north; a placer asking "how far away is it" is told
- * `depth/2` about a wall that is somewhere else. `wallDistance` is deleted and
- * `wallSpan` survives for the capture label, on the measured ground that a span is
- * the one quantity the two conventions agree on.
+ * **It reads the POLYGON, and it used to read the polygon's BOUNDS.** For a
+ * rectangle — dragged off-centre or not — the two describe the same wall, and this
+ * returns bit-for-bit what the bounds returned: same vertices, same subtraction, no
+ * interpolation. `tests/photo-geometry.test.ts` asserts that as an equality between
+ * the two expressions rather than a tolerance, which is what makes the whole
+ * `detect-pipeline` baseline a no-op proof.
  *
- * **What it is NOT, said here because the name invites the stronger reading.** These
- * are the polygon's BOUNDS. For a rectangle — dragged or not — they are the wall.
- * For a non-convex preset they are not: the `u` footprint's notch runs from
- * `z = −depth/2` to `z = 0`, so the wall directly in front of a north-facing lens is
- * at `z = 0` while this answers `depth/2`. Retiring the ±half pair fixed the
- * off-centre rectangle, which is the case the app can actually reach by dragging a
- * wall; it did not make an L, T or U room measurable, and that is a filed item rather
- * than a silent limitation.
+ * For an L, T or U they are not the same wall, and the gap is not small. Measured at
+ * the shipping preset dimensions (`app/onboarding/layout-pick`, one press from the
+ * capture flow), printed on every green run rather than quoted here from a scratch
+ * script: a `t`'s stem wall is **1.21 m** from the lens where its bounding box says
+ * **2.75 m**, so every size taken off that photograph came back **2.27× too large** —
+ * 1614 × 1153 mm for a 700 × 500 print, and the ratio is dimension-independent —
+ * `(w/2) ÷ 0.22w` is 2.2727 for EVERY `t` room, not just the one measured. The `l`
+ * keeps its distances, and that is structural rather than luck: its cut-away corner
+ * starts at 0.42 of each side and 0.42 < 0.5, so it misses both view axes for every
+ * `w` and `d` (0 of 80 combinations deviate). What it loses is its wall ENDS, the same
+ * defect one field over: the surface gate was handed 2.0–3.1 m of picture that is
+ * return wall and told it was the framed one.
  *
- * The camera is at the world origin, which is the capture rig's premise rather
- * than an assumption of this function's (`slotToWorld` derives every placement
- * from the same origin). So a footprint that does not CONTAIN the origin is a
- * room the rig cannot describe, and this refuses it rather than returning a
- * negative distance that would project as a mirror image.
+ * **The tally, recounted, because the first version of this passage flattered it.** It
+ * said "three walls of sixteen had the wrong distance and five more the wrong ends",
+ * which is wrong three ways. The presets have **twenty** walls, not sixteen — `open`
+ * was in the table and out of the denominator. **Two** had the wrong distance (`t` east
+ * and west), with a third having no wall at all (`u` north, where the box claimed
+ * 2.500 m). And the five with the wrong ends are five in TOTAL, two of them those same
+ * two, so three of them are "more". **Six distinct walls of twenty.**
+ *
+ * **Two errors partly cancelled, which is why nothing caught it.** A wall piece's
+ * size goes as `k · d`. A distance 2.27× too far, times the 66° default standing in
+ * for a real ultrawide (`k` 0.49× too small), leaves a 700 mm print reading 790 mm:
+ * +12.9%, indistinguishable from ordinary slop. Learn the lens — EXIF, or the
+ * vanishing-point solve — and the same photograph reads **+130.6%**. So the error
+ * grew as the calibration improved, and a cancellation is a trap rather than a
+ * reprieve for the second time in this module (`calibrateFromFloorLine` has the
+ * other one).
+ *
+ * **The `u` is worse than a wrong number, and the correction is the interesting
+ * part.** This file used to say a `u`'s notch puts the wall in front of a
+ * north-facing lens at `z = 0` while the bounds answer `depth/2`. It does not: the
+ * notch's inner face sits at `−depth/2 + 0.5·depth`, which is **exactly zero for
+ * every `u` room**, so the standardised camera position is ON that wall and there is
+ * no wall ahead of a north-facing lens at all. This answers null there — the honest
+ * answer about a photograph pointed out of a doorway — where the bounds answered
+ * 2.5 m about a wall you would have to leave the room to reach. Its other three views
+ * were never wrong and are not changed, which is worth saying because a first probe of
+ * this claimed otherwise: see the graze paragraph below. What none of it does is fix
+ * the rig — putting the camera at the bounding box's centre is what stands it on a
+ * wall, and that is a filed item rather than a silent one.
+ *
+ * The camera is at the world origin, which is the capture rig's premise rather than
+ * an assumption of this function's (`slotToWorld` derives every placement from the
+ * same origin). A lens outside the room is refused, and the test is not a containment
+ * check on the origin but the plainer question the picture asks: is the ROOM between
+ * the lens and the wall it is being told it photographed. A lens outdoors fails it
+ * because the wall it is standing outside of is in the way. That retires the
+ * `left < 0 && right > 0` this used to apply to the BOUNDS — a test an L whose
+ * cut-away quadrant contains the lens passes on all four axes while the camera stands
+ * outdoors, which was § 44's second filed residual and is closed by the same change
+ * rather than by a second one.
+ *
+ * `wallOutwardNormal` answers which face is which, from the polygon's WINDING and
+ * exactly, for any simple polygon; it is called rather than re-derived here because a
+ * wall-normal rule with two implementations has already cost this repo five walls
+ * once. And it takes a DIRECTION through `worldToLens`, which is sound because the rig
+ * puts the lens at the origin and that map is therefore linear.
+ *
+ * **A wall the view axis merely GRAZES is a candidate and never an obstruction**, and
+ * that distinction is not a nicety — it is the `u` preset. The rig stands the lens
+ * exactly on the notch's inner face, which is where the notch's two side walls end, so
+ * both of them touch the centre column at a single point. Counting either as the wall
+ * ahead names a wall the camera is edge-on to (1.32 m, in a first version of this and
+ * in the scratch probe that measured it); counting either as an obstruction refuses
+ * three walls that are genuinely photographable. Spanning the column at a point blocks
+ * a point of the image, not the column — so a `u`'s east, south and west views measure
+ * exactly what a rectangle's would, and only the north view has no answer.
  *
  * **That refusal is REACHABLE from the app, and since § 44 it decides whether a wall
  * piece is measured at all rather than only whether a gate fires — so the trigger is
@@ -327,29 +340,95 @@ export type WallFrame = { distance: number; left: number; right: number };
  * `depth/2` about a wall behind the camera. See § 44 in `docs/what-is-still-open.md`;
  * `docs/visual-check.md` carries it too, because on screen it looks like a re-scan that
  * did nothing.
+ *
+ * **Two things it still does not answer, both filed with numbers rather than left to
+ * be discovered.** The ends are the hit wall's own two ends, not the part of it the
+ * lens can SEE, so a polygon that occludes its own framed wall would over-report the
+ * span. Measured at **100% visible for `rect`, `l`, `t` and `open`**; the `u` cannot be
+ * asked, because its lens sits exactly ON the notch's inner face and every ray out of it
+ * leaves through a boundary it is already standing on — the same fact the `u` paragraph
+ * above states, rather than a second finding. (A first version of this sentence claimed
+ * all five, on a probe that reported 0% for the `u` and was waved off as an artifact. It
+ * WAS an artifact; asserting the number the artifact did not give is how a docblock
+ * stops being evidence.) And an OBLIQUE wall has no plane perpendicular to the view axis for
+ * the placers to invert against; this returns the crossing itself, which is exact at
+ * the image centre and approximate toward the ends. Only a hand-edited scene file can
+ * make one: `footprintForLayout` is axis-aligned by construction and `offsetWall`
+ * translates an edge along its own normal.
  */
 export function wallFrame(slot: CaptureSlot, footprint: Footprint): WallFrame | null {
   if (footprint.length < 3) return null;
-  // Every coordinate, not the bounds: `footprintBounds` compares with `<` and `>`,
-  // which are both false against NaN, so a NaN vertex is silently SKIPPED and the
-  // bounds come back finite and confident. `lib/dimension-ranges.ts` records NaN as
-  // a live hazard on this path, and this is the shape it arrives in.
+  // Every coordinate, not just the ones that end up bounding: a comparison against
+  // NaN is false in both directions, so a NaN vertex is silently SKIPPED by anything
+  // scanning for extremes and the answer comes back finite and confident.
+  // `lib/dimension-ranges.ts` records NaN as a live hazard on this path, and this is
+  // the shape it arrives in.
   for (const [x, z] of footprint) if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
-  const { minX, maxX, minZ, maxZ } = footprintBounds(footprint);
-  // Distance and lateral extent in the lens's own axes, from `slotToWorld`'s
-  // convention: n looks −Z with image-right +X, s looks +Z with right −X, e looks
-  // +X with right +Z, w looks −X with right −Z.
-  const frame =
-    slot === 'n'
-      ? { distance: -minZ, left: minX, right: maxX }
-      : slot === 's'
-        ? { distance: maxZ, left: -maxX, right: -minX }
-        : slot === 'e'
-          ? { distance: maxX, left: minZ, right: maxZ }
-          : { distance: -minX, left: -maxZ, right: -minZ };
-  if (!(frame.distance > 0)) return null;
-  if (!(frame.left < 0 && frame.right > 0)) return null;
-  return frame;
+  const n = footprint.length;
+  let best: { i: number; distance: number; left: number; right: number } | null = null;
+  // The nearest wall that spans the view column PROPERLY rather than touching it, kept
+  // separately because it answers a different question: not "which wall is this" but
+  // "is anything in the way". A wall the axis merely grazes — one endpoint exactly on
+  // the column — blocks a single point of the image and not the column, so it is a
+  // candidate and never an occluder. That distinction is the `u` preset: the rig stands
+  // the lens exactly on the notch's inner face, where the notch's two side walls end,
+  // and counting either of those as the wall ahead names a wall the camera is edge-on
+  // to. Both of them are grazes.
+  let blocker = Infinity;
+  for (let i = 0; i < n; i++) {
+    const a = worldToLens(slot, footprint[i][0], footprint[i][1]);
+    const b = worldToLens(slot, footprint[(i + 1) % n][0], footprint[(i + 1) % n][1]);
+    const lo = Math.min(a.right, b.right);
+    const hi = Math.max(a.right, b.right);
+    if (lo > 0 || hi < 0) continue; // not on the view column at all
+    // Seen exactly EDGE-ON: both ends on the centre column, so the wall recedes along
+    // the view axis and images as a line rather than a surface. The `u` notch's inner
+    // face is exactly this from its east and west views, so it is a shipped case and
+    // not a degenerate one. Written out even though DELETING IT CHANGES NOTHING — an
+    // equivalent mutant, confirmed: the interpolation below would then divide by the
+    // zero span, and NaN fails the `distance > 0` test one line down. Behaviour that
+    // correct by that route is behaviour resting on an accident, and the next person to
+    // reorder these two lines would not know they had broken anything.
+    if (lo === hi) continue;
+    // Where the wall meets the centre column. An axis-aligned wall's two ends have the
+    // same forward coordinate, so the correction term is exactly zero and this returns
+    // that coordinate BIT-FOR-BIT — which is what lets the no-op proof against the
+    // bounding box be an equality rather than a tolerance, and why there is no separate
+    // flat-wall branch: one was written, and mutating it away changed nothing, because
+    // `x + (0 · y)/z` is `x`. What the bit-identity rests on is reading the wall's own
+    // vertices at all. The general form is the oblique wall of the docblock's last
+    // paragraph, where a crossing is the only answer there is.
+    const distance = a.forward + ((b.forward - a.forward) * -a.right) / (b.right - a.right);
+    if (!(distance > 0)) continue; // behind the lens, or — the `u` — the lens on it
+    if (lo < 0 && hi > 0 && distance < blocker) blocker = distance;
+    // An edge that cannot beat the wall already chosen cannot become it, so it is asked
+    // no further questions. Ordering rather than an optimisation of the answer — and
+    // the reason it earns a line is that the test below is the expensive one:
+    // `wallOutwardNormal` derives the winding from the whole polygon, so asking it per
+    // edge is quadratic in the vertex count. MEASURED rather than feared, at the ceiling
+    // `readFootprint` accepts: 500 calls against a 256-gon take 47 ms, and against the
+    // four-point rectangle every real room has, 0.43 ms. So a whole scan of the worst
+    // importable footprint costs tens of milliseconds — which is why the winding is NOT
+    // hoisted by widening `wallOutwardNormal`'s signature or by writing the
+    // perpendicular out a second time here. One expression of a wall-normal rule has
+    // already cost this repo five walls; a few milliseconds has cost it nothing.
+    if (best && distance >= best.distance) continue;
+    // Are we looking at its INSIDE? `worldToLens` is linear (the rig stands the lens at
+    // the world origin, so there is no translation to subtract), which is what lets a
+    // DIRECTION go through the same function as a point.
+    const [nx, nz] = wallOutwardNormal(footprint, i);
+    if (!(worldToLens(slot, nx, nz).forward > 0)) continue;
+    best = { i, distance, left: lo, right: hi };
+  }
+  if (!best) return null;
+  // Nothing may stand between the lens and the wall it is being told it photographed —
+  // and this is the whole origin test now, in place of a `left < 0 && right > 0` on the
+  // BOUNDS. That version asked whether the lens was inside the BOX, which an L whose
+  // cut-away quadrant contains the lens passes on every axis while standing the camera
+  // outdoors; this asks whether the room is between the two, which is the question. A
+  // lens outside the room fails it because the wall it is outside of is in the way.
+  if (blocker < best.distance) return null;
+  return { distance: best.distance, left: best.left, right: best.right };
 }
 
 /**
@@ -388,6 +467,34 @@ export function wallColumnsAtHeight(
   const right = 0.5 + wall.right / fwd / cal.k;
   if (!Number.isFinite(left) || !Number.isFinite(right)) return null;
   return { left, right };
+}
+
+/**
+ * The inverse of `slotToWorld`: a world XZ point (or direction) in the framing
+ * camera's own axes, `forward` along the view axis and `right` across the image.
+ *
+ * It sits here rather than beside its one caller because the two are one convention
+ * and its inverse, and `tests/photo-geometry.test.ts` round-trips them against each
+ * other. Two independently written per-slot axis tables is the shape rule 3 of
+ * `CLAUDE.md` names — and the sign that would drift is invisible at n and s and
+ * inverts e and w, which is exactly the mistake `lib/geometry.ts` warns about for
+ * part rotations.
+ *
+ * There is no camera offset to subtract: the rig stands the lens at the world
+ * origin, so this is a pure rotation/reflection and a direction may go through it
+ * unchanged. `wallFrame` leans on that for the wall-facing test.
+ */
+function worldToLens(slot: CaptureSlot, x: number, z: number): { forward: number; right: number } {
+  switch (slot) {
+    case 'n':
+      return { forward: -z, right: x };
+    case 's':
+      return { forward: z, right: -x };
+    case 'e':
+      return { forward: x, right: z };
+    case 'w':
+      return { forward: -x, right: -z };
+  }
 }
 
 /**
@@ -623,9 +730,17 @@ function lateralSpan(
  * framed wall's own ends says the ray left the room, which means the plane it was inverted
  * against was the wrong plane and every number taken off it — width, height, position — is
  * void rather than slightly off. Those ends come from the FOOTPRINT (`wallFrame`), never
- * from `wallSpan`: a bounding-box dimension describes the wall only in a room centred on
+ * from a bounding-box side: a box dimension describes the wall only in a room centred on
  * the lens, and reading it as the room's lateral extent is how the first version of this
  * refused a correctly measured print in a room whose wall had been dragged.
+ *
+ * **And they are the ends of a NAMED WALL now, not the ends of the box**, which is where
+ * this gate does most of its work. In an `l` the room's distances are right by luck — the
+ * cut-away corner is off both view axes — so nothing about those photographs looks wrong,
+ * while the box's ends reach 1.97 m past where the east wall stops and 2.52 m past the
+ * south wall's. That window is return wall, and a fabrication landing in it was measured
+ * as though it were on the framed wall: exactly the defect this gate was built for, in the
+ * rooms it could not see. Five of the presets' twenty walls were in that state.
  *
  * **On an ultrawide, every ordinary room has picture beyond the ends of the wall it is
  * photographing**, and what is out there is the RETURN wall. The condition is

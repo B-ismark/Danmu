@@ -155,10 +155,43 @@ backend, no account. The 3D studio *is* the product.
    means deleting it, not merely ceasing to call it**: `wallDistance`'s deletability is what
    proves no sixth site was left behind, and narrowing the five signatures to a `Footprint`
    is what makes a bounding box unpassable rather than merely unread.
-   What it did NOT buy: `wallFrame` reads the polygon's **bounds**, so this fixed the
-   off-centre RECTANGLE — the case a wall drag plus Re-scan actually reaches — and left an
-   L, T or U measured to its box. A `u`'s notch means the wall in front of a north-facing
-   lens is at `z = 0` while both conventions answer `depth/2`. Filed, not smoothed.
+   What it did not buy at the time: `wallFrame` read the polygon's **bounds**, so it fixed
+   the off-centre RECTANGLE and left an L, T or U measured to its box. **That is closed
+   too now, and the follow-up is worth reading for two reasons beyond the fix.** The first
+   is the size of it: `wallFrame` picks the nearest wall whose inner face is turned toward
+   the camera and which reaches the image's centre column, with nothing in between — so a
+   `t`'s stem wall is measured at **1.21 m** where its bounding box said 2.75, and every
+   size taken off that photograph had been **2.27× too large**, 1614 × 1153 mm for a
+   700 × 500 print. Reachability is one press, not a hypothesis: *"Photograph my real room
+   first"* is offered for whichever preset is selected. **Six distinct walls of the
+   presets' twenty were wrong** — two with the wrong DISTANCE, one with no wall in front
+   of the lens at all, and five with the wrong ENDS, two of those being the same two —
+   which is the surface gate being handed 2.0–3.1 m of return wall and told it was the
+   framed one. (Recounted: the first version of this paragraph said "three of sixteen,
+   and five more", which flattered every one of those numbers, `open` having been left out
+   of the denominator. A tally is evidence, so it gets swept rather than eyeballed.)
+   The second is that **the cancellation trap repeated, and this time it made improving the
+   calibration make things worse.** A wall piece's size goes as `k · d`; a distance 2.27×
+   too far times the 66° default standing in for a real ultrawide (`k` 0.49× too small)
+   left a 700 mm print reading 790 mm — +12.9%, ordinary slop. Learn the lens and the same
+   photograph reads +130.6%.
+   And the sentence this passage used to carry about the `u` was **wrong in an instructive
+   way**: it said the notch puts the wall in front of a north-facing lens at `z = 0` while
+   both conventions answer `depth/2`. The notch's inner face is at `−depth/2 + 0.5·depth`,
+   which is **exactly zero for every `u` room** — so the rig stands the lens ON that wall
+   and there is no wall ahead of it at all. That is a mis-placed CAMERA, not a mis-measured
+   wall: the geometry answers null there now, and **putting the camera at the bounding
+   box's centre is still what stands it on a wall in a non-convex room.** Filed, and larger
+   than what was just fixed.
+   Two smaller things fell out of the same change. `wallSpan` is **deleted** — it survived
+   `wallDistance` by a commit on the measured ground that a span is the one quantity both
+   conventions agree on, which is true of a rectangle and false of every preset that cuts a
+   corner, so the capture screen's "this wall should be N m wide" label was describing a
+   different room than the photograph. And the origin test is the honest one at last: it
+   used to ask whether the lens was inside the bounding BOX, which an L whose cut-away
+   quadrant contains the lens passes on all four axes while standing the camera outdoors.
+   The question the picture actually asks is whether the ROOM is between the lens and the
+   wall it is being told it photographed.
    **Refusing is not deleting**, which is what made refuse-over-clamp decidable: `geoRefine`
    hands a refused detection back unchanged, so the piece still appears. Three claims that
    sentence used to carry, each written from reasoning and each disproved by measurement:
@@ -198,14 +231,16 @@ backend, no account. The 3D studio *is* the product.
    the differences. **Do not re-propose vanishing points for the no-bearing case.**
    Every shot frames one wall straight-on from the middle of a box, so the
    wall-parallel VP sits at infinity and the view-axis VP at the principal point in
-   *every* photo: an identical pair carrying no world-axis label. `wallSpan` is
-   the honest version of that idea — the length a wall ought to be, on screen, for
-   the user to check.
+   *every* photo: an identical pair carrying no world-axis label. The capture screen's
+   wall-length label is the honest version of that idea — the length a wall ought to
+   be, on screen, for the user to check. It reads `wallFrame`'s two ends, not a
+   bounding-box side: the number a person checks their own photograph against is the
+   last place in the app that should be describing a different room.
    **And there is now a SECOND, independent reason, measured rather than argued —
    which matters because the first one does not cover every use.** The natural next
    proposal is not a bearing at all but the magnitude of the off-square angle ψ, to
    tell someone their shot is crooked and offer a retake: a number for a person, like
-   `wallSpan`, with nothing downstream measuring from it. That form genuinely does not
+   the wall-length label, with nothing downstream measuring from it. That form genuinely does not
    touch the prohibition above, so it was built and measured, and the answer is still
    no: **a square-on wall capture is the DEGENERATE case for the method.** Verticals
    parallel, wall-parallel family parallel — the squarer the shot, the less there is

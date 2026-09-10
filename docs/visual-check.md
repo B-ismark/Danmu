@@ -1229,10 +1229,10 @@ second is the real one.
 **What would NOT be a bug.** Two things, and the second is the one that will look like
 the bug this item is watching for.
 
-· An **L, T or U** room still measuring to its bounding box. That is a separate and larger
-  item (a `u`'s real north wall is at the notch, not at `depth/2`) and is filed in
-  `docs/what-is-still-open.md` § 44, not fixed. If you want to see the fix work, drag a
-  wall of a **rect** room.
+· ~~An **L, T or U** room still measuring to its bounding box.~~ **That was the first
+  bullet here and it is FIXED** — § 44b, below, which is its own item and wants its own
+  look. A `rect` room is still the cleanest place to see *this* fix, because it isolates
+  the drag from the room shape.
 · **A drag big enough to leave the camera outside the room, where every wall piece comes
   back at its catalogue size.** `moveWall` only checks the resulting box against
   `ROOM_SIDE_M`, so dragging one wall of a 6 × 6 room inward by 3 m or more is accepted and
@@ -1255,6 +1255,62 @@ that same branch name for exactly this reason. A branch moves; that one was rest
 same day. The rule turns out to be easy to keep while writing about someone else's work and
 easy to drop while writing about your own, which is the only reason this parenthesis
 survives the re-point.)*
+
+### An L, T or U room built from photos — the wall pieces were 2.3× too big
+
+**Where to click.** `/onboarding/welcome` → pick a layout → choose **T-Shape** (or
+**U-Shape**), then the second button, *"Photograph my real room first (optional)"*. Take or
+upload four photos and let the detect screen run. Look at the wall-mounted pieces in the
+two side photos — the T's stem walls, the ones you shot from inside the narrow part of the
+room.
+
+**What wrong looks like.** Wall pieces vastly too LARGE — a picture the size of a door, a
+TV wider than the wall it is on — or, since this fix, still too large by any amount. Every
+plane in the geometry used to come from the box around the room, and a T's stem wall is
+**1.21 m** from the camera where that box says **2.75 m**, so a 700 × 500 print decoded
+**1614 × 1153 mm**. Six distinct walls of the presets' twenty were wrong: two with the wrong
+distance, one with no wall in front of the lens at all, and five with the wrong ENDS, two of
+them the same two. The ends are the surface gate's input, so a picture on a return wall could
+be measured as though it were on the wall in front of you and appear twice.
+
+**Why a person is needed.** The suite's proof is a round trip — project a piece with an
+independent camera model, invert it with the placer, require the truth back — which proves
+the arithmetic and says nothing about whether the room the app rebuilt looks like the room
+you photographed. And **the whole preset-plus-photos route has never been walked**: it is
+one press from the layout picker, and everything known about it here was read out of the
+source rather than exercised.
+
+**What would NOT be a bug — three things, and the first will look exactly like one.**
+
+· **A U-Shape's NORTH photo contributing no measurements at all**, so the pieces in it
+  come back at their catalogue sizes. The `u` preset's notch reaches exactly the middle of
+  the room, so the standardised camera position is **on one of its own walls** and there is
+  no wall in front of a north-facing lens. Refusing is the honest answer about a photograph
+  pointed out of a doorway — but on screen it is indistinguishable from the scan having
+  done nothing. **The camera's position in a non-convex room is the open item** now, filed
+  in `docs/what-is-still-open.md` § 44b, and it is larger than what was just fixed.
+· Wall pieces in a U-Shape's east and west photos being **the right size**. Those two views
+  were never affected — the walls they frame are 3.0 m away, exactly as a rectangle's would
+  be. (This bullet first claimed they were shot from 1.3 m with the floor line off the frame;
+  1.3 m was a retracted measurement, and its consequence outlived it by a paragraph.)
+· Pieces in an L-Shape's photos being the right size but a bit off along the wall. The L's
+  distances were never wrong — its cut-away corner misses both view axes — so what this fix
+  changed there is the wall's ENDS, and the visible effect is a fabrication disappearing
+  rather than a size changing.
+
+**Where it rides.** `335776e`, draft PR #152. Gates on that commit: typecheck · lint
+`--max-warnings 0` · build clean of `ESLint: Invalid Options` · 147 files, **2756 passed / 5
+expected fail**. `wallFrame` names the wall the lens is looking at instead of reading the box
+around the room; `wallSpan` is deleted with it, so the capture screen's *"this wall should be
+N m wide"* label now states the wall's real length — which is itself worth a glance on a
+T-Shape, where it used to say 4.70 m about a 2.58 m wall.
+
+*(This entry said **"Branch `claude/amazing-dijkstra-d0am9g` — to be re-pointed at its merge
+commit"** until a review of its own commit caught it. That is the THIRD time an item here has
+cited a branch, and the first two were caught the same way — so the interesting part is not
+the slip but that this one wrote the rule into the entry as an excuse for breaking it. A
+promise to comply later is not compliance: the artifact is a commit, and a commit exists as
+soon as there is anything to cite.)*
 
 ### Pressing Shuffle moves the button out from under the pointer
 

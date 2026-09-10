@@ -5,7 +5,6 @@ import {
   calFromHfov,
   wallFrame,
   wallRowAtHeight,
-  wallSpan,
   calibrateFromFloorLine,
   heightFromFloorLine,
   placeCeilingObject,
@@ -15,7 +14,7 @@ import {
 } from '@/lib/photo-geometry';
 import { hfovFromFocal35 } from '@/lib/exif';
 import type { CaptureSlot } from '@/lib/storage';
-import { footprintForLayout, type Footprint } from '@/lib/footprint';
+import { footprintForLayout, type Footprint, type LayoutId } from '@/lib/footprint';
 import {
   ALONG,
   bboxOfCeilingDisc,
@@ -45,6 +44,16 @@ const CARD = { depthM: 0 };
 /** The framed wall's distance, read from the polygon — see `wallD`'s docblock. */
 const wallD = (slot: CaptureSlot, room: { footprint: Footprint }) =>
   wallFrame(slot, room.footprint)!.distance;
+
+/** What the retired ±half pair answered for a wall's LENGTH — the room's `width`
+ *  across n/s and its `depth` across e/w. Written out here rather than imported,
+ *  because `wallSpan` is deleted too: an assertion about a convention the module no
+ *  longer holds has to state that convention itself, or it measures its own subject.
+ *  It survived `wallDistance` by a commit, on the measured ground that a span is the
+ *  one quantity the two conventions agree on — true of a rectangle, dragged or not,
+ *  and false of every preset that cuts a corner out of the room. */
+const bboxSide = (slot: CaptureSlot, room: { width: number; depth: number }) =>
+  slot === 'n' || slot === 's' ? room.width : room.depth;
 
 /** A room with ONE wall dragged, which is the fixture every other room in this file
  *  cannot be. `moveWall` translates two vertices and re-derives width/depth from the
@@ -92,29 +101,37 @@ describe('the framed wall · one description of it, and the half that never move
   it('and the wall you are depth/2 from is the one that is width wide', () => {
     for (const slot of ['n', 'e', 's', 'w'] as const) {
       const near = wallD(slot, ROOM) * 2;
-      const across = wallSpan(slot, ROOM);
+      const across = bboxSide(slot, ROOM);
       expect(near + across).toBe(ROOM.width + ROOM.depth);
       expect(across).not.toBe(near);
     }
-    expect(wallSpan('n', ROOM)).toBe(6);
-    expect(wallSpan('e', ROOM)).toBe(4);
+    expect(bboxSide('n', ROOM)).toBe(6);
+    expect(bboxSide('e', ROOM)).toBe(4);
   });
 
-  // WHY `wallSpan` survived the deletion of its twin, made executable rather than
-  // left as a paragraph in its docblock. A span is `maxX − minX` either way, because
-  // `moveWall` re-derives width/depth from `footprintBounds` — so dragging a wall
-  // moves the DISTANCE and the two ENDS INDIVIDUALLY and never the span. That is
-  // also why the surface gate needed `left` and `right` separately: the quantity
-  // `wallSpan` returns is exactly the one that carries no information about where
-  // the wall is.
-  it('a wall’s SPAN is the same in both conventions, dragged or not', () => {
-    for (const side of ['n', 's', 'e', 'w'] as const) {
-      for (const by of [1, 2, -0.5]) {
-        const room = dragged(side, by);
-        for (const slot of ['n', 's', 'e', 'w'] as const) {
-          const frame = wallFrame(slot, room.footprint)!;
-          expect(wallSpan(slot, room), `${side}${by} ${slot}`).toBeCloseTo(frame.right - frame.left, 12);
-        }
+  // THE NO-OP PROOF, at the source rather than only in the baseline tables it keeps
+  // byte-identical. `wallFrame` casts the view axis and takes the wall it hits; for a
+  // rectangle that wall's own vertices ARE the bounding box's extremes, so the two
+  // read the same doubles through the same subtraction and `toBe` is the honest
+  // comparison — a tolerance here would hide exactly the drift this asserts against.
+  // Dragged in both directions on all four sides, because inward over-reads the
+  // distance and outward under-reads it, and a one-signed fixture cannot see a
+  // swapped comparison.
+  it('for a RECTANGLE the polygon and the bounding box are the same wall, bit for bit', () => {
+    const cases = [{ ...ROOM }, ...(['n', 's', 'e', 'w'] as const).flatMap((side) => [1, 2, -0.5].map((by) => dragged(side, by)))];
+    for (const room of cases) {
+      const b = { minX: Math.min(...room.footprint.map((p) => p[0])), maxX: Math.max(...room.footprint.map((p) => p[0])), minZ: Math.min(...room.footprint.map((p) => p[1])), maxZ: Math.max(...room.footprint.map((p) => p[1])) };
+      const want = {
+        n: { distance: -b.minZ, left: b.minX, right: b.maxX },
+        s: { distance: b.maxZ, left: -b.maxX, right: -b.minX },
+        e: { distance: b.maxX, left: b.minZ, right: b.maxZ },
+        w: { distance: -b.minX, left: -b.maxZ, right: -b.minZ },
+      };
+      for (const slot of ['n', 's', 'e', 'w'] as const) {
+        expect(wallFrame(slot, room.footprint), `${room.width}x${room.depth} ${slot}`).toEqual(want[slot]);
+        // …and the span is the one quantity that survives a drag unchanged, which is
+        // why the surface gate needed `left` and `right` separately and not this.
+        expect(wallFrame(slot, room.footprint)!.right - wallFrame(slot, room.footprint)!.left).toBe(bboxSide(slot, room));
       }
     }
   });
@@ -131,7 +148,289 @@ describe('the framed wall · one description of it, and the half that never move
     expect(room.depth / 2).toBe(3.5); // what the deleted pair answered for BOTH
     // The perpendicular pair is unaffected in distance and grown in span.
     expect(wallD('e', room)).toBe(3);
-    expect(wallSpan('e', room)).toBe(7);
+    expect(bboxSide('e', room)).toBe(7);
+    // …and for a rectangle the polygon agrees about the span, which is the half of
+    // the old pair that was never wrong.
+    const eFrame = wallFrame('e', room.footprint)!;
+    expect(eFrame.right - eFrame.left).toBe(7);
+  });
+});
+
+// § 44's largest filed residual: `wallFrame` read the polygon's BOUNDS, so retiring
+// the ±half pair fixed the off-centre rectangle and left an L, T or U measured to the
+// box around it.
+//
+// The rooms here are the five the layout picker ships, at the dimensions it ships them
+// at, because reachability is one press: "Photograph my real room first (optional)" is
+// offered for whichever preset is selected, and `roomFootprint` hands that preset's
+// polygon to all five measurement sites. Not a hypothetical room shape.
+//
+// The table prints on every green run, and every number this commit publishes comes
+// out of it. `docs/traps.md` carries why: the figures that reached six files last time
+// were measured against a re-implementation of the placer in a scratch script — careful
+// measurement of the wrong subject. Call the function.
+describe('the framed wall in a room that is not a box', () => {
+  const PRESETS: Array<[LayoutId, number, number]> = [
+    ['rect', 6.0, 4.0],
+    ['l', 6.0, 4.7],
+    ['t', 5.5, 4.7],
+    ['u', 6.0, 5.0],
+    ['open', 7.5, 5.6],
+  ];
+  /** What the retired pair answered for the framed wall's DISTANCE: `depth/2` across
+   *  n/s, `width/2` across e/w. Stated here, not imported, for `bboxSide`'s reason. */
+  const bboxDist = (slot: CaptureSlot, w: number, d: number) =>
+    slot === 'n' || slot === 's' ? d / 2 : w / 2;
+
+  /** Where a preset's own vertex list puts the wall a given slot faces — the truth this
+   *  describe measures `wallFrame` against, read OFF THE INPUT rather than copied from
+   *  `footprintForLayout`'s constants. The first version of these tests wrote `0.22 * w`
+   *  and `0.42 * d` by hand, which is a second copy of a number the fixture already
+   *  holds: the same shape as the hand-typed truth row a review caught in § 44's own
+   *  table, one notch milder. Each reader below asserts the vertex is the one it thinks
+   *  it is, so a change to the preset fails loudly rather than silently re-pointing the
+   *  truth at something else. */
+  const vertex = (layout: LayoutId, w: number, d: number, i: number) => footprintForLayout(layout, w, d)[i];
+
+  it('prints what the bounding box said and what the wall is', () => {
+    const out: string[] = [
+      '\n§ 44b · the framed wall, per shipping preset · bbox convention vs the polygon',
+      'preset  W × D      slot   bbox d   poly d    ratio   bbox ends        poly ends        fabrication',
+    ];
+    for (const [layout, w, d] of PRESETS) {
+      const fp = footprintForLayout(layout, w, d);
+      for (const slot of ['n', 'e', 's', 'w'] as const) {
+        const frame = wallFrame(slot, fp);
+        const bd = bboxDist(slot, w, d);
+        const half = bboxSide(slot, { width: w, depth: d }) / 2;
+        // How much picture the surface gate used to accept beyond the real wall's own
+        // ends — the width of the window a return-wall fabrication had to land in.
+        const fab = frame ? Math.max(0, frame.left - -half) + Math.max(0, half - frame.right) : NaN;
+        out.push(
+          `${layout.padEnd(6)}  ${`${w} × ${d}`.padEnd(9)}  ${slot}    ${bd.toFixed(3).padStart(6)}   ` +
+            (frame
+              ? `${frame.distance.toFixed(3).padStart(6)}  ${(bd / frame.distance).toFixed(3).padStart(6)}×  ` +
+                `${`${(-half).toFixed(2)} … ${half.toFixed(2)}`.padEnd(15)}  ` +
+                `${`${frame.left.toFixed(2)} … ${frame.right.toFixed(2)}`.padEnd(15)}  ${fab.toFixed(2)} m`
+              : `  null       —     ${`${(-half).toFixed(2)} … ${half.toFixed(2)}`.padEnd(15)}  the lens has no wall ahead of it`),
+        );
+      }
+    }
+    console.log(out.join('\n'));
+    // A printed table nobody reads is this repo's own recurring failure, so the two
+    // rows that carry the finding are assertions as well as output.
+    // The stem's east wall, from the `t`'s own vertex list: vertices 3 and 4 are its two
+    // ends, so they share an x and that x IS the wall. Asserted, so this cannot quietly
+    // start reading some other edge.
+    const stemA = vertex('t', 5.5, 4.7, 3);
+    const stemB = vertex('t', 5.5, 4.7, 4);
+    expect(stemA[0], 'premise: the stem wall is vertical').toBe(stemB[0]);
+    // …and it is the `t`'s stem rather than any preset's third vertex. Worth pinning
+    // because `u`'s vertex 3 has the SAME x — both presets narrow to 0.22 of the width —
+    // so swapping the preset here is an equivalent mutant, and an assertion whose only
+    // mutation is equivalent has not been shown to fail at all.
+    expect(stemA[0]).toBeCloseTo(0.22 * 5.5, 12);
+    expect(vertex('l', 5.5, 4.7, 3)[0]).not.toBeCloseTo(stemA[0], 6);
+    expect(wallFrame('e', footprintForLayout('t', 5.5, 4.7))!.distance).toBeCloseTo(stemA[0], 12);
+    expect(wallFrame('n', footprintForLayout('u', 6.0, 5.0))).toBeNull();
+  });
+
+  // The stem's own half-width, from `footprintForLayout`'s constant rather than from
+  // the answer being checked — an assertion that reads its subject back to itself is
+  // the shape `tests/module-tiling.test.ts` was caught by.
+  it('a t’s stem wall is where the preset put it, and its box is 2.27× further', () => {
+    const [w, d] = [5.5, 4.7];
+    const fp = footprintForLayout('t', w, d);
+    const stemX = vertex('t', w, d, 3)[0];
+    expect(stemX, 'premise: the stem wall is vertical').toBe(vertex('t', w, d, 4)[0]);
+    for (const slot of ['e', 'w'] as const) {
+      expect(wallFrame(slot, fp)!.distance, slot).toBeCloseTo(stemX, 12);
+      expect(bboxDist(slot, w, d)).toBeCloseTo(w / 2, 12);
+      // Dimension-INDEPENDENT: the ratio is (w/2) ÷ stemX and stemX is a fixed fraction
+      // of w, so every `t` room is out by the same factor. Published as though it were
+      // one room's measurement; it is a property of the preset.
+      expect(bboxDist(slot, w, d) / wallFrame(slot, fp)!.distance).toBeCloseTo(2.2727, 4);
+    }
+    // The two slots along the other axis were right all along: the north bar runs the
+    // full width and the stem's end is the full depth away. So this is not "l/t/u are
+    // broken" but three of the `t`'s own four walls, and six of the presets' twenty —
+    // which is what a fixture sweeping all four slots on all five presets is for, and
+    // why the tally in the docs is swept rather than eyeballed. (It was published as
+    // "four of sixteen" here and "three of sixteen, and five more" everywhere else;
+    // both flattered, `open`'s four walls having been left out of the denominator.)
+    for (const slot of ['n', 's'] as const) {
+      expect(wallFrame(slot, fp)!.distance, slot).toBeCloseTo(d / 2, 12);
+    }
+    // …and the ENDS move on three of the four, which is the gate's half of the defect.
+    expect(wallFrame('s', fp)!.right).toBeCloseTo(stemX, 12); // the stem, not the bar
+    expect(bboxSide('s', { width: w, depth: d }) / 2).toBeCloseTo(w / 2, 12);
+  });
+
+  it('so a 700 × 500 print on that wall stops coming back 1614 × 1153', () => {
+    const [w, d] = [5.5, 4.7];
+    const fp = footprintForLayout('t', w, d);
+    const stem = wallFrame('e', fp)!.distance;
+    const box = bboxOfWallSolid('e', 'e', 0, 1.5, stem, 0.7, 0.5, 0.03, WIDE);
+    expect(inFrame(box)).toBe(true);
+    const got = placeWallObject(box, 'e', fp, WIDE, { depthM: 0.03 })!;
+    expect(got.widthMM).toBeCloseTo(700, 6);
+    expect(got.heightMM).toBeCloseTo(500, 6);
+    // What it WAS, pinned by handing the same photograph the bounding box as a room
+    // rather than by mutating the placer — so this row survives a refactor and cannot
+    // quietly become the same number as the row above it.
+    const asBox = placeWallObject(box, 'e', footprintForLayout('rect', w, d), WIDE, { depthM: 0.03 })!;
+    expect(Math.round(asBox.widthMM)).toBe(1614);
+    expect(Math.round(asBox.heightMM)).toBe(1153);
+    // And the cancellation, because it is the reason nothing caught this: the 66°
+    // default standing in for a real ultrawide is wrong the other way by almost the
+    // same factor, so the shipped answer was +12.9% — ordinary slop — and got WORSE as
+    // the calibration improved.
+    const withDefault = placeWallObject(box, 'e', footprintForLayout('rect', w, d), defaultCal(4 / 3), { depthM: 0.03 })!;
+    expect(withDefault.widthMM / 700 - 1).toBeCloseTo(0.129, 3);
+    const fixedWithDefault = placeWallObject(box, 'e', fp, defaultCal(4 / 3), { depthM: 0.03 })!;
+    // Fixing the footprint leaves the lens error alone and nothing else: −51% is
+    // `k` at 66° against a 106° photograph, which is § 28's item and not this one.
+    expect(fixedWithDefault.widthMM / 700 - 1).toBeCloseTo(-0.51, 2);
+  });
+
+  // Not a mis-measured wall but a mis-placed CAMERA, and the file used to say the first
+  // thing: that a `u`'s notch puts the wall ahead of a north-facing lens at `z = 0`
+  // while the bounds answer `depth/2`. The notch's inner face is at
+  // `−depth/2 + 0.5·depth` — exactly zero, for every `u` room — so the rig stands the
+  // lens ON that wall and there is no wall ahead of it at all.
+  it('the u preset stands the camera on one of its own walls', () => {
+    for (const [w, d] of [[6, 5], [4, 4], [7.5, 3.2], [2.4, 9.6]] as Array<[number, number]>) {
+      const fp = footprintForLayout('u', w, d);
+      expect(fp[2][1], `${w}×${d}`).toBe(0); // the notch's inner face, exactly on the lens
+      expect(wallFrame('n', fp), `${w}×${d}`).toBeNull();
+      // The other three walls are real and still measured — a preset is not refused
+      // wholesale, which is what a bounds-shaped refusal would have done.
+      for (const slot of ['e', 's', 'w'] as const) expect(wallFrame(slot, fp), slot).not.toBeNull();
+      expect(bboxDist('n', w, d)).toBe(d / 2); // what the bounds answered about the void
+    }
+  });
+
+  // The three roles, on a room a user can pick rather than on a two-point polygon: a
+  // PREMISE returns null, a GATE goes inert, a CLAMP goes inert with its arithmetic
+  // guard intact. Every one of them reached at once, by one photograph.
+  it('and every site takes its own no-frame branch there', () => {
+    const fp = footprintForLayout('u', 6, 5);
+    const room = { height: 2.7, footprint: fp };
+    // premises
+    expect(calibrateFromFloorLine(0.8, 'n', fp, 4 / 3)).toBeNull();
+    expect(heightFromFloorLine(0.8, 'n', fp, WIDE)).toBeNull();
+    const wallBox = bboxOfWallSolid('n', 'n', 0, 1.5, 2.5, 0.7, 0.5, 0.03, WIDE);
+    expect(placeWallObject(wallBox, 'n', fp, WIDE, { depthM: 0.03 })).toBeNull();
+    // A GATE goes inert, and inertness is only visible against a fixture the live
+    // bound would refuse: a ceiling disc 3.0 m ahead, where the bounding box this used
+    // to read answers 2.5. The slab's height still locates its plane, so there is a
+    // measurement to keep — only the bound is missing.
+    const box3m = { height: 2.7, footprint: footprintForLayout('rect', 6, 5) };
+    const disc = bboxOfCeilingDisc('n', 0, -3.0, 1.0, WIDE, 2.6);
+    expect(inFrame(disc)).toBe(true);
+    expect(placeCeilingObject(disc, 'n', room, WIDE)).not.toBeNull();
+    expect(placeCeilingObject(disc, 'n', box3m, WIDE)).toBeNull();
+    // A CLAMP goes inert while its arithmetic guard stays, and the same fixture shows
+    // it: a near face MEASURED at 3.0 m keeps its distance where there is no
+    // trustworthy plaster to bound it, and is pulled back to 2.5 where there is. A
+    // bound may falsify an assumption and may never overrule a measurement — with no
+    // bound, the measurement stands.
+    // (wM, hM, depthM) — the fixture's depth has to be the depth the placer is told,
+    // or the near face and the centre disagree by half their difference and the row
+    // reads like a clamp that fired. `docs/traps.md` has this transposition already.
+    const floor = bboxOfFloorBox('n', 0, -3.2, 1.0, 0.8, 0.4, WIDE);
+    expect(inFrame(floor)).toBe(true);
+    const free = placeFloorObject(floor, 'n', fp, WIDE, { depthM: 0.4 })!;
+    const bound = placeFloorObject(floor, 'n', box3m.footprint, WIDE, { depthM: 0.4 })!;
+    expect(free.distance).toBeCloseTo(3.2, 6);
+    // …and where there IS plaster, the CENTRE clamp puts the piece's back on it, so
+    // its centre lands half a depth in front. Two clamps, two subjects — the near face
+    // is measured and the centre is measurement plus a catalogue depth — which is why
+    // this is `frame.distance − depthM/2` and not the near clamp's own bound.
+    expect(bound.distance).toBeCloseTo(2.5 - 0.4 / 2, 6);
+  });
+
+  // The gate's half of the defect, and the payoff that reaches a user: a fabrication on
+  // the return wall used to land inside the bounds' ends and be measured as if it were
+  // on the framed one. The `l` is the sharp case because its DISTANCES were right, so
+  // nothing else about that photograph looks wrong.
+  it('the surface gate stops taking an l’s return wall for the framed one', () => {
+    const [w, d] = [6.0, 4.7];
+    const fp = footprintForLayout('l', w, d);
+    const east = wallFrame('e', fp)!;
+    expect(east.distance).toBeCloseTo(w / 2, 12); // the plane was never wrong here
+    // The east wall's south end, from the `l`'s own vertex list: vertex 2 is where the
+    // cut-away corner meets it. ONE binding for the premise and the value, so mutating
+    // the index moves both — written the other way first, and then the premise went on
+    // guarding vertex 2 while the value came from vertex 3.
+    const corner = vertex('l', w, d, 2);
+    expect(corner[0], 'premise: this vertex is ON the east wall').toBeCloseTo(w / 2, 12);
+    expect(east.right).toBeCloseTo(corner[1], 12);
+    expect(bboxSide('e', { width: w, depth: d }) / 2).toBeCloseTo(d / 2, 12); // the old bound
+    // Inside the real wall: measured, and exactly.
+    const on = bboxOfWallSolid('e', 'e', 0.2, 1.5, east.distance, 0.7, 0.5, 0.03, WIDE);
+    expect(inFrame(on)).toBe(true);
+    const kept = placeWallObject(on, 'e', fp, WIDE, { depthM: 0.03 })!;
+    expect(kept.widthMM).toBeCloseTo(700, 6);
+    // Past it, and still well inside the bounds' 2.35 m — refused now, measured before.
+    const off = bboxOfWallSolid('e', 'e', 1.5, 1.5, east.distance, 0.7, 0.5, 0.03, WIDE);
+    expect(inFrame(off)).toBe(true);
+    expect(placeWallObject(off, 'e', fp, WIDE, { depthM: 0.03 })).toBeNull();
+    expect(placeWallObject(off, 'e', footprintForLayout('rect', w, d), WIDE, { depthM: 0.03 })).not.toBeNull();
+  });
+
+  // Two walls facing the lens on ONE view axis, which is the fixture the whole preset
+  // sweep could not build: every ray out of a preset leaves the room exactly once, so
+  // "the nearest candidate" and "the farthest" agree everywhere and choosing the wrong
+  // one is a surviving mutant. A footprint whose arms wrap around the view axis — two
+  // areas joined by a corridor, which `readFootprint` accepts and no preset makes —
+  // separates them: the axis exits at 1 m, crosses outside, re-enters, and exits again
+  // at 7 m, so there are candidates at both and only the first is photographable.
+  it('takes the NEAREST wall facing it, on an axis that leaves the room twice', () => {
+    // x ∈ [−3, 3] × z ∈ [−7, 3], less a notch x ∈ [−3, 2] × z ∈ [−5, −1].
+    const c: Footprint = [
+      [-3, 3],
+      [3, 3],
+      [3, -7],
+      [-3, -7],
+      [-3, -5],
+      [2, -5],
+      [2, -1],
+      [-3, -1],
+    ];
+    const frame = wallFrame('n', c)!;
+    expect(frame.distance).toBe(1);
+    // …and its own ends, which really are asymmetric: that wall stops at x = 2 where
+    // the corridor opens, and the bounding box would have said ±3 on both sides.
+    expect(frame.left).toBe(-3);
+    expect(frame.right).toBe(2);
+    // The far arm's wall faces the lens too and is 7 m away; naming it would be naming
+    // a wall with a room's worth of outdoors in between.
+    expect(frame.distance).not.toBe(7);
+    // The complement, so this is not just "the smaller number": from the SOUTH the
+    // only facing wall is the far one, and 3 m is the answer no nearest-vs-farthest
+    // rule can get wrong.
+    expect(wallFrame('s', c)!.distance).toBe(3);
+  });
+
+  // § 44's second filed residual, closed by the same change rather than by a second
+  // test: the old origin check was `left < 0 && right > 0` on the BOUNDS, which an L
+  // whose cut-away quadrant contains the lens passes on every axis while the camera
+  // stands outdoors. The facing test is the honest one — the nearest wall the view axis
+  // crosses is one seen from inside, or the lens is not in this room.
+  it('refuses a lens standing in an l’s cut-away quadrant, which the bounds passed', () => {
+    const [w, d] = [6.0, 4.7];
+    // Translate the preset so the removed quadrant covers the origin.
+    const fp = footprintForLayout('l', w, d).map(([x, z]) => [x - 1.5, z - 1.2]) as Footprint;
+    const xs = fp.map((pt) => pt[0]);
+    const zs = fp.map((pt) => pt[1]);
+    // The premise: the OLD test passes on all four slots, because the origin is inside
+    // the bounding box even though it is outside the room.
+    expect(Math.min(...xs)).toBeLessThan(0);
+    expect(Math.max(...xs)).toBeGreaterThan(0);
+    expect(Math.min(...zs)).toBeLessThan(0);
+    expect(Math.max(...zs)).toBeGreaterThan(0);
+    for (const slot of ['n', 'e', 's', 'w'] as const) expect(wallFrame(slot, fp), slot).toBeNull();
   });
 });
 
@@ -846,7 +1145,7 @@ describe('the framed surface · what the gate refuses, measured', () => {
       truthW: wM * 1000,
       truthH: hM * 1000,
       lateral: Math.abs(free.position.z),
-      end: wallSpan('e', r) / 2,
+      end: wallFrame('e', r.footprint)!.right,
       decW: free.widthMM,
       decH: free.heightMM,
       refused: placeWallObject(box, 'e', r.footprint, WIDE, { depthM }) === null,
@@ -863,7 +1162,7 @@ describe('the framed surface · what the gate refuses, measured', () => {
       truthW: sizeM * 1000,
       truthH: NaN,
       lateral: Math.abs(free.position.z),
-      end: wallSpan('e', r) / 2,
+      end: wallFrame('e', r.footprint)!.right,
       decW: free.widthMM,
       decH: NaN,
       refused: placeCeilingObject(box, 'e', r, WIDE) === null,
@@ -922,7 +1221,7 @@ describe('the framed surface · what the gate refuses, measured', () => {
 
 describe('the framed surface', () => {
   const WALLD = (slot: 'n' | 's' | 'e' | 'w') => wallD(slot, ROOM);
-  const HALF = (slot: 'n' | 's' | 'e' | 'w') => wallSpan(slot, ROOM) / 2;
+  const HALF = (slot: 'n' | 's' | 'e' | 'w') => wallFrame(slot, ROOM.footprint)!.right;
 
   // The FALSE-POSITIVE direction first, and deliberately so: a gate that refuses real
   // furniture is this repo's worst failure — a piece that never appears leaves no
@@ -1198,7 +1497,7 @@ describe('the framed surface', () => {
       for (const mount of mounts) {
         for (const view of seeing) {
           // 800 mm in from the shared corner, on the mount wall.
-          const half = wallSpan(mount, room) / 2;
+          const half = wallFrame(mount, room.footprint)!.right;
           const toward = view === 'e' || view === 's' ? 1 : -1;
           const lateral = (half - 0.8) * toward * (mount === 's' || mount === 'w' ? -1 : 1);
           const d = wallD(mount, room);
@@ -1250,7 +1549,7 @@ describe('the framed surface', () => {
     // photographed — and it is the `dragged` fixture at the top of this file.)
     expect(wallD('n', off)).toBe(3);
     expect(off.depth / 2, 'premise: the retired pair agreed here').toBe(3);
-    expect(wallSpan('n', off) / 2).toBe(3.5); // the bound that used to apply
+    expect(bboxSide('n', off) / 2).toBe(3.5); // the bound that used to apply
     for (const [lateral, verdict] of [
       [3.2, 'accepted'],
       [3.52, 'accepted'], // REFUSED before this read the polygon

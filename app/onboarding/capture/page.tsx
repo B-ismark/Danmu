@@ -30,7 +30,8 @@ import {
   type SlotMap,
   type SlotSignal,
 } from '@/lib/capture-slots';
-import { wallSpan } from '@/lib/photo-geometry';
+import { wallFrame } from '@/lib/photo-geometry';
+import { roomFootprint } from '@/lib/footprint';
 import { photoDropIntent } from '@/lib/photo-drop';
 import { useDeviceTilt } from '@/lib/device-tilt';
 import { scoreQuality, flagHelp, flagLabel, flagTone, type Quality } from '@/lib/image-quality';
@@ -389,14 +390,36 @@ export default function CapturePage() {
     () => placePhotos(placedIn(photos), [{}]).placed[0]?.slot ?? null,
     [photos],
   );
+  /** How long each wall really is, from the ROOM'S OUTLINE rather than the box
+   *  around it. This used to read `wallSpan`, a bounding-box side, which survived
+   *  the ±half pair's deletion on the measured ground that a span is the one
+   *  quantity the two conventions agree on — true of a rectangle, dragged or not,
+   *  and false of every preset that cuts a corner. A `t`'s stem wall is 2.58 m long
+   *  and the box said 4.70; a `u`'s north view has no wall in front of it at all.
+   *  This number is the one check a person can make against their own photograph,
+   *  so it is the last place in the app that should be describing a different room
+   *  than the one on screen. Null where the lens has no wall ahead of it. */
+  const wallSpans = useMemo(() => {
+    if (!room) return null;
+    const fp = roomFootprint(room);
+    const out = {} as Record<CaptureSlot, number | null>;
+    for (const slot of SLOT_ORDER) {
+      const frame = wallFrame(slot, fp);
+      out[slot] = frame ? frame.right - frame.left : null;
+    }
+    return out;
+  }, [room]);
   /** Only worth showing when the walls are actually different lengths; in a square
    *  room every rotation measures the same and the number would be noise. */
-  const spanLabel = (slot: CaptureSlot) =>
-    room && room.width !== room.depth
-      ? // `formatDim` returns the number alone, so the unit has to come from the
-        // setting beside it — a bare "5.60 wall" is not a measurement.
-        `${formatDim(wallSpan(slot, room) * 1000, dimUnit)} ${dimUnit}`
-      : null;
+  const spanLabel = (slot: CaptureSlot) => {
+    const span = wallSpans?.[slot];
+    if (span == null || !wallSpans) return null;
+    const known = SLOT_ORDER.map((s) => wallSpans[s]).filter((v): v is number => v != null);
+    if (known.every((v) => v === known[0])) return null;
+    // `formatDim` returns the number alone, so the unit has to come from the
+    // setting beside it — a bare "5.60 wall" is not a measurement.
+    return `${formatDim(span * 1000, dimUnit)} ${dimUnit}`;
+  };
 
   // Arriving here without a room (a shared link, a cleared browser) used to do
   // nothing at all — every upload silently no-oped.

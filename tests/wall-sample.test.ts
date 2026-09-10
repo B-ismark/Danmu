@@ -31,7 +31,6 @@ import {
   wallColumnsAtHeight,
   wallFrame,
   wallRowAtHeight,
-  wallSpan,
   type CameraCal,
   type WallFrame,
 } from '@/lib/photo-geometry';
@@ -94,7 +93,7 @@ describe('wallFrame — the footprint\'s bounds, not ±width/2', () => {
     for (const slot of SLOT_ORDER) {
       const frame = wallFrame(slot, RECT)!;
       expect(frame.distance).toBeCloseTo(wallD(slot, { footprint: RECT }), 12);
-      expect(frame.right - frame.left).toBeCloseTo(wallSpan(slot, ROOM), 12);
+      expect(frame.right - frame.left).toBeCloseTo(slot === 'n' || slot === 's' ? ROOM.width : ROOM.depth, 12);
       expect(frame.left).toBeCloseTo(-frame.right, 12);
     }
   });
@@ -129,9 +128,22 @@ describe('wallFrame — the footprint\'s bounds, not ±width/2', () => {
     // side of the lens. Without this, the lateral half of the guard is untestable
     // and mutating it away changes nothing.
     expect(wallFrame('n', pushed)).toBeNull();
-    // …while the wall the shift did not move laterally is still measurable, so the
-    // refusal is not "anything shifted".
-    expect(wallFrame('e', pushed)).not.toBeNull();
+    // **This assertion INVERTED when `wallFrame` started reading the polygon, and the
+    // old version was the defect § 44 filed.** It used to require that `'e'` on this
+    // same 10 m shift still answered — "so the refusal is not anything shifted" — and
+    // the bounds obligingly reported the east wall 13 m ahead of a lens standing 7 m
+    // OUTSIDE the room's west wall. The lateral test was on the BOX, so a room wholly
+    // to one side passed it on any axis that happened to straddle. The facing test
+    // catches it: the first wall the view axis crosses is that west wall, seen from
+    // its outdoor side.
+    expect(wallFrame('e', pushed)).toBeNull();
+    // The intent behind that assertion is real and keeps its own fixture: a shift
+    // that leaves the lens INSIDE must still measure all four walls, or the refusal
+    // would just be "anything off-centre".
+    const nudged = RECT.map(([x, z]) => [x + 1, z]) as Footprint;
+    for (const slot of SLOT_ORDER) expect(wallFrame(slot, nudged), slot).not.toBeNull();
+    expect(wallFrame('e', nudged)!.distance).toBeCloseTo(ROOM.width / 2 + 1, 12);
+    expect(wallFrame('w', nudged)!.distance).toBeCloseTo(ROOM.width / 2 - 1, 12);
   });
 
   it('refuses non-finite dimensions and a degenerate polygon', () => {

@@ -569,6 +569,17 @@ re-implemented `placeCeilingObject` the same way, got 3.509 m where the placer g
 and filed a finding that the published ceiling figures were unreproducible. They were
 reproducible. The re-implementation was the thing that was wrong — in the pass whose whole
 job was checking the numbers.)*
+→ **Third instance, and it is the one worth reading, because there the code did not exist
+yet.** § 44b's defect could only be measured against a wall-finder nothing had written, so
+a scratch probe cast a ray and took the first edge it crossed — and reported a `u`'s east
+and west walls at **1.32 m**, a 130% error. The shipped selection answers **3.00 m** and no
+error at all: the probe had grazed the notch's side walls, which touch the view axis at a
+single point and cannot be photographed. Two findings, one of them invented, and the
+invented one shaped the first design. So the rule extends rather than repeats: **if you
+must re-implement something to see the defect at all, the re-implementation is a
+HYPOTHESIS, not a measurement** — build the real thing, then re-measure, and expect the
+number to move. Every figure § 44b published came out of the real function's own printed
+table, and one row of the first draft had to be retracted.
 
 **Symptom: an assertion fails only on CI, and the failure comes with a plausible ratio.**
 The wrong move is to retune to it. `expected 8.554660000000013 to be greater than 8.8`
