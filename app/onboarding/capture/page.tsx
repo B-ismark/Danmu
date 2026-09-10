@@ -112,7 +112,15 @@ export default function CapturePage() {
   const narrow = useMediaQuery(NARROW);
   const [source, setSource] = useState<Source>('upload');
   const [photos, setPhotos] = useState<PhotoMap>(emptyPhotos());
-  const [room, setRoom] = useState<{ width: number; depth: number } | null>(null);
+  // The room's OUTLINE, not the box around it. `layoutId` and `footprint` are here because
+  // `spanLabel` measures the framed wall with `wallFrame`, which needs the polygon — see
+  // the note at the read below for what holding only width/depth cost.
+  const [room, setRoom] = useState<{
+    width: number;
+    depth: number;
+    layoutId: string | undefined;
+    footprint?: Array<[number, number]>;
+  } | null>(null);
   const [draggingFrom, setDraggingFrom] = useState<CaptureSlot | null>(null);
   /** single polite live region for everything that happens without a page change */
   const [announce, setAnnounce] = useState('');
@@ -189,9 +197,26 @@ export default function CapturePage() {
         next[c.slot] = { blob: c.blob, url: blobToObjectUrl(c.blob), quality: null, pose: c.pose };
       }
       setPhotos(next);
-      // Width and depth are what make "Wall 2 · the 4.2 m wall" possible, and that
-      // line is the only check a person can make against their own photograph.
-      if (meta) setRoom({ width: meta.width, depth: meta.depth });
+      // The wall-length label is the only check a person can make against their own
+      // photograph, so it has to describe the room they are standing in.
+      //
+      // THIS LINE READ `setRoom({ width: meta.width, depth: meta.depth })` and the comment
+      // above it said "width and depth are what make 'Wall 2 · the 4.2 m wall' possible".
+      // That was true while the label read `wallSpan`. § 44b repointed it at
+      // `wallFrame(slot, roomFootprint(room))` and did not come here — and because
+      // `roomFootprint`'s `layoutId` was OPTIONAL, a `{ width, depth }` object type-checked
+      // and fell back to `'rect'`, so every preset was measured as a rectangle and a
+      // T-Shape's stem wall went on being announced as 4.70 m against a real 2.58.
+      // `scripts/capture-route-probe.mjs` measured it in a browser: the label printed the
+      // same number before and after § 44b, while the geometry on the next screen moved
+      // 3.64×. A comment stating the superseded reason is what kept it standing.
+      if (meta)
+        setRoom({
+          width: meta.width,
+          depth: meta.depth,
+          layoutId: meta.layoutId,
+          footprint: meta.footprint,
+        });
       for (const c of caps) {
         // `patchIfSame`, not a write by slot: scoring is async and the user can
         // rotate the set while it is still running.

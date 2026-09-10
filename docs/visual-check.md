@@ -1256,63 +1256,61 @@ same day. The rule turns out to be easy to keep while writing about someone else
 easy to drop while writing about your own, which is the only reason this parenthesis
 survives the re-point.)*
 
-### An L, T or U room built from photos — the wall pieces were 2.3× too big — merged to `main` in `9390323` (PR #152)
+### A U-Shape's first wall shows no length, and it looks exactly like a missing number
 
-**Where to click.** `/onboarding/welcome` → pick a layout → choose **T-Shape** (or
-**U-Shape**), then the second button, *"Photograph my real room first (optional)"*. Take or
-upload four photos and let the detect screen run. Look at the wall-mounted pieces in the
-two side photos — the T's stem walls, the ones you shot from inside the narrow part of the
-room.
+**Where to click.** `/onboarding/welcome` → **Start decorating** → choose **U-Shape** →
+*"Photograph my real room first (optional)"* → add four photos. Look at the four cards'
+wall-length labels.
 
-**What wrong looks like.** Wall pieces vastly too LARGE — a picture the size of a door, a
-TV wider than the wall it is on — or, since this fix, still too large by any amount. Every
-plane in the geometry used to come from the box around the room, and a T's stem wall is
-**1.21 m** from the camera where that box says **2.75 m**, so a 700 × 500 print decoded
-**1614 × 1153 mm**. Six distinct walls of the presets' twenty were wrong: two with the wrong
-distance, one with no wall in front of the lens at all, and five with the wrong ENDS, two of
-them the same two. The ends are the surface gate's input, so a picture on a return wall could
-be measured as though it were on the wall in front of you and appear twice.
+**What you will see.** Walls 2, 3 and 4 read `5.00 m`, `6.00 m`, `5.00 m`. **Wall 1 reads
+nothing at all** — the chip is just "Wall 1".
 
-**Why a person is needed.** The suite's proof is a round trip — project a piece with an
-independent camera model, invert it with the placer, require the truth back — which proves
-the arithmetic and says nothing about whether the room the app rebuilt looks like the room
-you photographed. And **the whole preset-plus-photos route has never been walked**: it is
-one press from the layout picker, and everything known about it here was read out of the
-source rather than exercised.
+**That is correct, and that is the problem.** The `u` preset's notch reaches exactly the
+middle of the room, so the standardised camera position is *on one of its own walls* and
+there is no wall in front of a north-facing lens; `wallFrame` returns null and the label
+declines to invent a number. Refusing is the honest answer about a photograph pointed out
+of a doorway. But three walls with lengths and a fourth without reads as a number that
+failed to load, on the one line the copy above it tells you to check your photograph
+against — and a person cannot tell a deliberate silence from a broken one.
 
-**What would NOT be a bug — three things, and the first will look exactly like one.**
+**Why a person is needed.** Whether it needs copy ("no wall ahead from here"), a different
+treatment, or nothing at all is a judgement about what a stranger infers from a gap, which
+no assertion reaches. It is also entangled with the larger open item — the rig standing the
+camera at the bounding box's centre — so the right answer may be to move the camera rather
+than to explain the gap. Filed in `docs/what-is-still-open.md` § 44b.
 
-· **A U-Shape's NORTH photo contributing no measurements at all**, so the pieces in it
-  come back at their catalogue sizes. The `u` preset's notch reaches exactly the middle of
-  the room, so the standardised camera position is **on one of its own walls** and there is
-  no wall in front of a north-facing lens. Refusing is the honest answer about a photograph
-  pointed out of a doorway — but on screen it is indistinguishable from the scan having
-  done nothing. **The camera's position in a non-convex room is the open item** now, filed
-  in `docs/what-is-still-open.md` § 44b, and it is larger than what was just fixed.
-· Wall pieces in a U-Shape's east and west photos being **the right size**. Those two views
-  were never affected — the walls they frame are 3.0 m away, exactly as a rectangle's would
-  be. (This bullet first claimed they were shot from 1.3 m with the floor line off the frame;
-  1.3 m was a retracted measurement, and its consequence outlived it by a paragraph.)
-· Pieces in an L-Shape's photos being the right size but a bit off along the wall. The L's
-  distances were never wrong — its cut-away corner misses both view axes — so what this fix
-  changed there is the wall's ENDS, and the visible effect is a fabrication disappearing
-  rather than a size changing.
+**Where it rides.** The refusal is `9390323`; the label reaching it at all is this branch's
+fix. `scripts/capture-route-probe.mjs` pins the absence as an assertion (S3.1), so the
+silence cannot regress into a wrong number — what it cannot judge is how the gap reads.
 
-**Where it rides.** `9390323` on `main`. `wallFrame` names the wall the lens is looking at
-instead of reading the box around the room; `wallSpan` is deleted with it, so the capture
-screen's *"this wall should be N m wide"* label now states the wall's real length — which is
-itself worth a glance on a T-Shape, where it used to say 4.70 m about a 2.58 m wall. The gate
-counts are gone: they were measured on two commits a squash has replaced with one. What
-survives is the reason to look anyway — the geometry is exact against a projected solid at
-every tilt, and none of that says the room the app rebuilt *looks like* the room you
-photographed.
+### Whether a rebuilt room LOOKS like the room you photographed
 
-*(This entry said **"Branch `claude/amazing-dijkstra-d0am9g` — to be re-pointed at its merge
-commit"** until a review of its own commit caught it. That is the THIRD time an item here has
-cited a branch, and the first two were caught the same way — so the interesting part is not
-the slip but that this one wrote the rule into the entry as an excuse for breaking it. A
-promise to comply later is not compliance: the artifact is a commit, and a commit exists as
-soon as there is anything to cite.)*
+**Where to click.** Any preset → *"Photograph my real room first"* → four real photos of a
+real room → let the detect screen run → **Continue to the studio**.
+
+**What wrong looks like.** Furniture at plausible sizes that is nonetheless not your room:
+a sofa on the wrong wall, a piece at the right size in the wrong place, proportions that
+are individually defensible and collectively unlike the space you stood in.
+
+**Why a person is needed, and this is the residue of a walk rather than an unwalked item.**
+`scripts/capture-route-probe.mjs` now walks the whole preset-plus-photos route in a browser
+and measures it against the build before § 44b: the geometry moves 3.64× on a T-Shape's
+stem wall, both controls hold to the printed digit, and the wall-length labels are right.
+So the numbers are established and reachable. What a probe cannot do is upload a photograph
+of a real room and have an opinion about the result — its uploads are synthetic, EXIF-less
+images, which is exactly why they are deterministic. **This is the part of the original
+§ 44b item that survived being looked at**, and it is the only part.
+
+*(The entry this descends from once said **"Branch `claude/amazing-dijkstra-d0am9g` — to be
+re-pointed at its merge commit"**, until a review of its own commit caught it: the third
+time an item here cited a branch instead of a commit, and the first to write this file's
+rule into itself as a promise to comply later. A promise to comply later is not compliance.
+The parenthesis outlives the item it was attached to on purpose — retiring an entry is not
+a reason to tidy away its retraction, and the lesson was never about the branch. It is that
+the rule is easy to keep while writing about someone else's work and easy to drop while
+writing about your own. Which the item then proved twice over: it also asserted that the
+capture screen's wall-length label "now states the wall's real length", read out of the
+source, and a browser found it still saying 4.70 m about a 2.58 m wall.)*
 
 ### Pressing Shuffle moves the button out from under the pointer
 

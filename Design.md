@@ -1156,7 +1156,15 @@ Two more things went with it. `wallSpan` is **deleted** — it outlived `wallDis
 commit, on the measured ground that a span is the one quantity the two conventions agree
 on, and that is true of a rectangle and false of every preset that cuts a corner; the
 capture screen's wall-length label now reads `wallFrame`'s own two ends, which matters
-because it is the one number a person checks their photograph against. And the origin test
+because it is the one number a person checks their photograph against. **That last clause
+was true of the source and false on screen until `scripts/capture-route-probe.mjs` walked
+the route in a browser:** the label read the right function through a room narrowed to
+`{ width, depth }`, and `roomFootprint`'s then-optional `layoutId` turned that bounding box
+into a silent `'rect'`, so a T-Shape's stem wall was still announced as 4.70 m against a
+real 2.58. The probe's A/B printed an identical 12 passed / 4 failed on the build before
+§ 44b and on `main`, while the geometry one screen later moved 3.64× — so the fix was live
+and its user-facing half was not. `layoutId` is a required key of possibly-undefined value
+now, which makes the compiler the guard. And the origin test
 is honest at last: `left < 0 && right > 0` asked whether the lens was inside the BOX, which
 an L whose cut-away quadrant contains the lens passes on all four axes while standing the
 camera outdoors. Asking instead whether the room is between the lens and the wall answers

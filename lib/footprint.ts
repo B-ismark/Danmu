@@ -24,11 +24,28 @@ export type Footprint = [number, number][];
  *  implementations, drifting apart in the direction nobody looks. It is a `Partial`
  *  rather than `RoomData` so `lib/` modules that must not import storage can read it.
  *
- *  `length >= 3` is the same floor `wallFrame` applies: two points are not a room. */
+ *  `length >= 3` is the same floor `wallFrame` applies: two points are not a room.
+ *
+ *  **`layoutId` is a REQUIRED KEY whose value may be undefined, and that asymmetry is the
+ *  whole guard.** It used to be optional, which made a `{ width, depth }` object — a
+ *  BOUNDING BOX — a legal argument that fell back to `'rect'` in silence. The capture
+ *  screen held its room in exactly that shape, so after § 44b repointed its wall-length
+ *  label at `wallFrame(slot, roomFootprint(room))` the label went on reading a box side:
+ *  a T-Shape's stem wall was still announced as 4.70 m against a real 2.58, on the one
+ *  screen whose own docblock calls it the last place in the app that should describe a
+ *  different room. Measured through the real click path by
+ *  `scripts/capture-route-probe.mjs`, which found the two builds printing the same number.
+ *
+ *  That is § 44's lesson defeated at a boundary. It narrowed five signatures to a
+ *  `Footprint` so a bounding box would be *unpassable rather than merely unread*, and an
+ *  optional polygon parameter hands the hole back. A required key makes `tsc` refuse a
+ *  caller that has not thought about the outline; `?? 'rect'` still absorbs an old
+ *  persisted record that genuinely predates the field, which is the case the optionality
+ *  was really for. Passing `undefined` deliberately is fine — passing nothing is not. */
 export function roomFootprint(room: {
   width: number;
   depth: number;
-  layoutId?: string;
+  layoutId: string | undefined;
   footprint?: Array<[number, number]>;
 }): Footprint {
   return room.footprint && room.footprint.length >= 3
