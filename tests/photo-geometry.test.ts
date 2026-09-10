@@ -1609,6 +1609,15 @@ describe('§ 44 · reading the polygon instead of its bounding box', () => {
   it('prints what a HALF-migration would have cost, both ways', () => {
     const truthD = 4;
     const boxD = OUT.depth / 2;
+    /** The piece, named once, because the fixture and the table's own truth row are two
+     *  readers of one fact and used to be two hand-written copies of it. See `row` below
+     *  for what that cost. */
+    const TRUTH = { lateral: 0.8, yC: 1.5, wM: 0.7, hM: 0.5, depthM: 0.03 };
+    const mm = (m: number) => Math.round(m * 1000);
+    /** Its back is on the plaster, so its centre sits half a depth into the room — the
+     *  same expression `placeWallObject` states, which is what the § 44 row must return
+     *  rather than merely print alongside. */
+    const truthDist = truthD - TRUTH.depthM / 2;
     const vFloor = wallRowAtHeight(0, truthD, LEVEL)!;
     const kBbox = calibrateFromFloorLine(vFloor, 'n', bboxAsRoom(OUT).footprint, LEVEL.aspect, {
       height: LEVEL.height,
@@ -1616,7 +1625,17 @@ describe('§ 44 · reading the polygon instead of its bounding box', () => {
     const kReal = calibrateFromFloorLine(vFloor, 'n', OUT.footprint, LEVEL.aspect, {
       height: LEVEL.height,
     })!;
-    const box = bboxOfWallSolid('n', 'n', 0.8, 1.5, truthD, 0.7, 0.5, 0.03, LEVEL);
+    const box = bboxOfWallSolid(
+      'n',
+      'n',
+      TRUTH.lateral,
+      TRUTH.yC,
+      truthD,
+      TRUTH.wM,
+      TRUTH.hM,
+      TRUTH.depthM,
+      LEVEL,
+    );
     const rows: Array<[string, CameraCal, Footprint]> = [
       ['shipped   · k from bbox, plane from bbox', kBbox, bboxAsRoom(OUT).footprint],
       ['half      · k from bbox, plane from polygon', kBbox, OUT.footprint],
@@ -1625,24 +1644,30 @@ describe('§ 44 · reading the polygon instead of its bounding box', () => {
       ['EXIF      · k KNOWN, plane from bbox', LEVEL, bboxAsRoom(OUT).footprint],
       ['EXIF+§ 44 · k KNOWN, plane from polygon', LEVEL, OUT.footprint],
     ];
-    // Derived, not typed: the header names the same two numbers the fixtures use, so it
-    // cannot drift from them the way a hand-written caption does.
+    // ONE formatter, for the measured rows and for the truth row alike — which is the
+    // whole fix rather than a tidy-up. A row the others are read against cannot be a
+    // second, hand-kept copy of the fixture, and this one was: moving the fixture's
+    // lateral printed a `§ 44` row of 1.0000 directly above a `truth` row of 0.8000 — a
+    // table contradicting itself — with all 65 tests green. Rule 2 names that shape
+    // outright, *a displayed measurement hand-typed next to the thing it describes*, and
+    // it survived review twice because the eye goes to the derived header one line up.
+    // The caption and the dW denominator carried their own copies of 700 as well.
+    const row = (label: string, widthMM: number, heightMM: number, x: number, dist: number) =>
+      `${label.padEnd(44)} ${String(widthMM).padStart(6)}  ${String(heightMM).padStart(6)}  ${
+        `${(((widthMM - mm(TRUTH.wM)) / mm(TRUTH.wM)) * 100).toFixed(1)}%`.padStart(6)
+      }  ${x.toFixed(4).padStart(7)}  ${dist.toFixed(3).padStart(6)}`;
     const out: string[] = [
-      `\n§ 44 · a 700 × 500 print on a north wall dragged out to ${truthD.toFixed(1)} m ` +
-        `(its bounding box says ${boxD.toFixed(1)})`,
+      `\n§ 44 · a ${mm(TRUTH.wM)} × ${mm(TRUTH.hM)} print on a north wall dragged out to ` +
+        `${truthD.toFixed(1)} m (its bounding box says ${boxD.toFixed(1)})`,
       'configuration                                 width  height   dW      pos.x    dist',
     ];
-    const got: Record<string, { w: number; h: number }> = {};
+    const got: Record<string, { w: number; h: number; x: number; dist: number }> = {};
     for (const [label, cal, fp] of rows) {
-      const g = placeWallObject(box, 'n', fp, cal, { depthM: 0.03 })!;
-      got[label] = { w: g.widthMM, h: g.heightMM };
-      out.push(
-        `${label.padEnd(44)} ${String(g.widthMM).padStart(6)}  ${String(g.heightMM).padStart(6)}  ${
-          `${(((g.widthMM - 700) / 700) * 100).toFixed(1)}%`.padStart(6)
-        }  ${g.position.x.toFixed(4).padStart(7)}  ${g.distance.toFixed(3).padStart(6)}`,
-      );
+      const g = placeWallObject(box, 'n', fp, cal, { depthM: TRUTH.depthM })!;
+      got[label] = { w: g.widthMM, h: g.heightMM, x: g.position.x, dist: g.distance };
+      out.push(row(label, g.widthMM, g.heightMM, g.position.x, g.distance));
     }
-    out.push(`truth${''.padEnd(39)}    700     500    0.0%   0.8000   3.985`);
+    out.push(row('truth', mm(TRUTH.wM), mm(TRUTH.hM), TRUTH.lateral, truthDist));
     console.log(out.join('\n'));
 
     const at = (k: string) => got[rows.find((r) => r[0].startsWith(k))![0]];
@@ -1658,5 +1683,19 @@ describe('§ 44 · reading the polygon instead of its bounding box', () => {
     expect(at('§ 44').h).toBe(500);
     expect(at('EXIF      ').w).toBe(611);
     expect(at('EXIF+§ 44').w).toBe(700);
+
+    // **The two columns nothing pinned**, which is how the truth row could contradict the
+    // table above it in silence — every assertion here was a width or a height, and the
+    // position half of the defect was printed and checked by nothing. Derived from
+    // `TRUTH`, so moving the fixture now fails here instead of printing a contradiction.
+    expect(at('§ 44').x, 'the fix recovers the lateral offset').toBeCloseTo(TRUTH.lateral, 9);
+    expect(at('§ 44').dist, 'and the distance').toBeCloseTo(truthDist, 9);
+    // And this item's headline figure: the bounding box put the plane 500 mm short, which
+    // is the half that survived the cancellation and reached the user.
+    expect(at('shipped').dist, 'the retired plane, half the bbox').toBeCloseTo(
+      boxD - TRUTH.depthM / 2,
+      9,
+    );
+    expect(at('§ 44').dist - at('shipped').dist, 'the headline: 500 mm').toBeCloseTo(0.5, 9);
   });
 });

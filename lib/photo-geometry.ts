@@ -312,6 +312,21 @@ export type WallFrame = { distance: number; left: number; right: number };
  * from the same origin). So a footprint that does not CONTAIN the origin is a
  * room the rig cannot describe, and this refuses it rather than returning a
  * negative distance that would project as a mirror image.
+ *
+ * **That refusal is REACHABLE from the app, and since § 44 it decides whether a wall
+ * piece is measured at all rather than only whether a gate fires — so the trigger is
+ * written down here rather than left to be discovered.** `moveWall` accepts any drag
+ * whose resulting bounding box stays inside `ROOM_SIDE_M`; nothing there checks that the
+ * lens is still inside the polygon. Measured on a 6 × 6 rect, dragging the north wall
+ * inward: −2 m leaves `z ∈ [−1, 3]` and answers 1.00, while **−3 m leaves `z ∈ [0, 3]`,
+ * is accepted, and answers null** — as does −5 m, at a legal 1.0 m depth. Every caller
+ * then takes its no-frame branch at once: both floor-line solvers return null (the lens
+ * falls back to `defaultCal`), `placeWallObject` refuses, and the ceiling and floor
+ * bounds go inert. Which is the honest outcome — those photographs were taken from a
+ * point outside the room as it now is — and better than the ±half pair, which answered
+ * `depth/2` about a wall behind the camera. See § 44 in `docs/what-is-still-open.md`;
+ * `docs/visual-check.md` carries it too, because on screen it looks like a re-scan that
+ * did nothing.
  */
 export function wallFrame(slot: CaptureSlot, footprint: Footprint): WallFrame | null {
   if (footprint.length < 3) return null;

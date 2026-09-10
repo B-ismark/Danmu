@@ -1226,17 +1226,35 @@ second is the real one.
   silently does nothing on such a room, the fix is real and unreachable, and no test here
   covers the navigation.
 
-**What would NOT be a bug.** An **L, T or U** room still measuring to its bounding box.
-That is a separate and larger item (a `u`'s real north wall is at the notch, not at
-`depth/2`) and is filed in `docs/what-is-still-open.md` § 44, not fixed. If you want to
-see the fix work, drag a wall of a **rect** room.
+**What would NOT be a bug.** Two things, and the second is the one that will look like
+the bug this item is watching for.
 
-**Where it rides.** Branch `claude/amazing-dijkstra-d0am9g`, draft PR for § 44.
-`wallDistance` is deleted; all five sites read `wallFrame`. Gates on that branch:
-typecheck · lint · build clean · full suite green, with the `detect-pipeline` and
-`off-square-cost` baseline tables **byte-identical** to `main` — which is the proof the
-change was a no-op on every centred room, and exactly why the off-centre case is the one
-that needs eyes.
+· An **L, T or U** room still measuring to its bounding box. That is a separate and larger
+  item (a `u`'s real north wall is at the notch, not at `depth/2`) and is filed in
+  `docs/what-is-still-open.md` § 44, not fixed. If you want to see the fix work, drag a
+  wall of a **rect** room.
+· **A drag big enough to leave the camera outside the room, where every wall piece comes
+  back at its catalogue size.** `moveWall` only checks the resulting box against
+  `ROOM_SIDE_M`, so dragging one wall of a 6 × 6 room inward by 3 m or more is accepted and
+  puts the whole footprint on one side of the origin — at which point `wallFrame` refuses,
+  and refusing is correct: the photos were taken from somewhere that is no longer in the
+  room. It is indistinguishable **on screen** from the re-scan having silently done
+  nothing, which is the first bullet above, so keep the drag modest — a metre on a 6 m
+  wall is plenty to see the fix. Filed in § 44.
+
+**Where it rides.** `7607794`, draft PR #150. `wallDistance` is deleted; all five sites
+read `wallFrame`. Gates on that commit: typecheck · lint · build clean of
+`ESLint: Invalid Options` · **147 files, 2748 passed / 5 expected fail**, with the
+`detect-pipeline` and `off-square-cost` baseline tables **byte-identical** to `main` —
+which is the proof the change was a no-op on every centred room, and exactly why the
+off-centre case is the one that needs eyes.
+
+*(This entry named the BRANCH and gave no count until a review of its own commit caught
+it — against this file's own rule twelve hundred lines up, that the artifact is a commit
+and never "the tree", and two commits after PR #149 re-pointed six items off that same
+branch name for exactly this reason. A branch moves; this one has already been restarted
+once. The rule is easy to keep while writing about someone else's work and easy to drop
+while writing about your own.)*
 
 ### Pressing Shuffle moves the button out from under the pointer
 

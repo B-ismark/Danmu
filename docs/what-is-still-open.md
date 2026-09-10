@@ -7012,7 +7012,7 @@ coverage floors this thread already filed: **an assertion positioned where it ca
 
 **What § 44 did NOT buy, stated because the fix invites the stronger reading.** `wallFrame`
 reads the polygon's **bounds**. It fixed the off-centre RECTANGLE — the reachable case — and
-left three things open, each its own item below:
+left four things open, each its own item below:
 
 - **A non-convex preset is still measured to its bounding box, and for `u` that is large.**
   The `u` footprint's notch runs `z = −depth/2 → 0`, so the wall directly in front of a
@@ -7027,6 +7027,28 @@ left three things open, each its own item below:
 - **`readFootprint` never reconciles the polygon's bounds with the file's own
   `width`/`depth`**, so an imported room can have the two disagree — the one case where
   `wallSpan` and `frame.right − frame.left` come apart.
+- **A legal wall drag can put the lens OUTSIDE the room, and then all five sites go
+  silent at once — correct, reachable, and until now undocumented.** Found reviewing
+  § 44's own commit. `moveWall` accepts any drag whose resulting bounding box stays inside
+  `ROOM_SIDE_M`; it never checks that the origin is still inside the polygon. Measured by
+  calling the two functions on a 6 × 6 rect, dragging the north wall inward: `−2` gives
+  `z ∈ [−1, 3]` and `wallFrame('n').distance` 1.00; **`−3` gives `z ∈ [0, 3]`, accepted,
+  and `wallFrame` NULL**; `−5` gives `z ∈ [2, 3]` — depth 1.0 m, legal — also NULL. Past
+  that point every wall detection on that slot is refused, both floor-line solvers return
+  null (so the lens falls back to the 66° default and the camera height to an assumed
+  1.5 m), and the ceiling and floor bounds go inert. **The behaviour is right** — the
+  photographs were taken from a point that is no longer inside the room, which is the
+  premise `wallFrame`'s docblock refuses on — and it is an improvement on what the ±half
+  pair did there, which was to answer `depth/2` about a wall behind the camera and measure
+  confidently off it. Two things are missing rather than wrong. The three role tests pin
+  the no-frame answers on a **two-point** footprint, a shape production cannot produce
+  (`footprintForLayout` gives four, `offsetWall` preserves the count, `readFootprint`
+  demands three) — the code path is the same single `null` either way, so this is realism
+  and not coverage, and `wallFrame`'s own guards ARE pinned on a production-shaped
+  rectangle in `tests/wall-sample.test.ts`. And nobody is told: a big drag makes every
+  wall piece come back at its catalogue size, which looks exactly like the re-scan having
+  done nothing — the failure `docs/visual-check.md`'s § 44 item is watching for, with a
+  different cause. That item now says so.
 
 ### 45. The sensor grant is site-wide when one route needs it — NOT fixed, and not a one-liner
 

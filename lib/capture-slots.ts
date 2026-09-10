@@ -14,11 +14,18 @@
 // the local magnetic declination, a phone that writes magnetic where another
 // writes true — cancels out of the differences entirely.
 //
-// WHAT IS AT STAKE IF THIS IS WRONG, because it is not cosmetic. `wallDistance`
-// returns `depth/2` for n/s and `width/2` for e/w, so a photo of the long wall
-// filed under a short one is measured from the wrong distance, and every size and
-// position read off it is wrong. A wrong slot is a wrong room. Hence the ladder
-// below reports which rung answered, and the screen shows it.
+// WHAT IS AT STAKE IF THIS IS WRONG, because it is not cosmetic. `wallFrame` reads
+// the framed wall's distance across the room's DEPTH for n/s and across its WIDTH
+// for e/w, so a photo of the long wall filed under a short one is measured from the
+// wrong distance, and every size and position read off it is wrong. A wrong slot is
+// a wrong room. Hence the ladder below reports which rung answered, and the screen
+// shows it.
+//
+// (This paragraph named `wallDistance` until § 44 deleted that function. The axis
+// convention is unchanged — `wallFrame` reads the polygon's bounds where the ±half
+// pair read `depth/2` — so only the NAME went stale, which is how a stake paragraph
+// goes wrong without going false: the next reader greps the name to check the claim
+// and finds nothing to check it against.)
 //
 // THE LADDER, strongest rung first:
 //

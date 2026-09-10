@@ -83,9 +83,11 @@ const labelOf = (id: CaptureSlot) => CAPTURE_SLOTS.find((s) => s.id === id)!.lab
 const turnOf = (id: CaptureSlot) => CAPTURE_SLOTS.find((s) => s.id === id)!.instruction;
 
 /** What the wall assignment is standing on, in words. The screen says this per
- *  photo because a wrong wall is a wrong room — `wallDistance` reads n/s at
- *  depth/2 and e/w at width/2 — and the user is the only one who can see whether
- *  we got it right. */
+ *  photo because a wrong wall is a wrong room — `wallFrame` reads the framed wall's
+ *  distance across the room's depth for n/s and across its width for e/w, so a photo
+ *  filed under the wrong wall is measured from the wrong distance — and the user is
+ *  the only one who can see whether we got it right. (It named `wallDistance` until
+ *  § 44 deleted it; the convention is the same, the function is not.) */
 const REASON: Record<SlotSignal, string> = {
   bearing: 'from this photo’s compass',
   time: 'from when it was taken',
