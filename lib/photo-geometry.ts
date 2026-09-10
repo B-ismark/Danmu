@@ -261,10 +261,21 @@ export type WallFrame = { distance: number; left: number; right: number };
  * capture flow), printed on every green run rather than quoted here from a scratch
  * script: a `t`'s stem wall is **1.21 m** from the lens where its bounding box says
  * **2.75 m**, so every size taken off that photograph came back **2.27× too large** —
- * 1614 × 1153 mm for a 700 × 500 print. The `l` keeps its distances by luck (its
- * cut-away corner is off both view axes) and loses its wall ENDS, which is the same
+ * 1614 × 1153 mm for a 700 × 500 print, and the ratio is dimension-independent —
+ * `(w/2) ÷ 0.22w` is 2.2727 for EVERY `t` room, not just the one measured. The `l`
+ * keeps its distances, and that is structural rather than luck: its cut-away corner
+ * starts at 0.42 of each side and 0.42 < 0.5, so it misses both view axes for every
+ * `w` and `d` (0 of 80 combinations deviate). What it loses is its wall ENDS, the same
  * defect one field over: the surface gate was handed 2.0–3.1 m of picture that is
  * return wall and told it was the framed one.
+ *
+ * **The tally, recounted, because the first version of this passage flattered it.** It
+ * said "three walls of sixteen had the wrong distance and five more the wrong ends",
+ * which is wrong three ways. The presets have **twenty** walls, not sixteen — `open`
+ * was in the table and out of the denominator. **Two** had the wrong distance (`t` east
+ * and west), with a third having no wall at all (`u` north, where the box claimed
+ * 2.500 m). And the five with the wrong ends are five in TOTAL, two of them those same
+ * two, so three of them are "more". **Six distinct walls of twenty.**
  *
  * **Two errors partly cancelled, which is why nothing caught it.** A wall piece's
  * size goes as `k · d`. A distance 2.27× too far, times the 66° default standing in
@@ -333,8 +344,13 @@ export type WallFrame = { distance: number; left: number; right: number };
  * **Two things it still does not answer, both filed with numbers rather than left to
  * be discovered.** The ends are the hit wall's own two ends, not the part of it the
  * lens can SEE, so a polygon that occludes its own framed wall would over-report the
- * span — measured at 100% visible for all five presets, so nothing ships in that
- * state today. And an OBLIQUE wall has no plane perpendicular to the view axis for
+ * span. Measured at **100% visible for `rect`, `l`, `t` and `open`**; the `u` cannot be
+ * asked, because its lens sits exactly ON the notch's inner face and every ray out of it
+ * leaves through a boundary it is already standing on — the same fact the `u` paragraph
+ * above states, rather than a second finding. (A first version of this sentence claimed
+ * all five, on a probe that reported 0% for the `u` and was waved off as an artifact. It
+ * WAS an artifact; asserting the number the artifact did not give is how a docblock
+ * stops being evidence.) And an OBLIQUE wall has no plane perpendicular to the view axis for
  * the placers to invert against; this returns the crossing itself, which is exact at
  * the image centre and approximate toward the ends. Only a hand-edited scene file can
  * make one: `footprintForLayout` is axis-aligned by construction and `offsetWall`
@@ -385,12 +401,24 @@ export function wallFrame(slot: CaptureSlot, footprint: Footprint): WallFrame | 
     const distance = a.forward + ((b.forward - a.forward) * -a.right) / (b.right - a.right);
     if (!(distance > 0)) continue; // behind the lens, or — the `u` — the lens on it
     if (lo < 0 && hi > 0 && distance < blocker) blocker = distance;
+    // An edge that cannot beat the wall already chosen cannot become it, so it is asked
+    // no further questions. Ordering rather than an optimisation of the answer — and
+    // the reason it earns a line is that the test below is the expensive one:
+    // `wallOutwardNormal` derives the winding from the whole polygon, so asking it per
+    // edge is quadratic in the vertex count. MEASURED rather than feared, at the ceiling
+    // `readFootprint` accepts: 500 calls against a 256-gon take 47 ms, and against the
+    // four-point rectangle every real room has, 0.43 ms. So a whole scan of the worst
+    // importable footprint costs tens of milliseconds — which is why the winding is NOT
+    // hoisted by widening `wallOutwardNormal`'s signature or by writing the
+    // perpendicular out a second time here. One expression of a wall-normal rule has
+    // already cost this repo five walls; a few milliseconds has cost it nothing.
+    if (best && distance >= best.distance) continue;
     // Are we looking at its INSIDE? `worldToLens` is linear (the rig stands the lens at
     // the world origin, so there is no translation to subtract), which is what lets a
     // DIRECTION go through the same function as a point.
     const [nx, nz] = wallOutwardNormal(footprint, i);
     if (!(worldToLens(slot, nx, nz).forward > 0)) continue;
-    if (!best || distance < best.distance) best = { i, distance, left: lo, right: hi };
+    best = { i, distance, left: lo, right: hi };
   }
   if (!best) return null;
   // Nothing may stand between the lens and the wall it is being told it photographed —
@@ -712,7 +740,7 @@ function lateralSpan(
  * while the box's ends reach 1.97 m past where the east wall stops and 2.52 m past the
  * south wall's. That window is return wall, and a fabrication landing in it was measured
  * as though it were on the framed wall: exactly the defect this gate was built for, in the
- * rooms it could not see. Five of sixteen preset walls were in that state.
+ * rooms it could not see. Five of the presets' twenty walls were in that state.
  *
  * **On an ultrawide, every ordinary room has picture beyond the ends of the wall it is
  * photographing**, and what is out there is the RETURN wall. The condition is

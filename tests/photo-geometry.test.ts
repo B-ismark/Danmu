@@ -182,6 +182,16 @@ describe('the framed wall in a room that is not a box', () => {
   const bboxDist = (slot: CaptureSlot, w: number, d: number) =>
     slot === 'n' || slot === 's' ? d / 2 : w / 2;
 
+  /** Where a preset's own vertex list puts the wall a given slot faces — the truth this
+   *  describe measures `wallFrame` against, read OFF THE INPUT rather than copied from
+   *  `footprintForLayout`'s constants. The first version of these tests wrote `0.22 * w`
+   *  and `0.42 * d` by hand, which is a second copy of a number the fixture already
+   *  holds: the same shape as the hand-typed truth row a review caught in § 44's own
+   *  table, one notch milder. Each reader below asserts the vertex is the one it thinks
+   *  it is, so a change to the preset fails loudly rather than silently re-pointing the
+   *  truth at something else. */
+  const vertex = (layout: LayoutId, w: number, d: number, i: number) => footprintForLayout(layout, w, d)[i];
+
   it('prints what the bounding box said and what the wall is', () => {
     const out: string[] = [
       '\n§ 44b · the framed wall, per shipping preset · bbox convention vs the polygon',
@@ -209,7 +219,19 @@ describe('the framed wall in a room that is not a box', () => {
     console.log(out.join('\n'));
     // A printed table nobody reads is this repo's own recurring failure, so the two
     // rows that carry the finding are assertions as well as output.
-    expect(wallFrame('e', footprintForLayout('t', 5.5, 4.7))!.distance).toBeCloseTo(0.22 * 5.5, 12);
+    // The stem's east wall, from the `t`'s own vertex list: vertices 3 and 4 are its two
+    // ends, so they share an x and that x IS the wall. Asserted, so this cannot quietly
+    // start reading some other edge.
+    const stemA = vertex('t', 5.5, 4.7, 3);
+    const stemB = vertex('t', 5.5, 4.7, 4);
+    expect(stemA[0], 'premise: the stem wall is vertical').toBe(stemB[0]);
+    // …and it is the `t`'s stem rather than any preset's third vertex. Worth pinning
+    // because `u`'s vertex 3 has the SAME x — both presets narrow to 0.22 of the width —
+    // so swapping the preset here is an equivalent mutant, and an assertion whose only
+    // mutation is equivalent has not been shown to fail at all.
+    expect(stemA[0]).toBeCloseTo(0.22 * 5.5, 12);
+    expect(vertex('l', 5.5, 4.7, 3)[0]).not.toBeCloseTo(stemA[0], 6);
+    expect(wallFrame('e', footprintForLayout('t', 5.5, 4.7))!.distance).toBeCloseTo(stemA[0], 12);
     expect(wallFrame('n', footprintForLayout('u', 6.0, 5.0))).toBeNull();
   });
 
@@ -219,20 +241,28 @@ describe('the framed wall in a room that is not a box', () => {
   it('a t’s stem wall is where the preset put it, and its box is 2.27× further', () => {
     const [w, d] = [5.5, 4.7];
     const fp = footprintForLayout('t', w, d);
+    const stemX = vertex('t', w, d, 3)[0];
+    expect(stemX, 'premise: the stem wall is vertical').toBe(vertex('t', w, d, 4)[0]);
     for (const slot of ['e', 'w'] as const) {
-      expect(wallFrame(slot, fp)!.distance, slot).toBeCloseTo(0.22 * w, 12);
+      expect(wallFrame(slot, fp)!.distance, slot).toBeCloseTo(stemX, 12);
       expect(bboxDist(slot, w, d)).toBeCloseTo(w / 2, 12);
+      // Dimension-INDEPENDENT: the ratio is (w/2) ÷ stemX and stemX is a fixed fraction
+      // of w, so every `t` room is out by the same factor. Published as though it were
+      // one room's measurement; it is a property of the preset.
       expect(bboxDist(slot, w, d) / wallFrame(slot, fp)!.distance).toBeCloseTo(2.2727, 4);
     }
     // The two slots along the other axis were right all along: the north bar runs the
     // full width and the stem's end is the full depth away. So this is not "l/t/u are
-    // broken" but four walls of sixteen, which is what a fixture sweeping all four
-    // slots on all five presets is for.
+    // broken" but three of the `t`'s own four walls, and six of the presets' twenty —
+    // which is what a fixture sweeping all four slots on all five presets is for, and
+    // why the tally in the docs is swept rather than eyeballed. (It was published as
+    // "four of sixteen" here and "three of sixteen, and five more" everywhere else;
+    // both flattered, `open`'s four walls having been left out of the denominator.)
     for (const slot of ['n', 's'] as const) {
       expect(wallFrame(slot, fp)!.distance, slot).toBeCloseTo(d / 2, 12);
     }
     // …and the ENDS move on three of the four, which is the gate's half of the defect.
-    expect(wallFrame('s', fp)!.right).toBeCloseTo(0.22 * w, 12); // the stem, not the bar
+    expect(wallFrame('s', fp)!.right).toBeCloseTo(stemX, 12); // the stem, not the bar
     expect(bboxSide('s', { width: w, depth: d }) / 2).toBeCloseTo(w / 2, 12);
   });
 
@@ -329,7 +359,13 @@ describe('the framed wall in a room that is not a box', () => {
     const fp = footprintForLayout('l', w, d);
     const east = wallFrame('e', fp)!;
     expect(east.distance).toBeCloseTo(w / 2, 12); // the plane was never wrong here
-    expect(east.right).toBeCloseTo(d / 2 - 0.42 * d, 12); // …the wall's own end, 0.376
+    // The east wall's south end, from the `l`'s own vertex list: vertex 2 is where the
+    // cut-away corner meets it. ONE binding for the premise and the value, so mutating
+    // the index moves both — written the other way first, and then the premise went on
+    // guarding vertex 2 while the value came from vertex 3.
+    const corner = vertex('l', w, d, 2);
+    expect(corner[0], 'premise: this vertex is ON the east wall').toBeCloseTo(w / 2, 12);
+    expect(east.right).toBeCloseTo(corner[1], 12);
     expect(bboxSide('e', { width: w, depth: d }) / 2).toBeCloseTo(d / 2, 12); // the old bound
     // Inside the real wall: measured, and exactly.
     const on = bboxOfWallSolid('e', 'e', 0.2, 1.5, east.distance, 0.7, 0.5, 0.03, WIDE);

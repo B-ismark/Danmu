@@ -163,9 +163,13 @@ backend, no account. The 3D studio *is* the product.
    `t`'s stem wall is measured at **1.21 m** where its bounding box said 2.75, and every
    size taken off that photograph had been **2.27× too large**, 1614 × 1153 mm for a
    700 × 500 print. Reachability is one press, not a hypothesis: *"Photograph my real room
-   first"* is offered for whichever preset is selected. Three walls of sixteen had their
-   DISTANCE wrong, and five more had their ENDS wrong, which is the surface gate being
-   handed 2.0–3.1 m of return wall and told it was the framed one.
+   first"* is offered for whichever preset is selected. **Six distinct walls of the
+   presets' twenty were wrong** — two with the wrong DISTANCE, one with no wall in front
+   of the lens at all, and five with the wrong ENDS, two of those being the same two —
+   which is the surface gate being handed 2.0–3.1 m of return wall and told it was the
+   framed one. (Recounted: the first version of this paragraph said "three of sixteen,
+   and five more", which flattered every one of those numbers, `open` having been left out
+   of the denominator. A tally is evidence, so it gets swept rather than eyeballed.)
    The second is that **the cancellation trap repeated, and this time it made improving the
    calibration make things worse.** A wall piece's size goes as `k · d`; a distance 2.27×
    too far times the 66° default standing in for a real ultrawide (`k` 0.49× too small)

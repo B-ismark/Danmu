@@ -1268,9 +1268,10 @@ room.
 TV wider than the wall it is on — or, since this fix, still too large by any amount. Every
 plane in the geometry used to come from the box around the room, and a T's stem wall is
 **1.21 m** from the camera where that box says **2.75 m**, so a 700 × 500 print decoded
-**1614 × 1153 mm**. Three of the sixteen preset walls had the wrong distance; five more had
-the wrong ENDS, which is the surface gate's input, so a picture on a return wall could be
-measured as though it were on the wall in front of you and appear twice.
+**1614 × 1153 mm**. Six distinct walls of the presets' twenty were wrong: two with the wrong
+distance, one with no wall in front of the lens at all, and five with the wrong ENDS, two of
+them the same two. The ends are the surface gate's input, so a picture on a return wall could
+be measured as though it were on the wall in front of you and appear twice.
 
 **Why a person is needed.** The suite's proof is a round trip — project a piece with an
 independent camera model, invert it with the placer, require the truth back — which proves
@@ -1288,20 +1289,28 @@ source rather than exercised.
   pointed out of a doorway — but on screen it is indistinguishable from the scan having
   done nothing. **The camera's position in a non-convex room is the open item** now, filed
   in `docs/what-is-still-open.md` § 44b, and it is larger than what was just fixed.
-· A U-Shape's east and west photos being taken from about 1.3 m away, close enough that the
-  wall-floor junction falls off the bottom of the frame. Those two views are measured
-  correctly; what they cannot do is contribute the floor-line calibration rung, so the lens
-  falls back to the 66° assumption. That is § 28's item, not this one.
+· Wall pieces in a U-Shape's east and west photos being **the right size**. Those two views
+  were never affected — the walls they frame are 3.0 m away, exactly as a rectangle's would
+  be. (This bullet first claimed they were shot from 1.3 m with the floor line off the frame;
+  1.3 m was a retracted measurement, and its consequence outlived it by a paragraph.)
 · Pieces in an L-Shape's photos being the right size but a bit off along the wall. The L's
   distances were never wrong — its cut-away corner misses both view axes — so what this fix
   changed there is the wall's ENDS, and the visible effect is a fabrication disappearing
   rather than a size changing.
 
-**Where it rides.** Branch `claude/amazing-dijkstra-d0am9g` — to be re-pointed at its merge
-commit, per this file's own rule. `wallFrame` names the wall the lens is looking at instead
-of reading the box around the room; `wallSpan` is deleted with it, so the capture screen's
-*"this wall should be N m wide"* label now states the wall's real length — which is itself
-worth a glance on a T-Shape, where it used to say 4.70 m about a 2.58 m wall.
+**Where it rides.** `335776e`, draft PR #152. Gates on that commit: typecheck · lint
+`--max-warnings 0` · build clean of `ESLint: Invalid Options` · 147 files, **2756 passed / 5
+expected fail**. `wallFrame` names the wall the lens is looking at instead of reading the box
+around the room; `wallSpan` is deleted with it, so the capture screen's *"this wall should be
+N m wide"* label now states the wall's real length — which is itself worth a glance on a
+T-Shape, where it used to say 4.70 m about a 2.58 m wall.
+
+*(This entry said **"Branch `claude/amazing-dijkstra-d0am9g` — to be re-pointed at its merge
+commit"** until a review of its own commit caught it. That is the THIRD time an item here has
+cited a branch, and the first two were caught the same way — so the interesting part is not
+the slip but that this one wrote the rule into the entry as an excuse for breaking it. A
+promise to comply later is not compliance: the artifact is a commit, and a commit exists as
+soon as there is anything to cite.)*
 
 ### Pressing Shuffle moves the button out from under the pointer
 

@@ -1119,15 +1119,20 @@ whichever preset is selected — and printed on every green run:
 | preset · slot | box said | the wall is | a 700 × 500 print read |
 |---|---|---|---|
 | `t` 5.5 × 4.7 · e/w | 2.750 m | **1.210 m** (the stem) | **1614 × 1153 mm, +130.6%** |
-| `l` 6 × 4.7 · e | 3.000 m | 3.000 m — right by luck | its ENDS were 1.97 m too generous |
+| `l` 6 × 4.7 · e | 3.000 m | 3.000 m — right, structurally | its ENDS were 1.97 m too generous |
 | `l` 6 × 4.7 · s | 2.350 m | 2.350 m | ends 2.52 m too generous |
 | `t` 5.5 × 4.7 · s | 2.350 m | 2.350 m | ends 3.08 m too generous |
 | `u` 6 × 5 · n | 2.500 m | **no wall at all** | measured against a void |
 | `rect`, `open`, and 8 other preset walls | — | unchanged | unchanged |
 
-So three walls of sixteen had the wrong DISTANCE and five more had the wrong ENDS, which
-is the surface gate being handed 2–3 m of return wall and told it was the framed one — the
-same fabrication § 42.3 built that gate to catch, in the rooms it could not see.
+So **six distinct walls of the presets' twenty were wrong**: two with the wrong DISTANCE
+(`t` east and west), one with no wall in front of the lens at all (`u` north), and five
+with the wrong ENDS, two of which are those same two. The ends are the surface gate's
+input, so those five had it handed 2–3 m of return wall and told it was the framed one —
+the same fabrication § 42.3 built that gate to catch, in the rooms it could not see.
+(Recounted after the first version of this paragraph said "three of sixteen, and five
+more". `open` was in the table and out of the denominator, the no-wall case was folded into
+the distance count, and "more" double-counted the overlap.)
 
 **The cancellation trap repeated, and this time improving the calibration made it worse.**
 A wall piece's size goes as `k · d`, so a distance 2.27× too far times the 66° default
