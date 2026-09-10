@@ -356,7 +356,11 @@ export type WallFrame = { distance: number; left: number; right: number };
  * make one: `footprintForLayout` is axis-aligned by construction and `offsetWall`
  * translates an edge along its own normal.
  */
-export function wallFrame(slot: CaptureSlot, footprint: Footprint): WallFrame | null {
+export function framedWallFrom(
+  stand: readonly [number, number],
+  slot: CaptureSlot,
+  footprint: Footprint,
+): WallFrame | null {
   if (footprint.length < 3) return null;
   // Every coordinate, not just the ones that end up bounding: a comparison against
   // NaN is false in both directions, so a NaN vertex is silently SKIPPED by anything
@@ -376,8 +380,8 @@ export function wallFrame(slot: CaptureSlot, footprint: Footprint): WallFrame | 
   // to. Both of them are grazes.
   let blocker = Infinity;
   for (let i = 0; i < n; i++) {
-    const a = worldToLens(slot, footprint[i][0], footprint[i][1]);
-    const b = worldToLens(slot, footprint[(i + 1) % n][0], footprint[(i + 1) % n][1]);
+    const a = pointToLens(slot, footprint[i][0], footprint[i][1], stand);
+    const b = pointToLens(slot, footprint[(i + 1) % n][0], footprint[(i + 1) % n][1], stand);
     const lo = Math.min(a.right, b.right);
     const hi = Math.max(a.right, b.right);
     if (lo > 0 || hi < 0) continue; // not on the view column at all
@@ -413,9 +417,16 @@ export function wallFrame(slot: CaptureSlot, footprint: Footprint): WallFrame | 
     // perpendicular out a second time here. One expression of a wall-normal rule has
     // already cost this repo five walls; a few milliseconds has cost it nothing.
     if (best && distance >= best.distance) continue;
-    // Are we looking at its INSIDE? `worldToLens` is linear (the rig stands the lens at
-    // the world origin, so there is no translation to subtract), which is what lets a
-    // DIRECTION go through the same function as a point.
+    // Are we looking at its INSIDE? A normal is a DIRECTION, so it goes through the
+    // vector map and is NOT offset by where the lens stands — the vertices two dozen
+    // lines up go through `pointToLens` and this does not, and that asymmetry is the
+    // whole reason the two are separate functions. This used to read "`worldToLens` is
+    // linear … which is what lets a DIRECTION go through the same function as a point",
+    // which was true while the rig stood the lens at the world origin and is exactly the
+    // kind of sentence that certifies a defect once the premise moves: offsetting a
+    // normal would rotate it toward or away from the camera by an amount that grows with
+    // how far off-centre the lens is, so a wall's inside would read as its outside in
+    // precisely the rooms this change exists for.
     const [nx, nz] = wallOutwardNormal(footprint, i);
     if (!(worldToLens(slot, nx, nz).forward > 0)) continue;
     best = { i, distance, left: lo, right: hi };
@@ -429,6 +440,45 @@ export function wallFrame(slot: CaptureSlot, footprint: Footprint): WallFrame | 
   // lens outside the room fails it because the wall it is outside of is in the way.
   if (blocker < best.distance) return null;
   return { distance: best.distance, left: best.left, right: best.right };
+}
+
+/**
+ * Where the lens stood, in world XZ, for a room with this footprint.
+ *
+ * **This is a PLACEHOLDER that reproduces today's rig exactly, and it is here so the
+ * standpoint has one name before it has a better value.** Every distance the module
+ * measures scales with it, so replacing the rule and opening the seam in one commit
+ * would leave nothing able to prove which of the two moved the numbers.
+ *
+ * Today's answer is the WORLD ORIGIN, and that is not the same claim as "the centre of
+ * the room" or even "the centre of the box around the room" — those coincide only for a
+ * footprint centred on the origin, which is every preset as `footprintForLayout` authors
+ * it and is NOT what `offsetWall` leaves behind. So a dragged room's lens is at the
+ * origin, not at its new bbox centre, and `[0, 0]` is the honest transcription of the
+ * rig rather than a stand-in for a centre.
+ *
+ * `null` where the polygon cannot answer — fewer than three points, or a non-finite
+ * vertex — which is the same floor `framedWallFrom` applies, so callers inherit their
+ * existing no-frame branch and nothing new has to decide anything.
+ */
+function cameraStand(footprint: Footprint): readonly [number, number] | null {
+  if (footprint.length < 3) return null;
+  for (const [x, z] of footprint) if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
+  return ORIGIN_STAND;
+}
+
+/** Frozen so the placeholder cannot be mutated by a caller into a real standpoint by
+ *  accident, and one instance so identity is stable for a future memo. */
+const ORIGIN_STAND: readonly [number, number] = Object.freeze([0, 0] as [number, number]);
+
+/** The framed wall, from wherever the rig stands for this room. See `framedWallFrom` —
+ *  this resolves the standpoint and that measures from it, and the split exists so a
+ *  candidate standpoint can be MEASURED by calling this module rather than by
+ *  re-deriving its arithmetic somewhere a comparison would be against a
+ *  re-implementation. Signature unchanged, so all six readers are untouched. */
+export function wallFrame(slot: CaptureSlot, footprint: Footprint): WallFrame | null {
+  const stand = cameraStand(footprint);
+  return stand ? framedWallFrom(stand, slot, footprint) : null;
 }
 
 /**
@@ -480,9 +530,14 @@ export function wallColumnsAtHeight(
  * inverts e and w, which is exactly the mistake `lib/geometry.ts` warns about for
  * part rotations.
  *
- * There is no camera offset to subtract: the rig stands the lens at the world
- * origin, so this is a pure rotation/reflection and a direction may go through it
- * unchanged. `wallFrame` leans on that for the wall-facing test.
+ * This is the VECTOR map — a pure rotation/reflection about the vertical, with no
+ * translation — so it is what a DIRECTION goes through, and `pointToLens` is what a
+ * POINT goes through. Keeping the two named apart is the point rather than tidiness:
+ * the lens no longer stands at the world origin, so a single function cannot serve
+ * both, and the version that did was correct only for as long as there was nothing to
+ * subtract. `wallFrame` takes `wallOutwardNormal`'s answer through THIS one and the
+ * footprint's own vertices through the other; swapping either is a defect no signature
+ * can catch, which is why they differ in arity as well as in name.
  */
 function worldToLens(slot: CaptureSlot, x: number, z: number): { forward: number; right: number } {
   switch (slot) {
@@ -495,6 +550,22 @@ function worldToLens(slot: CaptureSlot, x: number, z: number): { forward: number
     case 'w':
       return { forward: -x, right: -z };
   }
+}
+
+/** A world floor POINT in the lens's own frame: offset by where the lens stands, then
+ *  rotated. Every quantity `wallFrame` measures is a distance from the camera, so the
+ *  subtraction has to happen before the rotation and not after — and where the stand is
+ *  the origin (a room centred on the lens, which is every preset as authored) it is
+ *  `x - 0`, exact in IEEE 754, so the answer is BIT-identical to the version that had no
+ *  standpoint at all. That is what keeps the no-op proof an equality rather than a
+ *  tolerance. */
+function pointToLens(
+  slot: CaptureSlot,
+  x: number,
+  z: number,
+  stand: readonly [number, number],
+): { forward: number; right: number } {
+  return worldToLens(slot, x - stand[0], z - stand[1]);
 }
 
 /**

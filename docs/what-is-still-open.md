@@ -7213,3 +7213,91 @@ and would need one line changed (assert present on the route with the consumer, 
 elsewhere) once the header is split, which is a sharper invariant than "present
 somewhere".
 
+
+
+---
+
+### 46. Where the lens stood — MEASURED 2026-09-10, and the rule chosen from the table
+
+Every size this app reads off a room photo scales with how far the lens was from the wall
+it photographed, and that distance is not measured but assumed from a hard-coded camera
+position: **the world origin** (`lib/photo-geometry.ts`'s rig line — *"camera at the ROOM
+CENTRE"*). § 44 stopped the placers measuring to the box around the room; § 44b stopped
+`wallFrame` naming a box side as the framed wall. Both left the **observer** at the box's
+centre, which is where § 44b filed this.
+
+**The artifact is `tests/camera-stand.test.ts`, printed on every green run**, and it calls
+`framedWallFrom` rather than re-deriving it — the seam exists so a candidate standpoint can
+be measured by calling the module, per this thread's twice-filed "call the function" trap.
+
+**The defect, as a count rather than a description: 19 of the presets' 20 walls are
+photographable from the origin.** The twentieth is the `u`'s north view, and its standpoint
+clearance there is **exactly 0.00 m** — the lens is not near a wall, it is *on* one.
+
+**The four candidates, at the dimensions the picker ships:**
+
+| rule | walls ahead / 20 | exactly the origin on a centred rect? | on the room's symmetry axis? |
+|---|---|---|---|
+| origin (today) | **19** | yes | yes |
+| bbox centre | 19 | yes, and *not* the same claim — a dragged room's bbox centre is not the origin | yes |
+| area centroid | 20 | yes | yes |
+| largest bay (`roomBays(poly)[0]`) | **20** | **yes** | **yes** |
+| pole of inaccessibility | 20 | **NO** | **no** |
+
+**Chosen: the largest bay's centre.** Three requirements in order — every view must have a
+wall ahead (a slot without one cannot be measured by anything downstream), exactly the
+origin on a centred rectangle (which is what keeps the `detect-pipeline` and
+`off-square-cost` baselines byte-identical when the standpoint replaces the hard-coded
+origin), and on the room's own symmetry axis (all five presets are symmetric about x = 0, and
+the flow asks a person to stand in one place and turn). Only one rule meets all three, and
+`roomBays` already proves each rectangle is whole floor via `rectInsidePoly`.
+
+**Both losing candidates are recorded with the number that lost them**, so neither is
+re-proposed — § 44b's filed note names both:
+
+- **The pole of inaccessibility is degenerate on a rectangle.** The farthest-from-any-wall
+  point in a 6 × 4 room is the whole centre LINE `x ∈ [−1, 1]` at `z = 0`, every point of it
+  exactly 2.0 m from the nearest wall — so the answer is whichever cell a grid scan reaches
+  first. Measured, it lands at **x = −0.95**: off-centre, in a rectangle, by an artifact of
+  its own step size.
+- **The area centroid is inside every preset and that is not the question.** On a `u` it
+  stands **0.35 m** from the notch's inner face and would need a **150° lens** to frame that
+  wall; the largest bay stands **1.25 m** back and needs 93°. `interiorPoint`
+  (`lib/footprint.ts:311`) uses the area centroid as its first tier and is right to — it
+  answers *"a point inside this polygon"*, a real question and a neighbouring one. Reusing it
+  here would be the same mistake as the depthless card and the box-room vanishing-point
+  fixture: a fixture, or a helper, that matches the domain and not the input.
+
+**What the standpoint change buys, and it is not what the item assumed.** A `u`'s north view
+becomes measurable — 1.25 m to the notch's inner face, 2.64 m of span, which frames on an
+ultrawide — so `docs/visual-check.md`'s *"a U-Shape's first wall shows no length"* item is
+answered by moving the camera rather than by writing copy to explain a gap, exactly as that
+item predicted. And a `t`'s east and west views change which wall they frame: from the bar's
+centre they see the bar's own side walls at **2.75 m / 2.12 m span**, where the origin saw
+the stem's at 1.21 m / 2.58 m. Both are correct answers to *"what is in front of the lens"*;
+which one is right depends on where the person stood, which is the whole reason the
+instruction and the geometry have to name the same spot.
+
+**And the table found something that is not about non-convex rooms at all — it is about the
+copy, and it is worse than the item being fixed.** `lib/capture.ts` tells a person to
+*"Stand in the middle of the room … frame it corner to corner."* In the app's own **default
+Rectangle**, 6 × 4 m, the long wall is 6.00 m of span seen from 2.00 m, which needs a
+**112.6° lens**. The assumed default is 66°; a phone's main camera is nearer 78°; only an
+ultrawide gets close. **Not one of the five presets can frame its long wall corner to corner
+from any standpoint measured here**, so the promise the instruction makes is one the room
+cannot keep, on the flow's first shot. Filed rather than fixed with the standpoint, because
+it is a copy decision — and note it does **not** make those photos unmeasurable: a wall that
+overflows the frame still measures the furniture in it. What it breaks is the person's
+ability to do what they were asked, and the wall-length label's usefulness as a check.
+
+**Reachability of the underlying defect is not in question**, since `moveWall` accepts any
+drag whose bbox stays inside `ROOM_SIDE_M` and never checks that the lens is still inside
+the polygon — which `wallFrame`'s docblock already records with numbers (a 6 × 6 rect, north
+dragged in 3 m, every slot answering null).
+
+**Still open here:** the mechanism itself (`worldToLens` subtracts the stand, `slotToWorld`
+adds it, and the wall-facing test's normal must stop going through the point transform —
+that comment currently justifies sharing one function *because* there is no translation);
+whether the corner-to-corner instruction changes; and per-slot standpoints, which are a
+different flow rather than a better constant — a person really does back away from the wall
+they are shooting, and *"turn right after each shot"* is what makes one standpoint cheap.
