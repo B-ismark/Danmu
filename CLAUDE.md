@@ -535,7 +535,11 @@ backend, no account. The 3D studio *is* the product.
    clear 4.5:1 as type (`--accent-text` also works on `--accent-tint`). Anything
    interactive gets `--edge` as its boundary, not a `--hairline*` (those are
    decorative dividers — `.ds-btn`, `.ds-chip`, `.popover` and `.toolbar` all
-   carry `--edge`; `.ds-card` and the real dividers keep `--hairline`). Text on a
+   carry `--edge`; `.ds-card` and the real dividers keep `--hairline`). The one
+   container that looks like a control and is not is `.chrome-pill`, the floating
+   chrome over the room: its rim is `--hairline-strong` because nothing presses the
+   pill, and the borderless controls inside are identified by their own glyph or
+   word — do not "fix" it to `--edge`, which puts two outlines on every button. Text on a
    filled surface uses `--on-accent` / `--on-ink`, never `#fff`. z-index comes
    from the `--z-*` scale only, including `--z-sticky-local` for a sticky header
    inside its own scroll box. Tailwind is present for Preflight only — no utility

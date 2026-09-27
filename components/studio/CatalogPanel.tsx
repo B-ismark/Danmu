@@ -101,27 +101,22 @@ export function AddPiecesButton() {
 export function CatalogToggle() {
   const open = useStudio((s) => s.catalogOpen);
   const setOpen = useStudio((s) => s.setCatalogOpen);
+  // A `.chrome-pill` like the rest of the cluster; open reads as the tinted capsule
+  // (`aria-expanded`, globals.css). It sits in `CanvasTools`, which wraps, and
+  // pills hold their width there — so it goes to a row of its own rather than being
+  // compressed to an icon and half a word.
   return (
-    <button
-      onClick={() => setOpen(!open)}
-      aria-expanded={open}
-      className="ds-btn ds-btn--sm"
-      title="Add a piece — drag it into the room, click to drop it in the first clear spot, or Shift-click to mark several"
-      style={{
-        fontWeight: 700,
-        gap: 6,
-        // It sits in `CanvasTools`, which wraps. Holding its width there is what
-        // sends it to a row of its own rather than letting it be compressed to
-        // an icon and half a word.
-        flexShrink: 0,
-        background: open ? 'var(--accent-tint)' : 'var(--paper)',
-        borderColor: open ? 'var(--accent-text)' : 'var(--edge)',
-        color: open ? 'var(--accent-text)' : 'var(--ink-2)',
-        boxShadow: 'var(--shadow-soft)',
-      }}
-    >
-      <Icon name="plus" size={12} /> Add
-    </button>
+    <div className="chrome-pill">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className="chrome-pill__text"
+        title="Add a piece — drag it into the room, click to drop it in the first clear spot, or Shift-click to mark several"
+      >
+        <Icon name="plus" size={12} /> Add
+      </button>
+    </div>
   );
 }
 

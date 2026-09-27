@@ -42,8 +42,8 @@ export function PlanViewControls({
   if (phone) return null;
   return (
     // `flexWrap`, because this row is about 450px of zoom, rotation and fit and
-    // the 2D canvas is not always 450px wide. `.toolbar` is `overflow: hidden`
-    // (it clips its segment fills to the rounded corners), so without a wrap the
+    // the 2D canvas is not always 450px wide. It was one `.toolbar`, which is
+    // `overflow: hidden` (it clips its segment fills to the rounded corners), so without a wrap the
     // last controls were simply cut off at the border — no scrollbar, no ellipsis,
     // and the Fit button unreachable with nothing on screen saying why. Folding
     // into two short rows costs a little height in the one slot that has height to
@@ -51,12 +51,21 @@ export function PlanViewControls({
     //
     // It folds as two GROUPS, never control by control: zoom, and turn + fit. Wrapping
     // one control at a time left "Fit" alone on a third row at the laptop's 1024px
-    // step, with a hairline divider stranded at the end of the row above it. And each
-    // group is its own pill rather than one box around both, because a wrapped flex
-    // row keeps the full width it was offered: the single box stayed 264px wide
-    // around two 130px rows, an empty strip inside its own border.
-    <div className="plan-view-bar" role="group" aria-label="Plan view">
-      <div className="toolbar plan-view-bar__group">
+    // step, with a hairline divider stranded at the end of the row above it.
+    //
+    // And the two groups are handed straight to `CanvasView`, which wraps, rather
+    // than boxed together: a wrapper made both one flex item, so on a cramped canvas
+    // the pair dropped below undo/redo as a block and then folded again inside it —
+    // three rows stepping down the corner where two would do. As siblings of
+    // undo/redo, zoom stays on its row and only the turn pill moves down. Each group
+    // names itself, which a wrapper's one label did for both.
+    //
+    // Each is a `.chrome-pill` (globals.css): one capsule, quiet round buttons inside
+    // it, and the readouts on a fixed width so + and − never shift as the number
+    // grows a digit. It replaced a box of outlined circles inside an outlined box —
+    // two boundaries per control.
+    <>
+      <div className="chrome-pill" role="group" aria-label="Zoom">
         {/* Disabled at the bounds. The handle clamps silently, so without this the
             buttons stay pressable at max/min and appear broken. */}
         <IconButton
@@ -64,8 +73,7 @@ export function PlanViewControls({
           label="Zoom out"
           onClick={() => api.current?.zoomOut()}
           disabled={zoom <= MIN_ZOOM + 0.001}
-          variant="outline"
-          size={28}
+          size={30}
           iconSize={15}
         />
         {/* One readout, not two. The old top-left chip said "To scale in mm" beside
@@ -73,19 +81,7 @@ export function PlanViewControls({
             the claim worth making — it is what someone measuring would rely on.
             The SHORT form: "centimeters (cm) · 100%" was the widest thing in the
             row, and on a phone it was cut off by the toolbar's own edge. */}
-        <span
-          className="mono"
-          title={`Drawn to scale. Every dimension is in ${unitName}.`}
-          style={{
-            fontSize: 'var(--fs-micro)',
-            color: 'var(--ink-3)',
-            letterSpacing: '0.06em',
-            display: 'flex',
-            alignItems: 'center',
-            padding: '0 8px',
-            whiteSpace: 'nowrap',
-          }}
-        >
+        <span className="chrome-pill__readout chrome-pill__readout--zoom" title={`Drawn to scale. Every dimension is in ${unitName}.`}>
           {dimUnit} · {(zoom * 100).toFixed(0)}%
         </span>
         <IconButton
@@ -93,52 +89,33 @@ export function PlanViewControls({
           label="Zoom in"
           onClick={() => api.current?.zoomIn()}
           disabled={zoom >= MAX_ZOOM - 0.001}
-          variant="outline"
-          size={28}
+          size={30}
           iconSize={15}
         />
       </div>
-      <div className="toolbar plan-view-bar__group">
+      <div className="chrome-pill" role="group" aria-label="Turn and fit">
         <IconButton
           icon="rotate-ccw"
           label="Turn the page left"
           onClick={() => api.current?.rotateLeft()}
-          variant="outline"
-          size={28}
+          size={30}
           iconSize={14}
         />
-        <span
-          className="mono"
-          style={{
-            fontSize: 'var(--fs-micro)',
-            color: 'var(--ink-3)',
-            letterSpacing: '0.06em',
-            display: 'flex',
-            alignItems: 'center',
-            padding: '0 6px',
-          }}
-        >
-          {deg}°
-        </span>
+        <span className="chrome-pill__readout chrome-pill__readout--deg">{deg}°</span>
         <IconButton
           icon="rotate-cw"
           label="Turn the page right"
           onClick={() => api.current?.rotateRight()}
-          variant="outline"
-          size={28}
+          size={30}
           iconSize={14}
         />
-        <button
-          onClick={() => api.current?.fit()}
-          title="Back to the default view"
-          className="ds-btn ds-btn--xs"
-          style={{ padding: '0 9px', gap: 5 }}
-        >
+        <span aria-hidden="true" className="chrome-pill__rule" />
+        <button type="button" onClick={() => api.current?.fit()} title="Back to the default view" className="chrome-pill__text">
           <Icon name="fit" size={12} />
           Fit
         </button>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -149,10 +126,12 @@ export function PlanViewControls({
  */
 export function ComfortLegend({ hasCutOff }: { hasCutOff: boolean }) {
   return (
+    // A key, not a control, so it wears the floating-chrome container (`.chrome-legend`)
+    // rather than `.popover`'s `--edge`: nothing in it can be pressed.
     <div
-      className="popover"
+      className="chrome-legend"
       style={{
-        padding: '7px 10px',
+        padding: '7px 12px',
         fontSize: 'var(--fs-caption)',
         color: 'var(--ink-3)',
         lineHeight: 1.45,

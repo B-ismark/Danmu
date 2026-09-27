@@ -4,13 +4,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { PlanView, type PlanViewHandle } from '@/components/studio/PlanView';
 import { PlanViewControls, ComfortLegend } from '@/components/studio/PlanChrome';
-import { CanvasTools, CanvasView, CanvasAide, ChromeDivider } from '@/components/studio/CanvasChrome';
+import { CanvasTools, CanvasView, CanvasAide } from '@/components/studio/CanvasChrome';
 import { UndoRedo } from '@/components/studio/UndoRedo';
 import { SceneContextMenu } from '@/components/studio/SceneContextMenu';
 import { HoverCard } from '@/components/studio/HoverCard';
 import { CatalogPanel, STUDIO_CANVAS_ID } from '@/components/studio/CatalogPanel';
 import { StudioShell } from '@/components/studio/StudioShell';
-import { usePhoneStudio } from '@/components/studio/NarrowViewportBanner';
 import { Icon } from '@/components/ui/Icon';
 import { useStudio, useSettings } from '@/lib/store';
 import { roomStore } from '@/lib/storage';
@@ -18,7 +17,6 @@ import { UNIT_OPTIONS } from '@/lib/units';
 
 export default function PlanPage() {
   const dimUnit = useSettings((s) => s.dimUnit);
-  const phone = usePhoneStudio();
   const { roomId } = useParams<{ roomId: string }>();
   // Only the setter is read — the name is written into the export filename from
   // the ref below, not rendered, so the value binding was dead.
@@ -112,28 +110,24 @@ export default function PlanPage() {
           card and a zoom toolbar bottom-left (inside PlanView), and a legend
           bottom-right: four corners, on the tab that also had the least to say. */}
       <CanvasTools>
-        <button
-          onClick={() => setComfort((v) => !v)}
-          aria-pressed={comfort}
-          className={`ds-chip ${comfort ? 'ds-chip--accent' : ''}`}
-          title="Shade the floor a person needs to walk, open a door, and get into bed"
-          style={{
-            cursor: 'pointer',
-            fontWeight: 700,
-            borderColor: comfort ? 'var(--accent-text)' : 'var(--edge)',
-            background: comfort ? 'var(--accent-tint)' : 'var(--paper)',
-          }}
-        >
-          <Icon name="crosshair" size={10} />
-          Comfort zones
-        </button>
+        <div className="chrome-pill">
+          <button
+            type="button"
+            onClick={() => setComfort((v) => !v)}
+            aria-pressed={comfort}
+            className="chrome-pill__text"
+            title="Shade the floor a person needs to walk, open a door, and get into bed"
+          >
+            <Icon name="crosshair" size={12} />
+            Comfort zones
+          </button>
+        </div>
       </CanvasTools>
 
       <CanvasView>
+        {/* Pills, so the gap is the separation: no rule to strand when the zoom
+            pills are not on a phone (pinch is). */}
         <UndoRedo />
-        {/* The zoom box is not on a phone (pinch is), so neither is the rule
-            that separated it from undo/redo — alone, it drew a stray line. */}
-        {!phone && <ChromeDivider />}
         <PlanViewControls api={planApi} zoom={view.zoom} rot={view.rot} dimUnit={dimUnit} unitName={unitName.toLowerCase()} />
       </CanvasView>
 

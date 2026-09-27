@@ -33,8 +33,9 @@
 //   hscroll   the page itself scrolling sideways.
 //   cut       a text or number field whose value is wider than the field, so part of
 //             the number is hidden. Inputs report no text overflow of their own.
-//   orphan    a `.chrome-divider` with nothing shown on one side of it — the control it
-//             separated was hidden (the plan's zoom box on a phone) and the rule stayed.
+//   orphan    a `.chrome-pill__rule` with nothing shown on one side of it — the control it
+//             separated was hidden and the rule stayed (the plan's old zoom-box divider on
+//             a phone was the first).
 //   stretched on widths of 768 and up, a control, card or paragraph spread wider than
 //             its content can use: a button more than 240px wide whose label and
 //             icon occupy under half of it, a `.ds-card` over 760px, or a paragraph
@@ -335,7 +336,7 @@ async function measure(page) {
     // A divider separates two things. One with nothing drawn on one side of it is a
     // stray line: the thing it divided from was hidden and the rule was left behind.
     const shown = (el) => el && el.getBoundingClientRect().width > 0 && getComputedStyle(el).visibility !== 'hidden';
-    for (const d of document.querySelectorAll('.chrome-divider')) {
+    for (const d of document.querySelectorAll('.chrome-pill__rule')) {
       if (!shown(d)) continue;
       let prev = d.previousElementSibling, next = d.nextElementSibling;
       while (prev && !shown(prev)) prev = prev.previousElementSibling;

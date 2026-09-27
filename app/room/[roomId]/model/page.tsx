@@ -10,7 +10,7 @@ import { TransformToolbar } from '@/components/studio/TransformToolbar';
 import { StudioShell } from '@/components/studio/StudioShell';
 import { ViewGizmo } from '@/components/studio/ViewGizmo';
 import { UndoRedo } from '@/components/studio/UndoRedo';
-import { CanvasTools, CanvasView, CanvasAide, ChromeDivider } from '@/components/studio/CanvasChrome';
+import { CanvasTools, CanvasView, CanvasAide } from '@/components/studio/CanvasChrome';
 
 const Room = dynamic(() => import('@/components/three/Room').then((m) => m.Room), {
   ssr: false,
@@ -53,12 +53,7 @@ export default function ModelPage() {
         <TransformToolbar />
         {/* A phone's Add is its toolbar's primary action, under the thumb; a second
             one up here would be two buttons for one verb. */}
-        {!phone && (
-          <>
-            <ChromeDivider />
-            <CatalogToggle />
-          </>
-        )}
+        {!phone && <CatalogToggle />}
       </CanvasTools>
 
       <CanvasView>

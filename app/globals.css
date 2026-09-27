@@ -1002,15 +1002,97 @@ textarea.field { border-radius: var(--r-2); }
   background: var(--paper); border: 1px solid var(--edge);
   border-radius: var(--r-2); box-shadow: var(--shadow-lift);
 }
-/* The plan's zoom / turn / fit bar (PlanViewControls): two groups that wrap whole. */
-.plan-view-bar { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
-.plan-view-bar__group { gap: 6px; padding: 4px; }
-/* The four camera views, a 2×2 in the canvas's bottom-right corner (ViewGizmo). */
+/* The four camera views, a 2×2 in the canvas's bottom-right corner (ViewGizmo).
+   Same family as `.chrome-pill` below: a container with a quiet rim and quiet cells. */
 .gizmo {
   display: grid; gap: 2px; padding: 3px;
-  background: var(--paper); border: 1px solid var(--edge);
-  border-radius: var(--r-2); box-shadow: var(--shadow-soft);
+  background: var(--paper); border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-3); box-shadow: var(--shadow-float);
 }
+.gizmo > button { border-radius: var(--r-2); transition: background var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out); }
+.gizmo > button:hover:not([aria-pressed="true"]) { background: var(--paper-2); color: var(--ink); }
+
+/* ── Floating chrome: one capsule per group ────────────────────────────────────
+   Everything that floats over the room (undo/redo, the plan's zoom and turn, the
+   move / scale / rotate modes, Snap, Add, Comfort zones) is a PILL: a fully rounded
+   container holding quiet controls. It replaces an outlined box around outlined
+   buttons — two boundaries per control, which read as dated and as noise.
+
+   The rim is `--hairline-strong`, not `--edge`, and that is the rule working rather
+   than an exception to it: the pill is a CONTAINER and is not pressable. Every
+   control inside is identified by its own glyph or word (--ink-2 / --ink, ≥ 7:1 on
+   --paper), which is what WCAG 1.4.11 asks of a borderless control, and the pill
+   is lifted off the room by `--shadow-float`. A pressed state is a filled capsule
+   (`--ink`, or `--accent-tint` for a toggle), never a border. Standalone controls
+   elsewhere keep `--edge`. */
+.chrome-pill {
+  display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0;
+  padding: 3px;
+  background: var(--paper);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-full);
+  box-shadow: var(--shadow-float);
+}
+.chrome-pill .icon-btn { border-radius: var(--r-full); }
+/* A word button inside a pill (Fit, Snap, Add, Comfort zones): the same height as
+   the icon buttons beside it, a capsule of its own for hover and pressed. */
+.chrome-pill__text {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+  height: 30px; padding: 0 12px;
+  white-space: nowrap;
+  border: 0; border-radius: var(--r-full);
+  background: transparent; color: var(--ink-2);
+  font-family: var(--font-sans); font-size: var(--fs-small); font-weight: 700;
+  cursor: pointer;
+  transition: background var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out);
+}
+.chrome-pill__text:hover { background: var(--paper-2); color: var(--ink); }
+.chrome-pill__text.is-on,
+.chrome-pill__text[aria-pressed="true"],
+.chrome-pill__text[aria-expanded="true"] { background: var(--accent-tint); color: var(--accent-text); }
+.chrome-pill__text:focus-visible { outline: 2px solid var(--accent-text); outline-offset: -2px; }
+/* Thumb height on a phone, level with the 40px icon buttons beside it. */
+@media (max-width: 599px) { .chrome-pill__text { height: 40px; } }
+/* A number that changes while you press beside it (zoom %, degrees). Tabular and
+   given a floor wide enough for its longest value, so the + and − never shift under
+   the pointer as the number grows a digit. */
+.chrome-pill__readout {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0 4px; white-space: nowrap;
+  font-family: var(--font-mono); font-size: var(--fs-micro); letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums; color: var(--ink-3);
+}
+.chrome-pill__readout--zoom { min-width: 9ch; }  /* "cm · 100%" — the longest unit × zoom */
+.chrome-pill__readout--deg { min-width: 4ch; }   /* "-90°" / "270°" */
+/* A divider INSIDE a pill only, so it can never be stranded by its neighbour hiding. */
+.chrome-pill__rule { width: 1px; height: 16px; margin: 0 3px; flex-shrink: 0; background: var(--hairline-strong); }
+
+/* A key floating over the room (the plan's ComfortLegend): the pill's rim and lift,
+   a card's corners, because it may be two lines. */
+.chrome-legend {
+  background: var(--paper);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow-float);
+}
+
+/* The three drag modes as a segmented pill. It may shrink (the labels ellipsise,
+   see TransformToolbar), so unlike its siblings it has a floor of 0 and clips. */
+.chrome-seg { flex-shrink: 1; min-width: 0; overflow: hidden; }
+.chrome-seg__btn {
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+  height: 30px; padding: 0 12px;
+  border: 0; border-radius: var(--r-full);
+  background: transparent; color: var(--ink-3);
+  font-family: var(--font-sans); font-size: var(--fs-small); font-weight: 600;
+  cursor: pointer;
+  transition: background var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out);
+}
+.chrome-seg__btn.is-live { color: var(--ink-2); }
+.chrome-seg__btn:hover:not([aria-pressed="true"]) { background: var(--paper-2); color: var(--ink); }
+.chrome-seg__btn[aria-pressed="true"] { background: var(--ink); color: var(--on-ink); }
+/* Inside, because the pill clips: an outside ring would be cut at the rim. */
+.chrome-seg__btn:focus-visible { outline: 2px solid var(--accent-text); outline-offset: -2px; }
 .toolbar {
   display: inline-flex; align-items: center;
   background: var(--paper); border: 1px solid var(--edge);
@@ -1141,20 +1223,23 @@ textarea.field { border-radius: var(--r-2); }
 
 /* Real glass over the room: the chrome clusters floating on the canvas. The room
    moves behind these, so here the blur is doing something. */
-.split--glass #studio-canvas .canvas-chrome :is(.toolbar, .gizmo, .ds-btn:not(.ds-btn--primary, .ds-btn--accent, .ds-btn--ghost)) {
+.split--glass #studio-canvas .canvas-chrome :is(.toolbar, .chrome-pill, .chrome-legend, .gizmo, .ds-btn:not(.ds-btn--primary, .ds-btn--accent, .ds-btn--ghost)) {
   background: var(--glass-fill-strong);
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
-  border-color: var(--edge);
 }
+/* A standalone control keeps `--edge`; a pill or the gizmo keeps its container rim
+   and gains a lit top edge, which is what makes frosted glass read as glass. */
+.split--glass #studio-canvas .canvas-chrome :is(.toolbar, .ds-btn:not(.ds-btn--primary, .ds-btn--accent, .ds-btn--ghost)) { border-color: var(--edge); }
+.split--glass #studio-canvas .canvas-chrome :is(.chrome-pill, .chrome-legend, .gizmo) { box-shadow: inset 0 1px 0 var(--glass-rim), var(--shadow-float); }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .split--glass #studio-canvas .canvas-chrome :is(.toolbar, .gizmo, .ds-btn:not(.ds-btn--primary, .ds-btn--accent, .ds-btn--ghost)) { background: var(--paper); }
+  .split--glass #studio-canvas .canvas-chrome :is(.toolbar, .chrome-pill, .chrome-legend, .gizmo, .ds-btn:not(.ds-btn--primary, .ds-btn--accent, .ds-btn--ghost)) { background: var(--paper); }
 }
 /* Someone who has asked for less transparency gets solid panes, same layout. */
 @media (prefers-reduced-transparency: reduce) {
   .split--glass > .rail { background: var(--paper); }
   .split--glass .rail-footer { background: var(--paper-2); }
-  .split--glass #studio-canvas .canvas-chrome :is(.toolbar, .gizmo, .ds-btn:not(.ds-btn--primary, .ds-btn--accent, .ds-btn--ghost)) {
+  .split--glass #studio-canvas .canvas-chrome :is(.toolbar, .chrome-pill, .chrome-legend, .gizmo, .ds-btn:not(.ds-btn--primary, .ds-btn--accent, .ds-btn--ghost)) {
     background: var(--paper);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;

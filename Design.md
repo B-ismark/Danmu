@@ -1919,6 +1919,31 @@ the room is never under them.
   printing "6.0" for 6.00. The sweep's `cut` rule catches a field's value wider than
   the field, which inputs do not report as text overflow.
 
+### Floating chrome — one pill per group
+
+Everything that floats over the room on either tab is a `.chrome-pill`: undo/redo,
+the plan's **Zoom** and **Turn and fit**, the 3D tab's Move / Scale / Rotate (a
+segmented pill, `.chrome-seg`), Snap, Add and Comfort zones. The camera gizmo and
+the comfort legend wear the same rim and lift at card corners. It replaced an
+outlined box around outlined buttons, which put two boundaries on every control.
+
+- **The container carries the rim, the controls carry none.** The rim is
+  `--hairline-strong`, not `--edge`, because a pill is not pressable: each control
+  inside is identified by its own glyph or word (≥ 7:1), and a pressed state is a
+  filled capsule — `--ink` for the chosen mode, `--accent-tint` for a toggle that is
+  on (Snap, Comfort zones, an open Add). Standalone controls keep `--edge`.
+- **Readouts hold a width** (`.chrome-pill__readout--zoom` 9ch, `--deg` 4ch) in
+  tabular figures, so − and + do not move under the pointer as the number changes.
+- **Pills are handed straight to the canvas cluster, never boxed together.** A box
+  around two pills is one flex item, so on a cramped canvas it drops below its
+  neighbour whole and then folds again inside itself. A rule between groups is the
+  gap now; the one `.chrome-pill__rule` left sits inside a pill, beside Fit, where no
+  neighbour can hide and strand it.
+- Heights: 30px controls in a 38px pill; 40px in a 48px pill on a phone, where the
+  mode strip and undo/redo are the only chrome.
+- On a laptop the pills are frosted (`.split--glass`, with a lit top edge); on a
+  tablet or phone they are solid paper.
+
 ### Other studio tools
 - **"Will it fit?"** (`lib/fit-check.ts`, the `Will it fit` tab in `RoomTools.tsx`).
   The gap between "I like this layout" and `PRODUCT.md`'s *confidence to commit* is one

@@ -233,12 +233,3 @@ export function CanvasAide({ children }: { children: ReactNode }) {
     </div>
   );
 }
-
-/** A hairline between two groups inside one cluster. `flexShrink: 0` because a
- *  1px rule that can be squeezed to nothing is a rule that vanishes on exactly
- *  the narrow canvas where knowing which group is which matters most. */
-export function ChromeDivider() {
-  return (
-    <span aria-hidden="true" className="chrome-divider" style={{ width: 1, height: 20, flexShrink: 0, background: 'var(--hairline-strong)' }} />
-  );
-}

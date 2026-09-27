@@ -97,8 +97,9 @@ export function ViewGizmo() {
               placeItems: 'center',
               cursor: 'pointer',
               border: 0,
-              borderRadius: 'var(--r-1)',
-              background: on ? 'var(--accent-tint)' : 'transparent',
+              // Radius and hover are the class's (`.gizmo > button`); an inline
+              // `transparent` here would beat the hover fill.
+              background: on ? 'var(--accent-tint)' : undefined,
               color: on ? 'var(--accent-text)' : 'var(--ink-2)',
             }}
           >

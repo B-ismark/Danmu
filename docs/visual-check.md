@@ -977,7 +977,19 @@ only seen over a still frame. Wrong would be: a square corner poking past a pane
 dropdown or the room report landing lower than its trigger (a filter crept onto a
 rail), or text looking greyer on the rails than on plain paper. With macOS "Reduce
 transparency" on, the panes should be solid. The room size fields at 1024 put Height
-on a second line with every number whole; the plan's zoom bar folds into two pills.
+on a second line with every number whole.
+
+### Floating chrome as pills — PR #157, SWEPT, needs a real GPU and a touch screen
+
+Swept at all seven widths: **0 findings**. On both tabs every cluster over the room is
+a rounded capsule with quiet buttons inside: undo/redo; on the plan, Zoom (− m · 100% +)
+and Turn and fit (⟲ 0° ⟳ | Fit); on 3D, Move / Scale / Rotate with the chosen mode as a
+dark capsule, then Snap and Add. At 1024 on the plan the right corner folds into two
+rows (undo/redo + Zoom, then Turn and fit), never three. Press + and − repeatedly: the
+buttons must not shift as the percentage changes digits. Wrong would be: a pill that
+disappears into a pale wall in 3D (the rim is deliberately soft and the lift is the
+shadow, so check a light wall colour), a keyboard focus ring cut off inside the mode
+strip, or Comfort zones shorter than undo/redo on a phone.
 
 ### Phones get a phone layout, tablets one docked panel — PR #157, SWEPT, needs a real phone and a real tablet
 

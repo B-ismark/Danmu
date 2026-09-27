@@ -102,9 +102,13 @@ describe('the glass rules', () => {
     expect(block).toMatch(/backdrop-filter: none;/);
   });
 
-  it('keeps --edge as the boundary of the chrome on glass', () => {
-    const chrome = all.find(([sel]) => sel.startsWith('.split--glass #studio-canvas .canvas-chrome'));
-    expect(chrome![1]).toMatch(/border-color:\s*var\(--edge\)/);
+  it('keeps --edge on a standalone control on glass, and a container rim on a pill', () => {
+    const edge = all.find(([sel, body]) => sel.startsWith('.split--glass #studio-canvas .canvas-chrome') && /border-color:\s*var\(--edge\)/.test(body));
+    expect(edge, 'no --edge rule for the chrome on glass').toBeDefined();
+    expect(edge![0]).toMatch(/\.toolbar/);
+    expect(edge![0]).toMatch(/\.ds-btn/);
+    // A pill is a container, not a control: it must not be handed a control's edge.
+    expect(edge![0]).not.toMatch(/chrome-pill|gizmo|chrome-legend/);
   });
 
   it('puts the sash in the middle of the gap between two panes', () => {
@@ -143,25 +147,84 @@ describe('a row of number fields fits its longest number', () => {
   });
 });
 
-describe("the plan's zoom bar folds as two groups", () => {
+describe("the plan's zoom bar is two pills", () => {
   const plan = src('components/studio/PlanChrome.tsx');
   const bar = plan.slice(plan.indexOf('export function PlanViewControls'), plan.indexOf('export function ComfortLegend'));
 
-  it('zoom, then turn + fit, and no rule between them to strand', () => {
-    expect(bar.match(/className="toolbar plan-view-bar__group"/g)).toHaveLength(2);
-    // The outer bar is not a toolbar: a wrapped row keeps its full width, and a
-    // surface drawn around it would show that width as an empty strip.
-    expect(bar).toMatch(/className="plan-view-bar" role="group"/);
-    expect(bar).not.toMatch(/background: 'var\(--hairline\)'/);
-    const second = bar.slice(bar.lastIndexOf('plan-view-bar__group'));
+  it('zoom, then turn + fit, each its own labelled pill with no wrapper around both', () => {
+    expect(bar.match(/<div className="chrome-pill" role="group" aria-label="[^"]+"/g)).toHaveLength(2);
+    // A wrapper made both pills ONE flex item, so on a cramped canvas the pair dropped
+    // below undo/redo as a block and folded again inside it: three rows, not two.
+    expect(bar).toMatch(/return \([\s\S]*?<>\s*<div className="chrome-pill"/);
+    expect(bar).not.toMatch(/plan-view-bar/);
+    const second = bar.slice(bar.lastIndexOf('className="chrome-pill"'));
     expect(second).toMatch(/rotate-ccw/);
     expect(second).toMatch(/Fit/);
     expect(second).not.toMatch(/Zoom in/);
+    // The one rule sits INSIDE a pill, beside Fit, so nothing can strand it.
+    expect(bar.match(/chrome-pill__rule/g)).toHaveLength(1);
+    expect(second).toMatch(/chrome-pill__rule/);
   });
 
-  it('keeps each group on one line while the bar wraps', () => {
-    expect(CSS).toMatch(/\.plan-view-bar \{[^}]*flex-wrap: wrap;/);
-    // `.toolbar` is `inline-flex` and does not wrap; nothing here may make it.
-    expect(CSS).not.toMatch(/\.plan-view-bar__group \{[^}]*flex-wrap: wrap/);
+  it('quiet buttons inside the capsule: no outlined control inside a rimmed one', () => {
+    expect(bar).not.toMatch(/variant="outline"/);
+    expect(bar).not.toMatch(/className="ds-btn/);
+  });
+
+  it('holds the readouts to a width, so + and − do not shift as a digit arrives', () => {
+    expect(bar).toMatch(/chrome-pill__readout chrome-pill__readout--zoom/);
+    expect(bar).toMatch(/chrome-pill__readout chrome-pill__readout--deg/);
+    expect(CSS).toMatch(/\.chrome-pill__readout \{[^}]*font-variant-numeric: tabular-nums;/);
+    expect(CSS).toMatch(/\.chrome-pill__readout--zoom \{ min-width: 9ch; \}/);
+    expect(CSS).toMatch(/\.chrome-pill__readout--deg \{ min-width: 4ch; \}/);
   });
 });
+
+describe('everything floating over the room is one pill family', () => {
+  it.each([
+    ['components/studio/UndoRedo.tsx', /<div className="chrome-pill" role="group" aria-label="Edit history">/],
+    ['components/studio/TransformToolbar.tsx', /<div className="chrome-pill chrome-seg" role="group"/],
+    ['components/studio/CatalogPanel.tsx', /<div className="chrome-pill">\s*<button[\s\S]*?className="chrome-pill__text"/],
+    ['app/room/[roomId]/plan/page.tsx', /<div className="chrome-pill">\s*<button[\s\S]*?className="chrome-pill__text"/],
+  ])('%s', (file, re) => {
+    expect(src(file)).toMatch(re);
+  });
+
+  it('the pill is a rimmed capsule that holds its width, and the mode strip alone may shrink', () => {
+    const pill = ruleBody(/^\.chrome-pill$/);
+    expect(pill).toMatch(/border-radius: var\(--r-full\);/);
+    expect(pill).toMatch(/border: 1px solid var\(--hairline-strong\);/);
+    expect(pill).toMatch(/flex-shrink: 0;/);
+    const seg = ruleBody(/^\.chrome-seg$/);
+    expect(seg).toMatch(/flex-shrink: 1;/);
+    expect(seg).toMatch(/min-width: 0;/);
+    expect(seg).toMatch(/overflow: hidden;/);
+  });
+
+  it('a chosen mode is a dark capsule, and no rule divides the modes', () => {
+    expect(ruleBody(/^\.chrome-seg__btn\[aria-pressed="true"\]$/)).toMatch(/background: var\(--ink\); color: var\(--on-ink\);/);
+    expect(src('components/studio/TransformToolbar.tsx')).not.toMatch(/borderLeft/);
+  });
+
+  it('a word button is level with its icon neighbours, and thumb-height on a phone', () => {
+    // The base rule; the phone's lives in its own media block, below.
+    expect(CSS).toMatch(/\n\.chrome-pill__text \{[^}]*height: 30px;/);
+    expect(CSS).toMatch(/@media \(max-width: 599px\) \{ \.chrome-pill__text \{ height: 40px; \} \}/);
+  });
+
+  it('keeps a focus ring inside a clipping pill', () => {
+    expect(ruleBody(/^\.chrome-seg__btn:focus-visible$/)).toMatch(/outline-offset: -2px;/);
+  });
+
+  it('frosts the pills, the gizmo and the legend over the room on a laptop', () => {
+    const chrome = rules(CSS).find(([sel]) => sel.startsWith('.split--glass #studio-canvas .canvas-chrome :is(') && /backdrop-filter/.test(rules(CSS).find(([s2]) => s2 === sel)![1]));
+    for (const cls of ['.chrome-pill', '.chrome-legend', '.gizmo']) expect(chrome![0]).toContain(cls);
+  });
+});
+
+/** The body of the one rule whose selector matches, exactly. */
+function ruleBody(sel: RegExp): string {
+  const hit = rules(CSS).filter(([s]) => sel.test(s));
+  expect(hit, `rules matching ${sel}`).toHaveLength(1);
+  return hit[0][1];
+}
