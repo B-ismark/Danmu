@@ -64,7 +64,7 @@ const stepFreeDesc = (unit: DimUnit) =>
 import { useScene, type RoomShape } from '@/lib/scene-store';
 import { currentRoomScene, resolveParts, useRoomScene } from '@/lib/room-scene';
 import { useStudio, useSettings, type DimUnit } from '@/lib/store';
-import { analyzeRoom, type ClearanceIssue, type ClearanceSeverity, type RoomReport } from '@/lib/clearance';
+import { analyzeRoom, floorClearPct, type ClearanceIssue, type ClearanceSeverity, type RoomReport } from '@/lib/clearance';
 import {
   impossibleClause,
   isWorthOffering,
@@ -1344,7 +1344,7 @@ function CheckSummary({
     >
       <span>
         <span className="mono" style={{ color: 'var(--ink-2)' }}>
-          {Math.round(freeShare * 100)}%
+          {floorClearPct(freeShare)}%
         </span>{' '}
         floor clear
       </span>

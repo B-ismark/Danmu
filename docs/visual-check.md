@@ -1661,9 +1661,15 @@ copy above it pulled into the first screen on a phone — it was always that siz
 What a person can see and the sweep cannot:
 - **The cream on a real display**, beside the old one if you have it: it should read as
   paper, not as grey and not as yellow. Check the pale wall colours in 3D against it.
-- **Sun direction on a phone:** tap ⓘ, the bubble opens above it and stays on screen;
-  tap anywhere else or scroll the sheet and it closes. With a mouse it opens on hover
-  and on keyboard focus, and Esc closes it.
+- **Sun direction on a phone:** tap ⓘ, the bubble opens above it (below it when the
+  sheet is pulled up so the row is near the top) and stays on screen; tap ⓘ again, tap
+  anywhere else or scroll the sheet and it closes. A tap on a control under the bubble
+  should reach that control. With a mouse it opens on hover and a click closes it; on
+  a keyboard, focus opens it, Enter toggles it, and Esc closes the bubble and not the
+  sheet. With VoiceOver, the explanation should be read when focus lands on ⓘ.
+- **A furnished room smaller than its rug** (resize a rug past the room in the
+  Inspector): the size hint should say the rug's size and that it does not fit, never
+  that it "needs" the room's own width.
 - **The loading card** (run a detection): a pulsing dot, "Working…" and Stop on one
   row, the title under it, and no tips cycling. Nobody has seen it since the tips went.
 - **The room size hint:** drag a room's width down to its largest piece; the sentence
@@ -1805,7 +1811,7 @@ wiring; nobody has watched it happen.
 ### Re-scan looks again, and its answer reaches the studio — `c2137c4` on `main` (PR #157)
 
 **Where to click.** A photographed room with furniture found → studio → move a piece and
-add one from the Library → Room rail → **Re-scan**. The screen should say *This is your last
+add one from the Library → Room rail → **Re-scan**. The screen should say *Showing your previous
 scan* with **Look again**. Press it, then **Continue to the studio**.
 
 **What wrong looks like.** The studio still showing the old arrangement after a scan that

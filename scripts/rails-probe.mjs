@@ -293,16 +293,22 @@ async function main() {
     await ctx.close();
   }
 
-  // ── S5 · the dial's sentence, without hovering anything ───────────────────
+  // ── S5 · the dial's explanation, without hovering anything ────────────────
+  // It stopped being standing text in PR #158: it sits behind the "About sun
+  // direction" info button, as that button's description. So the question is no
+  // longer whether a sentence is on screen but whether a screen reader has it
+  // before anything is hovered or pressed: a description added on open is never
+  // read, because focus has already arrived.
   {
     const { ctx, page } = await fresh(browser);
-    const said = await page.evaluate(() =>
-      [...document.querySelectorAll('div,span,p')]
-        .map((e) => e.textContent?.trim() ?? '')
-        .some((t) => /Light comes from the dial's/.test(t) || /^Drag to set north\./.test(t)),
-    );
-    if (said) ok('S5', "the dial's hint is in the document with nothing hovered");
-    else no('S5', "the dial's hint is not rendered until something is hovered");
+    const said = await page.evaluate(() => {
+      const btn = [...document.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'About sun direction');
+      const id = btn?.getAttribute('aria-describedby');
+      const text = id ? document.getElementById(id)?.textContent?.trim() ?? '' : '';
+      return /^Turn the dial so N points to real north\./.test(text);
+    });
+    if (said) ok('S5', "the dial's explanation is the info button's description with nothing hovered");
+    else no('S5', "the dial's explanation is not in the document until something is hovered");
     await ctx.close();
   }
 

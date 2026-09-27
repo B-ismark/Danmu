@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { analyzeRoom, crowdingDetail, freeFloorFraction } from '@/lib/clearance';
+import { analyzeRoom, crowdingDetail, floorClearPct, freeFloorFraction } from '@/lib/clearance';
 import { CROWDED_COVER } from '@/lib/layout-rules';
 import { pointInObb, pointInPoly, polygonArea, type OBB, type Poly } from '@/lib/geometry';
 import { SHAPES, type ScenePart } from '@/lib/scene-spec';
@@ -581,14 +581,25 @@ describe('analyzeRoom · crowding names the line it fires on', () => {
   // past 60%: a hand-typed number beside a derived one (CLAUDE.md rule 2).
   const pct = (s: string) => [...s.matchAll(/(\d+)%/g)].map((m) => Number(m[1]));
 
-  it('the sentence quotes CROWDED_COVER, and the measured share is past it', () => {
-    for (const cover of [0.6001, 0.603, 0.61, 0.65, 0.8, 1]) {
-      const [measured, line] = pct(crowdingDetail(cover));
-      expect(line).toBe(Math.round(CROWDED_COVER * 100));
-      expect(measured, `cover ${cover}`).toBeGreaterThan(line);
-      expect(measured - cover * 100, `cover ${cover}`).toBeLessThan(1);
+  it('the sentence quotes CROWDED_COVER, and adds up with the summary beside it', () => {
+    const line = Math.round(CROWDED_COVER * 100);
+    for (const free of [0.39, 0.35, 0.2, 0]) {
+      const [covered, quoted] = pct(crowdingDetail(free));
+      expect(quoted).toBe(line);
+      expect(covered, `free ${free}`).toBeGreaterThan(line);
+      // "40% floor clear" and "covers 61%" on one panel was 101%.
+      expect(covered + floorClearPct(free), `free ${free}`).toBe(100);
     }
-    expect(pct(crowdingDetail(0.61))[0]).toBe(61);
+    expect(crowdingDetail(0.39)).toMatch(/^Furniture covers 61% of the floor\./);
+  });
+
+  it('a room a fraction past the line is just over it, never on it', () => {
+    // 60.3% covered shows as "40% floor clear", so "covers 60%. Past 60%" would be
+    // the finding contradicting itself.
+    for (const free of [0.397, 0.3999]) {
+      expect(floorClearPct(free)).toBe(40);
+      expect(crowdingDetail(free)).toMatch(/^Furniture covers just over 60% of the floor\. Past 60%/);
+    }
   });
 
   it('the rule and the sentence both read the constant, with no number of their own', () => {
@@ -611,10 +622,16 @@ describe('analyzeRoom · crowding names the line it fires on', () => {
         [part({ category: 'table', shape: 'box', dimMM: [6000 * cover, 4000, 500], pos: [-3 + 3 * cover, 0, 0] })],
         ROOM,
       );
-    const over = at(CROWDED_COVER + 0.05);
+    // ON the line, measured: the raster's columns are 50 mm, so a slab 0.6 of the
+    // room wide covers exactly 0.6 and must not fire. The next column past it must.
+    const on = at(CROWDED_COVER);
+    expect(1 - on.freeFloorShare, 'the fixture must measure exactly the line').toBe(CROWDED_COVER);
+    expect(on.issues.find((i) => i.rule === 'crowding')).toBeUndefined();
+    const over = at(CROWDED_COVER + 0.01);
+    expect(1 - over.freeFloorShare - CROWDED_COVER, 'one column past, not five').toBeLessThan(0.01);
     const hit = over.issues.find((i) => i.rule === 'crowding');
     expect(hit, `free ${over.freeFloorShare}`).toBeDefined();
-    expect(hit!.detail).toBe(crowdingDetail(1 - over.freeFloorShare));
+    expect(hit!.detail).toBe(crowdingDetail(over.freeFloorShare));
     const under = at(CROWDED_COVER - 0.05);
     expect(under.issues.find((i) => i.rule === 'crowding'), `free ${under.freeFloorShare}`).toBeUndefined();
   });

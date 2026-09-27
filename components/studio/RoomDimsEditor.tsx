@@ -8,7 +8,7 @@ import { useScene } from '@/lib/scene-store';
 import { useSettings, useStudio } from '@/lib/store';
 import { boundsToUnit, fromMM, toMM, stepFor, precisionFor } from '@/lib/units';
 import { applyRoomEdits, roomAxisRange, ROOM_AXES, type RoomAxis, type RoomRejection } from '@/lib/dimension-ranges';
-import { floorRefusal, namesTheStop, roomFloors, type FloorAxis } from '@/lib/room-floor';
+import { floorHint, floorRefusal, namesTheStop, roomFloors, type FloorAxis } from '@/lib/room-floor';
 import { currentRoomScene, useRoomScene } from '@/lib/room-scene';
 import { recarryForResize, regradeForNewCeiling } from '@/lib/transforms';
 import { roomStore } from '@/lib/storage';
@@ -340,12 +340,13 @@ export function RoomDimsEditor() {
           </div>
         ) : heldAxes.length > 0 ? (
           // Not an error, so not `--danger-text`: nothing has gone wrong, a chevron
-          // simply has nowhere further to go. The number is `bounds()`, the SAME call
-          // the arrows are clamped by, so the sentence cannot name a stop the stepper
-          // will not reach — which is the pairing `boundsToUnit` exists for.
+          // simply has nowhere further to go. `floorHint` names the bound through the
+          // same `boundsToUnit` call the arrows are clamped by (`bounds()` above reads
+          // the same range), so the sentence cannot name a stop the stepper will not
+          // reach, and it says the piece's size instead where the piece overhangs.
           <div className="t-hint" style={{ marginTop: 6, lineHeight: 1.4, overflowWrap: 'anywhere' }}>
             {heldAxes
-              .map((axis) => `“${floors[axis].stop!.name}” needs ${bounds(axis).min} ${dimUnit}, so the ${axis} stops there.`)
+              .map((axis) => floorHint(floors[axis].stop!, axis, axis === 'width' ? room.width : room.depth, dimUnit))
               .join(' ')}
           </div>
         ) : null}

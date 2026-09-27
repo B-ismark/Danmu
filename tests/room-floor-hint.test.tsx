@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
 import { footprintForLayout } from '@/lib/footprint';
 import { roomAxisRange } from '@/lib/dimension-ranges';
-import { boundsToUnit, toMM } from '@/lib/units';
+import { boundsToUnit, formatDim, toMM } from '@/lib/units';
 import { useScene } from '@/lib/scene-store';
 import { useSettings, useStudio, type DimUnit } from '@/lib/store';
 import type { ScenePart } from '@/lib/scene-spec';
@@ -67,5 +67,14 @@ describe('the furniture floor is said only where the arrow stops', () => {
     expect(container.textContent).toContain(`“Area rug” needs ${min} ${unit}, so the width stops there.`);
     // Depth is 5 m against a 1.6 m rug, nowhere near its floor.
     expect(container.textContent).not.toMatch(/the depth stops/);
+  });
+
+  it('a room the rug already overhangs gives the rug its size, not a need', () => {
+    // A 2.4 m rug in a 2.0 m room pins the floor to 2.0 m. "Needs 2 m" would be
+    // false; the rug is 2.4 m and does not fit.
+    const { container } = mount(2, 'm');
+    // At display precision, as `floorRefusal` states the same fact: a size, not a bound.
+    expect(container.textContent).toContain(`“Area rug” is ${formatDim(RUG.dimMM[0], 'm')} m and already does not fit, so the width stops here.`);
+    expect(container.textContent).not.toMatch(/needs/);
   });
 });

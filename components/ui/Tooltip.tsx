@@ -25,7 +25,7 @@
 // name twice, and `aria-describedby` would make it a description, which it is not
 // — it IS the name.
 
-import { useCallback, useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
 
@@ -35,6 +35,8 @@ const OFFSET = 8;
 const MARGIN = 8;
 /** Widest the bubble may be. Beyond this it wraps — see the clamp in `open`. */
 const CAP = 240;
+/** A one-line bubble's height: what a bubble is placed for before it has painted. */
+const ONE_LINE = 28;
 
 type BubbleBox = {
   left: number;
@@ -42,16 +44,20 @@ type BubbleBox = {
   place: 'top' | 'bottom';
   /** The cap actually applied, so the style and the clamp read one number. */
   width: number;
+  /** The height it was placed for: `ONE_LINE` until the bubble has been measured. */
+  height: number;
 };
 
 /** Where a bubble goes for a trigger at `r`: `position: fixed` coordinates, kept
  *  inside the viewport. Shared by `Tooltip` and `InfoTip` so the two bubbles land
  *  by one rule. */
-function placeBubble(r: DOMRect, placement: 'top' | 'bottom'): BubbleBox {
+function placeBubble(r: DOMRect, placement: 'top' | 'bottom', height = ONE_LINE): BubbleBox {
   // Measured against the viewport because the bubble is `fixed`. Height is not
-  // known before paint, so `place` is decided from the space available and the
-  // transform does the rest — which also means one number, not a re-measure.
-  const place = placement === 'top' && r.top < 44 ? 'bottom' : placement;
+  // known before paint, so a bubble is first placed for one line and the
+  // transform does the rest. A one-line `Tooltip` never needs more; `InfoTip`'s
+  // explanation runs to several lines and places itself again once measured, or a
+  // trigger 60 px from the top opens the first lines off the screen.
+  const place = placement === 'top' && r.top < OFFSET + height + MARGIN ? 'bottom' : placement;
   // Clamp the bubble's BOX inside the viewport, not its centre. Clamping the
   // centre to `[MARGIN, innerWidth - MARGIN]` and then translating by -50% left
   // half the bubble outside that range: at 360px wide, a trigger 20px from the
@@ -71,6 +77,7 @@ function placeBubble(r: DOMRect, placement: 'top' | 'bottom'): BubbleBox {
     top: place === 'top' ? r.top - OFFSET : r.bottom + OFFSET,
     place,
     width,
+    height,
   };
 }
 
@@ -206,12 +213,17 @@ export function Tooltip({
  *  control it sits on and dismisses on press, which is right for a name and wrong
  *  here: on a touch screen the press IS the only way to open it, so `Tooltip`'s
  *  press latch would flash the bubble and close it in the same gesture. This one
- *  opens on hover and focus like a tooltip, and a press PINS it (a toggletip), so a
- *  tap opens it, a second tap, Escape, or a press anywhere else closes it.
+ *  opens on hover and focus like a tooltip, and a press PINS it (a toggletip), so
+ *  it stays when the pointer or focus leaves, until a second press, Escape, a press
+ *  anywhere else, a scroll or a resize. The second press closes it however it
+ *  opened, with the pointer still on the button or focus still on it.
  *
- *  The bubble is real content, not decoration: it is the trigger's description
- *  (`aria-describedby`) while open, and the trigger's own name says what it is
- *  about ("About sun direction"). */
+ *  The explanation is the trigger's description, and it is there from the first
+ *  render (a hidden copy), not only while the bubble is open: a screen reader reads
+ *  a description when focus arrives and does not go back for one added later, so a
+ *  description that appears on press is never heard. The bubble itself is the
+ *  sighted copy and is `aria-hidden`, or the text would be read twice. The
+ *  trigger's own name says what it is about ("About sun direction"). */
 export function InfoTip({
   label,
   children,
@@ -224,11 +236,18 @@ export function InfoTip({
   placement?: 'top' | 'bottom';
 }) {
   const btnRef = useRef<HTMLButtonElement>(null);
+  const bubbleRef = useRef<HTMLSpanElement>(null);
   const id = useId();
   const [hover, setHover] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [box, setBox] = useState<BubbleBox | null>(null);
   const shown = hover || pinned;
+
+  /** One way to close, whichever of the six things asked. */
+  const close = useCallback(() => {
+    setHover(false);
+    setPinned(false);
+  }, []);
 
   // Measured when it opens, like `Tooltip`: a bubble that survives a scroll is a
   // bubble pointing at nothing, so a scroll or a resize closes it instead.
@@ -239,22 +258,41 @@ export function InfoTip({
     }
     const r = btnRef.current?.getBoundingClientRect();
     if (r) setBox(placeBubble(r, placement));
-    const shut = () => {
-      setHover(false);
-      setPinned(false);
-    };
     const outside = (e: PointerEvent) => {
-      if (!btnRef.current?.contains(e.target as Node)) shut();
+      if (!btnRef.current?.contains(e.target as Node)) close();
     };
-    window.addEventListener('scroll', shut, true);
-    window.addEventListener('resize', shut);
+    // Escape is heard on the window, capturing, before anything else, the way the
+    // studio's other popovers take it. A handler on the button is too late inside
+    // the phone sheet: `SheetShell` listens on the sheet element itself, natively,
+    // which runs before React's root handler, so one Escape lowered the whole sheet
+    // and left the bubble open. Stopping it here keeps one Escape to one thing
+    // closing, and it also reaches a bubble opened by a click that did not focus
+    // the button, which Safari's clicks do not.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      close();
+    };
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    window.addEventListener('keydown', onKey, true);
     document.addEventListener('pointerdown', outside);
     return () => {
-      window.removeEventListener('scroll', shut, true);
-      window.removeEventListener('resize', shut);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+      window.removeEventListener('keydown', onKey, true);
       document.removeEventListener('pointerdown', outside);
     };
-  }, [shown, placement]);
+  }, [shown, placement, close]);
+
+  // Placed again at its real height once painted, before the browser shows it.
+  // The loop ends because the second placement records the height it used.
+  useLayoutEffect(() => {
+    const h = bubbleRef.current?.offsetHeight;
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!box || !h || !r || h === box.height) return;
+    setBox(placeBubble(r, placement, h));
+  }, [box, placement]);
 
   return (
     <>
@@ -264,33 +302,31 @@ export function InfoTip({
         className="icon-btn"
         aria-label={label}
         aria-expanded={shown}
-        aria-describedby={box ? id : undefined}
+        aria-describedby={id}
         onPointerEnter={(e) => e.pointerType === 'mouse' && setHover(true)}
         onPointerLeave={(e) => e.pointerType === 'mouse' && setHover(false)}
         // Keyboard focus opens it like a hover. A tap focuses the button too, and
         // counting that would leave the bubble open after the second tap closed it.
         onFocus={(e) => e.currentTarget.matches(':focus-visible') && setHover(true)}
-        onBlur={() => {
-          setHover(false);
-          setPinned(false);
-        }}
-        onClick={() => setPinned((p) => !p)}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape' && shown) {
-            e.stopPropagation();
-            setHover(false);
-            setPinned(false);
-          }
-        }}
+        onBlur={close}
+        // A press pins it, and a press on a pinned one closes it, hover and all:
+        // closing only the pin left a hovered or focused bubble open, so the
+        // second press did nothing visible.
+        onClick={() => (pinned ? close() : setPinned(true))}
         style={{ width: 24, height: 24, borderRadius: 'var(--r-full)', color: 'var(--ink-3)', flexShrink: 0 }}
       >
         <Icon name="info" size={14} />
       </button>
+      <span id={id} className="sr-only">{children}</span>
       {box && createPortal(
         <span
-          id={id}
+          ref={bubbleRef}
           role="tooltip"
-          style={{ ...bubbleStyle(box), textAlign: 'left', fontWeight: 500, padding: '6px 10px', lineHeight: 1.4 }}
+          aria-hidden="true"
+          // Presses go through to what it covers. It closes on any press outside
+          // the button, so a bubble that caught the press would eat the click it
+          // was closing for.
+          style={{ ...bubbleStyle(box), pointerEvents: 'none', textAlign: 'left', fontWeight: 500, padding: '6px 10px', lineHeight: 1.4 }}
         >
           {children}
         </span>,

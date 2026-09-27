@@ -24,6 +24,11 @@ The numbers — 208 versus 228, a grid with three columns versus none, a label's
 | S7 | **measurement, not a gate**: the right rail's fixed stack against the rail's own height at a short window | prints | prints | **NO** — this is F7, unverified either way until it prints |
 | S8 | control — the studio grid has three tracks on a plain load, both builds | PASS | PASS | **NO** — separates "lost the variable" from "never had one" |
 
+**S5's pass condition changed after this was written** (PR #158). The standing sentence
+under the dial became an info button's explanation, so S5 now passes when that
+explanation is the button's `aria-describedby` text with nothing hovered or pressed. The
+row above is the prediction as it was made, and stays as it was.
+
 **S7 is a measurement and is not evidence for the change.** It exists because the
 components review raised the footer spilling past `.rail` (which is `overflow: visible`)
 on a short window and could not measure it. Whatever it prints goes in the PR as a

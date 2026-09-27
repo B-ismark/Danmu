@@ -248,15 +248,25 @@ export function floorBlockers(parts: ScenePart[]): ScenePart[] {
   );
 }
 
-/** The crowding finding's sentence, for a room whose furniture covers `cover` of
- *  the floor. Both numbers come from code: the share measured, and the line from
- *  `CROWDED_COVER`, the same constant the finding fires on.
+/** The floor's clear share as the room report shows it: a whole percent. One
+ *  call, because the report's summary ("40% floor clear") and the crowding
+ *  finding's "covers N%" sit on one panel and must add up to 100. */
+export function floorClearPct(freeShare: number): number {
+  return Math.round(freeShare * 100);
+}
+
+/** The crowding finding's sentence, for a room whose floor is `freeShare` clear.
+ *  Both numbers come from code: the covered share is whatever the summary does not
+ *  show as clear, and the line is `CROWDED_COVER`, the constant the finding fires on.
  *
- *  The measured share rounds UP. It only reaches this sentence once it is past the
- *  line, and a room at 60.3% against a 60% line would otherwise read "covers 60%.
- *  Past 60%…", which is a finding that contradicts itself. */
-export function crowdingDetail(cover: number): string {
-  return `Furniture covers ${Math.ceil(cover * 100)}% of the floor. Past ${Math.round(CROWDED_COVER * 100)}%, a room starts to feel crowded.`;
+ *  A room only a fraction past the line rounds back onto it (60.3% covered is
+ *  "40% clear"), and "covers 60%. Past 60%…" contradicts itself, so that room is
+ *  "just over" the line instead: still true, and still adding up with the summary. */
+export function crowdingDetail(freeShare: number): string {
+  const line = Math.round(CROWDED_COVER * 100);
+  const covered = 100 - floorClearPct(freeShare);
+  const share = covered > line ? `${covered}%` : `just over ${line}%`;
+  return `Furniture covers ${share} of the floor. Past ${line}%, a room starts to feel crowded.`;
 }
 
 /** Which walkable regions someone can actually enter the room into.
@@ -858,7 +868,7 @@ export function analyzeRoom(
       rule: 'crowding',
       severity: 'warn',
       title: 'Room is getting crowded',
-      detail: crowdingDetail(1 - freeFloorShare),
+      detail: crowdingDetail(freeFloorShare),
       partIds: [],
     });
   }

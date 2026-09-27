@@ -185,7 +185,9 @@ function Dial({
         height={C * 2}
         role="slider"
         tabIndex={0}
-        aria-label="Which way the room faces"
+        // Opens with the visible label, so "Sun direction" is what voice control
+        // answers to (WCAG 2.5.3); the rest says what dragging it actually sets.
+        aria-label="Sun direction: which way the room faces"
         aria-valuemin={0}
         aria-valuemax={359}
         aria-valuenow={Math.round(bearingDeg)}
