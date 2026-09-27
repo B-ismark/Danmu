@@ -42,8 +42,8 @@ const TOUCH = 0.003;
 const categoryOf = (shape: Shape): Category => PART_LIBRARY.find((l) => l.shape === shape)?.category ?? 'other';
 const libDim = (shape: Shape) => PART_LIBRARY.find((l) => l.shape === shape)?.dimMM as [number, number, number] | undefined;
 
-const partAt = (shape: Shape, dimMM: [number, number, number]): ScenePart =>
-  ({ id: `probe-${shape}`, name: shape, shape, category: categoryOf(shape), dimMM, pos: [0, 0, 0], rot: 0, color: '#b07a52' }) as unknown as ScenePart;
+const partAt = (shape: Shape, dimMM: [number, number, number], category: Category = categoryOf(shape)): ScenePart =>
+  ({ id: `probe-${shape}`, name: shape, shape, category, dimMM, pos: [0, 0, 0], rot: 0, color: '#b07a52' }) as unknown as ScenePart;
 
 type Box3 = { x: [number, number]; z: [number, number]; y: [number, number] };
 const box = (p: Prim): Box3 => {
@@ -86,8 +86,8 @@ function nearestGapMM(bs: Box3[], c: number[]): number {
 
 type Finding = { shape: Shape; size: string; what: string };
 
-function inspect(shape: Shape, size: string, dim: [number, number, number]): Finding[] {
-  const rep = walk(PartGeometry({ part: partAt(shape, dim), locked: false }));
+function inspect(shape: Shape, size: string, dim: [number, number, number], category?: Category): Finding[] {
+  const rep = walk(PartGeometry({ part: partAt(shape, dim, category), locked: false }));
   const bs = rep.prims.map(box);
   const found: Finding[] = [];
   if (bs.length === 0) return found;
@@ -113,8 +113,28 @@ for (const shape of SHAPES) {
   sizes.push(['max', [...r.max] as [number, number, number]]);
   for (const [s, d] of sizes) findings.push(...inspect(shape, s, d));
 }
+// The one shape drawn two ways: `desk-standard` with category `table` is a dining
+// table (`roleOf`), and the library entry is the desk. Walked at the desk range's
+// sizes that still read as a dining table — the min is too small to sit at.
+const DINING: Array<[string, [number, number, number]]> = [
+  ['seed', [1500, 850, 750]],
+  ['min', [900, 700, 700]],
+  ['max', [...dimRangeFor('desk', 'desk-standard').max] as [number, number, number]],
+];
+for (const [s, d] of DINING) findings.push(...inspect('desk-standard', `dining ${s}`, d, 'table'));
 
 describe('every model is one grounded object', () => {
+  it('draws a dining table as a table and a desk as a desk', () => {
+    // Floor contacts tell them apart: four legs, against the desk's side panel and
+    // two legs. A scanned "table" was drawn as a desk before the role branch.
+    const onFloor = (category: Category) =>
+      walk(PartGeometry({ part: partAt('desk-standard', [1500, 850, 750], category), locked: false })).prims.filter(
+        (p) => Math.abs(p.y[0]) < TOUCH,
+      ).length;
+    expect(onFloor('table')).toBe(4);
+    expect(onFloor('desk')).toBe(3);
+  });
+
   it('walks every library shape completely', () => {
     const shapes = SHAPES.filter((sh) => libDim(sh));
     expect(shapes.length).toBeGreaterThanOrEqual(40);

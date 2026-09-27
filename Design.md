@@ -326,10 +326,17 @@ Furniture detection runs through a fallback chain, best-effort:
    rejected: release assets redirect to a storage host with no
    `access-control-allow-origin`, so browsers block them (curl does not, which
    makes this easy to mis-verify).
-2. **Gemini fallback** — `lib/detection.ts`: one multimodal `@google/genai` call
+2. **Gemini fallback and second look** — `lib/detection.ts`: one multimodal `@google/genai` call
    over all wall photos at once (so it can reason about object continuity across
    walls). BYO key; quota tracked in `lib/quota.ts`. Key validated by
-   `lib/validate-key.ts`.
+   `lib/validate-key.ts`. It runs when the on-device pass finds nothing, **and as a
+   second look whenever a key is set**: both lists go through `refineDetections`, so
+   a piece both passes saw merges to one row (same photo by box overlap; across
+   photos by place plus `sameThingKey`, which folds the two local models' words —
+   `Couch`/`Sofa`, `Houseplant`/`Potted plant` — onto one). A failed second look
+   keeps the on-device list and says so. A dining table stays `desk-standard` in the
+   data and is DRAWN as a table: `DynamicPart` asks `roleOf`, which already tells the
+   two apart by category and size.
 
    The prompt itself is `lib/detect-prompt.ts` — extracted so it can be tested
    without the SDK, and **a function of the photos actually attached**. It used to

@@ -81,6 +81,7 @@ type Notice = {
     | 'STOPPED'
     | 'NOTHING_FOUND'
     | 'CACHED'
+    | 'SECOND_LOOK_FAILED'
     | 'DAILY_QUOTA'
     | 'RATE_LIMIT'
     | 'INVALID_KEY'
@@ -410,15 +411,32 @@ export default function DetectPage() {
               dets = null;
             }
           }
-          if (!dets) {
-            // The photos are about to leave the device. Say so BEFORE the call, so
-            // the disclosure is on screen for the whole upload.
-            setPath('cloud');
-            dets = await detectAcrossImages(
+          const askCloud = () =>
+            detectAcrossImages(
               apiKeyRef.current,
               entries.map((e) => ({ slot: e.slot, blob: e.cap.blob })),
               room ? { width: room.width, depth: room.depth, height: room.height, layoutId: room.layoutId } : undefined,
             );
+          let secondLookFailed = false;
+          if (!dets) {
+            // The photos are about to leave the device. Say so BEFORE the call, so
+            // the disclosure is on screen for the whole upload.
+            setPath('cloud');
+            dets = await askCloud();
+          } else if (apiKeyRef.current) {
+            // A SECOND LOOK, not only a fallback. Someone who set up a key did it so
+            // their photos would be read by the stronger model, and the on-device pass
+            // finding SOMETHING used to be enough to skip it — measured on a real
+            // four-photo room, on-device found 13 of 19 pieces. Both lists go through
+            // the same geometry pass and merge, so a piece seen by both is one row.
+            // A failed second look costs nothing already found: the on-device list
+            // stands and the screen says the cloud half did not happen.
+            setPath('cloud');
+            try {
+              dets = [...dets, ...(await askCloud())];
+            } catch {
+              secondLookFailed = true;
+            }
           }
           if (cancelled || stopped.current) return;
           // Geometry pass, then the merge — in that order, which is the whole
@@ -438,6 +456,15 @@ export default function DetectPage() {
             if (shouldAutoConfirm(d, judged[i].status)) marks.add(i);
           });
           setConfirmed(marks);
+          if (secondLookFailed) {
+            setNotice({
+              code: 'SECOND_LOOK_FAILED',
+              tone: 'calm',
+              kicker: 'Found on this device',
+              title: 'The second look didn’t go through',
+              body: 'These are the pieces your browser found on its own. Google’s pass over your photos failed, so anything it would have added is missing — add those by hand, or come back and press Re-scan later.',
+            });
+          }
           if (refined.length === 0) {
             // Saying nothing here is how someone who photographed an empty study
             // ends up in a room full of furniture they never owned.
@@ -487,8 +514,8 @@ export default function DetectPage() {
         return;
       }
 
-      // Otherwise: local on-device detector first (no key, no quota); Gemini
-      // only as the fallback when the model isn't deployed or finds nothing.
+      // Otherwise: local on-device detector first (no key, no quota), and
+      // Gemini when that finds nothing — or as a second look whenever a key is set.
       await run();
     })();
     return () => {

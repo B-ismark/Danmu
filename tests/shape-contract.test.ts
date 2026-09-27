@@ -351,6 +351,17 @@ describe('the detector and the app agree on what the labels mean', () => {
     expect(checked, 'the label sweep checked almost nothing').toBe(40);
   });
 
+  it('files a detected armchair as a chair and draws the armchair', () => {
+    // It was `sofa`, so an 800 mm armchair was clamped to the sofa's 1.2 m minimum
+    // width and drawn as a two-seater.
+    expect(WORLD_TO_CATEGORY['armchair']).toBe('chair');
+    expect(refineShape('chair', 'Armchair')).toBe('chair-armchair');
+    // …and a "Couch" too narrow to be one, re-worded to chair by label repair, keeps
+    // the label and so must still come out an armchair rather than a dining chair.
+    expect(refineShape('chair', 'Couch')).toBe('chair-armchair');
+    expect(refineShape('chair', 'Loveseat')).toBe('chair-armchair');
+  });
+
   it('tells a pedestal fan from a ceiling fan', () => {
     // The label layer of the same defect: `electric fan` is what the exported
     // vocabulary calls a pedestal fan, and with no `fan` case in `refineShape` it took

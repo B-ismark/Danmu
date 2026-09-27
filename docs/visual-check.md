@@ -1707,6 +1707,21 @@ production build (SwiftShader), and Undo restoring the list. The run itself coul
 watched here — no on-device model and no key, so **Look again** ends at *Let's do this by
 hand* — so the replace-and-keep half is held by `tests/rescan.test.ts` alone.
 
+### Scanned furniture comes out as the right piece — branch `claude/amazing-davinci-m8zqys`, PR #157
+
+**Where to click.** Photograph a room with an armchair, a dining table and a sofa, with
+the on-device model deployed and a detection key set, and let the scan run.
+
+**What wrong looks like.** The armchair listed or drawn as a two-seat sofa; the dining
+table drawn with a desk's side panel and cable rail; the same sofa listed twice, once as
+"Couch" and once as "Sofa"; the privacy line saying the photos stayed on the device while
+the second look was sending them; after a failed second look, the on-device pieces gone.
+
+**What has been seen.** The dining table beside a desk in the 3D view (SwiftShader): four
+legs and aprons against the desk's panel. Nothing else — neither the model nor a key is
+available here, so the second look and the merge are held by `tests/detection-dedupe.test.ts`
+and the armchair by `tests/shape-contract.test.ts`.
+
 ## The browser route, so the next person does not rebuild it
 
 Looking is a half-hour of setup nobody has to hand, which is the actual reason items sit

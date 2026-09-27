@@ -196,6 +196,34 @@ function boxIoU(a: Detection['box'], b: Detection['box']): number {
  *  better kept. */
 const SAME_BOX_IOU = 0.5;
 
+/** Words the two detectors use for the same thing. The on-device path runs two
+ *  models over every photo — Open Images names (`Couch`, `Houseplant`, `Bookcase`)
+ *  and the world prompts (`Sofa`, `Potted plant`, `Bookshelf`) — so one sofa seen from
+ *  two walls could come back as a couch in one photo and a sofa in the other, and
+ *  rule 2's label test kept both. Only TRUE synonyms: a loveseat beside a sofa, or a
+ *  ceiling fan above a standing one, are two pieces, and that asymmetry is the
+ *  reason the label test exists. */
+const SAME_THING: readonly (readonly string[])[] = [
+  ['sofa', 'couch', 'studio couch'],
+  ['tv', 'television'],
+  ['plant', 'houseplant', 'potted plant'],
+  ['bookshelf', 'bookcase'],
+  ['fan', 'electric fan', 'mechanical fan', 'standing fan'],
+  ['dining table', 'kitchen & dining room table'],
+  ['cabinet', 'storage cabinet', 'cupboard', 'cabinetry'],
+  ['curtain', 'window curtain'],
+  ['clothes rail', 'clothes rack', 'hanging clothes'],
+  ['nightstand', 'bedside table'],
+  ['fridge', 'refrigerator'],
+];
+const CANONICAL = new Map(SAME_THING.flatMap((g) => g.map((w) => [w, g[0]] as const)));
+
+/** A label reduced to the word rule 2 compares: lowercased, trimmed, synonyms folded. */
+export function sameThingKey(label: string): string {
+  const l = label.toLowerCase().trim();
+  return CANONICAL.get(l) ?? l;
+}
+
 /** Drop near-identical detections. Two rules:
  *
  *  1. Same slot + same category + bounding boxes overlapping by `SAME_BOX_IOU` —
@@ -244,7 +272,7 @@ export function dedupeDetections(items: Detection[]): Detection[] {
       // Same photo — heavily overlapping boxes mean one object boxed twice.
       if (o.slot === d.slot && boxIoU(o.box, d.box) >= SAME_BOX_IOU) return true;
       // Different photos — same name AND same place.
-      if (o.label.toLowerCase().trim() !== d.label.toLowerCase().trim()) return false;
+      if (sameThingKey(o.label) !== sameThingKey(d.label)) return false;
       if (!o.position || !d.position) return false;
       const dist = Math.hypot(o.position.x - d.position.x, o.position.z - d.position.z);
       return dist < mergeDistanceFor(d.category);

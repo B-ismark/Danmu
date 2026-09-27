@@ -2257,7 +2257,10 @@ export function refineShape(category: Category, label: string): Shape {
     case 'chair':
       if (/ottoman|footstool|pouf/.test(l)) return 'ottoman';
       if (/office|swivel|desk chair|computer chair|gaming/.test(l)) return 'chair-office';
-      if (/arm|lounge|accent|recliner|wingback|easy/.test(l)) return 'chair-armchair';
+      // `sofa|couch|loveseat` too: a chair still carrying a sofa word is a "sofa" that
+      // was too narrow to be one — what Room check's label repair offers as "Chair?"
+      // for a 0.8 m couch — and the seat it is, is an armchair, not a dining chair.
+      if (/arm|lounge|accent|recliner|wingback|easy|sofa|couch|loveseat/.test(l)) return 'chair-armchair';
       if (/stool/.test(l)) return 'stool';
       return 'chair-dining';
     case 'bed':

@@ -27,6 +27,7 @@ import {
   type ScenePart,
 } from '@/lib/scene-spec';
 import { useStudio } from '@/lib/store';
+import { roleOf } from '@/lib/layout-rules';
 import { DECOR, DETAIL, SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { hexFromKelvin, shadeGlow } from '@/lib/light-units';
 
@@ -171,7 +172,17 @@ function ShapeDispatch({ part, locked }: { part: ScenePart; locked: boolean }) {
     case 'bed-double':
       return <BedGeo part={part} locked={locked} double={true} />;
     case 'desk-standard':
-      return <DeskGeo part={part} locked={locked} lShape={false} />;
+      // One shape, two pieces of furniture: the catalogue and the seeder both use
+      // `desk-standard` for a dining table, and a detected "table" lands on it too.
+      // `roleOf` is where the app already decides which one a piece is (by category
+      // and size), so the drawing asks it rather than keeping a second opinion — a
+      // dining table drawn as a desk, side panel and cable rail included, is what a
+      // scanned table used to look like.
+      return roleOf(part) === 'dining-table' ? (
+        <DiningTableGeo part={part} locked={locked} />
+      ) : (
+        <DeskGeo part={part} locked={locked} lShape={false} />
+      );
     case 'desk-l':
       return <DeskGeo part={part} locked={locked} lShape={true} />;
     case 'coffee-table':
@@ -1003,6 +1014,43 @@ function CurtainGeo({ part }: { part: ScenePart }) {
 }
 
 // ─── Tables ─────────────────────────────────────────────────────────────
+/** Four legs, four aprons and a top — a table you walk all the way round. Leg and
+ *  apron sizes are fixed rather than proportional, like the desk's, because this
+ *  shape is scaled per axis rather than as a group. */
+function DiningTableGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
+  const w = part.dimMM[0] / 1000;
+  const d = part.dimMM[1] / 1000;
+  const h = part.dimMM[2] / 1000;
+  const top = body(part, locked);
+  const frame = shade(top, -20);
+  const topT = 0.035;
+  const leg = 0.055;
+  const apron = 0.08;
+  // Leg centres, inset so a leg's outer faces sit 40 mm inside the top's edge.
+  const lx = w / 2 - 0.04 - leg / 2;
+  const lz = d / 2 - 0.04 - leg / 2;
+  return (
+    <>
+      <Box surface="wood" size={[w, topT, d]} position={[0, h - topT / 2, 0]} color={top} roughness={0.65} />
+      {/* aprons on the legs' centre lines, so each rail's ends run into a leg */}
+      {[-1, 1].map((s) => (
+        <Box key={`ax${s}`} surface="wood" size={[2 * lx, apron, 0.022]} position={[0, h - topT - apron / 2, s * lz]} color={frame} roughness={0.7} />
+      ))}
+      {[-1, 1].map((s) => (
+        <Box key={`az${s}`} surface="wood" size={[0.022, apron, 2 * lz]} position={[s * lx, h - topT - apron / 2, 0]} color={frame} roughness={0.7} />
+      ))}
+      {[
+        [-lx, -lz],
+        [lx, -lz],
+        [-lx, lz],
+        [lx, lz],
+      ].map(([x, z], i) => (
+        <Box key={i} surface="wood" size={[leg, h - topT, leg]} position={[x, (h - topT) / 2, z]} color={frame} roughness={0.7} />
+      ))}
+    </>
+  );
+}
+
 function CoffeeTableGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
   const w = part.dimMM[0] / 1000;
   const d = part.dimMM[1] / 1000;
