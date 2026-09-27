@@ -110,16 +110,65 @@ const SCREENS = [
       await p.mouse.move(0, 0);
     },
   },
+  // Below 1024px the rails are a bottom sheet (SheetShell). Its states are swept like
+  // any other screen; above 1024px there is no sheet and these are skipped.
   {
-    // Under 1024px the studio opens behind a gate; "Open it anyway" is a real path
-    // people take, so it is swept like any other state.
-    key: 'studio-plan-anyway',
+    key: 'studio-sheet-room',
     studio: true,
     go: async (p, id) => {
       await p.goto(`${BASE}/room/${id}/plan`);
       await p.waitForTimeout(1500);
-      const btn = p.getByRole('button', { name: 'Open it anyway' });
-      if (await btn.count()) await btn.click().catch(() => {});
+      if (!(await p.locator('.sheet').count())) return 'skip';
+      await p.getByRole('tab', { name: 'Room' }).click();
+      await p.waitForTimeout(500);
+    },
+  },
+  {
+    key: 'studio-sheet-details',
+    studio: true,
+    go: async (p, id) => {
+      await p.goto(`${BASE}/room/${id}/plan`);
+      await p.waitForTimeout(1500);
+      if (!(await p.locator('.sheet').count())) return 'skip';
+      await p.getByRole('tab', { name: 'Room' }).click();
+      await p.waitForTimeout(500);
+      await p.locator('.sheet [role="option"].list-row').nth(1).click({ position: { x: 40, y: 12 } });
+      await p.waitForTimeout(500);
+    },
+  },
+  {
+    // Selected, then the sheet lowered: the piece's name rides in the tab at rest.
+    key: 'studio-sheet-rest-selected',
+    studio: true,
+    go: async (p, id) => {
+      await p.goto(`${BASE}/room/${id}/plan`);
+      await p.waitForTimeout(1500);
+      if (!(await p.locator('.sheet').count())) return 'skip';
+      await p.getByRole('tab', { name: 'Room' }).click();
+      await p.waitForTimeout(500);
+      await p.locator('.sheet [role="option"].list-row').nth(1).click({ position: { x: 40, y: 12 } });
+      await p.waitForTimeout(300);
+      await p.locator('.sheet__handle').focus();
+      await p.keyboard.press('Enter');
+      await p.waitForTimeout(600);
+    },
+  },
+  {
+    key: 'studio-sheet-full',
+    studio: true,
+    go: async (p, id) => {
+      await p.goto(`${BASE}/room/${id}/model`);
+      await p.waitForTimeout(1500);
+      if (!(await p.locator('.sheet').count())) return 'skip';
+      await p.getByRole('tab', { name: 'Details' }).click();
+      await p.waitForTimeout(400);
+      // A real drag on the bar, up past the top: settles at `full`.
+      const bar = await p.locator('.sheet__bar').boundingBox();
+      await p.mouse.move(bar.x + 20, bar.y + 8);
+      await p.mouse.down();
+      for (let i = 1; i <= 10; i++) await p.mouse.move(bar.x + 20, bar.y + 8 - i * 80);
+      await p.mouse.up();
+      await p.waitForTimeout(600);
     },
   },
   { key: 'studio-model', studio: true, go: (p, id) => p.goto(`${BASE}/room/${id}/model`) },
@@ -245,7 +294,7 @@ try {
     await seed(page, [room(id, LONG_NAME), room(`${id}-b`, 'Study')]);
     for (const s of SCREENS) {
       if (ONLY && !s.key.startsWith(ONLY)) continue;
-      await s.go(page, id);
+      if ((await s.go(page, id)) === 'skip') continue;
       await page.waitForLoadState('networkidle').catch(() => {});
       await page.waitForTimeout(s.studio ? 2500 : 700);
       const found = await measure(page);

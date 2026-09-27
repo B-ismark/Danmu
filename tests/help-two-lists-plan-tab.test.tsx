@@ -121,7 +121,7 @@ describe('help on the 2D plan says what the two lists are', () => {
       const nodes = screen.getAllByText(/is what you can add/);
       expect(nodes).toHaveLength(1);
       const line = nodes[0].textContent ?? '';
-      expect(line).toContain('in the panel under the room');
+      expect(line).toContain('on the Room tab of the panel at the bottom');
       expect(line, 'the wide wording must not survive into a stacked shell').not.toContain('left rail');
       // The half that does NOT branch, asserted here too: if a future edit makes the
       // Library sentence conditional as well, this is where it goes wrong first.

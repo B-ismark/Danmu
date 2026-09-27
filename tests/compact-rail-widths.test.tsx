@@ -136,14 +136,19 @@ describe('the compact step, at a width that is actually in it', () => {
     cleanup();
     restore?.();
 
-    // And one pixel below the band there are no sash variables at all, because a stacked
-    // shell is one column and has no rail widths to hand out. This is the assertion that
+    // And one pixel below the band there are no rails at all: the studio is the
+    // bottom-sheet shell, which has no widths to hand out. This is the assertion that
     // makes the two above mean `compact` specifically: without it, a shim that answered
-    // `stacked` for every width would still have to be caught by the absence of a token
-    // rather than by the presence of the wrong one.
-    const stacked = shellAt(STACK_MAX);
-    expect(sash(stacked, 'left'), `at ${STACK_MAX}px`).toBe('');
-    expect(sash(stacked, 'right'), `at ${STACK_MAX}px`).toBe('');
+    // `stacked` for every width would still have to be caught by the absence of the
+    // docked shell rather than by the presence of the wrong token.
+    restore = viewportAt(STACK_MAX);
+    const { container } = render(
+      <StudioShell loadingLabel="Building your room">
+        <main>room</main>
+      </StudioShell>,
+    );
+    expect(container.querySelector('.split'), `at ${STACK_MAX}px`).toBeNull();
+    expect(container.querySelector('.sheet-shell'), `no sheet at ${STACK_MAX}px`).not.toBeNull();
   });
 
   it('and a dragged rail keeps the width it was dragged to, because a preference outranks a step', () => {

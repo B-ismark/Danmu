@@ -22,6 +22,7 @@
 import { Fragment, type ReactNode } from 'react';
 import { useStudioLayout } from './NarrowViewportBanner';
 import { DockedShell } from './shells/DockedShell';
+import { SheetShell } from './shells/SheetShell';
 
 export function StudioShell({
   children,
@@ -32,10 +33,10 @@ export function StudioShell({
   /** Spoken while the shell decides its own shape. Names the thing being built. */
   loadingLabel: string;
 }) {
-  // Three steps, not a boolean: below ~1024px the rails stack under the work
-  // surface instead of squeezing it to nothing, and between there and 1279px they
-  // narrow instead. Done in JS rather than CSS because the stacked order has to
-  // put the surface FIRST, and a media query cannot reorder an inline-styled grid.
+  // Three steps, not a boolean: below ~1024px the rails become a bottom sheet
+  // instead of squeezing the room to nothing, and between there and 1279px they
+  // narrow instead. Done in JS rather than CSS because the two are different
+  // component trees, not one tree restyled.
   //
   // `ready` gates the first paint: without it a narrow viewport lays out the
   // three-column shell, then re-orders and re-flows once matchMedia answers.
@@ -56,5 +57,9 @@ export function StudioShell({
   // time the viewport crosses the stacking threshold and the children are
   // reordered. A `display: contents` div would also work and is one more thing to
   // be wrong about.
-  return <DockedShell surface={<Fragment key="surface">{children}</Fragment>} layout={layout} />;
+  const surface = <Fragment key="surface">{children}</Fragment>;
+  // Below 1024px the rails become one bottom sheet over a full-height room; see
+  // `shells/SheetShell.tsx`. Crossing that line swaps the shell and so remounts the
+  // canvas — a resize across a breakpoint, not something that happens mid-gesture.
+  return layout === 'stacked' ? <SheetShell surface={surface} /> : <DockedShell surface={surface} layout={layout} />;
 }

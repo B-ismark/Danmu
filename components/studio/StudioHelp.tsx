@@ -279,7 +279,7 @@ function TwoLists() {
   return (
     <HelpGroup title="The two lists">
       <HelpLine>
-        <b>Catalog</b>, {layout === 'stacked' ? 'in the panel under the room' : 'in the left rail'}, is what
+        <b>Catalog</b>, {layout === 'stacked' ? 'on the Room tab of the panel at the bottom' : 'in the left rail'}, is what
         is in this room; <b>Library</b>, on the right of the canvas, is what you can add.
       </HelpLine>
       <HelpLine>

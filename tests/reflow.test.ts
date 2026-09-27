@@ -752,11 +752,14 @@ describe('the studio shells', () => {
   });
 
   it('always offers the sash on a three-column layout', () => {
-    // The sash used to be opt-in per variant. It ships now, so the only thing that
-    // withholds it is the stacked layout, where a vertical divider between rails
-    // stacked BELOW the room would resize nothing.
-    expect(DOCKED).not.toMatch(/sashable/);
-    expect(DOCKED, 'the sash is gated on layout alone').toMatch(/\{!stacked && \(\s*<RailSash/);
+    // The sash used to be opt-in per variant, and then gated on the stacked layout.
+    // Below 1024px is a different shell now (`SheetShell`), so the docked one is
+    // always three columns and both rails always carry a sash — and the sheet, whose
+    // panels are not side by side, carries none.
+    expect(DOCKED).not.toMatch(/sashable|\bstacked\b(?!'>)/);
+    expect([...codeOnly(DOCKED).matchAll(/<RailSash\b/g)]).toHaveLength(2);
+    const SHEET = readFileSync(root('components', 'studio', 'shells', 'SheetShell.tsx'), 'utf8');
+    expect(codeOnly(SHEET)).not.toMatch(/RailSash/);
   });
 
   it('renders a dragged width inside the token bounds rather than instead of them', () => {

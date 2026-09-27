@@ -249,6 +249,14 @@
 
   --shadow-soft: 0 1px 2px rgba(42, 37, 32, 0.04), 0 6px 16px rgba(42, 37, 32, 0.06);
   --shadow-lift: 0 2px 4px rgba(42, 37, 32, 0.06), 0 12px 28px rgba(42, 37, 32, 0.10);
+  /* The lift, cast upward: a bottom sheet stands on the room from below. */
+  --shadow-sheet: 0 -1px 3px rgba(42, 37, 32, 0.06), 0 -12px 28px rgba(42, 37, 32, 0.10);
+  /* The phone studio's bottom sheet. At rest it is exactly its tab bar — a grab
+     line over two 44px tabs — and the room gets everything above it. Open, it
+     stops `--sheet-top-gap` short of the top so a strip of room always shows:
+     the sheet is over the room, not instead of it. */
+  --sheet-peek: 64px;
+  --sheet-top-gap: 56px;
 }
 
 html, body {
@@ -1023,6 +1031,64 @@ textarea.field { border-radius: var(--r-2); }
 /* Two-column work surface: fixed rail(s) + fluid content. The `--stack` modifier
    that turns those columns into rows lives in the 720px block below. */
 .split { display: grid; min-height: 0; }
+
+/* The studio on a phone or tablet (SheetShell). The room is the grid's first row
+   and the sheet's resting height is its second, so at rest the sheet covers no
+   room at all; opened, it rises OVER the room from that row, which is when the
+   panel and not the room is what is in use. */
+.sheet-shell {
+  position: relative; height: 100%; min-height: 0; overflow: hidden;
+  display: grid; grid-template-rows: minmax(0, 1fr) var(--sheet-peek);
+}
+.sheet-shell__room { grid-row: 1; min-height: 0; display: grid; }
+.sheet-shell__room > * { min-height: 0; min-width: 0; }
+.sheet {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: var(--sheet-peek);
+  display: flex; flex-direction: column;
+  background: var(--paper);
+  border-top: 1px solid var(--hairline);
+  border-radius: var(--r-3) var(--r-3) 0 0;
+  box-shadow: var(--shadow-sheet);
+  z-index: var(--z-panel);
+  transition: height var(--dur-slow) var(--ease-out);
+}
+.sheet[data-snap="half"] { height: 55%; }
+.sheet[data-snap="full"] { height: calc(100% - var(--sheet-top-gap)); }
+/* A finger on the handle owns the height; easing it would trail the finger. */
+.sheet[data-dragging] { transition: none; }
+.sheet__bar {
+  position: relative; flex-shrink: 0;
+  height: var(--sheet-peek);
+  display: flex; align-items: flex-end;
+  padding: 0 10px 6px;
+  /* The bar is the drag surface: the browser must not scroll the page with it. */
+  touch-action: none; user-select: none; cursor: grab;
+}
+.sheet[data-snap="half"] .sheet__bar,
+.sheet[data-snap="full"] .sheet__bar { border-bottom: 1px solid var(--hairline); }
+.sheet__handle {
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 64px; height: 14px; padding: 0;
+  display: grid; place-items: center;
+  background: none; border: 0; border-radius: var(--r-1); cursor: grab;
+}
+.sheet__handle > span { width: 36px; height: 4px; border-radius: 999px; background: var(--hairline-strong); }
+.sheet__tabs { display: flex; gap: 6px; width: 100%; }
+.sheet__tab {
+  flex: 1 1 0; min-width: 0; height: 44px; padding: 0 12px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  font-family: var(--font-sans); font-size: var(--fs-body); font-weight: 600;
+  color: var(--ink-2); background: transparent;
+  border: 1px solid transparent; border-radius: var(--r-2); cursor: pointer;
+  transition: background var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out);
+}
+.sheet__tab[aria-selected="true"] { background: var(--paper-2); color: var(--ink); border-color: var(--edge); }
+.sheet__tab-dot { width: 7px; height: 7px; flex-shrink: 0; border-radius: 999px; background: var(--accent); }
+.sheet__body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.sheet__rail { flex: 1 1 auto; height: auto; }
+/* `.rail` is `display: flex`, which outranks the UA's `[hidden] { display: none }`. */
+.sheet__rail[hidden] { display: none; }
 
 /* Reassurance, not feedback: "Saves as you go" is worth a laptop's pixels and
    not a small laptop's. The dot keeps its tooltip and the live region keeps
