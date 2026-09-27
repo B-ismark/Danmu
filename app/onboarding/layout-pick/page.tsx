@@ -205,23 +205,25 @@ export default function LayoutPickPage() {
             </p>
           )}
 
-          <button
-            onClick={() => createRoom('model')}
-            disabled={saving !== null}
-            className="ds-btn ds-btn--xl ds-btn--accent"
-            style={{ marginTop: 24, fontSize: 'var(--fs-body)', justifyContent: 'center', width: '100%' }}
-          >
-            {saving === 'model' ? 'Creating your room…' : (<>Start decorating · {layout.starter.toLowerCase()}<Icon name="arrow-right" size={14} color="var(--on-accent)" /></>)}
-          </button>
-          <button
-            onClick={() => createRoom('capture')}
-            disabled={saving !== null}
-            className="ds-btn ds-btn--lg ds-btn--ghost"
-            style={{ marginTop: 8, fontSize: 'var(--fs-small)', justifyContent: 'center', width: '100%', color: 'var(--ink-2)' }}
-          >
-            <Icon name="camera" size={13} />
-            {saving === 'capture' ? 'Creating your room…' : 'Photograph my real room first (optional)'}
-          </button>
+          <div className="action-row" style={{ marginTop: 24 }}>
+            <button
+              onClick={() => createRoom('model')}
+              disabled={saving !== null}
+              className="ds-btn ds-btn--xl ds-btn--accent ds-btn--block-compact"
+              style={{ fontSize: 'var(--fs-body)' }}
+            >
+              {saving === 'model' ? 'Creating your room…' : (<>Start decorating · {layout.starter.toLowerCase()}<Icon name="arrow-right" size={14} color="var(--on-accent)" /></>)}
+            </button>
+            <button
+              onClick={() => createRoom('capture')}
+              disabled={saving !== null}
+              className="ds-btn ds-btn--lg ds-btn--ghost ds-btn--block-compact"
+              style={{ fontSize: 'var(--fs-small)', color: 'var(--ink-2)' }}
+            >
+              <Icon name="camera" size={13} />
+              {saving === 'capture' ? 'Creating your room…' : 'Photograph my real room first (optional)'}
+            </button>
+          </div>
         </div>
 
         {/* PREVIEW */}

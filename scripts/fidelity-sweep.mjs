@@ -31,6 +31,12 @@
 //             because a dense desktop control reflowed onto a tablet is a design
 //             question rather than a bug.
 //   hscroll   the page itself scrolling sideways.
+//   stretched on widths of 768 and up, a control, card or paragraph spread wider than
+//             its content can use: a button more than 240px wide whose label and
+//             icon occupy under half of it, a `.ds-card` over 760px, or a paragraph
+//             of running text over ~80 characters a line (WCAG 1.4.8; Bringhurst's
+//             45–75). A thing does not get wider because the window did. Rename
+//             fields, disclosure rows and tiles are not buttons and are skipped.
 //
 // EXIT CODES: 0 clean, 1 findings, 2 the sweep could not run.
 
@@ -247,6 +253,46 @@ async function measure(page) {
           out.push({ kind: 'target', what: `${label(el)} ${Math.round(r.width)}×${Math.round(r.height)}` });
       }
     });
+    if (W >= 768) {
+      const contentW = (el) => {
+        const rg = document.createRange();
+        rg.selectNodeContents(el);
+        return rg.getBoundingClientRect().width;
+      };
+      for (const el of controls) {
+        if (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA') continue;
+        // Not buttons, though they are <button>s: a rename field (`.editable`), a
+        // disclosure ROW (a section header, which spans its panel on purpose), and a
+        // tile taller than any button — a card you press.
+        if (el.classList.contains('editable')) continue;
+        if (el.hasAttribute('aria-expanded') && !el.classList.contains('ds-btn')) continue;
+        if (el.getBoundingClientRect().height > 64) continue;
+        const w = el.getBoundingClientRect().width;
+        const c = contentW(el);
+        if (w > 240 && c < w / 2) out.push({ kind: 'stretched', what: `${label(el)} ${Math.round(w)}px for ${Math.round(c)}px of content` });
+      }
+      for (const el of document.querySelectorAll('.ds-card')) {
+        if (!vis(el)) continue;
+        const w = el.getBoundingClientRect().width;
+        if (w > 760) out.push({ kind: 'stretched', what: `${label(el).slice(0, 50)} card ${Math.round(w)}px wide` });
+      }
+      // The measure is read in the paragraph's own `ch`, by a probe set in its own
+      // font, so the rule and the stylesheet's `70ch` speak one unit.
+      const probe = document.createElement('span');
+      probe.style.cssText = 'position:absolute;visibility:hidden;inline-size:80ch;white-space:nowrap';
+      for (const el of document.querySelectorAll('p, li')) {
+        if (!vis(el) || !ownText(el)) continue;
+        const cs = getComputedStyle(el);
+        const r = el.getBoundingClientRect();
+        el.appendChild(probe);
+        const limit = probe.getBoundingClientRect().width;
+        probe.remove();
+        const lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5;
+        // Only running text — more than one line of it — has a measure to be too long.
+        if (r.width > limit + 1 && r.height > lh * 1.5)
+          out.push({ kind: 'stretched', what: `${label(el).slice(0, 50)} ${Math.round(r.width)}px, over 80ch (${Math.round(limit)}px)` });
+      }
+    }
     for (let i = 0; i < controls.length; i++)
       for (let j = i + 1; j < controls.length; j++) {
         const a = controls[i], b = controls[j];

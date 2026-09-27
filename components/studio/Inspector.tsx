@@ -492,7 +492,7 @@ export function Inspector() {
           className={isGeneric ? 'ds-btn' : 'ds-btn ds-btn--primary'}
           title="Pick a different model from the Library"
           style={{
-            width: '100%',
+            alignSelf: 'flex-start',
             height: 34,
             fontSize: 'var(--fs-small)',
             gap: 6,
@@ -510,7 +510,7 @@ export function Inspector() {
             onClick={() => resetTransforms(id!)}
             className="ds-btn ds-btn--sm"
             title="Undo the moves, turns and resizes you made to this piece"
-            style={{ width: '100%', gap: 6, justifyContent: 'center', fontSize: 'var(--fs-caption)' }}
+            style={{ alignSelf: 'flex-start', gap: 6, fontSize: 'var(--fs-caption)' }}
           >
             <Icon name="refresh" size={12} /> Back to where it started
           </button>
@@ -801,7 +801,7 @@ function WallInspector({ index }: { index: number }) {
             onClick={() => setAllWallColors(current)}
             className="ds-btn ds-btn--sm"
             title={painted ? 'Paint every wall this colour' : 'Paint every wall the default colour'}
-            style={{ width: '100%', justifyContent: 'center', gap: 6, marginTop: 10 }}
+            style={{ gap: 6, marginTop: 10 }}
           >
             <Icon name="layers" size={13} /> Use this colour on every wall
           </button>

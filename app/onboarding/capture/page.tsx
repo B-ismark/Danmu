@@ -458,7 +458,7 @@ export default function CapturePage() {
             Photos are saved into a room, and there is no room open on this device yet. Choose a footprint and you can
             come straight back here.
           </p>
-          <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--lg ds-btn--accent" style={{ justifyContent: 'center', width: '100%' }}>
+          <Link href="/onboarding/layout-pick" className="ds-btn ds-btn--lg ds-btn--accent ds-btn--block-compact">
             Pick a shape
             <Icon name="arrow-right" size={14} color="var(--on-accent)" />
           </Link>

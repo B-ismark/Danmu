@@ -58,8 +58,6 @@ export function AddPiecesButton() {
       title="Add a piece to the room"
       className="ds-btn ds-btn--sm"
       style={{
-        width: '100%',
-        justifyContent: 'center',
         background: 'var(--accent-tint)',
         // --accent as type on --accent-tint measures 2.89:1; --accent-text is
         // the accent-coloured ink that clears 4.5:1 on the same tint.

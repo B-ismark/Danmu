@@ -95,6 +95,9 @@ export function DemoBanner() {
             color: 'var(--accent-text)',
             textDecoration: 'underline',
             textUnderlineOffset: 3,
+            // One unit: when the sentence wraps, the whole invitation moves to the
+            // next line instead of breaking after "Rather".
+            display: 'inline-block',
           }}
         >
           Rather use your own room? Photograph it
@@ -106,7 +109,9 @@ export function DemoBanner() {
         onClick={dismiss}
         size={26}
         iconSize={13}
-        style={{ color: 'var(--accent-text)', flexShrink: 0 }}
+        // The paragraph stops at its measure (globals.css, `p { max-inline-size }`),
+        // so the dismiss is pushed to the bar's end rather than trailing the text.
+        style={{ color: 'var(--accent-text)', flexShrink: 0, marginLeft: 'auto' }}
       />
     </div>
   );

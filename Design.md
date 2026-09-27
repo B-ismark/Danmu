@@ -135,6 +135,16 @@ owned by a deterministic geometry engine, not by a model.
    type step, so a button's height is never typed beside its label again. The same
    test fails on a classless element spelling out a named pairing inline, and holds
    a ceiling on inline styles that only goes down.
+   **Nothing spreads wide because the window did.** A button is as wide as its
+   label (Material's buttons hug their content; Apple's "span the screen" advice is
+   watchOS'), so full width is reserved for a screen's one primary action on a
+   phone — `.ds-btn--block-compact`, below 600px, Material's compact class — and an
+   action with its quieter alternative stacks as one block (`.action-row`). A
+   line of running text stops at `70ch` (`p, li { max-inline-size }`; Baymard
+   measures 50–75 characters as the readable band, WCAG 1.4.8 caps it at 80). Rows
+   that are not buttons — a disclosure header, a rename field, a tile — span their
+   panel on purpose. The sweep's `stretched` rule measures all three in the browser
+   at 768px and up.
    **Nothing UI-facing is done until `scripts/fidelity-sweep.mjs` is clean.** It
    walks every screen at seven widths (360 → 1920) against a production build and
    counts the silent failures rule 4 names — text spilling its box, text clipped by

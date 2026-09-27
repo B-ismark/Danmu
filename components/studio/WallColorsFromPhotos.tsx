@@ -240,7 +240,7 @@ export function WallColorsFromPhotos() {
         aria-busy={busy}
         className="ds-btn ds-btn--sm"
         title="Read each wall’s colour out of the photo of it"
-        style={{ width: '100%', gap: 6, justifyContent: 'center' }}
+        style={{ gap: 6 }}
       >
         {busy ? <Spinner size={12} /> : <Icon name="image" size={13} />}
         {/* The label gets its OWN element, which is what `.ds-btn`'s own comment

@@ -107,19 +107,18 @@ export function RailFooter() {
   return (
     <div className="rail-footer">
       {selectedWall !== null ? (
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ minWidth: 0 }}>
           <button
             onClick={() => setSelectedWall(null)}
             className="ds-btn ds-btn--sm"
             title="Finish with this wall"
-            style={{ width: '100%', justifyContent: 'center' }}
           >
             <Icon name="x" size={12} />
             <span style={LABEL}>Done</span>
           </button>
         </div>
       ) : selectedName != null ? (
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ minWidth: 0 }}>
           {/* No confirm — pressing a button labelled Delete is a decision, and the
               shared path answers with an Undo toast rather than a dialog (see
               `removeParts`). Backspace is the one delete gesture that asks first,
@@ -140,8 +139,6 @@ export function RailFooter() {
             title={deleteLabel}
             aria-label={deleteLabel}
             style={{
-              width: '100%',
-              justifyContent: 'center',
               color: 'var(--danger)',
               borderColor: 'var(--danger)',
             }}
@@ -151,7 +148,11 @@ export function RailFooter() {
           </button>
         </div>
       ) : null}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      {/* Each button as wide as its label, the way a dialog's actions sit: the
+          destructive one leading, the one that adds trailing. Stretched halves read
+          as a segmented control, and a lone "Add" spanning a 320px rail is a bar,
+          not a button. */}
+      <div style={{ minWidth: 0, marginLeft: 'auto' }}>
         <AddPiecesButton />
       </div>
       {hasAnyOverride && (

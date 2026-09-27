@@ -557,7 +557,6 @@ export function PartTree() {
             <button
               onClick={improveAll}
               className="ds-btn ds-btn--xs"
-              style={{ width: '100%', justifyContent: 'center' }}
             >
               <Icon name="refresh" size={11} />
               Match to real models

@@ -554,15 +554,20 @@ describe('the rail footer holds the selection, add and revert in ONE row', () =>
   it('lets every label ellipsise rather than widening the rail', () => {
     // `.ds-btn` is `white-space: nowrap`, so at the narrowest right rail two labels
     // plus a 32px square push the row past the rail, and `.rail` is
-    // `overflow: hidden` — no scrollbar, no ellipsis, no clue. `flex: 1` sizes the
-    // BOX and `minWidth: 0` is what lets it go below its own text; the pair is one
-    // mechanism and either half alone does nothing.
+    // `overflow: hidden` — no scrollbar, no ellipsis, no clue. Each wrapper keeps
+    // flex's default `0 1 auto` — as wide as its label, and allowed to SHRINK — with
+    // `minWidth: 0` letting it go below its own text, and the button inside is
+    // capped at the wrapper (`max-width: 100%`), which is where the ellipsis starts.
+    // No `flex: 1`: the buttons hug their labels rather than splitting the rail into
+    // halves that read as a segmented control.
     //
     // Three wrappers, not two: the selection slot is Delete for a piece and Done
     // for a wall, written as two branches of one slot because the store makes those
     // two selections mutually exclusive.
-    const wrappers = CODE.match(/style=\{\{ flex: 1, minWidth: 0 \}\}/g) ?? [];
-    expect(wrappers, 'every labelled button in the row needs the flex/minWidth pair').toHaveLength(3);
+    const wrappers = CODE.match(/style=\{\{ minWidth: 0(?:, marginLeft: 'auto')? \}\}/g) ?? [];
+    expect(wrappers, 'every labelled button in the row needs a shrinkable wrapper').toHaveLength(3);
+    expect(CODE, 'footer buttons hug their labels; nothing grows').not.toMatch(/flex: 1\b/);
+    expect(rule('.rail-footer .ds-btn')).toContain('max-width: 100%');
 
     // And the label needs its OWN element or the ellipsis has nowhere to happen: a
     // bare text node beside an icon is an anonymous flex item, which is what
@@ -1228,5 +1233,33 @@ describe('the room-check actions wrap rather than cut a word', () => {
       label,
       `a 1fr column at --rail-left-tight leaves ${label}px for a label that wants ~${needed}px`,
     ).toBeLessThan(needed);
+  });
+});
+
+describe('nothing spreads wide because the window did', () => {
+  // The other half of rule 4. A control that does not fit must reflow; a control
+  // that has room to spare must not take it. Buttons hug their labels (Material's
+  // buttons are `wrap_content`; Apple's "span the width" advice is watchOS'), and a
+  // line of running text stops at ~70 characters (Baymard 50–75, WCAG 1.4.8's 80).
+  // `scripts/fidelity-sweep.mjs` measures the same thing in the browser as
+  // `stretched`; this is the half that fails in CI.
+
+  it('full width is a phone-only convention for a primary action', () => {
+    const at = CSS.indexOf('.ds-btn--block-compact');
+    expect(at, 'no .ds-btn--block-compact in globals.css').toBeGreaterThan(-1);
+    const before = CSS.slice(0, at);
+    const media = before.lastIndexOf('@media');
+    expect(before.slice(media), 'the full-width rule must live inside the compact query').toMatch(/^@media \(max-width: 599px\) \{\s*$/);
+    // Filled buttons only: the welcome card's "Add an AI key" is a disclosure ROW in
+    // ghost dress, and a row spanning its card is the pattern, not the defect.
+    for (const page of ['welcome', 'layout-pick', 'capture']) {
+      const src = codeOnly(readFileSync(root('app', 'onboarding', page, 'page.tsx'), 'utf8'));
+      expect(src, `${page}: a CTA stretched at every width`).not.toMatch(/className="ds-btn[^"]*--(?:accent|primary)[^"]*"\s+style=\{\{[^}]*width: '100%'/);
+      expect(src).toContain('ds-btn--block-compact');
+    }
+  });
+
+  it('running text stops at its measure', () => {
+    expect(CSS).toMatch(/\np, li \{ max-inline-size: 70ch; \}/);
   });
 });

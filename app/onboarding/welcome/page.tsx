@@ -112,8 +112,7 @@ export default function WelcomePage() {
 
           <button
             onClick={() => router.push('/onboarding/layout-pick')}
-            className="ds-btn ds-btn--xl ds-btn--accent"
-            style={{ justifyContent: 'center', width: '100%' }}
+            className="ds-btn ds-btn--xl ds-btn--accent ds-btn--block-compact"
           >
             Start decorating
             <Icon name="arrow-right" size={15} color="var(--on-accent)" />
