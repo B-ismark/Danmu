@@ -13,6 +13,8 @@
 // (the same opt-out as the shell's shadow-only ceiling) while the shadow pass,
 // which draws with its own depth material, keeps casting them.
 //
+// Every drawable in the group is covered — meshes and line outlines alike.
+//
 // It also stops the piece taking clicks while it is gone, so a press on the sofa
 // behind an invisible window selects the sofa.
 //
@@ -31,8 +33,12 @@ const NO_PICK = (_r: Raycaster, _i: Intersection[]) => {};
 
 function apply(g: Group, cut: boolean) {
   g.traverse((o) => {
+    // Anything that DRAWS, not only meshes: drei's <Edges> outlines (an AC unit's
+    // louvres, a table leg's edge line) and the selection highlight are line
+    // segments, and skipping them left four floating rectangles where an air
+    // conditioner had been.
     const mesh = o as Mesh & { __cutRaycast?: Mesh['raycast'] };
-    if (!(mesh as { isMesh?: boolean }).isMesh) return;
+    if (!mesh.material) return;
     if (cut && mesh.raycast !== NO_PICK) {
       mesh.__cutRaycast = mesh.raycast;
       mesh.raycast = NO_PICK;

@@ -192,46 +192,6 @@ whether a plant at its declared size still looks like a plant. If any of them lo
 honest fix is the **declared size in `PART_LIBRARY`**, not the renderer — the geometry is
 correct now and the catalogue number is the thing that was never checked against it.
 
-### An air purifier's intake slats stand up through it instead of banding around it
-
-**Where to click.** Any room, **3D Model** tab, Library → **Air purifier**. Look at it from
-the side, not from above.
-
-**What is wrong.** `AirPurifierGeo` (`components/three/DynamicPart.tsx:1232-1236`) draws its
-three intake slats as `<torusGeometry>` with **no rotation**. A torus lies in XY with its
-axis on Z; the purifier body is a cylinder about Y. So the three rings stand as vertical
-hoops in the `z = 0` plane, cutting edge-on through the body, where they are meant to be
-horizontal bands around it. The fix is almost certainly `rotation={[Math.PI/2, 0, 0]}` —
-the same axis confusion the washing-machine drum already carries a comment about.
-
-**Why it is filed here and not fixed.** It is a one-line rotation, which is exactly the
-class of change that ships upside-down because it was obviously right. Nothing in this repo
-renders geometry — the `FanGeo` control mutation above is the standing proof — so no gate
-can tell a corrected slat from a slat rotated the other way. Someone has to see it before
-and after.
-
-**Found by** the footprint lane, incidentally, while sweeping shapes for compound
-footprints. Never in a browser. Related, same class, also unfixed: `DeskGeo` draws the
-L-desk's return wing so the piece spans **2.86 m** where every consumer reads 1.60 m, and
-32 of 46 shapes draw outside their own `dimMM`.
-
-**Its twin has been looked at, and this one can be settled the same way.** `WardrobeGeo`'s
-doors sat here as one class with this item — both one-line rotations, both "obviously
-right", both filed because no gate in this repo can tell a corrected rotation from one
-flipped twice. That item is deleted because the `footprint` lane put it on screen: a
-Playwright A/B, SwiftShader, production builds, one arm at a time. Closed, the panels
-stand 12 mm proud; opened on `main` the box **shrank** to 1.380..1.980 against a closed
-1.368..1.980, and with the fix it grows to 0.856..1.980 — **+512 mm into the room** —
-across three bays with alternating hinge signs, so both directions were measured rather
-than reasoned. The write-up is on PR #123; the fix is on `fix/seeded-flags-and-wardrobe-doors`
-and unmerged at the time of writing. **That observation is not mine — I have not seen
-either piece.** What it establishes for this item is that the route exists. Two traps it
-cost, both on that PR rather than in the route section below: a plan piece is never
-`visible` to Playwright, because its stroke is drawn only while it is selected — wait on
-`{ state: 'attached' }` instead, or the locator resolves and times out; and projecting a
-part's world centre through the camera lands on the CANVAS and selects nothing, so
-clicking and reading `aria-selected` back is the only aiming that works.
-
 ### A ceiling fan hangs flush against the slab — and an OLD room's fan still does not
 
 **Where to click.** Any room, **3D Model** tab, Library → Appliances → **Ceiling fan**,
@@ -1662,6 +1622,24 @@ a real GPU is entirely unlooked-at.
 
 **Noticed, not fixed.** The sofa's fabric weave aliases into a moiré at room distance on
 both builds — the normal map wants mipmapping or a distance fade.
+
+### Every model is one object now — branch `claude/amazing-davinci-m8zqys`, PR #157
+
+**Where to click.** Library → coffee table, dining chair, armchair, office chair, desk, shoe
+rack, floor lamp, air purifier, both mirrors, monitor, fridge. Orbit close to each.
+
+**What wrong looks like.** A part that stops short of what it should meet: a table top above
+its legs, a chair back with nothing under it, a shelf between legs that does not reach them,
+a handle standing off a door, purifier rings through the floor (they were vertical hoops;
+now `rotation={[π/2,0,0]}` — this closes the old "intake slats stand up" item, seen as bands
+on SwiftShader). Also look at legs: the white outline strokes are gone from them.
+
+**What was measured, and on what.** `tests/model-integrity.test.tsx` walks every shape at
+min / library / max and found 181 detached or ungrounded parts across 19 shapes; it finds
+none now. It proves each model is connected, not that every visible joint is closed — the
+coffee table's legs cut back to 0.82h still pass, because the new aprons carry them. Seen on
+SwiftShader in a seeded showroom (all but the oval mirror, which did not appear in that
+seeded room — not yet looked at).
 
 ## The browser route, so the next person does not rebuild it
 

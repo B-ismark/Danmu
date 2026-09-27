@@ -375,19 +375,24 @@ function DiningChairGeo({ part, locked }: { part: ScenePart; locked: boolean }) 
   return (
     <FitToDim natural={[0.42, 1.09, 0.42]} part={part}>
         <Box size={[0.42, 0.06, 0.42]} position={[0, 0.46, 0]} color={seat} roughness={0.97} />
-        {/* back slats — two thin bars instead of a solid slab */}
-        <Box surface="wood" size={[0.42, 0.04, 0.04]} position={[0, 0.68, -0.19]} color={wood} roughness={0.7} />
-        <Box surface="wood" size={[0.42, 0.04, 0.04]} position={[0, 0.82, -0.19]} color={wood} roughness={0.7} />
-        <Box surface="wood" size={[0.42, 0.04, 0.04]} position={[0, 0.96, -0.19]} color={wood} roughness={0.7} />
+        {/* back slats — thin bars spanning the rear legs, flush with their outer faces.
+            They were 420 mm wide against legs 400 mm apart outside, and the rear legs
+            stopped at the seat, so the whole back — three slats and the top rail —
+            hung 39–78 mm in the air with nothing under it. A chair's back is carried
+            by its back legs running up into the top rail. */}
+        <Box surface="wood" size={[0.4, 0.04, 0.04]} position={[0, 0.68, -0.19]} color={wood} roughness={0.7} />
+        <Box surface="wood" size={[0.4, 0.04, 0.04]} position={[0, 0.82, -0.19]} color={wood} roughness={0.7} />
+        <Box surface="wood" size={[0.4, 0.04, 0.04]} position={[0, 0.96, -0.19]} color={wood} roughness={0.7} />
         {/* top rail */}
-        <Box surface="wood" size={[0.42, 0.06, 0.05]} position={[0, 1.06, -0.18]} color={wood} roughness={0.7} />
+        <Box surface="wood" size={[0.4, 0.06, 0.05]} position={[0, 1.06, -0.18]} color={wood} roughness={0.7} />
+        {/* front legs to the seat; rear legs on up into the top rail */}
         {[
-          [-0.18, -0.18],
-          [0.18, -0.18],
-          [-0.18, 0.18],
-          [0.18, 0.18],
-        ].map(([x, z], i) => (
-          <Box surface="wood" key={i} size={[0.04, 0.45, 0.04]} position={[x, 0.225, z]} color={wood} roughness={0.7} edgeOpacity={0.4} />
+          [-0.18, -0.18, 1.06],
+          [0.18, -0.18, 1.06],
+          [-0.18, 0.18, 0.45],
+          [0.18, 0.18, 0.45],
+        ].map(([x, z, h], i) => (
+          <Box surface="wood" key={i} size={[0.04, h, 0.04]} position={[x, h / 2, z]} color={wood} roughness={0.7} />
         ))}
     </FitToDim>
   );
@@ -409,7 +414,7 @@ function OfficeChairGeo({ part, locked }: { part: ScenePart; locked: boolean }) 
           const z = Math.sin(a) * 0.16;
           return (
             <group key={i}>
-              <Box surface="metal" size={[0.32, 0.025, 0.05]} position={[x / 2, 0.045, z / 2]} rotation={[0, -a, 0]} color={metal} edgeOpacity={0.4} />
+              <Box surface="metal" size={[0.32, 0.025, 0.05]} position={[x / 2, 0.045, z / 2]} rotation={[0, -a, 0]} color={metal} />
               <mesh position={[x, 0.03, z]}>
                 <sphereGeometry args={[0.03, 8, 8]} />
                 <meshStandardMaterial color={DETAIL.hardware} />
@@ -418,8 +423,9 @@ function OfficeChairGeo({ part, locked }: { part: ScenePart; locked: boolean }) 
           );
         })}
         {/* gas piston */}
-        <mesh position={[0, 0.28, 0]}>
-          <cylinderGeometry args={[0.03, 0.03, 0.42, 12]} />
+        {/* from inside the hub up into the seat — it started 5 mm above the hub */}
+        <mesh position={[0, 0.275, 0]}>
+          <cylinderGeometry args={[0.03, 0.03, 0.43, 12]} />
           <meshStandardMaterial color={metal} {...SURFACE.metal} />
         </mesh>
         {/* seat */}
@@ -428,9 +434,16 @@ function OfficeChairGeo({ part, locked }: { part: ScenePart; locked: boolean }) 
         <Box surface="fabric" size={[0.48, 0.6, 0.06]} position={[0, 0.85, -0.21]} color={cushion} roughness={0.97} />
         {/* lumbar curve hint — slightly protruding box gives depth */}
         <Box surface="fabric" size={[0.44, 0.18, 0.04]} position={[0, 0.7, -0.19]} color={shade(cushion, -8)} roughness={0.97} />
+        {/* backrest spine — the backrest stopped 10 mm above the seat with nothing
+            behind it, so the back floated; this bar runs from the seat into it */}
+        <Box surface="metal" size={[0.06, 0.3, 0.03]} position={[0, 0.55, -0.255]} color={metal} roughness={0.55} />
+        {/* armrest posts — the pads hung 60 mm above the seat on nothing */}
+        {[-0.26, 0.26].map((x) => (
+          <Box key={x} surface="metal" size={[0.03, 0.09, 0.03]} position={[x, 0.585, -0.05]} color={DETAIL.hardware} roughness={0.55} metalness={0.3} />
+        ))}
         {/* armrests */}
-        <Box surface="metal" size={[0.04, 0.04, 0.32]} position={[-0.27, 0.62, -0.05]} color={DETAIL.hardware} roughness={0.55} metalness={0.3} edgeOpacity={0.4} />
-        <Box surface="metal" size={[0.04, 0.04, 0.32]} position={[0.27, 0.62, -0.05]} color={DETAIL.hardware} roughness={0.55} metalness={0.3} edgeOpacity={0.4} />
+        <Box surface="metal" size={[0.04, 0.04, 0.32]} position={[-0.27, 0.62, -0.05]} color={DETAIL.hardware} roughness={0.55} metalness={0.3} />
+        <Box surface="metal" size={[0.04, 0.04, 0.32]} position={[0.27, 0.62, -0.05]} color={DETAIL.hardware} roughness={0.55} metalness={0.3} />
     </FitToDim>
   );
 }
@@ -450,14 +463,15 @@ function ArmchairGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
         {/* armrests */}
         <Box size={[0.1, 0.38, 0.68]} position={[-0.3, 0.56, 0]} color={seat} surface="fabric" roughness={0.95} />
         <Box size={[0.1, 0.38, 0.68]} position={[0.3, 0.56, 0]} color={seat} surface="fabric" roughness={0.95} />
-        {/* wooden legs */}
+        {/* wooden legs, up to the underside of the seat and arms (0.37). They stopped
+            at 0.32, so the whole upholstered body hovered 44 mm above its own legs. */}
         {[
           [-0.3, -0.3],
           [0.3, -0.3],
           [-0.3, 0.3],
           [0.3, 0.3],
         ].map(([x, z], i) => (
-          <Box surface="wood" key={i} size={[0.05, 0.32, 0.05]} position={[x, 0.16, z]} color={leg} roughness={0.7} edgeOpacity={0.4} />
+          <Box surface="wood" key={i} size={[0.05, 0.37, 0.05]} position={[x, 0.185, z]} color={leg} roughness={0.7} />
         ))}
     </FitToDim>
   );
@@ -530,8 +544,9 @@ function FloorLampGeo({ part }: { part: ScenePart }) {
           <cylinderGeometry args={[0.15, 0.18, 0.04, 16]} />
           <meshStandardMaterial color={metal} {...SURFACE.metal} />
         </mesh>
-        <mesh position={[0, 0.85, 0]}>
-          <cylinderGeometry args={[0.015, 0.015, 1.6, 8]} />
+        {/* pole from inside the base (it started 10 mm above it) up into the shade */}
+        <mesh position={[0, 0.84, 0]}>
+          <cylinderGeometry args={[0.015, 0.015, 1.62, 8]} />
           <meshStandardMaterial color={metal} {...SURFACE.metal} />
         </mesh>
         <mesh position={[0, 1.7, 0]}>
@@ -739,6 +754,12 @@ function ShoeRackGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
         return (
           <group key={i} position={[0, (i + 0.5) * gap, 0]} rotation={[-0.12, 0, 0]}>
             <BoxInstances items={slats} color={wood} surface={{ roughness: 0.7 }} />
+            {/* side rails the slats rest on, running front post to back post. Without
+                them every slat was a board floating 40 mm from the next, held by
+                nothing — a rack drawn as a stack of loose sticks. */}
+            {[-1, 1].map((sx) => (
+              <Box key={sx} surface="wood" size={[0.02, 0.025, d - 0.02]} position={[sx * (w / 2 - 0.03), -0.01, 0]} color={wood} roughness={0.7} />
+            ))}
           </group>
         );
       })}
@@ -828,14 +849,16 @@ function DeskGeo({ part, locked, lShape }: { part: ScenePart; locked: boolean; l
           roughness={0.65}
         />
       )}
-      {/* side modesty panel on left — encloses the leg space, within the long arm */}
-      <Box surface="wood" size={[0.018, h * 0.82, armD * 0.88]} position={[-w / 2 + 0.009, h * 0.41, armZ]} color={leg} roughness={0.68} />
+      {/* side panel on left — encloses the leg space, within the long arm. It carries
+          that end of the top, so it runs floor to underside: at 0.82h it stopped 90 mm
+          short and the desktop's left end sat on air. */}
+      <Box surface="wood" size={[0.018, h - 0.045, armD * 0.88]} position={[-w / 2 + 0.009, (h - 0.045) / 2, armZ]} color={leg} roughness={0.68} />
       {/* right rear leg */}
-      <Box surface="wood" size={[0.05, h - 0.04, 0.05]} position={[w / 2 - 0.04, (h - 0.04) / 2, -d / 2 + 0.04]} color={leg} roughness={0.7} edgeOpacity={0.4} />
+      <Box surface="wood" size={[0.05, h - 0.04, 0.05]} position={[w / 2 - 0.04, (h - 0.04) / 2, -d / 2 + 0.04]} color={leg} roughness={0.7} />
       {/* right front leg — under the return in L form, under the top otherwise */}
-      <Box surface="wood" size={[0.05, h - 0.04, 0.05]} position={[w / 2 - 0.04, (h - 0.04) / 2, d / 2 - 0.04]} color={leg} roughness={0.7} edgeOpacity={0.4} />
+      <Box surface="wood" size={[0.05, h - 0.04, 0.05]} position={[w / 2 - 0.04, (h - 0.04) / 2, d / 2 - 0.04]} color={leg} roughness={0.7} />
       {/* cable management rail under back edge */}
-      <Box surface="wood" size={[w * 0.75, 0.03, 0.04]} position={[0, h - 0.065, -d / 2 + 0.05]} color={shade(leg, 8)} roughness={0.6} />
+      <Box surface="wood" size={[w * 0.75, 0.03, 0.04]} position={[0, h - 0.06, -d / 2 + 0.05]} color={shade(leg, 8)} roughness={0.6} />
     </>
   );
 }
@@ -857,7 +880,9 @@ function MonitorGeo({ part }: { part: ScenePart }) {
         <meshStandardMaterial color={shell} roughness={0.5} metalness={0.35} />
       </mesh>
       {/* angled neck */}
-      <Box size={[0.05, h * 0.32, 0.028]} position={[0, h * 0.22, -0.005]} color={shade(shell, 6)} roughness={0.5} metalness={0.3} />
+      {/* neck from the base plate up into the screen's back — it started h·0.06 up,
+          which cleared the 24 mm plate on the tall sizes */}
+      <Box size={[0.05, h * 0.38 - 0.02, 0.028]} position={[0, (h * 0.38 + 0.02) / 2, -0.005]} color={shade(shell, 6)} roughness={0.5} metalness={0.3} />
       {/* housing / back bulge (gives the panel real depth) */}
       <Box size={[w * 0.98, screenH, 0.05]} position={[0, screenY, -0.022]} color={shade(shell, -8)} roughness={0.55} />
       {/* bezel frame */}
@@ -912,7 +937,7 @@ function FanGeo({ part }: { part: ScenePart }) {
                 size={[length, thickness, chord]}
                 position={[centre, 0, 0]}
                 color={blade}
-                edgeOpacity={0.4}
+               
               />
             </group>
           );
@@ -933,8 +958,9 @@ function FridgeGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
       {/* fridge/freezer split line */}
       <Box size={[w, 0.01, 0.006]} position={[0, h * 0.36, d / 2 + 0.002]} color={shade(shell, -30)} />
       {/* brushed-steel handles */}
-      <Box size={[0.025, h * 0.34, 0.04]} position={[w / 2 - 0.07, h * 0.72, d / 2 + 0.028]} color="#b9bcc0" roughness={0.35} metalness={0.6} />
-      <Box size={[0.025, h * 0.18, 0.04]} position={[w / 2 - 0.07, h * 0.2, d / 2 + 0.028]} color="#b9bcc0" roughness={0.35} metalness={0.6} />
+      {/* handles against the doors — both stood 8 mm off them on nothing */}
+      <Box size={[0.025, h * 0.34, 0.04]} position={[w / 2 - 0.07, h * 0.72, d / 2 + 0.02]} color="#b9bcc0" roughness={0.35} metalness={0.6} />
+      <Box size={[0.025, h * 0.18, 0.04]} position={[w / 2 - 0.07, h * 0.2, d / 2 + 0.02]} color="#b9bcc0" roughness={0.35} metalness={0.6} />
       {/* feet */}
       {[-1, 1].map((s) => (
         <Box key={s} size={[0.05, 0.04, 0.05]} position={[s * (w / 2 - 0.06), 0.02, d / 2 - 0.06]} color="#2b2b2e" />
@@ -983,20 +1009,35 @@ function CoffeeTableGeo({ part, locked }: { part: ScenePart; locked: boolean }) 
   const h = part.dimMM[2] / 1000;
   const top = body(part, locked);
   const frame = shade(top, -20);
+  const topT = h * 0.15;
+  // Proportional, not capped: this shape is group-scaled on a resize (§ 36).
+  const apron = h * 0.14;
   return (
     <>
       {/* top surface */}
-      <Box surface="wood" size={[w, h * 0.15, d]} position={[0, h - h * 0.075, 0]} color={top} roughness={0.65} />
-      {/* lower shelf */}
-      <Box surface="wood" size={[w * 0.88, h * 0.06, d * 0.86]} position={[0, h * 0.28, 0]} color={frame} roughness={0.7} />
-      {/* four tapered legs */}
+      <Box surface="wood" size={[w, topT, d]} position={[0, h - topT / 2, 0]} color={top} roughness={0.65} />
+      {/* aprons — the rails under the top that tie the legs together. Without them
+          the top read as a slab resting on four sticks. Drawn on the legs' centre
+          lines, so each rail's ends run into a leg. */}
+      {[-1, 1].map((s) => (
+        <Box key={`ax${s}`} surface="wood" size={[w - 0.06, apron, 0.02]} position={[0, h - topT - apron / 2, s * (d / 2 - 0.03)]} color={frame} roughness={0.7} />
+      ))}
+      {[-1, 1].map((s) => (
+        <Box key={`az${s}`} surface="wood" size={[0.02, apron, d - 0.06]} position={[s * (w / 2 - 0.03), h - topT - apron / 2, 0]} color={frame} roughness={0.7} />
+      ))}
+      {/* lower shelf, corner to corner between the leg centres so its corners sit
+          INSIDE the legs. At 0.88w it stopped 13 mm short of them (55 mm at the
+          largest size) and hung in mid-air. */}
+      <Box surface="wood" size={[w - 0.06, h * 0.06, d - 0.06]} position={[0, h * 0.28, 0]} color={frame} roughness={0.7} />
+      {/* four legs, floor to the underside of the top — they stopped at 0.82h, 13 mm
+          below it, so the top floated */}
       {[
         [-w / 2 + 0.03, -d / 2 + 0.03],
         [w / 2 - 0.03, -d / 2 + 0.03],
         [-w / 2 + 0.03, d / 2 - 0.03],
         [w / 2 - 0.03, d / 2 - 0.03],
       ].map(([x, z], i) => (
-        <Box surface="wood" key={i} size={[0.045, h * 0.82, 0.045]} position={[x, h * 0.41, z]} color={frame} roughness={0.7} edgeOpacity={0.4} />
+        <Box key={i} surface="wood" size={[0.045, h - topT, 0.045]} position={[x, (h - topT) / 2, z]} color={frame} roughness={0.7} />
       ))}
     </>
   );
@@ -1051,7 +1092,7 @@ function NightstandGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
             <Box surface="wood" size={[w * 0.9, h * 0.38, d * 0.85]} position={[0, 0, d / 2 - d * 0.45]} color={dark} roughness={0.85} />
           )}
           <Box surface="wood" size={[w * 0.94, h * 0.4, 0.014]} position={[0, 0, d / 2 - 0.004]} color={face} roughness={0.65} />
-          <mesh position={[0, 0, d / 2 + 0.014]}>
+          <mesh position={[0, 0, d / 2 + 0.0095]}>
             <boxGeometry args={[0.055, 0.013, 0.013]} />
             <meshStandardMaterial color="#9A9088" roughness={0.35} metalness={0.55} />
           </mesh>
@@ -1090,6 +1131,7 @@ function OttomanGeo({ part, locked }: { part: ScenePart; locked: boolean }) {
 // ─── Wall-hung ──────────────────────────────────────────────────────────
 function MirrorGeo({ part, oval }: { part: ScenePart; oval: boolean }) {
   const w = part.dimMM[0] / 1000;
+  const d = part.dimMM[1] / 1000;
   const h = part.dimMM[2] / 1000;
   // The frame is the recolourable surface (the glass is not). It was a literal in
   // both branches, so recolouring a mirror did nothing.
@@ -1099,11 +1141,15 @@ function MirrorGeo({ part, oval }: { part: ScenePart; oval: boolean }) {
     // ellipse behind the reflective face.
     return (
       <>
-        <mesh position={[0, 0, 0]} scale={[w / 2 + 0.03, h / 2 + 0.03, 1]}>
-          <circleGeometry args={[1, 56]} />
+        {/* A frame with a real depth (the piece's own `dimMM[1]`), glass on its face.
+            It was a paper-thin disc with the glass floating 25 mm in front of it. The
+            cylinder's axis is Y, turned to Z; `scale` is applied before the turn, so
+            its Y entry is the depth. */}
+        <mesh position={[0, 0, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[w / 2 + 0.03, d, h / 2 + 0.03]}>
+          <cylinderGeometry args={[1, 1, 1, 56]} />
           <meshStandardMaterial color={frame} {...SURFACE.wood} />
         </mesh>
-        <mesh position={[0, 0, 0.025]} scale={[w / 2, h / 2, 1]}>
+        <mesh position={[0, 0, d / 2 + 0.001]} scale={[w / 2, h / 2, 1]}>
           <circleGeometry args={[1, 56]} />
           <meshStandardMaterial color="#cdd7df" metalness={0.5} roughness={0.24} />
         </mesh>
@@ -1112,8 +1158,10 @@ function MirrorGeo({ part, oval }: { part: ScenePart; oval: boolean }) {
   }
   return (
     <>
-      <Box surface="wood" size={[w + 0.03, h + 0.03, 0.04]} position={[0, 0, 0]} color={frame} />
-      <mesh position={[0, 0, 0.025]}>
+      {/* frame at the piece's declared depth (it was a flat 40 mm whatever the Inspector
+          said), glass 1 mm proud of its face rather than 5 mm in front of it */}
+      <Box surface="wood" size={[w + 0.03, h + 0.03, d]} position={[0, 0, 0]} color={frame} />
+      <mesh position={[0, 0, d / 2 + 0.001]}>
         <planeGeometry args={[w, h]} />
         {/* Soft reflective mirror — gentle gloss, not a chrome plate. */}
         <meshStandardMaterial color="#cdd7df" metalness={0.5} roughness={0.24} />
@@ -1278,7 +1326,7 @@ function SoundbarGeo({ part }: { part: ScenePart }) {
     <>
       <Box size={[w, h, d]} position={[0, h / 2, 0]} color={bodyC} roughness={0.55} />
       {/* fabric grille front */}
-      <mesh position={[0, h / 2, d / 2 + 0.003]}>
+      <mesh position={[0, h / 2, d / 2 + 0.002]}>
         <planeGeometry args={[w * 0.96, h * 0.78]} />
         <meshStandardMaterial color={shade(bodyC, 6)} roughness={0.96} />
       </mesh>
@@ -1322,7 +1370,9 @@ function AirPurifierGeo({ part }: { part: ScenePart }) {
       </mesh>
       {/* intake slats */}
       {[0.22, 0.34, 0.46].map((y, i) => (
-        <mesh key={i} position={[0, h * y, 0]}>
+        // A torus lies in XY with its axis on Z; the body's axis is Y. Unturned, the
+        // rings stood as vertical hoops through the body and 22–42 mm into the floor.
+        <mesh key={i} position={[0, h * y, 0]} rotation={[Math.PI / 2, 0, 0]}>
           <torusGeometry args={[r + 0.002, 0.006, 8, 28]} />
           <meshStandardMaterial color={shade(bodyC, -22)} roughness={0.8} />
         </mesh>
@@ -1369,17 +1419,17 @@ function MicrowaveGeo({ part }: { part: ScenePart }) {
     <>
       <Box size={[w, h, d]} position={[0, h / 2, 0]} color={bodyC} roughness={0.5} metalness={0.1} />
       {/* door window */}
-      <mesh position={[-w * 0.12, h / 2, d / 2 + 0.003]}>
+      <mesh position={[-w * 0.12, h / 2, d / 2 + 0.002]}>
         <planeGeometry args={[w * 0.58, h * 0.72]} />
         <meshStandardMaterial color="#15181c" roughness={0.2} metalness={0.2} />
       </mesh>
       {/* control strip */}
-      <mesh position={[w * 0.34, h / 2, d / 2 + 0.003]}>
+      <mesh position={[w * 0.34, h / 2, d / 2 + 0.002]}>
         <planeGeometry args={[w * 0.22, h * 0.82]} />
         <meshStandardMaterial color={shade(bodyC, 12)} roughness={0.6} />
       </mesh>
       {/* handle */}
-      <Box size={[0.02, h * 0.6, 0.03]} position={[w * 0.17, h / 2, d / 2 + 0.02]} color="#cfcfcf" roughness={0.4} metalness={0.5} />
+      <Box size={[0.02, h * 0.6, 0.03]} position={[w * 0.17, h / 2, d / 2 + 0.015]} color="#cfcfcf" roughness={0.4} metalness={0.5} />
     </>
   );
 }
