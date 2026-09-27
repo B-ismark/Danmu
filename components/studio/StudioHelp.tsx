@@ -156,17 +156,11 @@ export function StudioHelp({
 
       {coach && (
         <div
-          className="ds-card"
+          // Placement and width in globals.css (`.help-pop`): anchored under the "?"
+          // on a laptop, and on the phone's margins under the app bar.
+          className="ds-card help-pop help-pop--coach"
           role="note"
           style={{
-            position: 'absolute',
-            top: 'calc(100% + 8px)',
-            right: 0,
-            zIndex: 'var(--z-popover)',
-            // Anchored to its right edge, so it grows LEFT — and at a flat 300 it
-            // grew straight off a narrow window. 100vw rather than 100%, because
-            // the trigger it hangs from is a 28px button.
-            width: 'min(300px, calc(100vw - 32px))',
             padding: '11px 12px 12px 14px',
             boxShadow: 'var(--shadow-lift)',
             textAlign: 'left',
@@ -191,15 +185,7 @@ export function StudioHelp({
       )}
 
       {open && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 'calc(100% + 8px)',
-            right: 0,
-            zIndex: 'var(--z-popover)',
-            textAlign: 'left',
-          }}
-        >
+        <div className="help-pop">
           <HelpCard
             title="How this works"
             onClose={() => {

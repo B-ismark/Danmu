@@ -36,11 +36,9 @@ export function HelpCard({ title, onClose, children }: { title: string; onClose:
       style={{
         padding: 0,
         boxShadow: 'var(--shadow-lift)',
-        // Height in globals.css (`.help-card`), because a phone gives it more.
+        // Height and width in globals.css (`.help-card`), because a phone gives it
+        // more of both.
         overflow: 'auto',
-        // Capped against the window as well as stated: this card is placed by
-        // whoever renders it, and none of those slots can promise it 320px.
-        width: 'min(320px, calc(100vw - 32px))',
       }}
     >
       <div

@@ -229,11 +229,28 @@ describe('a floating card is capped against the window, not just stated', () => 
   // pixel width grows straight off screen. Browser zoom reaches these widths on a
   // laptop, which is the case the viewport gate deliberately stopped blocking.
   it.each([
-    ['components/studio/StudioHelp.tsx', /width:\s*'min\(\d+px,\s*calc\(100vw/],
-    ['components/studio/HelpCard.tsx', /width:\s*'min\(\d+px,\s*calc\(100vw/],
     ['components/studio/RoomSwitcher.tsx', /maxWidth:\s*'min\(\d+px,\s*calc\(100vw/],
   ])('%s caps its width', (file, pattern) => {
     expect(readFileSync(root(...file.split('/')), 'utf8')).toMatch(pattern);
+  });
+
+  // The help card and the coach note keep their widths in the stylesheet, because a
+  // phone replaces them with its own margins (`.app-bar .help-pop`). So the cap is
+  // asserted where it lives, and the components are held to the classes carrying it —
+  // a class the component stopped using would leave the rule capping nothing.
+  it.each([
+    ['components/studio/HelpCard.tsx', 'help-card'],
+    ['components/studio/StudioHelp.tsx', 'help-pop--coach'],
+  ])('%s caps its width through .%s', (file, cls) => {
+    expect(readFileSync(root(...file.split('/')), 'utf8')).toContain(cls);
+    const css = readFileSync(root('app', 'globals.css'), 'utf8');
+    const rule = new RegExp(`\\n\\.${cls} \\{[^}]*width: min\\(\\d+px, calc\\(100vw`);
+    expect(css).toMatch(rule);
+  });
+
+  it('a phone gives help the screen margins, not the edge of the More button', () => {
+    const css = readFileSync(root('app', 'globals.css'), 'utf8');
+    expect(css).toMatch(/\.app-bar \.help-pop \{[^}]*position: fixed;[^}]*left: 16px; right: 16px;/);
   });
 
   // A third guard stood here: the sun graph's `<svg>` had a 272-wide viewBox left

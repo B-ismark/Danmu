@@ -1080,9 +1080,22 @@ textarea.field { border-radius: var(--r-2); }
    phone the card hangs from the app bar over a room nobody is using while they
    read, so it may reach down to just above the toolbar and show its whole touch
    card rather than stop mid-sentence at 420. */
-.help-card { max-height: min(420px, 60vh); }
+/* Width is capped against the window as well as stated: none of the slots that
+   render the card can promise it 320px. */
+.help-card { max-height: min(420px, 60vh); width: min(320px, calc(100vw - 32px)); }
+/* Help hangs under the "?" it opens from, right edges aligned, so it grows left. */
+.help-pop {
+  position: absolute; top: calc(100% + 8px); right: 0;
+  z-index: var(--z-popover); text-align: left;
+}
+.help-pop--coach { width: min(300px, calc(100vw - 32px)); }
 @media (max-width: 599px) {
   .help-card { max-height: calc(100dvh - 160px); }
+  /* A phone opens help from More, at the bar's far edge, and a card anchored there
+     sat 6px from one side of the screen and 34–64px from the other. It takes the
+     screen's 16px margins instead, just under the 56px bar. */
+  .app-bar .help-pop { position: fixed; top: 64px; left: 16px; right: 16px; }
+  .app-bar .help-pop .help-card, .app-bar .help-pop--coach { width: auto; }
 }
 .more-menu {
   position: absolute; top: calc(100% + 6px); right: 0; z-index: var(--z-popover);
